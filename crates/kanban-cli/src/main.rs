@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{net::SocketAddr, path::PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -46,6 +46,7 @@ enum Command {
         task_ref: Option<String>,
     },
     Dispatch(DispatchArgs),
+    Serve(ServeArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -207,6 +208,16 @@ struct DispatchArgs {
     log_dir: Option<PathBuf>,
 }
 
+#[derive(Debug, Args)]
+struct ServeArgs {
+    /// Host interface to bind. Defaults to localhost only; non-local hosts bind only when explicitly passed.
+    #[arg(long, default_value = "127.0.0.1")]
+    host: String,
+    /// TCP port to bind.
+    #[arg(long, default_value_t = 8721)]
+    port: u16,
+}
+
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum PolicyArg {
     Done,
@@ -296,8 +307,28 @@ fn main() -> Result<()> {
                 )
             })?;
         }
+        Command::Serve(args) => serve(args, db_path, actor)?,
     }
     Ok(())
+}
+
+fn serve(args: ServeArgs, db_path: PathBuf, actor: String) -> Result<()> {
+    let _init = init_database(&db_path, &actor)
+        .with_context(|| format!("failed to initialize/open {}", db_path.display()))?;
+    let addr: SocketAddr = format!("{}:{}", args.host, args.port)
+        .parse()
+        .with_context(|| format!("invalid bind address {}:{}", args.host, args.port))?;
+    eprintln!(
+        "Serving kb API on http://{addr} using {}",
+        db_path.display()
+    );
+    let runtime = tokio::runtime::Runtime::new().context("failed to start tokio runtime")?;
+    runtime
+        .block_on(kanban_server::serve(
+            addr,
+            kanban_server::AppState::new(db_path, actor),
+        ))
+        .context("kb server failed")
 }
 
 fn handle_task(

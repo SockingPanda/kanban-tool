@@ -603,8 +603,8 @@ data: {"id":124,"event_id":"e_...","task_id":"t_...","kind":"task.claimed","payl
 
 Reconnect：
 
-- Browser 使用 Last-Event-ID。
-- Server 读取 `after` 或 Last-Event-ID 后继续发送。
+- V1 implementation emits a finite snapshot of existing matching events and closes; clients should reconnect or poll `GET /api/v1/events` for updates.
+- Browser clients may send Last-Event-ID, but V1 only honors the `after` query parameter.
 - 若 event 已被压缩/清理，客户端重新 fetch board snapshot。
 
 ---

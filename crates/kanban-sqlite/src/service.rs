@@ -44,6 +44,7 @@ pub struct TaskRecord {
     pub retry_count: i64,
     pub max_retries: Option<i64>,
     pub result_summary: Option<String>,
+    pub result_json: Option<String>,
     pub metadata_json: String,
     pub lock_version: i64,
 }
@@ -75,6 +76,31 @@ pub struct RunRecord {
     pub summary: Option<String>,
     pub error: Option<String>,
     pub log_path: Option<String>,
+    pub metadata_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BoardRecord {
+    pub id: String,
+    pub slug: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub archived_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BoardColumnRecord {
+    pub id: String,
+    pub board_id: String,
+    pub status: TaskStatus,
+    pub title: String,
+    pub position: i64,
+    pub hidden: bool,
+    pub wip_limit: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,16 +177,63 @@ pub struct DispatchResult {
     pub exit_code: Option<i32>,
 }
 
+pub fn list_boards(path: impl AsRef<Path>) -> Result<Vec<BoardRecord>> {
+    let conn = connect_file(path.as_ref())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id,slug,name,description,created_at,updated_at,archived_at \
+             FROM boards WHERE archived_at IS NULL ORDER BY created_at ASC, slug ASC",
+        )
+        .map_err(storage)?;
+    let rows = stmt.query_map([], board_from_row).map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
+pub fn get_board(path: impl AsRef<Path>, slug_or_id: &str) -> Result<BoardRecord> {
+    let conn = connect_file(path.as_ref())?;
+    get_board_conn(&conn, slug_or_id)
+}
+
+pub fn list_board_columns(
+    path: impl AsRef<Path>,
+    board_slug_or_id: &str,
+) -> Result<Vec<BoardColumnRecord>> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board_slug_or_id)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id,board_id,status,title,position,hidden,wip_limit,created_at,updated_at \
+             FROM board_columns WHERE board_id=?1 ORDER BY position ASC",
+        )
+        .map_err(storage)?;
+    let rows = stmt
+        .query_map([board_id], board_column_from_row)
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
 pub fn create_task(
     path: impl AsRef<Path>,
     board: &str,
     actor: &str,
     input: CreateTask,
 ) -> Result<TaskRecord> {
+    create_task_with_dependencies(path, board, actor, input, &[])
+}
+
+pub fn create_task_with_dependencies(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    input: CreateTask,
+    depends_on: &[String],
+) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
-    let board_id = board_id(&conn, board)?;
-    if input.title.trim().is_empty() {
+    let title = input.title.trim().to_owned();
+    if title.is_empty() {
         return Err(KanbanError::InvalidInput("title is required".into()));
     }
     if !json_valid(&conn, &input.metadata_json)? {
@@ -174,18 +247,19 @@ pub fn create_task(
         input.scheduled_at,
         now,
     )?;
-    let seq: i64 = conn
-        .query_row(
-            "SELECT COALESCE(MAX(seq), 0) + 1 FROM tasks WHERE board_id=?1",
-            [&board_id],
-            |r| r.get(0),
-        )
-        .map_err(storage)?;
     let id = new_task_id();
     with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
+        let seq: i64 = conn
+            .query_row(
+                "SELECT COALESCE(MAX(seq), 0) + 1 FROM tasks WHERE board_id=?1",
+                [&board_id],
+                |r| r.get(0),
+            )
+            .map_err(storage)?;
         conn.execute(
         "INSERT INTO tasks(id, board_id, seq, title, description, status, assignee, priority, position, scheduled_at, due_at, created_by, created_at, updated_at, metadata_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?3 * 1024, ?9, ?10, ?11, ?12, ?12, ?13)",
-        params![id, board_id, seq, input.title.trim(), input.description, status.as_str(), input.assignee, input.priority, input.scheduled_at, input.due_at, actor, now, input.metadata_json],
+        params![id, board_id, seq, title, input.description, status.as_str(), input.assignee, input.priority, input.scheduled_at, input.due_at, actor, now, input.metadata_json],
         ).map_err(storage)?;
         let payload = json!({ "status": status.as_str() }).to_string();
         insert_event(
@@ -198,6 +272,11 @@ pub fn create_task(
             &payload,
             now,
         )?;
+        for parent_ref in depends_on {
+            let parent = resolve_task(&conn, &board_id, parent_ref)?;
+            let child = get_task_by_id(&conn, &board_id, &id)?;
+            add_dependency_in_current_tx(&conn, &board_id, actor, &parent, &child, now)?;
+        }
         get_task_by_id(&conn, &board_id, &id)
     })
 }
@@ -212,55 +291,59 @@ pub fn update_task(
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
-    let mut task = resolve_task(&conn, &board_id, task_ref)?;
-    if patch
-        .expected_lock_version
-        .is_some_and(|expected| task.lock_version != expected)
-    {
-        return Err(KanbanError::InvalidInput("lock_version mismatch".into()));
-    }
-    if let Some(title) = patch.title {
-        if title.trim().is_empty() {
-            return Err(KanbanError::InvalidInput("title is required".into()));
-        }
-        task.title = title;
-    }
-    if let Some(description) = patch.description {
-        task.description = description;
-    }
-    if let Some(assignee) = patch.assignee {
-        task.assignee = assignee;
-    }
-    if let Some(priority) = patch.priority {
-        task.priority = priority;
-    }
-    if let Some(scheduled_at) = patch.scheduled_at {
-        task.scheduled_at = scheduled_at;
-    }
-    if let Some(due_at) = patch.due_at {
-        task.due_at = due_at;
-    }
-    if let Some(metadata_json) = patch.metadata_json {
-        if !json_valid(&conn, &metadata_json)? {
-            return Err(KanbanError::InvalidInput(
-                "metadata_json must be valid JSON".into(),
-            ));
-        }
-        task.metadata_json = metadata_json;
-    }
-    if patch.scheduled_at.is_some()
-        && matches!(
-            task.status,
-            TaskStatus::Triage | TaskStatus::Todo | TaskStatus::Scheduled | TaskStatus::Ready
-        )
-    {
-        task.status = recompute_ready_status(&conn, &task, now)?;
-    }
     with_immediate_tx(&conn, || {
-        conn.execute(
+        let mut task = resolve_task(&conn, &board_id, task_ref)?;
+        let scheduled_at_changed = patch.scheduled_at.is_some();
+        if patch
+            .expected_lock_version
+            .is_some_and(|expected| task.lock_version != expected)
+        {
+            return Err(KanbanError::InvalidInput("lock_version mismatch".into()));
+        }
+        if let Some(title) = patch.title {
+            if title.trim().is_empty() {
+                return Err(KanbanError::InvalidInput("title is required".into()));
+            }
+            task.title = title;
+        }
+        if let Some(description) = patch.description {
+            task.description = description;
+        }
+        if let Some(assignee) = patch.assignee {
+            task.assignee = assignee;
+        }
+        if let Some(priority) = patch.priority {
+            task.priority = priority;
+        }
+        if let Some(scheduled_at) = patch.scheduled_at {
+            task.scheduled_at = scheduled_at;
+        }
+        if let Some(due_at) = patch.due_at {
+            task.due_at = due_at;
+        }
+        if let Some(metadata_json) = patch.metadata_json {
+            if !json_valid(&conn, &metadata_json)? {
+                return Err(KanbanError::InvalidInput(
+                    "metadata_json must be valid JSON".into(),
+                ));
+            }
+            task.metadata_json = metadata_json;
+        }
+        if scheduled_at_changed
+            && matches!(
+                task.status,
+                TaskStatus::Triage | TaskStatus::Todo | TaskStatus::Scheduled | TaskStatus::Ready
+            )
+        {
+            task.status = recompute_ready_status(&conn, &task, now)?;
+        }
+        let changed = conn.execute(
         "UPDATE tasks SET title=?1, description=?2, status=?3, assignee=?4, priority=?5, scheduled_at=?6, due_at=?7, metadata_json=?8, updated_at=?9, lock_version=lock_version+1 WHERE id=?10 AND board_id=?11",
         params![task.title, task.description, task.status.as_str(), task.assignee, task.priority, task.scheduled_at, task.due_at, task.metadata_json, now, task.id, board_id],
         ).map_err(storage)?;
+        if changed != 1 {
+            return Err(KanbanError::InvalidTransition("task update failed".into()));
+        }
         insert_event(
             &conn,
             &board_id,
@@ -269,6 +352,55 @@ pub fn update_task(
             "task.updated",
             actor,
             "{}",
+            now,
+        )?;
+        get_task_by_id(&conn, &board_id, &task.id)
+    })
+}
+
+pub fn specify_task(
+    path: impl AsRef<Path>,
+    actor: &str,
+    task_id: &str,
+    description: Option<String>,
+    scheduled_at: Option<i64>,
+) -> Result<TaskRecord> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    let board_id = board_id_for_task(&conn, task_id)?;
+    let mut task = get_task_by_id(&conn, &board_id, task_id)?;
+    if task.status != TaskStatus::Triage {
+        return Err(KanbanError::InvalidTransition(format!(
+            "cannot specify from {}",
+            task.status.as_str()
+        )));
+    }
+    if let Some(description) = description {
+        task.description = Some(description);
+    }
+    if let Some(scheduled_at) = scheduled_at {
+        task.scheduled_at = Some(scheduled_at);
+    }
+    if matches!(
+        task.status,
+        TaskStatus::Triage | TaskStatus::Todo | TaskStatus::Scheduled | TaskStatus::Ready
+    ) {
+        task.status = recompute_ready_status(&conn, &task, now)?;
+    }
+    with_immediate_tx(&conn, || {
+        conn.execute(
+            "UPDATE tasks SET description=?1, scheduled_at=?2, status=?3, updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6",
+            params![task.description, task.scheduled_at, task.status.as_str(), now, task.id, board_id],
+        )
+        .map_err(storage)?;
+        insert_event(
+            &conn,
+            &board_id,
+            Some(&task.id),
+            None,
+            "task.specified",
+            actor,
+            &json!({ "to_status": task.status.as_str() }).to_string(),
             now,
         )?;
         get_task_by_id(&conn, &board_id, &task.id)
@@ -297,6 +429,24 @@ pub fn get_task(path: impl AsRef<Path>, board: &str, task_ref: &str) -> Result<T
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
     resolve_task(&conn, &board_id, task_ref)
+}
+
+pub fn get_task_by_id_global(path: impl AsRef<Path>, task_id: &str) -> Result<TaskRecord> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id_for_task(&conn, task_id)?;
+    get_task_by_id(&conn, &board_id, task_id)
+}
+
+pub fn update_task_by_id(
+    path: impl AsRef<Path>,
+    actor: &str,
+    task_id: &str,
+    patch: TaskPatch,
+) -> Result<TaskRecord> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id_for_task(&conn, task_id)?;
+    drop(conn);
+    update_task(path, &board_id, actor, task_id, patch)
 }
 
 pub fn promote_task(
@@ -342,13 +492,51 @@ pub fn claim_task(
     task_ref: &str,
     ttl_ms: i64,
 ) -> Result<ClaimResult> {
-    let conn = connect_file(path.as_ref())?;
-    let now = SystemClock.now_ms();
-    let board_id = board_id(&conn, board)?;
-    let task = resolve_task(&conn, &board_id, task_ref)?;
-    claim_task_conn(&conn, &board_id, actor, &task.id, ttl_ms, "manual", now)
+    claim_task_with_profile(path, board, actor, task_ref, ttl_ms, "manual")
 }
 
+pub fn claim_task_with_profile(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    ttl_ms: i64,
+    worker_profile: &str,
+) -> Result<ClaimResult> {
+    claim_task_with_profile_and_metadata(path, board, actor, task_ref, ttl_ms, worker_profile, "{}")
+}
+
+pub fn claim_task_with_profile_and_metadata(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    ttl_ms: i64,
+    worker_profile: &str,
+    metadata_json: &str,
+) -> Result<ClaimResult> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    if !json_valid(&conn, metadata_json)? {
+        return Err(KanbanError::InvalidInput(
+            "metadata_json must be valid JSON".into(),
+        ));
+    }
+    let board_id = board_id(&conn, board)?;
+    let task = resolve_task(&conn, &board_id, task_ref)?;
+    claim_task_conn(
+        &conn,
+        &board_id,
+        actor,
+        &task.id,
+        ttl_ms,
+        worker_profile,
+        metadata_json,
+        now,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 fn claim_task_conn(
     conn: &Connection,
     board_id: &str,
@@ -356,10 +544,20 @@ fn claim_task_conn(
     task_id: &str,
     ttl_ms: i64,
     profile: &str,
+    metadata_json: &str,
     now: i64,
 ) -> Result<ClaimResult> {
     conn.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
-    match claim_task_in_current_tx(conn, board_id, actor, task_id, ttl_ms, profile, now) {
+    match claim_task_in_current_tx(
+        conn,
+        board_id,
+        actor,
+        task_id,
+        ttl_ms,
+        profile,
+        metadata_json,
+        now,
+    ) {
         Ok(claim) => {
             conn.execute_batch("COMMIT").map_err(storage)?;
             Ok(claim)
@@ -389,10 +587,17 @@ fn claim_next_ready_conn(
         .optional()
         .map_err(storage);
     let result = match selected {
-        Ok(Some(task_id)) => {
-            claim_task_in_current_tx(conn, board_id, actor, &task_id, ttl_ms, worker_profile, now)
-                .map(Some)
-        }
+        Ok(Some(task_id)) => claim_task_in_current_tx(
+            conn,
+            board_id,
+            actor,
+            &task_id,
+            ttl_ms,
+            worker_profile,
+            "{}",
+            now,
+        )
+        .map(Some),
         Ok(None) => Ok(None),
         Err(err) => Err(err),
     };
@@ -408,6 +613,7 @@ fn claim_next_ready_conn(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn claim_task_in_current_tx(
     conn: &Connection,
     board_id: &str,
@@ -415,6 +621,7 @@ fn claim_task_in_current_tx(
     task_id: &str,
     ttl_ms: i64,
     profile: &str,
+    metadata_json: &str,
     now: i64,
 ) -> Result<ClaimResult> {
     let task = get_task_by_id(conn, board_id, task_id)?;
@@ -435,8 +642,8 @@ fn claim_task_in_current_tx(
         return Err(KanbanError::InvalidTransition("claim conflict".into()));
     }
     conn.execute(
-        "INSERT INTO task_runs(id, board_id, task_id, status, worker_profile, claim_token, claim_owner, claim_expires_at, started_at, last_heartbeat_at, metadata_json) VALUES (?1, ?2, ?3, 'running', ?4, ?5, ?6, ?7, ?8, ?8, '{}')",
-        params![run_id, board_id, task_id, profile, token, actor, expires, now],
+        "INSERT INTO task_runs(id, board_id, task_id, status, worker_profile, claim_token, claim_owner, claim_expires_at, started_at, last_heartbeat_at, metadata_json) VALUES (?1, ?2, ?3, 'running', ?4, ?5, ?6, ?7, ?8, ?8, ?9)",
+        params![run_id, board_id, task_id, profile, token, actor, expires, now, metadata_json],
     ).map_err(storage)?;
     conn.execute(
         "UPDATE tasks SET current_run_id=?1 WHERE id=?2",
@@ -450,7 +657,12 @@ fn claim_task_in_current_tx(
         Some(&run_id),
         "task.claimed",
         actor,
-        &json!({ "claim_owner": actor }).to_string(),
+        &json!({
+            "claim_owner": actor,
+            "metadata": serde_json::from_str::<serde_json::Value>(metadata_json)
+                .unwrap_or_else(|_| json!({})),
+        })
+        .to_string(),
         now,
     )?;
     Ok(ClaimResult {
@@ -468,16 +680,29 @@ pub fn heartbeat_task(
     token: &str,
     ttl_ms: i64,
 ) -> Result<TaskRecord> {
+    heartbeat_task_with_note(path, board, actor, task_ref, token, ttl_ms, None)
+}
+
+pub fn heartbeat_task_with_note(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    token: &str,
+    ttl_ms: i64,
+    note: Option<&str>,
+) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
     let task = resolve_task(&conn, &board_id, task_ref)?;
     with_immediate_tx(&conn, || {
-        heartbeat_task_conn(&conn, &board_id, actor, &task, token, ttl_ms, now)?;
+        heartbeat_task_conn(&conn, &board_id, actor, &task, token, ttl_ms, note, now)?;
         get_task_by_id(&conn, &board_id, &task.id)
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn heartbeat_task_conn(
     conn: &Connection,
     board_id: &str,
@@ -485,6 +710,7 @@ fn heartbeat_task_conn(
     task: &TaskRecord,
     token: &str,
     ttl_ms: i64,
+    note: Option<&str>,
     now: i64,
 ) -> Result<()> {
     if task.status != TaskStatus::Running || task.claim_token.as_deref() != Some(token) {
@@ -523,7 +749,7 @@ fn heartbeat_task_conn(
             Some(run_id),
             "task.heartbeat",
             actor,
-            "{}",
+            &json!({ "note": note }).to_string(),
             now,
         )?;
     }
@@ -538,10 +764,45 @@ pub fn complete_task(
     token: Option<&str>,
     force: bool,
 ) -> Result<TaskRecord> {
+    complete_task_with_summary_and_result(path, board, actor, task_ref, token, force, None, None)
+}
+
+pub fn complete_task_with_summary(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    token: Option<&str>,
+    force: bool,
+    summary: Option<&str>,
+) -> Result<TaskRecord> {
+    complete_task_with_summary_and_result(path, board, actor, task_ref, token, force, summary, None)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn complete_task_with_summary_and_result(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    token: Option<&str>,
+    force: bool,
+    summary: Option<&str>,
+    result_json: Option<&str>,
+) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
     let task = resolve_task(&conn, &board_id, task_ref)?;
+    let result_json_is_invalid = match result_json {
+        Some(value) => !json_valid(&conn, value)?,
+        None => false,
+    };
+    if result_json_is_invalid {
+        return Err(KanbanError::InvalidInput(
+            "result_json must be valid JSON".into(),
+        ));
+    }
     if task.status == TaskStatus::Running && !force && task.claim_token.as_deref() != token {
         return Err(KanbanError::InvalidTransition(
             "claim token mismatch".into(),
@@ -564,6 +825,8 @@ pub fn complete_task(
             0,
             None,
             None,
+            summary,
+            result_json,
             now,
         )?;
         promote_children(&conn, &board_id, actor, &task.id, now)?;
@@ -578,6 +841,18 @@ pub fn submit_review_task(
     task_ref: &str,
     token: Option<&str>,
     force: bool,
+) -> Result<TaskRecord> {
+    submit_review_task_with_summary(path, board, actor, task_ref, token, force, None)
+}
+
+pub fn submit_review_task_with_summary(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    token: Option<&str>,
+    force: bool,
+    summary: Option<&str>,
 ) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
@@ -604,6 +879,8 @@ pub fn submit_review_task(
             "succeeded",
             0,
             None,
+            None,
+            summary,
             None,
             now,
         )?;
@@ -655,6 +932,8 @@ pub fn block_task(
             "failed",
             1,
             Some(reason),
+            None,
+            None,
             None,
             now,
         )?;
@@ -741,6 +1020,81 @@ pub fn reclaim_expired(path: impl AsRef<Path>, board: &str, actor: &str) -> Resu
     Ok(count)
 }
 
+pub fn reclaim_task(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    force: bool,
+) -> Result<TaskRecord> {
+    reclaim_task_to(path, board, actor, task_ref, force, TaskStatus::Ready, None)
+}
+
+pub fn reclaim_task_to(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    force: bool,
+    to_status: TaskStatus,
+    reason: Option<&str>,
+) -> Result<TaskRecord> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    let board_id = board_id(&conn, board)?;
+    let task = resolve_task(&conn, &board_id, task_ref)?;
+    if !matches!(to_status, TaskStatus::Ready | TaskStatus::Blocked) {
+        return Err(KanbanError::InvalidInput(
+            "reclaim to_status must be ready or blocked".into(),
+        ));
+    }
+    if to_status == TaskStatus::Blocked && reason.is_none_or(|value| value.trim().is_empty()) {
+        return Err(KanbanError::InvalidInput(
+            "reclaim reason is required when to_status is blocked".into(),
+        ));
+    }
+    if task.status != TaskStatus::Running {
+        return Err(KanbanError::InvalidTransition(
+            "reclaim requires running".into(),
+        ));
+    }
+    if !force && task.claim_expires_at.is_none_or(|expires| expires > now) {
+        return Err(KanbanError::InvalidTransition(
+            "reclaim requires expired claim or force".into(),
+        ));
+    }
+    let new_retry_count = task.retry_count + 1;
+    let max_retries_reached = task
+        .max_retries
+        .is_some_and(|max_retries| new_retry_count >= max_retries);
+    let effective_status = if max_retries_reached {
+        TaskStatus::Blocked
+    } else {
+        to_status
+    };
+    let default_reason = if max_retries_reached {
+        "max retries reached"
+    } else if force {
+        "force reclaimed"
+    } else {
+        "claim expired"
+    };
+    let effective_reason = reason.unwrap_or(default_reason);
+    with_immediate_tx(&conn, || {
+        reclaim_running_task(
+            &conn,
+            &board_id,
+            &task,
+            actor,
+            if force { "canceled" } else { "expired" },
+            effective_reason,
+            effective_status,
+            now,
+        )?;
+        get_task_by_id(&conn, &board_id, &task.id)
+    })
+}
+
 pub fn archive_task(
     path: impl AsRef<Path>,
     board: &str,
@@ -817,30 +1171,56 @@ pub fn add_dependency(
         ));
     }
     with_immediate_tx(&conn, || {
+        add_dependency_in_current_tx(&conn, &board_id, actor, &parent, &child, now)
+    })
+}
+
+fn add_dependency_in_current_tx(
+    conn: &Connection,
+    board_id: &str,
+    actor: &str,
+    parent: &TaskRecord,
+    child: &TaskRecord,
+    now: i64,
+) -> Result<()> {
+    if parent.id == child.id {
+        return Err(KanbanError::InvalidInput(
+            "dependency cannot point to itself".into(),
+        ));
+    }
+    if has_path(conn, &child.id, &parent.id)? {
+        return Err(KanbanError::InvalidInput(
+            "dependency cycle detected".into(),
+        ));
+    }
+    if child.status == TaskStatus::Running && parent.status != TaskStatus::Done {
+        return Err(KanbanError::InvalidTransition(
+            "cannot add incomplete dependency to running task".into(),
+        ));
+    }
+    conn.execute(
+        "INSERT OR IGNORE INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES (?1, ?2, ?3, ?4)",
+        params![board_id, parent.id, child.id, now],
+    )
+    .map_err(storage)?;
+    if child.status == TaskStatus::Ready && parent.status != TaskStatus::Done {
         conn.execute(
-            "INSERT OR IGNORE INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![board_id, parent.id, child.id, now],
+            "UPDATE tasks SET status='todo', updated_at=?1, lock_version=lock_version+1 WHERE id=?2",
+            params![now, child.id],
         )
         .map_err(storage)?;
-        if child.status == TaskStatus::Ready && parent.status != TaskStatus::Done {
-            conn.execute(
-                "UPDATE tasks SET status='todo', updated_at=?1, lock_version=lock_version+1 WHERE id=?2",
-                params![now, child.id],
-            )
-            .map_err(storage)?;
-        }
-        let payload = json!({ "parent_task_id": parent.id }).to_string();
-        insert_event(
-            &conn,
-            &board_id,
-            Some(&child.id),
-            None,
-            "dependency.added",
-            actor,
-            &payload,
-            now,
-        )
-    })
+    }
+    let payload = json!({ "parent_task_id": parent.id }).to_string();
+    insert_event(
+        conn,
+        board_id,
+        Some(&child.id),
+        None,
+        "dependency.added",
+        actor,
+        &payload,
+        now,
+    )
 }
 
 pub fn remove_dependency(
@@ -937,9 +1317,9 @@ pub fn list_runs(
         .map(|r| resolve_task(&conn, &board_id, r).map(|t| t.id))
         .transpose()?;
     let sql = if task_id.is_some() {
-        "SELECT id,task_id,status,worker_profile,worker_pid,claim_token,claim_owner,started_at,finished_at,exit_code,summary,error,log_path FROM task_runs WHERE board_id=?1 AND task_id=?2 ORDER BY started_at DESC"
+        "SELECT id,task_id,status,worker_profile,worker_pid,claim_token,claim_owner,started_at,finished_at,exit_code,summary,error,log_path,metadata_json FROM task_runs WHERE board_id=?1 AND task_id=?2 ORDER BY started_at DESC"
     } else {
-        "SELECT id,task_id,status,worker_profile,worker_pid,claim_token,claim_owner,started_at,finished_at,exit_code,summary,error,log_path FROM task_runs WHERE board_id=?1 ORDER BY started_at DESC"
+        "SELECT id,task_id,status,worker_profile,worker_pid,claim_token,claim_owner,started_at,finished_at,exit_code,summary,error,log_path,metadata_json FROM task_runs WHERE board_id=?1 ORDER BY started_at DESC"
     };
     let mut stmt = conn.prepare(sql).map_err(storage)?;
     let mut out = Vec::new();
@@ -959,6 +1339,18 @@ pub fn list_runs(
         }
     }
     Ok(out)
+}
+
+pub fn get_run_by_id_global(path: impl AsRef<Path>, run_id: &str) -> Result<RunRecord> {
+    let conn = connect_file(path.as_ref())?;
+    conn.query_row(
+        "SELECT id,task_id,status,worker_profile,worker_pid,claim_token,claim_owner,started_at,finished_at,exit_code,summary,error,log_path,metadata_json FROM task_runs WHERE id=?1",
+        [run_id],
+        run_from_row,
+    )
+    .optional()
+    .map_err(storage)?
+    .ok_or_else(|| KanbanError::NotFound(format!("run {run_id}")))
 }
 
 pub fn dispatch_once(
@@ -1013,6 +1405,8 @@ pub fn dispatch_once(
                     exit,
                     None,
                     Some(&log_path),
+                    None,
+                    None,
                     SystemClock.now_ms(),
                 )?;
                 promote_children(
@@ -1035,6 +1429,8 @@ pub fn dispatch_once(
                     exit,
                     None,
                     Some(&log_path),
+                    None,
+                    None,
                     SystemClock.now_ms(),
                 )?;
             }
@@ -1050,6 +1446,8 @@ pub fn dispatch_once(
                     exit,
                     Some("worker failed"),
                     Some(&log_path),
+                    None,
+                    None,
                     SystemClock.now_ms(),
                 )?;
             }
@@ -1184,6 +1582,7 @@ fn run_worker_with_heartbeat(
                         &task,
                         &claim.claim_token,
                         options.claim_ttl_ms,
+                        None,
                         SystemClock.now_ms(),
                     )
                 }) {
@@ -1194,6 +1593,68 @@ fn run_worker_with_heartbeat(
             }
         }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn reclaim_running_task(
+    conn: &Connection,
+    board_id: &str,
+    task: &TaskRecord,
+    actor: &str,
+    run_status: &str,
+    reason: &str,
+    target: TaskStatus,
+    now: i64,
+) -> Result<()> {
+    if task.status != TaskStatus::Running
+        || task.claim_token.is_none()
+        || task.current_run_id.is_none()
+    {
+        return Err(KanbanError::InvalidTransition(
+            "reclaim requires matching running claim".into(),
+        ));
+    }
+    if let (Some(run_id), Some(token)) = (&task.current_run_id, &task.claim_token) {
+        let changed = conn
+            .execute(
+                "UPDATE task_runs SET status=?1, finished_at=?2, error=?3 WHERE id=?4 AND board_id=?5 AND task_id=?6 AND status='running' AND claim_token=?7",
+                params![run_status, now, reason, run_id, board_id, task.id, token],
+            )
+            .map_err(storage)?;
+        if changed != 1 {
+            return Err(KanbanError::InvalidTransition(
+                "reclaim requires matching running run".into(),
+            ));
+        }
+    }
+    let changed = conn
+        .execute(
+            "UPDATE tasks SET status=?1, status_reason=?2, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, retry_count=retry_count+1, updated_at=?3, lock_version=lock_version+1 WHERE id=?4 AND board_id=?5 AND status='running' AND claim_token=?6 AND current_run_id=?7",
+            params![target.as_str(), (target == TaskStatus::Blocked).then_some(reason), now, task.id, board_id, task.claim_token, task.current_run_id],
+        )
+        .map_err(storage)?;
+    if changed != 1 {
+        return Err(KanbanError::InvalidTransition(
+            "reclaim requires matching running claim".into(),
+        ));
+    }
+    let payload = json!({
+        "retry_count": task.retry_count + 1,
+        "max_retries": task.max_retries,
+        "to_status": target.as_str(),
+        "reason": reason,
+    })
+    .to_string();
+    insert_event(
+        conn,
+        board_id,
+        Some(&task.id),
+        task.current_run_id.as_deref(),
+        "task.reclaimed",
+        actor,
+        &payload,
+        now,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1317,6 +1778,8 @@ fn finish_running(
     exit_code: i32,
     reason: Option<&str>,
     log_path: Option<&Path>,
+    summary: Option<&str>,
+    result_json: Option<&str>,
     now: i64,
 ) -> Result<()> {
     let completed = if target == TaskStatus::Done {
@@ -1338,13 +1801,13 @@ fn finish_running(
             ));
         }
         conn.execute(
-            "UPDATE tasks SET status=?1, status_reason=?2, completed_at=?3, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='running' AND claim_token=?7 AND current_run_id=?8",
-            params![target.as_str(), reason, completed, now, task.id, board_id, task.claim_token, task.current_run_id],
+            "UPDATE tasks SET status=?1, status_reason=?2, completed_at=?3, result_summary=COALESCE(?4, result_summary), result_json=COALESCE(?5, result_json), claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?6, lock_version=lock_version+1 WHERE id=?7 AND board_id=?8 AND status='running' AND claim_token=?9 AND current_run_id=?10",
+            params![target.as_str(), reason, completed, summary, result_json, now, task.id, board_id, task.claim_token, task.current_run_id],
         )
     } else {
         conn.execute(
-            "UPDATE tasks SET status=?1, status_reason=?2, completed_at=?3, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='review'",
-            params![target.as_str(), reason, completed, now, task.id, board_id],
+            "UPDATE tasks SET status=?1, status_reason=?2, completed_at=?3, result_summary=COALESCE(?4, result_summary), result_json=COALESCE(?5, result_json), claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?6, lock_version=lock_version+1 WHERE id=?7 AND board_id=?8 AND status='review'",
+            params![target.as_str(), reason, completed, summary, result_json, now, task.id, board_id],
         )
     }
     .map_err(storage)?;
@@ -1353,10 +1816,14 @@ fn finish_running(
             "finish requires matching running claim".into(),
         ));
     }
+    let event_payload = json!({
+        "result": result_json.and_then(|value| serde_json::from_str::<serde_json::Value>(value).ok()),
+    })
+    .to_string();
     if let Some(run_id) = &task.current_run_id {
         let changed = conn.execute(
-            "UPDATE task_runs SET status=?1, finished_at=?2, exit_code=?3, error=?4, log_path=COALESCE(?5, log_path) WHERE id=?6 AND board_id=?7 AND task_id=?8 AND status='running' AND claim_token IS ?9",
-            params![run_status, now, exit_code, reason, log_path.map(|p| p.to_string_lossy().to_string()), run_id, board_id, task.id, task.claim_token],
+            "UPDATE task_runs SET status=?1, finished_at=?2, exit_code=?3, error=?4, log_path=COALESCE(?5, log_path), summary=COALESCE(?6, summary) WHERE id=?7 AND board_id=?8 AND task_id=?9 AND status='running' AND claim_token IS ?10",
+            params![run_status, now, exit_code, reason, log_path.map(|p| p.to_string_lossy().to_string()), summary, run_id, board_id, task.id, task.claim_token],
         ).map_err(storage)?;
         if task.status == TaskStatus::Running && changed != 1 {
             return Err(KanbanError::InvalidTransition(
@@ -1370,7 +1837,7 @@ fn finish_running(
             Some(run_id),
             event,
             actor,
-            "{}",
+            &event_payload,
             now,
         )?;
     } else {
@@ -1381,7 +1848,7 @@ fn finish_running(
             None,
             event,
             actor,
-            "{}",
+            &event_payload,
             now,
         )?;
     }
@@ -1488,14 +1955,14 @@ fn has_path(conn: &Connection, start: &str, goal: &str) -> Result<bool> {
 }
 
 fn query_tasks(conn: &Connection, board_id: &str) -> Result<Vec<TaskRecord>> {
-    let mut stmt = conn.prepare("SELECT id,board_id,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,metadata_json,lock_version FROM tasks WHERE board_id=?1 ORDER BY CASE status WHEN 'triage' THEN 10 WHEN 'todo' THEN 20 WHEN 'scheduled' THEN 30 WHEN 'ready' THEN 40 WHEN 'running' THEN 50 WHEN 'blocked' THEN 60 WHEN 'review' THEN 70 WHEN 'done' THEN 80 ELSE 90 END, position ASC, priority DESC, created_at ASC").map_err(storage)?;
+    let mut stmt = conn.prepare("SELECT id,board_id,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,result_json,metadata_json,lock_version FROM tasks WHERE board_id=?1 ORDER BY CASE status WHEN 'triage' THEN 10 WHEN 'todo' THEN 20 WHEN 'scheduled' THEN 30 WHEN 'ready' THEN 40 WHEN 'running' THEN 50 WHEN 'blocked' THEN 60 WHEN 'review' THEN 70 WHEN 'done' THEN 80 ELSE 90 END, position ASC, priority DESC, created_at ASC").map_err(storage)?;
     let rows = stmt.query_map([board_id], task_from_row).map_err(storage)?;
     rows.collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)
 }
 
 fn get_task_by_id(conn: &Connection, board_id: &str, task_id: &str) -> Result<TaskRecord> {
-    conn.query_row("SELECT id,board_id,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,metadata_json,lock_version FROM tasks WHERE board_id=?1 AND id=?2", params![board_id, task_id], task_from_row).optional().map_err(storage)?.ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
+    conn.query_row("SELECT id,board_id,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,result_json,metadata_json,lock_version FROM tasks WHERE board_id=?1 AND id=?2", params![board_id, task_id], task_from_row).optional().map_err(storage)?.ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
 }
 
 fn resolve_task(conn: &Connection, board_id: &str, task_ref: &str) -> Result<TaskRecord> {
@@ -1503,7 +1970,7 @@ fn resolve_task(conn: &Connection, board_id: &str, task_ref: &str) -> Result<Tas
         let seq: i64 = seq
             .parse()
             .map_err(|_| KanbanError::InvalidInput("invalid task seq".into()))?;
-        conn.query_row("SELECT id,board_id,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,metadata_json,lock_version FROM tasks WHERE board_id=?1 AND seq=?2", params![board_id, seq], task_from_row).optional().map_err(storage)?.ok_or_else(|| KanbanError::NotFound(format!("task #{seq}")))
+        conn.query_row("SELECT id,board_id,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,result_json,metadata_json,lock_version FROM tasks WHERE board_id=?1 AND seq=?2", params![board_id, seq], task_from_row).optional().map_err(storage)?.ok_or_else(|| KanbanError::NotFound(format!("task #{seq}")))
     } else {
         get_task_by_id(conn, board_id, task_ref)
     }
@@ -1539,8 +2006,9 @@ fn task_from_row(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
         retry_count: row.get(23)?,
         max_retries: row.get(24)?,
         result_summary: row.get(25)?,
-        metadata_json: row.get(26)?,
-        lock_version: row.get(27)?,
+        result_json: row.get(26)?,
+        metadata_json: row.get(27)?,
+        lock_version: row.get(28)?,
     })
 }
 
@@ -1571,6 +2039,48 @@ fn run_from_row(row: &Row<'_>) -> rusqlite::Result<RunRecord> {
         summary: row.get(10)?,
         error: row.get(11)?,
         log_path: row.get(12)?,
+        metadata_json: row.get(13)?,
+    })
+}
+
+fn get_board_conn(conn: &Connection, slug_or_id: &str) -> Result<BoardRecord> {
+    let sql = if slug_or_id.starts_with("b_") {
+        "SELECT id,slug,name,description,created_at,updated_at,archived_at FROM boards WHERE id=?1 AND archived_at IS NULL"
+    } else {
+        "SELECT id,slug,name,description,created_at,updated_at,archived_at FROM boards WHERE slug=?1 AND archived_at IS NULL"
+    };
+    conn.query_row(sql, [slug_or_id], board_from_row)
+        .optional()
+        .map_err(storage)?
+        .ok_or_else(|| KanbanError::NotFound(format!("board {slug_or_id}")))
+}
+
+fn board_from_row(row: &Row<'_>) -> rusqlite::Result<BoardRecord> {
+    Ok(BoardRecord {
+        id: row.get(0)?,
+        slug: row.get(1)?,
+        name: row.get(2)?,
+        description: row.get(3)?,
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
+        archived_at: row.get(6)?,
+    })
+}
+
+fn board_column_from_row(row: &Row<'_>) -> rusqlite::Result<BoardColumnRecord> {
+    let status: String = row.get(2)?;
+    let hidden: i64 = row.get(5)?;
+    Ok(BoardColumnRecord {
+        id: row.get(0)?,
+        board_id: row.get(1)?,
+        status: TaskStatus::try_from(status.as_str())
+            .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?,
+        title: row.get(3)?,
+        position: row.get(4)?,
+        hidden: hidden != 0,
+        wip_limit: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
     })
 }
 
@@ -1584,6 +2094,15 @@ fn board_id(conn: &Connection, slug_or_id: &str) -> Result<String> {
         .optional()
         .map_err(storage)?
         .ok_or_else(|| KanbanError::NotFound(format!("board {slug_or_id}")))
+}
+
+fn board_id_for_task(conn: &Connection, task_id: &str) -> Result<String> {
+    conn.query_row("SELECT board_id FROM tasks WHERE id=?1", [task_id], |r| {
+        r.get(0)
+    })
+    .optional()
+    .map_err(storage)?
+    .ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -1,6 +1,26 @@
 use std::{path::Path, process::Command};
 
 #[test]
+fn serve_help_includes_default_localhost_bind_options() {
+    let output = Command::new(env!("CARGO_BIN_EXE_kb"))
+        .args(["serve", "--help"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "status: {:?}\nstdout:\n{}\nstderr:\n{}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--host"), "{stdout}");
+    assert!(stdout.contains("127.0.0.1"), "{stdout}");
+    assert!(stdout.contains("--port"), "{stdout}");
+    assert!(stdout.contains("8721"), "{stdout}");
+}
+
+#[test]
 fn task_update_sets_and_clears_scheduled_at_and_due_at() {
     let temp = TempDb::new("task_update_sets_and_clears_scheduled_at_and_due_at");
     kb(&temp.path, &["init"]).success();

@@ -63,12 +63,13 @@ enum TaskCommand {
     Claim(ClaimArgs),
     Heartbeat(HeartbeatArgs),
     Done(FinishArgs),
+    Complete(FinishArgs),
     Review(FinishArgs),
     Block(BlockArgs),
     Unblock {
         task_ref: String,
     },
-    Reclaim,
+    Reclaim(ReclaimArgs),
     Archive {
         task_ref: String,
         #[arg(long)]
@@ -117,6 +118,14 @@ struct UpdateArgs {
     #[arg(long)]
     priority: Option<i64>,
     #[arg(long)]
+    scheduled_at: Option<i64>,
+    #[arg(long)]
+    clear_scheduled_at: bool,
+    #[arg(long)]
+    due_at: Option<i64>,
+    #[arg(long)]
+    clear_due_at: bool,
+    #[arg(long)]
     metadata: Option<String>,
     #[arg(long)]
     expected_lock_version: Option<i64>,
@@ -157,6 +166,12 @@ struct BlockArgs {
     force: bool,
 }
 
+#[derive(Debug, Args)]
+struct ReclaimArgs {
+    #[arg(long)]
+    expired: bool,
+}
+
 #[derive(Debug, Subcommand)]
 enum DepCommand {
     Add {
@@ -182,6 +197,8 @@ struct DispatchArgs {
     worker_profile: String,
     #[arg(long, default_value_t = 300_000)]
     claim_ttl_ms: i64,
+    #[arg(long, default_value_t = 30_000)]
+    heartbeat_interval_ms: i64,
     #[arg(long, value_enum, default_value_t = PolicyArg::Done)]
     on_success: PolicyArg,
     #[arg(long, value_enum, default_value_t = PolicyArg::Blocked)]
@@ -266,6 +283,7 @@ fn main() -> Result<()> {
                     command: args.command,
                     worker_profile: args.worker_profile,
                     claim_ttl_ms: args.claim_ttl_ms,
+                    heartbeat_interval_ms: args.heartbeat_interval_ms,
                     on_success: args.on_success.into(),
                     on_failure: args.on_failure.into(),
                     log_dir,
@@ -335,8 +353,8 @@ fn handle_task(
                         args.assignee.map(Some)
                     },
                     priority: args.priority,
-                    scheduled_at: None,
-                    due_at: None,
+                    scheduled_at: optional_clearable(args.scheduled_at, args.clear_scheduled_at),
+                    due_at: optional_clearable(args.due_at, args.clear_due_at),
                     metadata_json: args.metadata,
                     expected_lock_version: args.expected_lock_version,
                 },
@@ -365,7 +383,7 @@ fn handle_task(
                 )?,
             )?;
         }
-        TaskCommand::Done(args) => print_task(
+        TaskCommand::Done(args) | TaskCommand::Complete(args) => print_task(
             json,
             &complete_task(
                 db_path,
@@ -402,7 +420,8 @@ fn handle_task(
         TaskCommand::Unblock { task_ref } => {
             print_task(json, &unblock_task(db_path, board, actor, &task_ref)?)?
         }
-        TaskCommand::Reclaim => {
+        TaskCommand::Reclaim(args) => {
+            let _expired_only = args.expired;
             let count = reclaim_expired(db_path, board, actor)?;
             print_or_json(json, &serde_json::json!({"reclaimed": count}), || {
                 format!("Reclaimed {count} task(s)")
@@ -491,6 +510,10 @@ fn task_line(task: &kanban_sqlite::TaskRecord) -> String {
 
 fn parse_status(value: &str) -> Result<TaskStatus> {
     TaskStatus::try_from(value).map_err(|err| anyhow::anyhow!(err))
+}
+
+fn optional_clearable<T>(value: Option<T>, clear: bool) -> Option<Option<T>> {
+    if clear { Some(None) } else { value.map(Some) }
 }
 
 fn default_db_path() -> PathBuf {

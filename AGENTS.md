@@ -33,6 +33,8 @@
 - 当前目录如果不是 git 仓库，先初始化 git；每个方向使用独立分支。
 - 默认分支工作流：clean main → feature branch → TDD 实现 → verify → squash/merge → 删除临时分支。
 - 复杂实现优先按小任务推进，并使用 worker/reviewer gate；父级负责最终验证。
+- milestone/release 级实现必须在合并前通过独立 spec reviewer + quality reviewer；仅 `fmt/test/clippy/smoke` 通过不能宣称版本完成。
+- 如果 reviewer 指出 P0/P1 规格或质量问题，必须在同一方向分支上修正并重新 review，直到 PASS/APPROVED 后再由父级合并。
 - 生产代码遵循 TDD：先写失败测试，运行看到 RED，再写最小实现，运行 GREEN。
 - 每次完成一个阶段必须运行：
   - `cargo fmt --check`

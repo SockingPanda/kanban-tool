@@ -1,6 +1,9 @@
 use std::{
+    fs::File,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, ExitStatus, Stdio},
+    thread,
+    time::Duration,
 };
 
 use kanban_core::{
@@ -9,6 +12,7 @@ use kanban_core::{
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::connect_file;
 
@@ -89,7 +93,7 @@ impl CreateTask {
     pub fn ready(title: impl Into<String>) -> Self {
         Self {
             title: title.into(),
-            description: Some(String::new()),
+            description: Some("ready spec".to_owned()),
             status: Some(TaskStatus::Ready),
             assignee: None,
             priority: 0,
@@ -133,6 +137,7 @@ pub struct DispatchOptions {
     pub command: String,
     pub worker_profile: String,
     pub claim_ttl_ms: i64,
+    pub heartbeat_interval_ms: i64,
     pub on_success: FinishPolicy,
     pub on_failure: FinishPolicy,
     pub log_dir: PathBuf,
@@ -177,21 +182,24 @@ pub fn create_task(
         )
         .map_err(storage)?;
     let id = new_task_id();
-    conn.execute(
+    with_immediate_tx(&conn, || {
+        conn.execute(
         "INSERT INTO tasks(id, board_id, seq, title, description, status, assignee, priority, position, scheduled_at, due_at, created_by, created_at, updated_at, metadata_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?3 * 1024, ?9, ?10, ?11, ?12, ?12, ?13)",
         params![id, board_id, seq, input.title.trim(), input.description, status.as_str(), input.assignee, input.priority, input.scheduled_at, input.due_at, actor, now, input.metadata_json],
-    ).map_err(storage)?;
-    insert_event(
-        &conn,
-        &board_id,
-        Some(&id),
-        None,
-        "task.created",
-        actor,
-        &format!(r#"{{"status":"{}"}}"#, status.as_str()),
-        now,
-    )?;
-    get_task_by_id(&conn, &board_id, &id)
+        ).map_err(storage)?;
+        let payload = json!({ "status": status.as_str() }).to_string();
+        insert_event(
+            &conn,
+            &board_id,
+            Some(&id),
+            None,
+            "task.created",
+            actor,
+            &payload,
+            now,
+        )?;
+        get_task_by_id(&conn, &board_id, &id)
+    })
 }
 
 pub fn update_task(
@@ -240,21 +248,31 @@ pub fn update_task(
         }
         task.metadata_json = metadata_json;
     }
-    conn.execute(
-        "UPDATE tasks SET title=?1, description=?2, assignee=?3, priority=?4, scheduled_at=?5, due_at=?6, metadata_json=?7, updated_at=?8, lock_version=lock_version+1 WHERE id=?9 AND board_id=?10",
-        params![task.title, task.description, task.assignee, task.priority, task.scheduled_at, task.due_at, task.metadata_json, now, task.id, board_id],
-    ).map_err(storage)?;
-    insert_event(
-        &conn,
-        &board_id,
-        Some(&task.id),
-        None,
-        "task.updated",
-        actor,
-        "{}",
-        now,
-    )?;
-    get_task_by_id(&conn, &board_id, &task.id)
+    if patch.scheduled_at.is_some()
+        && matches!(
+            task.status,
+            TaskStatus::Triage | TaskStatus::Todo | TaskStatus::Scheduled | TaskStatus::Ready
+        )
+    {
+        task.status = recompute_ready_status(&conn, &task, now)?;
+    }
+    with_immediate_tx(&conn, || {
+        conn.execute(
+        "UPDATE tasks SET title=?1, description=?2, status=?3, assignee=?4, priority=?5, scheduled_at=?6, due_at=?7, metadata_json=?8, updated_at=?9, lock_version=lock_version+1 WHERE id=?10 AND board_id=?11",
+        params![task.title, task.description, task.status.as_str(), task.assignee, task.priority, task.scheduled_at, task.due_at, task.metadata_json, now, task.id, board_id],
+        ).map_err(storage)?;
+        insert_event(
+            &conn,
+            &board_id,
+            Some(&task.id),
+            None,
+            "task.updated",
+            actor,
+            "{}",
+            now,
+        )?;
+        get_task_by_id(&conn, &board_id, &task.id)
+    })
 }
 
 pub fn list_tasks(
@@ -303,16 +321,18 @@ pub fn promote_task(
             task.status.as_str()
         )));
     }
-    set_status(
-        &conn,
-        &board_id,
-        &task.id,
-        TaskStatus::Ready,
-        actor,
-        "task.promoted",
-        now,
-    )?;
-    get_task_by_id(&conn, &board_id, &task.id)
+    with_immediate_tx(&conn, || {
+        set_status(
+            &conn,
+            &board_id,
+            &task.id,
+            TaskStatus::Ready,
+            actor,
+            "task.promoted",
+            now,
+        )?;
+        get_task_by_id(&conn, &board_id, &task.id)
+    })
 }
 
 pub fn claim_task(
@@ -338,6 +358,65 @@ fn claim_task_conn(
     profile: &str,
     now: i64,
 ) -> Result<ClaimResult> {
+    conn.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+    match claim_task_in_current_tx(conn, board_id, actor, task_id, ttl_ms, profile, now) {
+        Ok(claim) => {
+            conn.execute_batch("COMMIT").map_err(storage)?;
+            Ok(claim)
+        }
+        Err(err) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(err)
+        }
+    }
+}
+
+fn claim_next_ready_conn(
+    conn: &Connection,
+    board_id: &str,
+    actor: &str,
+    worker_profile: &str,
+    ttl_ms: i64,
+    now: i64,
+) -> Result<Option<ClaimResult>> {
+    conn.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+    let selected = conn
+        .query_row(
+            "SELECT id FROM tasks WHERE board_id=?1 AND status='ready' AND claim_token IS NULL AND (assignee IS NULL OR assignee=?2) AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status != 'done') ORDER BY priority DESC, created_at ASC LIMIT 1",
+            params![board_id, worker_profile],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(storage);
+    let result = match selected {
+        Ok(Some(task_id)) => {
+            claim_task_in_current_tx(conn, board_id, actor, &task_id, ttl_ms, worker_profile, now)
+                .map(Some)
+        }
+        Ok(None) => Ok(None),
+        Err(err) => Err(err),
+    };
+    match result {
+        Ok(claim) => {
+            conn.execute_batch("COMMIT").map_err(storage)?;
+            Ok(claim)
+        }
+        Err(err) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(err)
+        }
+    }
+}
+
+fn claim_task_in_current_tx(
+    conn: &Connection,
+    board_id: &str,
+    actor: &str,
+    task_id: &str,
+    ttl_ms: i64,
+    profile: &str,
+    now: i64,
+) -> Result<ClaimResult> {
     let task = get_task_by_id(conn, board_id, task_id)?;
     if task.status != TaskStatus::Ready || task.claim_token.is_some() {
         return Err(KanbanError::InvalidTransition(
@@ -349,7 +428,7 @@ fn claim_task_conn(
     let run_id = new_run_id();
     let expires = now + ttl_ms;
     let changed = conn.execute(
-        "UPDATE tasks SET status='running', claim_token=?1, claim_owner=?2, claim_expires_at=?3, last_heartbeat_at=?4, started_at=COALESCE(started_at, ?4), updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='ready' AND claim_token IS NULL",
+        "UPDATE tasks SET status='running', claim_token=?1, claim_owner=?2, claim_expires_at=?3, last_heartbeat_at=?4, started_at=COALESCE(started_at, ?4), updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='ready' AND claim_token IS NULL AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status != 'done')",
         params![token, actor, expires, now, task_id, board_id],
     ).map_err(storage)?;
     if changed != 1 {
@@ -371,7 +450,7 @@ fn claim_task_conn(
         Some(&run_id),
         "task.claimed",
         actor,
-        &format!(r#"{{"claim_owner":"{}"}}"#, actor),
+        &json!({ "claim_owner": actor }).to_string(),
         now,
     )?;
     Ok(ClaimResult {
@@ -384,7 +463,7 @@ fn claim_task_conn(
 pub fn heartbeat_task(
     path: impl AsRef<Path>,
     board: &str,
-    _actor: &str,
+    actor: &str,
     task_ref: &str,
     token: &str,
     ttl_ms: i64,
@@ -393,25 +472,62 @@ pub fn heartbeat_task(
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
     let task = resolve_task(&conn, &board_id, task_ref)?;
+    with_immediate_tx(&conn, || {
+        heartbeat_task_conn(&conn, &board_id, actor, &task, token, ttl_ms, now)?;
+        get_task_by_id(&conn, &board_id, &task.id)
+    })
+}
+
+fn heartbeat_task_conn(
+    conn: &Connection,
+    board_id: &str,
+    actor: &str,
+    task: &TaskRecord,
+    token: &str,
+    ttl_ms: i64,
+    now: i64,
+) -> Result<()> {
     if task.status != TaskStatus::Running || task.claim_token.as_deref() != Some(token) {
         return Err(KanbanError::InvalidTransition(
             "heartbeat requires matching running claim".into(),
         ));
     }
     let expires = now + ttl_ms;
-    conn.execute(
-        "UPDATE tasks SET claim_expires_at=?1, last_heartbeat_at=?2, updated_at=?2, lock_version=lock_version+1 WHERE id=?3",
-        params![expires, now, task.id],
-    )
-    .map_err(storage)?;
-    if let Some(run_id) = &task.current_run_id {
-        conn.execute(
-            "UPDATE task_runs SET claim_expires_at=?1, last_heartbeat_at=?2 WHERE id=?3",
-            params![expires, now, run_id],
+    let changed = conn
+        .execute(
+            "UPDATE tasks SET claim_expires_at=?1, last_heartbeat_at=?2, updated_at=?2, lock_version=lock_version+1 WHERE id=?3 AND board_id=?4 AND status='running' AND claim_token=?5 AND current_run_id IS ?6",
+            params![expires, now, task.id, board_id, token, task.current_run_id],
         )
         .map_err(storage)?;
+    if changed != 1 {
+        return Err(KanbanError::InvalidTransition(
+            "heartbeat requires matching running claim".into(),
+        ));
     }
-    get_task_by_id(&conn, &board_id, &task.id)
+    if let Some(run_id) = &task.current_run_id {
+        let changed = conn
+            .execute(
+                "UPDATE task_runs SET claim_expires_at=?1, last_heartbeat_at=?2 WHERE id=?3 AND board_id=?4 AND task_id=?5 AND status='running' AND claim_token=?6",
+                params![expires, now, run_id, board_id, task.id, token],
+            )
+            .map_err(storage)?;
+        if changed != 1 {
+            return Err(KanbanError::InvalidTransition(
+                "heartbeat requires matching running run".into(),
+            ));
+        }
+        insert_event(
+            conn,
+            board_id,
+            Some(&task.id),
+            Some(run_id),
+            "task.heartbeat",
+            actor,
+            "{}",
+            now,
+        )?;
+    }
+    Ok(())
 }
 
 pub fn complete_task(
@@ -436,21 +552,23 @@ pub fn complete_task(
             "complete requires running or review".into(),
         ));
     }
-    finish_running(
-        &conn,
-        &board_id,
-        &task,
-        TaskStatus::Done,
-        actor,
-        "task.completed",
-        "succeeded",
-        0,
-        None,
-        None,
-        now,
-    )?;
-    promote_children(&conn, &board_id, actor, &task.id, now)?;
-    get_task_by_id(&conn, &board_id, &task.id)
+    with_immediate_tx(&conn, || {
+        finish_running(
+            &conn,
+            &board_id,
+            &task,
+            TaskStatus::Done,
+            actor,
+            "task.completed",
+            "succeeded",
+            0,
+            None,
+            None,
+            now,
+        )?;
+        promote_children(&conn, &board_id, actor, &task.id, now)?;
+        get_task_by_id(&conn, &board_id, &task.id)
+    })
 }
 
 pub fn submit_review_task(
@@ -475,20 +593,22 @@ pub fn submit_review_task(
             "claim token mismatch".into(),
         ));
     }
-    finish_running(
-        &conn,
-        &board_id,
-        &task,
-        TaskStatus::Review,
-        actor,
-        "task.submitted_for_review",
-        "succeeded",
-        0,
-        None,
-        None,
-        now,
-    )?;
-    get_task_by_id(&conn, &board_id, &task.id)
+    with_immediate_tx(&conn, || {
+        finish_running(
+            &conn,
+            &board_id,
+            &task,
+            TaskStatus::Review,
+            actor,
+            "task.submitted_for_review",
+            "succeeded",
+            0,
+            None,
+            None,
+            now,
+        )?;
+        get_task_by_id(&conn, &board_id, &task.id)
+    })
 }
 
 pub fn block_task(
@@ -500,7 +620,7 @@ pub fn block_task(
     token: Option<&str>,
     force: bool,
 ) -> Result<TaskRecord> {
-    let conn = connect_file(path.as_ref())?;
+    let mut conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
     let task = resolve_task(&conn, &board_id, task_ref)?;
@@ -524,8 +644,9 @@ pub fn block_task(
         return Err(KanbanError::InvalidTransition("cannot block task".into()));
     }
     if task.status == TaskStatus::Running {
+        let tx = conn.transaction().map_err(storage)?;
         finish_running(
-            &conn,
+            &tx,
             &board_id,
             &task,
             TaskStatus::Blocked,
@@ -537,18 +658,22 @@ pub fn block_task(
             None,
             now,
         )?;
+        tx.commit().map_err(storage)?;
     } else {
-        conn.execute("UPDATE tasks SET status='blocked', status_reason=?1, updated_at=?2, lock_version=lock_version+1 WHERE id=?3", params![reason, now, task.id]).map_err(storage)?;
+        let tx = conn.transaction().map_err(storage)?;
+        tx.execute("UPDATE tasks SET status='blocked', status_reason=?1, updated_at=?2, lock_version=lock_version+1 WHERE id=?3", params![reason, now, task.id]).map_err(storage)?;
+        let payload = json!({ "reason": reason }).to_string();
         insert_event(
-            &conn,
+            &tx,
             &board_id,
             Some(&task.id),
             None,
             "task.blocked",
             actor,
-            &format!(r#"{{"reason":"{}"}}"#, escape_json(reason)),
+            &payload,
             now,
         )?;
+        tx.commit().map_err(storage)?;
     }
     get_task_by_id(&conn, &board_id, &task.id)
 }
@@ -569,18 +694,25 @@ pub fn unblock_task(
         ));
     }
     let target = recompute_ready_status(&conn, &task, now)?;
-    conn.execute("UPDATE tasks SET status=?1, status_reason=NULL, updated_at=?2, lock_version=lock_version+1 WHERE id=?3", params![target.as_str(), now, task.id]).map_err(storage)?;
-    insert_event(
-        &conn,
-        &board_id,
-        Some(&task.id),
-        None,
-        "task.unblocked",
-        actor,
-        &format!(r#"{{"to_status":"{}"}}"#, target.as_str()),
-        now,
-    )?;
-    get_task_by_id(&conn, &board_id, &task.id)
+    with_immediate_tx(&conn, || {
+        conn.execute(
+            "UPDATE tasks SET status=?1, status_reason=NULL, updated_at=?2, lock_version=lock_version+1 WHERE id=?3",
+            params![target.as_str(), now, task.id],
+        )
+        .map_err(storage)?;
+        let payload = json!({ "to_status": target.as_str() }).to_string();
+        insert_event(
+            &conn,
+            &board_id,
+            Some(&task.id),
+            None,
+            "task.unblocked",
+            actor,
+            &payload,
+            now,
+        )?;
+        get_task_by_id(&conn, &board_id, &task.id)
+    })
 }
 
 pub fn reclaim_expired(path: impl AsRef<Path>, board: &str, actor: &str) -> Result<usize> {
@@ -593,18 +725,18 @@ pub fn reclaim_expired(path: impl AsRef<Path>, board: &str, actor: &str) -> Resu
         .collect();
     let count = expired.len();
     for task in expired {
-        conn.execute("UPDATE task_runs SET status='expired', finished_at=?1 WHERE id=?2 AND status='running'", params![now, task.current_run_id]).map_err(storage)?;
-        conn.execute("UPDATE tasks SET status='ready', claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, retry_count=retry_count+1, updated_at=?1, lock_version=lock_version+1 WHERE id=?2", params![now, task.id]).map_err(storage)?;
-        insert_event(
-            &conn,
-            &board_id,
-            Some(&task.id),
-            task.current_run_id.as_deref(),
-            "task.reclaimed",
-            actor,
-            "{}",
-            now,
-        )?;
+        with_immediate_tx(&conn, || {
+            retry_running_task(
+                &conn,
+                &board_id,
+                &task,
+                actor,
+                "expired",
+                None,
+                "claim expired",
+                now,
+            )
+        })?;
     }
     Ok(count)
 }
@@ -616,7 +748,7 @@ pub fn archive_task(
     task_ref: &str,
     force: bool,
 ) -> Result<TaskRecord> {
-    let conn = connect_file(path.as_ref())?;
+    let mut conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
     let task = resolve_task(&conn, &board_id, task_ref)?;
@@ -625,9 +757,26 @@ pub fn archive_task(
             "cannot archive running without force".into(),
         ));
     }
-    conn.execute("UPDATE tasks SET status='archived', archived_at=?1, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?1, lock_version=lock_version+1 WHERE id=?2", params![now, task.id]).map_err(storage)?;
+    let tx = conn.transaction().map_err(storage)?;
+    if task.status == TaskStatus::Running {
+        let run_id = task.current_run_id.as_deref().ok_or_else(|| {
+            KanbanError::InvalidTransition("force archive requires active run".into())
+        })?;
+        let changed = tx
+            .execute(
+                "UPDATE task_runs SET status='canceled', finished_at=?1, error=COALESCE(error, ?2) WHERE id=?3 AND board_id=?4 AND task_id=?5 AND status='running'",
+                params![now, "force archived", run_id, board_id, task.id],
+            )
+            .map_err(storage)?;
+        if changed != 1 {
+            return Err(KanbanError::InvalidTransition(
+                "force archive requires active running run".into(),
+            ));
+        }
+    }
+    tx.execute("UPDATE tasks SET status='archived', archived_at=?1, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?1, lock_version=lock_version+1 WHERE id=?2", params![now, task.id]).map_err(storage)?;
     insert_event(
-        &conn,
+        &tx,
         &board_id,
         Some(&task.id),
         task.current_run_id.as_deref(),
@@ -636,6 +785,7 @@ pub fn archive_task(
         "{}",
         now,
     )?;
+    tx.commit().map_err(storage)?;
     get_task_by_id(&conn, &board_id, &task.id)
 }
 
@@ -661,21 +811,36 @@ pub fn add_dependency(
             "dependency cycle detected".into(),
         ));
     }
-    conn.execute("INSERT OR IGNORE INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES (?1, ?2, ?3, ?4)", params![board_id, parent.id, child.id, now]).map_err(storage)?;
-    if child.status == TaskStatus::Ready && parent.status != TaskStatus::Done {
-        conn.execute("UPDATE tasks SET status='todo', updated_at=?1, lock_version=lock_version+1 WHERE id=?2", params![now, child.id]).map_err(storage)?;
+    if child.status == TaskStatus::Running && parent.status != TaskStatus::Done {
+        return Err(KanbanError::InvalidTransition(
+            "cannot add incomplete dependency to running task".into(),
+        ));
     }
-    insert_event(
-        &conn,
-        &board_id,
-        Some(&child.id),
-        None,
-        "dependency.added",
-        actor,
-        &format!(r#"{{"parent_task_id":"{}"}}"#, parent.id),
-        now,
-    )?;
-    Ok(())
+    with_immediate_tx(&conn, || {
+        conn.execute(
+            "INSERT OR IGNORE INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![board_id, parent.id, child.id, now],
+        )
+        .map_err(storage)?;
+        if child.status == TaskStatus::Ready && parent.status != TaskStatus::Done {
+            conn.execute(
+                "UPDATE tasks SET status='todo', updated_at=?1, lock_version=lock_version+1 WHERE id=?2",
+                params![now, child.id],
+            )
+            .map_err(storage)?;
+        }
+        let payload = json!({ "parent_task_id": parent.id }).to_string();
+        insert_event(
+            &conn,
+            &board_id,
+            Some(&child.id),
+            None,
+            "dependency.added",
+            actor,
+            &payload,
+            now,
+        )
+    })
 }
 
 pub fn remove_dependency(
@@ -690,22 +855,24 @@ pub fn remove_dependency(
     let board_id = board_id(&conn, board)?;
     let parent = resolve_task(&conn, &board_id, parent_ref)?;
     let child = resolve_task(&conn, &board_id, child_ref)?;
-    conn.execute(
-        "DELETE FROM task_dependencies WHERE parent_task_id=?1 AND child_task_id=?2",
-        params![parent.id, child.id],
-    )
-    .map_err(storage)?;
-    insert_event(
-        &conn,
-        &board_id,
-        Some(&child.id),
-        None,
-        "dependency.removed",
-        actor,
-        &format!(r#"{{"parent_task_id":"{}"}}"#, parent.id),
-        now,
-    )?;
-    Ok(())
+    with_immediate_tx(&conn, || {
+        conn.execute(
+            "DELETE FROM task_dependencies WHERE parent_task_id=?1 AND child_task_id=?2",
+            params![parent.id, child.id],
+        )
+        .map_err(storage)?;
+        let payload = json!({ "parent_task_id": parent.id }).to_string();
+        insert_event(
+            &conn,
+            &board_id,
+            Some(&child.id),
+            None,
+            "dependency.removed",
+            actor,
+            &payload,
+            now,
+        )
+    })
 }
 
 pub fn list_dependencies(
@@ -799,18 +966,22 @@ pub fn dispatch_once(
     board: &str,
     options: DispatchOptions,
 ) -> Result<DispatchResult> {
+    validate_dispatch_options(&options)?;
     let path = path.as_ref();
     reclaim_expired(path, board, &options.actor)?;
     let conn = connect_file(path)?;
     let board_id = board_id(&conn, board)?;
-    let ready = query_tasks(&conn, &board_id)?.into_iter().find(|t| {
-        t.status == TaskStatus::Ready
-            && t.claim_token.is_none()
-            && (t.assignee.is_none()
-                || t.assignee.as_deref() == Some(options.worker_profile.as_str()))
-            && dependencies_done(&conn, &t.id).unwrap_or(false)
-    });
-    let Some(task) = ready else {
+    let now = SystemClock.now_ms();
+    promote_due_tasks(&conn, &board_id, &options.actor, now)?;
+    let Some(claim) = claim_next_ready_conn(
+        &conn,
+        &board_id,
+        &options.actor,
+        &options.worker_profile,
+        options.claim_ttl_ms,
+        now,
+    )?
+    else {
         return Ok(DispatchResult {
             claimed: 0,
             task_id: None,
@@ -818,30 +989,9 @@ pub fn dispatch_once(
             exit_code: None,
         });
     };
-    let now = SystemClock.now_ms();
-    let claim = claim_task_conn(
-        &conn,
-        &board_id,
-        &options.actor,
-        &task.id,
-        options.claim_ttl_ms,
-        &options.worker_profile,
-        now,
-    )?;
     std::fs::create_dir_all(&options.log_dir).map_err(|e| KanbanError::Storage(e.to_string()))?;
     let log_path = options.log_dir.join(format!("{}.log", claim.run_id));
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg(&options.command)
-        .env("KB_TASK_ID", &claim.task.id)
-        .env("KB_TASK_SEQ", claim.task.seq.to_string())
-        .env("KB_CLAIM_TOKEN", &claim.claim_token)
-        .env("KB_RUN_ID", &claim.run_id)
-        .output()
-        .map_err(|e| KanbanError::Storage(e.to_string()))?;
-    let mut log = output.stdout;
-    log.extend_from_slice(&output.stderr);
-    std::fs::write(&log_path, log).map_err(|e| KanbanError::Storage(e.to_string()))?;
+    let output = run_worker_with_heartbeat(path, board, &options, &claim, &log_path)?;
     let exit = output.status.code().unwrap_or(1);
     let fresh = get_task_by_id(&conn, &board_id, &claim.task.id)?;
     let target = if output.status.success() {
@@ -849,70 +999,287 @@ pub fn dispatch_once(
     } else {
         options.on_failure
     };
-    match target {
-        FinishPolicy::Done => {
-            finish_running(
-                &conn,
-                &board_id,
-                &fresh,
-                TaskStatus::Done,
-                &options.actor,
-                "task.completed",
-                "succeeded",
-                exit,
-                None,
-                Some(&log_path),
-                SystemClock.now_ms(),
-            )?;
-            promote_children(
-                &conn,
-                &board_id,
-                &options.actor,
-                &fresh.id,
-                SystemClock.now_ms(),
-            )?;
+    with_immediate_tx(&conn, || {
+        match target {
+            FinishPolicy::Done => {
+                finish_running(
+                    &conn,
+                    &board_id,
+                    &fresh,
+                    TaskStatus::Done,
+                    &options.actor,
+                    "task.completed",
+                    "succeeded",
+                    exit,
+                    None,
+                    Some(&log_path),
+                    SystemClock.now_ms(),
+                )?;
+                promote_children(
+                    &conn,
+                    &board_id,
+                    &options.actor,
+                    &fresh.id,
+                    SystemClock.now_ms(),
+                )?;
+            }
+            FinishPolicy::Review => {
+                finish_running(
+                    &conn,
+                    &board_id,
+                    &fresh,
+                    TaskStatus::Review,
+                    &options.actor,
+                    "task.submitted_for_review",
+                    "succeeded",
+                    exit,
+                    None,
+                    Some(&log_path),
+                    SystemClock.now_ms(),
+                )?;
+            }
+            FinishPolicy::Blocked => {
+                finish_running(
+                    &conn,
+                    &board_id,
+                    &fresh,
+                    TaskStatus::Blocked,
+                    &options.actor,
+                    "task.blocked",
+                    "failed",
+                    exit,
+                    Some("worker failed"),
+                    Some(&log_path),
+                    SystemClock.now_ms(),
+                )?;
+            }
+            FinishPolicy::Ready => {
+                retry_running_task(
+                    &conn,
+                    &board_id,
+                    &fresh,
+                    &options.actor,
+                    "failed",
+                    Some(exit),
+                    "worker failed",
+                    SystemClock.now_ms(),
+                )?;
+                conn.execute(
+                    "UPDATE task_runs SET log_path=?1 WHERE id=?2",
+                    params![log_path.to_string_lossy(), claim.run_id],
+                )
+                .map_err(storage)?;
+            }
         }
-        FinishPolicy::Review => {
-            finish_running(
-                &conn,
-                &board_id,
-                &fresh,
-                TaskStatus::Review,
-                &options.actor,
-                "task.submitted_for_review",
-                "succeeded",
-                exit,
-                None,
-                Some(&log_path),
-                SystemClock.now_ms(),
-            )?;
-        }
-        FinishPolicy::Blocked => {
-            finish_running(
-                &conn,
-                &board_id,
-                &fresh,
-                TaskStatus::Blocked,
-                &options.actor,
-                "task.blocked",
-                "failed",
-                exit,
-                Some("worker failed"),
-                Some(&log_path),
-                SystemClock.now_ms(),
-            )?;
-        }
-        FinishPolicy::Ready => {
-            conn.execute("UPDATE task_runs SET status='failed', finished_at=?1, exit_code=?2, log_path=?3 WHERE id=?4", params![SystemClock.now_ms(), exit, log_path.to_string_lossy(), claim.run_id]).map_err(storage)?;
-            conn.execute("UPDATE tasks SET status='ready', claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?1, lock_version=lock_version+1 WHERE id=?2", params![SystemClock.now_ms(), fresh.id]).map_err(storage)?;
-        }
-    }
+        Ok(())
+    })?;
     Ok(DispatchResult {
         claimed: 1,
         task_id: Some(claim.task.id),
         run_id: Some(claim.run_id),
         exit_code: Some(exit),
     })
+}
+
+fn promote_due_tasks(conn: &Connection, board_id: &str, actor: &str, now: i64) -> Result<usize> {
+    let candidates = query_tasks(conn, board_id)?
+        .into_iter()
+        .filter(|task| matches!(task.status, TaskStatus::Todo | TaskStatus::Scheduled))
+        .collect::<Vec<_>>();
+    let mut promoted = 0;
+    for task in candidates {
+        if recompute_ready_status(conn, &task, now)? == TaskStatus::Ready {
+            with_immediate_tx(conn, || {
+                set_status(
+                    conn,
+                    board_id,
+                    &task.id,
+                    TaskStatus::Ready,
+                    actor,
+                    "task.promoted",
+                    now,
+                )
+            })?;
+            promoted += 1;
+        }
+    }
+    Ok(promoted)
+}
+
+struct WorkerOutput {
+    status: ExitStatus,
+}
+
+fn validate_dispatch_options(options: &DispatchOptions) -> Result<()> {
+    if options.claim_ttl_ms <= 0 {
+        return Err(KanbanError::InvalidInput(
+            "claim_ttl_ms must be positive".into(),
+        ));
+    }
+    if options.heartbeat_interval_ms <= 0 {
+        return Err(KanbanError::InvalidInput(
+            "heartbeat_interval_ms must be positive".into(),
+        ));
+    }
+    if options.heartbeat_interval_ms >= options.claim_ttl_ms {
+        return Err(KanbanError::InvalidInput(
+            "heartbeat_interval_ms must be less than claim_ttl_ms".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn run_worker_with_heartbeat(
+    path: &Path,
+    board: &str,
+    options: &DispatchOptions,
+    claim: &ClaimResult,
+    log_path: &Path,
+) -> Result<WorkerOutput> {
+    let stdout = File::create(log_path).map_err(|e| KanbanError::Storage(e.to_string()))?;
+    let stderr = stdout
+        .try_clone()
+        .map_err(|e| KanbanError::Storage(e.to_string()))?;
+    let mut child = Command::new("sh")
+        .arg("-c")
+        .arg(&options.command)
+        .env("KB_DB_PATH", path)
+        .env("KB_BOARD_ID", &claim.task.board_id)
+        .env("KB_BOARD_SLUG", board)
+        .env("KB_TASK_ID", &claim.task.id)
+        .env("KB_TASK_SEQ", claim.task.seq.to_string())
+        .env("KB_TASK_TITLE", &claim.task.title)
+        .env("KB_CLAIM_TOKEN", &claim.claim_token)
+        .env("KB_RUN_ID", &claim.run_id)
+        .env("KB_ACTOR", &options.actor)
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
+        .spawn()
+        .map_err(|e| KanbanError::Storage(e.to_string()))?;
+
+    let heartbeat_interval = Duration::from_millis(options.heartbeat_interval_ms as u64);
+    let poll_interval = heartbeat_interval.min(Duration::from_millis(10));
+    let mut elapsed_since_heartbeat = Duration::ZERO;
+    loop {
+        match child
+            .try_wait()
+            .map_err(|e| KanbanError::Storage(e.to_string()))?
+        {
+            Some(status) => return Ok(WorkerOutput { status }),
+            None => {
+                thread::sleep(poll_interval);
+                elapsed_since_heartbeat += poll_interval;
+                if elapsed_since_heartbeat < heartbeat_interval {
+                    continue;
+                }
+                elapsed_since_heartbeat = Duration::ZERO;
+                let conn = connect_file(path)?;
+                let board_id = board_id(&conn, board)?;
+                let task = get_task_by_id(&conn, &board_id, &claim.task.id)?;
+                if let Err(err) = with_immediate_tx(&conn, || {
+                    heartbeat_task_conn(
+                        &conn,
+                        &board_id,
+                        &options.actor,
+                        &task,
+                        &claim.claim_token,
+                        options.claim_ttl_ms,
+                        SystemClock.now_ms(),
+                    )
+                }) {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(err);
+                }
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn retry_running_task(
+    conn: &Connection,
+    board_id: &str,
+    task: &TaskRecord,
+    actor: &str,
+    run_status: &str,
+    exit_code: Option<i32>,
+    reason: &str,
+    now: i64,
+) -> Result<()> {
+    if task.status != TaskStatus::Running
+        || task.claim_token.is_none()
+        || task.current_run_id.is_none()
+    {
+        return Err(KanbanError::InvalidTransition(
+            "retry requires matching running claim".into(),
+        ));
+    }
+    let new_retry_count = task.retry_count + 1;
+    let blocked = task
+        .max_retries
+        .is_some_and(|max_retries| new_retry_count >= max_retries);
+    let target = if blocked {
+        TaskStatus::Blocked
+    } else {
+        TaskStatus::Ready
+    };
+    if let (Some(run_id), Some(token)) = (&task.current_run_id, &task.claim_token) {
+        let changed = conn
+            .execute(
+                "UPDATE task_runs SET status=?1, finished_at=?2, exit_code=?3, error=?4 WHERE id=?5 AND board_id=?6 AND task_id=?7 AND status='running' AND claim_token=?8",
+                params![run_status, now, exit_code, reason, run_id, board_id, task.id, token],
+            )
+            .map_err(storage)?;
+        if changed != 1 {
+            return Err(KanbanError::InvalidTransition(
+                "retry requires matching running run".into(),
+            ));
+        }
+    }
+    let changed = conn
+        .execute(
+            "UPDATE tasks SET status=?1, status_reason=?2, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, retry_count=?3, updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='running' AND claim_token=?7 AND current_run_id=?8",
+            params![target.as_str(), if blocked { Some(reason) } else { None }, new_retry_count, now, task.id, board_id, task.claim_token, task.current_run_id],
+        )
+        .map_err(storage)?;
+    if changed != 1 {
+        return Err(KanbanError::InvalidTransition(
+            "retry requires matching running claim".into(),
+        ));
+    }
+    let payload = json!({
+        "retry_count": new_retry_count,
+        "max_retries": task.max_retries,
+    })
+    .to_string();
+    insert_event(
+        conn,
+        board_id,
+        Some(&task.id),
+        task.current_run_id.as_deref(),
+        if blocked {
+            "task.blocked"
+        } else {
+            "task.reclaimed"
+        },
+        actor,
+        &payload,
+        now,
+    )?;
+    if blocked && reason == "claim expired" {
+        insert_event(
+            conn,
+            board_id,
+            Some(&task.id),
+            task.current_run_id.as_deref(),
+            "task.reclaimed",
+            actor,
+            &payload,
+            now,
+        )?;
+    }
+    Ok(())
 }
 
 fn initial_status(
@@ -957,12 +1324,45 @@ fn finish_running(
     } else {
         task.completed_at
     };
-    conn.execute(
-        "UPDATE tasks SET status=?1, status_reason=?2, completed_at=?3, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?4, lock_version=lock_version+1 WHERE id=?5",
-        params![target.as_str(), reason, completed, now, task.id],
-    ).map_err(storage)?;
+    if task.status != TaskStatus::Running
+        && !(task.status == TaskStatus::Review && target == TaskStatus::Done)
+    {
+        return Err(KanbanError::InvalidTransition(
+            "finish requires matching running claim".into(),
+        ));
+    }
+    let changed = if task.status == TaskStatus::Running {
+        if task.claim_token.is_none() || task.current_run_id.is_none() {
+            return Err(KanbanError::InvalidTransition(
+                "finish requires matching running claim".into(),
+            ));
+        }
+        conn.execute(
+            "UPDATE tasks SET status=?1, status_reason=?2, completed_at=?3, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='running' AND claim_token=?7 AND current_run_id=?8",
+            params![target.as_str(), reason, completed, now, task.id, board_id, task.claim_token, task.current_run_id],
+        )
+    } else {
+        conn.execute(
+            "UPDATE tasks SET status=?1, status_reason=?2, completed_at=?3, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='review'",
+            params![target.as_str(), reason, completed, now, task.id, board_id],
+        )
+    }
+    .map_err(storage)?;
+    if changed != 1 {
+        return Err(KanbanError::InvalidTransition(
+            "finish requires matching running claim".into(),
+        ));
+    }
     if let Some(run_id) = &task.current_run_id {
-        conn.execute("UPDATE task_runs SET status=?1, finished_at=?2, exit_code=?3, error=?4, log_path=COALESCE(?5, log_path) WHERE id=?6", params![run_status, now, exit_code, reason, log_path.map(|p| p.to_string_lossy().to_string()), run_id]).map_err(storage)?;
+        let changed = conn.execute(
+            "UPDATE task_runs SET status=?1, finished_at=?2, exit_code=?3, error=?4, log_path=COALESCE(?5, log_path) WHERE id=?6 AND board_id=?7 AND task_id=?8 AND status='running' AND claim_token IS ?9",
+            params![run_status, now, exit_code, reason, log_path.map(|p| p.to_string_lossy().to_string()), run_id, board_id, task.id, task.claim_token],
+        ).map_err(storage)?;
+        if task.status == TaskStatus::Running && changed != 1 {
+            return Err(KanbanError::InvalidTransition(
+                "finish requires matching running run".into(),
+            ));
+        }
         insert_event(
             conn,
             board_id,
@@ -1002,6 +1402,7 @@ fn set_status(
         params![status.as_str(), now, task_id],
     )
     .map_err(storage)?;
+    let payload = json!({ "to_status": status.as_str() }).to_string();
     insert_event(
         conn,
         board_id,
@@ -1009,7 +1410,7 @@ fn set_status(
         None,
         event,
         actor,
-        &format!(r#"{{"to_status":"{}"}}"#, status.as_str()),
+        &payload,
         now,
     )
 }
@@ -1049,7 +1450,12 @@ fn promote_children(
 }
 
 fn recompute_ready_status(conn: &Connection, task: &TaskRecord, now: i64) -> Result<TaskStatus> {
-    if task.title.trim().is_empty() {
+    if task.title.trim().is_empty()
+        || task
+            .description
+            .as_deref()
+            .is_none_or(|description| description.trim().is_empty())
+    {
         return Ok(TaskStatus::Triage);
     }
     if task.scheduled_at.is_some_and(|t| t > now) {
@@ -1201,9 +1607,20 @@ fn json_valid(conn: &Connection, json: &str) -> Result<bool> {
         .map_err(storage)
 }
 
+fn with_immediate_tx<T>(conn: &Connection, f: impl FnOnce() -> Result<T>) -> Result<T> {
+    conn.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+    match f() {
+        Ok(value) => {
+            conn.execute_batch("COMMIT").map_err(storage)?;
+            Ok(value)
+        }
+        Err(err) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(err)
+        }
+    }
+}
+
 fn storage(err: rusqlite::Error) -> KanbanError {
     KanbanError::Storage(err.to_string())
-}
-fn escape_json(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
 }

@@ -294,7 +294,9 @@ dependencies = [
  "anyhow",
  "clap",
  "dirs-next",
+ "kanban-core",
  "kanban-sqlite",
+ "serde",
  "serde_json",
 ]
 

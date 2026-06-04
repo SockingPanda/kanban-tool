@@ -3,11 +3,13 @@ use std::path::{Path, PathBuf};
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_board_id};
 use rusqlite::{Connection, OptionalExtension, params};
 
+use serde::{Deserialize, Serialize};
+
 use crate::connect_file;
 
 const INITIAL_MIGRATION: &str = include_str!("../../../migrations/001_initial.sql");
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InitResult {
     pub db_path: PathBuf,
     pub board_id: String,

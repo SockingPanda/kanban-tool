@@ -1,0 +1,383 @@
+# Dispatcher SPEC
+
+Dispatcher 是本地可选调度器。它只处理本机 SQLite DB，不处理远程 worker，不处理多用户协作。
+
+---
+
+## 1. 目标
+
+Dispatcher 负责：
+
+1. promotion：把符合条件的 `todo/scheduled` 任务提升到 `ready`。
+2. reclaim：回收超时、崩溃或失联的 `running` 任务。
+3. claim：从 `ready` 队列选择任务并进入 `running`。
+4. run：执行本地 worker profile。
+5. heartbeat：维持 claim。
+6. finish：根据 worker 结果写回 `done/review/blocked/ready`。
+
+Dispatcher 不负责：
+
+- 远程执行。
+- 多机协调。
+- 权限控制。
+- 长期日志存储。
+
+---
+
+## 2. 运行方式
+
+### 2.1 单次运行
+
+```bash
+kb dispatch --once
+```
+
+执行一轮：
+
+1. reclaim expired。
+2. promote due/ready。
+3. claim up to capacity。
+4. 对已 claim task 启动 worker。
+
+### 2.2 常驻运行
+
+```bash
+kb dispatch
+```
+
+循环执行。
+
+### 2.3 与 server 同进程
+
+```bash
+kb serve --dispatcher
+```
+
+适合日常 Web UI。
+
+---
+
+## 3. Dispatcher Loop
+
+伪代码：
+
+```rust
+loop {
+    let now = clock.now_ms();
+
+    reclaim_expired(now)?;
+    promote_due_tasks(now)?;
+
+    while running_count() < max_concurrency {
+        match claim_next_ready_task(now)? {
+            Some(claimed) => spawn_worker(claimed)?,
+            None => break,
+        }
+    }
+
+    sleep(poll_interval);
+}
+```
+
+---
+
+## 4. Promotion
+
+### 4.1 Scheduled promotion
+
+```text
+scheduled -> ready
+```
+
+Guard：
+
+- `scheduled_at <= now`。
+- 所有 parent dependency 为 `done`。
+
+### 4.2 Todo promotion
+
+```text
+todo -> ready
+```
+
+Guard：
+
+- 所有 parent dependency 为 `done`。
+- spec complete。
+
+### 4.3 Promotion transaction
+
+每个 task 独立 transaction 或批量 transaction 均可。建议批量，但限制 batch size。
+
+每个 promotion 必须写：
+
+- task status update。
+- `task_events(kind='task.promoted')`。
+
+---
+
+## 5. Ready Queue Selection
+
+默认排序：
+
+```sql
+ORDER BY priority DESC, created_at ASC
+```
+
+可选后续扩展：
+
+- assignee/profile matching。
+- due_at 优先。
+- label filter。
+- WIP limit。
+
+MVP selection 输入：
+
+```text
+board_id
+worker_profile optional
+limit
+```
+
+如果 task.assignee 不为空：
+
+- 当 worker profile 与 assignee 匹配时可 claim。
+- 人工 CLI start 可忽略 worker profile，但 actor 写入 claim_owner。
+
+---
+
+## 6. Claim Algorithm
+
+Claim 必须原子执行。
+
+伪 SQL：
+
+```sql
+BEGIN IMMEDIATE;
+
+SELECT id
+FROM tasks
+WHERE board_id = ?
+  AND status = 'ready'
+  AND claim_token IS NULL
+  AND (assignee IS NULL OR assignee = ?)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM task_dependencies d
+    JOIN tasks p ON p.id = d.parent_task_id
+    WHERE d.child_task_id = tasks.id
+      AND p.status != 'done'
+  )
+ORDER BY priority DESC, created_at ASC
+LIMIT 1;
+
+UPDATE tasks
+SET status = 'running',
+    claim_token = ?,
+    claim_owner = ?,
+    claim_expires_at = ?,
+    last_heartbeat_at = ?,
+    started_at = COALESCE(started_at, ?),
+    updated_at = ?,
+    lock_version = lock_version + 1
+WHERE id = ?
+  AND status = 'ready'
+  AND claim_token IS NULL;
+
+INSERT INTO task_runs (...);
+UPDATE tasks SET current_run_id = ? WHERE id = ?;
+INSERT INTO task_events (...);
+
+COMMIT;
+```
+
+如果 update affected rows = 0，说明被其他进程抢先 claim，重新选择下一个。
+
+---
+
+## 7. Worker Profile
+
+配置示例：
+
+```toml
+[workers.default]
+command = "./scripts/run-task.sh"
+concurrency = 1
+claim_ttl_ms = 300000
+heartbeat_interval_ms = 30000
+max_runtime_ms = 3600000
+on_success = "done"   # done | review
+on_failure = "blocked" # blocked | ready
+
+[workers.codegen]
+command = "kb-agent --task $KB_TASK_ID"
+concurrency = 2
+on_success = "review"
+on_failure = "blocked"
+```
+
+### 7.1 环境变量
+
+Worker process 获得：
+
+| Env | 说明 |
+|---|---|
+| `KB_DB_PATH` | SQLite DB path。 |
+| `KB_BOARD_ID` | board id。 |
+| `KB_BOARD_SLUG` | board slug。 |
+| `KB_TASK_ID` | task id。 |
+| `KB_TASK_SEQ` | task seq。 |
+| `KB_TASK_TITLE` | title。 |
+| `KB_CLAIM_TOKEN` | claim token。 |
+| `KB_RUN_ID` | run id。 |
+| `KB_ACTOR` | dispatcher/worker actor。 |
+
+Worker 可通过 CLI 回写：
+
+```bash
+kb --db "$KB_DB_PATH" task heartbeat "$KB_TASK_ID" --claim-token "$KB_CLAIM_TOKEN"
+kb --db "$KB_DB_PATH" task done "$KB_TASK_ID" --claim-token "$KB_CLAIM_TOKEN" --summary "..."
+```
+
+也可以让 dispatcher wrapper 根据进程退出码自动 complete/block。
+
+---
+
+## 8. Heartbeat
+
+默认：dispatcher wrapper 负责 heartbeat，不要求 worker 自己做。
+
+规则：
+
+- 每 `heartbeat_interval_ms` 更新一次。
+- heartbeat TTL 延长至 `now + claim_ttl_ms`。
+- 若 heartbeat 失败，dispatcher 应终止 worker 或等待 reclaim。
+
+---
+
+## 9. Finish Policy
+
+### 9.1 Success
+
+Worker exit code = 0。
+
+根据 profile：
+
+| `on_success` | Transition |
+|---|---|
+| `done` | `running -> done` |
+| `review` | `running -> review` |
+
+### 9.2 Failure
+
+Worker exit code != 0。
+
+根据 profile：
+
+| `on_failure` | Transition |
+|---|---|
+| `blocked` | `running -> blocked` with reason。 |
+| `ready` | reclaim to ready and increment retry。 |
+
+如果 `retry_count >= max_retries`，强制进入 `blocked`。
+
+### 9.3 Timeout
+
+如果 run 超过 `max_runtime_ms`：
+
+- 尝试 terminate worker。
+- close run as `expired`。
+- 根据 retry policy 进入 `ready` 或 `blocked`。
+
+---
+
+## 10. Reclaim
+
+Reclaim 条件：
+
+1. `claim_expires_at <= now`。
+2. worker_pid 不存在。
+3. run 超时。
+4. manual force。
+
+Reclaim side effects：
+
+- task status: `ready` 或 `blocked`。
+- clear claim fields。
+- close active run as `expired/canceled`。
+- insert `task_events(kind='task.reclaimed')`。
+
+---
+
+## 11. PID Checking
+
+因为只支持单机，可以检查 PID。
+
+限制：
+
+- PID 可能复用。
+- 只能作为辅助信号，claim TTL 仍是主机制。
+- 跨平台实现需要抽象。
+
+建议：
+
+- Linux/macOS：检查 pid 是否存在。
+- Windows：后续实现，MVP 可只依赖 TTL。
+
+---
+
+## 12. Logs
+
+Worker stdout/stderr 不全量写 DB。
+
+默认路径：
+
+```text
+~/.local/state/kb/logs/r_<run_id>.log
+```
+
+DB 记录：
+
+- `task_runs.log_path`
+- `task_runs.summary`
+- `task_runs.error`
+
+CLI：
+
+```bash
+kb run logs r_01HX...
+```
+
+---
+
+## 13. Failure Cases
+
+| Case | 行为 |
+|---|---|
+| Dispatcher 崩溃 | running task claim 过期后被下次 dispatcher reclaim。 |
+| Worker 崩溃 | heartbeat 停止，claim 过期，reclaim。 |
+| SQLite busy | 等待 busy_timeout；仍失败则记录错误并下轮重试。 |
+| Task 被人工 block | Dispatcher 不再处理。 |
+| Task 被人工 force complete | Worker 后续 complete 失败，因 token/run 已关闭。 |
+| DB integrity failed | Dispatcher 停止，提示运行 `kb doctor`。 |
+
+---
+
+## 14. MVP Scope
+
+MVP dispatcher 必须实现：
+
+- promote due tasks。
+- claim one ready task。
+- spawn command。
+- heartbeat。
+- complete/block based on exit code。
+- reclaim expired claims。
+
+MVP 可暂不实现：
+
+- profile concurrency > 1。
+- complex worker matching。
+- Windows PID checking。
+- per-label routing。
+- cron-like recurring tasks。

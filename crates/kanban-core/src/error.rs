@@ -1,0 +1,17 @@
+use thiserror::Error;
+
+pub type Result<T> = std::result::Result<T, KanbanError>;
+
+#[derive(Debug, Error)]
+pub enum KanbanError {
+    #[error("invalid status: {0}")]
+    InvalidStatus(String),
+    #[error("invalid transition: {0}")]
+    InvalidTransition(String),
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
+    #[error("not found: {0}")]
+    NotFound(String),
+    #[error("storage error: {0}")]
+    Storage(String),
+}

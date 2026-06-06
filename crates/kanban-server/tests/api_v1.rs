@@ -1,9 +1,9 @@
 use axum::{
     body::Body,
-    http::{Request, StatusCode, header},
+    http::{HeaderValue, Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use kanban_server::{AppState, build_router};
+use kanban_server::{AppState, build_desktop_router, build_router};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
@@ -117,9 +117,36 @@ async fn get_raw(app: axum::Router, uri: &str) -> (StatusCode, axum::http::Heade
     )
 }
 
-fn assert_task_dto_hides_internal_fields(task: &Value) {
-    for hidden in [
-        "claim_token",
+async fn options_raw(
+    app: axum::Router,
+    uri: &str,
+    origin: &str,
+) -> (StatusCode, axum::http::HeaderMap) {
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("OPTIONS")
+                .uri(uri)
+                .header(header::ORIGIN, origin)
+                .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                .header(
+                    header::ACCESS_CONTROL_REQUEST_HEADERS,
+                    "content-type,x-kb-actor",
+                )
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    (response.status(), response.headers().clone())
+}
+
+fn assert_task_dto_exposes_ui_fields_without_claim_token(task: &Value) {
+    assert!(
+        task.get("claim_token").is_none(),
+        "claim_token must not be exposed"
+    );
+    for exposed in [
         "claim_owner",
         "claim_expires_at",
         "current_run_id",
@@ -129,8 +156,41 @@ fn assert_task_dto_hides_internal_fields(task: &Value) {
         "max_retries",
         "result_summary",
     ] {
-        assert!(task.get(hidden).is_none(), "{hidden} must not be exposed");
+        assert!(task.get(exposed).is_some(), "{exposed} must be exposed");
     }
+}
+
+#[tokio::test]
+async fn default_router_does_not_enable_browser_cors_for_mutations() {
+    let (_dir, db_path) = temp_db();
+    let app = build_router(AppState::new(db_path, "api-test"));
+
+    let (_status, headers) =
+        options_raw(app, "/api/v1/boards/default/tasks", "http://127.0.0.1:1420").await;
+
+    assert!(headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
+}
+
+#[tokio::test]
+async fn desktop_router_allows_only_local_desktop_origins() {
+    let (_dir, db_path) = temp_db();
+    let app = build_desktop_router(AppState::new(db_path, "api-test"));
+
+    let (status, headers) = options_raw(
+        app.clone(),
+        "/api/v1/boards/default/tasks",
+        "http://127.0.0.1:1420",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN),
+        Some(&HeaderValue::from_static("http://127.0.0.1:1420"))
+    );
+
+    let (_status, headers) =
+        options_raw(app, "/api/v1/boards/default/tasks", "http://example.com").await;
+    assert!(headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
 }
 
 fn future_epoch_ms() -> i64 {
@@ -261,7 +321,7 @@ async fn tasks_api_creates_task_and_event_with_body_actor_priority() {
     assert_eq!(task["status"], "ready");
     assert_eq!(task["assignee"], "worker-a");
     assert_eq!(task["priority"], 10);
-    assert_task_dto_hides_internal_fields(task);
+    assert_task_dto_exposes_ui_fields_without_claim_token(task);
     assert_eq!(task["metadata_json"], r#"{"source":"test"}"#);
 
     let events =
@@ -622,7 +682,7 @@ async fn tasks_api_gets_task_by_id() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["id"], task.id);
     assert_eq!(json["data"]["title"], "get by id");
-    assert_task_dto_hides_internal_fields(&json["data"]);
+    assert_task_dto_exposes_ui_fields_without_claim_token(&json["data"]);
 }
 
 #[tokio::test]
@@ -815,7 +875,7 @@ async fn transitions_api_claim_returns_token_run_and_running_task() {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["task"]["status"], "running");
-    assert_task_dto_hides_internal_fields(&json["data"]["task"]);
+    assert_task_dto_exposes_ui_fields_without_claim_token(&json["data"]["task"]);
     let token = json["data"]["claim_token"].as_str().expect("claim token");
     assert!(token.starts_with("claim_"));
     let run = &json["data"]["run"];
@@ -1452,6 +1512,53 @@ async fn events_api_after_limit_returns_ordered_events_and_next_after() {
     assert!(events[0]["event_id"].as_str().unwrap().starts_with("e_"));
     assert_eq!(events[0]["kind"], "task.created");
     assert_ne!(first.id, second.id);
+}
+
+#[tokio::test]
+async fn events_api_filters_by_task_id_for_detail_timeline() {
+    let (_dir, db_path) = temp_db();
+    let first = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("first timeline"),
+    )
+    .expect("first");
+    let second = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("second timeline"),
+    )
+    .expect("second");
+    kanban_sqlite::block_task(
+        &db_path,
+        "default",
+        "seed",
+        &first.id,
+        "waiting on local input",
+        None,
+        false,
+    )
+    .expect("block first");
+    let app = build_router(AppState::new(db_path, "api-test"));
+
+    let (status, json) = get_json(
+        app,
+        &format!("/api/v1/events?board=default&task_id={}", first.id),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let events = json["data"].as_array().expect("events array");
+    assert!(events.len() >= 2);
+    assert!(
+        events
+            .iter()
+            .all(|event| event["task_id"].as_str() == Some(first.id.as_str()))
+    );
+    assert!(!events.iter().any(|event| event["task_id"] == second.id));
+    assert!(events.iter().any(|event| event["kind"] == "task.blocked"));
 }
 
 #[tokio::test]

@@ -4,3 +4,12 @@
 *.db-shm
 *.db-wal
 .DS_Store
+
+# Node/Vite desktop app
+apps/desktop/node_modules/
+apps/desktop/dist/
+apps/desktop/src-tauri/gen/
+
+# Local browser automation artifacts
+.playwright-cli/
+output/playwright/

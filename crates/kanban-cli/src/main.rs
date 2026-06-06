@@ -548,21 +548,13 @@ fn optional_clearable<T>(value: Option<T>, clear: bool) -> Option<Option<T>> {
 }
 
 fn default_db_path() -> PathBuf {
-    dirs_next::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("kb")
-        .join("kb.db")
+    kanban_local::default_db_path()
 }
 
 fn default_log_dir() -> PathBuf {
-    dirs_next::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("kb")
-        .join("logs")
+    kanban_local::default_log_dir()
 }
 
 fn default_actor() -> String {
-    std::env::var("USER")
-        .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_else(|_| "local".to_owned())
+    kanban_local::default_actor()
 }

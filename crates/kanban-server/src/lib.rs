@@ -6,7 +6,7 @@ use axum::{
         Path, Query, RawQuery, State,
         rejection::{JsonRejection, QueryRejection},
     },
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     response::{
         IntoResponse, Response,
         sse::{Event, Sse},
@@ -17,6 +17,7 @@ use futures_util::stream;
 use kanban_core::{KanbanError, TaskStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -77,7 +78,15 @@ struct TaskDto {
     created_at: i64,
     updated_at: i64,
     started_at: Option<i64>,
+    completed_at: Option<i64>,
+    archived_at: Option<i64>,
+    claim_owner: Option<String>,
+    claim_expires_at: Option<i64>,
     last_heartbeat_at: Option<i64>,
+    current_run_id: Option<String>,
+    retry_count: i64,
+    max_retries: Option<i64>,
+    result_summary: Option<String>,
     result_json: Option<String>,
     metadata_json: String,
     lock_version: i64,
@@ -102,7 +111,15 @@ impl From<kanban_sqlite::TaskRecord> for TaskDto {
             created_at: task.created_at,
             updated_at: task.updated_at,
             started_at: task.started_at,
+            completed_at: task.completed_at,
+            archived_at: task.archived_at,
+            claim_owner: task.claim_owner,
+            claim_expires_at: task.claim_expires_at,
             last_heartbeat_at: task.last_heartbeat_at,
+            current_run_id: task.current_run_id,
+            retry_count: task.retry_count,
+            max_retries: task.max_retries,
+            result_summary: task.result_summary,
             result_json: task.result_json,
             metadata_json: task.metadata_json,
             lock_version: task.lock_version,
@@ -232,6 +249,32 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/events", get(list_events))
         .route("/api/v1/stream/events", get(stream_events))
         .with_state(state)
+}
+
+pub fn build_desktop_router(state: AppState) -> Router {
+    build_router(state).layer(desktop_cors_layer())
+}
+
+fn desktop_cors_layer() -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::list([
+            HeaderValue::from_static("http://127.0.0.1:1420"),
+            HeaderValue::from_static("http://localhost:1420"),
+            HeaderValue::from_static("http://tauri.localhost"),
+            HeaderValue::from_static("https://tauri.localhost"),
+            HeaderValue::from_static("tauri://localhost"),
+        ]))
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::HeaderName::from_static("x-kb-actor"),
+        ])
 }
 
 pub async fn serve(addr: SocketAddr, state: AppState) -> std::io::Result<()> {
@@ -528,6 +571,7 @@ struct AddDependencyBody {
 struct EventsQuery {
     #[serde(default = "default_board")]
     board: String,
+    task_id: Option<String>,
     #[serde(default)]
     after: i64,
     #[serde(default = "default_limit")]
@@ -908,7 +952,8 @@ fn events_snapshot(
 ) -> Result<(Vec<EventDto>, i64), ApiError> {
     let board = kanban_sqlite::get_board(state.db_path(), &query.board)?;
     let limit = query.limit.min(1000);
-    let mut events = kanban_sqlite::list_events(state.db_path(), &query.board, None)?;
+    let mut events =
+        kanban_sqlite::list_events(state.db_path(), &query.board, query.task_id.as_deref())?;
     events.retain(|event| event.id > query.after);
     events.truncate(limit);
     let next_after = events.last().map_or(query.after, |event| event.id);

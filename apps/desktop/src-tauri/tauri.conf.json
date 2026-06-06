@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Kanban Tool",
+  "version": "0.1.0",
+  "identifier": "dev.kanban-user.kanban",
+  "build": {
+    "beforeDevCommand": "pnpm dev --host 127.0.0.1",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Kanban Tool",
+        "width": 1440,
+        "height": 1024,
+        "minWidth": 1180,
+        "minHeight": 760
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src http://127.0.0.1:* http://localhost:*"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
+  }
+}

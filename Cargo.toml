@@ -2,8 +2,10 @@
 members = [
   "crates/kanban-core",
   "crates/kanban-sqlite",
+  "crates/kanban-local",
   "crates/kanban-cli",
   "crates/kanban-server",
+  "apps/desktop/src-tauri",
 ]
 resolver = "3"
 
@@ -32,3 +34,5 @@ ulid = "1.1"
 
 kanban-core = { path = "crates/kanban-core" }
 kanban-sqlite = { path = "crates/kanban-sqlite" }
+kanban-local = { path = "crates/kanban-local" }
+kanban-server = { path = "crates/kanban-server" }

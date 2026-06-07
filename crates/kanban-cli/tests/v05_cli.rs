@@ -142,6 +142,39 @@ fn task_reclaim_expired_alias_matches_bare_reclaim() {
     assert_eq!(explicit_result["data"]["reclaimed"], 1);
 }
 
+#[test]
+fn doctor_reports_integrity_migration_and_expired_running_tasks() {
+    let temp = TempDb::new("doctor_reports_integrity_migration_and_expired_running_tasks");
+    kb(&temp.path, &["init"]).success();
+    let created = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "doctor expired",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success_json();
+    let task_id = created["data"]["id"].as_str().unwrap();
+    kb(
+        &temp.path,
+        &["--json", "task", "claim", task_id, "--ttl-ms", "1"],
+    )
+    .success_json();
+    std::thread::sleep(std::time::Duration::from_millis(5));
+
+    let doctor = kb(&temp.path, &["--json", "doctor"]).success_json();
+
+    assert_eq!(doctor["data"]["integrity_check"], "ok");
+    assert_eq!(doctor["data"]["migration_version"], 1);
+    assert_eq!(doctor["data"]["user_version"], 1);
+    assert_eq!(doctor["data"]["expired_running_tasks"], 1);
+    assert_eq!(doctor["data"]["ok"], false);
+}
+
 fn kb(db_path: &Path, args: &[&str]) -> CmdResult {
     let output = Command::new(env!("CARGO_BIN_EXE_kb"))
         .arg("--db")

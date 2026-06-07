@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Activity,
   Archive,
@@ -55,6 +55,7 @@ import {
   canCompleteTask,
   completeTaskBody,
 } from "@/lib/action-policy"
+import { createLatestRequestGuard, runLatestRequest } from "@/lib/latest-request"
 import { cn, formatRelativeTime, shortId } from "@/lib/utils"
 
 const fallbackColumns: ApiBoardColumn[] = [
@@ -164,6 +165,7 @@ function App() {
   const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const taskRefreshGuard = useRef(createLatestRequestGuard())
 
   useEffect(() => {
     loadRuntimeConfig()
@@ -184,27 +186,33 @@ function App() {
     if (!api) return
     const query = search.trim()
     const statuses = statusFilter === "all" ? [] : [statusFilter]
-    const nextTasks = query
-      ? await api.searchTasks({
-          query,
+    return runLatestRequest(
+      taskRefreshGuard.current,
+      async () => {
+        if (query) {
+          const result = await api.searchTasks({
+            query,
+            includeArchived: showArchived,
+            statuses,
+          })
+          return { tasks: result.tasks, searchMeta: result.meta }
+        }
+
+        const tasks = await api.listTasks({
           includeArchived: showArchived,
           statuses,
-        }).then((result) => {
-          setSearchMeta(result.meta)
-          return result.tasks
         })
-      : await api.listTasks({
-          includeArchived: showArchived,
-          statuses,
-        }).then((result) => {
-          setSearchMeta(null)
-          return result
-        })
-    setTasks(nextTasks)
-    setSelectedId((current) =>
-      current && nextTasks.some((task) => task.id === current) ? current : nextTasks[0]?.id ?? null,
+        return { tasks, searchMeta: null }
+      },
+      ({ tasks: nextTasks, searchMeta: nextSearchMeta }) => {
+        setSearchMeta(nextSearchMeta)
+        setTasks(nextTasks)
+        setSelectedId((current) =>
+          current && nextTasks.some((task) => task.id === current) ? current : nextTasks[0]?.id ?? null,
+        )
+        setLastRefreshAt(Date.now())
+      },
     )
-    setLastRefreshAt(Date.now())
   }, [api, search, showArchived, statusFilter])
 
   const refreshDetail = useCallback(

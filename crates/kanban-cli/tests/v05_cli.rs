@@ -507,8 +507,9 @@ fn task_list_command_rejects_unbounded_limit() {
 }
 
 #[test]
-fn search_command_treats_like_wildcards_as_literal_text() {
-    let temp = TempDb::new("search_command_treats_like_wildcards_as_literal_text");
+fn search_command_treats_like_wildcards_and_escape_characters_as_literal_text() {
+    let temp =
+        TempDb::new("search_command_treats_like_wildcards_and_escape_characters_as_literal_text");
     kb(&temp.path, &["init"]).success();
     kb(
         &temp.path,
@@ -516,6 +517,17 @@ fn search_command_treats_like_wildcards_as_literal_text() {
             "task",
             "create",
             "literal percent % cli",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "literal backslash \\ cli",
             "--description",
             "ready spec",
         ],
@@ -537,6 +549,11 @@ fn search_command_treats_like_wildcards_as_literal_text() {
     let hits = json["data"]["hits"].as_array().unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0]["task"]["title"], "literal percent % cli");
+
+    let json = kb(&temp.path, &["--json", "search", "\\"]).success_json();
+    let hits = json["data"]["hits"].as_array().unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0]["task"]["title"], "literal backslash \\ cli");
 }
 
 #[test]

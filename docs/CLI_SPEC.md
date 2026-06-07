@@ -464,7 +464,7 @@ section and can set `command`, `claim_ttl_ms`, `heartbeat_interval_ms`,
 kb search <query> [--status ready] [--status review] [--assignee worker-a] [--include-archived] [--limit 20] [--offset 0] [--json]
 ```
 
-当前实现使用 SQLite fallback，不依赖外部/派生索引。搜索匹配 task title、description、comments、run summary/error、event kind/payload。
+默认实现使用 SQLite fallback，不依赖外部/派生索引。启用 `tantivy-backend` feature 且 `index/v1/tasks/` 存在可读 Tantivy 索引时，`kb search` 使用 Tantivy；缺失或损坏时回落 SQLite，并在 meta 中标记 stale。搜索匹配 task title、description、comments、run summary/error、event kind/payload。
 
 Human output compactly includes seq/id, status, score, title, and snippet when available:
 
@@ -510,11 +510,12 @@ kb index doctor
 kb index rebuild
 ```
 
-当前 backend 是 SQLite fallback：
+默认 backend 是 SQLite fallback。启用 `tantivy-backend` feature 时，Tantivy index 是可重建 derived cache：
 
 - `status` returns backend/meta.
 - `doctor` returns the same fallback health meta for scripts.
-- `rebuild` is a successful no-op because there is no derived index yet.
+- `rebuild` builds/replaces `index/v1/tasks/` beside the SQLite DB.
+- Task mutations do not update Tantivy inside their transactions; run `kb index rebuild` manually after changes.
 
 JSON data shape:
 
@@ -531,6 +532,8 @@ JSON data shape:
   }
 }
 ```
+
+With Tantivy enabled after rebuild, `backend` is `tantivy`, `derived_index` is `true`, and `index_version` is `tasks-v1`.
 
 ---
 

@@ -713,6 +713,43 @@ async fn search_api_returns_hits_with_tasks_and_sqlite_status() {
     assert_eq!(json["data"]["stale"], false);
 }
 
+#[cfg(feature = "tantivy-backend")]
+#[tokio::test]
+async fn search_api_uses_tantivy_index_when_rebuilt() {
+    let (_dir, db_path) = temp_db();
+    kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask {
+            title: "api tantivy comet".to_owned(),
+            description: Some("ready spec".to_owned()),
+            status: Some(kanban_core::TaskStatus::Ready),
+            assignee: Some("worker-a".to_owned()),
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".to_owned(),
+        },
+    )
+    .expect("seed task");
+    kanban_sqlite::rebuild_search_index(&db_path, "default").expect("rebuild index");
+    let app = build_router(AppState::new(db_path, "api-test"));
+
+    let (status, json) = get_json(
+        app,
+        "/api/v1/search/tasks?board=default&q=comet&assignee=worker-a&limit=10",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["meta"]["backend"], "tantivy");
+    assert_eq!(
+        json["data"]["hits"][0]["task"]["title"],
+        "api tantivy comet"
+    );
+}
+
 #[tokio::test]
 async fn search_api_rejects_unbounded_limit() {
     let (_dir, db_path) = temp_db();

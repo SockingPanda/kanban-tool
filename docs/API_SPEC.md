@@ -755,7 +755,7 @@ DELETE /api/v1/tasks/{task_id}/labels/{label_id}
 GET /api/v1/search/tasks?board=default&q=needle&status=ready&assignee=worker-a&include_archived=false&limit=20&offset=0
 ```
 
-Current backend is SQLite fallback only. It searches task title, description, comments, run summary/error, and event kind/payload. It does not require or create a derived index.
+Default backend is SQLite fallback. When the binary is built with `tantivy-backend` and `index/v1/tasks/` exists beside the SQLite DB, search uses the manual Tantivy task index. Missing or corrupt Tantivy indexes fall back to SQLite with stale metadata. Search matches task title, description, comments, run summary/error, and event kind/payload.
 
 Response:
 
@@ -790,6 +790,8 @@ Response:
   }
 }
 ```
+
+The API does not rebuild the derived index; use `kb index rebuild` for manual rebuilds.
 
 ### 13.2 Search status
 

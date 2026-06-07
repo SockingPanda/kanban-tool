@@ -747,9 +747,77 @@ DELETE /api/v1/tasks/{task_id}/labels/{label_id}
 
 ---
 
-## 13. Maintenance
+## 13. Search
 
-### 13.1 Doctor
+### 13.1 Search tasks
+
+```http
+GET /api/v1/search/tasks?board=default&q=needle&status=ready&assignee=worker-a&include_archived=false&limit=20&offset=0
+```
+
+Current backend is SQLite fallback only. It searches task title, description, comments, run summary/error, and event kind/payload. It does not require or create a derived index.
+
+Response:
+
+```json
+{
+  "data": {
+    "hits": [
+      {
+        "task_id": "t_01HX...",
+        "seq": 12,
+        "score": 60.0,
+        "snippet": "ready spec needle",
+        "task": {
+          "id": "t_01HX...",
+          "seq": 12,
+          "status": "ready",
+          "title": "实现状态机"
+        }
+      }
+    ],
+    "meta": {
+      "backend": "sqlite",
+      "stale": false,
+      "index_version": null,
+      "last_event_id": 42,
+      "index_lag_events": 0
+    }
+  },
+  "meta": {
+    "limit": 20,
+    "offset": 0
+  }
+}
+```
+
+### 13.2 Search status
+
+```http
+GET /api/v1/search/status?board=default
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "backend": "sqlite",
+    "derived_index": false,
+    "stale": false,
+    "index_version": null,
+    "last_event_id": 42,
+    "index_lag_events": 0,
+    "message": "SQLite fallback search is active; no derived index exists yet"
+  }
+}
+```
+
+---
+
+## 14. Maintenance
+
+### 14.1 Doctor
 
 ```http
 POST /api/v1/maintenance/doctor
@@ -757,7 +825,7 @@ POST /api/v1/maintenance/doctor
 
 Response includes SQLite integrity, migration/user version, expired running tasks, orphan run checks, dependency cycle count, archived dependency edge count, missing run log count, and executable status invariant counts for dependency/spec/schedule violations.
 
-### 13.2 Checkpoint
+### 14.2 Checkpoint
 
 ```http
 POST /api/v1/maintenance/checkpoint
@@ -765,13 +833,13 @@ POST /api/v1/maintenance/checkpoint
 
 Runs `PRAGMA wal_checkpoint(TRUNCATE)` and returns `busy`, `log_frames`, and `checkpointed_frames`.
 
-### 13.3 Backup
+### 14.3 Backup
 
 MVP 建议只提供 CLI backup，不开放 HTTP backup。
 
 ---
 
-## 14. Web UI Interaction Rules
+## 15. Web UI Interaction Rules
 
 1. 拖拽列时调用 transition endpoint。
 2. 普通字段编辑调用 `PATCH /tasks/{id}`。

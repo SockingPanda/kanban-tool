@@ -456,7 +456,85 @@ section and can set `command`, `claim_ttl_ms`, `heartbeat_interval_ms`,
 
 ---
 
-## 12. Maintenance Commands
+## 12. Search Commands
+
+### 12.1 `kb search`
+
+```bash
+kb search <query> [--status ready] [--status review] [--assignee worker-a] [--include-archived] [--limit 20] [--offset 0] [--json]
+```
+
+当前实现使用 SQLite fallback，不依赖外部/派生索引。搜索匹配 task title、description、comments、run summary/error、event kind/payload。
+
+Human output compactly includes seq/id, status, score, title, and snippet when available:
+
+```text
+#12 t_01HX... [ready] score=60.0 实现状态机 - ready spec needle
+```
+
+JSON output:
+
+```json
+{
+  "data": {
+    "hits": [
+      {
+        "task_id": "t_01HX...",
+        "seq": 12,
+        "score": 60.0,
+        "snippet": "ready spec needle",
+        "task": {
+          "id": "t_01HX...",
+          "seq": 12,
+          "status": "ready",
+          "title": "实现状态机"
+        }
+      }
+    ],
+    "meta": {
+      "backend": "sqlite",
+      "stale": false,
+      "index_version": null,
+      "last_event_id": 42,
+      "index_lag_events": 0
+    }
+  }
+}
+```
+
+### 12.2 `kb index`
+
+```bash
+kb index status
+kb index doctor
+kb index rebuild
+```
+
+当前 backend 是 SQLite fallback：
+
+- `status` returns backend/meta.
+- `doctor` returns the same fallback health meta for scripts.
+- `rebuild` is a successful no-op because there is no derived index yet.
+
+JSON data shape:
+
+```json
+{
+  "data": {
+    "backend": "sqlite",
+    "derived_index": false,
+    "stale": false,
+    "index_version": null,
+    "last_event_id": 42,
+    "index_lag_events": 0,
+    "message": "SQLite fallback search is active; no derived index exists yet"
+  }
+}
+```
+
+---
+
+## 13. Maintenance Commands
 
 ```bash
 kb doctor
@@ -474,7 +552,7 @@ kb checkpoint
 `kb export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kb backup`。
 `kb import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kb import --replace` 是 offline-only 操作；运行前必须停止 `kb serve` 和常驻 `kb dispatch`，如果检测到 active runtime lock 会直接拒绝。
 
-### 12.1 `kb doctor`
+### 13.1 `kb doctor`
 
 检查：
 
@@ -493,7 +571,7 @@ kb checkpoint
 
 ---
 
-## 13. JSON Output Contract
+## 14. JSON Output Contract
 
 成功：
 

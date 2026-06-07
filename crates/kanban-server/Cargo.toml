@@ -9,6 +9,7 @@ authors.workspace = true
 axum.workspace = true
 futures-util = "0.3"
 kanban-core.workspace = true
+kanban-search.workspace = true
 kanban-sqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -42,7 +42,20 @@ pub fn maintenance_lock_path(path: &Path) -> PathBuf {
     PathBuf::from(format!("{}.maintenance.lock", normalized.display()))
 }
 
+pub fn runtime_lock_path(path: &Path) -> PathBuf {
+    let normalized = normalized_database_path(path);
+    PathBuf::from(format!("{}.runtime.lock", normalized.display()))
+}
+
 pub fn maintenance_lock_blocks(lock_path: &Path) -> Result<bool> {
+    lock_file_blocks(lock_path)
+}
+
+pub fn runtime_lock_blocks(lock_path: &Path) -> Result<bool> {
+    lock_file_blocks(lock_path)
+}
+
+fn lock_file_blocks(lock_path: &Path) -> Result<bool> {
     if !lock_path.exists() {
         return Ok(false);
     }

@@ -11,11 +11,12 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_core::TaskStatus;
 use kanban_sqlite::{
     CreateTask, DispatchOptions, FinishPolicy, TaskPatch, add_dependency, archive_task,
-    backup_database, begin_database_replace, block_task, checkpoint_database, claim_task,
-    complete_task, create_task, dispatch_once, export_jsonl, get_run_by_id_global, get_task,
-    heartbeat_task, import_jsonl, init_database, list_dependencies, list_events, list_runs,
-    list_tasks, promote_task, queue_stats, reclaim_expired, remove_dependency,
-    set_task_retry_policy_by_id, submit_review_task, unblock_task, update_task, vacuum_database,
+    backup_database, begin_database_replace, begin_database_runtime, block_task,
+    checkpoint_database, claim_task, complete_task, create_task, dispatch_once, export_jsonl,
+    get_run_by_id_global, get_task, heartbeat_task, import_jsonl, init_database, list_dependencies,
+    list_events, list_runs, list_tasks, promote_task, queue_stats, reclaim_expired,
+    remove_dependency, set_task_retry_policy_by_id, submit_review_task, unblock_task, update_task,
+    vacuum_database,
 };
 
 #[derive(Debug, Parser)]
@@ -373,6 +374,7 @@ fn main() -> Result<()> {
                     )
                 })?;
             } else {
+                let _runtime_guard = begin_database_runtime(&db_path)?;
                 let summary = dispatch_loop(
                     &db_path,
                     &cli.board,
@@ -482,6 +484,7 @@ fn serve(args: ServeArgs, db_path: PathBuf, actor: String) -> Result<()> {
     if !addr.ip().is_loopback() {
         bail!("kb serve only supports loopback hosts; use 127.0.0.1 or ::1");
     }
+    let _runtime_guard = begin_database_runtime(&db_path)?;
     let _init = init_database(&db_path, &actor)
         .with_context(|| format!("failed to initialize/open {}", db_path.display()))?;
     eprintln!(

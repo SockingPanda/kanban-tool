@@ -19,7 +19,10 @@ use rusqlite::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{connect_file, default_pragmas, maintenance_lock_blocks, maintenance_lock_path};
+use crate::{
+    connect_file, default_pragmas, maintenance_lock_blocks, maintenance_lock_path,
+    runtime_lock_blocks, runtime_lock_path,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskRecord {
@@ -283,6 +286,17 @@ pub struct DatabaseReplaceGuard {
 }
 
 impl Drop for DatabaseReplaceGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.lock_path);
+    }
+}
+
+#[derive(Debug)]
+pub struct DatabaseRuntimeGuard {
+    lock_path: PathBuf,
+}
+
+impl Drop for DatabaseRuntimeGuard {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.lock_path);
     }
@@ -569,22 +583,14 @@ pub fn begin_database_replace(path: impl AsRef<Path>) -> Result<DatabaseReplaceG
             path.display()
         )));
     }
-    let lock_result = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&lock_path);
-    let mut lock_file = match lock_result {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            return Err(KanbanError::InvalidInput(format!(
-                "database is locked for maintenance: {}",
-                path.display()
-            )));
-        }
-        Err(error) => return Err(KanbanError::Storage(error.to_string())),
-    };
-    writeln!(lock_file, "pid={}", std::process::id())
-        .map_err(|error| KanbanError::Storage(error.to_string()))?;
+    let runtime_lock = runtime_lock_path(path);
+    if runtime_lock_blocks(&runtime_lock)? {
+        return Err(KanbanError::InvalidInput(format!(
+            "database has active serve/dispatch runtime; stop kb serve/dispatch before import --replace: {}",
+            path.display()
+        )));
+    }
+    create_lock_file(&lock_path, "maintenance", path)?;
     let guard = DatabaseReplaceGuard { lock_path };
     if path.exists() && !path.is_file() {
         drop(guard);
@@ -601,6 +607,45 @@ pub fn begin_database_replace(path: impl AsRef<Path>) -> Result<DatabaseReplaceG
         return Err(error);
     }
     Ok(guard)
+}
+
+pub fn begin_database_runtime(path: impl AsRef<Path>) -> Result<DatabaseRuntimeGuard> {
+    let path = path.as_ref();
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent).map_err(|error| KanbanError::Storage(error.to_string()))?;
+    }
+    let lock_path = runtime_lock_path(path);
+    if runtime_lock_blocks(&lock_path)? {
+        return Err(KanbanError::InvalidInput(format!(
+            "database already has an active serve/dispatch runtime: {}",
+            path.display()
+        )));
+    }
+    create_lock_file(&lock_path, "runtime", path)?;
+    Ok(DatabaseRuntimeGuard { lock_path })
+}
+
+fn create_lock_file(lock_path: &Path, kind: &str, db_path: &Path) -> Result<()> {
+    let lock_result = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(lock_path);
+    let mut lock_file = match lock_result {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(KanbanError::InvalidInput(format!(
+                "database is locked for {kind}: {}",
+                db_path.display()
+            )));
+        }
+        Err(error) => return Err(KanbanError::Storage(error.to_string())),
+    };
+    writeln!(lock_file, "pid={}", std::process::id())
+        .map_err(|error| KanbanError::Storage(error.to_string()))?;
+    writeln!(lock_file, "kind={kind}").map_err(|error| KanbanError::Storage(error.to_string()))
 }
 
 pub fn export_jsonl(
@@ -821,7 +866,8 @@ pub fn update_task(
     let board_id = board_id(&conn, board)?;
     with_immediate_tx(&conn, || {
         let mut task = resolve_task(&conn, &board_id, task_ref)?;
-        let scheduled_at_changed = patch.scheduled_at.is_some();
+        let recompute_needed =
+            patch.title.is_some() || patch.description.is_some() || patch.scheduled_at.is_some();
         if patch
             .expected_lock_version
             .is_some_and(|expected| task.lock_version != expected)
@@ -857,12 +903,7 @@ pub fn update_task(
             }
             task.metadata_json = metadata_json;
         }
-        if scheduled_at_changed
-            && matches!(
-                task.status,
-                TaskStatus::Triage | TaskStatus::Todo | TaskStatus::Scheduled | TaskStatus::Ready
-            )
-        {
+        if recompute_needed && is_active_recomputable_status(task.status) {
             task.status = recompute_ready_status(&conn, &task, now)?;
         }
         let changed = conn.execute(
@@ -1061,24 +1102,32 @@ pub fn promote_task(
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
-    let task = resolve_task(&conn, &board_id, task_ref)?;
-    ensure_dependencies_done(&conn, &task.id)?;
-    if task.status == TaskStatus::Scheduled && task.scheduled_at.is_some_and(|t| t > now) {
-        return Err(KanbanError::InvalidTransition(
-            "scheduled_at is in the future".into(),
-        ));
-    }
-    if !matches!(task.status, TaskStatus::Todo | TaskStatus::Scheduled) {
-        return Err(KanbanError::InvalidTransition(format!(
-            "cannot promote from {}",
-            task.status.as_str()
-        )));
-    }
     with_immediate_tx(&conn, || {
-        set_status(
+        let task = resolve_task(&conn, &board_id, task_ref)?;
+        if !matches!(task.status, TaskStatus::Todo | TaskStatus::Scheduled) {
+            return Err(KanbanError::InvalidTransition(format!(
+                "cannot promote from {}",
+                task.status.as_str()
+            )));
+        }
+        if task.status == TaskStatus::Scheduled && task.scheduled_at.is_some_and(|t| t > now) {
+            return Err(KanbanError::InvalidTransition(
+                "scheduled_at is in the future".into(),
+            ));
+        }
+        let target = recompute_ready_status(&conn, &task, now)?;
+        if target != TaskStatus::Ready {
+            return Err(KanbanError::InvalidTransition(match target {
+                TaskStatus::Todo => "dependency blocked".into(),
+                TaskStatus::Scheduled => "scheduled_at is in the future".into(),
+                TaskStatus::Triage => "task spec is incomplete".into(),
+                _ => format!("cannot promote to {}", target.as_str()),
+            }));
+        }
+        guarded_set_status(
             &conn,
             &board_id,
-            &task.id,
+            &task,
             TaskStatus::Ready,
             actor,
             "task.promoted",
@@ -1576,29 +1625,25 @@ pub fn unblock_task(
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
-    let task = resolve_task(&conn, &board_id, task_ref)?;
-    if task.status != TaskStatus::Blocked {
-        return Err(KanbanError::InvalidTransition(
-            "unblock requires blocked".into(),
-        ));
-    }
-    let target = recompute_ready_status(&conn, &task, now)?;
     with_immediate_tx(&conn, || {
-        conn.execute(
-            "UPDATE tasks SET status=?1, status_reason=NULL, updated_at=?2, lock_version=lock_version+1 WHERE id=?3",
-            params![target.as_str(), now, task.id],
-        )
-        .map_err(storage)?;
-        let payload = json!({ "to_status": target.as_str() }).to_string();
-        insert_event(
+        let task = resolve_task(&conn, &board_id, task_ref)?;
+        if task.status != TaskStatus::Blocked {
+            return Err(KanbanError::InvalidTransition(
+                "unblock requires blocked".into(),
+            ));
+        }
+        let target = recompute_ready_status(&conn, &task, now)?;
+        guarded_set_status_with_reason(
             &conn,
             &board_id,
-            Some(&task.id),
-            None,
-            "task.unblocked",
-            actor,
-            &payload,
-            now,
+            &task,
+            StatusUpdate {
+                status: target,
+                status_reason: None,
+                actor,
+                event: "task.unblocked",
+                now,
+            },
         )?;
         get_task_by_id(&conn, &board_id, &task.id)
     })
@@ -1792,24 +1837,9 @@ pub fn add_dependency(
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
-    let parent = resolve_task(&conn, &board_id, parent_ref)?;
-    let child = resolve_task(&conn, &board_id, child_ref)?;
-    if parent.id == child.id {
-        return Err(KanbanError::InvalidInput(
-            "dependency cannot point to itself".into(),
-        ));
-    }
-    if has_path(&conn, &child.id, &parent.id)? {
-        return Err(KanbanError::InvalidInput(
-            "dependency cycle detected".into(),
-        ));
-    }
-    if child.status == TaskStatus::Running && parent.status != TaskStatus::Done {
-        return Err(KanbanError::InvalidTransition(
-            "cannot add incomplete dependency to running task".into(),
-        ));
-    }
     with_immediate_tx(&conn, || {
+        let parent = resolve_task(&conn, &board_id, parent_ref)?;
+        let child = resolve_task(&conn, &board_id, child_ref)?;
         add_dependency_in_current_tx(&conn, &board_id, actor, &parent, &child, now)
     })
 }
@@ -1842,12 +1872,24 @@ fn add_dependency_in_current_tx(
         params![board_id, parent.id, child.id, now],
     )
     .map_err(storage)?;
-    if child.status == TaskStatus::Ready && parent.status != TaskStatus::Done {
-        conn.execute(
-            "UPDATE tasks SET status='todo', updated_at=?1, lock_version=lock_version+1 WHERE id=?2",
-            params![now, child.id],
-        )
-        .map_err(storage)?;
+    let fresh_child = get_task_by_id(conn, board_id, &child.id)?;
+    if is_active_recomputable_status(fresh_child.status) {
+        let target = recompute_ready_status(conn, &fresh_child, now)?;
+        if target != fresh_child.status {
+            guarded_set_status(
+                conn,
+                board_id,
+                &fresh_child,
+                target,
+                actor,
+                if target == TaskStatus::Ready {
+                    "task.promoted"
+                } else {
+                    "task.recomputed"
+                },
+                now,
+            )?;
+        }
     }
     let payload = json!({ "parent_task_id": parent.id }).to_string();
     insert_event(
@@ -1887,10 +1929,10 @@ pub fn remove_dependency(
         ) {
             let target = recompute_ready_status(&conn, &fresh_child, now)?;
             if target != fresh_child.status {
-                set_status(
+                guarded_set_status(
                     &conn,
                     &board_id,
-                    &fresh_child.id,
+                    &fresh_child,
                     target,
                     actor,
                     if target == TaskStatus::Ready {
@@ -2249,18 +2291,26 @@ fn promote_due_tasks(conn: &Connection, board_id: &str, actor: &str, now: i64) -
         .collect::<Vec<_>>();
     let mut promoted = 0;
     for task in candidates {
-        if recompute_ready_status(conn, &task, now)? == TaskStatus::Ready {
-            with_immediate_tx(conn, || {
-                set_status(
-                    conn,
-                    board_id,
-                    &task.id,
-                    TaskStatus::Ready,
-                    actor,
-                    "task.promoted",
-                    now,
-                )
-            })?;
+        let was_promoted = with_immediate_tx(conn, || {
+            let fresh = get_task_by_id(conn, board_id, &task.id)?;
+            if !matches!(fresh.status, TaskStatus::Todo | TaskStatus::Scheduled) {
+                return Ok(false);
+            }
+            if recompute_ready_status(conn, &fresh, now)? != TaskStatus::Ready {
+                return Ok(false);
+            }
+            guarded_set_status(
+                conn,
+                board_id,
+                &fresh,
+                TaskStatus::Ready,
+                actor,
+                "task.promoted",
+                now,
+            )?;
+            Ok(true)
+        })?;
+        if was_promoted {
             promoted += 1;
         }
     }
@@ -2641,36 +2691,72 @@ fn finish_running(
     Ok(())
 }
 
-fn set_status(
+fn guarded_set_status(
     conn: &Connection,
     board_id: &str,
-    task_id: &str,
+    task: &TaskRecord,
     status: TaskStatus,
     actor: &str,
     event: &str,
     now: i64,
 ) -> Result<()> {
+    guarded_set_status_with_reason(
+        conn,
+        board_id,
+        task,
+        StatusUpdate {
+            status,
+            status_reason: None,
+            actor,
+            event,
+            now,
+        },
+    )
+}
+
+struct StatusUpdate<'a> {
+    status: TaskStatus,
+    status_reason: Option<&'a str>,
+    actor: &'a str,
+    event: &'a str,
+    now: i64,
+}
+
+fn guarded_set_status_with_reason(
+    conn: &Connection,
+    board_id: &str,
+    task: &TaskRecord,
+    update: StatusUpdate<'_>,
+) -> Result<()> {
     let changed = conn
         .execute(
-            "UPDATE tasks SET status=?1, updated_at=?2, lock_version=lock_version+1 WHERE id=?3 AND board_id=?4",
-            params![status.as_str(), now, task_id, board_id],
+            "UPDATE tasks SET status=?1, status_reason=?2, updated_at=?3, lock_version=lock_version+1 WHERE id=?4 AND board_id=?5 AND status=?6 AND lock_version=?7",
+            params![
+                update.status.as_str(),
+                update.status_reason,
+                update.now,
+                task.id,
+                board_id,
+                task.status.as_str(),
+                task.lock_version
+            ],
         )
         .map_err(storage)?;
     if changed != 1 {
         return Err(KanbanError::InvalidTransition(
-            "status update requires matching task".into(),
+            "status update requires matching fresh task".into(),
         ));
     }
-    let payload = json!({ "to_status": status.as_str() }).to_string();
+    let payload = json!({ "to_status": update.status.as_str() }).to_string();
     insert_event(
         conn,
         board_id,
-        Some(task_id),
+        Some(&task.id),
         None,
-        event,
-        actor,
+        update.event,
+        update.actor,
         &payload,
-        now,
+        update.now,
     )
 }
 
@@ -2694,10 +2780,10 @@ fn promote_children(
         if matches!(child.status, TaskStatus::Todo | TaskStatus::Scheduled)
             && recompute_ready_status(conn, &child, now)? == TaskStatus::Ready
         {
-            set_status(
+            guarded_set_status(
                 conn,
                 board_id,
-                &child_id,
+                &child,
                 TaskStatus::Ready,
                 actor,
                 "task.promoted",
@@ -2724,6 +2810,13 @@ fn recompute_ready_status(conn: &Connection, task: &TaskRecord, now: i64) -> Res
         return Ok(TaskStatus::Todo);
     }
     Ok(TaskStatus::Ready)
+}
+
+fn is_active_recomputable_status(status: TaskStatus) -> bool {
+    matches!(
+        status,
+        TaskStatus::Triage | TaskStatus::Todo | TaskStatus::Scheduled | TaskStatus::Ready
+    )
 }
 
 fn ensure_dependencies_done(conn: &Connection, task_id: &str) -> Result<()> {

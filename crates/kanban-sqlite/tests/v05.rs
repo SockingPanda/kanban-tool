@@ -5,14 +5,14 @@ use std::{
     time::Duration,
 };
 
-use kanban_core::TaskStatus;
+use kanban_core::{TaskStatus, new_run_id};
 use kanban_sqlite::{
-    CreateTask, DispatchOptions, FinishPolicy, TaskPatch, add_dependency, archive_task, block_task,
-    claim_task, complete_task, connect_file, create_task, dispatch_once, doctor_database, get_task,
-    init_database, list_dependencies, list_events, list_runs, list_tasks, unblock_task,
-    update_task,
+    CreateTask, DispatchOptions, FinishPolicy, TaskPatch, add_dependency, archive_task,
+    begin_database_replace, begin_database_runtime, block_task, claim_task, complete_task,
+    connect_file, create_task, dispatch_once, doctor_database, get_task, init_database,
+    list_dependencies, list_events, list_runs, list_tasks, promote_task, unblock_task, update_task,
 };
-use rusqlite::params;
+use rusqlite::{Connection, params};
 
 #[test]
 fn task_crud_writes_events_and_hides_archived_by_default() {
@@ -425,6 +425,70 @@ fn clearing_schedule_recomputes_missing_description_to_triage() {
         &task.id,
         TaskPatch {
             scheduled_at: Some(None),
+            ..TaskPatch::default()
+        },
+    )
+    .unwrap();
+
+    assert_eq!(updated.status, TaskStatus::Triage);
+}
+
+#[test]
+fn updating_description_recomputes_active_triage_to_ready() {
+    let temp = TempDb::new("updating_description_recomputes_active_triage_to_ready");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "needs spec".into(),
+            description: None,
+            status: None,
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(task.status, TaskStatus::Triage);
+
+    let updated = update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        TaskPatch {
+            description: Some(Some("ready spec".into())),
+            ..TaskPatch::default()
+        },
+    )
+    .unwrap();
+
+    assert_eq!(updated.status, TaskStatus::Ready);
+}
+
+#[test]
+fn updating_description_recomputes_active_ready_to_triage() {
+    let temp = TempDb::new("updating_description_recomputes_active_ready_to_triage");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("remove spec"),
+    )
+    .unwrap();
+
+    let updated = update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        TaskPatch {
+            description: Some(None),
             ..TaskPatch::default()
         },
     )
@@ -1403,6 +1467,176 @@ fn adding_incomplete_parent_to_running_child_is_rejected_without_force() {
 }
 
 #[test]
+fn add_dependency_reloads_child_inside_transaction_before_demoting_ready() {
+    let temp = TempDb::new("add_dependency_reloads_child_inside_transaction_before_demoting_ready");
+    init_database(&temp.path, "tester").unwrap();
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "incomplete parent".into(),
+            description: None,
+            status: Some(TaskStatus::Triage),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("claimed child"),
+    )
+    .unwrap();
+
+    let conn = connect_file(&temp.path).unwrap();
+    conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+    mark_task_running_in_current_tx(&conn, &child.id);
+    let adding = thread::spawn({
+        let db_path = temp.path.clone();
+        let parent_id = parent.id.clone();
+        let child_id = child.id.clone();
+        move || add_dependency(&db_path, "default", "tester", &parent_id, &child_id)
+    });
+    thread::sleep(Duration::from_millis(50));
+    conn.execute_batch("COMMIT").unwrap();
+
+    let err = adding.join().unwrap().unwrap_err();
+    assert!(
+        err.to_string().contains("running") && err.to_string().contains("dependency"),
+        "err: {err}"
+    );
+    let fresh = get_task(&temp.path, "default", &child.id).unwrap();
+    assert_eq!(fresh.status, TaskStatus::Running);
+    assert!(fresh.current_run_id.is_some());
+    assert!(
+        list_dependencies(&temp.path, "default", &child.id)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn promote_task_reloads_dependencies_inside_transaction() {
+    let temp = TempDb::new("promote_task_reloads_dependencies_inside_transaction");
+    init_database(&temp.path, "tester").unwrap();
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "unfinished parent".into(),
+            description: Some("spec".into()),
+            status: Some(TaskStatus::Todo),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "manual promote race".into(),
+            description: Some("ready spec".into()),
+            status: Some(TaskStatus::Todo),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+
+    let conn = connect_file(&temp.path).unwrap();
+    conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+    conn.execute(
+        "INSERT INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES (?1, ?2, ?3, ?4)",
+        params![child.board_id, parent.id, child.id, now_ms()],
+    )
+    .unwrap();
+    let promoting = thread::spawn({
+        let db_path = temp.path.clone();
+        let child_id = child.id.clone();
+        move || promote_task(&db_path, "default", "tester", &child_id)
+    });
+    thread::sleep(Duration::from_millis(50));
+    conn.execute_batch("COMMIT").unwrap();
+
+    let err = promoting.join().unwrap().unwrap_err();
+    assert!(err.to_string().contains("dependency"), "err: {err}");
+    assert_eq!(
+        get_task(&temp.path, "default", &child.id).unwrap().status,
+        TaskStatus::Todo
+    );
+}
+
+#[test]
+fn unblock_task_reloads_status_inside_transaction_before_recomputing() {
+    let temp = TempDb::new("unblock_task_reloads_status_inside_transaction_before_recomputing");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("blocked archive race"),
+    )
+    .unwrap();
+    block_task(
+        &temp.path, "default", "tester", &task.id, "waiting", None, false,
+    )
+    .unwrap();
+
+    let conn = connect_file(&temp.path).unwrap();
+    conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+    conn.execute(
+        "UPDATE tasks SET status='archived', archived_at=?1, updated_at=?1, lock_version=lock_version+1 WHERE id=?2",
+        params![now_ms(), task.id],
+    )
+    .unwrap();
+    let unblocking = thread::spawn({
+        let db_path = temp.path.clone();
+        let task_id = task.id.clone();
+        move || unblock_task(&db_path, "default", "tester", &task_id)
+    });
+    thread::sleep(Duration::from_millis(50));
+    conn.execute_batch("COMMIT").unwrap();
+
+    let err = unblocking.join().unwrap().unwrap_err();
+    assert!(err.to_string().contains("unblock"), "err: {err}");
+    assert_eq!(
+        get_task(&temp.path, "default", &task.id).unwrap().status,
+        TaskStatus::Archived
+    );
+}
+
+#[test]
+fn database_replace_is_rejected_while_runtime_lock_is_held() {
+    let temp = TempDb::new("database_replace_is_rejected_while_runtime_lock_is_held");
+    init_database(&temp.path, "tester").unwrap();
+    let _runtime_guard = begin_database_runtime(&temp.path).unwrap();
+
+    let err = begin_database_replace(&temp.path).unwrap_err();
+
+    assert!(
+        err.to_string().contains("running")
+            || err.to_string().contains("runtime")
+            || err.to_string().contains("serve/dispatch"),
+        "err: {err}"
+    );
+}
+
+#[test]
 fn failed_ready_retry_policy_increments_retry_count_and_blocks_at_max_retries() {
     let temp =
         TempDb::new("failed_ready_retry_policy_increments_retry_count_and_blocks_at_max_retries");
@@ -1547,6 +1781,29 @@ fn reclaim_expired_skips_task_heartbeated_after_scan_before_claim_tx() {
             .claim_expires_at
             .is_some_and(|expires| expires > now_ms())
     );
+}
+
+fn mark_task_running_in_current_tx(conn: &Connection, task_id: &str) {
+    let run_id = new_run_id();
+    let now = now_ms();
+    let claim_token = format!("token-{task_id}");
+    let (board_id, claim_owner): (String, String) = conn
+        .query_row(
+            "SELECT board_id, 'worker' FROM tasks WHERE id=?1",
+            [task_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    conn.execute(
+        "UPDATE tasks SET status='running', claim_token=?1, claim_owner=?2, claim_expires_at=?3, last_heartbeat_at=?4, started_at=COALESCE(started_at, ?4), current_run_id=?5, updated_at=?4, lock_version=lock_version+1 WHERE id=?6",
+        params![claim_token, claim_owner, now + 300_000, now, run_id, task_id],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO task_runs(id, board_id, task_id, status, worker_profile, claim_token, claim_owner, claim_expires_at, started_at, last_heartbeat_at, metadata_json) VALUES (?1, ?2, ?3, 'running', 'test', ?4, ?5, ?6, ?7, ?7, '{}')",
+        params![run_id, board_id, task_id, claim_token, claim_owner, now + 300_000, now],
+    )
+    .unwrap();
 }
 
 struct TempDb {

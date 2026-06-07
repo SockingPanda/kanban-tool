@@ -11,6 +11,7 @@ use kanban_sqlite::{
     claim_task, complete_task, connect_file, create_task, dispatch_once, get_task, init_database,
     list_dependencies, list_events, list_runs, list_tasks, unblock_task, update_task,
 };
+use rusqlite::params;
 
 #[test]
 fn task_crud_writes_events_and_hides_archived_by_default() {
@@ -70,6 +71,60 @@ fn task_crud_writes_events_and_hides_archived_by_default() {
     assert_eq!(
         list_tasks(&temp.path, "default", &[], true).unwrap().len(),
         1
+    );
+}
+
+#[test]
+fn explicit_ready_create_requires_ready_prerequisites() {
+    let temp = TempDb::new("explicit_ready_create_requires_ready_prerequisites");
+    init_database(&temp.path, "tester").unwrap();
+
+    let missing_spec = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "not ready".into(),
+            description: None,
+            status: Some(TaskStatus::Ready),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap_err();
+
+    assert!(
+        missing_spec
+            .to_string()
+            .contains("ready requires description"),
+        "err: {missing_spec}"
+    );
+
+    let future_ready = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "future ready".into(),
+            description: Some("spec".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: None,
+            priority: 0,
+            scheduled_at: Some(now_ms() + 60_000),
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap_err();
+
+    assert!(
+        future_ready
+            .to_string()
+            .contains("ready requires scheduled_at to be due"),
+        "err: {future_ready}"
     );
 }
 
@@ -767,6 +822,53 @@ fn add_dependency_rolls_back_edge_and_status_when_event_insert_fails() {
 }
 
 #[test]
+fn remove_dependency_recomputes_child_to_ready_when_unblocked() {
+    let temp = TempDb::new("remove_dependency_recomputes_child_to_ready_when_unblocked");
+    init_database(&temp.path, "tester").unwrap();
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "unfinished parent".into(),
+            description: Some("spec".into()),
+            status: Some(TaskStatus::Todo),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("child should unblock"),
+    )
+    .unwrap();
+
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id).unwrap();
+    assert_eq!(
+        get_task(&temp.path, "default", &child.id).unwrap().status,
+        TaskStatus::Todo
+    );
+
+    kanban_sqlite::remove_dependency(&temp.path, "default", "tester", &parent.id, &child.id)
+        .unwrap();
+
+    let child = get_task(&temp.path, "default", &child.id).unwrap();
+    assert_eq!(child.status, TaskStatus::Ready);
+    assert!(
+        list_events(&temp.path, "default", Some(&child.id))
+            .unwrap()
+            .iter()
+            .any(|event| event.kind == "task.promoted")
+    );
+}
+
+#[test]
 fn dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming() {
     let temp = TempDb::new("dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming");
     init_database(&temp.path, "tester").unwrap();
@@ -1236,6 +1338,68 @@ fn reclaim_expired_increments_retry_count_and_blocks_at_max_retries() {
             .unwrap()
             .iter()
             .any(|event| event.kind == "task.reclaimed")
+    );
+}
+
+#[test]
+fn reclaim_expired_skips_task_heartbeated_after_scan_before_claim_tx() {
+    let temp = TempDb::new("reclaim_expired_skips_task_heartbeated_after_scan_before_claim_tx");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("heartbeat race"),
+    )
+    .unwrap();
+    let claim = claim_task(&temp.path, "default", "worker", &task.id, 1).unwrap();
+    thread::sleep(Duration::from_millis(5));
+
+    let db_path = temp.path.clone();
+    let task_id = task.id.clone();
+    let run_id = claim.run_id.clone();
+    let claim_token = claim.claim_token.clone();
+    let heartbeat_started = Arc::new(Barrier::new(2));
+    let release_heartbeat = Arc::new(Barrier::new(2));
+    let worker_started = Arc::clone(&heartbeat_started);
+    let worker_release = Arc::clone(&release_heartbeat);
+    let handle = thread::spawn(move || {
+        let conn = connect_file(&db_path).unwrap();
+        conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+        let extended = now_ms() + 300_000;
+        conn.execute(
+            "UPDATE tasks SET claim_expires_at=?1, last_heartbeat_at=?2 WHERE id=?3 AND status='running' AND claim_token=?4",
+            params![extended, extended, task_id, claim_token],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE task_runs SET claim_expires_at=?1, last_heartbeat_at=?2 WHERE id=?3",
+            params![extended, extended, run_id],
+        )
+        .unwrap();
+        worker_started.wait();
+        worker_release.wait();
+        conn.execute_batch("COMMIT").unwrap();
+    });
+
+    heartbeat_started.wait();
+    let reclaiming = thread::spawn({
+        let db_path = temp.path.clone();
+        move || kanban_sqlite::reclaim_expired(&db_path, "default", "dispatcher")
+    });
+    thread::sleep(Duration::from_millis(50));
+    release_heartbeat.wait();
+
+    let reclaimed = reclaiming.join().unwrap().unwrap();
+    handle.join().unwrap();
+
+    assert_eq!(reclaimed, 0);
+    let fresh = get_task(&temp.path, "default", &task.id).unwrap();
+    assert_eq!(fresh.status, TaskStatus::Running);
+    assert!(
+        fresh
+            .claim_expires_at
+            .is_some_and(|expires| expires > now_ms())
     );
 }
 

@@ -1002,20 +1002,34 @@ pub fn reclaim_expired(path: impl AsRef<Path>, board: &str, actor: &str) -> Resu
         .into_iter()
         .filter(|t| t.status == TaskStatus::Running && t.claim_expires_at.is_some_and(|x| x <= now))
         .collect();
-    let count = expired.len();
+    let mut count = 0;
     for task in expired {
-        with_immediate_tx(&conn, || {
+        let reclaimed = with_immediate_tx(&conn, || {
+            let fresh = get_task_by_id(&conn, &board_id, &task.id)?;
+            let tx_now = SystemClock.now_ms();
+            if fresh.status != TaskStatus::Running
+                || fresh
+                    .claim_expires_at
+                    .is_none_or(|expires| expires > tx_now)
+            {
+                return Ok(false);
+            }
             retry_running_task(
                 &conn,
                 &board_id,
-                &task,
+                &fresh,
                 actor,
                 "expired",
                 None,
                 "claim expired",
-                now,
-            )
+                tx_now,
+                Some(tx_now),
+            )?;
+            Ok(true)
         })?;
+        if reclaimed {
+            count += 1;
+        }
     }
     Ok(count)
 }
@@ -1040,9 +1054,7 @@ pub fn reclaim_task_to(
     reason: Option<&str>,
 ) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
-    let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
-    let task = resolve_task(&conn, &board_id, task_ref)?;
     if !matches!(to_status, TaskStatus::Ready | TaskStatus::Blocked) {
         return Err(KanbanError::InvalidInput(
             "reclaim to_status must be ready or blocked".into(),
@@ -1053,45 +1065,53 @@ pub fn reclaim_task_to(
             "reclaim reason is required when to_status is blocked".into(),
         ));
     }
-    if task.status != TaskStatus::Running {
-        return Err(KanbanError::InvalidTransition(
-            "reclaim requires running".into(),
-        ));
-    }
-    if !force && task.claim_expires_at.is_none_or(|expires| expires > now) {
-        return Err(KanbanError::InvalidTransition(
-            "reclaim requires expired claim or force".into(),
-        ));
-    }
-    let new_retry_count = task.retry_count + 1;
-    let max_retries_reached = task
-        .max_retries
-        .is_some_and(|max_retries| new_retry_count >= max_retries);
-    let effective_status = if max_retries_reached {
-        TaskStatus::Blocked
-    } else {
-        to_status
-    };
-    let default_reason = if max_retries_reached {
-        "max retries reached"
-    } else if force {
-        "force reclaimed"
-    } else {
-        "claim expired"
-    };
-    let effective_reason = reason.unwrap_or(default_reason);
+    let task = resolve_task(&conn, &board_id, task_ref)?;
     with_immediate_tx(&conn, || {
+        let fresh = get_task_by_id(&conn, &board_id, &task.id)?;
+        let tx_now = SystemClock.now_ms();
+        if fresh.status != TaskStatus::Running {
+            return Err(KanbanError::InvalidTransition(
+                "reclaim requires running".into(),
+            ));
+        }
+        if !force
+            && fresh
+                .claim_expires_at
+                .is_none_or(|expires| expires > tx_now)
+        {
+            return Err(KanbanError::InvalidTransition(
+                "reclaim requires expired claim or force".into(),
+            ));
+        }
+        let new_retry_count = fresh.retry_count + 1;
+        let max_retries_reached = fresh
+            .max_retries
+            .is_some_and(|max_retries| new_retry_count >= max_retries);
+        let effective_status = if max_retries_reached {
+            TaskStatus::Blocked
+        } else {
+            to_status
+        };
+        let default_reason = if max_retries_reached {
+            "max retries reached"
+        } else if force {
+            "force reclaimed"
+        } else {
+            "claim expired"
+        };
+        let effective_reason = reason.unwrap_or(default_reason);
         reclaim_running_task(
             &conn,
             &board_id,
-            &task,
+            &fresh,
             actor,
             if force { "canceled" } else { "expired" },
             effective_reason,
             effective_status,
-            now,
+            tx_now,
+            (!force).then_some(tx_now),
         )?;
-        get_task_by_id(&conn, &board_id, &task.id)
+        get_task_by_id(&conn, &board_id, &fresh.id)
     })
 }
 
@@ -1241,6 +1261,28 @@ pub fn remove_dependency(
             params![parent.id, child.id],
         )
         .map_err(storage)?;
+        let fresh_child = get_task_by_id(&conn, &board_id, &child.id)?;
+        if matches!(
+            fresh_child.status,
+            TaskStatus::Triage | TaskStatus::Todo | TaskStatus::Scheduled | TaskStatus::Ready
+        ) {
+            let target = recompute_ready_status(&conn, &fresh_child, now)?;
+            if target != fresh_child.status {
+                set_status(
+                    &conn,
+                    &board_id,
+                    &fresh_child.id,
+                    target,
+                    actor,
+                    if target == TaskStatus::Ready {
+                        "task.promoted"
+                    } else {
+                        "task.recomputed"
+                    },
+                    now,
+                )?;
+            }
+        }
         let payload = json!({ "parent_task_id": parent.id }).to_string();
         insert_event(
             &conn,
@@ -1461,6 +1503,7 @@ pub fn dispatch_once(
                     Some(exit),
                     "worker failed",
                     SystemClock.now_ms(),
+                    None,
                 )?;
                 conn.execute(
                     "UPDATE task_runs SET log_path=?1 WHERE id=?2",
@@ -1605,6 +1648,7 @@ fn reclaim_running_task(
     reason: &str,
     target: TaskStatus,
     now: i64,
+    expiry_guard: Option<i64>,
 ) -> Result<()> {
     if task.status != TaskStatus::Running
         || task.claim_token.is_none()
@@ -1629,8 +1673,8 @@ fn reclaim_running_task(
     }
     let changed = conn
         .execute(
-            "UPDATE tasks SET status=?1, status_reason=?2, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, retry_count=retry_count+1, updated_at=?3, lock_version=lock_version+1 WHERE id=?4 AND board_id=?5 AND status='running' AND claim_token=?6 AND current_run_id=?7",
-            params![target.as_str(), (target == TaskStatus::Blocked).then_some(reason), now, task.id, board_id, task.claim_token, task.current_run_id],
+            "UPDATE tasks SET status=?1, status_reason=?2, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, retry_count=retry_count+1, updated_at=?3, lock_version=lock_version+1 WHERE id=?4 AND board_id=?5 AND status='running' AND claim_token=?6 AND current_run_id=?7 AND (?8 IS NULL OR claim_expires_at <= ?8)",
+            params![target.as_str(), (target == TaskStatus::Blocked).then_some(reason), now, task.id, board_id, task.claim_token, task.current_run_id, expiry_guard],
         )
         .map_err(storage)?;
     if changed != 1 {
@@ -1667,6 +1711,7 @@ fn retry_running_task(
     exit_code: Option<i32>,
     reason: &str,
     now: i64,
+    expiry_guard: Option<i64>,
 ) -> Result<()> {
     if task.status != TaskStatus::Running
         || task.claim_token.is_none()
@@ -1700,8 +1745,8 @@ fn retry_running_task(
     }
     let changed = conn
         .execute(
-            "UPDATE tasks SET status=?1, status_reason=?2, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, retry_count=?3, updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='running' AND claim_token=?7 AND current_run_id=?8",
-            params![target.as_str(), if blocked { Some(reason) } else { None }, new_retry_count, now, task.id, board_id, task.claim_token, task.current_run_id],
+            "UPDATE tasks SET status=?1, status_reason=?2, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, retry_count=?3, updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='running' AND claim_token=?7 AND current_run_id=?8 AND (?9 IS NULL OR claim_expires_at <= ?9)",
+            params![target.as_str(), if blocked { Some(reason) } else { None }, new_retry_count, now, task.id, board_id, task.claim_token, task.current_run_id, expiry_guard],
         )
         .map_err(storage)?;
     if changed != 1 {
@@ -1750,12 +1795,33 @@ fn initial_status(
     now: i64,
 ) -> Result<TaskStatus> {
     if let Some(status) = explicit {
-        if status.can_be_created() {
-            return Ok(status);
+        if !status.can_be_created() {
+            return Err(KanbanError::InvalidInput(
+                "initial status must be triage/todo/scheduled/ready".into(),
+            ));
         }
-        return Err(KanbanError::InvalidInput(
-            "initial status must be triage/todo/scheduled/ready".into(),
-        ));
+        match status {
+            TaskStatus::Scheduled if scheduled_at.is_none() => {
+                return Err(KanbanError::InvalidInput(
+                    "scheduled initial status requires scheduled_at".into(),
+                ));
+            }
+            TaskStatus::Ready
+                if description.is_none_or(|description| description.trim().is_empty()) =>
+            {
+                return Err(KanbanError::InvalidInput(
+                    "ready requires description".into(),
+                ));
+            }
+            TaskStatus::Ready if scheduled_at.is_some_and(|scheduled| scheduled > now) => {
+                return Err(KanbanError::InvalidInput(
+                    "ready requires scheduled_at to be due".into(),
+                ));
+            }
+            _ => {
+                return Ok(status);
+            }
+        }
     }
     if description.is_none_or(|d| d.trim().is_empty()) {
         return Ok(TaskStatus::Triage);

@@ -110,16 +110,43 @@ pub mod tantivy_backend {
 
     pub const INDEX_VERSION: &str = "tasks-v1";
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum TantivyTaskIndexErrorKind {
+        Unavailable,
+        Corrupt,
+        Query,
+        Schema,
+        Io,
+        Internal,
+    }
+
     #[derive(Debug)]
     pub struct TantivyTaskIndexError {
+        kind: TantivyTaskIndexErrorKind,
         message: String,
     }
 
     impl TantivyTaskIndexError {
-        fn new(message: impl Into<String>) -> Self {
+        fn new(kind: TantivyTaskIndexErrorKind, message: impl Into<String>) -> Self {
             Self {
+                kind,
                 message: message.into(),
             }
+        }
+
+        pub fn kind(&self) -> TantivyTaskIndexErrorKind {
+            self.kind
+        }
+
+        pub fn is_fallback_eligible(&self) -> bool {
+            matches!(
+                self.kind,
+                TantivyTaskIndexErrorKind::Unavailable | TantivyTaskIndexErrorKind::Corrupt
+            )
+        }
+
+        fn corrupt(error: impl fmt::Display) -> Self {
+            Self::new(TantivyTaskIndexErrorKind::Corrupt, error.to_string())
         }
     }
 
@@ -133,25 +160,25 @@ pub mod tantivy_backend {
 
     impl From<tantivy::TantivyError> for TantivyTaskIndexError {
         fn from(value: tantivy::TantivyError) -> Self {
-            Self::new(value.to_string())
+            Self::new(TantivyTaskIndexErrorKind::Internal, value.to_string())
         }
     }
 
     impl From<std::io::Error> for TantivyTaskIndexError {
         fn from(value: std::io::Error) -> Self {
-            Self::new(value.to_string())
+            Self::new(TantivyTaskIndexErrorKind::Io, value.to_string())
         }
     }
 
     impl From<serde_json::Error> for TantivyTaskIndexError {
         fn from(value: serde_json::Error) -> Self {
-            Self::new(value.to_string())
+            Self::new(TantivyTaskIndexErrorKind::Corrupt, value.to_string())
         }
     }
 
     impl From<QueryParserError> for TantivyTaskIndexError {
         fn from(value: QueryParserError) -> Self {
-            Self::new(value.to_string())
+            Self::new(TantivyTaskIndexErrorKind::Query, value.to_string())
         }
     }
 
@@ -187,9 +214,12 @@ pub mod tantivy_backend {
         last_event_id: Option<i64>,
         documents: &[TaskSearchDocument],
     ) -> Result<TantivyIndexMetadata, TantivyTaskIndexError> {
-        let parent = path
-            .parent()
-            .ok_or_else(|| TantivyTaskIndexError::new("index path must have a parent"))?;
+        let parent = path.parent().ok_or_else(|| {
+            TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Internal,
+                "index path must have a parent",
+            )
+        })?;
         fs::create_dir_all(parent)?;
         let tmp_path = temp_index_path(path);
         if tmp_path.exists() {
@@ -229,8 +259,17 @@ pub mod tantivy_backend {
     pub fn read_task_index_metadata(
         path: &Path,
     ) -> Result<TantivyIndexMetadata, TantivyTaskIndexError> {
-        let metadata = fs::read(path.join("kb-index-meta.json"))?;
-        Ok(serde_json::from_slice(&metadata)?)
+        let metadata = fs::read(path.join("kb-index-meta.json")).map_err(|err| {
+            if err.kind() == std::io::ErrorKind::NotFound {
+                TantivyTaskIndexError::new(
+                    TantivyTaskIndexErrorKind::Unavailable,
+                    "task index metadata is missing",
+                )
+            } else {
+                TantivyTaskIndexError::new(TantivyTaskIndexErrorKind::Unavailable, err.to_string())
+            }
+        })?;
+        serde_json::from_slice(&metadata).map_err(TantivyTaskIndexError::from)
     }
 
     pub fn search_task_index(
@@ -241,34 +280,47 @@ pub mod tantivy_backend {
     ) -> Result<(Vec<SearchHit>, SearchMeta), TantivyTaskIndexError> {
         let metadata = read_task_index_metadata(path)?;
         if metadata.index_version != INDEX_VERSION {
-            return Err(TantivyTaskIndexError::new(format!(
-                "unsupported task index version {}",
-                metadata.index_version
-            )));
+            return Err(TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Corrupt,
+                format!("unsupported task index version {}", metadata.index_version),
+            ));
         }
         if metadata.board_id != board_id {
-            return Err(TantivyTaskIndexError::new("task index board mismatch"));
+            return Err(TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Unavailable,
+                "task index board mismatch",
+            ));
         }
 
-        let index = Index::open_in_dir(path)?;
+        let index = Index::open_in_dir(path).map_err(TantivyTaskIndexError::corrupt)?;
         let schema = index.schema();
         let fields = fields_from_schema(&schema)?;
-        let reader = index.reader()?;
+        let reader = index.reader().map_err(TantivyTaskIndexError::corrupt)?;
         let searcher = reader.searcher();
         let search_query = build_query(&index, fields, board_id, query)?;
-        let wanted = query
-            .limit
-            .checked_add(query.offset)
-            .ok_or_else(|| TantivyTaskIndexError::new("search page bound overflow"))?;
-        let top_docs = searcher.search(
-            &*search_query,
-            &TopDocs::with_limit(wanted).order_by_score(),
-        )?;
+        let wanted = query.limit.checked_add(query.offset).ok_or_else(|| {
+            TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Query,
+                "search page bound overflow",
+            )
+        })?;
+        let top_docs = searcher
+            .search(
+                &*search_query,
+                &TopDocs::with_limit(wanted).order_by_score(),
+            )
+            .map_err(TantivyTaskIndexError::corrupt)?;
         let mut hits = Vec::new();
         for (score, address) in top_docs.into_iter().skip(query.offset) {
-            let document = searcher.doc::<TantivyDocument>(address)?;
-            let task_id = text_value(&document, fields.task_id)
-                .ok_or_else(|| TantivyTaskIndexError::new("task_id missing from hit"))?;
+            let document = searcher
+                .doc::<TantivyDocument>(address)
+                .map_err(TantivyTaskIndexError::corrupt)?;
+            let task_id = text_value(&document, fields.task_id).ok_or_else(|| {
+                TantivyTaskIndexError::new(
+                    TantivyTaskIndexErrorKind::Internal,
+                    "task_id missing from hit",
+                )
+            })?;
             let seq = i64_value(&document, fields.seq).unwrap_or_default();
             let snippet = query
                 .q
@@ -416,9 +468,12 @@ pub mod tantivy_backend {
 
     fn fields_from_schema(schema: &Schema) -> Result<Fields, TantivyTaskIndexError> {
         let field = |name: &str| {
-            schema
-                .get_field(name)
-                .map_err(|_| TantivyTaskIndexError::new(format!("missing field {name}")))
+            schema.get_field(name).map_err(|_| {
+                TantivyTaskIndexError::new(
+                    TantivyTaskIndexErrorKind::Schema,
+                    format!("missing field {name}"),
+                )
+            })
         };
         Ok(Fields {
             board_id: field("board_id")?,

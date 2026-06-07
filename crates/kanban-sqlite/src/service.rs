@@ -1059,12 +1059,18 @@ pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<Search
                 last_event_id,
             ) {
                 Ok(results) => {
+                    if results.1.stale {
+                        return sqlite_search_tasks(path_ref, query, true);
+                    }
                     return Ok(SearchResults {
                         hits: results.0,
                         meta: results.1,
                     });
                 }
-                Err(_) => return sqlite_search_tasks(path_ref, query, true),
+                Err(err) if err.is_fallback_eligible() => {
+                    return sqlite_search_tasks(path_ref, query, true);
+                }
+                Err(err) => return Err(search_storage(err)),
             }
         }
     }
@@ -1165,8 +1171,18 @@ pub fn search_index_status(path: impl AsRef<Path>, board: &str) -> Result<Search
     {
         let index_path = task_index_path(path.as_ref());
         if kanban_search::tantivy_backend::task_index_exists(&index_path) {
-            let metadata = kanban_search::tantivy_backend::read_task_index_metadata(&index_path)
-                .map_err(search_storage)?;
+            let metadata =
+                match kanban_search::tantivy_backend::read_task_index_metadata(&index_path) {
+                    Ok(metadata) => metadata,
+                    Err(err) if err.is_fallback_eligible() => {
+                        return Ok(degraded_search_index_status(
+                            last_event_id,
+                            &index_path,
+                            &err,
+                        ));
+                    }
+                    Err(err) => return Err(search_storage(err)),
+                };
             let lag = match (last_event_id, metadata.last_event_id) {
                 (Some(current), Some(indexed)) => Some(current.saturating_sub(indexed)),
                 (Some(current), None) => Some(current),
@@ -1223,6 +1239,28 @@ pub fn rebuild_search_index(path: impl AsRef<Path>, board: &str) -> Result<Searc
     #[cfg(not(feature = "tantivy-backend"))]
     {
         search_index_status(path, board)
+    }
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn degraded_search_index_status(
+    last_event_id: Option<i64>,
+    index_path: &Path,
+    err: &kanban_search::tantivy_backend::TantivyTaskIndexError,
+) -> SearchIndexStatus {
+    SearchIndexStatus {
+        backend: "sqlite".to_owned(),
+        derived_index: true,
+        stale: true,
+        index_version: None,
+        last_event_id,
+        index_lag_events: last_event_id.or(Some(0)),
+        message: format!(
+            "Tantivy task index at {} is degraded ({:?}: {}); SQLite fallback search is active",
+            index_path.display(),
+            err.kind(),
+            err
+        ),
     }
 }
 

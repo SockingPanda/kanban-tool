@@ -1080,7 +1080,11 @@ pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<Search
                     }
                     Err(err) => return Err(search_storage(err)),
                 };
-            let validated_indexed_last_event_id = indexed_last_event_id.or(metadata.last_event_id);
+            let contract = search_index_contract(indexed_last_event_id, &metadata);
+            let validated_indexed_last_event_id = contract.indexed_last_event_id;
+            if contract.mismatch {
+                return sqlite_search_tasks(path_ref, query, true, validated_indexed_last_event_id);
+            }
             if search_index_ahead(last_event_id, validated_indexed_last_event_id) {
                 return sqlite_search_tasks(path_ref, query, true, validated_indexed_last_event_id);
             }
@@ -1094,7 +1098,8 @@ pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<Search
                 last_event_id,
             ) {
                 Ok(results) => {
-                    let indexed = indexed_last_event_id.or(results.1.last_event_id);
+                    let indexed = search_index_contract(indexed_last_event_id, &metadata)
+                        .indexed_last_event_id;
                     let lag = search_lag(last_event_id, indexed);
                     if search_index_ahead(last_event_id, indexed) {
                         return sqlite_search_tasks(path_ref, query, true, indexed);
@@ -1238,9 +1243,20 @@ pub fn search_index_status(path: impl AsRef<Path>, board: &str) -> Result<Search
                     }
                     Err(err) => return Err(search_storage(err)),
                 };
-            let indexed = indexed_last_event_id.or(metadata.last_event_id);
+            let contract = search_index_contract(indexed_last_event_id, &metadata);
+            let indexed = contract.indexed_last_event_id;
             let lag = search_lag(last_event_id, indexed);
             let dirty = state.as_ref().is_some_and(|state| state.dirty);
+            if contract.mismatch {
+                return Ok(mismatched_search_index_status(
+                    last_event_id,
+                    indexed,
+                    &index_path,
+                    Some(metadata.index_version),
+                    indexed_last_event_id,
+                    metadata.last_event_id,
+                ));
+            }
             if search_index_ahead(last_event_id, indexed) {
                 return Ok(search_index_ahead_status(
                     last_event_id,
@@ -1332,12 +1348,11 @@ pub fn sync_search_index(path: impl AsRef<Path>, board: &str) -> Result<SearchIn
         let metadata = kanban_search::tantivy_backend::validate_task_index(&index_path, &board_id)
             .map_err(search_storage)?;
         let state = read_search_index_state(&conn, &board_id)?;
-        let indexed_last_event_id = state
-            .as_ref()
-            .and_then(|state| state.last_event_id)
-            .or(metadata.last_event_id);
+        let state_last_event_id = state.as_ref().and_then(|state| state.last_event_id);
+        let contract = search_index_contract(state_last_event_id, &metadata);
+        let indexed_last_event_id = contract.indexed_last_event_id;
         let current_last_event_id = current_last_event_id(&conn, &board_id)?;
-        if search_index_ahead(current_last_event_id, indexed_last_event_id) {
+        if contract.mismatch || search_index_ahead(current_last_event_id, indexed_last_event_id) {
             return rebuild_search_index(path_ref, board);
         }
         let lag = search_lag(current_last_event_id, indexed_last_event_id);
@@ -1445,6 +1460,63 @@ fn search_index_ahead_status(
             indexed_last_event_id,
             current_last_event_id
         ),
+    }
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn mismatched_search_index_status(
+    current_last_event_id: Option<i64>,
+    indexed_last_event_id: Option<i64>,
+    index_path: &Path,
+    index_version: Option<String>,
+    state_last_event_id: Option<i64>,
+    metadata_last_event_id: Option<i64>,
+) -> SearchIndexStatus {
+    SearchIndexStatus {
+        backend: "sqlite".to_owned(),
+        derived_index: true,
+        stale: true,
+        index_version,
+        last_event_id: indexed_last_event_id,
+        index_lag_events: Some(search_lag(current_last_event_id, indexed_last_event_id)),
+        message: format!(
+            "Tantivy task index at {} has mismatched search state and metadata watermarks (state last_event_id {:?}, metadata last_event_id {:?}); SQLite fallback search is active until rebuild",
+            index_path.display(),
+            state_last_event_id,
+            metadata_last_event_id
+        ),
+    }
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[derive(Debug, Clone, Copy)]
+struct SearchIndexContract {
+    indexed_last_event_id: Option<i64>,
+    mismatch: bool,
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn search_index_contract(
+    state_last_event_id: Option<i64>,
+    metadata: &kanban_search::tantivy_backend::TantivyIndexMetadata,
+) -> SearchIndexContract {
+    let metadata_last_event_id = metadata.last_event_id;
+    let mismatch = matches!(
+        (state_last_event_id, metadata_last_event_id),
+        (Some(state), Some(metadata)) if state != metadata
+    );
+    SearchIndexContract {
+        indexed_last_event_id: max_event_id(state_last_event_id, metadata_last_event_id),
+        mismatch,
+    }
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn max_event_id(left: Option<i64>, right: Option<i64>) -> Option<i64> {
+    match (left, right) {
+        (Some(left), Some(right)) => Some(left.max(right)),
+        (Some(value), None) | (None, Some(value)) => Some(value),
+        (None, None) => None,
     }
 }
 

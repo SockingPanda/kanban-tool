@@ -709,6 +709,49 @@ fn import_replace_rejects_directory_database_path() {
 }
 
 #[test]
+fn import_replace_rejects_running_work_in_target_database() {
+    let source = TempDb::new("import_replace_rejects_running_work_source");
+    kb(&source.path, &["init"]).success();
+    let export_path = source.dir.join("restore.jsonl");
+    kb(
+        &source.path,
+        &["--json", "export", "--out", export_path.to_str().unwrap()],
+    )
+    .success_json();
+
+    let target = TempDb::new("import_replace_rejects_running_work_target");
+    kb(&target.path, &["init"]).success();
+    let created = kb(
+        &target.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "running work",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success_json();
+    let task_id = created["data"]["id"].as_str().unwrap();
+    kb(&target.path, &["--json", "task", "claim", task_id]).success_json();
+
+    kb(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            export_path.to_str().unwrap(),
+            "--replace",
+        ],
+    )
+    .failure_containing("database has running work");
+    let running = kb(&target.path, &["--json", "task", "show", task_id]).success_json();
+    assert_eq!(running["data"]["status"], "running");
+}
+
+#[test]
 fn maintenance_lock_uses_canonical_database_path() {
     let temp = TempDb::new("maintenance_lock_uses_canonical_database_path");
     kb(&temp.path, &["init"]).success();

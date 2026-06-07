@@ -523,6 +523,24 @@ Response：
 GET /api/v1/tasks/{task_id}/comments
 ```
 
+Response：
+
+```json
+{
+  "data": [
+    {
+      "id": "c_01HX...",
+      "board_id": "b_01HX...",
+      "task_id": "t_01HX...",
+      "author": "alice",
+      "body": "这里需要确认边界条件。",
+      "kind": "text",
+      "created_at": 1717520000000
+    }
+  ]
+}
+```
+
 ### 7.2 Add comment
 
 ```http
@@ -535,9 +553,15 @@ Request：
 {
   "body": "这里需要确认边界条件。",
   "kind": "text",
-  "actor": "alice"
+  "author": "alice"
 }
 ```
+
+Notes：
+
+- `kind` 默认为 `text`，当前允许 `text|system|worker`。
+- `author` 走通用 actor 语义；也可以用 `X-KB-Actor` 或 server 默认 actor。
+- 创建评论会写入 `task.comment.created` event。
 
 ---
 
@@ -554,6 +578,30 @@ GET /api/v1/tasks/{task_id}/runs
 ```http
 GET /api/v1/runs/{run_id}
 ```
+
+### 8.3 Get run log
+
+```http
+GET /api/v1/runs/{run_id}/log
+```
+
+Response：
+
+```json
+{
+  "data": {
+    "run_id": "r_01HX...",
+    "content": "worker output\n",
+    "truncated": false
+  }
+}
+```
+
+Notes：
+
+- Response 不包含 `claim_token`。
+- 当前最多返回 256 KiB；更大的 log 会设置 `truncated: true`。
+- 若 run 没有 `log_path` 或文件不存在，返回 `not_found`。
 
 ---
 
@@ -677,4 +725,3 @@ MVP 建议只提供 CLI backup，不开放 HTTP backup。
 4. running task 的 complete/block 操作，若无 token，则 UI 走 `force=true` 并要求确认。
 5. blocked task unblock 后目标列由服务端返回，前端不要预设。
 6. SSE 收到 event 后，优先 refetch affected task，避免客户端状态机漂移。
-

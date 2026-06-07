@@ -215,6 +215,17 @@ pub struct EventListOptions {
     pub limit: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DoctorReport {
+    pub ok: bool,
+    pub integrity_check: String,
+    pub migration_version: Option<i64>,
+    pub user_version: i64,
+    pub expired_running_tasks: i64,
+    pub running_tasks_without_active_run: i64,
+    pub orphan_running_runs: i64,
+}
+
 pub fn list_boards(path: impl AsRef<Path>) -> Result<Vec<BoardRecord>> {
     let conn = connect_file(path.as_ref())?;
     let mut stmt = conn
@@ -226,6 +237,59 @@ pub fn list_boards(path: impl AsRef<Path>) -> Result<Vec<BoardRecord>> {
     let rows = stmt.query_map([], board_from_row).map_err(storage)?;
     rows.collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)
+}
+
+pub fn doctor_database(path: impl AsRef<Path>) -> Result<DoctorReport> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    let integrity_check: String = conn
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .map_err(storage)?;
+    let migration_version = conn
+        .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+            row.get::<_, Option<i64>>(0)
+        })
+        .optional()
+        .map_err(storage)?
+        .flatten();
+    let user_version: i64 = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map_err(storage)?;
+    let expired_running_tasks: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM tasks WHERE status='running' AND claim_expires_at <= ?1",
+            [now],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    let running_tasks_without_active_run: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM tasks t WHERE t.status='running' AND (t.current_run_id IS NULL OR NOT EXISTS (SELECT 1 FROM task_runs r WHERE r.id=t.current_run_id AND r.task_id=t.id AND r.status='running' AND r.claim_token=t.claim_token))",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    let orphan_running_runs: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM task_runs r WHERE r.status='running' AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id=r.task_id AND t.status='running' AND t.current_run_id=r.id AND t.claim_token=r.claim_token)",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    let ok = integrity_check == "ok"
+        && migration_version == Some(user_version)
+        && expired_running_tasks == 0
+        && running_tasks_without_active_run == 0
+        && orphan_running_runs == 0;
+    Ok(DoctorReport {
+        ok,
+        integrity_check,
+        migration_version,
+        user_version,
+        expired_running_tasks,
+        running_tasks_without_active_run,
+        orphan_running_runs,
+    })
 }
 
 pub fn get_board(path: impl AsRef<Path>, slug_or_id: &str) -> Result<BoardRecord> {

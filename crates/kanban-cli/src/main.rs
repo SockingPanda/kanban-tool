@@ -47,6 +47,7 @@ enum Command {
     },
     Dispatch(DispatchArgs),
     Serve(ServeArgs),
+    Doctor,
 }
 
 #[derive(Debug, Subcommand)]
@@ -308,6 +309,21 @@ fn main() -> Result<()> {
             })?;
         }
         Command::Serve(args) => serve(args, db_path, actor)?,
+        Command::Doctor => {
+            let report = kanban_sqlite::doctor_database(&db_path)?;
+            print_or_json(cli.json, &report, || {
+                format!(
+                    "ok={} integrity={} migration={:?} user_version={} expired_running={} running_without_run={} orphan_running_runs={}",
+                    report.ok,
+                    report.integrity_check,
+                    report.migration_version,
+                    report.user_version,
+                    report.expired_running_tasks,
+                    report.running_tasks_without_active_run,
+                    report.orphan_running_runs
+                )
+            })?;
+        }
     }
     Ok(())
 }

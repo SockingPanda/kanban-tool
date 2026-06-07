@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/kanban-core",
+  "crates/kanban-entity",
   "crates/kanban-search",
   "crates/kanban-sqlite",
   "crates/kanban-local",
@@ -35,6 +36,7 @@ tower = { version = "0.5", features = ["util"] }
 ulid = "1.1"
 
 kanban-core = { path = "crates/kanban-core" }
+kanban-entity = { path = "crates/kanban-entity" }
 kanban-search = { path = "crates/kanban-search" }
 kanban-sqlite = { path = "crates/kanban-sqlite" }
 kanban-local = { path = "crates/kanban-local" }

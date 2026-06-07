@@ -1332,6 +1332,24 @@ async fn stats_api_reports_stale_claims_and_blocked_reason_counts() {
 }
 
 #[tokio::test]
+async fn maintenance_api_reports_doctor_and_checkpoint_results() {
+    let (_dir, db_path) = temp_db();
+    let app = build_router(AppState::new(db_path, "api-test"));
+
+    let (status, json) = post_json(app.clone(), "/api/v1/maintenance/doctor", json!({})).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["integrity_check"], "ok");
+    assert_eq!(json["data"]["dependency_cycles"], 0);
+    assert_eq!(json["data"]["archived_dependency_edges"], 0);
+    assert_eq!(json["data"]["missing_run_logs"], 0);
+
+    let (status, json) = post_json(app, "/api/v1/maintenance/checkpoint", json!({})).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["busy"], 0);
+    assert!(json["data"].get("checkpointed_frames").is_some());
+}
+
+#[tokio::test]
 async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() {
     let (_dir, db_path) = temp_db();
     let ready_task = kanban_sqlite::create_task(

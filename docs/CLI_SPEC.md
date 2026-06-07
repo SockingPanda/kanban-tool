@@ -462,11 +462,16 @@ kb doctor
 kb stats
 kb backup --out backup.sqlite
 kb export --format jsonl --out board.jsonl
+kb import --input board.jsonl --replace
 kb vacuum
 kb checkpoint
 ```
 
 `kb stats --json` 返回 status counts、过期 running claim 列表和 blocked reason 聚合，用于本地 operator recovery。
+
+`kb backup` 使用 SQLite `VACUUM INTO` 创建一致备份；目标文件已存在时失败，避免覆盖。
+`kb export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kb backup`。
+`kb import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。
 
 ### 12.1 `kb doctor`
 
@@ -479,6 +484,11 @@ kb checkpoint
 - running task 是否缺 claim。
 - expired claim 数量。
 - dependency cycle。
+- archived dependency edge。
+- 缺失 run log 文件。
+- `ready/running` task 带有未完成 parent dependency。
+- `ready/running` task 缺少可执行 spec。
+- `ready/running` task 带有未来 `scheduled_at`。
 
 ---
 

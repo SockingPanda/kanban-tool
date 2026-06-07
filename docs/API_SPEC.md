@@ -755,11 +755,15 @@ DELETE /api/v1/tasks/{task_id}/labels/{label_id}
 POST /api/v1/maintenance/doctor
 ```
 
+Response includes SQLite integrity, migration/user version, expired running tasks, orphan run checks, dependency cycle count, archived dependency edge count, missing run log count, and executable status invariant counts for dependency/spec/schedule violations.
+
 ### 13.2 Checkpoint
 
 ```http
 POST /api/v1/maintenance/checkpoint
 ```
+
+Runs `PRAGMA wal_checkpoint(TRUNCATE)` and returns `busy`, `log_frames`, and `checkpointed_frames`.
 
 ### 13.3 Backup
 

@@ -286,6 +286,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/stats", get(get_stats))
         .route("/api/v1/events", get(list_events))
         .route("/api/v1/stream/events", get(stream_events))
+        .route("/api/v1/maintenance/doctor", post(doctor))
+        .route("/api/v1/maintenance/checkpoint", post(checkpoint))
         .with_state(state)
 }
 
@@ -1083,6 +1085,24 @@ async fn stream_events(
         frames.push(Ok::<_, Infallible>(frame));
     }
     Ok(Sse::new(stream::iter(frames)))
+}
+
+async fn doctor(
+    State(state): State<AppState>,
+) -> Result<Json<Envelope<kanban_sqlite::DoctorReport>>, ApiError> {
+    Ok(Json(Envelope {
+        data: kanban_sqlite::doctor_database(state.db_path())?,
+        meta: None,
+    }))
+}
+
+async fn checkpoint(
+    State(state): State<AppState>,
+) -> Result<Json<Envelope<kanban_sqlite::CheckpointResult>>, ApiError> {
+    Ok(Json(Envelope {
+        data: kanban_sqlite::checkpoint_database(state.db_path())?,
+        meta: None,
+    }))
 }
 
 fn events_snapshot(

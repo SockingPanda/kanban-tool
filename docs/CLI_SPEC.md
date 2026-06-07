@@ -508,14 +508,18 @@ JSON output:
 kb index status
 kb index doctor
 kb index rebuild
+kb index sync
 ```
 
 默认 backend 是 SQLite fallback。启用 `tantivy-backend` feature 时，Tantivy index 是可重建 derived cache：
 
 - `status` returns backend/meta.
 - `doctor` returns the same fallback health meta for scripts.
-- `rebuild` builds/replaces `index/v1/tasks/` beside the SQLite DB.
-- Task mutations do not update Tantivy inside their transactions; run `kb index rebuild` manually after changes.
+- `rebuild` builds/replaces `index/v1/tasks/` beside the SQLite DB and stores a clean high-watermark state in `app_settings`.
+- `sync` consumes `task_events.id` after the stored high-watermark, delete+reindexes affected task aggregates, then advances the high-watermark only after a successful commit.
+- Task mutations do not update Tantivy inside their transactions; run `kb index sync` after changes, or `kb index rebuild` to replace the derived index.
+
+The persisted setting key is board-scoped as `search.tasks.state.<board_id>`. Its JSON contains `schema_version`, `index_version`, `backend`, `index_name`, `board_id`, `last_event_id`, `dirty`, `updated_at`, and optional `message`; it is included in JSONL export/import through existing `app_settings` handling.
 
 JSON data shape:
 
@@ -534,6 +538,7 @@ JSON data shape:
 ```
 
 With Tantivy enabled after rebuild, `backend` is `tantivy`, `derived_index` is `true`, and `index_version` is `tasks-v1`.
+When the current `MAX(task_events.id)` is greater than the stored `last_event_id`, `stale=true` and `index_lag_events` reports the event lag. Search falls back to SQLite while stale to preserve current-result correctness.
 
 ---
 

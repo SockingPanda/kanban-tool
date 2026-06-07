@@ -242,15 +242,43 @@ pub mod tantivy_backend {
             board_id: board_id.to_owned(),
             last_event_id,
         };
-        fs::write(
-            tmp_path.join("kb-index-meta.json"),
-            serde_json::to_vec_pretty(&metadata)?,
-        )?;
+        write_index_metadata(&tmp_path, &metadata)?;
 
         if path.exists() {
             fs::remove_dir_all(path)?;
         }
         fs::rename(&tmp_path, path)?;
+        Ok(metadata)
+    }
+
+    pub fn sync_task_index(
+        path: &Path,
+        board_id: &str,
+        last_event_id: Option<i64>,
+        documents: &[TaskSearchDocument],
+        delete_task_ids: &[String],
+    ) -> Result<TantivyIndexMetadata, TantivyTaskIndexError> {
+        let previous = validate_task_index(path, board_id)?;
+        validate_metadata(&previous, board_id)?;
+        let index = Index::open_in_dir(path).map_err(TantivyTaskIndexError::corrupt)?;
+        let schema = index.schema();
+        let fields = fields_from_schema(&schema)?;
+        let mut writer = index.writer(50_000_000)?;
+        for task_id in delete_task_ids {
+            writer.delete_term(Term::from_field_text(fields.task_id, task_id));
+        }
+        for document in documents {
+            writer.delete_term(Term::from_field_text(fields.task_id, &document.task_id));
+            writer.add_document(to_tantivy_doc(fields, document))?;
+        }
+        writer.commit()?;
+
+        let metadata = TantivyIndexMetadata {
+            index_version: INDEX_VERSION.to_owned(),
+            board_id: board_id.to_owned(),
+            last_event_id,
+        };
+        write_index_metadata(path, &metadata)?;
         Ok(metadata)
     }
 
@@ -368,6 +396,17 @@ pub mod tantivy_backend {
                 "task index board mismatch",
             ));
         }
+        Ok(())
+    }
+
+    fn write_index_metadata(
+        path: &Path,
+        metadata: &TantivyIndexMetadata,
+    ) -> Result<(), TantivyTaskIndexError> {
+        fs::write(
+            path.join("kb-index-meta.json"),
+            serde_json::to_vec_pretty(metadata)?,
+        )?;
         Ok(())
     }
 

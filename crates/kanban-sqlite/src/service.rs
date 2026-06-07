@@ -25,6 +25,11 @@ use crate::{
     runtime_lock_blocks, runtime_lock_path,
 };
 
+/// Maximum task-list page size accepted by CLI, API, and SQLite service calls.
+pub const MAX_TASK_LIST_LIMIT: usize = 1000;
+/// Maximum search page size accepted by CLI, API, and SQLite service calls.
+pub const MAX_SEARCH_LIMIT: usize = 1000;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskRecord {
     pub id: String,
@@ -1000,6 +1005,7 @@ pub fn list_tasks_page(
     board: &str,
     options: TaskListOptions,
 ) -> Result<TaskListPage> {
+    validate_page_bounds(options.limit, MAX_TASK_LIST_LIMIT, options.offset)?;
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
     let (where_sql, params) = task_query_where(&board_id, &options);
@@ -1011,8 +1017,12 @@ pub fn list_tasks_page(
         .map_err(storage)?;
 
     let mut page_params = params;
-    page_params.push(Value::Integer(options.limit as i64));
-    page_params.push(Value::Integer(options.offset as i64));
+    page_params.push(Value::Integer(
+        options.limit.try_into().expect("validated limit"),
+    ));
+    page_params.push(Value::Integer(
+        options.offset.try_into().expect("validated offset"),
+    ));
     let sql = format!(
         "SELECT {TASK_COLUMNS} FROM tasks {where_sql} ORDER BY {} LIMIT ? OFFSET ?",
         task_order_by(options.sort)
@@ -1031,6 +1041,7 @@ pub fn list_tasks_page(
 }
 
 pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<SearchResults> {
+    validate_page_bounds(query.limit, MAX_SEARCH_LIMIT, query.offset)?;
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, &query.board)?;
     let (where_sql, mut params) = search_task_where(&board_id, &query);
@@ -1039,22 +1050,22 @@ pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<Search
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(|value| format!("%{}%", value.to_lowercase()));
+        .map(|value| format!("%{}%", sqlite_like_literal(&value.to_lowercase())));
     let (score_sql, snippet_sql, outer_filter, mut search_params) = if let Some(needle) =
         needle.as_deref()
     {
         (
-            "CASE WHEN lower(t.title) LIKE ? THEN 100.0 ELSE 0.0 END \
-                 + CASE WHEN lower(COALESCE(t.description, '')) LIKE ? THEN 60.0 ELSE 0.0 END \
-                 + CASE WHEN EXISTS (SELECT 1 FROM task_comments c WHERE c.task_id=t.id AND lower(c.body) LIKE ?) THEN 40.0 ELSE 0.0 END \
-                 + CASE WHEN EXISTS (SELECT 1 FROM task_runs r WHERE r.task_id=t.id AND (lower(COALESCE(r.summary, '')) LIKE ? OR lower(COALESCE(r.error, '')) LIKE ?)) THEN 30.0 ELSE 0.0 END \
-                 + CASE WHEN EXISTS (SELECT 1 FROM task_events e WHERE e.task_id=t.id AND (lower(e.kind) LIKE ? OR lower(e.payload_json) LIKE ?)) THEN 20.0 ELSE 0.0 END",
+            "CASE WHEN lower(t.title) LIKE ? ESCAPE '\\' THEN 100.0 ELSE 0.0 END \
+                 + CASE WHEN lower(COALESCE(t.description, '')) LIKE ? ESCAPE '\\' THEN 60.0 ELSE 0.0 END \
+                 + CASE WHEN EXISTS (SELECT 1 FROM task_comments c WHERE c.task_id=t.id AND lower(c.body) LIKE ? ESCAPE '\\') THEN 40.0 ELSE 0.0 END \
+                 + CASE WHEN EXISTS (SELECT 1 FROM task_runs r WHERE r.task_id=t.id AND (lower(COALESCE(r.summary, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(r.error, '')) LIKE ? ESCAPE '\\')) THEN 30.0 ELSE 0.0 END \
+                 + CASE WHEN EXISTS (SELECT 1 FROM task_events e WHERE e.task_id=t.id AND (lower(e.kind) LIKE ? ESCAPE '\\' OR lower(e.payload_json) LIKE ? ESCAPE '\\')) THEN 20.0 ELSE 0.0 END",
             "COALESCE(\
-                    CASE WHEN lower(t.title) LIKE ? THEN t.title END,\
-                    CASE WHEN lower(COALESCE(t.description, '')) LIKE ? THEN t.description END,\
-                    (SELECT c.body FROM task_comments c WHERE c.task_id=t.id AND lower(c.body) LIKE ? ORDER BY c.created_at ASC, c.id ASC LIMIT 1),\
-                    (SELECT CASE WHEN lower(COALESCE(r.summary, '')) LIKE ? THEN r.summary ELSE r.error END FROM task_runs r WHERE r.task_id=t.id AND (lower(COALESCE(r.summary, '')) LIKE ? OR lower(COALESCE(r.error, '')) LIKE ?) ORDER BY r.started_at DESC, r.id ASC LIMIT 1),\
-                    (SELECT e.kind || ' ' || e.payload_json FROM task_events e WHERE e.task_id=t.id AND (lower(e.kind) LIKE ? OR lower(e.payload_json) LIKE ?) ORDER BY e.id ASC LIMIT 1)\
+                    CASE WHEN lower(t.title) LIKE ? ESCAPE '\\' THEN t.title END,\
+                    CASE WHEN lower(COALESCE(t.description, '')) LIKE ? ESCAPE '\\' THEN t.description END,\
+                    (SELECT c.body FROM task_comments c WHERE c.task_id=t.id AND lower(c.body) LIKE ? ESCAPE '\\' ORDER BY c.created_at ASC, c.id ASC LIMIT 1),\
+                    (SELECT CASE WHEN lower(COALESCE(r.summary, '')) LIKE ? ESCAPE '\\' THEN r.summary ELSE r.error END FROM task_runs r WHERE r.task_id=t.id AND (lower(COALESCE(r.summary, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(r.error, '')) LIKE ? ESCAPE '\\') ORDER BY r.started_at DESC, r.id ASC LIMIT 1),\
+                    (SELECT e.kind || ' ' || e.payload_json FROM task_events e WHERE e.task_id=t.id AND (lower(e.kind) LIKE ? ESCAPE '\\' OR lower(e.payload_json) LIKE ? ESCAPE '\\') ORDER BY e.id ASC LIMIT 1)\
                 )",
             "WHERE score > 0.0",
             vec![
@@ -1079,8 +1090,12 @@ pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<Search
         ("0.0", "NULL", "", Vec::new())
     };
     search_params.append(&mut params);
-    search_params.push(Value::Integer(query.limit as i64));
-    search_params.push(Value::Integer(query.offset as i64));
+    search_params.push(Value::Integer(
+        query.limit.try_into().expect("validated limit"),
+    ));
+    search_params.push(Value::Integer(
+        query.offset.try_into().expect("validated offset"),
+    ));
     let sql = format!(
         "SELECT task_id, seq, score, snippet FROM (\
              SELECT t.id AS task_id, t.seq AS seq, ({score_sql}) AS score, {snippet_sql} AS snippet, t.updated_at AS updated_at \
@@ -3632,12 +3647,44 @@ fn task_query_where(board_id: &str, options: &TaskListOptions) -> (String, Vec<V
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        let needle = format!("%{}%", search.to_lowercase());
-        clauses.push("(lower(title) LIKE ? OR lower(COALESCE(description, '')) LIKE ?)".to_owned());
+        let needle = format!("%{}%", sqlite_like_literal(&search.to_lowercase()));
+        clauses.push(
+            "(lower(title) LIKE ? ESCAPE '\\' OR lower(COALESCE(description, '')) LIKE ? ESCAPE '\\')"
+                .to_owned(),
+        );
         params.push(Value::Text(needle.clone()));
         params.push(Value::Text(needle));
     }
     (clauses.join(" AND "), params)
+}
+
+fn validate_page_bounds(limit: usize, max_limit: usize, offset: usize) -> Result<()> {
+    if limit > max_limit {
+        return Err(KanbanError::InvalidInput(format!(
+            "limit must be <= {max_limit}"
+        )));
+    }
+    if offset > i64::MAX as usize {
+        return Err(KanbanError::InvalidInput(format!(
+            "offset must be <= {}",
+            i64::MAX
+        )));
+    }
+    Ok(())
+}
+
+fn sqlite_like_literal(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '%' | '_' | '\\' => {
+                escaped.push('\\');
+                escaped.push(ch);
+            }
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
 }
 
 fn search_task_where(board_id: &str, query: &SearchQuery) -> (String, Vec<Value>) {

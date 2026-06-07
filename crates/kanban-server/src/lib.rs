@@ -452,6 +452,11 @@ async fn list_tasks(
     query: Result<Query<TaskListQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<Vec<TaskDto>>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
+    validate_page_bounds(
+        query.limit,
+        kanban_sqlite::MAX_TASK_LIST_LIMIT,
+        query.offset,
+    )?;
     if query
         .label
         .as_deref()
@@ -500,6 +505,7 @@ async fn search_tasks(
     query: Result<Query<SearchTasksQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<SearchTasksDto>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
+    validate_page_bounds(query.limit, kanban_sqlite::MAX_SEARCH_LIMIT, query.offset)?;
     let statuses = parse_status_filters(raw_query.as_deref())?;
     let q = query
         .q
@@ -1437,6 +1443,16 @@ fn extractor_error(error: impl std::fmt::Display) -> ApiError {
 
 fn invalid_input(message: impl Into<String>) -> ApiError {
     ApiError(KanbanError::InvalidInput(message.into()))
+}
+
+fn validate_page_bounds(limit: usize, max_limit: usize, offset: usize) -> Result<(), ApiError> {
+    if limit > max_limit {
+        return Err(invalid_input(format!("limit must be <= {max_limit}")));
+    }
+    if offset > i64::MAX as usize {
+        return Err(invalid_input(format!("offset must be <= {}", i64::MAX)));
+    }
+    Ok(())
 }
 
 #[derive(Debug)]

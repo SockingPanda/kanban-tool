@@ -680,6 +680,35 @@ fn import_replace_rejects_maintenance_locked_database() {
 }
 
 #[test]
+fn import_replace_rejects_directory_database_path() {
+    let source = TempDb::new("import_replace_rejects_directory_database_path_source");
+    kb(&source.path, &["init"]).success();
+    let export_path = source.dir.join("restore.jsonl");
+    kb(
+        &source.path,
+        &["--json", "export", "--out", export_path.to_str().unwrap()],
+    )
+    .success_json();
+
+    let target = TempDb::new("import_replace_rejects_directory_database_path_target");
+    let db_dir = target.dir.join("db-dir");
+    std::fs::create_dir(&db_dir).unwrap();
+
+    kb(
+        &db_dir,
+        &[
+            "--json",
+            "import",
+            "--input",
+            export_path.to_str().unwrap(),
+            "--replace",
+        ],
+    )
+    .failure_containing("database path is not a file");
+    assert!(db_dir.is_dir());
+}
+
+#[test]
 fn maintenance_lock_uses_canonical_database_path() {
     let temp = TempDb::new("maintenance_lock_uses_canonical_database_path");
     kb(&temp.path, &["init"]).success();

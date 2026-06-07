@@ -686,6 +686,30 @@ fn doctor_reports_executable_status_invariant_violations() {
 }
 
 #[test]
+fn doctor_counts_each_dependency_cycle_once() {
+    let temp = TempDb::new("doctor_counts_each_dependency_cycle_once");
+    init_database(&temp.path, "tester").unwrap();
+    let a = create_task(&temp.path, "default", "tester", CreateTask::ready("a")).unwrap();
+    let b = create_task(&temp.path, "default", "tester", CreateTask::ready("b")).unwrap();
+    let c = create_task(&temp.path, "default", "tester", CreateTask::ready("c")).unwrap();
+    add_dependency(&temp.path, "default", "tester", &a.id, &b.id).unwrap();
+    add_dependency(&temp.path, "default", "tester", &b.id, &c.id).unwrap();
+    connect_file(&temp.path)
+        .unwrap()
+        .execute(
+            "INSERT INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) \
+             VALUES (?1, ?2, ?3, 1)",
+            params![a.board_id, c.id, a.id],
+        )
+        .unwrap();
+
+    let report = doctor_database(&temp.path).unwrap();
+
+    assert!(!report.ok);
+    assert_eq!(report.dependency_cycles, 1);
+}
+
+#[test]
 fn concurrent_claim_attempts_on_one_ready_task_have_exactly_one_success() {
     let temp = TempDb::new("concurrent_claim_attempts_on_one_ready_task_have_exactly_one_success");
     init_database(&temp.path, "tester").unwrap();

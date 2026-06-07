@@ -10,13 +10,13 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_core::TaskStatus;
 use kanban_sqlite::{
-    CreateTask, DispatchOptions, FinishPolicy, TaskPatch, add_dependency, archive_task,
-    backup_database, begin_database_replace, begin_database_runtime, block_task,
-    checkpoint_database, claim_task, complete_task, create_task, dispatch_once, export_jsonl,
-    get_run_by_id_global, get_task, heartbeat_task, import_jsonl, init_database, list_dependencies,
-    list_events, list_runs, list_tasks, promote_task, queue_stats, reclaim_expired,
-    remove_dependency, set_task_retry_policy_by_id, submit_review_task, unblock_task, update_task,
-    vacuum_database,
+    CreateTask, DispatchOptions, FinishPolicy, TaskListOptions, TaskListSort, TaskPatch,
+    add_dependency, archive_task, backup_database, begin_database_replace, begin_database_runtime,
+    block_task, checkpoint_database, claim_task, complete_task, create_task, dispatch_once,
+    export_jsonl, get_run_by_id_global, get_task, heartbeat_task, import_jsonl, init_database,
+    list_dependencies, list_events, list_runs, list_tasks, list_tasks_page, promote_task,
+    queue_stats, reclaim_expired, remove_dependency, set_task_retry_policy_by_id,
+    submit_review_task, unblock_task, update_task, vacuum_database,
 };
 
 #[derive(Debug, Parser)]
@@ -124,7 +124,17 @@ struct ListArgs {
     #[arg(long)]
     status: Vec<String>,
     #[arg(long)]
+    search: Option<String>,
+    #[arg(long)]
+    assignee: Option<String>,
+    #[arg(long)]
     include_archived: bool,
+    #[arg(long)]
+    limit: Option<usize>,
+    #[arg(long)]
+    offset: Option<usize>,
+    #[arg(long)]
+    sort: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -790,7 +800,34 @@ fn handle_task(
                 .iter()
                 .map(|s| parse_status(s))
                 .collect::<Result<Vec<_>>>()?;
-            let tasks = list_tasks(db_path, board, &statuses, args.include_archived)?;
+            let uses_page_options = args.search.is_some()
+                || args.assignee.is_some()
+                || args.limit.is_some()
+                || args.offset.is_some()
+                || args.sort.is_some();
+            let tasks = if uses_page_options {
+                list_tasks_page(
+                    db_path,
+                    board,
+                    TaskListOptions {
+                        statuses,
+                        include_archived: args.include_archived,
+                        assignee: args.assignee,
+                        search: args.search,
+                        sort: args
+                            .sort
+                            .as_deref()
+                            .map(parse_task_list_sort)
+                            .transpose()?
+                            .unwrap_or(TaskListSort::Position),
+                        limit: args.limit.unwrap_or(100),
+                        offset: args.offset.unwrap_or(0),
+                    },
+                )?
+                .tasks
+            } else {
+                list_tasks(db_path, board, &statuses, args.include_archived)?
+            };
             print_or_json(json, &tasks, || {
                 tasks.iter().map(task_line).collect::<Vec<_>>().join("\n")
             })?;
@@ -1030,6 +1067,22 @@ fn task_line(task: &kanban_sqlite::TaskRecord) -> String {
 
 fn parse_status(value: &str) -> Result<TaskStatus> {
     TaskStatus::try_from(value).map_err(|err| anyhow::anyhow!(err))
+}
+
+fn parse_task_list_sort(value: &str) -> Result<TaskListSort> {
+    match value {
+        "position" => Ok(TaskListSort::Position),
+        "position_desc" => Ok(TaskListSort::PositionDesc),
+        "priority" => Ok(TaskListSort::Priority),
+        "priority_desc" => Ok(TaskListSort::PriorityDesc),
+        "created" | "created_at" => Ok(TaskListSort::CreatedAt),
+        "created_desc" | "created_at_desc" => Ok(TaskListSort::CreatedAtDesc),
+        "updated" | "updated_at" => Ok(TaskListSort::UpdatedAt),
+        "updated_desc" | "updated_at_desc" => Ok(TaskListSort::UpdatedAtDesc),
+        "due" | "due_at" => Ok(TaskListSort::DueAt),
+        "due_desc" | "due_at_desc" => Ok(TaskListSort::DueAtDesc),
+        _ => bail!("unsupported task list sort: {value}"),
+    }
 }
 
 fn optional_clearable<T>(value: Option<T>, clear: bool) -> Option<Option<T>> {

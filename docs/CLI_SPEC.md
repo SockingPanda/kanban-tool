@@ -173,6 +173,7 @@ Options：
 | `--search <query>` | title/description 模糊搜索。 |
 | `--include-archived` | 包含 archived。 |
 | `--limit <n>` | 限制数量。 |
+| `--offset <n>` | 分页偏移。 |
 | `--sort <field>` | priority/created/updated/position。 |
 
 Examples：

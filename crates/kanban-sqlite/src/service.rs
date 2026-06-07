@@ -12,6 +12,7 @@ use kanban_core::{
     Clock, KanbanError, Result, SystemClock, TaskStatus, new_event_id, new_run_id, new_task_id,
     new_typed_id,
 };
+use kanban_search::{SearchHit, SearchMeta, SearchQuery, SearchResults};
 use rusqlite::{
     Connection, OptionalExtension, Row, params, params_from_iter,
     types::{Value, ValueRef},
@@ -1026,6 +1027,96 @@ pub fn list_tasks_page(
     Ok(TaskListPage {
         tasks,
         total: total as usize,
+    })
+}
+
+pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<SearchResults> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, &query.board)?;
+    let (where_sql, mut params) = search_task_where(&board_id, &query);
+    let needle = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| format!("%{}%", value.to_lowercase()));
+    let (score_sql, snippet_sql, outer_filter, mut search_params) = if let Some(needle) =
+        needle.as_deref()
+    {
+        (
+            "CASE WHEN lower(t.title) LIKE ? THEN 100.0 ELSE 0.0 END \
+                 + CASE WHEN lower(COALESCE(t.description, '')) LIKE ? THEN 60.0 ELSE 0.0 END \
+                 + CASE WHEN EXISTS (SELECT 1 FROM task_comments c WHERE c.task_id=t.id AND lower(c.body) LIKE ?) THEN 40.0 ELSE 0.0 END \
+                 + CASE WHEN EXISTS (SELECT 1 FROM task_runs r WHERE r.task_id=t.id AND (lower(COALESCE(r.summary, '')) LIKE ? OR lower(COALESCE(r.error, '')) LIKE ?)) THEN 30.0 ELSE 0.0 END \
+                 + CASE WHEN EXISTS (SELECT 1 FROM task_events e WHERE e.task_id=t.id AND (lower(e.kind) LIKE ? OR lower(e.payload_json) LIKE ?)) THEN 20.0 ELSE 0.0 END",
+            "COALESCE(\
+                    CASE WHEN lower(t.title) LIKE ? THEN t.title END,\
+                    CASE WHEN lower(COALESCE(t.description, '')) LIKE ? THEN t.description END,\
+                    (SELECT c.body FROM task_comments c WHERE c.task_id=t.id AND lower(c.body) LIKE ? ORDER BY c.created_at ASC, c.id ASC LIMIT 1),\
+                    (SELECT CASE WHEN lower(COALESCE(r.summary, '')) LIKE ? THEN r.summary ELSE r.error END FROM task_runs r WHERE r.task_id=t.id AND (lower(COALESCE(r.summary, '')) LIKE ? OR lower(COALESCE(r.error, '')) LIKE ?) ORDER BY r.started_at DESC, r.id ASC LIMIT 1),\
+                    (SELECT e.kind || ' ' || e.payload_json FROM task_events e WHERE e.task_id=t.id AND (lower(e.kind) LIKE ? OR lower(e.payload_json) LIKE ?) ORDER BY e.id ASC LIMIT 1)\
+                )",
+            "WHERE score > 0.0",
+            vec![
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+                Value::Text(needle.to_owned()),
+            ],
+        )
+    } else {
+        ("0.0", "NULL", "", Vec::new())
+    };
+    search_params.append(&mut params);
+    search_params.push(Value::Integer(query.limit as i64));
+    search_params.push(Value::Integer(query.offset as i64));
+    let sql = format!(
+        "SELECT task_id, seq, score, snippet FROM (\
+             SELECT t.id AS task_id, t.seq AS seq, ({score_sql}) AS score, {snippet_sql} AS snippet, t.updated_at AS updated_at \
+             FROM tasks t {where_sql}\
+         ) {outer_filter} ORDER BY score DESC, updated_at DESC, seq ASC LIMIT ? OFFSET ?"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(storage)?;
+    let rows = stmt
+        .query_map(params_from_iter(search_params.iter()), |row| {
+            Ok(SearchHit {
+                task_id: row.get(0)?,
+                seq: row.get(1)?,
+                score: row.get(2)?,
+                snippet: row.get(3)?,
+            })
+        })
+        .map_err(storage)?;
+    let hits = rows
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)?;
+    let last_event_id = conn
+        .query_row(
+            "SELECT MAX(id) FROM task_events WHERE board_id=?1",
+            params![board_id],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    Ok(SearchResults {
+        hits,
+        meta: SearchMeta {
+            backend: "sqlite".to_owned(),
+            stale: false,
+            index_version: None,
+            last_event_id,
+            index_lag_events: Some(0),
+        },
     })
 }
 
@@ -3516,6 +3607,36 @@ fn task_query_where(board_id: &str, options: &TaskListOptions) -> (String, Vec<V
         clauses.push("(lower(title) LIKE ? OR lower(COALESCE(description, '')) LIKE ?)".to_owned());
         params.push(Value::Text(needle.clone()));
         params.push(Value::Text(needle));
+    }
+    (clauses.join(" AND "), params)
+}
+
+fn search_task_where(board_id: &str, query: &SearchQuery) -> (String, Vec<Value>) {
+    let mut clauses = vec!["WHERE t.board_id=?".to_owned()];
+    let mut params = vec![Value::Text(board_id.to_owned())];
+    if !query.include_archived {
+        clauses.push("t.status != 'archived'".to_owned());
+    }
+    if !query.statuses.is_empty() {
+        let placeholders = std::iter::repeat_n("?", query.statuses.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        clauses.push(format!("t.status IN ({placeholders})"));
+        params.extend(
+            query
+                .statuses
+                .iter()
+                .map(|status| Value::Text(status.as_str().to_owned())),
+        );
+    }
+    if let Some(assignee) = query
+        .assignee
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        clauses.push("t.assignee=?".to_owned());
+        params.push(Value::Text(assignee.to_owned()));
     }
     (clauses.join(" AND "), params)
 }

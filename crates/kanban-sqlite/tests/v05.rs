@@ -264,8 +264,10 @@ fn sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely() {
 }
 
 #[test]
-fn sqlite_search_treats_like_wildcards_as_literal_query_text() {
-    let temp = TempDb::new("sqlite_search_treats_like_wildcards_as_literal_query_text");
+fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_text() {
+    let temp = TempDb::new(
+        "sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_text",
+    );
     init_database(&temp.path, "tester").unwrap();
 
     let title_percent = create_task(
@@ -312,6 +314,22 @@ fn sqlite_search_treats_like_wildcards_as_literal_query_text() {
         "default",
         "tester",
         CreateTask::ready("run literal source"),
+    )
+    .unwrap();
+    let title_backslash = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "literal backslash \\ title".into(),
+            description: Some("ready spec".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
     )
     .unwrap();
     let control = create_task(
@@ -386,6 +404,26 @@ fn sqlite_search_treats_like_wildcards_as_literal_query_text() {
     assert!(underscore_ids.contains(&description_underscore.id.as_str()));
     assert!(underscore_ids.contains(&run_underscore.id.as_str()));
     assert!(!underscore_ids.contains(&control.id.as_str()));
+
+    let backslash_results = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("\\".into()),
+            statuses: vec![],
+            assignee: None,
+            include_archived: false,
+            limit: 10,
+            offset: 0,
+        },
+    )
+    .unwrap();
+    let backslash_ids = backslash_results
+        .hits
+        .iter()
+        .map(|hit| hit.task_id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(backslash_ids, vec![title_backslash.id.as_str()]);
 }
 
 #[test]

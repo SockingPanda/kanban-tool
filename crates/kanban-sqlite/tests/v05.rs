@@ -700,6 +700,91 @@ fn tantivy_sync_reindexes_task_comment_run_event_and_archive_changes() {
 
 #[cfg(feature = "tantivy-backend")]
 #[test]
+fn tantivy_index_ahead_of_database_falls_back_and_sync_rebuilds() {
+    let temp = TempDb::new("tantivy_index_ahead_of_database_falls_back_and_sync_rebuilds");
+    init_database(&temp.path, "tester").unwrap();
+    let base = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("rollback base comet"),
+    )
+    .unwrap();
+    kanban_sqlite::checkpoint_database(&temp.path).unwrap();
+    let snapshot = temp.dir.join("rollback-snapshot.db");
+    std::fs::copy(&temp.path, &snapshot).unwrap();
+
+    let future = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("rollback future phantom"),
+    )
+    .unwrap();
+    let rebuilt = kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+    assert_eq!(rebuilt.backend, "tantivy");
+    assert!(!rebuilt.stale);
+
+    std::fs::copy(&snapshot, &temp.path).unwrap();
+    let _ = std::fs::remove_file(temp.path.with_extension("db-wal"));
+    let _ = std::fs::remove_file(temp.path.with_extension("db-shm"));
+
+    assert!(get_task(&temp.path, "default", &future.id).is_err());
+    let stale = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("phantom".into()),
+            statuses: vec![],
+            assignee: None,
+            include_archived: false,
+            limit: 10,
+            offset: 0,
+        },
+    )
+    .unwrap();
+    assert_eq!(stale.meta.backend, "sqlite");
+    assert!(stale.meta.stale);
+    assert!(stale.meta.index_lag_events.unwrap() > 0);
+    assert!(stale.hits.is_empty(), "{:?}", stale.hits);
+
+    let status = kanban_sqlite::search_index_status(&temp.path, "default").unwrap();
+    assert_eq!(status.backend, "sqlite");
+    assert!(status.derived_index);
+    assert!(status.stale);
+    assert!(status.index_lag_events.unwrap() > 0);
+    assert!(
+        status.message.contains("ahead of the database"),
+        "{}",
+        status.message
+    );
+
+    let synced = kanban_sqlite::sync_search_index(&temp.path, "default").unwrap();
+    assert_eq!(synced.backend, "tantivy");
+    assert!(!synced.stale);
+    assert_eq!(synced.index_lag_events, Some(0));
+
+    let repaired = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("comet".into()),
+            statuses: vec![],
+            assignee: None,
+            include_archived: false,
+            limit: 10,
+            offset: 0,
+        },
+    )
+    .unwrap();
+    assert_eq!(repaired.meta.backend, "tantivy");
+    assert!(!repaired.meta.stale);
+    assert_eq!(repaired.hits.len(), 1);
+    assert_eq!(repaired.hits[0].task_id, base.id);
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
 fn tantivy_sync_failure_does_not_advance_search_state_watermark() {
     let temp = TempDb::new("tantivy_sync_failure_does_not_advance_search_state_watermark");
     init_database(&temp.path, "tester").unwrap();

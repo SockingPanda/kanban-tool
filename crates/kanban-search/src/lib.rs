@@ -364,7 +364,9 @@ pub mod tantivy_backend {
             });
         }
         let lag = match (last_event_id, metadata.last_event_id) {
-            (Some(current), Some(indexed)) => Some(current.saturating_sub(indexed)),
+            (Some(current), Some(indexed)) => {
+                Some(current.abs_diff(indexed).try_into().unwrap_or(i64::MAX))
+            }
             (Some(current), None) => Some(current),
             _ => Some(0),
         };

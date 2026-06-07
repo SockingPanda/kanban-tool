@@ -2054,6 +2054,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "kanban-entity"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "kanban-local"
 version = "0.1.0"
 dependencies = [
@@ -2094,6 +2102,7 @@ name = "kanban-sqlite"
 version = "0.1.0"
 dependencies = [
  "kanban-core",
+ "kanban-entity",
  "kanban-search",
  "rusqlite",
  "serde",

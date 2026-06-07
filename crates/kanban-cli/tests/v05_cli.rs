@@ -182,8 +182,8 @@ fn doctor_reports_integrity_migration_and_expired_running_tasks() {
     let doctor = kb(&temp.path, &["--json", "doctor"]).success_json();
 
     assert_eq!(doctor["data"]["integrity_check"], "ok");
-    assert_eq!(doctor["data"]["migration_version"], 1);
-    assert_eq!(doctor["data"]["user_version"], 1);
+    assert_eq!(doctor["data"]["migration_version"], 2);
+    assert_eq!(doctor["data"]["user_version"], 2);
     assert_eq!(doctor["data"]["expired_running_tasks"], 1);
     assert_eq!(doctor["data"]["dependency_cycles"], 0);
     assert_eq!(doctor["data"]["archived_dependency_edges"], 0);
@@ -482,6 +482,73 @@ fn search_command_outputs_json_and_human_hits() {
     assert!(stdout.contains("score="), "{stdout}");
     assert!(stdout.contains("Alpha search surface"), "{stdout}");
     assert!(stdout.contains("unique-needle"), "{stdout}");
+}
+
+#[test]
+fn substrate_commands_report_entities_outbox_and_derived_status() {
+    let temp = TempDb::new("substrate_commands_report_entities_outbox_and_derived_status");
+    kb(&temp.path, &["init"]).success();
+
+    let entities = kb(
+        &temp.path,
+        &[
+            "--json", "entity", "list", "--kind", "board", "--limit", "5",
+        ],
+    )
+    .success_json();
+    let entity_rows = entities["data"].as_array().unwrap();
+    assert_eq!(entity_rows.len(), 1);
+    assert_eq!(entity_rows[0]["kind"], "board");
+    let uri = entity_rows[0]["uri"].as_str().unwrap();
+    assert!(uri.starts_with("kb://board/"));
+
+    let shown = kb(&temp.path, &["--json", "entity", "show", uri]).success_json();
+    assert_eq!(shown["data"]["uri"], uri);
+
+    let outbox = kb(&temp.path, &["--json", "outbox", "list"]).success_json();
+    assert_eq!(outbox["data"].as_array().unwrap().len(), 0);
+
+    let created = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "substrate task",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success_json();
+    let task_id = created["data"]["id"].as_str().unwrap();
+    let task_uri = format!("kb://task/{task_id}");
+    let task_entity = kb(&temp.path, &["--json", "entity", "show", &task_uri]).success_json();
+    assert_eq!(task_entity["data"]["title"], "substrate task");
+
+    let outbox = kb(&temp.path, &["--json", "outbox", "list"]).success_json();
+    let jobs = outbox["data"].as_array().unwrap();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0]["target"], "all");
+    assert_eq!(jobs[0]["entity_uri"], task_uri);
+
+    let derived = kb(&temp.path, &["--json", "derived", "status"]).success_json();
+    let stores = derived["data"].as_array().unwrap();
+    assert_eq!(stores.len(), 3);
+    assert!(
+        stores
+            .iter()
+            .any(|store| store["store_name"] == "tantivy_tasks")
+    );
+    assert!(
+        stores
+            .iter()
+            .any(|store| store["store_name"] == "oxigraph_relations")
+    );
+    assert!(
+        stores
+            .iter()
+            .any(|store| store["store_name"] == "lancedb_chunks")
+    );
 }
 
 #[cfg(feature = "tantivy-backend")]

@@ -76,7 +76,7 @@ fn init_records_and_enforces_migration_checksum() {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(user_version, 1);
+    assert_eq!(user_version, 2);
     assert_eq!(name, "001_initial");
     assert!(checksum.starts_with("fnv64:"), "checksum: {checksum}");
 
@@ -92,6 +92,92 @@ fn init_records_and_enforces_migration_checksum() {
         err.to_string().contains("migration checksum mismatch"),
         "err: {err}"
     );
+}
+
+#[test]
+fn init_creates_knowledge_substrate_tables_and_seeds() {
+    let temp = TempDb::new("init_creates_knowledge_substrate_tables_and_seeds");
+
+    init_database(&temp.path, "tester").expect("init succeeds");
+
+    let conn = Connection::open(&temp.path).unwrap();
+    let user_version: i64 = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(user_version, 2);
+    for table in [
+        "entities",
+        "relation_predicates",
+        "entity_relations",
+        "index_outbox",
+        "derived_store_state",
+    ] {
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                [table],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "missing table {table}");
+    }
+    let predicate_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM relation_predicates", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert!(predicate_count >= 13);
+    let derived_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM derived_store_state", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(derived_count, 3);
+    let board_entities: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM entities WHERE kind='board'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(board_entities, 1);
+}
+
+#[test]
+fn init_upgrades_v1_database_and_backfills_task_entities() {
+    let temp = TempDb::new("init_upgrades_v1_database_and_backfills_task_entities");
+
+    let v1_sql = include_str!("../../../migrations/001_initial.sql");
+    let conn = Connection::open(&temp.path).unwrap();
+    conn.execute_batch(v1_sql).unwrap();
+    conn.execute(
+        "INSERT INTO boards(id, slug, name, description, created_at, updated_at, archived_at) VALUES ('b_test', 'default', 'Default', NULL, 1, 1, NULL)",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO tasks(id, board_id, seq, title, description, status, created_by, created_at, updated_at, metadata_json) VALUES ('t_test', 'b_test', 1, 'Upgrade task', 'ready spec', 'ready', 'tester', 2, 2, '{}')",
+        [],
+    )
+    .unwrap();
+    conn.pragma_update(None, "user_version", 1).unwrap();
+    drop(conn);
+
+    init_database(&temp.path, "tester").expect("upgrade succeeds");
+
+    let conn = Connection::open(&temp.path).unwrap();
+    let user_version: i64 = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(user_version, 2);
+    let task_entity_title: String = conn
+        .query_row(
+            "SELECT title FROM entities WHERE uri='kb://task/t_test'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(task_entity_title, "Upgrade task");
 }
 
 struct TempDb {

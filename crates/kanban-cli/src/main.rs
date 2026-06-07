@@ -11,14 +11,16 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_core::TaskStatus;
 use kanban_search::SearchQuery;
 use kanban_sqlite::{
-    CreateTask, DispatchOptions, FinishPolicy, MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT,
-    TaskListOptions, TaskListSort, TaskPatch, add_dependency, archive_task, backup_database,
-    begin_database_replace, begin_database_runtime, block_task, checkpoint_database, claim_task,
-    complete_task, create_task, dispatch_once, export_jsonl, get_run_by_id_global, get_task,
-    heartbeat_task, import_jsonl, init_database, list_dependencies, list_events, list_runs,
-    list_tasks, list_tasks_page, promote_task, queue_stats, rebuild_search_index, reclaim_expired,
-    remove_dependency, search_index_status, search_tasks, set_task_retry_policy_by_id,
-    submit_review_task, sync_search_index, unblock_task, update_task, vacuum_database,
+    CreateTask, DispatchOptions, EntityListOptions, FinishPolicy, MAX_SEARCH_LIMIT,
+    MAX_TASK_LIST_LIMIT, OutboxListOptions, TaskListOptions, TaskListSort, TaskPatch,
+    add_dependency, archive_task, backup_database, begin_database_replace, begin_database_runtime,
+    block_task, checkpoint_database, claim_task, complete_task, create_task,
+    derived_store_statuses, dispatch_once, export_jsonl, get_entity, get_run_by_id_global,
+    get_task, heartbeat_task, import_jsonl, init_database, list_dependencies, list_entities,
+    list_events, list_outbox, list_runs, list_tasks, list_tasks_page, promote_task, queue_stats,
+    rebuild_search_index, reclaim_expired, remove_dependency, search_index_status, search_tasks,
+    set_task_retry_policy_by_id, submit_review_task, sync_search_index, unblock_task, update_task,
+    vacuum_database,
 };
 
 #[derive(Debug, Parser)]
@@ -64,6 +66,18 @@ enum Command {
     Index {
         #[command(subcommand)]
         command: IndexCommand,
+    },
+    Entity {
+        #[command(subcommand)]
+        command: EntityCommand,
+    },
+    Outbox {
+        #[command(subcommand)]
+        command: OutboxCommand,
+    },
+    Derived {
+        #[command(subcommand)]
+        command: DerivedCommand,
     },
     Dispatch(DispatchArgs),
     Serve(ServeArgs),
@@ -165,6 +179,38 @@ enum IndexCommand {
     Doctor,
     Rebuild,
     Sync,
+}
+
+#[derive(Debug, Subcommand)]
+enum EntityCommand {
+    List(EntityListArgs),
+    Show { uri: String },
+}
+
+#[derive(Debug, Args)]
+struct EntityListArgs {
+    #[arg(long)]
+    kind: Option<String>,
+    #[arg(long, default_value_t = 50)]
+    limit: usize,
+}
+
+#[derive(Debug, Subcommand)]
+enum OutboxCommand {
+    List(OutboxListArgs),
+}
+
+#[derive(Debug, Args)]
+struct OutboxListArgs {
+    #[arg(long)]
+    status: Option<String>,
+    #[arg(long, default_value_t = 50)]
+    limit: usize,
+}
+
+#[derive(Debug, Subcommand)]
+enum DerivedCommand {
+    Status,
 }
 
 #[derive(Debug, Args)]
@@ -423,6 +469,9 @@ fn main() -> Result<()> {
         Command::Run { command } => handle_run(command, &db_path, cli.json)?,
         Command::Search(args) => handle_search(args, &db_path, &cli.board, cli.json)?,
         Command::Index { command } => handle_index(command, &db_path, &cli.board, cli.json)?,
+        Command::Entity { command } => handle_entity(command, &db_path, cli.json)?,
+        Command::Outbox { command } => handle_outbox(command, &db_path, cli.json)?,
+        Command::Derived { command } => handle_derived(command, &db_path, cli.json)?,
         Command::Dispatch(args) => {
             let options = dispatch_options(&args, actor.clone())?;
             if args.once {
@@ -1125,6 +1174,95 @@ fn handle_index(command: IndexCommand, db_path: &PathBuf, board: &str, json: boo
             status.message
         )
     })
+}
+
+fn handle_entity(command: EntityCommand, db_path: &PathBuf, json: bool) -> Result<()> {
+    match command {
+        EntityCommand::List(args) => {
+            validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let entities = list_entities(
+                db_path,
+                EntityListOptions {
+                    kind: args.kind,
+                    limit: args.limit,
+                },
+            )?;
+            print_or_json(json, &entities, || {
+                entities
+                    .iter()
+                    .map(|entity| {
+                        format!(
+                            "{} [{}] {}:{}",
+                            entity.uri, entity.kind, entity.source_table, entity.source_id
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })?;
+        }
+        EntityCommand::Show { uri } => {
+            let entity = get_entity(db_path, &uri)?;
+            print_or_json(json, &entity, || {
+                format!(
+                    "{} [{}] {}:{} title={:?}",
+                    entity.uri, entity.kind, entity.source_table, entity.source_id, entity.title
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn handle_outbox(command: OutboxCommand, db_path: &PathBuf, json: bool) -> Result<()> {
+    match command {
+        OutboxCommand::List(args) => {
+            validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let jobs = list_outbox(
+                db_path,
+                OutboxListOptions {
+                    status: args.status,
+                    limit: args.limit,
+                },
+            )?;
+            print_or_json(json, &jobs, || {
+                jobs.iter()
+                    .map(|job| {
+                        format!(
+                            "#{} [{}] {} {} attempts={}",
+                            job.id, job.status, job.target, job.entity_uri, job.attempts
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn handle_derived(command: DerivedCommand, db_path: &PathBuf, json: bool) -> Result<()> {
+    match command {
+        DerivedCommand::Status => {
+            let statuses = derived_store_statuses(db_path)?;
+            print_or_json(json, &statuses, || {
+                statuses
+                    .iter()
+                    .map(|status| {
+                        format!(
+                            "{} schema={} last_event_id={} dirty={} last_error={:?}",
+                            status.store_name,
+                            status.schema_version,
+                            status.last_event_id,
+                            status.dirty,
+                            status.last_error
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })?;
+        }
+    }
+    Ok(())
 }
 
 fn handle_dep(

@@ -242,6 +242,61 @@ pub struct EventListOptions {
     pub limit: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EntityListOptions {
+    pub kind: Option<String>,
+    pub limit: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutboxListOptions {
+    pub status: Option<String>,
+    pub limit: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EntityRecord {
+    pub uri: String,
+    pub kind: String,
+    pub source_table: String,
+    pub source_id: String,
+    pub board_id: Option<String>,
+    pub task_id: Option<String>,
+    pub title: Option<String>,
+    pub summary: Option<String>,
+    pub content_hash: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub archived_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IndexOutboxRecord {
+    pub id: i64,
+    pub source_event_id: Option<i64>,
+    pub target: String,
+    pub entity_uri: String,
+    pub action: String,
+    pub payload_json: String,
+    pub status: String,
+    pub attempts: i64,
+    pub last_error: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DerivedStoreStatusRecord {
+    pub store_name: String,
+    pub schema_version: i64,
+    pub last_event_id: i64,
+    pub dirty: bool,
+    pub last_rebuild_at: Option<i64>,
+    pub last_sync_at: Option<i64>,
+    pub last_error: Option<String>,
+    pub updated_at: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DoctorReport {
     pub ok: bool,
@@ -371,6 +426,100 @@ pub fn list_boards(path: impl AsRef<Path>) -> Result<Vec<BoardRecord>> {
         )
         .map_err(storage)?;
     let rows = stmt.query_map([], board_from_row).map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
+pub fn list_entities(
+    path: impl AsRef<Path>,
+    options: EntityListOptions,
+) -> Result<Vec<EntityRecord>> {
+    validate_page_bounds(options.limit, MAX_TASK_LIST_LIMIT, 0)?;
+    let conn = connect_file(path.as_ref())?;
+    let mut params = Vec::new();
+    let where_sql = if let Some(kind) = options
+        .kind
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        params.push(Value::Text(kind.to_owned()));
+        "WHERE kind=?1"
+    } else {
+        ""
+    };
+    params.push(Value::Integer(
+        options.limit.try_into().expect("validated limit"),
+    ));
+    let sql = format!(
+        "SELECT uri,kind,source_table,source_id,board_id,task_id,title,summary,content_hash,created_at,updated_at,archived_at \
+         FROM entities {where_sql} ORDER BY updated_at DESC, uri ASC LIMIT ?"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(storage)?;
+    let rows = stmt
+        .query_map(params_from_iter(params.iter()), entity_from_row)
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
+pub fn get_entity(path: impl AsRef<Path>, uri: &str) -> Result<EntityRecord> {
+    let conn = connect_file(path.as_ref())?;
+    conn.query_row(
+        "SELECT uri,kind,source_table,source_id,board_id,task_id,title,summary,content_hash,created_at,updated_at,archived_at \
+         FROM entities WHERE uri=?1",
+        [uri],
+        entity_from_row,
+    )
+    .optional()
+    .map_err(storage)?
+    .ok_or_else(|| KanbanError::NotFound(format!("entity {uri}")))
+}
+
+pub fn list_outbox(
+    path: impl AsRef<Path>,
+    options: OutboxListOptions,
+) -> Result<Vec<IndexOutboxRecord>> {
+    validate_page_bounds(options.limit, MAX_TASK_LIST_LIMIT, 0)?;
+    let conn = connect_file(path.as_ref())?;
+    let mut params = Vec::new();
+    let where_sql = if let Some(status) = options
+        .status
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        params.push(Value::Text(status.to_owned()));
+        "WHERE status=?1"
+    } else {
+        ""
+    };
+    params.push(Value::Integer(
+        options.limit.try_into().expect("validated limit"),
+    ));
+    let sql = format!(
+        "SELECT id,source_event_id,target,entity_uri,action,payload_json,status,attempts,last_error,created_at,updated_at \
+         FROM index_outbox {where_sql} ORDER BY id ASC LIMIT ?"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(storage)?;
+    let rows = stmt
+        .query_map(params_from_iter(params.iter()), outbox_from_row)
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
+pub fn derived_store_statuses(path: impl AsRef<Path>) -> Result<Vec<DerivedStoreStatusRecord>> {
+    let conn = connect_file(path.as_ref())?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT store_name,schema_version,last_event_id,dirty,last_rebuild_at,last_sync_at,last_error,updated_at \
+             FROM derived_store_state ORDER BY store_name ASC",
+        )
+        .map_err(storage)?;
+    let rows = stmt
+        .query_map([], derived_store_status_from_row)
+        .map_err(storage)?;
     rows.collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)
 }
@@ -4475,6 +4624,53 @@ fn run_from_row(row: &Row<'_>) -> rusqlite::Result<RunRecord> {
     })
 }
 
+fn entity_from_row(row: &Row<'_>) -> rusqlite::Result<EntityRecord> {
+    Ok(EntityRecord {
+        uri: row.get(0)?,
+        kind: row.get(1)?,
+        source_table: row.get(2)?,
+        source_id: row.get(3)?,
+        board_id: row.get(4)?,
+        task_id: row.get(5)?,
+        title: row.get(6)?,
+        summary: row.get(7)?,
+        content_hash: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
+        archived_at: row.get(11)?,
+    })
+}
+
+fn outbox_from_row(row: &Row<'_>) -> rusqlite::Result<IndexOutboxRecord> {
+    Ok(IndexOutboxRecord {
+        id: row.get(0)?,
+        source_event_id: row.get(1)?,
+        target: row.get(2)?,
+        entity_uri: row.get(3)?,
+        action: row.get(4)?,
+        payload_json: row.get(5)?,
+        status: row.get(6)?,
+        attempts: row.get(7)?,
+        last_error: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
+    })
+}
+
+fn derived_store_status_from_row(row: &Row<'_>) -> rusqlite::Result<DerivedStoreStatusRecord> {
+    let dirty: i64 = row.get(3)?;
+    Ok(DerivedStoreStatusRecord {
+        store_name: row.get(0)?,
+        schema_version: row.get(1)?,
+        last_event_id: row.get(2)?,
+        dirty: dirty != 0,
+        last_rebuild_at: row.get(4)?,
+        last_sync_at: row.get(5)?,
+        last_error: row.get(6)?,
+        updated_at: row.get(7)?,
+    })
+}
+
 fn get_board_conn(conn: &Connection, slug_or_id: &str) -> Result<BoardRecord> {
     let sql = if slug_or_id.starts_with("b_") {
         "SELECT id,slug,name,description,created_at,updated_at,archived_at FROM boards WHERE id=?1 AND archived_at IS NULL"
@@ -4560,7 +4756,83 @@ fn insert_event(
     payload: &str,
     now: i64,
 ) -> Result<()> {
-    conn.execute("INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)", params![new_event_id(), board_id, task_id, run_id, kind, actor, payload, now]).map_err(storage)?;
+    let event_id = new_event_id();
+    conn.execute("INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)", params![event_id, board_id, task_id, run_id, kind, actor, payload, now]).map_err(storage)?;
+    let source_event_id = conn.last_insert_rowid();
+    upsert_event_entity(conn, &event_id, board_id, task_id, kind, payload, now)?;
+    if let Some(task_id) = task_id {
+        upsert_task_entity(conn, task_id)?;
+    }
+    if let Some(run_id) = run_id {
+        upsert_run_entity(conn, run_id)?;
+    }
+    let entity_uri = task_id
+        .map(|task_id| format!("kb://task/{task_id}"))
+        .or_else(|| run_id.map(|run_id| format!("kb://run/{run_id}")))
+        .unwrap_or_else(|| format!("kb://board/{board_id}"));
+    enqueue_index_outbox(conn, source_event_id, &entity_uri, "upsert", now)?;
+    Ok(())
+}
+
+fn upsert_event_entity(
+    conn: &Connection,
+    event_id: &str,
+    board_id: &str,
+    task_id: Option<&str>,
+    kind: &str,
+    payload: &str,
+    now: i64,
+) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         VALUES (?1, 'event', 'task_events', ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?7, NULL)",
+        params![
+            format!("kb://event/{event_id}"),
+            event_id,
+            board_id,
+            task_id,
+            kind,
+            payload,
+            now
+        ],
+    )
+    .map_err(storage)?;
+    Ok(())
+}
+
+fn upsert_task_entity(conn: &Connection, task_id: &str) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://task/' || id, 'task', 'tasks', id, board_id, id, title, description, NULL, created_at, updated_at, archived_at FROM tasks WHERE id=?1",
+        [task_id],
+    )
+    .map_err(storage)?;
+    Ok(())
+}
+
+fn upsert_run_entity(conn: &Connection, run_id: &str) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://run/' || id, 'run', 'task_runs', id, board_id, task_id, id, COALESCE(summary, error), NULL, started_at, COALESCE(finished_at, last_heartbeat_at, started_at), NULL FROM task_runs WHERE id=?1",
+        [run_id],
+    )
+    .map_err(storage)?;
+    Ok(())
+}
+
+fn enqueue_index_outbox(
+    conn: &Connection,
+    source_event_id: i64,
+    entity_uri: &str,
+    action: &str,
+    now: i64,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO index_outbox(source_event_id, target, entity_uri, action, payload_json, status, attempts, last_error, created_at, updated_at) \
+         VALUES (?1, 'all', ?2, ?3, '{}', 'pending', 0, NULL, ?4, ?4)",
+        params![source_event_id, entity_uri, action, now],
+    )
+    .map_err(storage)?;
     Ok(())
 }
 

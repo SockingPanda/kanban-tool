@@ -1034,7 +1034,7 @@ pub fn block_task(
     token: Option<&str>,
     force: bool,
 ) -> Result<TaskRecord> {
-    let mut conn = connect_file(path.as_ref())?;
+    let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
     let task = resolve_task(&conn, &board_id, task_ref)?;
@@ -1057,40 +1057,47 @@ pub fn block_task(
     ) {
         return Err(KanbanError::InvalidTransition("cannot block task".into()));
     }
-    if task.status == TaskStatus::Running {
-        let tx = conn.transaction().map_err(storage)?;
-        finish_running(
-            &tx,
-            &board_id,
-            &task,
-            TaskStatus::Blocked,
-            actor,
-            "task.blocked",
-            "failed",
-            1,
-            Some(reason),
-            None,
-            None,
-            None,
-            now,
-        )?;
-        tx.commit().map_err(storage)?;
-    } else {
-        let tx = conn.transaction().map_err(storage)?;
-        tx.execute("UPDATE tasks SET status='blocked', status_reason=?1, updated_at=?2, lock_version=lock_version+1 WHERE id=?3", params![reason, now, task.id]).map_err(storage)?;
-        let payload = json!({ "reason": reason }).to_string();
-        insert_event(
-            &tx,
-            &board_id,
-            Some(&task.id),
-            None,
-            "task.blocked",
-            actor,
-            &payload,
-            now,
-        )?;
-        tx.commit().map_err(storage)?;
-    }
+    with_immediate_tx(&conn, || {
+        if task.status == TaskStatus::Running {
+            finish_running(
+                &conn,
+                &board_id,
+                &task,
+                TaskStatus::Blocked,
+                actor,
+                "task.blocked",
+                "failed",
+                1,
+                Some(reason),
+                None,
+                None,
+                None,
+                now,
+            )?;
+        } else {
+            let changed = conn
+                .execute(
+                    "UPDATE tasks SET status='blocked', status_reason=?1, updated_at=?2, lock_version=lock_version+1 WHERE id=?3 AND board_id=?4 AND status=?5",
+                    params![reason, now, task.id, board_id, task.status.as_str()],
+                )
+                .map_err(storage)?;
+            if changed != 1 {
+                return Err(KanbanError::InvalidTransition("cannot block task".into()));
+            }
+            let payload = json!({ "reason": reason }).to_string();
+            insert_event(
+                &conn,
+                &board_id,
+                Some(&task.id),
+                None,
+                "task.blocked",
+                actor,
+                &payload,
+                now,
+            )?;
+        }
+        Ok(())
+    })?;
     get_task_by_id(&conn, &board_id, &task.id)
 }
 
@@ -1259,7 +1266,7 @@ pub fn archive_task(
     task_ref: &str,
     force: bool,
 ) -> Result<TaskRecord> {
-    let mut conn = connect_file(path.as_ref())?;
+    let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
     let task = resolve_task(&conn, &board_id, task_ref)?;
@@ -1268,35 +1275,44 @@ pub fn archive_task(
             "cannot archive running without force".into(),
         ));
     }
-    let tx = conn.transaction().map_err(storage)?;
-    if task.status == TaskStatus::Running {
-        let run_id = task.current_run_id.as_deref().ok_or_else(|| {
-            KanbanError::InvalidTransition("force archive requires active run".into())
-        })?;
-        let changed = tx
+    with_immediate_tx(&conn, || {
+        if task.status == TaskStatus::Running {
+            let run_id = task.current_run_id.as_deref().ok_or_else(|| {
+                KanbanError::InvalidTransition("force archive requires active run".into())
+            })?;
+            let changed = conn
             .execute(
                 "UPDATE task_runs SET status='canceled', finished_at=?1, error=COALESCE(error, ?2) WHERE id=?3 AND board_id=?4 AND task_id=?5 AND status='running'",
                 params![now, "force archived", run_id, board_id, task.id],
             )
             .map_err(storage)?;
-        if changed != 1 {
-            return Err(KanbanError::InvalidTransition(
-                "force archive requires active running run".into(),
-            ));
+            if changed != 1 {
+                return Err(KanbanError::InvalidTransition(
+                    "force archive requires active running run".into(),
+                ));
+            }
         }
-    }
-    tx.execute("UPDATE tasks SET status='archived', archived_at=?1, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?1, lock_version=lock_version+1 WHERE id=?2", params![now, task.id]).map_err(storage)?;
-    insert_event(
-        &tx,
-        &board_id,
-        Some(&task.id),
-        task.current_run_id.as_deref(),
-        "task.archived",
-        actor,
-        "{}",
-        now,
-    )?;
-    tx.commit().map_err(storage)?;
+        let changed = conn
+            .execute(
+                "UPDATE tasks SET status='archived', archived_at=?1, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?1, lock_version=lock_version+1 WHERE id=?2 AND board_id=?3 AND status=?4",
+                params![now, task.id, board_id, task.status.as_str()],
+            )
+            .map_err(storage)?;
+        if changed != 1 {
+            return Err(KanbanError::InvalidTransition("cannot archive task".into()));
+        }
+        insert_event(
+            &conn,
+            &board_id,
+            Some(&task.id),
+            task.current_run_id.as_deref(),
+            "task.archived",
+            actor,
+            "{}",
+            now,
+        )?;
+        Ok(())
+    })?;
     get_task_by_id(&conn, &board_id, &task.id)
 }
 
@@ -2097,11 +2113,17 @@ fn set_status(
     event: &str,
     now: i64,
 ) -> Result<()> {
-    conn.execute(
-        "UPDATE tasks SET status=?1, updated_at=?2, lock_version=lock_version+1 WHERE id=?3",
-        params![status.as_str(), now, task_id],
-    )
-    .map_err(storage)?;
+    let changed = conn
+        .execute(
+            "UPDATE tasks SET status=?1, updated_at=?2, lock_version=lock_version+1 WHERE id=?3 AND board_id=?4",
+            params![status.as_str(), now, task_id, board_id],
+        )
+        .map_err(storage)?;
+    if changed != 1 {
+        return Err(KanbanError::InvalidTransition(
+            "status update requires matching task".into(),
+        ));
+    }
     let payload = json!({ "to_status": status.as_str() }).to_string();
     insert_event(
         conn,

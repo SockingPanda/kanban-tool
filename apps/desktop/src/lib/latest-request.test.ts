@@ -3,6 +3,29 @@ import { describe, expect, it, vi } from "vitest"
 import { createLatestRequestGuard, runLatestRequest } from "./latest-request"
 
 describe("runLatestRequest", () => {
+  it("starts the freshness token before running the async loader", async () => {
+    const events: string[] = []
+    const guard = {
+      begin() {
+        events.push("begin")
+        return { isLatest: () => true }
+      },
+    }
+
+    await expect(
+      runLatestRequest(
+        guard,
+        async () => {
+          events.push("load")
+          return "fresh"
+        },
+        () => events.push("commit"),
+      ),
+    ).resolves.toBe(true)
+
+    expect(events).toEqual(["begin", "load", "commit"])
+  })
+
   it("keeps stale requests from committing when the latest request resolves first", async () => {
     const guard = createLatestRequestGuard()
     const commits: string[] = []

@@ -2902,6 +2902,14 @@ fn assert_database_idle_for_replace(path: &Path) -> Result<()> {
     if !table_exists(&conn, "schema_migrations").unwrap_or(false) {
         return Ok(());
     }
+    let running_tasks = count_table_status(&conn, "tasks", "running")?;
+    let running_runs = count_table_status(&conn, "task_runs", "running")?;
+    if running_tasks > 0 || running_runs > 0 {
+        return Err(KanbanError::InvalidInput(format!(
+            "database has running work; stop kb serve/dispatch before import --replace: {}",
+            path.display()
+        )));
+    }
     let checkpoint = conn
         .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
             Ok(CheckpointResult {
@@ -2925,6 +2933,18 @@ fn assert_database_idle_for_replace(path: &Path) -> Result<()> {
             ))
         })?;
     Ok(())
+}
+
+fn count_table_status(conn: &Connection, table: &str, status: &str) -> Result<i64> {
+    if !table_exists(conn, table).unwrap_or(false) {
+        return Ok(0);
+    }
+    conn.query_row(
+        &format!("SELECT COUNT(*) FROM {table} WHERE status=?1"),
+        [status],
+        |row| row.get(0),
+    )
+    .map_err(storage)
 }
 
 fn connect_existing_file(path: &Path) -> Result<Connection> {

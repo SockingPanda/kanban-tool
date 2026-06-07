@@ -414,6 +414,168 @@ fn task_list_supports_search_assignee_sort_limit_and_offset() {
 }
 
 #[test]
+fn search_command_outputs_json_and_human_hits() {
+    let temp = TempDb::new("search_command_outputs_json_and_human_hits");
+    kb(&temp.path, &["init"]).success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "Alpha search surface",
+            "--description",
+            "ready spec unique-needle",
+            "--assignee",
+            "worker-a",
+        ],
+    )
+    .success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "Beta search surface",
+            "--description",
+            "ready spec unique-needle",
+            "--assignee",
+            "worker-b",
+        ],
+    )
+    .success();
+
+    let json = kb(
+        &temp.path,
+        &[
+            "--json",
+            "search",
+            "unique-needle",
+            "--assignee",
+            "worker-a",
+            "--limit",
+            "5",
+        ],
+    )
+    .success_json();
+    assert_eq!(json["data"]["meta"]["backend"], "sqlite");
+    let hits = json["data"]["hits"].as_array().unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0]["task"]["title"], "Alpha search surface");
+    assert!(hits[0]["score"].as_f64().unwrap() > 0.0);
+    assert!(
+        hits[0]["snippet"]
+            .as_str()
+            .unwrap()
+            .contains("unique-needle")
+    );
+
+    let human = kb(
+        &temp.path,
+        &["search", "unique-needle", "--assignee", "worker-a"],
+    );
+    assert!(human.output.status.success());
+    let stdout = String::from_utf8_lossy(&human.output.stdout);
+    assert!(stdout.contains("#1"), "{stdout}");
+    assert!(stdout.contains("[ready]"), "{stdout}");
+    assert!(stdout.contains("score="), "{stdout}");
+    assert!(stdout.contains("Alpha search surface"), "{stdout}");
+    assert!(stdout.contains("unique-needle"), "{stdout}");
+}
+
+#[test]
+fn search_command_rejects_unbounded_limit() {
+    let temp = TempDb::new("search_command_rejects_unbounded_limit");
+    kb(&temp.path, &["init"]).success();
+
+    kb(
+        &temp.path,
+        &["search", "needle", "--limit", &usize::MAX.to_string()],
+    )
+    .failure_containing("limit must be <= 1000");
+}
+
+#[test]
+fn task_list_command_rejects_unbounded_limit() {
+    let temp = TempDb::new("task_list_command_rejects_unbounded_limit");
+    kb(&temp.path, &["init"]).success();
+
+    kb(
+        &temp.path,
+        &["task", "list", "--limit", &usize::MAX.to_string()],
+    )
+    .failure_containing("limit must be <= 1000");
+}
+
+#[test]
+fn search_command_treats_like_wildcards_and_escape_characters_as_literal_text() {
+    let temp =
+        TempDb::new("search_command_treats_like_wildcards_and_escape_characters_as_literal_text");
+    kb(&temp.path, &["init"]).success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "literal percent % cli",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "literal backslash \\ cli",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "plain cli control",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success();
+
+    let json = kb(&temp.path, &["--json", "search", "%"]).success_json();
+    let hits = json["data"]["hits"].as_array().unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0]["task"]["title"], "literal percent % cli");
+
+    let json = kb(&temp.path, &["--json", "search", "\\"]).success_json();
+    let hits = json["data"]["hits"].as_array().unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0]["task"]["title"], "literal backslash \\ cli");
+}
+
+#[test]
+fn index_commands_report_sqlite_fallback_backend() {
+    let temp = TempDb::new("index_commands_report_sqlite_fallback_backend");
+    kb(&temp.path, &["init"]).success();
+
+    for command in ["status", "doctor", "rebuild"] {
+        let json = kb(&temp.path, &["--json", "index", command]).success_json();
+        assert_eq!(json["data"]["backend"], "sqlite");
+        assert_eq!(json["data"]["derived_index"], false);
+        assert_eq!(json["data"]["stale"], false);
+    }
+
+    let human = kb(&temp.path, &["index", "rebuild"]);
+    assert!(human.output.status.success());
+    let stdout = String::from_utf8_lossy(&human.output.stdout);
+    assert!(stdout.contains("SQLite fallback"), "{stdout}");
+    assert!(stdout.contains("no derived index"), "{stdout}");
+}
+
+#[test]
 fn stats_command_reports_stale_claims_and_blocked_reasons() {
     let temp = TempDb::new("stats_command_reports_stale_claims_and_blocked_reasons");
     kb(&temp.path, &["init"]).success();

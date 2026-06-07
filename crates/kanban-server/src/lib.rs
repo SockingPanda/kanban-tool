@@ -15,6 +15,7 @@ use axum::{
 };
 use futures_util::stream;
 use kanban_core::{KanbanError, TaskStatus};
+use kanban_search::SearchQuery;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -223,6 +224,21 @@ struct DependenciesDto {
     children: Vec<TaskDto>,
 }
 
+#[derive(Debug, Serialize)]
+struct SearchTaskHitDto {
+    task_id: String,
+    seq: i64,
+    score: f64,
+    snippet: Option<String>,
+    task: TaskDto,
+}
+
+#[derive(Debug, Serialize)]
+struct SearchTasksDto {
+    hits: Vec<SearchTaskHitDto>,
+    meta: kanban_search::SearchMeta,
+}
+
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -284,6 +300,8 @@ pub fn build_router(state: AppState) -> Router {
             get(list_comments).post(create_comment),
         )
         .route("/api/v1/stats", get(get_stats))
+        .route("/api/v1/search/tasks", get(search_tasks))
+        .route("/api/v1/search/status", get(search_status))
         .route("/api/v1/events", get(list_events))
         .route("/api/v1/stream/events", get(stream_events))
         .route("/api/v1/maintenance/doctor", post(doctor))
@@ -381,8 +399,32 @@ struct TaskListQuery {
     label: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct SearchTasksQuery {
+    #[serde(default = "default_board")]
+    board: String,
+    q: Option<String>,
+    #[serde(default)]
+    include_archived: bool,
+    #[serde(default = "default_search_limit")]
+    limit: usize,
+    #[serde(default)]
+    offset: usize,
+    assignee: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchStatusQuery {
+    #[serde(default = "default_board")]
+    board: String,
+}
+
 fn default_limit() -> usize {
     100
+}
+
+fn default_search_limit() -> usize {
+    20
 }
 
 #[derive(Debug, Deserialize)]
@@ -410,6 +452,11 @@ async fn list_tasks(
     query: Result<Query<TaskListQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<Vec<TaskDto>>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
+    validate_page_bounds(
+        query.limit,
+        kanban_sqlite::MAX_TASK_LIST_LIMIT,
+        query.offset,
+    )?;
     if query
         .label
         .as_deref()
@@ -449,6 +496,72 @@ async fn list_tasks(
     Ok(Json(Envelope {
         data: tasks,
         meta: Some(json!({ "limit": query.limit, "offset": query.offset, "total": page.total })),
+    }))
+}
+
+async fn search_tasks(
+    State(state): State<AppState>,
+    RawQuery(raw_query): RawQuery,
+    query: Result<Query<SearchTasksQuery>, QueryRejection>,
+) -> Result<Json<Envelope<SearchTasksDto>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    validate_page_bounds(query.limit, kanban_sqlite::MAX_SEARCH_LIMIT, query.offset)?;
+    let statuses = parse_status_filters(raw_query.as_deref())?;
+    let q = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned);
+    let assignee = query
+        .assignee
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned);
+    let results = kanban_sqlite::search_tasks(
+        state.db_path(),
+        SearchQuery {
+            board: query.board,
+            q,
+            statuses,
+            assignee,
+            include_archived: query.include_archived,
+            limit: query.limit,
+            offset: query.offset,
+        },
+    )?;
+    let hits = results
+        .hits
+        .into_iter()
+        .map(|hit| {
+            let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &hit.task_id)?;
+            Ok(SearchTaskHitDto {
+                task_id: hit.task_id,
+                seq: hit.seq,
+                score: hit.score,
+                snippet: hit.snippet,
+                task: TaskDto::from(task),
+            })
+        })
+        .collect::<Result<Vec<_>, ApiError>>()?;
+    Ok(Json(Envelope {
+        data: SearchTasksDto {
+            hits,
+            meta: results.meta,
+        },
+        meta: Some(json!({ "limit": query.limit, "offset": query.offset })),
+    }))
+}
+
+async fn search_status(
+    State(state): State<AppState>,
+    query: Result<Query<SearchStatusQuery>, QueryRejection>,
+) -> Result<Json<Envelope<kanban_search::SearchIndexStatus>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    Ok(Json(Envelope {
+        data: kanban_sqlite::search_index_status(state.db_path(), &query.board)?,
+        meta: None,
     }))
 }
 
@@ -1330,6 +1443,16 @@ fn extractor_error(error: impl std::fmt::Display) -> ApiError {
 
 fn invalid_input(message: impl Into<String>) -> ApiError {
     ApiError(KanbanError::InvalidInput(message.into()))
+}
+
+fn validate_page_bounds(limit: usize, max_limit: usize, offset: usize) -> Result<(), ApiError> {
+    if limit > max_limit {
+        return Err(invalid_input(format!("limit must be <= {max_limit}")));
+    }
+    if offset > i64::MAX as usize {
+        return Err(invalid_input(format!("offset must be <= {}", i64::MAX)));
+    }
+    Ok(())
 }
 
 #[derive(Debug)]

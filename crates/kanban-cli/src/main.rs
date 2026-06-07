@@ -9,13 +9,15 @@ use std::{
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_core::TaskStatus;
+use kanban_search::SearchQuery;
 use kanban_sqlite::{
-    CreateTask, DispatchOptions, FinishPolicy, TaskListOptions, TaskListSort, TaskPatch,
-    add_dependency, archive_task, backup_database, begin_database_replace, begin_database_runtime,
-    block_task, checkpoint_database, claim_task, complete_task, create_task, dispatch_once,
-    export_jsonl, get_run_by_id_global, get_task, heartbeat_task, import_jsonl, init_database,
-    list_dependencies, list_events, list_runs, list_tasks, list_tasks_page, promote_task,
-    queue_stats, reclaim_expired, remove_dependency, set_task_retry_policy_by_id,
+    CreateTask, DispatchOptions, FinishPolicy, MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT,
+    TaskListOptions, TaskListSort, TaskPatch, add_dependency, archive_task, backup_database,
+    begin_database_replace, begin_database_runtime, block_task, checkpoint_database, claim_task,
+    complete_task, create_task, dispatch_once, export_jsonl, get_run_by_id_global, get_task,
+    heartbeat_task, import_jsonl, init_database, list_dependencies, list_events, list_runs,
+    list_tasks, list_tasks_page, promote_task, queue_stats, rebuild_search_index, reclaim_expired,
+    remove_dependency, search_index_status, search_tasks, set_task_retry_policy_by_id,
     submit_review_task, unblock_task, update_task, vacuum_database,
 };
 
@@ -57,6 +59,11 @@ enum Command {
     Run {
         #[command(subcommand)]
         command: RunCommand,
+    },
+    Search(SearchArgs),
+    Index {
+        #[command(subcommand)]
+        command: IndexCommand,
     },
     Dispatch(DispatchArgs),
     Serve(ServeArgs),
@@ -135,6 +142,28 @@ struct ListArgs {
     offset: Option<usize>,
     #[arg(long)]
     sort: Option<String>,
+}
+
+#[derive(Debug, Args)]
+struct SearchArgs {
+    query: String,
+    #[arg(long)]
+    status: Vec<String>,
+    #[arg(long)]
+    assignee: Option<String>,
+    #[arg(long)]
+    include_archived: bool,
+    #[arg(long, default_value_t = 20)]
+    limit: usize,
+    #[arg(long, default_value_t = 0)]
+    offset: usize,
+}
+
+#[derive(Debug, Subcommand)]
+enum IndexCommand {
+    Status,
+    Doctor,
+    Rebuild,
 }
 
 #[derive(Debug, Args)]
@@ -320,6 +349,21 @@ struct DispatchLoopSummary {
     runs: Vec<kanban_sqlite::DispatchResult>,
 }
 
+#[derive(Debug, serde::Serialize)]
+struct SearchOutput {
+    hits: Vec<SearchOutputHit>,
+    meta: kanban_search::SearchMeta,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct SearchOutputHit {
+    task_id: String,
+    seq: i64,
+    score: f64,
+    snippet: Option<String>,
+    task: kanban_sqlite::TaskRecord,
+}
+
 #[derive(Debug, Clone)]
 struct WorkerProfileConfig {
     command: Option<String>,
@@ -373,6 +417,8 @@ fn main() -> Result<()> {
             })?;
         }
         Command::Run { command } => handle_run(command, &db_path, cli.json)?,
+        Command::Search(args) => handle_search(args, &db_path, &cli.board, cli.json)?,
+        Command::Index { command } => handle_index(command, &db_path, &cli.board, cli.json)?,
         Command::Dispatch(args) => {
             let options = dispatch_options(&args, actor.clone())?;
             if args.once {
@@ -795,6 +841,11 @@ fn handle_task(
             print_task(json, &task)?;
         }
         TaskCommand::List(args) => {
+            validate_page_bounds(
+                args.limit.unwrap_or(100),
+                MAX_TASK_LIST_LIMIT,
+                args.offset.unwrap_or(0),
+            )?;
             let statuses = args
                 .status
                 .iter()
@@ -992,6 +1043,76 @@ fn read_run_log(
     })
 }
 
+fn handle_search(args: SearchArgs, db_path: &PathBuf, board: &str, json: bool) -> Result<()> {
+    validate_page_bounds(args.limit, MAX_SEARCH_LIMIT, args.offset)?;
+    let statuses = args
+        .status
+        .iter()
+        .map(|status| parse_status(status))
+        .collect::<Result<Vec<_>>>()?;
+    let results = search_tasks(
+        db_path,
+        SearchQuery {
+            board: board.to_owned(),
+            q: Some(args.query),
+            statuses,
+            assignee: args.assignee,
+            include_archived: args.include_archived,
+            limit: args.limit,
+            offset: args.offset,
+        },
+    )?;
+    let hits = results
+        .hits
+        .into_iter()
+        .map(|hit| {
+            let task = kanban_sqlite::get_task_by_id_global(db_path, &hit.task_id)?;
+            Ok(SearchOutputHit {
+                task_id: hit.task_id,
+                seq: hit.seq,
+                score: hit.score,
+                snippet: hit.snippet,
+                task,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let output = SearchOutput {
+        hits,
+        meta: results.meta,
+    };
+    print_or_json(json, &output, || {
+        output
+            .hits
+            .iter()
+            .map(search_hit_line)
+            .collect::<Vec<_>>()
+            .join("\n")
+    })
+}
+
+fn validate_page_bounds(limit: usize, max_limit: usize, offset: usize) -> Result<()> {
+    if limit > max_limit {
+        bail!("limit must be <= {max_limit}");
+    }
+    if offset > i64::MAX as usize {
+        bail!("offset must be <= {}", i64::MAX);
+    }
+    Ok(())
+}
+
+fn handle_index(command: IndexCommand, db_path: &PathBuf, board: &str, json: bool) -> Result<()> {
+    let status = match command {
+        IndexCommand::Status | IndexCommand::Doctor => search_index_status(db_path, board)?,
+        IndexCommand::Rebuild => rebuild_search_index(db_path, board)?,
+    };
+    print_or_json(json, &status, || {
+        format!(
+            "SQLite fallback search active: derived_index={} stale={} last_event_id={:?}; no derived index to rebuild",
+            status.derived_index, status.stale, status.last_event_id
+        )
+    })
+}
+
 fn handle_dep(
     command: DepCommand,
     db_path: &PathBuf,
@@ -1062,6 +1183,25 @@ fn task_line(task: &kanban_sqlite::TaskRecord) -> String {
         task.id,
         task.status.as_str(),
         task.title
+    )
+}
+
+fn search_hit_line(hit: &SearchOutputHit) -> String {
+    let snippet = hit
+        .snippet
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| format!(" - {value}"))
+        .unwrap_or_default();
+    format!(
+        "#{} {} [{}] score={:.1} {}{}",
+        hit.seq,
+        hit.task_id,
+        hit.task.status.as_str(),
+        hit.score,
+        hit.task.title,
+        snippet
     )
 }
 

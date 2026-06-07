@@ -18,7 +18,7 @@ use rusqlite::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{connect_file, default_pragmas, maintenance_lock_path};
+use crate::{connect_file, default_pragmas, maintenance_lock_blocks, maintenance_lock_path};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskRecord {
@@ -562,6 +562,12 @@ pub fn begin_database_replace(path: impl AsRef<Path>) -> Result<DatabaseReplaceG
         fs::create_dir_all(parent).map_err(|error| KanbanError::Storage(error.to_string()))?;
     }
     let lock_path = maintenance_lock_path(path);
+    if maintenance_lock_blocks(&lock_path)? {
+        return Err(KanbanError::InvalidInput(format!(
+            "database is locked for maintenance: {}",
+            path.display()
+        )));
+    }
     let lock_result = OpenOptions::new()
         .write(true)
         .create_new(true)

@@ -1,5 +1,7 @@
 use std::{path::Path, process::Command};
 
+use kanban_sqlite::maintenance_lock_path;
+
 #[test]
 fn serve_help_includes_default_localhost_bind_options() {
     let output = Command::new(env!("CARGO_BIN_EXE_kb"))
@@ -657,7 +659,7 @@ fn import_replace_rejects_maintenance_locked_database() {
     )
     .success_json();
     let existing_id = existing["data"]["id"].as_str().unwrap();
-    let lock_path = Path::new(&format!("{}.maintenance.lock", target.path.display())).to_path_buf();
+    let lock_path = maintenance_lock_path(&target.path);
     std::fs::write(&lock_path, "locked").unwrap();
 
     kb(
@@ -675,6 +677,30 @@ fn import_replace_rejects_maintenance_locked_database() {
 
     let existing_after = kb(&target.path, &["--json", "task", "show", existing_id]).success_json();
     assert_eq!(existing_after["data"]["title"], "keep existing");
+}
+
+#[test]
+fn maintenance_lock_uses_canonical_database_path() {
+    let temp = TempDb::new("maintenance_lock_uses_canonical_database_path");
+    kb(&temp.path, &["init"]).success();
+    let lock_path = maintenance_lock_path(&temp.path);
+    std::fs::write(&lock_path, format!("pid={}", std::process::id())).unwrap();
+
+    kb_in_dir(Path::new("kb.db"), &["--json", "doctor"], &temp.dir)
+        .failure_containing("database is locked for maintenance");
+    std::fs::remove_file(lock_path).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn maintenance_lock_with_dead_pid_is_removed() {
+    let temp = TempDb::new("maintenance_lock_with_dead_pid_is_removed");
+    kb(&temp.path, &["init"]).success();
+    let lock_path = maintenance_lock_path(&temp.path);
+    std::fs::write(&lock_path, "pid=999999999").unwrap();
+
+    kb(&temp.path, &["--json", "doctor"]).success_json();
+    assert!(!lock_path.exists());
 }
 
 #[test]

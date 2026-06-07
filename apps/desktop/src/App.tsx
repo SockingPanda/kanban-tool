@@ -43,6 +43,7 @@ import {
   Run,
   RunLog,
   RuntimeConfig,
+  SearchMeta,
   Task,
   TaskStatus,
   loadRuntimeConfig,
@@ -149,6 +150,7 @@ function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<DetailState>(emptyDetail)
   const [search, setSearch] = useState("")
+  const [searchMeta, setSearchMeta] = useState<SearchMeta | null>(null)
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all")
   const [showArchived, setShowArchived] = useState(false)
   const [newTitle, setNewTitle] = useState("")
@@ -180,11 +182,24 @@ function App() {
 
   const refreshTasks = useCallback(async () => {
     if (!api) return
-    const nextTasks = await api.listTasks({
-      search,
-      includeArchived: showArchived,
-      statuses: statusFilter === "all" ? [] : [statusFilter],
-    })
+    const query = search.trim()
+    const statuses = statusFilter === "all" ? [] : [statusFilter]
+    const nextTasks = query
+      ? await api.searchTasks({
+          query,
+          includeArchived: showArchived,
+          statuses,
+        }).then((result) => {
+          setSearchMeta(result.meta)
+          return result.tasks
+        })
+      : await api.listTasks({
+          includeArchived: showArchived,
+          statuses,
+        }).then((result) => {
+          setSearchMeta(null)
+          return result
+        })
     setTasks(nextTasks)
     setSelectedId((current) =>
       current && nextTasks.some((task) => task.id === current) ? current : nextTasks[0]?.id ?? null,
@@ -388,6 +403,7 @@ function App() {
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
+          {search.trim() && searchMeta ? <SearchBackendBadge meta={searchMeta} /> : null}
           <Button variant="secondary" size="icon" onClick={() => void refreshTasks()}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
           </Button>
@@ -859,6 +875,16 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <span className="text-neutral-500">{label}</span>
       <span className="truncate font-medium">{value}</span>
     </div>
+  )
+}
+
+function SearchBackendBadge({ meta }: { meta: SearchMeta }) {
+  return (
+    <Badge variant={meta.stale ? "review" : "secondary"}>
+      search {meta.backend}
+      {meta.stale ? " stale/degraded" : ""}
+      {meta.index_lag_events && meta.index_lag_events > 0 ? ` +${meta.index_lag_events}` : ""}
+    </Badge>
   )
 }
 

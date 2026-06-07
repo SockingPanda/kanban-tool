@@ -755,7 +755,7 @@ DELETE /api/v1/tasks/{task_id}/labels/{label_id}
 GET /api/v1/search/tasks?board=default&q=needle&status=ready&assignee=worker-a&include_archived=false&limit=20&offset=0
 ```
 
-Default backend is SQLite fallback. When the binary is built with `tantivy-backend` and `index/v1/tasks/` exists beside the SQLite DB, search uses the manual Tantivy task index. Missing or corrupt Tantivy indexes fall back to SQLite with stale metadata. Search matches task title, description, comments, run summary/error, and event kind/payload.
+Default backend is SQLite fallback. When the binary is built with `tantivy-backend` and `index/v1/tasks/` exists beside the SQLite DB, search uses the manual Tantivy task index. Missing, corrupt, or stale Tantivy indexes fall back to SQLite with stale metadata. Search matches task title, description, comments, run summary/error, and event kind/payload.
 
 Response:
 
@@ -791,7 +791,7 @@ Response:
 }
 ```
 
-The API does not rebuild the derived index; use `kb index rebuild` for manual rebuilds.
+The API does not rebuild or sync the derived index; use `kb index sync` after normal task changes or `kb index rebuild` for full manual rebuilds. The Tantivy state is stored in board-scoped `app_settings` under `search.tasks.state.<board_id>` and round-trips through existing export/import.
 
 ### 13.2 Search status
 
@@ -814,6 +814,8 @@ Response:
   }
 }
 ```
+
+When the current `MAX(task_events.id)` is greater than the stored Tantivy `last_event_id`, `stale=true` and `index_lag_events` reports that high-watermark lag.
 
 ---
 

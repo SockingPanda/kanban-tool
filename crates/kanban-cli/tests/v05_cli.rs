@@ -512,6 +512,58 @@ fn index_rebuild_enables_tantivy_search_backend() {
     );
 }
 
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn index_sync_refreshes_stale_tantivy_search_backend() {
+    let temp = TempDb::new("index_sync_refreshes_stale_tantivy_search_backend");
+    kb(&temp.path, &["init"]).success();
+    let created = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "cli sync source",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success_json();
+    let task_id = created["data"]["id"].as_str().unwrap();
+    kb(&temp.path, &["index", "rebuild"]).success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "update",
+            task_id,
+            "--title",
+            "cli sync comet",
+            "--expected-lock-version",
+            created["data"]["lock_version"]
+                .as_i64()
+                .unwrap()
+                .to_string()
+                .as_str(),
+        ],
+    )
+    .success();
+
+    let stale = kb(&temp.path, &["--json", "index", "status"]).success_json();
+    assert_eq!(stale["data"]["backend"], "tantivy");
+    assert_eq!(stale["data"]["stale"], true);
+    assert!(stale["data"]["index_lag_events"].as_i64().unwrap() > 0);
+
+    let synced = kb(&temp.path, &["--json", "index", "sync"]).success_json();
+    assert_eq!(synced["data"]["backend"], "tantivy");
+    assert_eq!(synced["data"]["stale"], false);
+    assert_eq!(synced["data"]["index_lag_events"], 0);
+
+    let search = kb(&temp.path, &["--json", "search", "comet"]).success_json();
+    assert_eq!(search["data"]["meta"]["backend"], "tantivy");
+    assert_eq!(search["data"]["hits"][0]["task"]["title"], "cli sync comet");
+}
+
 #[test]
 fn search_command_rejects_unbounded_limit() {
     let temp = TempDb::new("search_command_rejects_unbounded_limit");
@@ -601,6 +653,11 @@ fn index_commands_report_sqlite_fallback_backend() {
     #[cfg(not(feature = "tantivy-backend"))]
     {
         let json = kb(&temp.path, &["--json", "index", "rebuild"]).success_json();
+        assert_eq!(json["data"]["backend"], "sqlite");
+        assert_eq!(json["data"]["derived_index"], false);
+        assert_eq!(json["data"]["stale"], false);
+
+        let json = kb(&temp.path, &["--json", "index", "sync"]).success_json();
         assert_eq!(json["data"]["backend"], "sqlite");
         assert_eq!(json["data"]["derived_index"], false);
         assert_eq!(json["data"]["stale"], false);

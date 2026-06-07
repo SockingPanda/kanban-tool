@@ -515,7 +515,227 @@ fn stale_tantivy_index_falls_back_to_sqlite_before_current_filters_are_applied()
 
     assert_eq!(filtered.meta.backend, "sqlite");
     assert!(filtered.meta.stale);
+    assert!(filtered.meta.index_lag_events.unwrap() > 0);
     assert!(filtered.hits.is_empty(), "{:?}", filtered.hits);
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_rebuild_persists_search_state_in_app_settings() {
+    let temp = TempDb::new("tantivy_rebuild_persists_search_state_in_app_settings");
+    init_database(&temp.path, "tester").unwrap();
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("state comet"),
+    )
+    .unwrap();
+
+    let status = kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+    assert_eq!(status.backend, "tantivy");
+    assert_eq!(status.index_lag_events, Some(0));
+
+    let conn = connect_file(&temp.path).unwrap();
+    let board_id: String = conn
+        .query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    let state_json: String = conn
+        .query_row(
+            "SELECT value_json FROM app_settings WHERE key=?1",
+            [format!("search.tasks.state.{board_id}")],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let state: serde_json::Value = serde_json::from_str(&state_json).unwrap();
+    assert_eq!(state["schema_version"], 1);
+    assert_eq!(state["backend"], "tantivy");
+    assert_eq!(state["index_name"], "tasks");
+    assert_eq!(state["dirty"], false);
+    assert_eq!(state["last_event_id"].as_i64(), status.last_event_id);
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_sync_reindexes_task_comment_run_event_and_archive_changes() {
+    let temp = TempDb::new("tantivy_sync_reindexes_task_comment_run_event_and_archive_changes");
+    init_database(&temp.path, "tester").unwrap();
+
+    let updated = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("updated source"),
+    )
+    .unwrap();
+    let commented = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("comment source"),
+    )
+    .unwrap();
+    let run_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("run source"),
+    )
+    .unwrap();
+    let event_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("event source"),
+    )
+    .unwrap();
+    let archived = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("archive syncneedle"),
+    )
+    .unwrap();
+
+    kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+    update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &updated.id,
+        TaskPatch {
+            title: Some("updated syncneedle".into()),
+            expected_lock_version: Some(updated.lock_version),
+            ..TaskPatch::default()
+        },
+    )
+    .unwrap();
+    create_comment(
+        &temp.path,
+        &commented.id,
+        "tester",
+        "comment syncneedle",
+        None,
+    )
+    .unwrap();
+    let claim = claim_task(&temp.path, "default", "worker", &run_task.id, 300_000).unwrap();
+    kanban_sqlite::complete_task_with_summary(
+        &temp.path,
+        "default",
+        "worker",
+        &run_task.id,
+        Some(&claim.claim_token),
+        false,
+        Some("run syncneedle"),
+    )
+    .unwrap();
+    let conn = connect_file(&temp.path).unwrap();
+    let board_id: String = conn
+        .query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    conn.execute(
+        "INSERT INTO task_events(event_id, board_id, task_id, kind, actor, payload_json, created_at) VALUES (?1, ?2, ?3, 'task.sync.event', 'tester', ?4, 1)",
+        params![
+            kanban_core::new_event_id(),
+            board_id,
+            event_task.id,
+            "{\"note\":\"event syncneedle\"}"
+        ],
+    )
+    .unwrap();
+    drop(conn);
+    archive_task(&temp.path, "default", "tester", &archived.id, false).unwrap();
+
+    let stale = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("syncneedle".into()),
+            statuses: vec![],
+            assignee: None,
+            include_archived: false,
+            limit: 20,
+            offset: 0,
+        },
+    )
+    .unwrap();
+    assert_eq!(stale.meta.backend, "sqlite");
+    assert!(stale.meta.stale);
+    assert!(stale.meta.index_lag_events.unwrap() > 0);
+
+    let sync = kanban_sqlite::sync_search_index(&temp.path, "default").unwrap();
+    assert_eq!(sync.backend, "tantivy");
+    assert!(!sync.stale);
+    assert_eq!(sync.index_lag_events, Some(0));
+
+    let results = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("syncneedle".into()),
+            statuses: vec![],
+            assignee: None,
+            include_archived: false,
+            limit: 20,
+            offset: 0,
+        },
+    )
+    .unwrap();
+    assert_eq!(results.meta.backend, "tantivy");
+    assert!(!results.meta.stale);
+    let ids = results
+        .hits
+        .iter()
+        .map(|hit| hit.task_id.as_str())
+        .collect::<Vec<_>>();
+    for expected in [&updated.id, &commented.id, &run_task.id, &event_task.id] {
+        assert!(ids.contains(&expected.as_str()), "{ids:?}");
+    }
+    assert!(!ids.contains(&archived.id.as_str()), "{ids:?}");
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_sync_failure_does_not_advance_search_state_watermark() {
+    let temp = TempDb::new("tantivy_sync_failure_does_not_advance_search_state_watermark");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("watermark source"),
+    )
+    .unwrap();
+    let rebuilt = kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+    update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        TaskPatch {
+            title: Some("watermark syncneedle".into()),
+            expected_lock_version: Some(task.lock_version),
+            ..TaskPatch::default()
+        },
+    )
+    .unwrap();
+    std::fs::write(
+        temp.dir.join("index/v1/tasks/kb-index-meta.json"),
+        b"not json",
+    )
+    .unwrap();
+
+    let err = kanban_sqlite::sync_search_index(&temp.path, "default").unwrap_err();
+    assert!(err.to_string().contains("expected ident") || err.to_string().contains("JSON"));
+
+    let status = kanban_sqlite::search_index_status(&temp.path, "default").unwrap();
+    assert_eq!(status.last_event_id, rebuilt.last_event_id);
+    assert!(status.stale);
+    assert!(status.index_lag_events.unwrap() > 0);
 }
 
 #[cfg(feature = "tantivy-backend")]

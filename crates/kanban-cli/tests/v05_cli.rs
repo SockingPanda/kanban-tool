@@ -20,6 +20,8 @@ fn serve_help_includes_default_localhost_bind_options() {
     assert!(stdout.contains("127.0.0.1"), "{stdout}");
     assert!(stdout.contains("--port"), "{stdout}");
     assert!(stdout.contains("8721"), "{stdout}");
+    assert!(stdout.contains("--search-sync-interval-ms"), "{stdout}");
+    assert!(stdout.contains("5000"), "{stdout}");
 }
 
 #[test]

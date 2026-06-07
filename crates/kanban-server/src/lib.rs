@@ -377,43 +377,37 @@ async fn list_tasks(
         return Err(invalid_input("label filter is not supported yet"));
     }
     let statuses = parse_status_filters(raw_query.as_deref())?;
-    let mut tasks =
-        kanban_sqlite::list_tasks(state.db_path(), &board, &statuses, query.include_archived)?;
-    if let Some(assignee) = query
+    let assignee = query
         .assignee
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-    {
-        tasks.retain(|task| task.assignee.as_deref() == Some(assignee));
-    }
-    if let Some(search) = query
+        .map(str::to_owned);
+    let search = query
         .q
         .as_deref()
         .or(query.search.as_deref())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(str::to_lowercase)
-    {
-        tasks.retain(|task| {
-            task.title.to_lowercase().contains(&search)
-                || task
-                    .description
-                    .as_deref()
-                    .is_some_and(|description| description.to_lowercase().contains(&search))
-        });
-    }
-    sort_tasks(&mut tasks, query.sort.as_deref())?;
-    let total = tasks.len();
-    let tasks = tasks
-        .into_iter()
-        .skip(query.offset)
-        .take(query.limit)
-        .map(TaskDto::from)
-        .collect();
+        .map(str::to_owned);
+    let sort = parse_task_sort(query.sort.as_deref())?;
+    let page = kanban_sqlite::list_tasks_page(
+        state.db_path(),
+        &board,
+        kanban_sqlite::TaskListOptions {
+            statuses,
+            include_archived: query.include_archived,
+            assignee,
+            search,
+            sort,
+            limit: query.limit,
+            offset: query.offset,
+        },
+    )?;
+    let tasks = page.tasks.into_iter().map(TaskDto::from).collect();
     Ok(Json(Envelope {
         data: tasks,
-        meta: Some(json!({ "limit": query.limit, "offset": query.offset, "total": total })),
+        meta: Some(json!({ "limit": query.limit, "offset": query.offset, "total": page.total })),
     }))
 }
 
@@ -952,10 +946,15 @@ fn events_snapshot(
 ) -> Result<(Vec<EventDto>, i64), ApiError> {
     let board = kanban_sqlite::get_board(state.db_path(), &query.board)?;
     let limit = query.limit.min(1000);
-    let mut events =
-        kanban_sqlite::list_events(state.db_path(), &query.board, query.task_id.as_deref())?;
-    events.retain(|event| event.id > query.after);
-    events.truncate(limit);
+    let events = kanban_sqlite::list_events_after(
+        state.db_path(),
+        &query.board,
+        kanban_sqlite::EventListOptions {
+            task_ref: query.task_id.clone(),
+            after: query.after,
+            limit,
+        },
+    )?;
     let next_after = events.last().map_or(query.after, |event| event.id);
     let data = events
         .into_iter()
@@ -1004,33 +1003,21 @@ fn optional_json_body<T: Default>(body: Result<Json<T>, JsonRejection>) -> Resul
     }
 }
 
-fn sort_tasks(tasks: &mut [kanban_sqlite::TaskRecord], sort: Option<&str>) -> Result<(), ApiError> {
-    match sort.unwrap_or("position") {
-        "position" => tasks.sort_by_key(|task| (task.position, task.created_at, task.seq)),
-        "-position" => {
-            tasks.sort_by_key(|task| std::cmp::Reverse((task.position, task.created_at, task.seq)));
-        }
-        "priority" => tasks.sort_by_key(|task| (task.priority, task.created_at, task.seq)),
-        "-priority" => {
-            tasks.sort_by_key(|task| std::cmp::Reverse((task.priority, task.created_at, task.seq)));
-        }
-        "created_at" => tasks.sort_by_key(|task| (task.created_at, task.seq)),
-        "-created_at" => {
-            tasks.sort_by_key(|task| std::cmp::Reverse((task.created_at, task.seq)));
-        }
-        "updated_at" => tasks.sort_by_key(|task| (task.updated_at, task.seq)),
-        "-updated_at" => {
-            tasks.sort_by_key(|task| std::cmp::Reverse((task.updated_at, task.seq)));
-        }
-        "due_at" => {
-            tasks.sort_by_key(|task| (task.due_at.unwrap_or(i64::MAX), task.created_at, task.seq));
-        }
-        "-due_at" => tasks.sort_by_key(|task| {
-            std::cmp::Reverse((task.due_at.unwrap_or(i64::MIN), task.created_at, task.seq))
-        }),
+fn parse_task_sort(sort: Option<&str>) -> Result<kanban_sqlite::TaskListSort, ApiError> {
+    let sort = match sort.unwrap_or("position") {
+        "position" => kanban_sqlite::TaskListSort::Position,
+        "-position" => kanban_sqlite::TaskListSort::PositionDesc,
+        "priority" => kanban_sqlite::TaskListSort::Priority,
+        "-priority" => kanban_sqlite::TaskListSort::PriorityDesc,
+        "created_at" => kanban_sqlite::TaskListSort::CreatedAt,
+        "-created_at" => kanban_sqlite::TaskListSort::CreatedAtDesc,
+        "updated_at" => kanban_sqlite::TaskListSort::UpdatedAt,
+        "-updated_at" => kanban_sqlite::TaskListSort::UpdatedAtDesc,
+        "due_at" => kanban_sqlite::TaskListSort::DueAt,
+        "-due_at" => kanban_sqlite::TaskListSort::DueAtDesc,
         value => return Err(invalid_input(format!("unsupported sort: {value}"))),
-    }
-    Ok(())
+    };
+    Ok(sort)
 }
 
 fn parse_status_filters(raw_query: Option<&str>) -> Result<Vec<TaskStatus>, ApiError> {

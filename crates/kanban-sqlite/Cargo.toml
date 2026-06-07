@@ -5,6 +5,10 @@ version.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[features]
+default = []
+tantivy-backend = ["kanban-search/tantivy-backend"]
+
 [dependencies]
 kanban-core.workspace = true
 kanban-search.workspace = true

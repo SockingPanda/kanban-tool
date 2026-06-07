@@ -240,6 +240,208 @@ fn sqlite_search_rejects_limit_that_cannot_be_bounded_safely() {
     assert!(error.to_string().contains("limit must be <= 1000"));
 }
 
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters() {
+    let temp =
+        TempDb::new("tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters");
+    init_database(&temp.path, "tester").unwrap();
+
+    let title = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Tantivy title comet".into(),
+            description: Some("plain ready spec".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: Some("worker-a".into()),
+            priority: 10,
+            scheduled_at: None,
+            due_at: Some(1_767_312_000_000),
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let description = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Description task".into(),
+            description: Some("description comet payload".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: Some("worker-a".into()),
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let comment = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Comment task"),
+    )
+    .unwrap();
+    create_comment(
+        &temp.path,
+        &comment.id,
+        "tester",
+        "comment comet payload",
+        None,
+    )
+    .unwrap();
+    let run = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Run task"),
+    )
+    .unwrap();
+    let event = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Event task"),
+    )
+    .unwrap();
+    let archived = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Archived comet"),
+    )
+    .unwrap();
+
+    let conn = connect_file(&temp.path).unwrap();
+    let board_id: String = conn
+        .query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    conn.execute(
+        "INSERT INTO task_runs(id, board_id, task_id, status, claim_token, claim_owner, claim_expires_at, started_at, summary, error, metadata_json) VALUES (?1, ?2, ?3, 'failed', 'token', 'tester', 1, 1, ?4, NULL, '{}')",
+        params![new_run_id(), board_id, run.id, "run comet summary"],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO task_events(event_id, board_id, task_id, kind, actor, payload_json, created_at) VALUES (?1, ?2, ?3, 'task.comet.event', 'tester', ?4, 1)",
+        params![kanban_core::new_event_id(), board_id, event.id, "{\"note\":\"event comet payload\"}"],
+    )
+    .unwrap();
+    drop(conn);
+    archive_task(&temp.path, "default", "tester", &archived.id, false).unwrap();
+
+    let status = kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+    assert_eq!(status.backend, "tantivy");
+    assert!(status.derived_index);
+    assert!(!status.stale);
+    assert!(temp.dir.join("index/v1/tasks").exists());
+
+    let results = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("comet".into()),
+            statuses: vec![],
+            assignee: None,
+            include_archived: false,
+            limit: 20,
+            offset: 0,
+        },
+    )
+    .unwrap();
+    assert_eq!(results.meta.backend, "tantivy");
+    assert!(!results.meta.stale);
+    let ids = results
+        .hits
+        .iter()
+        .map(|hit| hit.task_id.as_str())
+        .collect::<Vec<_>>();
+    for expected in [&title.id, &description.id, &comment.id, &run.id, &event.id] {
+        assert!(
+            ids.contains(&expected.as_str()),
+            "missing {expected}: {ids:?}"
+        );
+    }
+    assert!(!ids.contains(&archived.id.as_str()));
+    assert!(results.hits.iter().all(|hit| hit.snippet.is_some()));
+
+    let hydrated = get_task(&temp.path, "default", &results.hits[0].task_id).unwrap();
+    assert_ne!(hydrated.status, TaskStatus::Archived);
+
+    let filtered = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("comet".into()),
+            statuses: vec![TaskStatus::Ready],
+            assignee: Some("worker-a".into()),
+            include_archived: false,
+            limit: 20,
+            offset: 0,
+        },
+    )
+    .unwrap();
+    let mut filtered_ids = filtered
+        .hits
+        .iter()
+        .map(|hit| hit.task_id.as_str())
+        .collect::<Vec<_>>();
+    filtered_ids.sort_unstable();
+    let mut expected_ids = vec![title.id.as_str(), description.id.as_str()];
+    expected_ids.sort_unstable();
+    assert_eq!(filtered_ids, expected_ids);
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_missing_or_corrupt_index_falls_back_to_sqlite() {
+    let temp = TempDb::new("tantivy_missing_or_corrupt_index_falls_back_to_sqlite");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Fallback nebula".into(),
+            description: Some("ready spec".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+
+    let index_dir = temp.dir.join("index/v1/tasks");
+    std::fs::create_dir_all(&index_dir).unwrap();
+    std::fs::write(index_dir.join("meta.json"), b"not json").unwrap();
+
+    let results = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("nebula".into()),
+            statuses: vec![],
+            assignee: None,
+            include_archived: false,
+            limit: 10,
+            offset: 0,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(results.meta.backend, "sqlite");
+    assert!(results.meta.stale);
+    assert_eq!(results.hits[0].task_id, task.id);
+}
+
 #[test]
 fn sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely() {
     let temp = TempDb::new("sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely");

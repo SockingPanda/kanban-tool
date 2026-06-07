@@ -482,6 +482,36 @@ fn search_command_outputs_json_and_human_hits() {
     assert!(stdout.contains("unique-needle"), "{stdout}");
 }
 
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn index_rebuild_enables_tantivy_search_backend() {
+    let temp = TempDb::new("index_rebuild_enables_tantivy_search_backend");
+    kb(&temp.path, &["init"]).success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "cli tantivy comet",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success();
+
+    let rebuilt = kb(&temp.path, &["--json", "index", "rebuild"]).success_json();
+    assert_eq!(rebuilt["data"]["backend"], "tantivy");
+    assert_eq!(rebuilt["data"]["derived_index"], true);
+    assert!(temp.dir.join("index/v1/tasks").exists());
+
+    let search = kb(&temp.path, &["--json", "search", "comet"]).success_json();
+    assert_eq!(search["data"]["meta"]["backend"], "tantivy");
+    assert_eq!(
+        search["data"]["hits"][0]["task"]["title"],
+        "cli tantivy comet"
+    );
+}
+
 #[test]
 fn search_command_rejects_unbounded_limit() {
     let temp = TempDb::new("search_command_rejects_unbounded_limit");

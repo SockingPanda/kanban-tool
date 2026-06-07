@@ -506,11 +506,11 @@ fn import_command(
     let restore_path = temporary_restore_db_path(db_path)?;
     let replaced_path = temporary_replaced_db_path(db_path)?;
     let result = (|| {
+        let _replace_guard = begin_database_replace(db_path)?;
         let _init = init_database(&temp_path, actor)
             .with_context(|| format!("failed to initialize/open {}", temp_path.display()))?;
         let result = import_jsonl(&temp_path, &args.input, args.replace)?;
         backup_database(&temp_path, &restore_path)?;
-        let _replace_guard = begin_database_replace(db_path)?;
         replace_database_main_file(db_path, &restore_path, &replaced_path)?;
         Ok(result)
     })();

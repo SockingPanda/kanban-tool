@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
@@ -585,6 +586,13 @@ pub fn begin_database_replace(path: impl AsRef<Path>) -> Result<DatabaseReplaceG
     writeln!(lock_file, "pid={}", std::process::id())
         .map_err(|error| KanbanError::Storage(error.to_string()))?;
     let guard = DatabaseReplaceGuard { lock_path };
+    if path.exists() && !path.is_file() {
+        drop(guard);
+        return Err(KanbanError::InvalidInput(format!(
+            "database path is not a file: {}",
+            path.display()
+        )));
+    }
     if path.exists()
         && path.is_file()
         && let Err(error) = assert_database_idle_for_replace(path)
@@ -2740,14 +2748,83 @@ fn count_dependency_cycles(conn: &Connection) -> Result<i64> {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
         .map_err(storage)?;
-    let mut cycles = 0;
+    let mut graph: HashMap<String, Vec<String>> = HashMap::new();
+    let mut nodes: HashSet<String> = HashSet::new();
     for row in rows {
         let (parent, child) = row.map_err(storage)?;
-        if has_path(conn, &child, &parent)? {
-            cycles += 1;
+        nodes.insert(parent.clone());
+        nodes.insert(child.clone());
+        graph.entry(parent).or_default().push(child);
+    }
+    Ok(count_cyclic_components(&nodes, &graph))
+}
+
+fn count_cyclic_components(nodes: &HashSet<String>, graph: &HashMap<String, Vec<String>>) -> i64 {
+    struct Tarjan<'a> {
+        graph: &'a HashMap<String, Vec<String>>,
+        index: usize,
+        stack: Vec<String>,
+        indices: HashMap<String, usize>,
+        lowlinks: HashMap<String, usize>,
+        on_stack: HashSet<String>,
+        cycles: i64,
+    }
+
+    impl Tarjan<'_> {
+        fn visit(&mut self, node: &str) {
+            self.indices.insert(node.to_owned(), self.index);
+            self.lowlinks.insert(node.to_owned(), self.index);
+            self.index += 1;
+            self.stack.push(node.to_owned());
+            self.on_stack.insert(node.to_owned());
+
+            for next in self.graph.get(node).into_iter().flatten() {
+                if !self.indices.contains_key(next) {
+                    self.visit(next);
+                    let node_low = self.lowlinks[node].min(self.lowlinks[next]);
+                    self.lowlinks.insert(node.to_owned(), node_low);
+                } else if self.on_stack.contains(next) {
+                    let node_low = self.lowlinks[node].min(self.indices[next]);
+                    self.lowlinks.insert(node.to_owned(), node_low);
+                }
+            }
+
+            if self.lowlinks[node] == self.indices[node] {
+                let mut component_len = 0;
+                while let Some(member) = self.stack.pop() {
+                    self.on_stack.remove(&member);
+                    component_len += 1;
+                    if member == node {
+                        break;
+                    }
+                }
+                if component_len > 1
+                    || self
+                        .graph
+                        .get(node)
+                        .is_some_and(|edges| edges.iter().any(|next| next == node))
+                {
+                    self.cycles += 1;
+                }
+            }
         }
     }
-    Ok(cycles)
+
+    let mut tarjan = Tarjan {
+        graph,
+        index: 0,
+        stack: Vec::new(),
+        indices: HashMap::new(),
+        lowlinks: HashMap::new(),
+        on_stack: HashSet::new(),
+        cycles: 0,
+    };
+    for node in nodes {
+        if !tarjan.indices.contains_key(node) {
+            tarjan.visit(node);
+        }
+    }
+    tarjan.cycles
 }
 
 fn count_missing_run_logs(conn: &Connection, db_dir: Option<&Path>) -> Result<i64> {

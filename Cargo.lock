@@ -1899,6 +1899,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "kanban-search"
+version = "0.1.0"
+dependencies = [
+ "kanban-core",
+ "serde",
+]
+
+[[package]]
 name = "kanban-server"
 version = "0.1.0"
 dependencies = [
@@ -1921,6 +1929,7 @@ name = "kanban-sqlite"
 version = "0.1.0"
 dependencies = [
  "kanban-core",
+ "kanban-search",
  "rusqlite",
  "serde",
  "serde_json",

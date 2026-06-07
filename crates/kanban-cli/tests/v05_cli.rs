@@ -339,6 +339,81 @@ fn retry_policy_and_run_log_commands_support_operator_recovery() {
 }
 
 #[test]
+fn task_list_supports_search_assignee_sort_limit_and_offset() {
+    let temp = TempDb::new("task_list_supports_search_assignee_sort_limit_and_offset");
+    kb(&temp.path, &["init"]).success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "Alpha search match",
+            "--description",
+            "ready spec search-term",
+            "--assignee",
+            "worker-a",
+            "--priority",
+            "1",
+        ],
+    )
+    .success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "Beta search match",
+            "--description",
+            "ready spec search-term",
+            "--assignee",
+            "worker-a",
+            "--priority",
+            "10",
+        ],
+    )
+    .success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "Gamma search match",
+            "--description",
+            "ready spec search-term",
+            "--assignee",
+            "worker-b",
+            "--priority",
+            "100",
+        ],
+    )
+    .success();
+
+    let tasks = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "list",
+            "--search",
+            "search-term",
+            "--assignee",
+            "worker-a",
+            "--sort",
+            "priority_desc",
+            "--limit",
+            "1",
+            "--offset",
+            "1",
+        ],
+    )
+    .success_json();
+
+    let data = tasks["data"].as_array().unwrap();
+    assert_eq!(data.len(), 1);
+    assert_eq!(data[0]["title"], "Alpha search match");
+}
+
+#[test]
 fn stats_command_reports_stale_claims_and_blocked_reasons() {
     let temp = TempDb::new("stats_command_reports_stale_claims_and_blocked_reasons");
     kb(&temp.path, &["init"]).success();

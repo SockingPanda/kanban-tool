@@ -9,8 +9,9 @@ use kanban_core::{TaskStatus, new_run_id};
 use kanban_sqlite::{
     CreateTask, DispatchOptions, FinishPolicy, TaskPatch, add_dependency, archive_task,
     begin_database_replace, begin_database_runtime, block_task, claim_task, complete_task,
-    connect_file, create_task, dispatch_once, doctor_database, get_task, init_database,
-    list_dependencies, list_events, list_runs, list_tasks, promote_task, unblock_task, update_task,
+    connect_file, create_comment, create_task, dispatch_once, doctor_database, get_task,
+    init_database, list_dependencies, list_events, list_runs, list_tasks, promote_task,
+    search_tasks, unblock_task, update_task,
 };
 use rusqlite::{Connection, params};
 
@@ -72,6 +73,148 @@ fn task_crud_writes_events_and_hides_archived_by_default() {
     assert_eq!(
         list_tasks(&temp.path, "default", &[], true).unwrap().len(),
         1
+    );
+}
+
+#[test]
+fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() {
+    let temp =
+        TempDb::new("sqlite_search_fallback_matches_task_related_text_with_filters_and_paging");
+    init_database(&temp.path, "tester").unwrap();
+
+    let alpha = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Alpha primary".into(),
+            description: Some("plain spec".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: Some("worker-a".into()),
+            priority: 10,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let beta = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Beta secondary".into(),
+            description: Some("mentions fallback needle in the spec".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: Some("worker-a".into()),
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let gamma = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Gamma unrelated".into(),
+            description: Some("plain spec".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: Some("worker-b".into()),
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let archived = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Archived fallback needle".into(),
+            description: Some("ready spec".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: Some("worker-a".into()),
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+
+    create_comment(
+        &temp.path,
+        &alpha.id,
+        "tester",
+        "comment carries fallback needle",
+        None,
+    )
+    .unwrap();
+    archive_task(&temp.path, "default", "tester", &archived.id, false).unwrap();
+
+    let conn = connect_file(&temp.path).unwrap();
+    let board_id: String = conn
+        .query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    conn.execute(
+        "INSERT INTO task_runs(id, board_id, task_id, status, claim_token, claim_owner, claim_expires_at, started_at, summary, error, metadata_json) VALUES (?1, ?2, ?3, 'failed', 'token', 'tester', 1, 1, ?4, ?5, '{}')",
+        params![new_run_id(), board_id, gamma.id, "run fallback needle summary", "run fallback needle error"],
+    )
+    .unwrap();
+
+    let results = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("fallback needle".into()),
+            statuses: vec![TaskStatus::Ready],
+            assignee: Some("worker-a".into()),
+            include_archived: false,
+            limit: 10,
+            offset: 0,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(results.meta.backend, "sqlite");
+    assert!(!results.meta.stale);
+    assert_eq!(
+        results
+            .hits
+            .iter()
+            .map(|hit| hit.task_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![beta.id.as_str(), alpha.id.as_str()]
+    );
+    assert!(results.hits.iter().all(|hit| hit.snippet.is_some()));
+    assert!(results.hits[0].score >= results.hits[1].score);
+
+    let second_page = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("fallback needle".into()),
+            statuses: vec![],
+            assignee: None,
+            include_archived: true,
+            limit: 2,
+            offset: 2,
+        },
+    )
+    .unwrap();
+    assert_eq!(second_page.hits.len(), 2);
+    assert!(
+        second_page
+            .hits
+            .iter()
+            .any(|hit| hit.task_id == gamma.id || hit.task_id == archived.id)
     );
 }
 

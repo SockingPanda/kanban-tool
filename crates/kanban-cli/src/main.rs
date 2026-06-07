@@ -18,7 +18,7 @@ use kanban_sqlite::{
     heartbeat_task, import_jsonl, init_database, list_dependencies, list_events, list_runs,
     list_tasks, list_tasks_page, promote_task, queue_stats, rebuild_search_index, reclaim_expired,
     remove_dependency, search_index_status, search_tasks, set_task_retry_policy_by_id,
-    submit_review_task, unblock_task, update_task, vacuum_database,
+    submit_review_task, sync_search_index, unblock_task, update_task, vacuum_database,
 };
 
 #[derive(Debug, Parser)]
@@ -164,6 +164,7 @@ enum IndexCommand {
     Status,
     Doctor,
     Rebuild,
+    Sync,
 }
 
 #[derive(Debug, Args)]
@@ -1104,6 +1105,7 @@ fn handle_index(command: IndexCommand, db_path: &PathBuf, board: &str, json: boo
     let status = match command {
         IndexCommand::Status | IndexCommand::Doctor => search_index_status(db_path, board)?,
         IndexCommand::Rebuild => rebuild_search_index(db_path, board)?,
+        IndexCommand::Sync => sync_search_index(db_path, board)?,
     };
     print_or_json(json, &status, || {
         format!(

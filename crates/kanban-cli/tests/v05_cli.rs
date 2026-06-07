@@ -175,6 +175,91 @@ fn doctor_reports_integrity_migration_and_expired_running_tasks() {
     assert_eq!(doctor["data"]["ok"], false);
 }
 
+#[test]
+fn dispatch_loop_uses_worker_profile_config_and_respects_assignee_routing() {
+    let temp =
+        TempDb::new("dispatch_loop_uses_worker_profile_config_and_respects_assignee_routing");
+    kb(&temp.path, &["init"]).success();
+    let backend = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "backend work",
+            "--description",
+            "ready spec",
+            "--assignee",
+            "backend",
+        ],
+    )
+    .success_json();
+    let frontend = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "frontend work",
+            "--description",
+            "ready spec",
+            "--assignee",
+            "frontend",
+        ],
+    )
+    .success_json();
+    let config = temp.dir.join("workers.toml");
+    let logs = temp.dir.join("logs");
+    std::fs::write(
+        &config,
+        format!(
+            "[workers.backend]\ncommand = \"sh -c 'true'\"\nclaim_ttl_ms = 60000\nheartbeat_interval_ms = 10\non_success = \"done\"\non_failure = \"blocked\"\nlog_dir = \"{}\"\n",
+            logs.display()
+        ),
+    )
+    .unwrap();
+
+    let result = kb(
+        &temp.path,
+        &[
+            "--json",
+            "dispatch",
+            "--worker-profile",
+            "backend",
+            "--profile-config",
+            config.to_str().unwrap(),
+            "--max-iterations",
+            "1",
+        ],
+    )
+    .success_json();
+
+    assert_eq!(result["data"]["iterations"], 1);
+    assert_eq!(result["data"]["claimed"], 1);
+    let backend_task = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "show",
+            backend["data"]["id"].as_str().unwrap(),
+        ],
+    )
+    .success_json();
+    let frontend_task = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "show",
+            frontend["data"]["id"].as_str().unwrap(),
+        ],
+    )
+    .success_json();
+    assert_eq!(backend_task["data"]["status"], "done");
+    assert_eq!(frontend_task["data"]["status"], "ready");
+}
+
 fn kb(db_path: &Path, args: &[&str]) -> CmdResult {
     let output = Command::new(env!("CARGO_BIN_EXE_kb"))
         .arg("--db")

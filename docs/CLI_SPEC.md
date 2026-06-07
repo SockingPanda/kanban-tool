@@ -436,8 +436,15 @@ kb serve --dispatcher
 
 kb dispatch
 kb dispatch --once
-kb dispatch --profile default
+kb dispatch --worker-profile default
+kb dispatch --worker-profile backend --profile-config ./workers.toml
+kb dispatch --max-iterations 10 --poll-interval-ms 1000
 ```
+
+`kb dispatch` is a foreground loop. Use `--once` for one pass, or `--max-iterations`
+for bounded scripts/tests. `--profile-config` reads the selected `[workers.<name>]`
+section and can set `command`, `claim_ttl_ms`, `heartbeat_interval_ms`,
+`on_success`, `on_failure`, and `log_dir`.
 
 ---
 
@@ -495,4 +502,3 @@ stderr：
 
 - human 模式：错误写 stderr。
 - JSON 模式：错误 JSON 写 stdout 或 stderr 需要固定；建议 stderr，stdout 保持空。
-

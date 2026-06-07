@@ -746,7 +746,7 @@ async fn tasks_api_patches_editable_fields_and_uses_header_actor_when_body_actor
     assert_eq!(json["data"]["assignee"], "worker-b");
     assert_eq!(json["data"]["priority"], 20);
     assert_eq!(json["data"]["metadata_json"], r#"{"updated":true}"#);
-    assert_eq!(json["data"]["status"], "ready");
+    assert_eq!(json["data"]["status"], "triage");
 
     let events = kanban_sqlite::list_events(&db_path, "default", Some(&task.id)).expect("events");
     assert_eq!(events.last().expect("updated event").kind, "task.updated");

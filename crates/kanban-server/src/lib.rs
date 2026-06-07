@@ -283,6 +283,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/tasks/:task_id/comments",
             get(list_comments).post(create_comment),
         )
+        .route("/api/v1/stats", get(get_stats))
         .route("/api/v1/events", get(list_events))
         .route("/api/v1/stream/events", get(stream_events))
         .with_state(state)
@@ -393,6 +394,7 @@ struct CreateTaskBody {
     priority: i64,
     scheduled_at: Option<i64>,
     due_at: Option<i64>,
+    max_retries: Option<i64>,
     metadata: Option<serde_json::Value>,
     #[serde(default)]
     depends_on: Vec<String>,
@@ -466,13 +468,21 @@ async fn create_task(
         due_at: body.due_at,
         metadata_json: metadata_json(body.metadata)?,
     };
-    let task = kanban_sqlite::create_task_with_dependencies(
+    let mut task = kanban_sqlite::create_task_with_dependencies(
         state.db_path(),
         &board,
         &actor,
         input,
         &body.depends_on,
     )?;
+    if body.max_retries.is_some() {
+        task = kanban_sqlite::set_task_retry_policy_by_id(
+            state.db_path(),
+            &actor,
+            &task.id,
+            body.max_retries,
+        )?;
+    }
     Ok((
         StatusCode::CREATED,
         Json(Envelope {
@@ -512,14 +522,19 @@ async fn update_task(
     }
     let body_actor = object.get("actor").and_then(|value| value.as_str());
     let actor = actor(body_actor, &headers, &state);
+    let retry_policy = retry_policy_from_value(object)?;
     let patch = patch_from_value(object)?;
-    Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::update_task_by_id(
+    let mut task = kanban_sqlite::update_task_by_id(state.db_path(), &actor, &task_id, patch)?;
+    if let Some(max_retries) = retry_policy {
+        task = kanban_sqlite::set_task_retry_policy_by_id(
             state.db_path(),
             &actor,
             &task_id,
-            patch,
-        )?),
+            max_retries,
+        )?;
+    }
+    Ok(Json(Envelope {
+        data: TaskDto::from(task),
         meta: None,
     }))
 }
@@ -615,6 +630,12 @@ struct EventsQuery {
     after: i64,
     #[serde(default = "default_limit")]
     limit: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct StatsQuery {
+    #[serde(default = "default_board")]
+    board: String,
 }
 
 fn default_claim_ttl_ms() -> i64 {
@@ -1024,6 +1045,17 @@ async fn create_comment(
     ))
 }
 
+async fn get_stats(
+    State(state): State<AppState>,
+    query: Result<Query<StatsQuery>, QueryRejection>,
+) -> Result<Json<Envelope<kanban_sqlite::QueueStats>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    Ok(Json(Envelope {
+        data: kanban_sqlite::queue_stats(state.db_path(), &query.board)?,
+        meta: None,
+    }))
+}
+
 async fn list_events(
     State(state): State<AppState>,
     query: Result<Query<EventsQuery>, QueryRejection>,
@@ -1158,6 +1190,7 @@ fn patch_from_value(
         "due_at",
         "metadata_json",
         "metadata",
+        "max_retries",
         "expected_lock_version",
         "actor",
     ];
@@ -1210,6 +1243,15 @@ fn patch_from_value(
         );
     }
     Ok(patch)
+}
+
+fn retry_policy_from_value(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> Result<Option<Option<i64>>, ApiError> {
+    if !object.contains_key("max_retries") {
+        return Ok(None);
+    }
+    optional_i64_field(object.get("max_retries"), "max_retries").map(Some)
 }
 
 fn actor(body_actor: Option<&str>, headers: &HeaderMap, state: &AppState) -> String {

@@ -237,6 +237,40 @@ pub struct DoctorReport {
     pub orphan_running_runs: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StatusCount {
+    pub status: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StaleClaimRecord {
+    pub task_id: String,
+    pub seq: i64,
+    pub title: String,
+    pub claim_owner: Option<String>,
+    pub claim_expires_at: Option<i64>,
+    pub last_heartbeat_at: Option<i64>,
+    pub current_run_id: Option<String>,
+    pub retry_count: i64,
+    pub max_retries: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BlockedReasonCount {
+    pub reason: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueueStats {
+    pub board_id: String,
+    pub generated_at: i64,
+    pub status_counts: Vec<StatusCount>,
+    pub stale_claims: Vec<StaleClaimRecord>,
+    pub blocked_reasons: Vec<BlockedReasonCount>,
+}
+
 pub fn list_boards(path: impl AsRef<Path>) -> Result<Vec<BoardRecord>> {
     let conn = connect_file(path.as_ref())?;
     let mut stmt = conn
@@ -248,6 +282,78 @@ pub fn list_boards(path: impl AsRef<Path>) -> Result<Vec<BoardRecord>> {
     let rows = stmt.query_map([], board_from_row).map_err(storage)?;
     rows.collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)
+}
+
+pub fn queue_stats(path: impl AsRef<Path>, board: &str) -> Result<QueueStats> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    let generated_at = SystemClock.now_ms();
+    let mut status_stmt = conn
+        .prepare(
+            "SELECT status, COUNT(*) FROM tasks WHERE board_id=?1 GROUP BY status ORDER BY status",
+        )
+        .map_err(storage)?;
+    let status_counts = status_stmt
+        .query_map([&board_id], |row| {
+            Ok(StatusCount {
+                status: row.get(0)?,
+                count: row.get(1)?,
+            })
+        })
+        .map_err(storage)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)?;
+
+    let mut stale_stmt = conn
+        .prepare(
+            "SELECT id,seq,title,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries \
+             FROM tasks WHERE board_id=?1 AND status='running' AND claim_expires_at <= ?2 \
+             ORDER BY claim_expires_at ASC, updated_at ASC",
+        )
+        .map_err(storage)?;
+    let stale_claims = stale_stmt
+        .query_map(params![&board_id, generated_at], |row| {
+            Ok(StaleClaimRecord {
+                task_id: row.get(0)?,
+                seq: row.get(1)?,
+                title: row.get(2)?,
+                claim_owner: row.get(3)?,
+                claim_expires_at: row.get(4)?,
+                last_heartbeat_at: row.get(5)?,
+                current_run_id: row.get(6)?,
+                retry_count: row.get(7)?,
+                max_retries: row.get(8)?,
+            })
+        })
+        .map_err(storage)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)?;
+
+    let mut blocked_stmt = conn
+        .prepare(
+            "SELECT COALESCE(NULLIF(status_reason, ''), 'unspecified') AS reason, COUNT(*) \
+             FROM tasks WHERE board_id=?1 AND status='blocked' \
+             GROUP BY reason ORDER BY COUNT(*) DESC, reason ASC",
+        )
+        .map_err(storage)?;
+    let blocked_reasons = blocked_stmt
+        .query_map([&board_id], |row| {
+            Ok(BlockedReasonCount {
+                reason: row.get(0)?,
+                count: row.get(1)?,
+            })
+        })
+        .map_err(storage)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)?;
+
+    Ok(QueueStats {
+        board_id,
+        generated_at,
+        status_counts,
+        stale_claims,
+        blocked_reasons,
+    })
 }
 
 pub fn doctor_database(path: impl AsRef<Path>) -> Result<DoctorReport> {
@@ -595,6 +701,46 @@ pub fn update_task_by_id(
     let board_id = board_id_for_task(&conn, task_id)?;
     drop(conn);
     update_task(path, &board_id, actor, task_id, patch)
+}
+
+pub fn set_task_retry_policy_by_id(
+    path: impl AsRef<Path>,
+    actor: &str,
+    task_id: &str,
+    max_retries: Option<i64>,
+) -> Result<TaskRecord> {
+    if max_retries.is_some_and(|value| value <= 0) {
+        return Err(KanbanError::InvalidInput(
+            "max_retries must be a positive integer".into(),
+        ));
+    }
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    let board_id = board_id_for_task(&conn, task_id)?;
+    with_immediate_tx(&conn, || {
+        let changed = conn
+            .execute(
+                "UPDATE tasks SET max_retries=?1, updated_at=?2, lock_version=lock_version+1 WHERE id=?3 AND board_id=?4",
+                params![max_retries, now, task_id, board_id],
+            )
+            .map_err(storage)?;
+        if changed != 1 {
+            return Err(KanbanError::InvalidTransition(
+                "retry policy update failed".into(),
+            ));
+        }
+        insert_event(
+            &conn,
+            &board_id,
+            Some(task_id),
+            None,
+            "task.retry_policy.updated",
+            actor,
+            &json!({ "max_retries": max_retries }).to_string(),
+            now,
+        )?;
+        get_task_by_id(&conn, &board_id, task_id)
+    })
 }
 
 pub fn promote_task(

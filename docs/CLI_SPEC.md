@@ -125,6 +125,7 @@ Options：
 | `--priority <int>` | 优先级，默认 0。 |
 | `--scheduled-at <datetime>` | 计划时间。 |
 | `--due-at <datetime>` | 截止时间。 |
+| `--max-retries <n>` | worker 失败或 reclaim 后最多重试次数。 |
 | `--depends-on <task_id>` | 添加 parent dependency，可重复。 |
 | `--label <name>` | 添加 label，可重复。 |
 | `--metadata <json>` | 扩展 JSON。 |
@@ -215,6 +216,7 @@ kb task update <task_ref> [OPTIONS]
 - priority
 - scheduled_at
 - due_at
+- max_retries
 - metadata
 
 不允许通过 update 修改 status；status 必须通过 transition command。
@@ -224,6 +226,8 @@ Examples：
 ```bash
 kb task update #12 --priority 20
 kb task update t_01HX --description "新的规格"
+kb task update t_01HX --max-retries 2
+kb task update t_01HX --clear-max-retries
 ```
 
 ---
@@ -423,7 +427,10 @@ kb events watch --board default
 kb runs <task_ref>
 kb run show <run_id>
 kb run logs <run_id>
+kb run logs <run_id> --tail-bytes 65536
 ```
+
+`kb run logs` 默认最多读取 256 KiB。传 `--tail-bytes` 时只返回 log 末尾指定字节数。
 
 ---
 
@@ -452,11 +459,14 @@ section and can set `command`, `claim_ttl_ms`, `heartbeat_interval_ms`,
 
 ```bash
 kb doctor
+kb stats
 kb backup --out backup.sqlite
 kb export --format jsonl --out board.jsonl
 kb vacuum
 kb checkpoint
 ```
+
+`kb stats --json` 返回 status counts、过期 running claim 列表和 blocked reason 聚合，用于本地 operator recovery。
 
 ### 12.1 `kb doctor`
 

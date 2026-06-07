@@ -591,18 +591,54 @@ fn index_commands_report_sqlite_fallback_backend() {
     let temp = TempDb::new("index_commands_report_sqlite_fallback_backend");
     kb(&temp.path, &["init"]).success();
 
-    for command in ["status", "doctor", "rebuild"] {
+    for command in ["status", "doctor"] {
         let json = kb(&temp.path, &["--json", "index", command]).success_json();
         assert_eq!(json["data"]["backend"], "sqlite");
         assert_eq!(json["data"]["derived_index"], false);
         assert_eq!(json["data"]["stale"], false);
     }
 
+    #[cfg(not(feature = "tantivy-backend"))]
+    {
+        let json = kb(&temp.path, &["--json", "index", "rebuild"]).success_json();
+        assert_eq!(json["data"]["backend"], "sqlite");
+        assert_eq!(json["data"]["derived_index"], false);
+        assert_eq!(json["data"]["stale"], false);
+    }
+
+    #[cfg(not(feature = "tantivy-backend"))]
     let human = kb(&temp.path, &["index", "rebuild"]);
+    #[cfg(not(feature = "tantivy-backend"))]
     assert!(human.output.status.success());
+    #[cfg(not(feature = "tantivy-backend"))]
     let stdout = String::from_utf8_lossy(&human.output.stdout);
+    #[cfg(not(feature = "tantivy-backend"))]
     assert!(stdout.contains("SQLite fallback"), "{stdout}");
+    #[cfg(not(feature = "tantivy-backend"))]
     assert!(stdout.contains("no derived index"), "{stdout}");
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn index_status_and_doctor_report_degraded_partial_tantivy_index() {
+    let temp = TempDb::new("index_status_and_doctor_report_degraded_partial_tantivy_index");
+    kb(&temp.path, &["init"]).success();
+    std::fs::create_dir_all(temp.dir.join("index/v1/tasks")).unwrap();
+    std::fs::write(
+        temp.dir.join("index/v1/tasks/kb-index-meta.json"),
+        b"partial tantivy meta",
+    )
+    .unwrap();
+
+    for command in ["status", "doctor"] {
+        let json = kb(&temp.path, &["--json", "index", command]).success_json();
+        assert_eq!(json["data"]["backend"], "sqlite");
+        assert_eq!(json["data"]["derived_index"], true);
+        assert_eq!(json["data"]["stale"], true);
+        let message = json["data"]["message"].as_str().unwrap();
+        assert!(message.contains("degraded"), "{message}");
+        assert!(message.contains("SQLite fallback"), "{message}");
+    }
 }
 
 #[test]

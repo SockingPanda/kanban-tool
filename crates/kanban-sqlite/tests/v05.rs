@@ -399,6 +399,127 @@ fn tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters() 
 
 #[cfg(feature = "tantivy-backend")]
 #[test]
+fn stale_tantivy_index_falls_back_to_sqlite_before_current_filters_are_applied() {
+    let temp =
+        TempDb::new("stale_tantivy_index_falls_back_to_sqlite_before_current_filters_are_applied");
+    init_database(&temp.path, "tester").unwrap();
+
+    let archive_candidate = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Stale comet archived later".into(),
+            description: Some("ready spec".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: Some("worker-a".into()),
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let status_candidate = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Stale comet running later".into(),
+            description: Some("ready spec".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: Some("worker-a".into()),
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let assignee_candidate = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Stale comet reassigned later".into(),
+            description: Some("ready spec".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: Some("worker-a".into()),
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+
+    kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+    let indexed = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("comet".into()),
+            statuses: vec![TaskStatus::Ready],
+            assignee: Some("worker-a".into()),
+            include_archived: false,
+            limit: 10,
+            offset: 0,
+        },
+    )
+    .unwrap();
+    assert_eq!(indexed.meta.backend, "tantivy");
+    assert_eq!(indexed.hits.len(), 3);
+
+    archive_task(
+        &temp.path,
+        "default",
+        "tester",
+        &archive_candidate.id,
+        false,
+    )
+    .unwrap();
+    claim_task(
+        &temp.path,
+        "default",
+        "worker",
+        &status_candidate.id,
+        300_000,
+    )
+    .unwrap();
+    update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &assignee_candidate.id,
+        TaskPatch {
+            assignee: Some(Some("worker-b".into())),
+            expected_lock_version: Some(assignee_candidate.lock_version),
+            ..TaskPatch::default()
+        },
+    )
+    .unwrap();
+
+    let filtered = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("comet".into()),
+            statuses: vec![TaskStatus::Ready],
+            assignee: Some("worker-a".into()),
+            include_archived: false,
+            limit: 10,
+            offset: 0,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(filtered.meta.backend, "sqlite");
+    assert!(filtered.meta.stale);
+    assert!(filtered.hits.is_empty(), "{:?}", filtered.hits);
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
 fn tantivy_missing_or_corrupt_index_falls_back_to_sqlite() {
     let temp = TempDb::new("tantivy_missing_or_corrupt_index_falls_back_to_sqlite");
     init_database(&temp.path, "tester").unwrap();
@@ -421,7 +542,7 @@ fn tantivy_missing_or_corrupt_index_falls_back_to_sqlite() {
 
     let index_dir = temp.dir.join("index/v1/tasks");
     std::fs::create_dir_all(&index_dir).unwrap();
-    std::fs::write(index_dir.join("meta.json"), b"not json").unwrap();
+    std::fs::write(index_dir.join("kb-index-meta.json"), b"not json").unwrap();
 
     let results = search_tasks(
         &temp.path,
@@ -440,6 +561,51 @@ fn tantivy_missing_or_corrupt_index_falls_back_to_sqlite() {
     assert_eq!(results.meta.backend, "sqlite");
     assert!(results.meta.stale);
     assert_eq!(results.hits[0].task_id, task.id);
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_query_errors_do_not_fall_back_to_sqlite() {
+    let temp = TempDb::new("tantivy_query_errors_do_not_fall_back_to_sqlite");
+    init_database(&temp.path, "tester").unwrap();
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Query syntax nebula".into(),
+            description: Some("ready spec".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+
+    let error = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("\"".into()),
+            statuses: vec![],
+            assignee: None,
+            include_archived: false,
+            limit: 10,
+            offset: 0,
+        },
+    )
+    .unwrap_err();
+
+    assert!(
+        error.to_string().contains("query")
+            || error.to_string().contains("Syntax")
+            || error.to_string().contains("unterminated"),
+        "{error}"
+    );
 }
 
 #[test]

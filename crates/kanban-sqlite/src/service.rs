@@ -12,6 +12,8 @@ use kanban_core::{
     Clock, KanbanError, Result, SystemClock, TaskStatus, new_event_id, new_run_id, new_task_id,
     new_typed_id,
 };
+#[cfg(feature = "tantivy-backend")]
+use kanban_search::TaskSearchDocument;
 use kanban_search::{SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults};
 use rusqlite::{
     Connection, OptionalExtension, Row, params, params_from_iter,
@@ -1042,6 +1044,47 @@ pub fn list_tasks_page(
 
 pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<SearchResults> {
     validate_page_bounds(query.limit, MAX_SEARCH_LIMIT, query.offset)?;
+    #[cfg(feature = "tantivy-backend")]
+    {
+        let path_ref = path.as_ref();
+        let conn = connect_file(path_ref)?;
+        let board_id = board_id(&conn, &query.board)?;
+        let last_event_id = current_last_event_id(&conn, &board_id)?;
+        let index_path = task_index_path(path_ref);
+        if kanban_search::tantivy_backend::task_index_exists(&index_path) {
+            if tantivy_literal_sqlite_fallback_required(&query) {
+                return sqlite_search_tasks(path_ref, query, true);
+            }
+            match kanban_search::tantivy_backend::search_task_index(
+                &index_path,
+                &board_id,
+                &query,
+                last_event_id,
+            ) {
+                Ok(results) => {
+                    if results.1.stale {
+                        return sqlite_search_tasks(path_ref, query, true);
+                    }
+                    return Ok(SearchResults {
+                        hits: results.0,
+                        meta: results.1,
+                    });
+                }
+                Err(err) if err.is_fallback_eligible() => {
+                    return sqlite_search_tasks(path_ref, query, true);
+                }
+                Err(err) => return Err(search_storage(err)),
+            }
+        }
+    }
+    sqlite_search_tasks(path, query, false)
+}
+
+fn sqlite_search_tasks(
+    path: impl AsRef<Path>,
+    query: SearchQuery,
+    stale: bool,
+) -> Result<SearchResults> {
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, &query.board)?;
     let (where_sql, mut params) = search_task_where(&board_id, &query);
@@ -1116,29 +1159,49 @@ pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<Search
     let hits = rows
         .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)?;
-    let last_event_id = conn
-        .query_row(
-            "SELECT MAX(id) FROM task_events WHERE board_id=?1",
-            params![board_id],
-            |row| row.get(0),
-        )
-        .map_err(storage)?;
+    let last_event_id = current_last_event_id(&conn, &board_id)?;
     Ok(SearchResults {
         hits,
-        meta: sqlite_search_meta(last_event_id),
+        meta: sqlite_search_meta(last_event_id, stale),
     })
 }
 
 pub fn search_index_status(path: impl AsRef<Path>, board: &str) -> Result<SearchIndexStatus> {
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
-    let last_event_id = conn
-        .query_row(
-            "SELECT MAX(id) FROM task_events WHERE board_id=?1",
-            params![board_id],
-            |row| row.get(0),
-        )
-        .map_err(storage)?;
+    let last_event_id = current_last_event_id(&conn, &board_id)?;
+    #[cfg(feature = "tantivy-backend")]
+    {
+        let index_path = task_index_path(path.as_ref());
+        if kanban_search::tantivy_backend::task_index_exists(&index_path) {
+            let metadata =
+                match kanban_search::tantivy_backend::validate_task_index(&index_path, &board_id) {
+                    Ok(metadata) => metadata,
+                    Err(err) if err.is_fallback_eligible() => {
+                        return Ok(degraded_search_index_status(
+                            last_event_id,
+                            &index_path,
+                            &err,
+                        ));
+                    }
+                    Err(err) => return Err(search_storage(err)),
+                };
+            let lag = match (last_event_id, metadata.last_event_id) {
+                (Some(current), Some(indexed)) => Some(current.saturating_sub(indexed)),
+                (Some(current), None) => Some(current),
+                _ => Some(0),
+            };
+            return Ok(SearchIndexStatus {
+                backend: "tantivy".to_owned(),
+                derived_index: true,
+                stale: lag.is_some_and(|value| value > 0),
+                index_version: Some(metadata.index_version),
+                last_event_id: metadata.last_event_id,
+                index_lag_events: lag,
+                message: format!("Tantivy task index at {}", index_path.display()),
+            });
+        }
+    }
     Ok(SearchIndexStatus {
         backend: "sqlite".to_owned(),
         derived_index: false,
@@ -1151,13 +1214,94 @@ pub fn search_index_status(path: impl AsRef<Path>, board: &str) -> Result<Search
 }
 
 pub fn rebuild_search_index(path: impl AsRef<Path>, board: &str) -> Result<SearchIndexStatus> {
-    search_index_status(path, board)
+    #[cfg(feature = "tantivy-backend")]
+    {
+        let path_ref = path.as_ref();
+        let conn = connect_file(path_ref)?;
+        let board_id = board_id(&conn, board)?;
+        let last_event_id = current_last_event_id(&conn, &board_id)?;
+        let documents = task_search_documents(&conn, &board_id)?;
+        let index_path = task_index_path(path_ref);
+        let metadata = kanban_search::tantivy_backend::rebuild_task_index(
+            &index_path,
+            &board_id,
+            last_event_id,
+            &documents,
+        )
+        .map_err(search_storage)?;
+        Ok(SearchIndexStatus {
+            backend: "tantivy".to_owned(),
+            derived_index: true,
+            stale: false,
+            index_version: Some(metadata.index_version),
+            last_event_id: metadata.last_event_id,
+            index_lag_events: Some(0),
+            message: format!("Rebuilt Tantivy task index at {}", index_path.display()),
+        })
+    }
+    #[cfg(not(feature = "tantivy-backend"))]
+    {
+        search_index_status(path, board)
+    }
 }
 
-fn sqlite_search_meta(last_event_id: Option<i64>) -> SearchMeta {
+#[cfg(feature = "tantivy-backend")]
+fn degraded_search_index_status(
+    last_event_id: Option<i64>,
+    index_path: &Path,
+    err: &kanban_search::tantivy_backend::TantivyTaskIndexError,
+) -> SearchIndexStatus {
+    SearchIndexStatus {
+        backend: "sqlite".to_owned(),
+        derived_index: true,
+        stale: true,
+        index_version: None,
+        last_event_id,
+        index_lag_events: last_event_id.or(Some(0)),
+        message: format!(
+            "Tantivy task index at {} is degraded ({:?}: {}); SQLite fallback search is active",
+            index_path.display(),
+            err.kind(),
+            err
+        ),
+    }
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn tantivy_literal_sqlite_fallback_required(query: &SearchQuery) -> bool {
+    query.q.as_deref().map(str::trim).is_some_and(|q| {
+        q.chars().any(|ch| {
+            matches!(
+                ch,
+                '"' | '+'
+                    | '-'
+                    | '!'
+                    | '('
+                    | ')'
+                    | '{'
+                    | '}'
+                    | '['
+                    | ']'
+                    | '^'
+                    | '~'
+                    | '*'
+                    | '?'
+                    | ':'
+                    | '\\'
+                    | '/'
+                    | '&'
+                    | '|'
+                    | '%'
+                    | '_'
+            )
+        })
+    })
+}
+
+fn sqlite_search_meta(last_event_id: Option<i64>, stale: bool) -> SearchMeta {
     SearchMeta {
         backend: "sqlite".to_owned(),
-        stale: false,
+        stale,
         index_version: None,
         last_event_id,
         index_lag_events: Some(0),
@@ -3734,6 +3878,62 @@ fn task_order_by(sort: TaskListSort) -> &'static str {
     }
 }
 
+fn current_last_event_id(conn: &Connection, board_id: &str) -> Result<Option<i64>> {
+    conn.query_row(
+        "SELECT MAX(id) FROM task_events WHERE board_id=?1",
+        params![board_id],
+        |row| row.get(0),
+    )
+    .map_err(storage)
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn task_index_path(db_path: &Path) -> PathBuf {
+    db_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("index")
+        .join("v1")
+        .join("tasks")
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn task_search_documents(conn: &Connection, board_id: &str) -> Result<Vec<TaskSearchDocument>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT t.id,t.board_id,t.seq,t.status,t.assignee,t.priority,t.created_at,t.updated_at,t.due_at,t.title,t.description,\
+                    COALESCE((SELECT group_concat(c.body, char(10)) FROM task_comments c WHERE c.board_id=t.board_id AND c.task_id=t.id ORDER BY c.created_at ASC, c.id ASC), '') AS comments,\
+                    COALESCE((SELECT group_concat(COALESCE(r.summary, '') || ' ' || COALESCE(r.error, ''), char(10)) FROM task_runs r WHERE r.board_id=t.board_id AND r.task_id=t.id ORDER BY r.started_at ASC, r.id ASC), '') AS run_text,\
+                    COALESCE((SELECT group_concat(e.kind || ' ' || e.payload_json, char(10)) FROM task_events e WHERE e.board_id=t.board_id AND e.task_id=t.id ORDER BY e.id ASC), '') AS event_text \
+             FROM tasks t WHERE t.board_id=?1 ORDER BY t.seq ASC",
+        )
+        .map_err(storage)?;
+    let rows = stmt
+        .query_map([board_id], |row| {
+            let status: String = row.get(3)?;
+            Ok(TaskSearchDocument {
+                task_id: row.get(0)?,
+                board_id: row.get(1)?,
+                seq: row.get(2)?,
+                status: TaskStatus::try_from(status.as_str())
+                    .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?,
+                assignee: row.get(4)?,
+                priority: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+                due_at: row.get(8)?,
+                title: row.get(9)?,
+                description: row.get(10)?,
+                comments: row.get(11)?,
+                run_text: row.get(12)?,
+                event_text: row.get(13)?,
+            })
+        })
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
 fn query_tasks(conn: &Connection, board_id: &str) -> Result<Vec<TaskRecord>> {
     let mut stmt = conn
         .prepare(&format!(
@@ -3958,5 +4158,10 @@ fn with_read_tx<T>(conn: &Connection, f: impl FnOnce() -> Result<T>) -> Result<T
 }
 
 fn storage(err: rusqlite::Error) -> KanbanError {
+    KanbanError::Storage(err.to_string())
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn search_storage(err: impl std::error::Error) -> KanbanError {
     KanbanError::Storage(err.to_string())
 }

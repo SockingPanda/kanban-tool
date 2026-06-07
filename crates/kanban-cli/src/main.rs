@@ -1107,8 +1107,13 @@ fn handle_index(command: IndexCommand, db_path: &PathBuf, board: &str, json: boo
     };
     print_or_json(json, &status, || {
         format!(
-            "SQLite fallback search active: derived_index={} stale={} last_event_id={:?}; no derived index to rebuild",
-            status.derived_index, status.stale, status.last_event_id
+            "search backend={} derived_index={} stale={} last_event_id={:?} lag={:?}: {}",
+            status.backend,
+            status.derived_index,
+            status.stale,
+            status.last_event_id,
+            status.index_lag_events,
+            status.message
         )
     })
 }

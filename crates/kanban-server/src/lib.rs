@@ -1,4 +1,4 @@
-use std::{convert::Infallible, net::SocketAddr, path::PathBuf, str::FromStr};
+use std::{convert::Infallible, fs, net::SocketAddr, path::PathBuf, str::FromStr};
 
 use axum::{
     Json, Router,
@@ -178,6 +178,38 @@ struct EventDto {
 }
 
 #[derive(Debug, Serialize)]
+struct CommentDto {
+    id: String,
+    board_id: String,
+    task_id: String,
+    author: String,
+    body: String,
+    kind: String,
+    created_at: i64,
+}
+
+impl From<kanban_sqlite::CommentRecord> for CommentDto {
+    fn from(comment: kanban_sqlite::CommentRecord) -> Self {
+        Self {
+            id: comment.id,
+            board_id: comment.board_id,
+            task_id: comment.task_id,
+            author: comment.author,
+            body: comment.body,
+            kind: comment.kind,
+            created_at: comment.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct RunLogDto {
+    run_id: String,
+    content: String,
+    truncated: bool,
+}
+
+#[derive(Debug, Serialize)]
 struct ClaimDto {
     task: TaskDto,
     run: RunDto,
@@ -246,6 +278,11 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/tasks/:task_id/runs", get(list_runs))
         .route("/api/v1/runs/:run_id", get(get_run))
+        .route("/api/v1/runs/:run_id/log", get(get_run_log))
+        .route(
+            "/api/v1/tasks/:task_id/comments",
+            get(list_comments).post(create_comment),
+        )
         .route("/api/v1/events", get(list_events))
         .route("/api/v1/stream/events", get(stream_events))
         .with_state(state)
@@ -490,6 +527,14 @@ async fn update_task(
 #[derive(Debug, Deserialize, Default)]
 struct ActorBody {
     actor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CommentBody {
+    author: Option<String>,
+    body: String,
+    kind: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -909,6 +954,74 @@ async fn get_run(
         )?),
         meta: None,
     }))
+}
+
+async fn get_run_log(
+    State(state): State<AppState>,
+    Path(run_id): Path<String>,
+) -> Result<Json<Envelope<RunLogDto>>, ApiError> {
+    const MAX_RUN_LOG_BYTES: usize = 256 * 1024;
+    let run = kanban_sqlite::get_run_by_id_global(state.db_path(), &run_id)?;
+    let log_path = run
+        .log_path
+        .as_deref()
+        .ok_or_else(|| KanbanError::NotFound(format!("run log {run_id}")))?;
+    let bytes = fs::read(log_path).map_err(|error| match error.kind() {
+        std::io::ErrorKind::NotFound => KanbanError::NotFound(format!("run log {run_id}")),
+        _ => KanbanError::Storage(error.to_string()),
+    })?;
+    let truncated = bytes.len() > MAX_RUN_LOG_BYTES;
+    let bytes = if truncated {
+        &bytes[..MAX_RUN_LOG_BYTES]
+    } else {
+        &bytes[..]
+    };
+    let content = String::from_utf8_lossy(bytes).into_owned();
+    Ok(Json(Envelope {
+        data: RunLogDto {
+            run_id,
+            content,
+            truncated,
+        },
+        meta: None,
+    }))
+}
+
+async fn list_comments(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+) -> Result<Json<Envelope<Vec<CommentDto>>>, ApiError> {
+    Ok(Json(Envelope {
+        data: kanban_sqlite::list_comments(state.db_path(), &task_id)?
+            .into_iter()
+            .map(CommentDto::from)
+            .collect(),
+        meta: None,
+    }))
+}
+
+async fn create_comment(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    headers: HeaderMap,
+    body: Result<Json<CommentBody>, JsonRejection>,
+) -> Result<(StatusCode, Json<Envelope<CommentDto>>), ApiError> {
+    let Json(body) = body.map_err(extractor_error)?;
+    let actor = actor(body.author.as_deref(), &headers, &state);
+    let comment = kanban_sqlite::create_comment(
+        state.db_path(),
+        &task_id,
+        &actor,
+        &body.body,
+        body.kind.as_deref(),
+    )?;
+    Ok((
+        StatusCode::CREATED,
+        Json(Envelope {
+            data: CommentDto::from(comment),
+            meta: None,
+        }),
+    ))
 }
 
 async fn list_events(

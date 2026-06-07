@@ -9,6 +9,14 @@ authors.workspace = true
 name = "kb"
 path = "src/main.rs"
 
+[features]
+default = []
+tantivy-backend = [
+  "kanban-search/tantivy-backend",
+  "kanban-sqlite/tantivy-backend",
+  "kanban-server/tantivy-backend",
+]
+
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true

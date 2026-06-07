@@ -234,20 +234,24 @@ function App() {
     [api],
   )
 
-  const refreshBoard = useCallback(async () => {
+  const refreshColumns = useCallback(async () => {
     if (!api) return
     const nextColumns = await api.listBoardColumns()
     setColumns(nextColumns)
-    await refreshTasks()
-  }, [api, refreshTasks])
+  }, [api])
+
+  useEffect(() => {
+    if (!api) return
+    refreshColumns().catch((err: unknown) => setError(errorMessage(err)))
+  }, [api, refreshColumns])
 
   useEffect(() => {
     if (!api) return
     setBusy(true)
-    refreshBoard()
+    refreshTasks()
       .catch((err: unknown) => setError(errorMessage(err)))
       .finally(() => setBusy(false))
-  }, [api, refreshBoard])
+  }, [api, refreshTasks])
 
   useEffect(() => {
     if (!selectedId) {

@@ -8,8 +8,9 @@ use std::{
 use kanban_core::TaskStatus;
 use kanban_sqlite::{
     CreateTask, DispatchOptions, FinishPolicy, TaskPatch, add_dependency, archive_task, block_task,
-    claim_task, complete_task, connect_file, create_task, dispatch_once, get_task, init_database,
-    list_dependencies, list_events, list_runs, list_tasks, unblock_task, update_task,
+    claim_task, complete_task, connect_file, create_task, dispatch_once, doctor_database, get_task,
+    init_database, list_dependencies, list_events, list_runs, list_tasks, unblock_task,
+    update_task,
 };
 use rusqlite::params;
 
@@ -561,6 +562,127 @@ fn dispatch_once_runs_ready_task_and_records_log() {
     assert_eq!(runs[0].status, "succeeded");
     let log_path = runs[0].log_path.as_ref().expect("run log path");
     assert!(std::fs::read_to_string(log_path).unwrap().contains("task="));
+}
+
+#[test]
+fn doctor_resolves_legacy_relative_run_log_paths_against_database_dir() {
+    let temp = TempDb::new("doctor_resolves_legacy_relative_run_log_paths_against_database_dir");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("legacy log path"),
+    )
+    .unwrap();
+    let log_dir = temp.dir.join("logs");
+    dispatch_once(
+        &temp.path,
+        "default",
+        DispatchOptions {
+            actor: "dispatcher".into(),
+            command: "printf legacy".into(),
+            worker_profile: "default".into(),
+            claim_ttl_ms: 300_000,
+            heartbeat_interval_ms: 30_000,
+            on_success: FinishPolicy::Done,
+            on_failure: FinishPolicy::Blocked,
+            log_dir,
+        },
+    )
+    .unwrap();
+    let run = list_runs(&temp.path, "default", Some(&task.id)).unwrap()[0].clone();
+    let absolute_log_path = Path::new(run.log_path.as_ref().unwrap());
+    let relative_log_path = absolute_log_path
+        .strip_prefix(&temp.dir)
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    connect_file(&temp.path)
+        .unwrap()
+        .execute(
+            "UPDATE task_runs SET log_path=?1 WHERE id=?2",
+            params![relative_log_path, run.id],
+        )
+        .unwrap();
+
+    let report = doctor_database(&temp.path).unwrap();
+
+    assert_eq!(report.missing_run_logs, 0);
+    assert!(report.ok);
+}
+
+#[test]
+fn doctor_reports_partially_initialized_database_without_bailing() {
+    let temp = TempDb::new("doctor_reports_partially_initialized_database_without_bailing");
+    connect_file(&temp.path)
+        .unwrap()
+        .execute(
+            "CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY, name TEXT NOT NULL, checksum TEXT NOT NULL DEFAULT '', applied_at INTEGER NOT NULL)",
+            [],
+        )
+        .unwrap();
+
+    let report = doctor_database(&temp.path).unwrap();
+
+    assert!(!report.ok);
+    assert_eq!(report.migration_version, None);
+    assert_eq!(report.user_version, 0);
+}
+
+#[test]
+fn doctor_reports_executable_status_invariant_violations() {
+    let temp = TempDb::new("doctor_reports_executable_status_invariant_violations");
+    init_database(&temp.path, "tester").unwrap();
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("unfinished parent"),
+    )
+    .unwrap();
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("invalid ready child"),
+    )
+    .unwrap();
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id).unwrap();
+    let missing_spec = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("invalid missing spec"),
+    )
+    .unwrap();
+    let future_scheduled = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("invalid future schedule"),
+    )
+    .unwrap();
+    let conn = connect_file(&temp.path).unwrap();
+    conn.execute("UPDATE tasks SET status='ready' WHERE id=?1", [&child.id])
+        .unwrap();
+    conn.execute(
+        "UPDATE tasks SET description=NULL WHERE id=?1",
+        [&missing_spec.id],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE tasks SET scheduled_at=?1 WHERE id=?2",
+        params![4_102_444_800_000_i64, future_scheduled.id],
+    )
+    .unwrap();
+
+    let report = doctor_database(&temp.path).unwrap();
+
+    assert!(!report.ok);
+    assert_eq!(report.executable_dependency_violations, 1);
+    assert_eq!(report.executable_spec_violations, 1);
+    assert_eq!(report.executable_schedule_violations, 1);
 }
 
 #[test]

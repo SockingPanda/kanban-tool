@@ -12,7 +12,7 @@ use kanban_core::{
     Clock, KanbanError, Result, SystemClock, TaskStatus, new_event_id, new_run_id, new_task_id,
     new_typed_id,
 };
-use kanban_search::{SearchHit, SearchMeta, SearchQuery, SearchResults};
+use kanban_search::{SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults};
 use rusqlite::{
     Connection, OptionalExtension, Row, params, params_from_iter,
     types::{Value, ValueRef},
@@ -1110,14 +1110,43 @@ pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<Search
         .map_err(storage)?;
     Ok(SearchResults {
         hits,
-        meta: SearchMeta {
-            backend: "sqlite".to_owned(),
-            stale: false,
-            index_version: None,
-            last_event_id,
-            index_lag_events: Some(0),
-        },
+        meta: sqlite_search_meta(last_event_id),
     })
+}
+
+pub fn search_index_status(path: impl AsRef<Path>, board: &str) -> Result<SearchIndexStatus> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    let last_event_id = conn
+        .query_row(
+            "SELECT MAX(id) FROM task_events WHERE board_id=?1",
+            params![board_id],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    Ok(SearchIndexStatus {
+        backend: "sqlite".to_owned(),
+        derived_index: false,
+        stale: false,
+        index_version: None,
+        last_event_id,
+        index_lag_events: Some(0),
+        message: "SQLite fallback search is active; no derived index exists yet".to_owned(),
+    })
+}
+
+pub fn rebuild_search_index(path: impl AsRef<Path>, board: &str) -> Result<SearchIndexStatus> {
+    search_index_status(path, board)
+}
+
+fn sqlite_search_meta(last_event_id: Option<i64>) -> SearchMeta {
+    SearchMeta {
+        backend: "sqlite".to_owned(),
+        stale: false,
+        index_version: None,
+        last_event_id,
+        index_lag_events: Some(0),
+    }
 }
 
 pub fn get_task(path: impl AsRef<Path>, board: &str, task_ref: &str) -> Result<TaskRecord> {

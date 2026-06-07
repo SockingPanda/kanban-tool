@@ -141,7 +141,9 @@ pub mod tantivy_backend {
         pub fn is_fallback_eligible(&self) -> bool {
             matches!(
                 self.kind,
-                TantivyTaskIndexErrorKind::Unavailable | TantivyTaskIndexErrorKind::Corrupt
+                TantivyTaskIndexErrorKind::Unavailable
+                    | TantivyTaskIndexErrorKind::Corrupt
+                    | TantivyTaskIndexErrorKind::Schema
             )
         }
 
@@ -272,26 +274,26 @@ pub mod tantivy_backend {
         serde_json::from_slice(&metadata).map_err(TantivyTaskIndexError::from)
     }
 
+    pub fn validate_task_index(
+        path: &Path,
+        board_id: &str,
+    ) -> Result<TantivyIndexMetadata, TantivyTaskIndexError> {
+        let metadata = read_task_index_metadata(path)?;
+        validate_metadata(&metadata, board_id)?;
+        let index = Index::open_in_dir(path).map_err(TantivyTaskIndexError::corrupt)?;
+        let schema = index.schema();
+        fields_from_schema(&schema)?;
+        index.reader().map_err(TantivyTaskIndexError::corrupt)?;
+        Ok(metadata)
+    }
+
     pub fn search_task_index(
         path: &Path,
         board_id: &str,
         query: &SearchQuery,
         last_event_id: Option<i64>,
     ) -> Result<(Vec<SearchHit>, SearchMeta), TantivyTaskIndexError> {
-        let metadata = read_task_index_metadata(path)?;
-        if metadata.index_version != INDEX_VERSION {
-            return Err(TantivyTaskIndexError::new(
-                TantivyTaskIndexErrorKind::Corrupt,
-                format!("unsupported task index version {}", metadata.index_version),
-            ));
-        }
-        if metadata.board_id != board_id {
-            return Err(TantivyTaskIndexError::new(
-                TantivyTaskIndexErrorKind::Unavailable,
-                "task index board mismatch",
-            ));
-        }
-
+        let metadata = validate_task_index(path, board_id)?;
         let index = Index::open_in_dir(path).map_err(TantivyTaskIndexError::corrupt)?;
         let schema = index.schema();
         let fields = fields_from_schema(&schema)?;
@@ -348,6 +350,25 @@ pub mod tantivy_backend {
                 index_lag_events: lag,
             },
         ))
+    }
+
+    fn validate_metadata(
+        metadata: &TantivyIndexMetadata,
+        board_id: &str,
+    ) -> Result<(), TantivyTaskIndexError> {
+        if metadata.index_version != INDEX_VERSION {
+            return Err(TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Corrupt,
+                format!("unsupported task index version {}", metadata.index_version),
+            ));
+        }
+        if metadata.board_id != board_id {
+            return Err(TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Unavailable,
+                "task index board mismatch",
+            ));
+        }
+        Ok(())
     }
 
     fn build_query(

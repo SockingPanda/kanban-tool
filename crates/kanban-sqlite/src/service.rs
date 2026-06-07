@@ -1052,6 +1052,9 @@ pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<Search
         let last_event_id = current_last_event_id(&conn, &board_id)?;
         let index_path = task_index_path(path_ref);
         if kanban_search::tantivy_backend::task_index_exists(&index_path) {
+            if tantivy_literal_sqlite_fallback_required(&query) {
+                return sqlite_search_tasks(path_ref, query, true);
+            }
             match kanban_search::tantivy_backend::search_task_index(
                 &index_path,
                 &board_id,
@@ -1172,7 +1175,7 @@ pub fn search_index_status(path: impl AsRef<Path>, board: &str) -> Result<Search
         let index_path = task_index_path(path.as_ref());
         if kanban_search::tantivy_backend::task_index_exists(&index_path) {
             let metadata =
-                match kanban_search::tantivy_backend::read_task_index_metadata(&index_path) {
+                match kanban_search::tantivy_backend::validate_task_index(&index_path, &board_id) {
                     Ok(metadata) => metadata,
                     Err(err) if err.is_fallback_eligible() => {
                         return Ok(degraded_search_index_status(
@@ -1262,6 +1265,37 @@ fn degraded_search_index_status(
             err
         ),
     }
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn tantivy_literal_sqlite_fallback_required(query: &SearchQuery) -> bool {
+    query.q.as_deref().map(str::trim).is_some_and(|q| {
+        q.chars().any(|ch| {
+            matches!(
+                ch,
+                '"' | '+'
+                    | '-'
+                    | '!'
+                    | '('
+                    | ')'
+                    | '{'
+                    | '}'
+                    | '['
+                    | ']'
+                    | '^'
+                    | '~'
+                    | '*'
+                    | '?'
+                    | ':'
+                    | '\\'
+                    | '/'
+                    | '&'
+                    | '|'
+                    | '%'
+                    | '_'
+            )
+        })
+    })
 }
 
 fn sqlite_search_meta(last_event_id: Option<i64>, stale: bool) -> SearchMeta {

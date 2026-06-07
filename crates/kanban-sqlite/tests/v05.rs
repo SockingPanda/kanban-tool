@@ -565,47 +565,136 @@ fn tantivy_missing_or_corrupt_index_falls_back_to_sqlite() {
 
 #[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_query_errors_do_not_fall_back_to_sqlite() {
-    let temp = TempDb::new("tantivy_query_errors_do_not_fall_back_to_sqlite");
+fn tantivy_status_degrades_metadata_only_index_dir() {
+    let temp = TempDb::new("tantivy_status_degrades_metadata_only_index_dir");
     init_database(&temp.path, "tester").unwrap();
-    create_task(
+    let conn = connect_file(&temp.path).unwrap();
+    let board_id: String = conn
+        .query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    drop(conn);
+
+    let index_dir = temp.dir.join("index/v1/tasks");
+    std::fs::create_dir_all(&index_dir).unwrap();
+    std::fs::write(
+        index_dir.join("kb-index-meta.json"),
+        format!(r#"{{"index_version":"tasks-v1","board_id":"{board_id}","last_event_id":null}}"#),
+    )
+    .unwrap();
+
+    let status = kanban_sqlite::search_index_status(&temp.path, "default").unwrap();
+    assert_eq!(status.backend, "sqlite");
+    assert!(status.derived_index);
+    assert!(status.stale);
+    assert!(status.message.contains("degraded"), "{}", status.message);
+    assert!(
+        status.message.contains("SQLite fallback"),
+        "{}",
+        status.message
+    );
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_status_degrades_wrong_schema_index() {
+    let temp = TempDb::new("tantivy_status_degrades_wrong_schema_index");
+    init_database(&temp.path, "tester").unwrap();
+    let conn = connect_file(&temp.path).unwrap();
+    let board_id: String = conn
+        .query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    drop(conn);
+
+    let index_dir = temp.dir.join("index/v1/tasks");
+    std::fs::create_dir_all(&index_dir).unwrap();
+    let mut builder = tantivy::schema::Schema::builder();
+    builder.add_text_field("board_id", tantivy::schema::STRING);
+    tantivy::Index::create_in_dir(&index_dir, builder.build()).unwrap();
+    std::fs::write(
+        index_dir.join("kb-index-meta.json"),
+        format!(r#"{{"index_version":"tasks-v1","board_id":"{board_id}","last_event_id":null}}"#),
+    )
+    .unwrap();
+
+    let status = kanban_sqlite::search_index_status(&temp.path, "default").unwrap();
+    assert_eq!(status.backend, "sqlite");
+    assert!(status.derived_index);
+    assert!(status.stale);
+    assert!(status.message.contains("Schema"), "{}", status.message);
+    assert!(
+        status.message.contains("SQLite fallback"),
+        "{}",
+        status.message
+    );
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_literal_special_searches_fall_back_to_sqlite_after_rebuild() {
+    let temp = TempDb::new("tantivy_literal_special_searches_fall_back_to_sqlite_after_rebuild");
+    init_database(&temp.path, "tester").unwrap();
+    let percent = create_task(
         &temp.path,
         "default",
         "tester",
-        CreateTask {
-            title: "Query syntax nebula".into(),
-            description: Some("ready spec".into()),
-            status: Some(TaskStatus::Ready),
-            assignee: None,
-            priority: 0,
-            scheduled_at: None,
-            due_at: None,
-            metadata_json: "{}".into(),
-        },
+        CreateTask::ready("literal 100% complete"),
     )
     .unwrap();
+    let underscore = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("literal snake_case token"),
+    )
+    .unwrap();
+    let backslash = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("literal path C:\\work"),
+    )
+    .unwrap();
+    let quote = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("literal quote \" token"),
+    )
+    .unwrap();
+
     kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
 
-    let error = search_tasks(
-        &temp.path,
-        kanban_search::SearchQuery {
-            board: "default".into(),
-            q: Some("\"".into()),
-            statuses: vec![],
-            assignee: None,
-            include_archived: false,
-            limit: 10,
-            offset: 0,
-        },
-    )
-    .unwrap_err();
-
-    assert!(
-        error.to_string().contains("query")
-            || error.to_string().contains("Syntax")
-            || error.to_string().contains("unterminated"),
-        "{error}"
-    );
+    for (query, expected) in [
+        ("100%", percent.id.as_str()),
+        ("snake_case", underscore.id.as_str()),
+        ("C:\\work", backslash.id.as_str()),
+        ("quote \"", quote.id.as_str()),
+    ] {
+        let results = search_tasks(
+            &temp.path,
+            kanban_search::SearchQuery {
+                board: "default".into(),
+                q: Some(query.into()),
+                statuses: vec![],
+                assignee: None,
+                include_archived: false,
+                limit: 10,
+                offset: 0,
+            },
+        )
+        .unwrap();
+        assert_eq!(results.meta.backend, "sqlite", "{query}");
+        assert!(results.meta.stale, "{query}");
+        assert!(
+            results.hits.iter().any(|hit| hit.task_id == expected),
+            "{query}: {:?}",
+            results.hits
+        );
+    }
 }
 
 #[test]

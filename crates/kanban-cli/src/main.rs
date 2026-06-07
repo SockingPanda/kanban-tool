@@ -516,7 +516,6 @@ fn import_command(
     })();
     remove_sqlite_file_family(&temp_path);
     remove_sqlite_file_family(&restore_path);
-    remove_sqlite_file_family(&replaced_path);
     result
 }
 

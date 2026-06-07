@@ -5,9 +5,10 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_core::TaskStatus;
 use kanban_sqlite::{
     CreateTask, DispatchOptions, FinishPolicy, TaskPatch, add_dependency, archive_task, block_task,
-    claim_task, complete_task, create_task, dispatch_once, get_task, heartbeat_task, init_database,
-    list_dependencies, list_events, list_runs, list_tasks, promote_task, reclaim_expired,
-    remove_dependency, submit_review_task, unblock_task, update_task,
+    claim_task, complete_task, create_task, dispatch_once, get_run_by_id_global, get_task,
+    heartbeat_task, init_database, list_dependencies, list_events, list_runs, list_tasks,
+    promote_task, queue_stats, reclaim_expired, remove_dependency, set_task_retry_policy_by_id,
+    submit_review_task, unblock_task, update_task,
 };
 
 #[derive(Debug, Parser)]
@@ -45,9 +46,14 @@ enum Command {
     Runs {
         task_ref: Option<String>,
     },
+    Run {
+        #[command(subcommand)]
+        command: RunCommand,
+    },
     Dispatch(DispatchArgs),
     Serve(ServeArgs),
     Doctor,
+    Stats,
 }
 
 #[derive(Debug, Subcommand)]
@@ -94,6 +100,8 @@ struct CreateArgs {
     scheduled_at: Option<i64>,
     #[arg(long)]
     due_at: Option<i64>,
+    #[arg(long)]
+    max_retries: Option<i64>,
     #[arg(long, default_value = "{}")]
     metadata: String,
 }
@@ -128,9 +136,25 @@ struct UpdateArgs {
     #[arg(long)]
     clear_due_at: bool,
     #[arg(long)]
+    max_retries: Option<i64>,
+    #[arg(long)]
+    clear_max_retries: bool,
+    #[arg(long)]
     metadata: Option<String>,
     #[arg(long)]
     expected_lock_version: Option<i64>,
+}
+
+#[derive(Debug, Subcommand)]
+enum RunCommand {
+    Show {
+        run_id: String,
+    },
+    Logs {
+        run_id: String,
+        #[arg(long)]
+        tail_bytes: Option<usize>,
+    },
 }
 
 #[derive(Debug, Args, Clone)]
@@ -303,6 +327,7 @@ fn main() -> Result<()> {
                     .join("\n")
             })?;
         }
+        Command::Run { command } => handle_run(command, &db_path, cli.json)?,
         Command::Dispatch(args) => {
             let options = dispatch_options(&args, actor.clone())?;
             if args.once {
@@ -343,6 +368,19 @@ fn main() -> Result<()> {
                     report.running_tasks_without_active_run,
                     report.orphan_running_runs
                 )
+            })?;
+        }
+        Command::Stats => {
+            let stats = queue_stats(&db_path, &cli.board)?;
+            print_or_json(cli.json, &stats, || {
+                let stale = stats.stale_claims.len();
+                let blocked = stats
+                    .blocked_reasons
+                    .iter()
+                    .map(|reason| format!("{}={}", reason.reason, reason.count))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("stale_claims={stale} blocked_reasons=[{blocked}]")
             })?;
         }
     }
@@ -518,7 +556,7 @@ fn handle_task(
 ) -> Result<()> {
     match command {
         TaskCommand::Create(args) => {
-            let task = create_task(
+            let mut task = create_task(
                 db_path,
                 board,
                 actor,
@@ -533,6 +571,9 @@ fn handle_task(
                     metadata_json: args.metadata,
                 },
             )?;
+            if args.max_retries.is_some() {
+                task = set_task_retry_policy_by_id(db_path, actor, &task.id, args.max_retries)?;
+            }
             print_task(json, &task)?;
         }
         TaskCommand::List(args) => {
@@ -548,7 +589,7 @@ fn handle_task(
         }
         TaskCommand::Show { task_ref } => print_task(json, &get_task(db_path, board, &task_ref)?)?,
         TaskCommand::Update(args) => {
-            let task = update_task(
+            let mut task = update_task(
                 db_path,
                 board,
                 actor,
@@ -568,6 +609,18 @@ fn handle_task(
                     expected_lock_version: args.expected_lock_version,
                 },
             )?;
+            if args.max_retries.is_some() || args.clear_max_retries {
+                task = set_task_retry_policy_by_id(
+                    db_path,
+                    actor,
+                    &task.id,
+                    if args.clear_max_retries {
+                        None
+                    } else {
+                        args.max_retries
+                    },
+                )?;
+            }
             print_task(json, &task)?;
         }
         TaskCommand::Promote { task_ref } => {
@@ -642,6 +695,56 @@ fn handle_task(
         )?,
     }
     Ok(())
+}
+
+fn handle_run(command: RunCommand, db_path: &PathBuf, json: bool) -> Result<()> {
+    match command {
+        RunCommand::Show { run_id } => {
+            let run = get_run_by_id_global(db_path, &run_id)?;
+            print_or_json(json, &run, || {
+                format!(
+                    "{} [{}] task={} exit={:?}",
+                    run.id, run.status, run.task_id, run.exit_code
+                )
+            })?;
+        }
+        RunCommand::Logs { run_id, tail_bytes } => {
+            let log = read_run_log(db_path, &run_id, tail_bytes)?;
+            print_or_json(json, &log, || log.content.clone())?;
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, serde::Serialize)]
+struct RunLogOutput {
+    run_id: String,
+    content: String,
+    truncated: bool,
+    tail_bytes: Option<usize>,
+}
+
+fn read_run_log(
+    db_path: &PathBuf,
+    run_id: &str,
+    tail_bytes: Option<usize>,
+) -> Result<RunLogOutput> {
+    const DEFAULT_MAX_RUN_LOG_BYTES: usize = 256 * 1024;
+    let run = get_run_by_id_global(db_path, run_id)?;
+    let path = run
+        .log_path
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("run log not found for {run_id}"))?;
+    let bytes = fs::read(path).with_context(|| format!("failed to read run log {}", path))?;
+    let limit = tail_bytes.unwrap_or(DEFAULT_MAX_RUN_LOG_BYTES);
+    let truncated = bytes.len() > limit;
+    let start = if truncated { bytes.len() - limit } else { 0 };
+    Ok(RunLogOutput {
+        run_id: run_id.to_owned(),
+        content: String::from_utf8_lossy(&bytes[start..]).into_owned(),
+        truncated,
+        tail_bytes,
+    })
 }
 
 fn handle_dep(

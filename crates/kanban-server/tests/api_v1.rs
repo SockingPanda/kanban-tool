@@ -1226,6 +1226,112 @@ async fn run_log_api_reads_dispatch_log_content_without_claim_token() {
 }
 
 #[tokio::test]
+async fn task_api_accepts_retry_policy_on_create_and_patch() {
+    let (_dir, db_path) = temp_db();
+    let app = build_router(AppState::new(db_path, "api-test"));
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/tasks",
+        json!({
+            "title":"retry via api",
+            "description":"ready spec",
+            "max_retries":2
+        }),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    let task_id = json["data"]["id"].as_str().unwrap();
+    assert_eq!(json["data"]["max_retries"], 2);
+
+    let (status, json) = patch_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{task_id}"),
+        json!({"max_retries":null}),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(json["data"]["max_retries"].is_null());
+
+    let (status, json) = patch_json(
+        app,
+        &format!("/api/v1/tasks/{task_id}"),
+        json!({"max_retries":1}),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["max_retries"], 1);
+}
+
+#[tokio::test]
+async fn stats_api_reports_stale_claims_and_blocked_reason_counts() {
+    let (_dir, db_path) = temp_db();
+    let stale = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("stale claim"),
+    )
+    .expect("stale task");
+    kanban_sqlite::claim_task(&db_path, "default", "worker", &stale.id, -1).expect("claim");
+    let blocked_a = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("blocked a"),
+    )
+    .expect("blocked a");
+    let blocked_b = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("blocked b"),
+    )
+    .expect("blocked b");
+    kanban_sqlite::block_task(
+        &db_path,
+        "default",
+        "seed",
+        &blocked_a.id,
+        "waiting on operator",
+        None,
+        true,
+    )
+    .expect("block a");
+    kanban_sqlite::block_task(
+        &db_path,
+        "default",
+        "seed",
+        &blocked_b.id,
+        "waiting on operator",
+        None,
+        true,
+    )
+    .expect("block b");
+    let app = build_router(AppState::new(db_path, "api-test"));
+
+    let (status, json) = get_json(app, "/api/v1/stats?board=default").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["stale_claims"][0]["task_id"], stale.id);
+    assert_eq!(
+        json["data"]["blocked_reasons"][0]["reason"],
+        "waiting on operator"
+    );
+    assert_eq!(json["data"]["blocked_reasons"][0]["count"], 2);
+    assert!(
+        json["data"]["status_counts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|count| count["status"] == "running" && count["count"] == 1)
+    );
+}
+
+#[tokio::test]
 async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() {
     let (_dir, db_path) = temp_db();
     let ready_task = kanban_sqlite::create_task(

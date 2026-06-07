@@ -260,6 +260,126 @@ fn dispatch_loop_uses_worker_profile_config_and_respects_assignee_routing() {
     assert_eq!(frontend_task["data"]["status"], "ready");
 }
 
+#[test]
+fn retry_policy_and_run_log_commands_support_operator_recovery() {
+    let temp = TempDb::new("retry_policy_and_run_log_commands_support_operator_recovery");
+    kb(&temp.path, &["init"]).success();
+    let created = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "retry policy",
+            "--description",
+            "ready spec",
+            "--max-retries",
+            "2",
+        ],
+    )
+    .success_json();
+    let task_id = created["data"]["id"].as_str().unwrap();
+    assert_eq!(created["data"]["max_retries"], 2);
+
+    let updated = kb(
+        &temp.path,
+        &["--json", "task", "update", task_id, "--clear-max-retries"],
+    )
+    .success_json();
+    assert!(updated["data"]["max_retries"].is_null());
+
+    let reset = kb(
+        &temp.path,
+        &["--json", "task", "update", task_id, "--max-retries", "1"],
+    )
+    .success_json();
+    assert_eq!(reset["data"]["max_retries"], 1);
+
+    let logs = temp.dir.join("logs");
+    let dispatch = kb(
+        &temp.path,
+        &[
+            "--json",
+            "dispatch",
+            "--once",
+            "--command",
+            "printf 'operator log\\n'",
+            "--log-dir",
+            logs.to_str().unwrap(),
+        ],
+    )
+    .success_json();
+    let run_id = dispatch["data"]["run_id"].as_str().unwrap();
+
+    let run = kb(&temp.path, &["--json", "run", "show", run_id]).success_json();
+    assert_eq!(run["data"]["id"], run_id);
+    assert!(run["data"].get("claim_token").is_some());
+
+    let log = kb(&temp.path, &["--json", "run", "logs", run_id]).success_json();
+    assert_eq!(log["data"]["run_id"], run_id);
+    assert_eq!(log["data"]["content"], "operator log\n");
+    assert_eq!(log["data"]["truncated"], false);
+}
+
+#[test]
+fn stats_command_reports_stale_claims_and_blocked_reasons() {
+    let temp = TempDb::new("stats_command_reports_stale_claims_and_blocked_reasons");
+    kb(&temp.path, &["init"]).success();
+    let stale = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "stale cli",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success_json();
+    let stale_id = stale["data"]["id"].as_str().unwrap();
+    kb(
+        &temp.path,
+        &["--json", "task", "claim", stale_id, "--ttl-ms", "1"],
+    )
+    .success_json();
+    let blocked = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "blocked cli",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success_json();
+    let blocked_id = blocked["data"]["id"].as_str().unwrap();
+    kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "block",
+            blocked_id,
+            "operator needed",
+            "--force",
+        ],
+    )
+    .success_json();
+    std::thread::sleep(std::time::Duration::from_millis(5));
+
+    let stats = kb(&temp.path, &["--json", "stats"]).success_json();
+
+    assert_eq!(stats["data"]["stale_claims"][0]["task_id"], stale_id);
+    assert_eq!(
+        stats["data"]["blocked_reasons"][0]["reason"],
+        "operator needed"
+    );
+    assert_eq!(stats["data"]["blocked_reasons"][0]["count"], 1);
+}
+
 fn kb(db_path: &Path, args: &[&str]) -> CmdResult {
     let output = Command::new(env!("CARGO_BIN_EXE_kb"))
         .arg("--db")

@@ -229,6 +229,7 @@ Request：
   "priority": 10,
   "scheduled_at": null,
   "due_at": null,
+  "max_retries": 2,
   "depends_on": ["t_01HX..."],
   "labels": ["core"],
   "metadata": {},
@@ -270,11 +271,14 @@ PATCH /api/v1/tasks/{task_id}
   "priority": 20,
   "scheduled_at": 1717520000000,
   "due_at": 1717600000000,
+  "max_retries": 2,
   "metadata": {},
   "actor": "alice",
   "expected_lock_version": 7
 }
 ```
+
+`max_retries: null` 清空 retry policy。
 
 禁止字段：
 
@@ -605,9 +609,55 @@ Notes：
 
 ---
 
-## 9. Events
+## 9. Stats
 
-### 9.1 List events
+### 9.1 Queue stats
+
+```http
+GET /api/v1/stats?board=default
+```
+
+Response：
+
+```json
+{
+  "data": {
+    "board_id": "b_01HX...",
+    "generated_at": 1717520000000,
+    "status_counts": [
+      {"status": "ready", "count": 3},
+      {"status": "running", "count": 1}
+    ],
+    "stale_claims": [
+      {
+        "task_id": "t_01HX...",
+        "seq": 12,
+        "title": "stale worker",
+        "claim_owner": "dispatcher",
+        "claim_expires_at": 1717520000000,
+        "last_heartbeat_at": 1717519900000,
+        "current_run_id": "r_01HX...",
+        "retry_count": 1,
+        "max_retries": 3
+      }
+    ],
+    "blocked_reasons": [
+      {"reason": "waiting on operator", "count": 2}
+    ]
+  }
+}
+```
+
+Notes：
+
+- `stale_claims` 只包含 `running` 且 `claim_expires_at <= now` 的任务。
+- `blocked_reasons` 按数量降序、reason 升序排序。
+
+---
+
+## 10. Events
+
+### 10.1 List events
 
 ```http
 GET /api/v1/events?board=default&after=0&limit=100
@@ -635,7 +685,7 @@ Response：
 }
 ```
 
-### 9.2 SSE stream
+### 10.2 SSE stream
 
 ```http
 GET /api/v1/stream/events?board=default&after=123
@@ -657,15 +707,15 @@ Reconnect：
 
 ---
 
-## 10. Columns / UI Settings
+## 11. Columns / UI Settings
 
-### 10.1 List columns
+### 11.1 List columns
 
 ```http
 GET /api/v1/boards/{board}/columns
 ```
 
-### 10.2 Update columns
+### 11.2 Update columns
 
 ```http
 PATCH /api/v1/boards/{board}/columns
@@ -686,7 +736,7 @@ MVP 不允许 column 改变 canonical status。
 
 ---
 
-## 11. Labels
+## 12. Labels
 
 ```http
 GET /api/v1/boards/{board}/labels
@@ -697,27 +747,27 @@ DELETE /api/v1/tasks/{task_id}/labels/{label_id}
 
 ---
 
-## 12. Maintenance
+## 13. Maintenance
 
-### 12.1 Doctor
+### 13.1 Doctor
 
 ```http
 POST /api/v1/maintenance/doctor
 ```
 
-### 12.2 Checkpoint
+### 13.2 Checkpoint
 
 ```http
 POST /api/v1/maintenance/checkpoint
 ```
 
-### 12.3 Backup
+### 13.3 Backup
 
 MVP 建议只提供 CLI backup，不开放 HTTP backup。
 
 ---
 
-## 13. Web UI Interaction Rules
+## 14. Web UI Interaction Rules
 
 1. 拖拽列时调用 transition endpoint。
 2. 普通字段编辑调用 `PATCH /tasks/{id}`。

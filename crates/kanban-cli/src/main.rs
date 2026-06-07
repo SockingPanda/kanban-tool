@@ -11,14 +11,14 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_core::TaskStatus;
 use kanban_search::SearchQuery;
 use kanban_sqlite::{
-    CreateTask, DispatchOptions, FinishPolicy, TaskListOptions, TaskListSort, TaskPatch,
-    add_dependency, archive_task, backup_database, begin_database_replace, begin_database_runtime,
-    block_task, checkpoint_database, claim_task, complete_task, create_task, dispatch_once,
-    export_jsonl, get_run_by_id_global, get_task, heartbeat_task, import_jsonl, init_database,
-    list_dependencies, list_events, list_runs, list_tasks, list_tasks_page, promote_task,
-    queue_stats, rebuild_search_index, reclaim_expired, remove_dependency, search_index_status,
-    search_tasks, set_task_retry_policy_by_id, submit_review_task, unblock_task, update_task,
-    vacuum_database,
+    CreateTask, DispatchOptions, FinishPolicy, MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT,
+    TaskListOptions, TaskListSort, TaskPatch, add_dependency, archive_task, backup_database,
+    begin_database_replace, begin_database_runtime, block_task, checkpoint_database, claim_task,
+    complete_task, create_task, dispatch_once, export_jsonl, get_run_by_id_global, get_task,
+    heartbeat_task, import_jsonl, init_database, list_dependencies, list_events, list_runs,
+    list_tasks, list_tasks_page, promote_task, queue_stats, rebuild_search_index, reclaim_expired,
+    remove_dependency, search_index_status, search_tasks, set_task_retry_policy_by_id,
+    submit_review_task, unblock_task, update_task, vacuum_database,
 };
 
 #[derive(Debug, Parser)]
@@ -841,6 +841,11 @@ fn handle_task(
             print_task(json, &task)?;
         }
         TaskCommand::List(args) => {
+            validate_page_bounds(
+                args.limit.unwrap_or(100),
+                MAX_TASK_LIST_LIMIT,
+                args.offset.unwrap_or(0),
+            )?;
             let statuses = args
                 .status
                 .iter()
@@ -1039,6 +1044,7 @@ fn read_run_log(
 }
 
 fn handle_search(args: SearchArgs, db_path: &PathBuf, board: &str, json: bool) -> Result<()> {
+    validate_page_bounds(args.limit, MAX_SEARCH_LIMIT, args.offset)?;
     let statuses = args
         .status
         .iter()
@@ -1082,6 +1088,16 @@ fn handle_search(args: SearchArgs, db_path: &PathBuf, board: &str, json: bool) -
             .collect::<Vec<_>>()
             .join("\n")
     })
+}
+
+fn validate_page_bounds(limit: usize, max_limit: usize, offset: usize) -> Result<()> {
+    if limit > max_limit {
+        bail!("limit must be <= {max_limit}");
+    }
+    if offset > i64::MAX as usize {
+        bail!("offset must be <= {}", i64::MAX);
+    }
+    Ok(())
 }
 
 fn handle_index(command: IndexCommand, db_path: &PathBuf, board: &str, json: bool) -> Result<()> {

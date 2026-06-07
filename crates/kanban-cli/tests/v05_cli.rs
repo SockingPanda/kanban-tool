@@ -483,6 +483,63 @@ fn search_command_outputs_json_and_human_hits() {
 }
 
 #[test]
+fn search_command_rejects_unbounded_limit() {
+    let temp = TempDb::new("search_command_rejects_unbounded_limit");
+    kb(&temp.path, &["init"]).success();
+
+    kb(
+        &temp.path,
+        &["search", "needle", "--limit", &usize::MAX.to_string()],
+    )
+    .failure_containing("limit must be <= 1000");
+}
+
+#[test]
+fn task_list_command_rejects_unbounded_limit() {
+    let temp = TempDb::new("task_list_command_rejects_unbounded_limit");
+    kb(&temp.path, &["init"]).success();
+
+    kb(
+        &temp.path,
+        &["task", "list", "--limit", &usize::MAX.to_string()],
+    )
+    .failure_containing("limit must be <= 1000");
+}
+
+#[test]
+fn search_command_treats_like_wildcards_as_literal_text() {
+    let temp = TempDb::new("search_command_treats_like_wildcards_as_literal_text");
+    kb(&temp.path, &["init"]).success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "literal percent % cli",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "plain cli control",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success();
+
+    let json = kb(&temp.path, &["--json", "search", "%"]).success_json();
+    let hits = json["data"]["hits"].as_array().unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0]["task"]["title"], "literal percent % cli");
+}
+
+#[test]
 fn index_commands_report_sqlite_fallback_backend() {
     let temp = TempDb::new("index_commands_report_sqlite_fallback_backend");
     kb(&temp.path, &["init"]).success();

@@ -1072,8 +1072,20 @@ pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<Search
         let indexed_last_event_id = state.as_ref().and_then(|state| state.last_event_id);
         let index_path = task_index_path(path_ref);
         if kanban_search::tantivy_backend::task_index_exists(&index_path) {
+            let metadata =
+                match kanban_search::tantivy_backend::validate_task_index(&index_path, &board_id) {
+                    Ok(metadata) => metadata,
+                    Err(err) if err.is_fallback_eligible() => {
+                        return sqlite_search_tasks(path_ref, query, true, indexed_last_event_id);
+                    }
+                    Err(err) => return Err(search_storage(err)),
+                };
+            let validated_indexed_last_event_id = indexed_last_event_id.or(metadata.last_event_id);
+            if search_index_ahead(last_event_id, validated_indexed_last_event_id) {
+                return sqlite_search_tasks(path_ref, query, true, validated_indexed_last_event_id);
+            }
             if tantivy_literal_sqlite_fallback_required(&query) {
-                return sqlite_search_tasks(path_ref, query, true, indexed_last_event_id);
+                return sqlite_search_tasks(path_ref, query, true, validated_indexed_last_event_id);
             }
             match kanban_search::tantivy_backend::search_task_index(
                 &index_path,
@@ -1084,6 +1096,9 @@ pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<Search
                 Ok(results) => {
                     let indexed = indexed_last_event_id.or(results.1.last_event_id);
                     let lag = search_lag(last_event_id, indexed);
+                    if search_index_ahead(last_event_id, indexed) {
+                        return sqlite_search_tasks(path_ref, query, true, indexed);
+                    }
                     if state.as_ref().is_some_and(|state| state.dirty) || lag > 0 || results.1.stale
                     {
                         return sqlite_search_tasks(path_ref, query, true, indexed);
@@ -1099,7 +1114,12 @@ pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<Search
                     });
                 }
                 Err(err) if err.is_fallback_eligible() => {
-                    return sqlite_search_tasks(path_ref, query, true, indexed_last_event_id);
+                    return sqlite_search_tasks(
+                        path_ref,
+                        query,
+                        true,
+                        validated_indexed_last_event_id,
+                    );
                 }
                 Err(err) => return Err(search_storage(err)),
             }
@@ -1221,6 +1241,14 @@ pub fn search_index_status(path: impl AsRef<Path>, board: &str) -> Result<Search
             let indexed = indexed_last_event_id.or(metadata.last_event_id);
             let lag = search_lag(last_event_id, indexed);
             let dirty = state.as_ref().is_some_and(|state| state.dirty);
+            if search_index_ahead(last_event_id, indexed) {
+                return Ok(search_index_ahead_status(
+                    last_event_id,
+                    indexed,
+                    &index_path,
+                    Some(metadata.index_version),
+                ));
+            }
             return Ok(SearchIndexStatus {
                 backend: "tantivy".to_owned(),
                 derived_index: true,
@@ -1309,6 +1337,9 @@ pub fn sync_search_index(path: impl AsRef<Path>, board: &str) -> Result<SearchIn
             .and_then(|state| state.last_event_id)
             .or(metadata.last_event_id);
         let current_last_event_id = current_last_event_id(&conn, &board_id)?;
+        if search_index_ahead(current_last_event_id, indexed_last_event_id) {
+            return rebuild_search_index(path_ref, board);
+        }
         let lag = search_lag(current_last_event_id, indexed_last_event_id);
         if lag == 0 && state.as_ref().is_some_and(|state| !state.dirty) {
             return search_index_status(path_ref, board);
@@ -1390,6 +1421,29 @@ fn degraded_search_index_status(
             index_path.display(),
             err.kind(),
             err
+        ),
+    }
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn search_index_ahead_status(
+    current_last_event_id: Option<i64>,
+    indexed_last_event_id: Option<i64>,
+    index_path: &Path,
+    index_version: Option<String>,
+) -> SearchIndexStatus {
+    SearchIndexStatus {
+        backend: "sqlite".to_owned(),
+        derived_index: true,
+        stale: true,
+        index_version,
+        last_event_id: indexed_last_event_id,
+        index_lag_events: Some(search_lag(current_last_event_id, indexed_last_event_id)),
+        message: format!(
+            "Tantivy task index at {} is ahead of the database (indexed last_event_id {:?}, current last_event_id {:?}); SQLite fallback search is active until rebuild",
+            index_path.display(),
+            indexed_last_event_id,
+            current_last_event_id
         ),
     }
 }
@@ -4088,10 +4142,21 @@ fn write_search_index_state(conn: &Connection, state: &SearchIndexState) -> Resu
 
 fn search_lag(current_last_event_id: Option<i64>, indexed_last_event_id: Option<i64>) -> i64 {
     match (current_last_event_id, indexed_last_event_id) {
-        (Some(current), Some(indexed)) => current.saturating_sub(indexed),
+        (Some(current), Some(indexed)) => current.abs_diff(indexed).try_into().unwrap_or(i64::MAX),
         (Some(current), None) => current,
         _ => 0,
     }
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn search_index_ahead(
+    current_last_event_id: Option<i64>,
+    indexed_last_event_id: Option<i64>,
+) -> bool {
+    matches!(
+        (current_last_event_id, indexed_last_event_id),
+        (Some(current), Some(indexed)) if indexed > current
+    )
 }
 
 #[cfg(feature = "tantivy-backend")]

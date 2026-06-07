@@ -13,6 +13,7 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
+  checksum TEXT NOT NULL DEFAULT '',
   applied_at INTEGER NOT NULL
 );
 
@@ -233,7 +234,7 @@ CREATE INDEX IF NOT EXISTS idx_events_kind_created
 CREATE INDEX IF NOT EXISTS idx_task_labels_label
   ON task_labels(label_id, task_id);
 
-INSERT OR IGNORE INTO schema_migrations(version, name, applied_at)
-VALUES (1, '001_initial', CAST(strftime('%s','now') AS INTEGER) * 1000);
+INSERT OR IGNORE INTO schema_migrations(version, name, checksum, applied_at)
+VALUES (1, '001_initial', '', CAST(strftime('%s','now') AS INTEGER) * 1000);
 
 COMMIT;

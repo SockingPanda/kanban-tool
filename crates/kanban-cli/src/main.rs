@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, path::PathBuf};
+use std::{fs, net::SocketAddr, path::PathBuf, thread, time::Duration};
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -193,6 +193,12 @@ enum DepCommand {
 struct DispatchArgs {
     #[arg(long)]
     once: bool,
+    #[arg(long)]
+    profile_config: Option<PathBuf>,
+    #[arg(long, default_value_t = 1_000)]
+    poll_interval_ms: u64,
+    #[arg(long)]
+    max_iterations: Option<usize>,
     #[arg(long, default_value = "sh -c 'true'")]
     command: String,
     #[arg(long, default_value = "default")]
@@ -238,6 +244,23 @@ impl From<PolicyArg> for FinishPolicy {
     }
 }
 
+#[derive(Debug, serde::Serialize)]
+struct DispatchLoopSummary {
+    iterations: usize,
+    claimed: usize,
+    runs: Vec<kanban_sqlite::DispatchResult>,
+}
+
+#[derive(Debug, Clone)]
+struct WorkerProfileConfig {
+    command: Option<String>,
+    claim_ttl_ms: Option<i64>,
+    heartbeat_interval_ms: Option<i64>,
+    on_success: Option<FinishPolicy>,
+    on_failure: Option<FinishPolicy>,
+    log_dir: Option<PathBuf>,
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let db_path = cli.db.clone().unwrap_or_else(default_db_path);
@@ -281,32 +304,30 @@ fn main() -> Result<()> {
             })?;
         }
         Command::Dispatch(args) => {
-            if !args.once {
-                bail!("v0.5 supports dispatch --once; run it from a scheduler/loop for now");
+            let options = dispatch_options(&args, actor.clone())?;
+            if args.once {
+                let result = dispatch_once(&db_path, &cli.board, options)?;
+                print_or_json(cli.json, &result, || {
+                    format!(
+                        "claimed={} task={:?} exit={:?}",
+                        result.claimed, result.task_id, result.exit_code
+                    )
+                })?;
+            } else {
+                let summary = dispatch_loop(
+                    &db_path,
+                    &cli.board,
+                    options,
+                    args.poll_interval_ms,
+                    args.max_iterations,
+                )?;
+                print_or_json(cli.json, &summary, || {
+                    format!(
+                        "iterations={} claimed={}",
+                        summary.iterations, summary.claimed
+                    )
+                })?;
             }
-            let log_dir = args
-                .log_dir
-                .unwrap_or_else(|| default_log_dir().join("runs"));
-            let result = dispatch_once(
-                &db_path,
-                &cli.board,
-                DispatchOptions {
-                    actor,
-                    command: args.command,
-                    worker_profile: args.worker_profile,
-                    claim_ttl_ms: args.claim_ttl_ms,
-                    heartbeat_interval_ms: args.heartbeat_interval_ms,
-                    on_success: args.on_success.into(),
-                    on_failure: args.on_failure.into(),
-                    log_dir,
-                },
-            )?;
-            print_or_json(cli.json, &result, || {
-                format!(
-                    "claimed={} task={:?} exit={:?}",
-                    result.claimed, result.task_id, result.exit_code
-                )
-            })?;
         }
         Command::Serve(args) => serve(args, db_path, actor)?,
         Command::Doctor => {
@@ -345,6 +366,147 @@ fn serve(args: ServeArgs, db_path: PathBuf, actor: String) -> Result<()> {
             kanban_server::AppState::new(db_path, actor),
         ))
         .context("kb server failed")
+}
+
+fn dispatch_options(args: &DispatchArgs, actor: String) -> Result<DispatchOptions> {
+    let profile = args
+        .profile_config
+        .as_ref()
+        .map(|path| load_worker_profile(path, &args.worker_profile))
+        .transpose()?;
+    let log_dir = profile
+        .as_ref()
+        .and_then(|profile| profile.log_dir.clone())
+        .or_else(|| args.log_dir.clone())
+        .unwrap_or_else(|| default_log_dir().join("runs"));
+    Ok(DispatchOptions {
+        actor,
+        command: profile
+            .as_ref()
+            .and_then(|profile| profile.command.clone())
+            .unwrap_or_else(|| args.command.clone()),
+        worker_profile: args.worker_profile.clone(),
+        claim_ttl_ms: profile
+            .as_ref()
+            .and_then(|profile| profile.claim_ttl_ms)
+            .unwrap_or(args.claim_ttl_ms),
+        heartbeat_interval_ms: profile
+            .as_ref()
+            .and_then(|profile| profile.heartbeat_interval_ms)
+            .unwrap_or(args.heartbeat_interval_ms),
+        on_success: profile
+            .as_ref()
+            .and_then(|profile| profile.on_success)
+            .unwrap_or_else(|| args.on_success.into()),
+        on_failure: profile
+            .as_ref()
+            .and_then(|profile| profile.on_failure)
+            .unwrap_or_else(|| args.on_failure.into()),
+        log_dir,
+    })
+}
+
+fn dispatch_loop(
+    db_path: &PathBuf,
+    board: &str,
+    options: DispatchOptions,
+    poll_interval_ms: u64,
+    max_iterations: Option<usize>,
+) -> Result<DispatchLoopSummary> {
+    let mut iterations = 0;
+    let mut claimed = 0;
+    let mut runs = Vec::new();
+    loop {
+        iterations += 1;
+        let result = dispatch_once(db_path, board, options.clone())?;
+        claimed += result.claimed;
+        runs.push(result);
+        if max_iterations.is_some_and(|max| iterations >= max) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(poll_interval_ms));
+    }
+    Ok(DispatchLoopSummary {
+        iterations,
+        claimed,
+        runs,
+    })
+}
+
+fn load_worker_profile(path: &PathBuf, profile_name: &str) -> Result<WorkerProfileConfig> {
+    let text = fs::read_to_string(path)
+        .with_context(|| format!("failed to read worker profile config {}", path.display()))?;
+    let mut active = false;
+    let mut found = false;
+    let mut profile = WorkerProfileConfig {
+        command: None,
+        claim_ttl_ms: None,
+        heartbeat_interval_ms: None,
+        on_success: None,
+        on_failure: None,
+        log_dir: None,
+    };
+    let section = format!("workers.{profile_name}");
+    for raw_line in text.lines() {
+        let line = raw_line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(name) = line
+            .strip_prefix('[')
+            .and_then(|line| line.strip_suffix(']'))
+        {
+            active = name.trim() == section;
+            found |= active;
+            continue;
+        }
+        if !active {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            bail!("invalid worker profile line: {raw_line}");
+        };
+        let key = key.trim();
+        let value = unquote(value.trim());
+        match key {
+            "command" => profile.command = Some(value.to_owned()),
+            "claim_ttl_ms" => profile.claim_ttl_ms = Some(value.parse()?),
+            "heartbeat_interval_ms" => profile.heartbeat_interval_ms = Some(value.parse()?),
+            "on_success" => profile.on_success = Some(parse_finish_policy(value)?),
+            "on_failure" => profile.on_failure = Some(parse_finish_policy(value)?),
+            "log_dir" => profile.log_dir = Some(PathBuf::from(value)),
+            _ => bail!("unsupported worker profile key: {key}"),
+        }
+    }
+    if !found {
+        bail!(
+            "worker profile {profile_name} not found in {}",
+            path.display()
+        );
+    }
+    Ok(profile)
+}
+
+fn unquote(value: &str) -> &str {
+    value
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .or_else(|| {
+            value
+                .strip_prefix('\'')
+                .and_then(|value| value.strip_suffix('\''))
+        })
+        .unwrap_or(value)
+}
+
+fn parse_finish_policy(value: &str) -> Result<FinishPolicy> {
+    match value {
+        "done" => Ok(FinishPolicy::Done),
+        "review" => Ok(FinishPolicy::Review),
+        "blocked" => Ok(FinishPolicy::Blocked),
+        "ready" => Ok(FinishPolicy::Ready),
+        _ => bail!("unsupported finish policy: {value}"),
+    }
 }
 
 fn handle_task(

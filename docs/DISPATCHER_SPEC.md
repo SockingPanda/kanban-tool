@@ -43,9 +43,10 @@ kb dispatch --once
 
 ```bash
 kb dispatch
+kb dispatch --max-iterations 10
 ```
 
-循环执行。
+前台循环执行。`--max-iterations` 用于测试、脚本或受控 smoke；不传时持续运行直到进程收到外部停止信号。
 
 ### 2.3 与 server 同进程
 
@@ -53,7 +54,34 @@ kb dispatch
 kb serve --dispatcher
 ```
 
-适合日常 Web UI。
+后续扩展。当前实现先提供独立 `kb dispatch` 前台 loop。
+
+### 2.4 Worker profile config
+
+```bash
+kb dispatch --worker-profile backend --profile-config ./workers.toml
+```
+
+最小配置格式：
+
+```toml
+[workers.backend]
+command = "cargo test -p backend"
+claim_ttl_ms = 300000
+heartbeat_interval_ms = 30000
+on_success = "done"
+on_failure = "blocked"
+log_dir = ".kb/logs/runs"
+```
+
+当前 CLI 只读取被 `--worker-profile` 选中的 section。支持字段：
+
+- `command`
+- `claim_ttl_ms`
+- `heartbeat_interval_ms`
+- `on_success`: `done|review|blocked|ready`
+- `on_failure`: `done|review|blocked|ready`
+- `log_dir`
 
 ---
 

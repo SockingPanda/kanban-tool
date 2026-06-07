@@ -46,6 +46,7 @@
 | [`docs/ADR.md`](docs/ADR.md) | 关键架构决策记录 |
 | [`docs/V0.5.md`](docs/V0.5.md) | V0.5 已实现范围、验证记录与暂未包含项 |
 | [`docs/V1.md`](docs/V1.md) | V1 Local Web API 已实现范围、`kb serve`、SSE 行为与 smoke 流程 |
+| [`docs/V0.6.md`](docs/V0.6.md) | V0.6 invariant hardening：reclaim、migration、query、doctor |
 | [`migrations/001_initial.sql`](migrations/001_initial.sql) | SQLite 初始 schema |
 
 ## 推荐仓库结构

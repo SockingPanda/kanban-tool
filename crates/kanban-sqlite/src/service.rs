@@ -10,7 +10,7 @@ use kanban_core::{
     Clock, KanbanError, Result, SystemClock, TaskStatus, new_event_id, new_run_id, new_task_id,
     new_typed_id,
 };
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter, types::Value};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -175,6 +175,44 @@ pub struct DispatchResult {
     pub task_id: Option<String>,
     pub run_id: Option<String>,
     pub exit_code: Option<i32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskListSort {
+    Position,
+    PositionDesc,
+    Priority,
+    PriorityDesc,
+    CreatedAt,
+    CreatedAtDesc,
+    UpdatedAt,
+    UpdatedAtDesc,
+    DueAt,
+    DueAtDesc,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskListOptions {
+    pub statuses: Vec<TaskStatus>,
+    pub include_archived: bool,
+    pub assignee: Option<String>,
+    pub search: Option<String>,
+    pub sort: TaskListSort,
+    pub limit: usize,
+    pub offset: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskListPage {
+    pub tasks: Vec<TaskRecord>,
+    pub total: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventListOptions {
+    pub task_ref: Option<String>,
+    pub after: i64,
+    pub limit: usize,
 }
 
 pub fn list_boards(path: impl AsRef<Path>) -> Result<Vec<BoardRecord>> {
@@ -423,6 +461,41 @@ pub fn list_tasks(
         tasks.retain(|t| statuses.contains(&t.status));
     }
     Ok(tasks)
+}
+
+pub fn list_tasks_page(
+    path: impl AsRef<Path>,
+    board: &str,
+    options: TaskListOptions,
+) -> Result<TaskListPage> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    let (where_sql, params) = task_query_where(&board_id, &options);
+    let total_sql = format!("SELECT COUNT(*) FROM tasks {where_sql}");
+    let total: i64 = conn
+        .query_row(&total_sql, params_from_iter(params.iter()), |row| {
+            row.get(0)
+        })
+        .map_err(storage)?;
+
+    let mut page_params = params;
+    page_params.push(Value::Integer(options.limit as i64));
+    page_params.push(Value::Integer(options.offset as i64));
+    let sql = format!(
+        "SELECT {TASK_COLUMNS} FROM tasks {where_sql} ORDER BY {} LIMIT ? OFFSET ?",
+        task_order_by(options.sort)
+    );
+    let mut stmt = conn.prepare(&sql).map_err(storage)?;
+    let rows = stmt
+        .query_map(params_from_iter(page_params.iter()), task_from_row)
+        .map_err(storage)?;
+    let tasks = rows
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)?;
+    Ok(TaskListPage {
+        tasks,
+        total: total as usize,
+    })
 }
 
 pub fn get_task(path: impl AsRef<Path>, board: &str, task_ref: &str) -> Result<TaskRecord> {
@@ -1348,6 +1421,36 @@ pub fn list_events(
     Ok(out)
 }
 
+pub fn list_events_after(
+    path: impl AsRef<Path>,
+    board: &str,
+    options: EventListOptions,
+) -> Result<Vec<EventRecord>> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    let task_id = options
+        .task_ref
+        .as_deref()
+        .map(|r| resolve_task(&conn, &board_id, r).map(|t| t.id))
+        .transpose()?;
+    let mut params = vec![Value::Text(board_id), Value::Integer(options.after)];
+    let mut where_sql = "WHERE board_id=? AND id>?".to_owned();
+    if let Some(task_id) = task_id {
+        where_sql.push_str(" AND task_id=?");
+        params.push(Value::Text(task_id));
+    }
+    params.push(Value::Integer(options.limit as i64));
+    let sql = format!(
+        "SELECT id,event_id,task_id,run_id,kind,actor,payload_json,created_at FROM task_events {where_sql} ORDER BY id ASC LIMIT ?"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(storage)?;
+    let rows = stmt
+        .query_map(params_from_iter(params.iter()), event_from_row)
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
 pub fn list_runs(
     path: impl AsRef<Path>,
     board: &str,
@@ -2020,15 +2123,86 @@ fn has_path(conn: &Connection, start: &str, goal: &str) -> Result<bool> {
     Ok(count > 0)
 }
 
+const TASK_COLUMNS: &str = "id,board_id,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,result_json,metadata_json,lock_version";
+
+fn task_query_where(board_id: &str, options: &TaskListOptions) -> (String, Vec<Value>) {
+    let mut clauses = vec!["WHERE board_id=?".to_owned()];
+    let mut params = vec![Value::Text(board_id.to_owned())];
+    if !options.include_archived {
+        clauses.push("status != 'archived'".to_owned());
+    }
+    if !options.statuses.is_empty() {
+        let placeholders = std::iter::repeat_n("?", options.statuses.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        clauses.push(format!("status IN ({placeholders})"));
+        params.extend(
+            options
+                .statuses
+                .iter()
+                .map(|status| Value::Text(status.as_str().to_owned())),
+        );
+    }
+    if let Some(assignee) = options
+        .assignee
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        clauses.push("assignee=?".to_owned());
+        params.push(Value::Text(assignee.to_owned()));
+    }
+    if let Some(search) = options
+        .search
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let needle = format!("%{}%", search.to_lowercase());
+        clauses.push("(lower(title) LIKE ? OR lower(COALESCE(description, '')) LIKE ?)".to_owned());
+        params.push(Value::Text(needle.clone()));
+        params.push(Value::Text(needle));
+    }
+    (clauses.join(" AND "), params)
+}
+
+fn task_order_by(sort: TaskListSort) -> &'static str {
+    match sort {
+        TaskListSort::Position => "position ASC, created_at ASC, seq ASC",
+        TaskListSort::PositionDesc => "position DESC, created_at DESC, seq DESC",
+        TaskListSort::Priority => "priority ASC, created_at ASC, seq ASC",
+        TaskListSort::PriorityDesc => "priority DESC, created_at DESC, seq DESC",
+        TaskListSort::CreatedAt => "created_at ASC, seq ASC",
+        TaskListSort::CreatedAtDesc => "created_at DESC, seq DESC",
+        TaskListSort::UpdatedAt => "updated_at ASC, seq ASC",
+        TaskListSort::UpdatedAtDesc => "updated_at DESC, seq DESC",
+        TaskListSort::DueAt => "COALESCE(due_at, 9223372036854775807) ASC, created_at ASC, seq ASC",
+        TaskListSort::DueAtDesc => {
+            "COALESCE(due_at, -9223372036854775808) DESC, created_at DESC, seq DESC"
+        }
+    }
+}
+
 fn query_tasks(conn: &Connection, board_id: &str) -> Result<Vec<TaskRecord>> {
-    let mut stmt = conn.prepare("SELECT id,board_id,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,result_json,metadata_json,lock_version FROM tasks WHERE board_id=?1 ORDER BY CASE status WHEN 'triage' THEN 10 WHEN 'todo' THEN 20 WHEN 'scheduled' THEN 30 WHEN 'ready' THEN 40 WHEN 'running' THEN 50 WHEN 'blocked' THEN 60 WHEN 'review' THEN 70 WHEN 'done' THEN 80 ELSE 90 END, position ASC, priority DESC, created_at ASC").map_err(storage)?;
+    let mut stmt = conn
+        .prepare(&format!(
+            "SELECT {TASK_COLUMNS} FROM tasks WHERE board_id=?1 ORDER BY CASE status WHEN 'triage' THEN 10 WHEN 'todo' THEN 20 WHEN 'scheduled' THEN 30 WHEN 'ready' THEN 40 WHEN 'running' THEN 50 WHEN 'blocked' THEN 60 WHEN 'review' THEN 70 WHEN 'done' THEN 80 ELSE 90 END, position ASC, priority DESC, created_at ASC"
+        ))
+        .map_err(storage)?;
     let rows = stmt.query_map([board_id], task_from_row).map_err(storage)?;
     rows.collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)
 }
 
 fn get_task_by_id(conn: &Connection, board_id: &str, task_id: &str) -> Result<TaskRecord> {
-    conn.query_row("SELECT id,board_id,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,result_json,metadata_json,lock_version FROM tasks WHERE board_id=?1 AND id=?2", params![board_id, task_id], task_from_row).optional().map_err(storage)?.ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
+    conn.query_row(
+        &format!("SELECT {TASK_COLUMNS} FROM tasks WHERE board_id=?1 AND id=?2"),
+        params![board_id, task_id],
+        task_from_row,
+    )
+    .optional()
+    .map_err(storage)?
+    .ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
 }
 
 fn resolve_task(conn: &Connection, board_id: &str, task_ref: &str) -> Result<TaskRecord> {

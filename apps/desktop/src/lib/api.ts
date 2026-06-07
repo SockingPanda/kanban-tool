@@ -77,6 +77,34 @@ export type EventRecord = {
   created_at: number
 }
 
+export type BoardColumn = {
+  id: string
+  board_id: string
+  status: TaskStatus
+  title: string
+  position: number
+  hidden: boolean
+  wip_limit: number | null
+  created_at: number
+  updated_at: number
+}
+
+export type CommentRecord = {
+  id: string
+  board_id: string
+  task_id: string
+  author: string
+  body: string
+  kind: "text" | "system" | "worker"
+  created_at: number
+}
+
+export type RunLog = {
+  run_id: string
+  content: string
+  truncated: boolean
+}
+
 export type Dependencies = {
   parents: Task[]
   children: Task[]
@@ -132,11 +160,16 @@ export class KanbanApi {
     return this.request<{ ok: boolean; db: string; version: string }>("/health")
   }
 
-  async listTasks(search = "") {
+  async listBoardColumns() {
+    return this.request<BoardColumn[]>(`/api/v1/boards/${this.board}/columns`)
+  }
+
+  async listTasks(options: { search?: string; includeArchived?: boolean; statuses?: TaskStatus[] } = {}) {
     const params = new URLSearchParams()
-    params.set("include_archived", "true")
+    params.set("include_archived", String(options.includeArchived ?? false))
     params.set("sort", "-updated_at")
-    if (search.trim()) params.set("q", search.trim())
+    for (const status of options.statuses ?? []) params.append("status", status)
+    if (options.search?.trim()) params.set("q", options.search.trim())
     return this.request<Task[]>(`/api/v1/boards/${this.board}/tasks?${params.toString()}`)
   }
 
@@ -180,8 +213,28 @@ export class KanbanApi {
     return this.request<Run[]>(`/api/v1/tasks/${taskId}/runs`)
   }
 
+  async getRunLog(runId: string) {
+    return this.request<RunLog>(`/api/v1/runs/${runId}/log`)
+  }
+
+  async listComments(taskId: string) {
+    return this.request<CommentRecord[]>(`/api/v1/tasks/${taskId}/comments`)
+  }
+
+  async createComment(taskId: string, body: string) {
+    return this.request<CommentRecord>(`/api/v1/tasks/${taskId}/comments`, {
+      method: "POST",
+      body: { author: this.actor, body },
+    })
+  }
+
   async listEvents(taskId: string) {
     const params = new URLSearchParams({ board: this.board, task_id: taskId, limit: "50" })
+    return this.request<EventRecord[]>(`/api/v1/events?${params.toString()}`)
+  }
+
+  async listEventsAfter(after: number) {
+    const params = new URLSearchParams({ board: this.board, after: String(after), limit: "100" })
     return this.request<EventRecord[]>(`/api/v1/events?${params.toString()}`)
   }
 

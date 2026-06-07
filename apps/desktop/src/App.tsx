@@ -6,18 +6,22 @@ import {
   CircleDot,
   Command,
   Database,
+  FileText,
   GitBranch,
   HeartPulse,
   Inbox,
   ListChecks,
   Loader2,
+  MessageSquare,
   PauseCircle,
   Play,
   Plus,
   RefreshCcw,
+  Save,
   Search,
   Settings,
   ShieldAlert,
+  SlidersHorizontal,
   SquareKanban,
   TerminalSquare,
   XCircle,
@@ -30,11 +34,14 @@ import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import {
   ApiError,
+  BoardColumn as ApiBoardColumn,
   ClaimResponse,
+  CommentRecord,
   Dependencies,
   EventRecord,
   KanbanApi,
   Run,
+  RunLog,
   RuntimeConfig,
   Task,
   TaskStatus,
@@ -49,13 +56,38 @@ import {
 } from "@/lib/action-policy"
 import { cn, formatRelativeTime, shortId } from "@/lib/utils"
 
-const columns: Array<{ id: TaskStatus; title: string; hint: string }> = [
-  { id: "triage", title: "Triage", hint: "needs spec" },
-  { id: "ready", title: "Ready", hint: "claimable" },
-  { id: "running", title: "Running", hint: "active runs" },
-  { id: "review", title: "Review", hint: "manual check" },
-  { id: "blocked", title: "Blocked", hint: "needs input" },
-  { id: "done", title: "Done", hint: "finished" },
+const fallbackColumns: ApiBoardColumn[] = [
+  boardColumn("triage", "Triage", 10),
+  boardColumn("todo", "Todo", 20),
+  boardColumn("scheduled", "Scheduled", 30),
+  boardColumn("ready", "Ready", 40),
+  boardColumn("running", "Running", 50),
+  boardColumn("blocked", "Blocked", 60),
+  boardColumn("review", "Review", 70),
+  boardColumn("done", "Done", 80),
+]
+
+const columnHints: Record<TaskStatus, string> = {
+  triage: "needs spec",
+  todo: "waiting deps",
+  scheduled: "future work",
+  ready: "claimable",
+  running: "active runs",
+  blocked: "needs input",
+  review: "manual check",
+  done: "finished",
+  archived: "hidden",
+}
+
+const filterStatuses: TaskStatus[] = [
+  "triage",
+  "todo",
+  "scheduled",
+  "ready",
+  "running",
+  "blocked",
+  "review",
+  "done",
 ]
 
 const statusAccent: Record<TaskStatus, string> = {
@@ -74,26 +106,60 @@ type DetailState = {
   dependencies: Dependencies
   runs: Run[]
   events: EventRecord[]
+  comments: CommentRecord[]
+  runLog: RunLog | null
+}
+
+type TaskEditDraft = {
+  title: string
+  description: string
+  assignee: string
+  priority: string
+  scheduledAt: string
+  dueAt: string
 }
 
 const emptyDetail: DetailState = {
   dependencies: { parents: [], children: [] },
   runs: [],
   events: [],
+  comments: [],
+  runLog: null,
+}
+
+function boardColumn(status: TaskStatus, title: string, position: number): ApiBoardColumn {
+  return {
+    id: `col_${status}`,
+    board_id: "b_local",
+    status,
+    title,
+    position,
+    hidden: false,
+    wip_limit: null,
+    created_at: 0,
+    updated_at: 0,
+  }
 }
 
 function App() {
   const [config, setConfig] = useState<RuntimeConfig | null>(null)
   const [api, setApi] = useState<KanbanApi | null>(null)
+  const [columns, setColumns] = useState<ApiBoardColumn[]>(fallbackColumns)
   const [tasks, setTasks] = useState<Task[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<DetailState>(emptyDetail)
   const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all")
+  const [showArchived, setShowArchived] = useState(false)
   const [newTitle, setNewTitle] = useState("")
   const [newDescription, setNewDescription] = useState("")
   const [blockReason, setBlockReason] = useState("")
   const [dependencyInput, setDependencyInput] = useState("")
+  const [commentBody, setCommentBody] = useState("")
+  const [editDraft, setEditDraft] = useState<TaskEditDraft | null>(null)
   const [claimTokens, setClaimTokens] = useState<Record<string, string>>({})
+  const [lastEventId, setLastEventId] = useState(0)
+  const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -107,33 +173,58 @@ function App() {
       .catch((err: unknown) => setError(errorMessage(err)))
   }, [])
 
+  const visibleColumns = useMemo(
+    () => columns.filter((column) => showArchived || (!column.hidden && column.status !== "archived")),
+    [columns, showArchived],
+  )
+
   const refreshTasks = useCallback(async () => {
     if (!api) return
-    const nextTasks = await api.listTasks(search)
+    const nextTasks = await api.listTasks({
+      search,
+      includeArchived: showArchived,
+      statuses: statusFilter === "all" ? [] : [statusFilter],
+    })
     setTasks(nextTasks)
-    setSelectedId((current) => current ?? nextTasks[0]?.id ?? null)
-  }, [api, search])
+    setSelectedId((current) =>
+      current && nextTasks.some((task) => task.id === current) ? current : nextTasks[0]?.id ?? null,
+    )
+    setLastRefreshAt(Date.now())
+  }, [api, search, showArchived, statusFilter])
 
   const refreshDetail = useCallback(
     async (taskId: string) => {
       if (!api) return
-      const [dependencies, runs, events] = await Promise.all([
+      const [dependencies, runs, events, comments] = await Promise.all([
         api.listDependencies(taskId),
         api.listRuns(taskId),
         api.listEvents(taskId),
+        api.listComments(taskId),
       ])
-      setDetail({ dependencies, runs, events })
+      const runWithLog = runs.find((run) => Boolean(run.log_path)) ?? null
+      const runLog = runWithLog
+        ? await api.getRunLog(runWithLog.id).catch(() => null)
+        : null
+      setDetail({ dependencies, runs, events, comments, runLog })
+      setLastEventId((current) => Math.max(current, ...events.map((event) => event.id), current))
     },
     [api],
   )
 
+  const refreshBoard = useCallback(async () => {
+    if (!api) return
+    const nextColumns = await api.listBoardColumns()
+    setColumns(nextColumns)
+    await refreshTasks()
+  }, [api, refreshTasks])
+
   useEffect(() => {
     if (!api) return
     setBusy(true)
-    refreshTasks()
+    refreshBoard()
       .catch((err: unknown) => setError(errorMessage(err)))
       .finally(() => setBusy(false))
-  }, [api, refreshTasks])
+  }, [api, refreshBoard])
 
   useEffect(() => {
     if (!selectedId) {
@@ -148,15 +239,38 @@ function App() {
     [selectedId, tasks],
   )
 
+  useEffect(() => {
+    if (!selectedTask) {
+      setEditDraft(null)
+      return
+    }
+    setEditDraft(taskToDraft(selectedTask))
+  }, [selectedTask])
+
+  useEffect(() => {
+    if (!api) return
+    const interval = window.setInterval(() => {
+      api
+        .listEventsAfter(lastEventId)
+        .then((events) => {
+          if (!events.length) return
+          setLastEventId((current) => Math.max(current, ...events.map((event) => event.id)))
+          void refreshTasks()
+          if (selectedId) void refreshDetail(selectedId)
+        })
+        .catch((err: unknown) => setError(errorMessage(err)))
+    }, 5_000)
+    return () => window.clearInterval(interval)
+  }, [api, lastEventId, refreshDetail, refreshTasks, selectedId])
+
   const grouped = useMemo(() => {
     const map = new Map<TaskStatus, Task[]>()
-    for (const column of columns) map.set(column.id, [])
+    for (const column of visibleColumns) map.set(column.status, [])
     for (const task of tasks) {
-      const target = task.status === "todo" || task.status === "scheduled" ? "triage" : task.status
-      if (map.has(target)) map.get(target)!.push(task)
+      if (map.has(task.status)) map.get(task.status)!.push(task)
     }
     return map
-  }, [tasks])
+  }, [tasks, visibleColumns])
 
   async function runAction(action: () => Promise<unknown>) {
     setBusy(true)
@@ -167,7 +281,8 @@ function App() {
         setClaimTokens((current) => ({ ...current, [result.task.id]: result.claim_token }))
       }
       await refreshTasks()
-      if (selectedTask) await refreshDetail(selectedTask.id)
+      const taskId = selectedId ?? selectedTask?.id
+      if (taskId) await refreshDetail(taskId)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -194,6 +309,29 @@ function App() {
     await runAction(async () => {
       await api.addDependency(selectedTask.id, dependencyInput.trim())
       setDependencyInput("")
+    })
+  }
+
+  async function saveTask() {
+    if (!api || !selectedTask || !editDraft) return
+    await runAction(async () => {
+      const updated = await api.updateTask(selectedTask.id, {
+        title: editDraft.title.trim(),
+        description: editDraft.description.trim() || null,
+        assignee: editDraft.assignee.trim() || null,
+        priority: Number(editDraft.priority) || 0,
+        due_at: parseDateInput(editDraft.dueAt),
+        scheduled_at: parseDateInput(editDraft.scheduledAt),
+      })
+      setEditDraft(taskToDraft(updated))
+    })
+  }
+
+  async function addComment() {
+    if (!api || !selectedTask || !commentBody.trim()) return
+    await runAction(async () => {
+      await api.createComment(selectedTask.id, commentBody.trim())
+      setCommentBody("")
     })
   }
 
@@ -266,6 +404,27 @@ function App() {
               </button>
             ))}
           </div>
+          <div className="flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs">
+            <SlidersHorizontal className="h-3.5 w-3.5 text-neutral-500" />
+            <select
+              className="bg-transparent outline-none"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as TaskStatus | "all")}
+            >
+              <option value="all">all active</option>
+              {filterStatuses.map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+          </div>
+          <label className="flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs text-neutral-600">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(event) => setShowArchived(event.target.checked)}
+            />
+            Archived
+          </label>
           <div className="ml-auto flex items-center gap-2">
             <Badge variant="secondary">actor {config?.actor ?? "-"}</Badge>
             <Badge variant="ready">dispatcher observed</Badge>
@@ -294,12 +453,15 @@ function App() {
               </Button>
             </form>
 
-            <div className="grid min-h-0 flex-1 grid-cols-6 gap-px overflow-hidden bg-neutral-200">
-              {columns.map((column) => (
+            <div
+              className="grid min-h-0 flex-1 gap-px overflow-hidden bg-neutral-200"
+              style={{ gridTemplateColumns: `repeat(${Math.max(1, visibleColumns.length)}, minmax(160px, 1fr))` }}
+            >
+              {visibleColumns.map((column) => (
                 <BoardColumn
                   key={column.id}
                   column={column}
-                  tasks={grouped.get(column.id) ?? []}
+                  tasks={grouped.get(column.status) ?? []}
                   selectedId={selectedTask?.id}
                   dependencies={detail.dependencies}
                   onSelect={setSelectedId}
@@ -318,14 +480,20 @@ function App() {
             dependencyInput={dependencyInput}
             setDependencyInput={setDependencyInput}
             claimToken={selectedTask ? claimTokens[selectedTask.id] ?? null : null}
+            commentBody={commentBody}
+            setCommentBody={setCommentBody}
+            editDraft={editDraft}
+            setEditDraft={setEditDraft}
             busy={busy}
             onAction={runAction}
             onAddDependency={addDependency}
+            onSaveTask={saveTask}
+            onAddComment={addComment}
           />
         </div>
 
         <footer className="flex h-8 items-center justify-between border-t border-neutral-200 bg-white px-4 text-xs text-neutral-500">
-          <span>Last refresh {new Date().toLocaleTimeString()}</span>
+          <span>Last refresh {lastRefreshAt ? new Date(lastRefreshAt).toLocaleTimeString() : "-"}</span>
           <span>
             ready {queueCounts.ready} / running {queueCounts.running} / blocked {queueCounts.blocked}
           </span>
@@ -342,7 +510,7 @@ function BoardColumn({
   dependencies,
   onSelect,
 }: {
-  column: { id: TaskStatus; title: string; hint: string }
+  column: ApiBoardColumn
   tasks: Task[]
   selectedId?: string
   dependencies: Dependencies
@@ -353,12 +521,12 @@ function BoardColumn({
       <div className="border-b border-neutral-200 bg-white px-3 py-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className={cn("h-2 w-2 rounded-full", statusAccent[column.id])} />
+            <span className={cn("h-2 w-2 rounded-full", statusAccent[column.status])} />
             <span className="text-sm font-semibold">{column.title}</span>
           </div>
           <span className="text-xs text-neutral-500">{tasks.length}</span>
         </div>
-        <div className="mt-0.5 text-xs text-neutral-500">{column.hint}</div>
+        <div className="mt-0.5 text-xs text-neutral-500">{columnHints[column.status]}</div>
       </div>
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
         {tasks.map((task) => (
@@ -426,9 +594,15 @@ function TaskDetail({
   dependencyInput,
   setDependencyInput,
   claimToken,
+  commentBody,
+  setCommentBody,
+  editDraft,
+  setEditDraft,
   busy,
   onAction,
   onAddDependency,
+  onSaveTask,
+  onAddComment,
 }: {
   api: KanbanApi | null
   task: Task | null
@@ -439,9 +613,15 @@ function TaskDetail({
   dependencyInput: string
   setDependencyInput: (value: string) => void
   claimToken: string | null
+  commentBody: string
+  setCommentBody: (value: string) => void
+  editDraft: TaskEditDraft | null
+  setEditDraft: (value: TaskEditDraft) => void
   busy: boolean
   onAction: (action: () => Promise<unknown>) => Promise<void>
   onAddDependency: () => Promise<void>
+  onSaveTask: () => Promise<void>
+  onAddComment: () => Promise<void>
 }) {
   if (!task) {
     return <aside className="w-[420px] border-l border-neutral-200 bg-white p-4 text-sm text-neutral-500">No task selected.</aside>
@@ -463,6 +643,54 @@ function TaskDetail({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {editDraft ? (
+          <>
+            <Section title="Task detail">
+              <div className="space-y-2">
+                <Input
+                  value={editDraft.title}
+                  onChange={(event) => setEditDraft({ ...editDraft, title: event.target.value })}
+                />
+                <Textarea
+                  className="min-h-28"
+                  value={editDraft.description}
+                  onChange={(event) => setEditDraft({ ...editDraft, description: event.target.value })}
+                  placeholder="Description"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    value={editDraft.assignee}
+                    onChange={(event) => setEditDraft({ ...editDraft, assignee: event.target.value })}
+                    placeholder="Assignee"
+                  />
+                  <Input
+                    type="number"
+                    value={editDraft.priority}
+                    onChange={(event) => setEditDraft({ ...editDraft, priority: event.target.value })}
+                    placeholder="Priority"
+                  />
+                  <Input
+                    type="datetime-local"
+                    value={editDraft.scheduledAt}
+                    onChange={(event) => setEditDraft({ ...editDraft, scheduledAt: event.target.value })}
+                  />
+                  <Input
+                    type="datetime-local"
+                    value={editDraft.dueAt}
+                    onChange={(event) => setEditDraft({ ...editDraft, dueAt: event.target.value })}
+                  />
+                </div>
+                <Button disabled={!api || busy || !editDraft.title.trim()} onClick={() => void onSaveTask()}>
+                  <Save className="h-4 w-4" />
+                  Save
+                </Button>
+              </div>
+            </Section>
+
+            <Separator className="my-4" />
+          </>
+        ) : null}
+
         <Section title="Legal transitions">
           <div className="grid grid-cols-2 gap-2">
             {actions.map((action) => (
@@ -514,6 +742,38 @@ function TaskDetail({
 
         <Separator className="my-4" />
 
+        <Section title="Comments">
+          <div className="space-y-3">
+            <div className="space-y-2">
+              {detail.comments.length ? (
+                detail.comments.slice(-4).map((comment) => (
+                  <div key={comment.id} className="rounded-md border border-neutral-200 bg-neutral-50 p-2 text-sm">
+                    <div className="mb-1 flex items-center justify-between text-xs text-neutral-500">
+                      <span>{comment.author}</span>
+                      <span>{formatRelativeTime(comment.created_at)}</span>
+                    </div>
+                    <div className="whitespace-pre-wrap text-neutral-800">{comment.body}</div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-neutral-500">No comments yet.</div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={commentBody}
+                onChange={(event) => setCommentBody(event.target.value)}
+                placeholder="Add handoff note"
+              />
+              <Button variant="outline" disabled={!commentBody.trim() || busy} onClick={() => void onAddComment()}>
+                <MessageSquare className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </Section>
+
+        <Separator className="my-4" />
+
         <Section title="Run summary">
           {activeRun ? (
             <div className="space-y-2 text-sm">
@@ -523,6 +783,20 @@ function TaskDetail({
               <InfoRow label="owner" value={activeRun.claim_owner} />
               <InfoRow label="started" value={formatRelativeTime(activeRun.started_at)} />
               <InfoRow label="log" value={activeRun.log_path ?? "-"} />
+              {detail.runLog ? (
+                <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-950 p-2 text-xs text-neutral-50">
+                  <div className="mb-2 flex items-center justify-between text-neutral-400">
+                    <span className="flex items-center gap-1">
+                      <FileText className="h-3.5 w-3.5" />
+                      log
+                    </span>
+                    {detail.runLog.truncated ? <span>truncated</span> : null}
+                  </div>
+                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-mono leading-relaxed">
+                    {detail.runLog.content || "(empty)"}
+                  </pre>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="text-sm text-neutral-500">No runs yet.</div>
@@ -671,6 +945,30 @@ function badgeVariant(status: TaskStatus) {
   if (status === "blocked") return "blocked"
   if (status === "review") return "review"
   return "secondary"
+}
+
+function taskToDraft(task: Task): TaskEditDraft {
+  return {
+    title: task.title,
+    description: task.description ?? "",
+    assignee: task.assignee ?? "",
+    priority: String(task.priority),
+    scheduledAt: formatDateInput(task.scheduled_at),
+    dueAt: formatDateInput(task.due_at),
+  }
+}
+
+function formatDateInput(value: number | null) {
+  if (!value) return ""
+  const date = new Date(value)
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
+}
+
+function parseDateInput(value: string) {
+  if (!value) return null
+  const time = new Date(value).getTime()
+  return Number.isFinite(time) ? time : null
 }
 
 function apiEndpointLabel(apiBaseUrl: string) {

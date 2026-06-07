@@ -316,7 +316,7 @@ fn desktop_cors_layer() -> CorsLayer {
 
 pub async fn serve(addr: SocketAddr, state: AppState) -> std::io::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, build_router(state)).await
+    axum::serve(listener, build_desktop_router(state)).await
 }
 
 async fn health(

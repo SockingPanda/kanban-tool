@@ -59,6 +59,41 @@ fn init_is_idempotent() {
     assert_eq!(column_count, 9);
 }
 
+#[test]
+fn init_records_and_enforces_migration_checksum() {
+    let temp = TempDb::new("init_records_and_enforces_migration_checksum");
+
+    init_database(&temp.path, "first").expect("first init succeeds");
+
+    let conn = Connection::open(&temp.path).unwrap();
+    let user_version: i64 = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap();
+    let (name, checksum): (String, String) = conn
+        .query_row(
+            "SELECT name, checksum FROM schema_migrations WHERE version = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(user_version, 1);
+    assert_eq!(name, "001_initial");
+    assert!(checksum.starts_with("fnv64:"), "checksum: {checksum}");
+
+    conn.execute(
+        "UPDATE schema_migrations SET checksum='fnv64:wrong' WHERE version=1",
+        [],
+    )
+    .unwrap();
+    drop(conn);
+
+    let err = init_database(&temp.path, "second").unwrap_err();
+    assert!(
+        err.to_string().contains("migration checksum mismatch"),
+        "err: {err}"
+    );
+}
+
 struct TempDb {
     path: std::path::PathBuf,
 }

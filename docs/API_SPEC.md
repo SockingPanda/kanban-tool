@@ -755,7 +755,7 @@ DELETE /api/v1/tasks/{task_id}/labels/{label_id}
 GET /api/v1/search/tasks?board=default&q=needle&status=ready&assignee=worker-a&include_archived=false&limit=20&offset=0
 ```
 
-Default backend is SQLite fallback. When the binary is built with `tantivy-backend` and `index/v1/tasks/` exists beside the SQLite DB, search uses the manual Tantivy task index. Missing, corrupt, or stale Tantivy indexes fall back to SQLite with stale metadata. Search matches task title, description, comments, run summary/error, and event kind/payload.
+Default backend is SQLite fallback. When the binary is built with `tantivy-backend` and `index/v1/tasks/` exists beside the SQLite DB, search uses the Tantivy task index. Missing, corrupt, or stale Tantivy indexes fall back to SQLite with stale metadata. Search matches task title, description, comments, run summary/error, and event kind/payload.
 
 Response:
 
@@ -791,7 +791,7 @@ Response:
 }
 ```
 
-The API does not rebuild or sync the derived index; use `kb index sync` after normal task changes or `kb index rebuild` for full manual rebuilds. The Tantivy state is stored in board-scoped `app_settings` under `search.tasks.state.<board_id>` and round-trips through existing export/import.
+Task mutations do not write Tantivy inside their SQLite transactions. When served by `kb serve` with `tantivy-backend`, a background loop makes one prompt startup `sync_search_index` attempt and then syncs every `--search-sync-interval-ms` milliseconds by default (`5000`; `0` disables). Manual `kb index sync` remains available after normal task changes, and `kb index rebuild` replaces the derived index. The Tantivy state is stored in board-scoped `app_settings` under `search.tasks.state.<board_id>` and round-trips through existing export/import.
 
 ### 13.2 Search status
 
@@ -816,6 +816,7 @@ Response:
 ```
 
 When the current `MAX(task_events.id)` is greater than the stored Tantivy `last_event_id`, `stale=true` and `index_lag_events` reports that high-watermark lag.
+If background sync is disabled, delayed, or fails, search keeps returning current SQLite fallback results with stale metadata instead of trusting an out-of-date derived index.
 
 ---
 

@@ -441,6 +441,7 @@ kb run logs <run_id> --tail-bytes 65536
 kb serve
 kb serve --open
 kb serve --dispatcher
+kb serve --search-sync-interval-ms 5000
 
 kb dispatch
 kb dispatch --once
@@ -453,6 +454,12 @@ kb dispatch --max-iterations 10 --poll-interval-ms 1000
 for bounded scripts/tests. `--profile-config` reads the selected `[workers.<name>]`
 section and can set `command`, `claim_ttl_ms`, `heartbeat_interval_ms`,
 `on_success`, `on_failure`, and `log_dir`.
+
+`kb serve` starts a conservative background search sync loop when the binary is
+built with `tantivy-backend`. The loop makes one prompt startup attempt and then
+calls `sync_search_index` every `--search-sync-interval-ms` milliseconds
+(default `5000`). Use `--search-sync-interval-ms 0` to disable it. Without
+`tantivy-backend`, the flag is accepted and no background index task is started.
 
 ---
 
@@ -517,7 +524,7 @@ kb index sync
 - `doctor` returns the same fallback health meta for scripts.
 - `rebuild` builds/replaces `index/v1/tasks/` beside the SQLite DB and stores a clean high-watermark state in `app_settings`.
 - `sync` consumes `task_events.id` after the stored high-watermark, delete+reindexes affected task aggregates, then advances the high-watermark only after a successful commit.
-- Task mutations do not update Tantivy inside their transactions; run `kb index sync` after changes, or `kb index rebuild` to replace the derived index.
+- Task mutations do not update Tantivy inside their transactions; run `kb index sync` after changes, rely on `kb serve` background sync for local server/desktop sessions, or use `kb index rebuild` to replace the derived index.
 
 The persisted setting key is board-scoped as `search.tasks.state.<board_id>`. Its JSON contains `schema_version`, `index_version`, `backend`, `index_name`, `board_id`, `last_event_id`, `dirty`, `updated_at`, and optional `message`; it is included in JSONL export/import through existing `app_settings` handling.
 
@@ -539,6 +546,7 @@ JSON data shape:
 
 With Tantivy enabled after rebuild, `backend` is `tantivy`, `derived_index` is `true`, and `index_version` is `tasks-v1`.
 When the current `MAX(task_events.id)` is greater than the stored `last_event_id`, `stale=true` and `index_lag_events` reports the event lag. Search falls back to SQLite while stale to preserve current-result correctness.
+Background sync errors do not make search fail open to stale Tantivy results; the next search still reports stale/fallback metadata and returns current SQLite results when the derived index is behind or unusable.
 
 ---
 

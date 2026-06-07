@@ -300,6 +300,9 @@ struct ServeArgs {
     /// TCP port to bind.
     #[arg(long, default_value_t = 8721)]
     port: u16,
+    /// Background search index sync interval in milliseconds. Use 0 to disable.
+    #[arg(long, default_value_t = 5_000)]
+    search_sync_interval_ms: u64,
 }
 
 #[derive(Debug, Args)]
@@ -447,7 +450,7 @@ fn main() -> Result<()> {
                 })?;
             }
         }
-        Command::Serve(args) => serve(args, db_path, actor)?,
+        Command::Serve(args) => serve(args, db_path, &cli.board, actor)?,
         Command::Doctor => {
             let report = kanban_sqlite::doctor_database(&db_path)?;
             print_or_json(cli.json, &report, || {
@@ -534,7 +537,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn serve(args: ServeArgs, db_path: PathBuf, actor: String) -> Result<()> {
+fn serve(args: ServeArgs, db_path: PathBuf, board: &str, actor: String) -> Result<()> {
     let addr: SocketAddr = format!("{}:{}", args.host, args.port)
         .parse()
         .with_context(|| format!("invalid bind address {}:{}", args.host, args.port))?;
@@ -550,9 +553,13 @@ fn serve(args: ServeArgs, db_path: PathBuf, actor: String) -> Result<()> {
     );
     let runtime = tokio::runtime::Runtime::new().context("failed to start tokio runtime")?;
     runtime
-        .block_on(kanban_server::serve(
+        .block_on(kanban_server::serve_with_search_sync(
             addr,
             kanban_server::AppState::new(db_path, actor),
+            kanban_server::SearchSyncConfig::new(
+                board,
+                Duration::from_millis(args.search_sync_interval_ms),
+            ),
         ))
         .context("kb server failed")
 }

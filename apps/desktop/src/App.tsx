@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Activity,
   Archive,
@@ -43,6 +43,7 @@ import {
   Run,
   RunLog,
   RuntimeConfig,
+  SearchMeta,
   Task,
   TaskStatus,
   loadRuntimeConfig,
@@ -54,6 +55,7 @@ import {
   canCompleteTask,
   completeTaskBody,
 } from "@/lib/action-policy"
+import { createLatestRequestGuard, runLatestRequest } from "@/lib/latest-request"
 import { cn, formatRelativeTime, shortId } from "@/lib/utils"
 
 const fallbackColumns: ApiBoardColumn[] = [
@@ -149,6 +151,7 @@ function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<DetailState>(emptyDetail)
   const [search, setSearch] = useState("")
+  const [searchMeta, setSearchMeta] = useState<SearchMeta | null>(null)
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all")
   const [showArchived, setShowArchived] = useState(false)
   const [newTitle, setNewTitle] = useState("")
@@ -162,6 +165,7 @@ function App() {
   const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const taskRefreshGuard = useRef(createLatestRequestGuard())
 
   useEffect(() => {
     loadRuntimeConfig()
@@ -180,16 +184,35 @@ function App() {
 
   const refreshTasks = useCallback(async () => {
     if (!api) return
-    const nextTasks = await api.listTasks({
-      search,
-      includeArchived: showArchived,
-      statuses: statusFilter === "all" ? [] : [statusFilter],
-    })
-    setTasks(nextTasks)
-    setSelectedId((current) =>
-      current && nextTasks.some((task) => task.id === current) ? current : nextTasks[0]?.id ?? null,
+    const query = search.trim()
+    const statuses = statusFilter === "all" ? [] : [statusFilter]
+    return runLatestRequest(
+      taskRefreshGuard.current,
+      async () => {
+        if (query) {
+          const result = await api.searchTasks({
+            query,
+            includeArchived: showArchived,
+            statuses,
+          })
+          return { tasks: result.tasks, searchMeta: result.meta }
+        }
+
+        const tasks = await api.listTasks({
+          includeArchived: showArchived,
+          statuses,
+        })
+        return { tasks, searchMeta: null }
+      },
+      ({ tasks: nextTasks, searchMeta: nextSearchMeta }) => {
+        setSearchMeta(nextSearchMeta)
+        setTasks(nextTasks)
+        setSelectedId((current) =>
+          current && nextTasks.some((task) => task.id === current) ? current : nextTasks[0]?.id ?? null,
+        )
+        setLastRefreshAt(Date.now())
+      },
     )
-    setLastRefreshAt(Date.now())
   }, [api, search, showArchived, statusFilter])
 
   const refreshDetail = useCallback(
@@ -211,20 +234,24 @@ function App() {
     [api],
   )
 
-  const refreshBoard = useCallback(async () => {
+  const refreshColumns = useCallback(async () => {
     if (!api) return
     const nextColumns = await api.listBoardColumns()
     setColumns(nextColumns)
-    await refreshTasks()
-  }, [api, refreshTasks])
+  }, [api])
+
+  useEffect(() => {
+    if (!api) return
+    refreshColumns().catch((err: unknown) => setError(errorMessage(err)))
+  }, [api, refreshColumns])
 
   useEffect(() => {
     if (!api) return
     setBusy(true)
-    refreshBoard()
+    refreshTasks()
       .catch((err: unknown) => setError(errorMessage(err)))
       .finally(() => setBusy(false))
-  }, [api, refreshBoard])
+  }, [api, refreshTasks])
 
   useEffect(() => {
     if (!selectedId) {
@@ -388,6 +415,7 @@ function App() {
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
+          {search.trim() && searchMeta ? <SearchBackendBadge meta={searchMeta} /> : null}
           <Button variant="secondary" size="icon" onClick={() => void refreshTasks()}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
           </Button>
@@ -859,6 +887,16 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <span className="text-neutral-500">{label}</span>
       <span className="truncate font-medium">{value}</span>
     </div>
+  )
+}
+
+function SearchBackendBadge({ meta }: { meta: SearchMeta }) {
+  return (
+    <Badge variant={meta.stale ? "review" : "secondary"}>
+      search {meta.backend}
+      {meta.stale ? " stale/degraded" : ""}
+      {meta.index_lag_events && meta.index_lag_events > 0 ? ` +${meta.index_lag_events}` : ""}
+    </Badge>
   )
 }
 

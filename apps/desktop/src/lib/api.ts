@@ -117,8 +117,34 @@ export type ClaimResponse = {
   claim_expires_at: number | null
 }
 
+export type SearchMeta = {
+  backend: string
+  stale: boolean
+  index_version: string | null
+  last_event_id: number | null
+  index_lag_events: number | null
+}
+
+export type SearchTasksResult = {
+  tasks: Task[]
+  meta: SearchMeta
+}
+
 type Envelope<T> = { data: T; meta?: Record<string, unknown> }
 type ErrorEnvelope = { error: { code: string; message: string } }
+
+type SearchTaskHit = {
+  task_id: string
+  seq: number
+  score: number
+  snippet: string | null
+  task: Task
+}
+
+type SearchTasksResponse = {
+  hits: SearchTaskHit[]
+  meta: SearchMeta
+}
 
 export class ApiError extends Error {
   constructor(
@@ -164,13 +190,26 @@ export class KanbanApi {
     return this.request<BoardColumn[]>(`/api/v1/boards/${this.board}/columns`)
   }
 
-  async listTasks(options: { search?: string; includeArchived?: boolean; statuses?: TaskStatus[] } = {}) {
+  async listTasks(options: { includeArchived?: boolean; statuses?: TaskStatus[] } = {}) {
     const params = new URLSearchParams()
     params.set("include_archived", String(options.includeArchived ?? false))
     params.set("sort", "-updated_at")
     for (const status of options.statuses ?? []) params.append("status", status)
-    if (options.search?.trim()) params.set("q", options.search.trim())
     return this.request<Task[]>(`/api/v1/boards/${this.board}/tasks?${params.toString()}`)
+  }
+
+  async searchTasks(options: { query: string; includeArchived?: boolean; statuses?: TaskStatus[] }) {
+    const params = new URLSearchParams()
+    params.set("board", this.board)
+    params.set("q", options.query.trim())
+    params.set("include_archived", String(options.includeArchived ?? false))
+    params.set("limit", "100")
+    for (const status of options.statuses ?? []) params.append("status", status)
+    const response = await this.request<SearchTasksResponse>(`/api/v1/search/tasks?${params.toString()}`)
+    return {
+      tasks: response.hits.map((hit) => hit.task),
+      meta: response.meta,
+    } satisfies SearchTasksResult
   }
 
   async createTask(input: { title: string; description?: string; status?: TaskStatus }) {

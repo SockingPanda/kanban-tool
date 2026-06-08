@@ -278,3 +278,40 @@ Accepted
 
 - API 数量更多。
 - UI 拖拽逻辑更复杂。
+
+---
+
+## ADR-0009：Knowledge Substrate 派生层
+
+### Status
+
+Accepted
+
+### Context
+
+后续搜索、关系扩展、agent context、artifact provenance 和向量召回需要跨 task/run/comment/artifact/skill 的统一身份与派生索引，但不能削弱 SQLite 状态机、claim 和 dependency guard。
+
+### Decision
+
+SQLite 继续作为 operational source of truth。新增：
+
+- `entities`：跨库统一 `kb://...` identity registry。
+- `relation_predicates` / `entity_relations`：受控 predicate 与可重建关系镜像。
+- `index_outbox`：派生 store 的 at-least-once job surface。
+- `derived_store_state`：Tantivy/Oxigraph/LanceDB 等派生层健康和水位。
+
+Tantivy、Oxigraph、LanceDB 都是可重建 derived stores，不参与状态机事务。
+
+### Consequences
+
+优点：
+
+- 后续 graph/vector/context broker 可以接同一 entity/relation contract。
+- SQLite 状态机边界保持清楚。
+- 派生 store 损坏时可 fallback/rebuild。
+- `kb doctor` / maintenance API 汇总 outbox backlog、dirty stores、last_error 和 failed outbox，用于本地 operator 判断 sync/rebuild，而不是让派生层参与 SQLite 事务。
+
+代价：
+
+- 需要维护 entity backfill/outbox/derived state。
+- `derived_store_state` 是派生 store 的主健康/水位记录；Tantivy 的旧 `app_settings` search state 仅保留为兼容 metadata。

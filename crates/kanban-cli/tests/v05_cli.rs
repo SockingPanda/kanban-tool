@@ -182,8 +182,8 @@ fn doctor_reports_integrity_migration_and_expired_running_tasks() {
     let doctor = kb(&temp.path, &["--json", "doctor"]).success_json();
 
     assert_eq!(doctor["data"]["integrity_check"], "ok");
-    assert_eq!(doctor["data"]["migration_version"], 1);
-    assert_eq!(doctor["data"]["user_version"], 1);
+    assert_eq!(doctor["data"]["migration_version"], 2);
+    assert_eq!(doctor["data"]["user_version"], 2);
     assert_eq!(doctor["data"]["expired_running_tasks"], 1);
     assert_eq!(doctor["data"]["dependency_cycles"], 0);
     assert_eq!(doctor["data"]["archived_dependency_edges"], 0);
@@ -191,6 +191,25 @@ fn doctor_reports_integrity_migration_and_expired_running_tasks() {
     assert_eq!(doctor["data"]["executable_dependency_violations"], 0);
     assert_eq!(doctor["data"]["executable_spec_violations"], 0);
     assert_eq!(doctor["data"]["executable_schedule_violations"], 0);
+    assert_eq!(doctor["data"]["outbox_pending"], 6);
+    assert_eq!(doctor["data"]["outbox_running"], 0);
+    assert_eq!(doctor["data"]["outbox_failed"], 0);
+    assert_eq!(doctor["data"]["derived_dirty_stores"], 3);
+    assert_eq!(doctor["data"]["derived_error_stores"], 0);
+    assert_eq!(
+        doctor["data"]["derived_stores"].as_array().unwrap().len(),
+        3
+    );
+    assert!(
+        doctor["data"]["derived_stores"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|store| store["store_name"] == "tantivy_tasks"
+                && store["dirty"] == true
+                && store["pending_outbox"] == 2
+                && store["failed_outbox"] == 0)
+    );
     assert_eq!(doctor["data"]["ok"], false);
 }
 
@@ -484,6 +503,268 @@ fn search_command_outputs_json_and_human_hits() {
     assert!(stdout.contains("unique-needle"), "{stdout}");
 }
 
+#[test]
+fn substrate_commands_report_entities_outbox_and_derived_status() {
+    let temp = TempDb::new("substrate_commands_report_entities_outbox_and_derived_status");
+    kb(&temp.path, &["init"]).success();
+
+    let entities = kb(
+        &temp.path,
+        &[
+            "--json", "entity", "list", "--kind", "board", "--limit", "5",
+        ],
+    )
+    .success_json();
+    let entity_rows = entities["data"].as_array().unwrap();
+    assert_eq!(entity_rows.len(), 1);
+    assert_eq!(entity_rows[0]["kind"], "board");
+    let uri = entity_rows[0]["uri"].as_str().unwrap();
+    assert!(uri.starts_with("kb://board/"));
+
+    let shown = kb(&temp.path, &["--json", "entity", "show", uri]).success_json();
+    assert_eq!(shown["data"]["uri"], uri);
+
+    let outbox = kb(&temp.path, &["--json", "outbox", "list"]).success_json();
+    assert_eq!(outbox["data"].as_array().unwrap().len(), 0);
+
+    let created = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "substrate task",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success_json();
+    let task_id = created["data"]["id"].as_str().unwrap();
+    let task_uri = format!("kb://task/{task_id}");
+    let task_entity = kb(&temp.path, &["--json", "entity", "show", &task_uri]).success_json();
+    assert_eq!(task_entity["data"]["title"], "substrate task");
+
+    let outbox = kb(&temp.path, &["--json", "outbox", "list"]).success_json();
+    let jobs = outbox["data"].as_array().unwrap();
+    assert_eq!(jobs.len(), 3);
+    let targets = jobs
+        .iter()
+        .map(|job| job["target"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(targets, vec!["tantivy", "oxigraph", "lancedb"]);
+    assert!(jobs.iter().all(|job| job["entity_uri"] == task_uri));
+
+    let derived = kb(&temp.path, &["--json", "derived", "status"]).success_json();
+    let stores = derived["data"].as_array().unwrap();
+    assert_eq!(stores.len(), 3);
+    assert!(
+        stores
+            .iter()
+            .any(|store| store["store_name"] == "tantivy_tasks")
+    );
+    assert!(
+        stores
+            .iter()
+            .any(|store| store["store_name"] == "oxigraph_relations")
+    );
+    assert!(
+        stores
+            .iter()
+            .any(|store| store["store_name"] == "lancedb_chunks")
+    );
+}
+
+#[test]
+fn graph_vector_and_context_commands_report_disabled_fallbacks() {
+    let temp = TempDb::new("graph_vector_and_context_commands_report_disabled_fallbacks");
+    kb(&temp.path, &["init"]).success();
+    let created = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "fallback context source",
+            "--description",
+            "ready spec context-needle",
+        ],
+    )
+    .success_json();
+    let task_id = created["data"]["id"].as_str().unwrap();
+
+    let graph = kb(&temp.path, &["--json", "graph", "status"]).success_json();
+    #[cfg(not(feature = "graph-oxigraph"))]
+    {
+        assert_eq!(graph["data"]["backend"], "disabled");
+        assert_eq!(graph["data"]["enabled"], false);
+
+        let neighbors = kb(
+            &temp.path,
+            &[
+                "--json",
+                "graph",
+                "neighbors",
+                &format!("kb://task/{task_id}"),
+            ],
+        )
+        .success_json();
+        assert_eq!(neighbors["data"].as_array().unwrap().len(), 0);
+    }
+    #[cfg(feature = "graph-oxigraph")]
+    {
+        let board_id = created["data"]["board_id"].as_str().unwrap();
+        assert_eq!(graph["data"]["backend"], "oxigraph");
+        assert_eq!(graph["data"]["enabled"], true);
+
+        let rebuilt = kb(&temp.path, &["--json", "graph", "rebuild"]).success_json();
+        assert_eq!(rebuilt["data"]["backend"], "oxigraph");
+        assert_eq!(rebuilt["data"]["enabled"], true);
+
+        let neighbors = kb(
+            &temp.path,
+            &[
+                "--json",
+                "graph",
+                "neighbors",
+                &format!("kb://task/{task_id}"),
+            ],
+        )
+        .success_json();
+        assert!(
+            neighbors["data"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|relation| relation["predicate"] == "belongs_to_board"
+                    && relation["object_uri"] == format!("kb://board/{board_id}"))
+        );
+
+        let query = kb(
+            &temp.path,
+            &[
+                "--json",
+                "graph",
+                "query",
+                &format!(
+                    "SELECT ?board WHERE {{ GRAPH ?g {{ <kb://task/{task_id}> <kb://predicate/belongs_to_board> ?board }} }}"
+                ),
+            ],
+        )
+        .success_json();
+        assert_eq!(query["data"].as_array().unwrap().len(), 1);
+    }
+
+    let vector = kb(&temp.path, &["--json", "vector", "status"]).success_json();
+    #[cfg(not(feature = "vector-lancedb"))]
+    {
+        assert_eq!(vector["data"]["backend"], "disabled");
+        assert_eq!(vector["data"]["enabled"], false);
+    }
+    #[cfg(feature = "vector-lancedb")]
+    {
+        assert_eq!(vector["data"]["backend"], "lancedb");
+        assert_eq!(vector["data"]["enabled"], false);
+        assert!(
+            vector["data"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("without an embedding provider")
+        );
+    }
+
+    let context = kb(
+        &temp.path,
+        &[
+            "--json",
+            "context",
+            "build",
+            task_id,
+            "--lexical-limit",
+            "3",
+        ],
+    )
+    .success_json();
+    assert_eq!(context["data"]["subject"], format!("kb://task/{task_id}"));
+    #[cfg(not(feature = "graph-oxigraph"))]
+    assert!(
+        context["data"]["degraded"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "graph_disabled")
+    );
+    #[cfg(feature = "graph-oxigraph")]
+    assert!(
+        !context["data"]["degraded"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "graph_disabled")
+    );
+    #[cfg(not(feature = "vector-lancedb"))]
+    assert!(
+        context["data"]["degraded"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "vector_disabled")
+    );
+    #[cfg(feature = "vector-lancedb")]
+    assert!(
+        context["data"]["degraded"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "vector_disabled")
+    );
+    assert_eq!(
+        context["data"]["items"][0]["entity_uri"],
+        format!("kb://task/{task_id}")
+    );
+    assert_eq!(context["data"]["items"][0]["source"], "subject");
+    assert!(
+        context["data"]["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["entity_uri"] == format!("kb://task/{task_id}"))
+    );
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn vector_status_reports_lancedb_degraded_without_embedding_provider() {
+    let temp = TempDb::new("vector_status_reports_lancedb_degraded_without_embedding_provider");
+    kb(&temp.path, &["init"]).success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "degraded vector source",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success();
+
+    let status = kb(&temp.path, &["--json", "vector", "status"]).success_json();
+    assert_eq!(status["data"]["backend"], "lancedb");
+    assert_eq!(status["data"]["enabled"], false);
+    assert!(
+        status["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("without an embedding provider")
+    );
+    assert!(
+        status["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("dirty=true")
+    );
+}
+
 #[cfg(feature = "tantivy-backend")]
 #[test]
 fn index_rebuild_enables_tantivy_search_backend() {
@@ -588,6 +869,31 @@ fn task_list_command_rejects_unbounded_limit() {
         &["task", "list", "--limit", &usize::MAX.to_string()],
     )
     .failure_containing("limit must be <= 1000");
+}
+
+#[test]
+fn context_build_command_rejects_zero_max_items() {
+    let temp = TempDb::new("context_build_command_rejects_zero_max_items");
+    kb(&temp.path, &["init"]).success();
+    let created = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "zero budget context",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success_json();
+    let task_id = created["data"]["id"].as_str().unwrap();
+
+    kb(
+        &temp.path,
+        &["context", "build", task_id, "--max-items", "0"],
+    )
+    .failure_containing("max_items must be >= 1");
 }
 
 #[test]

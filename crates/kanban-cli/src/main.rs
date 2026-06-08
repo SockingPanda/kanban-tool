@@ -8,17 +8,27 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use kanban_context::ContextPolicy;
 use kanban_core::TaskStatus;
+use kanban_entity::{EntityUri, Predicate};
+#[cfg(not(feature = "graph-oxigraph"))]
+use kanban_graph::DisabledGraphStore;
+#[cfg(feature = "graph-oxigraph")]
+use kanban_graph::OxigraphStore;
+use kanban_graph::RelationGraph;
 use kanban_search::SearchQuery;
 use kanban_sqlite::{
-    CreateTask, DispatchOptions, FinishPolicy, MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT,
-    TaskListOptions, TaskListSort, TaskPatch, add_dependency, archive_task, backup_database,
-    begin_database_replace, begin_database_runtime, block_task, checkpoint_database, claim_task,
-    complete_task, create_task, dispatch_once, export_jsonl, get_run_by_id_global, get_task,
-    heartbeat_task, import_jsonl, init_database, list_dependencies, list_events, list_runs,
-    list_tasks, list_tasks_page, promote_task, queue_stats, rebuild_search_index, reclaim_expired,
+    CreateTask, DispatchOptions, EntityListOptions, FinishPolicy, MAX_SEARCH_LIMIT,
+    MAX_TASK_LIST_LIMIT, OutboxListOptions, TaskListOptions, TaskListSort, TaskPatch,
+    add_dependency, archive_task, backup_database, begin_database_replace, begin_database_runtime,
+    block_task, checkpoint_database, claim_task, complete_task, create_task,
+    derived_store_statuses, dispatch_once, export_jsonl, get_entity, get_run_by_id_global,
+    get_task, heartbeat_task, import_jsonl, init_database, list_dependencies, list_entities,
+    list_events, list_outbox, list_runs, list_tasks, list_tasks_page, promote_task, queue_stats,
+    rebuild_graph_store, rebuild_search_index, rebuild_vector_store, reclaim_expired,
     remove_dependency, search_index_status, search_tasks, set_task_retry_policy_by_id,
-    submit_review_task, sync_search_index, unblock_task, update_task, vacuum_database,
+    submit_review_task, sync_graph_store, sync_search_index, sync_vector_store, unblock_task,
+    update_task, vacuum_database, vector_store_status,
 };
 
 #[derive(Debug, Parser)]
@@ -64,6 +74,30 @@ enum Command {
     Index {
         #[command(subcommand)]
         command: IndexCommand,
+    },
+    Entity {
+        #[command(subcommand)]
+        command: EntityCommand,
+    },
+    Outbox {
+        #[command(subcommand)]
+        command: OutboxCommand,
+    },
+    Derived {
+        #[command(subcommand)]
+        command: DerivedCommand,
+    },
+    Graph {
+        #[command(subcommand)]
+        command: GraphCommand,
+    },
+    Vector {
+        #[command(subcommand)]
+        command: VectorCommand,
+    },
+    Context {
+        #[command(subcommand)]
+        command: ContextCommand,
     },
     Dispatch(DispatchArgs),
     Serve(ServeArgs),
@@ -165,6 +199,88 @@ enum IndexCommand {
     Doctor,
     Rebuild,
     Sync,
+}
+
+#[derive(Debug, Subcommand)]
+enum EntityCommand {
+    List(EntityListArgs),
+    Show { uri: String },
+}
+
+#[derive(Debug, Args)]
+struct EntityListArgs {
+    #[arg(long)]
+    kind: Option<String>,
+    #[arg(long, default_value_t = 50)]
+    limit: usize,
+}
+
+#[derive(Debug, Subcommand)]
+enum OutboxCommand {
+    List(OutboxListArgs),
+}
+
+#[derive(Debug, Args)]
+struct OutboxListArgs {
+    #[arg(long)]
+    status: Option<String>,
+    #[arg(long, default_value_t = 50)]
+    limit: usize,
+}
+
+#[derive(Debug, Subcommand)]
+enum DerivedCommand {
+    Status,
+}
+
+#[derive(Debug, Subcommand)]
+enum GraphCommand {
+    Status,
+    Neighbors(GraphNeighborsArgs),
+    Rebuild,
+    Sync,
+    Query(GraphQueryArgs),
+}
+
+#[derive(Debug, Args)]
+struct GraphNeighborsArgs {
+    entity_uri: String,
+    #[arg(long)]
+    predicate: Option<String>,
+    #[arg(long, default_value_t = 50)]
+    limit: usize,
+}
+
+#[derive(Debug, Args)]
+struct GraphQueryArgs {
+    sparql: String,
+    #[arg(long, default_value_t = 50)]
+    limit: usize,
+}
+
+#[derive(Debug, Subcommand)]
+enum VectorCommand {
+    Status,
+    Rebuild,
+    Sync,
+}
+
+#[derive(Debug, Subcommand)]
+enum ContextCommand {
+    Build(ContextBuildArgs),
+}
+
+#[derive(Debug, Args)]
+struct ContextBuildArgs {
+    task_ref: String,
+    #[arg(long, default_value_t = 5)]
+    lexical_limit: usize,
+    #[arg(long, default_value_t = 10)]
+    graph_limit: usize,
+    #[arg(long, default_value_t = 5)]
+    vector_limit: usize,
+    #[arg(long, default_value_t = 20)]
+    max_items: usize,
 }
 
 #[derive(Debug, Args)]
@@ -423,6 +539,12 @@ fn main() -> Result<()> {
         Command::Run { command } => handle_run(command, &db_path, cli.json)?,
         Command::Search(args) => handle_search(args, &db_path, &cli.board, cli.json)?,
         Command::Index { command } => handle_index(command, &db_path, &cli.board, cli.json)?,
+        Command::Entity { command } => handle_entity(command, &db_path, cli.json)?,
+        Command::Outbox { command } => handle_outbox(command, &db_path, cli.json)?,
+        Command::Derived { command } => handle_derived(command, &db_path, cli.json)?,
+        Command::Graph { command } => handle_graph(command, &db_path, &cli.board, cli.json)?,
+        Command::Vector { command } => handle_vector(command, &db_path, &cli.board, cli.json)?,
+        Command::Context { command } => handle_context(command, &db_path, &cli.board, cli.json)?,
         Command::Dispatch(args) => {
             let options = dispatch_options(&args, actor.clone())?;
             if args.once {
@@ -455,7 +577,7 @@ fn main() -> Result<()> {
             let report = kanban_sqlite::doctor_database(&db_path)?;
             print_or_json(cli.json, &report, || {
                 format!(
-                    "ok={} integrity={} migration={:?} user_version={} expired_running={} running_without_run={} orphan_running_runs={} dependency_cycles={} archived_dependency_edges={} missing_run_logs={} executable_dependency_violations={} executable_spec_violations={} executable_schedule_violations={}",
+                    "ok={} integrity={} migration={:?} user_version={} expired_running={} running_without_run={} orphan_running_runs={} dependency_cycles={} archived_dependency_edges={} missing_run_logs={} executable_dependency_violations={} executable_spec_violations={} executable_schedule_violations={} outbox_pending={} outbox_running={} outbox_failed={} derived_dirty_stores={} derived_error_stores={}",
                     report.ok,
                     report.integrity_check,
                     report.migration_version,
@@ -468,7 +590,12 @@ fn main() -> Result<()> {
                     report.missing_run_logs,
                     report.executable_dependency_violations,
                     report.executable_spec_violations,
-                    report.executable_schedule_violations
+                    report.executable_schedule_violations,
+                    report.outbox_pending,
+                    report.outbox_running,
+                    report.outbox_failed,
+                    report.derived_dirty_stores,
+                    report.derived_error_stores
                 )
             })?;
         }
@@ -819,6 +946,26 @@ fn parse_finish_policy(value: &str) -> Result<FinishPolicy> {
     }
 }
 
+fn parse_predicate(value: &str) -> Result<Predicate> {
+    match value {
+        "belongs_to_board" => Ok(Predicate::BelongsToBoard),
+        "belongs_to_task" => Ok(Predicate::BelongsToTask),
+        "depends_on" => Ok(Predicate::DependsOn),
+        "produced_by" => Ok(Predicate::ProducedBy),
+        "generated_by" => Ok(Predicate::GeneratedBy),
+        "references_artifact" => Ok(Predicate::ReferencesArtifact),
+        "related_to" => Ok(Predicate::RelatedTo),
+        "uses_skill" => Ok(Predicate::UsesSkill),
+        "uses_context" => Ok(Predicate::UsesContext),
+        "derived_from" => Ok(Predicate::DerivedFrom),
+        "supersedes" => Ok(Predicate::Supersedes),
+        "similar_to" => Ok(Predicate::SimilarTo),
+        "requires_review" => Ok(Predicate::RequiresReview),
+        "waiting_for_user" => Ok(Predicate::WaitingForUser),
+        _ => bail!("unsupported predicate: {value}"),
+    }
+}
+
 fn handle_task(
     command: TaskCommand,
     db_path: &PathBuf,
@@ -1125,6 +1272,250 @@ fn handle_index(command: IndexCommand, db_path: &PathBuf, board: &str, json: boo
             status.message
         )
     })
+}
+
+fn handle_entity(command: EntityCommand, db_path: &PathBuf, json: bool) -> Result<()> {
+    match command {
+        EntityCommand::List(args) => {
+            validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let entities = list_entities(
+                db_path,
+                EntityListOptions {
+                    kind: args.kind,
+                    limit: args.limit,
+                },
+            )?;
+            print_or_json(json, &entities, || {
+                entities
+                    .iter()
+                    .map(|entity| {
+                        format!(
+                            "{} [{}] {}:{}",
+                            entity.uri, entity.kind, entity.source_table, entity.source_id
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })?;
+        }
+        EntityCommand::Show { uri } => {
+            let entity = get_entity(db_path, &uri)?;
+            print_or_json(json, &entity, || {
+                format!(
+                    "{} [{}] {}:{} title={:?}",
+                    entity.uri, entity.kind, entity.source_table, entity.source_id, entity.title
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn handle_outbox(command: OutboxCommand, db_path: &PathBuf, json: bool) -> Result<()> {
+    match command {
+        OutboxCommand::List(args) => {
+            validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let jobs = list_outbox(
+                db_path,
+                OutboxListOptions {
+                    status: args.status,
+                    limit: args.limit,
+                },
+            )?;
+            print_or_json(json, &jobs, || {
+                jobs.iter()
+                    .map(|job| {
+                        format!(
+                            "#{} [{}] {} {} attempts={}",
+                            job.id, job.status, job.target, job.entity_uri, job.attempts
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn handle_derived(command: DerivedCommand, db_path: &PathBuf, json: bool) -> Result<()> {
+    match command {
+        DerivedCommand::Status => {
+            let statuses = derived_store_statuses(db_path)?;
+            print_or_json(json, &statuses, || {
+                statuses
+                    .iter()
+                    .map(|status| {
+                        format!(
+                            "{} schema={} last_event_id={} dirty={} last_error={:?}",
+                            status.store_name,
+                            status.schema_version,
+                            status.last_event_id,
+                            status.dirty,
+                            status.last_error
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn handle_graph(command: GraphCommand, db_path: &PathBuf, board: &str, json: bool) -> Result<()> {
+    match command {
+        GraphCommand::Status => {
+            let status = kanban_sqlite::graph_store_status(db_path, board)?;
+            print_or_json(json, &status, || {
+                format!(
+                    "graph backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+        GraphCommand::Neighbors(args) => {
+            validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let graph = open_graph_store(db_path)?;
+            let uri = EntityUri::new(args.entity_uri)?;
+            let predicate = args.predicate.as_deref().map(parse_predicate).transpose()?;
+            let neighbors = graph.neighbors(&uri, predicate, args.limit)?;
+            print_or_json(json, &neighbors, || {
+                if neighbors.is_empty() {
+                    "No graph neighbors (graph store disabled)".to_owned()
+                } else {
+                    neighbors
+                        .iter()
+                        .map(|relation| {
+                            format!(
+                                "{} --{}--> {}",
+                                relation.subject_uri, relation.predicate, relation.object_uri
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+            })?;
+        }
+        GraphCommand::Rebuild => {
+            let status = rebuild_graph_store(db_path, board)?;
+            print_or_json(json, &status, || {
+                format!(
+                    "graph backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+        GraphCommand::Sync => {
+            let status = sync_graph_store(db_path, board)?;
+            print_or_json(json, &status, || {
+                format!(
+                    "graph backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+        GraphCommand::Query(args) => {
+            validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let graph = open_graph_store(db_path)?;
+            let rows = graph.query(&args.sparql, args.limit)?;
+            print_or_json(json, &rows, || {
+                if rows.is_empty() {
+                    "No graph query results".to_owned()
+                } else {
+                    rows.iter()
+                        .map(|row| {
+                            row.bindings
+                                .iter()
+                                .map(|binding| format!("{}={}", binding.name, binding.value))
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+            })?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "graph-oxigraph")]
+fn open_graph_store(db_path: &Path) -> Result<OxigraphStore> {
+    OxigraphStore::open(kanban_local::graph_store_path(db_path.to_path_buf())).map_err(Into::into)
+}
+
+#[cfg(not(feature = "graph-oxigraph"))]
+fn open_graph_store(_db_path: &Path) -> Result<DisabledGraphStore> {
+    Ok(DisabledGraphStore)
+}
+
+fn handle_vector(command: VectorCommand, db_path: &PathBuf, board: &str, json: bool) -> Result<()> {
+    match command {
+        VectorCommand::Status => {
+            let status = vector_store_status(db_path, board)?;
+            print_or_json(json, &status, || {
+                format!(
+                    "vector backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+        VectorCommand::Rebuild => {
+            let status = rebuild_vector_store(db_path, board)?;
+            print_or_json(json, &status, || {
+                format!(
+                    "vector backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+        VectorCommand::Sync => {
+            let status = sync_vector_store(db_path, board)?;
+            print_or_json(json, &status, || {
+                format!(
+                    "vector backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn handle_context(
+    command: ContextCommand,
+    db_path: &PathBuf,
+    board: &str,
+    json: bool,
+) -> Result<()> {
+    match command {
+        ContextCommand::Build(args) => {
+            validate_page_bounds(args.lexical_limit, MAX_SEARCH_LIMIT, 0)?;
+            validate_page_bounds(args.graph_limit, MAX_TASK_LIST_LIMIT, 0)?;
+            validate_page_bounds(args.vector_limit, MAX_TASK_LIST_LIMIT, 0)?;
+            validate_page_bounds(args.max_items, MAX_TASK_LIST_LIMIT, 0)?;
+            if args.max_items == 0 {
+                bail!("max_items must be >= 1 because the subject item is mandatory");
+            }
+            let policy = ContextPolicy {
+                lexical_limit: args.lexical_limit,
+                graph_limit: args.graph_limit,
+                vector_limit: args.vector_limit,
+                max_items: args.max_items,
+            };
+            let pack = kanban_sqlite::build_context_pack(db_path, board, &args.task_ref, policy)?;
+            print_or_json(json, &pack, || {
+                format!(
+                    "context subject={} items={} degraded={}",
+                    pack.subject,
+                    pack.items.len(),
+                    pack.degraded.join(",")
+                )
+            })?;
+        }
+    }
+    Ok(())
 }
 
 fn handle_dep(

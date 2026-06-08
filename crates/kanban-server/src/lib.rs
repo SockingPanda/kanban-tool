@@ -15,6 +15,7 @@ use axum::{
 };
 use futures_util::stream;
 use kanban_core::{KanbanError, TaskStatus};
+use kanban_entity::{EntityUri, Predicate};
 use kanban_search::SearchQuery;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -309,6 +310,34 @@ struct SearchTasksDto {
     meta: kanban_search::SearchMeta,
 }
 
+#[derive(Debug, Deserialize)]
+struct ContextBuildQuery {
+    #[serde(default = "default_board")]
+    board: String,
+    #[serde(default = "default_context_lexical_limit")]
+    lexical_limit: usize,
+    #[serde(default = "default_context_graph_limit")]
+    graph_limit: usize,
+    #[serde(default = "default_context_vector_limit")]
+    vector_limit: usize,
+    #[serde(default = "default_context_max_items")]
+    max_items: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct BoardQuery {
+    #[serde(default = "default_board")]
+    board: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphNeighborsQuery {
+    entity_uri: String,
+    predicate: Option<String>,
+    #[serde(default = "default_graph_limit")]
+    limit: usize,
+}
+
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -372,6 +401,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/stats", get(get_stats))
         .route("/api/v1/search/tasks", get(search_tasks))
         .route("/api/v1/search/status", get(search_status))
+        .route("/api/v1/tasks/:task_id/context", get(build_context))
+        .route("/api/v1/graph/status", get(graph_status))
+        .route("/api/v1/graph/neighbors", get(graph_neighbors))
+        .route("/api/v1/vector/status", get(vector_status))
         .route("/api/v1/events", get(list_events))
         .route("/api/v1/stream/events", get(stream_events))
         .route("/api/v1/maintenance/doctor", post(doctor))
@@ -504,6 +537,26 @@ fn default_limit() -> usize {
 
 fn default_search_limit() -> usize {
     20
+}
+
+fn default_context_lexical_limit() -> usize {
+    5
+}
+
+fn default_context_graph_limit() -> usize {
+    10
+}
+
+fn default_context_vector_limit() -> usize {
+    5
+}
+
+fn default_context_max_items() -> usize {
+    20
+}
+
+fn default_graph_limit() -> usize {
+    50
 }
 
 #[derive(Debug, Deserialize)]
@@ -640,6 +693,74 @@ async fn search_status(
     let Query(query) = query.map_err(extractor_error)?;
     Ok(Json(Envelope {
         data: kanban_sqlite::search_index_status(state.db_path(), &query.board)?,
+        meta: None,
+    }))
+}
+
+async fn build_context(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    query: Result<Query<ContextBuildQuery>, QueryRejection>,
+) -> Result<Json<Envelope<kanban_context::ContextPack>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    validate_page_bounds(query.lexical_limit, kanban_sqlite::MAX_SEARCH_LIMIT, 0)?;
+    validate_page_bounds(query.graph_limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
+    validate_page_bounds(query.vector_limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
+    validate_page_bounds(query.max_items, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
+    if query.max_items == 0 {
+        return Err(invalid_input(
+            "max_items must be >= 1 because the subject item is mandatory",
+        ));
+    }
+    let policy = kanban_context::ContextPolicy {
+        lexical_limit: query.lexical_limit,
+        graph_limit: query.graph_limit,
+        vector_limit: query.vector_limit,
+        max_items: query.max_items,
+    };
+    Ok(Json(Envelope {
+        data: kanban_sqlite::build_context_pack(state.db_path(), &query.board, &task_id, policy)?,
+        meta: None,
+    }))
+}
+
+async fn graph_status(
+    State(state): State<AppState>,
+    query: Result<Query<BoardQuery>, QueryRejection>,
+) -> Result<Json<Envelope<kanban_graph::GraphStoreStatus>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    Ok(Json(Envelope {
+        data: kanban_sqlite::graph_store_status(state.db_path(), &query.board)?,
+        meta: None,
+    }))
+}
+
+async fn graph_neighbors(
+    State(state): State<AppState>,
+    query: Result<Query<GraphNeighborsQuery>, QueryRejection>,
+) -> Result<Json<Envelope<Vec<kanban_entity::Relation>>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
+    let entity_uri =
+        EntityUri::new(query.entity_uri).map_err(|error| invalid_input(error.to_string()))?;
+    let predicate = query
+        .predicate
+        .as_deref()
+        .map(parse_predicate)
+        .transpose()?;
+    Ok(Json(Envelope {
+        data: kanban_sqlite::graph_neighbors(state.db_path(), &entity_uri, predicate, query.limit)?,
+        meta: Some(json!({ "limit": query.limit })),
+    }))
+}
+
+async fn vector_status(
+    State(state): State<AppState>,
+    query: Result<Query<BoardQuery>, QueryRejection>,
+) -> Result<Json<Envelope<kanban_vector::VectorStoreStatus>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    Ok(Json(Envelope {
+        data: kanban_sqlite::vector_store_status(state.db_path(), &query.board)?,
         meta: None,
     }))
 }
@@ -1388,6 +1509,26 @@ fn parse_status_filters(raw_query: Option<&str>) -> Result<Vec<TaskStatus>, ApiE
         .filter_map(|(key, value)| (key == "status").then_some(value))
         .map(|value| TaskStatus::from_str(value.trim()).map_err(ApiError::from))
         .collect()
+}
+
+fn parse_predicate(value: &str) -> Result<Predicate, ApiError> {
+    match value.trim() {
+        "belongs_to_board" => Ok(Predicate::BelongsToBoard),
+        "belongs_to_task" => Ok(Predicate::BelongsToTask),
+        "depends_on" => Ok(Predicate::DependsOn),
+        "produced_by" => Ok(Predicate::ProducedBy),
+        "generated_by" => Ok(Predicate::GeneratedBy),
+        "references_artifact" => Ok(Predicate::ReferencesArtifact),
+        "related_to" => Ok(Predicate::RelatedTo),
+        "uses_skill" => Ok(Predicate::UsesSkill),
+        "uses_context" => Ok(Predicate::UsesContext),
+        "derived_from" => Ok(Predicate::DerivedFrom),
+        "supersedes" => Ok(Predicate::Supersedes),
+        "similar_to" => Ok(Predicate::SimilarTo),
+        "requires_review" => Ok(Predicate::RequiresReview),
+        "waiting_for_user" => Ok(Predicate::WaitingForUser),
+        other => Err(invalid_input(format!("unsupported predicate: {other}"))),
+    }
 }
 
 fn patch_from_value(

@@ -395,7 +395,7 @@ SQLite WAL 和 busy timeout 负责排队。业务层仍需保证 transaction 短
 - server 输出结构化日志。
 - dispatcher 对每次 run 写入 `task_runs`。
 - worker stdout/stderr 可写入本地 log 文件，DB 只存路径和摘要。
-- `kb doctor` 检查 DB、WAL、schema、integrity、orphan run。
+- `kb doctor` 检查 DB、WAL、schema、integrity、orphan run，并报告 Knowledge Substrate 的 `index_outbox` backlog、derived store dirty/error 状态和 per-store last_error。派生层异常不改变 SQLite task truth；operator 通过 sync/rebuild 恢复 Tantivy/Oxigraph/LanceDB。
 
 ---
 
@@ -408,4 +408,3 @@ SQLite WAL 和 busy timeout 负责排队。业务层仍需保证 transaction 短
 - 不提供远程访问配置。
 - 不在 API 中执行任意 shell，worker profile 只能来自本地 config。
 - 附件路径必须限制在 data dir 内，防止 path traversal。
-

@@ -133,6 +133,7 @@ pub trait EmbeddingProvider {
 
 pub trait VectorStore {
     fn status(&self) -> VectorStoreStatus;
+    fn delete_entities(&self, entity_uris: &[String]) -> Result<(), VectorError>;
     fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError>;
     fn query(&self, query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError>;
 }
@@ -150,6 +151,10 @@ impl VectorStore for DisabledVectorStore {
     }
 
     fn upsert(&self, _chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
+        Err(VectorError::Disabled)
+    }
+
+    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), VectorError> {
         Err(VectorError::Disabled)
     }
 
@@ -216,6 +221,8 @@ pub enum VectorError {
     MissingEmbeddingProvider,
     #[error("embedding dimension mismatch: expected {expected}, got {actual}")]
     DimensionMismatch { expected: usize, actual: usize },
+    #[error("embedding model mismatch: expected {expected}, got {actual}")]
+    EmbeddingModelMismatch { expected: String, actual: String },
     #[error("chunk build error: {0}")]
     Chunk(String),
     #[error("vector store error: {0}")]
@@ -234,6 +241,10 @@ mod tests {
         let store = DisabledVectorStore;
 
         assert!(matches!(store.upsert(&[]), Err(VectorError::Disabled)));
+        assert!(matches!(
+            store.delete_entities(&["kb://task/t_1".to_owned()]),
+            Err(VectorError::Disabled)
+        ));
         assert_eq!(
             store
                 .query(&super::VectorQuery {

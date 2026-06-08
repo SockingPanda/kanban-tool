@@ -1036,6 +1036,44 @@ fn vector_sync_marks_lancedb_outbox_done_without_touching_other_boards() {
 }
 
 #[test]
+fn vector_sync_deletes_archived_task_chunks_and_converges_outbox() {
+    let temp = TempDb::new("vector_sync_deletes_archived_task_chunks_and_converges_outbox");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("archived vector task"),
+    )
+    .unwrap();
+    let store = RecordingVectorStore::default();
+
+    sync_vector_store_with(&temp.path, "default", &store).unwrap();
+    archive_task(&temp.path, "default", "tester", &task.id, false).unwrap();
+    let status = sync_vector_store_with(&temp.path, "default", &store).unwrap();
+
+    assert!(status.message.contains("synced 0 chunk(s) from 1 job(s)"));
+    assert_eq!(
+        store.deleted_entity_uris(),
+        vec![
+            format!("kb://task/{}", task.id),
+            format!("kb://task/{}", task.id)
+        ]
+    );
+    assert_eq!(
+        lancedb_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done", "done"]
+    );
+    let vector = derived_store_statuses(&temp.path)
+        .unwrap()
+        .into_iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .unwrap();
+    assert!(!vector.dirty);
+    assert!(vector.last_error.is_none());
+}
+
+#[test]
 fn vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error() {
     let temp = TempDb::new("vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error");
     init_database(&temp.path, "tester").unwrap();
@@ -3578,11 +3616,16 @@ fn insert_board(path: &Path, slug: &str, id: &str) {
 #[derive(Default)]
 struct RecordingVectorStore {
     upserted: std::sync::Mutex<Vec<String>>,
+    deleted: std::sync::Mutex<Vec<String>>,
 }
 
 impl RecordingVectorStore {
     fn upserted_texts(&self) -> Vec<String> {
         self.upserted.lock().unwrap().clone()
+    }
+
+    fn deleted_entity_uris(&self) -> Vec<String> {
+        self.deleted.lock().unwrap().clone()
     }
 }
 
@@ -3598,6 +3641,12 @@ impl VectorStore for RecordingVectorStore {
     fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
         let mut upserted = self.upserted.lock().unwrap();
         upserted.extend(chunks.iter().map(|chunk| chunk.text.clone()));
+        Ok(())
+    }
+
+    fn delete_entities(&self, entity_uris: &[String]) -> Result<(), VectorError> {
+        let mut deleted = self.deleted.lock().unwrap();
+        deleted.extend(entity_uris.iter().cloned());
         Ok(())
     }
 
@@ -3622,6 +3671,10 @@ impl VectorStore for FailingVectorStore {
             expected: 3,
             actual: 2,
         })
+    }
+
+    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), VectorError> {
+        Ok(())
     }
 
     fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {

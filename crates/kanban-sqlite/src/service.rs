@@ -758,8 +758,12 @@ pub fn rebuild_vector_store_with(
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
     let last_event_id = current_last_event_id(&conn, &board_id)?;
+    let entity_uris = vector_entity_uris_for_board(&conn, &board_id)?;
     let chunks = vector_chunks_for_board(&conn, &board_id)?;
-    match store.upsert(&chunks) {
+    match store
+        .delete_entities(&entity_uris)
+        .and_then(|()| store.upsert(&chunks))
+    {
         Ok(()) => {
             let now = SystemClock.now_ms();
             mark_derived_store_success(
@@ -814,7 +818,22 @@ pub fn sync_vector_store_with(
             .collect::<Vec<_>>();
         vector_chunks_for_entity_uris(&conn, &board_id, &entity_uris)?
     };
-    match store.upsert(&chunks) {
+    let entity_uris = if state.last_event_id == 0 || jobs.iter().any(|job| job.action == "rebuild")
+    {
+        vector_entity_uris_for_board(&conn, &board_id)?
+    } else {
+        let mut entity_uris = jobs
+            .iter()
+            .map(|job| job.entity_uri.clone())
+            .collect::<Vec<_>>();
+        entity_uris.sort();
+        entity_uris.dedup();
+        entity_uris
+    };
+    match store
+        .delete_entities(&entity_uris)
+        .and_then(|()| store.upsert(&chunks))
+    {
         Ok(()) => {
             let now = SystemClock.now_ms();
             mark_derived_store_success(
@@ -5302,6 +5321,17 @@ fn vector_chunks_for_board(
         .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)?;
     build_vector_chunks(&sources)
+}
+
+fn vector_entity_uris_for_board(conn: &Connection, board_id: &str) -> Result<Vec<String>> {
+    let mut stmt = conn
+        .prepare("SELECT 'kb://task/' || id FROM tasks WHERE board_id=?1 ORDER BY seq ASC")
+        .map_err(storage)?;
+    let rows = stmt
+        .query_map([board_id], |row| row.get::<_, String>(0))
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
 }
 
 fn vector_chunks_for_entity_uris(

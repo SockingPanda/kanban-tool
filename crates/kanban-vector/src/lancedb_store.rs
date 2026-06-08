@@ -9,6 +9,7 @@ use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use futures::TryStreamExt;
 use lancedb::Table;
 use lancedb::database::CreateTableMode;
+use lancedb::expr::{col, lit};
 use lancedb::query::{ExecutableQuery, QueryBase, Select};
 use tokio::runtime::Runtime;
 
@@ -96,6 +97,17 @@ impl VectorStore for LanceDbStore {
             return Ok(());
         }
 
+        let expected_model = provider.embedding_model();
+        if let Some(chunk) = chunks
+            .iter()
+            .find(|chunk| chunk.embedding_model != expected_model)
+        {
+            return Err(VectorError::EmbeddingModelMismatch {
+                expected: expected_model.to_owned(),
+                actual: chunk.embedding_model.clone(),
+            });
+        }
+
         let dimensions = provider.dimensions();
         let mut embeddings = Vec::with_capacity(chunks.len());
         for chunk in chunks {
@@ -116,6 +128,25 @@ impl VectorStore for LanceDbStore {
                 .execute(Box::new(reader))
                 .await
                 .map_err(map_lancedb_error)?;
+            Ok(())
+        })
+    }
+
+    fn delete_entities(&self, entity_uris: &[String]) -> Result<(), VectorError> {
+        let provider = self.provider()?;
+        if entity_uris.is_empty() {
+            return Ok(());
+        }
+
+        let mut entity_uris = entity_uris.to_vec();
+        entity_uris.sort();
+        entity_uris.dedup();
+        let table = self.table(provider.dimensions())?;
+        self.runtime.block_on(async {
+            for entity_uri in entity_uris {
+                let predicate = col("entity_uri").eq(lit(entity_uri));
+                table.delete(&predicate).await.map_err(map_lancedb_error)?;
+            }
             Ok(())
         })
     }
@@ -484,6 +515,10 @@ mod tests {
             store.upsert(&[]),
             Err(VectorError::MissingEmbeddingProvider)
         ));
+        assert!(matches!(
+            store.delete_entities(&["kb://task/t_1".to_owned()]),
+            Err(VectorError::MissingEmbeddingProvider)
+        ));
     }
 
     #[test]
@@ -514,6 +549,35 @@ mod tests {
     }
 
     #[test]
+    fn lancedb_store_deletes_chunks_by_entity_uri() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let provider = Arc::new(StaticProvider);
+        let store = LanceDbStore::connect(LanceDbConfig::new(tempdir.path(), provider)).unwrap();
+        let builder = ChunkBuilder::new("static-test");
+        let chunks = vec![
+            build_chunk(&builder, "t_alpha", "alpha work"),
+            build_chunk(&builder, "t_beta", "beta work"),
+        ];
+
+        store.upsert(&chunks).unwrap();
+        store
+            .delete_entities(&["kb://task/t_alpha".to_owned()])
+            .unwrap();
+        let hits = store
+            .query(&VectorQuery {
+                text: "alpha".to_owned(),
+                limit: 10,
+            })
+            .unwrap();
+
+        assert!(
+            hits.iter()
+                .all(|hit| hit.chunk.entity_uri.as_str() != "kb://task/t_alpha"),
+            "{hits:?}"
+        );
+    }
+
+    #[test]
     fn lancedb_store_rejects_embedding_dimension_mismatch() {
         let tempdir = tempfile::tempdir().unwrap();
         let store =
@@ -529,6 +593,25 @@ mod tests {
                 expected: 3,
                 actual: 2
             }
+        ));
+    }
+
+    #[test]
+    fn lancedb_store_rejects_embedding_model_mismatch() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let store =
+            LanceDbStore::connect(LanceDbConfig::new(tempdir.path(), Arc::new(StaticProvider)))
+                .unwrap();
+        let builder = ChunkBuilder::new("other-model");
+        let chunk = build_chunk(&builder, "t_alpha", "alpha work");
+
+        let err = store.upsert(&[chunk]).unwrap_err();
+        assert!(matches!(
+            err,
+            VectorError::EmbeddingModelMismatch {
+                expected,
+                actual
+            } if expected == "static-test" && actual == "other-model"
         ));
     }
 

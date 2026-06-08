@@ -313,4 +313,4 @@ Tantivy、Oxigraph、LanceDB 都是可重建 derived stores，不参与状态机
 代价：
 
 - 需要维护 entity backfill/outbox/derived state。
-- 短期内现有 Tantivy state 与新 `derived_store_state` 并存，直到搜索 sync 迁移完成。
+- `derived_store_state` 是派生 store 的主健康/水位记录；Tantivy 的旧 `app_settings` search state 仅保留为兼容 metadata。

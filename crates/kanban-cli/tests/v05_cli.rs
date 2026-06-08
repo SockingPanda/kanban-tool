@@ -527,9 +527,13 @@ fn substrate_commands_report_entities_outbox_and_derived_status() {
 
     let outbox = kb(&temp.path, &["--json", "outbox", "list"]).success_json();
     let jobs = outbox["data"].as_array().unwrap();
-    assert_eq!(jobs.len(), 1);
-    assert_eq!(jobs[0]["target"], "all");
-    assert_eq!(jobs[0]["entity_uri"], task_uri);
+    assert_eq!(jobs.len(), 3);
+    let targets = jobs
+        .iter()
+        .map(|job| job["target"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(targets, vec!["tantivy", "oxigraph", "lancedb"]);
+    assert!(jobs.iter().all(|job| job["entity_uri"] == task_uri));
 
     let derived = kb(&temp.path, &["--json", "derived", "status"]).success_json();
     let stores = derived["data"].as_array().unwrap();
@@ -548,6 +552,73 @@ fn substrate_commands_report_entities_outbox_and_derived_status() {
         stores
             .iter()
             .any(|store| store["store_name"] == "lancedb_chunks")
+    );
+}
+
+#[test]
+fn graph_vector_and_context_commands_report_disabled_fallbacks() {
+    let temp = TempDb::new("graph_vector_and_context_commands_report_disabled_fallbacks");
+    kb(&temp.path, &["init"]).success();
+    let created = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "fallback context source",
+            "--description",
+            "ready spec context-needle",
+        ],
+    )
+    .success_json();
+    let task_id = created["data"]["id"].as_str().unwrap();
+
+    let graph = kb(&temp.path, &["--json", "graph", "status"]).success_json();
+    assert_eq!(graph["data"]["backend"], "disabled");
+    assert_eq!(graph["data"]["enabled"], false);
+
+    let neighbors = kb(
+        &temp.path,
+        &[
+            "--json",
+            "graph",
+            "neighbors",
+            &format!("kb://task/{task_id}"),
+        ],
+    )
+    .success_json();
+    assert_eq!(neighbors["data"].as_array().unwrap().len(), 0);
+
+    let vector = kb(&temp.path, &["--json", "vector", "status"]).success_json();
+    assert_eq!(vector["data"]["backend"], "disabled");
+    assert_eq!(vector["data"]["enabled"], false);
+
+    let context = kb(
+        &temp.path,
+        &[
+            "--json",
+            "context",
+            "build",
+            task_id,
+            "--lexical-limit",
+            "3",
+        ],
+    )
+    .success_json();
+    assert_eq!(context["data"]["subject"], format!("kb://task/{task_id}"));
+    assert!(
+        context["data"]["degraded"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "graph_disabled")
+    );
+    assert!(
+        context["data"]["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["entity_uri"] == format!("kb://task/{task_id}"))
     );
 }
 

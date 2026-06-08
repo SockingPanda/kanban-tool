@@ -12,6 +12,11 @@ use kanban_core::{
     Clock, KanbanError, Result, SystemClock, TaskStatus, new_event_id, new_run_id, new_task_id,
     new_typed_id,
 };
+use kanban_indexer::{
+    DERIVED_STORE_SEEDS, DerivedStoreUpdate, OUTBOX_FANOUT_TARGETS, derived_store_for_name,
+};
+#[cfg(feature = "tantivy-backend")]
+use kanban_indexer::{OutboxTarget, TANTIVY_TASKS_STORE};
 #[cfg(feature = "tantivy-backend")]
 use kanban_search::TaskSearchDocument;
 use kanban_search::{SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults};
@@ -1447,13 +1452,24 @@ pub fn rebuild_search_index(path: impl AsRef<Path>, board: &str) -> Result<Searc
         let last_event_id = current_last_event_id(&conn, &board_id)?;
         let documents = task_search_documents(&conn, &board_id)?;
         let index_path = task_index_path(path_ref);
-        let metadata = kanban_search::tantivy_backend::rebuild_task_index(
+        let metadata = match kanban_search::tantivy_backend::rebuild_task_index(
             &index_path,
             &board_id,
             last_event_id,
             &documents,
-        )
-        .map_err(search_storage)?;
+        ) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                mark_derived_store_failure(
+                    &conn,
+                    TANTIVY_TASKS_STORE,
+                    &board_id,
+                    &error.to_string(),
+                    SystemClock.now_ms(),
+                )?;
+                return Err(search_storage(error));
+            }
+        };
         let now = SystemClock.now_ms();
         write_search_index_state(
             &conn,
@@ -1467,6 +1483,14 @@ pub fn rebuild_search_index(path: impl AsRef<Path>, board: &str) -> Result<Searc
                 )),
                 now,
             ),
+        )?;
+        mark_derived_store_success(
+            &conn,
+            TANTIVY_TASKS_STORE,
+            &board_id,
+            metadata.last_event_id,
+            true,
+            now,
         )?;
         Ok(SearchIndexStatus {
             backend: "tantivy".to_owned(),
@@ -1494,8 +1518,20 @@ pub fn sync_search_index(path: impl AsRef<Path>, board: &str) -> Result<SearchIn
         if !kanban_search::tantivy_backend::task_index_exists(&index_path) {
             return rebuild_search_index(path_ref, board);
         }
-        let metadata = kanban_search::tantivy_backend::validate_task_index(&index_path, &board_id)
-            .map_err(search_storage)?;
+        let metadata =
+            match kanban_search::tantivy_backend::validate_task_index(&index_path, &board_id) {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    mark_derived_store_failure(
+                        &conn,
+                        TANTIVY_TASKS_STORE,
+                        &board_id,
+                        &error.to_string(),
+                        SystemClock.now_ms(),
+                    )?;
+                    return Err(search_storage(error));
+                }
+            };
         let state = read_search_index_state(&conn, &board_id)?;
         let state_last_event_id = state.as_ref().and_then(|state| state.last_event_id);
         let contract = search_index_contract(state_last_event_id, &metadata);
@@ -1520,18 +1556,30 @@ pub fn sync_search_index(path: impl AsRef<Path>, board: &str) -> Result<SearchIn
                 now,
             ),
         )?;
+        mark_derived_store_dirty(&conn, TANTIVY_TASKS_STORE, now)?;
 
         let affected_task_ids =
             affected_task_ids_since(&conn, &board_id, indexed_last_event_id.unwrap_or(0))?;
         let documents = task_search_documents_for_task_ids(&conn, &board_id, &affected_task_ids)?;
-        let metadata = kanban_search::tantivy_backend::sync_task_index(
+        let metadata = match kanban_search::tantivy_backend::sync_task_index(
             &index_path,
             &board_id,
             current_last_event_id,
             &documents,
             &affected_task_ids,
-        )
-        .map_err(search_storage)?;
+        ) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                mark_derived_store_failure(
+                    &conn,
+                    TANTIVY_TASKS_STORE,
+                    &board_id,
+                    &error.to_string(),
+                    SystemClock.now_ms(),
+                )?;
+                return Err(search_storage(error));
+            }
+        };
         write_search_index_state(
             &conn,
             &default_search_index_state(
@@ -1545,6 +1593,14 @@ pub fn sync_search_index(path: impl AsRef<Path>, board: &str) -> Result<SearchIn
                 )),
                 SystemClock.now_ms(),
             ),
+        )?;
+        mark_derived_store_success(
+            &conn,
+            TANTIVY_TASKS_STORE,
+            &board_id,
+            metadata.last_event_id,
+            false,
+            SystemClock.now_ms(),
         )?;
         Ok(SearchIndexStatus {
             backend: "tantivy".to_owned(),
@@ -4382,12 +4438,7 @@ fn search_index_ahead(
 
 #[cfg(feature = "tantivy-backend")]
 fn task_index_path(db_path: &Path) -> PathBuf {
-    db_path
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join("index")
-        .join("v1")
-        .join("tasks")
+    kanban_local::task_index_path(db_path.to_path_buf())
 }
 
 #[cfg(feature = "tantivy-backend")]
@@ -4827,10 +4878,164 @@ fn enqueue_index_outbox(
     action: &str,
     now: i64,
 ) -> Result<()> {
+    for target in OUTBOX_FANOUT_TARGETS {
+        conn.execute(
+            "INSERT INTO index_outbox(source_event_id, target, entity_uri, action, payload_json, status, attempts, last_error, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, '{}', 'pending', 0, NULL, ?5, ?5)",
+            params![source_event_id, target.as_str(), entity_uri, action, now],
+        )
+        .map_err(storage)?;
+    }
+    for seed in DERIVED_STORE_SEEDS {
+        mark_derived_store_dirty(conn, seed.store_name, now)?;
+    }
+    Ok(())
+}
+
+fn mark_derived_store_dirty(conn: &Connection, store_name: &str, now: i64) -> Result<()> {
+    let seed = derived_store_for_name(store_name)
+        .ok_or_else(|| KanbanError::Storage(format!("unknown derived store: {store_name}")))?;
+    let update = DerivedStoreUpdate::dirty(seed, now);
     conn.execute(
-        "INSERT INTO index_outbox(source_event_id, target, entity_uri, action, payload_json, status, attempts, last_error, created_at, updated_at) \
-         VALUES (?1, 'all', ?2, ?3, '{}', 'pending', 0, NULL, ?4, ?4)",
-        params![source_event_id, entity_uri, action, now],
+        "INSERT INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) \
+         ON CONFLICT(store_name) DO UPDATE SET dirty=1, updated_at=excluded.updated_at",
+        params![
+            store_name,
+            update.schema_version,
+            update.last_event_id,
+            i64::from(update.dirty),
+            update.last_rebuild_at,
+            update.last_sync_at,
+            update.last_error,
+            update.updated_at
+        ],
+    )
+    .map_err(storage)?;
+    Ok(())
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn mark_derived_store_success(
+    conn: &Connection,
+    store_name: &str,
+    board_id: &str,
+    last_event_id: Option<i64>,
+    rebuilt: bool,
+    now: i64,
+) -> Result<()> {
+    let target = store_target(store_name)?;
+    let seed = derived_store_for_name(store_name)
+        .ok_or_else(|| KanbanError::Storage(format!("unknown derived store: {store_name}")))?;
+    let update = DerivedStoreUpdate::success(seed, last_event_id, rebuilt, now);
+    conn.execute(
+        "INSERT INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) \
+         ON CONFLICT(store_name) DO UPDATE SET last_event_id=excluded.last_event_id, dirty=0, last_rebuild_at=COALESCE(excluded.last_rebuild_at, derived_store_state.last_rebuild_at), last_sync_at=COALESCE(excluded.last_sync_at, derived_store_state.last_sync_at), last_error=NULL, updated_at=excluded.updated_at",
+        params![
+            update.store_name,
+            update.schema_version,
+            update.last_event_id,
+            i64::from(update.dirty),
+            update.last_rebuild_at,
+            update.last_sync_at,
+            update.last_error,
+            update.updated_at
+        ],
+    )
+    .map_err(storage)?;
+    complete_outbox_for_store(conn, target, board_id, last_event_id, now)?;
+    Ok(())
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn mark_derived_store_failure(
+    conn: &Connection,
+    store_name: &str,
+    board_id: &str,
+    error: &str,
+    now: i64,
+) -> Result<()> {
+    let target = store_target(store_name)?;
+    let seed = derived_store_for_name(store_name)
+        .ok_or_else(|| KanbanError::Storage(format!("unknown derived store: {store_name}")))?;
+    let update = DerivedStoreUpdate::failure(seed, error, now);
+    conn.execute(
+        "INSERT INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) \
+         ON CONFLICT(store_name) DO UPDATE SET dirty=1, last_error=excluded.last_error, updated_at=excluded.updated_at",
+        params![
+            update.store_name,
+            update.schema_version,
+            update.last_event_id,
+            i64::from(update.dirty),
+            update.last_rebuild_at,
+            update.last_sync_at,
+            update.last_error,
+            update.updated_at
+        ],
+    )
+    .map_err(storage)?;
+    fail_outbox_for_store(conn, target, board_id, error, now)?;
+    Ok(())
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn store_target(store_name: &str) -> Result<OutboxTarget> {
+    DERIVED_STORE_SEEDS
+        .iter()
+        .find(|seed| seed.store_name == store_name)
+        .map(|seed| seed.target)
+        .ok_or_else(|| KanbanError::Storage(format!("unknown derived store: {store_name}")))
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn complete_outbox_for_store(
+    conn: &Connection,
+    target: OutboxTarget,
+    board_id: &str,
+    last_event_id: Option<i64>,
+    now: i64,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE index_outbox \
+         SET status='done', last_error=NULL, updated_at=?1 \
+         WHERE target IN (?2, 'all') \
+           AND status IN ('pending', 'running', 'failed') \
+           AND source_event_id <= ?3 \
+           AND EXISTS ( \
+               SELECT 1 FROM task_events e \
+               WHERE e.id=index_outbox.source_event_id AND e.board_id=?4 \
+           )",
+        params![
+            now,
+            target.as_str(),
+            last_event_id.unwrap_or(i64::MAX),
+            board_id
+        ],
+    )
+    .map_err(storage)?;
+    Ok(())
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn fail_outbox_for_store(
+    conn: &Connection,
+    target: OutboxTarget,
+    board_id: &str,
+    error: &str,
+    now: i64,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE index_outbox \
+         SET status='failed', attempts=attempts + 1, last_error=?1, updated_at=?2 \
+         WHERE target IN (?3, 'all') \
+           AND status IN ('pending', 'running') \
+           AND EXISTS ( \
+               SELECT 1 FROM task_events e \
+               WHERE e.id=index_outbox.source_event_id AND e.board_id=?4 \
+           )",
+        params![error, now, target.as_str(), board_id],
     )
     .map_err(storage)?;
     Ok(())

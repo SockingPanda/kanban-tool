@@ -127,6 +127,10 @@ impl EntityUri {
         Self(format!("kb://label/{id}"))
     }
 
+    pub fn chunk(id: &str) -> Self {
+        Self(format!("kb://chunk/{id}"))
+    }
+
     pub fn setting(key: &str) -> Self {
         Self(format!("kb://setting/{key}"))
     }
@@ -148,6 +152,7 @@ pub enum EntityUriError {
 #[serde(rename_all = "snake_case")]
 pub enum Predicate {
     BelongsToBoard,
+    BelongsToTask,
     DependsOn,
     ProducedBy,
     GeneratedBy,
@@ -166,6 +171,7 @@ impl Predicate {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::BelongsToBoard => "belongs_to_board",
+            Self::BelongsToTask => "belongs_to_task",
             Self::DependsOn => "depends_on",
             Self::ProducedBy => "produced_by",
             Self::GeneratedBy => "generated_by",
@@ -186,6 +192,7 @@ impl Predicate {
             Self::BelongsToBoard => {
                 RelationPredicateSeed::new(self, Some("task"), Some("board"), "sqlite")
             }
+            Self::BelongsToTask => RelationPredicateSeed::new(self, None, Some("task"), "sqlite"),
             Self::DependsOn => {
                 RelationPredicateSeed::new(self, Some("task"), Some("task"), "sqlite")
             }
@@ -214,6 +221,7 @@ impl fmt::Display for Predicate {
 
 pub const PREDICATE_SEEDS: &[Predicate] = &[
     Predicate::BelongsToBoard,
+    Predicate::BelongsToTask,
     Predicate::DependsOn,
     Predicate::ProducedBy,
     Predicate::GeneratedBy,
@@ -234,6 +242,50 @@ pub struct RelationPredicateSeed {
     pub domain_kind: Option<&'static str>,
     pub range_kind: Option<&'static str>,
     pub authoritative_store: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EntitySnapshot {
+    pub uri: EntityUri,
+    pub kind: EntityKind,
+    pub source_table: String,
+    pub source_id: String,
+    pub board_id: Option<String>,
+    pub task_id: Option<String>,
+    pub title: Option<String>,
+    pub summary: Option<String>,
+    pub content_hash: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub archived_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Provenance {
+    pub source_table: Option<String>,
+    pub source_id: Option<String>,
+    pub source_event_id: Option<i64>,
+    pub authoritative_store: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Relation {
+    pub subject_uri: EntityUri,
+    pub predicate: Predicate,
+    pub object_uri: EntityUri,
+    pub graph_uri: EntityUri,
+    pub provenance: Provenance,
+    pub metadata_json: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChunkRef {
+    pub uri: EntityUri,
+    pub entity_uri: EntityUri,
+    pub ordinal: i64,
+    pub content_hash: Option<String>,
 }
 
 impl RelationPredicateSeed {

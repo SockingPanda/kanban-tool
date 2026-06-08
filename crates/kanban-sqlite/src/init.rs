@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_board_id};
 use kanban_entity::PREDICATE_SEEDS;
+use kanban_indexer::DERIVED_STORE_SEEDS;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use serde::{Deserialize, Serialize};
@@ -243,11 +244,11 @@ fn seed_relation_predicates(conn: &Connection, now: i64) -> Result<()> {
 }
 
 fn seed_derived_store_state(conn: &Connection, now: i64) -> Result<()> {
-    for store_name in ["tantivy_tasks", "oxigraph_relations", "lancedb_chunks"] {
+    for seed in DERIVED_STORE_SEEDS {
         conn.execute(
             "INSERT OR IGNORE INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
-             VALUES (?1, 1, 0, 0, NULL, NULL, NULL, ?2)",
-            params![store_name, now],
+             VALUES (?1, ?2, 0, 0, NULL, NULL, NULL, ?3)",
+            params![seed.store_name, seed.schema_version, now],
         )
         .map_err(|err| KanbanError::Storage(err.to_string()))?;
     }

@@ -411,6 +411,48 @@ fn context_broker_reports_graph_dirty_and_stale_before_sync() {
     assert!(pack.degraded.iter().any(|marker| marker == "graph_stale"));
 }
 
+#[cfg(feature = "graph-oxigraph")]
+#[test]
+fn context_broker_reports_graph_error_diagnostic_without_failing_pack() {
+    let temp = TempDb::new("context_broker_reports_graph_error_diagnostic_without_failing_pack");
+    init_database(&temp.path, "tester").unwrap();
+    let subject = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("broken graph context subject"),
+    )
+    .unwrap();
+    let graph_path = kanban_local::graph_store_path(temp.path.clone());
+    std::fs::create_dir_all(graph_path.parent().unwrap()).unwrap();
+    std::fs::write(&graph_path, "not a graph directory").unwrap();
+
+    let pack = build_context_pack(
+        &temp.path,
+        "default",
+        &subject.id,
+        kanban_context::ContextPolicy {
+            lexical_limit: 5,
+            graph_limit: 5,
+            vector_limit: 0,
+            max_items: 10,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        pack.items[0].entity_uri,
+        kanban_entity::EntityUri::task(&subject.id)
+    );
+    assert!(pack.degraded.iter().any(|marker| marker == "graph_error"));
+    assert!(pack.diagnostics.iter().any(|diagnostic| {
+        diagnostic.source == "graph"
+            && diagnostic.code == "graph_error"
+            && !diagnostic.message.is_empty()
+            && diagnostic.message.len() <= 243
+    }));
+}
+
 #[cfg(feature = "vector-lancedb")]
 #[test]
 fn context_broker_reports_vector_query_error_without_failing_pack() {

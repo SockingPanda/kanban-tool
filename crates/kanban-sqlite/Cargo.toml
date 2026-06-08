@@ -13,6 +13,7 @@ vector-lancedb = ["kanban-vector/vector-lancedb"]
 
 [dependencies]
 kanban-core.workspace = true
+kanban-context.workspace = true
 kanban-entity.workspace = true
 kanban-graph.workspace = true
 kanban-indexer.workspace = true

@@ -3672,9 +3672,13 @@ dependencies = [
  "axum",
  "futures-util",
  "http-body-util",
+ "kanban-context",
  "kanban-core",
+ "kanban-entity",
+ "kanban-graph",
  "kanban-search",
  "kanban-sqlite",
+ "kanban-vector",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -3688,6 +3692,7 @@ dependencies = [
 name = "kanban-sqlite"
 version = "0.1.0"
 dependencies = [
+ "kanban-context",
  "kanban-core",
  "kanban-entity",
  "kanban-graph",

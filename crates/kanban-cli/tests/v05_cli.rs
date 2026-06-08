@@ -660,6 +660,18 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() {
             .any(|value| value == "graph_disabled")
     );
     assert!(
+        context["data"]["degraded"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "vector_disabled")
+    );
+    assert_eq!(
+        context["data"]["items"][0]["entity_uri"],
+        format!("kb://task/{task_id}")
+    );
+    assert_eq!(context["data"]["items"][0]["source"], "subject");
+    assert!(
         context["data"]["items"]
             .as_array()
             .unwrap()

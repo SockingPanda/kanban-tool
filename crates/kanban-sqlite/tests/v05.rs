@@ -8,10 +8,10 @@ use std::{
 use kanban_core::{TaskStatus, new_run_id};
 use kanban_sqlite::{
     CreateTask, DispatchOptions, FinishPolicy, TaskPatch, add_dependency, archive_task,
-    begin_database_replace, begin_database_runtime, block_task, claim_task, complete_task,
-    connect_file, create_comment, create_task, derived_store_statuses, dispatch_once,
-    doctor_database, get_task, init_database, list_dependencies, list_events, list_outbox,
-    list_runs, list_tasks, promote_task, rebuild_vector_store_with, search_tasks,
+    begin_database_replace, begin_database_runtime, block_task, build_context_pack, claim_task,
+    complete_task, connect_file, create_comment, create_task, derived_store_statuses,
+    dispatch_once, doctor_database, get_task, init_database, list_dependencies, list_events,
+    list_outbox, list_runs, list_tasks, promote_task, rebuild_vector_store_with, search_tasks,
     sync_vector_store_with, unblock_task, update_task,
 };
 use kanban_vector::{
@@ -242,6 +242,87 @@ fn sqlite_search_rejects_limit_that_cannot_be_bounded_safely() {
     .unwrap_err();
 
     assert!(error.to_string().contains("limit must be <= 1000"));
+}
+
+#[test]
+fn context_broker_hydrates_subject_and_reports_disabled_derived_stores() {
+    let temp = TempDb::new("context_broker_hydrates_subject_and_reports_disabled_derived_stores");
+    init_database(&temp.path, "tester").unwrap();
+    let subject = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "context broker source".into(),
+            description: Some("ready spec broker-needle".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let related = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "related context broker source".into(),
+            description: Some("ready spec broker-needle".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+
+    let pack = build_context_pack(
+        &temp.path,
+        "default",
+        &subject.id,
+        kanban_context::ContextPolicy {
+            lexical_limit: 5,
+            graph_limit: 5,
+            vector_limit: 5,
+            max_items: 10,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(pack.subject, kanban_entity::EntityUri::task(&subject.id));
+    assert_eq!(
+        pack.items[0].entity_uri,
+        kanban_entity::EntityUri::task(&subject.id)
+    );
+    assert_eq!(pack.items[0].source, "subject");
+    assert!(
+        pack.items
+            .iter()
+            .any(|item| item.entity_uri == kanban_entity::EntityUri::task(&related.id))
+    );
+    #[cfg(not(feature = "graph-oxigraph"))]
+    assert!(
+        pack.degraded
+            .iter()
+            .any(|marker| marker == "graph_disabled")
+    );
+    #[cfg(feature = "graph-oxigraph")]
+    assert!(
+        !pack
+            .degraded
+            .iter()
+            .any(|marker| marker == "graph_disabled")
+    );
+    assert!(
+        pack.degraded
+            .iter()
+            .any(|marker| marker == "vector_disabled")
+    );
 }
 
 #[test]

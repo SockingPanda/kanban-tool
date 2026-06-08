@@ -668,6 +668,40 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() {
     );
 }
 
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn vector_status_reports_lancedb_degraded_without_embedding_provider() {
+    let temp = TempDb::new("vector_status_reports_lancedb_degraded_without_embedding_provider");
+    kb(&temp.path, &["init"]).success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "degraded vector source",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success();
+
+    let status = kb(&temp.path, &["--json", "vector", "status"]).success_json();
+    assert_eq!(status["data"]["backend"], "lancedb");
+    assert_eq!(status["data"]["enabled"], false);
+    assert!(
+        status["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("without an embedding provider")
+    );
+    assert!(
+        status["data"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("dirty=true")
+    );
+}
+
 #[cfg(feature = "tantivy-backend")]
 #[test]
 fn index_rebuild_enables_tantivy_search_backend() {

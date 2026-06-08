@@ -25,11 +25,11 @@ use kanban_sqlite::{
     derived_store_statuses, dispatch_once, export_jsonl, get_entity, get_run_by_id_global,
     get_task, heartbeat_task, import_jsonl, init_database, list_dependencies, list_entities,
     list_events, list_outbox, list_runs, list_tasks, list_tasks_page, promote_task, queue_stats,
-    rebuild_graph_store, rebuild_search_index, reclaim_expired, remove_dependency,
-    search_index_status, search_tasks, set_task_retry_policy_by_id, submit_review_task,
-    sync_graph_store, sync_search_index, unblock_task, update_task, vacuum_database,
+    rebuild_graph_store, rebuild_search_index, rebuild_vector_store, reclaim_expired,
+    remove_dependency, search_index_status, search_tasks, set_task_retry_policy_by_id,
+    submit_review_task, sync_graph_store, sync_search_index, sync_vector_store, unblock_task,
+    update_task, vacuum_database, vector_store_status,
 };
-use kanban_vector::{DisabledVectorStore, VectorStore};
 
 #[derive(Debug, Parser)]
 #[command(name = "kb", version, about = "Local SQLite-backed Kanban work queue")]
@@ -261,6 +261,8 @@ struct GraphQueryArgs {
 #[derive(Debug, Subcommand)]
 enum VectorCommand {
     Status,
+    Rebuild,
+    Sync,
 }
 
 #[derive(Debug, Subcommand)]
@@ -535,7 +537,7 @@ fn main() -> Result<()> {
         Command::Outbox { command } => handle_outbox(command, &db_path, cli.json)?,
         Command::Derived { command } => handle_derived(command, &db_path, cli.json)?,
         Command::Graph { command } => handle_graph(command, &db_path, &cli.board, cli.json)?,
-        Command::Vector { command } => handle_vector(command, cli.json)?,
+        Command::Vector { command } => handle_vector(command, &db_path, &cli.board, cli.json)?,
         Command::Context { command } => handle_context(command, &db_path, &cli.board, cli.json)?,
         Command::Dispatch(args) => {
             let options = dispatch_options(&args, actor.clone())?;
@@ -1437,11 +1439,28 @@ fn open_graph_store(_db_path: &Path) -> Result<DisabledGraphStore> {
     Ok(DisabledGraphStore)
 }
 
-fn handle_vector(command: VectorCommand, json: bool) -> Result<()> {
+fn handle_vector(command: VectorCommand, db_path: &PathBuf, board: &str, json: bool) -> Result<()> {
     match command {
         VectorCommand::Status => {
-            let store = DisabledVectorStore;
-            let status = store.status();
+            let status = vector_store_status(db_path, board)?;
+            print_or_json(json, &status, || {
+                format!(
+                    "vector backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+        VectorCommand::Rebuild => {
+            let status = rebuild_vector_store(db_path, board)?;
+            print_or_json(json, &status, || {
+                format!(
+                    "vector backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+        VectorCommand::Sync => {
+            let status = sync_vector_store(db_path, board)?;
             print_or_json(json, &status, || {
                 format!(
                     "vector backend={} enabled={}: {}",

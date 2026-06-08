@@ -11,7 +11,11 @@ use kanban_sqlite::{
     begin_database_replace, begin_database_runtime, block_task, claim_task, complete_task,
     connect_file, create_comment, create_task, derived_store_statuses, dispatch_once,
     doctor_database, get_task, init_database, list_dependencies, list_events, list_outbox,
-    list_runs, list_tasks, promote_task, search_tasks, unblock_task, update_task,
+    list_runs, list_tasks, promote_task, rebuild_vector_store_with, search_tasks,
+    sync_vector_store_with, unblock_task, update_task,
+};
+use kanban_vector::{
+    EmbeddingChunk, VectorError, VectorHit, VectorQuery, VectorStore, VectorStoreStatus,
 };
 use rusqlite::{Connection, params};
 
@@ -968,6 +972,103 @@ fn graph_rebuild_persists_board_and_dependency_relations() {
     assert_eq!(
         board_neighbors[0].object_uri,
         EntityUri::board(&child.board_id)
+    );
+}
+
+#[test]
+fn vector_sync_marks_lancedb_outbox_done_without_touching_other_boards() {
+    let temp = TempDb::new("vector_sync_marks_lancedb_outbox_done_without_touching_other_boards");
+    init_database(&temp.path, "tester").unwrap();
+    insert_board(&temp.path, "second", "b_second");
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default board vector task"),
+    )
+    .unwrap();
+    create_task(
+        &temp.path,
+        "second",
+        "tester",
+        CreateTask::ready("second board vector task"),
+    )
+    .unwrap();
+
+    let store = RecordingVectorStore::default();
+    let status = sync_vector_store_with(&temp.path, "default", &store).unwrap();
+    assert_eq!(status.backend, "test-vector");
+    assert!(status.message.contains("synced 1 chunk(s)"));
+    assert_eq!(
+        store.upserted_texts(),
+        vec!["default board vector task\n\nready spec"]
+    );
+    assert_eq!(
+        lancedb_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done"]
+    );
+    assert_eq!(
+        lancedb_outbox_statuses_for_board(&temp.path, "second"),
+        vec!["pending"]
+    );
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let vector = derived
+        .iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .unwrap();
+    assert!(
+        vector.dirty,
+        "second board still has pending LanceDB outbox"
+    );
+
+    sync_vector_store_with(&temp.path, "second", &store).unwrap();
+    assert_eq!(
+        lancedb_outbox_statuses_for_board(&temp.path, "second"),
+        vec!["done"]
+    );
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let vector = derived
+        .iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .unwrap();
+    assert!(!vector.dirty);
+    assert!(vector.last_error.is_none());
+}
+
+#[test]
+fn vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error() {
+    let temp = TempDb::new("vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("failing vector task"),
+    )
+    .unwrap();
+    let store = FailingVectorStore;
+
+    let error = rebuild_vector_store_with(&temp.path, "default", &store).unwrap_err();
+    assert!(error.to_string().contains("dimension mismatch"));
+
+    let fresh = get_task(&temp.path, "default", &task.id).unwrap();
+    assert_eq!(fresh.title, task.title, "SQLite task truth is unchanged");
+    assert_eq!(
+        lancedb_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["failed"]
+    );
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let vector = derived
+        .iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .unwrap();
+    assert!(vector.dirty);
+    assert!(
+        vector
+            .last_error
+            .as_deref()
+            .unwrap()
+            .contains("dimension mismatch")
     );
 }
 
@@ -3464,7 +3565,6 @@ impl Drop for TempDb {
     }
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
 fn insert_board(path: &Path, slug: &str, id: &str) {
     connect_file(path)
         .unwrap()
@@ -3473,6 +3573,60 @@ fn insert_board(path: &Path, slug: &str, id: &str) {
             params![id, slug, slug],
         )
         .unwrap();
+}
+
+#[derive(Default)]
+struct RecordingVectorStore {
+    upserted: std::sync::Mutex<Vec<String>>,
+}
+
+impl RecordingVectorStore {
+    fn upserted_texts(&self) -> Vec<String> {
+        self.upserted.lock().unwrap().clone()
+    }
+}
+
+impl VectorStore for RecordingVectorStore {
+    fn status(&self) -> VectorStoreStatus {
+        VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store".to_owned(),
+        }
+    }
+
+    fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
+        let mut upserted = self.upserted.lock().unwrap();
+        upserted.extend(chunks.iter().map(|chunk| chunk.text.clone()));
+        Ok(())
+    }
+
+    fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
+        Ok(Vec::new())
+    }
+}
+
+struct FailingVectorStore;
+
+impl VectorStore for FailingVectorStore {
+    fn status(&self) -> VectorStoreStatus {
+        VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store".to_owned(),
+        }
+    }
+
+    fn upsert(&self, _chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
+        Err(VectorError::DimensionMismatch {
+            expected: 3,
+            actual: 2,
+        })
+    }
+
+    fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
+        Ok(Vec::new())
+    }
 }
 
 #[cfg(feature = "tantivy-backend")]
@@ -3504,6 +3658,24 @@ fn graph_outbox_statuses_for_board(path: &Path, board_slug: &str) -> Vec<String>
              JOIN task_events e ON e.id=io.source_event_id \
              JOIN boards b ON b.id=e.board_id \
              WHERE b.slug=?1 AND io.target='oxigraph' \
+             ORDER BY io.id ASC",
+        )
+        .unwrap();
+    stmt.query_map([board_slug], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap()
+}
+
+fn lancedb_outbox_statuses_for_board(path: &Path, board_slug: &str) -> Vec<String> {
+    let conn = connect_file(path).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT io.status \
+             FROM index_outbox io \
+             JOIN task_events e ON e.id=io.source_event_id \
+             JOIN boards b ON b.id=e.board_id \
+             WHERE b.slug=?1 AND io.target='lancedb' \
              ORDER BY io.id ASC",
         )
         .unwrap();

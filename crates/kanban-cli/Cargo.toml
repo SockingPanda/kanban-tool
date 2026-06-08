@@ -20,6 +20,10 @@ graph-oxigraph = [
   "kanban-graph/graph-oxigraph",
   "kanban-sqlite/graph-oxigraph",
 ]
+vector-lancedb = [
+  "kanban-sqlite/vector-lancedb",
+  "kanban-vector/vector-lancedb",
+]
 
 [dependencies]
 anyhow.workspace = true

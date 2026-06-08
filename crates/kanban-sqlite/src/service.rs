@@ -758,10 +758,9 @@ pub fn rebuild_vector_store_with(
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
     let last_event_id = current_last_event_id(&conn, &board_id)?;
-    let entity_uris = vector_entity_uris_for_board(&conn, &board_id)?;
-    let chunks = vector_chunks_for_board(&conn, &board_id)?;
+    let chunks = vector_chunks_for_board(&conn, &board_id, store.chunk_embedding_model())?;
     match store
-        .delete_entities(&entity_uris)
+        .delete_board(&board_id)
         .and_then(|()| store.upsert(&chunks))
     {
         Ok(()) => {
@@ -809,18 +808,23 @@ pub fn sync_vector_store_with(
         return vector_store_status_with(&conn, &board_id, store);
     }
     let jobs = pending_vector_outbox_for_board(&conn, &board_id, last_event_id)?;
+    let full_rebuild = state.last_event_id == 0 || jobs.iter().any(|job| job.action == "rebuild");
     let chunks = if state.last_event_id == 0 || jobs.iter().any(|job| job.action == "rebuild") {
-        vector_chunks_for_board(&conn, &board_id)?
+        vector_chunks_for_board(&conn, &board_id, store.chunk_embedding_model())?
     } else {
         let entity_uris = jobs
             .iter()
             .map(|job| job.entity_uri.clone())
             .collect::<Vec<_>>();
-        vector_chunks_for_entity_uris(&conn, &board_id, &entity_uris)?
+        vector_chunks_for_entity_uris(
+            &conn,
+            &board_id,
+            &entity_uris,
+            store.chunk_embedding_model(),
+        )?
     };
-    let entity_uris = if state.last_event_id == 0 || jobs.iter().any(|job| job.action == "rebuild")
-    {
-        vector_entity_uris_for_board(&conn, &board_id)?
+    let entity_uris = if full_rebuild {
+        Vec::new()
     } else {
         let mut entity_uris = jobs
             .iter()
@@ -830,10 +834,13 @@ pub fn sync_vector_store_with(
         entity_uris.dedup();
         entity_uris
     };
-    match store
-        .delete_entities(&entity_uris)
-        .and_then(|()| store.upsert(&chunks))
-    {
+    let write_result = if full_rebuild {
+        store.delete_board(&board_id)
+    } else {
+        store.delete_entities(&entity_uris)
+    }
+    .and_then(|()| store.upsert(&chunks));
+    match write_result {
         Ok(()) => {
             let now = SystemClock.now_ms();
             mark_derived_store_success(
@@ -5305,6 +5312,7 @@ fn has_pending_vector_outbox_for_board(
 fn vector_chunks_for_board(
     conn: &Connection,
     board_id: &str,
+    embedding_model: &str,
 ) -> Result<Vec<kanban_vector::EmbeddingChunk>> {
     let mut stmt = conn
         .prepare(
@@ -5320,24 +5328,14 @@ fn vector_chunks_for_board(
     let sources = rows
         .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)?;
-    build_vector_chunks(&sources)
-}
-
-fn vector_entity_uris_for_board(conn: &Connection, board_id: &str) -> Result<Vec<String>> {
-    let mut stmt = conn
-        .prepare("SELECT 'kb://task/' || id FROM tasks WHERE board_id=?1 ORDER BY seq ASC")
-        .map_err(storage)?;
-    let rows = stmt
-        .query_map([board_id], |row| row.get::<_, String>(0))
-        .map_err(storage)?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)
+    build_vector_chunks(&sources, embedding_model)
 }
 
 fn vector_chunks_for_entity_uris(
     conn: &Connection,
     board_id: &str,
     entity_uris: &[String],
+    embedding_model: &str,
 ) -> Result<Vec<kanban_vector::EmbeddingChunk>> {
     let mut task_ids = entity_uris
         .iter()
@@ -5366,7 +5364,7 @@ fn vector_chunks_for_entity_uris(
     let sources = rows
         .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)?;
-    build_vector_chunks(&sources)
+    build_vector_chunks(&sources, embedding_model)
 }
 
 fn task_chunk_source_from_row(row: &Row<'_>) -> rusqlite::Result<TaskChunkSource> {
@@ -5383,8 +5381,11 @@ fn task_chunk_source_from_row(row: &Row<'_>) -> rusqlite::Result<TaskChunkSource
     })
 }
 
-fn build_vector_chunks(sources: &[TaskChunkSource]) -> Result<Vec<kanban_vector::EmbeddingChunk>> {
-    let builder = ChunkBuilder::new("kb-local-default");
+fn build_vector_chunks(
+    sources: &[TaskChunkSource],
+    embedding_model: &str,
+) -> Result<Vec<kanban_vector::EmbeddingChunk>> {
+    let builder = ChunkBuilder::new(embedding_model);
     let mut chunks = Vec::new();
     for source in sources {
         chunks.extend(builder.build_task_chunks(source).map_err(vector_storage)?);

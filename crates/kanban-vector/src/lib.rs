@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Arc};
 use thiserror::Error;
 
+pub const DEFAULT_EMBEDDING_MODEL: &str = "kb-local-default";
+
 #[cfg(feature = "vector-lancedb")]
 mod lancedb_store;
 #[cfg(feature = "vector-lancedb")]
@@ -132,7 +134,11 @@ pub trait EmbeddingProvider {
 }
 
 pub trait VectorStore {
+    fn chunk_embedding_model(&self) -> &str {
+        DEFAULT_EMBEDDING_MODEL
+    }
     fn status(&self) -> VectorStoreStatus;
+    fn delete_board(&self, board_id: &str) -> Result<(), VectorError>;
     fn delete_entities(&self, entity_uris: &[String]) -> Result<(), VectorError>;
     fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError>;
     fn query(&self, query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError>;
@@ -151,6 +157,10 @@ impl VectorStore for DisabledVectorStore {
     }
 
     fn upsert(&self, _chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
+        Err(VectorError::Disabled)
+    }
+
+    fn delete_board(&self, _board_id: &str) -> Result<(), VectorError> {
         Err(VectorError::Disabled)
     }
 

@@ -70,6 +70,13 @@ impl LanceDbStore {
 }
 
 impl VectorStore for LanceDbStore {
+    fn chunk_embedding_model(&self) -> &str {
+        self.provider
+            .as_ref()
+            .map(|provider| provider.embedding_model())
+            .unwrap_or(crate::DEFAULT_EMBEDDING_MODEL)
+    }
+
     fn status(&self) -> VectorStoreStatus {
         match self.provider.as_ref() {
             Some(provider) => VectorStoreStatus {
@@ -132,6 +139,19 @@ impl VectorStore for LanceDbStore {
         })
     }
 
+    fn delete_board(&self, board_id: &str) -> Result<(), VectorError> {
+        let provider = self.provider()?;
+        let embedding_model = provider.embedding_model().to_owned();
+        let table = self.table(provider.dimensions())?;
+        self.runtime.block_on(async {
+            let predicate = col("board_id")
+                .eq(lit(board_id.to_owned()))
+                .and(col("embedding_model").eq(lit(embedding_model)));
+            table.delete(&predicate).await.map_err(map_lancedb_error)?;
+            Ok(())
+        })
+    }
+
     fn delete_entities(&self, entity_uris: &[String]) -> Result<(), VectorError> {
         let provider = self.provider()?;
         if entity_uris.is_empty() {
@@ -141,10 +161,13 @@ impl VectorStore for LanceDbStore {
         let mut entity_uris = entity_uris.to_vec();
         entity_uris.sort();
         entity_uris.dedup();
+        let embedding_model = provider.embedding_model().to_owned();
         let table = self.table(provider.dimensions())?;
         self.runtime.block_on(async {
             for entity_uri in entity_uris {
-                let predicate = col("entity_uri").eq(lit(entity_uri));
+                let predicate = col("entity_uri")
+                    .eq(lit(entity_uri))
+                    .and(col("embedding_model").eq(lit(embedding_model.clone())));
                 table.delete(&predicate).await.map_err(map_lancedb_error)?;
             }
             Ok(())
@@ -177,6 +200,7 @@ impl VectorStore for LanceDbStore {
                 .nearest_to(embedding)
                 .map_err(map_lancedb_error)?
                 .column(VECTOR_COLUMN)
+                .only_if_expr(col("embedding_model").eq(lit(provider.embedding_model())))
                 .limit(query.limit)
                 .select(Select::columns(&[
                     "chunk_uri",
@@ -505,6 +529,22 @@ mod tests {
         }
     }
 
+    struct OtherModelProvider;
+
+    impl EmbeddingProvider for OtherModelProvider {
+        fn embedding_model(&self) -> &str {
+            "other-test"
+        }
+
+        fn dimensions(&self) -> usize {
+            3
+        }
+
+        fn embed(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
+            Ok(vec![1.0, 0.0, 0.0])
+        }
+    }
+
     #[test]
     fn degraded_lancedb_store_reports_unavailable_without_provider() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -517,6 +557,10 @@ mod tests {
         ));
         assert!(matches!(
             store.delete_entities(&["kb://task/t_1".to_owned()]),
+            Err(VectorError::MissingEmbeddingProvider)
+        ));
+        assert!(matches!(
+            store.delete_board("b_1"),
             Err(VectorError::MissingEmbeddingProvider)
         ));
     }
@@ -575,6 +619,103 @@ mod tests {
                 .all(|hit| hit.chunk.entity_uri.as_str() != "kb://task/t_alpha"),
             "{hits:?}"
         );
+    }
+
+    #[test]
+    fn lancedb_store_deletes_chunks_by_board_id() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let provider = Arc::new(StaticProvider);
+        let store = LanceDbStore::connect(LanceDbConfig::new(tempdir.path(), provider)).unwrap();
+        let builder = ChunkBuilder::new("static-test");
+        let mut first_board = build_chunk(&builder, "t_alpha", "alpha work");
+        first_board.board_id = Some("b_first".to_owned());
+        let mut second_board = build_chunk(&builder, "t_beta", "beta work");
+        second_board.board_id = Some("b_second".to_owned());
+
+        store.upsert(&[first_board, second_board]).unwrap();
+        store.delete_board("b_first").unwrap();
+        let hits = store
+            .query(&VectorQuery {
+                text: "alpha".to_owned(),
+                limit: 10,
+            })
+            .unwrap();
+
+        assert!(
+            hits.iter()
+                .all(|hit| hit.chunk.entity_uri.as_str() != "kb://task/t_alpha"),
+            "{hits:?}"
+        );
+        assert!(
+            hits.iter()
+                .any(|hit| hit.chunk.entity_uri.as_str() == "kb://task/t_beta"),
+            "{hits:?}"
+        );
+    }
+
+    #[test]
+    fn lancedb_store_scopes_delete_and_query_by_embedding_model() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let static_store =
+            LanceDbStore::connect(LanceDbConfig::new(tempdir.path(), Arc::new(StaticProvider)))
+                .unwrap();
+        let other_store = LanceDbStore::connect(LanceDbConfig::new(
+            tempdir.path(),
+            Arc::new(OtherModelProvider),
+        ))
+        .unwrap();
+        let static_builder = ChunkBuilder::new("static-test");
+        let other_builder = ChunkBuilder::new("other-test");
+
+        other_store
+            .upsert(&[build_chunk(&other_builder, "t_other", "shared text")])
+            .unwrap();
+        assert!(
+            static_store
+                .query(&VectorQuery {
+                    text: "shared".to_owned(),
+                    limit: 10,
+                })
+                .unwrap()
+                .is_empty()
+        );
+
+        static_store
+            .upsert(&[build_chunk(&static_builder, "t_shared", "shared text")])
+            .unwrap();
+        static_store
+            .delete_entities(&["kb://task/t_shared".to_owned()])
+            .unwrap();
+        let other_hits = other_store
+            .query(&VectorQuery {
+                text: "shared".to_owned(),
+                limit: 10,
+            })
+            .unwrap();
+        assert_eq!(other_hits.len(), 1);
+        assert_eq!(other_hits[0].chunk.entity_uri.as_str(), "kb://task/t_other");
+
+        static_store
+            .upsert(&[build_chunk(&static_builder, "t_static", "shared text")])
+            .unwrap();
+        static_store.delete_board("b_1").unwrap();
+        assert!(
+            static_store
+                .query(&VectorQuery {
+                    text: "shared".to_owned(),
+                    limit: 10,
+                })
+                .unwrap()
+                .is_empty()
+        );
+        let other_hits = other_store
+            .query(&VectorQuery {
+                text: "shared".to_owned(),
+                limit: 10,
+            })
+            .unwrap();
+        assert_eq!(other_hits.len(), 1);
+        assert_eq!(other_hits[0].chunk.entity_uri.as_str(), "kb://task/t_other");
     }
 
     #[test]

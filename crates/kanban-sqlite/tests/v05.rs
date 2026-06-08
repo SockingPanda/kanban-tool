@@ -906,6 +906,12 @@ fn graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() {
         .find(|store| store.store_name == "oxigraph_relations")
         .unwrap();
     assert!(!graph.dirty);
+    let default_status = kanban_sqlite::graph_store_status(&temp.path, "default").unwrap();
+    assert!(
+        default_status.message.contains("lag=0"),
+        "default board has no unfinished graph outbox even though the shared watermark advanced: {}",
+        default_status.message
+    );
 }
 
 #[cfg(feature = "graph-oxigraph")]

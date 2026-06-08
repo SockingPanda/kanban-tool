@@ -550,8 +550,14 @@ pub fn graph_store_status(path: impl AsRef<Path>, board: &str) -> Result<GraphSt
     let graph = OxigraphStore::open(graph_store_path(path_ref)).map_err(graph_storage)?;
     let current_last_event_id = current_last_event_id(&conn, &board_id)?;
     let state = derived_status_by_name(&conn, OXIGRAPH_RELATIONS_STORE)?;
+    let board_has_pending =
+        has_pending_graph_outbox_for_board(&conn, &board_id, current_last_event_id)?;
     let mut status = graph.status();
-    let lag = search_lag(current_last_event_id, Some(state.last_event_id));
+    let lag = if board_has_pending {
+        search_lag(current_last_event_id, Some(state.last_event_id))
+    } else {
+        0
+    };
     status.message = format!(
         "{}; dirty={} last_event_id={} lag={}",
         status.message, state.dirty, state.last_event_id, lag
@@ -631,7 +637,7 @@ pub fn sync_graph_store(path: impl AsRef<Path>, board: &str) -> Result<GraphStor
     let board_id = board_id(&conn, board)?;
     let last_event_id = current_last_event_id(&conn, &board_id)?;
     let state = derived_status_by_name(&conn, OXIGRAPH_RELATIONS_STORE)?;
-    if !state.dirty && Some(state.last_event_id) == last_event_id {
+    if !has_pending_graph_outbox_for_board(&conn, &board_id, last_event_id)? {
         return graph_store_status(path_ref, board);
     }
     let jobs = pending_graph_outbox_for_board(&conn, &board_id, last_event_id)?;
@@ -5035,6 +5041,27 @@ fn pending_graph_outbox_for_board(
         .map_err(storage)?;
     rows.collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)
+}
+
+#[cfg(feature = "graph-oxigraph")]
+fn has_pending_graph_outbox_for_board(
+    conn: &Connection,
+    board_id: &str,
+    last_event_id: Option<i64>,
+) -> Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS( \
+             SELECT 1 FROM index_outbox o \
+             JOIN task_events e ON e.id=o.source_event_id \
+             WHERE o.target IN ('oxigraph', 'all') \
+               AND o.status IN ('pending', 'running', 'failed') \
+               AND e.board_id=?1 \
+               AND e.id <= ?2 \
+         )",
+        params![board_id, last_event_id.unwrap_or(i64::MAX)],
+        |row| row.get::<_, bool>(0),
+    )
+    .map_err(storage)
 }
 
 #[cfg(feature = "graph-oxigraph")]

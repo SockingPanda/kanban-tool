@@ -1410,7 +1410,9 @@ fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Result<Doctor
     let user_version: i64 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(storage)?;
-    if migration_version != Some(user_version) || !doctor_tables_present(conn)? {
+    if migration_version != Some(user_version)
+        || !doctor_tables_present(conn, migration_version, user_version)?
+    {
         return Ok(DoctorReport {
             ok: false,
             integrity_check,
@@ -4687,8 +4689,22 @@ fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
     .map_err(storage)
 }
 
-fn doctor_tables_present(conn: &Connection) -> Result<bool> {
-    for table in ["tasks", "task_dependencies", "task_runs"] {
+fn doctor_tables_present(
+    conn: &Connection,
+    migration_version: Option<i64>,
+    user_version: i64,
+) -> Result<bool> {
+    let mut required_tables = vec!["tasks", "task_dependencies", "task_runs"];
+    if migration_version.unwrap_or(0) >= 2 || user_version >= 2 {
+        required_tables.extend([
+            "entities",
+            "relation_predicates",
+            "entity_relations",
+            "index_outbox",
+            "derived_store_state",
+        ]);
+    }
+    for table in required_tables {
         if !table_exists(conn, table)? {
             return Ok(false);
         }

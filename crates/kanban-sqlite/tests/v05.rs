@@ -2809,6 +2809,26 @@ fn doctor_reports_partially_initialized_database_without_bailing() {
 }
 
 #[test]
+fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() {
+    for table in ["index_outbox", "derived_store_state"] {
+        let temp = TempDb::new(&format!(
+            "doctor_reports_missing_knowledge_substrate_tables_unhealthy_{table}"
+        ));
+        init_database(&temp.path, "tester").unwrap();
+        connect_file(&temp.path)
+            .unwrap()
+            .execute_batch(&format!("DROP TABLE {table};"))
+            .unwrap();
+
+        let report = doctor_database(&temp.path).unwrap();
+
+        assert_eq!(report.migration_version, Some(2));
+        assert_eq!(report.user_version, 2);
+        assert!(!report.ok, "{table} missing should make doctor unhealthy");
+    }
+}
+
+#[test]
 fn doctor_reports_executable_status_invariant_violations() {
     let temp = TempDb::new("doctor_reports_executable_status_invariant_violations");
     init_database(&temp.path, "tester").unwrap();

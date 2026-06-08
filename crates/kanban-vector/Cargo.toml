@@ -5,7 +5,20 @@ version.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[features]
+default = []
+vector-lancedb = ["dep:arrow-array", "dep:arrow-schema", "dep:futures", "dep:lancedb", "dep:tokio"]
+
 [dependencies]
+arrow-array = { workspace = true, optional = true }
+arrow-schema = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
 kanban-entity.workspace = true
+lancedb = { workspace = true, optional = true }
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
+tokio = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true

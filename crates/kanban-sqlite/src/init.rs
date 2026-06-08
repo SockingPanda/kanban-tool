@@ -322,6 +322,12 @@ fn backfill_entities(conn: &Connection) -> Result<()> {
 fn backfill_dependency_relations(conn: &Connection, now: i64) -> Result<()> {
     conn.execute(
         "INSERT OR REPLACE INTO entity_relations(subject_uri, predicate, object_uri, graph_uri, authoritative_store, source_table, source_id, source_event_id, metadata_json, created_at, updated_at) \
+         SELECT 'kb://task/' || id, 'belongs_to_board', 'kb://board/' || board_id, 'kb://graph/indexed', 'sqlite', 'tasks', id, NULL, '{}', created_at, ?1 FROM tasks",
+        [now],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO entity_relations(subject_uri, predicate, object_uri, graph_uri, authoritative_store, source_table, source_id, source_event_id, metadata_json, created_at, updated_at) \
          SELECT 'kb://task/' || child_task_id, 'depends_on', 'kb://task/' || parent_task_id, 'kb://graph/indexed', 'sqlite', 'task_dependencies', parent_task_id || '->' || child_task_id, NULL, '{}', created_at, ?1 FROM task_dependencies",
         [now],
     )

@@ -11,7 +11,11 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_context::{ContextItem, ContextPolicy, ContextRetriever, SearchContextRetriever};
 use kanban_core::TaskStatus;
 use kanban_entity::{EntityUri, Predicate};
-use kanban_graph::{DisabledGraphStore, RelationGraph};
+#[cfg(not(feature = "graph-oxigraph"))]
+use kanban_graph::DisabledGraphStore;
+#[cfg(feature = "graph-oxigraph")]
+use kanban_graph::OxigraphStore;
+use kanban_graph::RelationGraph;
 use kanban_search::SearchQuery;
 use kanban_sqlite::{
     CreateTask, DispatchOptions, EntityListOptions, FinishPolicy, MAX_SEARCH_LIMIT,
@@ -21,9 +25,9 @@ use kanban_sqlite::{
     derived_store_statuses, dispatch_once, export_jsonl, get_entity, get_run_by_id_global,
     get_task, heartbeat_task, import_jsonl, init_database, list_dependencies, list_entities,
     list_events, list_outbox, list_runs, list_tasks, list_tasks_page, promote_task, queue_stats,
-    rebuild_search_index, reclaim_expired, remove_dependency, search_index_status, search_tasks,
-    set_task_retry_policy_by_id, submit_review_task, sync_search_index, unblock_task, update_task,
-    vacuum_database,
+    rebuild_graph_store, rebuild_search_index, reclaim_expired, remove_dependency,
+    search_index_status, search_tasks, set_task_retry_policy_by_id, submit_review_task,
+    sync_graph_store, sync_search_index, unblock_task, update_task, vacuum_database,
 };
 use kanban_vector::{DisabledVectorStore, VectorStore};
 
@@ -233,6 +237,9 @@ enum DerivedCommand {
 enum GraphCommand {
     Status,
     Neighbors(GraphNeighborsArgs),
+    Rebuild,
+    Sync,
+    Query(GraphQueryArgs),
 }
 
 #[derive(Debug, Args)]
@@ -240,6 +247,13 @@ struct GraphNeighborsArgs {
     entity_uri: String,
     #[arg(long)]
     predicate: Option<String>,
+    #[arg(long, default_value_t = 50)]
+    limit: usize,
+}
+
+#[derive(Debug, Args)]
+struct GraphQueryArgs {
+    sparql: String,
     #[arg(long, default_value_t = 50)]
     limit: usize,
 }
@@ -520,7 +534,7 @@ fn main() -> Result<()> {
         Command::Entity { command } => handle_entity(command, &db_path, cli.json)?,
         Command::Outbox { command } => handle_outbox(command, &db_path, cli.json)?,
         Command::Derived { command } => handle_derived(command, &db_path, cli.json)?,
-        Command::Graph { command } => handle_graph(command, cli.json)?,
+        Command::Graph { command } => handle_graph(command, &db_path, &cli.board, cli.json)?,
         Command::Vector { command } => handle_vector(command, cli.json)?,
         Command::Context { command } => handle_context(command, &db_path, &cli.board, cli.json)?,
         Command::Dispatch(args) => {
@@ -1336,11 +1350,10 @@ fn handle_derived(command: DerivedCommand, db_path: &PathBuf, json: bool) -> Res
     Ok(())
 }
 
-fn handle_graph(command: GraphCommand, json: bool) -> Result<()> {
-    let graph = DisabledGraphStore;
+fn handle_graph(command: GraphCommand, db_path: &PathBuf, board: &str, json: bool) -> Result<()> {
     match command {
         GraphCommand::Status => {
-            let status = graph.status();
+            let status = kanban_sqlite::graph_store_status(db_path, board)?;
             print_or_json(json, &status, || {
                 format!(
                     "graph backend={} enabled={}: {}",
@@ -1350,6 +1363,7 @@ fn handle_graph(command: GraphCommand, json: bool) -> Result<()> {
         }
         GraphCommand::Neighbors(args) => {
             validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let graph = open_graph_store(db_path)?;
             let uri = EntityUri::new(args.entity_uri)?;
             let predicate = args.predicate.as_deref().map(parse_predicate).transpose()?;
             let neighbors = graph.neighbors(&uri, predicate, args.limit)?;
@@ -1370,8 +1384,57 @@ fn handle_graph(command: GraphCommand, json: bool) -> Result<()> {
                 }
             })?;
         }
+        GraphCommand::Rebuild => {
+            let status = rebuild_graph_store(db_path, board)?;
+            print_or_json(json, &status, || {
+                format!(
+                    "graph backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+        GraphCommand::Sync => {
+            let status = sync_graph_store(db_path, board)?;
+            print_or_json(json, &status, || {
+                format!(
+                    "graph backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+        GraphCommand::Query(args) => {
+            validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let graph = open_graph_store(db_path)?;
+            let rows = graph.query(&args.sparql, args.limit)?;
+            print_or_json(json, &rows, || {
+                if rows.is_empty() {
+                    "No graph query results".to_owned()
+                } else {
+                    rows.iter()
+                        .map(|row| {
+                            row.bindings
+                                .iter()
+                                .map(|binding| format!("{}={}", binding.name, binding.value))
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+            })?;
+        }
     }
     Ok(())
+}
+
+#[cfg(feature = "graph-oxigraph")]
+fn open_graph_store(db_path: &Path) -> Result<OxigraphStore> {
+    OxigraphStore::open(kanban_local::graph_store_path(db_path.to_path_buf())).map_err(Into::into)
+}
+
+#[cfg(not(feature = "graph-oxigraph"))]
+fn open_graph_store(_db_path: &Path) -> Result<DisabledGraphStore> {
+    Ok(DisabledGraphStore)
 }
 
 fn handle_vector(command: VectorCommand, json: bool) -> Result<()> {

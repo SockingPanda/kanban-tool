@@ -8,10 +8,12 @@ authors.workspace = true
 [features]
 default = []
 tantivy-backend = ["kanban-search/tantivy-backend"]
+graph-oxigraph = ["kanban-graph/graph-oxigraph"]
 
 [dependencies]
 kanban-core.workspace = true
 kanban-entity.workspace = true
+kanban-graph.workspace = true
 kanban-indexer.workspace = true
 kanban-local.workspace = true
 kanban-search.workspace = true

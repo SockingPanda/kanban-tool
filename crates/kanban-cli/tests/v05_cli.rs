@@ -574,20 +574,66 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() {
     let task_id = created["data"]["id"].as_str().unwrap();
 
     let graph = kb(&temp.path, &["--json", "graph", "status"]).success_json();
-    assert_eq!(graph["data"]["backend"], "disabled");
-    assert_eq!(graph["data"]["enabled"], false);
+    #[cfg(not(feature = "graph-oxigraph"))]
+    {
+        assert_eq!(graph["data"]["backend"], "disabled");
+        assert_eq!(graph["data"]["enabled"], false);
 
-    let neighbors = kb(
-        &temp.path,
-        &[
-            "--json",
-            "graph",
-            "neighbors",
-            &format!("kb://task/{task_id}"),
-        ],
-    )
-    .success_json();
-    assert_eq!(neighbors["data"].as_array().unwrap().len(), 0);
+        let neighbors = kb(
+            &temp.path,
+            &[
+                "--json",
+                "graph",
+                "neighbors",
+                &format!("kb://task/{task_id}"),
+            ],
+        )
+        .success_json();
+        assert_eq!(neighbors["data"].as_array().unwrap().len(), 0);
+    }
+    #[cfg(feature = "graph-oxigraph")]
+    {
+        let board_id = created["data"]["board_id"].as_str().unwrap();
+        assert_eq!(graph["data"]["backend"], "oxigraph");
+        assert_eq!(graph["data"]["enabled"], true);
+
+        let rebuilt = kb(&temp.path, &["--json", "graph", "rebuild"]).success_json();
+        assert_eq!(rebuilt["data"]["backend"], "oxigraph");
+        assert_eq!(rebuilt["data"]["enabled"], true);
+
+        let neighbors = kb(
+            &temp.path,
+            &[
+                "--json",
+                "graph",
+                "neighbors",
+                &format!("kb://task/{task_id}"),
+            ],
+        )
+        .success_json();
+        assert!(
+            neighbors["data"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|relation| relation["predicate"] == "belongs_to_board"
+                    && relation["object_uri"] == format!("kb://board/{board_id}"))
+        );
+
+        let query = kb(
+            &temp.path,
+            &[
+                "--json",
+                "graph",
+                "query",
+                &format!(
+                    "SELECT ?board WHERE {{ GRAPH ?g {{ <kb://task/{task_id}> <kb://predicate/belongs_to_board> ?board }} }}"
+                ),
+            ],
+        )
+        .success_json();
+        assert_eq!(query["data"].as_array().unwrap().len(), 1);
+    }
 
     let vector = kb(&temp.path, &["--json", "vector", "status"]).success_json();
     assert_eq!(vector["data"]["backend"], "disabled");

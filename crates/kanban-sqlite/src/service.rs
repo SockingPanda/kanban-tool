@@ -12,11 +12,18 @@ use kanban_core::{
     Clock, KanbanError, Result, SystemClock, TaskStatus, new_event_id, new_run_id, new_task_id,
     new_typed_id,
 };
+use kanban_entity::{EntityUri, Predicate, Provenance, Relation};
+#[cfg(feature = "graph-oxigraph")]
+use kanban_graph::{GraphStoreStatus, OxigraphStore, RelationGraph};
+#[cfg(feature = "graph-oxigraph")]
+use kanban_indexer::OXIGRAPH_RELATIONS_STORE;
+#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
+use kanban_indexer::OutboxTarget;
+#[cfg(feature = "tantivy-backend")]
+use kanban_indexer::TANTIVY_TASKS_STORE;
 use kanban_indexer::{
     DERIVED_STORE_SEEDS, DerivedStoreUpdate, OUTBOX_FANOUT_TARGETS, derived_store_for_name,
 };
-#[cfg(feature = "tantivy-backend")]
-use kanban_indexer::{OutboxTarget, TANTIVY_TASKS_STORE};
 #[cfg(feature = "tantivy-backend")]
 use kanban_search::TaskSearchDocument;
 use kanban_search::{SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults};
@@ -527,6 +534,159 @@ pub fn derived_store_statuses(path: impl AsRef<Path>) -> Result<Vec<DerivedStore
         .map_err(storage)?;
     rows.collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)
+}
+
+pub fn graph_relation_snapshot(path: impl AsRef<Path>, board: &str) -> Result<Vec<Relation>> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    graph_relation_snapshot_for_board(&conn, &board_id)
+}
+
+#[cfg(feature = "graph-oxigraph")]
+pub fn graph_store_status(path: impl AsRef<Path>, board: &str) -> Result<GraphStoreStatus> {
+    let path_ref = path.as_ref();
+    let conn = connect_file(path_ref)?;
+    let board_id = board_id(&conn, board)?;
+    let graph = OxigraphStore::open(graph_store_path(path_ref)).map_err(graph_storage)?;
+    let current_last_event_id = current_last_event_id(&conn, &board_id)?;
+    let state = derived_status_by_name(&conn, OXIGRAPH_RELATIONS_STORE)?;
+    let mut status = graph.status();
+    let lag = search_lag(current_last_event_id, Some(state.last_event_id));
+    status.message = format!(
+        "{}; dirty={} last_event_id={} lag={}",
+        status.message, state.dirty, state.last_event_id, lag
+    );
+    Ok(status)
+}
+
+#[cfg(not(feature = "graph-oxigraph"))]
+pub fn graph_store_status(
+    _path: impl AsRef<Path>,
+    _board: &str,
+) -> Result<kanban_graph::GraphStoreStatus> {
+    let graph = kanban_graph::DisabledGraphStore;
+    Ok(kanban_graph::RelationGraph::status(&graph))
+}
+
+#[cfg(feature = "graph-oxigraph")]
+pub fn rebuild_graph_store(path: impl AsRef<Path>, board: &str) -> Result<GraphStoreStatus> {
+    let path_ref = path.as_ref();
+    let conn = connect_file(path_ref)?;
+    let board_id = board_id(&conn, board)?;
+    let last_event_id = current_last_event_id(&conn, &board_id)?;
+    let relations = graph_relation_snapshot_for_board(&conn, &board_id)?;
+    match OxigraphStore::replace(graph_store_path(path_ref), &relations) {
+        Ok(_) => {
+            let now = SystemClock.now_ms();
+            mark_derived_store_success(
+                &conn,
+                OXIGRAPH_RELATIONS_STORE,
+                &board_id,
+                last_event_id,
+                true,
+                now,
+            )?;
+            Ok(GraphStoreStatus {
+                backend: "oxigraph".to_owned(),
+                enabled: true,
+                message: format!(
+                    "Rebuilt Oxigraph relation store ({} relation(s))",
+                    relations.len()
+                ),
+            })
+        }
+        Err(error) => {
+            mark_derived_store_failure(
+                &conn,
+                OXIGRAPH_RELATIONS_STORE,
+                &board_id,
+                &error.to_string(),
+                SystemClock.now_ms(),
+            )?;
+            Err(KanbanError::Storage(error.to_string()))
+        }
+    }
+}
+
+#[cfg(not(feature = "graph-oxigraph"))]
+pub fn rebuild_graph_store(
+    path: impl AsRef<Path>,
+    board: &str,
+) -> Result<kanban_graph::GraphStoreStatus> {
+    graph_store_status(path, board)
+}
+
+#[cfg(feature = "graph-oxigraph")]
+pub fn sync_graph_store(path: impl AsRef<Path>, board: &str) -> Result<GraphStoreStatus> {
+    let path_ref = path.as_ref();
+    let conn = connect_file(path_ref)?;
+    let board_id = board_id(&conn, board)?;
+    let last_event_id = current_last_event_id(&conn, &board_id)?;
+    let state = derived_status_by_name(&conn, OXIGRAPH_RELATIONS_STORE)?;
+    if !state.dirty && Some(state.last_event_id) == last_event_id {
+        return graph_store_status(path_ref, board);
+    }
+    let jobs = pending_graph_outbox_for_board(&conn, &board_id, last_event_id)?;
+    let result = (|| -> Result<()> {
+        let graph = OxigraphStore::open(graph_store_path(path_ref)).map_err(graph_storage)?;
+        if state.last_event_id == 0 || jobs.iter().any(|job| job.action == "rebuild") {
+            let relations = graph_relation_snapshot_for_board(&conn, &board_id)?;
+            graph.rebuild(&relations).map_err(graph_storage)?;
+        } else {
+            let mut affected = jobs
+                .iter()
+                .map(|job| job.entity_uri.clone())
+                .collect::<Vec<_>>();
+            affected.sort();
+            affected.dedup();
+            for uri in affected {
+                let entity_uri = EntityUri::new(uri).map_err(graph_storage)?;
+                let relations = graph_relations_for_entity(&conn, &board_id, entity_uri.as_str())?;
+                if relations.is_empty() {
+                    graph.delete(&entity_uri).map_err(graph_storage)?;
+                } else {
+                    graph.upsert(&relations).map_err(graph_storage)?;
+                }
+            }
+        }
+        Ok(())
+    })();
+    match result {
+        Ok(()) => {
+            let now = SystemClock.now_ms();
+            mark_derived_store_success(
+                &conn,
+                OXIGRAPH_RELATIONS_STORE,
+                &board_id,
+                last_event_id,
+                false,
+                now,
+            )?;
+            Ok(GraphStoreStatus {
+                backend: "oxigraph".to_owned(),
+                enabled: true,
+                message: format!("Synced Oxigraph relation store ({} job(s))", jobs.len()),
+            })
+        }
+        Err(error) => {
+            mark_derived_store_failure(
+                &conn,
+                OXIGRAPH_RELATIONS_STORE,
+                &board_id,
+                &error.to_string(),
+                SystemClock.now_ms(),
+            )?;
+            Err(KanbanError::Storage(error.to_string()))
+        }
+    }
+}
+
+#[cfg(not(feature = "graph-oxigraph"))]
+pub fn sync_graph_store(
+    path: impl AsRef<Path>,
+    board: &str,
+) -> Result<kanban_graph::GraphStoreStatus> {
+    graph_store_status(path, board)
 }
 
 pub fn queue_stats(path: impl AsRef<Path>, board: &str) -> Result<QueueStats> {
@@ -2621,6 +2781,7 @@ fn add_dependency_in_current_tx(
         params![board_id, parent.id, child.id, now],
     )
     .map_err(storage)?;
+    upsert_dependency_relation(conn, &parent.id, &child.id, now)?;
     let fresh_child = get_task_by_id(conn, board_id, &child.id)?;
     if is_active_recomputable_status(fresh_child.status) {
         let target = recompute_ready_status(conn, &fresh_child, now)?;
@@ -2671,6 +2832,7 @@ pub fn remove_dependency(
             params![parent.id, child.id],
         )
         .map_err(storage)?;
+        delete_dependency_relation(&conn, &parent.id, &child.id)?;
         let fresh_child = get_task_by_id(&conn, &board_id, &child.id)?;
         if matches!(
             fresh_child.status,
@@ -4722,6 +4884,139 @@ fn derived_store_status_from_row(row: &Row<'_>) -> rusqlite::Result<DerivedStore
     })
 }
 
+fn relation_from_row(row: &Row<'_>) -> rusqlite::Result<Relation> {
+    let predicate: String = row.get(1)?;
+    Ok(Relation {
+        subject_uri: EntityUri::new(row.get::<_, String>(0)?).map_err(sql_from_display)?,
+        predicate: predicate_from_str(&predicate).map_err(sql_from_display)?,
+        object_uri: EntityUri::new(row.get::<_, String>(2)?).map_err(sql_from_display)?,
+        graph_uri: EntityUri::new(row.get::<_, String>(3)?).map_err(sql_from_display)?,
+        provenance: Provenance {
+            authoritative_store: row.get(4)?,
+            source_table: row.get(5)?,
+            source_id: row.get(6)?,
+            source_event_id: row.get(7)?,
+        },
+        metadata_json: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
+    })
+}
+
+fn graph_relation_snapshot_for_board(conn: &Connection, board_id: &str) -> Result<Vec<Relation>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT r.subject_uri,r.predicate,r.object_uri,r.graph_uri,r.authoritative_store,r.source_table,r.source_id,r.source_event_id,r.metadata_json,r.created_at,r.updated_at \
+             FROM entity_relations r \
+             JOIN entities s ON s.uri=r.subject_uri \
+             WHERE s.board_id=?1 \
+             ORDER BY r.subject_uri ASC, r.predicate ASC, r.object_uri ASC",
+        )
+        .map_err(storage)?;
+    let rows = stmt
+        .query_map([board_id], relation_from_row)
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
+#[cfg(feature = "graph-oxigraph")]
+fn graph_relations_for_entity(
+    conn: &Connection,
+    board_id: &str,
+    entity_uri: &str,
+) -> Result<Vec<Relation>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT r.subject_uri,r.predicate,r.object_uri,r.graph_uri,r.authoritative_store,r.source_table,r.source_id,r.source_event_id,r.metadata_json,r.created_at,r.updated_at \
+             FROM entity_relations r \
+             JOIN entities s ON s.uri=r.subject_uri \
+             WHERE s.board_id=?1 AND r.subject_uri=?2 \
+             ORDER BY r.predicate ASC, r.object_uri ASC",
+        )
+        .map_err(storage)?;
+    let rows = stmt
+        .query_map(params![board_id, entity_uri], relation_from_row)
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
+fn predicate_from_str(value: &str) -> Result<Predicate> {
+    match value {
+        "belongs_to_board" => Ok(Predicate::BelongsToBoard),
+        "belongs_to_task" => Ok(Predicate::BelongsToTask),
+        "depends_on" => Ok(Predicate::DependsOn),
+        "produced_by" => Ok(Predicate::ProducedBy),
+        "generated_by" => Ok(Predicate::GeneratedBy),
+        "references_artifact" => Ok(Predicate::ReferencesArtifact),
+        "related_to" => Ok(Predicate::RelatedTo),
+        "uses_skill" => Ok(Predicate::UsesSkill),
+        "uses_context" => Ok(Predicate::UsesContext),
+        "derived_from" => Ok(Predicate::DerivedFrom),
+        "supersedes" => Ok(Predicate::Supersedes),
+        "similar_to" => Ok(Predicate::SimilarTo),
+        "requires_review" => Ok(Predicate::RequiresReview),
+        "waiting_for_user" => Ok(Predicate::WaitingForUser),
+        _ => Err(KanbanError::Storage(format!("unknown predicate: {value}"))),
+    }
+}
+
+fn sql_from_display(error: impl std::fmt::Display) -> rusqlite::Error {
+    rusqlite::Error::ToSqlConversionFailure(Box::new(KanbanError::Storage(error.to_string())))
+}
+
+#[cfg(feature = "graph-oxigraph")]
+fn graph_storage(error: impl std::fmt::Display) -> KanbanError {
+    KanbanError::Storage(error.to_string())
+}
+
+#[cfg(feature = "graph-oxigraph")]
+fn derived_status_by_name(conn: &Connection, store_name: &str) -> Result<DerivedStoreStatusRecord> {
+    conn.query_row(
+        "SELECT store_name,schema_version,last_event_id,dirty,last_rebuild_at,last_sync_at,last_error,updated_at \
+         FROM derived_store_state WHERE store_name=?1",
+        [store_name],
+        derived_store_status_from_row,
+    )
+    .optional()
+    .map_err(storage)?
+    .ok_or_else(|| KanbanError::Storage(format!("missing derived store state: {store_name}")))
+}
+
+#[cfg(feature = "graph-oxigraph")]
+fn pending_graph_outbox_for_board(
+    conn: &Connection,
+    board_id: &str,
+    last_event_id: Option<i64>,
+) -> Result<Vec<IndexOutboxRecord>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT o.id,o.source_event_id,o.target,o.entity_uri,o.action,o.payload_json,o.status,o.attempts,o.last_error,o.created_at,o.updated_at \
+             FROM index_outbox o \
+             JOIN task_events e ON e.id=o.source_event_id \
+             WHERE o.target IN ('oxigraph', 'all') \
+               AND o.status IN ('pending', 'running', 'failed') \
+               AND e.board_id=?1 \
+               AND e.id <= ?2 \
+             ORDER BY o.id ASC",
+        )
+        .map_err(storage)?;
+    let rows = stmt
+        .query_map(
+            params![board_id, last_event_id.unwrap_or(i64::MAX)],
+            outbox_from_row,
+        )
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
+#[cfg(feature = "graph-oxigraph")]
+fn graph_store_path(db_path: &Path) -> PathBuf {
+    kanban_local::graph_store_path(db_path.to_path_buf())
+}
+
 fn get_board_conn(conn: &Connection, slug_or_id: &str) -> Result<BoardRecord> {
     let sql = if slug_or_id.starts_with("b_") {
         "SELECT id,slug,name,description,created_at,updated_at,archived_at FROM boards WHERE id=?1 AND archived_at IS NULL"
@@ -4810,6 +5105,7 @@ fn insert_event(
     let event_id = new_event_id();
     conn.execute("INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)", params![event_id, board_id, task_id, run_id, kind, actor, payload, now]).map_err(storage)?;
     let source_event_id = conn.last_insert_rowid();
+    upsert_board_entity(conn, board_id)?;
     upsert_event_entity(conn, &event_id, board_id, task_id, kind, payload, now)?;
     if let Some(task_id) = task_id {
         upsert_task_entity(conn, task_id)?;
@@ -4822,6 +5118,17 @@ fn insert_event(
         .or_else(|| run_id.map(|run_id| format!("kb://run/{run_id}")))
         .unwrap_or_else(|| format!("kb://board/{board_id}"));
     enqueue_index_outbox(conn, source_event_id, &entity_uri, "upsert", now)?;
+    Ok(())
+}
+
+fn upsert_board_entity(conn: &Connection, board_id: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://board/' || id, 'board', 'boards', id, id, NULL, name, description, NULL, created_at, updated_at, archived_at FROM boards WHERE id=?1 \
+         ON CONFLICT(uri) DO UPDATE SET kind=excluded.kind, source_table=excluded.source_table, source_id=excluded.source_id, board_id=excluded.board_id, task_id=excluded.task_id, title=excluded.title, summary=excluded.summary, content_hash=excluded.content_hash, updated_at=excluded.updated_at, archived_at=excluded.archived_at",
+        [board_id],
+    )
+    .map_err(storage)?;
     Ok(())
 }
 
@@ -4853,11 +5160,13 @@ fn upsert_event_entity(
 
 fn upsert_task_entity(conn: &Connection, task_id: &str) -> Result<()> {
     conn.execute(
-        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
-         SELECT 'kb://task/' || id, 'task', 'tasks', id, board_id, id, title, description, NULL, created_at, updated_at, archived_at FROM tasks WHERE id=?1",
+        "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://task/' || id, 'task', 'tasks', id, board_id, id, title, description, NULL, created_at, updated_at, archived_at FROM tasks WHERE id=?1 \
+         ON CONFLICT(uri) DO UPDATE SET kind=excluded.kind, source_table=excluded.source_table, source_id=excluded.source_id, board_id=excluded.board_id, task_id=excluded.task_id, title=excluded.title, summary=excluded.summary, content_hash=excluded.content_hash, updated_at=excluded.updated_at, archived_at=excluded.archived_at",
         [task_id],
     )
     .map_err(storage)?;
+    upsert_task_board_relation(conn, task_id)?;
     Ok(())
 }
 
@@ -4866,6 +5175,50 @@ fn upsert_run_entity(conn: &Connection, run_id: &str) -> Result<()> {
         "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
          SELECT 'kb://run/' || id, 'run', 'task_runs', id, board_id, task_id, id, COALESCE(summary, error), NULL, started_at, COALESCE(finished_at, last_heartbeat_at, started_at), NULL FROM task_runs WHERE id=?1",
         [run_id],
+    )
+    .map_err(storage)?;
+    Ok(())
+}
+
+fn upsert_task_board_relation(conn: &Connection, task_id: &str) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO entity_relations(subject_uri, predicate, object_uri, graph_uri, authoritative_store, source_table, source_id, source_event_id, metadata_json, created_at, updated_at) \
+         SELECT 'kb://task/' || id, 'belongs_to_board', 'kb://board/' || board_id, 'kb://graph/indexed', 'sqlite', 'tasks', id, NULL, '{}', created_at, updated_at \
+         FROM tasks WHERE id=?1",
+        [task_id],
+    )
+    .map_err(storage)?;
+    Ok(())
+}
+
+fn upsert_dependency_relation(
+    conn: &Connection,
+    parent_task_id: &str,
+    child_task_id: &str,
+    now: i64,
+) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO entity_relations(subject_uri, predicate, object_uri, graph_uri, authoritative_store, source_table, source_id, source_event_id, metadata_json, created_at, updated_at) \
+         SELECT 'kb://task/' || child_task_id, 'depends_on', 'kb://task/' || parent_task_id, 'kb://graph/indexed', 'sqlite', 'task_dependencies', parent_task_id || '->' || child_task_id, NULL, '{}', created_at, ?3 \
+         FROM task_dependencies WHERE parent_task_id=?1 AND child_task_id=?2",
+        params![parent_task_id, child_task_id, now],
+    )
+    .map_err(storage)?;
+    Ok(())
+}
+
+fn delete_dependency_relation(
+    conn: &Connection,
+    parent_task_id: &str,
+    child_task_id: &str,
+) -> Result<()> {
+    conn.execute(
+        "DELETE FROM entity_relations \
+         WHERE subject_uri=?1 AND predicate='depends_on' AND object_uri=?2 AND source_table='task_dependencies'",
+        params![
+            format!("kb://task/{child_task_id}"),
+            format!("kb://task/{parent_task_id}")
+        ],
     )
     .map_err(storage)?;
     Ok(())
@@ -4915,7 +5268,7 @@ fn mark_derived_store_dirty(conn: &Connection, store_name: &str, now: i64) -> Re
     Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
 fn mark_derived_store_success(
     conn: &Connection,
     store_name: &str,
@@ -4949,7 +5302,7 @@ fn mark_derived_store_success(
     Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
 fn mark_derived_store_failure(
     conn: &Connection,
     store_name: &str,
@@ -4981,7 +5334,7 @@ fn mark_derived_store_failure(
     Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
 fn store_target(store_name: &str) -> Result<OutboxTarget> {
     DERIVED_STORE_SEEDS
         .iter()
@@ -4990,7 +5343,7 @@ fn store_target(store_name: &str) -> Result<OutboxTarget> {
         .ok_or_else(|| KanbanError::Storage(format!("unknown derived store: {store_name}")))
 }
 
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
 fn complete_outbox_for_store(
     conn: &Connection,
     target: OutboxTarget,
@@ -5019,7 +5372,7 @@ fn complete_outbox_for_store(
     Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
 fn has_unfinished_outbox_for_store(conn: &Connection, target: OutboxTarget) -> Result<bool> {
     conn.query_row(
         "SELECT EXISTS( \
@@ -5034,7 +5387,7 @@ fn has_unfinished_outbox_for_store(conn: &Connection, target: OutboxTarget) -> R
     .map_err(storage)
 }
 
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
 fn fail_outbox_for_store(
     conn: &Connection,
     target: OutboxTarget,

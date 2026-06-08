@@ -832,7 +832,7 @@ async fn context_graph_and_vector_apis_return_default_fallbacks() {
         json["data"]["degraded"]
             .as_array()
             .unwrap()
-            .contains(&json!("vector_error"))
+            .contains(&json!("vector_disabled"))
     );
 
     let (status, json) = get_json(

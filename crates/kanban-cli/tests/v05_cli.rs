@@ -644,7 +644,13 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() {
     #[cfg(feature = "vector-lancedb")]
     {
         assert_eq!(vector["data"]["backend"], "lancedb");
-        assert_eq!(vector["data"]["enabled"], true);
+        assert_eq!(vector["data"]["enabled"], false);
+        assert!(
+            vector["data"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("without an embedding provider")
+        );
     }
 
     let context = kb(
@@ -690,7 +696,7 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|value| value == "vector_error")
+            .any(|value| value == "vector_disabled")
     );
     assert_eq!(
         context["data"]["items"][0]["entity_uri"],

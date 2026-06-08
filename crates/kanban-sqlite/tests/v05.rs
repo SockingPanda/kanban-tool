@@ -446,6 +446,12 @@ fn context_broker_reports_vector_query_error_without_failing_pack() {
     assert!(pack.degraded.iter().any(|marker| marker == "vector_dirty"));
     assert!(pack.degraded.iter().any(|marker| marker == "vector_stale"));
     assert!(pack.degraded.iter().any(|marker| marker == "vector_error"));
+    assert!(pack.diagnostics.iter().any(|diagnostic| {
+        diagnostic.source == "vector"
+            && diagnostic.code == "vector_error"
+            && diagnostic.message.contains("query exploded")
+            && diagnostic.message.len() <= 243
+    }));
 }
 
 #[test]

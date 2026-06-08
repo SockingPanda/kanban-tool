@@ -41,6 +41,15 @@ pub struct ContextPack {
     pub policy: ContextPolicy,
     pub items: Vec<ContextItem>,
     pub degraded: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<ContextDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextDiagnostic {
+    pub source: String,
+    pub code: String,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -53,13 +62,21 @@ pub struct ContextBrokerInput {
     pub vector_status: VectorStoreStatus,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub degraded: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<ContextDiagnostic>,
 }
 
 pub fn build_context_pack(
     subject: EntityUri,
     policy: ContextPolicy,
     input: ContextBrokerInput,
-) -> ContextPack {
+) -> Result<ContextPack, ContextError> {
+    if policy.max_items == 0 {
+        return Err(ContextError::InvalidInput(
+            "max_items must be >= 1 because the subject item is mandatory".to_owned(),
+        ));
+    }
+
     let mut degraded = Vec::new();
     for marker in input.degraded {
         push_marker(&mut degraded, &marker);
@@ -105,12 +122,13 @@ pub fn build_context_pack(
         merge_item(&mut items, item);
     }
 
-    ContextPack {
+    Ok(ContextPack {
         subject,
         policy,
         items,
         degraded,
-    }
+        diagnostics: input.diagnostics,
+    })
 }
 
 fn push_marker(degraded: &mut Vec<String>, marker: &str) {
@@ -197,6 +215,7 @@ impl ContextRetriever for SearchContextRetriever {
             policy: policy.clone(),
             items,
             degraded: vec!["graph_disabled".to_owned(), "vector_disabled".to_owned()],
+            diagnostics: Vec::new(),
         })
     }
 }
@@ -287,8 +306,10 @@ mod tests {
                 graph_status,
                 vector_status,
                 degraded: vec![],
+                diagnostics: vec![],
             },
-        );
+        )
+        .unwrap();
 
         assert_eq!(pack.items.len(), 3);
         assert_eq!(pack.items[0].entity_uri, subject);
@@ -345,8 +366,10 @@ mod tests {
                 graph_status,
                 vector_status,
                 degraded: vec![],
+                diagnostics: vec![],
             },
-        );
+        )
+        .unwrap();
 
         assert_eq!(pack.items.len(), 1);
         assert_eq!(pack.items[0].entity_uri, EntityUri::task("t_subject"));
@@ -400,8 +423,10 @@ mod tests {
                 graph_status,
                 vector_status,
                 degraded: vec!["vector_dirty".to_owned(), "vector_dirty".to_owned()],
+                diagnostics: vec![],
             },
-        );
+        )
+        .unwrap();
 
         assert_eq!(pack.items.len(), 2);
         assert_eq!(
@@ -415,10 +440,55 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn broker_rejects_zero_max_items_at_public_boundary() {
+        let (graph_status, vector_status) = status(true, "test");
+        let error = build_context_pack(
+            EntityUri::task("t_subject"),
+            ContextPolicy {
+                lexical_limit: 0,
+                graph_limit: 0,
+                vector_limit: 0,
+                max_items: 0,
+            },
+            ContextBrokerInput {
+                subject_item: ContextItem {
+                    entity_uri: EntityUri::task("t_subject"),
+                    source: "subject".to_owned(),
+                    provenance: vec![],
+                    score: None,
+                    title: None,
+                    snippet: None,
+                },
+                lexical: SearchResults {
+                    hits: vec![],
+                    meta: SearchMeta {
+                        backend: "tantivy".to_owned(),
+                        stale: false,
+                        index_version: None,
+                        last_event_id: None,
+                        index_lag_events: None,
+                    },
+                },
+                graph: vec![],
+                vector: vec![],
+                graph_status,
+                vector_status,
+                degraded: vec![],
+                diagnostics: vec![],
+            },
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("max_items must be >= 1"));
+    }
 }
 
 #[derive(Debug, Error)]
 pub enum ContextError {
+    #[error("invalid context input: {0}")]
+    InvalidInput(String),
     #[error("context retrieval error: {0}")]
     Retrieval(String),
 }

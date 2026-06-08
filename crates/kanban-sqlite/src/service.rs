@@ -575,8 +575,16 @@ pub fn rebuild_graph_store(path: impl AsRef<Path>, board: &str) -> Result<GraphS
     let board_id = board_id(&conn, board)?;
     let last_event_id = current_last_event_id(&conn, &board_id)?;
     let relations = graph_relation_snapshot_for_board(&conn, &board_id)?;
-    match OxigraphStore::replace(graph_store_path(path_ref), &relations) {
-        Ok(_) => {
+    let entity_uris = graph_entity_uris_for_board(&conn, &board_id)?;
+    let result = (|| -> Result<()> {
+        let graph = OxigraphStore::open(graph_store_path(path_ref)).map_err(graph_storage)?;
+        graph
+            .replace_entities(&entity_uris, &relations)
+            .map_err(graph_storage)?;
+        Ok(())
+    })();
+    match result {
+        Ok(()) => {
             let now = SystemClock.now_ms();
             mark_derived_store_success(
                 &conn,
@@ -631,7 +639,10 @@ pub fn sync_graph_store(path: impl AsRef<Path>, board: &str) -> Result<GraphStor
         let graph = OxigraphStore::open(graph_store_path(path_ref)).map_err(graph_storage)?;
         if state.last_event_id == 0 || jobs.iter().any(|job| job.action == "rebuild") {
             let relations = graph_relation_snapshot_for_board(&conn, &board_id)?;
-            graph.rebuild(&relations).map_err(graph_storage)?;
+            let entity_uris = graph_entity_uris_for_board(&conn, &board_id)?;
+            graph
+                .replace_entities(&entity_uris, &relations)
+                .map_err(graph_storage)?;
         } else {
             let mut affected = jobs
                 .iter()
@@ -4915,6 +4926,20 @@ fn graph_relation_snapshot_for_board(conn: &Connection, board_id: &str) -> Resul
         .map_err(storage)?;
     let rows = stmt
         .query_map([board_id], relation_from_row)
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
+#[cfg(feature = "graph-oxigraph")]
+fn graph_entity_uris_for_board(conn: &Connection, board_id: &str) -> Result<Vec<EntityUri>> {
+    let mut stmt = conn
+        .prepare("SELECT uri FROM entities WHERE board_id=?1 ORDER BY uri ASC")
+        .map_err(storage)?;
+    let rows = stmt
+        .query_map([board_id], |row| {
+            EntityUri::new(row.get::<_, String>(0)?).map_err(sql_from_display)
+        })
         .map_err(storage)?;
     rows.collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)

@@ -820,17 +820,20 @@ fn tantivy_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() {
 #[cfg(feature = "graph-oxigraph")]
 #[test]
 fn graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() {
+    use kanban_entity::{EntityUri, Predicate};
+    use kanban_graph::{OxigraphStore, RelationGraph};
+
     let temp = TempDb::new("graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending");
     init_database(&temp.path, "tester").unwrap();
     insert_board(&temp.path, "second", "b_second");
-    create_task(
+    let default_task = create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("default board graph task"),
     )
     .unwrap();
-    create_task(
+    let second_task = create_task(
         &temp.path,
         "second",
         "tester",
@@ -839,6 +842,18 @@ fn graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() {
     .unwrap();
 
     kanban_sqlite::rebuild_graph_store(&temp.path, "default").unwrap();
+    let graph = OxigraphStore::open(kanban_local::graph_store_path(temp.path.clone())).unwrap();
+    assert_eq!(
+        graph
+            .neighbors(
+                &EntityUri::task(&default_task.id),
+                Some(Predicate::BelongsToBoard),
+                10,
+            )
+            .unwrap()
+            .len(),
+        1
+    );
 
     assert_eq!(
         graph_outbox_statuses_for_board(&temp.path, "default"),
@@ -856,6 +871,30 @@ fn graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() {
     assert!(graph.dirty, "second board still has pending graph outbox");
 
     kanban_sqlite::rebuild_graph_store(&temp.path, "second").unwrap();
+    let graph = OxigraphStore::open(kanban_local::graph_store_path(temp.path.clone())).unwrap();
+    assert_eq!(
+        graph
+            .neighbors(
+                &EntityUri::task(&default_task.id),
+                Some(Predicate::BelongsToBoard),
+                10,
+            )
+            .unwrap()
+            .len(),
+        1,
+        "rebuilding the second board must preserve the first board graph"
+    );
+    assert_eq!(
+        graph
+            .neighbors(
+                &EntityUri::task(&second_task.id),
+                Some(Predicate::BelongsToBoard),
+                10,
+            )
+            .unwrap()
+            .len(),
+        1
+    );
 
     assert_eq!(
         graph_outbox_statuses_for_board(&temp.path, "second"),

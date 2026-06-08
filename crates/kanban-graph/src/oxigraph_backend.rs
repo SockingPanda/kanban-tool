@@ -45,6 +45,28 @@ impl OxigraphStore {
         Ok(graph)
     }
 
+    pub fn replace_entities(
+        &self,
+        entity_uris: &[EntityUri],
+        relations: &[Relation],
+    ) -> Result<(), GraphError> {
+        let incoming = group_relations_by_subject(relations.to_vec());
+        let mut stored = self.relations.lock().map_err(lock_error)?;
+        for entity_uri in entity_uris {
+            self.clear_entity_graph(entity_uri)?;
+            stored.remove(entity_uri.as_str());
+        }
+        for relation in relations {
+            let quad = Self::relation_quad(relation)?;
+            self.store.insert(&quad).map_err(store_error)?;
+        }
+        for (subject, relations) in incoming {
+            stored.insert(subject, relations);
+        }
+        self.write_snapshot(&stored)?;
+        Ok(())
+    }
+
     fn with_snapshot(path: &Path, relations: Vec<Relation>) -> Result<Self, GraphError> {
         let snapshot_path = path.join("relations.json");
         let store = Store::new().map_err(store_error)?;

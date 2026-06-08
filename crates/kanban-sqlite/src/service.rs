@@ -15,18 +15,21 @@ use kanban_core::{
 use kanban_entity::{EntityUri, Predicate, Provenance, Relation};
 #[cfg(feature = "graph-oxigraph")]
 use kanban_graph::{GraphStoreStatus, OxigraphStore, RelationGraph};
+use kanban_indexer::LANCEDB_CHUNKS_STORE;
 #[cfg(feature = "graph-oxigraph")]
 use kanban_indexer::OXIGRAPH_RELATIONS_STORE;
-#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
-use kanban_indexer::OutboxTarget;
 #[cfg(feature = "tantivy-backend")]
 use kanban_indexer::TANTIVY_TASKS_STORE;
 use kanban_indexer::{
-    DERIVED_STORE_SEEDS, DerivedStoreUpdate, OUTBOX_FANOUT_TARGETS, derived_store_for_name,
+    DERIVED_STORE_SEEDS, DerivedStoreUpdate, OUTBOX_FANOUT_TARGETS, OutboxTarget,
+    derived_store_for_name,
 };
 #[cfg(feature = "tantivy-backend")]
 use kanban_search::TaskSearchDocument;
 use kanban_search::{SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults};
+use kanban_vector::{ChunkBuilder, TaskChunkSource, VectorStore, VectorStoreStatus};
+#[cfg(feature = "vector-lancedb")]
+use kanban_vector::{LanceDbConfig, LanceDbStore};
 use rusqlite::{
     Connection, OptionalExtension, Row, params, params_from_iter,
     types::{Value, ValueRef},
@@ -704,6 +707,145 @@ pub fn sync_graph_store(
     board: &str,
 ) -> Result<kanban_graph::GraphStoreStatus> {
     graph_store_status(path, board)
+}
+
+#[cfg(feature = "vector-lancedb")]
+pub fn vector_store_status(path: impl AsRef<Path>, board: &str) -> Result<VectorStoreStatus> {
+    let path_ref = path.as_ref();
+    let conn = connect_file(path_ref)?;
+    let board_id = board_id(&conn, board)?;
+    let store = LanceDbStore::connect(LanceDbConfig::degraded(vector_store_path(path_ref)))
+        .map_err(vector_storage)?;
+    vector_store_status_with(&conn, &board_id, &store)
+}
+
+#[cfg(not(feature = "vector-lancedb"))]
+pub fn vector_store_status(_path: impl AsRef<Path>, _board: &str) -> Result<VectorStoreStatus> {
+    Ok(kanban_vector::DisabledVectorStore.status())
+}
+
+#[cfg(feature = "vector-lancedb")]
+pub fn rebuild_vector_store(path: impl AsRef<Path>, board: &str) -> Result<VectorStoreStatus> {
+    let path_ref = path.as_ref();
+    let store = LanceDbStore::connect(LanceDbConfig::degraded(vector_store_path(path_ref)))
+        .map_err(vector_storage)?;
+    rebuild_vector_store_with(path_ref, board, &store)
+}
+
+#[cfg(not(feature = "vector-lancedb"))]
+pub fn rebuild_vector_store(path: impl AsRef<Path>, board: &str) -> Result<VectorStoreStatus> {
+    vector_store_status(path, board)
+}
+
+#[cfg(feature = "vector-lancedb")]
+pub fn sync_vector_store(path: impl AsRef<Path>, board: &str) -> Result<VectorStoreStatus> {
+    let path_ref = path.as_ref();
+    let store = LanceDbStore::connect(LanceDbConfig::degraded(vector_store_path(path_ref)))
+        .map_err(vector_storage)?;
+    sync_vector_store_with(path_ref, board, &store)
+}
+
+#[cfg(not(feature = "vector-lancedb"))]
+pub fn sync_vector_store(path: impl AsRef<Path>, board: &str) -> Result<VectorStoreStatus> {
+    vector_store_status(path, board)
+}
+
+pub fn rebuild_vector_store_with(
+    path: impl AsRef<Path>,
+    board: &str,
+    store: &impl VectorStore,
+) -> Result<VectorStoreStatus> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    let last_event_id = current_last_event_id(&conn, &board_id)?;
+    let chunks = vector_chunks_for_board(&conn, &board_id)?;
+    match store.upsert(&chunks) {
+        Ok(()) => {
+            let now = SystemClock.now_ms();
+            mark_derived_store_success(
+                &conn,
+                LANCEDB_CHUNKS_STORE,
+                &board_id,
+                last_event_id,
+                true,
+                now,
+            )?;
+            let mut status = store.status();
+            status.message = format!(
+                "{}; rebuilt {} chunk(s); dirty=false last_event_id={} lag=0",
+                status.message,
+                chunks.len(),
+                last_event_id.unwrap_or(0)
+            );
+            Ok(status)
+        }
+        Err(error) => {
+            mark_derived_store_failure(
+                &conn,
+                LANCEDB_CHUNKS_STORE,
+                &board_id,
+                &error.to_string(),
+                SystemClock.now_ms(),
+            )?;
+            Err(vector_storage(error))
+        }
+    }
+}
+
+pub fn sync_vector_store_with(
+    path: impl AsRef<Path>,
+    board: &str,
+    store: &impl VectorStore,
+) -> Result<VectorStoreStatus> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    let last_event_id = current_last_event_id(&conn, &board_id)?;
+    let state = derived_status_by_name(&conn, LANCEDB_CHUNKS_STORE)?;
+    if !has_pending_vector_outbox_for_board(&conn, &board_id, last_event_id)? {
+        return vector_store_status_with(&conn, &board_id, store);
+    }
+    let jobs = pending_vector_outbox_for_board(&conn, &board_id, last_event_id)?;
+    let chunks = if state.last_event_id == 0 || jobs.iter().any(|job| job.action == "rebuild") {
+        vector_chunks_for_board(&conn, &board_id)?
+    } else {
+        let entity_uris = jobs
+            .iter()
+            .map(|job| job.entity_uri.clone())
+            .collect::<Vec<_>>();
+        vector_chunks_for_entity_uris(&conn, &board_id, &entity_uris)?
+    };
+    match store.upsert(&chunks) {
+        Ok(()) => {
+            let now = SystemClock.now_ms();
+            mark_derived_store_success(
+                &conn,
+                LANCEDB_CHUNKS_STORE,
+                &board_id,
+                last_event_id,
+                false,
+                now,
+            )?;
+            let mut status = store.status();
+            status.message = format!(
+                "{}; synced {} chunk(s) from {} job(s); dirty=false last_event_id={} lag=0",
+                status.message,
+                chunks.len(),
+                jobs.len(),
+                last_event_id.unwrap_or(0)
+            );
+            Ok(status)
+        }
+        Err(error) => {
+            mark_derived_store_failure(
+                &conn,
+                LANCEDB_CHUNKS_STORE,
+                &board_id,
+                &error.to_string(),
+                SystemClock.now_ms(),
+            )?;
+            Err(vector_storage(error))
+        }
+    }
 }
 
 pub fn queue_stats(path: impl AsRef<Path>, board: &str) -> Result<QueueStats> {
@@ -5002,7 +5144,6 @@ fn graph_storage(error: impl std::fmt::Display) -> KanbanError {
     KanbanError::Storage(error.to_string())
 }
 
-#[cfg(feature = "graph-oxigraph")]
 fn derived_status_by_name(conn: &Connection, store_name: &str) -> Result<DerivedStoreStatusRecord> {
     conn.query_row(
         "SELECT store_name,schema_version,last_event_id,dirty,last_rebuild_at,last_sync_at,last_error,updated_at \
@@ -5067,6 +5208,167 @@ fn has_pending_graph_outbox_for_board(
 #[cfg(feature = "graph-oxigraph")]
 fn graph_store_path(db_path: &Path) -> PathBuf {
     kanban_local::graph_store_path(db_path.to_path_buf())
+}
+
+fn vector_store_status_with(
+    conn: &Connection,
+    board_id: &str,
+    store: &impl VectorStore,
+) -> Result<VectorStoreStatus> {
+    let state = derived_status_by_name(conn, LANCEDB_CHUNKS_STORE)?;
+    let current_last_event_id = current_last_event_id(conn, board_id)?;
+    let board_has_pending =
+        has_pending_vector_outbox_for_board(conn, board_id, current_last_event_id)?;
+    let lag = if board_has_pending {
+        search_lag(current_last_event_id, Some(state.last_event_id))
+    } else {
+        0
+    };
+    let mut status = store.status();
+    status.message = format!(
+        "{}; dirty={} last_event_id={} lag={} last_error={}",
+        status.message,
+        state.dirty,
+        state.last_event_id,
+        lag,
+        state.last_error.as_deref().unwrap_or("none")
+    );
+    Ok(status)
+}
+
+fn pending_vector_outbox_for_board(
+    conn: &Connection,
+    board_id: &str,
+    last_event_id: Option<i64>,
+) -> Result<Vec<IndexOutboxRecord>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT o.id,o.source_event_id,o.target,o.entity_uri,o.action,o.payload_json,o.status,o.attempts,o.last_error,o.created_at,o.updated_at \
+             FROM index_outbox o \
+             JOIN task_events e ON e.id=o.source_event_id \
+             WHERE o.target IN ('lancedb', 'all') \
+               AND o.status IN ('pending', 'running', 'failed') \
+               AND e.board_id=?1 \
+               AND e.id <= ?2 \
+             ORDER BY o.id ASC",
+        )
+        .map_err(storage)?;
+    let rows = stmt
+        .query_map(
+            params![board_id, last_event_id.unwrap_or(i64::MAX)],
+            outbox_from_row,
+        )
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
+fn has_pending_vector_outbox_for_board(
+    conn: &Connection,
+    board_id: &str,
+    last_event_id: Option<i64>,
+) -> Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS( \
+             SELECT 1 FROM index_outbox o \
+             JOIN task_events e ON e.id=o.source_event_id \
+             WHERE o.target IN ('lancedb', 'all') \
+               AND o.status IN ('pending', 'running', 'failed') \
+               AND e.board_id=?1 \
+               AND e.id <= ?2 \
+         )",
+        params![board_id, last_event_id.unwrap_or(i64::MAX)],
+        |row| row.get::<_, bool>(0),
+    )
+    .map_err(storage)
+}
+
+fn vector_chunks_for_board(
+    conn: &Connection,
+    board_id: &str,
+) -> Result<Vec<kanban_vector::EmbeddingChunk>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT 'kb://task/' || t.id,t.board_id,t.id,t.title,t.description,\
+                    (SELECT MAX(e.id) FROM task_events e WHERE e.board_id=t.board_id AND e.task_id=t.id),\
+                    t.created_at,t.updated_at \
+             FROM tasks t WHERE t.board_id=?1 AND t.archived_at IS NULL ORDER BY t.seq ASC",
+        )
+        .map_err(storage)?;
+    let rows = stmt
+        .query_map([board_id], task_chunk_source_from_row)
+        .map_err(storage)?;
+    let sources = rows
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)?;
+    build_vector_chunks(&sources)
+}
+
+fn vector_chunks_for_entity_uris(
+    conn: &Connection,
+    board_id: &str,
+    entity_uris: &[String],
+) -> Result<Vec<kanban_vector::EmbeddingChunk>> {
+    let mut task_ids = entity_uris
+        .iter()
+        .filter_map(|uri| uri.strip_prefix("kb://task/").map(ToOwned::to_owned))
+        .collect::<Vec<_>>();
+    task_ids.sort();
+    task_ids.dedup();
+    if task_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = std::iter::repeat_n("?", task_ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT 'kb://task/' || t.id,t.board_id,t.id,t.title,t.description,\
+                (SELECT MAX(e.id) FROM task_events e WHERE e.board_id=t.board_id AND e.task_id=t.id),\
+                t.created_at,t.updated_at \
+         FROM tasks t WHERE t.board_id=? AND t.archived_at IS NULL AND t.id IN ({placeholders}) ORDER BY t.seq ASC"
+    );
+    let mut params = vec![Value::Text(board_id.to_owned())];
+    params.extend(task_ids.into_iter().map(Value::Text));
+    let mut stmt = conn.prepare(&sql).map_err(storage)?;
+    let rows = stmt
+        .query_map(params_from_iter(params.iter()), task_chunk_source_from_row)
+        .map_err(storage)?;
+    let sources = rows
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)?;
+    build_vector_chunks(&sources)
+}
+
+fn task_chunk_source_from_row(row: &Row<'_>) -> rusqlite::Result<TaskChunkSource> {
+    Ok(TaskChunkSource {
+        task_uri: row.get(0)?,
+        project_id: None,
+        board_id: row.get(1)?,
+        task_id: row.get(2)?,
+        title: row.get(3)?,
+        description: row.get(4)?,
+        source_event_id: row.get(5)?,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
+    })
+}
+
+fn build_vector_chunks(sources: &[TaskChunkSource]) -> Result<Vec<kanban_vector::EmbeddingChunk>> {
+    let builder = ChunkBuilder::new("kb-local-default");
+    let mut chunks = Vec::new();
+    for source in sources {
+        chunks.extend(builder.build_task_chunks(source).map_err(vector_storage)?);
+    }
+    Ok(chunks)
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn vector_store_path(db_path: &Path) -> PathBuf {
+    kanban_local::vector_store_path(db_path.to_path_buf())
+}
+
+fn vector_storage(error: impl std::fmt::Display) -> KanbanError {
+    KanbanError::Storage(error.to_string())
 }
 
 fn get_board_conn(conn: &Connection, slug_or_id: &str) -> Result<BoardRecord> {
@@ -5320,7 +5622,6 @@ fn mark_derived_store_dirty(conn: &Connection, store_name: &str, now: i64) -> Re
     Ok(())
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
 fn mark_derived_store_success(
     conn: &Connection,
     store_name: &str,
@@ -5354,7 +5655,6 @@ fn mark_derived_store_success(
     Ok(())
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
 fn mark_derived_store_failure(
     conn: &Connection,
     store_name: &str,
@@ -5386,7 +5686,6 @@ fn mark_derived_store_failure(
     Ok(())
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
 fn store_target(store_name: &str) -> Result<OutboxTarget> {
     DERIVED_STORE_SEEDS
         .iter()
@@ -5395,7 +5694,6 @@ fn store_target(store_name: &str) -> Result<OutboxTarget> {
         .ok_or_else(|| KanbanError::Storage(format!("unknown derived store: {store_name}")))
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
 fn complete_outbox_for_store(
     conn: &Connection,
     target: OutboxTarget,
@@ -5424,7 +5722,6 @@ fn complete_outbox_for_store(
     Ok(())
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
 fn has_unfinished_outbox_for_store(conn: &Connection, target: OutboxTarget) -> Result<bool> {
     conn.query_row(
         "SELECT EXISTS( \
@@ -5439,7 +5736,6 @@ fn has_unfinished_outbox_for_store(conn: &Connection, target: OutboxTarget) -> R
     .map_err(storage)
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "graph-oxigraph"))]
 fn fail_outbox_for_store(
     conn: &Connection,
     target: OutboxTarget,

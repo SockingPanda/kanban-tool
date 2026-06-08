@@ -3694,6 +3694,7 @@ dependencies = [
  "kanban-indexer",
  "kanban-local",
  "kanban-search",
+ "kanban-vector",
  "rusqlite",
  "serde",
  "serde_json",

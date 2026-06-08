@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_board_id};
+use kanban_entity::PREDICATE_SEEDS;
+use kanban_indexer::DERIVED_STORE_SEEDS;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use serde::{Deserialize, Serialize};
@@ -8,8 +10,28 @@ use serde::{Deserialize, Serialize};
 use crate::connect_file;
 
 const INITIAL_MIGRATION: &str = include_str!("../../../migrations/001_initial.sql");
-const INITIAL_MIGRATION_VERSION: i64 = 1;
-const INITIAL_MIGRATION_NAME: &str = "001_initial";
+const KNOWLEDGE_SUBSTRATE_MIGRATION: &str =
+    include_str!("../../../migrations/002_knowledge_substrate.sql");
+const LATEST_MIGRATION_VERSION: i64 = 2;
+
+struct Migration {
+    version: i64,
+    name: &'static str,
+    sql: &'static str,
+}
+
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "001_initial",
+        sql: INITIAL_MIGRATION,
+    },
+    Migration {
+        version: 2,
+        name: "002_knowledge_substrate",
+        sql: KNOWLEDGE_SUBSTRATE_MIGRATION,
+    },
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InitResult {
@@ -21,12 +43,11 @@ pub struct InitResult {
 pub fn init_database(path: impl AsRef<Path>, actor: &str) -> Result<InitResult> {
     let path = path.as_ref();
     let conn = connect_file(path)?;
-    conn.execute_batch(INITIAL_MIGRATION)
-        .map_err(|err| KanbanError::Storage(err.to_string()))?;
-    validate_initial_migration(&conn)?;
+    apply_migrations(&conn)?;
     ensure_default_board(&conn, actor, SystemClock.now_ms())?;
     let board_id = default_board_id(&conn)?;
     ensure_default_columns(&conn, &board_id, SystemClock.now_ms())?;
+    ensure_knowledge_substrate(&conn)?;
     Ok(InitResult {
         db_path: path.to_path_buf(),
         board_id,
@@ -34,42 +55,59 @@ pub fn init_database(path: impl AsRef<Path>, actor: &str) -> Result<InitResult> 
     })
 }
 
-fn validate_initial_migration(conn: &Connection) -> Result<()> {
+fn apply_migrations(conn: &Connection) -> Result<()> {
+    conn.execute_batch(INITIAL_MIGRATION)
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
     ensure_schema_migrations_shape(conn)?;
-    let checksum = migration_checksum(INITIAL_MIGRATION);
+    for migration in MIGRATIONS {
+        validate_or_apply_migration(conn, migration)?;
+    }
+    validate_schema_shape(conn)?;
+    conn.pragma_update(None, "user_version", LATEST_MIGRATION_VERSION)
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    Ok(())
+}
+
+fn validate_or_apply_migration(conn: &Connection, migration: &Migration) -> Result<()> {
+    let checksum = migration_checksum(migration.sql);
     let row: Option<(String, String)> = conn
         .query_row(
             "SELECT name, checksum FROM schema_migrations WHERE version = ?1",
-            [INITIAL_MIGRATION_VERSION],
+            [migration.version],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
         .map_err(|err| KanbanError::Storage(err.to_string()))?;
     match row {
-        Some((name, _stored)) if name != INITIAL_MIGRATION_NAME => {
+        Some((name, _stored)) if name != migration.name => {
             return Err(KanbanError::Storage(format!(
-                "migration name mismatch for version {INITIAL_MIGRATION_VERSION}: expected {INITIAL_MIGRATION_NAME}, found {name}"
+                "migration name mismatch for version {}: expected {}, found {name}",
+                migration.version, migration.name
             )));
         }
         Some((_name, stored)) if stored.is_empty() => {
             conn.execute(
                 "UPDATE schema_migrations SET checksum=?1 WHERE version=?2",
-                params![checksum, INITIAL_MIGRATION_VERSION],
+                params![checksum, migration.version],
             )
             .map_err(|err| KanbanError::Storage(err.to_string()))?;
         }
         Some((_name, stored)) if stored != checksum => {
             return Err(KanbanError::Storage(format!(
-                "migration checksum mismatch for {INITIAL_MIGRATION_NAME}: expected {checksum}, found {stored}"
+                "migration checksum mismatch for {}: expected {checksum}, found {stored}",
+                migration.name
             )));
         }
         Some((_name, _stored)) => {}
         None => {
+            conn.execute_batch(migration.sql)
+                .map_err(|err| KanbanError::Storage(err.to_string()))?;
             conn.execute(
-                "INSERT INTO schema_migrations(version, name, checksum, applied_at) VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO schema_migrations(version, name, checksum, applied_at) VALUES (?1, ?2, ?3, ?4) \
+                 ON CONFLICT(version) DO UPDATE SET name=excluded.name, checksum=excluded.checksum",
                 params![
-                    INITIAL_MIGRATION_VERSION,
-                    INITIAL_MIGRATION_NAME,
+                    migration.version,
+                    migration.name,
                     checksum,
                     SystemClock.now_ms()
                 ],
@@ -77,9 +115,6 @@ fn validate_initial_migration(conn: &Connection) -> Result<()> {
             .map_err(|err| KanbanError::Storage(err.to_string()))?;
         }
     }
-    validate_schema_shape(conn)?;
-    conn.pragma_update(None, "user_version", INITIAL_MIGRATION_VERSION)
-        .map_err(|err| KanbanError::Storage(err.to_string()))?;
     Ok(())
 }
 
@@ -134,6 +169,38 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
                 "payload_json",
             ][..],
         ),
+        (
+            "entities",
+            &[
+                "uri",
+                "kind",
+                "source_table",
+                "source_id",
+                "created_at",
+                "updated_at",
+            ][..],
+        ),
+        (
+            "relation_predicates",
+            &["name", "authoritative_store", "created_at"][..],
+        ),
+        (
+            "entity_relations",
+            &[
+                "subject_uri",
+                "predicate",
+                "object_uri",
+                "authoritative_store",
+            ][..],
+        ),
+        (
+            "index_outbox",
+            &["target", "entity_uri", "action", "status", "attempts"][..],
+        ),
+        (
+            "derived_store_state",
+            &["store_name", "schema_version", "last_event_id", "dirty"][..],
+        ),
     ];
     for (table, columns) in required {
         for column in columns {
@@ -144,6 +211,127 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+fn ensure_knowledge_substrate(conn: &Connection) -> Result<()> {
+    let now = SystemClock.now_ms();
+    seed_relation_predicates(conn, now)?;
+    seed_derived_store_state(conn, now)?;
+    backfill_entities(conn)?;
+    backfill_dependency_relations(conn, now)?;
+    Ok(())
+}
+
+fn seed_relation_predicates(conn: &Connection, now: i64) -> Result<()> {
+    for predicate in PREDICATE_SEEDS {
+        let seed = predicate.seed();
+        conn.execute(
+            "INSERT INTO relation_predicates(name, domain_kind, range_kind, cardinality, authoritative_store, description, created_at) \
+             VALUES (?1, ?2, ?3, NULL, ?4, NULL, ?5) \
+             ON CONFLICT(name) DO UPDATE SET domain_kind=excluded.domain_kind, range_kind=excluded.range_kind, authoritative_store=excluded.authoritative_store",
+            params![
+                seed.name,
+                seed.domain_kind,
+                seed.range_kind,
+                seed.authoritative_store,
+                now
+            ],
+        )
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    }
+    Ok(())
+}
+
+fn seed_derived_store_state(conn: &Connection, now: i64) -> Result<()> {
+    for seed in DERIVED_STORE_SEEDS {
+        conn.execute(
+            "INSERT OR IGNORE INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
+             VALUES (?1, ?2, 0, 0, NULL, NULL, NULL, ?3)",
+            params![seed.store_name, seed.schema_version, now],
+        )
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    }
+    Ok(())
+}
+
+fn backfill_entities(conn: &Connection) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://board/' || id, 'board', 'boards', id, id, NULL, name, description, NULL, created_at, updated_at, archived_at FROM boards",
+        [],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://column/' || id, 'column', 'board_columns', id, board_id, NULL, title, status, NULL, created_at, updated_at, NULL FROM board_columns",
+        [],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://task/' || id, 'task', 'tasks', id, board_id, id, title, description, NULL, created_at, updated_at, archived_at FROM tasks",
+        [],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://run/' || id, 'run', 'task_runs', id, board_id, task_id, id, COALESCE(summary, error), NULL, started_at, COALESCE(finished_at, last_heartbeat_at, started_at), NULL FROM task_runs",
+        [],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://event/' || event_id, 'event', 'task_events', event_id, board_id, task_id, kind, payload_json, NULL, created_at, created_at, NULL FROM task_events",
+        [],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://comment/' || id, 'comment', 'task_comments', id, board_id, task_id, author, body, NULL, created_at, created_at, NULL FROM task_comments",
+        [],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://artifact/' || id, 'attachment', 'task_attachments', id, board_id, task_id, filename, rel_path, sha256, created_at, created_at, NULL FROM task_attachments",
+        [],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://label/' || id, 'label', 'labels', id, board_id, NULL, name, color, NULL, created_at, updated_at, NULL FROM labels",
+        [],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://task-label/' || task_id || '/' || label_id, 'task_label', 'task_labels', task_id || ':' || label_id, board_id, task_id, label_id, NULL, NULL, created_at, created_at, NULL FROM task_labels",
+        [],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://setting/' || key, 'setting', 'app_settings', key, NULL, NULL, key, value_json, NULL, updated_at, updated_at, NULL FROM app_settings",
+        [],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    Ok(())
+}
+
+fn backfill_dependency_relations(conn: &Connection, now: i64) -> Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO entity_relations(subject_uri, predicate, object_uri, graph_uri, authoritative_store, source_table, source_id, source_event_id, metadata_json, created_at, updated_at) \
+         SELECT 'kb://task/' || id, 'belongs_to_board', 'kb://board/' || board_id, 'kb://graph/indexed', 'sqlite', 'tasks', id, NULL, '{}', created_at, ?1 FROM tasks",
+        [now],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO entity_relations(subject_uri, predicate, object_uri, graph_uri, authoritative_store, source_table, source_id, source_event_id, metadata_json, created_at, updated_at) \
+         SELECT 'kb://task/' || child_task_id, 'depends_on', 'kb://task/' || parent_task_id, 'kb://graph/indexed', 'sqlite', 'task_dependencies', parent_task_id || '->' || child_task_id, NULL, '{}', created_at, ?1 FROM task_dependencies",
+        [now],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
     Ok(())
 }
 

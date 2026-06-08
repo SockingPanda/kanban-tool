@@ -11,13 +11,25 @@ tantivy-backend = [
   "kanban-search/tantivy-backend",
   "kanban-sqlite/tantivy-backend",
 ]
+graph-oxigraph = [
+  "kanban-graph/graph-oxigraph",
+  "kanban-sqlite/graph-oxigraph",
+]
+vector-lancedb = [
+  "kanban-sqlite/vector-lancedb",
+  "kanban-vector/vector-lancedb",
+]
 
 [dependencies]
 axum.workspace = true
 futures-util = "0.3"
 kanban-core.workspace = true
+kanban-context.workspace = true
+kanban-entity.workspace = true
+kanban-graph.workspace = true
 kanban-search.workspace = true
 kanban-sqlite.workspace = true
+kanban-vector.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_urlencoded = "0.7"

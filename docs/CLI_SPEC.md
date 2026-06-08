@@ -560,6 +560,15 @@ kb export --format jsonl --out board.jsonl
 kb import --input board.jsonl --replace
 kb vacuum
 kb checkpoint
+
+kb entity list [--kind task] [--limit 50]
+kb entity show kb://task/t_...
+kb outbox list [--status pending] [--limit 50]
+kb derived status
+kb graph status
+kb graph neighbors kb://task/t_... [--predicate depends_on] [--limit 50]
+kb vector status
+kb context build t_... [--lexical-limit 5]
 ```
 
 `kb stats --json` 返回 status counts、过期 running claim 列表和 blocked reason 聚合，用于本地 operator recovery。
@@ -567,6 +576,9 @@ kb checkpoint
 `kb backup` 使用 SQLite `VACUUM INTO` 创建一致备份；目标文件已存在时失败，避免覆盖。
 `kb export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kb backup`。
 `kb import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kb import --replace` 是 offline-only 操作；运行前必须停止 `kb serve` 和常驻 `kb dispatch`，如果检测到 active runtime lock 会直接拒绝。
+`kb entity`、`kb outbox`、`kb derived` 是 Knowledge Substrate 的只读维护入口。SQLite 仍是事实源；这些命令只报告统一 entity registry、派生索引 outbox 和 derived store 状态，不改变 task 状态或 claim。
+`kb graph` 和 `kb vector` 是 feature-gated 派生层入口：未启用 `graph-oxigraph` / `vector-lancedb` 或缺少 embedding provider 时返回 disabled/degraded status；启用后仍只作为可重建 relation/vector store，不参与 task 状态事务。
+`kb context build` 通过 SQLite hydrate canonical task，并合并 lexical、graph、vector hits。graph/vector 不可用或失败时返回 degraded markers；失败原因通过有界 diagnostics 暴露，context pack 本身仍可用。
 
 ### 13.1 `kb doctor`
 
@@ -584,6 +596,10 @@ kb checkpoint
 - `ready/running` task 带有未完成 parent dependency。
 - `ready/running` task 缺少可执行 spec。
 - `ready/running` task 带有未来 `scheduled_at`。
+- `index_outbox` backlog：`outbox_pending`、`outbox_running`、`outbox_failed`。
+- derived store health：`derived_dirty_stores`、`derived_error_stores`、`derived_stores[]`，每个 store 包含 `dirty`、`last_error` 和按 store target 聚合的 pending/running/failed outbox 计数。
+
+`dirty` / pending outbox 表示派生层需要 sync/rebuild，不会改变 SQLite task truth；failed outbox 或 `last_error` 用于 operator 判断是否需要 `kb index sync`、`kb graph sync/rebuild` 或 `kb vector sync/rebuild`。
 
 ---
 

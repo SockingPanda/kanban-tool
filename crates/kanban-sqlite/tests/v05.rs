@@ -8,10 +8,14 @@ use std::{
 use kanban_core::{TaskStatus, new_run_id};
 use kanban_sqlite::{
     CreateTask, DispatchOptions, FinishPolicy, TaskPatch, add_dependency, archive_task,
-    begin_database_replace, begin_database_runtime, block_task, claim_task, complete_task,
-    connect_file, create_comment, create_task, dispatch_once, doctor_database, get_task,
-    init_database, list_dependencies, list_events, list_runs, list_tasks, promote_task,
-    search_tasks, unblock_task, update_task,
+    begin_database_replace, begin_database_runtime, block_task, build_context_pack, claim_task,
+    complete_task, connect_file, create_comment, create_task, derived_store_statuses,
+    dispatch_once, doctor_database, get_task, init_database, list_dependencies, list_events,
+    list_outbox, list_runs, list_tasks, promote_task, rebuild_vector_store_with, search_tasks,
+    sync_vector_store_with, unblock_task, update_task,
+};
+use kanban_vector::{
+    EmbeddingChunk, VectorError, VectorHit, VectorQuery, VectorStore, VectorStoreStatus,
 };
 use rusqlite::{Connection, params};
 
@@ -238,6 +242,444 @@ fn sqlite_search_rejects_limit_that_cannot_be_bounded_safely() {
     .unwrap_err();
 
     assert!(error.to_string().contains("limit must be <= 1000"));
+}
+
+#[test]
+fn context_broker_hydrates_subject_and_reports_disabled_derived_stores() {
+    let temp = TempDb::new("context_broker_hydrates_subject_and_reports_disabled_derived_stores");
+    init_database(&temp.path, "tester").unwrap();
+    let subject = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "context broker source".into(),
+            description: Some("ready spec broker-needle".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let related = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "related context broker source".into(),
+            description: Some("ready spec broker-needle".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+
+    let pack = build_context_pack(
+        &temp.path,
+        "default",
+        &subject.id,
+        kanban_context::ContextPolicy {
+            lexical_limit: 5,
+            graph_limit: 5,
+            vector_limit: 5,
+            max_items: 10,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(pack.subject, kanban_entity::EntityUri::task(&subject.id));
+    assert_eq!(
+        pack.items[0].entity_uri,
+        kanban_entity::EntityUri::task(&subject.id)
+    );
+    assert_eq!(pack.items[0].source, "subject");
+    assert!(
+        pack.items
+            .iter()
+            .any(|item| item.entity_uri == kanban_entity::EntityUri::task(&related.id))
+    );
+    #[cfg(not(feature = "graph-oxigraph"))]
+    assert!(
+        pack.degraded
+            .iter()
+            .any(|marker| marker == "graph_disabled")
+    );
+    #[cfg(feature = "graph-oxigraph")]
+    assert!(
+        !pack
+            .degraded
+            .iter()
+            .any(|marker| marker == "graph_disabled")
+    );
+    #[cfg(not(feature = "vector-lancedb"))]
+    assert!(
+        pack.degraded
+            .iter()
+            .any(|marker| marker == "vector_disabled")
+    );
+    #[cfg(feature = "vector-lancedb")]
+    assert!(pack.degraded.iter().any(|marker| marker == "vector_dirty"));
+}
+
+#[test]
+fn context_broker_rejects_zero_max_items_and_counts_subject_toward_budget() {
+    let temp =
+        TempDb::new("context_broker_rejects_zero_max_items_and_counts_subject_toward_budget");
+    init_database(&temp.path, "tester").unwrap();
+    let subject = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("budget context subject"),
+    )
+    .unwrap();
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("budget context related"),
+    )
+    .unwrap();
+
+    let pack = build_context_pack(
+        &temp.path,
+        "default",
+        &subject.id,
+        kanban_context::ContextPolicy {
+            lexical_limit: 5,
+            graph_limit: 5,
+            vector_limit: 5,
+            max_items: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(pack.items.len(), 1);
+    assert_eq!(
+        pack.items[0].entity_uri,
+        kanban_entity::EntityUri::task(&subject.id)
+    );
+
+    let error = build_context_pack(
+        &temp.path,
+        "default",
+        &subject.id,
+        kanban_context::ContextPolicy {
+            lexical_limit: 5,
+            graph_limit: 5,
+            vector_limit: 5,
+            max_items: 0,
+        },
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("max_items must be >= 1"));
+}
+
+#[cfg(feature = "graph-oxigraph")]
+#[test]
+fn context_broker_reports_graph_dirty_and_stale_before_sync() {
+    let temp = TempDb::new("context_broker_reports_graph_dirty_and_stale_before_sync");
+    init_database(&temp.path, "tester").unwrap();
+    let subject = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("dirty graph context subject"),
+    )
+    .unwrap();
+
+    let pack = build_context_pack(
+        &temp.path,
+        "default",
+        &subject.id,
+        kanban_context::ContextPolicy {
+            lexical_limit: 5,
+            graph_limit: 5,
+            vector_limit: 0,
+            max_items: 10,
+        },
+    )
+    .unwrap();
+
+    assert!(pack.degraded.iter().any(|marker| marker == "graph_dirty"));
+    assert!(pack.degraded.iter().any(|marker| marker == "graph_stale"));
+}
+
+#[cfg(feature = "graph-oxigraph")]
+#[test]
+fn context_broker_reports_graph_error_diagnostic_without_failing_pack() {
+    let temp = TempDb::new("context_broker_reports_graph_error_diagnostic_without_failing_pack");
+    init_database(&temp.path, "tester").unwrap();
+    let subject = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("broken graph context subject"),
+    )
+    .unwrap();
+    let graph_path = kanban_local::graph_store_path(temp.path.clone());
+    std::fs::create_dir_all(graph_path.parent().unwrap()).unwrap();
+    std::fs::write(&graph_path, "not a graph directory").unwrap();
+
+    let pack = build_context_pack(
+        &temp.path,
+        "default",
+        &subject.id,
+        kanban_context::ContextPolicy {
+            lexical_limit: 5,
+            graph_limit: 5,
+            vector_limit: 0,
+            max_items: 10,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        pack.items[0].entity_uri,
+        kanban_entity::EntityUri::task(&subject.id)
+    );
+    assert!(pack.degraded.iter().any(|marker| marker == "graph_error"));
+    assert!(pack.diagnostics.iter().any(|diagnostic| {
+        diagnostic.source == "graph"
+            && diagnostic.code == "graph_error"
+            && !diagnostic.message.is_empty()
+            && diagnostic.message.len() <= 243
+    }));
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn context_broker_reports_vector_query_error_without_failing_pack() {
+    let temp = TempDb::new("context_broker_reports_vector_query_error_without_failing_pack");
+    init_database(&temp.path, "tester").unwrap();
+    let subject = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("query failing vector context subject"),
+    )
+    .unwrap();
+    let store = QueryFailingVectorStore;
+
+    let pack = kanban_sqlite::build_context_pack_with_vector_store(
+        &temp.path,
+        "default",
+        &subject.id,
+        kanban_context::ContextPolicy {
+            lexical_limit: 5,
+            graph_limit: 0,
+            vector_limit: 5,
+            max_items: 10,
+        },
+        &store,
+    )
+    .unwrap();
+
+    assert_eq!(
+        pack.items[0].entity_uri,
+        kanban_entity::EntityUri::task(&subject.id)
+    );
+    assert!(pack.degraded.iter().any(|marker| marker == "vector_dirty"));
+    assert!(pack.degraded.iter().any(|marker| marker == "vector_stale"));
+    assert!(pack.degraded.iter().any(|marker| marker == "vector_error"));
+    assert!(pack.diagnostics.iter().any(|diagnostic| {
+        diagnostic.source == "vector"
+            && diagnostic.code == "vector_error"
+            && diagnostic.message.contains("query exploded")
+            && diagnostic.message.len() <= 243
+    }));
+}
+
+#[test]
+fn task_events_fan_out_target_specific_outbox_and_mark_derived_stores_dirty() {
+    let temp =
+        TempDb::new("task_events_fan_out_target_specific_outbox_and_mark_derived_stores_dirty");
+    init_database(&temp.path, "tester").unwrap();
+
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("outbox fanout"),
+    )
+    .unwrap();
+
+    let jobs = list_outbox(
+        &temp.path,
+        kanban_sqlite::OutboxListOptions {
+            status: Some("pending".to_owned()),
+            limit: 10,
+        },
+    )
+    .unwrap();
+    assert_eq!(jobs.len(), 3);
+    assert_eq!(
+        jobs.iter()
+            .map(|job| job.target.as_str())
+            .collect::<Vec<_>>(),
+        vec!["tantivy", "oxigraph", "lancedb"]
+    );
+    assert!(
+        jobs.iter()
+            .all(|job| job.entity_uri == format!("kb://task/{}", task.id))
+    );
+
+    let statuses = derived_store_statuses(&temp.path).unwrap();
+    for store in ["tantivy_tasks", "oxigraph_relations", "lancedb_chunks"] {
+        let status = statuses
+            .iter()
+            .find(|status| status.store_name == store)
+            .unwrap();
+        assert!(status.dirty, "{store} should be dirty");
+        assert_eq!(status.last_event_id, 0);
+    }
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_rebuild_marks_only_current_board_outbox_done() {
+    let temp = TempDb::new("tantivy_rebuild_marks_only_current_board_outbox_done");
+    init_database(&temp.path, "tester").unwrap();
+    insert_board(&temp.path, "other", "b_other");
+
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default first"),
+    )
+    .unwrap();
+    create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("other between default events"),
+    )
+    .unwrap();
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default second"),
+    )
+    .unwrap();
+
+    kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done", "done"]
+    );
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "other"),
+        vec!["pending"]
+    );
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_sync_marks_only_current_board_outbox_done() {
+    let temp = TempDb::new("tantivy_sync_marks_only_current_board_outbox_done");
+    init_database(&temp.path, "tester").unwrap();
+    insert_board(&temp.path, "other", "b_other");
+    let default = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default indexed"),
+    )
+    .unwrap();
+    kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+
+    create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("other pending during default sync"),
+    )
+    .unwrap();
+    update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &default.id,
+        TaskPatch {
+            title: Some("default synced".into()),
+            expected_lock_version: Some(default.lock_version),
+            ..TaskPatch::default()
+        },
+    )
+    .unwrap();
+
+    kanban_sqlite::sync_search_index(&temp.path, "default").unwrap();
+
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done", "done"]
+    );
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "other"),
+        vec!["pending"]
+    );
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_sync_failure_marks_only_current_board_outbox_failed() {
+    let temp = TempDb::new("tantivy_sync_failure_marks_only_current_board_outbox_failed");
+    init_database(&temp.path, "tester").unwrap();
+    insert_board(&temp.path, "other", "b_other");
+    let default = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default indexed before failure"),
+    )
+    .unwrap();
+    kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+
+    create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("other pending during default failure"),
+    )
+    .unwrap();
+    update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &default.id,
+        TaskPatch {
+            title: Some("default failure candidate".into()),
+            expected_lock_version: Some(default.lock_version),
+            ..TaskPatch::default()
+        },
+    )
+    .unwrap();
+    std::fs::write(
+        temp.dir.join("index/v1/tasks/kb-index-meta.json"),
+        b"not json",
+    )
+    .unwrap();
+
+    let err = kanban_sqlite::sync_search_index(&temp.path, "default").unwrap_err();
+    assert!(err.to_string().contains("expected ident") || err.to_string().contains("JSON"));
+
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done", "failed"]
+    );
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "other"),
+        vec!["pending"]
+    );
 }
 
 #[cfg(feature = "tantivy-backend")]
@@ -555,6 +997,458 @@ fn tantivy_rebuild_persists_search_state_in_app_settings() {
     assert_eq!(state["index_name"], "tasks");
     assert_eq!(state["dirty"], false);
     assert_eq!(state["last_event_id"].as_i64(), status.last_event_id);
+
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let tantivy = derived
+        .iter()
+        .find(|store| store.store_name == "tantivy_tasks")
+        .unwrap();
+    assert_eq!(Some(tantivy.last_event_id), status.last_event_id);
+    assert!(!tantivy.dirty);
+    assert!(tantivy.last_rebuild_at.is_some());
+    assert!(tantivy.last_error.is_none());
+    let jobs = list_outbox(
+        &temp.path,
+        kanban_sqlite::OutboxListOptions {
+            status: Some("done".to_owned()),
+            limit: 10,
+        },
+    )
+    .unwrap();
+    assert!(jobs.iter().any(|job| job.target == "tantivy"));
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() {
+    let temp = TempDb::new("tantivy_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending");
+    init_database(&temp.path, "tester").unwrap();
+    insert_board(&temp.path, "second", "b_second");
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default board task"),
+    )
+    .unwrap();
+    create_task(
+        &temp.path,
+        "second",
+        "tester",
+        CreateTask::ready("second board task"),
+    )
+    .unwrap();
+
+    kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done"]
+    );
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "second"),
+        vec!["pending"]
+    );
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let tantivy = derived
+        .iter()
+        .find(|store| store.store_name == "tantivy_tasks")
+        .unwrap();
+    assert!(
+        tantivy.dirty,
+        "second board still has pending Tantivy outbox"
+    );
+
+    kanban_sqlite::rebuild_search_index(&temp.path, "second").unwrap();
+
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "second"),
+        vec!["done"]
+    );
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let tantivy = derived
+        .iter()
+        .find(|store| store.store_name == "tantivy_tasks")
+        .unwrap();
+    assert!(!tantivy.dirty);
+}
+
+#[cfg(feature = "graph-oxigraph")]
+#[test]
+fn graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() {
+    use kanban_entity::{EntityUri, Predicate};
+    use kanban_graph::{OxigraphStore, RelationGraph};
+
+    let temp = TempDb::new("graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending");
+    init_database(&temp.path, "tester").unwrap();
+    insert_board(&temp.path, "second", "b_second");
+    let default_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default board graph task"),
+    )
+    .unwrap();
+    let second_task = create_task(
+        &temp.path,
+        "second",
+        "tester",
+        CreateTask::ready("second board graph task"),
+    )
+    .unwrap();
+
+    kanban_sqlite::rebuild_graph_store(&temp.path, "default").unwrap();
+    let graph = OxigraphStore::open(kanban_local::graph_store_path(temp.path.clone())).unwrap();
+    assert_eq!(
+        graph
+            .neighbors(
+                &EntityUri::task(&default_task.id),
+                Some(Predicate::BelongsToBoard),
+                10,
+            )
+            .unwrap()
+            .len(),
+        1
+    );
+
+    assert_eq!(
+        graph_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done"]
+    );
+    assert_eq!(
+        graph_outbox_statuses_for_board(&temp.path, "second"),
+        vec!["pending"]
+    );
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let graph = derived
+        .iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .unwrap();
+    assert!(graph.dirty, "second board still has pending graph outbox");
+
+    kanban_sqlite::rebuild_graph_store(&temp.path, "second").unwrap();
+    let graph = OxigraphStore::open(kanban_local::graph_store_path(temp.path.clone())).unwrap();
+    assert_eq!(
+        graph
+            .neighbors(
+                &EntityUri::task(&default_task.id),
+                Some(Predicate::BelongsToBoard),
+                10,
+            )
+            .unwrap()
+            .len(),
+        1,
+        "rebuilding the second board must preserve the first board graph"
+    );
+    assert_eq!(
+        graph
+            .neighbors(
+                &EntityUri::task(&second_task.id),
+                Some(Predicate::BelongsToBoard),
+                10,
+            )
+            .unwrap()
+            .len(),
+        1
+    );
+
+    assert_eq!(
+        graph_outbox_statuses_for_board(&temp.path, "second"),
+        vec!["done"]
+    );
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let graph = derived
+        .iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .unwrap();
+    assert!(!graph.dirty);
+    let default_status = kanban_sqlite::graph_store_status(&temp.path, "default").unwrap();
+    assert!(
+        default_status.message.contains("lag=0"),
+        "default board has no unfinished graph outbox even though the shared watermark advanced: {}",
+        default_status.message
+    );
+}
+
+#[cfg(feature = "graph-oxigraph")]
+#[test]
+fn graph_rebuild_persists_board_and_dependency_relations() {
+    use kanban_entity::{EntityUri, Predicate};
+    use kanban_graph::{OxigraphStore, RelationGraph};
+
+    let temp = TempDb::new("graph_rebuild_persists_board_and_dependency_relations");
+    init_database(&temp.path, "tester").unwrap();
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("graph parent"),
+    )
+    .unwrap();
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("graph child"),
+    )
+    .unwrap();
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id).unwrap();
+
+    let snapshot = kanban_sqlite::graph_relation_snapshot(&temp.path, "default").unwrap();
+    assert!(
+        snapshot.iter().any(
+            |relation| relation.subject_uri == EntityUri::task(&child.id)
+                && relation.predicate == Predicate::DependsOn
+                && relation.object_uri == EntityUri::task(&parent.id)
+        ),
+        "SQLite relation snapshot should mirror the authoritative dependency edge"
+    );
+
+    kanban_sqlite::rebuild_graph_store(&temp.path, "default").unwrap();
+
+    let graph = OxigraphStore::open(kanban_local::graph_store_path(temp.path.clone())).unwrap();
+    let child_uri = EntityUri::task(&child.id);
+    let dependency_neighbors = graph
+        .neighbors(&child_uri, Some(Predicate::DependsOn), 10)
+        .unwrap();
+    assert_eq!(dependency_neighbors.len(), 1);
+    assert_eq!(
+        dependency_neighbors[0].object_uri,
+        EntityUri::task(&parent.id)
+    );
+
+    let board_neighbors = graph
+        .neighbors(&child_uri, Some(Predicate::BelongsToBoard), 10)
+        .unwrap();
+    assert_eq!(board_neighbors.len(), 1);
+    assert_eq!(
+        board_neighbors[0].object_uri,
+        EntityUri::board(&child.board_id)
+    );
+}
+
+#[test]
+fn vector_sync_marks_lancedb_outbox_done_without_touching_other_boards() {
+    let temp = TempDb::new("vector_sync_marks_lancedb_outbox_done_without_touching_other_boards");
+    init_database(&temp.path, "tester").unwrap();
+    insert_board(&temp.path, "second", "b_second");
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default board vector task"),
+    )
+    .unwrap();
+    create_task(
+        &temp.path,
+        "second",
+        "tester",
+        CreateTask::ready("second board vector task"),
+    )
+    .unwrap();
+
+    let store = RecordingVectorStore::default();
+    let status = sync_vector_store_with(&temp.path, "default", &store).unwrap();
+    assert_eq!(status.backend, "test-vector");
+    assert!(status.message.contains("synced 1 chunk(s)"));
+    assert_eq!(
+        store.upserted_texts(),
+        vec!["default board vector task\n\nready spec"]
+    );
+    assert_eq!(
+        lancedb_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done"]
+    );
+    assert_eq!(
+        lancedb_outbox_statuses_for_board(&temp.path, "second"),
+        vec!["pending"]
+    );
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let vector = derived
+        .iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .unwrap();
+    assert!(
+        vector.dirty,
+        "second board still has pending LanceDB outbox"
+    );
+
+    sync_vector_store_with(&temp.path, "second", &store).unwrap();
+    assert_eq!(
+        lancedb_outbox_statuses_for_board(&temp.path, "second"),
+        vec!["done"]
+    );
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let vector = derived
+        .iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .unwrap();
+    assert!(!vector.dirty);
+    assert!(vector.last_error.is_none());
+}
+
+#[test]
+fn vector_sync_and_rebuild_use_store_embedding_model() {
+    let temp = TempDb::new("vector_sync_and_rebuild_use_store_embedding_model");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("non default model vector task"),
+    )
+    .unwrap();
+    let store = RecordingVectorStore::with_embedding_model("static-test");
+
+    sync_vector_store_with(&temp.path, "default", &store).unwrap();
+    assert_eq!(store.upserted_models(), vec!["static-test"]);
+
+    update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        TaskPatch {
+            title: Some("non default model vector task updated".into()),
+            expected_lock_version: Some(task.lock_version),
+            ..TaskPatch::default()
+        },
+    )
+    .unwrap();
+    rebuild_vector_store_with(&temp.path, "default", &store).unwrap();
+
+    assert_eq!(store.upserted_models(), vec!["static-test", "static-test"]);
+}
+
+#[test]
+fn vector_sync_deletes_archived_task_chunks_and_converges_outbox() {
+    let temp = TempDb::new("vector_sync_deletes_archived_task_chunks_and_converges_outbox");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("archived vector task"),
+    )
+    .unwrap();
+    let store = RecordingVectorStore::default();
+
+    sync_vector_store_with(&temp.path, "default", &store).unwrap();
+    archive_task(&temp.path, "default", "tester", &task.id, false).unwrap();
+    let status = sync_vector_store_with(&temp.path, "default", &store).unwrap();
+
+    assert!(status.message.contains("synced 0 chunk(s) from 1 job(s)"));
+    assert_eq!(
+        store.deleted_entity_uris(),
+        vec![format!("kb://task/{}", task.id)]
+    );
+    assert_eq!(store.deleted_board_ids(), vec![task.board_id.as_str()]);
+    assert_eq!(
+        lancedb_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done", "done"]
+    );
+    let vector = derived_store_statuses(&temp.path)
+        .unwrap()
+        .into_iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .unwrap();
+    assert!(!vector.dirty);
+    assert!(vector.last_error.is_none());
+}
+
+#[test]
+fn vector_rebuild_deletes_board_before_reindexing_current_tasks() {
+    let temp = TempDb::new("vector_rebuild_deletes_board_before_reindexing_current_tasks");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("hard deleted vector task"),
+    )
+    .unwrap();
+    let store = RecordingVectorStore::default();
+
+    sync_vector_store_with(&temp.path, "default", &store).unwrap();
+    assert_eq!(
+        store.live_texts(),
+        vec!["hard deleted vector task\n\nready spec"]
+    );
+
+    connect_file(&temp.path)
+        .unwrap()
+        .execute("DELETE FROM tasks WHERE id=?1", params![task.id])
+        .unwrap();
+    let status = rebuild_vector_store_with(&temp.path, "default", &store).unwrap();
+
+    assert!(status.message.contains("rebuilt 0 chunk(s)"));
+    assert_eq!(
+        store.deleted_board_ids(),
+        vec![task.board_id.as_str(), task.board_id.as_str()]
+    );
+    assert!(store.live_texts().is_empty());
+    assert_eq!(
+        lancedb_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done"]
+    );
+    let vector = derived_store_statuses(&temp.path)
+        .unwrap()
+        .into_iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .unwrap();
+    assert!(!vector.dirty);
+    assert!(vector.last_error.is_none());
+}
+
+#[test]
+fn vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error() {
+    let temp = TempDb::new("vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("failing vector task"),
+    )
+    .unwrap();
+    let store = FailingVectorStore;
+
+    let error = rebuild_vector_store_with(&temp.path, "default", &store).unwrap_err();
+    assert!(error.to_string().contains("dimension mismatch"));
+
+    let fresh = get_task(&temp.path, "default", &task.id).unwrap();
+    assert_eq!(fresh.title, task.title, "SQLite task truth is unchanged");
+    assert_eq!(
+        lancedb_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["failed"]
+    );
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let vector = derived
+        .iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .unwrap();
+    assert!(vector.dirty);
+    assert!(
+        vector
+            .last_error
+            .as_deref()
+            .unwrap()
+            .contains("dimension mismatch")
+    );
+    let report = doctor_database(&temp.path).unwrap();
+    assert!(!report.ok);
+    assert_eq!(report.outbox_failed, 1);
+    assert_eq!(report.derived_error_stores, 1);
+    assert!(report.derived_stores.iter().any(|store| {
+        store.store_name == "lancedb_chunks"
+            && store.dirty
+            && store.failed_outbox == 1
+            && store
+                .last_error
+                .as_deref()
+                .unwrap()
+                .contains("dimension mismatch")
+    }));
 }
 
 #[cfg(feature = "tantivy-backend")]
@@ -671,6 +1565,14 @@ fn tantivy_sync_reindexes_task_comment_run_event_and_archive_changes() {
     assert_eq!(sync.backend, "tantivy");
     assert!(!sync.stale);
     assert_eq!(sync.index_lag_events, Some(0));
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let tantivy = derived
+        .iter()
+        .find(|store| store.store_name == "tantivy_tasks")
+        .unwrap();
+    assert_eq!(Some(tantivy.last_event_id), sync.last_event_id);
+    assert!(!tantivy.dirty);
+    assert!(tantivy.last_sync_at.is_some());
 
     let results = search_tasks(
         &temp.path,
@@ -912,6 +1814,14 @@ fn tantivy_sync_failure_does_not_advance_search_state_watermark() {
     assert_eq!(status.last_event_id, rebuilt.last_event_id);
     assert!(status.stale);
     assert!(status.index_lag_events.unwrap() > 0);
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let tantivy = derived
+        .iter()
+        .find(|store| store.store_name == "tantivy_tasks")
+        .unwrap();
+    assert_eq!(Some(tantivy.last_event_id), rebuilt.last_event_id);
+    assert!(tantivy.dirty);
+    assert!(tantivy.last_error.is_some());
 }
 
 #[cfg(feature = "tantivy-backend")]
@@ -1896,6 +2806,26 @@ fn doctor_reports_partially_initialized_database_without_bailing() {
     assert!(!report.ok);
     assert_eq!(report.migration_version, None);
     assert_eq!(report.user_version, 0);
+}
+
+#[test]
+fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() {
+    for table in ["index_outbox", "derived_store_state"] {
+        let temp = TempDb::new(&format!(
+            "doctor_reports_missing_knowledge_substrate_tables_unhealthy_{table}"
+        ));
+        init_database(&temp.path, "tester").unwrap();
+        connect_file(&temp.path)
+            .unwrap()
+            .execute_batch(&format!("DROP TABLE {table};"))
+            .unwrap();
+
+        let report = doctor_database(&temp.path).unwrap();
+
+        assert_eq!(report.migration_version, Some(2));
+        assert_eq!(report.user_version, 2);
+        assert!(!report.ok, "{table} missing should make doctor unhealthy");
+    }
 }
 
 #[test]
@@ -3032,6 +3962,244 @@ impl Drop for TempDb {
             let _ = std::fs::remove_dir_all(&self.dir);
         }
     }
+}
+
+fn insert_board(path: &Path, slug: &str, id: &str) {
+    connect_file(path)
+        .unwrap()
+        .execute(
+            "INSERT INTO boards(id, slug, name, description, created_at, updated_at, archived_at) VALUES (?1, ?2, ?3, NULL, 1, 1, NULL)",
+            params![id, slug, slug],
+        )
+        .unwrap();
+}
+
+#[derive(Default)]
+struct RecordingVectorStore {
+    embedding_model: Option<String>,
+    live_chunks: std::sync::Mutex<Vec<EmbeddingChunk>>,
+    upserted: std::sync::Mutex<Vec<String>>,
+    upserted_models: std::sync::Mutex<Vec<String>>,
+    deleted: std::sync::Mutex<Vec<String>>,
+    deleted_boards: std::sync::Mutex<Vec<String>>,
+}
+
+impl RecordingVectorStore {
+    fn with_embedding_model(embedding_model: &str) -> Self {
+        Self {
+            embedding_model: Some(embedding_model.to_owned()),
+            ..Self::default()
+        }
+    }
+
+    fn expected_model(&self) -> &str {
+        self.embedding_model
+            .as_deref()
+            .unwrap_or(kanban_vector::DEFAULT_EMBEDDING_MODEL)
+    }
+
+    fn upserted_texts(&self) -> Vec<String> {
+        self.upserted.lock().unwrap().clone()
+    }
+
+    fn upserted_models(&self) -> Vec<String> {
+        self.upserted_models.lock().unwrap().clone()
+    }
+
+    fn deleted_entity_uris(&self) -> Vec<String> {
+        self.deleted.lock().unwrap().clone()
+    }
+
+    fn deleted_board_ids(&self) -> Vec<String> {
+        self.deleted_boards.lock().unwrap().clone()
+    }
+
+    fn live_texts(&self) -> Vec<String> {
+        self.live_chunks
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|chunk| chunk.text.clone())
+            .collect()
+    }
+}
+
+impl VectorStore for RecordingVectorStore {
+    fn chunk_embedding_model(&self) -> &str {
+        self.expected_model()
+    }
+
+    fn status(&self) -> VectorStoreStatus {
+        VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store".to_owned(),
+        }
+    }
+
+    fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
+        if let Some(chunk) = chunks
+            .iter()
+            .find(|chunk| chunk.embedding_model != self.expected_model())
+        {
+            return Err(VectorError::EmbeddingModelMismatch {
+                expected: self.expected_model().to_owned(),
+                actual: chunk.embedding_model.clone(),
+            });
+        }
+        let mut upserted = self.upserted.lock().unwrap();
+        upserted.extend(chunks.iter().map(|chunk| chunk.text.clone()));
+        let mut upserted_models = self.upserted_models.lock().unwrap();
+        upserted_models.extend(chunks.iter().map(|chunk| chunk.embedding_model.clone()));
+        let mut live_chunks = self.live_chunks.lock().unwrap();
+        for chunk in chunks {
+            live_chunks.retain(|live| live.chunk_key() != chunk.chunk_key());
+            live_chunks.push(chunk.clone());
+        }
+        Ok(())
+    }
+
+    fn delete_board(&self, board_id: &str) -> Result<(), VectorError> {
+        let mut deleted_boards = self.deleted_boards.lock().unwrap();
+        deleted_boards.push(board_id.to_owned());
+        self.live_chunks
+            .lock()
+            .unwrap()
+            .retain(|chunk| chunk.board_id.as_deref() != Some(board_id));
+        Ok(())
+    }
+
+    fn delete_entities(&self, entity_uris: &[String]) -> Result<(), VectorError> {
+        let mut deleted = self.deleted.lock().unwrap();
+        deleted.extend(entity_uris.iter().cloned());
+        self.live_chunks.lock().unwrap().retain(|chunk| {
+            !entity_uris
+                .iter()
+                .any(|entity_uri| entity_uri == chunk.chunk.entity_uri.as_str())
+        });
+        Ok(())
+    }
+
+    fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
+        Ok(Vec::new())
+    }
+}
+
+struct FailingVectorStore;
+
+impl VectorStore for FailingVectorStore {
+    fn status(&self) -> VectorStoreStatus {
+        VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store".to_owned(),
+        }
+    }
+
+    fn upsert(&self, _chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
+        Err(VectorError::DimensionMismatch {
+            expected: 3,
+            actual: 2,
+        })
+    }
+
+    fn delete_board(&self, _board_id: &str) -> Result<(), VectorError> {
+        Ok(())
+    }
+
+    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), VectorError> {
+        Ok(())
+    }
+
+    fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
+        Ok(Vec::new())
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+struct QueryFailingVectorStore;
+
+#[cfg(feature = "vector-lancedb")]
+impl VectorStore for QueryFailingVectorStore {
+    fn status(&self) -> VectorStoreStatus {
+        VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store".to_owned(),
+        }
+    }
+
+    fn upsert(&self, _chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
+        Ok(())
+    }
+
+    fn delete_board(&self, _board_id: &str) -> Result<(), VectorError> {
+        Ok(())
+    }
+
+    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), VectorError> {
+        Ok(())
+    }
+
+    fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
+        Err(VectorError::Store("query exploded".to_owned()))
+    }
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn tantivy_outbox_statuses_for_board(path: &Path, board_slug: &str) -> Vec<String> {
+    let conn = connect_file(path).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT io.status \
+             FROM index_outbox io \
+             JOIN task_events e ON e.id=io.source_event_id \
+             JOIN boards b ON b.id=e.board_id \
+             WHERE b.slug=?1 AND io.target='tantivy' \
+             ORDER BY io.id ASC",
+        )
+        .unwrap();
+    stmt.query_map([board_slug], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap()
+}
+
+#[cfg(feature = "graph-oxigraph")]
+fn graph_outbox_statuses_for_board(path: &Path, board_slug: &str) -> Vec<String> {
+    let conn = connect_file(path).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT io.status \
+             FROM index_outbox io \
+             JOIN task_events e ON e.id=io.source_event_id \
+             JOIN boards b ON b.id=e.board_id \
+             WHERE b.slug=?1 AND io.target='oxigraph' \
+             ORDER BY io.id ASC",
+        )
+        .unwrap();
+    stmt.query_map([board_slug], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap()
+}
+
+fn lancedb_outbox_statuses_for_board(path: &Path, board_slug: &str) -> Vec<String> {
+    let conn = connect_file(path).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT io.status \
+             FROM index_outbox io \
+             JOIN task_events e ON e.id=io.source_event_id \
+             JOIN boards b ON b.id=e.board_id \
+             WHERE b.slug=?1 AND io.target='lancedb' \
+             ORDER BY io.id ASC",
+        )
+        .unwrap();
+    stmt.query_map([board_slug], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap()
 }
 
 fn now_ms() -> i64 {

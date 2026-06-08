@@ -1,0 +1,20 @@
+[package]
+name = "kanban-graph"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+kanban-entity.workspace = true
+oxigraph = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[features]
+default = []
+graph-oxigraph = ["oxigraph"]
+
+[dev-dependencies]
+tempfile.workspace = true

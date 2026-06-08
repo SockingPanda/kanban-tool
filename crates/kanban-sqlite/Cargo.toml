@@ -8,10 +8,18 @@ authors.workspace = true
 [features]
 default = []
 tantivy-backend = ["kanban-search/tantivy-backend"]
+graph-oxigraph = ["kanban-graph/graph-oxigraph"]
+vector-lancedb = ["kanban-vector/vector-lancedb"]
 
 [dependencies]
 kanban-core.workspace = true
+kanban-context.workspace = true
+kanban-entity.workspace = true
+kanban-graph.workspace = true
+kanban-indexer.workspace = true
+kanban-local.workspace = true
 kanban-search.workspace = true
+kanban-vector.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true

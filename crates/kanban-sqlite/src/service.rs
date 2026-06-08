@@ -319,6 +319,18 @@ pub struct DerivedStoreStatusRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DoctorDerivedStoreReport {
+    pub store_name: String,
+    pub schema_version: i64,
+    pub last_event_id: i64,
+    pub dirty: bool,
+    pub last_error: Option<String>,
+    pub pending_outbox: i64,
+    pub running_outbox: i64,
+    pub failed_outbox: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DoctorReport {
     pub ok: bool,
     pub integrity_check: String,
@@ -333,6 +345,12 @@ pub struct DoctorReport {
     pub executable_dependency_violations: i64,
     pub executable_spec_violations: i64,
     pub executable_schedule_violations: i64,
+    pub outbox_pending: i64,
+    pub outbox_running: i64,
+    pub outbox_failed: i64,
+    pub derived_dirty_stores: i64,
+    pub derived_error_stores: i64,
+    pub derived_stores: Vec<DoctorDerivedStoreReport>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -532,6 +550,10 @@ pub fn list_outbox(
 
 pub fn derived_store_statuses(path: impl AsRef<Path>) -> Result<Vec<DerivedStoreStatusRecord>> {
     let conn = connect_file(path.as_ref())?;
+    derived_store_statuses_conn(&conn)
+}
+
+fn derived_store_statuses_conn(conn: &Connection) -> Result<Vec<DerivedStoreStatusRecord>> {
     let mut stmt = conn
         .prepare(
             "SELECT store_name,schema_version,last_event_id,dirty,last_rebuild_at,last_sync_at,last_error,updated_at \
@@ -1403,6 +1425,12 @@ fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Result<Doctor
             executable_dependency_violations: 0,
             executable_spec_violations: 0,
             executable_schedule_violations: 0,
+            outbox_pending: 0,
+            outbox_running: 0,
+            outbox_failed: 0,
+            derived_dirty_stores: 0,
+            derived_error_stores: 0,
+            derived_stores: Vec::new(),
         });
     }
     let expired_running_tasks: i64 = conn
@@ -1441,6 +1469,15 @@ fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Result<Doctor
     let executable_dependency_violations = count_executable_dependency_violations(conn)?;
     let executable_spec_violations = count_executable_spec_violations(conn)?;
     let executable_schedule_violations = count_executable_schedule_violations(conn, now)?;
+    let derived_stores = doctor_derived_store_reports(conn)?;
+    let outbox_pending = count_table_status(conn, "index_outbox", "pending")?;
+    let outbox_running = count_table_status(conn, "index_outbox", "running")?;
+    let outbox_failed = count_table_status(conn, "index_outbox", "failed")?;
+    let derived_dirty_stores = derived_stores.iter().filter(|store| store.dirty).count() as i64;
+    let derived_error_stores = derived_stores
+        .iter()
+        .filter(|store| store.last_error.is_some() || store.failed_outbox > 0)
+        .count() as i64;
     let ok = integrity_check == "ok"
         && migration_version == Some(user_version)
         && expired_running_tasks == 0
@@ -1451,7 +1488,9 @@ fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Result<Doctor
         && missing_run_logs == 0
         && executable_dependency_violations == 0
         && executable_spec_violations == 0
-        && executable_schedule_violations == 0;
+        && executable_schedule_violations == 0
+        && outbox_failed == 0
+        && derived_error_stores == 0;
     Ok(DoctorReport {
         ok,
         integrity_check,
@@ -1466,7 +1505,50 @@ fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Result<Doctor
         executable_dependency_violations,
         executable_spec_violations,
         executable_schedule_violations,
+        outbox_pending,
+        outbox_running,
+        outbox_failed,
+        derived_dirty_stores,
+        derived_error_stores,
+        derived_stores,
     })
+}
+
+fn doctor_derived_store_reports(conn: &Connection) -> Result<Vec<DoctorDerivedStoreReport>> {
+    if !table_exists(conn, "derived_store_state")? {
+        return Ok(Vec::new());
+    }
+    let stores = derived_store_statuses_conn(conn)?;
+    stores
+        .into_iter()
+        .map(|store| {
+            let seed = derived_store_for_name(&store.store_name).ok_or_else(|| {
+                KanbanError::Storage(format!("unknown derived store: {}", store.store_name))
+            })?;
+            Ok(DoctorDerivedStoreReport {
+                store_name: store.store_name,
+                schema_version: store.schema_version,
+                last_event_id: store.last_event_id,
+                dirty: store.dirty,
+                last_error: store.last_error,
+                pending_outbox: count_outbox_for_target(conn, seed.target, "pending")?,
+                running_outbox: count_outbox_for_target(conn, seed.target, "running")?,
+                failed_outbox: count_outbox_for_target(conn, seed.target, "failed")?,
+            })
+        })
+        .collect()
+}
+
+fn count_outbox_for_target(conn: &Connection, target: OutboxTarget, status: &str) -> Result<i64> {
+    if !table_exists(conn, "index_outbox")? {
+        return Ok(0);
+    }
+    conn.query_row(
+        "SELECT COUNT(*) FROM index_outbox WHERE status=?1 AND target IN (?2, 'all')",
+        params![status, target.as_str()],
+        |row| row.get(0),
+    )
+    .map_err(storage)
 }
 
 pub fn checkpoint_database(path: impl AsRef<Path>) -> Result<CheckpointResult> {

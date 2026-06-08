@@ -16,6 +16,10 @@ tantivy-backend = [
   "kanban-sqlite/tantivy-backend",
   "kanban-server/tantivy-backend",
 ]
+graph-oxigraph = [
+  "kanban-graph/graph-oxigraph",
+  "kanban-sqlite/graph-oxigraph",
+]
 
 [dependencies]
 anyhow.workspace = true

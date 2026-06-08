@@ -4927,16 +4927,18 @@ fn mark_derived_store_success(
     let target = store_target(store_name)?;
     let seed = derived_store_for_name(store_name)
         .ok_or_else(|| KanbanError::Storage(format!("unknown derived store: {store_name}")))?;
+    complete_outbox_for_store(conn, target, board_id, last_event_id, now)?;
+    let dirty = has_unfinished_outbox_for_store(conn, target)?;
     let update = DerivedStoreUpdate::success(seed, last_event_id, rebuilt, now);
     conn.execute(
         "INSERT INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) \
-         ON CONFLICT(store_name) DO UPDATE SET last_event_id=excluded.last_event_id, dirty=0, last_rebuild_at=COALESCE(excluded.last_rebuild_at, derived_store_state.last_rebuild_at), last_sync_at=COALESCE(excluded.last_sync_at, derived_store_state.last_sync_at), last_error=NULL, updated_at=excluded.updated_at",
+         ON CONFLICT(store_name) DO UPDATE SET last_event_id=MAX(derived_store_state.last_event_id, excluded.last_event_id), dirty=excluded.dirty, last_rebuild_at=COALESCE(excluded.last_rebuild_at, derived_store_state.last_rebuild_at), last_sync_at=COALESCE(excluded.last_sync_at, derived_store_state.last_sync_at), last_error=NULL, updated_at=excluded.updated_at",
         params![
             update.store_name,
             update.schema_version,
             update.last_event_id,
-            i64::from(update.dirty),
+            i64::from(dirty),
             update.last_rebuild_at,
             update.last_sync_at,
             update.last_error,
@@ -4944,7 +4946,6 @@ fn mark_derived_store_success(
         ],
     )
     .map_err(storage)?;
-    complete_outbox_for_store(conn, target, board_id, last_event_id, now)?;
     Ok(())
 }
 
@@ -5016,6 +5017,21 @@ fn complete_outbox_for_store(
     )
     .map_err(storage)?;
     Ok(())
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn has_unfinished_outbox_for_store(conn: &Connection, target: OutboxTarget) -> Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS( \
+             SELECT 1 FROM index_outbox \
+             WHERE target IN (?1, 'all') \
+               AND status IN ('pending', 'running', 'failed') \
+         )",
+        [target.as_str()],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|exists| exists != 0)
+    .map_err(storage)
 }
 
 #[cfg(feature = "tantivy-backend")]

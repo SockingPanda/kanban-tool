@@ -1,4 +1,7 @@
-use std::path::PathBuf;
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+};
 
 pub const INDEX_LAYOUT_VERSION: &str = "v1";
 pub const TASK_INDEX_NAME: &str = "tasks";
@@ -26,7 +29,32 @@ pub fn default_data_dir() -> Option<PathBuf> {
 }
 
 pub fn default_state_dir() -> Option<PathBuf> {
-    dirs_next::data_dir()
+    state_dir_from_parts(
+        std::env::var_os("XDG_STATE_HOME").as_deref(),
+        dirs_next::home_dir(),
+        dirs_next::data_dir(),
+    )
+}
+
+fn state_dir_from_parts(
+    xdg_state_home: Option<&OsStr>,
+    home_dir: Option<PathBuf>,
+    fallback_dir: Option<PathBuf>,
+) -> Option<PathBuf> {
+    if let Some(state_home) = xdg_state_home
+        .map(Path::new)
+        .filter(|path| !path.as_os_str().is_empty())
+    {
+        return Some(state_home.to_path_buf());
+    }
+
+    if cfg!(target_os = "linux") || cfg!(target_os = "freebsd") || cfg!(target_os = "openbsd") {
+        return home_dir
+            .map(|home| home.join(".local").join("state"))
+            .or(fallback_dir);
+    }
+
+    fallback_dir
 }
 
 pub fn kb_data_dir_for_db(db_path: impl Into<PathBuf>) -> PathBuf {
@@ -94,6 +122,37 @@ mod tests {
 
         let log_dir = default_log_dir();
         assert!(log_dir.ends_with("kb/logs"));
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]
+    #[test]
+    fn default_state_dir_uses_state_root_not_data_root() {
+        let state = state_dir_from_parts(
+            None,
+            Some(PathBuf::from("/home/alice")),
+            Some(PathBuf::from("/home/alice/.local/share")),
+        )
+        .unwrap();
+        let data = PathBuf::from("/home/alice/.local/share");
+
+        assert_eq!(state, PathBuf::from("/home/alice/.local/state"));
+        assert_ne!(state, data);
+        assert_eq!(
+            state.join("kb").join("logs"),
+            PathBuf::from("/home/alice/.local/state/kb/logs")
+        );
+    }
+
+    #[test]
+    fn default_state_dir_honors_xdg_state_home_before_fallback() {
+        let state = state_dir_from_parts(
+            Some(OsStr::new("/tmp/xdg-state")),
+            Some(PathBuf::from("/home/alice")),
+            Some(PathBuf::from("/home/alice/.local/share")),
+        )
+        .unwrap();
+
+        assert_eq!(state, PathBuf::from("/tmp/xdg-state"));
     }
 
     #[test]

@@ -764,6 +764,61 @@ fn tantivy_rebuild_persists_search_state_in_app_settings() {
 
 #[cfg(feature = "tantivy-backend")]
 #[test]
+fn tantivy_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() {
+    let temp = TempDb::new("tantivy_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending");
+    init_database(&temp.path, "tester").unwrap();
+    insert_board(&temp.path, "second", "b_second");
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default board task"),
+    )
+    .unwrap();
+    create_task(
+        &temp.path,
+        "second",
+        "tester",
+        CreateTask::ready("second board task"),
+    )
+    .unwrap();
+
+    kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done"]
+    );
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "second"),
+        vec!["pending"]
+    );
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let tantivy = derived
+        .iter()
+        .find(|store| store.store_name == "tantivy_tasks")
+        .unwrap();
+    assert!(
+        tantivy.dirty,
+        "second board still has pending Tantivy outbox"
+    );
+
+    kanban_sqlite::rebuild_search_index(&temp.path, "second").unwrap();
+
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "second"),
+        vec!["done"]
+    );
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let tantivy = derived
+        .iter()
+        .find(|store| store.store_name == "tantivy_tasks")
+        .unwrap();
+    assert!(!tantivy.dirty);
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
 fn tantivy_sync_reindexes_task_comment_run_event_and_archive_changes() {
     let temp = TempDb::new("tantivy_sync_reindexes_task_comment_run_event_and_archive_changes");
     init_database(&temp.path, "tester").unwrap();

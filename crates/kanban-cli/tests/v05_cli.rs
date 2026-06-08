@@ -191,6 +191,25 @@ fn doctor_reports_integrity_migration_and_expired_running_tasks() {
     assert_eq!(doctor["data"]["executable_dependency_violations"], 0);
     assert_eq!(doctor["data"]["executable_spec_violations"], 0);
     assert_eq!(doctor["data"]["executable_schedule_violations"], 0);
+    assert_eq!(doctor["data"]["outbox_pending"], 6);
+    assert_eq!(doctor["data"]["outbox_running"], 0);
+    assert_eq!(doctor["data"]["outbox_failed"], 0);
+    assert_eq!(doctor["data"]["derived_dirty_stores"], 3);
+    assert_eq!(doctor["data"]["derived_error_stores"], 0);
+    assert_eq!(
+        doctor["data"]["derived_stores"].as_array().unwrap().len(),
+        3
+    );
+    assert!(
+        doctor["data"]["derived_stores"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|store| store["store_name"] == "tantivy_tasks"
+                && store["dirty"] == true
+                && store["pending_outbox"] == 2
+                && store["failed_outbox"] == 0)
+    );
     assert_eq!(doctor["data"]["ok"], false);
 }
 

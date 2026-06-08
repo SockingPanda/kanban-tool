@@ -1435,6 +1435,20 @@ fn vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error() {
             .unwrap()
             .contains("dimension mismatch")
     );
+    let report = doctor_database(&temp.path).unwrap();
+    assert!(!report.ok);
+    assert_eq!(report.outbox_failed, 1);
+    assert_eq!(report.derived_error_stores, 1);
+    assert!(report.derived_stores.iter().any(|store| {
+        store.store_name == "lancedb_chunks"
+            && store.dirty
+            && store.failed_outbox == 1
+            && store
+                .last_error
+                .as_deref()
+                .unwrap()
+                .contains("dimension mismatch")
+    }));
 }
 
 #[cfg(feature = "tantivy-backend")]

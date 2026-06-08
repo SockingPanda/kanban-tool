@@ -828,7 +828,16 @@ If background sync is disabled, delayed, or fails, search keeps returning curren
 POST /api/v1/maintenance/doctor
 ```
 
-Response includes SQLite integrity, migration/user version, expired running tasks, orphan run checks, dependency cycle count, archived dependency edge count, missing run log count, and executable status invariant counts for dependency/spec/schedule violations.
+Response includes SQLite integrity, migration/user version, expired running tasks, orphan run checks, dependency cycle count, archived dependency edge count, missing run log count, executable status invariant counts for dependency/spec/schedule violations, and Knowledge Substrate diagnostics.
+
+Derived-layer diagnostics are read-only:
+
+- `outbox_pending` / `outbox_running` / `outbox_failed` summarize `index_outbox`.
+- `derived_dirty_stores` counts stores with `dirty=true`.
+- `derived_error_stores` counts stores with `last_error` or failed outbox.
+- `derived_stores[]` reports each store's `store_name`, `schema_version`, `last_event_id`, `dirty`, `last_error`, and pending/running/failed outbox counts for that store target.
+
+These fields do not make Tantivy/Oxigraph/LanceDB authoritative. SQLite remains the source of truth, and dirty derived stores remain rebuildable caches.
 
 ### 14.2 Checkpoint
 

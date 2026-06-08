@@ -577,7 +577,7 @@ fn main() -> Result<()> {
             let report = kanban_sqlite::doctor_database(&db_path)?;
             print_or_json(cli.json, &report, || {
                 format!(
-                    "ok={} integrity={} migration={:?} user_version={} expired_running={} running_without_run={} orphan_running_runs={} dependency_cycles={} archived_dependency_edges={} missing_run_logs={} executable_dependency_violations={} executable_spec_violations={} executable_schedule_violations={}",
+                    "ok={} integrity={} migration={:?} user_version={} expired_running={} running_without_run={} orphan_running_runs={} dependency_cycles={} archived_dependency_edges={} missing_run_logs={} executable_dependency_violations={} executable_spec_violations={} executable_schedule_violations={} outbox_pending={} outbox_running={} outbox_failed={} derived_dirty_stores={} derived_error_stores={}",
                     report.ok,
                     report.integrity_check,
                     report.migration_version,
@@ -590,7 +590,12 @@ fn main() -> Result<()> {
                     report.missing_run_logs,
                     report.executable_dependency_violations,
                     report.executable_spec_violations,
-                    report.executable_schedule_violations
+                    report.executable_schedule_violations,
+                    report.outbox_pending,
+                    report.outbox_running,
+                    report.outbox_failed,
+                    report.derived_dirty_stores,
+                    report.derived_error_stores
                 )
             })?;
         }

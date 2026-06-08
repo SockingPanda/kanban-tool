@@ -1602,6 +1602,10 @@ async fn maintenance_api_reports_doctor_and_checkpoint_results() {
     assert_eq!(json["data"]["dependency_cycles"], 0);
     assert_eq!(json["data"]["archived_dependency_edges"], 0);
     assert_eq!(json["data"]["missing_run_logs"], 0);
+    assert_eq!(json["data"]["outbox_pending"], 0);
+    assert_eq!(json["data"]["derived_dirty_stores"], 0);
+    assert_eq!(json["data"]["derived_error_stores"], 0);
+    assert_eq!(json["data"]["derived_stores"].as_array().unwrap().len(), 3);
 
     let (status, json) = post_json(app, "/api/v1/maintenance/checkpoint", json!({})).await;
     assert_eq!(status, StatusCode::OK);

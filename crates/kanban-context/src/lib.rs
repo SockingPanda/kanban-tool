@@ -51,6 +51,8 @@ pub struct ContextBrokerInput {
     pub vector: Vec<ContextItem>,
     pub graph_status: GraphStoreStatus,
     pub vector_status: VectorStoreStatus,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub degraded: Vec<String>,
 }
 
 pub fn build_context_pack(
@@ -59,17 +61,20 @@ pub fn build_context_pack(
     input: ContextBrokerInput,
 ) -> ContextPack {
     let mut degraded = Vec::new();
+    for marker in input.degraded {
+        push_marker(&mut degraded, &marker);
+    }
     if input.lexical.meta.backend == "sqlite" {
-        degraded.push("search_sqlite_fallback".to_owned());
+        push_marker(&mut degraded, "search_sqlite_fallback");
     }
     if input.lexical.meta.stale {
-        degraded.push("search_stale".to_owned());
+        push_marker(&mut degraded, "search_stale");
     }
     if !input.graph_status.enabled {
-        degraded.push("graph_disabled".to_owned());
+        push_marker(&mut degraded, "graph_disabled");
     }
     if !input.vector_status.enabled {
-        degraded.push("vector_disabled".to_owned());
+        push_marker(&mut degraded, "vector_disabled");
     }
 
     let lexical_items = input
@@ -90,12 +95,14 @@ pub fn build_context_pack(
     let vector_items = input.vector.into_iter().take(policy.vector_limit);
 
     let mut items = Vec::new();
-    merge_item(&mut items, input.subject_item);
+    if policy.max_items > 0 {
+        merge_item(&mut items, input.subject_item);
+    }
     for item in lexical_items.chain(graph_items).chain(vector_items) {
-        merge_item(&mut items, item);
         if items.len() >= policy.max_items {
             break;
         }
+        merge_item(&mut items, item);
     }
 
     ContextPack {
@@ -103,6 +110,12 @@ pub fn build_context_pack(
         policy,
         items,
         degraded,
+    }
+}
+
+fn push_marker(degraded: &mut Vec<String>, marker: &str) {
+    if !degraded.iter().any(|value| value == marker) {
+        degraded.push(marker.to_owned());
     }
 }
 
@@ -273,6 +286,7 @@ mod tests {
                 }],
                 graph_status,
                 vector_status,
+                degraded: vec![],
             },
         );
 
@@ -285,7 +299,61 @@ mod tests {
     }
 
     #[test]
-    fn broker_reports_disabled_stores_and_applies_budget() {
+    fn broker_counts_subject_toward_max_items_budget() {
+        let (graph_status, vector_status) = status(true, "test");
+        let pack = build_context_pack(
+            EntityUri::task("t_subject"),
+            ContextPolicy {
+                lexical_limit: 3,
+                graph_limit: 3,
+                vector_limit: 3,
+                max_items: 1,
+            },
+            ContextBrokerInput {
+                subject_item: ContextItem {
+                    entity_uri: EntityUri::task("t_subject"),
+                    source: "subject".to_owned(),
+                    provenance: vec![],
+                    score: None,
+                    title: None,
+                    snippet: None,
+                },
+                lexical: SearchResults {
+                    hits: vec![SearchHit {
+                        task_id: "t_one".to_owned(),
+                        seq: 1,
+                        score: 1.0,
+                        snippet: None,
+                    }],
+                    meta: SearchMeta {
+                        backend: "tantivy".to_owned(),
+                        stale: false,
+                        index_version: None,
+                        last_event_id: None,
+                        index_lag_events: None,
+                    },
+                },
+                graph: vec![ContextItem {
+                    entity_uri: EntityUri::task("t_graph"),
+                    source: "graph".to_owned(),
+                    provenance: vec![],
+                    score: None,
+                    title: None,
+                    snippet: None,
+                }],
+                vector: vec![],
+                graph_status,
+                vector_status,
+                degraded: vec![],
+            },
+        );
+
+        assert_eq!(pack.items.len(), 1);
+        assert_eq!(pack.items[0].entity_uri, EntityUri::task("t_subject"));
+    }
+
+    #[test]
+    fn broker_reports_disabled_stores_degraded_markers_and_applies_budget() {
         let (graph_status, vector_status) = status(false, "disabled");
         let pack = build_context_pack(
             EntityUri::task("t_subject"),
@@ -331,6 +399,7 @@ mod tests {
                 vector: vec![],
                 graph_status,
                 vector_status,
+                degraded: vec!["vector_dirty".to_owned(), "vector_dirty".to_owned()],
             },
         );
 
@@ -338,6 +407,7 @@ mod tests {
         assert_eq!(
             pack.degraded,
             vec![
+                "vector_dirty",
                 "search_sqlite_fallback",
                 "search_stale",
                 "graph_disabled",

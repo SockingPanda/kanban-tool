@@ -608,6 +608,7 @@ fn build_context_pack_inner(
         Ok(status) => status,
         Err(error) => {
             push_degraded_marker(&mut degraded, "graph_error");
+            push_context_diagnostic(&mut diagnostics, "graph", "graph_error", &error);
             GraphStoreStatus {
                 backend: graph_backend_name(),
                 enabled: cfg!(feature = "graph-oxigraph"),
@@ -617,8 +618,9 @@ fn build_context_pack_inner(
     };
     let graph = match context_graph_items(path_ref, &subject, policy.graph_limit) {
         Ok(items) => items,
-        Err(_error) => {
+        Err(error) => {
             push_degraded_marker(&mut degraded, "graph_error");
+            push_context_diagnostic(&mut diagnostics, "graph", "graph_error", &error);
             Vec::new()
         }
     };

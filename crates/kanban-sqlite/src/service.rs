@@ -8,7 +8,9 @@ use std::{
     time::Duration,
 };
 
-use kanban_context::{ContextBrokerInput, ContextItem, ContextPack, ContextPolicy};
+use kanban_context::{
+    ContextBrokerInput, ContextDiagnostic, ContextError, ContextItem, ContextPack, ContextPolicy,
+};
 use kanban_core::{
     Clock, KanbanError, Result, SystemClock, TaskStatus, new_event_id, new_run_id, new_task_id,
     new_typed_id,
@@ -587,6 +589,7 @@ fn build_context_pack_inner(
     let conn = connect_file(path_ref)?;
     let board_id = board_id(&conn, board)?;
     let mut degraded = context_derived_degraded_markers(&conn, &board_id)?;
+    let mut diagnostics = Vec::new();
     let task = get_task(path_ref, board, task_ref)?;
     let subject = EntityUri::task(&task.id);
     let lexical = search_tasks(
@@ -626,6 +629,7 @@ fn build_context_pack_inner(
         board,
         vector_store,
         &mut degraded,
+        &mut diagnostics,
     );
     let vector = match context_vector_items(
         path_ref,
@@ -635,13 +639,14 @@ fn build_context_pack_inner(
         vector_store,
     ) {
         Ok(items) => items,
-        Err(_error) => {
+        Err(error) => {
             push_degraded_marker(&mut degraded, "vector_error");
+            push_context_diagnostic(&mut diagnostics, "vector", "vector_error", &error);
             Vec::new()
         }
     };
 
-    Ok(kanban_context::build_context_pack(
+    kanban_context::build_context_pack(
         subject.clone(),
         policy,
         ContextBrokerInput {
@@ -659,8 +664,10 @@ fn build_context_pack_inner(
             graph_status,
             vector_status,
             degraded,
+            diagnostics,
         },
-    ))
+    )
+    .map_err(context_error)
 }
 
 fn validate_context_max_items(max_items: usize) -> Result<()> {
@@ -675,6 +682,36 @@ fn validate_context_max_items(max_items: usize) -> Result<()> {
 fn push_degraded_marker(degraded: &mut Vec<String>, marker: &str) {
     if !degraded.iter().any(|value| value == marker) {
         degraded.push(marker.to_owned());
+    }
+}
+
+fn push_context_diagnostic(
+    diagnostics: &mut Vec<ContextDiagnostic>,
+    source: &str,
+    code: &str,
+    error: &impl std::fmt::Display,
+) {
+    diagnostics.push(ContextDiagnostic {
+        source: source.to_owned(),
+        code: code.to_owned(),
+        message: bounded_diagnostic_message(error),
+    });
+}
+
+fn bounded_diagnostic_message(error: &impl std::fmt::Display) -> String {
+    const MAX_DIAGNOSTIC_MESSAGE_LEN: usize = 240;
+    let mut message = error.to_string().replace(['\r', '\n'], " ");
+    if message.len() > MAX_DIAGNOSTIC_MESSAGE_LEN {
+        message.truncate(MAX_DIAGNOSTIC_MESSAGE_LEN);
+        message.push_str("...");
+    }
+    message
+}
+
+fn context_error(error: ContextError) -> KanbanError {
+    match error {
+        ContextError::InvalidInput(message) => KanbanError::InvalidInput(message),
+        ContextError::Retrieval(message) => KanbanError::Storage(message),
     }
 }
 
@@ -852,6 +889,7 @@ fn context_vector_status(
     board: &str,
     store: Option<&dyn VectorStore>,
     degraded: &mut Vec<String>,
+    diagnostics: &mut Vec<ContextDiagnostic>,
 ) -> VectorStoreStatus {
     let status = match store {
         Some(store) => vector_store_status_with(conn, board_id, store),
@@ -861,6 +899,7 @@ fn context_vector_status(
         Ok(status) => status,
         Err(error) => {
             push_degraded_marker(degraded, "vector_error");
+            push_context_diagnostic(diagnostics, "vector", "vector_error", &error);
             VectorStoreStatus {
                 backend: "lancedb".to_owned(),
                 enabled: true,
@@ -878,6 +917,7 @@ fn context_vector_status(
     board: &str,
     _store: Option<&dyn VectorStore>,
     _degraded: &mut Vec<String>,
+    _diagnostics: &mut Vec<ContextDiagnostic>,
 ) -> VectorStoreStatus {
     vector_store_status(path, board).expect("disabled vector status is infallible")
 }
@@ -1091,9 +1131,7 @@ pub fn vector_store_status(path: impl AsRef<Path>, board: &str) -> Result<Vector
     let path_ref = path.as_ref();
     let conn = connect_file(path_ref)?;
     let board_id = board_id(&conn, board)?;
-    let store = LanceDbStore::connect(LanceDbConfig::degraded(vector_store_path(path_ref)))
-        .map_err(vector_storage)?;
-    vector_store_status_with(&conn, &board_id, &store)
+    vector_store_status_without_provider(&conn, &board_id)
 }
 
 #[cfg(not(feature = "vector-lancedb"))]
@@ -5618,6 +5656,31 @@ fn vector_store_status_with(
     board_id: &str,
     store: &(impl VectorStore + ?Sized),
 ) -> Result<VectorStoreStatus> {
+    vector_store_status_from_base(conn, board_id, store.status())
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn vector_store_status_without_provider(
+    conn: &Connection,
+    board_id: &str,
+) -> Result<VectorStoreStatus> {
+    vector_store_status_from_base(
+        conn,
+        board_id,
+        VectorStoreStatus {
+            backend: "lancedb".to_owned(),
+            enabled: false,
+            message: "LanceDB configured without an embedding provider; vector retrieval degraded"
+                .to_owned(),
+        },
+    )
+}
+
+fn vector_store_status_from_base(
+    conn: &Connection,
+    board_id: &str,
+    mut status: VectorStoreStatus,
+) -> Result<VectorStoreStatus> {
     let state = derived_status_by_name(conn, LANCEDB_CHUNKS_STORE)?;
     let current_last_event_id = current_last_event_id(conn, board_id)?;
     let board_has_pending =
@@ -5627,7 +5690,6 @@ fn vector_store_status_with(
     } else {
         0
     };
-    let mut status = store.status();
     status.message = format!(
         "{}; dirty={} last_event_id={} lag={} last_error={}",
         status.message,

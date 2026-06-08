@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use kanban_context::{ContextItem, ContextPolicy, ContextRetriever, SearchContextRetriever};
+use kanban_context::ContextPolicy;
 use kanban_core::TaskStatus;
 use kanban_entity::{EntityUri, Predicate};
 #[cfg(not(feature = "graph-oxigraph"))]
@@ -275,6 +275,12 @@ struct ContextBuildArgs {
     task_ref: String,
     #[arg(long, default_value_t = 5)]
     lexical_limit: usize,
+    #[arg(long, default_value_t = 10)]
+    graph_limit: usize,
+    #[arg(long, default_value_t = 5)]
+    vector_limit: usize,
+    #[arg(long, default_value_t = 20)]
+    max_items: usize,
 }
 
 #[derive(Debug, Args)]
@@ -1481,38 +1487,16 @@ fn handle_context(
     match command {
         ContextCommand::Build(args) => {
             validate_page_bounds(args.lexical_limit, MAX_SEARCH_LIMIT, 0)?;
-            let task = get_task(db_path, board, &args.task_ref)?;
+            validate_page_bounds(args.graph_limit, MAX_TASK_LIST_LIMIT, 0)?;
+            validate_page_bounds(args.vector_limit, MAX_TASK_LIST_LIMIT, 0)?;
+            validate_page_bounds(args.max_items, MAX_TASK_LIST_LIMIT, 0)?;
             let policy = ContextPolicy {
                 lexical_limit: args.lexical_limit,
-                ..ContextPolicy::default()
+                graph_limit: args.graph_limit,
+                vector_limit: args.vector_limit,
+                max_items: args.max_items,
             };
-            let results = search_tasks(
-                db_path,
-                SearchQuery {
-                    board: board.to_owned(),
-                    q: Some(task.title.clone()),
-                    statuses: vec![],
-                    assignee: None,
-                    include_archived: true,
-                    limit: policy.lexical_limit,
-                    offset: 0,
-                },
-            )?;
-            let subject = EntityUri::task(&task.id);
-            let retriever = SearchContextRetriever::new(results);
-            let mut pack = retriever.retrieve(&subject, &policy)?;
-            if !pack.items.iter().any(|item| item.entity_uri == subject) {
-                pack.items.insert(
-                    0,
-                    ContextItem {
-                        entity_uri: subject.clone(),
-                        source: "subject".to_owned(),
-                        score: None,
-                        title: Some(task.title.clone()),
-                        snippet: task.description.clone(),
-                    },
-                );
-            }
+            let pack = kanban_sqlite::build_context_pack(db_path, board, &args.task_ref, policy)?;
             print_or_json(json, &pack, || {
                 format!(
                     "context subject={} items={} degraded={}",

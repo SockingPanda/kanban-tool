@@ -8,6 +8,7 @@ use std::{
     time::Duration,
 };
 
+use kanban_context::{ContextBrokerInput, ContextItem, ContextPack, ContextPolicy};
 use kanban_core::{
     Clock, KanbanError, Result, SystemClock, TaskStatus, new_event_id, new_run_id, new_task_id,
     new_typed_id,
@@ -30,6 +31,8 @@ use kanban_search::{SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, Searc
 use kanban_vector::{ChunkBuilder, TaskChunkSource, VectorStore, VectorStoreStatus};
 #[cfg(feature = "vector-lancedb")]
 use kanban_vector::{LanceDbConfig, LanceDbStore};
+#[cfg(feature = "vector-lancedb")]
+use kanban_vector::{VectorHit, VectorQuery};
 use rusqlite::{
     Connection, OptionalExtension, Row, params, params_from_iter,
     types::{Value, ValueRef},
@@ -543,6 +546,187 @@ pub fn graph_relation_snapshot(path: impl AsRef<Path>, board: &str) -> Result<Ve
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
     graph_relation_snapshot_for_board(&conn, &board_id)
+}
+
+pub fn build_context_pack(
+    path: impl AsRef<Path>,
+    board: &str,
+    task_ref: &str,
+    policy: ContextPolicy,
+) -> Result<ContextPack> {
+    validate_page_bounds(policy.lexical_limit, MAX_SEARCH_LIMIT, 0)?;
+    validate_page_bounds(policy.graph_limit, MAX_TASK_LIST_LIMIT, 0)?;
+    validate_page_bounds(policy.vector_limit, MAX_TASK_LIST_LIMIT, 0)?;
+    validate_page_bounds(policy.max_items, MAX_TASK_LIST_LIMIT, 0)?;
+
+    let path_ref = path.as_ref();
+    let task = get_task(path_ref, board, task_ref)?;
+    let subject = EntityUri::task(&task.id);
+    let lexical = search_tasks(
+        path_ref,
+        SearchQuery {
+            board: board.to_owned(),
+            q: Some(task.title.clone()),
+            statuses: vec![],
+            assignee: None,
+            include_archived: true,
+            limit: policy.lexical_limit,
+            offset: 0,
+        },
+    )?;
+    let graph_status = graph_store_status(path_ref, board)?;
+    let graph = context_graph_items(path_ref, &subject, policy.graph_limit)?;
+    let vector_status = vector_store_status(path_ref, board)?;
+    let vector = context_vector_items(path_ref, &task, &vector_status, policy.vector_limit)?;
+
+    Ok(kanban_context::build_context_pack(
+        subject.clone(),
+        policy,
+        ContextBrokerInput {
+            subject_item: ContextItem {
+                entity_uri: subject,
+                source: "subject".to_owned(),
+                provenance: vec!["sqlite:tasks".to_owned()],
+                score: None,
+                title: Some(task.title),
+                snippet: task.description,
+            },
+            lexical,
+            graph,
+            vector,
+            graph_status,
+            vector_status,
+        },
+    ))
+}
+
+#[cfg(feature = "graph-oxigraph")]
+pub fn graph_neighbors(
+    path: impl AsRef<Path>,
+    entity_uri: &EntityUri,
+    predicate: Option<Predicate>,
+    limit: usize,
+) -> Result<Vec<Relation>> {
+    validate_page_bounds(limit, MAX_TASK_LIST_LIMIT, 0)?;
+    let graph = OxigraphStore::open(graph_store_path(path.as_ref())).map_err(graph_storage)?;
+    graph
+        .neighbors(entity_uri, predicate, limit)
+        .map_err(graph_storage)
+}
+
+#[cfg(not(feature = "graph-oxigraph"))]
+pub fn graph_neighbors(
+    _path: impl AsRef<Path>,
+    _entity_uri: &EntityUri,
+    _predicate: Option<Predicate>,
+    limit: usize,
+) -> Result<Vec<Relation>> {
+    validate_page_bounds(limit, MAX_TASK_LIST_LIMIT, 0)?;
+    Ok(Vec::new())
+}
+
+#[cfg(feature = "graph-oxigraph")]
+fn context_graph_items(path: &Path, subject: &EntityUri, limit: usize) -> Result<Vec<ContextItem>> {
+    let relations = graph_neighbors(path, subject, None, limit)?;
+    let conn = connect_file(path)?;
+    Ok(relations
+        .into_iter()
+        .map(|relation| {
+            let title = entity_title(&conn, relation.object_uri.as_str())
+                .ok()
+                .flatten();
+            ContextItem {
+                entity_uri: relation.object_uri,
+                source: "graph".to_owned(),
+                provenance: vec![format!("graph:{}", relation.predicate)],
+                score: None,
+                title,
+                snippet: Some(relation.predicate.to_string()),
+            }
+        })
+        .collect())
+}
+
+#[cfg(not(feature = "graph-oxigraph"))]
+fn context_graph_items(
+    _path: &Path,
+    _subject: &EntityUri,
+    _limit: usize,
+) -> Result<Vec<ContextItem>> {
+    Ok(Vec::new())
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn context_vector_items(
+    path: &Path,
+    task: &TaskRecord,
+    status: &VectorStoreStatus,
+    limit: usize,
+) -> Result<Vec<ContextItem>> {
+    if !status.enabled || limit == 0 {
+        return Ok(Vec::new());
+    }
+    let store = LanceDbStore::connect(LanceDbConfig::degraded(vector_store_path(path)))
+        .map_err(vector_storage)?;
+    vector_hits_to_context_items(
+        path,
+        store
+            .query(&VectorQuery {
+                text: task_context_text(task),
+                limit,
+            })
+            .unwrap_or_default(),
+    )
+}
+
+#[cfg(not(feature = "vector-lancedb"))]
+fn context_vector_items(
+    _path: &Path,
+    _task: &TaskRecord,
+    _status: &VectorStoreStatus,
+    _limit: usize,
+) -> Result<Vec<ContextItem>> {
+    Ok(Vec::new())
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn vector_hits_to_context_items(path: &Path, hits: Vec<VectorHit>) -> Result<Vec<ContextItem>> {
+    let conn = connect_file(path)?;
+    Ok(hits
+        .into_iter()
+        .map(|hit| {
+            let title = entity_title(&conn, hit.chunk.entity_uri.as_str())
+                .ok()
+                .flatten();
+            ContextItem {
+                entity_uri: hit.chunk.entity_uri,
+                source: "vector".to_owned(),
+                provenance: vec!["vector:lancedb".to_owned()],
+                score: Some(f64::from(hit.score)),
+                title: title.or(hit.summary),
+                snippet: hit.text,
+            }
+        })
+        .collect())
+}
+
+#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
+fn entity_title(conn: &Connection, uri: &str) -> Result<Option<String>> {
+    conn.query_row("SELECT title FROM entities WHERE uri=?1", [uri], |row| {
+        row.get(0)
+    })
+    .optional()
+    .map_err(storage)
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn task_context_text(task: &TaskRecord) -> String {
+    match task.description.as_deref().map(str::trim) {
+        Some(description) if !description.is_empty() => {
+            format!("{}\n\n{}", task.title.trim(), description)
+        }
+        _ => task.title.trim().to_owned(),
+    }
 }
 
 #[cfg(feature = "graph-oxigraph")]

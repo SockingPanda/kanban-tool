@@ -2,7 +2,11 @@
 members = [
   "crates/kanban-core",
   "crates/kanban-entity",
+  "crates/kanban-indexer",
   "crates/kanban-search",
+  "crates/kanban-graph",
+  "crates/kanban-vector",
+  "crates/kanban-context",
   "crates/kanban-sqlite",
   "crates/kanban-local",
   "crates/kanban-cli",
@@ -37,7 +41,11 @@ ulid = "1.1"
 
 kanban-core = { path = "crates/kanban-core" }
 kanban-entity = { path = "crates/kanban-entity" }
+kanban-indexer = { path = "crates/kanban-indexer" }
 kanban-search = { path = "crates/kanban-search" }
+kanban-graph = { path = "crates/kanban-graph" }
+kanban-vector = { path = "crates/kanban-vector" }
+kanban-context = { path = "crates/kanban-context" }
 kanban-sqlite = { path = "crates/kanban-sqlite" }
 kanban-local = { path = "crates/kanban-local" }
 kanban-server = { path = "crates/kanban-server" }

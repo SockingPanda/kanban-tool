@@ -1,0 +1,11 @@
+[package]
+name = "kanban-vector"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+kanban-entity.workspace = true
+serde.workspace = true
+thiserror.workspace = true

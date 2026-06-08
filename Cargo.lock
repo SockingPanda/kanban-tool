@@ -2018,14 +2018,30 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "kanban-context",
  "kanban-core",
+ "kanban-entity",
+ "kanban-graph",
  "kanban-local",
  "kanban-search",
  "kanban-server",
  "kanban-sqlite",
+ "kanban-vector",
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "kanban-context"
+version = "0.1.0"
+dependencies = [
+ "kanban-entity",
+ "kanban-graph",
+ "kanban-search",
+ "kanban-vector",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2058,6 +2074,25 @@ name = "kanban-entity"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "kanban-graph"
+version = "0.1.0"
+dependencies = [
+ "kanban-entity",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "kanban-indexer"
+version = "0.1.0"
+dependencies = [
+ "kanban-entity",
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -2103,11 +2138,22 @@ version = "0.1.0"
 dependencies = [
  "kanban-core",
  "kanban-entity",
+ "kanban-indexer",
+ "kanban-local",
  "kanban-search",
  "rusqlite",
  "serde",
  "serde_json",
  "tantivy",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "kanban-vector"
+version = "0.1.0"
+dependencies = [
+ "kanban-entity",
+ "serde",
  "thiserror 2.0.18",
 ]
 

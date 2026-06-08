@@ -9,9 +9,9 @@ use kanban_core::{TaskStatus, new_run_id};
 use kanban_sqlite::{
     CreateTask, DispatchOptions, FinishPolicy, TaskPatch, add_dependency, archive_task,
     begin_database_replace, begin_database_runtime, block_task, claim_task, complete_task,
-    connect_file, create_comment, create_task, dispatch_once, doctor_database, get_task,
-    init_database, list_dependencies, list_events, list_runs, list_tasks, promote_task,
-    search_tasks, unblock_task, update_task,
+    connect_file, create_comment, create_task, derived_store_statuses, dispatch_once,
+    doctor_database, get_task, init_database, list_dependencies, list_events, list_outbox,
+    list_runs, list_tasks, promote_task, search_tasks, unblock_task, update_task,
 };
 use rusqlite::{Connection, params};
 
@@ -238,6 +238,192 @@ fn sqlite_search_rejects_limit_that_cannot_be_bounded_safely() {
     .unwrap_err();
 
     assert!(error.to_string().contains("limit must be <= 1000"));
+}
+
+#[test]
+fn task_events_fan_out_target_specific_outbox_and_mark_derived_stores_dirty() {
+    let temp =
+        TempDb::new("task_events_fan_out_target_specific_outbox_and_mark_derived_stores_dirty");
+    init_database(&temp.path, "tester").unwrap();
+
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("outbox fanout"),
+    )
+    .unwrap();
+
+    let jobs = list_outbox(
+        &temp.path,
+        kanban_sqlite::OutboxListOptions {
+            status: Some("pending".to_owned()),
+            limit: 10,
+        },
+    )
+    .unwrap();
+    assert_eq!(jobs.len(), 3);
+    assert_eq!(
+        jobs.iter()
+            .map(|job| job.target.as_str())
+            .collect::<Vec<_>>(),
+        vec!["tantivy", "oxigraph", "lancedb"]
+    );
+    assert!(
+        jobs.iter()
+            .all(|job| job.entity_uri == format!("kb://task/{}", task.id))
+    );
+
+    let statuses = derived_store_statuses(&temp.path).unwrap();
+    for store in ["tantivy_tasks", "oxigraph_relations", "lancedb_chunks"] {
+        let status = statuses
+            .iter()
+            .find(|status| status.store_name == store)
+            .unwrap();
+        assert!(status.dirty, "{store} should be dirty");
+        assert_eq!(status.last_event_id, 0);
+    }
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_rebuild_marks_only_current_board_outbox_done() {
+    let temp = TempDb::new("tantivy_rebuild_marks_only_current_board_outbox_done");
+    init_database(&temp.path, "tester").unwrap();
+    insert_board(&temp.path, "other", "b_other");
+
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default first"),
+    )
+    .unwrap();
+    create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("other between default events"),
+    )
+    .unwrap();
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default second"),
+    )
+    .unwrap();
+
+    kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done", "done"]
+    );
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "other"),
+        vec!["pending"]
+    );
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_sync_marks_only_current_board_outbox_done() {
+    let temp = TempDb::new("tantivy_sync_marks_only_current_board_outbox_done");
+    init_database(&temp.path, "tester").unwrap();
+    insert_board(&temp.path, "other", "b_other");
+    let default = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default indexed"),
+    )
+    .unwrap();
+    kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+
+    create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("other pending during default sync"),
+    )
+    .unwrap();
+    update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &default.id,
+        TaskPatch {
+            title: Some("default synced".into()),
+            expected_lock_version: Some(default.lock_version),
+            ..TaskPatch::default()
+        },
+    )
+    .unwrap();
+
+    kanban_sqlite::sync_search_index(&temp.path, "default").unwrap();
+
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done", "done"]
+    );
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "other"),
+        vec!["pending"]
+    );
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_sync_failure_marks_only_current_board_outbox_failed() {
+    let temp = TempDb::new("tantivy_sync_failure_marks_only_current_board_outbox_failed");
+    init_database(&temp.path, "tester").unwrap();
+    insert_board(&temp.path, "other", "b_other");
+    let default = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default indexed before failure"),
+    )
+    .unwrap();
+    kanban_sqlite::rebuild_search_index(&temp.path, "default").unwrap();
+
+    create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("other pending during default failure"),
+    )
+    .unwrap();
+    update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &default.id,
+        TaskPatch {
+            title: Some("default failure candidate".into()),
+            expected_lock_version: Some(default.lock_version),
+            ..TaskPatch::default()
+        },
+    )
+    .unwrap();
+    std::fs::write(
+        temp.dir.join("index/v1/tasks/kb-index-meta.json"),
+        b"not json",
+    )
+    .unwrap();
+
+    let err = kanban_sqlite::sync_search_index(&temp.path, "default").unwrap_err();
+    assert!(err.to_string().contains("expected ident") || err.to_string().contains("JSON"));
+
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done", "failed"]
+    );
+    assert_eq!(
+        tantivy_outbox_statuses_for_board(&temp.path, "other"),
+        vec!["pending"]
+    );
 }
 
 #[cfg(feature = "tantivy-backend")]
@@ -555,6 +741,25 @@ fn tantivy_rebuild_persists_search_state_in_app_settings() {
     assert_eq!(state["index_name"], "tasks");
     assert_eq!(state["dirty"], false);
     assert_eq!(state["last_event_id"].as_i64(), status.last_event_id);
+
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let tantivy = derived
+        .iter()
+        .find(|store| store.store_name == "tantivy_tasks")
+        .unwrap();
+    assert_eq!(Some(tantivy.last_event_id), status.last_event_id);
+    assert!(!tantivy.dirty);
+    assert!(tantivy.last_rebuild_at.is_some());
+    assert!(tantivy.last_error.is_none());
+    let jobs = list_outbox(
+        &temp.path,
+        kanban_sqlite::OutboxListOptions {
+            status: Some("done".to_owned()),
+            limit: 10,
+        },
+    )
+    .unwrap();
+    assert!(jobs.iter().any(|job| job.target == "tantivy"));
 }
 
 #[cfg(feature = "tantivy-backend")]
@@ -671,6 +876,14 @@ fn tantivy_sync_reindexes_task_comment_run_event_and_archive_changes() {
     assert_eq!(sync.backend, "tantivy");
     assert!(!sync.stale);
     assert_eq!(sync.index_lag_events, Some(0));
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let tantivy = derived
+        .iter()
+        .find(|store| store.store_name == "tantivy_tasks")
+        .unwrap();
+    assert_eq!(Some(tantivy.last_event_id), sync.last_event_id);
+    assert!(!tantivy.dirty);
+    assert!(tantivy.last_sync_at.is_some());
 
     let results = search_tasks(
         &temp.path,
@@ -912,6 +1125,14 @@ fn tantivy_sync_failure_does_not_advance_search_state_watermark() {
     assert_eq!(status.last_event_id, rebuilt.last_event_id);
     assert!(status.stale);
     assert!(status.index_lag_events.unwrap() > 0);
+    let derived = derived_store_statuses(&temp.path).unwrap();
+    let tantivy = derived
+        .iter()
+        .find(|store| store.store_name == "tantivy_tasks")
+        .unwrap();
+    assert_eq!(Some(tantivy.last_event_id), rebuilt.last_event_id);
+    assert!(tantivy.dirty);
+    assert!(tantivy.last_error.is_some());
 }
 
 #[cfg(feature = "tantivy-backend")]
@@ -3032,6 +3253,36 @@ impl Drop for TempDb {
             let _ = std::fs::remove_dir_all(&self.dir);
         }
     }
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn insert_board(path: &Path, slug: &str, id: &str) {
+    connect_file(path)
+        .unwrap()
+        .execute(
+            "INSERT INTO boards(id, slug, name, description, created_at, updated_at, archived_at) VALUES (?1, ?2, ?3, NULL, 1, 1, NULL)",
+            params![id, slug, slug],
+        )
+        .unwrap();
+}
+
+#[cfg(feature = "tantivy-backend")]
+fn tantivy_outbox_statuses_for_board(path: &Path, board_slug: &str) -> Vec<String> {
+    let conn = connect_file(path).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT io.status \
+             FROM index_outbox io \
+             JOIN task_events e ON e.id=io.source_event_id \
+             JOIN boards b ON b.id=e.board_id \
+             WHERE b.slug=?1 AND io.target='tantivy' \
+             ORDER BY io.id ASC",
+        )
+        .unwrap();
+    stmt.query_map([board_slug], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap()
 }
 
 fn now_ms() -> i64 {

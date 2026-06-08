@@ -8,7 +8,10 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use kanban_context::{ContextItem, ContextPolicy, ContextRetriever, SearchContextRetriever};
 use kanban_core::TaskStatus;
+use kanban_entity::{EntityUri, Predicate};
+use kanban_graph::{DisabledGraphStore, RelationGraph};
 use kanban_search::SearchQuery;
 use kanban_sqlite::{
     CreateTask, DispatchOptions, EntityListOptions, FinishPolicy, MAX_SEARCH_LIMIT,
@@ -22,6 +25,7 @@ use kanban_sqlite::{
     set_task_retry_policy_by_id, submit_review_task, sync_search_index, unblock_task, update_task,
     vacuum_database,
 };
+use kanban_vector::{DisabledVectorStore, VectorStore};
 
 #[derive(Debug, Parser)]
 #[command(name = "kb", version, about = "Local SQLite-backed Kanban work queue")]
@@ -78,6 +82,18 @@ enum Command {
     Derived {
         #[command(subcommand)]
         command: DerivedCommand,
+    },
+    Graph {
+        #[command(subcommand)]
+        command: GraphCommand,
+    },
+    Vector {
+        #[command(subcommand)]
+        command: VectorCommand,
+    },
+    Context {
+        #[command(subcommand)]
+        command: ContextCommand,
     },
     Dispatch(DispatchArgs),
     Serve(ServeArgs),
@@ -211,6 +227,38 @@ struct OutboxListArgs {
 #[derive(Debug, Subcommand)]
 enum DerivedCommand {
     Status,
+}
+
+#[derive(Debug, Subcommand)]
+enum GraphCommand {
+    Status,
+    Neighbors(GraphNeighborsArgs),
+}
+
+#[derive(Debug, Args)]
+struct GraphNeighborsArgs {
+    entity_uri: String,
+    #[arg(long)]
+    predicate: Option<String>,
+    #[arg(long, default_value_t = 50)]
+    limit: usize,
+}
+
+#[derive(Debug, Subcommand)]
+enum VectorCommand {
+    Status,
+}
+
+#[derive(Debug, Subcommand)]
+enum ContextCommand {
+    Build(ContextBuildArgs),
+}
+
+#[derive(Debug, Args)]
+struct ContextBuildArgs {
+    task_ref: String,
+    #[arg(long, default_value_t = 5)]
+    lexical_limit: usize,
 }
 
 #[derive(Debug, Args)]
@@ -472,6 +520,9 @@ fn main() -> Result<()> {
         Command::Entity { command } => handle_entity(command, &db_path, cli.json)?,
         Command::Outbox { command } => handle_outbox(command, &db_path, cli.json)?,
         Command::Derived { command } => handle_derived(command, &db_path, cli.json)?,
+        Command::Graph { command } => handle_graph(command, cli.json)?,
+        Command::Vector { command } => handle_vector(command, cli.json)?,
+        Command::Context { command } => handle_context(command, &db_path, &cli.board, cli.json)?,
         Command::Dispatch(args) => {
             let options = dispatch_options(&args, actor.clone())?;
             if args.once {
@@ -868,6 +919,26 @@ fn parse_finish_policy(value: &str) -> Result<FinishPolicy> {
     }
 }
 
+fn parse_predicate(value: &str) -> Result<Predicate> {
+    match value {
+        "belongs_to_board" => Ok(Predicate::BelongsToBoard),
+        "belongs_to_task" => Ok(Predicate::BelongsToTask),
+        "depends_on" => Ok(Predicate::DependsOn),
+        "produced_by" => Ok(Predicate::ProducedBy),
+        "generated_by" => Ok(Predicate::GeneratedBy),
+        "references_artifact" => Ok(Predicate::ReferencesArtifact),
+        "related_to" => Ok(Predicate::RelatedTo),
+        "uses_skill" => Ok(Predicate::UsesSkill),
+        "uses_context" => Ok(Predicate::UsesContext),
+        "derived_from" => Ok(Predicate::DerivedFrom),
+        "supersedes" => Ok(Predicate::Supersedes),
+        "similar_to" => Ok(Predicate::SimilarTo),
+        "requires_review" => Ok(Predicate::RequiresReview),
+        "waiting_for_user" => Ok(Predicate::WaitingForUser),
+        _ => bail!("unsupported predicate: {value}"),
+    }
+}
+
 fn handle_task(
     command: TaskCommand,
     db_path: &PathBuf,
@@ -1259,6 +1330,114 @@ fn handle_derived(command: DerivedCommand, db_path: &PathBuf, json: bool) -> Res
                     })
                     .collect::<Vec<_>>()
                     .join("\n")
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn handle_graph(command: GraphCommand, json: bool) -> Result<()> {
+    let graph = DisabledGraphStore;
+    match command {
+        GraphCommand::Status => {
+            let status = graph.status();
+            print_or_json(json, &status, || {
+                format!(
+                    "graph backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+        GraphCommand::Neighbors(args) => {
+            validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let uri = EntityUri::new(args.entity_uri)?;
+            let predicate = args.predicate.as_deref().map(parse_predicate).transpose()?;
+            let neighbors = graph.neighbors(&uri, predicate, args.limit)?;
+            print_or_json(json, &neighbors, || {
+                if neighbors.is_empty() {
+                    "No graph neighbors (graph store disabled)".to_owned()
+                } else {
+                    neighbors
+                        .iter()
+                        .map(|relation| {
+                            format!(
+                                "{} --{}--> {}",
+                                relation.subject_uri, relation.predicate, relation.object_uri
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn handle_vector(command: VectorCommand, json: bool) -> Result<()> {
+    match command {
+        VectorCommand::Status => {
+            let store = DisabledVectorStore;
+            let status = store.status();
+            print_or_json(json, &status, || {
+                format!(
+                    "vector backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn handle_context(
+    command: ContextCommand,
+    db_path: &PathBuf,
+    board: &str,
+    json: bool,
+) -> Result<()> {
+    match command {
+        ContextCommand::Build(args) => {
+            validate_page_bounds(args.lexical_limit, MAX_SEARCH_LIMIT, 0)?;
+            let task = get_task(db_path, board, &args.task_ref)?;
+            let policy = ContextPolicy {
+                lexical_limit: args.lexical_limit,
+                ..ContextPolicy::default()
+            };
+            let results = search_tasks(
+                db_path,
+                SearchQuery {
+                    board: board.to_owned(),
+                    q: Some(task.title.clone()),
+                    statuses: vec![],
+                    assignee: None,
+                    include_archived: true,
+                    limit: policy.lexical_limit,
+                    offset: 0,
+                },
+            )?;
+            let subject = EntityUri::task(&task.id);
+            let retriever = SearchContextRetriever::new(results);
+            let mut pack = retriever.retrieve(&subject, &policy)?;
+            if !pack.items.iter().any(|item| item.entity_uri == subject) {
+                pack.items.insert(
+                    0,
+                    ContextItem {
+                        entity_uri: subject.clone(),
+                        source: "subject".to_owned(),
+                        score: None,
+                        title: Some(task.title.clone()),
+                        snippet: task.description.clone(),
+                    },
+                );
+            }
+            print_or_json(json, &pack, || {
+                format!(
+                    "context subject={} items={} degraded={}",
+                    pack.subject,
+                    pack.items.len(),
+                    pack.degraded.join(",")
+                )
             })?;
         }
     }

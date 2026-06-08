@@ -565,6 +565,10 @@ kb entity list [--kind task] [--limit 50]
 kb entity show kb://task/t_...
 kb outbox list [--status pending] [--limit 50]
 kb derived status
+kb graph status
+kb graph neighbors kb://task/t_... [--predicate depends_on] [--limit 50]
+kb vector status
+kb context build t_... [--lexical-limit 5]
 ```
 
 `kb stats --json` 返回 status counts、过期 running claim 列表和 blocked reason 聚合，用于本地 operator recovery。
@@ -573,6 +577,8 @@ kb derived status
 `kb export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kb backup`。
 `kb import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kb import --replace` 是 offline-only 操作；运行前必须停止 `kb serve` 和常驻 `kb dispatch`，如果检测到 active runtime lock 会直接拒绝。
 `kb entity`、`kb outbox`、`kb derived` 是 Knowledge Substrate 的只读维护入口。SQLite 仍是事实源；这些命令只报告统一 entity registry、派生索引 outbox 和 derived store 状态，不改变 task 状态或 claim。
+`kb graph` 和 `kb vector` 当前报告 disabled fallback store；它们提供稳定 contract surface，但不连接真实 Oxigraph/LanceDB。
+`kb context build` 使用现有 SQLite/search results 组装 fallback context pack；graph/vector disabled 时返回降级标记而不是失败。
 
 ### 13.1 `kb doctor`
 

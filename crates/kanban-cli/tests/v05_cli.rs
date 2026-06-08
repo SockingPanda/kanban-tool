@@ -636,8 +636,16 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() {
     }
 
     let vector = kb(&temp.path, &["--json", "vector", "status"]).success_json();
-    assert_eq!(vector["data"]["backend"], "disabled");
-    assert_eq!(vector["data"]["enabled"], false);
+    #[cfg(not(feature = "vector-lancedb"))]
+    {
+        assert_eq!(vector["data"]["backend"], "disabled");
+        assert_eq!(vector["data"]["enabled"], false);
+    }
+    #[cfg(feature = "vector-lancedb")]
+    {
+        assert_eq!(vector["data"]["backend"], "lancedb");
+        assert_eq!(vector["data"]["enabled"], true);
+    }
 
     let context = kb(
         &temp.path,
@@ -652,6 +660,7 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() {
     )
     .success_json();
     assert_eq!(context["data"]["subject"], format!("kb://task/{task_id}"));
+    #[cfg(not(feature = "graph-oxigraph"))]
     assert!(
         context["data"]["degraded"]
             .as_array()
@@ -659,12 +668,29 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() {
             .iter()
             .any(|value| value == "graph_disabled")
     );
+    #[cfg(feature = "graph-oxigraph")]
+    assert!(
+        !context["data"]["degraded"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "graph_disabled")
+    );
+    #[cfg(not(feature = "vector-lancedb"))]
     assert!(
         context["data"]["degraded"]
             .as_array()
             .unwrap()
             .iter()
             .any(|value| value == "vector_disabled")
+    );
+    #[cfg(feature = "vector-lancedb")]
+    assert!(
+        context["data"]["degraded"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value == "vector_error")
     );
     assert_eq!(
         context["data"]["items"][0]["entity_uri"],
@@ -818,6 +844,31 @@ fn task_list_command_rejects_unbounded_limit() {
         &["task", "list", "--limit", &usize::MAX.to_string()],
     )
     .failure_containing("limit must be <= 1000");
+}
+
+#[test]
+fn context_build_command_rejects_zero_max_items() {
+    let temp = TempDb::new("context_build_command_rejects_zero_max_items");
+    kb(&temp.path, &["init"]).success();
+    let created = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "zero budget context",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success_json();
+    let task_id = created["data"]["id"].as_str().unwrap();
+
+    kb(
+        &temp.path,
+        &["context", "build", task_id, "--max-items", "0"],
+    )
+    .failure_containing("max_items must be >= 1");
 }
 
 #[test]

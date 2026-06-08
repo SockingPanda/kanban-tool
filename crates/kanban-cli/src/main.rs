@@ -1490,6 +1490,9 @@ fn handle_context(
             validate_page_bounds(args.graph_limit, MAX_TASK_LIST_LIMIT, 0)?;
             validate_page_bounds(args.vector_limit, MAX_TASK_LIST_LIMIT, 0)?;
             validate_page_bounds(args.max_items, MAX_TASK_LIST_LIMIT, 0)?;
+            if args.max_items == 0 {
+                bail!("max_items must be >= 1 because the subject item is mandatory");
+            }
             let policy = ContextPolicy {
                 lexical_limit: args.lexical_limit,
                 graph_limit: args.graph_limit,

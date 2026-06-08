@@ -14,8 +14,9 @@ use kanban_core::{
     new_typed_id,
 };
 use kanban_entity::{EntityUri, Predicate, Provenance, Relation};
+use kanban_graph::GraphStoreStatus;
 #[cfg(feature = "graph-oxigraph")]
-use kanban_graph::{GraphStoreStatus, OxigraphStore, RelationGraph};
+use kanban_graph::{OxigraphStore, RelationGraph};
 use kanban_indexer::LANCEDB_CHUNKS_STORE;
 #[cfg(feature = "graph-oxigraph")]
 use kanban_indexer::OXIGRAPH_RELATIONS_STORE;
@@ -554,12 +555,38 @@ pub fn build_context_pack(
     task_ref: &str,
     policy: ContextPolicy,
 ) -> Result<ContextPack> {
+    build_context_pack_inner(path.as_ref(), board, task_ref, policy, None)
+}
+
+#[cfg(feature = "vector-lancedb")]
+pub fn build_context_pack_with_vector_store(
+    path: impl AsRef<Path>,
+    board: &str,
+    task_ref: &str,
+    policy: ContextPolicy,
+    vector_store: &impl VectorStore,
+) -> Result<ContextPack> {
+    build_context_pack_inner(path.as_ref(), board, task_ref, policy, Some(vector_store))
+}
+
+fn build_context_pack_inner(
+    path_ref: &Path,
+    board: &str,
+    task_ref: &str,
+    policy: ContextPolicy,
+    #[cfg_attr(not(feature = "vector-lancedb"), allow(unused_variables))] vector_store: Option<
+        &dyn VectorStore,
+    >,
+) -> Result<ContextPack> {
     validate_page_bounds(policy.lexical_limit, MAX_SEARCH_LIMIT, 0)?;
     validate_page_bounds(policy.graph_limit, MAX_TASK_LIST_LIMIT, 0)?;
     validate_page_bounds(policy.vector_limit, MAX_TASK_LIST_LIMIT, 0)?;
     validate_page_bounds(policy.max_items, MAX_TASK_LIST_LIMIT, 0)?;
+    validate_context_max_items(policy.max_items)?;
 
-    let path_ref = path.as_ref();
+    let conn = connect_file(path_ref)?;
+    let board_id = board_id(&conn, board)?;
+    let mut degraded = context_derived_degraded_markers(&conn, &board_id)?;
     let task = get_task(path_ref, board, task_ref)?;
     let subject = EntityUri::task(&task.id);
     let lexical = search_tasks(
@@ -574,10 +601,45 @@ pub fn build_context_pack(
             offset: 0,
         },
     )?;
-    let graph_status = graph_store_status(path_ref, board)?;
-    let graph = context_graph_items(path_ref, &subject, policy.graph_limit)?;
-    let vector_status = vector_store_status(path_ref, board)?;
-    let vector = context_vector_items(path_ref, &task, &vector_status, policy.vector_limit)?;
+    let graph_status = match graph_store_status(path_ref, board) {
+        Ok(status) => status,
+        Err(error) => {
+            push_degraded_marker(&mut degraded, "graph_error");
+            GraphStoreStatus {
+                backend: graph_backend_name(),
+                enabled: cfg!(feature = "graph-oxigraph"),
+                message: error.to_string(),
+            }
+        }
+    };
+    let graph = match context_graph_items(path_ref, &subject, policy.graph_limit) {
+        Ok(items) => items,
+        Err(_error) => {
+            push_degraded_marker(&mut degraded, "graph_error");
+            Vec::new()
+        }
+    };
+    let vector_status = context_vector_status(
+        path_ref,
+        &conn,
+        &board_id,
+        board,
+        vector_store,
+        &mut degraded,
+    );
+    let vector = match context_vector_items(
+        path_ref,
+        &task,
+        &vector_status,
+        policy.vector_limit,
+        vector_store,
+    ) {
+        Ok(items) => items,
+        Err(_error) => {
+            push_degraded_marker(&mut degraded, "vector_error");
+            Vec::new()
+        }
+    };
 
     Ok(kanban_context::build_context_pack(
         subject.clone(),
@@ -596,8 +658,94 @@ pub fn build_context_pack(
             vector,
             graph_status,
             vector_status,
+            degraded,
         },
     ))
+}
+
+fn validate_context_max_items(max_items: usize) -> Result<()> {
+    if max_items == 0 {
+        return Err(KanbanError::InvalidInput(
+            "max_items must be >= 1 because the subject item is mandatory".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn push_degraded_marker(degraded: &mut Vec<String>, marker: &str) {
+    if !degraded.iter().any(|value| value == marker) {
+        degraded.push(marker.to_owned());
+    }
+}
+
+fn context_derived_degraded_markers(
+    #[cfg_attr(
+        not(any(feature = "graph-oxigraph", feature = "vector-lancedb")),
+        allow(unused_variables)
+    )]
+    conn: &Connection,
+    #[cfg_attr(
+        not(any(feature = "graph-oxigraph", feature = "vector-lancedb")),
+        allow(unused_variables)
+    )]
+    board_id: &str,
+) -> Result<Vec<String>> {
+    #[cfg_attr(
+        not(any(feature = "graph-oxigraph", feature = "vector-lancedb")),
+        allow(unused_mut)
+    )]
+    let mut degraded = Vec::new();
+    #[cfg(feature = "graph-oxigraph")]
+    push_store_state_markers(
+        conn,
+        board_id,
+        OXIGRAPH_RELATIONS_STORE,
+        "graph",
+        &mut degraded,
+    )?;
+    #[cfg(feature = "vector-lancedb")]
+    push_store_state_markers(
+        conn,
+        board_id,
+        LANCEDB_CHUNKS_STORE,
+        "vector",
+        &mut degraded,
+    )?;
+    Ok(degraded)
+}
+
+#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
+fn push_store_state_markers(
+    conn: &Connection,
+    board_id: &str,
+    store_name: &str,
+    marker_prefix: &str,
+    degraded: &mut Vec<String>,
+) -> Result<()> {
+    let state = derived_status_by_name(conn, store_name)?;
+    let current_last_event_id = current_last_event_id(conn, board_id)?;
+    let target = store_target(store_name)?;
+    let pending = has_pending_outbox_for_target(conn, target, board_id, current_last_event_id)?;
+    if state.dirty {
+        push_degraded_marker(degraded, &format!("{marker_prefix}_dirty"));
+    }
+    if pending {
+        push_degraded_marker(degraded, &format!("{marker_prefix}_stale"));
+    }
+    if state.last_error.is_some() {
+        push_degraded_marker(degraded, &format!("{marker_prefix}_error"));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "graph-oxigraph")]
+fn graph_backend_name() -> String {
+    "oxigraph".to_owned()
+}
+
+#[cfg(not(feature = "graph-oxigraph"))]
+fn graph_backend_name() -> String {
+    "disabled".to_owned()
 }
 
 #[cfg(feature = "graph-oxigraph")]
@@ -662,21 +810,27 @@ fn context_vector_items(
     task: &TaskRecord,
     status: &VectorStoreStatus,
     limit: usize,
+    store: Option<&dyn VectorStore>,
 ) -> Result<Vec<ContextItem>> {
     if !status.enabled || limit == 0 {
         return Ok(Vec::new());
     }
-    let store = LanceDbStore::connect(LanceDbConfig::degraded(vector_store_path(path)))
+    let owned_store;
+    let store = match store {
+        Some(store) => store,
+        None => {
+            owned_store = LanceDbStore::connect(LanceDbConfig::degraded(vector_store_path(path)))
+                .map_err(vector_storage)?;
+            &owned_store
+        }
+    };
+    let hits = store
+        .query(&VectorQuery {
+            text: task_context_text(task),
+            limit,
+        })
         .map_err(vector_storage)?;
-    vector_hits_to_context_items(
-        path,
-        store
-            .query(&VectorQuery {
-                text: task_context_text(task),
-                limit,
-            })
-            .unwrap_or_default(),
-    )
+    vector_hits_to_context_items(path, hits)
 }
 
 #[cfg(not(feature = "vector-lancedb"))]
@@ -685,8 +839,47 @@ fn context_vector_items(
     _task: &TaskRecord,
     _status: &VectorStoreStatus,
     _limit: usize,
+    _store: Option<&dyn VectorStore>,
 ) -> Result<Vec<ContextItem>> {
     Ok(Vec::new())
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn context_vector_status(
+    path: &Path,
+    conn: &Connection,
+    board_id: &str,
+    board: &str,
+    store: Option<&dyn VectorStore>,
+    degraded: &mut Vec<String>,
+) -> VectorStoreStatus {
+    let status = match store {
+        Some(store) => vector_store_status_with(conn, board_id, store),
+        None => vector_store_status(path, board),
+    };
+    match status {
+        Ok(status) => status,
+        Err(error) => {
+            push_degraded_marker(degraded, "vector_error");
+            VectorStoreStatus {
+                backend: "lancedb".to_owned(),
+                enabled: true,
+                message: error.to_string(),
+            }
+        }
+    }
+}
+
+#[cfg(not(feature = "vector-lancedb"))]
+fn context_vector_status(
+    path: &Path,
+    _conn: &Connection,
+    _board_id: &str,
+    board: &str,
+    _store: Option<&dyn VectorStore>,
+    _degraded: &mut Vec<String>,
+) -> VectorStoreStatus {
+    vector_store_status(path, board).expect("disabled vector status is infallible")
 }
 
 #[cfg(feature = "vector-lancedb")]
@@ -5423,7 +5616,7 @@ fn graph_store_path(db_path: &Path) -> PathBuf {
 fn vector_store_status_with(
     conn: &Connection,
     board_id: &str,
-    store: &impl VectorStore,
+    store: &(impl VectorStore + ?Sized),
 ) -> Result<VectorStoreStatus> {
     let state = derived_status_by_name(conn, LANCEDB_CHUNKS_STORE)?;
     let current_last_event_id = current_last_event_id(conn, board_id)?;
@@ -5444,6 +5637,29 @@ fn vector_store_status_with(
         state.last_error.as_deref().unwrap_or("none")
     );
     Ok(status)
+}
+
+#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
+fn has_pending_outbox_for_target(
+    conn: &Connection,
+    target: OutboxTarget,
+    board_id: &str,
+    last_event_id: Option<i64>,
+) -> Result<bool> {
+    let target = target.as_str();
+    conn.query_row(
+        "SELECT EXISTS( \
+             SELECT 1 FROM index_outbox o \
+             JOIN task_events e ON e.id=o.source_event_id \
+             WHERE o.target IN (?1, 'all') \
+               AND o.status IN ('pending', 'running', 'failed') \
+               AND e.board_id=?2 \
+               AND e.id <= ?3 \
+         )",
+        params![target, board_id, last_event_id.unwrap_or(i64::MAX)],
+        |row| row.get::<_, bool>(0),
+    )
+    .map_err(storage)
 }
 
 fn pending_vector_outbox_for_board(

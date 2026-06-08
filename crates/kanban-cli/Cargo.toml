@@ -18,9 +18,11 @@ tantivy-backend = [
 ]
 graph-oxigraph = [
   "kanban-graph/graph-oxigraph",
+  "kanban-server/graph-oxigraph",
   "kanban-sqlite/graph-oxigraph",
 ]
 vector-lancedb = [
+  "kanban-server/vector-lancedb",
   "kanban-sqlite/vector-lancedb",
   "kanban-vector/vector-lancedb",
 ]

@@ -707,6 +707,11 @@ async fn build_context(
     validate_page_bounds(query.graph_limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
     validate_page_bounds(query.vector_limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
     validate_page_bounds(query.max_items, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
+    if query.max_items == 0 {
+        return Err(invalid_input(
+            "max_items must be >= 1 because the subject item is mandatory",
+        ));
+    }
     let policy = kanban_context::ContextPolicy {
         lexical_limit: query.lexical_limit,
         graph_limit: query.graph_limit,

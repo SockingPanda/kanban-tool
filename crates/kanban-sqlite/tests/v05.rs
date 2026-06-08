@@ -1036,6 +1036,39 @@ fn vector_sync_marks_lancedb_outbox_done_without_touching_other_boards() {
 }
 
 #[test]
+fn vector_sync_and_rebuild_use_store_embedding_model() {
+    let temp = TempDb::new("vector_sync_and_rebuild_use_store_embedding_model");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("non default model vector task"),
+    )
+    .unwrap();
+    let store = RecordingVectorStore::with_embedding_model("static-test");
+
+    sync_vector_store_with(&temp.path, "default", &store).unwrap();
+    assert_eq!(store.upserted_models(), vec!["static-test"]);
+
+    update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        TaskPatch {
+            title: Some("non default model vector task updated".into()),
+            expected_lock_version: Some(task.lock_version),
+            ..TaskPatch::default()
+        },
+    )
+    .unwrap();
+    rebuild_vector_store_with(&temp.path, "default", &store).unwrap();
+
+    assert_eq!(store.upserted_models(), vec!["static-test", "static-test"]);
+}
+
+#[test]
 fn vector_sync_deletes_archived_task_chunks_and_converges_outbox() {
     let temp = TempDb::new("vector_sync_deletes_archived_task_chunks_and_converges_outbox");
     init_database(&temp.path, "tester").unwrap();
@@ -1055,14 +1088,56 @@ fn vector_sync_deletes_archived_task_chunks_and_converges_outbox() {
     assert!(status.message.contains("synced 0 chunk(s) from 1 job(s)"));
     assert_eq!(
         store.deleted_entity_uris(),
-        vec![
-            format!("kb://task/{}", task.id),
-            format!("kb://task/{}", task.id)
-        ]
+        vec![format!("kb://task/{}", task.id)]
     );
+    assert_eq!(store.deleted_board_ids(), vec![task.board_id.as_str()]);
     assert_eq!(
         lancedb_outbox_statuses_for_board(&temp.path, "default"),
         vec!["done", "done"]
+    );
+    let vector = derived_store_statuses(&temp.path)
+        .unwrap()
+        .into_iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .unwrap();
+    assert!(!vector.dirty);
+    assert!(vector.last_error.is_none());
+}
+
+#[test]
+fn vector_rebuild_deletes_board_before_reindexing_current_tasks() {
+    let temp = TempDb::new("vector_rebuild_deletes_board_before_reindexing_current_tasks");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("hard deleted vector task"),
+    )
+    .unwrap();
+    let store = RecordingVectorStore::default();
+
+    sync_vector_store_with(&temp.path, "default", &store).unwrap();
+    assert_eq!(
+        store.live_texts(),
+        vec!["hard deleted vector task\n\nready spec"]
+    );
+
+    connect_file(&temp.path)
+        .unwrap()
+        .execute("DELETE FROM tasks WHERE id=?1", params![task.id])
+        .unwrap();
+    let status = rebuild_vector_store_with(&temp.path, "default", &store).unwrap();
+
+    assert!(status.message.contains("rebuilt 0 chunk(s)"));
+    assert_eq!(
+        store.deleted_board_ids(),
+        vec![task.board_id.as_str(), task.board_id.as_str()]
+    );
+    assert!(store.live_texts().is_empty());
+    assert_eq!(
+        lancedb_outbox_statuses_for_board(&temp.path, "default"),
+        vec!["done"]
     );
     let vector = derived_store_statuses(&temp.path)
         .unwrap()
@@ -3615,21 +3690,59 @@ fn insert_board(path: &Path, slug: &str, id: &str) {
 
 #[derive(Default)]
 struct RecordingVectorStore {
+    embedding_model: Option<String>,
+    live_chunks: std::sync::Mutex<Vec<EmbeddingChunk>>,
     upserted: std::sync::Mutex<Vec<String>>,
+    upserted_models: std::sync::Mutex<Vec<String>>,
     deleted: std::sync::Mutex<Vec<String>>,
+    deleted_boards: std::sync::Mutex<Vec<String>>,
 }
 
 impl RecordingVectorStore {
+    fn with_embedding_model(embedding_model: &str) -> Self {
+        Self {
+            embedding_model: Some(embedding_model.to_owned()),
+            ..Self::default()
+        }
+    }
+
+    fn expected_model(&self) -> &str {
+        self.embedding_model
+            .as_deref()
+            .unwrap_or(kanban_vector::DEFAULT_EMBEDDING_MODEL)
+    }
+
     fn upserted_texts(&self) -> Vec<String> {
         self.upserted.lock().unwrap().clone()
+    }
+
+    fn upserted_models(&self) -> Vec<String> {
+        self.upserted_models.lock().unwrap().clone()
     }
 
     fn deleted_entity_uris(&self) -> Vec<String> {
         self.deleted.lock().unwrap().clone()
     }
+
+    fn deleted_board_ids(&self) -> Vec<String> {
+        self.deleted_boards.lock().unwrap().clone()
+    }
+
+    fn live_texts(&self) -> Vec<String> {
+        self.live_chunks
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|chunk| chunk.text.clone())
+            .collect()
+    }
 }
 
 impl VectorStore for RecordingVectorStore {
+    fn chunk_embedding_model(&self) -> &str {
+        self.expected_model()
+    }
+
     fn status(&self) -> VectorStoreStatus {
         VectorStoreStatus {
             backend: "test-vector".to_owned(),
@@ -3639,14 +3752,45 @@ impl VectorStore for RecordingVectorStore {
     }
 
     fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
+        if let Some(chunk) = chunks
+            .iter()
+            .find(|chunk| chunk.embedding_model != self.expected_model())
+        {
+            return Err(VectorError::EmbeddingModelMismatch {
+                expected: self.expected_model().to_owned(),
+                actual: chunk.embedding_model.clone(),
+            });
+        }
         let mut upserted = self.upserted.lock().unwrap();
         upserted.extend(chunks.iter().map(|chunk| chunk.text.clone()));
+        let mut upserted_models = self.upserted_models.lock().unwrap();
+        upserted_models.extend(chunks.iter().map(|chunk| chunk.embedding_model.clone()));
+        let mut live_chunks = self.live_chunks.lock().unwrap();
+        for chunk in chunks {
+            live_chunks.retain(|live| live.chunk_key() != chunk.chunk_key());
+            live_chunks.push(chunk.clone());
+        }
+        Ok(())
+    }
+
+    fn delete_board(&self, board_id: &str) -> Result<(), VectorError> {
+        let mut deleted_boards = self.deleted_boards.lock().unwrap();
+        deleted_boards.push(board_id.to_owned());
+        self.live_chunks
+            .lock()
+            .unwrap()
+            .retain(|chunk| chunk.board_id.as_deref() != Some(board_id));
         Ok(())
     }
 
     fn delete_entities(&self, entity_uris: &[String]) -> Result<(), VectorError> {
         let mut deleted = self.deleted.lock().unwrap();
         deleted.extend(entity_uris.iter().cloned());
+        self.live_chunks.lock().unwrap().retain(|chunk| {
+            !entity_uris
+                .iter()
+                .any(|entity_uri| entity_uri == chunk.chunk.entity_uri.as_str())
+        });
         Ok(())
     }
 
@@ -3671,6 +3815,10 @@ impl VectorStore for FailingVectorStore {
             expected: 3,
             actual: 2,
         })
+    }
+
+    fn delete_board(&self, _board_id: &str) -> Result<(), VectorError> {
+        Ok(())
     }
 
     fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), VectorError> {

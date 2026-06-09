@@ -304,6 +304,41 @@ async fn boards_api_creates_and_archives_board() {
 }
 
 #[tokio::test]
+async fn boards_api_duplicate_slug_returns_invalid_input() {
+    let (_dir, db_path) = temp_db();
+    let app = build_router(AppState::new(&db_path, "api-test"));
+
+    let (status, _created) = post_json(
+        app.clone(),
+        "/api/v1/boards",
+        json!({
+            "slug": "project",
+            "name": "Project Board"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let (status, json) = post_json(
+        app,
+        "/api/v1/boards",
+        json!({
+            "slug": "project",
+            "name": "Duplicate Project Board"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("board slug already exists")
+    );
+}
+
+#[tokio::test]
 async fn task_dto_includes_board_slug_and_ref() {
     let (_dir, db_path) = temp_db();
     kanban_sqlite::create_board(
@@ -1515,6 +1550,56 @@ async fn comments_api_creates_and_lists_task_comments() {
             .iter()
             .any(|event| event.kind == "task.comment.created")
     );
+}
+
+#[tokio::test]
+async fn archived_board_history_apis_remain_readable() {
+    let (_dir, db_path) = temp_db();
+    kanban_sqlite::create_board(
+        &db_path,
+        "api-test",
+        kanban_sqlite::CreateBoard {
+            slug: "project".into(),
+            name: "Project".into(),
+            description: None,
+        },
+    )
+    .expect("board");
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "project",
+        "seed",
+        kanban_sqlite::CreateTask::ready("archived history"),
+    )
+    .expect("task");
+    kanban_sqlite::create_comment(&db_path, &task.id, "operator", "history note", None)
+        .expect("comment");
+    let claim =
+        kanban_sqlite::claim_task(&db_path, "project", "worker", &task.id, 60_000).expect("claim");
+    kanban_sqlite::archive_board(&db_path, "project", "api-test").expect("archive board");
+    let app = build_router(AppState::new(db_path, "api-test"));
+
+    let (status, events) = get_json(
+        app.clone(),
+        &format!("/api/v1/events?board=project&task_id={}", task.id),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        events["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["kind"] == "task.comment.created")
+    );
+
+    let (status, runs) = get_json(app.clone(), &format!("/api/v1/tasks/{}/runs", task.id)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(runs["data"][0]["id"], claim.run_id);
+
+    let (status, comments) = get_json(app, &format!("/api/v1/tasks/{}/comments", task.id)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(comments["data"][0]["body"], "history note");
 }
 
 #[tokio::test]

@@ -62,7 +62,8 @@ command -v cargo >/dev/null 2>&1 || { echo "error: cargo is required" >&2; exit 
 VERSION="$(cargo pkgid -p kanban-cli | sed 's/.*#//')"
 TARGET_TRIPLE="$(rustc -vV | awk '/^host:/ { print $2 }')"
 RUST_ARCH="${TARGET_TRIPLE%%-*}"
-TARGET_DIR="$ROOT/target/release"
+CARGO_TARGET_ROOT="$ROOT/target"
+TARGET_DIR="$CARGO_TARGET_ROOT/release"
 BIN_PATH="$TARGET_DIR/$BIN_NAME"
 BUNDLE_DIR="$TARGET_DIR/bundle/cli"
 TMPDIR="$(mktemp -d)"
@@ -90,15 +91,49 @@ install_payload() {
 build_binary() {
   (
     cd "$ROOT"
-    cargo build -p kanban-cli --release "${BUILD_ARGS[@]}"
+    cargo build -p kanban-cli --release --target-dir "$CARGO_TARGET_ROOT" "${BUILD_ARGS[@]}"
   )
   [[ -x "$BIN_PATH" ]] || { echo "error: expected binary not found: $BIN_PATH" >&2; exit 1; }
+}
+
+deb_depends() {
+  local package_root="$1"
+  local dep_workspace output depends
+
+  if ! command -v dpkg-shlibdeps >/dev/null 2>&1; then
+    echo "warning: dpkg-shlibdeps not found; using conservative Debian runtime dependencies" >&2
+    echo "libc6, libgcc-s1"
+    return
+  fi
+
+  dep_workspace="$TMPDIR/shlibdeps"
+  mkdir -p "$dep_workspace/debian"
+  cat > "$dep_workspace/debian/control" <<EOF
+Source: $PACKAGE_NAME
+Package: $PACKAGE_NAME
+Architecture: any
+EOF
+
+  output="$(
+    cd "$dep_workspace"
+    dpkg-shlibdeps -O "-S$package_root" "$package_root/usr/bin/$BIN_NAME"
+  )" || {
+    echo "error: dpkg-shlibdeps failed to generate shared-library dependencies" >&2
+    exit 1
+  }
+
+  depends="$(printf '%s\n' "$output" | sed -n 's/^shlibs:Depends=//p')"
+  [[ -n "$depends" ]] || {
+    echo "error: dpkg-shlibdeps returned no shlibs:Depends value" >&2
+    exit 1
+  }
+  echo "$depends"
 }
 
 build_deb() {
   command -v dpkg-deb >/dev/null 2>&1 || { echo "error: dpkg-deb is required for --format deb" >&2; exit 1; }
 
-  local arch package_root control_dir out_dir out_file installed_size
+  local arch package_root control_dir out_dir out_file installed_size depends
   arch="$(deb_arch)"
   package_root="$TMPDIR/deb-root"
   control_dir="$package_root/DEBIAN"
@@ -109,6 +144,7 @@ build_deb() {
   mkdir -p "$control_dir" "$out_dir"
   install_payload "$package_root"
   installed_size="$(du -sk "$package_root/usr" | awk '{ print $1 }')"
+  depends="$(deb_depends "$package_root")"
 
   cat > "$control_dir/control" <<EOF
 Package: $PACKAGE_NAME
@@ -116,6 +152,7 @@ Version: $VERSION-$REVISION
 Section: utils
 Priority: optional
 Architecture: $arch
+Depends: $depends
 Maintainer: kanban-user
 Installed-Size: $installed_size
 Description: Local-first Kanban CLI

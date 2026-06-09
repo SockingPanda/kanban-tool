@@ -12,8 +12,12 @@ use kanban_context::{
     ContextBrokerInput, ContextDiagnostic, ContextError, ContextItem, ContextPack, ContextPolicy,
 };
 use kanban_core::{
-    Clock, KanbanError, Result, SystemClock, TaskStatus, new_event_id, new_run_id, new_task_id,
-    new_typed_id,
+    Clock, KanbanError, ReadinessFacts, Result, SystemClock, TaskStatus, can_complete_from,
+    can_finish_to, can_promote_from, completed_at_for_finish,
+    initial_status as core_initial_status, is_active_recomputable_status, is_claimable_task,
+    new_event_id, new_run_id, new_task_id, new_typed_id,
+    recompute_ready_status as core_recompute_ready_status, retry_decision,
+    running_claim_is_present,
 };
 use kanban_entity::{EntityUri, Predicate, Provenance, Relation};
 use kanban_graph::GraphStoreStatus;
@@ -83,322 +87,11 @@ pub(crate) use vector::has_pending_outbox_for_target;
 #[cfg(feature = "vector-lancedb")]
 pub(crate) use vector::{vector_storage, vector_store_path, vector_store_status_with};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TaskRecord {
-    pub id: String,
-    pub board_id: String,
-    pub board_slug: String,
-    #[serde(rename = "ref")]
-    pub task_ref: String,
-    pub seq: i64,
-    pub title: String,
-    pub description: Option<String>,
-    pub status: TaskStatus,
-    pub status_reason: Option<String>,
-    pub assignee: Option<String>,
-    pub priority: i64,
-    pub position: i64,
-    pub scheduled_at: Option<i64>,
-    pub due_at: Option<i64>,
-    pub created_by: String,
-    pub created_at: i64,
-    pub updated_at: i64,
-    pub started_at: Option<i64>,
-    pub completed_at: Option<i64>,
-    pub archived_at: Option<i64>,
-    pub claim_token: Option<String>,
-    pub claim_owner: Option<String>,
-    pub claim_expires_at: Option<i64>,
-    pub last_heartbeat_at: Option<i64>,
-    pub current_run_id: Option<String>,
-    pub retry_count: i64,
-    pub max_retries: Option<i64>,
-    pub result_summary: Option<String>,
-    pub result_json: Option<String>,
-    pub metadata_json: String,
-    pub lock_version: i64,
-}
+mod transaction;
+mod types;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EventRecord {
-    pub id: i64,
-    pub event_id: String,
-    pub task_id: Option<String>,
-    pub run_id: Option<String>,
-    pub kind: String,
-    pub actor: Option<String>,
-    pub payload_json: String,
-    pub created_at: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RunRecord {
-    pub id: String,
-    pub task_id: String,
-    pub status: String,
-    pub worker_profile: Option<String>,
-    pub worker_pid: Option<i64>,
-    pub claim_token: String,
-    pub claim_owner: String,
-    pub started_at: i64,
-    pub finished_at: Option<i64>,
-    pub exit_code: Option<i64>,
-    pub summary: Option<String>,
-    pub error: Option<String>,
-    pub log_path: Option<String>,
-    pub metadata_json: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BoardRecord {
-    pub id: String,
-    pub slug: String,
-    pub name: String,
-    pub description: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
-    pub archived_at: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BoardColumnRecord {
-    pub id: String,
-    pub board_id: String,
-    pub status: TaskStatus,
-    pub title: String,
-    pub position: i64,
-    pub hidden: bool,
-    pub wip_limit: Option<i64>,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CreateBoard {
-    pub slug: String,
-    pub name: String,
-    pub description: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct BoardListOptions {
-    pub include_archived: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CommentRecord {
-    pub id: String,
-    pub board_id: String,
-    pub task_id: String,
-    pub author: String,
-    pub body: String,
-    pub kind: String,
-    pub created_at: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CreateTask {
-    pub title: String,
-    pub description: Option<String>,
-    pub status: Option<TaskStatus>,
-    pub assignee: Option<String>,
-    pub priority: i64,
-    pub scheduled_at: Option<i64>,
-    pub due_at: Option<i64>,
-    pub metadata_json: String,
-}
-
-impl CreateTask {
-    pub fn ready(title: impl Into<String>) -> Self {
-        Self {
-            title: title.into(),
-            description: Some("ready spec".to_owned()),
-            status: Some(TaskStatus::Ready),
-            assignee: None,
-            priority: 0,
-            scheduled_at: None,
-            due_at: None,
-            metadata_json: "{}".to_owned(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct TaskPatch {
-    pub title: Option<String>,
-    pub description: Option<Option<String>>,
-    pub assignee: Option<Option<String>>,
-    pub priority: Option<i64>,
-    pub scheduled_at: Option<Option<i64>>,
-    pub due_at: Option<Option<i64>>,
-    pub metadata_json: Option<String>,
-    pub expected_lock_version: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ClaimResult {
-    pub task: TaskRecord,
-    pub claim_token: String,
-    pub run_id: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FinishPolicy {
-    Done,
-    Review,
-    Blocked,
-    Ready,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DispatchOptions {
-    pub actor: String,
-    pub command: String,
-    pub worker_profile: String,
-    pub claim_ttl_ms: i64,
-    pub heartbeat_interval_ms: i64,
-    pub on_success: FinishPolicy,
-    pub on_failure: FinishPolicy,
-    pub log_dir: PathBuf,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DispatchResult {
-    pub claimed: usize,
-    pub task_id: Option<String>,
-    pub run_id: Option<String>,
-    pub exit_code: Option<i32>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TaskListSort {
-    Position,
-    PositionDesc,
-    Priority,
-    PriorityDesc,
-    CreatedAt,
-    CreatedAtDesc,
-    UpdatedAt,
-    UpdatedAtDesc,
-    DueAt,
-    DueAtDesc,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TaskListOptions {
-    pub statuses: Vec<TaskStatus>,
-    pub include_archived: bool,
-    pub assignee: Option<String>,
-    pub search: Option<String>,
-    pub sort: TaskListSort,
-    pub limit: usize,
-    pub offset: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TaskListPage {
-    pub tasks: Vec<TaskRecord>,
-    pub total: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EventListOptions {
-    pub task_ref: Option<String>,
-    pub after: i64,
-    pub limit: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CheckpointResult {
-    pub busy: i64,
-    pub log_frames: i64,
-    pub checkpointed_frames: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MaintenanceResult {
-    pub ok: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RunLogPathStatus {
-    Present(PathBuf),
-    Missing(PathBuf),
-    Suspicious { reason: String },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BackupResult {
-    pub out_path: PathBuf,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExportResult {
-    pub out_path: PathBuf,
-    pub records: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ImportResult {
-    pub input_path: PathBuf,
-    pub records: usize,
-}
-
-#[derive(Debug)]
-pub struct DatabaseReplaceGuard {
-    lock_path: PathBuf,
-}
-
-impl Drop for DatabaseReplaceGuard {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.lock_path);
-    }
-}
-
-#[derive(Debug)]
-pub struct DatabaseRuntimeGuard {
-    lock_path: PathBuf,
-}
-
-impl Drop for DatabaseRuntimeGuard {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.lock_path);
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StatusCount {
-    pub status: String,
-    pub count: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StaleClaimRecord {
-    pub task_id: String,
-    pub seq: i64,
-    pub title: String,
-    pub claim_owner: Option<String>,
-    pub claim_expires_at: Option<i64>,
-    pub last_heartbeat_at: Option<i64>,
-    pub current_run_id: Option<String>,
-    pub retry_count: i64,
-    pub max_retries: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BlockedReasonCount {
-    pub reason: String,
-    pub count: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct QueueStats {
-    pub board_id: String,
-    pub generated_at: i64,
-    pub status_counts: Vec<StatusCount>,
-    pub stale_claims: Vec<StaleClaimRecord>,
-    pub blocked_reasons: Vec<BlockedReasonCount>,
-}
+use transaction::{storage, with_immediate_tx, with_read_tx};
+pub use types::*;
 
 pub fn list_boards(path: impl AsRef<Path>, options: BoardListOptions) -> Result<Vec<BoardRecord>> {
     let conn = connect_file(path.as_ref())?;
@@ -1055,10 +748,14 @@ pub fn create_task_with_dependencies(
             "metadata_json must be valid JSON".into(),
         ));
     }
-    let status = initial_status(
+    let status = core_initial_status(
         input.status,
-        input.description.as_deref(),
-        input.scheduled_at,
+        ReadinessFacts {
+            title: &title,
+            description: input.description.as_deref(),
+            scheduled_at: input.scheduled_at,
+            dependencies_done: true,
+        },
         now,
     )?;
     let id = new_task_id();
@@ -1350,7 +1047,7 @@ pub fn promote_task(
     with_immediate_tx(&conn, || {
         ensure_board_active(&conn, &board_id)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
-        if !matches!(task.status, TaskStatus::Todo | TaskStatus::Scheduled) {
+        if !can_promote_from(task.status) {
             return Err(KanbanError::InvalidTransition(format!(
                 "cannot promote from {}",
                 task.status.as_str()
@@ -1528,7 +1225,7 @@ fn claim_task_in_current_tx(
 ) -> Result<ClaimResult> {
     ensure_board_active(conn, board_id)?;
     let task = get_task_by_id(conn, board_id, task_id)?;
-    if task.status != TaskStatus::Ready || task.claim_token.is_some() {
+    if !is_claimable_task(task.status, task.claim_token.is_some()) {
         return Err(KanbanError::InvalidTransition(
             "task is not claimable".into(),
         ));
@@ -1712,7 +1409,7 @@ pub fn complete_task_with_summary_and_result(
             "claim token mismatch".into(),
         ));
     }
-    if !matches!(task.status, TaskStatus::Running | TaskStatus::Review) {
+    if !can_complete_from(task.status) {
         return Err(KanbanError::InvalidTransition(
             "complete requires running or review".into(),
         ));
@@ -1996,16 +1693,8 @@ pub fn reclaim_task_to(
                 "reclaim requires expired claim or force".into(),
             ));
         }
-        let new_retry_count = fresh.retry_count + 1;
-        let max_retries_reached = fresh
-            .max_retries
-            .is_some_and(|max_retries| new_retry_count >= max_retries);
-        let effective_status = if max_retries_reached {
-            TaskStatus::Blocked
-        } else {
-            to_status
-        };
-        let default_reason = if max_retries_reached {
+        let decision = retry_decision(fresh.retry_count, fresh.max_retries, to_status);
+        let default_reason = if decision.max_retries_reached {
             "max retries reached"
         } else if force {
             "force reclaimed"
@@ -2020,7 +1709,7 @@ pub fn reclaim_task_to(
             actor,
             if force { "canceled" } else { "expired" },
             effective_reason,
-            effective_status,
+            decision.status,
             tx_now,
             (!force).then_some(tx_now),
         )?;
@@ -2711,10 +2400,11 @@ fn reclaim_running_task(
     now: i64,
     expiry_guard: Option<i64>,
 ) -> Result<()> {
-    if task.status != TaskStatus::Running
-        || task.claim_token.is_none()
-        || task.current_run_id.is_none()
-    {
+    if !running_claim_is_present(
+        task.status,
+        task.claim_token.is_some(),
+        task.current_run_id.is_some(),
+    ) {
         return Err(KanbanError::InvalidTransition(
             "reclaim requires matching running claim".into(),
         ));
@@ -2774,23 +2464,16 @@ fn retry_running_task(
     now: i64,
     expiry_guard: Option<i64>,
 ) -> Result<()> {
-    if task.status != TaskStatus::Running
-        || task.claim_token.is_none()
-        || task.current_run_id.is_none()
-    {
+    if !running_claim_is_present(
+        task.status,
+        task.claim_token.is_some(),
+        task.current_run_id.is_some(),
+    ) {
         return Err(KanbanError::InvalidTransition(
             "retry requires matching running claim".into(),
         ));
     }
-    let new_retry_count = task.retry_count + 1;
-    let blocked = task
-        .max_retries
-        .is_some_and(|max_retries| new_retry_count >= max_retries);
-    let target = if blocked {
-        TaskStatus::Blocked
-    } else {
-        TaskStatus::Ready
-    };
+    let decision = retry_decision(task.retry_count, task.max_retries, TaskStatus::Ready);
     if let (Some(run_id), Some(token)) = (&task.current_run_id, &task.claim_token) {
         let changed = conn
             .execute(
@@ -2807,7 +2490,7 @@ fn retry_running_task(
     let changed = conn
         .execute(
             "UPDATE tasks SET status=?1, status_reason=?2, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, retry_count=?3, updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='running' AND claim_token=?7 AND current_run_id=?8 AND (?9 IS NULL OR claim_expires_at <= ?9)",
-            params![target.as_str(), if blocked { Some(reason) } else { None }, new_retry_count, now, task.id, board_id, task.claim_token, task.current_run_id, expiry_guard],
+            params![decision.status.as_str(), if decision.max_retries_reached { Some(reason) } else { None }, decision.retry_count, now, task.id, board_id, task.claim_token, task.current_run_id, expiry_guard],
         )
         .map_err(storage)?;
     if changed != 1 {
@@ -2816,7 +2499,7 @@ fn retry_running_task(
         ));
     }
     let payload = json!({
-        "retry_count": new_retry_count,
+        "retry_count": decision.retry_count,
         "max_retries": task.max_retries,
     })
     .to_string();
@@ -2825,7 +2508,7 @@ fn retry_running_task(
         board_id,
         Some(&task.id),
         task.current_run_id.as_deref(),
-        if blocked {
+        if decision.max_retries_reached {
             "task.blocked"
         } else {
             "task.reclaimed"
@@ -2834,7 +2517,7 @@ fn retry_running_task(
         &payload,
         now,
     )?;
-    if blocked && reason == "claim expired" {
+    if decision.max_retries_reached && reason == "claim expired" {
         insert_event(
             conn,
             board_id,
@@ -2847,50 +2530,6 @@ fn retry_running_task(
         )?;
     }
     Ok(())
-}
-
-fn initial_status(
-    explicit: Option<TaskStatus>,
-    description: Option<&str>,
-    scheduled_at: Option<i64>,
-    now: i64,
-) -> Result<TaskStatus> {
-    if let Some(status) = explicit {
-        if !status.can_be_created() {
-            return Err(KanbanError::InvalidInput(
-                "initial status must be triage/todo/scheduled/ready".into(),
-            ));
-        }
-        match status {
-            TaskStatus::Scheduled if scheduled_at.is_none() => {
-                return Err(KanbanError::InvalidInput(
-                    "scheduled initial status requires scheduled_at".into(),
-                ));
-            }
-            TaskStatus::Ready
-                if description.is_none_or(|description| description.trim().is_empty()) =>
-            {
-                return Err(KanbanError::InvalidInput(
-                    "ready requires description".into(),
-                ));
-            }
-            TaskStatus::Ready if scheduled_at.is_some_and(|scheduled| scheduled > now) => {
-                return Err(KanbanError::InvalidInput(
-                    "ready requires scheduled_at to be due".into(),
-                ));
-            }
-            _ => {
-                return Ok(status);
-            }
-        }
-    }
-    if description.is_none_or(|d| d.trim().is_empty()) {
-        return Ok(TaskStatus::Triage);
-    }
-    if scheduled_at.is_some_and(|t| t > now) {
-        return Ok(TaskStatus::Scheduled);
-    }
-    Ok(TaskStatus::Ready)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2909,20 +2548,18 @@ fn finish_running(
     result_json: Option<&str>,
     now: i64,
 ) -> Result<()> {
-    let completed = if target == TaskStatus::Done {
-        Some(now)
-    } else {
-        task.completed_at
-    };
-    if task.status != TaskStatus::Running
-        && !(task.status == TaskStatus::Review && target == TaskStatus::Done)
-    {
+    let completed = completed_at_for_finish(target, now, task.completed_at);
+    if !can_finish_to(task.status, target) {
         return Err(KanbanError::InvalidTransition(
             "finish requires matching running claim".into(),
         ));
     }
     let changed = if task.status == TaskStatus::Running {
-        if task.claim_token.is_none() || task.current_run_id.is_none() {
+        if !running_claim_is_present(
+            task.status,
+            task.claim_token.is_some(),
+            task.current_run_id.is_some(),
+        ) {
             return Err(KanbanError::InvalidTransition(
                 "finish requires matching running claim".into(),
             ));
@@ -3086,28 +2723,15 @@ fn promote_children(
 }
 
 fn recompute_ready_status(conn: &Connection, task: &TaskRecord, now: i64) -> Result<TaskStatus> {
-    if task.title.trim().is_empty()
-        || task
-            .description
-            .as_deref()
-            .is_none_or(|description| description.trim().is_empty())
-    {
-        return Ok(TaskStatus::Triage);
-    }
-    if task.scheduled_at.is_some_and(|t| t > now) {
-        return Ok(TaskStatus::Scheduled);
-    }
-    if !dependencies_done(conn, &task.id)? {
-        return Ok(TaskStatus::Todo);
-    }
-    Ok(TaskStatus::Ready)
-}
-
-fn is_active_recomputable_status(status: TaskStatus) -> bool {
-    matches!(
-        status,
-        TaskStatus::Triage | TaskStatus::Todo | TaskStatus::Scheduled | TaskStatus::Ready
-    )
+    Ok(core_recompute_ready_status(
+        ReadinessFacts {
+            title: &task.title,
+            description: task.description.as_deref(),
+            scheduled_at: task.scheduled_at,
+            dependencies_done: dependencies_done(conn, &task.id)?,
+        },
+        now,
+    ))
 }
 
 fn ensure_dependencies_done(conn: &Connection, task_id: &str) -> Result<()> {
@@ -4645,36 +4269,4 @@ fn json_valid(conn: &Connection, json: &str) -> Result<bool> {
     conn.query_row("SELECT json_valid(?1)", [json], |r| r.get::<_, i64>(0))
         .map(|v| v == 1)
         .map_err(storage)
-}
-
-fn with_immediate_tx<T>(conn: &Connection, f: impl FnOnce() -> Result<T>) -> Result<T> {
-    conn.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
-    match f() {
-        Ok(value) => {
-            conn.execute_batch("COMMIT").map_err(storage)?;
-            Ok(value)
-        }
-        Err(err) => {
-            let _ = conn.execute_batch("ROLLBACK");
-            Err(err)
-        }
-    }
-}
-
-fn with_read_tx<T>(conn: &Connection, f: impl FnOnce() -> Result<T>) -> Result<T> {
-    conn.execute_batch("BEGIN").map_err(storage)?;
-    match f() {
-        Ok(value) => {
-            conn.execute_batch("COMMIT").map_err(storage)?;
-            Ok(value)
-        }
-        Err(err) => {
-            let _ = conn.execute_batch("ROLLBACK");
-            Err(err)
-        }
-    }
-}
-
-fn storage(err: rusqlite::Error) -> KanbanError {
-    KanbanError::Storage(err.to_string())
 }

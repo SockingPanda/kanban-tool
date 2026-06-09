@@ -1,0 +1,386 @@
+use crate::common::*;
+
+#[test]
+fn claim_complete_and_dependencies_promote_children() {
+    let temp = TempDb::new("claim_complete_and_dependencies_promote_children");
+    init_database(&temp.path, "tester").unwrap();
+    let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("父任务")).unwrap();
+    let child = create_task(&temp.path, "default", "tester", CreateTask::ready("子任务")).unwrap();
+
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id).unwrap();
+    assert_eq!(
+        get_task(&temp.path, "default", &child.id).unwrap().status,
+        TaskStatus::Todo
+    );
+
+    let claim = claim_task(&temp.path, "default", "worker", &parent.id, 300_000).unwrap();
+    assert_eq!(claim.task.status, TaskStatus::Running);
+    assert!(!claim.claim_token.is_empty());
+    assert!(claim.task.current_run_id.is_some());
+    let heartbeat = kanban_sqlite::heartbeat_task(
+        &temp.path,
+        "default",
+        "worker",
+        &parent.id,
+        &claim.claim_token,
+        600_000,
+    )
+    .unwrap();
+    assert!(heartbeat.claim_expires_at > claim.task.claim_expires_at);
+
+    complete_task(
+        &temp.path,
+        "default",
+        "worker",
+        &parent.id,
+        Some(&claim.claim_token),
+        false,
+    )
+    .unwrap();
+    assert_eq!(
+        get_task(&temp.path, "default", &parent.id).unwrap().status,
+        TaskStatus::Done
+    );
+    assert_eq!(
+        get_task(&temp.path, "default", &child.id).unwrap().status,
+        TaskStatus::Ready
+    );
+    assert_eq!(
+        list_runs(&temp.path, "default", Some(&parent.id)).unwrap()[0].status,
+        "succeeded"
+    );
+}
+
+#[test]
+fn block_unblock_recomputes_target_and_cycle_detection_rejects_cycles() {
+    let temp = TempDb::new("block_unblock_recomputes_target_and_cycle_detection_rejects_cycles");
+    init_database(&temp.path, "tester").unwrap();
+    let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("父任务")).unwrap();
+    let child = create_task(&temp.path, "default", "tester", CreateTask::ready("子任务")).unwrap();
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id).unwrap();
+
+    let err = add_dependency(&temp.path, "default", "tester", &child.id, &parent.id).unwrap_err();
+    assert!(err.to_string().contains("cycle"));
+
+    block_task(
+        &temp.path,
+        "default",
+        "tester",
+        &child.id,
+        "等待输入",
+        None,
+        false,
+    )
+    .unwrap();
+    let unblocked = unblock_task(&temp.path, "default", "tester", &child.id).unwrap();
+    assert_eq!(unblocked.status, TaskStatus::Todo);
+
+    let claim = claim_task(&temp.path, "default", "worker", &parent.id, 300_000).unwrap();
+    complete_task(
+        &temp.path,
+        "default",
+        "worker",
+        &parent.id,
+        Some(&claim.claim_token),
+        false,
+    )
+    .unwrap();
+    assert_eq!(
+        get_task(&temp.path, "default", &child.id).unwrap().status,
+        TaskStatus::Ready
+    );
+}
+
+#[test]
+fn add_dependency_rolls_back_edge_and_status_when_event_insert_fails() {
+    let temp = TempDb::new("add_dependency_rolls_back_edge_and_status_when_event_insert_fails");
+    init_database(&temp.path, "tester").unwrap();
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "incomplete parent".into(),
+            description: None,
+            status: Some(TaskStatus::Triage),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let child = create_task(&temp.path, "default", "tester", CreateTask::ready("child")).unwrap();
+    connect_file(&temp.path)
+        .unwrap()
+        .execute(
+            "CREATE TRIGGER fail_dependency_added_event BEFORE INSERT ON task_events WHEN NEW.kind='dependency.added' BEGIN SELECT RAISE(ABORT, 'forced dependency.added event failure'); END",
+            [],
+        )
+        .unwrap();
+
+    let err = add_dependency(&temp.path, "default", "tester", &parent.id, &child.id).unwrap_err();
+
+    assert!(
+        err.to_string()
+            .contains("forced dependency.added event failure"),
+        "err: {err}"
+    );
+    assert_eq!(
+        get_task(&temp.path, "default", &child.id).unwrap().status,
+        TaskStatus::Ready
+    );
+    assert!(
+        list_dependencies(&temp.path, "default", &child.id)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn remove_dependency_recomputes_child_to_ready_when_unblocked() {
+    let temp = TempDb::new("remove_dependency_recomputes_child_to_ready_when_unblocked");
+    init_database(&temp.path, "tester").unwrap();
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "unfinished parent".into(),
+            description: Some("spec".into()),
+            status: Some(TaskStatus::Todo),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("child should unblock"),
+    )
+    .unwrap();
+
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id).unwrap();
+    assert_eq!(
+        get_task(&temp.path, "default", &child.id).unwrap().status,
+        TaskStatus::Todo
+    );
+
+    kanban_sqlite::remove_dependency(&temp.path, "default", "tester", &parent.id, &child.id)
+        .unwrap();
+
+    let child = get_task(&temp.path, "default", &child.id).unwrap();
+    assert_eq!(child.status, TaskStatus::Ready);
+    assert!(
+        list_events(&temp.path, "default", Some(&child.id))
+            .unwrap()
+            .iter()
+            .any(|event| event.kind == "task.promoted")
+    );
+}
+
+#[test]
+fn adding_incomplete_parent_to_running_child_is_rejected_without_force() {
+    let temp = TempDb::new("adding_incomplete_parent_to_running_child_is_rejected_without_force");
+    init_database(&temp.path, "tester").unwrap();
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "incomplete parent".into(),
+            description: None,
+            status: Some(TaskStatus::Triage),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("running child"),
+    )
+    .unwrap();
+    claim_task(&temp.path, "default", "worker", &child.id, 300_000).unwrap();
+
+    let err = add_dependency(&temp.path, "default", "tester", &parent.id, &child.id).unwrap_err();
+
+    assert!(
+        err.to_string().contains("running") && err.to_string().contains("dependency"),
+        "err: {err}"
+    );
+    assert_eq!(
+        get_task(&temp.path, "default", &child.id).unwrap().status,
+        TaskStatus::Running
+    );
+    assert!(
+        list_dependencies(&temp.path, "default", &child.id)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn add_dependency_reloads_child_inside_transaction_before_demoting_ready() {
+    let temp = TempDb::new("add_dependency_reloads_child_inside_transaction_before_demoting_ready");
+    init_database(&temp.path, "tester").unwrap();
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "incomplete parent".into(),
+            description: None,
+            status: Some(TaskStatus::Triage),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("claimed child"),
+    )
+    .unwrap();
+
+    let conn = connect_file(&temp.path).unwrap();
+    conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+    mark_task_running_in_current_tx(&conn, &child.id);
+    let adding = thread::spawn({
+        let db_path = temp.path.clone();
+        let parent_id = parent.id.clone();
+        let child_id = child.id.clone();
+        move || add_dependency(&db_path, "default", "tester", &parent_id, &child_id)
+    });
+    thread::sleep(Duration::from_millis(50));
+    conn.execute_batch("COMMIT").unwrap();
+
+    let err = adding.join().unwrap().unwrap_err();
+    assert!(
+        err.to_string().contains("running") && err.to_string().contains("dependency"),
+        "err: {err}"
+    );
+    let fresh = get_task(&temp.path, "default", &child.id).unwrap();
+    assert_eq!(fresh.status, TaskStatus::Running);
+    assert!(fresh.current_run_id.is_some());
+    assert!(
+        list_dependencies(&temp.path, "default", &child.id)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn promote_task_reloads_dependencies_inside_transaction() {
+    let temp = TempDb::new("promote_task_reloads_dependencies_inside_transaction");
+    init_database(&temp.path, "tester").unwrap();
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "unfinished parent".into(),
+            description: Some("spec".into()),
+            status: Some(TaskStatus::Todo),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "manual promote race".into(),
+            description: Some("ready spec".into()),
+            status: Some(TaskStatus::Todo),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )
+    .unwrap();
+
+    let conn = connect_file(&temp.path).unwrap();
+    conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+    conn.execute(
+        "INSERT INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES (?1, ?2, ?3, ?4)",
+        params![child.board_id, parent.id, child.id, now_ms()],
+    )
+    .unwrap();
+    let promoting = thread::spawn({
+        let db_path = temp.path.clone();
+        let child_id = child.id.clone();
+        move || promote_task(&db_path, "default", "tester", &child_id)
+    });
+    thread::sleep(Duration::from_millis(50));
+    conn.execute_batch("COMMIT").unwrap();
+
+    let err = promoting.join().unwrap().unwrap_err();
+    assert!(err.to_string().contains("dependency"), "err: {err}");
+    assert_eq!(
+        get_task(&temp.path, "default", &child.id).unwrap().status,
+        TaskStatus::Todo
+    );
+}
+
+#[test]
+fn unblock_task_reloads_status_inside_transaction_before_recomputing() {
+    let temp = TempDb::new("unblock_task_reloads_status_inside_transaction_before_recomputing");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("blocked archive race"),
+    )
+    .unwrap();
+    block_task(
+        &temp.path, "default", "tester", &task.id, "waiting", None, false,
+    )
+    .unwrap();
+
+    let conn = connect_file(&temp.path).unwrap();
+    conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+    conn.execute(
+        "UPDATE tasks SET status='archived', archived_at=?1, updated_at=?1, lock_version=lock_version+1 WHERE id=?2",
+        params![now_ms(), task.id],
+    )
+    .unwrap();
+    let unblocking = thread::spawn({
+        let db_path = temp.path.clone();
+        let task_id = task.id.clone();
+        move || unblock_task(&db_path, "default", "tester", &task_id)
+    });
+    thread::sleep(Duration::from_millis(50));
+    conn.execute_batch("COMMIT").unwrap();
+
+    let err = unblocking.join().unwrap().unwrap_err();
+    assert!(err.to_string().contains("unblock"), "err: {err}");
+    assert_eq!(
+        get_task(&temp.path, "default", &task.id).unwrap().status,
+        TaskStatus::Archived
+    );
+}

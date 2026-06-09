@@ -582,6 +582,8 @@ kb context build t_... [--lexical-limit 5]
 `kb graph` 和 `kb vector` 是 feature-gated 派生层入口：未启用 `graph-oxigraph` / `vector-lancedb` 或缺少 embedding provider 时返回 disabled/degraded status；启用后仍只作为可重建 relation/vector store，不参与 task 状态事务。
 `kb context build` 通过 SQLite hydrate canonical task，并合并 lexical、graph、vector hits。graph/vector 不可用或失败时返回 degraded markers；失败原因通过有界 diagnostics 暴露，context pack 本身仍可用。
 
+`kb derived status` 中的 `last_event_id` 是 store 级成功处理水位，不是当前 board 的局部水位。`dirty=true` 表示该 store 仍有任意 board 的 pending/running/failed outbox，或最近一次派生更新失败；board-scoped `kb index sync`、`kb graph sync`、`kb vector sync` 只清理当前 board 的 job，不能因为本 board clean 就强制清掉全局 dirty。
+
 ### 13.1 `kb doctor`
 
 检查：
@@ -602,7 +604,7 @@ kb context build t_... [--lexical-limit 5]
 - `index_outbox` backlog：`outbox_pending`、`outbox_running`、`outbox_failed`。
 - derived store health：`derived_dirty_stores`、`derived_error_stores`、`derived_stores[]`，每个 store 包含 `dirty`、`last_error` 和按 store target 聚合的 pending/running/failed outbox 计数。
 
-`dirty` / pending outbox 表示派生层需要 sync/rebuild，不会改变 SQLite task truth；failed outbox 或 `last_error` 用于 operator 判断是否需要 `kb index sync`、`kb graph sync/rebuild` 或 `kb vector sync/rebuild`。
+`dirty` / pending outbox 表示派生层需要 sync/rebuild，不会改变 SQLite task truth；failed outbox 或 `last_error` 用于 operator 判断是否需要 `kb index sync`、`kb graph sync/rebuild` 或 `kb vector sync/rebuild`。`derived_stores[].last_event_id` 表示对应 store 已成功提交的全局 event watermark；当 `dirty=true` 时，它仍然只是“已成功处理到哪里”的摘要，不代表所有 board 都已经干净。
 
 ---
 

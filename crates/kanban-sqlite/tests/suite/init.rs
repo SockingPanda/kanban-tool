@@ -1,7 +1,4 @@
-use std::path::Path;
-
-use kanban_sqlite::init_database;
-use rusqlite::Connection;
+use crate::common::*;
 
 #[test]
 fn init_creates_schema_default_board_and_columns() {
@@ -147,7 +144,7 @@ fn init_creates_knowledge_substrate_tables_and_seeds() {
 fn init_upgrades_v1_database_and_backfills_task_entities() {
     let temp = TempDb::new("init_upgrades_v1_database_and_backfills_task_entities");
 
-    let v1_sql = include_str!("../../../migrations/001_initial.sql");
+    let v1_sql = include_str!("../../../../migrations/001_initial.sql");
     let conn = Connection::open(&temp.path).unwrap();
     conn.execute_batch(v1_sql).unwrap();
     conn.execute(
@@ -178,27 +175,4 @@ fn init_upgrades_v1_database_and_backfills_task_entities() {
         )
         .unwrap();
     assert_eq!(task_entity_title, "Upgrade task");
-}
-
-struct TempDb {
-    path: std::path::PathBuf,
-}
-
-impl TempDb {
-    fn new(name: &str) -> Self {
-        let mut path = std::env::temp_dir();
-        path.push(format!("kb-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&path);
-        std::fs::create_dir_all(&path).unwrap();
-        path.push("kb.db");
-        Self { path }
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        if let Some(parent) = Path::new(&self.path).parent() {
-            let _ = std::fs::remove_dir_all(parent);
-        }
-    }
 }

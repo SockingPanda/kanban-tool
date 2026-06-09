@@ -1,0 +1,138 @@
+name: Full CI
+
+on:
+  push:
+    branches:
+      - main
+      - "**full-ci**"
+  workflow_dispatch:
+
+concurrency:
+  group: full-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-default:
+    name: Rust default workspace
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --check
+      - name: Test workspace
+        run: cargo test --workspace
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  rust-features:
+    name: Rust feature matrix (${{ matrix.features }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        features:
+          - tantivy-backend
+          - graph-oxigraph
+          - vector-lancedb
+          - tantivy-backend,graph-oxigraph,vector-lancedb
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Test workspace with features
+        run: cargo test --workspace --features '${{ matrix.features }}'
+      - name: Clippy workspace with features
+        run: cargo clippy --workspace --all-targets --features '${{ matrix.features }}' -- -D warnings
+
+  desktop:
+    name: Desktop build and Tauri
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Linux webkit dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+        working-directory: .
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
+      - name: Build web assets
+        run: pnpm build
+      - name: Build Tauri app
+        run: pnpm tauri build
+
+  smoke:
+    name: Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Run V1 smoke script
+        if: ${{ hashFiles('scripts/smoke-v1-local.sh') != '' }}
+        run: bash scripts/smoke-v1-local.sh
+      - name: No smoke script
+        if: ${{ hashFiles('scripts/smoke-v1-local.sh') == '' }}
+        run: echo "No smoke script found"
+
+  full-ci-result:
+    name: Full CI result
+    needs:
+      - rust-default
+      - rust-features
+      - desktop
+      - smoke
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required jobs
+        run: |
+          for result in \
+            '${{ needs.rust-default.result }}' \
+            '${{ needs.rust-features.result }}' \
+            '${{ needs.desktop.result }}' \
+            '${{ needs.smoke.result }}'
+          do
+            case "$result" in
+              success) ;;
+              *) echo "A full CI job finished with result: $result"; exit 1 ;;
+            esac
+          done
+          echo "Full CI passed"

@@ -1,0 +1,326 @@
+pub use std::{
+    path::Path,
+    sync::{Arc, Barrier},
+    thread,
+    time::Duration,
+};
+
+pub use kanban_core::{KanbanError, TaskStatus, new_run_id};
+pub use kanban_sqlite::{
+    BoardListOptions, CreateBoard, CreateTask, DispatchOptions, FinishPolicy, TaskPatch,
+    add_dependency, archive_board, archive_task, begin_database_replace, begin_database_runtime,
+    block_task, build_context_pack, claim_task, complete_task, connect_file, create_board,
+    create_comment, create_task, derived_store_statuses, dispatch_once, doctor_database, get_board,
+    get_run_by_id_global, get_task, init_database, list_board_columns, list_boards, list_comments,
+    list_dependencies, list_events, list_outbox, list_runs, list_tasks, promote_task, search_tasks,
+    set_task_retry_policy_by_id, specify_task, unblock_task, update_task,
+};
+#[cfg(feature = "vector-lancedb")]
+pub use kanban_sqlite::{rebuild_vector_store_with, sync_vector_store_with};
+#[cfg(feature = "vector-lancedb")]
+pub use kanban_vector::{
+    EmbeddingChunk, VectorError, VectorHit, VectorQuery, VectorStore, VectorStoreStatus,
+};
+pub use rusqlite::{Connection, params};
+
+pub struct TempDb {
+    pub dir: std::path::PathBuf,
+    pub path: std::path::PathBuf,
+}
+
+impl TempDb {
+    pub fn new(name: &str) -> Self {
+        let mut dir = std::env::temp_dir();
+        dir.push(format!("kb-sqlite-all-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("kb.db");
+        Self { dir, path }
+    }
+}
+
+impl Drop for TempDb {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+impl AsRef<Path> for TempDb {
+    fn as_ref(&self) -> &Path {
+        &self.path
+    }
+}
+
+#[cfg(any(
+    feature = "graph-oxigraph",
+    feature = "tantivy-backend",
+    feature = "vector-lancedb"
+))]
+pub fn insert_board(path: &Path, slug: &str, id: &str) {
+    connect_file(path)
+        .unwrap()
+        .execute(
+            "INSERT INTO boards(id, slug, name, description, created_at, updated_at, archived_at) VALUES (?1, ?2, ?3, NULL, 1, 1, NULL)",
+            params![id, slug, slug],
+        )
+        .unwrap();
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[derive(Default)]
+pub struct RecordingVectorStore {
+    embedding_model: Option<String>,
+    live_chunks: std::sync::Mutex<Vec<EmbeddingChunk>>,
+    upserted: std::sync::Mutex<Vec<String>>,
+    upserted_models: std::sync::Mutex<Vec<String>>,
+    deleted: std::sync::Mutex<Vec<String>>,
+    deleted_boards: std::sync::Mutex<Vec<String>>,
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl RecordingVectorStore {
+    pub fn with_embedding_model(embedding_model: &str) -> Self {
+        Self {
+            embedding_model: Some(embedding_model.to_owned()),
+            ..Self::default()
+        }
+    }
+
+    pub fn expected_model(&self) -> &str {
+        self.embedding_model
+            .as_deref()
+            .unwrap_or(kanban_vector::DEFAULT_EMBEDDING_MODEL)
+    }
+
+    pub fn upserted_texts(&self) -> Vec<String> {
+        self.upserted.lock().unwrap().clone()
+    }
+
+    pub fn upserted_models(&self) -> Vec<String> {
+        self.upserted_models.lock().unwrap().clone()
+    }
+
+    pub fn deleted_entity_uris(&self) -> Vec<String> {
+        self.deleted.lock().unwrap().clone()
+    }
+
+    pub fn deleted_board_ids(&self) -> Vec<String> {
+        self.deleted_boards.lock().unwrap().clone()
+    }
+
+    pub fn live_texts(&self) -> Vec<String> {
+        self.live_chunks
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|chunk| chunk.text.clone())
+            .collect()
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl VectorStore for RecordingVectorStore {
+    fn chunk_embedding_model(&self) -> &str {
+        self.expected_model()
+    }
+
+    fn status(&self) -> VectorStoreStatus {
+        VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store".to_owned(),
+        }
+    }
+
+    fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
+        if let Some(chunk) = chunks
+            .iter()
+            .find(|chunk| chunk.embedding_model != self.expected_model())
+        {
+            return Err(VectorError::EmbeddingModelMismatch {
+                expected: self.expected_model().to_owned(),
+                actual: chunk.embedding_model.clone(),
+            });
+        }
+        let mut upserted = self.upserted.lock().unwrap();
+        upserted.extend(chunks.iter().map(|chunk| chunk.text.clone()));
+        let mut upserted_models = self.upserted_models.lock().unwrap();
+        upserted_models.extend(chunks.iter().map(|chunk| chunk.embedding_model.clone()));
+        let mut live_chunks = self.live_chunks.lock().unwrap();
+        for chunk in chunks {
+            live_chunks.retain(|live| live.chunk_key() != chunk.chunk_key());
+            live_chunks.push(chunk.clone());
+        }
+        Ok(())
+    }
+
+    fn delete_board(&self, board_id: &str) -> Result<(), VectorError> {
+        let mut deleted_boards = self.deleted_boards.lock().unwrap();
+        deleted_boards.push(board_id.to_owned());
+        self.live_chunks
+            .lock()
+            .unwrap()
+            .retain(|chunk| chunk.board_id.as_deref() != Some(board_id));
+        Ok(())
+    }
+
+    fn delete_entities(&self, entity_uris: &[String]) -> Result<(), VectorError> {
+        let mut deleted = self.deleted.lock().unwrap();
+        deleted.extend(entity_uris.iter().cloned());
+        self.live_chunks.lock().unwrap().retain(|chunk| {
+            !entity_uris
+                .iter()
+                .any(|entity_uri| entity_uri == chunk.chunk.entity_uri.as_str())
+        });
+        Ok(())
+    }
+
+    fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
+        Ok(Vec::new())
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+pub struct FailingVectorStore;
+
+#[cfg(feature = "vector-lancedb")]
+impl VectorStore for FailingVectorStore {
+    fn status(&self) -> VectorStoreStatus {
+        VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store".to_owned(),
+        }
+    }
+
+    fn upsert(&self, _chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
+        Err(VectorError::DimensionMismatch {
+            expected: 3,
+            actual: 2,
+        })
+    }
+
+    fn delete_board(&self, _board_id: &str) -> Result<(), VectorError> {
+        Ok(())
+    }
+
+    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), VectorError> {
+        Ok(())
+    }
+
+    fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
+        Ok(Vec::new())
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+pub struct QueryFailingVectorStore;
+
+#[cfg(feature = "vector-lancedb")]
+impl VectorStore for QueryFailingVectorStore {
+    fn status(&self) -> VectorStoreStatus {
+        VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store".to_owned(),
+        }
+    }
+
+    fn upsert(&self, _chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
+        Ok(())
+    }
+
+    fn delete_board(&self, _board_id: &str) -> Result<(), VectorError> {
+        Ok(())
+    }
+
+    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), VectorError> {
+        Ok(())
+    }
+
+    fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
+        Err(VectorError::Store("query exploded".to_owned()))
+    }
+}
+
+#[cfg(feature = "tantivy-backend")]
+pub fn tantivy_outbox_statuses_for_board(path: &Path, board_slug: &str) -> Vec<String> {
+    let conn = connect_file(path).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT io.status              FROM index_outbox io              JOIN task_events e ON e.id=io.source_event_id              JOIN boards b ON b.id=e.board_id              WHERE b.slug=?1 AND io.target='tantivy'              ORDER BY io.id ASC",
+        )
+        .unwrap();
+    stmt.query_map([board_slug], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap()
+}
+
+#[cfg(feature = "graph-oxigraph")]
+pub fn graph_outbox_statuses_for_board(path: &Path, board_slug: &str) -> Vec<String> {
+    let conn = connect_file(path).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT io.status              FROM index_outbox io              JOIN task_events e ON e.id=io.source_event_id              JOIN boards b ON b.id=e.board_id              WHERE b.slug=?1 AND io.target='oxigraph'              ORDER BY io.id ASC",
+        )
+        .unwrap();
+    stmt.query_map([board_slug], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap()
+}
+
+#[cfg(feature = "vector-lancedb")]
+pub fn lancedb_outbox_statuses_for_board(path: &Path, board_slug: &str) -> Vec<String> {
+    let conn = connect_file(path).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT io.status              FROM index_outbox io              JOIN task_events e ON e.id=io.source_event_id              JOIN boards b ON b.id=e.board_id              WHERE b.slug=?1 AND io.target='lancedb'              ORDER BY io.id ASC",
+        )
+        .unwrap();
+    stmt.query_map([board_slug], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap()
+}
+
+pub fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
+}
+
+pub fn set_retry_policy(path: &Path, task_id: &str, max_retries: i64) {
+    connect_file(path)
+        .unwrap()
+        .execute(
+            "UPDATE tasks SET max_retries=?1 WHERE id=?2",
+            rusqlite::params![max_retries, task_id],
+        )
+        .unwrap();
+}
+
+pub fn mark_task_running_in_current_tx(conn: &Connection, task_id: &str) {
+    let run_id = new_run_id();
+    let now = now_ms();
+    let claim_token = format!("token-{task_id}");
+    let (board_id, claim_owner): (String, String) = conn
+        .query_row(
+            "SELECT board_id, 'worker' FROM tasks WHERE id=?1",
+            [task_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    conn.execute(
+        "UPDATE tasks SET status='running', claim_token=?1, claim_owner=?2, claim_expires_at=?3, last_heartbeat_at=?4, started_at=COALESCE(started_at, ?4), current_run_id=?5, updated_at=?4, lock_version=lock_version+1 WHERE id=?6",
+        params![claim_token, claim_owner, now + 300_000, now, run_id, task_id],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO task_runs(id, board_id, task_id, status, worker_profile, claim_token, claim_owner, claim_expires_at, started_at, last_heartbeat_at, metadata_json) VALUES (?1, ?2, ?3, 'running', 'test', ?4, ?5, ?6, ?7, ?7, '{}')",
+        params![run_id, board_id, task_id, claim_token, claim_owner, now + 300_000, now],
+    )
+    .unwrap();
+}

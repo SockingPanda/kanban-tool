@@ -183,8 +183,11 @@ CLI 是一等入口，必须覆盖核心生命周期：
 ```bash
 kb init
 kb board list
+kb board create agent-work --name "Agent Work"
+kb board use agent-work
 kb task create "实现 SQLite schema"
 kb task list --status ready
+kb task show agent-work#1
 kb task show t_xxx
 kb task start t_xxx
 kb task heartbeat t_xxx --claim-token <token>
@@ -202,9 +205,11 @@ CLI 必须支持：
 
 - `--json`：机器可读输出。
 - `--db <path>`：指定 SQLite DB。
-- `--board <slug>`：指定 board。
+- `--board <slug-or-id>`：显式指定 active board。
 - `--actor <name>`：覆盖 actor。
 - 稳定退出码。
+
+Active board 选择顺序是 `--board`、`KB_BOARD`、最近 `.kb/config.toml`、`default`。`kb board use <board>` 写入项目级 `.kb/config.toml`，但仍使用同一个全局 SQLite DB。Task ref 必须支持全局 `t_...`、当前 board 的裸 seq / `#seq`、以及显式 `board#seq` / `board/#seq`；CLI 和 API 输出应带可复制的 `board_slug#seq` ref。
 
 CLI 见 [`CLI_SPEC.md`](CLI_SPEC.md)。
 
@@ -238,8 +243,10 @@ Dispatcher 见 [`DISPATCHER_SPEC.md`](DISPATCHER_SPEC.md)。
 6. 有未完成 parent 的 child 不得进入 `ready/running`。
 7. `archived` task 不参与默认 list、promotion、claim。
 8. `done` 和 `archived` 是 terminal-like 状态；默认不再被 dispatcher 修改。
-9. 每次状态变化必须写 `task_events`。
-10. task snapshot 与对应 event 必须同 transaction 提交。
+9. Archived board 不接受普通 task/comment/dispatcher 写入；只读 events/runs/comments 历史仍可审计。
+10. Board archive 不会改变 task 状态；如果 board 上仍有 `running` task/run，必须拒绝 archive。
+11. 每次状态变化必须写 `task_events`。
+12. task snapshot 与对应 event 必须同 transaction 提交。
 
 ---
 

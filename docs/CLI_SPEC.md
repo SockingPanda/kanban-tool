@@ -15,12 +15,18 @@ kb [GLOBAL_OPTIONS] <COMMAND>
 | Option | 说明 |
 |---|---|
 | `--db <path>` | 指定 SQLite DB。默认从 config 读取。 |
-| `--board <slug>` | 指定 board。默认 `default`。 |
+| `--board <slug-or-id>` | 显式指定 active board，优先级最高。 |
 | `--actor <name>` | 操作 actor。默认 OS username。 |
 | `--json` | JSON 输出。 |
-| `--no-color` | 禁用颜色。 |
-| `--config <path>` | 指定 config.toml。 |
-| `-v/--verbose` | 输出调试信息。 |
+
+Active board 解析顺序：
+
+1. `--board <slug-or-id>`。
+2. `KB_BOARD` 环境变量。
+3. 从当前目录向上查找最近的 `.kb/config.toml`，读取 `board = "<slug>"`。
+4. fallback 到 `default`。
+
+`kb board use <board>` 会把当前目录写成项目级 `.kb/config.toml`；后续子目录自动继承该 active board。该配置只选择本地项目的 board，不创建新 DB。
 
 ---
 
@@ -77,13 +83,13 @@ JSON：
 ### 4.1 List boards
 
 ```bash
-kb board list
+kb board list [--include-archived]
 ```
 
 ### 4.2 Create board
 
 ```bash
-kb board create <slug> --name <name>
+kb board create <slug> --name <name> [--description <text>]
 ```
 
 Example：
@@ -98,11 +104,35 @@ kb board create agent-work --name "Agent Work"
 kb board show <slug>
 ```
 
-### 4.4 Archive board
+### 4.4 Use board
+
+```bash
+kb board use <slug-or-id>
+```
+
+Writes:
+
+```toml
+board = "agent-work"
+```
+
+to `.kb/config.toml` in the current directory.
+
+### 4.5 Current board
+
+```bash
+kb board current
+```
+
+Shows the resolved active board after applying `--board`, `KB_BOARD`, project config, and fallback precedence.
+
+### 4.6 Archive board
 
 ```bash
 kb board archive <slug>
 ```
+
+Archived boards are hidden from `kb board list` unless `--include-archived` is passed. Ordinary task writes against archived boards are rejected. Audit history remains readable through task/event/run/comment history commands when the task or board can be resolved explicitly. Archiving a board with active `running` work is rejected; finish, block, or reclaim that work first.
 
 ---
 
@@ -119,29 +149,25 @@ Options：
 | Option | 说明 |
 |---|---|
 | `--description <text>` | Markdown 描述。 |
-| `--file <path>` | 从文件读取描述。 |
 | `--status <status>` | 显式初始状态：triage/todo/scheduled/ready。 |
 | `--assignee <name>` | assignee/worker profile。 |
 | `--priority <int>` | 优先级，默认 0。 |
-| `--scheduled-at <datetime>` | 计划时间。 |
-| `--due-at <datetime>` | 截止时间。 |
+| `--scheduled-at <epoch_ms>` | 计划时间，Unix epoch milliseconds。 |
+| `--due-at <epoch_ms>` | 截止时间，Unix epoch milliseconds。 |
 | `--max-retries <n>` | worker 失败或 reclaim 后最多重试次数。 |
-| `--depends-on <task_id>` | 添加 parent dependency，可重复。 |
-| `--label <name>` | 添加 label，可重复。 |
 | `--metadata <json>` | 扩展 JSON。 |
 
 Examples：
 
 ```bash
 kb task create "实现状态机" --priority 10
-kb task create "跑集成测试" --depends-on t_01HXABC
-kb task create "明早检查报告" --scheduled-at "2026-06-05T09:00:00-07:00"
+kb task create "明早检查报告" --scheduled-at 1780640400000
 ```
 
 Human output：
 
 ```text
-Created task #12 t_01HX... [ready] 实现状态机
+agent-work#12 t_01HX... [ready] 实现状态机
 ```
 
 JSON output：
@@ -150,6 +176,9 @@ JSON output：
 {
   "data": {
     "id": "t_01HX...",
+    "board_id": "b_01HX...",
+    "board_slug": "agent-work",
+    "ref": "agent-work#12",
     "seq": 12,
     "status": "ready",
     "title": "实现状态机"
@@ -169,7 +198,6 @@ Options：
 |---|---|
 | `--status <status>` | 按状态过滤，可重复。 |
 | `--assignee <name>` | 按 assignee。 |
-| `--label <name>` | 按 label。 |
 | `--search <query>` | title/description 模糊搜索。 |
 | `--include-archived` | 包含 archived。 |
 | `--limit <n>` | 限制数量。 |
@@ -192,16 +220,14 @@ kb task show <task_ref>
 
 `task_ref` 支持：
 
-- `t_...`
-- `#12`
+- `t_...`：全局 task id，忽略 active board。
+- `12`：当前 active board 内的 seq。
+- `#12`：当前 active board 内的 seq；shell 中需要引号，例如 `'#12'`。
+- `agent-work#12`：显式 board slug + seq。
+- `agent-work/#12`：兼容 alias/#seq 形式。
+- `b_01HX...#12`：显式 board id + seq。
 
-Options：
-
-| Option | 说明 |
-|---|---|
-| `--events` | 展示 event timeline。 |
-| `--comments` | 展示 comments。 |
-| `--runs` | 展示 run history。 |
+裸 `12` / `#12` 依赖 active board；显式 `board#seq` 和 `t_...` 可跨 active board 使用。跨 board dependency 在当前版本中会被拒绝。
 
 ### 5.4 Update task fields
 
@@ -225,7 +251,7 @@ kb task update <task_ref> [OPTIONS]
 Examples：
 
 ```bash
-kb task update #12 --priority 20
+kb task update 12 --priority 20
 kb task update t_01HX --description "新的规格"
 kb task update t_01HX --max-retries 2
 kb task update t_01HX --clear-max-retries
@@ -235,16 +261,7 @@ kb task update t_01HX --clear-max-retries
 
 ## 6. Transition Commands
 
-### 6.1 Specify
-
-```bash
-kb task specify <task_ref> --description <text>
-kb task specify <task_ref> --file spec.md
-```
-
-用于 `triage -> todo/scheduled/ready`。
-
-### 6.2 Promote
+### 6.1 Promote
 
 ```bash
 kb task promote <task_ref>
@@ -252,7 +269,7 @@ kb task promote <task_ref>
 
 手动尝试 `todo/scheduled -> ready`。
 
-### 6.3 Start / Claim
+### 6.2 Start / Claim
 
 ```bash
 kb task start <task_ref> [OPTIONS]
@@ -266,13 +283,11 @@ Options：
 | Option | 说明 |
 |---|---|
 | `--ttl-ms <ms>` | claim TTL。默认 300000。 |
-| `--worker-profile <name>` | worker profile。 |
 
 Output：
 
 ```text
-Claimed #12 t_01HX... as alice
-Claim token: ct_...
+Claimed t_01HX... token=ct_01HX...
 ```
 
 JSON：
@@ -288,7 +303,7 @@ JSON：
 }
 ```
 
-### 6.4 Heartbeat
+### 6.3 Heartbeat
 
 ```bash
 kb task heartbeat <task_ref> --claim-token <token>
@@ -299,9 +314,8 @@ Options：
 | Option | 说明 |
 |---|---|
 | `--ttl-ms <ms>` | 延长 TTL。 |
-| `--note <text>` | 可选备注。 |
 
-### 6.5 Done / Complete
+### 6.4 Done / Complete
 
 ```bash
 kb task done <task_ref> --claim-token <token>
@@ -312,19 +326,18 @@ Options：
 
 | Option | 说明 |
 |---|---|
-| `--summary <text>` | 完成摘要。 |
-| `--result-json <json>` | 结构化结果。 |
+| `--claim-token <token>` | active claim token。 |
 | `--force` | 强制完成 running task；仅本地人工修复使用。 |
 
-### 6.6 Submit Review
+### 6.5 Submit Review
 
 ```bash
-kb task review <task_ref> --claim-token <token> --summary <text>
+kb task review <task_ref> --claim-token <token>
 ```
 
 使 task 从 `running` 到 `review`。
 
-### 6.7 Block
+### 6.6 Block
 
 ```bash
 kb task block <task_ref> <reason>
@@ -337,7 +350,7 @@ Options：
 | `--claim-token <token>` | running task block 时需要。 |
 | `--force` | 强制 block。 |
 
-### 6.8 Unblock
+### 6.7 Unblock
 
 ```bash
 kb task unblock <task_ref>
@@ -345,21 +358,16 @@ kb task unblock <task_ref>
 
 不会盲目进入 ready，而是根据 spec、schedule、dependencies 重新计算目标状态。
 
-### 6.9 Reclaim
+### 6.8 Reclaim
 
 ```bash
-kb task reclaim <task_ref>
 kb task reclaim --expired
+kb task reclaim
 ```
 
-Options：
+当前 CLI reclaim 处理 active board 内 expired claims；裸 `kb task reclaim` 与 `kb task reclaim --expired` 等价。
 
-| Option | 说明 |
-|---|---|
-| `--force` | 强制 reclaim running task。 |
-| `--to blocked|ready` | 指定目标状态。 |
-
-### 6.10 Archive
+### 6.9 Archive
 
 ```bash
 kb task archive <task_ref>
@@ -381,48 +389,26 @@ kb dep remove <parent_ref> <child_ref>
 kb dep list <task_ref>
 ```
 
-Alias：
-
-```bash
-kb task link <parent_ref> <child_ref>
-kb task unlink <parent_ref> <child_ref>
-```
-
 添加 dependency 后：
 
 - 如果 child 当前是 `ready` 且 parent 未完成，child 降级为 `todo`。
 - 如果产生环，返回 exit code 6 或 invalid input。
+- 当前版本拒绝跨 board dependency，即使 parent/child 通过全局 `t_...` 或显式 `board#seq` 解析成功。
 
 ---
 
-## 8. Comment Commands
-
-```bash
-kb comment add <task_ref> <body>
-kb comment list <task_ref>
-```
-
-也可：
-
-```bash
-kb task comment <task_ref> <body>
-```
-
----
-
-## 9. Event Commands
+## 8. Event Commands
 
 ```bash
 kb events <task_ref>
-kb events --board default --after 120
-kb events watch --board default
+kb events --board default
 ```
 
-`watch` 持续输出新 events。
+不传 `<task_ref>` 时按 active board 列出 events。Archived board 的 events 仍可通过显式 `--board` 读取。
 
 ---
 
-## 10. Run Commands
+## 9. Run Commands
 
 ```bash
 kb runs <task_ref>
@@ -435,12 +421,10 @@ kb run logs <run_id> --tail-bytes 65536
 
 ---
 
-## 11. Dispatcher / Server Commands
+## 10. Dispatcher / Server Commands
 
 ```bash
 kb serve
-kb serve --open
-kb serve --dispatcher
 kb serve --search-sync-interval-ms 5000
 
 kb dispatch
@@ -465,9 +449,9 @@ calls `sync_search_index` every `--search-sync-interval-ms` milliseconds
 
 ---
 
-## 12. Search Commands
+## 11. Search Commands
 
-### 12.1 `kb search`
+### 11.1 `kb search`
 
 ```bash
 kb search <query> [--status ready] [--status review] [--assignee worker-a] [--include-archived] [--limit 20] [--offset 0] [--json]
@@ -511,7 +495,7 @@ JSON output:
 }
 ```
 
-### 12.2 `kb index`
+### 11.2 `kb index`
 
 ```bash
 kb index status
@@ -552,7 +536,7 @@ Background sync errors do not make search fail open to stale Tantivy results; th
 
 ---
 
-## 13. Maintenance Commands
+## 12. Maintenance Commands
 
 ```bash
 kb doctor
@@ -584,7 +568,7 @@ kb context build t_... [--lexical-limit 5]
 
 `kb derived status` 中的 `last_event_id` 是 store 级成功处理水位，不是当前 board 的局部水位。`dirty=true` 表示该 store 仍有任意 board 的 pending/running/failed outbox，或最近一次派生更新失败；board-scoped `kb index sync`、`kb graph sync`、`kb vector sync` 只清理当前 board 的 job，不能因为本 board clean 就强制清掉全局 dirty。
 
-### 13.1 `kb doctor`
+### 12.1 `kb doctor`
 
 检查：
 
@@ -608,7 +592,7 @@ kb context build t_... [--lexical-limit 5]
 
 ---
 
-## 14. JSON Output Contract
+## 13. JSON Output Contract
 
 成功：
 

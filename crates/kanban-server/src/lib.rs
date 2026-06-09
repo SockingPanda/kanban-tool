@@ -1302,17 +1302,18 @@ async fn get_run_log(
         .log_path
         .as_deref()
         .ok_or_else(|| KanbanError::NotFound(format!("run log {run_id}")))?;
-    let bytes = fs::read(log_path).map_err(|error| match error.kind() {
+    let path = kanban_sqlite::resolve_run_log_path(state.db_path(), &run_id, log_path)?;
+    let bytes = fs::read(path).map_err(|error| match error.kind() {
         std::io::ErrorKind::NotFound => KanbanError::NotFound(format!("run log {run_id}")),
         _ => KanbanError::Storage(error.to_string()),
     })?;
     let truncated = bytes.len() > MAX_RUN_LOG_BYTES;
-    let bytes = if truncated {
-        &bytes[..MAX_RUN_LOG_BYTES]
+    let start = if truncated {
+        bytes.len() - MAX_RUN_LOG_BYTES
     } else {
-        &bytes[..]
+        0
     };
-    let content = String::from_utf8_lossy(bytes).into_owned();
+    let content = String::from_utf8_lossy(&bytes[start..]).into_owned();
     Ok(Json(Envelope {
         data: RunLogDto {
             run_id,

@@ -299,6 +299,63 @@ fn dispatch_loop_uses_worker_profile_config_and_respects_assignee_routing() {
 }
 
 #[test]
+fn dispatch_rejects_profile_log_dir_outside_trusted_roots() {
+    let temp = TempDb::new("dispatch_rejects_profile_log_dir_outside_trusted_roots");
+    kb(&temp.path, &["init"]).success();
+    let task = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "unsafe log root",
+            "--description",
+            "ready spec",
+            "--assignee",
+            "backend",
+        ],
+    )
+    .success_json();
+    let config = temp.dir.join("workers.toml");
+    let untrusted_logs = temp.dir.join("custom-logs");
+    std::fs::write(
+        &config,
+        format!(
+            "[workers.backend]\ncommand = \"sh -c 'true'\"\nclaim_ttl_ms = 60000\nheartbeat_interval_ms = 10\non_success = \"done\"\non_failure = \"blocked\"\nlog_dir = \"{}\"\n",
+            untrusted_logs.display()
+        ),
+    )
+    .unwrap();
+
+    kb(
+        &temp.path,
+        &[
+            "--json",
+            "dispatch",
+            "--worker-profile",
+            "backend",
+            "--profile-config",
+            config.to_str().unwrap(),
+            "--max-iterations",
+            "1",
+        ],
+    )
+    .failure_containing("outside allowed run log roots");
+
+    let task = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "show",
+            task["data"]["id"].as_str().unwrap(),
+        ],
+    )
+    .success_json();
+    assert_eq!(task["data"]["status"], "ready");
+}
+
+#[test]
 fn retry_policy_and_run_log_commands_support_operator_recovery() {
     let temp = TempDb::new("retry_policy_and_run_log_commands_support_operator_recovery");
     kb(&temp.path, &["init"]).success();
@@ -357,6 +414,46 @@ fn retry_policy_and_run_log_commands_support_operator_recovery() {
     assert_eq!(log["data"]["run_id"], run_id);
     assert_eq!(log["data"]["content"], "operator log\n");
     assert_eq!(log["data"]["truncated"], false);
+}
+
+#[test]
+fn run_log_command_rejects_suspicious_log_paths() {
+    let temp = TempDb::new("run_log_command_rejects_suspicious_log_paths");
+    kb(&temp.path, &["init"]).success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "suspicious log",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success();
+    let dispatch = kb(
+        &temp.path,
+        &[
+            "--json",
+            "dispatch",
+            "--once",
+            "--command",
+            "printf 'operator log\\n'",
+            "--log-dir",
+            temp.dir.join("logs").to_str().unwrap(),
+        ],
+    )
+    .success_json();
+    let run_id = dispatch["data"]["run_id"].as_str().unwrap();
+    kanban_sqlite::connect_file(&temp.path)
+        .unwrap()
+        .execute(
+            "UPDATE task_runs SET log_path=?1 WHERE id=?2",
+            ("/etc/passwd", run_id),
+        )
+        .unwrap();
+
+    kb(&temp.path, &["run", "logs", run_id]).failure_containing("suspicious run log path");
 }
 
 #[test]
@@ -1145,6 +1242,7 @@ fn maintenance_commands_backup_checkpoint_vacuum_export_and_import_jsonl() {
     let doctor = kb(&target.path, &["--json", "doctor"]).success_json();
     assert_eq!(doctor["data"]["ok"], true);
     assert_eq!(doctor["data"]["missing_run_logs"], 0);
+    assert_eq!(doctor["data"]["suspicious_run_log_paths"], 0);
     assert_eq!(doctor["data"]["executable_dependency_violations"], 0);
     assert_eq!(doctor["data"]["executable_spec_violations"], 0);
     assert_eq!(doctor["data"]["executable_schedule_violations"], 0);

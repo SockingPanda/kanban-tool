@@ -299,6 +299,63 @@ fn dispatch_loop_uses_worker_profile_config_and_respects_assignee_routing() {
 }
 
 #[test]
+fn dispatch_rejects_profile_log_dir_outside_trusted_roots() {
+    let temp = TempDb::new("dispatch_rejects_profile_log_dir_outside_trusted_roots");
+    kb(&temp.path, &["init"]).success();
+    let task = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "unsafe log root",
+            "--description",
+            "ready spec",
+            "--assignee",
+            "backend",
+        ],
+    )
+    .success_json();
+    let config = temp.dir.join("workers.toml");
+    let untrusted_logs = temp.dir.join("custom-logs");
+    std::fs::write(
+        &config,
+        format!(
+            "[workers.backend]\ncommand = \"sh -c 'true'\"\nclaim_ttl_ms = 60000\nheartbeat_interval_ms = 10\non_success = \"done\"\non_failure = \"blocked\"\nlog_dir = \"{}\"\n",
+            untrusted_logs.display()
+        ),
+    )
+    .unwrap();
+
+    kb(
+        &temp.path,
+        &[
+            "--json",
+            "dispatch",
+            "--worker-profile",
+            "backend",
+            "--profile-config",
+            config.to_str().unwrap(),
+            "--max-iterations",
+            "1",
+        ],
+    )
+    .failure_containing("outside allowed run log roots");
+
+    let task = kb(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "show",
+            task["data"]["id"].as_str().unwrap(),
+        ],
+    )
+    .success_json();
+    assert_eq!(task["data"]["status"], "ready");
+}
+
+#[test]
 fn retry_policy_and_run_log_commands_support_operator_recovery() {
     let temp = TempDb::new("retry_policy_and_run_log_commands_support_operator_recovery");
     kb(&temp.path, &["init"]).success();

@@ -3772,6 +3772,7 @@ pub fn dispatch_once(
 ) -> Result<DispatchResult> {
     validate_dispatch_options(&options)?;
     let path = path.as_ref();
+    validate_dispatch_log_dir(path.parent(), &options.log_dir)?;
     reclaim_expired(path, board, &options.actor)?;
     let conn = connect_file(path)?;
     let board_id = board_id(&conn, board)?;
@@ -3943,6 +3944,25 @@ fn validate_dispatch_options(options: &DispatchOptions) -> Result<()> {
     if options.heartbeat_interval_ms >= options.claim_ttl_ms {
         return Err(KanbanError::InvalidInput(
             "heartbeat_interval_ms must be less than claim_ttl_ms".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_dispatch_log_dir(db_dir: Option<&Path>, log_dir: &Path) -> Result<()> {
+    let Some(db_dir) = db_dir else {
+        return Err(KanbanError::InvalidInput(
+            "database path has no parent directory".into(),
+        ));
+    };
+    let normalized_log_dir = normalize_existing_aware(log_dir);
+    let allowed = allowed_run_log_roots(db_dir)
+        .iter()
+        .map(|root| normalize_existing_aware(root))
+        .any(|root| normalized_log_dir.starts_with(root));
+    if !allowed {
+        return Err(KanbanError::InvalidInput(
+            "dispatch log_dir is outside allowed run log roots".into(),
         ));
     }
     Ok(())
@@ -4630,12 +4650,7 @@ fn run_log_path_status_for_db_dir(
         db_dir.join(stored_path)
     };
     let normalized_candidate = normalize_existing_aware(&candidate);
-    let allowed_roots = [
-        kanban_local::default_log_dir().join("runs"),
-        db_dir.join("logs"),
-        db_dir.join(".kb").join("logs"),
-    ];
-    let allowed = allowed_roots
+    let allowed = allowed_run_log_roots(db_dir)
         .iter()
         .map(|root| normalize_existing_aware(root))
         .any(|root| normalized_candidate.starts_with(root));
@@ -4649,6 +4664,14 @@ fn run_log_path_status_for_db_dir(
     } else {
         RunLogPathStatus::Missing(normalized_candidate)
     }
+}
+
+fn allowed_run_log_roots(db_dir: &Path) -> [PathBuf; 3] {
+    [
+        kanban_local::default_log_dir().join("runs"),
+        db_dir.join("logs"),
+        db_dir.join(".kb").join("logs"),
+    ]
 }
 
 fn normalize_existing_aware(path: &Path) -> PathBuf {

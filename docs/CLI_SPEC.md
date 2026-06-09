@@ -431,7 +431,7 @@ kb run logs <run_id>
 kb run logs <run_id> --tail-bytes 65536
 ```
 
-`kb run logs` 默认最多读取 256 KiB。传 `--tail-bytes` 时只返回 log 末尾指定字节数。
+`kb run logs` 默认最多读取 256 KiB。传 `--tail-bytes` 时只返回 log 末尾指定字节数。`task_runs.log_path` 必须解析到受信任日志目录且文件名匹配 `<run_id>.log`；可疑路径会被拒绝。
 
 ---
 
@@ -453,7 +453,9 @@ kb dispatch --max-iterations 10 --poll-interval-ms 1000
 `kb dispatch` is a foreground loop. Use `--once` for one pass, or `--max-iterations`
 for bounded scripts/tests. `--profile-config` reads the selected `[workers.<name>]`
 section and can set `command`, `claim_ttl_ms`, `heartbeat_interval_ms`,
-`on_success`, `on_failure`, and `log_dir`.
+`on_success`, `on_failure`, and `log_dir`. Dispatcher log directories must be
+inside a trusted run-log root: the platform default run log directory,
+`<db_dir>/logs`, or `<db_dir>/.kb/logs`.
 
 `kb serve` starts a conservative background search sync loop when the binary is
 built with `tantivy-backend`. The loop makes one prompt startup attempt and then
@@ -593,6 +595,7 @@ kb context build t_... [--lexical-limit 5]
 - dependency cycle。
 - archived dependency edge。
 - 缺失 run log 文件。
+- 可疑 run log 路径。
 - `ready/running` task 带有未完成 parent dependency。
 - `ready/running` task 缺少可执行 spec。
 - `ready/running` task 带有未来 `scheduled_at`。

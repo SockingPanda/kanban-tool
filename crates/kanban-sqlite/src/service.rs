@@ -342,6 +342,7 @@ pub struct DoctorReport {
     pub dependency_cycles: i64,
     pub archived_dependency_edges: i64,
     pub missing_run_logs: i64,
+    pub suspicious_run_log_paths: i64,
     pub executable_dependency_violations: i64,
     pub executable_spec_violations: i64,
     pub executable_schedule_violations: i64,
@@ -363,6 +364,13 @@ pub struct CheckpointResult {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MaintenanceResult {
     pub ok: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunLogPathStatus {
+    Present(PathBuf),
+    Missing(PathBuf),
+    Suspicious { reason: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1424,6 +1432,7 @@ fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Result<Doctor
             dependency_cycles: 0,
             archived_dependency_edges: 0,
             missing_run_logs: 0,
+            suspicious_run_log_paths: 0,
             executable_dependency_violations: 0,
             executable_spec_violations: 0,
             executable_schedule_violations: 0,
@@ -1467,7 +1476,7 @@ fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Result<Doctor
             |row| row.get(0),
         )
         .map_err(storage)?;
-    let missing_run_logs = count_missing_run_logs(conn, db_dir)?;
+    let (missing_run_logs, suspicious_run_log_paths) = count_run_log_path_findings(conn, db_dir)?;
     let executable_dependency_violations = count_executable_dependency_violations(conn)?;
     let executable_spec_violations = count_executable_spec_violations(conn)?;
     let executable_schedule_violations = count_executable_schedule_violations(conn, now)?;
@@ -1488,6 +1497,7 @@ fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Result<Doctor
         && dependency_cycles == 0
         && archived_dependency_edges == 0
         && missing_run_logs == 0
+        && suspicious_run_log_paths == 0
         && executable_dependency_violations == 0
         && executable_spec_violations == 0
         && executable_schedule_violations == 0
@@ -1504,6 +1514,7 @@ fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Result<Doctor
         dependency_cycles,
         archived_dependency_edges,
         missing_run_logs,
+        suspicious_run_log_paths,
         executable_dependency_violations,
         executable_spec_violations,
         executable_schedule_violations,
@@ -3761,6 +3772,7 @@ pub fn dispatch_once(
 ) -> Result<DispatchResult> {
     validate_dispatch_options(&options)?;
     let path = path.as_ref();
+    validate_dispatch_log_dir(path.parent(), &options.log_dir)?;
     reclaim_expired(path, board, &options.actor)?;
     let conn = connect_file(path)?;
     let board_id = board_id(&conn, board)?;
@@ -3932,6 +3944,25 @@ fn validate_dispatch_options(options: &DispatchOptions) -> Result<()> {
     if options.heartbeat_interval_ms >= options.claim_ttl_ms {
         return Err(KanbanError::InvalidInput(
             "heartbeat_interval_ms must be less than claim_ttl_ms".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_dispatch_log_dir(db_dir: Option<&Path>, log_dir: &Path) -> Result<()> {
+    let Some(db_dir) = db_dir else {
+        return Err(KanbanError::InvalidInput(
+            "database path has no parent directory".into(),
+        ));
+    };
+    let normalized_log_dir = normalize_existing_aware(log_dir);
+    let allowed = allowed_run_log_roots(db_dir)
+        .iter()
+        .map(|root| normalize_existing_aware(root))
+        .any(|root| normalized_log_dir.starts_with(root));
+    if !allowed {
+        return Err(KanbanError::InvalidInput(
+            "dispatch log_dir is outside allowed run log roots".into(),
         ));
     }
     Ok(())
@@ -4517,21 +4548,26 @@ fn count_cyclic_components(nodes: &HashSet<String>, graph: &HashMap<String, Vec<
     tarjan.cycles
 }
 
-fn count_missing_run_logs(conn: &Connection, db_dir: Option<&Path>) -> Result<i64> {
+fn count_run_log_path_findings(conn: &Connection, db_dir: Option<&Path>) -> Result<(i64, i64)> {
     let mut stmt = conn
-        .prepare("SELECT log_path FROM task_runs WHERE log_path IS NOT NULL")
+        .prepare("SELECT id, log_path FROM task_runs WHERE log_path IS NOT NULL")
         .map_err(storage)?;
     let rows = stmt
-        .query_map([], |row| row.get::<_, String>(0))
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
         .map_err(storage)?;
     let mut missing = 0;
+    let mut suspicious = 0;
     for row in rows {
-        let path = row.map_err(storage)?;
-        if !run_log_path_exists(&path, db_dir) {
-            missing += 1;
+        let (run_id, path) = row.map_err(storage)?;
+        match run_log_path_status_for_db_dir(db_dir, &run_id, &path) {
+            RunLogPathStatus::Present(_) => {}
+            RunLogPathStatus::Missing(_) => missing += 1,
+            RunLogPathStatus::Suspicious { .. } => suspicious += 1,
         }
     }
-    Ok(missing)
+    Ok((missing, suspicious))
 }
 
 fn count_executable_dependency_violations(conn: &Connection) -> Result<i64> {
@@ -4568,15 +4604,110 @@ fn count_executable_schedule_violations(conn: &Connection, now: i64) -> Result<i
     .map_err(storage)
 }
 
-fn run_log_path_exists(path: &str, db_dir: Option<&Path>) -> bool {
-    let path = Path::new(path);
-    if path.exists() {
-        return true;
+pub fn resolve_run_log_path(
+    db_path: impl AsRef<Path>,
+    run_id: &str,
+    log_path: &str,
+) -> Result<PathBuf> {
+    match run_log_path_status(db_path, run_id, log_path) {
+        RunLogPathStatus::Present(path) => Ok(path),
+        RunLogPathStatus::Missing(_) => Err(KanbanError::NotFound(format!("run log {run_id}"))),
+        RunLogPathStatus::Suspicious { reason } => Err(KanbanError::InvalidInput(format!(
+            "suspicious run log path for {run_id}: {reason}"
+        ))),
     }
-    if path.is_relative() {
-        return db_dir.is_some_and(|db_dir| db_dir.join(path).exists());
+}
+
+pub fn run_log_path_status(
+    db_path: impl AsRef<Path>,
+    run_id: &str,
+    log_path: &str,
+) -> RunLogPathStatus {
+    run_log_path_status_for_db_dir(db_path.as_ref().parent(), run_id, log_path)
+}
+
+fn run_log_path_status_for_db_dir(
+    db_dir: Option<&Path>,
+    run_id: &str,
+    log_path: &str,
+) -> RunLogPathStatus {
+    let expected_name = format!("{run_id}.log");
+    let stored_path = Path::new(log_path);
+    if stored_path.file_name().and_then(|name| name.to_str()) != Some(expected_name.as_str()) {
+        return RunLogPathStatus::Suspicious {
+            reason: format!("expected log file name {expected_name}"),
+        };
     }
-    false
+
+    let Some(db_dir) = db_dir else {
+        return RunLogPathStatus::Suspicious {
+            reason: "database path has no parent directory".to_owned(),
+        };
+    };
+    let candidate = if stored_path.is_absolute() {
+        stored_path.to_path_buf()
+    } else {
+        db_dir.join(stored_path)
+    };
+    let normalized_candidate = normalize_existing_aware(&candidate);
+    let allowed = allowed_run_log_roots(db_dir)
+        .iter()
+        .map(|root| normalize_existing_aware(root))
+        .any(|root| normalized_candidate.starts_with(root));
+    if !allowed {
+        return RunLogPathStatus::Suspicious {
+            reason: "path is outside allowed run log roots".to_owned(),
+        };
+    }
+    if normalized_candidate.exists() {
+        RunLogPathStatus::Present(normalized_candidate)
+    } else {
+        RunLogPathStatus::Missing(normalized_candidate)
+    }
+}
+
+fn allowed_run_log_roots(db_dir: &Path) -> [PathBuf; 3] {
+    [
+        kanban_local::default_log_dir().join("runs"),
+        db_dir.join("logs"),
+        db_dir.join(".kb").join("logs"),
+    ]
+}
+
+fn normalize_existing_aware(path: &Path) -> PathBuf {
+    if let Ok(canonical) = fs::canonicalize(path) {
+        return canonical;
+    }
+    let mut missing = Vec::new();
+    let mut ancestor = path;
+    while let Some(parent) = ancestor.parent() {
+        if let Some(name) = ancestor.file_name() {
+            missing.push(name.to_owned());
+        }
+        if let Ok(canonical_parent) = fs::canonicalize(parent) {
+            let mut normalized = canonical_parent;
+            for component in missing.iter().rev() {
+                normalized.push(component);
+            }
+            return lexical_normalize(&normalized);
+        }
+        ancestor = parent;
+    }
+    lexical_normalize(path)
+}
+
+fn lexical_normalize(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+    normalized
 }
 
 fn assert_database_idle_for_replace(path: &Path) -> Result<()> {

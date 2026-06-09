@@ -83,6 +83,10 @@ log_dir = ".kb/logs/runs"
 - `on_failure`: `done|review|blocked|ready`
 - `log_dir`
 
+`log_dir` 必须位于受信任 run log 根目录内：平台默认 run log 目录、
+`<db_dir>/logs`，或 `<db_dir>/.kb/logs`。Dispatcher 在 claim task 之前拒绝
+其他路径，避免写出后续 `kb run logs` 和 `doctor` 会判定为可疑的 run log。
+
 ---
 
 ## 3. Dispatcher Loop

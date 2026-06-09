@@ -10,9 +10,9 @@ use kanban_sqlite::{
     CreateTask, DispatchOptions, FinishPolicy, TaskPatch, add_dependency, archive_task,
     begin_database_replace, begin_database_runtime, block_task, build_context_pack, claim_task,
     complete_task, connect_file, create_comment, create_task, derived_store_statuses,
-    dispatch_once, doctor_database, get_task, init_database, list_dependencies, list_events,
-    list_outbox, list_runs, list_tasks, promote_task, rebuild_vector_store_with, search_tasks,
-    sync_vector_store_with, unblock_task, update_task,
+    dispatch_once, doctor_database, get_run_by_id_global, get_task, init_database,
+    list_dependencies, list_events, list_outbox, list_runs, list_tasks, promote_task,
+    rebuild_vector_store_with, search_tasks, sync_vector_store_with, unblock_task, update_task,
 };
 use kanban_vector::{
     EmbeddingChunk, VectorError, VectorHit, VectorQuery, VectorStore, VectorStoreStatus,
@@ -2743,6 +2743,49 @@ fn dispatch_once_runs_ready_task_and_records_log() {
 }
 
 #[test]
+fn dispatch_once_rejects_untrusted_log_dir_before_claiming() {
+    let temp = TempDb::new("dispatch_once_rejects_untrusted_log_dir_before_claiming");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("untrusted log dir"),
+    )
+    .unwrap();
+
+    let err = dispatch_once(
+        &temp.path,
+        "default",
+        DispatchOptions {
+            actor: "dispatcher".into(),
+            command: "printf should-not-run".into(),
+            worker_profile: "default".into(),
+            claim_ttl_ms: 300_000,
+            heartbeat_interval_ms: 30_000,
+            on_success: FinishPolicy::Done,
+            on_failure: FinishPolicy::Blocked,
+            log_dir: temp.dir.join("custom-logs"),
+        },
+    )
+    .unwrap_err();
+
+    assert!(
+        err.to_string().contains("outside allowed run log roots"),
+        "{err}"
+    );
+    assert_eq!(
+        get_task(&temp.path, "default", &task.id).unwrap().status,
+        TaskStatus::Ready
+    );
+    assert!(
+        list_runs(&temp.path, "default", Some(&task.id))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn doctor_resolves_legacy_relative_run_log_paths_against_database_dir() {
     let temp = TempDb::new("doctor_resolves_legacy_relative_run_log_paths_against_database_dir");
     init_database(&temp.path, "tester").unwrap();
@@ -2788,6 +2831,82 @@ fn doctor_resolves_legacy_relative_run_log_paths_against_database_dir() {
 
     assert_eq!(report.missing_run_logs, 0);
     assert!(report.ok);
+}
+
+#[test]
+fn doctor_counts_suspicious_run_log_paths_separately_from_missing_allowed_logs() {
+    let temp = TempDb::new("doctor_counts_suspicious_run_log_paths_separately");
+    init_database(&temp.path, "tester").unwrap();
+    let suspicious_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("suspicious log path"),
+    )
+    .unwrap();
+    let missing_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("missing log path"),
+    )
+    .unwrap();
+    let log_dir = temp.dir.join("logs");
+    let suspicious = dispatch_once(
+        &temp.path,
+        "default",
+        DispatchOptions {
+            actor: "dispatcher".into(),
+            command: "printf suspicious".into(),
+            worker_profile: "default".into(),
+            claim_ttl_ms: 300_000,
+            heartbeat_interval_ms: 30_000,
+            on_success: FinishPolicy::Done,
+            on_failure: FinishPolicy::Blocked,
+            log_dir: log_dir.clone(),
+        },
+    )
+    .unwrap();
+    let missing = dispatch_once(
+        &temp.path,
+        "default",
+        DispatchOptions {
+            actor: "dispatcher".into(),
+            command: "printf missing".into(),
+            worker_profile: "default".into(),
+            claim_ttl_ms: 300_000,
+            heartbeat_interval_ms: 30_000,
+            on_success: FinishPolicy::Done,
+            on_failure: FinishPolicy::Blocked,
+            log_dir,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        suspicious.task_id.as_deref(),
+        Some(suspicious_task.id.as_str())
+    );
+    assert_eq!(missing.task_id.as_deref(), Some(missing_task.id.as_str()));
+    let suspicious_run_id = suspicious.run_id.unwrap();
+    let missing_run_id = missing.run_id.unwrap();
+    let missing_log_path = get_run_by_id_global(&temp.path, &missing_run_id)
+        .unwrap()
+        .log_path
+        .unwrap();
+    std::fs::remove_file(missing_log_path).unwrap();
+    connect_file(&temp.path)
+        .unwrap()
+        .execute(
+            "UPDATE task_runs SET log_path=?1 WHERE id=?2",
+            params!["/etc/passwd", suspicious_run_id],
+        )
+        .unwrap();
+
+    let report = doctor_database(&temp.path).unwrap();
+
+    assert!(!report.ok);
+    assert_eq!(report.missing_run_logs, 1);
+    assert_eq!(report.suspicious_run_log_paths, 1);
 }
 
 #[test]

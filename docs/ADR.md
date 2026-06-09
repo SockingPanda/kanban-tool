@@ -302,6 +302,14 @@ SQLite 继续作为 operational source of truth。新增：
 
 Tantivy、Oxigraph、LanceDB 都是可重建 derived stores，不参与状态机事务。
 
+`derived_store_state` 的语义是 store 全局状态，不是 board 局部状态：
+
+- `last_event_id` 表示该 store 已成功处理并提交的全局 task event 高水位。成功 sync/rebuild 只能把它单调推进，不能倒退。
+- `dirty=true` 表示该 store 仍有未完成 outbox、失败 outbox 或最近一次派生更新失败；即使某个 board 已 sync/rebuild 完成，其他 board 仍有 pending/failed job 时也必须保持 dirty。
+- board-scoped sync/rebuild 只清理当前 board 的 outbox job；是否把 `dirty` 置回 false 取决于同一 store target 是否还存在任何 board 的 unfinished outbox。
+- `last_error` 记录最近一次 store 级失败证据。成功处理会清除 `last_error`，失败会保持 `dirty=true` 并保留/标记相关 outbox 失败状态。
+- `index_outbox` 是恢复和重放入口；`derived_store_state` 是 operator health/watermark 摘要。两者都不能使派生层成为事实源。
+
 ### Consequences
 
 优点：

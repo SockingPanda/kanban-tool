@@ -373,9 +373,80 @@ MVP：一个 status 对应一个 column。
 
 ---
 
-## 13. 常用查询
+## 13. Knowledge Substrate
 
-### 13.1 Board task list
+Knowledge Substrate 表只支持实体身份、关系镜像、派生 outbox 和派生 store 健康状态。SQLite task/run/comment/event 仍是 operational source of truth。
+
+### 13.1 Entity registry
+
+表：`entities`
+
+字段：
+
+| 字段 | 说明 |
+|---|---|
+| `uri` | 稳定 `kb://...` entity URI。 |
+| `kind` | `task` / `run` / `comment` / `artifact` / `skill` / `project`。 |
+| `source_table` | 来源 SQLite 表。 |
+| `source_id` | 来源 row id。 |
+| `board_id` | 可选 board scope。 |
+| `task_id` | 可选 task scope。 |
+| `title` | 展示标题。 |
+| `summary` | 简短摘要。 |
+| `content_hash` | 内容 hash，用于派生层判断变化。 |
+| `created_at` / `updated_at` / `archived_at` | 生命周期时间。 |
+
+### 13.2 Relation graph mirror
+
+表：`relation_predicates`、`entity_relations`
+
+`relation_predicates` 定义受控 predicate；`entity_relations` 存可重建关系镜像。关系层用于 graph/context 查询，不改变 task 状态机。状态机仍以 `tasks.status`、`task_dependencies` 和 service transaction 为准。
+
+### 13.3 Index outbox
+
+表：`index_outbox`
+
+字段：
+
+| 字段 | 说明 |
+|---|---|
+| `id` | 自增 job id。 |
+| `source_event_id` | 来源 `task_events.id`，允许事件被删除/导入时置空。 |
+| `target` | `tantivy` / `oxigraph` / `lancedb` / `all`。 |
+| `entity_uri` | 目标 entity。 |
+| `action` | `upsert` / `delete` / `rebuild`。 |
+| `payload_json` | 有界 job payload。 |
+| `status` | `pending` / `running` / `done` / `failed`。 |
+| `attempts` | 尝试次数。 |
+| `last_error` | 最近失败原因。 |
+| `created_at` / `updated_at` | job 时间。 |
+
+`index_outbox` 是 at-least-once 派生 job surface。task mutation transaction 只写 SQLite truth、event、entity/outbox 记录，不直接写 Tantivy/Oxigraph/LanceDB。
+
+### 13.4 Derived store state
+
+表：`derived_store_state`
+
+字段：
+
+| 字段 | 说明 |
+|---|---|
+| `store_name` | 派生 store 名称，例如 `tantivy_tasks`、`oxigraph_relations`、`lancedb_chunks`。 |
+| `schema_version` | store schema/contract 版本。 |
+| `last_event_id` | store 已成功提交的全局 `task_events.id` 水位。 |
+| `dirty` | 是否仍有未完成 outbox、失败 outbox 或最近一次 store 更新失败。 |
+| `last_rebuild_at` | 最近成功 rebuild 时间。 |
+| `last_sync_at` | 最近成功 sync 时间。 |
+| `last_error` | 最近失败证据。 |
+| `updated_at` | 状态更新时间。 |
+
+`last_event_id` 是 store 全局成功处理水位，不是 board 局部水位。成功 sync/rebuild 只能单调推进这个值；当一个 board sync 完成但其他 board 仍有 pending/running/failed outbox 时，`dirty` 必须保持 true。`dirty=false` 只表示同一 store target 当前没有 unfinished outbox 且最近一次 store 更新没有失败。
+
+`last_error` 成功后清空，失败时保留错误证据并保持 `dirty=true`。Operator 应通过 `kb derived status`、`kb doctor`、maintenance API 和对应 `sync/rebuild` 命令恢复派生层；派生 store 损坏或落后不改变 SQLite task truth。
+
+## 14. 常用查询
+
+### 14.1 Board task list
 
 ```sql
 SELECT *
@@ -399,7 +470,7 @@ ORDER BY
   created_at ASC;
 ```
 
-### 13.2 Ready queue
+### 14.2 Ready queue
 
 ```sql
 SELECT *
@@ -418,7 +489,7 @@ ORDER BY t.priority DESC, t.created_at ASC
 LIMIT ?;
 ```
 
-### 13.3 Expired claims
+### 14.3 Expired claims
 
 ```sql
 SELECT *
@@ -428,7 +499,7 @@ WHERE status = 'running'
   AND claim_expires_at <= ?;
 ```
 
-### 13.4 Event stream
+### 14.4 Event stream
 
 ```sql
 SELECT *
@@ -441,7 +512,7 @@ LIMIT ?;
 
 ---
 
-## 14. Export Format
+## 15. Export Format
 
 建议支持 JSONL export：
 

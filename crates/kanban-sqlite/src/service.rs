@@ -472,6 +472,20 @@ pub fn archive_board(path: impl AsRef<Path>, slug_or_id: &str, actor: &str) -> R
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
         let board = get_board_conn(&conn, slug_or_id)?;
+        let has_running_work = conn
+            .query_row(
+                "SELECT 1 WHERE EXISTS (SELECT 1 FROM tasks WHERE board_id=?1 AND status='running') OR EXISTS (SELECT 1 FROM task_runs WHERE board_id=?1 AND status='running')",
+                [&board.id],
+                |_row| Ok(()),
+            )
+            .optional()
+            .map_err(storage)?
+            .is_some();
+        if has_running_work {
+            return Err(KanbanError::InvalidTransition(
+                "cannot archive board with running work".into(),
+            ));
+        }
         let changed = conn
             .execute(
                 "UPDATE boards SET archived_at=?1, updated_at=?1 WHERE id=?2 AND archived_at IS NULL",

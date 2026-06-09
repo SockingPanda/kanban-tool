@@ -68,3 +68,56 @@ kanban-tool/
 ## 默认二进制名
 
 本文档中使用 `kb` 作为 CLI binary 名称。项目正式命名后可统一替换。
+
+## Linux installation and packaging
+
+Linux 发布分为两个独立 `.deb` 包：
+
+- Desktop package：由 Tauri 构建，产物是 desktop app 的 `.deb`。Desktop 包不负责安装 `kb` CLI。
+- CLI package：独立安装 `kb` 到 `/usr/bin/kb`，包名是 `kanban-tool-cli`。
+
+当前 dogfood 发布只关注 Debian package 路径；RPM target 暂不启用。
+
+### Install packaged releases
+
+Debian / Ubuntu：
+
+```bash
+sudo apt install ./kanban-tool-cli_0.1.0-1_amd64.deb
+kb --help
+```
+
+Desktop packages are installed separately from the CLI package. Install both only if
+you want both the graphical desktop app and the `kb` command.
+
+### Build the CLI package from source
+
+The repository includes a local packaging script for the standalone CLI package.
+It always builds the release CLI binary first:
+
+```bash
+./scripts/package-cli-linux.sh --format deb
+```
+
+The `.deb` is written to:
+
+```text
+target/release/bundle/cli/deb/
+```
+
+Feature flags can be passed through to the cargo build:
+
+```bash
+./scripts/package-cli-linux.sh --format deb --features tantivy-backend
+./scripts/package-cli-linux.sh --format deb --all-features
+```
+
+### Install the CLI directly with cargo
+
+For development machines, you can skip OS packages and install only the CLI from
+source:
+
+```bash
+cargo install --path crates/kanban-cli --bin kb
+kb --help
+```

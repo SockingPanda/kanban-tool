@@ -50,11 +50,7 @@ kb dispatch --max-iterations 10
 
 ### 2.3 与 server 同进程
 
-```bash
-kb serve --dispatcher
-```
-
-后续扩展。当前实现先提供独立 `kb dispatch` 前台 loop。
+后续扩展。当前实现先提供独立 `kb dispatch` 前台 loop；`kb serve` 不启动 dispatcher。
 
 ### 2.4 Worker profile config
 
@@ -189,7 +185,9 @@ BEGIN IMMEDIATE;
 
 SELECT id
 FROM tasks
-WHERE board_id = ?
+JOIN boards ON boards.id = tasks.board_id
+WHERE tasks.board_id = ?
+  AND boards.archived_at IS NULL
   AND status = 'ready'
   AND claim_token IS NULL
   AND (assignee IS NULL OR assignee = ?)
@@ -390,6 +388,7 @@ kb run logs r_01HX...
 | Worker 崩溃 | heartbeat 停止，claim 过期，reclaim。 |
 | SQLite busy | 等待 busy_timeout；仍失败则记录错误并下轮重试。 |
 | Task 被人工 block | Dispatcher 不再处理。 |
+| Board 被归档 | Dispatcher 不再 promote/claim/reclaim 该 board；若仍有 running task/run，board archive 本身会被拒绝。 |
 | Task 被人工 force complete | Worker 后续 complete 失败，因 token/run 已关闭。 |
 | DB integrity failed | Dispatcher 停止，提示运行 `kb doctor`。 |
 

@@ -281,7 +281,6 @@ kb serve
 启动：
 
 - localhost HTTP server。
-- 可选内嵌 dispatcher。
 - Web UI。
 
 适用：日常看板 UI。
@@ -292,11 +291,7 @@ kb serve
 kb dispatch
 ```
 
-启动本地调度循环。也可以在 server 中开启：
-
-```bash
-kb serve --dispatcher
-```
+启动本地调度循环。与 server 同进程运行 dispatcher 是后续扩展；当前 CLI 使用独立 `kb dispatch` 前台 loop。
 
 ---
 
@@ -337,6 +332,20 @@ concurrency = 1
 on_success = "done" # done | review
 on_failure = "blocked" # blocked | ready
 ```
+
+CLI 还支持项目级 active board 配置：
+
+```text
+<project>/.kb/config.toml
+```
+
+当前版本只写入一个顶层字段：
+
+```toml
+board = "agent-work"
+```
+
+Active board 解析顺序是 `--board`、`KB_BOARD`、向上查找最近 `.kb/config.toml`、最后 fallback 到 `default`。项目配置只选择同一个全局 SQLite DB 内的 board，不表示每个项目一个 DB。
 
 ---
 

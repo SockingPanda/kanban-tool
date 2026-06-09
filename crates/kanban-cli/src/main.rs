@@ -18,17 +18,18 @@ use kanban_graph::OxigraphStore;
 use kanban_graph::RelationGraph;
 use kanban_search::SearchQuery;
 use kanban_sqlite::{
-    CreateTask, DispatchOptions, EntityListOptions, FinishPolicy, MAX_SEARCH_LIMIT,
-    MAX_TASK_LIST_LIMIT, OutboxListOptions, TaskListOptions, TaskListSort, TaskPatch,
-    add_dependency, archive_task, backup_database, begin_database_replace, begin_database_runtime,
-    block_task, checkpoint_database, claim_task, complete_task, create_task,
-    derived_store_statuses, dispatch_once, export_jsonl, get_entity, get_run_by_id_global,
-    get_task, heartbeat_task, import_jsonl, init_database, list_dependencies, list_entities,
-    list_events, list_outbox, list_runs, list_tasks, list_tasks_page, promote_task, queue_stats,
-    rebuild_graph_store, rebuild_search_index, rebuild_vector_store, reclaim_expired,
-    remove_dependency, resolve_run_log_path, search_index_status, search_tasks,
-    set_task_retry_policy_by_id, submit_review_task, sync_graph_store, sync_search_index,
-    sync_vector_store, unblock_task, update_task, vacuum_database, vector_store_status,
+    BoardListOptions, CreateBoard, CreateTask, DispatchOptions, EntityListOptions, FinishPolicy,
+    MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT, OutboxListOptions, TaskListOptions, TaskListSort,
+    TaskPatch, add_dependency, archive_board, archive_task, backup_database,
+    begin_database_replace, begin_database_runtime, block_task, checkpoint_database, claim_task,
+    complete_task, create_board, create_task, derived_store_statuses, dispatch_once, export_jsonl,
+    get_board, get_entity, get_run_by_id_global, get_task, heartbeat_task, import_jsonl,
+    init_database, list_boards, list_dependencies, list_entities, list_events, list_outbox,
+    list_runs, list_tasks, list_tasks_page, promote_task, queue_stats, rebuild_graph_store,
+    rebuild_search_index, rebuild_vector_store, reclaim_expired, remove_dependency,
+    resolve_run_log_path, search_index_status, search_tasks, set_task_retry_policy_by_id,
+    submit_review_task, sync_graph_store, sync_search_index, sync_vector_store, unblock_task,
+    update_task, vacuum_database, vector_store_status,
 };
 
 #[derive(Debug, Parser)]
@@ -36,8 +37,8 @@ use kanban_sqlite::{
 struct Cli {
     #[arg(long, global = true)]
     db: Option<PathBuf>,
-    #[arg(long, global = true, default_value = "default")]
-    board: String,
+    #[arg(long, global = true)]
+    board: Option<String>,
     #[arg(long, global = true)]
     actor: Option<String>,
     #[arg(long, global = true)]
@@ -51,6 +52,10 @@ enum Command {
     Init {
         #[arg(long)]
         force: bool,
+    },
+    Board {
+        #[command(subcommand)]
+        command: BoardCommand,
     },
     Task {
         #[command(subcommand)]
@@ -137,6 +142,34 @@ enum TaskCommand {
         #[arg(long)]
         force: bool,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum BoardCommand {
+    List {
+        #[arg(long)]
+        include_archived: bool,
+    },
+    Create(BoardCreateArgs),
+    Show {
+        board: String,
+    },
+    Use {
+        board: String,
+    },
+    Current,
+    Archive {
+        board: String,
+    },
+}
+
+#[derive(Debug, Args)]
+struct BoardCreateArgs {
+    slug: String,
+    #[arg(long)]
+    name: String,
+    #[arg(long)]
+    description: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -498,6 +531,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let db_path = cli.db.clone().unwrap_or_else(default_db_path);
     let actor = cli.actor.clone().unwrap_or_else(default_actor);
+    let board = active_board(cli.board.as_deref())?;
     match cli.command {
         Command::Init { force: _ } => {
             let result = init_database(&db_path, &actor)
@@ -510,10 +544,11 @@ fn main() -> Result<()> {
                 )
             })?;
         }
-        Command::Task { command } => handle_task(command, &db_path, &cli.board, &actor, cli.json)?,
-        Command::Dep { command } => handle_dep(command, &db_path, &cli.board, &actor, cli.json)?,
+        Command::Board { command } => handle_board(command, &db_path, &board, &actor, cli.json)?,
+        Command::Task { command } => handle_task(command, &db_path, &board, &actor, cli.json)?,
+        Command::Dep { command } => handle_dep(command, &db_path, &board, &actor, cli.json)?,
         Command::Events { task_ref } => {
-            let events = list_events(&db_path, &cli.board, task_ref.as_deref())?;
+            let events = list_events(&db_path, &board, task_ref.as_deref())?;
             print_or_json(cli.json, &events, || {
                 events
                     .iter()
@@ -523,7 +558,7 @@ fn main() -> Result<()> {
             })?;
         }
         Command::Runs { task_ref } => {
-            let runs = list_runs(&db_path, &cli.board, task_ref.as_deref())?;
+            let runs = list_runs(&db_path, &board, task_ref.as_deref())?;
             print_or_json(cli.json, &runs, || {
                 runs.iter()
                     .map(|r| {
@@ -537,18 +572,18 @@ fn main() -> Result<()> {
             })?;
         }
         Command::Run { command } => handle_run(command, &db_path, cli.json)?,
-        Command::Search(args) => handle_search(args, &db_path, &cli.board, cli.json)?,
-        Command::Index { command } => handle_index(command, &db_path, &cli.board, cli.json)?,
+        Command::Search(args) => handle_search(args, &db_path, &board, cli.json)?,
+        Command::Index { command } => handle_index(command, &db_path, &board, cli.json)?,
         Command::Entity { command } => handle_entity(command, &db_path, cli.json)?,
         Command::Outbox { command } => handle_outbox(command, &db_path, cli.json)?,
         Command::Derived { command } => handle_derived(command, &db_path, cli.json)?,
-        Command::Graph { command } => handle_graph(command, &db_path, &cli.board, cli.json)?,
-        Command::Vector { command } => handle_vector(command, &db_path, &cli.board, cli.json)?,
-        Command::Context { command } => handle_context(command, &db_path, &cli.board, cli.json)?,
+        Command::Graph { command } => handle_graph(command, &db_path, &board, cli.json)?,
+        Command::Vector { command } => handle_vector(command, &db_path, &board, cli.json)?,
+        Command::Context { command } => handle_context(command, &db_path, &board, cli.json)?,
         Command::Dispatch(args) => {
             let options = dispatch_options(&args, actor.clone())?;
             if args.once {
-                let result = dispatch_once(&db_path, &cli.board, options)?;
+                let result = dispatch_once(&db_path, &board, options)?;
                 print_or_json(cli.json, &result, || {
                     format!(
                         "claimed={} task={:?} exit={:?}",
@@ -559,7 +594,7 @@ fn main() -> Result<()> {
                 let _runtime_guard = begin_database_runtime(&db_path)?;
                 let summary = dispatch_loop(
                     &db_path,
-                    &cli.board,
+                    &board,
                     options,
                     args.poll_interval_ms,
                     args.max_iterations,
@@ -572,7 +607,7 @@ fn main() -> Result<()> {
                 })?;
             }
         }
-        Command::Serve(args) => serve(args, db_path, &cli.board, actor)?,
+        Command::Serve(args) => serve(args, db_path, &board, actor)?,
         Command::Doctor => {
             let report = kanban_sqlite::doctor_database(&db_path)?;
             print_or_json(cli.json, &report, || {
@@ -601,7 +636,7 @@ fn main() -> Result<()> {
             })?;
         }
         Command::Stats => {
-            let stats = queue_stats(&db_path, &cli.board)?;
+            let stats = queue_stats(&db_path, &board)?;
             print_or_json(cli.json, &stats, || {
                 let stale = stats.stale_claims.len();
                 let blocked = stats
@@ -623,7 +658,7 @@ fn main() -> Result<()> {
             if args.format != "jsonl" {
                 bail!("unsupported export format: {}", args.format);
             }
-            let result = export_jsonl(&db_path, &cli.board, args.out)?;
+            let result = export_jsonl(&db_path, &board, args.out)?;
             print_or_json(cli.json, &result, || {
                 format!(
                     "Exported {} record(s) to {}",
@@ -965,6 +1000,69 @@ fn parse_predicate(value: &str) -> Result<Predicate> {
         "waiting_for_user" => Ok(Predicate::WaitingForUser),
         _ => bail!("unsupported predicate: {value}"),
     }
+}
+
+fn handle_board(
+    command: BoardCommand,
+    db_path: &PathBuf,
+    active_board: &str,
+    actor: &str,
+    json: bool,
+) -> Result<()> {
+    match command {
+        BoardCommand::List { include_archived } => {
+            let boards = list_boards(db_path, BoardListOptions { include_archived })?;
+            print_or_json(json, &boards, || {
+                boards
+                    .iter()
+                    .map(|board| {
+                        let archived = if board.archived_at.is_some() {
+                            " archived"
+                        } else {
+                            ""
+                        };
+                        format!("{} {}{}", board.slug, board.name, archived)
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })?;
+        }
+        BoardCommand::Create(args) => {
+            let board = create_board(
+                db_path,
+                actor,
+                CreateBoard {
+                    slug: args.slug,
+                    name: args.name,
+                    description: args.description,
+                },
+            )?;
+            print_or_json(json, &board, || {
+                format!("Created board {} {}", board.slug, board.name)
+            })?;
+        }
+        BoardCommand::Show { board } => {
+            let board = get_board(db_path, &board)?;
+            print_or_json(json, &board, || format!("{} {}", board.slug, board.name))?;
+        }
+        BoardCommand::Use { board } => {
+            let board = get_board(db_path, &board)?;
+            write_board_config(&board.slug)?;
+            print_or_json(json, &serde_json::json!({ "board": board.slug }), || {
+                format!("Current board: {}", board.slug)
+            })?;
+        }
+        BoardCommand::Current => {
+            print_or_json(json, &serde_json::json!({ "board": active_board }), || {
+                active_board.to_owned()
+            })?;
+        }
+        BoardCommand::Archive { board } => {
+            let board = archive_board(db_path, &board, actor)?;
+            print_or_json(json, &board, || format!("Archived board {}", board.slug))?;
+        }
+    }
+    Ok(())
 }
 
 fn handle_task(
@@ -1586,8 +1684,8 @@ fn print_or_json<T: serde::Serialize>(
 
 fn task_line(task: &kanban_sqlite::TaskRecord) -> String {
     format!(
-        "#{} {} [{}] {}",
-        task.seq,
+        "{} {} [{}] {}",
+        task.task_ref,
         task.id,
         task.status.as_str(),
         task.title
@@ -1647,4 +1745,75 @@ fn default_log_dir() -> PathBuf {
 
 fn default_actor() -> String {
     kanban_local::default_actor()
+}
+
+fn active_board(flag: Option<&str>) -> Result<String> {
+    if let Some(board) = flag.map(str::trim).filter(|board| !board.is_empty()) {
+        return Ok(board.to_owned());
+    }
+    if let Ok(board) = std::env::var("KB_BOARD") {
+        let board = board.trim();
+        if !board.is_empty() {
+            return Ok(board.to_owned());
+        }
+    }
+    if let Some(path) = nearest_board_config()?
+        && let Some(board) = read_board_config(&path)?
+    {
+        return Ok(board);
+    }
+    Ok("default".to_owned())
+}
+
+fn nearest_board_config() -> Result<Option<PathBuf>> {
+    let mut dir = std::env::current_dir().context("failed to resolve current directory")?;
+    loop {
+        let candidate = dir.join(".kb").join("config.toml");
+        if candidate.is_file() {
+            return Ok(Some(candidate));
+        }
+        if !dir.pop() {
+            return Ok(None);
+        }
+    }
+}
+
+fn write_board_config(board: &str) -> Result<()> {
+    let path = nearest_board_config()?.unwrap_or_else(|| {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(".kb")
+            .join("config.toml")
+    });
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+    fs::write(
+        &path,
+        format!("board = \"{}\"\n", escape_toml_string(board)),
+    )
+    .with_context(|| format!("failed to write {}", path.display()))
+}
+
+fn read_board_config(path: &Path) -> Result<Option<String>> {
+    let text =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    for raw_line in text.lines() {
+        let line = raw_line.split('#').next().unwrap_or("").trim();
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim() == "board" {
+            let board = unquote(value.trim()).trim();
+            if !board.is_empty() {
+                return Ok(Some(board.to_owned()));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn escape_toml_string(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
 }

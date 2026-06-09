@@ -330,6 +330,21 @@ Side effects：
 
 ---
 
+### 3.11.1 Board archive
+
+Board archive is a board lifecycle operation, not a task status transition.
+
+Rules：
+
+- Set `boards.archived_at = now`。
+- Insert `task_events(kind='board.archived')`。
+- Do not rewrite tasks on that board.
+- Reject archive if the board has any `running` task or any `running` task_run.
+- After archive, ordinary task/comment/dispatcher mutations against that board are rejected.
+- Read-only history queries for events, runs, and comments remain available for audit.
+
+---
+
 ### 3.12 Reopen
 
 ```text
@@ -422,4 +437,3 @@ UI column 不是状态真相，只是展示配置。
 6. completion 后 child promotion。
 7. archived task 不被 dispatcher 处理。
 8. illegal direct transition 返回 `invalid_transition`。
-

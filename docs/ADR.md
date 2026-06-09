@@ -323,3 +323,44 @@ Tantivy、Oxigraph、LanceDB 都是可重建 derived stores，不参与状态机
 
 - 需要维护 entity backfill/outbox/derived state。
 - `derived_store_state` 是派生 store 的主健康/水位记录；Tantivy 的旧 `app_settings` search state 仅保留为兼容 metadata。
+
+---
+
+## ADR-0010：单 DB 多 board 与 CLI task ref
+
+### Status
+
+Accepted
+
+### Context
+
+本地项目需要不同 board/project，但未来也需要聚合视图和跨 board 审计。如果每个项目拆一个 SQLite DB，聚合、搜索、事件和 dispatcher 恢复都会变复杂。另一方面，裸 `#12` 在 shell 中容易被当作注释，且 board-local seq 不能跨 board 唯一。
+
+### Decision
+
+继续使用单 SQLite DB 内多个 board：
+
+- `tasks.id` 是全局唯一 `t_...`。
+- `tasks.seq` 只在 `board_id` 内唯一。
+- CLI/API 展示 copyable task ref：`board_slug#seq`。
+- CLI task ref 支持全局 `t_...`、当前 active board 的 `12` / `#12`、显式 `board#12` / `board/#12` / `b_...#12`。
+- Active board 解析顺序是 `--board`、`KB_BOARD`、最近 `.kb/config.toml`、`default`。
+- `.kb/config.toml` 只记录当前项目选择的 board，不表示项目拥有独立 DB。
+- Board slug 禁用保留 ID 前缀和会破坏 ref 语法的字符。
+
+Archived board 默认不可写；归档只标记 board，不改 task 状态，并拒绝仍有 `running` task/run 的 board。Read-only events/runs/comments 历史保留可查，作为审计入口。
+
+### Consequences
+
+优点：
+
+- 保留未来聚合 board / dashboard 的数据基础。
+- `t_...` 可作为脚本稳定全局引用。
+- `board#seq` 对人和 shell 都更可复制。
+- 项目级 active board 不破坏单 DB 备份、搜索和 dispatcher 语义。
+
+代价：
+
+- CLI 必须维护 task ref parser/resolver。
+- Archived board 需要区分 read-only history 与 mutation guard。
+- 裸 `#12` 只能作为兼容输入，文档和输出不能依赖它。

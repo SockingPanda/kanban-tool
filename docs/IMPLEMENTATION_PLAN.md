@@ -192,6 +192,29 @@
 
 ---
 
+## Phase 6.5：Board Lifecycle MVP
+
+目标：让单 SQLite DB 内的多个 board 可通过 CLI/API 创建、选择、归档，并让 task ref 兼容未来聚合视图。
+
+交付：
+
+- `kb board list/create/show/use/current/archive`。
+- `POST /api/v1/boards` 与 `POST /api/v1/boards/{board}/archive`。
+- 项目级 `.kb/config.toml` active board，解析顺序为 `--board`、`KB_BOARD`、最近项目 config、`default`。
+- task ref 支持全局 `t_...`、当前 board 的裸 seq / `#seq`、显式 `board#seq` / `board/#seq`。
+- CLI/API task 输出包含 `board_slug` 和可复制 `ref`。
+
+验收：
+
+- `board create` 创建默认 columns 并写 `board.created` event。
+- `board use` 写入项目级 `.kb/config.toml`。
+- `t_...` 可跨 active board resolve，`board#seq` 可显式跨 board resolve。
+- Archived board 默认隐藏且拒绝普通写入；events/runs/comments 历史仍可读。
+- Board archive 在存在 `running` task/run 时被拒绝。
+- Duplicate board slug 返回 user-facing invalid input / HTTP 400。
+
+---
+
 ## Phase 7：Web UI MVP
 
 目标：基本看板 UI 可用。
@@ -289,16 +312,17 @@
 MVP 完成定义：
 
 1. `kb init` 创建可用 DB。
-2. `kb task create/list/show/update` 可用。
-3. `kb task start/heartbeat/done/block/unblock/archive` 可用。
-4. dependencies 可用。
-5. events 可用。
-6. runs 可用。
-7. dispatcher 可执行本地命令。
-8. web API 覆盖核心 lifecycle。
-9. web UI 可视化 board。
-10. 并发 claim 测试稳定通过。
-11. `kb doctor` 能发现基本数据异常。
+2. `kb board list/create/show/use/current/archive` 可用。
+3. `kb task create/list/show/update` 可用，输出包含 `board#seq` ref。
+4. `kb task start/heartbeat/done/block/unblock/archive` 可用。
+5. dependencies 可用。
+6. events 可用。
+7. runs 可用。
+8. dispatcher 可执行本地命令。
+9. web API 覆盖核心 lifecycle。
+10. web UI 可视化 board。
+11. 并发 claim 测试稳定通过。
+12. `kb doctor` 能发现基本数据异常。
 
 ---
 
@@ -319,4 +343,3 @@ Phase 0 + Phase 1 + Phase 2 + Phase 3 + 部分 Phase 4
 - dependencies 基础。
 
 先不要做 Web UI 和 dispatcher，直到状态机与 schema 稳定。
-

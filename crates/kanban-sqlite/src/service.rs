@@ -1090,8 +1090,8 @@ pub fn update_task(
 ) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
-    let board_id = board_id(&conn, board)?;
     with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
         let mut task = resolve_task(&conn, &board_id, task_ref)?;
         let recompute_needed =
             patch.title.is_some() || patch.description.is_some() || patch.scheduled_at.is_some();
@@ -1163,27 +1163,27 @@ pub fn specify_task(
 ) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
-    let board_id = active_board_id_for_task(&conn, task_id)?;
-    let mut task = get_task_by_id(&conn, &board_id, task_id)?;
-    if task.status != TaskStatus::Triage {
-        return Err(KanbanError::InvalidTransition(format!(
-            "cannot specify from {}",
-            task.status.as_str()
-        )));
-    }
-    if let Some(description) = description {
-        task.description = Some(description);
-    }
-    if let Some(scheduled_at) = scheduled_at {
-        task.scheduled_at = Some(scheduled_at);
-    }
-    if matches!(
-        task.status,
-        TaskStatus::Triage | TaskStatus::Todo | TaskStatus::Scheduled | TaskStatus::Ready
-    ) {
-        task.status = recompute_ready_status(&conn, &task, now)?;
-    }
     with_immediate_tx(&conn, || {
+        let board_id = active_board_id_for_task(&conn, task_id)?;
+        let mut task = get_task_by_id(&conn, &board_id, task_id)?;
+        if task.status != TaskStatus::Triage {
+            return Err(KanbanError::InvalidTransition(format!(
+                "cannot specify from {}",
+                task.status.as_str()
+            )));
+        }
+        if let Some(description) = description {
+            task.description = Some(description);
+        }
+        if let Some(scheduled_at) = scheduled_at {
+            task.scheduled_at = Some(scheduled_at);
+        }
+        if matches!(
+            task.status,
+            TaskStatus::Triage | TaskStatus::Todo | TaskStatus::Scheduled | TaskStatus::Ready
+        ) {
+            task.status = recompute_ready_status(&conn, &task, now)?;
+        }
         conn.execute(
             "UPDATE tasks SET description=?1, scheduled_at=?2, status=?3, updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6",
             params![task.description, task.scheduled_at, task.status.as_str(), now, task.id, board_id],
@@ -1297,8 +1297,8 @@ pub fn set_task_retry_policy_by_id(
     }
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
-    let board_id = active_board_id_for_task(&conn, task_id)?;
     with_immediate_tx(&conn, || {
+        let board_id = active_board_id_for_task(&conn, task_id)?;
         let changed = conn
             .execute(
                 "UPDATE tasks SET max_retries=?1, updated_at=?2, lock_version=lock_version+1 WHERE id=?3 AND board_id=?4",

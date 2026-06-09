@@ -1579,6 +1579,14 @@ async fn archived_board_history_apis_remain_readable() {
     kanban_sqlite::archive_board(&db_path, "project", "api-test").expect("archive board");
     let app = build_router(AppState::new(db_path, "api-test"));
 
+    let (status, _comment_error) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/comments", task.id),
+        json!({"author":"operator","body":"late write"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
     let (status, events) = get_json(
         app.clone(),
         &format!("/api/v1/events?board=project&task_id={}", task.id),

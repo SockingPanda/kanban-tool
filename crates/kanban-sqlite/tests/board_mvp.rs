@@ -163,6 +163,9 @@ fn archived_board_keeps_read_only_history_inspectable() {
     claim_task(&temp.path, "archivable", "runner", &task.id, 60_000).unwrap();
 
     archive_board(&temp.path, "archivable", "tester").unwrap();
+    let create_after_archive =
+        create_comment(&temp.path, &task.id, "tester", "late write", None).unwrap_err();
+    assert!(matches!(create_after_archive, KanbanError::NotFound(_)));
 
     let qualified_ref = "archivable#1";
     let events = list_events(&temp.path, "archivable", Some(qualified_ref)).unwrap();

@@ -257,6 +257,79 @@ async fn boards_api_lists_and_shows_default_board() {
 }
 
 #[tokio::test]
+async fn boards_api_creates_and_archives_board() {
+    let (_dir, db_path) = temp_db();
+    let app = build_router(AppState::new(&db_path, "api-test"));
+
+    let (status, created) = post_json(
+        app.clone(),
+        "/api/v1/boards",
+        json!({
+            "slug": "project",
+            "name": "Project Board",
+            "description": "Local project",
+            "actor": "api-user"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(created["data"]["slug"], "project");
+    assert_eq!(created["data"]["name"], "Project Board");
+    assert_eq!(created["data"]["description"], "Local project");
+
+    let events = kanban_sqlite::list_events(&db_path, "project", None).expect("events");
+    assert_eq!(events[0].kind, "board.created");
+    assert_eq!(events[0].actor.as_deref(), Some("api-user"));
+
+    let (status, archived) = post_json(
+        app.clone(),
+        "/api/v1/boards/project/archive",
+        json!({"actor": "api-user"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(archived["data"]["archived_at"].is_i64());
+
+    let (status, list) = get_json(app.clone(), "/api/v1/boards").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["data"].as_array().unwrap().len(), 1);
+
+    let (status, _task_error) = post_json(
+        app,
+        "/api/v1/boards/project/tasks",
+        json!({"title": "should reject", "description": "ready spec"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn task_dto_includes_board_slug_and_ref() {
+    let (_dir, db_path) = temp_db();
+    kanban_sqlite::create_board(
+        &db_path,
+        "api-test",
+        kanban_sqlite::CreateBoard {
+            slug: "project".into(),
+            name: "Project".into(),
+            description: None,
+        },
+    )
+    .expect("create board");
+    let app = build_router(AppState::new(db_path, "api-test"));
+
+    let (status, json) = post_json(
+        app,
+        "/api/v1/boards/project/tasks",
+        json!({"title": "api project task", "description": "ready spec"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(json["data"]["board_slug"], "project");
+    assert_eq!(json["data"]["ref"], "project#1");
+}
+
+#[tokio::test]
 async fn board_columns_api_lists_default_columns_in_position_order() {
     let (_dir, db_path) = temp_db();
     let app = build_router(AppState::new(db_path, "api-test"));

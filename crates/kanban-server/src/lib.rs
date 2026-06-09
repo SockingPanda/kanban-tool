@@ -136,6 +136,9 @@ struct ErrorBody {
 struct TaskDto {
     id: String,
     board_id: String,
+    board_slug: String,
+    #[serde(rename = "ref")]
+    task_ref: String,
     seq: i64,
     title: String,
     description: Option<String>,
@@ -169,6 +172,8 @@ impl From<kanban_sqlite::TaskRecord> for TaskDto {
         Self {
             id: task.id,
             board_id: task.board_id,
+            board_slug: task.board_slug,
+            task_ref: task.task_ref,
             seq: task.seq,
             title: task.title,
             description: task.description,
@@ -341,8 +346,9 @@ struct GraphNeighborsQuery {
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
-        .route("/api/v1/boards", get(list_boards))
+        .route("/api/v1/boards", get(list_boards).post(create_board))
         .route("/api/v1/boards/:board", get(get_board))
+        .route("/api/v1/boards/:board/archive", post(archive_board))
         .route("/api/v1/boards/:board/columns", get(list_board_columns))
         .route(
             "/api/v1/boards/:board/tasks",
@@ -470,9 +476,46 @@ async fn list_boards(
     State(state): State<AppState>,
 ) -> Result<Json<Envelope<Vec<kanban_sqlite::BoardRecord>>>, ApiError> {
     Ok(Json(Envelope {
-        data: kanban_sqlite::list_boards(state.db_path())?,
+        data: kanban_sqlite::list_boards(
+            state.db_path(),
+            kanban_sqlite::BoardListOptions::default(),
+        )?,
         meta: None,
     }))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CreateBoardBody {
+    slug: String,
+    name: String,
+    description: Option<String>,
+    actor: Option<String>,
+}
+
+async fn create_board(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Result<Json<CreateBoardBody>, JsonRejection>,
+) -> Result<(StatusCode, Json<Envelope<kanban_sqlite::BoardRecord>>), ApiError> {
+    let Json(body) = body.map_err(extractor_error)?;
+    let actor = actor(body.actor.as_deref(), &headers, &state);
+    let board = kanban_sqlite::create_board(
+        state.db_path(),
+        &actor,
+        kanban_sqlite::CreateBoard {
+            slug: body.slug,
+            name: body.name,
+            description: body.description,
+        },
+    )?;
+    Ok((
+        StatusCode::CREATED,
+        Json(Envelope {
+            data: board,
+            meta: None,
+        }),
+    ))
 }
 
 async fn get_board(
@@ -481,6 +524,20 @@ async fn get_board(
 ) -> Result<Json<Envelope<kanban_sqlite::BoardRecord>>, ApiError> {
     Ok(Json(Envelope {
         data: kanban_sqlite::get_board(state.db_path(), &board)?,
+        meta: None,
+    }))
+}
+
+async fn archive_board(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+    headers: HeaderMap,
+    body: Result<Json<ActorBody>, JsonRejection>,
+) -> Result<Json<Envelope<kanban_sqlite::BoardRecord>>, ApiError> {
+    let body = optional_json_body(body)?;
+    let actor = actor(body.actor.as_deref(), &headers, &state);
+    Ok(Json(Envelope {
+        data: kanban_sqlite::archive_board(state.db_path(), &board, &actor)?,
         meta: None,
     }))
 }

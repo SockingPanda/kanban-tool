@@ -1334,6 +1334,7 @@ pub fn promote_task(
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
     with_immediate_tx(&conn, || {
+        ensure_board_active(&conn, &board_id)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
         if !matches!(task.status, TaskStatus::Todo | TaskStatus::Scheduled) {
             return Err(KanbanError::InvalidTransition(format!(
@@ -1461,6 +1462,10 @@ fn claim_next_ready_conn(
     now: i64,
 ) -> Result<Option<ClaimResult>> {
     conn.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+    if let Err(err) = ensure_board_active(conn, board_id) {
+        let _ = conn.execute_batch("ROLLBACK");
+        return Err(err);
+    }
     let selected = conn
         .query_row(
             "SELECT id FROM tasks WHERE board_id=?1 AND status='ready' AND claim_token IS NULL AND (assignee IS NULL OR assignee=?2) AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status != 'done') ORDER BY priority DESC, created_at ASC LIMIT 1",
@@ -1507,6 +1512,7 @@ fn claim_task_in_current_tx(
     metadata_json: &str,
     now: i64,
 ) -> Result<ClaimResult> {
+    ensure_board_active(conn, board_id)?;
     let task = get_task_by_id(conn, board_id, task_id)?;
     if task.status != TaskStatus::Ready || task.claim_token.is_some() {
         return Err(KanbanError::InvalidTransition(
@@ -1580,6 +1586,7 @@ pub fn heartbeat_task_with_note(
     let board_id = board_id(&conn, board)?;
     let task = resolve_task(&conn, &board_id, task_ref)?;
     with_immediate_tx(&conn, || {
+        ensure_board_active(&conn, &board_id)?;
         heartbeat_task_conn(&conn, &board_id, actor, &task, token, ttl_ms, note, now)?;
         get_task_by_id(&conn, &board_id, &task.id)
     })
@@ -1697,6 +1704,7 @@ pub fn complete_task_with_summary_and_result(
         ));
     }
     with_immediate_tx(&conn, || {
+        ensure_board_active(&conn, &board_id)?;
         finish_running(
             &conn,
             &board_id,
@@ -1752,6 +1760,7 @@ pub fn submit_review_task_with_summary(
         ));
     }
     with_immediate_tx(&conn, || {
+        ensure_board_active(&conn, &board_id)?;
         finish_running(
             &conn,
             &board_id,
@@ -1804,6 +1813,7 @@ pub fn block_task(
         return Err(KanbanError::InvalidTransition("cannot block task".into()));
     }
     with_immediate_tx(&conn, || {
+        ensure_board_active(&conn, &board_id)?;
         if task.status == TaskStatus::Running {
             finish_running(
                 &conn,
@@ -1857,6 +1867,7 @@ pub fn unblock_task(
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
     with_immediate_tx(&conn, || {
+        ensure_board_active(&conn, &board_id)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
         if task.status != TaskStatus::Blocked {
             return Err(KanbanError::InvalidTransition(
@@ -1891,6 +1902,7 @@ pub fn reclaim_expired(path: impl AsRef<Path>, board: &str, actor: &str) -> Resu
     let mut count = 0;
     for task in expired {
         let reclaimed = with_immediate_tx(&conn, || {
+            ensure_board_active(&conn, &board_id)?;
             let fresh = get_task_by_id(&conn, &board_id, &task.id)?;
             let tx_now = SystemClock.now_ms();
             if fresh.status != TaskStatus::Running
@@ -1953,6 +1965,7 @@ pub fn reclaim_task_to(
     }
     let task = resolve_task(&conn, &board_id, task_ref)?;
     with_immediate_tx(&conn, || {
+        ensure_board_active(&conn, &board_id)?;
         let fresh = get_task_by_id(&conn, &board_id, &task.id)?;
         let tx_now = SystemClock.now_ms();
         if fresh.status != TaskStatus::Running {
@@ -2018,6 +2031,7 @@ pub fn archive_task(
         ));
     }
     with_immediate_tx(&conn, || {
+        ensure_board_active(&conn, &board_id)?;
         if task.status == TaskStatus::Running {
             let run_id = task.current_run_id.as_deref().ok_or_else(|| {
                 KanbanError::InvalidTransition("force archive requires active run".into())
@@ -2069,6 +2083,7 @@ pub fn add_dependency(
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
     with_immediate_tx(&conn, || {
+        ensure_board_active(&conn, &board_id)?;
         let parent = resolve_task(&conn, &board_id, parent_ref)?;
         let child = resolve_task(&conn, &board_id, child_ref)?;
         add_dependency_in_current_tx(&conn, &board_id, actor, &parent, &child, now)
@@ -2154,6 +2169,7 @@ pub fn remove_dependency(
     let parent = resolve_task(&conn, &board_id, parent_ref)?;
     let child = resolve_task(&conn, &board_id, child_ref)?;
     with_immediate_tx(&conn, || {
+        ensure_board_active(&conn, &board_id)?;
         conn.execute(
             "DELETE FROM task_dependencies WHERE parent_task_id=?1 AND child_task_id=?2",
             params![parent.id, child.id],
@@ -2435,6 +2451,7 @@ pub fn dispatch_once(
         options.on_failure
     };
     with_immediate_tx(&conn, || {
+        ensure_board_active(&conn, &board_id)?;
         match target {
             FinishPolicy::Done => {
                 finish_running(
@@ -2646,6 +2663,7 @@ fn run_worker_with_heartbeat(
                 let board_id = board_id(&conn, board)?;
                 let task = get_task_by_id(&conn, &board_id, &claim.task.id)?;
                 if let Err(err) = with_immediate_tx(&conn, || {
+                    ensure_board_active(&conn, &board_id)?;
                     heartbeat_task_conn(
                         &conn,
                         &board_id,
@@ -4220,6 +4238,23 @@ fn board_id_any(conn: &Connection, slug_or_id: &str) -> Result<String> {
         .optional()
         .map_err(storage)?
         .ok_or_else(|| KanbanError::NotFound(format!("board {slug_or_id}")))
+}
+
+fn ensure_board_active(conn: &Connection, board_id: &str) -> Result<()> {
+    let active = conn
+        .query_row(
+            "SELECT 1 FROM boards WHERE id=?1 AND archived_at IS NULL",
+            [board_id],
+            |_row| Ok(()),
+        )
+        .optional()
+        .map_err(storage)?
+        .is_some();
+    if active {
+        Ok(())
+    } else {
+        Err(KanbanError::NotFound(format!("board {board_id}")))
+    }
 }
 
 fn ensure_default_columns_conn(conn: &Connection, board_id: &str, now_ms: i64) -> Result<()> {

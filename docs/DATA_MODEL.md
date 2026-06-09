@@ -94,6 +94,10 @@ Board 是本地 project/board，不是 tenant。
 default
 ```
 
+Board slug 由 service 层校验：必须唯一、非空、不超过 64 bytes，以小写 ASCII 字母或数字开头，只能包含小写 ASCII 字母、数字、`.`、`_`、`-`，并且不能使用 `b_`、`t_`、`r_`、`c_`、`a_`、`l_`、`col_`、`e_` 等保留前缀。这样可以避免和 public ID、`board#seq` task ref、路径式 alias 语法冲突。
+
+Archived board 默认不出现在 board list，也不接受普通 task/comment/dispatcher 写入。归档只设置 board 的 `archived_at` 并写入 `board.archived` event，不改变 task 状态；如果 board 上仍有 `running` task 或 `running` run，归档会被拒绝。Events、runs、comments 等只读历史仍可通过显式 task/board identity 查询，用于审计。
+
 ---
 
 ## 5. Task
@@ -108,7 +112,12 @@ Task 是核心对象，既是看板卡片，也是可执行工作单元。
 |---|---|
 | `id` | Task ID。 |
 | `board_id` | 所属 board。 |
-| `seq` | board 内递增数字，便于显示 `#12`。 |
+| `seq` | board 内递增数字，便于显示 `board#12`。 |
+
+Task public identity 有两层：
+
+- `id` 是全局唯一 `t_...`，可跨 board 直接定位 task。
+- `seq` 只在同一 board 内唯一，CLI/API 展示时应组合成 `board_slug#seq`，例如 `agent-work#12`。
 
 #### Content
 
@@ -239,6 +248,7 @@ Event 是 append-only 事实记录。
 ```text
 board.created
 board.updated
+board.archived
 
 task.created
 task.updated
@@ -257,7 +267,7 @@ task.deleted
 
 dependency.added
 dependency.removed
-comment.added
+task.comment.created
 attachment.added
 attachment.removed
 run.started
@@ -300,7 +310,7 @@ run.finished
 | `kind` | `text` / `system` / `worker`。 |
 | `created_at` | 创建时间。 |
 
-Comment 创建时也写一条 `task_events(kind='comment.added')`。
+Comment 创建时也写一条 `task_events(kind='task.comment.created')`。
 
 ---
 

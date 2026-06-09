@@ -22,6 +22,8 @@
 - 本地 dispatcher/worker 能力。
 - append-only events + tasks snapshot。
 
+Board/project 使用同一个 SQLite DB。CLI 通过 `--board`、`KB_BOARD` 或项目级 `.kb/config.toml` 选择 active board；`kb board use <board>` 只写入项目配置，不创建项目独立 DB。Task 的 `t_...` id 全局唯一，board 内序号通过 `board#seq` 展示和复制。
+
 明确不包含：
 
 - 多用户协作。

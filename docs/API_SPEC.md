@@ -111,8 +111,10 @@ Response：
 ### 3.1 List boards
 
 ```http
-GET /api/v1/boards
+GET /api/v1/boards?include_archived=false
 ```
+
+Archived boards are hidden by default. Pass `include_archived=true` to include them.
 
 Response：
 
@@ -149,6 +151,8 @@ Request：
 }
 ```
 
+Response status is `201 Created`. Board slugs must be unique, non-empty, no longer than 64 bytes, start with a lowercase ASCII letter or digit, contain only lowercase ASCII letters, digits, `.`, `_`, `-`, and must not start with reserved ID prefixes such as `b_`, `t_`, `r_`, `c_`, `a_`, `l_`, `col_`, or `e_`. Duplicate or invalid slugs return the normal `400 invalid_input` error envelope, not `500`.
+
 ### 3.3 Get board
 
 ```http
@@ -160,6 +164,8 @@ GET /api/v1/boards/{board_slug_or_id}
 ```http
 POST /api/v1/boards/{board}/archive
 ```
+
+Archive marks `archived_at` and writes a `board.archived` event; it does not mutate tasks. The operation is rejected with `409 invalid_transition` if the board has active `running` tasks or `running` task runs. After archive, ordinary task mutations on that board are rejected, while audit history endpoints remain readable when called with explicit task/board identity.
 
 ---
 
@@ -193,6 +199,8 @@ Response：
       "id": "t_01HX...",
       "seq": 12,
       "board_id": "b_01HX...",
+      "board_slug": "agent-work",
+      "ref": "agent-work#12",
       "title": "实现状态机",
       "description": "...",
       "status": "ready",
@@ -248,6 +256,8 @@ Notes：
 ```http
 GET /api/v1/tasks/{task_id}
 ```
+
+`task_id` is the global `t_...` id and is not scoped by board. Responses include `board_id`, `board_slug`, and `ref` so clients can render copyable `board#seq` task refs.
 
 Query params：
 
@@ -527,6 +537,8 @@ Response：
 GET /api/v1/tasks/{task_id}/comments
 ```
 
+Comments are task-id scoped. Listing comments remains available for archived boards because it is read-only audit history; creating comments on archived boards is rejected.
+
 Response：
 
 ```json
@@ -576,6 +588,8 @@ Notes：
 ```http
 GET /api/v1/tasks/{task_id}/runs
 ```
+
+Run listing is task-id scoped and remains available for archived boards as read-only audit history.
 
 ### 8.2 Get run
 
@@ -663,6 +677,8 @@ Notes：
 ```http
 GET /api/v1/events?board=default&after=0&limit=100
 ```
+
+`board` accepts board slug or id. Events for archived boards remain readable so clients can inspect the audit trail after archive.
 
 Response：
 

@@ -2548,6 +2548,7 @@ fn promote_due_tasks(conn: &Connection, board_id: &str, actor: &str, now: i64) -
     let mut promoted = 0;
     for task in candidates {
         let was_promoted = with_immediate_tx(conn, || {
+            ensure_board_active(conn, board_id)?;
             let fresh = get_task_by_id(conn, board_id, &task.id)?;
             if !matches!(fresh.status, TaskStatus::Todo | TaskStatus::Scheduled) {
                 return Ok(false);

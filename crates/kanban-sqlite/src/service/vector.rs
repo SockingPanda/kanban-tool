@@ -62,12 +62,14 @@ pub fn rebuild_vector_store_with(
                 true,
                 now,
             )?;
+            let derived = derived_status_by_name(&conn, LANCEDB_CHUNKS_STORE)?;
             let mut status = store.status();
             status.message = format!(
-                "{}; rebuilt {} chunk(s); dirty=false last_event_id={} lag=0",
+                "{}; rebuilt {} chunk(s); derived_dirty={} last_event_id={}",
                 status.message,
                 chunks.len(),
-                last_event_id.unwrap_or(0)
+                derived.dirty,
+                derived.last_event_id
             );
             Ok(status)
         }
@@ -140,13 +142,15 @@ pub fn sync_vector_store_with(
                 false,
                 now,
             )?;
+            let derived = derived_status_by_name(&conn, LANCEDB_CHUNKS_STORE)?;
             let mut status = store.status();
             status.message = format!(
-                "{}; synced {} chunk(s) from {} job(s); dirty=false last_event_id={} lag=0",
+                "{}; synced {} chunk(s) from {} job(s); derived_dirty={} last_event_id={}",
                 status.message,
                 chunks.len(),
                 jobs.len(),
-                last_event_id.unwrap_or(0)
+                derived.dirty,
+                derived.last_event_id
             );
             Ok(status)
         }

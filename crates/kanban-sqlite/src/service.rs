@@ -2257,7 +2257,7 @@ pub fn create_comment(
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
-        let board_id = board_id_for_task(&conn, task_ref)?;
+        let board_id = active_board_id_for_task(&conn, task_ref)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
         let author = author.trim();
         if author.is_empty() {
@@ -4271,6 +4271,17 @@ fn board_id_for_task(conn: &Connection, task_id: &str) -> Result<String> {
     conn.query_row("SELECT board_id FROM tasks WHERE id=?1", [task_id], |r| {
         r.get(0)
     })
+    .optional()
+    .map_err(storage)?
+    .ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
+}
+
+fn active_board_id_for_task(conn: &Connection, task_id: &str) -> Result<String> {
+    conn.query_row(
+        "SELECT tasks.board_id FROM tasks JOIN boards ON boards.id=tasks.board_id WHERE tasks.id=?1 AND boards.archived_at IS NULL",
+        [task_id],
+        |r| r.get(0),
+    )
     .optional()
     .map_err(storage)?
     .ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))

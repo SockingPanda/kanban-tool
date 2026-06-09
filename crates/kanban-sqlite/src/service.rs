@@ -437,6 +437,16 @@ pub fn create_board(
         .filter(|description| !description.is_empty());
     let id = new_typed_id("b");
     with_immediate_tx(&conn, || {
+        let slug_exists = conn
+            .query_row("SELECT 1 FROM boards WHERE slug=?1", [&slug], |_row| Ok(()))
+            .optional()
+            .map_err(storage)?
+            .is_some();
+        if slug_exists {
+            return Err(KanbanError::InvalidInput(format!(
+                "board slug already exists: {slug}"
+            )));
+        }
         conn.execute(
             "INSERT INTO boards(id, slug, name, description, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
             params![id, slug, name, description, now],
@@ -975,6 +985,14 @@ pub fn import_jsonl(
 pub fn get_board(path: impl AsRef<Path>, slug_or_id: &str) -> Result<BoardRecord> {
     let conn = connect_file(path.as_ref())?;
     get_board_conn(&conn, slug_or_id)
+}
+
+pub fn get_board_including_archived(
+    path: impl AsRef<Path>,
+    slug_or_id: &str,
+) -> Result<BoardRecord> {
+    let conn = connect_file(path.as_ref())?;
+    get_board_conn_any(&conn, slug_or_id)
 }
 
 pub fn list_board_columns(
@@ -2202,7 +2220,7 @@ pub fn list_events(
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id_any(&conn, board)?;
     let task_id = task_ref
-        .map(|r| resolve_task(&conn, &board_id, r).map(|t| t.id))
+        .map(|r| resolve_task_any(&conn, &board_id, r).map(|t| t.id))
         .transpose()?;
     let sql = if task_id.is_some() {
         "SELECT id,event_id,task_id,run_id,kind,actor,payload_json,created_at FROM task_events WHERE board_id=?1 AND task_id=?2 ORDER BY id ASC"
@@ -2285,8 +2303,8 @@ pub fn create_comment(
 
 pub fn list_comments(path: impl AsRef<Path>, task_ref: &str) -> Result<Vec<CommentRecord>> {
     let conn = connect_file(path.as_ref())?;
-    let board_id = board_id_for_task(&conn, task_ref)?;
-    let task = resolve_task(&conn, &board_id, task_ref)?;
+    let task = resolve_task_without_active_board(&conn, task_ref)?;
+    let board_id = task.board_id.clone();
     let mut stmt = conn
         .prepare(
             "SELECT id, board_id, task_id, author, body, kind, created_at \
@@ -2310,7 +2328,7 @@ pub fn list_events_after(
     let task_id = options
         .task_ref
         .as_deref()
-        .map(|r| resolve_task(&conn, &board_id, r).map(|t| t.id))
+        .map(|r| resolve_task_any(&conn, &board_id, r).map(|t| t.id))
         .transpose()?;
     let mut params = vec![Value::Text(board_id), Value::Integer(options.after)];
     let mut where_sql = "WHERE board_id=? AND id>?".to_owned();
@@ -2336,9 +2354,9 @@ pub fn list_runs(
     task_ref: Option<&str>,
 ) -> Result<Vec<RunRecord>> {
     let conn = connect_file(path.as_ref())?;
-    let board_id = board_id(&conn, board)?;
+    let board_id = board_id_any(&conn, board)?;
     let task_id = task_ref
-        .map(|r| resolve_task(&conn, &board_id, r).map(|t| t.id))
+        .map(|r| resolve_task_any(&conn, &board_id, r).map(|t| t.id))
         .transpose()?;
     let sql = if task_id.is_some() {
         "SELECT id,task_id,status,worker_profile,worker_pid,claim_token,claim_owner,started_at,finished_at,exit_code,summary,error,log_path,metadata_json FROM task_runs WHERE board_id=?1 AND task_id=?2 ORDER BY started_at DESC"
@@ -3984,6 +4002,37 @@ fn resolve_task(conn: &Connection, active_board_id: &str, task_ref: &str) -> Res
     }
     let seq = parse_seq_ref(task_ref)?;
     get_task_by_seq(conn, active_board_id, seq, task_ref)
+}
+
+fn resolve_task_any(
+    conn: &Connection,
+    active_board_id: &str,
+    task_ref: &str,
+) -> Result<TaskRecord> {
+    if task_ref.starts_with("t_") {
+        return get_task_by_id_global_conn(conn, task_ref);
+    }
+    if let Some((board_ref, seq_ref)) = split_board_seq_ref(task_ref) {
+        let board_id = board_id_any(conn, board_ref)?;
+        let seq = parse_seq_ref(seq_ref)?;
+        return get_task_by_seq(conn, &board_id, seq, task_ref);
+    }
+    let seq = parse_seq_ref(task_ref)?;
+    get_task_by_seq(conn, active_board_id, seq, task_ref)
+}
+
+fn resolve_task_without_active_board(conn: &Connection, task_ref: &str) -> Result<TaskRecord> {
+    if task_ref.starts_with("t_") {
+        return get_task_by_id_global_conn(conn, task_ref);
+    }
+    if let Some((board_ref, seq_ref)) = split_board_seq_ref(task_ref) {
+        let board_id = board_id_any(conn, board_ref)?;
+        let seq = parse_seq_ref(seq_ref)?;
+        return get_task_by_seq(conn, &board_id, seq, task_ref);
+    }
+    Err(KanbanError::InvalidInput(
+        "task ref must be a task id or board-qualified ref".into(),
+    ))
 }
 
 fn split_board_seq_ref(task_ref: &str) -> Option<(&str, &str)> {

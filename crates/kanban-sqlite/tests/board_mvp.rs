@@ -1,9 +1,10 @@
 use std::path::Path;
 
-use kanban_core::TaskStatus;
+use kanban_core::{KanbanError, TaskStatus};
 use kanban_sqlite::{
-    BoardListOptions, CreateBoard, CreateTask, add_dependency, archive_board, create_board,
-    create_task, get_board, get_task, init_database, list_board_columns, list_boards, list_events,
+    BoardListOptions, CreateBoard, CreateTask, add_dependency, archive_board, claim_task,
+    create_board, create_comment, create_task, get_board, get_task, init_database,
+    list_board_columns, list_boards, list_comments, list_events, list_runs,
 };
 
 #[test]
@@ -64,6 +65,37 @@ fn board_slug_validation_rejects_reserved_prefixes_and_uppercase() {
 }
 
 #[test]
+fn duplicate_board_slug_returns_invalid_input() {
+    let temp = TempDb::new("duplicate_board_slug_returns_invalid_input");
+    init_database(&temp.path, "tester").unwrap();
+
+    create_board(
+        &temp.path,
+        "tester",
+        CreateBoard {
+            slug: "project".into(),
+            name: "Project".into(),
+            description: None,
+        },
+    )
+    .unwrap();
+
+    let error = create_board(
+        &temp.path,
+        "tester",
+        CreateBoard {
+            slug: "project".into(),
+            name: "Duplicate Project".into(),
+            description: None,
+        },
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, KanbanError::InvalidInput(_)));
+    assert!(error.to_string().contains("board slug already exists"));
+}
+
+#[test]
 fn archived_board_is_hidden_by_default_and_rejects_task_writes() {
     let temp = TempDb::new("archived_board_is_hidden_by_default_and_rejects_task_writes");
     init_database(&temp.path, "tester").unwrap();
@@ -104,6 +136,50 @@ fn archived_board_is_hidden_by_default_and_rejects_task_writes() {
 
     let events = list_events(&temp.path, "archivable", None).unwrap();
     assert_eq!(events.last().unwrap().kind, "board.archived");
+}
+
+#[test]
+fn archived_board_keeps_read_only_history_inspectable() {
+    let temp = TempDb::new("archived_board_keeps_read_only_history_inspectable");
+    init_database(&temp.path, "tester").unwrap();
+    create_board(
+        &temp.path,
+        "tester",
+        CreateBoard {
+            slug: "archivable".into(),
+            name: "Archivable".into(),
+            description: None,
+        },
+    )
+    .unwrap();
+    let task = create_task(
+        &temp.path,
+        "archivable",
+        "tester",
+        CreateTask::ready("history task"),
+    )
+    .unwrap();
+    create_comment(&temp.path, &task.id, "tester", "history note", None).unwrap();
+    claim_task(&temp.path, "archivable", "runner", &task.id, 60_000).unwrap();
+
+    archive_board(&temp.path, "archivable", "tester").unwrap();
+
+    let qualified_ref = "archivable#1";
+    let events = list_events(&temp.path, "archivable", Some(qualified_ref)).unwrap();
+    assert!(events.iter().any(|event| event.kind == "task.created"));
+    assert!(
+        events
+            .iter()
+            .any(|event| event.kind == "task.comment.created")
+    );
+
+    let runs = list_runs(&temp.path, "archivable", Some(qualified_ref)).unwrap();
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].task_id, task.id);
+
+    let comments = list_comments(&temp.path, qualified_ref).unwrap();
+    assert_eq!(comments.len(), 1);
+    assert_eq!(comments[0].body, "history note");
 }
 
 #[test]

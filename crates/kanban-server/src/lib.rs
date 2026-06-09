@@ -1480,7 +1480,7 @@ fn events_snapshot(
     state: &AppState,
     query: &EventsQuery,
 ) -> Result<(Vec<EventDto>, i64), ApiError> {
-    let board = kanban_sqlite::get_board(state.db_path(), &query.board)?;
+    let board = kanban_sqlite::get_board_including_archived(state.db_path(), &query.board)?;
     let limit = query.limit.min(1000);
     let events = kanban_sqlite::list_events_after(
         state.db_path(),

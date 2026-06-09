@@ -604,8 +604,9 @@ Response：
 Notes：
 
 - Response 不包含 `claim_token`。
-- 当前最多返回 256 KiB；更大的 log 会设置 `truncated: true`。
+- 当前最多返回末尾 256 KiB；更大的 log 会设置 `truncated: true`。
 - 若 run 没有 `log_path` 或文件不存在，返回 `not_found`。
+- 若 `log_path` 不在受信任日志目录或文件名不匹配 `<run_id>.log`，返回 `invalid_input`。
 
 ---
 
@@ -828,7 +829,7 @@ If background sync is disabled, delayed, or fails, search keeps returning curren
 POST /api/v1/maintenance/doctor
 ```
 
-Response includes SQLite integrity, migration/user version, expired running tasks, orphan run checks, dependency cycle count, archived dependency edge count, missing run log count, executable status invariant counts for dependency/spec/schedule violations, and Knowledge Substrate diagnostics.
+Response includes SQLite integrity, migration/user version, expired running tasks, orphan run checks, dependency cycle count, archived dependency edge count, missing and suspicious run log counts, executable status invariant counts for dependency/spec/schedule violations, and Knowledge Substrate diagnostics.
 
 Derived-layer diagnostics are read-only:
 

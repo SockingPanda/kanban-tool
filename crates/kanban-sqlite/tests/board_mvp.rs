@@ -5,6 +5,7 @@ use kanban_sqlite::{
     BoardListOptions, CreateBoard, CreateTask, add_dependency, archive_board, claim_task,
     create_board, create_comment, create_task, get_board, get_task, init_database,
     list_board_columns, list_boards, list_comments, list_events, list_runs,
+    set_task_retry_policy_by_id, specify_task,
 };
 
 #[test]
@@ -166,6 +167,18 @@ fn archived_board_keeps_read_only_history_inspectable() {
     let create_after_archive =
         create_comment(&temp.path, &task.id, "tester", "late write", None).unwrap_err();
     assert!(matches!(create_after_archive, KanbanError::NotFound(_)));
+    let specify_after_archive = specify_task(
+        &temp.path,
+        "tester",
+        &task.id,
+        Some("late spec".into()),
+        None,
+    )
+    .unwrap_err();
+    assert!(matches!(specify_after_archive, KanbanError::NotFound(_)));
+    let retry_after_archive =
+        set_task_retry_policy_by_id(&temp.path, "tester", &task.id, Some(2)).unwrap_err();
+    assert!(matches!(retry_after_archive, KanbanError::NotFound(_)));
 
     let qualified_ref = "archivable#1";
     let events = list_events(&temp.path, "archivable", Some(qualified_ref)).unwrap();

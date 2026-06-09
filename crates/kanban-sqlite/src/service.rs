@@ -1163,7 +1163,7 @@ pub fn specify_task(
 ) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
-    let board_id = board_id_for_task(&conn, task_id)?;
+    let board_id = active_board_id_for_task(&conn, task_id)?;
     let mut task = get_task_by_id(&conn, &board_id, task_id)?;
     if task.status != TaskStatus::Triage {
         return Err(KanbanError::InvalidTransition(format!(
@@ -1279,7 +1279,7 @@ pub fn update_task_by_id(
     patch: TaskPatch,
 ) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
-    let board_id = board_id_for_task(&conn, task_id)?;
+    let board_id = active_board_id_for_task(&conn, task_id)?;
     drop(conn);
     update_task(path, &board_id, actor, task_id, patch)
 }
@@ -1297,7 +1297,7 @@ pub fn set_task_retry_policy_by_id(
     }
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
-    let board_id = board_id_for_task(&conn, task_id)?;
+    let board_id = active_board_id_for_task(&conn, task_id)?;
     with_immediate_tx(&conn, || {
         let changed = conn
             .execute(
@@ -4265,15 +4265,6 @@ fn validate_board_slug(slug: &str) -> Result<()> {
         )));
     }
     Ok(())
-}
-
-fn board_id_for_task(conn: &Connection, task_id: &str) -> Result<String> {
-    conn.query_row("SELECT board_id FROM tasks WHERE id=?1", [task_id], |r| {
-        r.get(0)
-    })
-    .optional()
-    .map_err(storage)?
-    .ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
 }
 
 fn active_board_id_for_task(conn: &Connection, task_id: &str) -> Result<String> {

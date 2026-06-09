@@ -1587,6 +1587,14 @@ async fn archived_board_history_apis_remain_readable() {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 
+    let (status, _specify_error) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/transitions/specify", task.id),
+        json!({"description":"late spec"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
     let (status, events) = get_json(
         app.clone(),
         &format!("/api/v1/events?board=project&task_id={}", task.id),

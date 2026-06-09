@@ -2743,6 +2743,49 @@ fn dispatch_once_runs_ready_task_and_records_log() {
 }
 
 #[test]
+fn dispatch_once_rejects_untrusted_log_dir_before_claiming() {
+    let temp = TempDb::new("dispatch_once_rejects_untrusted_log_dir_before_claiming");
+    init_database(&temp.path, "tester").unwrap();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("untrusted log dir"),
+    )
+    .unwrap();
+
+    let err = dispatch_once(
+        &temp.path,
+        "default",
+        DispatchOptions {
+            actor: "dispatcher".into(),
+            command: "printf should-not-run".into(),
+            worker_profile: "default".into(),
+            claim_ttl_ms: 300_000,
+            heartbeat_interval_ms: 30_000,
+            on_success: FinishPolicy::Done,
+            on_failure: FinishPolicy::Blocked,
+            log_dir: temp.dir.join("custom-logs"),
+        },
+    )
+    .unwrap_err();
+
+    assert!(
+        err.to_string().contains("outside allowed run log roots"),
+        "{err}"
+    );
+    assert_eq!(
+        get_task(&temp.path, "default", &task.id).unwrap().status,
+        TaskStatus::Ready
+    );
+    assert!(
+        list_runs(&temp.path, "default", Some(&task.id))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn doctor_resolves_legacy_relative_run_log_paths_against_database_dir() {
     let temp = TempDb::new("doctor_resolves_legacy_relative_run_log_paths_against_database_dir");
     init_database(&temp.path, "tester").unwrap();

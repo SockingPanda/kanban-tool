@@ -453,7 +453,9 @@ kb dispatch --max-iterations 10 --poll-interval-ms 1000
 `kb dispatch` is a foreground loop. Use `--once` for one pass, or `--max-iterations`
 for bounded scripts/tests. `--profile-config` reads the selected `[workers.<name>]`
 section and can set `command`, `claim_ttl_ms`, `heartbeat_interval_ms`,
-`on_success`, `on_failure`, and `log_dir`.
+`on_success`, `on_failure`, and `log_dir`. Dispatcher log directories must be
+inside a trusted run-log root: the platform default run log directory,
+`<db_dir>/logs`, or `<db_dir>/.kb/logs`.
 
 `kb serve` starts a conservative background search sync loop when the binary is
 built with `tantivy-backend`. The loop makes one prompt startup attempt and then

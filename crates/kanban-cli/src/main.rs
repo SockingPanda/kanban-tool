@@ -26,9 +26,9 @@ use kanban_sqlite::{
     get_task, heartbeat_task, import_jsonl, init_database, list_dependencies, list_entities,
     list_events, list_outbox, list_runs, list_tasks, list_tasks_page, promote_task, queue_stats,
     rebuild_graph_store, rebuild_search_index, rebuild_vector_store, reclaim_expired,
-    remove_dependency, search_index_status, search_tasks, set_task_retry_policy_by_id,
-    submit_review_task, sync_graph_store, sync_search_index, sync_vector_store, unblock_task,
-    update_task, vacuum_database, vector_store_status,
+    remove_dependency, resolve_run_log_path, search_index_status, search_tasks,
+    set_task_retry_policy_by_id, submit_review_task, sync_graph_store, sync_search_index,
+    sync_vector_store, unblock_task, update_task, vacuum_database, vector_store_status,
 };
 
 #[derive(Debug, Parser)]
@@ -577,7 +577,7 @@ fn main() -> Result<()> {
             let report = kanban_sqlite::doctor_database(&db_path)?;
             print_or_json(cli.json, &report, || {
                 format!(
-                    "ok={} integrity={} migration={:?} user_version={} expired_running={} running_without_run={} orphan_running_runs={} dependency_cycles={} archived_dependency_edges={} missing_run_logs={} executable_dependency_violations={} executable_spec_violations={} executable_schedule_violations={} outbox_pending={} outbox_running={} outbox_failed={} derived_dirty_stores={} derived_error_stores={}",
+                    "ok={} integrity={} migration={:?} user_version={} expired_running={} running_without_run={} orphan_running_runs={} dependency_cycles={} archived_dependency_edges={} missing_run_logs={} suspicious_run_log_paths={} executable_dependency_violations={} executable_spec_violations={} executable_schedule_violations={} outbox_pending={} outbox_running={} outbox_failed={} derived_dirty_stores={} derived_error_stores={}",
                     report.ok,
                     report.integrity_check,
                     report.migration_version,
@@ -588,6 +588,7 @@ fn main() -> Result<()> {
                     report.dependency_cycles,
                     report.archived_dependency_edges,
                     report.missing_run_logs,
+                    report.suspicious_run_log_paths,
                     report.executable_dependency_violations,
                     report.executable_spec_violations,
                     report.executable_schedule_violations,
@@ -1182,11 +1183,13 @@ fn read_run_log(
 ) -> Result<RunLogOutput> {
     const DEFAULT_MAX_RUN_LOG_BYTES: usize = 256 * 1024;
     let run = get_run_by_id_global(db_path, run_id)?;
-    let path = run
+    let log_path = run
         .log_path
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("run log not found for {run_id}"))?;
-    let bytes = fs::read(path).with_context(|| format!("failed to read run log {}", path))?;
+    let path = resolve_run_log_path(db_path, run_id, log_path)?;
+    let bytes =
+        fs::read(&path).with_context(|| format!("failed to read run log {}", path.display()))?;
     let limit = tail_bytes.unwrap_or(DEFAULT_MAX_RUN_LOG_BYTES);
     let truncated = bytes.len() > limit;
     let start = if truncated { bytes.len() - limit } else { 0 };

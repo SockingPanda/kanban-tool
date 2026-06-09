@@ -360,6 +360,46 @@ fn retry_policy_and_run_log_commands_support_operator_recovery() {
 }
 
 #[test]
+fn run_log_command_rejects_suspicious_log_paths() {
+    let temp = TempDb::new("run_log_command_rejects_suspicious_log_paths");
+    kb(&temp.path, &["init"]).success();
+    kb(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "suspicious log",
+            "--description",
+            "ready spec",
+        ],
+    )
+    .success();
+    let dispatch = kb(
+        &temp.path,
+        &[
+            "--json",
+            "dispatch",
+            "--once",
+            "--command",
+            "printf 'operator log\\n'",
+            "--log-dir",
+            temp.dir.join("logs").to_str().unwrap(),
+        ],
+    )
+    .success_json();
+    let run_id = dispatch["data"]["run_id"].as_str().unwrap();
+    kanban_sqlite::connect_file(&temp.path)
+        .unwrap()
+        .execute(
+            "UPDATE task_runs SET log_path=?1 WHERE id=?2",
+            ("/etc/passwd", run_id),
+        )
+        .unwrap();
+
+    kb(&temp.path, &["run", "logs", run_id]).failure_containing("suspicious run log path");
+}
+
+#[test]
 fn task_list_supports_search_assignee_sort_limit_and_offset() {
     let temp = TempDb::new("task_list_supports_search_assignee_sort_limit_and_offset");
     kb(&temp.path, &["init"]).success();
@@ -1145,6 +1185,7 @@ fn maintenance_commands_backup_checkpoint_vacuum_export_and_import_jsonl() {
     let doctor = kb(&target.path, &["--json", "doctor"]).success_json();
     assert_eq!(doctor["data"]["ok"], true);
     assert_eq!(doctor["data"]["missing_run_logs"], 0);
+    assert_eq!(doctor["data"]["suspicious_run_log_paths"], 0);
     assert_eq!(doctor["data"]["executable_dependency_violations"], 0);
     assert_eq!(doctor["data"]["executable_spec_violations"], 0);
     assert_eq!(doctor["data"]["executable_schedule_violations"], 0);

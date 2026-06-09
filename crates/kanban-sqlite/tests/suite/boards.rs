@@ -1,12 +1,4 @@
-use std::path::Path;
-
-use kanban_core::{KanbanError, TaskStatus};
-use kanban_sqlite::{
-    BoardListOptions, CreateBoard, CreateTask, add_dependency, archive_board, claim_task,
-    complete_task, create_board, create_comment, create_task, get_board, get_task, init_database,
-    list_board_columns, list_boards, list_comments, list_events, list_runs,
-    set_task_retry_policy_by_id, specify_task,
-};
+use crate::common::*;
 
 #[test]
 fn create_board_adds_default_columns_and_created_event() {
@@ -314,32 +306,4 @@ fn task_refs_resolve_board_seq_and_board_slug_prefixes() {
             .id,
         task.id
     );
-}
-
-struct TempDb {
-    dir: std::path::PathBuf,
-    path: std::path::PathBuf,
-}
-
-impl TempDb {
-    fn new(name: &str) -> Self {
-        let mut dir = std::env::temp_dir();
-        dir.push(format!("kb-sqlite-board-mvp-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("kb.db");
-        Self { dir, path }
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
-}
-
-impl AsRef<Path> for TempDb {
-    fn as_ref(&self) -> &Path {
-        &self.path
-    }
 }

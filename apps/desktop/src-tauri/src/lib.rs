@@ -20,6 +20,7 @@ pub struct RuntimeConfig {
 
 struct EmbeddedApiRuntime {
     config: RuntimeConfig,
+    _runtime_guard: kanban_sqlite::DatabaseRuntimeGuard,
     shutdown_tx: Mutex<Option<oneshot::Sender<()>>>,
 }
 
@@ -74,6 +75,8 @@ pub fn run() {
 fn start_embedded_api() -> Result<EmbeddedApiRuntime, String> {
     let db_path = kanban_local::default_db_path();
     let actor = kanban_local::default_actor();
+    let runtime_guard =
+        kanban_sqlite::begin_database_runtime(&db_path).map_err(|error| error.to_string())?;
     kanban_sqlite::init_database(&db_path, &actor).map_err(|error| error.to_string())?;
 
     let state = kanban_server::AppState::new(db_path.clone(), actor.clone());
@@ -125,6 +128,7 @@ fn start_embedded_api() -> Result<EmbeddedApiRuntime, String> {
             actor,
             board: "default".to_owned(),
         },
+        _runtime_guard: runtime_guard,
         shutdown_tx: Mutex::new(Some(shutdown_tx)),
     })
 }

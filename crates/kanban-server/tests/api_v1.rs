@@ -304,6 +304,40 @@ async fn boards_api_creates_and_archives_board() {
 }
 
 #[tokio::test]
+async fn boards_api_archive_rejects_running_work() {
+    let (_dir, db_path) = temp_db();
+    kanban_sqlite::create_board(
+        &db_path,
+        "api-test",
+        kanban_sqlite::CreateBoard {
+            slug: "busy".into(),
+            name: "Busy".into(),
+            description: None,
+        },
+    )
+    .expect("board");
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "busy",
+        "seed",
+        kanban_sqlite::CreateTask::ready("running task"),
+    )
+    .expect("task");
+    kanban_sqlite::claim_task(&db_path, "busy", "worker", &task.id, 60_000).expect("claim");
+    let app = build_router(AppState::new(db_path.clone(), "api-test"));
+
+    let (status, json) = post_json(app, "/api/v1/boards/busy/archive", json!({})).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json["error"]["code"], "invalid_transition");
+    assert!(
+        kanban_sqlite::get_board(&db_path, "busy")
+            .expect("board")
+            .archived_at
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn boards_api_duplicate_slug_returns_invalid_input() {
     let (_dir, db_path) = temp_db();
     let app = build_router(AppState::new(&db_path, "api-test"));
@@ -1576,6 +1610,15 @@ async fn archived_board_history_apis_remain_readable() {
         .expect("comment");
     let claim =
         kanban_sqlite::claim_task(&db_path, "project", "worker", &task.id, 60_000).expect("claim");
+    kanban_sqlite::complete_task(
+        &db_path,
+        "project",
+        "worker",
+        &task.id,
+        Some(&claim.claim_token),
+        false,
+    )
+    .expect("complete");
     kanban_sqlite::archive_board(&db_path, "project", "api-test").expect("archive board");
     let app = build_router(AppState::new(db_path, "api-test"));
 

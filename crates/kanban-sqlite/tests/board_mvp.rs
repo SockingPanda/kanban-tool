@@ -3,7 +3,7 @@ use std::path::Path;
 use kanban_core::{KanbanError, TaskStatus};
 use kanban_sqlite::{
     BoardListOptions, CreateBoard, CreateTask, add_dependency, archive_board, claim_task,
-    create_board, create_comment, create_task, get_board, get_task, init_database,
+    complete_task, create_board, create_comment, create_task, get_board, get_task, init_database,
     list_board_columns, list_boards, list_comments, list_events, list_runs,
     set_task_retry_policy_by_id, specify_task,
 };
@@ -140,6 +140,35 @@ fn archived_board_is_hidden_by_default_and_rejects_task_writes() {
 }
 
 #[test]
+fn board_archive_rejects_running_work() {
+    let temp = TempDb::new("board_archive_rejects_running_work");
+    init_database(&temp.path, "tester").unwrap();
+    create_board(
+        &temp.path,
+        "tester",
+        CreateBoard {
+            slug: "busy".into(),
+            name: "Busy".into(),
+            description: None,
+        },
+    )
+    .unwrap();
+    let task = create_task(
+        &temp.path,
+        "busy",
+        "tester",
+        CreateTask::ready("running task"),
+    )
+    .unwrap();
+    claim_task(&temp.path, "busy", "runner", &task.id, 60_000).unwrap();
+
+    let error = archive_board(&temp.path, "busy", "tester").unwrap_err();
+    assert!(matches!(error, KanbanError::InvalidTransition(_)));
+    assert!(error.to_string().contains("running work"));
+    assert!(get_board(&temp.path, "busy").unwrap().archived_at.is_none());
+}
+
+#[test]
 fn archived_board_keeps_read_only_history_inspectable() {
     let temp = TempDb::new("archived_board_keeps_read_only_history_inspectable");
     init_database(&temp.path, "tester").unwrap();
@@ -161,7 +190,16 @@ fn archived_board_keeps_read_only_history_inspectable() {
     )
     .unwrap();
     create_comment(&temp.path, &task.id, "tester", "history note", None).unwrap();
-    claim_task(&temp.path, "archivable", "runner", &task.id, 60_000).unwrap();
+    let claim = claim_task(&temp.path, "archivable", "runner", &task.id, 60_000).unwrap();
+    complete_task(
+        &temp.path,
+        "archivable",
+        "runner",
+        &task.id,
+        Some(&claim.claim_token),
+        false,
+    )
+    .unwrap();
 
     archive_board(&temp.path, "archivable", "tester").unwrap();
     let create_after_archive =

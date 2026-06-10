@@ -5,7 +5,7 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
 {
     let temp =
         TempDb::new("sqlite_search_fallback_matches_task_related_text_with_filters_and_paging")?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
 
     let alpha = create_task(
         &temp.path,
@@ -21,8 +21,7 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
             due_at: None,
             metadata_json: "{}".into(),
         },
-    )
-    .unwrap();
+    )?;
     let beta = create_task(
         &temp.path,
         "default",
@@ -37,8 +36,7 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
             due_at: None,
             metadata_json: "{}".into(),
         },
-    )
-    .unwrap();
+    )?;
     let gamma = create_task(
         &temp.path,
         "default",
@@ -53,8 +51,7 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
             due_at: None,
             metadata_json: "{}".into(),
         },
-    )
-    .unwrap();
+    )?;
     let archived = create_task(
         &temp.path,
         "default",
@@ -69,8 +66,7 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
             due_at: None,
             metadata_json: "{}".into(),
         },
-    )
-    .unwrap();
+    )?;
 
     create_comment(
         &temp.path,
@@ -78,21 +74,19 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
         "tester",
         "comment carries fallback needle",
         None,
-    )
-    .unwrap();
-    archive_task(&temp.path, "default", "tester", &archived.id, false).unwrap();
+    )?;
+    archive_task(&temp.path, "default", "tester", &archived.id, false)?;
 
-    let conn = connect_file(&temp.path).unwrap();
-    let board_id: String = conn
-        .query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+    let conn = connect_file(&temp.path)?;
+    let board_id: String =
+        conn.query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
             row.get(0)
-        })
-        .unwrap();
+        })?;
     conn.execute(
         "INSERT INTO task_runs(id, board_id, task_id, status, claim_token, claim_owner, claim_expires_at, started_at, summary, error, metadata_json) VALUES (?1, ?2, ?3, 'failed', 'token', 'tester', 1, 1, ?4, ?5, '{}')",
         params![new_run_id(), board_id, gamma.id, "run fallback needle summary", "run fallback needle error"],
     )
-    .unwrap();
+    ?;
 
     let results = search_tasks(
         &temp.path,
@@ -105,8 +99,7 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
             limit: 10,
             offset: 0,
         },
-    )
-    .unwrap();
+    )?;
 
     assert_eq!(results.meta.backend, "sqlite");
     assert!(!results.meta.stale);
@@ -132,8 +125,7 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
             limit: 2,
             offset: 2,
         },
-    )
-    .unwrap();
+    )?;
     assert_eq!(second_page.hits.len(), 2);
     assert!(
         second_page
@@ -147,9 +139,9 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
 #[test]
 fn sqlite_search_rejects_limit_that_cannot_be_bounded_safely() -> anyhow::Result<()> {
     let temp = TempDb::new("sqlite_search_rejects_limit_that_cannot_be_bounded_safely")?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
 
-    let error = search_tasks(
+    let error = result_err(search_tasks(
         &temp.path,
         kanban_search::SearchQuery {
             board: "default".into(),
@@ -160,8 +152,7 @@ fn sqlite_search_rejects_limit_that_cannot_be_bounded_safely() -> anyhow::Result
             limit: usize::MAX,
             offset: 0,
         },
-    )
-    .unwrap_err();
+    ))?;
 
     assert!(error.to_string().contains("limit must be <= 1000"));
     Ok(())
@@ -170,9 +161,9 @@ fn sqlite_search_rejects_limit_that_cannot_be_bounded_safely() -> anyhow::Result
 #[test]
 fn sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely() -> anyhow::Result<()> {
     let temp = TempDb::new("sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely")?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
 
-    let error = kanban_sqlite::list_tasks_page(
+    let error = result_err(kanban_sqlite::list_tasks_page(
         &temp.path,
         "default",
         kanban_sqlite::TaskListOptions {
@@ -184,8 +175,7 @@ fn sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely() -> anyhow::Res
             limit: usize::MAX,
             offset: 0,
         },
-    )
-    .unwrap_err();
+    ))?;
 
     assert!(error.to_string().contains("limit must be <= 1000"));
     Ok(())
@@ -197,7 +187,7 @@ fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_te
     let temp = TempDb::new(
         "sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_text",
     )?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
 
     let title_percent = create_task(
         &temp.path,
@@ -213,8 +203,7 @@ fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_te
             due_at: None,
             metadata_json: "{}".into(),
         },
-    )
-    .unwrap();
+    )?;
     let description_underscore = create_task(
         &temp.path,
         "default",
@@ -229,22 +218,19 @@ fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_te
             due_at: None,
             metadata_json: "{}".into(),
         },
-    )
-    .unwrap();
+    )?;
     let comment_percent = create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("comment literal source"),
-    )
-    .unwrap();
+    )?;
     let run_underscore = create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("run literal source"),
-    )
-    .unwrap();
+    )?;
     let title_backslash = create_task(
         &temp.path,
         "default",
@@ -259,15 +245,13 @@ fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_te
             due_at: None,
             metadata_json: "{}".into(),
         },
-    )
-    .unwrap();
+    )?;
     let control = create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("control plain source"),
-    )
-    .unwrap();
+    )?;
 
     create_comment(
         &temp.path,
@@ -275,20 +259,18 @@ fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_te
         "tester",
         "comment contains literal % marker",
         None,
-    )
-    .unwrap();
+    )?;
 
-    let conn = connect_file(&temp.path).unwrap();
-    let board_id: String = conn
-        .query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+    let conn = connect_file(&temp.path)?;
+    let board_id: String =
+        conn.query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
             row.get(0)
-        })
-        .unwrap();
+        })?;
     conn.execute(
         "INSERT INTO task_runs(id, board_id, task_id, status, claim_token, claim_owner, claim_expires_at, started_at, summary, error, metadata_json) VALUES (?1, ?2, ?3, 'failed', 'token', 'tester', 1, 1, ?4, NULL, '{}')",
         params![new_run_id(), board_id, run_underscore.id, "run contains literal _ marker"],
     )
-    .unwrap();
+    ?;
 
     let percent_results = search_tasks(
         &temp.path,
@@ -301,8 +283,7 @@ fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_te
             limit: 10,
             offset: 0,
         },
-    )
-    .unwrap();
+    )?;
     let percent_ids = percent_results
         .hits
         .iter()
@@ -323,8 +304,7 @@ fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_te
             limit: 10,
             offset: 0,
         },
-    )
-    .unwrap();
+    )?;
     let underscore_ids = underscore_results
         .hits
         .iter()
@@ -345,8 +325,7 @@ fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_te
             limit: 10,
             offset: 0,
         },
-    )
-    .unwrap();
+    )?;
     let backslash_ids = backslash_results
         .hits
         .iter()

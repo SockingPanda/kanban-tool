@@ -100,8 +100,10 @@ pub fn update_task(
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let mut task = resolve_task(&conn, &board_id, task_ref)?;
-        let recompute_needed =
-            patch.title.is_some() || patch.description.is_some() || patch.scheduled_at.is_some();
+        let content_recompute_allowed = task.status != TaskStatus::Todo;
+        let recompute_needed = patch.scheduled_at.is_some()
+            || (content_recompute_allowed
+                && (patch.title.is_some() || patch.description.is_some()));
         if patch
             .expected_lock_version
             .is_some_and(|expected| task.lock_version != expected)

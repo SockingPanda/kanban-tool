@@ -4,7 +4,7 @@ import { archiveTaskBody, canSpecifyTask, isBlockableStatus, specifyTaskBody } f
 export type DragTransitionPlan =
   | {
       ok: true
-      action: "specify" | "promote" | "claim" | "complete" | "block" | "unblock" | "archive"
+      action: "specify" | "promote" | "claim" | "complete" | "submit-review" | "block" | "unblock" | "archive"
       body: Record<string, unknown>
       confirm?: string
       promptReason?: boolean
@@ -71,6 +71,25 @@ export function planDragTransition(
           confirm: `Force complete running task #${task.seq} without a claim token?`,
           message: "Force complete requested.",
         }
+  }
+
+  if (task.status === "running" && targetStatus === "review") {
+    if (!claimToken) return { ok: false, reason: "Submit for review requires a claim token." }
+    return {
+      ok: true,
+      action: "submit-review",
+      body: { claim_token: claimToken },
+      message: "Submit for review requested.",
+    }
+  }
+
+  if (task.status === "review" && targetStatus === "done") {
+    return {
+      ok: true,
+      action: "complete",
+      body: {},
+      message: "Complete requested.",
+    }
   }
 
   if (task.status === "running" && targetStatus === "blocked") {

@@ -69,6 +69,30 @@ describe("drag transition policy", () => {
     })
   })
 
+  it("maps running drops on review to submit review when a claim token is available", () => {
+    expect(planDragTransition(task({ status: "running" }), "review", "claim_123")).toMatchObject({
+      ok: true,
+      action: "submit-review",
+      body: { claim_token: "claim_123" },
+      message: "Submit for review requested.",
+    })
+  })
+
+  it("rejects running drops on review without a claim token", () => {
+    expect(planDragTransition(task({ status: "running" }), "review", null)).toEqual({
+      ok: false,
+      reason: "Submit for review requires a claim token.",
+    })
+  })
+
+  it("maps review drops on done to complete without a claim token", () => {
+    expect(planDragTransition(task({ status: "review" }), "done", null)).toMatchObject({
+      ok: true,
+      action: "complete",
+      body: {},
+    })
+  })
+
   it("does not route already blocked or terminal tasks through block", () => {
     expect(planDragTransition(task({ status: "blocked" }), "blocked", null)).toEqual({
       ok: false,

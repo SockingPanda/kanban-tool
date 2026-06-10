@@ -18,14 +18,30 @@ describe("KanbanApi task search", () => {
     const fetchMock = mockFetch({ data: [task({ id: "t_list", title: "plain list" })] })
     const api = new KanbanApi(runtimeConfig)
 
-    const tasks = await api.listTasks({ includeArchived: true, statuses: ["ready"] })
+    const result = await api.listTasks({ includeArchived: true, statuses: ["ready"], limit: 25, offset: 50 })
 
-    expect(tasks).toHaveLength(1)
+    expect(result.tasks).toHaveLength(1)
+    expect(result.page).toEqual({ limit: 25, offset: 50, total: null })
     const url = calledUrl(fetchMock)
     expect(url.pathname).toBe("/api/v1/boards/default/tasks")
     expect(url.searchParams.get("q")).toBeNull()
     expect(url.searchParams.get("include_archived")).toBe("true")
+    expect(url.searchParams.get("limit")).toBe("25")
+    expect(url.searchParams.get("offset")).toBe("50")
     expect(url.searchParams.getAll("status")).toEqual(["ready"])
+  })
+
+  it("keeps list task pagination metadata from the response envelope", async () => {
+    const fetchMock = mockFetch({
+      data: [task({ id: "t_list", title: "plain list" })],
+      meta: { limit: 25, offset: 50, total: 225 },
+    })
+    const api = new KanbanApi(runtimeConfig)
+
+    const result = await api.listTasks({ includeArchived: true, limit: 25, offset: 50 })
+
+    expect(result.page).toEqual({ limit: 25, offset: 50, total: 225 })
+    expect(calledInit(fetchMock).signal).toBeUndefined()
   })
 
   it("uses the search endpoint and returns hydrated task rows", async () => {
@@ -48,23 +64,75 @@ describe("KanbanApi task search", () => {
       query: " hydrated ",
       includeArchived: false,
       statuses: ["ready", "review"],
+      limit: 20,
+      offset: 40,
     })
 
     expect(result.tasks).toEqual([hitTask])
-    expect(result.meta.backend).toBe("tantivy")
-    expect(result.meta.stale).toBe(true)
+    expect(result.searchMeta.backend).toBe("tantivy")
+    expect(result.searchMeta.stale).toBe(true)
+    expect(result.page).toEqual({ limit: 20, offset: 40, total: null })
     const url = calledUrl(fetchMock)
     expect(url.pathname).toBe("/api/v1/search/tasks")
     expect(url.searchParams.get("board")).toBe("default")
     expect(url.searchParams.get("q")).toBe("hydrated")
-    expect(url.searchParams.get("limit")).toBe("100")
+    expect(url.searchParams.get("limit")).toBe("20")
+    expect(url.searchParams.get("offset")).toBe("40")
     expect(url.searchParams.getAll("status")).toEqual(["ready", "review"])
+  })
+
+  it("passes AbortSignal through queryable API requests", async () => {
+    const fetchMock = mockFetch({ data: [], meta: { limit: 10, offset: 0, total: 0 } })
+    const api = new KanbanApi(runtimeConfig)
+    const controller = new AbortController()
+
+    await api.listTasks({ signal: controller.signal, limit: 10 })
+
+    expect(calledInit(fetchMock).signal).toBe(controller.signal)
+  })
+
+  it("preserves unknown totals while keeping numeric limit and offset", async () => {
+    const fetchMock = mockFetch({
+      data: {
+        hits: [],
+        meta: {
+          backend: "sqlite",
+          stale: false,
+          index_version: null,
+          last_event_id: null,
+          index_lag_events: null,
+        },
+      },
+      meta: { limit: 10, offset: 20 },
+    })
+    const api = new KanbanApi(runtimeConfig)
+
+    const result = await api.searchTasks({ query: "missing total", limit: 10, offset: 20 })
+
+    expect(result.page).toEqual({ limit: 10, offset: 20, total: null })
+    expect(calledUrl(fetchMock).searchParams.get("q")).toBe("missing total")
+  })
+
+  it("uses event envelope cursor metadata instead of deriving only from row ids", async () => {
+    const fetchMock = mockFetch({
+      data: [eventRecord({ id: 123, task_id: "t_1", kind: "task.claimed" })],
+      meta: { next_after: 130 },
+    })
+    const api = new KanbanApi(runtimeConfig)
+
+    const page = await api.listEventsAfter(120)
+
+    expect(page.events).toHaveLength(1)
+    expect(page.meta.next_after).toBe(130)
+    const url = calledUrl(fetchMock)
+    expect(url.searchParams.get("after")).toBe("120")
   })
 })
 
 function mockFetch(envelope: unknown) {
-  const fetchMock = vi.fn(async (input: string) => {
+  const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
     void input
+    void init
     return {
       ok: true,
       status: 200,
@@ -82,10 +150,33 @@ function calledUrl(fetchMock: ReturnType<typeof mockFetch>) {
   return new URL(url)
 }
 
+function calledInit(fetchMock: ReturnType<typeof mockFetch>) {
+  const init = fetchMock.mock.calls[0]?.[1]
+  expect(init).toBeDefined()
+  return init!
+}
+
+function eventRecord(overrides: Partial<import("./api").EventRecord> = {}): import("./api").EventRecord {
+  return {
+    id: 1,
+    event_id: "e_1",
+    board_id: "b_1",
+    task_id: "t_1",
+    run_id: null,
+    kind: "task.created",
+    actor: "seed",
+    payload: {},
+    created_at: 1,
+    ...overrides,
+  }
+}
+
 function task(overrides: Partial<Task> = {}): Task {
   return {
     id: "t_1",
     board_id: "b_1",
+    board_slug: "default",
+    ref: "default#1",
     seq: 1,
     title: "Task",
     description: null,

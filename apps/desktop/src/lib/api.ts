@@ -132,7 +132,7 @@ export type ApiEnvelope<T, M = Record<string, unknown>> = { data: T; meta?: M }
 export type PageMeta = {
   limit: number
   offset: number
-  total: number
+  total: number | null
 }
 
 export type TaskPageResult = {
@@ -229,7 +229,7 @@ export class KanbanApi {
     )
     return {
       tasks: envelope.data,
-      page: normalizePageMeta(envelope.meta, envelope.data.length, { limit, offset }),
+      page: normalizePageMeta(envelope.meta, { limit, offset }),
     } satisfies TaskPageResult
   }
 
@@ -250,7 +250,7 @@ export class KanbanApi {
     return {
       tasks: envelope.data.hits.map((hit) => hit.task),
       searchMeta: envelope.data.meta,
-      page: normalizePageMeta(envelope.meta, envelope.data.hits.length, { limit, offset }),
+      page: normalizePageMeta(envelope.meta, { limit, offset }),
     } satisfies SearchTasksResult
   }
 
@@ -401,10 +401,10 @@ function parseJsonEnvelope<T, M>(text: string): ApiEnvelope<T, M> | ErrorEnvelop
   }
 }
 
-function normalizePageMeta(meta: PageEnvelopeMeta | undefined, count: number, fallback: { limit: number; offset: number }): PageMeta {
+function normalizePageMeta(meta: PageEnvelopeMeta | undefined, fallback: { limit: number; offset: number }): PageMeta {
   const limit = numericMeta(meta?.limit, fallback.limit)
   const offset = numericMeta(meta?.offset, fallback.offset)
-  const total = numericMeta(meta?.total, offset + count)
+  const total = typeof meta?.total === "number" && Number.isFinite(meta.total) ? meta.total : null
   return { limit, offset, total }
 }
 

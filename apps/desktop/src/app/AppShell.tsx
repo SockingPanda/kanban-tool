@@ -33,6 +33,7 @@ import type {
   TaskStatus,
   PageMeta,
 } from "@/lib/api"
+import { pageRangeLabel } from "@/lib/pagination"
 import { cn } from "@/lib/utils"
 
 export function AppShell({
@@ -252,7 +253,7 @@ export function AppShell({
 
             <div className="flex h-8 items-center justify-between border-b border-neutral-200 bg-white px-4 text-xs text-neutral-500">
               <span>
-                showing {visibleTaskCount ? page.offset + 1 : 0}-{page.offset + visibleTaskCount} of {page.total}
+                {pageRangeLabel(page, visibleTaskCount)}
                 {tasksLoading ? " · loading" : tasksRefreshing ? " · refreshing" : ""}
               </span>
               <span className="flex items-center gap-2">

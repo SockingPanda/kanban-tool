@@ -8,6 +8,7 @@ import { useEventPoller } from "@/features/events/useEventPoller"
 import { taskDetailOrEmpty, useTaskDetail } from "@/features/task-detail/useTaskDetail"
 import {
   parseDateInput,
+  reconcileSavedTaskDraft,
   reconcileTaskDraft,
   type TaskDraftState,
   type TaskEditDraft,
@@ -23,6 +24,7 @@ import {
   loadRuntimeConfig,
 } from "@/lib/api"
 import { queryKeys } from "@/lib/query-keys"
+import { hasNextPage } from "@/lib/pagination"
 import { useDebouncedValue } from "@/lib/use-debounced-value"
 
 const PAGE_SIZE = 100
@@ -79,7 +81,7 @@ function App() {
   })
 
   const tasks = tasksQuery.data?.tasks ?? EMPTY_TASKS
-  const page = tasksQuery.data?.page ?? { limit: PAGE_SIZE, offset: pageOffset, total: tasks.length }
+  const page = tasksQuery.data?.page ?? { limit: PAGE_SIZE, offset: pageOffset, total: null }
   const searchMeta = tasksQuery.data?.searchMeta ?? null
 
   useEffect(() => {
@@ -208,16 +210,19 @@ function App() {
 
   async function saveTask() {
     if (!api || !selectedTask || !draftState) return
+    if (draftState.taskId !== selectedTask.id) return
+    const taskId = selectedTask.id
+    const draft = draftState.draft
     await runAction(async () => {
-      const updated = await api.updateTask(selectedTask.id, {
-        title: draftState.draft.title.trim(),
-        description: draftState.draft.description.trim() || null,
-        assignee: draftState.draft.assignee.trim() || null,
-        priority: Number(draftState.draft.priority) || 0,
-        due_at: parseDateInput(draftState.draft.dueAt),
-        scheduled_at: parseDateInput(draftState.draft.scheduledAt),
+      const updated = await api.updateTask(taskId, {
+        title: draft.title.trim(),
+        description: draft.description.trim() || null,
+        assignee: draft.assignee.trim() || null,
+        priority: Number(draft.priority) || 0,
+        due_at: parseDateInput(draft.dueAt),
+        scheduled_at: parseDateInput(draft.scheduledAt),
       })
-      setDraftState((current) => reconcileTaskDraft(current, updated, { force: true }))
+      setDraftState((current) => reconcileSavedTaskDraft(current, updated))
       return updated
     }, "save")
   }
@@ -239,7 +244,7 @@ function App() {
     })
   }
 
-  const hasNextPage = page.offset + tasks.length < page.total
+  const hasNext = hasNextPage(page, tasks.length)
   const hasPreviousPage = page.offset > 0
 
   return (
@@ -259,7 +264,7 @@ function App() {
       showArchived={showArchived}
       page={page}
       visibleTaskCount={tasks.length}
-      hasNextPage={hasNextPage}
+      hasNextPage={hasNext}
       hasPreviousPage={hasPreviousPage}
       newTitle={newTitle}
       newDescription={newDescription}

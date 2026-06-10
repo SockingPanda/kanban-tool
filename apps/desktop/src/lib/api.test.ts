@@ -21,7 +21,7 @@ describe("KanbanApi task search", () => {
     const result = await api.listTasks({ includeArchived: true, statuses: ["ready"], limit: 25, offset: 50 })
 
     expect(result.tasks).toHaveLength(1)
-    expect(result.page).toEqual({ limit: 25, offset: 50, total: 51 })
+    expect(result.page).toEqual({ limit: 25, offset: 50, total: null })
     const url = calledUrl(fetchMock)
     expect(url.pathname).toBe("/api/v1/boards/default/tasks")
     expect(url.searchParams.get("q")).toBeNull()
@@ -71,7 +71,7 @@ describe("KanbanApi task search", () => {
     expect(result.tasks).toEqual([hitTask])
     expect(result.searchMeta.backend).toBe("tantivy")
     expect(result.searchMeta.stale).toBe(true)
-    expect(result.page).toEqual({ limit: 20, offset: 40, total: 41 })
+    expect(result.page).toEqual({ limit: 20, offset: 40, total: null })
     const url = calledUrl(fetchMock)
     expect(url.pathname).toBe("/api/v1/search/tasks")
     expect(url.searchParams.get("board")).toBe("default")
@@ -89,6 +89,28 @@ describe("KanbanApi task search", () => {
     await api.listTasks({ signal: controller.signal, limit: 10 })
 
     expect(calledInit(fetchMock).signal).toBe(controller.signal)
+  })
+
+  it("preserves unknown totals while keeping numeric limit and offset", async () => {
+    const fetchMock = mockFetch({
+      data: {
+        hits: [],
+        meta: {
+          backend: "sqlite",
+          stale: false,
+          index_version: null,
+          last_event_id: null,
+          index_lag_events: null,
+        },
+      },
+      meta: { limit: 10, offset: 20 },
+    })
+    const api = new KanbanApi(runtimeConfig)
+
+    const result = await api.searchTasks({ query: "missing total", limit: 10, offset: 20 })
+
+    expect(result.page).toEqual({ limit: 10, offset: 20, total: null })
+    expect(calledUrl(fetchMock).searchParams.get("q")).toBe("missing total")
   })
 
   it("uses event envelope cursor metadata instead of deriving only from row ids", async () => {

@@ -12,14 +12,18 @@ const BOARD_AFFECTING_TASK_KINDS = new Set([
   "task.specified",
   "task.promoted",
   "task.claimed",
+  "task.heartbeat",
   "task.completed",
-  "task.review.submitted",
+  "task.submitted_for_review",
   "task.blocked",
   "task.unblocked",
+  "task.recomputed",
   "task.reclaimed",
   "task.archived",
-  "task.dependency.added",
-  "task.dependency.removed",
+  "task.restored",
+  "task.deleted",
+  "task.export_sanitized",
+  "task.retry_policy.updated",
 ])
 
 export function nextEventCursor(current: number, events: EventRecord[], meta: EventMeta) {

@@ -4,7 +4,7 @@ import type { ElementType, ReactNode } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import type { BoardStats, CheckpointReport, DoctorDerivedStore, DoctorReport, KanbanApi, SearchMeta, StaleClaim } from "@/lib/api"
+import type { BoardStats, CheckpointReport, DoctorDerivedStore, DoctorReport, KanbanApi, SearchIndexStatus, StaleClaim } from "@/lib/api"
 
 export function MaintenanceView({ api }: { api: KanbanApi | null }) {
   const statsQuery = useQuery({
@@ -117,7 +117,7 @@ function StatsGrid({ stats }: { stats?: BoardStats }) {
   )
 }
 
-function SearchStatus({ meta }: { meta?: SearchMeta }) {
+function SearchStatus({ meta }: { meta?: SearchIndexStatus }) {
   if (!meta) return <div className="text-sm text-neutral-500">Loading search status.</div>
   return (
     <div className="space-y-2 text-sm">

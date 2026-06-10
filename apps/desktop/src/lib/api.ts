@@ -195,13 +195,16 @@ export type ClaimResponse = {
   claim_expires_at: number | null
 }
 
-export type SearchMeta = {
+export type SearchTasksMeta = {
   backend: string
-  derived_index: boolean
   stale: boolean
   index_version: string | null
   last_event_id: number | null
   index_lag_events: number | null
+}
+
+export type SearchIndexStatus = SearchTasksMeta & {
+  derived_index: boolean
   message: string
 }
 
@@ -220,7 +223,7 @@ export type TaskPageResult = {
 
 export type SearchTasksResult = {
   tasks: Task[]
-  searchMeta: SearchMeta
+  searchMeta: SearchTasksMeta
   page: PageMeta
 }
 
@@ -245,7 +248,7 @@ type SearchTaskHit = {
 
 type SearchTasksResponse = {
   hits: SearchTaskHit[]
-  meta: SearchMeta
+  meta: SearchTasksMeta
 }
 
 export class ApiError extends Error {
@@ -295,7 +298,7 @@ export class KanbanApi {
 
   async searchStatus(options: RequestOptions = {}) {
     const params = new URLSearchParams({ board: this.board })
-    return this.request<SearchMeta>(`/api/v1/search/status?${params.toString()}`, options)
+    return this.request<SearchIndexStatus>(`/api/v1/search/status?${params.toString()}`, options)
   }
 
   async doctor(options: RequestOptions = {}) {

@@ -23,7 +23,7 @@ fn serve_help_shows_localhost_bind_defaults() -> anyhow::Result<()> {
 }
 
 #[test]
-fn serve_rejects_non_loopback_host() -> anyhow::Result<()> {
+fn serve_rejects_non_loopback_host_before_opening_database() -> anyhow::Result<()> {
     let temp = TempDb::new("serve_rejects_non_loopback_host_without_creating_database")?;
 
     kb(&temp.path, &["serve", "--host", "0.0.0.0", "--port", "0"])?

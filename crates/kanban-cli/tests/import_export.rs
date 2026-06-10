@@ -515,6 +515,8 @@ fn export_scrubs_active_running_claims_for_roundtrip_import() -> anyhow::Result<
     assert!(export_content.contains(r#""status":"ready""#));
     assert!(export_content.contains(r#""current_run_id":null"#));
     assert!(export_content.contains(r#""claim_token":null"#));
+    assert!(export_content.contains(r#""actor":"kanban export""#));
+    assert!(!export_content.contains(r#""actor":"kb export""#));
 
     let target = TempDb::new("export_scrubs_active_running_claims_target")?;
     kanban(
@@ -540,8 +542,18 @@ fn export_scrubs_active_running_claims_for_roundtrip_import() -> anyhow::Result<
             .context("expected JSON array")?
             .iter()
             .any(|event| {
-                event["kind"] == "task.export_sanitized" && event["run_id"].as_str().is_some()
+                event["kind"] == "task.export_sanitized"
+                    && event["run_id"].as_str().is_some()
+                    && event["actor"] == "kanban export"
             }),
+        "events: {events}"
+    );
+    assert!(
+        !events["data"]
+            .as_array()
+            .context("expected JSON array")?
+            .iter()
+            .any(|event| event["actor"] == "kb export"),
         "events: {events}"
     );
     Ok(())

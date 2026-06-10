@@ -418,7 +418,7 @@ pub(crate) struct DispatchArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct ServeArgs {
-    /// Host interface to bind. Defaults to localhost only; non-local hosts bind only when explicitly passed.
+    /// Loopback host interface to bind. Only loopback hosts are supported.
     #[arg(long, default_value = "127.0.0.1")]
     pub(crate) host: String,
     /// TCP port to bind.

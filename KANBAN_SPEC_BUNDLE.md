@@ -86,7 +86,7 @@ kanban-tool/
 
 ## 默认二进制名
 
-本文档中使用 `kb` 作为 CLI binary 名称。项目正式命名后可统一替换。
+本文档中使用 `kanban` 作为 CLI binary 名称。
 
 
 ---
@@ -212,7 +212,7 @@ triage | todo | scheduled | ready | running | blocked | review | done | archived
 通过 CLI 指定：
 
 ```bash
-kb --db .kb/kb.db task list
+kanban --db .kb/kb.db task list
 ```
 
 ### 5.2 SQLite 配置
@@ -276,21 +276,21 @@ API 见 [`API_SPEC.md`](API_SPEC.md)。
 CLI 是一等入口，必须覆盖核心生命周期：
 
 ```bash
-kb init
-kb board list
-kb task create "实现 SQLite schema"
-kb task list --status ready
-kb task show t_xxx
-kb task start t_xxx
-kb task heartbeat t_xxx --claim-token <token>
-kb task block t_xxx "等待接口确认"
-kb task unblock t_xxx
-kb task done t_xxx --claim-token <token>
-kb task archive t_xxx
-kb events t_xxx
-kb runs t_xxx
-kb serve
-kb dispatch --once
+kanban init
+kanban board list
+kanban task create "实现 SQLite schema"
+kanban task list --status ready
+kanban task show t_xxx
+kanban task start t_xxx
+kanban task heartbeat t_xxx --claim-token <token>
+kanban task block t_xxx "等待接口确认"
+kanban task unblock t_xxx
+kanban task done t_xxx --claim-token <token>
+kanban task archive t_xxx
+kanban events t_xxx
+kanban runs t_xxx
+kanban serve
+kanban dispatch --once
 ```
 
 CLI 必须支持：
@@ -545,8 +545,8 @@ CLI 可以直接打开 SQLite DB 调用 service，不需要 server 常驻。
 Dispatcher 可以嵌入 server，也可以由 CLI 单独运行：
 
 ```bash
-kb dispatch
-kb dispatch --once
+kanban dispatch
+kanban dispatch --once
 ```
 
 ---
@@ -623,8 +623,8 @@ State-changing command
 ### 4.1 无 server 模式
 
 ```bash
-kb task create "..."
-kb task list
+kanban task create "..."
+kanban task list
 ```
 
 CLI 直接打开 SQLite DB。
@@ -634,7 +634,7 @@ CLI 直接打开 SQLite DB。
 ### 4.2 server 模式
 
 ```bash
-kb serve
+kanban serve
 ```
 
 启动：
@@ -648,13 +648,13 @@ kb serve
 ### 4.3 dispatcher 模式
 
 ```bash
-kb dispatch
+kanban dispatch
 ```
 
 启动本地调度循环。也可以在 server 中开启：
 
 ```bash
-kb serve --dispatcher
+kanban serve --dispatcher
 ```
 
 ---
@@ -754,7 +754,7 @@ SQLite WAL 和 busy timeout 负责排队。业务层仍需保证 transaction 短
 - server 输出结构化日志。
 - dispatcher 对每次 run 写入 `task_runs`。
 - worker stdout/stderr 可写入本地 log 文件，DB 只存路径和摘要。
-- `kb doctor` 检查 DB、WAL、schema、integrity、orphan run。
+- `kanban doctor` 检查 DB、WAL、schema、integrity、orphan run。
 
 ---
 
@@ -906,7 +906,7 @@ Side effects：
 Promote 通常由 dispatcher 或 complete/unblock 后的 service 内部触发，也可由 CLI 手动触发：
 
 ```bash
-kb task promote t_xxx
+kanban task promote t_xxx
 ```
 
 ---
@@ -1487,7 +1487,7 @@ run.finished
 - Task detail timeline。
 - SSE event stream。
 - Debug dispatcher。
-- CLI `kb events`。
+- CLI `kanban events`。
 - 未来 export/import。
 
 ---
@@ -1653,7 +1653,7 @@ LIMIT ?;
 建议支持 JSONL export：
 
 ```bash
-kb export --board default --format jsonl > board.jsonl
+kanban export --board default --format jsonl > board.jsonl
 ```
 
 每行：
@@ -1674,7 +1674,7 @@ MVP 可先只 export，不做 import。
 
 # CLI SPEC
 
-默认 binary 名称：`kb`
+默认 binary 名称：`kanban`
 
 CLI 是一等入口；它与 Web 使用同一套 command service 和 SQLite schema。
 
@@ -1683,7 +1683,7 @@ CLI 是一等入口；它与 Web 使用同一套 command service 和 SQLite sche
 ## 1. Global Options
 
 ```bash
-kb [GLOBAL_OPTIONS] <COMMAND>
+kanban [GLOBAL_OPTIONS] <COMMAND>
 ```
 
 | Option | 说明 |
@@ -1716,20 +1716,20 @@ kb [GLOBAL_OPTIONS] <COMMAND>
 
 ## 3. Init
 
-### 3.1 `kb init`
+### 3.1 `kanban init`
 
 初始化本地 DB、默认 board、默认 columns。
 
 ```bash
-kb init
-kb init --db .kb/kb.db
-kb init --force
+kanban init
+kanban init --db .kb/kb.db
+kanban init --force
 ```
 
 输出：
 
 ```text
-Initialized kb database at ~/.local/share/kb/kb.db
+Initialized Kanban database at ~/.local/share/kb/kb.db
 Default board: default
 ```
 
@@ -1751,31 +1751,31 @@ JSON：
 ### 4.1 List boards
 
 ```bash
-kb board list
+kanban board list
 ```
 
 ### 4.2 Create board
 
 ```bash
-kb board create <slug> --name <name>
+kanban board create <slug> --name <name>
 ```
 
 Example：
 
 ```bash
-kb board create agent-work --name "Agent Work"
+kanban board create agent-work --name "Agent Work"
 ```
 
 ### 4.3 Show board
 
 ```bash
-kb board show <slug>
+kanban board show <slug>
 ```
 
 ### 4.4 Archive board
 
 ```bash
-kb board archive <slug>
+kanban board archive <slug>
 ```
 
 ---
@@ -1785,7 +1785,7 @@ kb board archive <slug>
 ### 5.1 Create task
 
 ```bash
-kb task create <title> [OPTIONS]
+kanban task create <title> [OPTIONS]
 ```
 
 Options：
@@ -1806,9 +1806,9 @@ Options：
 Examples：
 
 ```bash
-kb task create "实现状态机" --priority 10
-kb task create "跑集成测试" --depends-on t_01HXABC
-kb task create "明早检查报告" --scheduled-at "2026-06-05T09:00:00-07:00"
+kanban task create "实现状态机" --priority 10
+kanban task create "跑集成测试" --depends-on t_01HXABC
+kanban task create "明早检查报告" --scheduled-at "2026-06-05T09:00:00-07:00"
 ```
 
 Human output：
@@ -1833,7 +1833,7 @@ JSON output：
 ### 5.2 List tasks
 
 ```bash
-kb task list [OPTIONS]
+kanban task list [OPTIONS]
 ```
 
 Options：
@@ -1851,15 +1851,15 @@ Options：
 Examples：
 
 ```bash
-kb task list
-kb task list --status ready --status running
-kb task list --assignee agent-default --json
+kanban task list
+kanban task list --status ready --status running
+kanban task list --assignee agent-default --json
 ```
 
 ### 5.3 Show task
 
 ```bash
-kb task show <task_ref>
+kanban task show <task_ref>
 ```
 
 `task_ref` 支持：
@@ -1878,7 +1878,7 @@ Options：
 ### 5.4 Update task fields
 
 ```bash
-kb task update <task_ref> [OPTIONS]
+kanban task update <task_ref> [OPTIONS]
 ```
 
 允许更新：
@@ -1896,8 +1896,8 @@ kb task update <task_ref> [OPTIONS]
 Examples：
 
 ```bash
-kb task update #12 --priority 20
-kb task update t_01HX --description "新的规格"
+kanban task update #12 --priority 20
+kanban task update t_01HX --description "新的规格"
 ```
 
 ---
@@ -1907,8 +1907,8 @@ kb task update t_01HX --description "新的规格"
 ### 6.1 Specify
 
 ```bash
-kb task specify <task_ref> --description <text>
-kb task specify <task_ref> --file spec.md
+kanban task specify <task_ref> --description <text>
+kanban task specify <task_ref> --file spec.md
 ```
 
 用于 `triage -> todo/scheduled/ready`。
@@ -1916,7 +1916,7 @@ kb task specify <task_ref> --file spec.md
 ### 6.2 Promote
 
 ```bash
-kb task promote <task_ref>
+kanban task promote <task_ref>
 ```
 
 手动尝试 `todo/scheduled -> ready`。
@@ -1924,8 +1924,8 @@ kb task promote <task_ref>
 ### 6.3 Start / Claim
 
 ```bash
-kb task start <task_ref> [OPTIONS]
-kb task claim <task_ref> [OPTIONS]
+kanban task start <task_ref> [OPTIONS]
+kanban task claim <task_ref> [OPTIONS]
 ```
 
 `start` 是 `claim` 的人类友好 alias。
@@ -1960,7 +1960,7 @@ JSON：
 ### 6.4 Heartbeat
 
 ```bash
-kb task heartbeat <task_ref> --claim-token <token>
+kanban task heartbeat <task_ref> --claim-token <token>
 ```
 
 Options：
@@ -1973,8 +1973,8 @@ Options：
 ### 6.5 Done / Complete
 
 ```bash
-kb task done <task_ref> --claim-token <token>
-kb task complete <task_ref> --claim-token <token>
+kanban task done <task_ref> --claim-token <token>
+kanban task complete <task_ref> --claim-token <token>
 ```
 
 Options：
@@ -1988,7 +1988,7 @@ Options：
 ### 6.6 Submit Review
 
 ```bash
-kb task review <task_ref> --claim-token <token> --summary <text>
+kanban task review <task_ref> --claim-token <token> --summary <text>
 ```
 
 使 task 从 `running` 到 `review`。
@@ -1996,7 +1996,7 @@ kb task review <task_ref> --claim-token <token> --summary <text>
 ### 6.7 Block
 
 ```bash
-kb task block <task_ref> <reason>
+kanban task block <task_ref> <reason>
 ```
 
 Options：
@@ -2009,7 +2009,7 @@ Options：
 ### 6.8 Unblock
 
 ```bash
-kb task unblock <task_ref>
+kanban task unblock <task_ref>
 ```
 
 不会盲目进入 ready，而是根据 spec、schedule、dependencies 重新计算目标状态。
@@ -2017,8 +2017,8 @@ kb task unblock <task_ref>
 ### 6.9 Reclaim
 
 ```bash
-kb task reclaim <task_ref>
-kb task reclaim --expired
+kanban task reclaim <task_ref>
+kanban task reclaim --expired
 ```
 
 Options：
@@ -2031,7 +2031,7 @@ Options：
 ### 6.10 Archive
 
 ```bash
-kb task archive <task_ref>
+kanban task archive <task_ref>
 ```
 
 Options：
@@ -2045,16 +2045,16 @@ Options：
 ## 7. Dependency Commands
 
 ```bash
-kb dep add <parent_ref> <child_ref>
-kb dep remove <parent_ref> <child_ref>
-kb dep list <task_ref>
+kanban dep add <parent_ref> <child_ref>
+kanban dep remove <parent_ref> <child_ref>
+kanban dep list <task_ref>
 ```
 
 Alias：
 
 ```bash
-kb task link <parent_ref> <child_ref>
-kb task unlink <parent_ref> <child_ref>
+kanban task link <parent_ref> <child_ref>
+kanban task unlink <parent_ref> <child_ref>
 ```
 
 添加 dependency 后：
@@ -2067,14 +2067,14 @@ kb task unlink <parent_ref> <child_ref>
 ## 8. Comment Commands
 
 ```bash
-kb comment add <task_ref> <body>
-kb comment list <task_ref>
+kanban comment add <task_ref> <body>
+kanban comment list <task_ref>
 ```
 
 也可：
 
 ```bash
-kb task comment <task_ref> <body>
+kanban task comment <task_ref> <body>
 ```
 
 ---
@@ -2082,9 +2082,9 @@ kb task comment <task_ref> <body>
 ## 9. Event Commands
 
 ```bash
-kb events <task_ref>
-kb events --board default --after 120
-kb events watch --board default
+kanban events <task_ref>
+kanban events --board default --after 120
+kanban events watch --board default
 ```
 
 `watch` 持续输出新 events。
@@ -2094,9 +2094,9 @@ kb events watch --board default
 ## 10. Run Commands
 
 ```bash
-kb runs <task_ref>
-kb run show <run_id>
-kb run logs <run_id>
+kanban runs <task_ref>
+kanban run show <run_id>
+kanban run logs <run_id>
 ```
 
 ---
@@ -2104,13 +2104,13 @@ kb run logs <run_id>
 ## 11. Dispatcher / Server Commands
 
 ```bash
-kb serve
-kb serve --open
-kb serve --dispatcher
+kanban serve
+kanban serve --open
+kanban serve --dispatcher
 
-kb dispatch
-kb dispatch --once
-kb dispatch --profile default
+kanban dispatch
+kanban dispatch --once
+kanban dispatch --profile default
 ```
 
 ---
@@ -2118,14 +2118,14 @@ kb dispatch --profile default
 ## 12. Maintenance Commands
 
 ```bash
-kb doctor
-kb backup --out backup.sqlite
-kb export --format jsonl --out board.jsonl
-kb vacuum
-kb checkpoint
+kanban doctor
+kanban backup --out backup.sqlite
+kanban export --format jsonl --out board.jsonl
+kanban vacuum
+kanban checkpoint
 ```
 
-### 12.1 `kb doctor`
+### 12.1 `kanban doctor`
 
 检查：
 
@@ -2893,7 +2893,7 @@ Dispatcher 不负责：
 ### 2.1 单次运行
 
 ```bash
-kb dispatch --once
+kanban dispatch --once
 ```
 
 执行一轮：
@@ -2906,7 +2906,7 @@ kb dispatch --once
 ### 2.2 常驻运行
 
 ```bash
-kb dispatch
+kanban dispatch
 ```
 
 循环执行。
@@ -2914,7 +2914,7 @@ kb dispatch
 ### 2.3 与 server 同进程
 
 ```bash
-kb serve --dispatcher
+kanban serve --dispatcher
 ```
 
 适合日常 Web UI。
@@ -3099,8 +3099,8 @@ Worker process 获得：
 Worker 可通过 CLI 回写：
 
 ```bash
-kb --db "$KB_DB_PATH" task heartbeat "$KB_TASK_ID" --claim-token "$KB_CLAIM_TOKEN"
-kb --db "$KB_DB_PATH" task done "$KB_TASK_ID" --claim-token "$KB_CLAIM_TOKEN" --summary "..."
+kanban --db "$KB_DB_PATH" task heartbeat "$KB_TASK_ID" --claim-token "$KB_CLAIM_TOKEN"
+kanban --db "$KB_DB_PATH" task done "$KB_TASK_ID" --claim-token "$KB_CLAIM_TOKEN" --summary "..."
 ```
 
 也可以让 dispatcher wrapper 根据进程退出码自动 complete/block。
@@ -3209,7 +3209,7 @@ DB 记录：
 CLI：
 
 ```bash
-kb run logs r_01HX...
+kanban run logs r_01HX...
 ```
 
 ---
@@ -3223,7 +3223,7 @@ kb run logs r_01HX...
 | SQLite busy | 等待 busy_timeout；仍失败则记录错误并下轮重试。 |
 | Task 被人工 block | Dispatcher 不再处理。 |
 | Task 被人工 force complete | Worker 后续 complete 失败，因 token/run 已关闭。 |
-| DB integrity failed | Dispatcher 停止，提示运行 `kb doctor`。 |
+| DB integrity failed | Dispatcher 停止，提示运行 `kanban doctor`。 |
 
 ---
 
@@ -3285,7 +3285,7 @@ MVP 可暂不实现：
 交付：
 
 - 执行 `001_initial.sql`。
-- `kb init`。
+- `kanban init`。
 - 默认 board。
 - 默认 columns。
 - 领域类型：Board、Task、Status、Run、Event。
@@ -3294,7 +3294,7 @@ MVP 可暂不实现：
 验收：
 
 - 新建 DB 后 `PRAGMA integrity_check` 返回 ok。
-- 重复运行 `kb init` 不破坏已有 DB。
+- 重复运行 `kanban init` 不破坏已有 DB。
 - schema version 可查询。
 
 测试：
@@ -3311,7 +3311,7 @@ MVP 可暂不实现：
 
 交付：
 
-- `kb task create/list/show/update`。
+- `kanban task create/list/show/update`。
 - `task_events` 写入。
 - `--json` 输出。
 - `expected_lock_version` 乐观锁。
@@ -3367,7 +3367,7 @@ MVP 可暂不实现：
 
 交付：
 
-- `kb dep add/remove/list`。
+- `kanban dep add/remove/list`。
 - cycle detection。
 - dependency-aware create/promote/claim。
 - parent complete 后尝试 promote children。
@@ -3394,8 +3394,8 @@ MVP 可暂不实现：
 交付：
 
 - `task_runs` 写入。
-- `kb dispatch --once`。
-- `kb dispatch` loop。
+- `kanban dispatch --once`。
+- `kanban dispatch` loop。
 - worker profile command。
 - heartbeat wrapper。
 - expired reclaim。
@@ -3424,7 +3424,7 @@ MVP 可暂不实现：
 
 交付：
 
-- `kb serve`。
+- `kanban serve`。
 - REST endpoints。
 - unified error response。
 - SSE event stream。
@@ -3475,10 +3475,10 @@ MVP 可暂不实现：
 
 交付：
 
-- `kb doctor`。
-- `kb backup`。
-- `kb checkpoint`。
-- `kb vacuum`。
+- `kanban doctor`。
+- `kanban backup`。
+- `kanban checkpoint`。
+- `kanban vacuum`。
 - JSONL export。
 - orphan run 检查。
 
@@ -3541,9 +3541,9 @@ MVP 可暂不实现：
 
 MVP 完成定义：
 
-1. `kb init` 创建可用 DB。
-2. `kb task create/list/show/update` 可用。
-3. `kb task start/heartbeat/done/block/unblock/archive` 可用。
+1. `kanban init` 创建可用 DB。
+2. `kanban task create/list/show/update` 可用。
+3. `kanban task start/heartbeat/done/block/unblock/archive` 可用。
 4. dependencies 可用。
 5. events 可用。
 6. runs 可用。
@@ -3551,7 +3551,7 @@ MVP 完成定义：
 8. web API 覆盖核心 lifecycle。
 9. web UI 可视化 board。
 10. 并发 claim 测试稳定通过。
-11. `kb doctor` 能发现基本数据异常。
+11. `kanban doctor` 能发现基本数据异常。
 
 ---
 
@@ -3800,7 +3800,7 @@ Accepted
 
 ### Decision
 
-`kb serve` 默认并且建议只监听：
+`kanban serve` 默认并且建议只监听：
 
 ```text
 127.0.0.1:8721

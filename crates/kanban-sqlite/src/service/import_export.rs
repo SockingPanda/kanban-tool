@@ -250,7 +250,7 @@ pub(crate) fn write_export_sanitized_events(
                 "task_id": task_id,
                 "run_id": run_id,
                 "kind": "task.export_sanitized",
-                "actor": "kb export",
+                "actor": "kanban export",
                 "payload_json": payload,
                 "created_at": export_now
             }

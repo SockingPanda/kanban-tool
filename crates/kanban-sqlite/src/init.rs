@@ -12,7 +12,9 @@ use crate::connect_file;
 const INITIAL_MIGRATION: &str = include_str!("../../../migrations/001_initial.sql");
 const KNOWLEDGE_SUBSTRATE_MIGRATION: &str =
     include_str!("../../../migrations/002_knowledge_substrate.sql");
-const LATEST_MIGRATION_VERSION: i64 = 2;
+const COMMENT_AUTHOR_IDENTITY_MIGRATION: &str =
+    include_str!("../../../migrations/003_comment_author_identity.sql");
+const LATEST_MIGRATION_VERSION: i64 = 3;
 
 struct Migration {
     version: i64,
@@ -30,6 +32,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 2,
         name: "002_knowledge_substrate",
         sql: KNOWLEDGE_SUBSTRATE_MIGRATION,
+    },
+    Migration {
+        version: 3,
+        name: "003_comment_author_identity",
+        sql: COMMENT_AUTHOR_IDENTITY_MIGRATION,
     },
 ];
 
@@ -167,6 +174,20 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
                 "task_id",
                 "kind",
                 "payload_json",
+            ][..],
+        ),
+        (
+            "task_comments",
+            &[
+                "id",
+                "board_id",
+                "task_id",
+                "author",
+                "author_type",
+                "agent_type",
+                "body",
+                "kind",
+                "created_at",
             ][..],
         ),
         (

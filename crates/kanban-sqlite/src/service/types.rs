@@ -111,9 +111,20 @@ pub struct CommentRecord {
     pub board_id: String,
     pub task_id: String,
     pub author: String,
+    pub author_type: String,
+    pub agent_type: Option<String>,
     pub body: String,
     pub kind: String,
     pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateComment {
+    pub author: String,
+    pub body: String,
+    pub kind: Option<String>,
+    pub author_type: Option<String>,
+    pub agent_type: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

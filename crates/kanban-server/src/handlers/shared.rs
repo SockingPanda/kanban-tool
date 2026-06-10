@@ -21,6 +21,8 @@ pub(crate) struct CommentBody {
     pub(crate) author: Option<String>,
     pub(crate) body: String,
     pub(crate) kind: Option<String>,
+    pub(crate) author_type: Option<String>,
+    pub(crate) agent_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

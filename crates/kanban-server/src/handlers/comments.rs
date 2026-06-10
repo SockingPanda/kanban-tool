@@ -31,12 +31,16 @@ pub(crate) async fn create_comment(
 ) -> Result<(StatusCode, Json<Envelope<CommentDto>>), ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.author.as_deref(), &headers, &state);
-    let comment = kanban_sqlite::create_comment(
+    let comment = kanban_sqlite::create_comment_with_options(
         state.db_path(),
         &task_id,
-        &actor,
-        &body.body,
-        body.kind.as_deref(),
+        kanban_sqlite::CreateComment {
+            author: actor,
+            body: body.body,
+            kind: body.kind,
+            author_type: body.author_type,
+            agent_type: body.agent_type,
+        },
     )?;
     Ok((
         StatusCode::CREATED,

@@ -1,168 +1,133 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { AppShell } from "@/app/AppShell"
 import { fallbackColumns } from "@/features/board/board-config"
-import { emptyDetail, type DetailState } from "@/features/task-detail/detail-state"
-import { parseDateInput, taskToDraft, type TaskEditDraft } from "@/features/task-detail/task-draft"
+import { useBoardTasks } from "@/features/board/useBoardTasks"
+import { useEventPoller } from "@/features/events/useEventPoller"
+import { taskDetailOrEmpty, useTaskDetail } from "@/features/task-detail/useTaskDetail"
+import {
+  parseDateInput,
+  reconcileTaskDraft,
+  type TaskDraftState,
+  type TaskEditDraft,
+} from "@/features/task-detail/task-draft"
 import {
   ApiError,
   BoardColumn,
   ClaimResponse,
   KanbanApi,
   RuntimeConfig,
-  SearchMeta,
   Task,
   TaskStatus,
   loadRuntimeConfig,
 } from "@/lib/api"
-import { createLatestRequestGuard, runLatestRequest } from "@/lib/latest-request"
+import { queryKeys } from "@/lib/query-keys"
+import { useDebouncedValue } from "@/lib/use-debounced-value"
+
+const PAGE_SIZE = 100
+const EMPTY_TASKS: Task[] = []
 
 function App() {
+  const queryClient = useQueryClient()
   const [config, setConfig] = useState<RuntimeConfig | null>(null)
-  const [api, setApi] = useState<KanbanApi | null>(null)
-  const [columns, setColumns] = useState<BoardColumn[]>(fallbackColumns)
-  const [tasks, setTasks] = useState<Task[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [detail, setDetail] = useState<DetailState>(emptyDetail)
   const [search, setSearch] = useState("")
-  const [searchMeta, setSearchMeta] = useState<SearchMeta | null>(null)
+  const debouncedSearch = useDebouncedValue(search, 250)
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all")
   const [showArchived, setShowArchived] = useState(false)
+  const [pageOffset, setPageOffset] = useState(0)
   const [newTitle, setNewTitle] = useState("")
   const [newDescription, setNewDescription] = useState("")
   const [blockReason, setBlockReason] = useState("")
   const [dependencyInput, setDependencyInput] = useState("")
   const [commentBody, setCommentBody] = useState("")
-  const [editDraft, setEditDraft] = useState<TaskEditDraft | null>(null)
+  const [draftState, setDraftState] = useState<TaskDraftState | null>(null)
   const [claimTokens, setClaimTokens] = useState<Record<string, string>>({})
-  const [lastEventId, setLastEventId] = useState(0)
   const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const taskRefreshGuard = useRef(createLatestRequestGuard())
 
   useEffect(() => {
     loadRuntimeConfig()
-      .then((runtime) => {
-        const client = new KanbanApi(runtime)
-        setConfig(runtime)
-        setApi(client)
-      })
+      .then(setConfig)
       .catch((err: unknown) => setError(errorMessage(err)))
   }, [])
 
-  const visibleColumns = useMemo(
-    () => columns.filter((column) => showArchived || (!column.hidden && column.status !== "archived")),
-    [columns, showArchived],
-  )
+  const api = useMemo(() => (config ? new KanbanApi(config) : null), [config])
 
-  const refreshTasks = useCallback(async () => {
-    if (!api) return
-    const query = search.trim()
-    const statuses = statusFilter === "all" ? [] : [statusFilter]
-    return runLatestRequest(
-      taskRefreshGuard.current,
-      async () => {
-        if (query) {
-          const result = await api.searchTasks({
-            query,
-            includeArchived: showArchived,
-            statuses,
-          })
-          return { tasks: result.tasks, searchMeta: result.meta }
-        }
+  useEffect(() => {
+    setPageOffset(0)
+  }, [debouncedSearch, showArchived, statusFilter])
 
-        const tasks = await api.listTasks({
-          includeArchived: showArchived,
-          statuses,
-        })
-        return { tasks, searchMeta: null }
-      },
-      ({ tasks: nextTasks, searchMeta: nextSearchMeta }) => {
-        setSearchMeta(nextSearchMeta)
-        setTasks(nextTasks)
-        setSelectedId((current) =>
-          current && nextTasks.some((task) => task.id === current) ? current : nextTasks[0]?.id ?? null,
-        )
-        setLastRefreshAt(Date.now())
-      },
-    )
-  }, [api, search, showArchived, statusFilter])
-
-  const refreshDetail = useCallback(
-    async (taskId: string) => {
-      if (!api) return
-      const [dependencies, runs, events, comments] = await Promise.all([
-        api.listDependencies(taskId),
-        api.listRuns(taskId),
-        api.listEvents(taskId),
-        api.listComments(taskId),
-      ])
-      const runWithLog = runs.find((run) => Boolean(run.log_path)) ?? null
-      const runLog = runWithLog
-        ? await api.getRunLog(runWithLog.id).catch(() => null)
-        : null
-      setDetail({ dependencies, runs, events, comments, runLog })
-      setLastEventId((current) => Math.max(current, ...events.map((event) => event.id), current))
+  const columnsQuery = useQuery({
+    enabled: Boolean(api),
+    queryKey: queryKeys.columns(api?.board ?? "pending"),
+    queryFn: ({ signal }) => {
+      if (!api) throw new Error("API client is not ready")
+      return api.listBoardColumns({ signal })
     },
-    [api],
-  )
+  })
 
-  const refreshColumns = useCallback(async () => {
-    if (!api) return
-    const nextColumns = await api.listBoardColumns()
-    setColumns(nextColumns)
-  }, [api])
+  const tasksQuery = useBoardTasks({
+    api,
+    search: debouncedSearch,
+    statusFilter,
+    showArchived,
+    limit: PAGE_SIZE,
+    offset: pageOffset,
+  })
 
-  useEffect(() => {
-    if (!api) return
-    refreshColumns().catch((err: unknown) => setError(errorMessage(err)))
-  }, [api, refreshColumns])
-
-  useEffect(() => {
-    if (!api) return
-    setBusy(true)
-    refreshTasks()
-      .catch((err: unknown) => setError(errorMessage(err)))
-      .finally(() => setBusy(false))
-  }, [api, refreshTasks])
+  const tasks = tasksQuery.data?.tasks ?? EMPTY_TASKS
+  const page = tasksQuery.data?.page ?? { limit: PAGE_SIZE, offset: pageOffset, total: tasks.length }
+  const searchMeta = tasksQuery.data?.searchMeta ?? null
 
   useEffect(() => {
-    if (!selectedId) {
-      setDetail(emptyDetail)
-      return
-    }
-    refreshDetail(selectedId).catch((err: unknown) => setError(errorMessage(err)))
-  }, [refreshDetail, selectedId])
+    if (tasksQuery.dataUpdatedAt) setLastRefreshAt(tasksQuery.dataUpdatedAt)
+  }, [tasksQuery.dataUpdatedAt])
 
-  const selectedTask = useMemo(
+  useEffect(() => {
+    setSelectedId((current) =>
+      current && tasks.some((task) => task.id === current) ? current : tasks[0]?.id ?? null,
+    )
+  }, [tasks])
+
+  const detailQuery = useTaskDetail(api, selectedId)
+  const boardSelectedTask = useMemo(
     () => tasks.find((task) => task.id === selectedId) ?? tasks[0] ?? null,
     [selectedId, tasks],
   )
+  const selectedTask = detailQuery.data?.task ?? boardSelectedTask
+  const detail = taskDetailOrEmpty(detailQuery.data)
 
   useEffect(() => {
-    if (!selectedTask) {
-      setEditDraft(null)
-      return
-    }
-    setEditDraft(taskToDraft(selectedTask))
+    setDraftState((current) => reconcileTaskDraft(current, selectedTask))
   }, [selectedTask])
 
   useEffect(() => {
-    if (!api) return
-    const interval = window.setInterval(() => {
-      api
-        .listEventsAfter(lastEventId)
-        .then((events) => {
-          if (!events.length) return
-          setLastEventId((current) => Math.max(current, ...events.map((event) => event.id)))
-          void refreshTasks()
-          if (selectedId) void refreshDetail(selectedId)
-        })
-        .catch((err: unknown) => setError(errorMessage(err)))
-    }, 5_000)
-    return () => window.clearInterval(interval)
-  }, [api, lastEventId, refreshDetail, refreshTasks, selectedId])
+    if (columnsQuery.error) setError(errorMessage(columnsQuery.error))
+  }, [columnsQuery.error])
+
+  useEffect(() => {
+    if (tasksQuery.error) setError(errorMessage(tasksQuery.error))
+  }, [tasksQuery.error])
+
+  useEffect(() => {
+    if (detailQuery.error) setError(errorMessage(detailQuery.error))
+  }, [detailQuery.error])
+
+  const handlePollError = useCallback((err: unknown) => setError(errorMessage(err)), [])
+  useEventPoller({
+    api,
+    enabled: Boolean(api),
+    selectedTaskId: selectedId,
+    onError: handlePollError,
+  })
+
+  const visibleColumns = useMemo(
+    () => (columnsQuery.data ?? fallbackColumns).filter((column) => showArchived || (!column.hidden && column.status !== "archived")),
+    [columnsQuery.data, showArchived],
+  )
 
   const groupedTasks = useMemo(() => {
     const map = new Map<TaskStatus, Task[]>()
@@ -173,6 +138,10 @@ function App() {
     return map
   }, [tasks, visibleColumns])
 
+  const actionMutation = useMutation({
+    mutationFn: (action: () => Promise<unknown>) => action(),
+  })
+
   const activeRun = detail.runs.find((run) => run.status === "running") ?? detail.runs[0]
   const claimToken = selectedTask ? claimTokens[selectedTask.id] ?? null : null
   const queueCounts = {
@@ -181,21 +150,35 @@ function App() {
     blocked: tasks.filter((task) => task.status === "blocked").length,
   }
 
-  async function runAction(action: () => Promise<unknown>) {
-    setBusy(true)
+  const invalidateTaskData = useCallback(
+    async (taskId: string | null) => {
+      if (!api) return
+      await queryClient.invalidateQueries({ queryKey: queryKeys.boardTasksRoot(api.board) })
+      if (taskId) await queryClient.invalidateQueries({ queryKey: queryKeys.taskDetail(taskId) })
+    },
+    [api, queryClient],
+  )
+
+  async function runAction(action: () => Promise<unknown>, label = "action") {
+    setPendingAction(label)
     setError(null)
     try {
-      const result = await action()
+      const result = await actionMutation.mutateAsync(action)
       if (isClaimResponse(result)) {
         setClaimTokens((current) => ({ ...current, [result.task.id]: result.claim_token }))
+        await invalidateTaskData(result.task.id)
+        return result
       }
-      await refreshTasks()
-      const taskId = selectedId ?? selectedTask?.id
-      if (taskId) await refreshDetail(taskId)
+      if (isTask(result)) {
+        await invalidateTaskData(result.id)
+        return result
+      }
+      await invalidateTaskData(selectedId)
+      return result
     } catch (err) {
       setError(errorMessage(err))
     } finally {
-      setBusy(false)
+      setPendingAction(null)
     }
   }
 
@@ -210,69 +193,95 @@ function App() {
       setSelectedId(task.id)
       setNewTitle("")
       setNewDescription("")
-    })
+      return task
+    }, "create")
   }
 
   async function addDependency() {
     if (!api || !selectedTask || !dependencyInput.trim()) return
     await runAction(async () => {
-      await api.addDependency(selectedTask.id, dependencyInput.trim())
+      const result = await api.addDependency(selectedTask.id, dependencyInput.trim())
       setDependencyInput("")
-    })
+      return result
+    }, "dependency")
   }
 
   async function saveTask() {
-    if (!api || !selectedTask || !editDraft) return
+    if (!api || !selectedTask || !draftState) return
     await runAction(async () => {
       const updated = await api.updateTask(selectedTask.id, {
-        title: editDraft.title.trim(),
-        description: editDraft.description.trim() || null,
-        assignee: editDraft.assignee.trim() || null,
-        priority: Number(editDraft.priority) || 0,
-        due_at: parseDateInput(editDraft.dueAt),
-        scheduled_at: parseDateInput(editDraft.scheduledAt),
+        title: draftState.draft.title.trim(),
+        description: draftState.draft.description.trim() || null,
+        assignee: draftState.draft.assignee.trim() || null,
+        priority: Number(draftState.draft.priority) || 0,
+        due_at: parseDateInput(draftState.draft.dueAt),
+        scheduled_at: parseDateInput(draftState.draft.scheduledAt),
       })
-      setEditDraft(taskToDraft(updated))
-    })
+      setDraftState((current) => reconcileTaskDraft(current, updated, { force: true }))
+      return updated
+    }, "save")
   }
 
   async function addComment() {
     if (!api || !selectedTask || !commentBody.trim()) return
     await runAction(async () => {
-      await api.createComment(selectedTask.id, commentBody.trim())
+      const result = await api.createComment(selectedTask.id, commentBody.trim())
       setCommentBody("")
+      return result
+    }, "comment")
+  }
+
+  function updateDraft(draft: TaskEditDraft) {
+    setDraftState((current) => {
+      if (current) return { ...current, draft, dirty: true }
+      if (!selectedTask) return null
+      return { taskId: selectedTask.id, draft, dirty: true }
     })
   }
+
+  const hasNextPage = page.offset + tasks.length < page.total
+  const hasPreviousPage = page.offset > 0
 
   return (
     <AppShell
       config={config}
       api={api}
-      columns={visibleColumns}
+      columns={visibleColumns as BoardColumn[]}
       groupedTasks={groupedTasks}
       selectedTask={selectedTask}
       selectedId={selectedId}
       detail={detail}
       activeRun={activeRun}
       search={search}
+      debouncedSearch={debouncedSearch}
       searchMeta={searchMeta}
       statusFilter={statusFilter}
       showArchived={showArchived}
+      page={page}
+      visibleTaskCount={tasks.length}
+      hasNextPage={hasNextPage}
+      hasPreviousPage={hasPreviousPage}
       newTitle={newTitle}
       newDescription={newDescription}
       blockReason={blockReason}
       dependencyInput={dependencyInput}
       commentBody={commentBody}
-      editDraft={editDraft}
+      editDraft={draftState?.draft ?? null}
+      draftDirty={draftState?.dirty ?? false}
       claimToken={claimToken}
-      busy={busy}
+      tasksLoading={tasksQuery.isLoading}
+      tasksRefreshing={tasksQuery.isFetching}
+      detailLoading={detailQuery.isFetching}
+      pendingAction={pendingAction}
       error={error}
       lastRefreshAt={lastRefreshAt}
       queueCounts={queueCounts}
       onSearchChange={setSearch}
       onStatusFilterChange={setStatusFilter}
       onShowArchivedChange={setShowArchived}
-      onRefreshTasks={() => void refreshTasks()}
+      onRefreshTasks={() => void tasksQuery.refetch()}
+      onPreviousPage={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}
+      onNextPage={() => setPageOffset((current) => current + PAGE_SIZE)}
       onCreateTask={(event) => void createTask(event)}
       onNewTitleChange={setNewTitle}
       onNewDescriptionChange={setNewDescription}
@@ -280,7 +289,7 @@ function App() {
       onBlockReasonChange={setBlockReason}
       onDependencyInputChange={setDependencyInput}
       onCommentBodyChange={setCommentBody}
-      onEditDraftChange={setEditDraft}
+      onEditDraftChange={updateDraft}
       onAction={runAction}
       onAddDependency={addDependency}
       onSaveTask={saveTask}
@@ -291,6 +300,10 @@ function App() {
 
 function isClaimResponse(value: unknown): value is ClaimResponse {
   return Boolean(value && typeof value === "object" && "claim_token" in value)
+}
+
+function isTask(value: unknown): value is Task {
+  return Boolean(value && typeof value === "object" && "id" in value && "status" in value)
 }
 
 function errorMessage(err: unknown) {

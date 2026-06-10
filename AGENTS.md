@@ -36,11 +36,39 @@
 - milestone/release 级实现必须在合并前通过独立 spec reviewer + quality reviewer；仅 `fmt/test/clippy/smoke` 通过不能宣称版本完成。
 - 如果 reviewer 指出 P0/P1 规格或质量问题，必须在同一方向分支上修正并重新 review，直到 PASS/APPROVED 后再由父级合并。
 - 生产代码遵循 TDD：先写失败测试，运行看到 RED，再写最小实现，运行 GREEN。
-- 每次完成一个阶段必须运行：
-  - `cargo fmt --check`
-  - `cargo test --workspace`
-  - `cargo clippy --workspace --all-targets -- -D warnings`
 - 提交语义使用 Conventional Commits。
+
+## 验证策略
+
+普通小改动默认跑受影响范围验证，不要把每个阶段都升级成全量 workspace gate。
+
+- Rust 单 crate 改动：
+  - `cargo fmt --check`
+  - `cargo check -p <crate> --tests`
+  - `cargo nextest run -p <crate> --no-fail-fast <filter>` 或 `cargo test -p <crate> <filter>`
+- Rust 跨 crate 改动：
+  - `cargo fmt --check`
+  - `cargo check --workspace --exclude kanban-desktop --tests`
+  - `cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast`
+- CLI / server / sqlite 测试优先使用 package 或 integration target：
+  - `cargo nextest run -p kanban-cli --test task --no-fail-fast`
+  - `cargo nextest run -p kanban-server -E 'test(tasks::)' --no-fail-fast`
+  - `cargo nextest run -p kanban-sqlite -E 'test(transitions::)' --no-fail-fast`
+- 文档或配置小改动：
+  - `git diff --check`
+  - 仅运行与该配置直接相关的静态检查或 dry-run。
+- 如果本机安装了 `just`，可以使用等价 `just fmt`、`just check-p <crate>`、`just test-p <crate>`；直接 `cargo` 命令仍是 canonical fallback。
+
+以下只用于 milestone / release / explicit full gate：
+
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets -- -D warnings`
+- feature matrix
+- `pnpm --dir apps/desktop test`
+- `pnpm --dir apps/desktop typecheck`
+- `pnpm --dir apps/desktop build`
+- `pnpm --dir apps/desktop tauri build`
+- `scripts/smoke-v1-local.sh`
 
 ## Rust workspace 约定
 

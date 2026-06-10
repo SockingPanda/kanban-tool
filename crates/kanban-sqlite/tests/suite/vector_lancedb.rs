@@ -25,7 +25,7 @@ fn vector_sync_marks_lancedb_outbox_done_without_touching_other_boards() -> anyh
     assert_eq!(status.backend, "test-vector");
     assert!(status.message.contains("synced 1 chunk(s)"));
     assert_eq!(
-        store.upserted_texts(),
+        store.upserted_texts()?,
         vec!["default board vector task\n\nready spec"]
     );
     assert_eq!(
@@ -74,7 +74,7 @@ fn vector_sync_and_rebuild_use_store_embedding_model() -> anyhow::Result<()> {
     let store = RecordingVectorStore::with_embedding_model("static-test");
 
     sync_vector_store_with(&temp.path, "default", &store)?;
-    assert_eq!(store.upserted_models(), vec!["static-test"]);
+    assert_eq!(store.upserted_models()?, vec!["static-test"]);
 
     update_task(
         &temp.path,
@@ -89,7 +89,7 @@ fn vector_sync_and_rebuild_use_store_embedding_model() -> anyhow::Result<()> {
     )?;
     rebuild_vector_store_with(&temp.path, "default", &store)?;
 
-    assert_eq!(store.upserted_models(), vec!["static-test", "static-test"]);
+    assert_eq!(store.upserted_models()?, vec!["static-test", "static-test"]);
     Ok(())
 }
 
@@ -111,10 +111,10 @@ fn vector_sync_deletes_archived_task_chunks_and_converges_outbox() -> anyhow::Re
 
     assert!(status.message.contains("synced 0 chunk(s) from 1 job(s)"));
     assert_eq!(
-        store.deleted_entity_uris(),
+        store.deleted_entity_uris()?,
         vec![format!("kb://task/{}", task.id)]
     );
-    assert_eq!(store.deleted_board_ids(), vec![task.board_id.as_str()]);
+    assert_eq!(store.deleted_board_ids()?, vec![task.board_id.as_str()]);
     assert_eq!(
         lancedb_outbox_statuses_for_board(&temp.path, "default")?,
         vec!["done", "done"]
@@ -142,7 +142,7 @@ fn vector_rebuild_deletes_board_before_reindexing_current_tasks() -> anyhow::Res
 
     sync_vector_store_with(&temp.path, "default", &store)?;
     assert_eq!(
-        store.live_texts(),
+        store.live_texts()?,
         vec!["hard deleted vector task\n\nready spec"]
     );
 
@@ -151,10 +151,10 @@ fn vector_rebuild_deletes_board_before_reindexing_current_tasks() -> anyhow::Res
 
     assert!(status.message.contains("rebuilt 0 chunk(s)"));
     assert_eq!(
-        store.deleted_board_ids(),
+        store.deleted_board_ids()?,
         vec![task.board_id.as_str(), task.board_id.as_str()]
     );
-    assert!(store.live_texts().is_empty());
+    assert!(store.live_texts()?.is_empty());
     assert_eq!(
         lancedb_outbox_statuses_for_board(&temp.path, "default")?,
         vec!["done"]

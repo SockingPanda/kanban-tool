@@ -110,40 +110,46 @@ impl RecordingVectorStore {
             .unwrap_or(kanban_vector::DEFAULT_EMBEDDING_MODEL)
     }
 
-    pub fn upserted_texts(&self) -> Vec<String> {
-        match self.upserted.lock() {
-            Ok(upserted) => upserted.clone(),
-            Err(poisoned) => poisoned.into_inner().clone(),
-        }
+    pub fn upserted_texts(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .upserted
+            .lock()
+            .map_err(|err| test_error(format!("upserted mutex poisoned: {err}")))?
+            .clone())
     }
 
-    pub fn upserted_models(&self) -> Vec<String> {
-        match self.upserted_models.lock() {
-            Ok(upserted_models) => upserted_models.clone(),
-            Err(poisoned) => poisoned.into_inner().clone(),
-        }
+    pub fn upserted_models(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .upserted_models
+            .lock()
+            .map_err(|err| test_error(format!("upserted_models mutex poisoned: {err}")))?
+            .clone())
     }
 
-    pub fn deleted_entity_uris(&self) -> Vec<String> {
-        match self.deleted.lock() {
-            Ok(deleted) => deleted.clone(),
-            Err(poisoned) => poisoned.into_inner().clone(),
-        }
+    pub fn deleted_entity_uris(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .deleted
+            .lock()
+            .map_err(|err| test_error(format!("deleted mutex poisoned: {err}")))?
+            .clone())
     }
 
-    pub fn deleted_board_ids(&self) -> Vec<String> {
-        match self.deleted_boards.lock() {
-            Ok(deleted_boards) => deleted_boards.clone(),
-            Err(poisoned) => poisoned.into_inner().clone(),
-        }
+    pub fn deleted_board_ids(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .deleted_boards
+            .lock()
+            .map_err(|err| test_error(format!("deleted_boards mutex poisoned: {err}")))?
+            .clone())
     }
 
-    pub fn live_texts(&self) -> Vec<String> {
-        let live_chunks = match self.live_chunks.lock() {
-            Ok(live_chunks) => live_chunks,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        live_chunks.iter().map(|chunk| chunk.text.clone()).collect()
+    pub fn live_texts(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .live_chunks
+            .lock()
+            .map_err(|err| test_error(format!("live_chunks mutex poisoned: {err}")))?
+            .iter()
+            .map(|chunk| chunk.text.clone())
+            .collect())
     }
 }
 

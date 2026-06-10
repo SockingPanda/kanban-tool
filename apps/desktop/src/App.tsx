@@ -111,6 +111,10 @@ function App() {
   }, [selectedTask])
 
   useEffect(() => {
+    setBlockReason("")
+  }, [selectedTask?.id, selectedTask?.status])
+
+  useEffect(() => {
     if (columnsQuery.error) setError(errorMessage(columnsQuery.error))
   }, [columnsQuery.error])
 
@@ -223,7 +227,7 @@ function App() {
     const task = tasksById.get(taskId)
     if (!task) return
     const token = claimTokens[task.id] ?? null
-    let plan = planDragTransition(task, targetStatus, token, blockReason)
+    let plan = planDragTransition(task, targetStatus, token)
     if (!plan.ok) {
       setError(plan.reason)
       return

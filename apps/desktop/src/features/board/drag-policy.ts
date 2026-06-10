@@ -16,7 +16,6 @@ export function planDragTransition(
   task: Task,
   targetStatus: TaskStatus,
   claimToken: string | null,
-  blockReason: string,
 ): DragTransitionPlan {
   if (task.status === targetStatus) return { ok: false, reason: "Already in that column." }
 
@@ -75,34 +74,31 @@ export function planDragTransition(
   }
 
   if (task.status === "running" && targetStatus === "blocked") {
-    const reason = blockReason.trim()
     if (claimToken) {
-      return reason
-        ? {
-            ok: true,
-            action: "block",
-            body: { claim_token: claimToken, reason },
-            message: "Block requested.",
-          }
-        : { ok: false, reason: "A block reason is required." }
+      return {
+        ok: true,
+        action: "block",
+        body: { claim_token: claimToken },
+        promptReason: true,
+        message: "Block requested.",
+      }
     }
     return {
       ok: true,
       action: "block",
-      body: reason ? { force: true, reason } : { force: true },
+      body: { force: true },
       confirm: `Force block running task #${task.seq} without a claim token?`,
-      promptReason: !reason,
+      promptReason: true,
       message: "Force block requested.",
     }
   }
 
   if (targetStatus === "blocked" && isBlockableStatus(task.status)) {
-    const reason = blockReason.trim()
     return {
       ok: true,
       action: "block",
-      body: reason ? { reason } : {},
-      promptReason: !reason,
+      body: {},
+      promptReason: true,
       message: "Block requested.",
     }
   }

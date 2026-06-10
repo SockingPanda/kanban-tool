@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { legalActions } from "@/features/task-actions/legal-actions"
+import { isBlockableStatus } from "@/lib/action-policy"
 import type { KanbanApi, Run, Task, TaskStatus } from "@/lib/api"
 import { formatRelativeTime, shortId } from "@/lib/utils"
 
@@ -151,7 +152,7 @@ export function TaskDetail({
           {task.status === "blocked" ? (
             <div className="mt-2 text-xs text-neutral-500">Unblock asks the service to recompute schedule and dependency state.</div>
           ) : null}
-          {task.status === "running" ? (
+          {isBlockableStatus(task.status) ? (
             <Textarea
               className="mt-3"
               placeholder="Block reason"

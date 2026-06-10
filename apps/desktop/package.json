@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
-    "build": "tsc -b && vite build",
+    "build": "pnpm typecheck && pnpm vite-build",
     "lint": "eslint .",
     "test": "vitest run",
     "typecheck": "tsc -b",
+    "vite-build": "vite build",
     "tauri": "tauri"
   },
   "dependencies": {

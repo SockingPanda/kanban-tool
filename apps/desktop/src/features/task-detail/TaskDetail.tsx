@@ -1,4 +1,4 @@
-import { CircleDot, FileText, GitBranch, MessageSquare, Save } from "lucide-react"
+import { CircleDot, FileText, GitBranch, MessageSquare, Save, X } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { Badge } from "@/components/ui/badge"
@@ -32,6 +32,7 @@ export function TaskDetail({
   pendingAction,
   onAction,
   onAddDependency,
+  onRemoveDependency,
   onSaveTask,
   onAddComment,
 }: {
@@ -53,6 +54,7 @@ export function TaskDetail({
   pendingAction: string | null
   onAction: (action: () => Promise<unknown>) => Promise<unknown>
   onAddDependency: () => Promise<void>
+  onRemoveDependency: (parentTaskId: string) => Promise<void>
   onSaveTask: () => Promise<void>
   onAddComment: () => Promise<void>
 }) {
@@ -137,6 +139,7 @@ export function TaskDetail({
                 disabled={!api || Boolean(pendingAction) || !action.enabled}
                 onClick={() => {
                   if (!api) return
+                  if (action.confirmation && !window.confirm(action.confirmation)) return
                   void onAction(() => action.run(api, task))
                 }}
               >
@@ -162,7 +165,12 @@ export function TaskDetail({
 
         <Section title="Dependencies">
           <div className="space-y-3">
-            <DependencyGroup title="Parents" tasks={detail.dependencies.parents} />
+            <DependencyGroup
+              title="Parents"
+              tasks={detail.dependencies.parents}
+              pending={pendingAction === "dependency"}
+              onRemove={(parentTaskId) => void onRemoveDependency(parentTaskId)}
+            />
             <DependencyGroup title="Children" tasks={detail.dependencies.children} />
             <div className="flex gap-2">
               <Input
@@ -271,16 +279,38 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-function DependencyGroup({ title, tasks }: { title: string; tasks: Task[] }) {
+function DependencyGroup({
+  title,
+  tasks,
+  pending = false,
+  onRemove,
+}: {
+  title: string
+  tasks: Task[]
+  pending?: boolean
+  onRemove?: (taskId: string) => void
+}) {
   return (
     <div>
       <div className="mb-1 text-xs text-neutral-500">{title}</div>
       <div className="flex flex-wrap gap-1">
         {tasks.length ? (
           tasks.map((task) => (
-            <Badge key={task.id} variant={task.status === "done" ? "ready" : task.status === "blocked" ? "blocked" : "secondary"}>
-              #{task.seq} {task.status}
-            </Badge>
+            <span key={task.id} className="inline-flex items-center overflow-hidden rounded-md border border-neutral-200 bg-neutral-50">
+              <Badge variant={task.status === "done" ? "ready" : task.status === "blocked" ? "blocked" : "secondary"}>
+                #{task.seq} {task.status}
+              </Badge>
+              {onRemove ? (
+                <button
+                  className="px-1.5 text-neutral-500 hover:text-red-700"
+                  disabled={pending}
+                  title="Remove parent dependency"
+                  onClick={() => onRemove(task.id)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+            </span>
           ))
         ) : (
           <span className="text-sm text-neutral-400">none</span>

@@ -127,6 +127,48 @@ describe("KanbanApi task search", () => {
     const url = calledUrl(fetchMock)
     expect(url.searchParams.get("after")).toBe("120")
   })
+
+  it("uses board-scoped maintenance and status endpoints", async () => {
+    const fetchMock = mockFetch({
+      data: {
+        backend: "sqlite",
+        stale: false,
+        index_version: null,
+        last_event_id: null,
+        index_lag_events: null,
+      },
+    })
+    const api = new KanbanApi(runtimeConfig)
+
+    await api.searchStatus()
+
+    expect(calledUrl(fetchMock).pathname).toBe("/api/v1/search/status")
+    expect(calledUrl(fetchMock).searchParams.get("board")).toBe("default")
+
+    fetchMock.mockClear()
+    await api.doctor()
+    expect(calledUrl(fetchMock).pathname).toBe("/api/v1/maintenance/doctor")
+    expect(calledInit(fetchMock).method).toBe("POST")
+    expect(JSON.parse(String(calledInit(fetchMock).body))).toEqual({
+      actor: "desktop-test",
+      board: "default",
+    })
+
+    fetchMock.mockClear()
+    await api.checkpoint()
+    expect(calledUrl(fetchMock).pathname).toBe("/api/v1/maintenance/checkpoint")
+    expect(calledInit(fetchMock).method).toBe("POST")
+  })
+
+  it("deletes parent dependencies through the child scoped endpoint", async () => {
+    const fetchMock = mockFetch({ data: { parents: [], children: [] } })
+    const api = new KanbanApi(runtimeConfig)
+
+    await api.removeDependency("t_child", "t_parent")
+
+    expect(calledUrl(fetchMock).pathname).toBe("/api/v1/tasks/t_child/dependencies/t_parent")
+    expect(calledInit(fetchMock).method).toBe("DELETE")
+  })
 })
 
 function mockFetch(envelope: unknown) {

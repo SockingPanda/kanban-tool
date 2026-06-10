@@ -19,13 +19,13 @@ export function completeTaskBody(status: TaskStatus, claimToken: string | null) 
 
 export function canBlockTask(status: TaskStatus, claimToken: string | null, blockReason: string) {
   void claimToken
-  return status === "running" && blockReason.trim().length > 0
+  return isBlockableStatus(status) && blockReason.trim().length > 0
 }
 
-export function blockTaskBody(claimToken: string | null, blockReason: string) {
-  return claimToken
-    ? { claim_token: claimToken, reason: blockReason.trim() }
-    : { force: true, reason: blockReason.trim() }
+export function blockTaskBody(status: TaskStatus, claimToken: string | null, blockReason: string) {
+  const reason = blockReason.trim()
+  if (status !== "running") return { reason }
+  return claimToken ? { claim_token: claimToken, reason } : { force: true, reason }
 }
 
 export function canArchiveTask(status: TaskStatus) {
@@ -40,4 +40,15 @@ export function requiresForceConfirmation(status: TaskStatus, action: "complete"
   if (status !== "running") return false
   if (action === "archive") return true
   return !claimToken
+}
+
+export function isBlockableStatus(status: TaskStatus) {
+  return (
+    status === "triage" ||
+    status === "todo" ||
+    status === "scheduled" ||
+    status === "ready" ||
+    status === "running" ||
+    status === "review"
+  )
 }

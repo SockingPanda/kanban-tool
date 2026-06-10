@@ -81,7 +81,7 @@ export function legalActions(task: Task, claimToken: string | null, blockReason:
         ? `Force block running task #${task.seq} without a claim token?`
         : undefined,
       danger: true,
-      run: (api, item) => api.transition(item, "block", blockTaskBody(claimToken, blockReason)),
+      run: (api, item) => api.transition(item, "block", blockTaskBody(item.status, claimToken, blockReason)),
     },
     {
       label: "Unblock",

@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[test]
-fn explicit_ready_create_requires_ready_prerequisites() {
-    let temp = TempDb::new("explicit_ready_create_requires_ready_prerequisites");
+fn explicit_ready_create_requires_ready_prerequisites() -> anyhow::Result<()> {
+    let temp = TempDb::new("explicit_ready_create_requires_ready_prerequisites")?;
     init_database(&temp.path, "tester").unwrap();
 
     let missing_spec = create_task(
@@ -52,11 +52,12 @@ fn explicit_ready_create_requires_ready_prerequisites() {
             .contains("ready requires scheduled_at to be due"),
         "err: {future_ready}"
     );
+    Ok(())
 }
 
 #[test]
-fn force_archive_running_task_closes_active_run() {
-    let temp = TempDb::new("force_archive_running_task_closes_active_run");
+fn force_archive_running_task_closes_active_run() -> anyhow::Result<()> {
+    let temp = TempDb::new("force_archive_running_task_closes_active_run")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -85,11 +86,12 @@ fn force_archive_running_task_closes_active_run() {
             .any(|event| event.kind == "task.archived"
                 && event.run_id.as_deref() == Some(&claim.run_id))
     );
+    Ok(())
 }
 
 #[test]
-fn block_reason_with_control_chars_writes_valid_event_json() {
-    let temp = TempDb::new("block_reason_with_control_chars_writes_valid_event_json");
+fn block_reason_with_control_chars_writes_valid_event_json() -> anyhow::Result<()> {
+    let temp = TempDb::new("block_reason_with_control_chars_writes_valid_event_json")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -114,11 +116,13 @@ fn block_reason_with_control_chars_writes_valid_event_json() {
         .unwrap();
     let payload: serde_json::Value = serde_json::from_str(&event.payload_json).unwrap();
     assert_eq!(payload["reason"], reason);
+    Ok(())
 }
 
 #[test]
-fn updating_ready_task_to_future_schedule_makes_it_unclaimable_until_due() {
-    let temp = TempDb::new("updating_ready_task_to_future_schedule_makes_it_unclaimable_until_due");
+fn updating_ready_task_to_future_schedule_makes_it_unclaimable_until_due() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("updating_ready_task_to_future_schedule_makes_it_unclaimable_until_due")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -162,12 +166,14 @@ fn updating_ready_task_to_future_schedule_makes_it_unclaimable_until_due() {
         get_task(&temp.path, "default", &task.id).unwrap().status,
         TaskStatus::Scheduled
     );
+    Ok(())
 }
 
 #[test]
-fn clearing_schedule_recomputes_complete_task_without_dependencies_to_ready() {
+fn clearing_schedule_recomputes_complete_task_without_dependencies_to_ready() -> anyhow::Result<()>
+{
     let temp =
-        TempDb::new("clearing_schedule_recomputes_complete_task_without_dependencies_to_ready");
+        TempDb::new("clearing_schedule_recomputes_complete_task_without_dependencies_to_ready")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -200,11 +206,12 @@ fn clearing_schedule_recomputes_complete_task_without_dependencies_to_ready() {
 
     assert_eq!(updated.scheduled_at, None);
     assert_eq!(updated.status, TaskStatus::Ready);
+    Ok(())
 }
 
 #[test]
-fn clearing_schedule_recomputes_incomplete_dependencies_to_todo() {
-    let temp = TempDb::new("clearing_schedule_recomputes_incomplete_dependencies_to_todo");
+fn clearing_schedule_recomputes_incomplete_dependencies_to_todo() -> anyhow::Result<()> {
+    let temp = TempDb::new("clearing_schedule_recomputes_incomplete_dependencies_to_todo")?;
     init_database(&temp.path, "tester").unwrap();
     let parent = create_task(
         &temp.path,
@@ -244,11 +251,12 @@ fn clearing_schedule_recomputes_incomplete_dependencies_to_todo() {
     .unwrap();
 
     assert_eq!(updated.status, TaskStatus::Todo);
+    Ok(())
 }
 
 #[test]
-fn clearing_schedule_recomputes_missing_description_to_triage() {
-    let temp = TempDb::new("clearing_schedule_recomputes_missing_description_to_triage");
+fn clearing_schedule_recomputes_missing_description_to_triage() -> anyhow::Result<()> {
+    let temp = TempDb::new("clearing_schedule_recomputes_missing_description_to_triage")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -280,11 +288,12 @@ fn clearing_schedule_recomputes_missing_description_to_triage() {
     .unwrap();
 
     assert_eq!(updated.status, TaskStatus::Triage);
+    Ok(())
 }
 
 #[test]
-fn updating_description_recomputes_active_triage_to_ready() {
-    let temp = TempDb::new("updating_description_recomputes_active_triage_to_ready");
+fn updating_description_recomputes_active_triage_to_ready() -> anyhow::Result<()> {
+    let temp = TempDb::new("updating_description_recomputes_active_triage_to_ready")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -317,11 +326,12 @@ fn updating_description_recomputes_active_triage_to_ready() {
     .unwrap();
 
     assert_eq!(updated.status, TaskStatus::Ready);
+    Ok(())
 }
 
 #[test]
-fn updating_description_recomputes_active_ready_to_triage() {
-    let temp = TempDb::new("updating_description_recomputes_active_ready_to_triage");
+fn updating_description_recomputes_active_ready_to_triage() -> anyhow::Result<()> {
+    let temp = TempDb::new("updating_description_recomputes_active_ready_to_triage")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -344,11 +354,12 @@ fn updating_description_recomputes_active_ready_to_triage() {
     .unwrap();
 
     assert_eq!(updated.status, TaskStatus::Triage);
+    Ok(())
 }
 
 #[test]
-fn claimed_task_has_current_run_running_run_and_claimed_event() {
-    let temp = TempDb::new("claimed_task_has_current_run_running_run_and_claimed_event");
+fn claimed_task_has_current_run_running_run_and_claimed_event() -> anyhow::Result<()> {
+    let temp = TempDb::new("claimed_task_has_current_run_running_run_and_claimed_event")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -380,13 +391,15 @@ fn claimed_task_has_current_run_running_run_and_claimed_event() {
             && event.run_id.as_deref() == claimed.current_run_id.as_deref()),
         "events: {events:?}"
     );
+    Ok(())
 }
 
 #[test]
-fn heartbeat_against_stale_non_running_claim_fails_without_touching_heartbeat_fields() {
+fn heartbeat_against_stale_non_running_claim_fails_without_touching_heartbeat_fields()
+-> anyhow::Result<()> {
     let temp = TempDb::new(
         "heartbeat_against_stale_non_running_claim_fails_without_touching_heartbeat_fields",
-    );
+    )?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -423,4 +436,5 @@ fn heartbeat_against_stale_non_running_claim_fails_without_touching_heartbeat_fi
     assert_eq!(after.status, TaskStatus::Blocked);
     assert_eq!(after.claim_expires_at, blocked.claim_expires_at);
     assert_eq!(after.last_heartbeat_at, blocked.last_heartbeat_at);
+    Ok(())
 }

@@ -1,9 +1,10 @@
+#![cfg(feature = "tantivy-backend")]
+
 use crate::common::*;
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_rebuild_marks_only_current_board_outbox_done() {
-    let temp = TempDb::new("tantivy_rebuild_marks_only_current_board_outbox_done");
+fn tantivy_rebuild_marks_only_current_board_outbox_done() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_rebuild_marks_only_current_board_outbox_done")?;
     init_database(&temp.path, "tester").unwrap();
     insert_board(&temp.path, "other", "b_other");
 
@@ -39,12 +40,12 @@ fn tantivy_rebuild_marks_only_current_board_outbox_done() {
         tantivy_outbox_statuses_for_board(&temp.path, "other"),
         vec!["pending"]
     );
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_sync_marks_only_current_board_outbox_done() {
-    let temp = TempDb::new("tantivy_sync_marks_only_current_board_outbox_done");
+fn tantivy_sync_marks_only_current_board_outbox_done() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_sync_marks_only_current_board_outbox_done")?;
     init_database(&temp.path, "tester").unwrap();
     insert_board(&temp.path, "other", "b_other");
     let default = create_task(
@@ -86,12 +87,12 @@ fn tantivy_sync_marks_only_current_board_outbox_done() {
         tantivy_outbox_statuses_for_board(&temp.path, "other"),
         vec!["pending"]
     );
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_sync_failure_marks_only_current_board_outbox_failed() {
-    let temp = TempDb::new("tantivy_sync_failure_marks_only_current_board_outbox_failed");
+fn tantivy_sync_failure_marks_only_current_board_outbox_failed() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_sync_failure_marks_only_current_board_outbox_failed")?;
     init_database(&temp.path, "tester").unwrap();
     insert_board(&temp.path, "other", "b_other");
     let default = create_task(
@@ -139,13 +140,14 @@ fn tantivy_sync_failure_marks_only_current_board_outbox_failed() {
         tantivy_outbox_statuses_for_board(&temp.path, "other"),
         vec!["pending"]
     );
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters() {
+fn tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters() -> anyhow::Result<()>
+{
     let temp =
-        TempDb::new("tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters");
+        TempDb::new("tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters")?;
     init_database(&temp.path, "tester").unwrap();
 
     let title = create_task(
@@ -296,13 +298,14 @@ fn tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters() 
     let mut expected_ids = vec![title.id.as_str(), description.id.as_str()];
     expected_ids.sort_unstable();
     assert_eq!(filtered_ids, expected_ids);
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn stale_tantivy_index_falls_back_to_sqlite_before_current_filters_are_applied() {
+fn stale_tantivy_index_falls_back_to_sqlite_before_current_filters_are_applied()
+-> anyhow::Result<()> {
     let temp =
-        TempDb::new("stale_tantivy_index_falls_back_to_sqlite_before_current_filters_are_applied");
+        TempDb::new("stale_tantivy_index_falls_back_to_sqlite_before_current_filters_are_applied")?;
     init_database(&temp.path, "tester").unwrap();
 
     let archive_candidate = create_task(
@@ -418,12 +421,12 @@ fn stale_tantivy_index_falls_back_to_sqlite_before_current_filters_are_applied()
     assert!(filtered.meta.stale);
     assert!(filtered.meta.index_lag_events.unwrap() > 0);
     assert!(filtered.hits.is_empty(), "{:?}", filtered.hits);
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_rebuild_persists_search_state_in_app_settings() {
-    let temp = TempDb::new("tantivy_rebuild_persists_search_state_in_app_settings");
+fn tantivy_rebuild_persists_search_state_in_app_settings() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_rebuild_persists_search_state_in_app_settings")?;
     init_database(&temp.path, "tester").unwrap();
     create_task(
         &temp.path,
@@ -475,12 +478,13 @@ fn tantivy_rebuild_persists_search_state_in_app_settings() {
     )
     .unwrap();
     assert!(jobs.iter().any(|job| job.target == "tantivy"));
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() {
-    let temp = TempDb::new("tantivy_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending");
+fn tantivy_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("tantivy_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending")?;
     init_database(&temp.path, "tester").unwrap();
     insert_board(&temp.path, "second", "b_second");
     create_task(
@@ -530,12 +534,12 @@ fn tantivy_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() {
         .find(|store| store.store_name == "tantivy_tasks")
         .unwrap();
     assert!(!tantivy.dirty);
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_sync_reindexes_task_comment_run_event_and_archive_changes() {
-    let temp = TempDb::new("tantivy_sync_reindexes_task_comment_run_event_and_archive_changes");
+fn tantivy_sync_reindexes_task_comment_run_event_and_archive_changes() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_sync_reindexes_task_comment_run_event_and_archive_changes")?;
     init_database(&temp.path, "tester").unwrap();
 
     let updated = create_task(
@@ -679,12 +683,12 @@ fn tantivy_sync_reindexes_task_comment_run_event_and_archive_changes() {
         assert!(ids.contains(&expected.as_str()), "{ids:?}");
     }
     assert!(!ids.contains(&archived.id.as_str()), "{ids:?}");
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_index_ahead_of_database_falls_back_and_sync_rebuilds() {
-    let temp = TempDb::new("tantivy_index_ahead_of_database_falls_back_and_sync_rebuilds");
+fn tantivy_index_ahead_of_database_falls_back_and_sync_rebuilds() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_index_ahead_of_database_falls_back_and_sync_rebuilds")?;
     init_database(&temp.path, "tester").unwrap();
     let base = create_task(
         &temp.path,
@@ -764,12 +768,12 @@ fn tantivy_index_ahead_of_database_falls_back_and_sync_rebuilds() {
     assert!(!repaired.meta.stale);
     assert_eq!(repaired.hits.len(), 1);
     assert_eq!(repaired.hits[0].task_id, base.id);
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_state_metadata_mismatch_falls_back_and_sync_rebuilds() {
-    let temp = TempDb::new("tantivy_state_metadata_mismatch_falls_back_and_sync_rebuilds");
+fn tantivy_state_metadata_mismatch_falls_back_and_sync_rebuilds() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_state_metadata_mismatch_falls_back_and_sync_rebuilds")?;
     init_database(&temp.path, "tester").unwrap();
     let base = create_task(
         &temp.path,
@@ -855,12 +859,12 @@ fn tantivy_state_metadata_mismatch_falls_back_and_sync_rebuilds() {
     assert_eq!(repaired.meta.index_lag_events, Some(0));
     assert_eq!(repaired.hits.len(), 1);
     assert_eq!(repaired.hits[0].task_id, base.id);
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_sync_failure_does_not_advance_search_state_watermark() {
-    let temp = TempDb::new("tantivy_sync_failure_does_not_advance_search_state_watermark");
+fn tantivy_sync_failure_does_not_advance_search_state_watermark() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_sync_failure_does_not_advance_search_state_watermark")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -903,12 +907,12 @@ fn tantivy_sync_failure_does_not_advance_search_state_watermark() {
     assert_eq!(Some(tantivy.last_event_id), rebuilt.last_event_id);
     assert!(tantivy.dirty);
     assert!(tantivy.last_error.is_some());
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_missing_or_corrupt_index_falls_back_to_sqlite() {
-    let temp = TempDb::new("tantivy_missing_or_corrupt_index_falls_back_to_sqlite");
+fn tantivy_missing_or_corrupt_index_falls_back_to_sqlite() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_missing_or_corrupt_index_falls_back_to_sqlite")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -948,12 +952,12 @@ fn tantivy_missing_or_corrupt_index_falls_back_to_sqlite() {
     assert_eq!(results.meta.backend, "sqlite");
     assert!(results.meta.stale);
     assert_eq!(results.hits[0].task_id, task.id);
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_status_degrades_metadata_only_index_dir() {
-    let temp = TempDb::new("tantivy_status_degrades_metadata_only_index_dir");
+fn tantivy_status_degrades_metadata_only_index_dir() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_status_degrades_metadata_only_index_dir")?;
     init_database(&temp.path, "tester").unwrap();
     let conn = connect_file(&temp.path).unwrap();
     let board_id: String = conn
@@ -981,12 +985,12 @@ fn tantivy_status_degrades_metadata_only_index_dir() {
         "{}",
         status.message
     );
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_status_degrades_wrong_schema_index() {
-    let temp = TempDb::new("tantivy_status_degrades_wrong_schema_index");
+fn tantivy_status_degrades_wrong_schema_index() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_status_degrades_wrong_schema_index")?;
     init_database(&temp.path, "tester").unwrap();
     let conn = connect_file(&temp.path).unwrap();
     let board_id: String = conn
@@ -1017,12 +1021,12 @@ fn tantivy_status_degrades_wrong_schema_index() {
         "{}",
         status.message
     );
+    Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 #[test]
-fn tantivy_literal_special_searches_fall_back_to_sqlite_after_rebuild() {
-    let temp = TempDb::new("tantivy_literal_special_searches_fall_back_to_sqlite_after_rebuild");
+fn tantivy_literal_special_searches_fall_back_to_sqlite_after_rebuild() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_literal_special_searches_fall_back_to_sqlite_after_rebuild")?;
     init_database(&temp.path, "tester").unwrap();
     let percent = create_task(
         &temp.path,
@@ -1082,4 +1086,5 @@ fn tantivy_literal_special_searches_fall_back_to_sqlite_after_rebuild() {
             results.hits
         );
     }
+    Ok(())
 }

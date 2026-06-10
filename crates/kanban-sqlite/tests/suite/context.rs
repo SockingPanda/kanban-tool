@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[test]
-fn context_broker_hydrates_subject_and_reports_disabled_derived_stores() {
-    let temp = TempDb::new("context_broker_hydrates_subject_and_reports_disabled_derived_stores");
+fn context_broker_hydrates_subject_and_reports_disabled_derived_stores() -> anyhow::Result<()> {
+    let temp = TempDb::new("context_broker_hydrates_subject_and_reports_disabled_derived_stores")?;
     init_database(&temp.path, "tester").unwrap();
     let subject = create_task(
         &temp.path,
@@ -82,12 +82,13 @@ fn context_broker_hydrates_subject_and_reports_disabled_derived_stores() {
     );
     #[cfg(feature = "vector-lancedb")]
     assert!(pack.degraded.iter().any(|marker| marker == "vector_dirty"));
+    Ok(())
 }
 
 #[test]
-fn context_broker_rejects_zero_max_items_and_counts_subject_toward_budget() {
+fn context_broker_rejects_zero_max_items_and_counts_subject_toward_budget() -> anyhow::Result<()> {
     let temp =
-        TempDb::new("context_broker_rejects_zero_max_items_and_counts_subject_toward_budget");
+        TempDb::new("context_broker_rejects_zero_max_items_and_counts_subject_toward_budget")?;
     init_database(&temp.path, "tester").unwrap();
     let subject = create_task(
         &temp.path,
@@ -135,12 +136,13 @@ fn context_broker_rejects_zero_max_items_and_counts_subject_toward_budget() {
     )
     .unwrap_err();
     assert!(error.to_string().contains("max_items must be >= 1"));
+    Ok(())
 }
 
 #[cfg(feature = "graph-oxigraph")]
 #[test]
-fn context_broker_reports_graph_dirty_and_stale_before_sync() {
-    let temp = TempDb::new("context_broker_reports_graph_dirty_and_stale_before_sync");
+fn context_broker_reports_graph_dirty_and_stale_before_sync() -> anyhow::Result<()> {
+    let temp = TempDb::new("context_broker_reports_graph_dirty_and_stale_before_sync")?;
     init_database(&temp.path, "tester").unwrap();
     let subject = create_task(
         &temp.path,
@@ -165,12 +167,13 @@ fn context_broker_reports_graph_dirty_and_stale_before_sync() {
 
     assert!(pack.degraded.iter().any(|marker| marker == "graph_dirty"));
     assert!(pack.degraded.iter().any(|marker| marker == "graph_stale"));
+    Ok(())
 }
 
 #[cfg(feature = "graph-oxigraph")]
 #[test]
-fn context_broker_reports_graph_error_diagnostic_without_failing_pack() {
-    let temp = TempDb::new("context_broker_reports_graph_error_diagnostic_without_failing_pack");
+fn context_broker_reports_graph_error_diagnostic_without_failing_pack() -> anyhow::Result<()> {
+    let temp = TempDb::new("context_broker_reports_graph_error_diagnostic_without_failing_pack")?;
     init_database(&temp.path, "tester").unwrap();
     let subject = create_task(
         &temp.path,
@@ -207,12 +210,13 @@ fn context_broker_reports_graph_error_diagnostic_without_failing_pack() {
             && !diagnostic.message.is_empty()
             && diagnostic.message.len() <= 243
     }));
+    Ok(())
 }
 
 #[cfg(feature = "vector-lancedb")]
 #[test]
-fn context_broker_reports_vector_query_error_without_failing_pack() {
-    let temp = TempDb::new("context_broker_reports_vector_query_error_without_failing_pack");
+fn context_broker_reports_vector_query_error_without_failing_pack() -> anyhow::Result<()> {
+    let temp = TempDb::new("context_broker_reports_vector_query_error_without_failing_pack")?;
     init_database(&temp.path, "tester").unwrap();
     let subject = create_task(
         &temp.path,
@@ -250,4 +254,5 @@ fn context_broker_reports_vector_query_error_without_failing_pack() {
             && diagnostic.message.contains("query exploded")
             && diagnostic.message.len() <= 243
     }));
+    Ok(())
 }

@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[test]
-fn doctor_resolves_legacy_relative_run_log_paths_against_database_dir() {
-    let temp = TempDb::new("doctor_resolves_legacy_relative_run_log_paths_against_database_dir");
+fn doctor_resolves_legacy_relative_run_log_paths_against_database_dir() -> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_resolves_legacy_relative_run_log_paths_against_database_dir")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -46,11 +46,13 @@ fn doctor_resolves_legacy_relative_run_log_paths_against_database_dir() {
 
     assert_eq!(report.missing_run_logs, 0);
     assert!(report.ok);
+    Ok(())
 }
 
 #[test]
-fn doctor_counts_suspicious_run_log_paths_separately_from_missing_allowed_logs() {
-    let temp = TempDb::new("doctor_counts_suspicious_run_log_paths_separately");
+fn doctor_counts_suspicious_run_log_paths_separately_from_missing_allowed_logs()
+-> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_counts_suspicious_run_log_paths_separately")?;
     init_database(&temp.path, "tester").unwrap();
     let suspicious_task = create_task(
         &temp.path,
@@ -122,11 +124,12 @@ fn doctor_counts_suspicious_run_log_paths_separately_from_missing_allowed_logs()
     assert!(!report.ok);
     assert_eq!(report.missing_run_logs, 1);
     assert_eq!(report.suspicious_run_log_paths, 1);
+    Ok(())
 }
 
 #[test]
-fn doctor_reports_partially_initialized_database_without_bailing() {
-    let temp = TempDb::new("doctor_reports_partially_initialized_database_without_bailing");
+fn doctor_reports_partially_initialized_database_without_bailing() -> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_reports_partially_initialized_database_without_bailing")?;
     connect_file(&temp.path)
         .unwrap()
         .execute(
@@ -140,14 +143,15 @@ fn doctor_reports_partially_initialized_database_without_bailing() {
     assert!(!report.ok);
     assert_eq!(report.migration_version, None);
     assert_eq!(report.user_version, 0);
+    Ok(())
 }
 
 #[test]
-fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() {
+fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() -> anyhow::Result<()> {
     for table in ["index_outbox", "derived_store_state"] {
         let temp = TempDb::new(&format!(
             "doctor_reports_missing_knowledge_substrate_tables_unhealthy_{table}"
-        ));
+        ))?;
         init_database(&temp.path, "tester").unwrap();
         connect_file(&temp.path)
             .unwrap()
@@ -160,11 +164,12 @@ fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() {
         assert_eq!(report.user_version, 2);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
+    Ok(())
 }
 
 #[test]
-fn doctor_reports_executable_status_invariant_violations() {
-    let temp = TempDb::new("doctor_reports_executable_status_invariant_violations");
+fn doctor_reports_executable_status_invariant_violations() -> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_reports_executable_status_invariant_violations")?;
     init_database(&temp.path, "tester").unwrap();
     let parent = create_task(
         &temp.path,
@@ -215,11 +220,12 @@ fn doctor_reports_executable_status_invariant_violations() {
     assert_eq!(report.executable_dependency_violations, 1);
     assert_eq!(report.executable_spec_violations, 1);
     assert_eq!(report.executable_schedule_violations, 1);
+    Ok(())
 }
 
 #[test]
-fn doctor_counts_each_dependency_cycle_once() {
-    let temp = TempDb::new("doctor_counts_each_dependency_cycle_once");
+fn doctor_counts_each_dependency_cycle_once() -> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_counts_each_dependency_cycle_once")?;
     init_database(&temp.path, "tester").unwrap();
     let a = create_task(&temp.path, "default", "tester", CreateTask::ready("a")).unwrap();
     let b = create_task(&temp.path, "default", "tester", CreateTask::ready("b")).unwrap();
@@ -239,11 +245,12 @@ fn doctor_counts_each_dependency_cycle_once() {
 
     assert!(!report.ok);
     assert_eq!(report.dependency_cycles, 1);
+    Ok(())
 }
 
 #[test]
-fn database_replace_is_rejected_while_runtime_lock_is_held() {
-    let temp = TempDb::new("database_replace_is_rejected_while_runtime_lock_is_held");
+fn database_replace_is_rejected_while_runtime_lock_is_held() -> anyhow::Result<()> {
+    let temp = TempDb::new("database_replace_is_rejected_while_runtime_lock_is_held")?;
     init_database(&temp.path, "tester").unwrap();
     let _runtime_guard = begin_database_runtime(&temp.path).unwrap();
 
@@ -255,4 +262,5 @@ fn database_replace_is_rejected_while_runtime_lock_is_held() {
             || err.to_string().contains("serve/dispatch"),
         "err: {err}"
     );
+    Ok(())
 }

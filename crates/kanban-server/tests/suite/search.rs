@@ -2,7 +2,8 @@ use crate::common::*;
 
 #[tokio::test]
 async fn search_api_returns_hits_with_tasks_and_sqlite_status() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     for (title, assignee) in [
         ("alpha api search", Some("worker-a")),
         ("beta api search", Some("worker-b")),
@@ -24,7 +25,7 @@ async fn search_api_returns_hits_with_tasks_and_sqlite_status() {
         )
         .expect("seed task");
     }
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(
         app.clone(),
@@ -54,7 +55,8 @@ mod tantivy_backend {
 
     #[tokio::test]
     async fn search_api_uses_tantivy_index_when_rebuilt() {
-        let (_dir, db_path) = temp_db();
+        let test = TestApp::new();
+        let db_path = test.db_path().to_path_buf();
         kanban_sqlite::create_task(
             &db_path,
             "default",
@@ -72,7 +74,7 @@ mod tantivy_backend {
         )
         .expect("seed task");
         kanban_sqlite::rebuild_search_index(&db_path, "default").expect("rebuild index");
-        let app = build_router(AppState::new(db_path, "api-test"));
+        let app = test.router();
 
         let (status, json) = get_json(
             app,
@@ -91,8 +93,8 @@ mod tantivy_backend {
 
 #[tokio::test]
 async fn search_api_rejects_unbounded_limit() {
-    let (_dir, db_path) = temp_db();
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let test = TestApp::new();
+    let app = test.router();
 
     let (status, json) = get_json(
         app,
@@ -115,7 +117,8 @@ async fn search_api_rejects_unbounded_limit() {
 
 #[tokio::test]
 async fn search_api_treats_like_wildcards_as_literal_text() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     for title in ["literal percent % api", "plain api control"] {
         kanban_sqlite::create_task(
             &db_path,
@@ -134,7 +137,7 @@ async fn search_api_treats_like_wildcards_as_literal_text() {
         )
         .expect("seed task");
     }
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(app, "/api/v1/search/tasks?board=default&q=%25").await;
     assert_eq!(status, StatusCode::OK);

@@ -2,7 +2,8 @@ use crate::common::*;
 
 #[tokio::test]
 async fn stats_api_reports_stale_claims_and_blocked_reason_counts() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let stale = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -45,7 +46,7 @@ async fn stats_api_reports_stale_claims_and_blocked_reason_counts() {
         true,
     )
     .expect("block b");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(app, "/api/v1/stats?board=default").await;
 
@@ -67,8 +68,8 @@ async fn stats_api_reports_stale_claims_and_blocked_reason_counts() {
 
 #[tokio::test]
 async fn maintenance_api_reports_doctor_and_checkpoint_results() {
-    let (_dir, db_path) = temp_db();
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let test = TestApp::new();
+    let app = test.router();
 
     let (status, json) = post_json(app.clone(), "/api/v1/maintenance/doctor", json!({})).await;
     assert_eq!(status, StatusCode::OK);

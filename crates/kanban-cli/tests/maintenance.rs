@@ -6,7 +6,7 @@ use kanban_sqlite::maintenance_lock_path;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 #[test]
-fn doctor_reports_integrity_migration_and_expired_running_tasks() -> anyhow::Result<()> {
+fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     let temp = TempDb::new("doctor_reports_integrity_migration_and_expired_running_tasks")?;
     kb(&temp.path, &["init"])?.success()?;
     let created = kb(
@@ -70,7 +70,7 @@ fn doctor_reports_integrity_migration_and_expired_running_tasks() -> anyhow::Res
 }
 
 #[test]
-fn maintenance_commands_reject_missing_database() -> anyhow::Result<()> {
+fn maintenance_rejects_missing_database() -> anyhow::Result<()> {
     let temp = TempDb::new("maintenance_commands_reject_missing_database")?;
     let backup_path = temp.dir.join("backup.sqlite");
     let nested_backup_path = temp.dir.join("new/subdir/backup.sqlite");
@@ -118,7 +118,7 @@ fn maintenance_commands_reject_missing_database() -> anyhow::Result<()> {
 }
 
 #[test]
-fn maintenance_lock_uses_canonical_database_path() -> anyhow::Result<()> {
+fn maintenance_lock_uses_canonical_path() -> anyhow::Result<()> {
     let temp = TempDb::new("maintenance_lock_uses_canonical_database_path")?;
     kb(&temp.path, &["init"])?.success()?;
     let lock_path = maintenance_lock_path(&temp.path);
@@ -132,7 +132,7 @@ fn maintenance_lock_uses_canonical_database_path() -> anyhow::Result<()> {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn maintenance_lock_with_dead_pid_is_removed() -> anyhow::Result<()> {
+fn maintenance_lock_removes_dead_pid() -> anyhow::Result<()> {
     let temp = TempDb::new("maintenance_lock_with_dead_pid_is_removed")?;
     kb(&temp.path, &["init"])?.success()?;
     let lock_path = maintenance_lock_path(&temp.path);

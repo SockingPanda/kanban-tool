@@ -1,8 +1,10 @@
+#![cfg(feature = "vector-lancedb")]
+
 use crate::common::*;
 
 #[test]
-fn vector_sync_marks_lancedb_outbox_done_without_touching_other_boards() {
-    let temp = TempDb::new("vector_sync_marks_lancedb_outbox_done_without_touching_other_boards");
+fn vector_sync_marks_lancedb_outbox_done_without_touching_other_boards() -> anyhow::Result<()> {
+    let temp = TempDb::new("vector_sync_marks_lancedb_outbox_done_without_touching_other_boards")?;
     init_database(&temp.path, "tester").unwrap();
     insert_board(&temp.path, "second", "b_second");
     create_task(
@@ -58,11 +60,12 @@ fn vector_sync_marks_lancedb_outbox_done_without_touching_other_boards() {
         .unwrap();
     assert!(!vector.dirty);
     assert!(vector.last_error.is_none());
+    Ok(())
 }
 
 #[test]
-fn vector_sync_and_rebuild_use_store_embedding_model() {
-    let temp = TempDb::new("vector_sync_and_rebuild_use_store_embedding_model");
+fn vector_sync_and_rebuild_use_store_embedding_model() -> anyhow::Result<()> {
+    let temp = TempDb::new("vector_sync_and_rebuild_use_store_embedding_model")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -91,11 +94,12 @@ fn vector_sync_and_rebuild_use_store_embedding_model() {
     rebuild_vector_store_with(&temp.path, "default", &store).unwrap();
 
     assert_eq!(store.upserted_models(), vec!["static-test", "static-test"]);
+    Ok(())
 }
 
 #[test]
-fn vector_sync_deletes_archived_task_chunks_and_converges_outbox() {
-    let temp = TempDb::new("vector_sync_deletes_archived_task_chunks_and_converges_outbox");
+fn vector_sync_deletes_archived_task_chunks_and_converges_outbox() -> anyhow::Result<()> {
+    let temp = TempDb::new("vector_sync_deletes_archived_task_chunks_and_converges_outbox")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -127,11 +131,12 @@ fn vector_sync_deletes_archived_task_chunks_and_converges_outbox() {
         .unwrap();
     assert!(!vector.dirty);
     assert!(vector.last_error.is_none());
+    Ok(())
 }
 
 #[test]
-fn vector_rebuild_deletes_board_before_reindexing_current_tasks() {
-    let temp = TempDb::new("vector_rebuild_deletes_board_before_reindexing_current_tasks");
+fn vector_rebuild_deletes_board_before_reindexing_current_tasks() -> anyhow::Result<()> {
+    let temp = TempDb::new("vector_rebuild_deletes_board_before_reindexing_current_tasks")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -171,11 +176,12 @@ fn vector_rebuild_deletes_board_before_reindexing_current_tasks() {
         .unwrap();
     assert!(!vector.dirty);
     assert!(vector.last_error.is_none());
+    Ok(())
 }
 
 #[test]
-fn vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error() {
-    let temp = TempDb::new("vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error");
+fn vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error() -> anyhow::Result<()> {
+    let temp = TempDb::new("vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -222,4 +228,5 @@ fn vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error() {
                 .unwrap()
                 .contains("dimension mismatch")
     }));
+    Ok(())
 }

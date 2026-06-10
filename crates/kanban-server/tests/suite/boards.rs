@@ -2,8 +2,8 @@ use crate::common::*;
 
 #[tokio::test]
 async fn boards_api_lists_and_shows_default_board() {
-    let (_dir, db_path) = temp_db();
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let test = TestApp::new();
+    let app = test.router();
 
     let (status, json) = get_json(app.clone(), "/api/v1/boards").await;
     assert_eq!(status, StatusCode::OK);
@@ -32,8 +32,9 @@ async fn boards_api_lists_and_shows_default_board() {
 
 #[tokio::test]
 async fn boards_api_creates_and_archives_board() {
-    let (_dir, db_path) = temp_db();
-    let app = build_router(AppState::new(&db_path, "api-test"));
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
+    let app = test.router();
 
     let (status, created) = post_json(
         app.clone(),
@@ -79,7 +80,8 @@ async fn boards_api_creates_and_archives_board() {
 
 #[tokio::test]
 async fn boards_api_archive_rejects_running_work() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     kanban_sqlite::create_board(
         &db_path,
         "api-test",
@@ -98,7 +100,7 @@ async fn boards_api_archive_rejects_running_work() {
     )
     .expect("task");
     kanban_sqlite::claim_task(&db_path, "busy", "worker", &task.id, 60_000).expect("claim");
-    let app = build_router(AppState::new(db_path.clone(), "api-test"));
+    let app = test.router();
 
     let (status, json) = post_json(app, "/api/v1/boards/busy/archive", json!({})).await;
     assert_eq!(status, StatusCode::CONFLICT);
@@ -113,8 +115,8 @@ async fn boards_api_archive_rejects_running_work() {
 
 #[tokio::test]
 async fn boards_api_duplicate_slug_returns_invalid_input() {
-    let (_dir, db_path) = temp_db();
-    let app = build_router(AppState::new(&db_path, "api-test"));
+    let test = TestApp::new();
+    let app = test.router();
 
     let (status, _created) = post_json(
         app.clone(),
@@ -148,7 +150,8 @@ async fn boards_api_duplicate_slug_returns_invalid_input() {
 
 #[tokio::test]
 async fn task_dto_includes_board_slug_and_ref() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     kanban_sqlite::create_board(
         &db_path,
         "api-test",
@@ -159,7 +162,7 @@ async fn task_dto_includes_board_slug_and_ref() {
         },
     )
     .expect("create board");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = post_json(
         app,
@@ -174,8 +177,8 @@ async fn task_dto_includes_board_slug_and_ref() {
 
 #[tokio::test]
 async fn board_columns_api_lists_default_columns_in_position_order() {
-    let (_dir, db_path) = temp_db();
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let test = TestApp::new();
+    let app = test.router();
 
     let (status, json) = get_json(app, "/api/v1/boards/default/columns").await;
 
@@ -208,7 +211,8 @@ async fn board_columns_api_lists_default_columns_in_position_order() {
 
 #[tokio::test]
 async fn archived_board_history_apis_remain_readable() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     kanban_sqlite::create_board(
         &db_path,
         "api-test",
@@ -240,7 +244,7 @@ async fn archived_board_history_apis_remain_readable() {
     )
     .expect("complete");
     kanban_sqlite::archive_board(&db_path, "project", "api-test").expect("archive board");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, _comment_error) = post_json(
         app.clone(),

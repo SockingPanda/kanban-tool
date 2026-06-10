@@ -31,7 +31,9 @@ import type {
   SearchMeta,
   Task,
   TaskStatus,
+  PageMeta,
 } from "@/lib/api"
+import { pageRangeLabel } from "@/lib/pagination"
 import { cn } from "@/lib/utils"
 
 export function AppShell({
@@ -44,17 +46,26 @@ export function AppShell({
   detail,
   activeRun,
   search,
+  debouncedSearch,
   searchMeta,
   statusFilter,
   showArchived,
+  page,
+  visibleTaskCount,
+  hasNextPage,
+  hasPreviousPage,
   newTitle,
   newDescription,
   blockReason,
   dependencyInput,
   commentBody,
   editDraft,
+  draftDirty,
   claimToken,
-  busy,
+  tasksLoading,
+  tasksRefreshing,
+  detailLoading,
+  pendingAction,
   error,
   lastRefreshAt,
   queueCounts,
@@ -62,6 +73,8 @@ export function AppShell({
   onStatusFilterChange,
   onShowArchivedChange,
   onRefreshTasks,
+  onPreviousPage,
+  onNextPage,
   onCreateTask,
   onNewTitleChange,
   onNewDescriptionChange,
@@ -84,17 +97,26 @@ export function AppShell({
   detail: DetailState
   activeRun?: Run
   search: string
+  debouncedSearch: string
   searchMeta: SearchMeta | null
   statusFilter: TaskStatus | "all"
   showArchived: boolean
+  page: PageMeta
+  visibleTaskCount: number
+  hasNextPage: boolean
+  hasPreviousPage: boolean
   newTitle: string
   newDescription: string
   blockReason: string
   dependencyInput: string
   commentBody: string
   editDraft: TaskEditDraft | null
+  draftDirty: boolean
   claimToken: string | null
-  busy: boolean
+  tasksLoading: boolean
+  tasksRefreshing: boolean
+  detailLoading: boolean
+  pendingAction: string | null
   error: string | null
   lastRefreshAt: number | null
   queueCounts: { ready: number; running: number; blocked: number }
@@ -102,6 +124,8 @@ export function AppShell({
   onStatusFilterChange: (value: TaskStatus | "all") => void
   onShowArchivedChange: (value: boolean) => void
   onRefreshTasks: () => void
+  onPreviousPage: () => void
+  onNextPage: () => void
   onCreateTask: (event: FormEvent) => void
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
@@ -110,7 +134,7 @@ export function AppShell({
   onDependencyInputChange: (value: string) => void
   onCommentBodyChange: (value: string) => void
   onEditDraftChange: (value: TaskEditDraft) => void
-  onAction: (action: () => Promise<unknown>) => Promise<void>
+  onAction: (action: () => Promise<unknown>) => Promise<unknown>
   onAddDependency: () => Promise<void>
   onSaveTask: () => Promise<void>
   onAddComment: () => Promise<void>
@@ -161,9 +185,9 @@ export function AppShell({
               onChange={(event) => onSearchChange(event.target.value)}
             />
           </div>
-          {search.trim() && searchMeta ? <SearchBackendBadge meta={searchMeta} /> : null}
-          <Button variant="secondary" size="icon" onClick={onRefreshTasks}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+          {debouncedSearch.trim() && searchMeta ? <SearchBackendBadge meta={searchMeta} /> : null}
+          <Button variant="secondary" size="icon" onClick={onRefreshTasks} disabled={tasksRefreshing}>
+            {tasksRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
           </Button>
           <div className="flex rounded-md border border-neutral-200 bg-neutral-50 p-0.5 text-sm">
             {["Board", "List", "Events"].map((view, index) => (
@@ -221,11 +245,26 @@ export function AppShell({
                 onChange={(event) => onNewDescriptionChange(event.target.value)}
                 placeholder="Optional spec or description"
               />
-              <Button type="submit" disabled={!newTitle.trim() || busy}>
+              <Button type="submit" disabled={!newTitle.trim() || pendingAction === "create"}>
                 <Plus className="h-4 w-4" />
                 New task
               </Button>
             </form>
+
+            <div className="flex h-8 items-center justify-between border-b border-neutral-200 bg-white px-4 text-xs text-neutral-500">
+              <span>
+                {pageRangeLabel(page, visibleTaskCount)}
+                {tasksLoading ? " · loading" : tasksRefreshing ? " · refreshing" : ""}
+              </span>
+              <span className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" disabled={!hasPreviousPage || tasksRefreshing} onClick={onPreviousPage}>
+                  Previous
+                </Button>
+                <Button variant="ghost" size="sm" disabled={!hasNextPage || tasksRefreshing} onClick={onNextPage}>
+                  Next
+                </Button>
+              </span>
+            </div>
 
             <BoardView
               columns={columns}
@@ -249,8 +288,10 @@ export function AppShell({
             commentBody={commentBody}
             setCommentBody={onCommentBodyChange}
             editDraft={editDraft}
+            draftDirty={draftDirty}
             setEditDraft={onEditDraftChange}
-            busy={busy}
+            detailLoading={detailLoading}
+            pendingAction={pendingAction}
             onAction={onAction}
             onAddDependency={onAddDependency}
             onSaveTask={onSaveTask}

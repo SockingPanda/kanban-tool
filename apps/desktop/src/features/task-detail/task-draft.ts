@@ -9,6 +9,12 @@ export type TaskEditDraft = {
   dueAt: string
 }
 
+export type TaskDraftState = {
+  taskId: string
+  draft: TaskEditDraft
+  dirty: boolean
+}
+
 export function taskToDraft(task: Task): TaskEditDraft {
   return {
     title: task.title,
@@ -18,6 +24,22 @@ export function taskToDraft(task: Task): TaskEditDraft {
     scheduledAt: formatDateInput(task.scheduled_at),
     dueAt: formatDateInput(task.due_at),
   }
+}
+
+export function reconcileTaskDraft(
+  current: TaskDraftState | null,
+  task: Task | null,
+  options: { force?: boolean } = {},
+): TaskDraftState | null {
+  if (!task) return null
+  if (!options.force && current?.taskId === task.id && current.dirty) return current
+  if (!options.force && current?.taskId === task.id) return { ...current, draft: taskToDraft(task), dirty: false }
+  return { taskId: task.id, draft: taskToDraft(task), dirty: false }
+}
+
+export function reconcileSavedTaskDraft(current: TaskDraftState | null, savedTask: Task): TaskDraftState | null {
+  if (current?.taskId !== savedTask.id) return current
+  return reconcileTaskDraft(current, savedTask, { force: true })
 }
 
 export function formatDateInput(value: number | null) {

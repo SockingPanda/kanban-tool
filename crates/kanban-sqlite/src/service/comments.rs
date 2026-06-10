@@ -1,8 +1,9 @@
 use crate::connect_file;
 
 use super::{
-    CommentRecord, CreateComment, active_board_id_for_task, insert_event, resolve_task,
-    resolve_task_without_active_board, storage, with_immediate_tx,
+    CommentRecord, CreateComment, active_board_id_for_task,
+    comment_identity::{normalize_comment_agent_type, normalize_comment_author_type},
+    insert_event, resolve_task, resolve_task_without_active_board, storage, with_immediate_tx,
 };
 
 use std::path::Path;
@@ -57,8 +58,8 @@ pub fn create_comment_with_options(
         if !matches!(kind, "text" | "system" | "worker") {
             return Err(KanbanError::InvalidInput("invalid comment kind".into()));
         }
-        let author_type = normalize_author_type(input.author_type.as_deref(), kind)?;
-        let agent_type = normalize_agent_type(input.agent_type.as_deref(), author_type)?;
+        let author_type = normalize_comment_author_type(input.author_type.as_deref(), kind)?;
+        let agent_type = normalize_comment_agent_type(input.agent_type.as_deref(), author_type)?;
         let id = new_typed_id("c");
         conn.execute(
             "INSERT INTO task_comments(id, board_id, task_id, author, author_type, agent_type, body, kind, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
@@ -118,35 +119,4 @@ pub(crate) fn comment_from_row(row: &Row<'_>) -> rusqlite::Result<CommentRecord>
         kind: row.get(7)?,
         created_at: row.get(8)?,
     })
-}
-
-fn normalize_author_type<'a>(author_type: Option<&'a str>, kind: &str) -> Result<&'a str> {
-    match author_type.map(str::trim) {
-        Some("human") => Ok("human"),
-        Some("agent") => Ok("agent"),
-        Some("system") => Ok("system"),
-        Some(_) => Err(KanbanError::InvalidInput(
-            "invalid comment author_type".into(),
-        )),
-        None => Ok(match kind {
-            "worker" => "agent",
-            "system" => "system",
-            _ => "human",
-        }),
-    }
-}
-
-fn normalize_agent_type<'a>(
-    agent_type: Option<&'a str>,
-    author_type: &str,
-) -> Result<Option<&'a str>> {
-    let Some(agent_type) = agent_type.map(str::trim).filter(|value| !value.is_empty()) else {
-        return Ok(None);
-    };
-    if author_type != "agent" {
-        return Err(KanbanError::InvalidInput(
-            "comment agent_type is only allowed when author_type is agent".into(),
-        ));
-    }
-    Ok(Some(agent_type))
 }

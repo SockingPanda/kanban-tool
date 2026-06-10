@@ -4,6 +4,7 @@ pub const MAX_TASK_LIST_LIMIT: usize = 1000;
 pub const MAX_SEARCH_LIMIT: usize = 1000;
 
 mod boards;
+mod comment_identity;
 mod comments;
 mod context;
 mod dependencies;

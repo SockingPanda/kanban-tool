@@ -1,8 +1,8 @@
 use crate::connect_file;
 
 use super::{
-    ExportResult, ImportResult, board_id, connect_existing_database, doctor_report_conn, storage,
-    with_immediate_tx, with_read_tx,
+    ExportResult, ImportResult, board_id, comment_identity::infer_comment_author_type,
+    connect_existing_database, doctor_report_conn, storage, with_immediate_tx, with_read_tx,
 };
 
 use std::{
@@ -470,14 +470,6 @@ pub(crate) fn normalize_import_record(
         data.insert("author_type".into(), json!(author_type));
     }
     data.entry("agent_type").or_insert(serde_json::Value::Null);
-}
-
-fn infer_comment_author_type(kind: &str) -> &'static str {
-    match kind {
-        "worker" => "agent",
-        "system" => "system",
-        _ => "human",
-    }
 }
 
 pub(crate) fn is_sql_identifier(value: &str) -> bool {

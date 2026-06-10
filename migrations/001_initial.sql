@@ -129,8 +129,6 @@ CREATE TABLE IF NOT EXISTS task_comments (
   board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   author TEXT NOT NULL,
-  author_type TEXT NOT NULL DEFAULT 'human' CHECK(author_type IN ('human', 'agent', 'system')),
-  agent_type TEXT CHECK(author_type = 'agent' OR agent_type IS NULL),
   body TEXT NOT NULL CHECK(length(trim(body)) > 0),
   kind TEXT NOT NULL DEFAULT 'text' CHECK(kind IN ('text', 'system', 'worker')),
   created_at INTEGER NOT NULL

@@ -14,6 +14,7 @@ jobs:
     name: Changed paths
     runs-on: ubuntu-latest
     outputs:
+      repo_meta: ${{ steps.filter.outputs.repo_meta }}
       rust: ${{ steps.filter.outputs.rust }}
       desktop: ${{ steps.filter.outputs.desktop }}
       desktop-rust: ${{ steps.filter.outputs.desktop-rust }}
@@ -25,15 +26,43 @@ jobs:
         uses: dorny/paths-filter@v3
         with:
           filters: |
+            repo_meta:
+              - '.github/workflows/**'
+              - '.config/nextest.toml'
+              - 'AGENTS.md'
+              - 'README.md'
+              - 'docs/**'
+              - 'justfile'
+              - 'Justfile'
+              - 'rust-toolchain'
+              - 'rust-toolchain.toml'
+              - 'scripts/*.sh'
+              - 'scripts/**/*.sh'
             rust:
               - '.github/workflows/**'
+              - '.config/nextest.toml'
+              - 'AGENTS.md'
               - 'Cargo.toml'
               - 'Cargo.lock'
+              - 'justfile'
+              - 'Justfile'
+              - 'rust-toolchain'
+              - 'rust-toolchain.toml'
               - 'crates/**'
               - 'migrations/**'
+              - 'scripts/*.sh'
+              - 'scripts/**/*.sh'
             desktop:
               - '.github/workflows/**'
-              - 'apps/desktop/**'
+              - 'apps/desktop/components.json'
+              - 'apps/desktop/eslint.config.js'
+              - 'apps/desktop/index.html'
+              - 'apps/desktop/package.json'
+              - 'apps/desktop/pnpm-lock.yaml'
+              - 'apps/desktop/public/**'
+              - 'apps/desktop/src/**'
+              - 'apps/desktop/tsconfig*.json'
+              - 'apps/desktop/vite.config.ts'
             desktop-rust:
               - '.github/workflows/**'
               - 'Cargo.toml'
@@ -51,6 +80,30 @@ jobs:
               - 'crates/kanban-sqlite/**'
               - 'crates/kanban-vector/**'
               - 'apps/desktop/src-tauri/**'
+
+  repo-meta:
+    name: Repo metadata checks
+    needs: changes
+    if: needs.changes.outputs.repo_meta == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - name: Check shell scripts
+        run: |
+          shopt -s nullglob
+          scripts=(scripts/*.sh)
+          if ((${#scripts[@]} == 0)); then
+            echo "No scripts/*.sh files found"
+          else
+            bash -n "${scripts[@]}"
+          fi
+      - name: List just recipes
+        run: just --list
 
   rust-default:
     name: Rust default features
@@ -138,6 +191,7 @@ jobs:
     name: PR result
     needs:
       - changes
+      - repo-meta
       - rust-default
       - desktop
       - desktop-rust
@@ -147,6 +201,7 @@ jobs:
       - name: Check required jobs
         run: |
           changes_result='${{ needs.changes.result }}'
+          repo_meta_result='${{ needs.repo-meta.result }}'
           rust_result='${{ needs.rust-default.result }}'
           desktop_result='${{ needs.desktop.result }}'
           desktop_rust_result='${{ needs.desktop-rust.result }}'
@@ -154,7 +209,7 @@ jobs:
             echo "Changed-path detection finished with result: $changes_result"
             exit 1
           fi
-          for result in "$rust_result" "$desktop_result" "$desktop_rust_result"; do
+          for result in "$repo_meta_result" "$rust_result" "$desktop_result" "$desktop_rust_result"; do
             case "$result" in
               success|skipped) ;;
               *) echo "A gated PR job finished with result: $result"; exit 1 ;;

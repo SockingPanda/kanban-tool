@@ -15,7 +15,7 @@ use kanban_core::{Clock, KanbanError, Result, SystemClock, new_event_id};
 
 use rusqlite::{Connection, params_from_iter, types::Value, types::ValueRef};
 
-use serde_json::json;
+use serde_json::{Map, json};
 
 pub fn export_jsonl(
     path: impl AsRef<Path>,
@@ -421,10 +421,12 @@ pub(crate) fn insert_jsonl_record(conn: &Connection, record: &serde_json::Value)
         .and_then(|value| value.as_str())
         .ok_or_else(|| KanbanError::InvalidInput("export record type is required".into()))?;
     let table = import_table_for_type(record_type)?;
-    let data = record
+    let mut data = record
         .get("data")
         .and_then(|value| value.as_object())
+        .cloned()
         .ok_or_else(|| KanbanError::InvalidInput("export record data is required".into()))?;
+    normalize_import_record(record_type, &mut data);
     if data.is_empty() {
         return Err(KanbanError::InvalidInput(
             "export record data cannot be empty".into(),
@@ -450,6 +452,32 @@ pub(crate) fn insert_jsonl_record(conn: &Connection, record: &serde_json::Value)
     conn.execute(&sql, params_from_iter(values.iter()))
         .map_err(storage)?;
     Ok(())
+}
+
+pub(crate) fn normalize_import_record(
+    record_type: &str,
+    data: &mut Map<String, serde_json::Value>,
+) {
+    if record_type != "comment" {
+        return;
+    }
+    if !data.contains_key("author_type") {
+        let author_type = data
+            .get("kind")
+            .and_then(|value| value.as_str())
+            .map(infer_comment_author_type)
+            .unwrap_or("human");
+        data.insert("author_type".into(), json!(author_type));
+    }
+    data.entry("agent_type").or_insert(serde_json::Value::Null);
+}
+
+fn infer_comment_author_type(kind: &str) -> &'static str {
+    match kind {
+        "worker" => "agent",
+        "system" => "system",
+        _ => "human",
+    }
 }
 
 pub(crate) fn is_sql_identifier(value: &str) -> bool {

@@ -2,6 +2,7 @@ mod common;
 
 mod suite {
     mod boards;
+    mod comments;
     mod concurrency;
     mod context;
     mod dependencies;

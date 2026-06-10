@@ -13,6 +13,7 @@
 - docs/IMPLEMENTATION_PLAN.md
 - docs/ADR.md
 - migrations/001_initial.sql
+- migrations/003_comment_author_identity.sql
 
 
 
@@ -1503,11 +1504,13 @@ run.finished
 | `id` | Comment ID。 |
 | `task_id` | 关联 task。 |
 | `author` | actor string。 |
+| `author_type` | `human` / `agent` / `system`，表示评论作者身份；旧请求按 `kind` 推断。 |
+| `agent_type` | 可选 open text，仅用于 `author_type=agent`，例如 `executor` / `reviewer`。 |
 | `body` | Markdown 文本。 |
-| `kind` | `text` / `system` / `worker`。 |
+| `kind` | `text` / `system` / `worker`，保留为兼容展示/来源分类，不等同于作者身份。 |
 | `created_at` | 创建时间。 |
 
-Comment 创建时也写一条 `task_events(kind='comment.added')`。
+Comment 创建时也写一条 `task_events(kind='task.comment.created')`。
 
 ---
 
@@ -2713,9 +2716,17 @@ Request：
 {
   "body": "这里需要确认边界条件。",
   "kind": "text",
+  "author_type": "human",
+  "agent_type": null,
   "actor": "alice"
 }
 ```
+
+Notes：
+
+- `kind` 默认为 `text`，当前允许 `text|system|worker`。
+- `author_type` marks who produced the comment and allows `human|agent|system`. If omitted, the service infers `worker -> agent`, `system -> system`, and all other kinds as `human`.
+- `agent_type` is optional open text for `author_type=agent` comments, such as `executor` or `reviewer`. Non-empty `agent_type` with `author_type=human` or `system` is rejected as `400 invalid_input`.
 
 ---
 
@@ -3051,6 +3062,34 @@ WHERE id = ?
 INSERT INTO task_runs (...);
 UPDATE tasks SET current_run_id = ? WHERE id = ?;
 INSERT INTO task_events (...);
+
+COMMIT;
+```
+
+# File: migrations/003_comment_author_identity.sql
+
+```sql
+-- Add explicit comment author identity while preserving existing kind values.
+
+BEGIN;
+
+ALTER TABLE task_comments
+  ADD COLUMN author_type TEXT NOT NULL DEFAULT 'human'
+  CHECK(author_type IN ('human', 'agent', 'system'));
+
+UPDATE task_comments
+SET author_type = CASE kind
+  WHEN 'worker' THEN 'agent'
+  WHEN 'system' THEN 'system'
+  ELSE 'human'
+END
+WHERE author_type = 'human';
+
+ALTER TABLE task_comments
+  ADD COLUMN agent_type TEXT CHECK(author_type = 'agent' OR agent_type IS NULL);
+
+INSERT OR IGNORE INTO schema_migrations(version, name, checksum, applied_at)
+VALUES (3, '003_comment_author_identity', '', CAST(strftime('%s','now') AS INTEGER) * 1000);
 
 COMMIT;
 ```
@@ -3996,6 +4035,8 @@ CREATE TABLE IF NOT EXISTS task_comments (
   board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   author TEXT NOT NULL,
+  author_type TEXT NOT NULL DEFAULT 'human' CHECK(author_type IN ('human', 'agent', 'system')),
+  agent_type TEXT CHECK(author_type = 'agent' OR agent_type IS NULL),
   body TEXT NOT NULL CHECK(length(trim(body)) > 0),
   kind TEXT NOT NULL DEFAULT 'text' CHECK(kind IN ('text', 'system', 'worker')),
   created_at INTEGER NOT NULL

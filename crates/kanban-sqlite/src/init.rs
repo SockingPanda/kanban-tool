@@ -12,7 +12,10 @@ use crate::connect_file;
 const INITIAL_MIGRATION: &str = include_str!("../../../migrations/001_initial.sql");
 const KNOWLEDGE_SUBSTRATE_MIGRATION: &str =
     include_str!("../../../migrations/002_knowledge_substrate.sql");
-const LATEST_MIGRATION_VERSION: i64 = 2;
+const COMMENT_AUTHOR_IDENTITY_MIGRATION: &str =
+    include_str!("../../../migrations/003_comment_author_identity.sql");
+const LATEST_MIGRATION_VERSION: i64 = 3;
+const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &["fnv64:0ca871be950fc8a6"];
 
 struct Migration {
     version: i64,
@@ -30,6 +33,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 2,
         name: "002_knowledge_substrate",
         sql: KNOWLEDGE_SUBSTRATE_MIGRATION,
+    },
+    Migration {
+        version: 3,
+        name: "003_comment_author_identity",
+        sql: COMMENT_AUTHOR_IDENTITY_MIGRATION,
     },
 ];
 
@@ -93,6 +101,9 @@ fn validate_or_apply_migration(conn: &Connection, migration: &Migration) -> Resu
             .map_err(|err| KanbanError::Storage(err.to_string()))?;
         }
         Some((_name, stored)) if stored != checksum => {
+            if is_allowed_legacy_migration_checksum(migration, &stored) {
+                return Ok(());
+            }
             return Err(KanbanError::Storage(format!(
                 "migration checksum mismatch for {}: expected {checksum}, found {stored}",
                 migration.name
@@ -100,8 +111,10 @@ fn validate_or_apply_migration(conn: &Connection, migration: &Migration) -> Resu
         }
         Some((_name, _stored)) => {}
         None => {
-            conn.execute_batch(migration.sql)
-                .map_err(|err| KanbanError::Storage(err.to_string()))?;
+            if !migration_already_reflected_in_initial_schema(conn, migration)? {
+                conn.execute_batch(migration.sql)
+                    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+            }
             conn.execute(
                 "INSERT INTO schema_migrations(version, name, checksum, applied_at) VALUES (?1, ?2, ?3, ?4) \
                  ON CONFLICT(version) DO UPDATE SET name=excluded.name, checksum=excluded.checksum",
@@ -116,6 +129,21 @@ fn validate_or_apply_migration(conn: &Connection, migration: &Migration) -> Resu
         }
     }
     Ok(())
+}
+
+fn is_allowed_legacy_migration_checksum(migration: &Migration, stored: &str) -> bool {
+    migration.version == 1 && LEGACY_INITIAL_MIGRATION_CHECKSUMS.contains(&stored)
+}
+
+fn migration_already_reflected_in_initial_schema(
+    conn: &Connection,
+    migration: &Migration,
+) -> Result<bool> {
+    if migration.version != 3 {
+        return Ok(false);
+    }
+    Ok(table_has_column(conn, "task_comments", "author_type")?
+        && table_has_column(conn, "task_comments", "agent_type")?)
 }
 
 fn ensure_schema_migrations_shape(conn: &Connection) -> Result<()> {
@@ -167,6 +195,20 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
                 "task_id",
                 "kind",
                 "payload_json",
+            ][..],
+        ),
+        (
+            "task_comments",
+            &[
+                "id",
+                "board_id",
+                "task_id",
+                "author",
+                "author_type",
+                "agent_type",
+                "body",
+                "kind",
+                "created_at",
             ][..],
         ),
         (

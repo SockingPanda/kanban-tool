@@ -618,7 +618,7 @@ kanban context build t_... [--lexical-limit 5]
 
 ---
 
-## 13. JSON Output Contract
+## 14. JSON Output Contract
 
 成功：
 

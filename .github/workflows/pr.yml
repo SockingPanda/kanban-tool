@@ -38,6 +38,8 @@ jobs:
               - '.github/workflows/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
+              - 'crates/**'
+              - 'migrations/**'
               - 'apps/desktop/src-tauri/**'
 
   rust-default:

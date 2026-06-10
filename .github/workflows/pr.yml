@@ -38,8 +38,18 @@ jobs:
               - '.github/workflows/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
-              - 'crates/**'
               - 'migrations/**'
+              # Keep this allowlist in sync with kanban-desktop's Rust dependency graph.
+              - 'crates/kanban-core/**'
+              - 'crates/kanban-context/**'
+              - 'crates/kanban-entity/**'
+              - 'crates/kanban-graph/**'
+              - 'crates/kanban-indexer/**'
+              - 'crates/kanban-local/**'
+              - 'crates/kanban-search/**'
+              - 'crates/kanban-server/**'
+              - 'crates/kanban-sqlite/**'
+              - 'crates/kanban-vector/**'
               - 'apps/desktop/src-tauri/**'
 
   rust-default:

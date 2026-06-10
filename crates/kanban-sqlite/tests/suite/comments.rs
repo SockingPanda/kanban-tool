@@ -126,11 +126,24 @@ fn comments_reject_agent_type_for_non_agent_authors() -> anyhow::Result<()> {
 #[test]
 fn migration_backfills_comment_author_type_from_kind() -> anyhow::Result<()> {
     let temp = TempDb::new("migration_backfills_comment_author_type_from_kind")?;
+    let v2_sql = include_str!("../../../../migrations/001_initial.sql")
+        .replace(
+            "  author_type TEXT NOT NULL DEFAULT 'human' CHECK(author_type IN ('human', 'agent', 'system')),\n",
+            "",
+        )
+        .replace(
+            "  agent_type TEXT CHECK(author_type = 'agent' OR agent_type IS NULL),\n",
+            "",
+        );
     let conn = Connection::open(&temp.path)?;
-    conn.execute_batch(include_str!("../../../../migrations/001_initial.sql"))?;
+    conn.execute_batch(&v2_sql)?;
     conn.execute_batch(include_str!(
         "../../../../migrations/002_knowledge_substrate.sql"
     ))?;
+    conn.execute(
+        "UPDATE schema_migrations SET checksum='fnv64:0ca871be950fc8a6' WHERE version=1",
+        [],
+    )?;
     conn.execute(
         "INSERT INTO boards(id, slug, name, description, created_at, updated_at, archived_at) VALUES ('b_test', 'default', 'Default', NULL, 1, 1, NULL)",
         [],
@@ -172,4 +185,103 @@ fn migration_backfills_comment_author_type_from_kind() -> anyhow::Result<()> {
     assert_eq!(worker.agent_type, None);
     assert_eq!(system.author_type, "system");
     Ok(())
+}
+
+#[test]
+fn storage_rejects_agent_type_for_non_agent_author_type() -> anyhow::Result<()> {
+    let temp = TempDb::new("storage_rejects_agent_type_for_non_agent_author_type")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("storage invariant"),
+    )?;
+
+    let error = result_err(connect_file(&temp.path)?.execute(
+        "INSERT INTO task_comments(id, board_id, task_id, author, author_type, agent_type, body, kind, created_at) \
+         VALUES ('c_bad', ?1, ?2, 'tester', 'human', 'executor', 'bad', 'text', 1)",
+        params![task.board_id, task.id],
+    ))?;
+
+    assert!(
+        error.to_string().contains("CHECK constraint failed"),
+        "error: {error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn legacy_jsonl_import_infers_comment_author_identity() -> anyhow::Result<()> {
+    let source = TempDb::new("legacy_jsonl_import_infers_comment_author_identity_source")?;
+    init_database(&source.path, "tester")?;
+    let task = create_task(
+        &source.path,
+        "default",
+        "tester",
+        CreateTask::ready("legacy import"),
+    )?;
+    create_comment(&source.path, &task.id, "human", "text note", Some("text"))?;
+    create_comment(
+        &source.path,
+        &task.id,
+        "runner",
+        "worker note",
+        Some("worker"),
+    )?;
+    create_comment(
+        &source.path,
+        &task.id,
+        "system",
+        "system note",
+        Some("system"),
+    )?;
+
+    let export_path = source.dir.join("comments.jsonl");
+    export_jsonl(&source.path, "default", &export_path)?;
+    let legacy_export = std::fs::read_to_string(&export_path)?
+        .lines()
+        .map(strip_comment_identity_fields)
+        .collect::<anyhow::Result<Vec<_>>>()?
+        .join("\n");
+    let legacy_path = source.dir.join("legacy-comments.jsonl");
+    std::fs::write(&legacy_path, format!("{legacy_export}\n"))?;
+
+    let target = TempDb::new("legacy_jsonl_import_infers_comment_author_identity_target")?;
+    init_database(&target.path, "tester")?;
+    import_jsonl(&target.path, &legacy_path, true)?;
+
+    let comments = list_comments(&target.path, &task.id)?;
+    assert_eq!(comments.len(), 3);
+    let text = comments
+        .iter()
+        .find(|comment| comment.kind == "text")
+        .ok_or_else(|| test_error("missing text comment"))?;
+    let worker = comments
+        .iter()
+        .find(|comment| comment.kind == "worker")
+        .ok_or_else(|| test_error("missing worker comment"))?;
+    let system = comments
+        .iter()
+        .find(|comment| comment.kind == "system")
+        .ok_or_else(|| test_error("missing system comment"))?;
+    assert_eq!(text.author_type, "human");
+    assert_eq!(worker.author_type, "agent");
+    assert_eq!(system.author_type, "system");
+    assert_eq!(text.agent_type, None);
+    assert_eq!(worker.agent_type, None);
+    assert_eq!(system.agent_type, None);
+    Ok(())
+}
+
+fn strip_comment_identity_fields(line: &str) -> anyhow::Result<String> {
+    let mut value = serde_json::from_str::<serde_json::Value>(line)?;
+    if value["type"] == "comment" {
+        let data = value["data"]
+            .as_object_mut()
+            .ok_or_else(|| test_error("expected comment data object"))?;
+        data.remove("author_type");
+        data.remove("agent_type");
+    }
+    Ok(value.to_string())
 }

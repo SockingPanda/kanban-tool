@@ -219,7 +219,7 @@ Accepted
 
 ### Decision
 
-`kb serve` 默认并且建议只监听：
+`kanban serve` 默认并且建议只监听：
 
 ```text
 127.0.0.1:8721
@@ -317,7 +317,7 @@ Tantivy、Oxigraph、LanceDB 都是可重建 derived stores，不参与状态机
 - 后续 graph/vector/context broker 可以接同一 entity/relation contract。
 - SQLite 状态机边界保持清楚。
 - 派生 store 损坏时可 fallback/rebuild。
-- `kb doctor` / maintenance API 汇总 outbox backlog、dirty stores、last_error 和 failed outbox，用于本地 operator 判断 sync/rebuild，而不是让派生层参与 SQLite 事务。
+- `kanban doctor` / maintenance API 汇总 outbox backlog、dirty stores、last_error 和 failed outbox，用于本地 operator 判断 sync/rebuild，而不是让派生层参与 SQLite 事务。
 
 代价：
 

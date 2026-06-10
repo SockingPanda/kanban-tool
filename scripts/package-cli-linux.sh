@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGE_NAME="kanban-tool-cli"
-BIN_NAME="kb"
+BIN_NAME="kanban"
 REVISION="1"
 BUILD_ARGS=()
 
@@ -11,7 +11,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/package-cli-linux.sh [OPTIONS]
 
-Build the standalone Linux CLI package for kb.
+Build the standalone Linux CLI package for kanban.
 
 Options:
   --format <deb>               Package format to build. Default: deb.
@@ -156,7 +156,7 @@ Depends: $depends
 Maintainer: kanban-user
 Installed-Size: $installed_size
 Description: Local-first Kanban CLI
- Standalone kb command line client for the Kanban Tool local work queue.
+ Standalone kanban command line client for the Kanban Tool local work queue.
 EOF
 
   dpkg-deb --root-owner-group --build "$package_root" "$out_file"

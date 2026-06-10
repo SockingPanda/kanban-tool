@@ -34,7 +34,7 @@ pub(crate) fn run() -> Result<()> {
                 .with_context(|| format!("failed to initialize {}", db_path.display()))?;
             print_or_json(cli.json, &result, || {
                 format!(
-                    "Initialized kb database at {}\nDefault board: {}",
+                    "Initialized Kanban database at {}\nDefault board: {}",
                     result.db_path.display(),
                     result.board_slug
                 )

@@ -25,3 +25,7 @@ serde.workspace = true
 serde_json.workspace = true
 tantivy = { workspace = true, optional = true }
 thiserror.workspace = true
+
+[dev-dependencies]
+anyhow.workspace = true
+tempfile.workspace = true

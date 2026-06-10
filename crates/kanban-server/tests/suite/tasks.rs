@@ -2,8 +2,9 @@ use crate::common::*;
 
 #[tokio::test]
 async fn tasks_api_creates_task_and_event_with_body_actor_priority() {
-    let (_dir, db_path) = temp_db();
-    let app = build_router(AppState::new(db_path.clone(), "default-actor"));
+    let test = TestApp::with_actor("default-actor");
+    let db_path = test.db_path().to_path_buf();
+    let app = test.router();
 
     let (status, json) = post_json(
         app,
@@ -44,7 +45,8 @@ async fn tasks_api_creates_task_and_event_with_body_actor_priority() {
 
 #[tokio::test]
 async fn tasks_api_creates_task_with_dependencies_and_degrades_ready_to_todo() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let parent = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -61,7 +63,7 @@ async fn tasks_api_creates_task_with_dependencies_and_degrades_ready_to_todo() {
         },
     )
     .expect("parent");
-    let app = build_router(AppState::new(db_path.clone(), "api-test"));
+    let app = test.router();
 
     let (status, json) = post_json(
         app,
@@ -89,8 +91,9 @@ async fn tasks_api_creates_task_with_dependencies_and_degrades_ready_to_todo() {
 
 #[tokio::test]
 async fn tasks_api_create_with_missing_dependency_rolls_back_task() {
-    let (_dir, db_path) = temp_db();
-    let app = build_router(AppState::new(db_path.clone(), "api-test"));
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
+    let app = test.router();
 
     let (status, json) = post_json(
         app,
@@ -112,7 +115,8 @@ async fn tasks_api_create_with_missing_dependency_rolls_back_task() {
 
 #[tokio::test]
 async fn tasks_api_create_with_multiple_dependencies_rolls_back_prior_edges_on_later_failure() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let valid_parent = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -120,7 +124,7 @@ async fn tasks_api_create_with_multiple_dependencies_rolls_back_prior_edges_on_l
         kanban_sqlite::CreateTask::ready("valid parent"),
     )
     .expect("valid parent");
-    let app = build_router(AppState::new(db_path.clone(), "api-test"));
+    let app = test.router();
 
     let (status, json) = post_json(
         app,
@@ -149,8 +153,8 @@ async fn tasks_api_create_with_multiple_dependencies_rolls_back_prior_edges_on_l
 
 #[tokio::test]
 async fn tasks_api_rejects_unsupported_create_fields() {
-    let (_dir, db_path) = temp_db();
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let test = TestApp::new();
+    let app = test.router();
 
     let (status, json) = post_json(
         app,
@@ -165,7 +169,8 @@ async fn tasks_api_rejects_unsupported_create_fields() {
 
 #[tokio::test]
 async fn tasks_api_lists_non_archived_by_default_and_includes_archived_on_query() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let visible = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -181,7 +186,7 @@ async fn tasks_api_lists_non_archived_by_default_and_includes_archived_on_query(
     )
     .expect("archived task");
     kanban_sqlite::archive_task(&db_path, "default", "seed", &archived.id, false).expect("archive");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(app.clone(), "/api/v1/boards/default/tasks").await;
     assert_eq!(status, StatusCode::OK);
@@ -200,7 +205,8 @@ async fn tasks_api_lists_non_archived_by_default_and_includes_archived_on_query(
 
 #[tokio::test]
 async fn tasks_api_lists_with_single_status_filter() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let ready = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -224,7 +230,7 @@ async fn tasks_api_lists_with_single_status_filter() {
         },
     )
     .expect("todo task");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(app, "/api/v1/boards/default/tasks?status=ready").await;
 
@@ -237,7 +243,8 @@ async fn tasks_api_lists_with_single_status_filter() {
 
 #[tokio::test]
 async fn tasks_api_lists_with_repeated_status_filters() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let ready = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -270,7 +277,7 @@ async fn tasks_api_lists_with_repeated_status_filters() {
         },
     )
     .expect("todo task");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(
         app,
@@ -288,7 +295,8 @@ async fn tasks_api_lists_with_repeated_status_filters() {
 
 #[tokio::test]
 async fn tasks_api_sorts_by_updated_at_ascending_and_descending() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let oldest = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -313,7 +321,7 @@ async fn tasks_api_sorts_by_updated_at_ascending_and_descending() {
     set_task_updated_at(&db_path, &oldest.id, 1_000);
     set_task_updated_at(&db_path, &newest.id, 3_000);
     set_task_updated_at(&db_path, &middle.id, 2_000);
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) =
         get_json(app.clone(), "/api/v1/boards/default/tasks?sort=updated_at").await;
@@ -334,7 +342,8 @@ async fn tasks_api_sorts_by_updated_at_ascending_and_descending() {
 
 #[tokio::test]
 async fn tasks_api_lists_with_assignee_search_sort_and_rejects_label_filter() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     for (title, assignee, priority) in [
         ("alpha bug", Some("alice"), 10),
         ("beta bug", Some("alice"), 30),
@@ -357,7 +366,7 @@ async fn tasks_api_lists_with_assignee_search_sort_and_rejects_label_filter() {
         )
         .expect("seed task");
     }
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(
         app.clone(),
@@ -377,8 +386,8 @@ async fn tasks_api_lists_with_assignee_search_sort_and_rejects_label_filter() {
 
 #[tokio::test]
 async fn tasks_api_rejects_unbounded_limit() {
-    let (_dir, db_path) = temp_db();
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let test = TestApp::new();
+    let app = test.router();
 
     let (status, json) = get_json(
         app,
@@ -398,7 +407,8 @@ async fn tasks_api_rejects_unbounded_limit() {
 
 #[tokio::test]
 async fn tasks_api_gets_task_by_id() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -406,7 +416,7 @@ async fn tasks_api_gets_task_by_id() {
         kanban_sqlite::CreateTask::ready("get by id"),
     )
     .expect("task");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(app, &format!("/api/v1/tasks/{}", task.id)).await;
 
@@ -418,8 +428,8 @@ async fn tasks_api_gets_task_by_id() {
 
 #[tokio::test]
 async fn tasks_api_returns_error_envelope_for_json_and_query_extractor_errors() {
-    let (_dir, db_path) = temp_db();
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let test = TestApp::new();
+    let app = test.router();
 
     for (status, json) in [
         request_raw_json(app.clone(), "POST", "/api/v1/boards/default/tasks", "{").await,
@@ -445,7 +455,8 @@ async fn tasks_api_returns_error_envelope_for_json_and_query_extractor_errors() 
 
 #[tokio::test]
 async fn tasks_api_patches_editable_fields_and_uses_header_actor_when_body_actor_absent() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -453,7 +464,7 @@ async fn tasks_api_patches_editable_fields_and_uses_header_actor_when_body_actor
         kanban_sqlite::CreateTask::ready("before update"),
     )
     .expect("task");
-    let app = build_router(AppState::new(db_path.clone(), "default-actor"));
+    let app = test.router();
 
     let (status, json) = patch_json(
         app.clone(),
@@ -508,7 +519,8 @@ async fn tasks_api_patches_editable_fields_and_uses_header_actor_when_body_actor
 
 #[tokio::test]
 async fn tasks_api_patch_rejects_forbidden_status_and_claim_fields() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -516,7 +528,7 @@ async fn tasks_api_patch_rejects_forbidden_status_and_claim_fields() {
         kanban_sqlite::CreateTask::ready("reject forbidden"),
     )
     .expect("task");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     for forbidden in ["status", "claim_token", "completed_at", "current_run_id"] {
         let (status, json) = patch_json(
@@ -537,7 +549,8 @@ async fn tasks_api_patch_rejects_forbidden_status_and_claim_fields() {
 
 #[tokio::test]
 async fn tasks_api_patch_rejects_unknown_fields() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -545,7 +558,7 @@ async fn tasks_api_patch_rejects_unknown_fields() {
         kanban_sqlite::CreateTask::ready("reject unknown"),
     )
     .expect("task");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = patch_json(
         app,
@@ -561,7 +574,8 @@ async fn tasks_api_patch_rejects_unknown_fields() {
 
 #[tokio::test]
 async fn tasks_api_patch_future_scheduled_at_recomputes_status_to_scheduled() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -569,7 +583,7 @@ async fn tasks_api_patch_future_scheduled_at_recomputes_status_to_scheduled() {
         kanban_sqlite::CreateTask::ready("schedule me"),
     )
     .expect("task");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
     let scheduled_at = future_epoch_ms();
 
     let (status, json) = patch_json(
@@ -587,8 +601,8 @@ async fn tasks_api_patch_future_scheduled_at_recomputes_status_to_scheduled() {
 
 #[tokio::test]
 async fn task_api_accepts_retry_policy_on_create_and_patch() {
-    let (_dir, db_path) = temp_db();
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let test = TestApp::new();
+    let app = test.router();
 
     let (status, json) = post_json(
         app.clone(),

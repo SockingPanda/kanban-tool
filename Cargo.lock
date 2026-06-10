@@ -3743,6 +3743,7 @@ dependencies = [
 name = "kanban-sqlite"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "kanban-context",
  "kanban-core",
  "kanban-entity",
@@ -3755,6 +3756,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tantivy",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 

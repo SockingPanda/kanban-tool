@@ -6,8 +6,24 @@ use kanban_sqlite::maintenance_lock_path;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 #[test]
-fn maintenance_commands_backup_checkpoint_vacuum_export_and_import_jsonl() -> anyhow::Result<()> {
+fn backup_checkpoint_vacuum_export_and_import_jsonl() -> anyhow::Result<()> {
     let source = TempDb::new("maintenance_commands_source")?;
+    let source_data = source_with_completed_run(&source)?;
+
+    checkpoint_vacuum_and_backup(&source)?;
+
+    let (export_path, export_records, export_content) =
+        export_board_snapshot(&source, &source_data.task_id)?;
+    import_exported_snapshot(&export_path, export_records, &source_data.task_id)?;
+    reject_import_with_missing_run_log(&source, &export_content)?;
+    Ok(())
+}
+
+struct SourceData {
+    task_id: String,
+}
+
+fn source_with_completed_run(source: &TempDb) -> anyhow::Result<SourceData> {
     kb(&source.path, &["init"])?.success()?;
     let created = kb(
         &source.path,
@@ -47,7 +63,12 @@ fn maintenance_commands_backup_checkpoint_vacuum_export_and_import_jsonl() -> an
         .context("expected JSON string")?;
     assert!(Path::new(log_path).is_absolute());
     assert!(log_path.starts_with(source.dir.to_str().context("expected UTF-8 path")?));
+    Ok(SourceData {
+        task_id: task_id.to_owned(),
+    })
+}
 
+fn checkpoint_vacuum_and_backup(source: &TempDb) -> anyhow::Result<()> {
     let checkpoint = kb(&source.path, &["--json", "checkpoint"])?.success_json()?;
     assert_eq!(checkpoint["data"]["busy"], 0);
     kb(&source.path, &["--json", "vacuum"])?.success_json()?;
@@ -68,7 +89,13 @@ fn maintenance_commands_backup_checkpoint_vacuum_export_and_import_jsonl() -> an
         backup_path.to_str().context("expected UTF-8 path")?
     );
     assert!(backup_path.exists());
+    Ok(())
+}
 
+fn export_board_snapshot(
+    source: &TempDb,
+    task_id: &str,
+) -> anyhow::Result<(std::path::PathBuf, serde_json::Value, String)> {
     let export_path = source.dir.join("board.jsonl");
     let export = kb(
         &source.path,
@@ -89,7 +116,18 @@ fn maintenance_commands_backup_checkpoint_vacuum_export_and_import_jsonl() -> an
     let export_content = std::fs::read_to_string(&export_path)?;
     assert!(export_content.contains(task_id));
     assert!(export_content.contains(r#""log_path":null"#));
+    Ok((
+        export_path,
+        export["data"]["records"].clone(),
+        export_content,
+    ))
+}
 
+fn import_exported_snapshot(
+    export_path: &Path,
+    export_records: serde_json::Value,
+    task_id: &str,
+) -> anyhow::Result<()> {
     let target = TempDb::new("maintenance_commands_target")?;
     let imported = kb(
         &target.path,
@@ -102,7 +140,7 @@ fn maintenance_commands_backup_checkpoint_vacuum_export_and_import_jsonl() -> an
         ],
     )?
     .success_json()?;
-    assert_eq!(imported["data"]["records"], export["data"]["records"]);
+    assert_eq!(imported["data"]["records"], export_records);
     let tasks = kb(&target.path, &["--json", "task", "list"])?.success_json()?;
     assert_eq!(tasks["data"][0]["id"], task_id);
     assert_eq!(tasks["data"][0]["title"], "release smoke");
@@ -113,7 +151,10 @@ fn maintenance_commands_backup_checkpoint_vacuum_export_and_import_jsonl() -> an
     assert_eq!(doctor["data"]["executable_dependency_violations"], 0);
     assert_eq!(doctor["data"]["executable_spec_violations"], 0);
     assert_eq!(doctor["data"]["executable_schedule_violations"], 0);
+    Ok(())
+}
 
+fn reject_import_with_missing_run_log(source: &TempDb, export_content: &str) -> anyhow::Result<()> {
     let invalid_export_path = source.dir.join("invalid-board.jsonl");
     std::fs::write(
         &invalid_export_path,

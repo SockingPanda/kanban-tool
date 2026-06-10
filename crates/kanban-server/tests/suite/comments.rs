@@ -2,7 +2,8 @@ use crate::common::*;
 
 #[tokio::test]
 async fn comments_api_creates_and_lists_task_comments() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -10,7 +11,7 @@ async fn comments_api_creates_and_lists_task_comments() {
         kanban_sqlite::CreateTask::ready("commented"),
     )
     .expect("task");
-    let app = build_router(AppState::new(db_path.clone(), "api-test"));
+    let app = test.router();
 
     let (status, json) = post_json(
         app.clone(),

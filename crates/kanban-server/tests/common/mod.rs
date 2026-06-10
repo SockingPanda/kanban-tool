@@ -7,11 +7,43 @@ pub use kanban_server::{AppState, build_desktop_router, build_router};
 pub use serde_json::{Value, json};
 pub use tower::ServiceExt;
 
-pub fn temp_db() -> (tempfile::TempDir, std::path::PathBuf) {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let db_path = dir.path().join("kb.db");
-    kanban_sqlite::init_database(&db_path, "api-test").expect("init db");
-    (dir, db_path)
+pub struct TestApp {
+    _dir: tempfile::TempDir,
+    db_path: std::path::PathBuf,
+    default_actor: String,
+}
+
+impl TestApp {
+    pub fn new() -> Self {
+        Self::with_actor("api-test")
+    }
+
+    pub fn with_actor(default_actor: &str) -> Self {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let db_path = dir.path().join("kb.db");
+        kanban_sqlite::init_database(&db_path, "api-test").expect("init db");
+        Self {
+            _dir: dir,
+            db_path,
+            default_actor: default_actor.to_owned(),
+        }
+    }
+
+    pub fn db_path(&self) -> &std::path::Path {
+        &self.db_path
+    }
+
+    pub fn dir_path(&self) -> &std::path::Path {
+        self._dir.path()
+    }
+
+    pub fn router(&self) -> axum::Router {
+        build_router(AppState::new(&self.db_path, self.default_actor.clone()))
+    }
+
+    pub fn desktop_router(&self) -> axum::Router {
+        build_desktop_router(AppState::new(&self.db_path, self.default_actor.clone()))
+    }
 }
 
 pub async fn get_json(app: axum::Router, uri: &str) -> (StatusCode, Value) {

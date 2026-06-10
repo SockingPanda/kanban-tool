@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[test]
-fn create_board_adds_default_columns_and_created_event() {
-    let temp = TempDb::new("create_board_adds_default_columns_and_created_event");
+fn create_board_adds_default_columns_and_created_event() -> anyhow::Result<()> {
+    let temp = TempDb::new("create_board_adds_default_columns_and_created_event")?;
     init_database(&temp.path, "tester").unwrap();
 
     let board = create_board(
@@ -31,11 +31,12 @@ fn create_board_adds_default_columns_and_created_event() {
     let events = list_events(&temp.path, "project.alpha", None).unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].kind, "board.created");
+    Ok(())
 }
 
 #[test]
-fn board_slug_validation_rejects_reserved_prefixes_and_uppercase() {
-    let temp = TempDb::new("board_slug_validation_rejects_reserved_prefixes_and_uppercase");
+fn board_slug_validation_rejects_reserved_prefixes_and_uppercase() -> anyhow::Result<()> {
+    let temp = TempDb::new("board_slug_validation_rejects_reserved_prefixes_and_uppercase")?;
     init_database(&temp.path, "tester").unwrap();
 
     for slug in ["Bad", "t_work", "b_work", "col_work", ""] {
@@ -55,11 +56,12 @@ fn board_slug_validation_rejects_reserved_prefixes_and_uppercase() {
             "{slug}: {error}"
         );
     }
+    Ok(())
 }
 
 #[test]
-fn duplicate_board_slug_returns_invalid_input() {
-    let temp = TempDb::new("duplicate_board_slug_returns_invalid_input");
+fn duplicate_board_slug_returns_invalid_input() -> anyhow::Result<()> {
+    let temp = TempDb::new("duplicate_board_slug_returns_invalid_input")?;
     init_database(&temp.path, "tester").unwrap();
 
     create_board(
@@ -86,11 +88,12 @@ fn duplicate_board_slug_returns_invalid_input() {
 
     assert!(matches!(error, KanbanError::InvalidInput(_)));
     assert!(error.to_string().contains("board slug already exists"));
+    Ok(())
 }
 
 #[test]
-fn archived_board_is_hidden_by_default_and_rejects_task_writes() {
-    let temp = TempDb::new("archived_board_is_hidden_by_default_and_rejects_task_writes");
+fn archived_board_is_hidden_by_default_and_rejects_task_writes() -> anyhow::Result<()> {
+    let temp = TempDb::new("archived_board_is_hidden_by_default_and_rejects_task_writes")?;
     init_database(&temp.path, "tester").unwrap();
     create_board(
         &temp.path,
@@ -129,11 +132,12 @@ fn archived_board_is_hidden_by_default_and_rejects_task_writes() {
 
     let events = list_events(&temp.path, "archivable", None).unwrap();
     assert_eq!(events.last().unwrap().kind, "board.archived");
+    Ok(())
 }
 
 #[test]
-fn board_archive_rejects_running_work() {
-    let temp = TempDb::new("board_archive_rejects_running_work");
+fn board_archive_rejects_running_work() -> anyhow::Result<()> {
+    let temp = TempDb::new("board_archive_rejects_running_work")?;
     init_database(&temp.path, "tester").unwrap();
     create_board(
         &temp.path,
@@ -158,11 +162,12 @@ fn board_archive_rejects_running_work() {
     assert!(matches!(error, KanbanError::InvalidTransition(_)));
     assert!(error.to_string().contains("running work"));
     assert!(get_board(&temp.path, "busy").unwrap().archived_at.is_none());
+    Ok(())
 }
 
 #[test]
-fn archived_board_keeps_read_only_history_inspectable() {
-    let temp = TempDb::new("archived_board_keeps_read_only_history_inspectable");
+fn archived_board_keeps_read_only_history_inspectable() -> anyhow::Result<()> {
+    let temp = TempDb::new("archived_board_keeps_read_only_history_inspectable")?;
     init_database(&temp.path, "tester").unwrap();
     create_board(
         &temp.path,
@@ -226,11 +231,12 @@ fn archived_board_keeps_read_only_history_inspectable() {
     let comments = list_comments(&temp.path, qualified_ref).unwrap();
     assert_eq!(comments.len(), 1);
     assert_eq!(comments[0].body, "history note");
+    Ok(())
 }
 
 #[test]
-fn cross_board_dependencies_are_rejected_even_with_global_refs() {
-    let temp = TempDb::new("cross_board_dependencies_are_rejected_even_with_global_refs");
+fn cross_board_dependencies_are_rejected_even_with_global_refs() -> anyhow::Result<()> {
+    let temp = TempDb::new("cross_board_dependencies_are_rejected_even_with_global_refs")?;
     init_database(&temp.path, "tester").unwrap();
     create_board(
         &temp.path,
@@ -266,11 +272,12 @@ fn cross_board_dependencies_are_rejected_even_with_global_refs() {
     )
     .unwrap_err();
     assert!(error.to_string().contains("cross-board dependency"));
+    Ok(())
 }
 
 #[test]
-fn task_refs_resolve_board_seq_and_board_slug_prefixes() {
-    let temp = TempDb::new("task_refs_resolve_board_seq_and_board_slug_prefixes");
+fn task_refs_resolve_board_seq_and_board_slug_prefixes() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_refs_resolve_board_seq_and_board_slug_prefixes")?;
     init_database(&temp.path, "tester").unwrap();
     let board = create_board(
         &temp.path,
@@ -306,4 +313,5 @@ fn task_refs_resolve_board_seq_and_board_slug_prefixes() {
             .id,
         task.id
     );
+    Ok(())
 }

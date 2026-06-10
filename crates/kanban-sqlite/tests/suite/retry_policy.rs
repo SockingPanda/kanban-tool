@@ -1,9 +1,10 @@
 use crate::common::*;
 
 #[test]
-fn failed_ready_retry_policy_increments_retry_count_and_blocks_at_max_retries() {
+fn failed_ready_retry_policy_increments_retry_count_and_blocks_at_max_retries() -> anyhow::Result<()>
+{
     let temp =
-        TempDb::new("failed_ready_retry_policy_increments_retry_count_and_blocks_at_max_retries");
+        TempDb::new("failed_ready_retry_policy_increments_retry_count_and_blocks_at_max_retries")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -40,11 +41,12 @@ fn failed_ready_retry_policy_increments_retry_count_and_blocks_at_max_retries() 
             assert_eq!(fresh.status, TaskStatus::Blocked);
         }
     }
+    Ok(())
 }
 
 #[test]
-fn reclaim_expired_increments_retry_count_and_blocks_at_max_retries() {
-    let temp = TempDb::new("reclaim_expired_increments_retry_count_and_blocks_at_max_retries");
+fn reclaim_expired_increments_retry_count_and_blocks_at_max_retries() -> anyhow::Result<()> {
+    let temp = TempDb::new("reclaim_expired_increments_retry_count_and_blocks_at_max_retries")?;
     init_database(&temp.path, "tester").unwrap();
     let retrying = create_task(
         &temp.path,
@@ -83,11 +85,12 @@ fn reclaim_expired_increments_retry_count_and_blocks_at_max_retries() {
             .iter()
             .any(|event| event.kind == "task.reclaimed")
     );
+    Ok(())
 }
 
 #[test]
-fn reclaim_expired_skips_task_heartbeated_after_scan_before_claim_tx() {
-    let temp = TempDb::new("reclaim_expired_skips_task_heartbeated_after_scan_before_claim_tx");
+fn reclaim_expired_skips_task_heartbeated_after_scan_before_claim_tx() -> anyhow::Result<()> {
+    let temp = TempDb::new("reclaim_expired_skips_task_heartbeated_after_scan_before_claim_tx")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -145,4 +148,5 @@ fn reclaim_expired_skips_task_heartbeated_after_scan_before_claim_tx() {
             .claim_expires_at
             .is_some_and(|expires| expires > now_ms())
     );
+    Ok(())
 }

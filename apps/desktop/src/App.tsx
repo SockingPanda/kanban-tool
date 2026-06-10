@@ -3,8 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { AppShell } from "@/app/AppShell"
 import { fallbackColumns } from "@/features/board/board-config"
+import { executeDragTransition, planDragTransition } from "@/features/board/drag-policy"
 import { useBoardTasks } from "@/features/board/useBoardTasks"
 import { useEventPoller } from "@/features/events/useEventPoller"
+import type { OperatorView } from "@/features/navigation/view-types"
+import { invalidateTaskDetailAndBoard } from "@/features/task-detail/detail-invalidation"
 import { taskDetailOrEmpty, useTaskDetail } from "@/features/task-detail/useTaskDetail"
 import {
   parseDateInput,
@@ -34,6 +37,7 @@ function App() {
   const queryClient = useQueryClient()
   const [config, setConfig] = useState<RuntimeConfig | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [view, setView] = useState<OperatorView>("board")
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search, 250)
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all")
@@ -107,6 +111,10 @@ function App() {
   }, [selectedTask])
 
   useEffect(() => {
+    setBlockReason("")
+  }, [selectedTask?.id, selectedTask?.status])
+
+  useEffect(() => {
     if (columnsQuery.error) setError(errorMessage(columnsQuery.error))
   }, [columnsQuery.error])
 
@@ -140,6 +148,8 @@ function App() {
     return map
   }, [tasks, visibleColumns])
 
+  const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks])
+
   const actionMutation = useMutation({
     mutationFn: (action: () => Promise<unknown>) => action(),
   })
@@ -155,8 +165,7 @@ function App() {
   const invalidateTaskData = useCallback(
     async (taskId: string | null) => {
       if (!api) return
-      await queryClient.invalidateQueries({ queryKey: queryKeys.boardTasksRoot(api.board) })
-      if (taskId) await queryClient.invalidateQueries({ queryKey: queryKeys.taskDetail(taskId) })
+      await invalidateTaskDetailAndBoard(queryClient, api.board, taskId)
     },
     [api, queryClient],
   )
@@ -208,6 +217,33 @@ function App() {
     }, "dependency")
   }
 
+  async function removeDependency(parentTaskId: string) {
+    if (!api || !selectedTask) return
+    await runAction(async () => api.removeDependency(selectedTask.id, parentTaskId), "dependency")
+  }
+
+  async function dropTask(taskId: string, targetStatus: TaskStatus) {
+    if (!api) return
+    const task = tasksById.get(taskId)
+    if (!task) return
+    const token = claimTokens[task.id] ?? null
+    let plan = planDragTransition(task, targetStatus, token)
+    if (!plan.ok) {
+      setError(plan.reason)
+      return
+    }
+    if (plan.promptReason) {
+      const reason = window.prompt("Block reason")
+      if (!reason?.trim()) {
+        setError("A block reason is required.")
+        return
+      }
+      plan = { ...plan, body: { ...plan.body, reason: reason.trim() }, promptReason: false }
+    }
+    if (plan.confirm && !window.confirm(plan.confirm)) return
+    await runAction(() => executeDragTransition(api, task, plan), "transition")
+  }
+
   async function saveTask() {
     if (!api || !selectedTask || !draftState) return
     if (draftState.taskId !== selectedTask.id) return
@@ -251,7 +287,9 @@ function App() {
     <AppShell
       config={config}
       api={api}
+      view={view}
       columns={visibleColumns as BoardColumn[]}
+      tasks={tasks}
       groupedTasks={groupedTasks}
       selectedTask={selectedTask}
       selectedId={selectedId}
@@ -282,6 +320,7 @@ function App() {
       lastRefreshAt={lastRefreshAt}
       queueCounts={queueCounts}
       onSearchChange={setSearch}
+      onViewChange={setView}
       onStatusFilterChange={setStatusFilter}
       onShowArchivedChange={setShowArchived}
       onRefreshTasks={() => void tasksQuery.refetch()}
@@ -291,12 +330,14 @@ function App() {
       onNewTitleChange={setNewTitle}
       onNewDescriptionChange={setNewDescription}
       onSelectTask={setSelectedId}
+      onDropTask={(taskId, status) => void dropTask(taskId, status)}
       onBlockReasonChange={setBlockReason}
       onDependencyInputChange={setDependencyInput}
       onCommentBodyChange={setCommentBody}
       onEditDraftChange={updateDraft}
       onAction={runAction}
       onAddDependency={addDependency}
+      onRemoveDependency={removeDependency}
       onSaveTask={saveTask}
       onAddComment={addComment}
     />

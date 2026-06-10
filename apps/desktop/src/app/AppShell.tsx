@@ -1,14 +1,15 @@
-import type { FormEvent } from "react"
+import type { ElementType, FormEvent } from "react"
 import {
   Activity,
   Command,
   Database,
+  DatabaseBackup,
+  HeartPulse,
   Inbox,
   Loader2,
   RefreshCcw,
   Search,
   Settings,
-  ShieldAlert,
   SlidersHorizontal,
   SquareKanban,
   TerminalSquare,
@@ -20,6 +21,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { BoardView } from "@/features/board/BoardView"
 import { filterStatuses } from "@/features/board/board-config"
+import { EventsView } from "@/features/events/EventsView"
+import { HealthView } from "@/features/health/HealthView"
+import { ListView } from "@/features/list/ListView"
+import { MaintenanceView } from "@/features/maintenance/MaintenanceView"
+import type { OperatorView } from "@/features/navigation/view-types"
+import { primaryViews, sidebarViews } from "@/features/navigation/view-types"
+import { RunsView } from "@/features/runs/RunsView"
+import { SettingsView } from "@/features/settings/SettingsView"
 import { TaskDetail } from "@/features/task-detail/TaskDetail"
 import type { DetailState } from "@/features/task-detail/detail-state"
 import type { TaskEditDraft } from "@/features/task-detail/task-draft"
@@ -28,7 +37,7 @@ import type {
   KanbanApi,
   Run,
   RuntimeConfig,
-  SearchMeta,
+  SearchTasksMeta,
   Task,
   TaskStatus,
   PageMeta,
@@ -39,7 +48,9 @@ import { cn } from "@/lib/utils"
 export function AppShell({
   config,
   api,
+  view,
   columns,
+  tasks,
   groupedTasks,
   selectedTask,
   selectedId,
@@ -70,6 +81,7 @@ export function AppShell({
   lastRefreshAt,
   queueCounts,
   onSearchChange,
+  onViewChange,
   onStatusFilterChange,
   onShowArchivedChange,
   onRefreshTasks,
@@ -79,18 +91,22 @@ export function AppShell({
   onNewTitleChange,
   onNewDescriptionChange,
   onSelectTask,
+  onDropTask,
   onBlockReasonChange,
   onDependencyInputChange,
   onCommentBodyChange,
   onEditDraftChange,
   onAction,
   onAddDependency,
+  onRemoveDependency,
   onSaveTask,
   onAddComment,
 }: {
   config: RuntimeConfig | null
   api: KanbanApi | null
+  view: OperatorView
   columns: BoardColumn[]
+  tasks: Task[]
   groupedTasks: Map<TaskStatus, Task[]>
   selectedTask: Task | null
   selectedId: string | null
@@ -98,7 +114,7 @@ export function AppShell({
   activeRun?: Run
   search: string
   debouncedSearch: string
-  searchMeta: SearchMeta | null
+  searchMeta: SearchTasksMeta | null
   statusFilter: TaskStatus | "all"
   showArchived: boolean
   page: PageMeta
@@ -121,6 +137,7 @@ export function AppShell({
   lastRefreshAt: number | null
   queueCounts: { ready: number; running: number; blocked: number }
   onSearchChange: (value: string) => void
+  onViewChange: (value: OperatorView) => void
   onStatusFilterChange: (value: TaskStatus | "all") => void
   onShowArchivedChange: (value: boolean) => void
   onRefreshTasks: () => void
@@ -130,12 +147,14 @@ export function AppShell({
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
   onSelectTask: (taskId: string) => void
+  onDropTask: (taskId: string, targetStatus: TaskStatus) => void
   onBlockReasonChange: (value: string) => void
   onDependencyInputChange: (value: string) => void
   onCommentBodyChange: (value: string) => void
   onEditDraftChange: (value: TaskEditDraft) => void
   onAction: (action: () => Promise<unknown>) => Promise<unknown>
   onAddDependency: () => Promise<void>
+  onRemoveDependency: (parentTaskId: string) => Promise<void>
   onSaveTask: () => Promise<void>
   onAddComment: () => Promise<void>
 }) {
@@ -152,12 +171,15 @@ export function AppShell({
           </div>
         </div>
         <nav className="space-y-1 px-2 py-3">
-          <NavItem icon={SquareKanban} label="Board" active />
-          <NavItem icon={Inbox} label="Ready Queue" />
-          <NavItem icon={ShieldAlert} label="Blocked" />
-          <NavItem icon={TerminalSquare} label="Runs" />
-          <NavItem icon={Activity} label="Events" />
-          <NavItem icon={Settings} label="Settings" />
+          {sidebarViews.map((item) => (
+            <NavItem
+              key={item}
+              icon={viewIcon(item)}
+              label={viewLabel(item)}
+              active={view === item}
+              onClick={() => onViewChange(item)}
+            />
+          ))}
         </nav>
         <div className="mt-auto space-y-3 border-t border-neutral-200 p-3 text-xs text-neutral-500">
           <div className="flex items-center gap-2">
@@ -190,15 +212,16 @@ export function AppShell({
             {tasksRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
           </Button>
           <div className="flex rounded-md border border-neutral-200 bg-neutral-50 p-0.5 text-sm">
-            {["Board", "List", "Events"].map((view, index) => (
+            {primaryViews.map((item) => (
               <button
-                key={view}
+                key={item}
                 className={cn(
                   "rounded px-3 py-1 text-neutral-500",
-                  index === 0 && "bg-white text-neutral-950 shadow-sm",
+                  view === item && "bg-white text-neutral-950 shadow-sm",
                 )}
+                onClick={() => onViewChange(item)}
               >
-                {view}
+                {viewLabel(item)}
               </button>
             ))}
           </div>
@@ -266,37 +289,51 @@ export function AppShell({
               </span>
             </div>
 
-            <BoardView
-              columns={columns}
-              groupedTasks={groupedTasks}
-              selectedId={selectedTask?.id ?? selectedId ?? undefined}
-              dependencies={detail.dependencies}
-              onSelectTask={onSelectTask}
-            />
+            {view === "board" ? (
+              <BoardView
+                columns={columns}
+                groupedTasks={groupedTasks}
+                selectedId={selectedTask?.id ?? selectedId ?? undefined}
+                dependencies={detail.dependencies}
+                onSelectTask={onSelectTask}
+                onDropTask={onDropTask}
+              />
+            ) : null}
+            {view === "list" ? (
+              <ListView tasks={tasks} selectedId={selectedId} onSelectTask={onSelectTask} />
+            ) : null}
+            {view === "events" ? <EventsView api={api} /> : null}
+            {view === "runs" ? <RunsView selectedTask={selectedTask} detail={detail} /> : null}
+            {view === "maintenance" ? <MaintenanceView api={api} /> : null}
+            {view === "health" ? <HealthView api={api} config={config} /> : null}
+            {view === "settings" ? <SettingsView config={config} /> : null}
           </section>
 
-          <TaskDetail
-            api={api}
-            task={selectedTask}
-            detail={detail}
-            activeRun={activeRun}
-            blockReason={blockReason}
-            setBlockReason={onBlockReasonChange}
-            dependencyInput={dependencyInput}
-            setDependencyInput={onDependencyInputChange}
-            claimToken={claimToken}
-            commentBody={commentBody}
-            setCommentBody={onCommentBodyChange}
-            editDraft={editDraft}
-            draftDirty={draftDirty}
-            setEditDraft={onEditDraftChange}
-            detailLoading={detailLoading}
-            pendingAction={pendingAction}
-            onAction={onAction}
-            onAddDependency={onAddDependency}
-            onSaveTask={onSaveTask}
-            onAddComment={onAddComment}
-          />
+          {view === "board" || view === "list" || view === "runs" ? (
+            <TaskDetail
+              api={api}
+              task={selectedTask}
+              detail={detail}
+              activeRun={activeRun}
+              blockReason={blockReason}
+              setBlockReason={onBlockReasonChange}
+              dependencyInput={dependencyInput}
+              setDependencyInput={onDependencyInputChange}
+              claimToken={claimToken}
+              commentBody={commentBody}
+              setCommentBody={onCommentBodyChange}
+              editDraft={editDraft}
+              draftDirty={draftDirty}
+              setEditDraft={onEditDraftChange}
+              detailLoading={detailLoading}
+              pendingAction={pendingAction}
+              onAction={onAction}
+              onAddDependency={onAddDependency}
+              onRemoveDependency={onRemoveDependency}
+              onSaveTask={onSaveTask}
+              onAddComment={onAddComment}
+            />
+          ) : null}
         </div>
 
         <footer className="flex h-8 items-center justify-between border-t border-neutral-200 bg-white px-4 text-xs text-neutral-500">
@@ -310,7 +347,7 @@ export function AppShell({
   )
 }
 
-function SearchBackendBadge({ meta }: { meta: SearchMeta }) {
+function SearchBackendBadge({ meta }: { meta: SearchTasksMeta }) {
   return (
     <Badge variant={meta.stale ? "review" : "secondary"}>
       search {meta.backend}
@@ -320,18 +357,49 @@ function SearchBackendBadge({ meta }: { meta: SearchMeta }) {
   )
 }
 
-function NavItem({ icon: Icon, label, active = false }: { icon: React.ElementType; label: string; active?: boolean }) {
+function NavItem({
+  icon: Icon,
+  label,
+  active = false,
+  onClick,
+}: {
+  icon: ElementType
+  label: string
+  active?: boolean
+  onClick: () => void
+}) {
   return (
     <button
       className={cn(
         "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-neutral-600",
         active && "bg-neutral-100 text-neutral-950",
       )}
+      onClick={onClick}
     >
       <Icon className="h-4 w-4" />
       {label}
     </button>
   )
+}
+
+function viewLabel(view: OperatorView) {
+  if (view === "board") return "Board"
+  if (view === "list") return "List"
+  if (view === "events") return "Events"
+  if (view === "runs") return "Runs"
+  if (view === "maintenance") return "Maintenance"
+  if (view === "health") return "Health"
+  return "Settings"
+}
+
+function viewIcon(view: OperatorView) {
+  if (view === "board") return SquareKanban
+  if (view === "list") return Inbox
+  if (view === "events") return Activity
+  if (view === "runs") return TerminalSquare
+  if (view === "maintenance") return DatabaseBackup
+  if (view === "health") return HeartPulse
+  return Settings
 }
 
 function apiEndpointLabel(apiBaseUrl: string) {

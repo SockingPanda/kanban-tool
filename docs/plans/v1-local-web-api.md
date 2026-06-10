@@ -39,7 +39,7 @@ V1 does not include:
 
 - **Pre-flight gate:** start from clean `main`, read AGENTS.md and API/DATA/STATE/CLI/DISPATCHER docs.
 - **Revision gate per task:** implementer commit → spec reviewer PASS → quality reviewer APPROVED. P0/P1 loops back to a fix worker on the same branch.
-- **Pre-merge gate:** parent runs `cargo fmt --check`, `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, and a real `kb serve` smoke with HTTP requests against a temp DB.
+- **Pre-merge gate:** parent runs `cargo fmt --check`, `cargo check --workspace --exclude kanban-desktop --tests`, `cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast`, `cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings`, and a real `kb serve` smoke with HTTP requests against a temp DB.
 - **Final release gate:** independent final spec reviewer compares against `docs/API_SPEC.md` and `docs/V1.md`; independent quality reviewer checks server safety, transaction invariants, and route tests.
 
 ## Task 1: Server crate and health/board read APIs
@@ -51,7 +51,7 @@ V1 does not include:
 - Create: `crates/kanban-server/Cargo.toml`
 - Create: `crates/kanban-server/src/lib.rs`
 - Create: `crates/kanban-server/src/main.rs` if useful
-- Test: `crates/kanban-server/tests/api_v1.rs`
+- Test: `cargo nextest run -p kanban-server --no-fail-fast`
 
 **TDD steps:**
 1. Add failing integration tests for `GET /health`, `GET /api/v1/boards`, `GET /api/v1/boards/default`, and `GET /api/v1/boards/default/columns` using a temp DB.
@@ -71,7 +71,7 @@ V1 does not include:
 **Files:**
 - Modify: `crates/kanban-server/src/lib.rs` or route modules
 - Modify: `crates/kanban-sqlite/src/service.rs` only for missing query helpers
-- Test: `crates/kanban-server/tests/api_v1.rs`
+- Test: `cargo nextest run -p kanban-server --no-fail-fast tasks`
 
 **TDD steps:**
 1. Add failing tests for:
@@ -96,7 +96,7 @@ V1 does not include:
 **Files:**
 - Modify: server routes
 - Modify: sqlite service only for missing helpers
-- Test: `crates/kanban-server/tests/api_v1.rs`
+- Test: `cargo nextest run -p kanban-server --no-fail-fast transitions`
 
 **TDD steps:**
 1. Add failing tests for transitions:

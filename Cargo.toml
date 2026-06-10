@@ -13,6 +13,19 @@ members = [
   "crates/kanban-server",
   "apps/desktop/src-tauri",
 ]
+default-members = [
+  "crates/kanban-core",
+  "crates/kanban-entity",
+  "crates/kanban-indexer",
+  "crates/kanban-search",
+  "crates/kanban-graph",
+  "crates/kanban-vector",
+  "crates/kanban-context",
+  "crates/kanban-sqlite",
+  "crates/kanban-local",
+  "crates/kanban-cli",
+  "crates/kanban-server",
+]
 resolver = "3"
 
 [workspace.package]

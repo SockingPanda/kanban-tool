@@ -4,7 +4,11 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_sqlite::FinishPolicy;
 
 #[derive(Debug, Parser)]
-#[command(name = "kb", version, about = "Local SQLite-backed Kanban work queue")]
+#[command(
+    name = "kanban",
+    version,
+    about = "Local SQLite-backed Kanban work queue"
+)]
 pub(crate) struct Cli {
     #[arg(long, global = true)]
     pub(crate) db: Option<PathBuf>,
@@ -414,7 +418,7 @@ pub(crate) struct DispatchArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct ServeArgs {
-    /// Host interface to bind. Defaults to localhost only; non-local hosts bind only when explicitly passed.
+    /// Loopback host interface to bind. Only loopback hosts are supported.
     #[arg(long, default_value = "127.0.0.1")]
     pub(crate) host: String,
     /// TCP port to bind.

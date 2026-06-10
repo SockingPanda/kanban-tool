@@ -1,13 +1,13 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kb};
+use common::{TempDb, kanban};
 use pretty_assertions::assert_eq;
 #[test]
 fn stats_command_reports_stale_claims_and_blocked_reasons() -> anyhow::Result<()> {
     let temp = TempDb::new("stats_command_reports_stale_claims_and_blocked_reasons")?;
-    kb(&temp.path, &["init"])?.success()?;
-    let stale = kb(
+    kanban(&temp.path, &["init"])?.success()?;
+    let stale = kanban(
         &temp.path,
         &[
             "--json",
@@ -22,12 +22,12 @@ fn stats_command_reports_stale_claims_and_blocked_reasons() -> anyhow::Result<()
     let stale_id = stale["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
-    kb(
+    kanban(
         &temp.path,
         &["--json", "task", "claim", stale_id, "--ttl-ms", "1"],
     )?
     .success_json()?;
-    let blocked = kb(
+    let blocked = kanban(
         &temp.path,
         &[
             "--json",
@@ -42,7 +42,7 @@ fn stats_command_reports_stale_claims_and_blocked_reasons() -> anyhow::Result<()
     let blocked_id = blocked["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
-    kb(
+    kanban(
         &temp.path,
         &[
             "--json",
@@ -56,7 +56,7 @@ fn stats_command_reports_stale_claims_and_blocked_reasons() -> anyhow::Result<()
     .success_json()?;
     std::thread::sleep(std::time::Duration::from_millis(5));
 
-    let stats = kb(&temp.path, &["--json", "stats"])?.success_json()?;
+    let stats = kanban(&temp.path, &["--json", "stats"])?.success_json()?;
 
     assert_eq!(stats["data"]["stale_claims"][0]["task_id"], stale_id);
     assert_eq!(

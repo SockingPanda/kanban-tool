@@ -130,7 +130,7 @@ Side effects：
 Promote 通常由 dispatcher 或 complete/unblock 后的 service 内部触发，也可由 CLI 手动触发：
 
 ```bash
-kb task promote t_xxx
+kanban task promote t_xxx
 ```
 
 ---

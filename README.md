@@ -22,7 +22,7 @@
 - 本地 dispatcher/worker 能力。
 - append-only events + tasks snapshot。
 
-Board/project 使用同一个 SQLite DB。CLI 通过 `--board`、`KB_BOARD` 或项目级 `.kb/config.toml` 选择 active board；`kb board use <board>` 只写入项目配置，不创建项目独立 DB。Task 的 `t_...` id 全局唯一，board 内序号通过 `board#seq` 展示和复制。
+Board/project 使用同一个 SQLite DB。CLI 通过 `--board`、`KB_BOARD` 或项目级 `.kb/config.toml` 选择 active board；`kanban board use <board>` 只写入项目配置，不创建项目独立 DB。Task 的 `t_...` id 全局唯一，board 内序号通过 `board#seq` 展示和复制。
 
 明确不包含：
 
@@ -47,7 +47,7 @@ Board/project 使用同一个 SQLite DB。CLI 通过 `--board`、`KB_BOARD` 或�
 | [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) | 分阶段实现计划、测试策略、验收标准 |
 | [`docs/ADR.md`](docs/ADR.md) | 关键架构决策记录 |
 | [`docs/V0.5.md`](docs/V0.5.md) | V0.5 已实现范围、验证记录与暂未包含项 |
-| [`docs/V1.md`](docs/V1.md) | V1 Local Web API 已实现范围、`kb serve`、SSE 行为与 smoke 流程 |
+| [`docs/V1.md`](docs/V1.md) | V1 Local Web API 已实现范围、`kanban serve`、SSE 行为与 smoke 流程 |
 | [`docs/V0.6.md`](docs/V0.6.md) | V0.6 invariant hardening：reclaim、migration、query、doctor |
 | [`migrations/001_initial.sql`](migrations/001_initial.sql) | SQLite 初始 schema |
 
@@ -69,14 +69,14 @@ kanban-tool/
 
 ## 默认二进制名
 
-本文档中使用 `kb` 作为 CLI binary 名称。项目正式命名后可统一替换。
+本文档中使用 `kanban` 作为 CLI binary 名称。
 
 ## Linux installation and packaging
 
 Linux 发布分为两个独立 `.deb` 包：
 
-- Desktop package：由 Tauri 构建，产物是 desktop app 的 `.deb`。Desktop 包不负责安装 `kb` CLI。
-- CLI package：独立安装 `kb` 到 `/usr/bin/kb`，包名是 `kanban-tool-cli`。
+- Desktop package：由 Tauri 构建，产物是 desktop app 的 `.deb`。Desktop 包不负责安装 `kanban` CLI。
+- CLI package：独立安装 `kanban` 到 `/usr/bin/kanban`，包名是 `kanban-tool-cli`。
 
 当前 dogfood 发布只关注 Debian package 路径；RPM target 暂不启用。
 
@@ -85,12 +85,12 @@ Linux 发布分为两个独立 `.deb` 包：
 Debian / Ubuntu：
 
 ```bash
-sudo apt install ./kanban-tool-cli_0.1.0-1_amd64.deb
-kb --help
+sudo apt install ./kanban-tool-cli_1.0.0-1_amd64.deb
+kanban --help
 ```
 
 Desktop packages are installed separately from the CLI package. Install both only if
-you want both the graphical desktop app and the `kb` command.
+you want both the graphical desktop app and the `kanban` command.
 
 ### Build the CLI package from source
 
@@ -120,6 +120,6 @@ For development machines, you can skip OS packages and install only the CLI from
 source:
 
 ```bash
-cargo install --path crates/kanban-cli --bin kb
-kb --help
+cargo install --path crates/kanban-cli --bin kanban
+kanban --help
 ```

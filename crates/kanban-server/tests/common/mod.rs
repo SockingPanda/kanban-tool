@@ -1,3 +1,4 @@
+pub use anyhow::{Context, Result};
 pub use axum::{
     body::Body,
     http::{HeaderValue, Request, StatusCode, header},
@@ -14,19 +15,19 @@ pub struct TestApp {
 }
 
 impl TestApp {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         Self::with_actor("api-test")
     }
 
-    pub fn with_actor(default_actor: &str) -> Self {
-        let dir = tempfile::tempdir().expect("tempdir");
+    pub fn with_actor(default_actor: &str) -> Result<Self> {
+        let dir = tempfile::tempdir().context("tempdir")?;
         let db_path = dir.path().join("kb.db");
-        kanban_sqlite::init_database(&db_path, "api-test").expect("init db");
-        Self {
+        kanban_sqlite::init_database(&db_path, default_actor).context("init db")?;
+        Ok(Self {
             _dir: dir,
             db_path,
             default_actor: default_actor.to_owned(),
-        }
+        })
     }
 
     pub fn db_path(&self) -> &std::path::Path {
@@ -46,11 +47,11 @@ impl TestApp {
     }
 }
 
-pub async fn get_json(app: axum::Router, uri: &str) -> (StatusCode, Value) {
+pub async fn get_json(app: axum::Router, uri: &str) -> Result<(StatusCode, Value)> {
     request_json(app, "GET", uri, None, None).await
 }
 
-pub async fn post_json(app: axum::Router, uri: &str, body: Value) -> (StatusCode, Value) {
+pub async fn post_json(app: axum::Router, uri: &str, body: Value) -> Result<(StatusCode, Value)> {
     request_json(app, "POST", uri, Some(body), None).await
 }
 
@@ -59,11 +60,11 @@ pub async fn patch_json(
     uri: &str,
     body: Value,
     actor_header: Option<&str>,
-) -> (StatusCode, Value) {
+) -> Result<(StatusCode, Value)> {
     request_json(app, "PATCH", uri, Some(body), actor_header).await
 }
 
-pub async fn delete_json(app: axum::Router, uri: &str) -> (StatusCode, Value) {
+pub async fn delete_json(app: axum::Router, uri: &str) -> Result<(StatusCode, Value)> {
     request_json(app, "DELETE", uri, None, None).await
 }
 
@@ -73,7 +74,7 @@ pub async fn request_json(
     uri: &str,
     body: Option<Value>,
     actor_header: Option<&str>,
-) -> (StatusCode, Value) {
+) -> Result<(StatusCode, Value)> {
     let mut builder = Request::builder().method(method).uri(uri);
     if body.is_some() {
         builder = builder.header("Content-Type", "application/json");
@@ -85,9 +86,9 @@ pub async fn request_json(
         .map(|value| Body::from(value.to_string()))
         .unwrap_or_else(Body::empty);
     let response = app
-        .oneshot(builder.body(body).expect("request"))
+        .oneshot(builder.body(body).context("request")?)
         .await
-        .expect("response");
+        .context("response")?;
     response_json(response).await
 }
 
@@ -96,7 +97,7 @@ pub async fn request_raw_json(
     method: &str,
     uri: &str,
     raw_body: &str,
-) -> (StatusCode, Value) {
+) -> Result<(StatusCode, Value)> {
     let response = app
         .oneshot(
             Request::builder()
@@ -104,51 +105,59 @@ pub async fn request_raw_json(
                 .uri(uri)
                 .header("Content-Type", "application/json")
                 .body(Body::from(raw_body.to_owned()))
-                .expect("request"),
+                .context("request")?,
         )
         .await
-        .expect("response");
+        .context("response")?;
     response_json(response).await
 }
 
-pub async fn response_json(response: axum::response::Response) -> (StatusCode, Value) {
+pub async fn response_json(response: axum::response::Response) -> Result<(StatusCode, Value)> {
     let status = response.status();
     let body = response
         .into_body()
         .collect()
         .await
-        .expect("body")
+        .context("body")?
         .to_bytes();
-    let value = serde_json::from_slice(&body).expect("json body");
-    (status, value)
+    let value = serde_json::from_slice(&body).context("json body")?;
+    Ok((status, value))
 }
 
-pub async fn get_raw(app: axum::Router, uri: &str) -> (StatusCode, axum::http::HeaderMap, String) {
+pub async fn get_raw(
+    app: axum::Router,
+    uri: &str,
+) -> Result<(StatusCode, axum::http::HeaderMap, String)> {
     let response = app
         .oneshot(
             Request::builder()
                 .method("GET")
                 .uri(uri)
                 .body(Body::empty())
-                .expect("request"),
+                .context("request")?,
         )
         .await
-        .expect("response");
+        .context("response")?;
     let status = response.status();
     let headers = response.headers().clone();
-    let body = response.into_body().collect().await.unwrap().to_bytes();
-    (
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .context("body")?
+        .to_bytes();
+    Ok((
         status,
         headers,
-        String::from_utf8(body.to_vec()).expect("utf8 body"),
-    )
+        String::from_utf8(body.to_vec()).context("utf8 body")?,
+    ))
 }
 
 pub async fn options_raw(
     app: axum::Router,
     uri: &str,
     origin: &str,
-) -> (StatusCode, axum::http::HeaderMap) {
+) -> Result<(StatusCode, axum::http::HeaderMap)> {
     let response = app
         .oneshot(
             Request::builder()
@@ -161,11 +170,11 @@ pub async fn options_raw(
                     "content-type,x-kb-actor",
                 )
                 .body(Body::empty())
-                .expect("request"),
+                .context("request")?,
         )
         .await
-        .expect("response");
-    (response.status(), response.headers().clone())
+        .context("response")?;
+    Ok((response.status(), response.headers().clone()))
 }
 
 pub fn assert_task_dto_exposes_ui_fields_without_claim_token(task: &Value) {
@@ -187,21 +196,25 @@ pub fn assert_task_dto_exposes_ui_fields_without_claim_token(task: &Value) {
     }
 }
 
-pub fn future_epoch_ms() -> i64 {
+pub fn future_epoch_ms() -> Result<i64> {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .expect("system time")
-        .as_millis() as i64
-        + 86_400_000
+        .context("system time")
+        .map(|duration| duration.as_millis() as i64 + 86_400_000)
 }
 
-pub fn set_task_updated_at(db_path: &std::path::Path, task_id: &str, updated_at: i64) {
-    let conn = kanban_sqlite::connect_file(db_path).expect("connect db");
+pub fn set_task_updated_at(
+    db_path: &std::path::Path,
+    task_id: &str,
+    updated_at: i64,
+) -> Result<()> {
+    let conn = kanban_sqlite::connect_file(db_path).context("connect db")?;
     let changed = conn
         .execute(
             "UPDATE tasks SET updated_at=?1 WHERE id=?2",
             (updated_at, task_id),
         )
-        .expect("set updated_at");
+        .context("set updated_at")?;
     assert_eq!(changed, 1);
+    Ok(())
 }

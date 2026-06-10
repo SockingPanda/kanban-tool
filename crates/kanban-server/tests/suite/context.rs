@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[tokio::test]
-async fn context_graph_and_vector_apis_return_default_fallbacks() {
-    let test = TestApp::new();
+async fn context_graph_and_vector_apis_return_default_fallbacks() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
@@ -19,7 +19,7 @@ async fn context_graph_and_vector_apis_return_default_fallbacks() {
             metadata_json: "{}".to_owned(),
         },
     )
-    .expect("seed task");
+    .context("seed task")?;
     let app = test.router();
 
     let (status, json) = get_json(
@@ -29,7 +29,7 @@ async fn context_graph_and_vector_apis_return_default_fallbacks() {
             task.id
         ),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["subject"], format!("kb://task/{}", task.id));
     assert_eq!(json["data"]["items"][0]["source"], "subject");
@@ -37,28 +37,28 @@ async fn context_graph_and_vector_apis_return_default_fallbacks() {
     assert!(
         json["data"]["degraded"]
             .as_array()
-            .unwrap()
+            .context("value")?
             .contains(&json!("graph_disabled"))
     );
     #[cfg(feature = "graph-oxigraph")]
     assert!(
         json["data"]["degraded"]
             .as_array()
-            .unwrap()
+            .context("value")?
             .contains(&json!("graph_dirty"))
     );
     #[cfg(not(feature = "vector-lancedb"))]
     assert!(
         json["data"]["degraded"]
             .as_array()
-            .unwrap()
+            .context("value")?
             .contains(&json!("vector_disabled"))
     );
     #[cfg(feature = "vector-lancedb")]
     assert!(
         json["data"]["degraded"]
             .as_array()
-            .unwrap()
+            .context("value")?
             .contains(&json!("vector_disabled"))
     );
 
@@ -69,19 +69,19 @@ async fn context_graph_and_vector_apis_return_default_fallbacks() {
             task.id
         ),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(json["error"]["code"], "invalid_input");
     assert!(
         json["error"]["message"]
             .as_str()
-            .unwrap()
+            .context("value")?
             .contains("max_items must be >= 1")
     );
 
-    let (status, json) = get_json(app.clone(), "/api/v1/graph/status?board=default").await;
+    let (status, json) = get_json(app.clone(), "/api/v1/graph/status?board=default").await?;
     assert_eq!(status, StatusCode::OK);
-    let graph_enabled = json["data"]["enabled"].as_bool().unwrap();
+    let graph_enabled = json["data"]["enabled"].as_bool().context("value")?;
 
     let (status, json) = get_json(
         app.clone(),
@@ -90,13 +90,14 @@ async fn context_graph_and_vector_apis_return_default_fallbacks() {
             task.id
         ),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     if !graph_enabled {
-        assert_eq!(json["data"].as_array().unwrap().len(), 0);
+        assert_eq!(json["data"].as_array().context("value")?.len(), 0);
     }
 
-    let (status, json) = get_json(app, "/api/v1/vector/status?board=default").await;
+    let (status, json) = get_json(app, "/api/v1/vector/status?board=default").await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["enabled"], false);
+    Ok(())
 }

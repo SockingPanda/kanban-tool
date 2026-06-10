@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[tokio::test]
-async fn transitions_api_claim_returns_token_run_and_running_task() {
-    let test = TestApp::new();
+async fn transitions_claim_returns_token_run_and_running_task() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
@@ -10,7 +10,7 @@ async fn transitions_api_claim_returns_token_run_and_running_task() {
         "seed",
         kanban_sqlite::CreateTask::ready("claim me"),
     )
-    .expect("task");
+    .context("task")?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -18,23 +18,26 @@ async fn transitions_api_claim_returns_token_run_and_running_task() {
         &format!("/api/v1/tasks/{}/transitions/claim", task.id),
         json!({"actor":"worker-a","ttl_ms":300000,"worker_profile":"profile-a"}),
     )
-    .await;
+    .await?;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["task"]["status"], "running");
     assert_task_dto_exposes_ui_fields_without_claim_token(&json["data"]["task"]);
-    let token = json["data"]["claim_token"].as_str().expect("claim token");
+    let token = json["data"]["claim_token"]
+        .as_str()
+        .context("claim token")?;
     assert!(token.starts_with("claim_"));
     let run = &json["data"]["run"];
-    assert!(run["id"].as_str().expect("run id").starts_with("r_"));
+    assert!(run["id"].as_str().context("run id")?.starts_with("r_"));
     assert_eq!(run["task_id"], task.id);
     assert_eq!(run["status"], "running");
     assert_eq!(run["worker_profile"], "profile-a");
+    Ok(())
 }
 
 #[tokio::test]
-async fn transitions_api_heartbeat_extends_claim_and_rejects_bad_token() {
-    let test = TestApp::new();
+async fn transitions_heartbeat_extends_claim_and_rejects_bad_token() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
@@ -42,9 +45,9 @@ async fn transitions_api_heartbeat_extends_claim_and_rejects_bad_token() {
         "seed",
         kanban_sqlite::CreateTask::ready("heartbeat me"),
     )
-    .expect("task");
-    let claim =
-        kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 1_000).expect("claim");
+    .context("task")?;
+    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 1_000)
+        .context("claim")?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -52,13 +55,15 @@ async fn transitions_api_heartbeat_extends_claim_and_rejects_bad_token() {
         &format!("/api/v1/tasks/{}/transitions/heartbeat", task.id),
         json!({"claim_token":claim.claim_token,"ttl_ms":300000,"note":"still running"}),
     )
-    .await;
+    .await?;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "running");
     assert!(
-        json["data"]["last_heartbeat_at"].as_i64().unwrap()
-            >= claim.task.last_heartbeat_at.unwrap()
+        json["data"]["last_heartbeat_at"]
+            .as_i64()
+            .context("value")?
+            >= claim.task.last_heartbeat_at.context("value")?
     );
     assert!(json["data"].get("claim_token").is_none());
     let (status, json) = post_json(
@@ -66,14 +71,15 @@ async fn transitions_api_heartbeat_extends_claim_and_rejects_bad_token() {
         &format!("/api/v1/tasks/{}/transitions/heartbeat", task.id),
         json!({"claim_token":"wrong","ttl_ms":300000}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(json["error"]["code"], "claim_token_mismatch");
+    Ok(())
 }
 
 #[tokio::test]
-async fn transitions_api_complete_moves_running_done_and_promotes_child() {
-    let test = TestApp::new();
+async fn transitions_complete_moves_running_done_and_promotes_child() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let parent = kanban_sqlite::create_task(
         &db_path,
@@ -81,7 +87,7 @@ async fn transitions_api_complete_moves_running_done_and_promotes_child() {
         "seed",
         kanban_sqlite::CreateTask::ready("parent"),
     )
-    .expect("parent");
+    .context("parent")?;
     let child = kanban_sqlite::create_task_with_dependencies(
         &db_path,
         "default",
@@ -89,10 +95,10 @@ async fn transitions_api_complete_moves_running_done_and_promotes_child() {
         kanban_sqlite::CreateTask::ready("child"),
         std::slice::from_ref(&parent.id),
     )
-    .expect("child");
+    .context("child")?;
     assert_eq!(child.status, kanban_core::TaskStatus::Todo);
     let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &parent.id, 60_000)
-        .expect("claim");
+        .context("claim")?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -100,17 +106,19 @@ async fn transitions_api_complete_moves_running_done_and_promotes_child() {
         &format!("/api/v1/tasks/{}/transitions/complete", parent.id),
         json!({"claim_token":claim.claim_token,"summary":"done","force":false}),
     )
-    .await;
+    .await?;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "done");
-    let child = kanban_sqlite::get_task_by_id_global(&db_path, &child.id).expect("child");
+    let child = kanban_sqlite::get_task_by_id_global(&db_path, &child.id).context("child")?;
     assert_eq!(child.status, kanban_core::TaskStatus::Ready);
+    Ok(())
 }
 
 #[tokio::test]
-async fn transitions_api_submit_review_moves_running_to_review_and_review_is_not_claimable() {
-    let test = TestApp::new();
+async fn transitions_submit_review_moves_running_to_review_and_review_is_not_claimable()
+-> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
@@ -118,9 +126,9 @@ async fn transitions_api_submit_review_moves_running_to_review_and_review_is_not
         "seed",
         kanban_sqlite::CreateTask::ready("review me"),
     )
-    .expect("task");
-    let claim =
-        kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000).expect("claim");
+    .context("task")?;
+    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000)
+        .context("claim")?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -128,7 +136,7 @@ async fn transitions_api_submit_review_moves_running_to_review_and_review_is_not
         &format!("/api/v1/tasks/{}/transitions/submit-review", task.id),
         json!({"claim_token":claim.claim_token,"summary":"needs review"}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "review");
 
@@ -137,14 +145,15 @@ async fn transitions_api_submit_review_moves_running_to_review_and_review_is_not
         &format!("/api/v1/tasks/{}/transitions/claim", task.id),
         json!({"ttl_ms":60000}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(json["error"]["code"], "invalid_transition");
+    Ok(())
 }
 
 #[tokio::test]
-async fn transitions_api_block_unblock_recomputes_target_status() {
-    let test = TestApp::new();
+async fn transitions_block_unblock_recomputes_target_status() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let parent = kanban_sqlite::create_task(
         &db_path,
@@ -161,7 +170,7 @@ async fn transitions_api_block_unblock_recomputes_target_status() {
             metadata_json: "{}".into(),
         },
     )
-    .expect("parent");
+    .context("parent")?;
     let child = kanban_sqlite::create_task_with_dependencies(
         &db_path,
         "default",
@@ -169,7 +178,7 @@ async fn transitions_api_block_unblock_recomputes_target_status() {
         kanban_sqlite::CreateTask::ready("blocked child"),
         std::slice::from_ref(&parent.id),
     )
-    .expect("child");
+    .context("child")?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -177,7 +186,7 @@ async fn transitions_api_block_unblock_recomputes_target_status() {
         &format!("/api/v1/tasks/{}/transitions/block", child.id),
         json!({"reason":"waiting"}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "blocked");
 
@@ -186,14 +195,15 @@ async fn transitions_api_block_unblock_recomputes_target_status() {
         &format!("/api/v1/tasks/{}/transitions/unblock", child.id),
         json!({}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "todo");
+    Ok(())
 }
 
 #[tokio::test]
-async fn transitions_api_archive_hides_task_from_default_list() {
-    let test = TestApp::new();
+async fn transitions_archive_hides_task_from_default_list() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
@@ -201,7 +211,7 @@ async fn transitions_api_archive_hides_task_from_default_list() {
         "seed",
         kanban_sqlite::CreateTask::ready("archive me"),
     )
-    .expect("task");
+    .context("task")?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -209,18 +219,19 @@ async fn transitions_api_archive_hides_task_from_default_list() {
         &format!("/api/v1/tasks/{}/transitions/archive", task.id),
         json!({"force":false}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "archived");
 
-    let (status, json) = get_json(app, "/api/v1/boards/default/tasks").await;
+    let (status, json) = get_json(app, "/api/v1/boards/default/tasks").await?;
     assert_eq!(status, StatusCode::OK);
-    assert!(json["data"].as_array().unwrap().is_empty());
+    assert!(json["data"].as_array().context("value")?.is_empty());
+    Ok(())
 }
 
 #[tokio::test]
-async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() {
-    let test = TestApp::new();
+async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let ready_task = kanban_sqlite::create_task(
         &db_path,
@@ -237,7 +248,7 @@ async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() {
             metadata_json: "{}".into(),
         },
     )
-    .expect("ready task");
+    .context("ready task")?;
     let scheduled_task = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -253,7 +264,7 @@ async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() {
             metadata_json: "{}".into(),
         },
     )
-    .expect("scheduled task");
+    .context("scheduled task")?;
     let parent = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -269,7 +280,7 @@ async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() {
             metadata_json: "{}".into(),
         },
     )
-    .expect("parent");
+    .context("parent")?;
     let todo_task = kanban_sqlite::create_task_with_dependencies(
         &db_path,
         "default",
@@ -286,7 +297,7 @@ async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() {
         },
         std::slice::from_ref(&parent.id),
     )
-    .expect("todo task");
+    .context("todo task")?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -294,17 +305,17 @@ async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() {
         &format!("/api/v1/tasks/{}/transitions/specify", ready_task.id),
         json!({"description":"ready spec"}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "ready");
 
-    let future = future_epoch_ms();
+    let future = future_epoch_ms()?;
     let (status, json) = post_json(
         app.clone(),
         &format!("/api/v1/tasks/{}/transitions/specify", scheduled_task.id),
         json!({"description":"scheduled spec","scheduled_at":future}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "scheduled");
 
@@ -313,14 +324,15 @@ async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() {
         &format!("/api/v1/tasks/{}/transitions/specify", todo_task.id),
         json!({"description":"todo spec"}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "todo");
+    Ok(())
 }
 
 #[tokio::test]
-async fn reclaim_transition_force_and_expired_close_active_run() {
-    let test = TestApp::new();
+async fn reclaim_transition_force_and_expired_close_active_run() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let force_task = kanban_sqlite::create_task(
         &db_path,
@@ -328,35 +340,35 @@ async fn reclaim_transition_force_and_expired_close_active_run() {
         "seed",
         kanban_sqlite::CreateTask::ready("force reclaim"),
     )
-    .expect("force task");
+    .context("force task")?;
     let expired_task = kanban_sqlite::create_task(
         &db_path,
         "default",
         "seed",
         kanban_sqlite::CreateTask::ready("expired reclaim"),
     )
-    .expect("expired task");
+    .context("expired task")?;
     let maxed_task = kanban_sqlite::create_task(
         &db_path,
         "default",
         "seed",
         kanban_sqlite::CreateTask::ready("max retries reclaim"),
     )
-    .expect("maxed task");
+    .context("maxed task")?;
     let force_claim =
         kanban_sqlite::claim_task(&db_path, "default", "worker", &force_task.id, 60_000)
-            .expect("force claim");
+            .context("force claim")?;
     let expired_claim =
         kanban_sqlite::claim_task(&db_path, "default", "worker", &expired_task.id, -1)
-            .expect("expired claim");
+            .context("expired claim")?;
     let maxed_claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &maxed_task.id, -1)
-        .expect("maxed claim");
-    let conn = kanban_sqlite::connect_file(&db_path).expect("connect");
+        .context("maxed claim")?;
+    let conn = kanban_sqlite::connect_file(&db_path).context("connect")?;
     conn.execute(
         "UPDATE tasks SET retry_count=0, max_retries=1 WHERE id=?1",
         (&maxed_task.id,),
     )
-    .expect("set max retries");
+    .context("set max retries")?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -364,7 +376,7 @@ async fn reclaim_transition_force_and_expired_close_active_run() {
         &format!("/api/v1/tasks/{}/transitions/reclaim", force_task.id),
         json!({"force":true}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "ready");
 
@@ -373,7 +385,7 @@ async fn reclaim_transition_force_and_expired_close_active_run() {
         &format!("/api/v1/tasks/{}/transitions/reclaim", expired_task.id),
         json!({}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "ready");
 
@@ -382,32 +394,33 @@ async fn reclaim_transition_force_and_expired_close_active_run() {
         &format!("/api/v1/tasks/{}/transitions/reclaim", maxed_task.id),
         json!({}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "blocked");
     assert_eq!(json["data"]["status_reason"], "max retries reached");
 
-    let runs = kanban_sqlite::list_runs(&db_path, "default", None).expect("runs");
+    let runs = kanban_sqlite::list_runs(&db_path, "default", None).context("runs")?;
     let force_run = runs
         .iter()
         .find(|run| run.id == force_claim.run_id)
-        .unwrap();
+        .context("value")?;
     let expired_run = runs
         .iter()
         .find(|run| run.id == expired_claim.run_id)
-        .unwrap();
+        .context("value")?;
     let maxed_run = runs
         .iter()
         .find(|run| run.id == maxed_claim.run_id)
-        .unwrap();
+        .context("value")?;
     assert_eq!(force_run.status, "canceled");
     assert_eq!(expired_run.status, "expired");
     assert_eq!(maxed_run.status, "expired");
+    Ok(())
 }
 
 #[tokio::test]
-async fn complete_with_summary_stores_task_run_summary_and_result() {
-    let test = TestApp::new();
+async fn complete_with_summary_stores_task_run_summary_and_result() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
@@ -415,9 +428,9 @@ async fn complete_with_summary_stores_task_run_summary_and_result() {
         "seed",
         kanban_sqlite::CreateTask::ready("complete summary"),
     )
-    .expect("task");
-    let claim =
-        kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000).expect("claim");
+    .context("task")?;
+    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000)
+        .context("claim")?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -425,12 +438,12 @@ async fn complete_with_summary_stores_task_run_summary_and_result() {
         &format!("/api/v1/tasks/{}/transitions/complete", task.id),
         json!({"claim_token":claim.claim_token,"summary":"done summary"}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "done");
 
-    let stored = kanban_sqlite::get_task_by_id_global(&db_path, &task.id).expect("task");
-    let runs = kanban_sqlite::list_runs(&db_path, "default", Some(&task.id)).expect("runs");
+    let stored = kanban_sqlite::get_task_by_id_global(&db_path, &task.id).context("task")?;
+    let runs = kanban_sqlite::list_runs(&db_path, "default", Some(&task.id)).context("runs")?;
     assert_eq!(stored.result_summary.as_deref(), Some("done summary"));
     assert_eq!(runs[0].summary.as_deref(), Some("done summary"));
 
@@ -440,24 +453,25 @@ async fn complete_with_summary_stores_task_run_summary_and_result() {
         "seed",
         kanban_sqlite::CreateTask::ready("reject result"),
     )
-    .expect("other");
-    let other_claim =
-        kanban_sqlite::claim_task(&db_path, "default", "worker", &other.id, 60_000).expect("claim");
+    .context("other")?;
+    let other_claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &other.id, 60_000)
+        .context("claim")?;
     let (status, json) = post_json(
         app,
         &format!("/api/v1/tasks/{}/transitions/complete", other.id),
         json!({"claim_token":other_claim.claim_token,"result":{"ok":true}}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "done");
-    let stored = kanban_sqlite::get_task_by_id_global(&db_path, &other.id).expect("task");
+    let stored = kanban_sqlite::get_task_by_id_global(&db_path, &other.id).context("task")?;
     assert_eq!(stored.result_json.as_deref(), Some(r#"{"ok":true}"#));
+    Ok(())
 }
 
 #[tokio::test]
-async fn submit_review_with_summary_stores_run_summary() {
-    let test = TestApp::new();
+async fn submit_review_with_summary_stores_run_summary() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
@@ -465,9 +479,9 @@ async fn submit_review_with_summary_stores_run_summary() {
         "seed",
         kanban_sqlite::CreateTask::ready("review summary"),
     )
-    .expect("task");
-    let claim =
-        kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000).expect("claim");
+    .context("task")?;
+    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000)
+        .context("claim")?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -475,17 +489,19 @@ async fn submit_review_with_summary_stores_run_summary() {
         &format!("/api/v1/tasks/{}/transitions/submit-review", task.id),
         json!({"claim_token":claim.claim_token,"summary":"ready for review"}),
     )
-    .await;
+    .await?;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "review");
-    let runs = kanban_sqlite::list_runs(&db_path, "default", Some(&task.id)).expect("runs");
+    let runs = kanban_sqlite::list_runs(&db_path, "default", Some(&task.id)).context("runs")?;
     assert_eq!(runs[0].summary.as_deref(), Some("ready for review"));
+    Ok(())
 }
 
 #[tokio::test]
-async fn heartbeat_non_running_wrong_token_returns_invalid_transition_not_token_mismatch() {
-    let test = TestApp::new();
+async fn heartbeat_non_running_wrong_token_returns_invalid_transition_not_token_mismatch()
+-> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
@@ -493,7 +509,7 @@ async fn heartbeat_non_running_wrong_token_returns_invalid_transition_not_token_
         "seed",
         kanban_sqlite::CreateTask::ready("heartbeat not running"),
     )
-    .expect("task");
+    .context("task")?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -501,8 +517,9 @@ async fn heartbeat_non_running_wrong_token_returns_invalid_transition_not_token_
         &format!("/api/v1/tasks/{}/transitions/heartbeat", task.id),
         json!({"claim_token":"wrong"}),
     )
-    .await;
+    .await?;
 
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(json["error"]["code"], "invalid_transition");
+    Ok(())
 }

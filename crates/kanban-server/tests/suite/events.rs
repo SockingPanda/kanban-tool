@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[tokio::test]
-async fn events_api_after_limit_returns_ordered_events_and_next_after() {
-    let test = TestApp::new();
+async fn events_after_limit_returns_ordered_events_and_next_after() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let first = kanban_sqlite::create_task(
         &db_path,
@@ -10,19 +10,19 @@ async fn events_api_after_limit_returns_ordered_events_and_next_after() {
         "seed",
         kanban_sqlite::CreateTask::ready("first"),
     )
-    .expect("first");
+    .context("first")?;
     let second = kanban_sqlite::create_task(
         &db_path,
         "default",
         "seed",
         kanban_sqlite::CreateTask::ready("second"),
     )
-    .expect("second");
-    let all = kanban_sqlite::list_events(&db_path, "default", None).expect("events");
+    .context("second")?;
+    let all = kanban_sqlite::list_events(&db_path, "default", None).context("events")?;
     let after = all
         .iter()
         .find(|event| event.task_id.as_deref() == Some(&first.id))
-        .expect("first task event")
+        .context("first task event")?
         .id;
     let app = test.router();
 
@@ -30,22 +30,28 @@ async fn events_api_after_limit_returns_ordered_events_and_next_after() {
         app,
         &format!("/api/v1/events?board=default&after={after}&limit=1"),
     )
-    .await;
+    .await?;
 
     assert_eq!(status, StatusCode::OK);
-    let events = json["data"].as_array().expect("events array");
+    let events = json["data"].as_array().context("events array")?;
     assert_eq!(events.len(), 1);
     assert_eq!(events[0]["task_id"], second.id);
-    assert!(events[0]["id"].as_i64().unwrap() > after);
+    assert!(events[0]["id"].as_i64().context("value")? > after);
     assert_eq!(json["meta"]["next_after"], events[0]["id"]);
-    assert!(events[0]["event_id"].as_str().unwrap().starts_with("e_"));
+    assert!(
+        events[0]["event_id"]
+            .as_str()
+            .context("value")?
+            .starts_with("e_")
+    );
     assert_eq!(events[0]["kind"], "task.created");
     assert_ne!(first.id, second.id);
+    Ok(())
 }
 
 #[tokio::test]
-async fn events_api_filters_by_task_id_for_detail_timeline() {
-    let test = TestApp::new();
+async fn events_filters_by_task_id_for_detail_timeline() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let first = kanban_sqlite::create_task(
         &db_path,
@@ -53,14 +59,14 @@ async fn events_api_filters_by_task_id_for_detail_timeline() {
         "seed",
         kanban_sqlite::CreateTask::ready("first timeline"),
     )
-    .expect("first");
+    .context("first")?;
     let second = kanban_sqlite::create_task(
         &db_path,
         "default",
         "seed",
         kanban_sqlite::CreateTask::ready("second timeline"),
     )
-    .expect("second");
+    .context("second")?;
     kanban_sqlite::block_task(
         &db_path,
         "default",
@@ -70,17 +76,17 @@ async fn events_api_filters_by_task_id_for_detail_timeline() {
         None,
         false,
     )
-    .expect("block first");
+    .context("block first")?;
     let app = test.router();
 
     let (status, json) = get_json(
         app,
         &format!("/api/v1/events?board=default&task_id={}", first.id),
     )
-    .await;
+    .await?;
 
     assert_eq!(status, StatusCode::OK);
-    let events = json["data"].as_array().expect("events array");
+    let events = json["data"].as_array().context("events array")?;
     assert!(events.len() >= 2);
     assert!(
         events
@@ -89,4 +95,5 @@ async fn events_api_filters_by_task_id_for_detail_timeline() {
     );
     assert!(!events.iter().any(|event| event["task_id"] == second.id));
     assert!(events.iter().any(|event| event["kind"] == "task.blocked"));
+    Ok(())
 }

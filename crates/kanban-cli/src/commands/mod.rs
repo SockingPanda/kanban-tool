@@ -1,2 +1,12 @@
 pub(crate) mod app;
+pub(crate) mod board;
+pub(crate) mod common;
+pub(crate) mod dep;
 pub(crate) mod dispatch;
+pub(crate) mod index;
+pub(crate) mod maintenance;
+pub(crate) mod run;
+pub(crate) mod search;
+pub(crate) mod serve;
+pub(crate) mod substrate;
+pub(crate) mod task;

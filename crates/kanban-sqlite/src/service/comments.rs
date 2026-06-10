@@ -1,7 +1,7 @@
 use crate::connect_file;
 
 use super::{
-    CommentRecord, active_board_id_for_task, insert_event, resolve_task,
+    CommentRecord, CreateComment, active_board_id_for_task, insert_event, resolve_task,
     resolve_task_without_active_board, storage, with_immediate_tx,
 };
 
@@ -20,29 +20,49 @@ pub fn create_comment(
     body: &str,
     kind: Option<&str>,
 ) -> Result<CommentRecord> {
+    create_comment_with_options(
+        path,
+        task_ref,
+        CreateComment {
+            author: author.to_owned(),
+            body: body.to_owned(),
+            kind: kind.map(str::to_owned),
+            author_type: None,
+            agent_type: None,
+        },
+    )
+}
+
+pub fn create_comment_with_options(
+    path: impl AsRef<Path>,
+    task_ref: &str,
+    input: CreateComment,
+) -> Result<CommentRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
         let board_id = active_board_id_for_task(&conn, task_ref)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
-        let author = author.trim();
+        let author = input.author.trim();
         if author.is_empty() {
             return Err(KanbanError::InvalidInput(
                 "comment author is required".into(),
             ));
         }
-        let body = body.trim();
+        let body = input.body.trim();
         if body.is_empty() {
             return Err(KanbanError::InvalidInput("comment body is required".into()));
         }
-        let kind = kind.unwrap_or("text").trim();
+        let kind = input.kind.as_deref().unwrap_or("text").trim();
         if !matches!(kind, "text" | "system" | "worker") {
             return Err(KanbanError::InvalidInput("invalid comment kind".into()));
         }
+        let author_type = normalize_author_type(input.author_type.as_deref(), kind)?;
+        let agent_type = normalize_agent_type(input.agent_type.as_deref(), author_type)?;
         let id = new_typed_id("c");
         conn.execute(
-            "INSERT INTO task_comments(id, board_id, task_id, author, body, kind, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![id, board_id, task.id, author, body, kind, now],
+            "INSERT INTO task_comments(id, board_id, task_id, author, author_type, agent_type, body, kind, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![id, board_id, task.id, author, author_type, agent_type, body, kind, now],
         )
         .map_err(storage)?;
         insert_event(
@@ -52,7 +72,7 @@ pub fn create_comment(
             None,
             "task.comment.created",
             author,
-            &json!({"comment_id": id, "kind": kind}).to_string(),
+            &json!({"comment_id": id, "kind": kind, "author_type": author_type, "agent_type": agent_type}).to_string(),
             now,
         )?;
         Ok(CommentRecord {
@@ -60,6 +80,8 @@ pub fn create_comment(
             board_id,
             task_id: task.id,
             author: author.to_owned(),
+            author_type: author_type.to_owned(),
+            agent_type: agent_type.map(str::to_owned),
             body: body.to_owned(),
             kind: kind.to_owned(),
             created_at: now,
@@ -73,7 +95,7 @@ pub fn list_comments(path: impl AsRef<Path>, task_ref: &str) -> Result<Vec<Comme
     let board_id = task.board_id.clone();
     let mut stmt = conn
         .prepare(
-            "SELECT id, board_id, task_id, author, body, kind, created_at \
+            "SELECT id, board_id, task_id, author, author_type, agent_type, body, kind, created_at \
              FROM task_comments WHERE board_id=?1 AND task_id=?2 ORDER BY created_at ASC, id ASC",
         )
         .map_err(storage)?;
@@ -90,8 +112,41 @@ pub(crate) fn comment_from_row(row: &Row<'_>) -> rusqlite::Result<CommentRecord>
         board_id: row.get(1)?,
         task_id: row.get(2)?,
         author: row.get(3)?,
-        body: row.get(4)?,
-        kind: row.get(5)?,
-        created_at: row.get(6)?,
+        author_type: row.get(4)?,
+        agent_type: row.get(5)?,
+        body: row.get(6)?,
+        kind: row.get(7)?,
+        created_at: row.get(8)?,
     })
+}
+
+fn normalize_author_type<'a>(author_type: Option<&'a str>, kind: &str) -> Result<&'a str> {
+    match author_type.map(str::trim) {
+        Some("human") => Ok("human"),
+        Some("agent") => Ok("agent"),
+        Some("system") => Ok("system"),
+        Some(_) => Err(KanbanError::InvalidInput(
+            "invalid comment author_type".into(),
+        )),
+        None => Ok(match kind {
+            "worker" => "agent",
+            "system" => "system",
+            _ => "human",
+        }),
+    }
+}
+
+fn normalize_agent_type<'a>(
+    agent_type: Option<&'a str>,
+    author_type: &str,
+) -> Result<Option<&'a str>> {
+    let Some(agent_type) = agent_type.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    if author_type != "agent" {
+        return Err(KanbanError::InvalidInput(
+            "comment agent_type is only allowed when author_type is agent".into(),
+        ));
+    }
+    Ok(Some(agent_type))
 }

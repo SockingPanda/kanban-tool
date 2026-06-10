@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import type { Task } from "@/lib/api"
 
-import { parseDateInput, taskToDraft } from "./task-draft"
+import { parseDateInput, reconcileTaskDraft, taskToDraft } from "./task-draft"
 
 describe("task draft helpers", () => {
   it("converts nullable task fields into editable strings", () => {
@@ -29,12 +29,43 @@ describe("task draft helpers", () => {
     expect(parseDateInput("")).toBeNull()
     expect(parseDateInput("not-a-date")).toBeNull()
   })
+
+  it("does not overwrite a dirty draft when the same task refreshes in the background", () => {
+    const current = {
+      taskId: "t_1",
+      draft: taskToDraft(task({ title: "Local edit" })),
+      dirty: true,
+    }
+
+    expect(reconcileTaskDraft(current, task({ title: "Server refresh" }))).toBe(current)
+  })
+
+  it("replaces the draft when selection changes or after a forced save sync", () => {
+    const current = {
+      taskId: "t_1",
+      draft: taskToDraft(task({ title: "Local edit" })),
+      dirty: true,
+    }
+
+    expect(reconcileTaskDraft(current, task({ id: "t_2", title: "Other task" }))).toEqual({
+      taskId: "t_2",
+      draft: taskToDraft(task({ id: "t_2", title: "Other task" })),
+      dirty: false,
+    })
+    expect(reconcileTaskDraft(current, task({ id: "t_1", title: "Saved server task" }), { force: true })).toEqual({
+      taskId: "t_1",
+      draft: taskToDraft(task({ id: "t_1", title: "Saved server task" })),
+      dirty: false,
+    })
+  })
 })
 
 function task(overrides: Partial<Task> = {}): Task {
   return {
     id: "t_1",
     board_id: "b_1",
+    board_slug: "default",
+    ref: "default#1",
     seq: 1,
     title: "Task",
     description: null,

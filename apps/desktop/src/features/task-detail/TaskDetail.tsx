@@ -26,8 +26,10 @@ export function TaskDetail({
   commentBody,
   setCommentBody,
   editDraft,
+  draftDirty,
   setEditDraft,
-  busy,
+  detailLoading,
+  pendingAction,
   onAction,
   onAddDependency,
   onSaveTask,
@@ -45,9 +47,11 @@ export function TaskDetail({
   commentBody: string
   setCommentBody: (value: string) => void
   editDraft: TaskEditDraft | null
+  draftDirty: boolean
   setEditDraft: (value: TaskEditDraft) => void
-  busy: boolean
-  onAction: (action: () => Promise<unknown>) => Promise<void>
+  detailLoading: boolean
+  pendingAction: string | null
+  onAction: (action: () => Promise<unknown>) => Promise<unknown>
   onAddDependency: () => Promise<void>
   onSaveTask: () => Promise<void>
   onAddComment: () => Promise<void>
@@ -66,7 +70,10 @@ export function TaskDetail({
             <div className="text-xs text-neutral-500">#{task.seq} {shortId(task.id)}</div>
             <h2 className="mt-1 text-lg font-semibold leading-snug">{task.title}</h2>
           </div>
-          <Badge variant={badgeVariant(task.status)}>{task.status}</Badge>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <Badge variant={badgeVariant(task.status)}>{task.status}</Badge>
+            {detailLoading ? <span className="text-xs text-neutral-500">refreshing</span> : null}
+          </div>
         </div>
         <p className="mt-2 text-sm text-neutral-600">{task.description || "No description yet."}</p>
       </div>
@@ -76,6 +83,7 @@ export function TaskDetail({
           <>
             <Section title="Task detail">
               <div className="space-y-2">
+                {draftDirty ? <div className="text-xs font-medium text-amber-700">Unsaved changes</div> : null}
                 <Input
                   value={editDraft.title}
                   onChange={(event) => setEditDraft({ ...editDraft, title: event.target.value })}
@@ -109,9 +117,9 @@ export function TaskDetail({
                     onChange={(event) => setEditDraft({ ...editDraft, dueAt: event.target.value })}
                   />
                 </div>
-                <Button disabled={!api || busy || !editDraft.title.trim()} onClick={() => void onSaveTask()}>
+                <Button disabled={!api || pendingAction === "save" || !editDraft.title.trim()} onClick={() => void onSaveTask()}>
                   <Save className="h-4 w-4" />
-                  Save
+                  {pendingAction === "save" ? "Saving" : "Save"}
                 </Button>
               </div>
             </Section>
@@ -126,7 +134,7 @@ export function TaskDetail({
               <Button
                 key={action.label}
                 variant={action.danger ? "destructive" : "secondary"}
-                disabled={!api || busy || !action.enabled}
+                disabled={!api || Boolean(pendingAction) || !action.enabled}
                 onClick={() => {
                   if (!api) return
                   void onAction(() => action.run(api, task))
@@ -162,7 +170,7 @@ export function TaskDetail({
                 onChange={(event) => setDependencyInput(event.target.value)}
                 placeholder="Parent task id"
               />
-              <Button variant="outline" disabled={!dependencyInput.trim() || busy} onClick={() => void onAddDependency()}>
+              <Button variant="outline" disabled={!dependencyInput.trim() || pendingAction === "dependency"} onClick={() => void onAddDependency()}>
                 <GitBranch className="h-4 w-4" />
               </Button>
             </div>
@@ -194,7 +202,7 @@ export function TaskDetail({
                 onChange={(event) => setCommentBody(event.target.value)}
                 placeholder="Add handoff note"
               />
-              <Button variant="outline" disabled={!commentBody.trim() || busy} onClick={() => void onAddComment()}>
+              <Button variant="outline" disabled={!commentBody.trim() || pendingAction === "comment"} onClick={() => void onAddComment()}>
                 <MessageSquare className="h-4 w-4" />
               </Button>
             </div>

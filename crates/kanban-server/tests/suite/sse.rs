@@ -1,8 +1,9 @@
 use crate::common::*;
 
 #[tokio::test]
-async fn stream_events_sse_returns_finite_snapshot_with_id_event_and_data_frames() {
-    let test = TestApp::new();
+async fn stream_events_sse_returns_finite_snapshot_with_id_event_and_data_frames()
+-> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let first = kanban_sqlite::create_task(
         &db_path,
@@ -10,37 +11,37 @@ async fn stream_events_sse_returns_finite_snapshot_with_id_event_and_data_frames
         "seed",
         kanban_sqlite::CreateTask::ready("first sse"),
     )
-    .expect("first");
+    .context("first")?;
     let second = kanban_sqlite::create_task(
         &db_path,
         "default",
         "seed",
         kanban_sqlite::CreateTask::ready("second sse"),
     )
-    .expect("second");
-    let all = kanban_sqlite::list_events(&db_path, "default", None).expect("events");
+    .context("second")?;
+    let all = kanban_sqlite::list_events(&db_path, "default", None).context("events")?;
     let after = all
         .iter()
         .find(|event| event.task_id.as_deref() == Some(&first.id))
-        .expect("first task event")
+        .context("first task event")?
         .id;
     let second_event = all
         .iter()
         .find(|event| event.task_id.as_deref() == Some(&second.id))
-        .expect("second task event");
+        .context("second task event")?;
     let app = test.router();
 
     let (status, headers, body) = get_raw(
         app,
         &format!("/api/v1/stream/events?board=default&after={after}&limit=1"),
     )
-    .await;
+    .await?;
 
     assert_eq!(status, StatusCode::OK);
     assert!(
         headers[header::CONTENT_TYPE]
             .to_str()
-            .unwrap()
+            .context("value")?
             .starts_with("text/event-stream")
     );
     assert!(body.contains(&format!("id: {}", second_event.id)), "{body}");
@@ -58,4 +59,5 @@ async fn stream_events_sse_returns_finite_snapshot_with_id_event_and_data_frames
         !body.contains(&first.id),
         "after must exclude the first task event: {body}"
     );
+    Ok(())
 }

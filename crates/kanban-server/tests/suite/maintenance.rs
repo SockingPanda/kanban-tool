@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[tokio::test]
-async fn stats_api_reports_stale_claims_and_blocked_reason_counts() {
-    let test = TestApp::new();
+async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let stale = kanban_sqlite::create_task(
         &db_path,
@@ -10,22 +10,22 @@ async fn stats_api_reports_stale_claims_and_blocked_reason_counts() {
         "seed",
         kanban_sqlite::CreateTask::ready("stale claim"),
     )
-    .expect("stale task");
-    kanban_sqlite::claim_task(&db_path, "default", "worker", &stale.id, -1).expect("claim");
+    .context("stale task")?;
+    kanban_sqlite::claim_task(&db_path, "default", "worker", &stale.id, -1).context("claim")?;
     let blocked_a = kanban_sqlite::create_task(
         &db_path,
         "default",
         "seed",
         kanban_sqlite::CreateTask::ready("blocked a"),
     )
-    .expect("blocked a");
+    .context("blocked a")?;
     let blocked_b = kanban_sqlite::create_task(
         &db_path,
         "default",
         "seed",
         kanban_sqlite::CreateTask::ready("blocked b"),
     )
-    .expect("blocked b");
+    .context("blocked b")?;
     kanban_sqlite::block_task(
         &db_path,
         "default",
@@ -35,7 +35,7 @@ async fn stats_api_reports_stale_claims_and_blocked_reason_counts() {
         None,
         true,
     )
-    .expect("block a");
+    .context("block a")?;
     kanban_sqlite::block_task(
         &db_path,
         "default",
@@ -45,10 +45,10 @@ async fn stats_api_reports_stale_claims_and_blocked_reason_counts() {
         None,
         true,
     )
-    .expect("block b");
+    .context("block b")?;
     let app = test.router();
 
-    let (status, json) = get_json(app, "/api/v1/stats?board=default").await;
+    let (status, json) = get_json(app, "/api/v1/stats?board=default").await?;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["stale_claims"][0]["task_id"], stale.id);
@@ -60,18 +60,19 @@ async fn stats_api_reports_stale_claims_and_blocked_reason_counts() {
     assert!(
         json["data"]["status_counts"]
             .as_array()
-            .unwrap()
+            .context("value")?
             .iter()
             .any(|count| count["status"] == "running" && count["count"] == 1)
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn maintenance_api_reports_doctor_and_checkpoint_results() {
-    let test = TestApp::new();
+async fn maintenance_reports_doctor_and_checkpoint_results() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let app = test.router();
 
-    let (status, json) = post_json(app.clone(), "/api/v1/maintenance/doctor", json!({})).await;
+    let (status, json) = post_json(app.clone(), "/api/v1/maintenance/doctor", json!({})).await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["integrity_check"], "ok");
     assert_eq!(json["data"]["dependency_cycles"], 0);
@@ -81,10 +82,17 @@ async fn maintenance_api_reports_doctor_and_checkpoint_results() {
     assert_eq!(json["data"]["outbox_pending"], 0);
     assert_eq!(json["data"]["derived_dirty_stores"], 0);
     assert_eq!(json["data"]["derived_error_stores"], 0);
-    assert_eq!(json["data"]["derived_stores"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        json["data"]["derived_stores"]
+            .as_array()
+            .context("value")?
+            .len(),
+        3
+    );
 
-    let (status, json) = post_json(app, "/api/v1/maintenance/checkpoint", json!({})).await;
+    let (status, json) = post_json(app, "/api/v1/maintenance/checkpoint", json!({})).await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["busy"], 0);
     assert!(json["data"].get("checkpointed_frames").is_some());
+    Ok(())
 }

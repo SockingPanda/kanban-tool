@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[tokio::test]
-async fn dependencies_api_add_remove_list_and_cycle_error() {
-    let test = TestApp::new();
+async fn dependencies_add_remove_list_and_cycle_error() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let parent = kanban_sqlite::create_task(
         &db_path,
@@ -10,14 +10,14 @@ async fn dependencies_api_add_remove_list_and_cycle_error() {
         "seed",
         kanban_sqlite::CreateTask::ready("parent"),
     )
-    .expect("parent");
+    .context("parent")?;
     let child = kanban_sqlite::create_task(
         &db_path,
         "default",
         "seed",
         kanban_sqlite::CreateTask::ready("child"),
     )
-    .expect("child");
+    .context("child")?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -25,16 +25,19 @@ async fn dependencies_api_add_remove_list_and_cycle_error() {
         &format!("/api/v1/tasks/{}/dependencies", child.id),
         json!({"parent_task_id":parent.id,"actor":"dep-actor"}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(json["data"]["parents"][0]["id"], parent.id);
-    assert_eq!(json["data"]["children"].as_array().unwrap().len(), 0);
+    assert_eq!(
+        json["data"]["children"].as_array().context("value")?.len(),
+        0
+    );
 
     let (status, json) = get_json(
         app.clone(),
         &format!("/api/v1/tasks/{}/dependencies", parent.id),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["children"][0]["id"], child.id);
 
@@ -43,7 +46,7 @@ async fn dependencies_api_add_remove_list_and_cycle_error() {
         &format!("/api/v1/tasks/{}/dependencies", parent.id),
         json!({"parent_task_id":child.id}),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(json["error"]["code"], "dependency_cycle");
 
@@ -51,7 +54,13 @@ async fn dependencies_api_add_remove_list_and_cycle_error() {
         app.clone(),
         &format!("/api/v1/tasks/{}/dependencies/{}", child.id, parent.id),
     )
-    .await;
+    .await?;
     assert_eq!(status, StatusCode::OK);
-    assert!(json["data"]["parents"].as_array().unwrap().is_empty());
+    assert!(
+        json["data"]["parents"]
+            .as_array()
+            .context("value")?
+            .is_empty()
+    );
+    Ok(())
 }

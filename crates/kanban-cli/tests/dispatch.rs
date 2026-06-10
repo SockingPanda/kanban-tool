@@ -1,14 +1,14 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kb};
+use common::{TempDb, kanban};
 use pretty_assertions::assert_eq;
 #[test]
 fn dispatch_profile_routes_assignees() -> anyhow::Result<()> {
     let temp =
         TempDb::new("dispatch_loop_uses_worker_profile_config_and_respects_assignee_routing")?;
-    kb(&temp.path, &["init"])?.success()?;
-    let backend = kb(
+    kanban(&temp.path, &["init"])?.success()?;
+    let backend = kanban(
         &temp.path,
         &[
             "--json",
@@ -22,7 +22,7 @@ fn dispatch_profile_routes_assignees() -> anyhow::Result<()> {
         ],
     )?
     .success_json()?;
-    let frontend = kb(
+    let frontend = kanban(
         &temp.path,
         &[
             "--json",
@@ -46,7 +46,7 @@ fn dispatch_profile_routes_assignees() -> anyhow::Result<()> {
         ),
     )?;
 
-    let result = kb(
+    let result = kanban(
         &temp.path,
         &[
             "--json",
@@ -63,7 +63,7 @@ fn dispatch_profile_routes_assignees() -> anyhow::Result<()> {
 
     assert_eq!(result["data"]["iterations"], 1);
     assert_eq!(result["data"]["claimed"], 1);
-    let backend_task = kb(
+    let backend_task = kanban(
         &temp.path,
         &[
             "--json",
@@ -75,7 +75,7 @@ fn dispatch_profile_routes_assignees() -> anyhow::Result<()> {
         ],
     )?
     .success_json()?;
-    let frontend_task = kb(
+    let frontend_task = kanban(
         &temp.path,
         &[
             "--json",
@@ -95,8 +95,8 @@ fn dispatch_profile_routes_assignees() -> anyhow::Result<()> {
 #[test]
 fn dispatch_rejects_untrusted_log_dir() -> anyhow::Result<()> {
     let temp = TempDb::new("dispatch_rejects_profile_log_dir_outside_trusted_roots")?;
-    kb(&temp.path, &["init"])?.success()?;
-    let task = kb(
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
         &temp.path,
         &[
             "--json",
@@ -120,7 +120,7 @@ fn dispatch_rejects_untrusted_log_dir() -> anyhow::Result<()> {
         ),
     )?;
 
-    kb(
+    kanban(
         &temp.path,
         &[
             "--json",
@@ -135,7 +135,7 @@ fn dispatch_rejects_untrusted_log_dir() -> anyhow::Result<()> {
     )?
     .failure_containing("outside allowed run log roots")?;
 
-    let task = kb(
+    let task = kanban(
         &temp.path,
         &[
             "--json",
@@ -154,8 +154,8 @@ fn dispatch_rejects_untrusted_log_dir() -> anyhow::Result<()> {
 #[test]
 fn retry_policy_and_run_logs_support_recovery() -> anyhow::Result<()> {
     let temp = TempDb::new("retry_policy_and_run_log_commands_support_operator_recovery")?;
-    kb(&temp.path, &["init"])?.success()?;
-    let created = kb(
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
         &temp.path,
         &[
             "--json",
@@ -174,14 +174,14 @@ fn retry_policy_and_run_logs_support_recovery() -> anyhow::Result<()> {
         .context("expected JSON string")?;
     assert_eq!(created["data"]["max_retries"], 2);
 
-    let updated = kb(
+    let updated = kanban(
         &temp.path,
         &["--json", "task", "update", task_id, "--clear-max-retries"],
     )?
     .success_json()?;
     assert!(updated["data"]["max_retries"].is_null());
 
-    let reset = kb(
+    let reset = kanban(
         &temp.path,
         &["--json", "task", "update", task_id, "--max-retries", "1"],
     )?
@@ -189,7 +189,7 @@ fn retry_policy_and_run_logs_support_recovery() -> anyhow::Result<()> {
     assert_eq!(reset["data"]["max_retries"], 1);
 
     let logs = temp.dir.join("logs");
-    let dispatch = kb(
+    let dispatch = kanban(
         &temp.path,
         &[
             "--json",
@@ -206,11 +206,11 @@ fn retry_policy_and_run_logs_support_recovery() -> anyhow::Result<()> {
         .as_str()
         .context("expected JSON string")?;
 
-    let run = kb(&temp.path, &["--json", "run", "show", run_id])?.success_json()?;
+    let run = kanban(&temp.path, &["--json", "run", "show", run_id])?.success_json()?;
     assert_eq!(run["data"]["id"], run_id);
     assert!(run["data"].get("claim_token").is_some());
 
-    let log = kb(&temp.path, &["--json", "run", "logs", run_id])?.success_json()?;
+    let log = kanban(&temp.path, &["--json", "run", "logs", run_id])?.success_json()?;
     assert_eq!(log["data"]["run_id"], run_id);
     assert_eq!(log["data"]["content"], "operator log\n");
     assert_eq!(log["data"]["truncated"], false);
@@ -220,8 +220,8 @@ fn retry_policy_and_run_logs_support_recovery() -> anyhow::Result<()> {
 #[test]
 fn run_logs_reject_suspicious_paths() -> anyhow::Result<()> {
     let temp = TempDb::new("run_log_command_rejects_suspicious_log_paths")?;
-    kb(&temp.path, &["init"])?.success()?;
-    kb(
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(
         &temp.path,
         &[
             "task",
@@ -232,7 +232,7 @@ fn run_logs_reject_suspicious_paths() -> anyhow::Result<()> {
         ],
     )?
     .success()?;
-    let dispatch = kb(
+    let dispatch = kanban(
         &temp.path,
         &[
             "--json",
@@ -256,6 +256,6 @@ fn run_logs_reject_suspicious_paths() -> anyhow::Result<()> {
         ("/etc/passwd", run_id),
     )?;
 
-    kb(&temp.path, &["run", "logs", run_id])?.failure_containing("suspicious run log path")?;
+    kanban(&temp.path, &["run", "logs", run_id])?.failure_containing("suspicious run log path")?;
     Ok(())
 }

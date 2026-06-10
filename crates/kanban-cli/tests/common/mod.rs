@@ -6,15 +6,19 @@ use anyhow::Context;
 use assert_cmd::Command;
 use predicates::{Predicate, str::contains};
 
-pub fn kb(db_path: &Path, args: &[&str]) -> anyhow::Result<CmdResult> {
-    kb_in_dir(db_path, args, Path::new(env!("CARGO_MANIFEST_DIR")))
+pub fn kanban(db_path: &Path, args: &[&str]) -> anyhow::Result<CmdResult> {
+    kanban_in_dir(db_path, args, Path::new(env!("CARGO_MANIFEST_DIR")))
 }
 
-pub fn kb_in_dir(db_path: &Path, args: &[&str], current_dir: &Path) -> anyhow::Result<CmdResult> {
-    kb_in_dir_env(db_path, args, current_dir, None)
+pub fn kanban_in_dir(
+    db_path: &Path,
+    args: &[&str],
+    current_dir: &Path,
+) -> anyhow::Result<CmdResult> {
+    kanban_in_dir_env(db_path, args, current_dir, None)
 }
 
-pub fn kb_in_dir_env(
+pub fn kanban_in_dir_env(
     db_path: &Path,
     args: &[&str],
     current_dir: &Path,

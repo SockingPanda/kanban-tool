@@ -4,7 +4,7 @@
 
 **Goal:** Complete V1 as a localhost Web API release on top of the spec-compliant V0.5 CLI/SQLite command service.
 
-**Architecture:** Add a `kanban-server` crate and `kb serve` entrypoint that expose `/health` and `/api/v1` JSON endpoints. HTTP handlers must call the same `kanban-sqlite` service functions used by CLI; no route may mutate `tasks.status` directly. V1 is API-first and intentionally does not include a browser Web UI bundle.
+**Architecture:** Add a `kanban-server` crate and `kanban serve` entrypoint that expose `/health` and `/api/v1` JSON endpoints. HTTP handlers must call the same `kanban-sqlite` service functions used by CLI; no route may mutate `tasks.status` directly. V1 is API-first and intentionally does not include a browser Web UI bundle.
 
 **Tech Stack:** Rust workspace, SQLite-only via `kanban-sqlite`, Axum/Tokio HTTP server, serde JSON, integration tests with a temporary SQLite database and localhost router/service tests.
 
@@ -15,7 +15,7 @@
 V1 includes:
 
 - `kanban-server` crate.
-- `kb serve` command, default bind `127.0.0.1:8721`.
+- `kanban serve` command, default bind `127.0.0.1:8721`.
 - Health endpoint: `GET /health`.
 - Board API minimum: list/show default board and columns.
 - Task API core lifecycle:
@@ -33,13 +33,13 @@ V1 does not include:
 - Remote auth, users, RBAC, teams, tenants.
 - HTTP backup/export endpoints.
 - Attachments/labels/comments unless already needed for API scaffolding; comments may remain documented future work if not implemented.
-- Persistent dispatcher service supervision; `kb serve --dispatcher` may remain out of scope unless explicitly implemented.
+- Persistent dispatcher service supervision; `kanban serve --dispatcher` may remain out of scope unless explicitly implemented.
 
 ## Gates
 
 - **Pre-flight gate:** start from clean `main`, read AGENTS.md and API/DATA/STATE/CLI/DISPATCHER docs.
 - **Revision gate per task:** implementer commit → spec reviewer PASS → quality reviewer APPROVED. P0/P1 loops back to a fix worker on the same branch.
-- **Pre-merge gate:** parent runs `cargo fmt --check`, `cargo check --workspace --exclude kanban-desktop --tests`, `cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast`, `cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings`, and a real `kb serve` smoke with HTTP requests against a temp DB.
+- **Pre-merge gate:** parent runs `cargo fmt --check`, `cargo check --workspace --exclude kanban-desktop --tests`, `cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast`, `cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings`, and a real `kanban serve` smoke with HTTP requests against a temp DB.
 - **Final release gate:** independent final spec reviewer compares against `docs/API_SPEC.md` and `docs/V1.md`; independent quality reviewer checks server safety, transaction invariants, and route tests.
 
 ## Task 1: Server crate and health/board read APIs
@@ -130,8 +130,8 @@ V1 does not include:
 - Test: CLI/server smoke tests if practical
 
 **TDD steps:**
-1. Add failing test or smoke script for `kb serve --help` and router SSE stream behavior.
-2. Implement `kb serve --host 127.0.0.1 --port 0/8721 --db <path>` if feasible; default must be localhost.
+1. Add failing test or smoke script for `kanban serve --help` and router SSE stream behavior.
+2. Implement `kanban serve --host 127.0.0.1 --port 0/8721 --db <path>` if feasible; default must be localhost.
 3. Implement `GET /api/v1/stream/events` as a simple SSE stream that emits existing events after `after` and can close for tests, or document exact V1 limitation if a continuous stream is deferred.
 4. Add `docs/V1.md` with implemented scope, out-of-scope items, verification commands, and smoke recipe.
 5. Verify and commit.

@@ -298,7 +298,7 @@ function DependencyGroup({
         {tasks.length ? (
           tasks.map((task) => (
             <span key={task.id} className="inline-flex items-center overflow-hidden rounded-md border border-neutral-200 bg-neutral-50">
-              <Badge variant={task.status === "done" ? "ready" : task.status === "blocked" ? "blocked" : "secondary"}>
+              <Badge variant={dependencyBadgeVariant(task.status)}>
                 #{task.seq} {task.status}
               </Badge>
               {onRemove ? (
@@ -335,5 +335,11 @@ function badgeVariant(status: TaskStatus) {
   if (status === "running") return "running"
   if (status === "blocked") return "blocked"
   if (status === "review") return "review"
+  return "secondary"
+}
+
+function dependencyBadgeVariant(status: TaskStatus): "ready" | "blocked" | "secondary" {
+  if (status === "done") return "ready"
+  if (status === "blocked") return "blocked"
   return "secondary"
 }

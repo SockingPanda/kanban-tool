@@ -10,13 +10,13 @@ pub(crate) fn serve(args: ServeArgs, db_path: PathBuf, board: &str, actor: Strin
         .parse()
         .with_context(|| format!("invalid bind address {}:{}", args.host, args.port))?;
     if !addr.ip().is_loopback() {
-        bail!("kb serve only supports loopback hosts; use 127.0.0.1 or ::1");
+        bail!("kanban serve only supports loopback hosts; use 127.0.0.1 or ::1");
     }
     let _runtime_guard = begin_database_runtime(&db_path)?;
     let _init = init_database(&db_path, &actor)
         .with_context(|| format!("failed to initialize/open {}", db_path.display()))?;
     eprintln!(
-        "Serving kb API on http://{addr} using {}",
+        "Serving Kanban API on http://{addr} using {}",
         db_path.display()
     );
     let runtime = tokio::runtime::Runtime::new().context("failed to start tokio runtime")?;
@@ -29,5 +29,5 @@ pub(crate) fn serve(args: ServeArgs, db_path: PathBuf, board: &str, actor: Strin
                 Duration::from_millis(args.search_sync_interval_ms),
             ),
         ))
-        .context("kb server failed")
+        .context("kanban server failed")
 }

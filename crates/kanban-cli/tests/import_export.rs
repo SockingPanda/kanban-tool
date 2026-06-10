@@ -1,7 +1,7 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kb, kb_in_dir};
+use common::{TempDb, kanban, kanban_in_dir};
 use kanban_sqlite::maintenance_lock_path;
 use pretty_assertions::assert_eq;
 use std::path::Path;
@@ -10,7 +10,7 @@ fn backup_writes_database_copy() -> anyhow::Result<()> {
     let source = initialized_database("backup_writes_database_copy")?;
     let backup_path = source.dir.join("backup.sqlite");
 
-    let backup = kb(
+    let backup = kanban(
         &source.path,
         &[
             "--json",
@@ -34,7 +34,7 @@ fn backup_writes_database_copy() -> anyhow::Result<()> {
 fn checkpoint_returns_wal_checkpoint_result() -> anyhow::Result<()> {
     let source = initialized_database("checkpoint_returns_wal_checkpoint_result")?;
 
-    let checkpoint = kb(&source.path, &["--json", "checkpoint"])?.success_json()?;
+    let checkpoint = kanban(&source.path, &["--json", "checkpoint"])?.success_json()?;
 
     assert_eq!(checkpoint["data"]["busy"], 0);
     Ok(())
@@ -44,7 +44,7 @@ fn checkpoint_returns_wal_checkpoint_result() -> anyhow::Result<()> {
 fn vacuum_succeeds_for_initialized_database() -> anyhow::Result<()> {
     let source = initialized_database("vacuum_succeeds_for_initialized_database")?;
 
-    kb(&source.path, &["--json", "vacuum"])?.success_json()?;
+    kanban(&source.path, &["--json", "vacuum"])?.success_json()?;
     Ok(())
 }
 
@@ -76,13 +76,13 @@ struct SourceData {
 
 fn initialized_database(name: &str) -> anyhow::Result<TempDb> {
     let source = TempDb::new(name)?;
-    kb(&source.path, &["init"])?.success()?;
+    kanban(&source.path, &["init"])?.success()?;
     Ok(source)
 }
 
 fn source_with_completed_run(source: &TempDb) -> anyhow::Result<SourceData> {
-    kb(&source.path, &["init"])?.success()?;
-    let created = kb(
+    kanban(&source.path, &["init"])?.success()?;
+    let created = kanban(
         &source.path,
         &[
             "--json",
@@ -97,7 +97,7 @@ fn source_with_completed_run(source: &TempDb) -> anyhow::Result<SourceData> {
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
-    let dispatch = kb_in_dir(
+    let dispatch = kanban_in_dir(
         &source.path,
         &[
             "--json",
@@ -114,7 +114,7 @@ fn source_with_completed_run(source: &TempDb) -> anyhow::Result<SourceData> {
     let run_id = dispatch["data"]["run_id"]
         .as_str()
         .context("expected JSON string")?;
-    let run = kb(&source.path, &["--json", "run", "show", run_id])?.success_json()?;
+    let run = kanban(&source.path, &["--json", "run", "show", run_id])?.success_json()?;
     let log_path = run["data"]["log_path"]
         .as_str()
         .context("expected JSON string")?;
@@ -130,7 +130,7 @@ fn export_board_snapshot(
     task_id: &str,
 ) -> anyhow::Result<(std::path::PathBuf, serde_json::Value, String)> {
     let export_path = source.dir.join("board.jsonl");
-    let export = kb(
+    let export = kanban(
         &source.path,
         &[
             "--json",
@@ -162,7 +162,7 @@ fn import_exported_snapshot(
     task_id: &str,
 ) -> anyhow::Result<()> {
     let target = TempDb::new("maintenance_commands_target")?;
-    let imported = kb(
+    let imported = kanban(
         &target.path,
         &[
             "--json",
@@ -174,10 +174,10 @@ fn import_exported_snapshot(
     )?
     .success_json()?;
     assert_eq!(imported["data"]["records"], export_records);
-    let tasks = kb(&target.path, &["--json", "task", "list"])?.success_json()?;
+    let tasks = kanban(&target.path, &["--json", "task", "list"])?.success_json()?;
     assert_eq!(tasks["data"][0]["id"], task_id);
     assert_eq!(tasks["data"][0]["title"], "release smoke");
-    let doctor = kb(&target.path, &["--json", "doctor"])?.success_json()?;
+    let doctor = kanban(&target.path, &["--json", "doctor"])?.success_json()?;
     assert_eq!(doctor["data"]["ok"], true);
     assert_eq!(doctor["data"]["missing_run_logs"], 0);
     assert_eq!(doctor["data"]["suspicious_run_log_paths"], 0);
@@ -194,7 +194,7 @@ fn reject_import_with_missing_run_log(source: &TempDb, export_content: &str) -> 
         export_content.replace(r#""log_path":null"#, r#""log_path":"/missing/kb-run.log""#),
     )?;
     let rejected = TempDb::new("maintenance_commands_rejected_import")?;
-    kb(
+    kanban(
         &rejected.path,
         &[
             "--json",
@@ -216,7 +216,7 @@ fn import_rejects_missing_input_without_creating_database() -> anyhow::Result<()
     let temp = TempDb::new("import_rejects_missing_input_without_creating_database")?;
     let input_path = temp.dir.join("missing.jsonl");
 
-    kb(
+    kanban(
         &temp.path,
         &[
             "--json",
@@ -247,7 +247,7 @@ fn import_requires_replace_without_creating_database() -> anyhow::Result<()> {
         )]),
     )?;
 
-    kb(
+    kanban(
         &temp.path,
         &[
             "--json",
@@ -264,8 +264,8 @@ fn import_requires_replace_without_creating_database() -> anyhow::Result<()> {
 #[test]
 fn import_replace_restores_over_corrupt_existing_database() -> anyhow::Result<()> {
     let source = TempDb::new("import_replace_restores_over_corrupt_existing_database_source")?;
-    kb(&source.path, &["init"])?.success()?;
-    let created = kb(
+    kanban(&source.path, &["init"])?.success()?;
+    let created = kanban(
         &source.path,
         &[
             "--json",
@@ -281,7 +281,7 @@ fn import_replace_restores_over_corrupt_existing_database() -> anyhow::Result<()
         .as_str()
         .context("expected JSON string")?;
     let export_path = source.dir.join("restore.jsonl");
-    kb(
+    kanban(
         &source.path,
         &[
             "--json",
@@ -294,7 +294,7 @@ fn import_replace_restores_over_corrupt_existing_database() -> anyhow::Result<()
 
     let target = TempDb::new("import_replace_restores_over_corrupt_existing_database_target")?;
     std::fs::write(&target.path, b"not a sqlite database")?;
-    kb(
+    kanban(
         &target.path,
         &[
             "--json",
@@ -306,7 +306,7 @@ fn import_replace_restores_over_corrupt_existing_database() -> anyhow::Result<()
     )?
     .success_json()?;
 
-    let imported = kb(&target.path, &["--json", "task", "show", task_id])?.success_json()?;
+    let imported = kanban(&target.path, &["--json", "task", "show", task_id])?.success_json()?;
     assert_eq!(imported["data"]["title"], "restore me");
     assert_eq!(imported["data"]["status"], "ready");
     Ok(())
@@ -315,8 +315,8 @@ fn import_replace_restores_over_corrupt_existing_database() -> anyhow::Result<()
 #[test]
 fn import_replace_rejects_maintenance_locked_database() -> anyhow::Result<()> {
     let source = TempDb::new("import_replace_rejects_maintenance_locked_database_source")?;
-    kb(&source.path, &["init"])?.success()?;
-    kb(
+    kanban(&source.path, &["init"])?.success()?;
+    kanban(
         &source.path,
         &[
             "--json",
@@ -329,7 +329,7 @@ fn import_replace_rejects_maintenance_locked_database() -> anyhow::Result<()> {
     )?
     .success_json()?;
     let export_path = source.dir.join("restore.jsonl");
-    kb(
+    kanban(
         &source.path,
         &[
             "--json",
@@ -341,8 +341,8 @@ fn import_replace_rejects_maintenance_locked_database() -> anyhow::Result<()> {
     .success_json()?;
 
     let target = TempDb::new("import_replace_rejects_maintenance_locked_database_target")?;
-    kb(&target.path, &["init"])?.success()?;
-    let existing = kb(
+    kanban(&target.path, &["init"])?.success()?;
+    let existing = kanban(
         &target.path,
         &[
             "--json",
@@ -360,7 +360,7 @@ fn import_replace_rejects_maintenance_locked_database() -> anyhow::Result<()> {
     let lock_path = maintenance_lock_path(&target.path);
     std::fs::write(&lock_path, "locked")?;
 
-    kb(
+    kanban(
         &target.path,
         &[
             "--json",
@@ -374,7 +374,7 @@ fn import_replace_rejects_maintenance_locked_database() -> anyhow::Result<()> {
     std::fs::remove_file(lock_path)?;
 
     let existing_after =
-        kb(&target.path, &["--json", "task", "show", existing_id])?.success_json()?;
+        kanban(&target.path, &["--json", "task", "show", existing_id])?.success_json()?;
     assert_eq!(existing_after["data"]["title"], "keep existing");
     Ok(())
 }
@@ -382,9 +382,9 @@ fn import_replace_rejects_maintenance_locked_database() -> anyhow::Result<()> {
 #[test]
 fn import_replace_rejects_directory_database_path() -> anyhow::Result<()> {
     let source = TempDb::new("import_replace_rejects_directory_database_path_source")?;
-    kb(&source.path, &["init"])?.success()?;
+    kanban(&source.path, &["init"])?.success()?;
     let export_path = source.dir.join("restore.jsonl");
-    kb(
+    kanban(
         &source.path,
         &[
             "--json",
@@ -399,7 +399,7 @@ fn import_replace_rejects_directory_database_path() -> anyhow::Result<()> {
     let db_dir = target.dir.join("db-dir");
     std::fs::create_dir(&db_dir)?;
 
-    kb(
+    kanban(
         &db_dir,
         &[
             "--json",
@@ -417,9 +417,9 @@ fn import_replace_rejects_directory_database_path() -> anyhow::Result<()> {
 #[test]
 fn import_replace_rejects_running_work_in_target_database() -> anyhow::Result<()> {
     let source = TempDb::new("import_replace_rejects_running_work_source")?;
-    kb(&source.path, &["init"])?.success()?;
+    kanban(&source.path, &["init"])?.success()?;
     let export_path = source.dir.join("restore.jsonl");
-    kb(
+    kanban(
         &source.path,
         &[
             "--json",
@@ -431,8 +431,8 @@ fn import_replace_rejects_running_work_in_target_database() -> anyhow::Result<()
     .success_json()?;
 
     let target = TempDb::new("import_replace_rejects_running_work_target")?;
-    kb(&target.path, &["init"])?.success()?;
-    let created = kb(
+    kanban(&target.path, &["init"])?.success()?;
+    let created = kanban(
         &target.path,
         &[
             "--json",
@@ -447,9 +447,9 @@ fn import_replace_rejects_running_work_in_target_database() -> anyhow::Result<()
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
-    kb(&target.path, &["--json", "task", "claim", task_id])?.success_json()?;
+    kanban(&target.path, &["--json", "task", "claim", task_id])?.success_json()?;
 
-    kb(
+    let import_result = kanban(
         &target.path,
         &[
             "--json",
@@ -458,9 +458,20 @@ fn import_replace_rejects_running_work_in_target_database() -> anyhow::Result<()
             export_path.to_str().context("expected UTF-8 path")?,
             "--replace",
         ],
-    )?
-    .failure_containing("database has running work")?;
-    let running = kb(&target.path, &["--json", "task", "show", task_id])?.success_json()?;
+    )?;
+    assert!(
+        !import_result.output.status.success(),
+        "import unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&import_result.output.stdout),
+        String::from_utf8_lossy(&import_result.output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&import_result.output.stderr);
+    assert!(
+        stderr.contains("database has running work; stop kanban serve/dispatch"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("stop kb serve/dispatch"), "{stderr}");
+    let running = kanban(&target.path, &["--json", "task", "show", task_id])?.success_json()?;
     assert_eq!(running["data"]["status"], "running");
     Ok(())
 }
@@ -468,8 +479,8 @@ fn import_replace_rejects_running_work_in_target_database() -> anyhow::Result<()
 #[test]
 fn export_scrubs_active_running_claims_for_roundtrip_import() -> anyhow::Result<()> {
     let source = TempDb::new("export_scrubs_active_running_claims_for_roundtrip_import")?;
-    kb(&source.path, &["init"])?.success()?;
-    let created = kb(
+    kanban(&source.path, &["init"])?.success()?;
+    let created = kanban(
         &source.path,
         &[
             "--json",
@@ -484,13 +495,13 @@ fn export_scrubs_active_running_claims_for_roundtrip_import() -> anyhow::Result<
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
-    kb(
+    kanban(
         &source.path,
         &["--json", "task", "claim", task_id, "--ttl-ms", "600000"],
     )?
     .success_json()?;
     let export_path = source.dir.join("active-claim.jsonl");
-    kb(
+    kanban(
         &source.path,
         &[
             "--json",
@@ -504,9 +515,11 @@ fn export_scrubs_active_running_claims_for_roundtrip_import() -> anyhow::Result<
     assert!(export_content.contains(r#""status":"ready""#));
     assert!(export_content.contains(r#""current_run_id":null"#));
     assert!(export_content.contains(r#""claim_token":null"#));
+    assert!(export_content.contains(r#""actor":"kanban export""#));
+    assert!(!export_content.contains(r#""actor":"kb export""#));
 
     let target = TempDb::new("export_scrubs_active_running_claims_target")?;
-    kb(
+    kanban(
         &target.path,
         &[
             "--json",
@@ -517,20 +530,30 @@ fn export_scrubs_active_running_claims_for_roundtrip_import() -> anyhow::Result<
         ],
     )?
     .success_json()?;
-    let imported = kb(&target.path, &["--json", "task", "show", task_id])?.success_json()?;
+    let imported = kanban(&target.path, &["--json", "task", "show", task_id])?.success_json()?;
     assert_eq!(imported["data"]["status"], "ready");
     assert!(imported["data"]["claim_token"].is_null());
     assert!(imported["data"]["current_run_id"].is_null());
     assert!(imported["data"]["started_at"].is_null());
-    let events = kb(&target.path, &["--json", "events", task_id])?.success_json()?;
+    let events = kanban(&target.path, &["--json", "events", task_id])?.success_json()?;
     assert!(
         events["data"]
             .as_array()
             .context("expected JSON array")?
             .iter()
             .any(|event| {
-                event["kind"] == "task.export_sanitized" && event["run_id"].as_str().is_some()
+                event["kind"] == "task.export_sanitized"
+                    && event["run_id"].as_str().is_some()
+                    && event["actor"] == "kanban export"
             }),
+        "events: {events}"
+    );
+    assert!(
+        !events["data"]
+            .as_array()
+            .context("expected JSON array")?
+            .iter()
+            .any(|event| event["actor"] == "kb export"),
         "events: {events}"
     );
     Ok(())
@@ -539,11 +562,11 @@ fn export_scrubs_active_running_claims_for_roundtrip_import() -> anyhow::Result<
 #[test]
 fn export_rejects_existing_output_file() -> anyhow::Result<()> {
     let temp = TempDb::new("export_rejects_existing_output_file")?;
-    kb(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["init"])?.success()?;
     let export_path = temp.dir.join("board.jsonl");
     std::fs::write(&export_path, "keepme")?;
 
-    kb(
+    kanban(
         &temp.path,
         &[
             "--json",
@@ -602,7 +625,7 @@ fn import_rejects_executable_status_invariant_violations() -> anyhow::Result<()>
         let input_path = temp.dir.join("invalid.jsonl");
         std::fs::write(&input_path, jsonl)?;
 
-        kb(
+        kanban(
             &temp.path,
             &[
                 "--json",
@@ -638,7 +661,7 @@ fn import_rejects_empty_or_unusable_snapshots_without_creating_database() -> any
         let input_path = temp.dir.join("unusable.jsonl");
         std::fs::write(&input_path, jsonl)?;
 
-        kb(
+        kanban(
             &temp.path,
             &[
                 "--json",

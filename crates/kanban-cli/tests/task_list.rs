@@ -1,13 +1,13 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kb};
+use common::{TempDb, kanban};
 use pretty_assertions::assert_eq;
 #[test]
 fn task_list_supports_search_assignee_sort_limit_and_offset() -> anyhow::Result<()> {
     let temp = TempDb::new("task_list_supports_search_assignee_sort_limit_and_offset")?;
-    kb(&temp.path, &["init"])?.success()?;
-    kb(
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(
         &temp.path,
         &[
             "task",
@@ -22,7 +22,7 @@ fn task_list_supports_search_assignee_sort_limit_and_offset() -> anyhow::Result<
         ],
     )?
     .success()?;
-    kb(
+    kanban(
         &temp.path,
         &[
             "task",
@@ -37,7 +37,7 @@ fn task_list_supports_search_assignee_sort_limit_and_offset() -> anyhow::Result<
         ],
     )?
     .success()?;
-    kb(
+    kanban(
         &temp.path,
         &[
             "task",
@@ -53,7 +53,7 @@ fn task_list_supports_search_assignee_sort_limit_and_offset() -> anyhow::Result<
     )?
     .success()?;
 
-    let tasks = kb(
+    let tasks = kanban(
         &temp.path,
         &[
             "--json",
@@ -82,9 +82,9 @@ fn task_list_supports_search_assignee_sort_limit_and_offset() -> anyhow::Result<
 #[test]
 fn task_list_command_rejects_unbounded_limit() -> anyhow::Result<()> {
     let temp = TempDb::new("task_list_command_rejects_unbounded_limit")?;
-    kb(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["init"])?.success()?;
 
-    kb(
+    kanban(
         &temp.path,
         &["task", "list", "--limit", &usize::MAX.to_string()],
     )?

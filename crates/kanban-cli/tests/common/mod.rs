@@ -6,21 +6,26 @@ use anyhow::Context;
 use assert_cmd::Command;
 use predicates::{Predicate, str::contains};
 
-pub fn kb(db_path: &Path, args: &[&str]) -> anyhow::Result<CmdResult> {
-    kb_in_dir(db_path, args, Path::new(env!("CARGO_MANIFEST_DIR")))
+pub fn kanban(db_path: &Path, args: &[&str]) -> anyhow::Result<CmdResult> {
+    kanban_in_dir(db_path, args, Path::new(env!("CARGO_MANIFEST_DIR")))
 }
 
-pub fn kb_in_dir(db_path: &Path, args: &[&str], current_dir: &Path) -> anyhow::Result<CmdResult> {
-    kb_in_dir_env(db_path, args, current_dir, None)
+pub fn kanban_in_dir(
+    db_path: &Path,
+    args: &[&str],
+    current_dir: &Path,
+) -> anyhow::Result<CmdResult> {
+    kanban_in_dir_env(db_path, args, current_dir, None)
 }
 
-pub fn kb_in_dir_env(
+pub fn kanban_in_dir_env(
     db_path: &Path,
     args: &[&str],
     current_dir: &Path,
     board_env: Option<&str>,
 ) -> anyhow::Result<CmdResult> {
-    let mut command = Command::cargo_bin("kb").context("failed to locate kb test binary")?;
+    let mut command =
+        Command::cargo_bin("kanban").context("failed to locate kanban test binary")?;
     command
         .current_dir(current_dir)
         .arg("--db")
@@ -31,7 +36,9 @@ pub fn kb_in_dir_env(
     } else {
         command.env_remove("KB_BOARD");
     }
-    let output = command.output().context("failed to execute kb command")?;
+    let output = command
+        .output()
+        .context("failed to execute kanban command")?;
     Ok(CmdResult { output })
 }
 

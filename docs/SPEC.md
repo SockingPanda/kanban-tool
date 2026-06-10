@@ -117,7 +117,7 @@ triage | todo | scheduled | ready | running | blocked | review | done | archived
 通过 CLI 指定：
 
 ```bash
-kb --db .kb/kb.db task list
+kanban --db .kb/kb.db task list
 ```
 
 ### 5.2 SQLite 配置
@@ -181,24 +181,24 @@ API 见 [`API_SPEC.md`](API_SPEC.md)。
 CLI 是一等入口，必须覆盖核心生命周期：
 
 ```bash
-kb init
-kb board list
-kb board create agent-work --name "Agent Work"
-kb board use agent-work
-kb task create "实现 SQLite schema"
-kb task list --status ready
-kb task show agent-work#1
-kb task show t_xxx
-kb task start t_xxx
-kb task heartbeat t_xxx --claim-token <token>
-kb task block t_xxx "等待接口确认"
-kb task unblock t_xxx
-kb task done t_xxx --claim-token <token>
-kb task archive t_xxx
-kb events t_xxx
-kb runs t_xxx
-kb serve
-kb dispatch --once
+kanban init
+kanban board list
+kanban board create agent-work --name "Agent Work"
+kanban board use agent-work
+kanban task create "实现 SQLite schema"
+kanban task list --status ready
+kanban task show agent-work#1
+kanban task show t_xxx
+kanban task start t_xxx
+kanban task heartbeat t_xxx --claim-token <token>
+kanban task block t_xxx "等待接口确认"
+kanban task unblock t_xxx
+kanban task done t_xxx --claim-token <token>
+kanban task archive t_xxx
+kanban events t_xxx
+kanban runs t_xxx
+kanban serve
+kanban dispatch --once
 ```
 
 CLI 必须支持：
@@ -209,7 +209,7 @@ CLI 必须支持：
 - `--actor <name>`：覆盖 actor。
 - 稳定退出码。
 
-Active board 选择顺序是 `--board`、`KB_BOARD`、最近 `.kb/config.toml`、`default`。`kb board use <board>` 写入项目级 `.kb/config.toml`，但仍使用同一个全局 SQLite DB。Task ref 必须支持全局 `t_...`、当前 board 的裸 seq / `#seq`、以及显式 `board#seq` / `board/#seq`；CLI 和 API 输出应带可复制的 `board_slug#seq` ref。
+Active board 选择顺序是 `--board`、`KB_BOARD`、最近 `.kb/config.toml`、`default`。`kanban board use <board>` 写入项目级 `.kb/config.toml`，但仍使用同一个全局 SQLite DB。Task ref 必须支持全局 `t_...`、当前 board 的裸 seq / `#seq`、以及显式 `board#seq` / `board/#seq`；CLI 和 API 输出应带可复制的 `board_slug#seq` ref。
 
 CLI 见 [`CLI_SPEC.md`](CLI_SPEC.md)。
 

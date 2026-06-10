@@ -1,13 +1,13 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kb};
+use common::{TempDb, kanban};
 use pretty_assertions::assert_eq;
 #[test]
 fn task_update_sets_and_clears_schedule_fields() -> anyhow::Result<()> {
     let temp = TempDb::new("task_update_sets_and_clears_scheduled_at_and_due_at")?;
-    kb(&temp.path, &["init"])?.success()?;
-    let created = kb(
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
         &temp.path,
         &[
             "--json",
@@ -23,7 +23,7 @@ fn task_update_sets_and_clears_schedule_fields() -> anyhow::Result<()> {
         .as_str()
         .context("expected JSON string")?;
 
-    let updated = kb(
+    let updated = kanban(
         &temp.path,
         &[
             "--json",
@@ -40,7 +40,7 @@ fn task_update_sets_and_clears_schedule_fields() -> anyhow::Result<()> {
     assert_eq!(updated["data"]["scheduled_at"], 1_767_225_600_000_i64);
     assert_eq!(updated["data"]["due_at"], 1_767_312_000_000_i64);
 
-    let cleared = kb(
+    let cleared = kanban(
         &temp.path,
         &[
             "--json",
@@ -60,8 +60,8 @@ fn task_update_sets_and_clears_schedule_fields() -> anyhow::Result<()> {
 #[test]
 fn task_complete_alias_finishes_running_task() -> anyhow::Result<()> {
     let temp = TempDb::new("task_complete_alias_finishes_like_done")?;
-    kb(&temp.path, &["init"])?.success()?;
-    let created = kb(
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
         &temp.path,
         &[
             "--json",
@@ -76,12 +76,12 @@ fn task_complete_alias_finishes_running_task() -> anyhow::Result<()> {
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
-    let claim = kb(&temp.path, &["--json", "task", "claim", task_id])?.success_json()?;
+    let claim = kanban(&temp.path, &["--json", "task", "claim", task_id])?.success_json()?;
     let token = claim["data"]["claim_token"]
         .as_str()
         .context("expected JSON string")?;
 
-    let completed = kb(
+    let completed = kanban(
         &temp.path,
         &[
             "--json",
@@ -103,8 +103,8 @@ fn task_reclaim_expired_alias_matches_default_reclaim() -> anyhow::Result<()> {
     let explicit = TempDb::new("task_reclaim_expired_alias_matches_bare_reclaim_explicit")?;
 
     for temp in [&bare, &explicit] {
-        kb(&temp.path, &["init"])?.success()?;
-        let created = kb(
+        kanban(&temp.path, &["init"])?.success()?;
+        let created = kanban(
             &temp.path,
             &[
                 "--json",
@@ -119,7 +119,7 @@ fn task_reclaim_expired_alias_matches_default_reclaim() -> anyhow::Result<()> {
         let task_id = created["data"]["id"]
             .as_str()
             .context("expected JSON string")?;
-        kb(
+        kanban(
             &temp.path,
             &["--json", "task", "claim", task_id, "--ttl-ms", "1"],
         )?
@@ -127,9 +127,9 @@ fn task_reclaim_expired_alias_matches_default_reclaim() -> anyhow::Result<()> {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
 
-    let bare_result = kb(&bare.path, &["--json", "task", "reclaim"])?.success_json()?;
+    let bare_result = kanban(&bare.path, &["--json", "task", "reclaim"])?.success_json()?;
     let explicit_result =
-        kb(&explicit.path, &["--json", "task", "reclaim", "--expired"])?.success_json()?;
+        kanban(&explicit.path, &["--json", "task", "reclaim", "--expired"])?.success_json()?;
 
     assert_eq!(bare_result, explicit_result);
     assert_eq!(explicit_result["data"]["reclaimed"], 1);

@@ -1,6 +1,6 @@
 mod common;
 
-use common::{TempDb, kb};
+use common::{TempDb, kanban};
 
 #[cfg(feature = "tantivy-backend")]
 mod tantivy_backend {
@@ -10,8 +10,8 @@ mod tantivy_backend {
     #[test]
     fn index_rebuild_enables_tantivy_search_backend() -> anyhow::Result<()> {
         let temp = TempDb::new("index_rebuild_enables_tantivy_search_backend")?;
-        kb(&temp.path, &["init"])?.success()?;
-        kb(
+        kanban(&temp.path, &["init"])?.success()?;
+        kanban(
             &temp.path,
             &[
                 "task",
@@ -23,12 +23,12 @@ mod tantivy_backend {
         )?
         .success()?;
 
-        let rebuilt = kb(&temp.path, &["--json", "index", "rebuild"])?.success_json()?;
+        let rebuilt = kanban(&temp.path, &["--json", "index", "rebuild"])?.success_json()?;
         assert_eq!(rebuilt["data"]["backend"], "tantivy");
         assert_eq!(rebuilt["data"]["derived_index"], true);
         assert!(temp.dir.join("index/v1/tasks").exists());
 
-        let search = kb(&temp.path, &["--json", "search", "comet"])?.success_json()?;
+        let search = kanban(&temp.path, &["--json", "search", "comet"])?.success_json()?;
         assert_eq!(search["data"]["meta"]["backend"], "tantivy");
         assert_eq!(
             search["data"]["hits"][0]["task"]["title"],
@@ -40,8 +40,8 @@ mod tantivy_backend {
     #[test]
     fn index_sync_refreshes_stale_tantivy_search_backend() -> anyhow::Result<()> {
         let temp = TempDb::new("index_sync_refreshes_stale_tantivy_search_backend")?;
-        kb(&temp.path, &["init"])?.success()?;
-        let created = kb(
+        kanban(&temp.path, &["init"])?.success()?;
+        let created = kanban(
             &temp.path,
             &[
                 "--json",
@@ -56,8 +56,8 @@ mod tantivy_backend {
         let task_id = created["data"]["id"]
             .as_str()
             .context("expected JSON string")?;
-        kb(&temp.path, &["index", "rebuild"])?.success()?;
-        kb(
+        kanban(&temp.path, &["index", "rebuild"])?.success()?;
+        kanban(
             &temp.path,
             &[
                 "task",
@@ -75,7 +75,7 @@ mod tantivy_backend {
         )?
         .success()?;
 
-        let stale = kb(&temp.path, &["--json", "index", "status"])?.success_json()?;
+        let stale = kanban(&temp.path, &["--json", "index", "status"])?.success_json()?;
         assert_eq!(stale["data"]["backend"], "tantivy");
         assert_eq!(stale["data"]["stale"], true);
         assert!(
@@ -85,12 +85,12 @@ mod tantivy_backend {
                 > 0
         );
 
-        let synced = kb(&temp.path, &["--json", "index", "sync"])?.success_json()?;
+        let synced = kanban(&temp.path, &["--json", "index", "sync"])?.success_json()?;
         assert_eq!(synced["data"]["backend"], "tantivy");
         assert_eq!(synced["data"]["stale"], false);
         assert_eq!(synced["data"]["index_lag_events"], 0);
 
-        let search = kb(&temp.path, &["--json", "search", "comet"])?.success_json()?;
+        let search = kanban(&temp.path, &["--json", "search", "comet"])?.success_json()?;
         assert_eq!(search["data"]["meta"]["backend"], "tantivy");
         assert_eq!(search["data"]["hits"][0]["task"]["title"], "cli sync comet");
         Ok(())
@@ -100,10 +100,10 @@ mod tantivy_backend {
 #[test]
 fn index_commands_report_sqlite_fallback_backend() -> anyhow::Result<()> {
     let temp = TempDb::new("index_commands_report_sqlite_fallback_backend")?;
-    kb(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["init"])?.success()?;
 
     for command in ["status", "doctor"] {
-        let json = kb(&temp.path, &["--json", "index", command])?.success_json()?;
+        let json = kanban(&temp.path, &["--json", "index", command])?.success_json()?;
         assert_eq!(json["data"]["backend"], "sqlite");
         assert_eq!(json["data"]["derived_index"], false);
         assert_eq!(json["data"]["stale"], false);
@@ -111,19 +111,19 @@ fn index_commands_report_sqlite_fallback_backend() -> anyhow::Result<()> {
 
     #[cfg(not(feature = "tantivy-backend"))]
     {
-        let json = kb(&temp.path, &["--json", "index", "rebuild"])?.success_json()?;
+        let json = kanban(&temp.path, &["--json", "index", "rebuild"])?.success_json()?;
         assert_eq!(json["data"]["backend"], "sqlite");
         assert_eq!(json["data"]["derived_index"], false);
         assert_eq!(json["data"]["stale"], false);
 
-        let json = kb(&temp.path, &["--json", "index", "sync"])?.success_json()?;
+        let json = kanban(&temp.path, &["--json", "index", "sync"])?.success_json()?;
         assert_eq!(json["data"]["backend"], "sqlite");
         assert_eq!(json["data"]["derived_index"], false);
         assert_eq!(json["data"]["stale"], false);
     }
 
     #[cfg(not(feature = "tantivy-backend"))]
-    let human = kb(&temp.path, &["index", "rebuild"])?;
+    let human = kanban(&temp.path, &["index", "rebuild"])?;
     #[cfg(not(feature = "tantivy-backend"))]
     assert!(human.output.status.success());
     #[cfg(not(feature = "tantivy-backend"))]
@@ -143,7 +143,7 @@ mod tantivy_degraded {
     #[test]
     fn index_status_and_doctor_report_degraded_partial_tantivy_index() -> anyhow::Result<()> {
         let temp = TempDb::new("index_status_and_doctor_report_degraded_partial_tantivy_index")?;
-        kb(&temp.path, &["init"])?.success()?;
+        kanban(&temp.path, &["init"])?.success()?;
         std::fs::create_dir_all(temp.dir.join("index/v1/tasks"))?;
         std::fs::write(
             temp.dir.join("index/v1/tasks/kb-index-meta.json"),
@@ -151,7 +151,7 @@ mod tantivy_degraded {
         )?;
 
         for command in ["status", "doctor"] {
-            let json = kb(&temp.path, &["--json", "index", command])?.success_json()?;
+            let json = kanban(&temp.path, &["--json", "index", command])?.success_json()?;
             assert_eq!(json["data"]["backend"], "sqlite");
             assert_eq!(json["data"]["derived_index"], true);
             assert_eq!(json["data"]["stale"], true);

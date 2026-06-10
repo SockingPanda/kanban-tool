@@ -1,15 +1,15 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kb, kb_in_dir};
+use common::{TempDb, kanban, kanban_in_dir};
 use kanban_sqlite::maintenance_lock_path;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 #[test]
 fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     let temp = TempDb::new("doctor_reports_integrity_migration_and_expired_running_tasks")?;
-    kb(&temp.path, &["init"])?.success()?;
-    let created = kb(
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
         &temp.path,
         &[
             "--json",
@@ -24,14 +24,14 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
-    kb(
+    kanban(
         &temp.path,
         &["--json", "task", "claim", task_id, "--ttl-ms", "1"],
     )?
     .success_json()?;
     std::thread::sleep(std::time::Duration::from_millis(5));
 
-    let doctor = kb(&temp.path, &["--json", "doctor"])?.success_json()?;
+    let doctor = kanban(&temp.path, &["--json", "doctor"])?.success_json()?;
 
     assert_eq!(doctor["data"]["integrity_check"], "ok");
     assert_eq!(doctor["data"]["migration_version"], 2);
@@ -100,7 +100,7 @@ fn maintenance_rejects_missing_database() -> anyhow::Result<()> {
     ];
 
     for args in cases {
-        kb(&temp.path, &args)?.failure_containing("database does not exist")?;
+        kanban(&temp.path, &args)?.failure_containing("database does not exist")?;
         assert!(
             !temp.path.exists(),
             "maintenance command should not create missing DB for args {args:?}"
@@ -120,11 +120,11 @@ fn maintenance_rejects_missing_database() -> anyhow::Result<()> {
 #[test]
 fn maintenance_lock_uses_canonical_path() -> anyhow::Result<()> {
     let temp = TempDb::new("maintenance_lock_uses_canonical_database_path")?;
-    kb(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["init"])?.success()?;
     let lock_path = maintenance_lock_path(&temp.path);
     std::fs::write(&lock_path, format!("pid={}", std::process::id()))?;
 
-    kb_in_dir(Path::new("kb.db"), &["--json", "doctor"], &temp.dir)?
+    kanban_in_dir(Path::new("kb.db"), &["--json", "doctor"], &temp.dir)?
         .failure_containing("database is locked for maintenance")?;
     std::fs::remove_file(lock_path)?;
     Ok(())
@@ -134,11 +134,11 @@ fn maintenance_lock_uses_canonical_path() -> anyhow::Result<()> {
 #[test]
 fn maintenance_lock_removes_dead_pid() -> anyhow::Result<()> {
     let temp = TempDb::new("maintenance_lock_with_dead_pid_is_removed")?;
-    kb(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["init"])?.success()?;
     let lock_path = maintenance_lock_path(&temp.path);
     std::fs::write(&lock_path, "pid=999999999")?;
 
-    kb(&temp.path, &["--json", "doctor"])?.success_json()?;
+    kanban(&temp.path, &["--json", "doctor"])?.success_json()?;
     assert!(!lock_path.exists());
     Ok(())
 }

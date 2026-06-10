@@ -29,7 +29,7 @@ Dispatcher 不负责：
 ### 2.1 单次运行
 
 ```bash
-kb dispatch --once
+kanban dispatch --once
 ```
 
 执行一轮：
@@ -42,20 +42,20 @@ kb dispatch --once
 ### 2.2 常驻运行
 
 ```bash
-kb dispatch
-kb dispatch --max-iterations 10
+kanban dispatch
+kanban dispatch --max-iterations 10
 ```
 
 前台循环执行。`--max-iterations` 用于测试、脚本或受控 smoke；不传时持续运行直到进程收到外部停止信号。
 
 ### 2.3 与 server 同进程
 
-后续扩展。当前实现先提供独立 `kb dispatch` 前台 loop；`kb serve` 不启动 dispatcher。
+后续扩展。当前实现先提供独立 `kanban dispatch` 前台 loop；`kanban serve` 不启动 dispatcher。
 
 ### 2.4 Worker profile config
 
 ```bash
-kb dispatch --worker-profile backend --profile-config ./workers.toml
+kanban dispatch --worker-profile backend --profile-config ./workers.toml
 ```
 
 最小配置格式：
@@ -81,7 +81,7 @@ log_dir = ".kb/logs/runs"
 
 `log_dir` 必须位于受信任 run log 根目录内：平台默认 run log 目录、
 `<db_dir>/logs`，或 `<db_dir>/.kb/logs`。Dispatcher 在 claim task 之前拒绝
-其他路径，避免写出后续 `kb run logs` 和 `doctor` 会判定为可疑的 run log。
+其他路径，避免写出后续 `kanban run logs` 和 `doctor` 会判定为可疑的 run log。
 
 ---
 
@@ -265,8 +265,8 @@ Worker process 获得：
 Worker 可通过 CLI 回写：
 
 ```bash
-kb --db "$KB_DB_PATH" task heartbeat "$KB_TASK_ID" --claim-token "$KB_CLAIM_TOKEN"
-kb --db "$KB_DB_PATH" task done "$KB_TASK_ID" --claim-token "$KB_CLAIM_TOKEN" --summary "..."
+kanban --db "$KB_DB_PATH" task heartbeat "$KB_TASK_ID" --claim-token "$KB_CLAIM_TOKEN"
+kanban --db "$KB_DB_PATH" task done "$KB_TASK_ID" --claim-token "$KB_CLAIM_TOKEN" --summary "..."
 ```
 
 也可以让 dispatcher wrapper 根据进程退出码自动 complete/block。
@@ -375,7 +375,7 @@ DB 记录：
 CLI：
 
 ```bash
-kb run logs r_01HX...
+kanban run logs r_01HX...
 ```
 
 ---
@@ -390,7 +390,7 @@ kb run logs r_01HX...
 | Task 被人工 block | Dispatcher 不再处理。 |
 | Board 被归档 | Dispatcher 不再 promote/claim/reclaim 该 board；若仍有 running task/run，board archive 本身会被拒绝。 |
 | Task 被人工 force complete | Worker 后续 complete 失败，因 token/run 已关闭。 |
-| DB integrity failed | Dispatcher 停止，提示运行 `kb doctor`。 |
+| DB integrity failed | Dispatcher 停止，提示运行 `kanban doctor`。 |
 
 ---
 

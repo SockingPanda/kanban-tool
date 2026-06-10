@@ -186,8 +186,8 @@ CLI 可以直接打开 SQLite DB 调用 service，不需要 server 常驻。
 Dispatcher 可以嵌入 server，也可以由 CLI 单独运行：
 
 ```bash
-kb dispatch
-kb dispatch --once
+kanban dispatch
+kanban dispatch --once
 ```
 
 ---
@@ -264,8 +264,8 @@ State-changing command
 ### 4.1 无 server 模式
 
 ```bash
-kb task create "..."
-kb task list
+kanban task create "..."
+kanban task list
 ```
 
 CLI 直接打开 SQLite DB。
@@ -275,7 +275,7 @@ CLI 直接打开 SQLite DB。
 ### 4.2 server 模式
 
 ```bash
-kb serve
+kanban serve
 ```
 
 启动：
@@ -288,10 +288,10 @@ kb serve
 ### 4.3 dispatcher 模式
 
 ```bash
-kb dispatch
+kanban dispatch
 ```
 
-启动本地调度循环。与 server 同进程运行 dispatcher 是后续扩展；当前 CLI 使用独立 `kb dispatch` 前台 loop。
+启动本地调度循环。与 server 同进程运行 dispatcher 是后续扩展；当前 CLI 使用独立 `kanban dispatch` 前台 loop。
 
 ---
 
@@ -404,7 +404,7 @@ SQLite WAL 和 busy timeout 负责排队。业务层仍需保证 transaction 短
 - server 输出结构化日志。
 - dispatcher 对每次 run 写入 `task_runs`。
 - worker stdout/stderr 可写入本地 log 文件，DB 只存路径和摘要。
-- `kb doctor` 检查 DB、WAL、schema、integrity、orphan run，并报告 Knowledge Substrate 的 `index_outbox` backlog、derived store dirty/error 状态和 per-store last_error。派生层异常不改变 SQLite task truth；operator 通过 sync/rebuild 恢复 Tantivy/Oxigraph/LanceDB。
+- `kanban doctor` 检查 DB、WAL、schema、integrity、orphan run，并报告 Knowledge Substrate 的 `index_outbox` backlog、derived store dirty/error 状态和 per-store last_error。派生层异常不改变 SQLite task truth；operator 通过 sync/rebuild 恢复 Tantivy/Oxigraph/LanceDB。
 
 ---
 

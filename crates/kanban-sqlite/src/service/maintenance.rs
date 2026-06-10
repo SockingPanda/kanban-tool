@@ -331,7 +331,7 @@ pub fn begin_database_replace(path: impl AsRef<Path>) -> Result<DatabaseReplaceG
     let runtime_lock = runtime_lock_path(path);
     if runtime_lock_blocks(&runtime_lock)? {
         return Err(KanbanError::InvalidInput(format!(
-            "database has active serve/dispatch runtime; stop kb serve/dispatch before import --replace: {}",
+            "database has active serve/dispatch runtime; stop kanban serve/dispatch before import --replace: {}",
             path.display()
         )));
     }
@@ -469,7 +469,7 @@ pub(crate) fn assert_database_idle_for_replace(path: &Path) -> Result<()> {
     let running_runs = count_table_status(&conn, "task_runs", "running")?;
     if running_tasks > 0 || running_runs > 0 {
         return Err(KanbanError::InvalidInput(format!(
-            "database has running work; stop kb serve/dispatch before import --replace: {}",
+            "database has running work; stop kanban serve/dispatch before import --replace: {}",
             path.display()
         )));
     }
@@ -484,14 +484,14 @@ pub(crate) fn assert_database_idle_for_replace(path: &Path) -> Result<()> {
         .map_err(storage)?;
     if checkpoint.busy != 0 {
         return Err(KanbanError::InvalidInput(format!(
-            "database is busy; stop kb serve/dispatch before import --replace: {}",
+            "database is busy; stop kanban serve/dispatch before import --replace: {}",
             path.display()
         )));
     }
     conn.execute_batch("BEGIN IMMEDIATE; COMMIT;")
         .map_err(|error| {
             KanbanError::InvalidInput(format!(
-                "database is busy; stop kb serve/dispatch before import --replace: {} ({error})",
+                "database is busy; stop kanban serve/dispatch before import --replace: {} ({error})",
                 path.display()
             ))
         })?;

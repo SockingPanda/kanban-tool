@@ -290,7 +290,7 @@ run.finished
 - Task detail timeline。
 - SSE event stream。
 - Debug dispatcher。
-- CLI `kb events`。
+- CLI `kanban events`。
 - 未来 export/import。
 
 ---
@@ -452,7 +452,7 @@ Knowledge Substrate 表只支持实体身份、关系镜像、派生 outbox 和�
 
 `last_event_id` 是 store 全局成功处理水位，不是 board 局部水位。成功 sync/rebuild 只能单调推进这个值；当一个 board sync 完成但其他 board 仍有 pending/running/failed outbox 时，`dirty` 必须保持 true。`dirty=false` 只表示同一 store target 当前没有 unfinished outbox 且最近一次 store 更新没有失败。
 
-`last_error` 成功后清空，失败时保留错误证据并保持 `dirty=true`。Operator 应通过 `kb derived status`、`kb doctor`、maintenance API 和对应 `sync/rebuild` 命令恢复派生层；派生 store 损坏或落后不改变 SQLite task truth。
+`last_error` 成功后清空，失败时保留错误证据并保持 `dirty=true`。Operator 应通过 `kanban derived status`、`kanban doctor`、maintenance API 和对应 `sync/rebuild` 命令恢复派生层；派生 store 损坏或落后不改变 SQLite task truth。
 
 ## 14. 常用查询
 
@@ -527,7 +527,7 @@ LIMIT ?;
 建议支持 JSONL export：
 
 ```bash
-kb export --board default --format jsonl > board.jsonl
+kanban export --board default --format jsonl > board.jsonl
 ```
 
 每行：

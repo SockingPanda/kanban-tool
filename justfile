@@ -20,7 +20,7 @@ test *args:
     if cargo nextest --version >/dev/null 2>&1; then cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast "$@"; else cargo test --workspace --exclude kanban-desktop "$@"; fi
 
 test-p package *args:
-    if cargo nextest --version >/dev/null 2>&1; then cargo nextest run -p {{package}} --no-fail-fast "$@"; else cargo test -p {{package}} "$@"; fi
+    shift; if cargo nextest --version >/dev/null 2>&1; then cargo nextest run -p {{package}} --no-fail-fast "$@"; else cargo test -p {{package}} "$@"; fi
 
 check-p package:
     cargo check -p {{package}} --tests

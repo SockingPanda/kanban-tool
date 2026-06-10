@@ -23,6 +23,26 @@ pub use kanban_vector::{
 };
 pub use rusqlite::{Connection, params};
 
+pub fn test_error(message: impl Into<String>) -> anyhow::Error {
+    anyhow::anyhow!(message.into())
+}
+
+pub fn join_thread<T>(handle: thread::JoinHandle<T>) -> anyhow::Result<T> {
+    handle
+        .join()
+        .map_err(|panic| test_error(format!("test thread panicked: {panic:?}")))
+}
+
+pub fn result_err<T, E>(result: Result<T, E>) -> anyhow::Result<E>
+where
+    T: std::fmt::Debug,
+{
+    match result {
+        Ok(value) => Err(test_error(format!("expected error, got Ok({value:?})"))),
+        Err(error) => Ok(error),
+    }
+}
+
 pub struct TempDb {
     _temp_dir: tempfile::TempDir,
     pub dir: std::path::PathBuf,
@@ -55,14 +75,13 @@ impl AsRef<Path> for TempDb {
     feature = "tantivy-backend",
     feature = "vector-lancedb"
 ))]
-pub fn insert_board(path: &Path, slug: &str, id: &str) {
-    connect_file(path)
-        .unwrap()
+pub fn insert_board(path: &Path, slug: &str, id: &str) -> anyhow::Result<()> {
+    connect_file(path)?
         .execute(
             "INSERT INTO boards(id, slug, name, description, created_at, updated_at, archived_at) VALUES (?1, ?2, ?3, NULL, 1, 1, NULL)",
             params![id, slug, slug],
-        )
-        .unwrap();
+        )?;
+    Ok(())
 }
 
 #[cfg(feature = "vector-lancedb")]
@@ -92,28 +111,39 @@ impl RecordingVectorStore {
     }
 
     pub fn upserted_texts(&self) -> Vec<String> {
-        self.upserted.lock().unwrap().clone()
+        match self.upserted.lock() {
+            Ok(upserted) => upserted.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
     }
 
     pub fn upserted_models(&self) -> Vec<String> {
-        self.upserted_models.lock().unwrap().clone()
+        match self.upserted_models.lock() {
+            Ok(upserted_models) => upserted_models.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
     }
 
     pub fn deleted_entity_uris(&self) -> Vec<String> {
-        self.deleted.lock().unwrap().clone()
+        match self.deleted.lock() {
+            Ok(deleted) => deleted.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
     }
 
     pub fn deleted_board_ids(&self) -> Vec<String> {
-        self.deleted_boards.lock().unwrap().clone()
+        match self.deleted_boards.lock() {
+            Ok(deleted_boards) => deleted_boards.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
     }
 
     pub fn live_texts(&self) -> Vec<String> {
-        self.live_chunks
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|chunk| chunk.text.clone())
-            .collect()
+        let live_chunks = match self.live_chunks.lock() {
+            Ok(live_chunks) => live_chunks,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        live_chunks.iter().map(|chunk| chunk.text.clone()).collect()
     }
 }
 
@@ -141,11 +171,20 @@ impl VectorStore for RecordingVectorStore {
                 actual: chunk.embedding_model.clone(),
             });
         }
-        let mut upserted = self.upserted.lock().unwrap();
+        let mut upserted = self
+            .upserted
+            .lock()
+            .map_err(|err| VectorError::Store(format!("upserted mutex poisoned: {err}")))?;
         upserted.extend(chunks.iter().map(|chunk| chunk.text.clone()));
-        let mut upserted_models = self.upserted_models.lock().unwrap();
+        let mut upserted_models = self
+            .upserted_models
+            .lock()
+            .map_err(|err| VectorError::Store(format!("upserted_models mutex poisoned: {err}")))?;
         upserted_models.extend(chunks.iter().map(|chunk| chunk.embedding_model.clone()));
-        let mut live_chunks = self.live_chunks.lock().unwrap();
+        let mut live_chunks = self
+            .live_chunks
+            .lock()
+            .map_err(|err| VectorError::Store(format!("live_chunks mutex poisoned: {err}")))?;
         for chunk in chunks {
             live_chunks.retain(|live| live.chunk_key() != chunk.chunk_key());
             live_chunks.push(chunk.clone());
@@ -154,23 +193,32 @@ impl VectorStore for RecordingVectorStore {
     }
 
     fn delete_board(&self, board_id: &str) -> Result<(), VectorError> {
-        let mut deleted_boards = self.deleted_boards.lock().unwrap();
+        let mut deleted_boards = self
+            .deleted_boards
+            .lock()
+            .map_err(|err| VectorError::Store(format!("deleted_boards mutex poisoned: {err}")))?;
         deleted_boards.push(board_id.to_owned());
         self.live_chunks
             .lock()
-            .unwrap()
+            .map_err(|err| VectorError::Store(format!("live_chunks mutex poisoned: {err}")))?
             .retain(|chunk| chunk.board_id.as_deref() != Some(board_id));
         Ok(())
     }
 
     fn delete_entities(&self, entity_uris: &[String]) -> Result<(), VectorError> {
-        let mut deleted = self.deleted.lock().unwrap();
+        let mut deleted = self
+            .deleted
+            .lock()
+            .map_err(|err| VectorError::Store(format!("deleted mutex poisoned: {err}")))?;
         deleted.extend(entity_uris.iter().cloned());
-        self.live_chunks.lock().unwrap().retain(|chunk| {
-            !entity_uris
-                .iter()
-                .any(|entity_uri| entity_uri == chunk.chunk.entity_uri.as_str())
-        });
+        self.live_chunks
+            .lock()
+            .map_err(|err| VectorError::Store(format!("live_chunks mutex poisoned: {err}")))?
+            .retain(|chunk| {
+                !entity_uris
+                    .iter()
+                    .any(|entity_uri| entity_uri == chunk.chunk.entity_uri.as_str())
+            });
         Ok(())
     }
 
@@ -243,83 +291,84 @@ impl VectorStore for QueryFailingVectorStore {
 }
 
 #[cfg(feature = "tantivy-backend")]
-pub fn tantivy_outbox_statuses_for_board(path: &Path, board_slug: &str) -> Vec<String> {
-    let conn = connect_file(path).unwrap();
+pub fn tantivy_outbox_statuses_for_board(
+    path: &Path,
+    board_slug: &str,
+) -> anyhow::Result<Vec<String>> {
+    let conn = connect_file(path)?;
     let mut stmt = conn
         .prepare(
             "SELECT io.status              FROM index_outbox io              JOIN task_events e ON e.id=io.source_event_id              JOIN boards b ON b.id=e.board_id              WHERE b.slug=?1 AND io.target='tantivy'              ORDER BY io.id ASC",
         )
-        .unwrap();
-    stmt.query_map([board_slug], |row| row.get::<_, String>(0))
-        .unwrap()
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .unwrap()
+        ?;
+    Ok(stmt
+        .query_map([board_slug], |row| row.get::<_, String>(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?)
 }
 
 #[cfg(feature = "graph-oxigraph")]
-pub fn graph_outbox_statuses_for_board(path: &Path, board_slug: &str) -> Vec<String> {
-    let conn = connect_file(path).unwrap();
+pub fn graph_outbox_statuses_for_board(
+    path: &Path,
+    board_slug: &str,
+) -> anyhow::Result<Vec<String>> {
+    let conn = connect_file(path)?;
     let mut stmt = conn
         .prepare(
             "SELECT io.status              FROM index_outbox io              JOIN task_events e ON e.id=io.source_event_id              JOIN boards b ON b.id=e.board_id              WHERE b.slug=?1 AND io.target='oxigraph'              ORDER BY io.id ASC",
         )
-        .unwrap();
-    stmt.query_map([board_slug], |row| row.get::<_, String>(0))
-        .unwrap()
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .unwrap()
+        ?;
+    Ok(stmt
+        .query_map([board_slug], |row| row.get::<_, String>(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?)
 }
 
 #[cfg(feature = "vector-lancedb")]
-pub fn lancedb_outbox_statuses_for_board(path: &Path, board_slug: &str) -> Vec<String> {
-    let conn = connect_file(path).unwrap();
+pub fn lancedb_outbox_statuses_for_board(
+    path: &Path,
+    board_slug: &str,
+) -> anyhow::Result<Vec<String>> {
+    let conn = connect_file(path)?;
     let mut stmt = conn
         .prepare(
             "SELECT io.status              FROM index_outbox io              JOIN task_events e ON e.id=io.source_event_id              JOIN boards b ON b.id=e.board_id              WHERE b.slug=?1 AND io.target='lancedb'              ORDER BY io.id ASC",
         )
-        .unwrap();
-    stmt.query_map([board_slug], |row| row.get::<_, String>(0))
-        .unwrap()
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .unwrap()
+        ?;
+    Ok(stmt
+        .query_map([board_slug], |row| row.get::<_, String>(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?)
 }
 
 pub fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as i64
+    match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+        Ok(duration) => duration.as_millis() as i64,
+        Err(error) => panic!("system clock is before unix epoch: {error}"),
+    }
 }
 
-pub fn set_retry_policy(path: &Path, task_id: &str, max_retries: i64) {
-    connect_file(path)
-        .unwrap()
-        .execute(
-            "UPDATE tasks SET max_retries=?1 WHERE id=?2",
-            rusqlite::params![max_retries, task_id],
-        )
-        .unwrap();
+pub fn set_retry_policy(path: &Path, task_id: &str, max_retries: i64) -> anyhow::Result<()> {
+    connect_file(path)?.execute(
+        "UPDATE tasks SET max_retries=?1 WHERE id=?2",
+        rusqlite::params![max_retries, task_id],
+    )?;
+    Ok(())
 }
 
-pub fn mark_task_running_in_current_tx(conn: &Connection, task_id: &str) {
+pub fn mark_task_running_in_current_tx(conn: &Connection, task_id: &str) -> anyhow::Result<()> {
     let run_id = new_run_id();
     let now = now_ms();
     let claim_token = format!("token-{task_id}");
-    let (board_id, claim_owner): (String, String) = conn
-        .query_row(
-            "SELECT board_id, 'worker' FROM tasks WHERE id=?1",
-            [task_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .unwrap();
+    let (board_id, claim_owner): (String, String) = conn.query_row(
+        "SELECT board_id, 'worker' FROM tasks WHERE id=?1",
+        [task_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
     conn.execute(
         "UPDATE tasks SET status='running', claim_token=?1, claim_owner=?2, claim_expires_at=?3, last_heartbeat_at=?4, started_at=COALESCE(started_at, ?4), current_run_id=?5, updated_at=?4, lock_version=lock_version+1 WHERE id=?6",
         params![claim_token, claim_owner, now + 300_000, now, run_id, task_id],
-    )
-    .unwrap();
+    )?;
     conn.execute(
         "INSERT INTO task_runs(id, board_id, task_id, status, worker_profile, claim_token, claim_owner, claim_expires_at, started_at, last_heartbeat_at, metadata_json) VALUES (?1, ?2, ?3, 'running', 'test', ?4, ?5, ?6, ?7, ?7, '{}')",
         params![run_id, board_id, task_id, claim_token, claim_owner, now + 300_000, now],
-    )
-    .unwrap();
+    )?;
+    Ok(())
 }

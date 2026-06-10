@@ -397,7 +397,33 @@ kanban dep list <task_ref>
 
 ---
 
-## 8. Event Commands
+## 8. Comment Commands
+
+```bash
+kanban comment add <task_ref> <body> [--kind text|system|worker] [--author-type human|agent|system] [--agent-type <type>]
+kanban comment list <task_ref>
+```
+
+`--actor` supplies the comment author display identity. If `--kind` is omitted,
+the service default is `text`. If `--author-type` is omitted, the service infers
+`worker -> agent`, `system -> system`, and otherwise `human`. `--agent-type` is
+allowed only with `--author-type agent`.
+
+Human output is compact and includes comment id, task id, created_at, kind,
+author identity, author_type, optional agent_type, and body:
+
+```text
+c_01HX... task=t_01HX... created_at=1717520000000 [text] alice (human): ready for review
+c_01HX... task=t_01HX... created_at=1717520000100 [worker] worker-a (agent/root): tests passed
+```
+
+JSON output uses the standard envelope and returns `CommentRecord` for `add` or
+`Vec<CommentRecord>` for `list`. Creating a comment writes
+`task_events(kind='task.comment.created')`.
+
+---
+
+## 9. Event Commands
 
 ```bash
 kanban events <task_ref>
@@ -408,7 +434,7 @@ kanban events --board default
 
 ---
 
-## 9. Run Commands
+## 10. Run Commands
 
 ```bash
 kanban runs <task_ref>
@@ -421,7 +447,7 @@ kanban run logs <run_id> --tail-bytes 65536
 
 ---
 
-## 10. Dispatcher / Server Commands
+## 11. Dispatcher / Server Commands
 
 ```bash
 kanban serve
@@ -449,9 +475,9 @@ calls `sync_search_index` every `--search-sync-interval-ms` milliseconds
 
 ---
 
-## 11. Search Commands
+## 12. Search Commands
 
-### 11.1 `kanban search`
+### 12.1 `kanban search`
 
 ```bash
 kanban search <query> [--status ready] [--status review] [--assignee worker-a] [--include-archived] [--limit 20] [--offset 0] [--json]
@@ -495,7 +521,7 @@ JSON output:
 }
 ```
 
-### 11.2 `kanban index`
+### 12.2 `kanban index`
 
 ```bash
 kanban index status
@@ -536,7 +562,7 @@ Background sync errors do not make search fail open to stale Tantivy results; th
 
 ---
 
-## 12. Maintenance Commands
+## 13. Maintenance Commands
 
 ```bash
 kanban doctor

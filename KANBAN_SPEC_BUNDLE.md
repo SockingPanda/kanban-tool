@@ -2070,15 +2070,26 @@ kanban task unlink <parent_ref> <child_ref>
 ## 8. Comment Commands
 
 ```bash
-kanban comment add <task_ref> <body>
+kanban comment add <task_ref> <body> [--kind text|system|worker] [--author-type human|agent|system] [--agent-type <type>]
 kanban comment list <task_ref>
 ```
 
-也可：
+`--actor` supplies the comment author display identity. If `--kind` is omitted,
+the service default is `text`. If `--author-type` is omitted, the service infers
+`worker -> agent`, `system -> system`, and otherwise `human`. `--agent-type` is
+allowed only with `--author-type agent`.
 
-```bash
-kanban task comment <task_ref> <body>
+Human output is compact and includes comment id, task id, created_at, kind,
+author identity, author_type, optional agent_type, and body:
+
+```text
+c_01HX... task=t_01HX... created_at=1717520000000 [text] alice (human): ready for review
+c_01HX... task=t_01HX... created_at=1717520000100 [worker] worker-a (agent/root): tests passed
 ```
+
+JSON output uses the standard envelope and returns `CommentRecord` for `add` or
+`Vec<CommentRecord>` for `list`. Creating a comment writes
+`task_events(kind='task.comment.created')`.
 
 ---
 

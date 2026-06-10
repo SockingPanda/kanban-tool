@@ -58,6 +58,16 @@
   - `git diff --check`
   - 仅运行与该配置直接相关的静态检查或 dry-run。
 - 如果本机安装了 `just`，可以使用等价 `just fmt`、`just check-p <crate>`、`just test-p <crate>`；直接 `cargo` 命令仍是 canonical fallback。
+- 并行 worktree / agent 开发时，优先把 Cargo 构建缓存放到内置 NVMe 的 lane 目录，避免在外置系统盘下重复冷构建：
+  - `CARGO_TARGET_DIR=$HOME/.cache/kanban-tool/cargo-target/main`
+  - `CARGO_TARGET_DIR=$HOME/.cache/kanban-tool/cargo-target/cli`
+  - `CARGO_TARGET_DIR=$HOME/.cache/kanban-tool/cargo-target/server`
+  - `CARGO_TARGET_DIR=$HOME/.cache/kanban-tool/cargo-target/sqlite`
+  - `CARGO_TARGET_DIR=$HOME/.cache/kanban-tool/cargo-target/desktop`
+- 多个 agent 并行时不要共用同一个 `CARGO_TARGET_DIR`，按 lane 分配，例如：
+  - `CARGO_TARGET_DIR=$HOME/.cache/kanban-tool/cargo-target/cli just check-p kanban-cli`
+  - `CARGO_TARGET_DIR=$HOME/.cache/kanban-tool/cargo-target/server just check-p kanban-server`
+  - `CARGO_TARGET_DIR=$HOME/.cache/kanban-tool/cargo-target/sqlite just test-p kanban-sqlite`
 
 以下只用于 milestone / release / explicit full gate：
 

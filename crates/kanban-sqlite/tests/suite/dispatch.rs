@@ -3,14 +3,13 @@ use crate::common::*;
 #[test]
 fn dispatch_once_runs_ready_task_and_records_log() -> anyhow::Result<()> {
     let temp = TempDb::new("dispatch_once_runs_ready_task_and_records_log")?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("跑 worker"),
-    )
-    .unwrap();
+    )?;
     let log_dir = temp.dir.join("logs");
 
     let result = dispatch_once(
@@ -26,34 +25,35 @@ fn dispatch_once_runs_ready_task_and_records_log() -> anyhow::Result<()> {
             on_failure: FinishPolicy::Blocked,
             log_dir: log_dir.clone(),
         },
-    )
-    .unwrap();
+    )?;
 
     assert_eq!(result.claimed, 1);
     assert_eq!(
-        get_task(&temp.path, "default", &task.id).unwrap().status,
+        get_task(&temp.path, "default", &task.id)?.status,
         TaskStatus::Done
     );
-    let runs = list_runs(&temp.path, "default", Some(&task.id)).unwrap();
+    let runs = list_runs(&temp.path, "default", Some(&task.id))?;
     assert_eq!(runs[0].status, "succeeded");
-    let log_path = runs[0].log_path.as_ref().expect("run log path");
-    assert!(std::fs::read_to_string(log_path).unwrap().contains("task="));
+    let log_path = runs[0]
+        .log_path
+        .as_ref()
+        .ok_or_else(|| test_error("expected run log path"))?;
+    assert!(std::fs::read_to_string(log_path)?.contains("task="));
     Ok(())
 }
 
 #[test]
 fn dispatch_once_rejects_untrusted_log_dir_before_claiming() -> anyhow::Result<()> {
     let temp = TempDb::new("dispatch_once_rejects_untrusted_log_dir_before_claiming")?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("untrusted log dir"),
-    )
-    .unwrap();
+    )?;
 
-    let err = dispatch_once(
+    let err = result_err(dispatch_once(
         &temp.path,
         "default",
         DispatchOptions {
@@ -66,29 +66,24 @@ fn dispatch_once_rejects_untrusted_log_dir_before_claiming() -> anyhow::Result<(
             on_failure: FinishPolicy::Blocked,
             log_dir: temp.dir.join("custom-logs"),
         },
-    )
-    .unwrap_err();
+    ))?;
 
     assert!(
         err.to_string().contains("outside allowed run log roots"),
         "{err}"
     );
     assert_eq!(
-        get_task(&temp.path, "default", &task.id).unwrap().status,
+        get_task(&temp.path, "default", &task.id)?.status,
         TaskStatus::Ready
     );
-    assert!(
-        list_runs(&temp.path, "default", Some(&task.id))
-            .unwrap()
-            .is_empty()
-    );
+    assert!(list_runs(&temp.path, "default", Some(&task.id))?.is_empty());
     Ok(())
 }
 
 #[test]
 fn dispatch_once_does_not_claim_review_or_dependency_blocked_tasks() -> anyhow::Result<()> {
     let temp = TempDb::new("dispatch_once_does_not_claim_review_or_dependency_blocked_tasks")?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
     let parent = create_task(
         &temp.path,
         "default",
@@ -103,17 +98,14 @@ fn dispatch_once_does_not_claim_review_or_dependency_blocked_tasks() -> anyhow::
             due_at: None,
             metadata_json: "{}".into(),
         },
-    )
-    .unwrap();
+    )?;
     let review_task = create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("review 不可 claim"),
-    )
-    .unwrap();
-    let review_claim =
-        claim_task(&temp.path, "default", "worker", &review_task.id, 300_000).unwrap();
+    )?;
+    let review_claim = claim_task(&temp.path, "default", "worker", &review_task.id, 300_000)?;
     kanban_sqlite::submit_review_task(
         &temp.path,
         "default",
@@ -121,30 +113,24 @@ fn dispatch_once_does_not_claim_review_or_dependency_blocked_tasks() -> anyhow::
         &review_task.id,
         Some(&review_claim.claim_token),
         false,
-    )
-    .unwrap();
+    )?;
     let blocked_by_dependency = create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("依赖未完成但快照被修回 ready"),
-    )
-    .unwrap();
+    )?;
     add_dependency(
         &temp.path,
         "default",
         "tester",
         &parent.id,
         &blocked_by_dependency.id,
-    )
-    .unwrap();
-    connect_file(&temp.path)
-        .unwrap()
-        .execute(
-            "UPDATE tasks SET status='ready' WHERE id=?1",
-            [&blocked_by_dependency.id],
-        )
-        .unwrap();
+    )?;
+    connect_file(&temp.path)?.execute(
+        "UPDATE tasks SET status='ready' WHERE id=?1",
+        [&blocked_by_dependency.id],
+    )?;
 
     let result = dispatch_once(
         &temp.path,
@@ -159,57 +145,47 @@ fn dispatch_once_does_not_claim_review_or_dependency_blocked_tasks() -> anyhow::
             on_failure: FinishPolicy::Blocked,
             log_dir: temp.dir.join("logs"),
         },
-    )
-    .unwrap();
+    )?;
 
     assert_eq!(result.claimed, 0);
     assert_eq!(
-        get_task(&temp.path, "default", &review_task.id)
-            .unwrap()
-            .status,
+        get_task(&temp.path, "default", &review_task.id)?.status,
         TaskStatus::Review
     );
     assert_eq!(
-        get_task(&temp.path, "default", &blocked_by_dependency.id)
-            .unwrap()
-            .status,
+        get_task(&temp.path, "default", &blocked_by_dependency.id)?.status,
         TaskStatus::Ready
     );
-    assert!(
-        list_runs(&temp.path, "default", Some(&blocked_by_dependency.id))
-            .unwrap()
-            .is_empty()
-    );
+    assert!(list_runs(&temp.path, "default", Some(&blocked_by_dependency.id))?.is_empty());
     Ok(())
 }
 
 #[test]
 fn claim_actor_with_quotes_and_control_chars_writes_valid_event_json() -> anyhow::Result<()> {
     let temp = TempDb::new("claim_actor_with_quotes_and_control_chars_writes_valid_event_json")?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("claim JSON escaping"),
-    )
-    .unwrap();
+    )?;
     let actor = "bad\"actor\nwith\tcontrol";
 
-    let claim = claim_task(&temp.path, "default", actor, &task.id, 300_000).unwrap();
+    let claim = claim_task(&temp.path, "default", actor, &task.id, 300_000)?;
 
-    let fresh = get_task(&temp.path, "default", &task.id).unwrap();
+    let fresh = get_task(&temp.path, "default", &task.id)?;
     assert_eq!(fresh.status, TaskStatus::Running);
     assert_eq!(fresh.claim_owner.as_deref(), Some(actor));
     assert_eq!(fresh.current_run_id.as_deref(), Some(claim.run_id.as_str()));
-    let events = list_events(&temp.path, "default", Some(&task.id)).unwrap();
+    let events = list_events(&temp.path, "default", Some(&task.id))?;
     let event = events
         .iter()
         .find(|event| event.kind == "task.claimed")
-        .expect("task.claimed event");
+        .ok_or_else(|| test_error("expected task.claimed event"))?;
     assert_eq!(event.actor.as_deref(), Some(actor));
     assert_eq!(event.run_id.as_deref(), Some(claim.run_id.as_str()));
-    let payload: serde_json::Value = serde_json::from_str(&event.payload_json).unwrap();
+    let payload: serde_json::Value = serde_json::from_str(&event.payload_json)?;
     assert_eq!(payload["claim_owner"], actor);
     Ok(())
 }
@@ -217,7 +193,7 @@ fn claim_actor_with_quotes_and_control_chars_writes_valid_event_json() -> anyhow
 #[test]
 fn dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming() -> anyhow::Result<()> {
     let temp = TempDb::new("dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming")?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
     let now = now_ms();
     let scheduled = create_task(
         &temp.path,
@@ -233,8 +209,7 @@ fn dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming() -> anyho
             due_at: None,
             metadata_json: "{}".into(),
         },
-    )
-    .unwrap();
+    )?;
     let todo = create_task(
         &temp.path,
         "default",
@@ -249,8 +224,7 @@ fn dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming() -> anyho
             due_at: None,
             metadata_json: "{}".into(),
         },
-    )
-    .unwrap();
+    )?;
 
     let result = dispatch_once(
         &temp.path,
@@ -265,24 +239,20 @@ fn dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming() -> anyho
             on_failure: FinishPolicy::Blocked,
             log_dir: temp.dir.join("logs"),
         },
-    )
-    .unwrap();
+    )?;
 
     assert_eq!(result.claimed, 1);
     assert_eq!(
-        get_task(&temp.path, "default", &scheduled.id)
-            .unwrap()
-            .status,
+        get_task(&temp.path, "default", &scheduled.id)?.status,
         TaskStatus::Done
     );
     assert_eq!(
-        get_task(&temp.path, "default", &todo.id).unwrap().status,
+        get_task(&temp.path, "default", &todo.id)?.status,
         TaskStatus::Ready
     );
     for task_id in [&scheduled.id, &todo.id] {
         assert!(
-            list_events(&temp.path, "default", Some(task_id))
-                .unwrap()
+            list_events(&temp.path, "default", Some(task_id))?
                 .iter()
                 .any(|event| event.kind == "task.promoted"),
             "missing task.promoted for {task_id}"
@@ -294,14 +264,13 @@ fn dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming() -> anyho
 #[test]
 fn dispatch_once_heartbeats_while_long_running_command_blocks() -> anyhow::Result<()> {
     let temp = TempDb::new("dispatch_once_heartbeats_while_long_running_command_blocks")?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("long worker"),
-    )
-    .unwrap();
+    )?;
 
     dispatch_once(
         &temp.path,
@@ -316,31 +285,28 @@ fn dispatch_once_heartbeats_while_long_running_command_blocks() -> anyhow::Resul
             on_failure: FinishPolicy::Blocked,
             log_dir: temp.dir.join("logs"),
         },
-    )
-    .unwrap();
+    )?;
 
-    let runs = list_runs(&temp.path, "default", Some(&task.id)).unwrap();
+    let runs = list_runs(&temp.path, "default", Some(&task.id))?;
     assert_eq!(runs[0].status, "succeeded");
-    let (run_claim_expires_at, run_last_heartbeat_at): (i64, i64) = connect_file(&temp.path)
-        .unwrap()
+    let (run_claim_expires_at, run_last_heartbeat_at): (i64, i64) = connect_file(&temp.path)?
         .query_row(
             "SELECT claim_expires_at, last_heartbeat_at FROM task_runs WHERE id=?1",
             [&runs[0].id],
             |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .unwrap();
+        )?;
     assert!(run_last_heartbeat_at > runs[0].started_at);
     assert!(run_claim_expires_at > runs[0].started_at + 100);
-    let events = list_events(&temp.path, "default", Some(&task.id)).unwrap();
+    let events = list_events(&temp.path, "default", Some(&task.id))?;
     let claimed_at = events
         .iter()
         .find(|event| event.kind == "task.claimed")
-        .expect("claimed event")
+        .ok_or_else(|| test_error("expected task.claimed event"))?
         .created_at;
     let heartbeat = events
         .iter()
         .find(|event| event.kind == "task.heartbeat")
-        .expect("heartbeat event");
+        .ok_or_else(|| test_error("expected task.heartbeat event"))?;
     assert!(heartbeat.created_at > claimed_at, "events: {events:?}");
     Ok(())
 }
@@ -348,14 +314,13 @@ fn dispatch_once_heartbeats_while_long_running_command_blocks() -> anyhow::Resul
 #[test]
 fn manual_block_during_dispatch_is_not_overwritten_to_done() -> anyhow::Result<()> {
     let temp = TempDb::new("manual_block_during_dispatch_is_not_overwritten_to_done")?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("manual block race"),
-    )
-    .unwrap();
+    )?;
     let release = temp.dir.join("release");
 
     let dispatch_path = temp.path.clone();
@@ -375,13 +340,16 @@ fn manual_block_during_dispatch_is_not_overwritten_to_done() -> anyhow::Result<(
                 heartbeat_interval_ms: 300_000,
                 on_success: FinishPolicy::Done,
                 on_failure: FinishPolicy::Blocked,
-                log_dir: dispatch_release.parent().unwrap().join("logs"),
+                log_dir: dispatch_release
+                    .parent()
+                    .ok_or_else(|| KanbanError::InvalidInput("release path has no parent".into()))?
+                    .join("logs"),
             },
         )
     });
 
     for _ in 0..200 {
-        if get_task(&temp.path, "default", &task.id).unwrap().status == TaskStatus::Running {
+        if get_task(&temp.path, "default", &task.id)?.status == TaskStatus::Running {
             break;
         }
         thread::sleep(Duration::from_millis(10));
@@ -394,13 +362,12 @@ fn manual_block_during_dispatch_is_not_overwritten_to_done() -> anyhow::Result<(
         "manual block",
         None,
         true,
-    )
-    .unwrap();
-    std::fs::write(&release, "go").unwrap();
-    let result = handle.join().unwrap();
+    )?;
+    std::fs::write(&release, "go")?;
+    let result = join_thread(handle)?;
     assert!(result.is_err(), "dispatcher should report finish conflict");
 
-    let fresh = get_task(&temp.path, "default", &task.id).unwrap();
+    let fresh = get_task(&temp.path, "default", &task.id)?;
     assert_eq!(fresh.status, TaskStatus::Blocked);
     assert_eq!(fresh.status_reason.as_deref(), Some("manual block"));
     Ok(())
@@ -409,7 +376,7 @@ fn manual_block_during_dispatch_is_not_overwritten_to_done() -> anyhow::Result<(
 #[test]
 fn todo_without_description_is_not_promoted_or_claimed_by_dispatch() -> anyhow::Result<()> {
     let temp = TempDb::new("todo_without_description_is_not_promoted_or_claimed_by_dispatch")?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
         "default",
@@ -424,8 +391,7 @@ fn todo_without_description_is_not_promoted_or_claimed_by_dispatch() -> anyhow::
             due_at: None,
             metadata_json: "{}".into(),
         },
-    )
-    .unwrap();
+    )?;
 
     let result = dispatch_once(
         &temp.path,
@@ -440,12 +406,11 @@ fn todo_without_description_is_not_promoted_or_claimed_by_dispatch() -> anyhow::
             on_failure: FinishPolicy::Blocked,
             log_dir: temp.dir.join("logs"),
         },
-    )
-    .unwrap();
+    )?;
 
     assert_eq!(result.claimed, 0);
     assert_eq!(
-        get_task(&temp.path, "default", &task.id).unwrap().status,
+        get_task(&temp.path, "default", &task.id)?.status,
         TaskStatus::Todo
     );
     Ok(())
@@ -454,14 +419,13 @@ fn todo_without_description_is_not_promoted_or_claimed_by_dispatch() -> anyhow::
 #[test]
 fn worker_large_output_does_not_deadlock_under_heartbeat_wrapper() -> anyhow::Result<()> {
     let temp = TempDb::new("worker_large_output_does_not_deadlock_under_heartbeat_wrapper")?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("large output"),
-    )
-    .unwrap();
+    )?;
 
     let result = dispatch_once(
         &temp.path,
@@ -476,12 +440,11 @@ fn worker_large_output_does_not_deadlock_under_heartbeat_wrapper() -> anyhow::Re
             on_failure: FinishPolicy::Blocked,
             log_dir: temp.dir.join("logs"),
         },
-    )
-    .unwrap();
+    )?;
 
     assert_eq!(result.claimed, 1);
     assert_eq!(
-        get_task(&temp.path, "default", &task.id).unwrap().status,
+        get_task(&temp.path, "default", &task.id)?.status,
         TaskStatus::Done
     );
     Ok(())
@@ -490,16 +453,15 @@ fn worker_large_output_does_not_deadlock_under_heartbeat_wrapper() -> anyhow::Re
 #[test]
 fn dispatch_rejects_heartbeat_interval_not_less_than_claim_ttl() -> anyhow::Result<()> {
     let temp = TempDb::new("dispatch_rejects_heartbeat_interval_not_less_than_claim_ttl")?;
-    init_database(&temp.path, "tester").unwrap();
+    init_database(&temp.path, "tester")?;
     create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("bad interval"),
-    )
-    .unwrap();
+    )?;
 
-    let err = dispatch_once(
+    let err = result_err(dispatch_once(
         &temp.path,
         "default",
         DispatchOptions {
@@ -512,8 +474,7 @@ fn dispatch_rejects_heartbeat_interval_not_less_than_claim_ttl() -> anyhow::Resu
             on_failure: FinishPolicy::Blocked,
             log_dir: temp.dir.join("logs"),
         },
-    )
-    .unwrap_err();
+    ))?;
 
     assert!(err.to_string().contains("heartbeat_interval_ms"));
     Ok(())

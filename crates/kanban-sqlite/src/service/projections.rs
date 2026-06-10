@@ -1,4 +1,13 @@
-use super::*;
+use rusqlite::{Connection, params};
+
+use super::storage;
+
+use kanban_core::{KanbanError, Result};
+
+use kanban_indexer::{
+    DERIVED_STORE_SEEDS, DerivedStoreUpdate, OUTBOX_FANOUT_TARGETS, OutboxTarget,
+    derived_store_for_name,
+};
 
 pub(crate) fn upsert_board_entity(conn: &Connection, board_id: &str) -> Result<()> {
     conn.execute(

@@ -6,7 +6,7 @@ import { planDragTransition } from "./drag-policy"
 
 describe("drag transition policy", () => {
   it("maps ready to running drops to claim", () => {
-    expect(planDragTransition(task({ status: "ready" }), "running", null, "")).toMatchObject({
+    expect(planDragTransition(task({ status: "ready" }), "running", null)).toMatchObject({
       ok: true,
       action: "claim",
       body: { ttl_ms: 300_000, worker_profile: "manual" },
@@ -14,15 +14,15 @@ describe("drag transition policy", () => {
   })
 
   it("requires viable triage spec before specifying to todo", () => {
-    expect(planDragTransition(task({ status: "triage", description: "" }), "todo", null, "")).toEqual({
+    expect(planDragTransition(task({ status: "triage", description: "" }), "todo", null)).toEqual({
       ok: false,
       reason: "Triage tasks need a description before specify.",
     })
-    expect(planDragTransition(task({ status: "triage", description: null }), "todo", null, "")).toEqual({
+    expect(planDragTransition(task({ status: "triage", description: null }), "todo", null)).toEqual({
       ok: false,
       reason: "Triage tasks need a description before specify.",
     })
-    expect(planDragTransition(task({ status: "triage", description: "ready enough" }), "todo", null, "")).toMatchObject({
+    expect(planDragTransition(task({ status: "triage", description: "ready enough" }), "todo", null)).toMatchObject({
       ok: true,
       action: "specify",
       body: { description: "ready enough" },
@@ -30,35 +30,29 @@ describe("drag transition policy", () => {
   })
 
   it("adds explicit force bodies for running drops without a claim token", () => {
-    expect(planDragTransition(task({ status: "running" }), "done", null, "")).toMatchObject({
+    expect(planDragTransition(task({ status: "running" }), "done", null)).toMatchObject({
       ok: true,
       action: "complete",
       body: { force: true },
       confirm: expect.stringContaining("Force complete"),
     })
-    expect(planDragTransition(task({ status: "running" }), "blocked", null, "waiting")).toMatchObject({
+    expect(planDragTransition(task({ status: "running" }), "blocked", null)).toMatchObject({
       ok: true,
       action: "block",
-      body: { force: true, reason: "waiting" },
+      body: { force: true },
       confirm: expect.stringContaining("Force block"),
+      promptReason: true,
     })
   })
 
-  it("routes ready and review blocked drops through block with a reason body", () => {
-    expect(planDragTransition(task({ status: "ready" }), "blocked", null, " waiting ")).toMatchObject({
+  it("always prompts for fresh reasons when dropping blockable non-running tasks on blocked", () => {
+    expect(planDragTransition(task({ status: "ready" }), "blocked", null)).toMatchObject({
       ok: true,
       action: "block",
-      body: { reason: "waiting" },
+      body: {},
+      promptReason: true,
     })
-    expect(planDragTransition(task({ status: "review" }), "blocked", null, "needs changes")).toMatchObject({
-      ok: true,
-      action: "block",
-      body: { reason: "needs changes" },
-    })
-  })
-
-  it("prompts for a reason when non-running tasks are dropped on blocked without one", () => {
-    expect(planDragTransition(task({ status: "ready" }), "blocked", null, "")).toMatchObject({
+    expect(planDragTransition(task({ status: "review" }), "blocked", null)).toMatchObject({
       ok: true,
       action: "block",
       body: {},
@@ -66,29 +60,38 @@ describe("drag transition policy", () => {
     })
   })
 
+  it("prompts for fresh reasons when running tasks with a claim token are dropped on blocked", () => {
+    expect(planDragTransition(task({ status: "running" }), "blocked", "claim_123")).toMatchObject({
+      ok: true,
+      action: "block",
+      body: { claim_token: "claim_123" },
+      promptReason: true,
+    })
+  })
+
   it("does not route already blocked or terminal tasks through block", () => {
-    expect(planDragTransition(task({ status: "blocked" }), "blocked", null, "waiting")).toEqual({
+    expect(planDragTransition(task({ status: "blocked" }), "blocked", null)).toEqual({
       ok: false,
       reason: "Already in that column.",
     })
-    expect(planDragTransition(task({ status: "done" }), "blocked", null, "waiting")).toEqual({
+    expect(planDragTransition(task({ status: "done" }), "blocked", null)).toEqual({
       ok: false,
       reason: "done cannot be dropped on blocked.",
     })
-    expect(planDragTransition(task({ status: "archived" }), "blocked", null, "waiting")).toEqual({
+    expect(planDragTransition(task({ status: "archived" }), "blocked", null)).toEqual({
       ok: false,
       reason: "archived cannot be dropped on blocked.",
     })
   })
 
   it("always force-confirms running archive drops", () => {
-    expect(planDragTransition(task({ status: "running" }), "archived", "claim_123", "")).toMatchObject({
+    expect(planDragTransition(task({ status: "running" }), "archived", "claim_123")).toMatchObject({
       ok: true,
       action: "archive",
       body: { force: true },
       confirm: expect.stringContaining("Force archive"),
     })
-    expect(planDragTransition(task({ status: "running" }), "archived", null, "")).toMatchObject({
+    expect(planDragTransition(task({ status: "running" }), "archived", null)).toMatchObject({
       ok: true,
       action: "archive",
       body: { force: true },
@@ -97,7 +100,7 @@ describe("drag transition policy", () => {
   })
 
   it("routes blocked drops through unblock instead of setting a target status", () => {
-    expect(planDragTransition(task({ status: "blocked" }), "ready", null, "")).toMatchObject({
+    expect(planDragTransition(task({ status: "blocked" }), "ready", null)).toMatchObject({
       ok: true,
       action: "unblock",
       body: {},

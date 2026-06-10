@@ -36,6 +36,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: TaskCommand,
     },
+    Comment {
+        #[command(subcommand)]
+        command: CommentCommand,
+    },
     Dep {
         #[command(subcommand)]
         command: DepCommand,
@@ -136,6 +140,24 @@ pub(crate) enum BoardCommand {
     Archive {
         board: String,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum CommentCommand {
+    Add(CommentAddArgs),
+    List { task_ref: String },
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct CommentAddArgs {
+    pub(crate) task_ref: String,
+    pub(crate) body: String,
+    #[arg(long)]
+    pub(crate) kind: Option<String>,
+    #[arg(long)]
+    pub(crate) author_type: Option<String>,
+    #[arg(long)]
+    pub(crate) agent_type: Option<String>,
 }
 
 #[derive(Debug, Args)]

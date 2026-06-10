@@ -45,6 +45,16 @@ import type {
 import { pageRangeLabel } from "@/lib/pagination"
 import { cn } from "@/lib/utils"
 
+const viewMetadata: Record<OperatorView, { label: string; icon: ElementType }> = {
+  board: { label: "Board", icon: SquareKanban },
+  list: { label: "List", icon: Inbox },
+  events: { label: "Events", icon: Activity },
+  runs: { label: "Runs", icon: TerminalSquare },
+  maintenance: { label: "Maintenance", icon: DatabaseBackup },
+  health: { label: "Health", icon: HeartPulse },
+  settings: { label: "Settings", icon: Settings },
+}
+
 export function AppShell({
   config,
   api,
@@ -158,6 +168,13 @@ export function AppShell({
   onSaveTask: () => Promise<void>
   onAddComment: () => Promise<void>
 }) {
+  let taskActivityLabel = ""
+  if (tasksLoading) {
+    taskActivityLabel = " · loading"
+  } else if (tasksRefreshing) {
+    taskActivityLabel = " · refreshing"
+  }
+
   return (
     <div className="flex h-screen bg-[#f7f7f5] text-neutral-950">
       <aside className="flex w-52 shrink-0 flex-col border-r border-neutral-200 bg-[#fbfbfa]">
@@ -277,7 +294,7 @@ export function AppShell({
             <div className="flex h-8 items-center justify-between border-b border-neutral-200 bg-white px-4 text-xs text-neutral-500">
               <span>
                 {pageRangeLabel(page, visibleTaskCount)}
-                {tasksLoading ? " · loading" : tasksRefreshing ? " · refreshing" : ""}
+                {taskActivityLabel}
               </span>
               <span className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" disabled={!hasPreviousPage || tasksRefreshing} onClick={onPreviousPage}>
@@ -382,24 +399,12 @@ function NavItem({
   )
 }
 
-function viewLabel(view: OperatorView) {
-  if (view === "board") return "Board"
-  if (view === "list") return "List"
-  if (view === "events") return "Events"
-  if (view === "runs") return "Runs"
-  if (view === "maintenance") return "Maintenance"
-  if (view === "health") return "Health"
-  return "Settings"
+function viewLabel(view: OperatorView): string {
+  return viewMetadata[view].label
 }
 
-function viewIcon(view: OperatorView) {
-  if (view === "board") return SquareKanban
-  if (view === "list") return Inbox
-  if (view === "events") return Activity
-  if (view === "runs") return TerminalSquare
-  if (view === "maintenance") return DatabaseBackup
-  if (view === "health") return HeartPulse
-  return Settings
+function viewIcon(view: OperatorView): ElementType {
+  return viewMetadata[view].icon
 }
 
 function apiEndpointLabel(apiBaseUrl: string) {

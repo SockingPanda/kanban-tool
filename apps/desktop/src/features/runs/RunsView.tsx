@@ -53,9 +53,7 @@ function RunRow({ run }: { run: Run }) {
     <div className="mb-2 rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm">
       <div className="mb-2 flex items-center justify-between">
         <span className="font-medium">{shortId(run.id)}</span>
-        <Badge variant={run.status === "running" ? "running" : run.status === "succeeded" ? "ready" : "secondary"}>
-          {run.status}
-        </Badge>
+        <Badge variant={runBadgeVariant(run.status)}>{run.status}</Badge>
       </div>
       <InfoRow label="worker" value={run.worker_profile ?? "manual"} />
       <InfoRow label="owner" value={run.claim_owner} />
@@ -74,4 +72,10 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <span className="truncate font-medium">{value}</span>
     </div>
   )
+}
+
+function runBadgeVariant(status: string): "running" | "ready" | "secondary" {
+  if (status === "running") return "running"
+  if (status === "succeeded") return "ready"
+  return "secondary"
 }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { KanbanApi, Task } from "./api"
+import { KanbanApi, type SearchIndexStatus, type SearchTasksMeta, type Task } from "./api"
 
 const runtimeConfig = {
   apiBaseUrl: "http://127.0.0.1:8721",
@@ -46,16 +46,17 @@ describe("KanbanApi task search", () => {
 
   it("uses the search endpoint and returns hydrated task rows", async () => {
     const hitTask = task({ id: "t_search", title: "hydrated search result" })
+    const searchMeta = {
+      backend: "tantivy",
+      stale: true,
+      index_version: "v1",
+      last_event_id: 12,
+      index_lag_events: 2,
+    } satisfies SearchTasksMeta
     const fetchMock = mockFetch({
       data: {
         hits: [{ task_id: hitTask.id, seq: hitTask.seq, score: 4.2, snippet: "hydrated", task: hitTask }],
-        meta: {
-          backend: "tantivy",
-          stale: true,
-          index_version: "v1",
-          last_event_id: 12,
-          index_lag_events: 2,
-        },
+        meta: searchMeta,
       },
     })
     const api = new KanbanApi(runtimeConfig)
@@ -69,8 +70,9 @@ describe("KanbanApi task search", () => {
     })
 
     expect(result.tasks).toEqual([hitTask])
-    expect(result.searchMeta.backend).toBe("tantivy")
-    expect(result.searchMeta.stale).toBe(true)
+    expect(result.searchMeta).toEqual(searchMeta)
+    expect("derived_index" in result.searchMeta).toBe(false)
+    expect("message" in result.searchMeta).toBe(false)
     expect(result.page).toEqual({ limit: 20, offset: 40, total: null })
     const url = calledUrl(fetchMock)
     expect(url.pathname).toBe("/api/v1/search/tasks")
@@ -92,16 +94,17 @@ describe("KanbanApi task search", () => {
   })
 
   it("preserves unknown totals while keeping numeric limit and offset", async () => {
+    const searchMeta = {
+      backend: "sqlite",
+      stale: false,
+      index_version: null,
+      last_event_id: null,
+      index_lag_events: null,
+    } satisfies SearchTasksMeta
     const fetchMock = mockFetch({
       data: {
         hits: [],
-        meta: {
-          backend: "sqlite",
-          stale: false,
-          index_version: null,
-          last_event_id: null,
-          index_lag_events: null,
-        },
+        meta: searchMeta,
       },
       meta: { limit: 10, offset: 20 },
     })
@@ -110,6 +113,7 @@ describe("KanbanApi task search", () => {
     const result = await api.searchTasks({ query: "missing total", limit: 10, offset: 20 })
 
     expect(result.page).toEqual({ limit: 10, offset: 20, total: null })
+    expect(result.searchMeta).toEqual(searchMeta)
     expect(calledUrl(fetchMock).searchParams.get("q")).toBe("missing total")
   })
 
@@ -139,6 +143,15 @@ describe("KanbanApi task search", () => {
   })
 
   it("uses backend-shaped maintenance and status envelopes", async () => {
+    const searchStatusEnvelope = {
+      backend: "sqlite",
+      derived_index: false,
+      stale: false,
+      index_version: null,
+      last_event_id: null,
+      index_lag_events: 0,
+      message: "SQLite fallback search is active",
+    } satisfies SearchIndexStatus
     const fetchMock = mockFetchSequence([
       {
         data: {
@@ -162,15 +175,7 @@ describe("KanbanApi task search", () => {
         },
       },
       {
-        data: {
-          backend: "sqlite",
-          derived_index: false,
-          stale: false,
-          index_version: null,
-          last_event_id: null,
-          index_lag_events: 0,
-          message: "SQLite fallback search is active",
-        },
+        data: searchStatusEnvelope,
       },
       {
         data: {
@@ -214,11 +219,9 @@ describe("KanbanApi task search", () => {
     expect(calledUrl(fetchMock).searchParams.get("board")).toBe("default")
 
     const searchStatus = await api.searchStatus()
-    expect(searchStatus).toMatchObject({
-      backend: "sqlite",
-      derived_index: false,
-      message: "SQLite fallback search is active",
-    })
+    expect(searchStatus).toEqual(searchStatusEnvelope)
+    expect(searchStatus.derived_index).toBe(false)
+    expect(searchStatus.message).toBe("SQLite fallback search is active")
     expect(fetchMock.mock.calls[1] ? new URL(String(fetchMock.mock.calls[1][0])).pathname : "").toBe("/api/v1/search/status")
 
     const doctor = await api.doctor()

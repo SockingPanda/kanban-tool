@@ -37,7 +37,7 @@ import type {
   KanbanApi,
   Run,
   RuntimeConfig,
-  SearchMeta,
+  SearchTasksMeta,
   Task,
   TaskStatus,
   PageMeta,
@@ -114,7 +114,7 @@ export function AppShell({
   activeRun?: Run
   search: string
   debouncedSearch: string
-  searchMeta: SearchMeta | null
+  searchMeta: SearchTasksMeta | null
   statusFilter: TaskStatus | "all"
   showArchived: boolean
   page: PageMeta
@@ -347,7 +347,7 @@ export function AppShell({
   )
 }
 
-function SearchBackendBadge({ meta }: { meta: SearchMeta }) {
+function SearchBackendBadge({ meta }: { meta: SearchTasksMeta }) {
   return (
     <Badge variant={meta.stale ? "review" : "secondary"}>
       search {meta.backend}

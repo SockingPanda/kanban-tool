@@ -4,7 +4,7 @@ import type { ElementType, ReactNode } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import type { BoardStats, DoctorIssue, KanbanApi, SearchMeta } from "@/lib/api"
+import type { BoardStats, CheckpointReport, DoctorDerivedStore, DoctorReport, KanbanApi, SearchMeta, StaleClaim } from "@/lib/api"
 
 export function MaintenanceView({ api }: { api: KanbanApi | null }) {
   const statsQuery = useQuery({
@@ -49,24 +49,21 @@ export function MaintenanceView({ api }: { api: KanbanApi | null }) {
           <Button variant="secondary" disabled={!api || doctorMutation.isPending} onClick={() => doctorMutation.mutate()}>
             Run doctor
           </Button>
-          {doctorMutation.data ? (
-            <div className="mt-3 space-y-2">
-              <Badge variant={doctorMutation.data.ok ? "ready" : "blocked"}>{doctorMutation.data.ok ? "ok" : "issues"}</Badge>
-              <IssueList issues={[...(doctorMutation.data.issues ?? []), ...(doctorMutation.data.warnings ?? [])]} />
-            </div>
-          ) : null}
+          {doctorMutation.data ? <DoctorReportView report={doctorMutation.data} /> : null}
           {doctorMutation.error ? <ErrorText error={doctorMutation.error} /> : null}
         </Panel>
         <Panel title="Checkpoint" icon={DatabaseBackup}>
-          <Button variant="secondary" disabled={!api || checkpointMutation.isPending} onClick={() => checkpointMutation.mutate()}>
+          <Button
+            variant="secondary"
+            disabled={!api || checkpointMutation.isPending}
+            onClick={() => {
+              if (!window.confirm("Run WAL checkpoint now?")) return
+              checkpointMutation.mutate()
+            }}
+          >
             Create checkpoint
           </Button>
-          {checkpointMutation.data ? (
-            <div className="mt-3 space-y-1 text-sm">
-              <div>status {checkpointMutation.data.ok ? "ok" : "failed"}</div>
-              <div className="truncate text-neutral-500">{checkpointMutation.data.path ?? "no path returned"}</div>
-            </div>
-          ) : null}
+          {checkpointMutation.data ? <CheckpointResultView result={checkpointMutation.data} /> : null}
           {checkpointMutation.error ? <ErrorText error={checkpointMutation.error} /> : null}
         </Panel>
       </div>
@@ -88,15 +85,34 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: ElementTy
 
 function StatsGrid({ stats }: { stats?: BoardStats }) {
   if (!stats) return <div className="text-sm text-neutral-500">Loading stats.</div>
-  const entries = Object.entries(stats).filter(([, value]) => typeof value === "number" || typeof value === "string" || typeof value === "boolean")
   return (
-    <div className="grid grid-cols-2 gap-2 text-sm">
-      {entries.map(([key, value]) => (
-        <div key={key} className="rounded border border-neutral-200 bg-white p-2">
-          <div className="text-xs text-neutral-500">{key}</div>
-          <div className="truncate font-medium">{String(value)}</div>
+    <div className="space-y-4 text-sm">
+      <div className="grid grid-cols-2 gap-2">
+        <Metric label="board" value={stats.board_id} />
+        <Metric label="generated" value={String(stats.generated_at)} />
+      </div>
+      <div>
+        <Subheading>Status counts</Subheading>
+        <div className="grid grid-cols-3 gap-2">
+          {stats.status_counts.map((entry) => (
+            <Metric key={entry.status} label={entry.status} value={String(entry.count)} />
+          ))}
+          {stats.status_counts.length === 0 ? <EmptyText>No status counts returned.</EmptyText> : null}
         </div>
-      ))}
+      </div>
+      <div>
+        <Subheading>Stale claims</Subheading>
+        <StaleClaimList claims={stats.stale_claims} />
+      </div>
+      <div>
+        <Subheading>Blocked reasons</Subheading>
+        <div className="space-y-1">
+          {stats.blocked_reasons.map((entry) => (
+            <InfoRow key={entry.reason} label={entry.reason || "unspecified"} value={String(entry.count)} />
+          ))}
+          {stats.blocked_reasons.length === 0 ? <EmptyText>No blocked reasons returned.</EmptyText> : null}
+        </div>
+      </div>
     </div>
   )
 }
@@ -106,26 +122,131 @@ function SearchStatus({ meta }: { meta?: SearchMeta }) {
   return (
     <div className="space-y-2 text-sm">
       <InfoRow label="backend" value={meta.backend} />
+      <InfoRow label="derived index" value={String(meta.derived_index)} />
       <InfoRow label="stale" value={String(meta.stale)} />
       <InfoRow label="index version" value={meta.index_version ?? "-"} />
       <InfoRow label="last event" value={meta.last_event_id === null ? "-" : String(meta.last_event_id)} />
       <InfoRow label="lag events" value={meta.index_lag_events === null ? "-" : String(meta.index_lag_events)} />
+      <div className="text-neutral-600">{meta.message}</div>
     </div>
   )
 }
 
-function IssueList({ issues }: { issues: DoctorIssue[] }) {
-  if (!issues.length) return <div className="text-sm text-neutral-500">No issues returned.</div>
+function DoctorReportView({ report }: { report: DoctorReport }) {
+  const findings = [
+    ["integrity", report.integrity_check],
+    ["migration version", nullableNumber(report.migration_version)],
+    ["user version", report.user_version],
+    ["expired running", report.expired_running_tasks],
+    ["running without run", report.running_tasks_without_active_run],
+    ["orphan running runs", report.orphan_running_runs],
+    ["dependency cycles", report.dependency_cycles],
+    ["archived dependency edges", report.archived_dependency_edges],
+    ["missing run logs", report.missing_run_logs],
+    ["suspicious run logs", report.suspicious_run_log_paths],
+    ["dependency violations", report.executable_dependency_violations],
+    ["spec violations", report.executable_spec_violations],
+    ["schedule violations", report.executable_schedule_violations],
+    ["outbox pending", report.outbox_pending],
+    ["outbox running", report.outbox_running],
+    ["outbox failed", report.outbox_failed],
+    ["dirty stores", report.derived_dirty_stores],
+    ["error stores", report.derived_error_stores],
+  ] as const
   return (
-    <div className="space-y-1">
-      {issues.map((issue, index) => (
-        <div key={`${issue.code}-${index}`} className="rounded border border-neutral-200 bg-white p-2 text-sm">
-          <div className="font-medium">{issue.code}</div>
-          <div className="text-neutral-600">{issue.message}</div>
+    <div className="mt-3 space-y-3 text-sm">
+      <Badge variant={report.ok ? "ready" : "blocked"}>{report.ok ? "ok" : "findings"}</Badge>
+      <div className="grid grid-cols-2 gap-2">
+        {findings.map(([label, value]) => (
+          <Metric key={label} label={label} value={String(value)} />
+        ))}
+      </div>
+      <div>
+        <Subheading>Derived stores</Subheading>
+        <DerivedStoreList stores={report.derived_stores} />
+      </div>
+    </div>
+  )
+}
+
+function StaleClaimList({ claims }: { claims: StaleClaim[] }) {
+  if (claims.length === 0) return <EmptyText>No stale claims returned.</EmptyText>
+  return (
+    <div className="space-y-2">
+      {claims.map((claim) => (
+        <div key={claim.task_id} className="rounded border border-neutral-200 bg-white p-2">
+          <div className="flex justify-between gap-3">
+            <span className="truncate font-medium">#{claim.seq} {claim.title}</span>
+            <span className="shrink-0 text-neutral-500">{claim.claim_owner ?? "no owner"}</span>
+          </div>
+          <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-neutral-600">
+            <span>expires {nullableNumber(claim.claim_expires_at)}</span>
+            <span>heartbeat {nullableNumber(claim.last_heartbeat_at)}</span>
+            <span>run {claim.current_run_id ?? "-"}</span>
+            <span>retry {claim.retry_count}/{nullableNumber(claim.max_retries)}</span>
+          </div>
         </div>
       ))}
     </div>
   )
+}
+
+function DerivedStoreList({ stores }: { stores: DoctorDerivedStore[] }) {
+  if (stores.length === 0) return <EmptyText>No derived stores returned.</EmptyText>
+  return (
+    <div className="space-y-2">
+      {stores.map((store) => (
+        <div key={store.store_name} className="rounded border border-neutral-200 bg-white p-2">
+          <div className="flex justify-between gap-3">
+            <span className="truncate font-medium">{store.store_name}</span>
+            <span className={store.dirty || store.last_error ? "shrink-0 text-amber-700" : "shrink-0 text-emerald-700"}>
+              {store.dirty ? "dirty" : "clean"}
+            </span>
+          </div>
+          <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-neutral-600">
+            <span>schema {store.schema_version}</span>
+            <span>event {store.last_event_id}</span>
+            <span>pending {store.pending_outbox}</span>
+            <span>running {store.running_outbox}</span>
+            <span>failed {store.failed_outbox}</span>
+            <span className="truncate">error {store.last_error ?? "-"}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CheckpointResultView({ result }: { result: CheckpointReport }) {
+  return (
+    <div className="mt-3 space-y-2 text-sm">
+      <Badge variant={result.busy === 0 ? "ready" : "blocked"}>{result.busy === 0 ? "checkpointed" : "busy"}</Badge>
+      <InfoRow label="busy" value={String(result.busy)} />
+      <InfoRow label="log frames" value={String(result.log_frames)} />
+      <InfoRow label="checkpointed frames" value={String(result.checkpointed_frames)} />
+    </div>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-neutral-200 bg-white p-2">
+      <div className="text-xs text-neutral-500">{label}</div>
+      <div className="truncate font-medium">{value}</div>
+    </div>
+  )
+}
+
+function Subheading({ children }: { children: ReactNode }) {
+  return <div className="mb-2 text-xs font-semibold uppercase text-neutral-500">{children}</div>
+}
+
+function EmptyText({ children }: { children: ReactNode }) {
+  return <div className="text-sm text-neutral-500">{children}</div>
+}
+
+function nullableNumber(value: number | null) {
+  return value === null ? "-" : String(value)
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {

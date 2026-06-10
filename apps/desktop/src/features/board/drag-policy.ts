@@ -1,4 +1,5 @@
 import type { KanbanApi, Task, TaskStatus } from "@/lib/api"
+import { archiveTaskBody, canSpecifyTask, specifyTaskBody } from "@/lib/action-policy"
 
 export type DragTransitionPlan =
   | {
@@ -21,24 +22,24 @@ export function planDragTransition(
 
   if (targetStatus === "archived") {
     if (task.status === "archived") return { ok: false, reason: "Already archived." }
-    if (task.status === "running" && !claimToken) {
+    if (task.status === "running") {
       return {
         ok: true,
         action: "archive",
-        body: { force: true },
-        confirm: `Force archive running task #${task.seq} without a claim token?`,
+        body: archiveTaskBody(task.status),
+        confirm: `Force archive running task #${task.seq}?`,
         message: "Archive requested.",
       }
     }
-    return { ok: true, action: "archive", body: {}, message: "Archive requested." }
+    return { ok: true, action: "archive", body: archiveTaskBody(task.status), message: "Archive requested." }
   }
 
   if (task.status === "triage" && targetStatus === "todo") {
-    if (!task.description?.trim()) return { ok: false, reason: "Triage tasks need a description before specify." }
+    if (!canSpecifyTask(task.status, task.description)) return { ok: false, reason: "Triage tasks need a description before specify." }
     return {
       ok: true,
       action: "specify",
-      body: { description: task.description },
+      body: specifyTaskBody(task.description),
       message: "Specify requested.",
     }
   }

@@ -114,44 +114,73 @@ export type HealthStatus = {
 }
 
 export type BoardStats = {
-  board: string
-  tasks_total?: number
-  open_tasks?: number
-  running_tasks?: number
-  blocked_tasks?: number
-  ready_tasks?: number
-  done_tasks?: number
-  archived_tasks?: number
-  runs_total?: number
-  active_runs?: number
-  events_total?: number
-  [key: string]: string | number | boolean | null | undefined
+  board_id: string
+  generated_at: number
+  status_counts: StatusCount[]
+  stale_claims: StaleClaim[]
+  blocked_reasons: BlockedReason[]
 }
 
-export type DoctorIssue = {
-  code: string
-  message: string
-  severity?: string
-  task_id?: string | null
-  details?: Record<string, unknown>
-  [key: string]: string | number | boolean | null | undefined | Record<string, unknown>
+export type StatusCount = {
+  status: string
+  count: number
+}
+
+export type StaleClaim = {
+  task_id: string
+  seq: number
+  title: string
+  claim_owner: string | null
+  claim_expires_at: number | null
+  last_heartbeat_at: number | null
+  current_run_id: string | null
+  retry_count: number
+  max_retries: number | null
+}
+
+export type BlockedReason = {
+  reason: string
+  count: number
+}
+
+export type DoctorDerivedStore = {
+  store_name: string
+  schema_version: number
+  last_event_id: number
+  dirty: boolean
+  last_error: string | null
+  pending_outbox: number
+  running_outbox: number
+  failed_outbox: number
 }
 
 export type DoctorReport = {
   ok: boolean
-  checked_at?: number
-  issues?: DoctorIssue[]
-  warnings?: DoctorIssue[]
-  repairs?: DoctorIssue[]
-  [key: string]: string | number | boolean | null | undefined | DoctorIssue[]
+  integrity_check: string
+  migration_version: number | null
+  user_version: number
+  expired_running_tasks: number
+  running_tasks_without_active_run: number
+  orphan_running_runs: number
+  dependency_cycles: number
+  archived_dependency_edges: number
+  missing_run_logs: number
+  suspicious_run_log_paths: number
+  executable_dependency_violations: number
+  executable_spec_violations: number
+  executable_schedule_violations: number
+  outbox_pending: number
+  outbox_running: number
+  outbox_failed: number
+  derived_dirty_stores: number
+  derived_error_stores: number
+  derived_stores: DoctorDerivedStore[]
 }
 
 export type CheckpointReport = {
-  ok: boolean
-  path?: string
-  created_at?: number
-  size_bytes?: number
-  [key: string]: string | number | boolean | null | undefined
+  busy: number
+  log_frames: number
+  checkpointed_frames: number
 }
 
 export type Dependencies = {
@@ -168,10 +197,12 @@ export type ClaimResponse = {
 
 export type SearchMeta = {
   backend: string
+  derived_index: boolean
   stale: boolean
   index_version: string | null
   last_event_id: number | null
   index_lag_events: number | null
+  message: string
 }
 
 export type ApiEnvelope<T, M = Record<string, unknown>> = { data: T; meta?: M }

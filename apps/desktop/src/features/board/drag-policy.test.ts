@@ -18,6 +18,10 @@ describe("drag transition policy", () => {
       ok: false,
       reason: "Triage tasks need a description before specify.",
     })
+    expect(planDragTransition(task({ status: "triage", description: null }), "todo", null, "")).toEqual({
+      ok: false,
+      reason: "Triage tasks need a description before specify.",
+    })
     expect(planDragTransition(task({ status: "triage", description: "ready enough" }), "todo", null, "")).toMatchObject({
       ok: true,
       action: "specify",
@@ -37,6 +41,21 @@ describe("drag transition policy", () => {
       action: "block",
       body: { force: true, reason: "waiting" },
       confirm: expect.stringContaining("Force block"),
+    })
+  })
+
+  it("always force-confirms running archive drops", () => {
+    expect(planDragTransition(task({ status: "running" }), "archived", "claim_123", "")).toMatchObject({
+      ok: true,
+      action: "archive",
+      body: { force: true },
+      confirm: expect.stringContaining("Force archive"),
+    })
+    expect(planDragTransition(task({ status: "running" }), "archived", null, "")).toMatchObject({
+      ok: true,
+      action: "archive",
+      body: { force: true },
+      confirm: expect.stringContaining("Force archive"),
     })
   })
 

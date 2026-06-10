@@ -2,9 +2,8 @@ import { useEffect, useRef } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 
 import type { KanbanApi } from "@/lib/api"
-import { queryKeys } from "@/lib/query-keys"
 
-import { affectedQueriesForEvents, nextEventCursor } from "./event-invalidation"
+import { affectedQueriesForEvents, nextEventCursor, queryKeysForAffectedEvents } from "./event-invalidation"
 
 export function useEventPoller({
   api,
@@ -45,15 +44,13 @@ export function useEventPoller({
 
         cursorRef.current = nextEventCursor(cursorRef.current, page.events, page.meta)
         const affected = affectedQueriesForEvents(page.events)
-        if (affected.invalidateBoardTasks) {
-          await queryClient.invalidateQueries({ queryKey: queryKeys.boardTasksRoot(api.board) })
-        }
-        for (const taskId of affected.taskIds) {
-          await queryClient.invalidateQueries({ queryKey: queryKeys.taskDetail(taskId) })
-        }
-        const currentSelectedTaskId = selectedTaskIdRef.current
-        if (currentSelectedTaskId && !affected.taskIds.has(currentSelectedTaskId) && affected.invalidateEvents) {
-          await queryClient.invalidateQueries({ queryKey: queryKeys.taskDetail(currentSelectedTaskId) })
+        const queryKeysToInvalidate = queryKeysForAffectedEvents({
+          affected,
+          board: api.board,
+          selectedTaskId: selectedTaskIdRef.current,
+        })
+        for (const queryKey of queryKeysToInvalidate) {
+          await queryClient.invalidateQueries({ queryKey })
         }
       } catch (error) {
         if (!controller.signal.aborted) onError(error)

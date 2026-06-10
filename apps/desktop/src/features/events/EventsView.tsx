@@ -3,12 +3,13 @@ import { CircleDot, RefreshCcw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import type { EventRecord, KanbanApi } from "@/lib/api"
+import { queryKeys } from "@/lib/query-keys"
 import { formatRelativeTime, shortId } from "@/lib/utils"
 
 export function EventsView({ api }: { api: KanbanApi | null }) {
   const eventsQuery = useQuery({
     enabled: Boolean(api),
-    queryKey: ["events", api?.board ?? "pending"],
+    queryKey: queryKeys.events(api?.board ?? "pending"),
     queryFn: ({ signal }) => {
       if (!api) throw new Error("API client is not ready")
       return api.listBoardEvents({ limit: 150, signal })

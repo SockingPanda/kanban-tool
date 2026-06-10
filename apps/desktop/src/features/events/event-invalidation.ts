@@ -1,4 +1,5 @@
 import type { EventMeta, EventRecord } from "@/lib/api"
+import { queryKeys } from "@/lib/query-keys"
 
 export type AffectedQueries = {
   taskIds: Set<string>
@@ -45,4 +46,29 @@ export function affectedQueriesForEvents(events: EventRecord[]): AffectedQueries
     invalidateBoardTasks,
     invalidateEvents: events.length > 0,
   }
+}
+
+export function queryKeysForAffectedEvents({
+  affected,
+  board,
+  selectedTaskId,
+}: {
+  affected: AffectedQueries
+  board: string
+  selectedTaskId: string | null
+}) {
+  const keys = []
+
+  if (affected.invalidateEvents) keys.push(queryKeys.events(board))
+  if (affected.invalidateBoardTasks) {
+    keys.push(queryKeys.boardTasksRoot(board))
+    keys.push(queryKeys.stats(board))
+    keys.push(queryKeys.searchStatus(board))
+  }
+  for (const taskId of affected.taskIds) keys.push(queryKeys.taskDetail(taskId))
+  if (selectedTaskId && !affected.taskIds.has(selectedTaskId) && affected.invalidateEvents) {
+    keys.push(queryKeys.taskDetail(selectedTaskId))
+  }
+
+  return keys
 }

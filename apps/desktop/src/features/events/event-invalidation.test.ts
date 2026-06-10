@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import type { EventRecord } from "@/lib/api"
 
-import { affectedQueriesForEvents, nextEventCursor } from "./event-invalidation"
+import { affectedQueriesForEvents, nextEventCursor, queryKeysForAffectedEvents } from "./event-invalidation"
 
 describe("event invalidation helpers", () => {
   it("uses event envelope next_after before falling back to row ids", () => {
@@ -51,6 +51,32 @@ describe("event invalidation helpers", () => {
       invalidateBoardTasks: true,
       invalidateEvents: true,
     })
+  })
+
+  it("maps event changes to canonical cache keys", () => {
+    const affected = affectedQueriesForEvents([
+      eventRecord({ task_id: "t_2", kind: "task.completed" }),
+      eventRecord({ task_id: "t_3", kind: "task.comment.created" }),
+    ])
+
+    expect(queryKeysForAffectedEvents({ affected, board: "default", selectedTaskId: "t_selected" })).toEqual([
+      ["events", "default"],
+      ["tasks", "default"],
+      ["stats", "default"],
+      ["search-status", "default"],
+      ["task-detail", "t_2"],
+      ["task-detail", "t_3"],
+      ["task-detail", "t_selected"],
+    ])
+  })
+
+  it("does not invalidate maintenance keys for task-scoped comment events", () => {
+    const affected = affectedQueriesForEvents([eventRecord({ task_id: "t_2", kind: "task.comment.created" })])
+
+    expect(queryKeysForAffectedEvents({ affected, board: "default", selectedTaskId: "t_2" })).toEqual([
+      ["events", "default"],
+      ["task-detail", "t_2"],
+    ])
   })
 })
 

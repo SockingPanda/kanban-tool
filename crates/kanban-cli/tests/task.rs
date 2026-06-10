@@ -4,7 +4,7 @@ use anyhow::Context;
 use common::{TempDb, kb};
 use pretty_assertions::assert_eq;
 #[test]
-fn task_update_sets_and_clears_dates() -> anyhow::Result<()> {
+fn task_update_sets_and_clears_schedule_fields() -> anyhow::Result<()> {
     let temp = TempDb::new("task_update_sets_and_clears_scheduled_at_and_due_at")?;
     kb(&temp.path, &["init"])?.success()?;
     let created = kb(
@@ -58,7 +58,7 @@ fn task_update_sets_and_clears_dates() -> anyhow::Result<()> {
 }
 
 #[test]
-fn task_complete_alias_marks_done() -> anyhow::Result<()> {
+fn task_complete_alias_finishes_running_task() -> anyhow::Result<()> {
     let temp = TempDb::new("task_complete_alias_finishes_like_done")?;
     kb(&temp.path, &["init"])?.success()?;
     let created = kb(
@@ -98,7 +98,7 @@ fn task_complete_alias_marks_done() -> anyhow::Result<()> {
 }
 
 #[test]
-fn task_reclaim_expired_alias_matches_reclaim() -> anyhow::Result<()> {
+fn task_reclaim_expired_alias_matches_default_reclaim() -> anyhow::Result<()> {
     let bare = TempDb::new("task_reclaim_expired_alias_matches_bare_reclaim_bare")?;
     let explicit = TempDb::new("task_reclaim_expired_alias_matches_bare_reclaim_explicit")?;
 

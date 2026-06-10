@@ -1,4 +1,33 @@
-use super::*;
+use crate::connect_file;
+
+use super::{
+    MAX_SEARCH_LIMIT, board_id, current_last_event_id, search_lag, sqlite_like_literal, storage,
+    validate_page_bounds,
+};
+#[cfg(feature = "tantivy-backend")]
+use super::{mark_derived_store_dirty, mark_derived_store_failure, mark_derived_store_success};
+
+#[cfg(feature = "tantivy-backend")]
+use std::collections::HashSet;
+use std::path::Path;
+#[cfg(feature = "tantivy-backend")]
+use std::path::PathBuf;
+
+use kanban_core::Result;
+#[cfg(feature = "tantivy-backend")]
+use kanban_core::{Clock, KanbanError, SystemClock, TaskStatus};
+#[cfg(feature = "tantivy-backend")]
+use kanban_indexer::TANTIVY_TASKS_STORE;
+
+#[cfg(feature = "tantivy-backend")]
+use kanban_search::TaskSearchDocument;
+use kanban_search::{SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults};
+
+#[cfg(feature = "tantivy-backend")]
+use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params_from_iter, types::Value};
+
+use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "tantivy-backend")]
 const SEARCH_TASKS_STATE_SCHEMA_VERSION: i64 = 1;

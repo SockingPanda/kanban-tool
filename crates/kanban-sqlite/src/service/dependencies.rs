@@ -1,4 +1,23 @@
-use super::*;
+use crate::connect_file;
+
+use super::{
+    TaskRecord, board_id, delete_dependency_relation, ensure_board_active, get_task_by_id,
+    guarded_set_status, insert_event, recompute_ready_status, resolve_task, storage,
+    upsert_dependency_relation, with_immediate_tx,
+};
+
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
+
+use kanban_core::{
+    Clock, KanbanError, Result, SystemClock, TaskStatus, is_active_recomputable_status,
+};
+
+use rusqlite::{Connection, params};
+
+use serde_json::json;
 
 pub fn add_dependency(
     path: impl AsRef<Path>,

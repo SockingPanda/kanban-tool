@@ -1,4 +1,17 @@
-use super::*;
+use crate::connect_file;
+
+use super::{
+    CommentRecord, active_board_id_for_task, insert_event, resolve_task,
+    resolve_task_without_active_board, storage, with_immediate_tx,
+};
+
+use std::path::Path;
+
+use kanban_core::{Clock, KanbanError, Result, SystemClock, new_typed_id};
+
+use rusqlite::{Row, params};
+
+use serde_json::json;
 
 pub fn create_comment(
     path: impl AsRef<Path>,

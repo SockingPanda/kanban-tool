@@ -1,4 +1,25 @@
-use super::*;
+use crate::connect_file;
+
+use super::{
+    IndexOutboxRecord, board_id, current_last_event_id, derived_status_by_name,
+    mark_derived_store_failure, mark_derived_store_success, outbox_from_row, search_lag, storage,
+};
+
+use std::path::Path;
+#[cfg(feature = "vector-lancedb")]
+use std::path::PathBuf;
+
+use kanban_core::{Clock, KanbanError, Result, SystemClock};
+
+use kanban_indexer::LANCEDB_CHUNKS_STORE;
+#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
+use kanban_indexer::OutboxTarget;
+
+use kanban_vector::{ChunkBuilder, TaskChunkSource, VectorStore, VectorStoreStatus};
+#[cfg(feature = "vector-lancedb")]
+use kanban_vector::{LanceDbConfig, LanceDbStore};
+
+use rusqlite::{Connection, Row, params, params_from_iter, types::Value};
 
 #[cfg(feature = "vector-lancedb")]
 pub fn vector_store_status(path: impl AsRef<Path>, board: &str) -> Result<VectorStoreStatus> {

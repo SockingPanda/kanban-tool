@@ -13,6 +13,9 @@ fix *args:
 clippy:
     cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings
 
+clippy-p package:
+    cargo clippy -p {{package}} --tests -- -D warnings
+
 check:
     cargo check --workspace --exclude kanban-desktop --tests
 
@@ -73,7 +76,6 @@ release:
     just feature-p kanban-server vector-lancedb
     just feature-p kanban-server tantivy-backend,graph-oxigraph,vector-lancedb
     just desktop-check
-    just desktop-build
     just desktop-package
     scripts/smoke-v1-local.sh
     git diff --check

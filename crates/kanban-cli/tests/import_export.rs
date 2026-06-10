@@ -6,21 +6,78 @@ use kanban_sqlite::maintenance_lock_path;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 #[test]
-fn backup_checkpoint_vacuum_export_and_import_jsonl() -> anyhow::Result<()> {
-    let source = TempDb::new("maintenance_commands_source")?;
-    let source_data = source_with_completed_run(&source)?;
+fn backup_writes_database_copy() -> anyhow::Result<()> {
+    let source = initialized_database("backup_writes_database_copy")?;
+    let backup_path = source.dir.join("backup.sqlite");
 
-    checkpoint_vacuum_and_backup(&source)?;
+    let backup = kb(
+        &source.path,
+        &[
+            "--json",
+            "backup",
+            "--out",
+            backup_path.to_str().context("expected UTF-8 path")?,
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(
+        backup["data"]["out_path"],
+        backup_path.to_str().context("expected UTF-8 path")?
+    );
+    assert!(backup_path.exists());
+    assert!(std::fs::metadata(&backup_path)?.len() > 0);
+    Ok(())
+}
+
+#[test]
+fn checkpoint_returns_wal_checkpoint_result() -> anyhow::Result<()> {
+    let source = initialized_database("checkpoint_returns_wal_checkpoint_result")?;
+
+    let checkpoint = kb(&source.path, &["--json", "checkpoint"])?.success_json()?;
+
+    assert_eq!(checkpoint["data"]["busy"], 0);
+    Ok(())
+}
+
+#[test]
+fn vacuum_succeeds_for_initialized_database() -> anyhow::Result<()> {
+    let source = initialized_database("vacuum_succeeds_for_initialized_database")?;
+
+    kb(&source.path, &["--json", "vacuum"])?.success_json()?;
+    Ok(())
+}
+
+#[test]
+fn export_import_round_trips_jsonl_snapshot() -> anyhow::Result<()> {
+    let source = TempDb::new("export_import_round_trips_jsonl_snapshot_source")?;
+    let source_data = source_with_completed_run(&source)?;
 
     let (export_path, export_records, export_content) =
         export_board_snapshot(&source, &source_data.task_id)?;
     import_exported_snapshot(&export_path, export_records, &source_data.task_id)?;
+    assert!(export_content.contains(&source_data.task_id));
+    Ok(())
+}
+
+#[test]
+fn import_rejects_missing_run_log_without_restoring_database() -> anyhow::Result<()> {
+    let source = TempDb::new("import_rejects_missing_run_log_without_restoring_database_source")?;
+    let source_data = source_with_completed_run(&source)?;
+
+    let (_, _, export_content) = export_board_snapshot(&source, &source_data.task_id)?;
     reject_import_with_missing_run_log(&source, &export_content)?;
     Ok(())
 }
 
 struct SourceData {
     task_id: String,
+}
+
+fn initialized_database(name: &str) -> anyhow::Result<TempDb> {
+    let source = TempDb::new(name)?;
+    kb(&source.path, &["init"])?.success()?;
+    Ok(source)
 }
 
 fn source_with_completed_run(source: &TempDb) -> anyhow::Result<SourceData> {
@@ -66,30 +123,6 @@ fn source_with_completed_run(source: &TempDb) -> anyhow::Result<SourceData> {
     Ok(SourceData {
         task_id: task_id.to_owned(),
     })
-}
-
-fn checkpoint_vacuum_and_backup(source: &TempDb) -> anyhow::Result<()> {
-    let checkpoint = kb(&source.path, &["--json", "checkpoint"])?.success_json()?;
-    assert_eq!(checkpoint["data"]["busy"], 0);
-    kb(&source.path, &["--json", "vacuum"])?.success_json()?;
-
-    let backup_path = source.dir.join("backup.sqlite");
-    let backup = kb(
-        &source.path,
-        &[
-            "--json",
-            "backup",
-            "--out",
-            backup_path.to_str().context("expected UTF-8 path")?,
-        ],
-    )?
-    .success_json()?;
-    assert_eq!(
-        backup["data"]["out_path"],
-        backup_path.to_str().context("expected UTF-8 path")?
-    );
-    assert!(backup_path.exists());
-    Ok(())
 }
 
 fn export_board_snapshot(

@@ -126,15 +126,7 @@ fn comments_reject_agent_type_for_non_agent_authors() -> anyhow::Result<()> {
 #[test]
 fn migration_backfills_comment_author_type_from_kind() -> anyhow::Result<()> {
     let temp = TempDb::new("migration_backfills_comment_author_type_from_kind")?;
-    let v2_sql = include_str!("../../../../migrations/001_initial.sql")
-        .replace(
-            "  author_type TEXT NOT NULL DEFAULT 'human' CHECK(author_type IN ('human', 'agent', 'system')),\n",
-            "",
-        )
-        .replace(
-            "  agent_type TEXT CHECK(author_type = 'agent' OR agent_type IS NULL),\n",
-            "",
-        );
+    let v2_sql = include_str!("../../../../migrations/001_initial.sql");
     let conn = Connection::open(&temp.path)?;
     conn.execute_batch(&v2_sql)?;
     conn.execute_batch(include_str!(
@@ -274,6 +266,51 @@ fn legacy_jsonl_import_infers_comment_author_identity() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn legacy_jsonl_import_infers_agent_author_type_without_dropping_agent_type() -> anyhow::Result<()>
+{
+    let source = TempDb::new("legacy_jsonl_import_preserves_agent_type_source")?;
+    init_database(&source.path, "tester")?;
+    let task = create_task(
+        &source.path,
+        "default",
+        "tester",
+        CreateTask::ready("legacy agent import"),
+    )?;
+    create_comment_with_options(
+        &source.path,
+        &task.id,
+        CreateComment {
+            author: "runner".into(),
+            body: "agent note".into(),
+            kind: Some("worker".into()),
+            author_type: Some("agent".into()),
+            agent_type: Some("executor".into()),
+        },
+    )?;
+
+    let export_path = source.dir.join("agent-comments.jsonl");
+    export_jsonl(&source.path, "default", &export_path)?;
+    let legacy_export = std::fs::read_to_string(&export_path)?
+        .lines()
+        .map(remove_comment_author_type)
+        .collect::<anyhow::Result<Vec<_>>>()?
+        .join("\n");
+    let legacy_path = source.dir.join("legacy-agent-comments.jsonl");
+    std::fs::write(&legacy_path, format!("{legacy_export}\n"))?;
+
+    let target = TempDb::new("legacy_jsonl_import_preserves_agent_type_target")?;
+    init_database(&target.path, "tester")?;
+    import_jsonl(&target.path, &legacy_path, true)?;
+
+    let comments = list_comments(&target.path, &task.id)?;
+    assert_eq!(comments.len(), 1);
+    assert_eq!(comments[0].kind, "worker");
+    assert_eq!(comments[0].author_type, "agent");
+    assert_eq!(comments[0].agent_type.as_deref(), Some("executor"));
+    Ok(())
+}
+
 fn strip_comment_identity_fields(line: &str) -> anyhow::Result<String> {
     let mut value = serde_json::from_str::<serde_json::Value>(line)?;
     if value["type"] == "comment" {
@@ -282,6 +319,17 @@ fn strip_comment_identity_fields(line: &str) -> anyhow::Result<String> {
             .ok_or_else(|| test_error("expected comment data object"))?;
         data.remove("author_type");
         data.remove("agent_type");
+    }
+    Ok(value.to_string())
+}
+
+fn remove_comment_author_type(line: &str) -> anyhow::Result<String> {
+    let mut value = serde_json::from_str::<serde_json::Value>(line)?;
+    if value["type"] == "comment" {
+        let data = value["data"]
+            .as_object_mut()
+            .ok_or_else(|| test_error("expected comment data object"))?;
+        data.remove("author_type");
     }
     Ok(value.to_string())
 }

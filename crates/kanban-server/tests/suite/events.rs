@@ -2,7 +2,8 @@ use crate::common::*;
 
 #[tokio::test]
 async fn events_api_after_limit_returns_ordered_events_and_next_after() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let first = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -23,7 +24,7 @@ async fn events_api_after_limit_returns_ordered_events_and_next_after() {
         .find(|event| event.task_id.as_deref() == Some(&first.id))
         .expect("first task event")
         .id;
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(
         app,
@@ -44,7 +45,8 @@ async fn events_api_after_limit_returns_ordered_events_and_next_after() {
 
 #[tokio::test]
 async fn events_api_filters_by_task_id_for_detail_timeline() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let first = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -69,7 +71,7 @@ async fn events_api_filters_by_task_id_for_detail_timeline() {
         false,
     )
     .expect("block first");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(
         app,

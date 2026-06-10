@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[test]
-fn claim_complete_and_dependencies_promote_children() {
-    let temp = TempDb::new("claim_complete_and_dependencies_promote_children");
+fn claim_complete_and_dependencies_promote_children() -> anyhow::Result<()> {
+    let temp = TempDb::new("claim_complete_and_dependencies_promote_children")?;
     init_database(&temp.path, "tester").unwrap();
     let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("父任务")).unwrap();
     let child = create_task(&temp.path, "default", "tester", CreateTask::ready("子任务")).unwrap();
@@ -49,11 +49,12 @@ fn claim_complete_and_dependencies_promote_children() {
         list_runs(&temp.path, "default", Some(&parent.id)).unwrap()[0].status,
         "succeeded"
     );
+    Ok(())
 }
 
 #[test]
-fn block_unblock_recomputes_target_and_cycle_detection_rejects_cycles() {
-    let temp = TempDb::new("block_unblock_recomputes_target_and_cycle_detection_rejects_cycles");
+fn block_unblock_recomputes_target_and_cycle_detection_rejects_cycles() -> anyhow::Result<()> {
+    let temp = TempDb::new("block_unblock_recomputes_target_and_cycle_detection_rejects_cycles")?;
     init_database(&temp.path, "tester").unwrap();
     let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("父任务")).unwrap();
     let child = create_task(&temp.path, "default", "tester", CreateTask::ready("子任务")).unwrap();
@@ -89,11 +90,12 @@ fn block_unblock_recomputes_target_and_cycle_detection_rejects_cycles() {
         get_task(&temp.path, "default", &child.id).unwrap().status,
         TaskStatus::Ready
     );
+    Ok(())
 }
 
 #[test]
-fn add_dependency_rolls_back_edge_and_status_when_event_insert_fails() {
-    let temp = TempDb::new("add_dependency_rolls_back_edge_and_status_when_event_insert_fails");
+fn add_dependency_rolls_back_edge_and_status_when_event_insert_fails() -> anyhow::Result<()> {
+    let temp = TempDb::new("add_dependency_rolls_back_edge_and_status_when_event_insert_fails")?;
     init_database(&temp.path, "tester").unwrap();
     let parent = create_task(
         &temp.path,
@@ -136,11 +138,12 @@ fn add_dependency_rolls_back_edge_and_status_when_event_insert_fails() {
             .unwrap()
             .is_empty()
     );
+    Ok(())
 }
 
 #[test]
-fn remove_dependency_recomputes_child_to_ready_when_unblocked() {
-    let temp = TempDb::new("remove_dependency_recomputes_child_to_ready_when_unblocked");
+fn remove_dependency_recomputes_child_to_ready_when_unblocked() -> anyhow::Result<()> {
+    let temp = TempDb::new("remove_dependency_recomputes_child_to_ready_when_unblocked")?;
     init_database(&temp.path, "tester").unwrap();
     let parent = create_task(
         &temp.path,
@@ -183,11 +186,12 @@ fn remove_dependency_recomputes_child_to_ready_when_unblocked() {
             .iter()
             .any(|event| event.kind == "task.promoted")
     );
+    Ok(())
 }
 
 #[test]
-fn adding_incomplete_parent_to_running_child_is_rejected_without_force() {
-    let temp = TempDb::new("adding_incomplete_parent_to_running_child_is_rejected_without_force");
+fn adding_incomplete_parent_to_running_child_is_rejected_without_force() -> anyhow::Result<()> {
+    let temp = TempDb::new("adding_incomplete_parent_to_running_child_is_rejected_without_force")?;
     init_database(&temp.path, "tester").unwrap();
     let parent = create_task(
         &temp.path,
@@ -229,11 +233,13 @@ fn adding_incomplete_parent_to_running_child_is_rejected_without_force() {
             .unwrap()
             .is_empty()
     );
+    Ok(())
 }
 
 #[test]
-fn add_dependency_reloads_child_inside_transaction_before_demoting_ready() {
-    let temp = TempDb::new("add_dependency_reloads_child_inside_transaction_before_demoting_ready");
+fn add_dependency_reloads_child_inside_transaction_before_demoting_ready() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("add_dependency_reloads_child_inside_transaction_before_demoting_ready")?;
     init_database(&temp.path, "tester").unwrap();
     let parent = create_task(
         &temp.path,
@@ -284,11 +290,12 @@ fn add_dependency_reloads_child_inside_transaction_before_demoting_ready() {
             .unwrap()
             .is_empty()
     );
+    Ok(())
 }
 
 #[test]
-fn promote_task_reloads_dependencies_inside_transaction() {
-    let temp = TempDb::new("promote_task_reloads_dependencies_inside_transaction");
+fn promote_task_reloads_dependencies_inside_transaction() -> anyhow::Result<()> {
+    let temp = TempDb::new("promote_task_reloads_dependencies_inside_transaction")?;
     init_database(&temp.path, "tester").unwrap();
     let parent = create_task(
         &temp.path,
@@ -344,11 +351,12 @@ fn promote_task_reloads_dependencies_inside_transaction() {
         get_task(&temp.path, "default", &child.id).unwrap().status,
         TaskStatus::Todo
     );
+    Ok(())
 }
 
 #[test]
-fn unblock_task_reloads_status_inside_transaction_before_recomputing() {
-    let temp = TempDb::new("unblock_task_reloads_status_inside_transaction_before_recomputing");
+fn unblock_task_reloads_status_inside_transaction_before_recomputing() -> anyhow::Result<()> {
+    let temp = TempDb::new("unblock_task_reloads_status_inside_transaction_before_recomputing")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -383,4 +391,5 @@ fn unblock_task_reloads_status_inside_transaction_before_recomputing() {
         get_task(&temp.path, "default", &task.id).unwrap().status,
         TaskStatus::Archived
     );
+    Ok(())
 }

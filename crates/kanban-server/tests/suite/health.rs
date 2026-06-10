@@ -2,8 +2,8 @@ use crate::common::*;
 
 #[tokio::test]
 async fn health_reports_ok_database_and_version() {
-    let (_dir, db_path) = temp_db();
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let test = TestApp::new();
+    let app = test.router();
 
     let (status, json) = get_json(app, "/health").await;
 

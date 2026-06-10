@@ -11,14 +11,27 @@ pub fn kb(db_path: &Path, args: &[&str]) -> anyhow::Result<CmdResult> {
 }
 
 pub fn kb_in_dir(db_path: &Path, args: &[&str], current_dir: &Path) -> anyhow::Result<CmdResult> {
-    let output = Command::cargo_bin("kb")
-        .context("failed to locate kb test binary")?
+    kb_in_dir_env(db_path, args, current_dir, None)
+}
+
+pub fn kb_in_dir_env(
+    db_path: &Path,
+    args: &[&str],
+    current_dir: &Path,
+    board_env: Option<&str>,
+) -> anyhow::Result<CmdResult> {
+    let mut command = Command::cargo_bin("kb").context("failed to locate kb test binary")?;
+    command
         .current_dir(current_dir)
         .arg("--db")
         .arg(db_path)
-        .args(args)
-        .output()
-        .context("failed to execute kb command")?;
+        .args(args);
+    if let Some(board) = board_env {
+        command.env("KB_BOARD", board);
+    } else {
+        command.env_remove("KB_BOARD");
+    }
+    let output = command.output().context("failed to execute kb command")?;
     Ok(CmdResult { output })
 }
 
@@ -36,6 +49,11 @@ impl CmdResult {
         ensure_success(&self.output)?;
         serde_json::from_slice(&self.output.stdout)
             .context("failed to parse command stdout as JSON")
+    }
+
+    pub fn success_stdout(self) -> anyhow::Result<String> {
+        ensure_success(&self.output)?;
+        String::from_utf8(self.output.stdout).context("failed to parse command stdout as UTF-8")
     }
 
     pub fn failure_containing(self, expected: &str) -> anyhow::Result<()> {

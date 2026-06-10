@@ -4,7 +4,7 @@ use anyhow::Context;
 use common::{TempDb, kb};
 use pretty_assertions::assert_eq;
 #[test]
-fn dispatch_loop_uses_worker_profile_config_and_respects_assignee_routing() -> anyhow::Result<()> {
+fn dispatch_profile_routes_assignees() -> anyhow::Result<()> {
     let temp =
         TempDb::new("dispatch_loop_uses_worker_profile_config_and_respects_assignee_routing")?;
     kb(&temp.path, &["init"])?.success()?;
@@ -93,7 +93,7 @@ fn dispatch_loop_uses_worker_profile_config_and_respects_assignee_routing() -> a
 }
 
 #[test]
-fn dispatch_rejects_profile_log_dir_outside_trusted_roots() -> anyhow::Result<()> {
+fn dispatch_rejects_untrusted_log_dir() -> anyhow::Result<()> {
     let temp = TempDb::new("dispatch_rejects_profile_log_dir_outside_trusted_roots")?;
     kb(&temp.path, &["init"])?.success()?;
     let task = kb(
@@ -152,7 +152,7 @@ fn dispatch_rejects_profile_log_dir_outside_trusted_roots() -> anyhow::Result<()
 }
 
 #[test]
-fn retry_policy_and_run_log_commands_support_operator_recovery() -> anyhow::Result<()> {
+fn retry_policy_and_run_logs_support_recovery() -> anyhow::Result<()> {
     let temp = TempDb::new("retry_policy_and_run_log_commands_support_operator_recovery")?;
     kb(&temp.path, &["init"])?.success()?;
     let created = kb(
@@ -218,7 +218,7 @@ fn retry_policy_and_run_log_commands_support_operator_recovery() -> anyhow::Resu
 }
 
 #[test]
-fn run_log_command_rejects_suspicious_log_paths() -> anyhow::Result<()> {
+fn run_logs_reject_suspicious_paths() -> anyhow::Result<()> {
     let temp = TempDb::new("run_log_command_rejects_suspicious_log_paths")?;
     kb(&temp.path, &["init"])?.success()?;
     kb(

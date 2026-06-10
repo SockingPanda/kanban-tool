@@ -1,9 +1,10 @@
 use crate::common::*;
 
 #[test]
-fn task_events_fan_out_target_specific_outbox_and_mark_derived_stores_dirty() {
+fn task_events_fan_out_target_specific_outbox_and_mark_derived_stores_dirty() -> anyhow::Result<()>
+{
     let temp =
-        TempDb::new("task_events_fan_out_target_specific_outbox_and_mark_derived_stores_dirty");
+        TempDb::new("task_events_fan_out_target_specific_outbox_and_mark_derived_stores_dirty")?;
     init_database(&temp.path, "tester").unwrap();
 
     let task = create_task(
@@ -43,4 +44,5 @@ fn task_events_fan_out_target_specific_outbox_and_mark_derived_stores_dirty() {
         assert!(status.dirty, "{store} should be dirty");
         assert_eq!(status.last_event_id, 0);
     }
+    Ok(())
 }

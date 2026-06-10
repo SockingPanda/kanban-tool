@@ -2,7 +2,8 @@ use crate::common::*;
 
 #[tokio::test]
 async fn dependencies_api_add_remove_list_and_cycle_error() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let parent = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -17,7 +18,7 @@ async fn dependencies_api_add_remove_list_and_cycle_error() {
         kanban_sqlite::CreateTask::ready("child"),
     )
     .expect("child");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = post_json(
         app.clone(),

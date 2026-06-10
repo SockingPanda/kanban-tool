@@ -2,7 +2,8 @@ use crate::common::*;
 
 #[tokio::test]
 async fn context_graph_and_vector_apis_return_default_fallbacks() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -19,7 +20,7 @@ async fn context_graph_and_vector_apis_return_default_fallbacks() {
         },
     )
     .expect("seed task");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(
         app.clone(),

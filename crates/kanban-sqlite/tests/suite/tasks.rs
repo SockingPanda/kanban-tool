@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[test]
-fn task_crud_writes_events_and_hides_archived_by_default() {
-    let temp = TempDb::new("task_crud_writes_events_and_hides_archived_by_default");
+fn task_crud_writes_events_and_hides_archived_by_default() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_crud_writes_events_and_hides_archived_by_default")?;
     init_database(&temp.path, "tester").unwrap();
 
     let task = create_task(
@@ -59,4 +59,5 @@ fn task_crud_writes_events_and_hides_archived_by_default() {
         list_tasks(&temp.path, "default", &[], true).unwrap().len(),
         1
     );
+    Ok(())
 }

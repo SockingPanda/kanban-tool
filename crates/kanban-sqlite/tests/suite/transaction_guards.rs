@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[test]
-fn block_rolls_back_task_state_when_event_insert_fails() {
-    let temp = TempDb::new("block_rolls_back_task_state_when_event_insert_fails");
+fn block_rolls_back_task_state_when_event_insert_fails() -> anyhow::Result<()> {
+    let temp = TempDb::new("block_rolls_back_task_state_when_event_insert_fails")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -31,11 +31,12 @@ fn block_rolls_back_task_state_when_event_insert_fails() {
     let fresh = get_task(&temp.path, "default", &task.id).unwrap();
     assert_eq!(fresh.status, TaskStatus::Ready);
     assert!(fresh.status_reason.is_none());
+    Ok(())
 }
 
 #[test]
-fn update_rolls_back_task_state_when_event_insert_fails() {
-    let temp = TempDb::new("update_rolls_back_task_state_when_event_insert_fails");
+fn update_rolls_back_task_state_when_event_insert_fails() -> anyhow::Result<()> {
+    let temp = TempDb::new("update_rolls_back_task_state_when_event_insert_fails")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -74,4 +75,5 @@ fn update_rolls_back_task_state_when_event_insert_fails() {
     assert_eq!(fresh.title, "original title");
     assert_eq!(fresh.priority, task.priority);
     assert_eq!(fresh.lock_version, task.lock_version);
+    Ok(())
 }

@@ -334,8 +334,9 @@ export class KanbanApi {
       `/api/v1/boards/${this.board}/tasks?${params.toString()}`,
       { signal: options.signal },
     )
+    const tasks = expectArray<Task>(envelope.data, "tasks response data")
     return {
-      tasks: envelope.data,
+      tasks,
       page: normalizePageMeta(envelope.meta, { limit, offset }),
     } satisfies TaskPageResult
   }
@@ -354,9 +355,11 @@ export class KanbanApi {
       `/api/v1/search/tasks?${params.toString()}`,
       { signal: options.signal },
     )
+    const search = expectRecord<SearchTasksResponse>(envelope.data, "search response data")
+    const hits = expectArray<SearchTaskHit>(search.hits, "search hits")
     return {
-      tasks: envelope.data.hits.map((hit) => hit.task),
-      searchMeta: envelope.data.meta,
+      tasks: hits.map((hit) => hit.task),
+      searchMeta: search.meta,
       page: normalizePageMeta(envelope.meta, { limit, offset }),
     } satisfies SearchTasksResult
   }
@@ -516,6 +519,20 @@ function parseJsonEnvelope<T, M>(text: string): ApiEnvelope<T, M> | ErrorEnvelop
   } catch {
     return null
   }
+}
+
+function expectArray<T>(value: unknown, label: string): T[] {
+  if (!Array.isArray(value)) {
+    throw new ApiError("invalid_response", `${label} must be an array`)
+  }
+  return value as T[]
+}
+
+function expectRecord<T extends Record<string, unknown>>(value: unknown, label: string): T {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiError("invalid_response", `${label} must be an object`)
+  }
+  return value as T
 }
 
 function normalizePageMeta(meta: PageEnvelopeMeta | undefined, fallback: { limit: number; offset: number }): PageMeta {

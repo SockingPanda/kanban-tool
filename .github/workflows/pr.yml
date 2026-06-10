@@ -95,12 +95,13 @@ jobs:
           tool: just
       - name: Check shell scripts
         run: |
-          shopt -s nullglob
-          scripts=(scripts/*.sh)
+          mapfile -d '' scripts < <(find scripts -type f -name '*.sh' -print0 | sort -z)
           if ((${#scripts[@]} == 0)); then
-            echo "No scripts/*.sh files found"
+            echo "No scripts/**/*.sh files found"
           else
-            bash -n "${scripts[@]}"
+            for script in "${scripts[@]}"; do
+              bash -n "$script"
+            done
           fi
       - name: List just recipes
         run: just --list

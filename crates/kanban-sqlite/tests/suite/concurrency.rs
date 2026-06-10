@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[test]
-fn concurrent_claim_attempts_on_one_ready_task_have_exactly_one_success() {
-    let temp = TempDb::new("concurrent_claim_attempts_on_one_ready_task_have_exactly_one_success");
+fn concurrent_claim_attempts_on_one_ready_task_have_exactly_one_success() -> anyhow::Result<()> {
+    let temp = TempDb::new("concurrent_claim_attempts_on_one_ready_task_have_exactly_one_success")?;
     init_database(&temp.path, "tester").unwrap();
     let task = create_task(
         &temp.path,
@@ -46,4 +46,5 @@ fn concurrent_claim_attempts_on_one_ready_task_have_exactly_one_success() {
             .count(),
         1
     );
+    Ok(())
 }

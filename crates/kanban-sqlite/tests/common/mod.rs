@@ -24,24 +24,23 @@ pub use kanban_vector::{
 pub use rusqlite::{Connection, params};
 
 pub struct TempDb {
+    _temp_dir: tempfile::TempDir,
     pub dir: std::path::PathBuf,
     pub path: std::path::PathBuf,
 }
 
 impl TempDb {
-    pub fn new(name: &str) -> Self {
-        let mut dir = std::env::temp_dir();
-        dir.push(format!("kb-sqlite-all-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("kb.db");
-        Self { dir, path }
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
+    pub fn new(name: &str) -> anyhow::Result<Self> {
+        let dir = tempfile::Builder::new()
+            .prefix(&format!("kb-sqlite-all-{name}-"))
+            .tempdir()?;
+        let path = dir.path().join("kb.db");
+        let dir_path = dir.path().to_path_buf();
+        Ok(Self {
+            _temp_dir: dir,
+            dir: dir_path,
+            path,
+        })
     }
 }
 

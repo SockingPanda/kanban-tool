@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[test]
-fn init_creates_schema_default_board_and_columns() {
-    let temp = TempDb::new("init_creates_schema_default_board_and_columns");
+fn init_creates_schema_default_board_and_columns() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_creates_schema_default_board_and_columns")?;
 
     let result = init_database(&temp.path, "test-actor").expect("init succeeds");
 
@@ -36,11 +36,12 @@ fn init_creates_schema_default_board_and_columns() {
         )
         .unwrap();
     assert_eq!(archived_columns, 1);
+    Ok(())
 }
 
 #[test]
-fn init_is_idempotent() {
-    let temp = TempDb::new("init_is_idempotent");
+fn init_is_idempotent() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_is_idempotent")?;
 
     init_database(&temp.path, "first").expect("first init succeeds");
     init_database(&temp.path, "second").expect("second init succeeds");
@@ -54,11 +55,12 @@ fn init_is_idempotent() {
         .unwrap();
     assert_eq!(board_count, 1);
     assert_eq!(column_count, 9);
+    Ok(())
 }
 
 #[test]
-fn init_records_and_enforces_migration_checksum() {
-    let temp = TempDb::new("init_records_and_enforces_migration_checksum");
+fn init_records_and_enforces_migration_checksum() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_records_and_enforces_migration_checksum")?;
 
     init_database(&temp.path, "first").expect("first init succeeds");
 
@@ -89,11 +91,12 @@ fn init_records_and_enforces_migration_checksum() {
         err.to_string().contains("migration checksum mismatch"),
         "err: {err}"
     );
+    Ok(())
 }
 
 #[test]
-fn init_creates_knowledge_substrate_tables_and_seeds() {
-    let temp = TempDb::new("init_creates_knowledge_substrate_tables_and_seeds");
+fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_creates_knowledge_substrate_tables_and_seeds")?;
 
     init_database(&temp.path, "tester").expect("init succeeds");
 
@@ -138,11 +141,12 @@ fn init_creates_knowledge_substrate_tables_and_seeds() {
         )
         .unwrap();
     assert_eq!(board_entities, 1);
+    Ok(())
 }
 
 #[test]
-fn init_upgrades_v1_database_and_backfills_task_entities() {
-    let temp = TempDb::new("init_upgrades_v1_database_and_backfills_task_entities");
+fn init_upgrades_v1_database_and_backfills_task_entities() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_upgrades_v1_database_and_backfills_task_entities")?;
 
     let v1_sql = include_str!("../../../../migrations/001_initial.sql");
     let conn = Connection::open(&temp.path).unwrap();
@@ -175,4 +179,5 @@ fn init_upgrades_v1_database_and_backfills_task_entities() {
         )
         .unwrap();
     assert_eq!(task_entity_title, "Upgrade task");
+    Ok(())
 }

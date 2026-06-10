@@ -1,9 +1,10 @@
 use crate::common::*;
 
 #[test]
-fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() {
+fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() -> anyhow::Result<()>
+{
     let temp =
-        TempDb::new("sqlite_search_fallback_matches_task_related_text_with_filters_and_paging");
+        TempDb::new("sqlite_search_fallback_matches_task_related_text_with_filters_and_paging")?;
     init_database(&temp.path, "tester").unwrap();
 
     let alpha = create_task(
@@ -140,11 +141,12 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() {
             .iter()
             .any(|hit| hit.task_id == gamma.id || hit.task_id == archived.id)
     );
+    Ok(())
 }
 
 #[test]
-fn sqlite_search_rejects_limit_that_cannot_be_bounded_safely() {
-    let temp = TempDb::new("sqlite_search_rejects_limit_that_cannot_be_bounded_safely");
+fn sqlite_search_rejects_limit_that_cannot_be_bounded_safely() -> anyhow::Result<()> {
+    let temp = TempDb::new("sqlite_search_rejects_limit_that_cannot_be_bounded_safely")?;
     init_database(&temp.path, "tester").unwrap();
 
     let error = search_tasks(
@@ -162,11 +164,12 @@ fn sqlite_search_rejects_limit_that_cannot_be_bounded_safely() {
     .unwrap_err();
 
     assert!(error.to_string().contains("limit must be <= 1000"));
+    Ok(())
 }
 
 #[test]
-fn sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely() {
-    let temp = TempDb::new("sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely");
+fn sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely() -> anyhow::Result<()> {
+    let temp = TempDb::new("sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely")?;
     init_database(&temp.path, "tester").unwrap();
 
     let error = kanban_sqlite::list_tasks_page(
@@ -185,13 +188,15 @@ fn sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely() {
     .unwrap_err();
 
     assert!(error.to_string().contains("limit must be <= 1000"));
+    Ok(())
 }
 
 #[test]
-fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_text() {
+fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_text()
+-> anyhow::Result<()> {
     let temp = TempDb::new(
         "sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_text",
-    );
+    )?;
     init_database(&temp.path, "tester").unwrap();
 
     let title_percent = create_task(
@@ -348,4 +353,5 @@ fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_te
         .map(|hit| hit.task_id.as_str())
         .collect::<Vec<_>>();
     assert_eq!(backslash_ids, vec![title_backslash.id.as_str()]);
+    Ok(())
 }

@@ -2,7 +2,8 @@ use crate::common::*;
 
 #[tokio::test]
 async fn stream_events_sse_returns_finite_snapshot_with_id_event_and_data_frames() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let first = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -27,7 +28,7 @@ async fn stream_events_sse_returns_finite_snapshot_with_id_event_and_data_frames
         .iter()
         .find(|event| event.task_id.as_deref() == Some(&second.id))
         .expect("second task event");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, headers, body) = get_raw(
         app,

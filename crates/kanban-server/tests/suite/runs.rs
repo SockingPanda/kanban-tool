@@ -2,7 +2,8 @@ use crate::common::*;
 
 #[tokio::test]
 async fn runs_api_lists_task_runs_without_claim_token() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -12,7 +13,7 @@ async fn runs_api_lists_task_runs_without_claim_token() {
     .expect("task");
     let claim =
         kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000).expect("claim");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(app, &format!("/api/v1/tasks/{}/runs", task.id)).await;
 
@@ -24,10 +25,9 @@ async fn runs_api_lists_task_runs_without_claim_token() {
 
 #[tokio::test]
 async fn run_log_api_reads_dispatch_log_content_without_claim_token() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let db_path = temp.path().join("kb.db");
-    let log_dir = temp.path().join("logs");
-    kanban_sqlite::init_database(&db_path, "api-test").expect("init db");
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
+    let log_dir = test.dir_path().join("logs");
     let task = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -52,7 +52,7 @@ async fn run_log_api_reads_dispatch_log_content_without_claim_token() {
     .expect("dispatch");
     assert_eq!(result.task_id.as_deref(), Some(task.id.as_str()));
     let run_id = result.run_id.expect("run id");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(app, &format!("/api/v1/runs/{run_id}/log")).await;
 
@@ -65,9 +65,8 @@ async fn run_log_api_reads_dispatch_log_content_without_claim_token() {
 
 #[tokio::test]
 async fn run_log_api_rejects_suspicious_log_paths() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let db_path = temp.path().join("kb.db");
-    kanban_sqlite::init_database(&db_path, "api-test").expect("init db");
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -86,7 +85,7 @@ async fn run_log_api_rejects_suspicious_log_paths() {
             heartbeat_interval_ms: 10,
             on_success: kanban_sqlite::FinishPolicy::Done,
             on_failure: kanban_sqlite::FinishPolicy::Blocked,
-            log_dir: temp.path().join("logs"),
+            log_dir: test.dir_path().join("logs"),
         },
     )
     .expect("dispatch");
@@ -98,7 +97,7 @@ async fn run_log_api_rejects_suspicious_log_paths() {
             ("/etc/passwd", run_id.as_str()),
         )
         .expect("update");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(app, &format!("/api/v1/runs/{run_id}/log")).await;
 
@@ -108,10 +107,9 @@ async fn run_log_api_rejects_suspicious_log_paths() {
 
 #[tokio::test]
 async fn run_log_api_returns_tail_window_when_log_is_large() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let db_path = temp.path().join("kb.db");
-    let log_dir = temp.path().join("logs");
-    kanban_sqlite::init_database(&db_path, "api-test").expect("init db");
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
+    let log_dir = test.dir_path().join("logs");
     kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -136,7 +134,7 @@ async fn run_log_api_returns_tail_window_when_log_is_large() {
     )
     .expect("dispatch");
     let run_id = result.run_id.expect("run id");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(app, &format!("/api/v1/runs/{run_id}/log")).await;
 
@@ -149,7 +147,8 @@ async fn run_log_api_returns_tail_window_when_log_is_large() {
 
 #[tokio::test]
 async fn claim_uses_requested_worker_profile_in_response_run() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -157,7 +156,7 @@ async fn claim_uses_requested_worker_profile_in_response_run() {
         kanban_sqlite::CreateTask::ready("profile claim"),
     )
     .expect("task");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = post_json(
         app,
@@ -172,7 +171,8 @@ async fn claim_uses_requested_worker_profile_in_response_run() {
 
 #[tokio::test]
 async fn runs_api_gets_run_by_id_without_claim_token() {
-    let (_dir, db_path) = temp_db();
+    let test = TestApp::new();
+    let db_path = test.db_path().to_path_buf();
     let task = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -182,7 +182,7 @@ async fn runs_api_gets_run_by_id_without_claim_token() {
     .expect("task");
     let claim =
         kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000).expect("claim");
-    let app = build_router(AppState::new(db_path, "api-test"));
+    let app = test.router();
 
     let (status, json) = get_json(app, &format!("/api/v1/runs/{}", claim.run_id)).await;
 

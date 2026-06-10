@@ -1,12 +1,13 @@
+#![cfg(feature = "graph-oxigraph")]
+
 use crate::common::*;
 
-#[cfg(feature = "graph-oxigraph")]
 #[test]
-fn graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() {
+fn graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() -> anyhow::Result<()> {
     use kanban_entity::{EntityUri, Predicate};
     use kanban_graph::{OxigraphStore, RelationGraph};
 
-    let temp = TempDb::new("graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending");
+    let temp = TempDb::new("graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending")?;
     init_database(&temp.path, "tester").unwrap();
     insert_board(&temp.path, "second", "b_second");
     let default_task = create_task(
@@ -95,15 +96,15 @@ fn graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() {
         "default board has no unfinished graph outbox even though the shared watermark advanced: {}",
         default_status.message
     );
+    Ok(())
 }
 
-#[cfg(feature = "graph-oxigraph")]
 #[test]
-fn graph_rebuild_persists_board_and_dependency_relations() {
+fn graph_rebuild_persists_board_and_dependency_relations() -> anyhow::Result<()> {
     use kanban_entity::{EntityUri, Predicate};
     use kanban_graph::{OxigraphStore, RelationGraph};
 
-    let temp = TempDb::new("graph_rebuild_persists_board_and_dependency_relations");
+    let temp = TempDb::new("graph_rebuild_persists_board_and_dependency_relations")?;
     init_database(&temp.path, "tester").unwrap();
     let parent = create_task(
         &temp.path,
@@ -152,4 +153,5 @@ fn graph_rebuild_persists_board_and_dependency_relations() {
         board_neighbors[0].object_uri,
         EntityUri::board(&child.board_id)
     );
+    Ok(())
 }

@@ -1,4 +1,15 @@
-use super::*;
+use std::net::SocketAddr;
+
+use axum::{
+    Router,
+    http::{HeaderValue, Method, header},
+    routing::{delete, get, post},
+};
+use tower_http::cors::{AllowOrigin, CorsLayer};
+
+use crate::handlers::api::*;
+use crate::handlers::health::health;
+use crate::state::{AppState, SearchSyncConfig, spawn_search_sync_task};
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()

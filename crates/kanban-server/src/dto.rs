@@ -1,4 +1,5 @@
-use super::*;
+use kanban_core::TaskStatus;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 pub(super) struct Envelope<T> {
@@ -227,4 +228,28 @@ pub(super) struct GraphNeighborsQuery {
     pub(super) predicate: Option<String>,
     #[serde(default = "default_graph_limit")]
     pub(super) limit: usize,
+}
+
+fn default_board() -> String {
+    "default".to_owned()
+}
+
+fn default_context_lexical_limit() -> usize {
+    5
+}
+
+fn default_context_graph_limit() -> usize {
+    10
+}
+
+fn default_context_vector_limit() -> usize {
+    5
+}
+
+fn default_context_max_items() -> usize {
+    20
+}
+
+fn default_graph_limit() -> usize {
+    50
 }

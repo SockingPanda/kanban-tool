@@ -12,12 +12,15 @@ import {
 
 import type { KanbanApi, Task } from "@/lib/api"
 import {
+  archiveTaskBody,
   blockTaskBody,
   canArchiveTask,
   canBlockTask,
   canCompleteTask,
+  canSpecifyTask,
   completeTaskBody,
   requiresForceConfirmation,
+  specifyTaskBody,
 } from "@/lib/action-policy"
 
 export type LegalTaskAction = {
@@ -34,8 +37,8 @@ export function legalActions(task: Task, claimToken: string | null, blockReason:
     {
       label: "Specify",
       icon: ListChecks,
-      enabled: task.status === "triage",
-      run: (api, item) => api.transition(item, "specify", { description: item.description ?? "ready spec" }),
+      enabled: canSpecifyTask(task.status, task.description),
+      run: (api, item) => api.transition(item, "specify", specifyTaskBody(item.description)),
     },
     {
       label: "Promote",
@@ -90,8 +93,11 @@ export function legalActions(task: Task, claimToken: string | null, blockReason:
       label: "Archive",
       icon: Archive,
       enabled: canArchiveTask(task.status),
+      confirmation: requiresForceConfirmation(task.status, "archive", claimToken)
+        ? `Force archive running task #${task.seq}?`
+        : undefined,
       danger: true,
-      run: (api, item) => api.transition(item, "archive"),
+      run: (api, item) => api.transition(item, "archive", archiveTaskBody(item.status)),
     },
   ]
 }

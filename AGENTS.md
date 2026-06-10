@@ -38,6 +38,13 @@
 - 生产代码遵循 TDD：先写失败测试，运行看到 RED，再写最小实现，运行 GREEN。
 - 提交语义使用 Conventional Commits。
 
+## 全局 skill 同步
+
+- 任何改动如果改变了用户可见的 kanban CLI、API、data model、workflow、status、task、dependency、comment、JSON、help 或 documentation 使用行为，implementer 必须检查全局 Codex skill `kanban-tool` 是否需要同步。
+- 如果该行为影响 skill 使用说明，必须同步更新 `~/.codex/skills/kanban-tool/SKILL.md`，以及必要的相关 agent 或 `openai.yaml` 配置。
+- 如果检查后不需要同步，final report 或 task record 必须明确记录 `kanban-tool skill checked: no change`。
+- 全局 skill 只能描述已经实现、并且能由 CLI help 或实际命令/API 输出确认的行为；不要把 roadmap、计划中功能或未实现规格写入 skill。
+
 ## 验证策略
 
 普通小改动默认跑受影响范围验证，不要把每个阶段都升级成全量 workspace gate。

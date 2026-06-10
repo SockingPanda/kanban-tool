@@ -449,7 +449,7 @@ fn import_replace_rejects_running_work_in_target_database() -> anyhow::Result<()
         .context("expected JSON string")?;
     kanban(&target.path, &["--json", "task", "claim", task_id])?.success_json()?;
 
-    kanban(
+    let import_result = kanban(
         &target.path,
         &[
             "--json",
@@ -458,8 +458,19 @@ fn import_replace_rejects_running_work_in_target_database() -> anyhow::Result<()
             export_path.to_str().context("expected UTF-8 path")?,
             "--replace",
         ],
-    )?
-    .failure_containing("database has running work")?;
+    )?;
+    assert!(
+        !import_result.output.status.success(),
+        "import unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&import_result.output.stdout),
+        String::from_utf8_lossy(&import_result.output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&import_result.output.stderr);
+    assert!(
+        stderr.contains("database has running work; stop kanban serve/dispatch"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("stop kb serve/dispatch"), "{stderr}");
     let running = kanban(&target.path, &["--json", "task", "show", task_id])?.success_json()?;
     assert_eq!(running["data"]["status"], "running");
     Ok(())

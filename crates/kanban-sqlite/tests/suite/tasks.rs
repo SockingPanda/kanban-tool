@@ -52,3 +52,52 @@ fn task_crud_writes_events_and_hides_archived_by_default() -> anyhow::Result<()>
     assert_eq!(list_tasks(&temp.path, "default", &[], true)?.len(), 1);
     Ok(())
 }
+
+#[test]
+fn task_update_description_preserves_explicit_todo_status() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_update_description_preserves_explicit_todo_status")?;
+    init_database(&temp.path, "tester")?;
+
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Plan rollout".into(),
+            description: None,
+            status: Some(TaskStatus::Todo),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: "{}".into(),
+        },
+    )?;
+    assert_eq!(task.status, TaskStatus::Todo);
+
+    let updated = update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        TaskPatch {
+            title: None,
+            description: Some(Some(
+                "Detailed spec: keep this task in planning until it is explicitly promoted.".into(),
+            )),
+            assignee: None,
+            priority: None,
+            scheduled_at: None,
+            due_at: None,
+            metadata_json: None,
+            expected_lock_version: None,
+        },
+    )?;
+
+    assert_eq!(
+        updated.description.as_deref(),
+        Some("Detailed spec: keep this task in planning until it is explicitly promoted.")
+    );
+    assert_eq!(updated.status, TaskStatus::Todo);
+    Ok(())
+}

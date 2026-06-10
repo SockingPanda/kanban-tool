@@ -128,7 +128,7 @@ fn migration_backfills_comment_author_type_from_kind() -> anyhow::Result<()> {
     let temp = TempDb::new("migration_backfills_comment_author_type_from_kind")?;
     let v2_sql = include_str!("../../../../migrations/001_initial.sql");
     let conn = Connection::open(&temp.path)?;
-    conn.execute_batch(&v2_sql)?;
+    conn.execute_batch(v2_sql)?;
     conn.execute_batch(include_str!(
         "../../../../migrations/002_knowledge_substrate.sql"
     ))?;

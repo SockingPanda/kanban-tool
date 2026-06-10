@@ -43,7 +43,9 @@ pub(crate) fn run() -> Result<()> {
         }
         Command::Board { command } => handle_board(command, &db_path, &board, &actor, cli.json)?,
         Command::Task { command } => handle_task(command, &db_path, &board, &actor, cli.json)?,
-        Command::Comment { command } => handle_comment(command, &db_path, &actor, cli.json)?,
+        Command::Comment { command } => {
+            handle_comment(command, &db_path, &board, &actor, cli.json)?
+        }
         Command::Dep { command } => handle_dep(command, &db_path, &board, &actor, cli.json)?,
         Command::Events { task_ref } => {
             let events = list_events(&db_path, &board, task_ref.as_deref())?;

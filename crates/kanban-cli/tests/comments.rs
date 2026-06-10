@@ -25,6 +25,27 @@ fn create_task(temp: &TempDb, title: &str) -> anyhow::Result<String> {
         .context("expected task id")
 }
 
+fn create_task_on_board(temp: &TempDb, board: &str, title: &str) -> anyhow::Result<String> {
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--board",
+            board,
+            "task",
+            "create",
+            title,
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    created["data"]["id"]
+        .as_str()
+        .map(str::to_owned)
+        .context("expected task id")
+}
+
 #[test]
 fn comment_add_and_list_json_roundtrip() -> anyhow::Result<()> {
     let temp = TempDb::new("comment_add_and_list_json_roundtrip")?;
@@ -245,5 +266,125 @@ fn comment_add_writes_task_comment_created_event() -> anyhow::Result<()> {
         .filter_map(|event| event["kind"].as_str())
         .collect::<Vec<_>>();
     assert!(kinds.contains(&"task.comment.created"));
+    Ok(())
+}
+
+#[test]
+fn comment_add_and_list_resolve_bare_active_board_seq() -> anyhow::Result<()> {
+    let temp = TempDb::new("comment_add_and_list_resolve_bare_active_board_seq")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let task_id = create_task(&temp, "bare seq comment")?;
+
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--board",
+            "default",
+            "comment",
+            "add",
+            "1",
+            "bare seq body",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(added["data"]["task_id"], task_id);
+
+    let listed = kanban(
+        &temp.path,
+        &["--json", "--board", "default", "comment", "list", "1"],
+    )?
+    .success_json()?;
+    assert_eq!(listed["data"][0]["body"], "bare seq body");
+    assert_eq!(listed["data"][0]["task_id"], task_id);
+    Ok(())
+}
+
+#[test]
+fn comment_add_and_list_resolve_hash_active_board_seq() -> anyhow::Result<()> {
+    let temp = TempDb::new("comment_add_and_list_resolve_hash_active_board_seq")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let task_id = create_task(&temp, "hash seq comment")?;
+
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--board",
+            "default",
+            "comment",
+            "add",
+            "#1",
+            "hash seq body",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(added["data"]["task_id"], task_id);
+
+    let listed = kanban(
+        &temp.path,
+        &["--json", "--board", "default", "comment", "list", "#1"],
+    )?
+    .success_json()?;
+    assert_eq!(listed["data"][0]["body"], "hash seq body");
+    assert_eq!(listed["data"][0]["task_id"], task_id);
+    Ok(())
+}
+
+#[test]
+fn comment_add_and_list_resolve_board_qualified_refs() -> anyhow::Result<()> {
+    let temp = TempDb::new("comment_add_and_list_resolve_board_qualified_refs")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(
+        &temp.path,
+        &["board", "create", "project", "--name", "Project"],
+    )?
+    .success()?;
+    let task_id = create_task_on_board(&temp, "project", "project comment")?;
+
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--board",
+            "default",
+            "comment",
+            "add",
+            "project#1",
+            "qualified body",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(added["data"]["task_id"], task_id);
+
+    let listed_hash = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--board",
+            "default",
+            "comment",
+            "list",
+            "project#1",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(listed_hash["data"][0]["body"], "qualified body");
+    assert_eq!(listed_hash["data"][0]["task_id"], task_id);
+
+    let listed_slash = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--board",
+            "default",
+            "comment",
+            "list",
+            "project/#1",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(listed_slash["data"][0]["body"], "qualified body");
+    assert_eq!(listed_slash["data"][0]["task_id"], task_id);
     Ok(())
 }

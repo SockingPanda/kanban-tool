@@ -594,7 +594,7 @@ kanban context build t_... [--lexical-limit 5]
 
 `kanban derived status` 中的 `last_event_id` 是 store 级成功处理水位，不是当前 board 的局部水位。`dirty=true` 表示该 store 仍有任意 board 的 pending/running/failed outbox，或最近一次派生更新失败；board-scoped `kanban index sync`、`kanban graph sync`、`kanban vector sync` 只清理当前 board 的 job，不能因为本 board clean 就强制清掉全局 dirty。
 
-### 12.1 `kanban doctor`
+### 13.1 `kanban doctor`
 
 检查：
 

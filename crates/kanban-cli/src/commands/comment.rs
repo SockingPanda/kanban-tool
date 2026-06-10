@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use kanban_sqlite::{CommentRecord, CreateComment, create_comment_with_options, list_comments};
+use kanban_sqlite::{
+    CommentRecord, CreateComment, create_comment_with_options, get_task, list_comments,
+};
 
 use crate::args::CommentCommand;
 use crate::output::print_or_json;
@@ -9,14 +11,16 @@ use crate::output::print_or_json;
 pub(crate) fn handle_comment(
     command: CommentCommand,
     db_path: &PathBuf,
+    board: &str,
     actor: &str,
     json: bool,
 ) -> Result<()> {
     match command {
         CommentCommand::Add(args) => {
+            let task = get_task(db_path, board, &args.task_ref)?;
             let comment = create_comment_with_options(
                 db_path,
-                &args.task_ref,
+                &task.id,
                 CreateComment {
                     author: actor.to_owned(),
                     body: args.body,
@@ -28,7 +32,12 @@ pub(crate) fn handle_comment(
             print_or_json(json, &comment, || comment_line(&comment))?;
         }
         CommentCommand::List { task_ref } => {
-            let comments = list_comments(db_path, &task_ref)?;
+            let comments = if task_ref.starts_with("t_") || is_board_qualified_ref(&task_ref) {
+                list_comments(db_path, &task_ref)?
+            } else {
+                let task = get_task(db_path, board, &task_ref)?;
+                list_comments(db_path, &task.id)?
+            };
             print_or_json(json, &comments, || {
                 comments
                     .iter()
@@ -39,6 +48,13 @@ pub(crate) fn handle_comment(
         }
     }
     Ok(())
+}
+
+fn is_board_qualified_ref(task_ref: &str) -> bool {
+    task_ref
+        .split_once("/#")
+        .or_else(|| task_ref.split_once('#'))
+        .is_some_and(|(board, seq)| !board.is_empty() && !seq.is_empty())
 }
 
 fn comment_line(comment: &CommentRecord) -> String {

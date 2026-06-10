@@ -32,10 +32,27 @@ describe("legal task actions", () => {
 
     expect(api.transition).toHaveBeenCalledWith(item, "archive", { force: true })
   })
+
+  it("enables non-running block actions with a reason body and no force confirmation", async () => {
+    const api = apiStub()
+    const item = task({ status: "review" })
+    const action = actionFor(item, "Block", null, " needs changes ")
+
+    expect(action.enabled).toBe(true)
+    expect(action.confirmation).toBeUndefined()
+
+    await action.run(api, item)
+
+    expect(api.transition).toHaveBeenCalledWith(item, "block", { reason: "needs changes" })
+  })
+
+  it("keeps non-running block actions disabled until a reason is present", () => {
+    expect(actionFor(task({ status: "ready" }), "Block", null, "  ").enabled).toBe(false)
+  })
 })
 
-function actionFor(task: Task, label: string, claimToken: string | null = null) {
-  const action = legalActions(task, claimToken, "waiting").find((candidate) => candidate.label === label)
+function actionFor(task: Task, label: string, claimToken: string | null = null, blockReason = "waiting") {
+  const action = legalActions(task, claimToken, blockReason).find((candidate) => candidate.label === label)
   expect(action).toBeDefined()
   return action!
 }

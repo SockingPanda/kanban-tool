@@ -12,12 +12,28 @@ import {
 } from "./action-policy"
 
 describe("task action policy", () => {
+  it("allows blockable non-terminal statuses with a reason only body", () => {
+    for (const status of ["triage", "todo", "scheduled", "ready", "review"] as const) {
+      expect(canBlockTask(status, null, "waiting")).toBe(true)
+      expect(canBlockTask(status, "claim_123", "waiting")).toBe(true)
+      expect(canBlockTask(status, null, "   ")).toBe(false)
+      expect(blockTaskBody(status, null, " waiting ")).toEqual({ reason: "waiting" })
+      expect(requiresForceConfirmation(status, "block", null)).toBe(false)
+    }
+  })
+
+  it("does not allow already blocked or terminal statuses to block", () => {
+    for (const status of ["blocked", "done", "archived"] as const) {
+      expect(canBlockTask(status, null, "waiting")).toBe(false)
+    }
+  })
+
   it("allows explicit force bodies for running tasks without a claim token", () => {
     expect(canCompleteTask("running")).toBe(true)
     expect(canBlockTask("running", null, "waiting")).toBe(true)
     expect(canArchiveTask("running")).toBe(true)
     expect(completeTaskBody("running", null)).toEqual({ force: true })
-    expect(blockTaskBody(null, "waiting")).toEqual({ force: true, reason: "waiting" })
+    expect(blockTaskBody("running", null, "waiting")).toEqual({ force: true, reason: "waiting" })
     expect(archiveTaskBody("running")).toEqual({ force: true })
     expect(requiresForceConfirmation("running", "complete", null)).toBe(true)
     expect(requiresForceConfirmation("running", "block", null)).toBe(true)
@@ -28,7 +44,7 @@ describe("task action policy", () => {
     expect(canCompleteTask("running")).toBe(true)
     expect(canBlockTask("running", "claim_123", "waiting")).toBe(true)
     expect(completeTaskBody("running", "claim_123")).toEqual({ claim_token: "claim_123" })
-    expect(blockTaskBody("claim_123", " waiting ")).toEqual({
+    expect(blockTaskBody("running", "claim_123", " waiting ")).toEqual({
       claim_token: "claim_123",
       reason: "waiting",
     })

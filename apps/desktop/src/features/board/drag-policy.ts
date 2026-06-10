@@ -1,5 +1,5 @@
 import type { KanbanApi, Task, TaskStatus } from "@/lib/api"
-import { archiveTaskBody, canSpecifyTask, specifyTaskBody } from "@/lib/action-policy"
+import { archiveTaskBody, canSpecifyTask, isBlockableStatus, specifyTaskBody } from "@/lib/action-policy"
 
 export type DragTransitionPlan =
   | {
@@ -93,6 +93,17 @@ export function planDragTransition(
       confirm: `Force block running task #${task.seq} without a claim token?`,
       promptReason: !reason,
       message: "Force block requested.",
+    }
+  }
+
+  if (targetStatus === "blocked" && isBlockableStatus(task.status)) {
+    const reason = blockReason.trim()
+    return {
+      ok: true,
+      action: "block",
+      body: reason ? { reason } : {},
+      promptReason: !reason,
+      message: "Block requested.",
     }
   }
 

@@ -44,6 +44,43 @@ describe("drag transition policy", () => {
     })
   })
 
+  it("routes ready and review blocked drops through block with a reason body", () => {
+    expect(planDragTransition(task({ status: "ready" }), "blocked", null, " waiting ")).toMatchObject({
+      ok: true,
+      action: "block",
+      body: { reason: "waiting" },
+    })
+    expect(planDragTransition(task({ status: "review" }), "blocked", null, "needs changes")).toMatchObject({
+      ok: true,
+      action: "block",
+      body: { reason: "needs changes" },
+    })
+  })
+
+  it("prompts for a reason when non-running tasks are dropped on blocked without one", () => {
+    expect(planDragTransition(task({ status: "ready" }), "blocked", null, "")).toMatchObject({
+      ok: true,
+      action: "block",
+      body: {},
+      promptReason: true,
+    })
+  })
+
+  it("does not route already blocked or terminal tasks through block", () => {
+    expect(planDragTransition(task({ status: "blocked" }), "blocked", null, "waiting")).toEqual({
+      ok: false,
+      reason: "Already in that column.",
+    })
+    expect(planDragTransition(task({ status: "done" }), "blocked", null, "waiting")).toEqual({
+      ok: false,
+      reason: "done cannot be dropped on blocked.",
+    })
+    expect(planDragTransition(task({ status: "archived" }), "blocked", null, "waiting")).toEqual({
+      ok: false,
+      reason: "archived cannot be dropped on blocked.",
+    })
+  })
+
   it("always force-confirms running archive drops", () => {
     expect(planDragTransition(task({ status: "running" }), "archived", "claim_123", "")).toMatchObject({
       ok: true,

@@ -28,6 +28,13 @@
 - `blocked -> ready` 必须重新计算 spec、schedule、dependency，不允许盲设。
 - review 不自动触发执行；dispatcher 不 claim `review`。
 
+## Desktop frontend guidance
+
+- 修改 `apps/desktop` 前先查阅 `docs/plans/desktop-shadcn-dashboard.md`，把 shadcn dashboard 作为方向参考，不要整套复制或做无目标重写。
+- Desktop UI 必须保持本地优先、单用户、localhost operator console 语义；不要引入 SaaS、团队协作、RBAC、邀请、云同步或远程 worker 假设。
+- 未来 shell/layout 变更优先保持 `AppShell` 作为边界：sidebar/header/global search/actions 属于 shell，Board/List/Event/Run/TaskDetail 等功能视图不要重复实现外层布局。
+- Board/List/Event 等数据视图必须保留状态机语义：列只是展示，任务状态变化通过 API/core command service，不直接写 `tasks.status`。
+
 ## 工程流程
 
 - 当前目录如果不是 git 仓库，先初始化 git；每个方向使用独立分支。

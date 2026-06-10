@@ -5,6 +5,7 @@ use kanban_sqlite::{begin_database_runtime, dispatch_once, init_database, list_e
 use crate::args::*;
 use crate::commands::{
     board::handle_board,
+    comment::handle_comment,
     common::{active_board, default_actor, default_db_path},
     dep::handle_dep,
     dispatch::{dispatch_loop, dispatch_options},
@@ -42,6 +43,7 @@ pub(crate) fn run() -> Result<()> {
         }
         Command::Board { command } => handle_board(command, &db_path, &board, &actor, cli.json)?,
         Command::Task { command } => handle_task(command, &db_path, &board, &actor, cli.json)?,
+        Command::Comment { command } => handle_comment(command, &db_path, &actor, cli.json)?,
         Command::Dep { command } => handle_dep(command, &db_path, &board, &actor, cli.json)?,
         Command::Events { task_ref } => {
             let events = list_events(&db_path, &board, task_ref.as_deref())?;

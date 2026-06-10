@@ -53,7 +53,7 @@ export function TaskDetail({
   setEditDraft: (value: TaskEditDraft) => void
   detailLoading: boolean
   pendingAction: string | null
-  onAction: (action: () => Promise<unknown>) => Promise<unknown>
+  onAction: (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null }) => Promise<unknown>
   onAddDependency: () => Promise<void>
   onRemoveDependency: (parentTaskId: string) => Promise<void>
   onSaveTask: () => Promise<void>
@@ -141,7 +141,7 @@ export function TaskDetail({
                 onClick={() => {
                   if (!api) return
                   if (action.confirmation && !window.confirm(action.confirmation)) return
-                  void onAction(() => action.run(api, task))
+                  void onAction(() => action.run(api, task), { fallbackTaskId: task.id, label: action.label.toLowerCase() })
                 }}
               >
                 <action.icon className="h-4 w-4" />

@@ -5,11 +5,12 @@ import type { ElementType, ReactNode } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { BoardStats, CheckpointReport, DoctorDerivedStore, DoctorReport, KanbanApi, SearchIndexStatus, StaleClaim } from "@/lib/api"
+import { queryKeys } from "@/lib/query-keys"
 
 export function MaintenanceView({ api }: { api: KanbanApi | null }) {
   const statsQuery = useQuery({
     enabled: Boolean(api),
-    queryKey: ["stats", api?.board ?? "pending"],
+    queryKey: queryKeys.stats(api?.board ?? "pending"),
     queryFn: ({ signal }) => {
       if (!api) throw new Error("API client is not ready")
       return api.stats({ signal })
@@ -17,7 +18,7 @@ export function MaintenanceView({ api }: { api: KanbanApi | null }) {
   })
   const searchStatusQuery = useQuery({
     enabled: Boolean(api),
-    queryKey: ["search-status", api?.board ?? "pending"],
+    queryKey: queryKeys.searchStatus(api?.board ?? "pending"),
     queryFn: ({ signal }) => {
       if (!api) throw new Error("API client is not ready")
       return api.searchStatus({ signal })

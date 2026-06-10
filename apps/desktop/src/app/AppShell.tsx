@@ -162,7 +162,7 @@ export function AppShell({
   onDependencyInputChange: (value: string) => void
   onCommentBodyChange: (value: string) => void
   onEditDraftChange: (value: TaskEditDraft) => void
-  onAction: (action: () => Promise<unknown>) => Promise<unknown>
+  onAction: (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null }) => Promise<unknown>
   onAddDependency: () => Promise<void>
   onRemoveDependency: (parentTaskId: string) => Promise<void>
   onSaveTask: () => Promise<void>

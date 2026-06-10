@@ -33,6 +33,11 @@ import { useDebouncedValue } from "@/lib/use-debounced-value"
 const PAGE_SIZE = 100
 const EMPTY_TASKS: Task[] = []
 
+type RunActionOptions = {
+  label?: string
+  fallbackTaskId?: string | null
+}
+
 function App() {
   const queryClient = useQueryClient()
   const [config, setConfig] = useState<RuntimeConfig | null>(null)
@@ -170,7 +175,9 @@ function App() {
     [api, queryClient],
   )
 
-  async function runAction(action: () => Promise<unknown>, label = "action") {
+  async function runAction(action: () => Promise<unknown>, options: RunActionOptions | string = "action") {
+    const label = typeof options === "string" ? options : options.label ?? "action"
+    const fallbackTaskId = typeof options === "string" ? selectedId : options.fallbackTaskId
     setPendingAction(label)
     setError(null)
     try {
@@ -184,7 +191,7 @@ function App() {
         await invalidateTaskData(result.id)
         return result
       }
-      await invalidateTaskData(selectedId)
+      await invalidateTaskData(fallbackTaskId ?? null)
       return result
     } catch (err) {
       setError(errorMessage(err))
@@ -210,16 +217,18 @@ function App() {
 
   async function addDependency() {
     if (!api || !selectedTask || !dependencyInput.trim()) return
+    const taskId = selectedTask.id
     await runAction(async () => {
-      const result = await api.addDependency(selectedTask.id, dependencyInput.trim())
+      const result = await api.addDependency(taskId, dependencyInput.trim())
       setDependencyInput("")
       return result
-    }, "dependency")
+    }, { label: "dependency", fallbackTaskId: taskId })
   }
 
   async function removeDependency(parentTaskId: string) {
     if (!api || !selectedTask) return
-    await runAction(async () => api.removeDependency(selectedTask.id, parentTaskId), "dependency")
+    const taskId = selectedTask.id
+    await runAction(async () => api.removeDependency(taskId, parentTaskId), { label: "dependency", fallbackTaskId: taskId })
   }
 
   async function dropTask(taskId: string, targetStatus: TaskStatus) {
@@ -241,7 +250,7 @@ function App() {
       plan = { ...plan, body: { ...plan.body, reason: reason.trim() }, promptReason: false }
     }
     if (plan.confirm && !window.confirm(plan.confirm)) return
-    await runAction(() => executeDragTransition(api, task, plan), "transition")
+    await runAction(() => executeDragTransition(api, task, plan), { label: "transition", fallbackTaskId: task.id })
   }
 
   async function saveTask() {
@@ -260,16 +269,17 @@ function App() {
       })
       setDraftState((current) => reconcileSavedTaskDraft(current, updated))
       return updated
-    }, "save")
+    }, { label: "save", fallbackTaskId: taskId })
   }
 
   async function addComment() {
     if (!api || !selectedTask || !commentBody.trim()) return
+    const taskId = selectedTask.id
     await runAction(async () => {
-      const result = await api.createComment(selectedTask.id, commentBody.trim())
+      const result = await api.createComment(taskId, commentBody.trim())
       setCommentBody("")
       return result
-    }, "comment")
+    }, { label: "comment", fallbackTaskId: taskId })
   }
 
   function updateDraft(draft: TaskEditDraft) {

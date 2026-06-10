@@ -62,7 +62,7 @@ kb dispatch --worker-profile backend --profile-config ./workers.toml
 
 ```toml
 [workers.backend]
-command = "cargo test -p backend"
+command = "cargo nextest run -p kanban-sqlite --no-fail-fast"
 claim_ttl_ms = 300000
 heartbeat_interval_ms = 30000
 on_success = "done"

@@ -107,6 +107,82 @@ export type RunLog = {
   truncated: boolean
 }
 
+export type HealthStatus = {
+  ok: boolean
+  db: string
+  version: string
+}
+
+export type BoardStats = {
+  board_id: string
+  generated_at: number
+  status_counts: StatusCount[]
+  stale_claims: StaleClaim[]
+  blocked_reasons: BlockedReason[]
+}
+
+export type StatusCount = {
+  status: string
+  count: number
+}
+
+export type StaleClaim = {
+  task_id: string
+  seq: number
+  title: string
+  claim_owner: string | null
+  claim_expires_at: number | null
+  last_heartbeat_at: number | null
+  current_run_id: string | null
+  retry_count: number
+  max_retries: number | null
+}
+
+export type BlockedReason = {
+  reason: string
+  count: number
+}
+
+export type DoctorDerivedStore = {
+  store_name: string
+  schema_version: number
+  last_event_id: number
+  dirty: boolean
+  last_error: string | null
+  pending_outbox: number
+  running_outbox: number
+  failed_outbox: number
+}
+
+export type DoctorReport = {
+  ok: boolean
+  integrity_check: string
+  migration_version: number | null
+  user_version: number
+  expired_running_tasks: number
+  running_tasks_without_active_run: number
+  orphan_running_runs: number
+  dependency_cycles: number
+  archived_dependency_edges: number
+  missing_run_logs: number
+  suspicious_run_log_paths: number
+  executable_dependency_violations: number
+  executable_spec_violations: number
+  executable_schedule_violations: number
+  outbox_pending: number
+  outbox_running: number
+  outbox_failed: number
+  derived_dirty_stores: number
+  derived_error_stores: number
+  derived_stores: DoctorDerivedStore[]
+}
+
+export type CheckpointReport = {
+  busy: number
+  log_frames: number
+  checkpointed_frames: number
+}
+
 export type Dependencies = {
   parents: Task[]
   children: Task[]
@@ -119,12 +195,17 @@ export type ClaimResponse = {
   claim_expires_at: number | null
 }
 
-export type SearchMeta = {
+export type SearchTasksMeta = {
   backend: string
   stale: boolean
   index_version: string | null
   last_event_id: number | null
   index_lag_events: number | null
+}
+
+export type SearchIndexStatus = SearchTasksMeta & {
+  derived_index: boolean
+  message: string
 }
 
 export type ApiEnvelope<T, M = Record<string, unknown>> = { data: T; meta?: M }
@@ -142,7 +223,7 @@ export type TaskPageResult = {
 
 export type SearchTasksResult = {
   tasks: Task[]
-  searchMeta: SearchMeta
+  searchMeta: SearchTasksMeta
   page: PageMeta
 }
 
@@ -167,7 +248,7 @@ type SearchTaskHit = {
 
 type SearchTasksResponse = {
   hits: SearchTaskHit[]
-  meta: SearchMeta
+  meta: SearchTasksMeta
 }
 
 export class ApiError extends Error {
@@ -207,7 +288,33 @@ export class KanbanApi {
   }
 
   async health(options: RequestOptions = {}) {
-    return this.request<{ ok: boolean; db: string; version: string }>("/health", options)
+    return this.request<HealthStatus>("/health", options)
+  }
+
+  async stats(options: RequestOptions = {}) {
+    const params = new URLSearchParams({ board: this.board })
+    return this.request<BoardStats>(`/api/v1/stats?${params.toString()}`, options)
+  }
+
+  async searchStatus(options: RequestOptions = {}) {
+    const params = new URLSearchParams({ board: this.board })
+    return this.request<SearchIndexStatus>(`/api/v1/search/status?${params.toString()}`, options)
+  }
+
+  async doctor(options: RequestOptions = {}) {
+    return this.request<DoctorReport>("/api/v1/maintenance/doctor", {
+      method: "POST",
+      body: { board: this.board, actor: this.actor },
+      signal: options.signal,
+    })
+  }
+
+  async checkpoint(options: RequestOptions = {}) {
+    return this.request<CheckpointReport>("/api/v1/maintenance/checkpoint", {
+      method: "POST",
+      body: { board: this.board, actor: this.actor },
+      signal: options.signal,
+    })
   }
 
   async listBoardColumns(options: RequestOptions = {}) {
@@ -323,6 +430,16 @@ export class KanbanApi {
     const envelope = await this.requestEnvelope<EventRecord[], EventMeta>(
       `/api/v1/events?${params.toString()}`,
       options,
+    )
+    return { events: envelope.data, meta: envelope.meta ?? {} } satisfies EventPage
+  }
+
+  async listBoardEvents(options: { after?: number; limit?: number; signal?: AbortSignal } = {}) {
+    const params = new URLSearchParams({ board: this.board, limit: String(options.limit ?? 100) })
+    if (typeof options.after === "number") params.set("after", String(options.after))
+    const envelope = await this.requestEnvelope<EventRecord[], EventMeta>(
+      `/api/v1/events?${params.toString()}`,
+      { signal: options.signal },
     )
     return { events: envelope.data, meta: envelope.meta ?? {} } satisfies EventPage
   }

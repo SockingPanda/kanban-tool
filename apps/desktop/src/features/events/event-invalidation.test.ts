@@ -21,6 +21,22 @@ describe("event invalidation helpers", () => {
     })
 
     expect(
+      affectedQueriesForEvents([eventRecord({ task_id: "t_2", kind: "task.submitted_for_review" })]),
+    ).toEqual({
+      taskIds: new Set(["t_2"]),
+      invalidateBoardTasks: true,
+      invalidateEvents: true,
+    })
+
+    expect(
+      affectedQueriesForEvents([eventRecord({ task_id: "t_3", kind: "task.recomputed" })]),
+    ).toEqual({
+      taskIds: new Set(["t_3"]),
+      invalidateBoardTasks: true,
+      invalidateEvents: true,
+    })
+
+    expect(
       affectedQueriesForEvents([eventRecord({ task_id: "t_2", kind: "task.completed" })]),
     ).toEqual({
       taskIds: new Set(["t_2"]),

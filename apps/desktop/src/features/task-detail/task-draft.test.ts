@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import type { Task } from "@/lib/api"
 
-import { parseDateInput, reconcileTaskDraft, taskToDraft } from "./task-draft"
+import { parseDateInput, reconcileSavedTaskDraft, reconcileTaskDraft, taskToDraft } from "./task-draft"
 
 describe("task draft helpers", () => {
   it("converts nullable task fields into editable strings", () => {
@@ -57,6 +57,22 @@ describe("task draft helpers", () => {
       draft: taskToDraft(task({ id: "t_1", title: "Saved server task" })),
       dirty: false,
     })
+  })
+
+  it("only reconciles a saved task when the current draft still belongs to it", () => {
+    const current = {
+      taskId: "t_2",
+      draft: taskToDraft(task({ id: "t_2", title: "Newly selected task" })),
+      dirty: true,
+    }
+
+    expect(reconcileSavedTaskDraft(current, task({ id: "t_1", title: "Late save result" }))).toBe(current)
+    expect(reconcileSavedTaskDraft(current, task({ id: "t_2", title: "Saved current task" }))).toEqual({
+      taskId: "t_2",
+      draft: taskToDraft(task({ id: "t_2", title: "Saved current task" })),
+      dirty: false,
+    })
+    expect(reconcileSavedTaskDraft(null, task({ id: "t_2", title: "Saved current task" }))).toBeNull()
   })
 })
 

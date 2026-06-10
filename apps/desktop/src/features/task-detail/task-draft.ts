@@ -37,6 +37,11 @@ export function reconcileTaskDraft(
   return { taskId: task.id, draft: taskToDraft(task), dirty: false }
 }
 
+export function reconcileSavedTaskDraft(current: TaskDraftState | null, savedTask: Task): TaskDraftState | null {
+  if (current?.taskId !== savedTask.id) return current
+  return reconcileTaskDraft(current, savedTask, { force: true })
+}
+
 export function formatDateInput(value: number | null) {
   if (!value) return ""
   const date = new Date(value)

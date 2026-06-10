@@ -1,4 +1,9 @@
-use crate::*;
+use std::{fs, path::PathBuf, thread, time::Duration};
+
+use anyhow::{Context, Result, bail};
+use kanban_sqlite::{DispatchOptions, FinishPolicy, dispatch_once};
+
+use crate::args::{DispatchArgs, DispatchLoopSummary, WorkerProfileConfig};
 
 pub(crate) fn dispatch_options(args: &DispatchArgs, actor: String) -> Result<DispatchOptions> {
     let profile = args
@@ -10,7 +15,7 @@ pub(crate) fn dispatch_options(args: &DispatchArgs, actor: String) -> Result<Dis
         .as_ref()
         .and_then(|profile| profile.log_dir.clone())
         .or_else(|| args.log_dir.clone())
-        .unwrap_or_else(|| default_log_dir().join("runs"));
+        .unwrap_or_else(|| kanban_local::default_log_dir().join("runs"));
     let log_dir = absolute_path(log_dir)?;
     Ok(DispatchOptions {
         actor,

@@ -20,7 +20,8 @@ pub fn kb_in_dir_env(
     current_dir: &Path,
     board_env: Option<&str>,
 ) -> anyhow::Result<CmdResult> {
-    let mut command = Command::cargo_bin("kb").context("failed to locate kb test binary")?;
+    let mut command =
+        Command::cargo_bin("kanban").context("failed to locate kanban test binary")?;
     command
         .current_dir(current_dir)
         .arg("--db")
@@ -31,7 +32,9 @@ pub fn kb_in_dir_env(
     } else {
         command.env_remove("KB_BOARD");
     }
-    let output = command.output().context("failed to execute kb command")?;
+    let output = command
+        .output()
+        .context("failed to execute kanban command")?;
     Ok(CmdResult { output })
 }
 

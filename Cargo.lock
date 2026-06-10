@@ -3610,7 +3610,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-cli"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -3634,7 +3634,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-context"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "kanban-entity",
  "kanban-graph",
@@ -3646,7 +3646,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "serde",
  "strum 0.26.3",
@@ -3657,7 +3657,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-desktop"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "axum",
  "kanban-local",
@@ -3671,7 +3671,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-entity"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -3679,7 +3679,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-graph"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "kanban-entity",
  "oxigraph",
@@ -3691,7 +3691,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-indexer"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "kanban-entity",
  "serde",
@@ -3701,14 +3701,14 @@ dependencies = [
 
 [[package]]
 name = "kanban-local"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "dirs-next",
 ]
 
 [[package]]
 name = "kanban-search"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "kanban-core",
  "serde",
@@ -3718,7 +3718,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-server"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -3742,7 +3742,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-sqlite"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "kanban-context",
@@ -3763,7 +3763,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-vector"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",

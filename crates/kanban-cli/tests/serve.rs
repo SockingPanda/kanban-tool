@@ -27,7 +27,7 @@ fn serve_rejects_non_loopback_host_before_opening_database() -> anyhow::Result<(
     let temp = TempDb::new("serve_rejects_non_loopback_host_without_creating_database")?;
 
     kb(&temp.path, &["serve", "--host", "0.0.0.0", "--port", "0"])?
-        .failure_containing("kb serve only supports loopback hosts")?;
+        .failure_containing("kanban serve only supports loopback hosts")?;
     assert!(!temp.path.exists());
     Ok(())
 }

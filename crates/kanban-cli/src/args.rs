@@ -4,7 +4,11 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_sqlite::FinishPolicy;
 
 #[derive(Debug, Parser)]
-#[command(name = "kb", version, about = "Local SQLite-backed Kanban work queue")]
+#[command(
+    name = "kanban",
+    version,
+    about = "Local SQLite-backed Kanban work queue"
+)]
 pub(crate) struct Cli {
     #[arg(long, global = true)]
     pub(crate) db: Option<PathBuf>,

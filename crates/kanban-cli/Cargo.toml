@@ -6,7 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [[bin]]
-name = "kb"
+name = "kanban"
 path = "src/main.rs"
 
 [features]

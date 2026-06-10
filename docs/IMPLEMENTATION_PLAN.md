@@ -32,7 +32,7 @@
 交付：
 
 - 执行 `001_initial.sql`。
-- `kb init`。
+- `kanban init`。
 - 默认 board。
 - 默认 columns。
 - 领域类型：Board、Task、Status、Run、Event。
@@ -41,7 +41,7 @@
 验收：
 
 - 新建 DB 后 `PRAGMA integrity_check` 返回 ok。
-- 重复运行 `kb init` 不破坏已有 DB。
+- 重复运行 `kanban init` 不破坏已有 DB。
 - schema version 可查询。
 
 测试：
@@ -58,7 +58,7 @@
 
 交付：
 
-- `kb task create/list/show/update`。
+- `kanban task create/list/show/update`。
 - `task_events` 写入。
 - `--json` 输出。
 - `expected_lock_version` 乐观锁。
@@ -114,7 +114,7 @@
 
 交付：
 
-- `kb dep add/remove/list`。
+- `kanban dep add/remove/list`。
 - cycle detection。
 - dependency-aware create/promote/claim。
 - parent complete 后尝试 promote children。
@@ -141,8 +141,8 @@
 交付：
 
 - `task_runs` 写入。
-- `kb dispatch --once`。
-- `kb dispatch` loop。
+- `kanban dispatch --once`。
+- `kanban dispatch` loop。
 - worker profile command。
 - heartbeat wrapper。
 - expired reclaim。
@@ -171,7 +171,7 @@
 
 交付：
 
-- `kb serve`。
+- `kanban serve`。
 - REST endpoints。
 - unified error response。
 - SSE event stream。
@@ -198,7 +198,7 @@
 
 交付：
 
-- `kb board list/create/show/use/current/archive`。
+- `kanban board list/create/show/use/current/archive`。
 - `POST /api/v1/boards` 与 `POST /api/v1/boards/{board}/archive`。
 - 项目级 `.kb/config.toml` active board，解析顺序为 `--board`、`KB_BOARD`、最近项目 config、`default`。
 - task ref 支持全局 `t_...`、当前 board 的裸 seq / `#seq`、显式 `board#seq` / `board/#seq`。
@@ -245,10 +245,10 @@
 
 交付：
 
-- `kb doctor`。
-- `kb backup`。
-- `kb checkpoint`。
-- `kb vacuum`。
+- `kanban doctor`。
+- `kanban backup`。
+- `kanban checkpoint`。
+- `kanban vacuum`。
 - JSONL export。
 - orphan run 检查。
 
@@ -311,10 +311,10 @@
 
 MVP 完成定义：
 
-1. `kb init` 创建可用 DB。
-2. `kb board list/create/show/use/current/archive` 可用。
-3. `kb task create/list/show/update` 可用，输出包含 `board#seq` ref。
-4. `kb task start/heartbeat/done/block/unblock/archive` 可用。
+1. `kanban init` 创建可用 DB。
+2. `kanban board list/create/show/use/current/archive` 可用。
+3. `kanban task create/list/show/update` 可用，输出包含 `board#seq` ref。
+4. `kanban task start/heartbeat/done/block/unblock/archive` 可用。
 5. dependencies 可用。
 6. events 可用。
 7. runs 可用。
@@ -322,7 +322,7 @@ MVP 完成定义：
 9. web API 覆盖核心 lifecycle。
 10. web UI 可视化 board。
 11. 并发 claim 测试稳定通过。
-12. `kb doctor` 能发现基本数据异常。
+12. `kanban doctor` 能发现基本数据异常。
 
 ---
 

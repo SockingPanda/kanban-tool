@@ -3071,12 +3071,11 @@ COMMIT;
 ```sql
 -- Add explicit comment author identity while preserving existing kind values.
 
+BEGIN;
+
 ALTER TABLE task_comments
   ADD COLUMN author_type TEXT NOT NULL DEFAULT 'human'
   CHECK(author_type IN ('human', 'agent', 'system'));
-
-ALTER TABLE task_comments
-  ADD COLUMN agent_type TEXT;
 
 UPDATE task_comments
 SET author_type = CASE kind
@@ -3086,8 +3085,13 @@ SET author_type = CASE kind
 END
 WHERE author_type = 'human';
 
+ALTER TABLE task_comments
+  ADD COLUMN agent_type TEXT CHECK(author_type = 'agent' OR agent_type IS NULL);
+
 INSERT OR IGNORE INTO schema_migrations(version, name, checksum, applied_at)
 VALUES (3, '003_comment_author_identity', '', CAST(strftime('%s','now') AS INTEGER) * 1000);
+
+COMMIT;
 ```
 
 如果 update affected rows = 0，说明被其他进程抢先 claim，重新选择下一个。
@@ -4031,6 +4035,8 @@ CREATE TABLE IF NOT EXISTS task_comments (
   board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   author TEXT NOT NULL,
+  author_type TEXT NOT NULL DEFAULT 'human' CHECK(author_type IN ('human', 'agent', 'system')),
+  agent_type TEXT CHECK(author_type = 'agent' OR agent_type IS NULL),
   body TEXT NOT NULL CHECK(length(trim(body)) > 0),
   kind TEXT NOT NULL DEFAULT 'text' CHECK(kind IN ('text', 'system', 'worker')),
   created_at INTEGER NOT NULL

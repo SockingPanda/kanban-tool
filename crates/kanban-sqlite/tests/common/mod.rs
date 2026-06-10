@@ -11,10 +11,11 @@ pub use kanban_sqlite::{
     TaskPatch, add_dependency, archive_board, archive_task, begin_database_replace,
     begin_database_runtime, block_task, build_context_pack, claim_task, complete_task,
     connect_file, create_board, create_comment, create_comment_with_options, create_task,
-    derived_store_statuses, dispatch_once, doctor_database, get_board, get_run_by_id_global,
-    get_task, init_database, list_board_columns, list_boards, list_comments, list_dependencies,
-    list_events, list_outbox, list_runs, list_tasks, promote_task, search_tasks,
-    set_task_retry_policy_by_id, specify_task, unblock_task, update_task,
+    derived_store_statuses, dispatch_once, doctor_database, export_jsonl, get_board,
+    get_run_by_id_global, get_task, import_jsonl, init_database, list_board_columns, list_boards,
+    list_comments, list_dependencies, list_events, list_outbox, list_runs, list_tasks,
+    promote_task, search_tasks, set_task_retry_policy_by_id, specify_task, unblock_task,
+    update_task,
 };
 #[cfg(feature = "vector-lancedb")]
 pub use kanban_sqlite::{rebuild_vector_store_with, sync_vector_store_with};

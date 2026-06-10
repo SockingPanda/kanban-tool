@@ -1,4 +1,36 @@
-use super::*;
+use crate::connect_file;
+
+#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
+use super::store_target;
+use super::{
+    MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT, board_id, context_graph_items, context_vector_items,
+    context_vector_status, get_task, graph_store_status, search_tasks, validate_page_bounds,
+};
+#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
+use super::{current_last_event_id, derived_status_by_name, has_pending_outbox_for_target};
+
+use std::path::Path;
+
+use kanban_context::{
+    ContextBrokerInput, ContextDiagnostic, ContextError, ContextItem, ContextPack, ContextPolicy,
+};
+
+use kanban_core::{KanbanError, Result};
+
+use kanban_entity::EntityUri;
+
+use kanban_graph::GraphStoreStatus;
+
+#[cfg(feature = "vector-lancedb")]
+use kanban_indexer::LANCEDB_CHUNKS_STORE;
+#[cfg(feature = "graph-oxigraph")]
+use kanban_indexer::OXIGRAPH_RELATIONS_STORE;
+
+use kanban_search::SearchQuery;
+
+use kanban_vector::VectorStore;
+
+use rusqlite::Connection;
 
 pub fn build_context_pack(
     path: impl AsRef<Path>,

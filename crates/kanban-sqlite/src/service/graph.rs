@@ -1,4 +1,46 @@
-use super::*;
+#[cfg(feature = "graph-oxigraph")]
+use rusqlite::params;
+use rusqlite::{Connection, OptionalExtension, Row};
+
+use super::{
+    DerivedStoreStatusRecord, MAX_TASK_LIST_LIMIT, TaskRecord, derived_store_status_from_row,
+    storage, validate_page_bounds, vector_store_status,
+};
+#[cfg(feature = "graph-oxigraph")]
+use super::{
+    IndexOutboxRecord, board_id, current_last_event_id, mark_derived_store_failure,
+    mark_derived_store_success, outbox_from_row, search_lag,
+};
+#[cfg(feature = "vector-lancedb")]
+use super::{
+    push_context_diagnostic, push_degraded_marker, vector_storage, vector_store_path,
+    vector_store_status_with,
+};
+
+use std::path::Path;
+#[cfg(feature = "graph-oxigraph")]
+use std::path::PathBuf;
+
+use kanban_context::{ContextDiagnostic, ContextItem};
+
+#[cfg(feature = "graph-oxigraph")]
+use kanban_core::{Clock, SystemClock};
+use kanban_core::{KanbanError, Result};
+
+use kanban_entity::{EntityUri, Predicate, Provenance, Relation};
+
+#[cfg(feature = "graph-oxigraph")]
+use kanban_graph::GraphStoreStatus;
+#[cfg(feature = "graph-oxigraph")]
+use kanban_graph::{OxigraphStore, RelationGraph};
+#[cfg(feature = "graph-oxigraph")]
+use kanban_indexer::OXIGRAPH_RELATIONS_STORE;
+#[cfg(feature = "vector-lancedb")]
+use kanban_vector::{LanceDbConfig, LanceDbStore, VectorHit, VectorQuery};
+use kanban_vector::{VectorStore, VectorStoreStatus};
+
+#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
+use crate::connect_file;
 
 #[cfg(feature = "graph-oxigraph")]
 pub fn graph_neighbors(

@@ -1,10 +1,10 @@
 mod common;
 
-use common::{TempDb, kb};
+use common::{TempDb, kanban};
 #[test]
 fn serve_help_shows_localhost_bind_defaults() -> anyhow::Result<()> {
     let temp = TempDb::new("serve_help_includes_default_localhost_bind_options")?;
-    let output = kb(&temp.path, &["serve", "--help"])?.output;
+    let output = kanban(&temp.path, &["serve", "--help"])?.output;
     assert!(
         output.status.success(),
         "status: {:?}\nstdout:\n{}\nstderr:\n{}",
@@ -26,7 +26,7 @@ fn serve_help_shows_localhost_bind_defaults() -> anyhow::Result<()> {
 fn serve_rejects_non_loopback_host_before_opening_database() -> anyhow::Result<()> {
     let temp = TempDb::new("serve_rejects_non_loopback_host_without_creating_database")?;
 
-    kb(&temp.path, &["serve", "--host", "0.0.0.0", "--port", "0"])?
+    kanban(&temp.path, &["serve", "--host", "0.0.0.0", "--port", "0"])?
         .failure_containing("kanban serve only supports loopback hosts")?;
     assert!(!temp.path.exists());
     Ok(())

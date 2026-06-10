@@ -1,13 +1,13 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kb};
+use common::{TempDb, kanban};
 use pretty_assertions::assert_eq;
 #[test]
 fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
     let temp = TempDb::new("search_command_outputs_json_and_human_hits")?;
-    kb(&temp.path, &["init"])?.success()?;
-    kb(
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(
         &temp.path,
         &[
             "task",
@@ -20,7 +20,7 @@ fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
         ],
     )?
     .success()?;
-    kb(
+    kanban(
         &temp.path,
         &[
             "task",
@@ -34,7 +34,7 @@ fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
     )?
     .success()?;
 
-    let json = kb(
+    let json = kanban(
         &temp.path,
         &[
             "--json",
@@ -61,7 +61,7 @@ fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
             .contains("unique-needle")
     );
 
-    let human = kb(
+    let human = kanban(
         &temp.path,
         &["search", "unique-needle", "--assignee", "worker-a"],
     )?;
@@ -78,9 +78,9 @@ fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
 #[test]
 fn search_command_rejects_unbounded_limit() -> anyhow::Result<()> {
     let temp = TempDb::new("search_command_rejects_unbounded_limit")?;
-    kb(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["init"])?.success()?;
 
-    kb(
+    kanban(
         &temp.path,
         &["search", "needle", "--limit", &usize::MAX.to_string()],
     )?
@@ -93,8 +93,8 @@ fn search_command_treats_like_wildcards_and_escape_characters_as_literal_text() 
 {
     let temp =
         TempDb::new("search_command_treats_like_wildcards_and_escape_characters_as_literal_text")?;
-    kb(&temp.path, &["init"])?.success()?;
-    kb(
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(
         &temp.path,
         &[
             "task",
@@ -105,7 +105,7 @@ fn search_command_treats_like_wildcards_and_escape_characters_as_literal_text() 
         ],
     )?
     .success()?;
-    kb(
+    kanban(
         &temp.path,
         &[
             "task",
@@ -116,7 +116,7 @@ fn search_command_treats_like_wildcards_and_escape_characters_as_literal_text() 
         ],
     )?
     .success()?;
-    kb(
+    kanban(
         &temp.path,
         &[
             "task",
@@ -128,14 +128,14 @@ fn search_command_treats_like_wildcards_and_escape_characters_as_literal_text() 
     )?
     .success()?;
 
-    let json = kb(&temp.path, &["--json", "search", "%"])?.success_json()?;
+    let json = kanban(&temp.path, &["--json", "search", "%"])?.success_json()?;
     let hits = json["data"]["hits"]
         .as_array()
         .context("expected JSON array")?;
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0]["task"]["title"], "literal percent % cli");
 
-    let json = kb(&temp.path, &["--json", "search", "\\"])?.success_json()?;
+    let json = kanban(&temp.path, &["--json", "search", "\\"])?.success_json()?;
     let hits = json["data"]["hits"]
         .as_array()
         .context("expected JSON array")?;

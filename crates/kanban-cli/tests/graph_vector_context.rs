@@ -1,13 +1,13 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kb};
+use common::{TempDb, kanban};
 #[test]
 fn substrate_commands_report_entities_outbox_and_derived_status() -> anyhow::Result<()> {
     let temp = TempDb::new("substrate_commands_report_entities_outbox_and_derived_status")?;
-    kb(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["init"])?.success()?;
 
-    let entities = kb(
+    let entities = kanban(
         &temp.path,
         &[
             "--json", "entity", "list", "--kind", "board", "--limit", "5",
@@ -22,10 +22,10 @@ fn substrate_commands_report_entities_outbox_and_derived_status() -> anyhow::Res
         .context("expected JSON string")?;
     assert!(uri.starts_with("kb://board/"));
 
-    let shown = kb(&temp.path, &["--json", "entity", "show", uri])?.success_json()?;
+    let shown = kanban(&temp.path, &["--json", "entity", "show", uri])?.success_json()?;
     assert_eq!(shown["data"]["uri"], uri);
 
-    let outbox = kb(&temp.path, &["--json", "outbox", "list"])?.success_json()?;
+    let outbox = kanban(&temp.path, &["--json", "outbox", "list"])?.success_json()?;
     assert_eq!(
         outbox["data"]
             .as_array()
@@ -34,7 +34,7 @@ fn substrate_commands_report_entities_outbox_and_derived_status() -> anyhow::Res
         0
     );
 
-    let created = kb(
+    let created = kanban(
         &temp.path,
         &[
             "--json",
@@ -50,10 +50,11 @@ fn substrate_commands_report_entities_outbox_and_derived_status() -> anyhow::Res
         .as_str()
         .context("expected JSON string")?;
     let task_uri = format!("kb://task/{task_id}");
-    let task_entity = kb(&temp.path, &["--json", "entity", "show", &task_uri])?.success_json()?;
+    let task_entity =
+        kanban(&temp.path, &["--json", "entity", "show", &task_uri])?.success_json()?;
     assert_eq!(task_entity["data"]["title"], "substrate task");
 
-    let outbox = kb(&temp.path, &["--json", "outbox", "list"])?.success_json()?;
+    let outbox = kanban(&temp.path, &["--json", "outbox", "list"])?.success_json()?;
     let jobs = outbox["data"].as_array().context("expected JSON array")?;
     assert_eq!(jobs.len(), 3);
     let targets = jobs
@@ -63,7 +64,7 @@ fn substrate_commands_report_entities_outbox_and_derived_status() -> anyhow::Res
     assert_eq!(targets, vec!["tantivy", "oxigraph", "lancedb"]);
     assert!(jobs.iter().all(|job| job["entity_uri"] == task_uri));
 
-    let derived = kb(&temp.path, &["--json", "derived", "status"])?.success_json()?;
+    let derived = kanban(&temp.path, &["--json", "derived", "status"])?.success_json()?;
     let stores = derived["data"].as_array().context("expected JSON array")?;
     assert_eq!(stores.len(), 3);
     assert!(
@@ -87,8 +88,8 @@ fn substrate_commands_report_entities_outbox_and_derived_status() -> anyhow::Res
 #[test]
 fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Result<()> {
     let temp = TempDb::new("graph_vector_and_context_commands_report_disabled_fallbacks")?;
-    kb(&temp.path, &["init"])?.success()?;
-    let created = kb(
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
         &temp.path,
         &[
             "--json",
@@ -104,13 +105,13 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
         .as_str()
         .context("expected JSON string")?;
 
-    let graph = kb(&temp.path, &["--json", "graph", "status"])?.success_json()?;
+    let graph = kanban(&temp.path, &["--json", "graph", "status"])?.success_json()?;
     #[cfg(not(feature = "graph-oxigraph"))]
     {
         assert_eq!(graph["data"]["backend"], "disabled");
         assert_eq!(graph["data"]["enabled"], false);
 
-        let neighbors = kb(
+        let neighbors = kanban(
             &temp.path,
             &[
                 "--json",
@@ -136,11 +137,11 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
         assert_eq!(graph["data"]["backend"], "oxigraph");
         assert_eq!(graph["data"]["enabled"], true);
 
-        let rebuilt = kb(&temp.path, &["--json", "graph", "rebuild"])?.success_json()?;
+        let rebuilt = kanban(&temp.path, &["--json", "graph", "rebuild"])?.success_json()?;
         assert_eq!(rebuilt["data"]["backend"], "oxigraph");
         assert_eq!(rebuilt["data"]["enabled"], true);
 
-        let neighbors = kb(
+        let neighbors = kanban(
             &temp.path,
             &[
                 "--json",
@@ -159,7 +160,7 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
                     && relation["object_uri"] == format!("kb://board/{board_id}"))
         );
 
-        let query = kb(
+        let query = kanban(
             &temp.path,
             &[
                 "--json",
@@ -180,7 +181,7 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
         );
     }
 
-    let vector = kb(&temp.path, &["--json", "vector", "status"])?.success_json()?;
+    let vector = kanban(&temp.path, &["--json", "vector", "status"])?.success_json()?;
     #[cfg(not(feature = "vector-lancedb"))]
     {
         assert_eq!(vector["data"]["backend"], "disabled");
@@ -198,7 +199,7 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
         );
     }
 
-    let context = kb(
+    let context = kanban(
         &temp.path,
         &[
             "--json",
@@ -266,8 +267,8 @@ mod vector_lancedb {
     fn vector_status_reports_lancedb_degraded_without_embedding_provider() -> anyhow::Result<()> {
         let temp =
             TempDb::new("vector_status_reports_lancedb_degraded_without_embedding_provider")?;
-        kb(&temp.path, &["init"])?.success()?;
-        kb(
+        kanban(&temp.path, &["init"])?.success()?;
+        kanban(
             &temp.path,
             &[
                 "task",
@@ -279,7 +280,7 @@ mod vector_lancedb {
         )?
         .success()?;
 
-        let status = kb(&temp.path, &["--json", "vector", "status"])?.success_json()?;
+        let status = kanban(&temp.path, &["--json", "vector", "status"])?.success_json()?;
         assert_eq!(status["data"]["backend"], "lancedb");
         assert_eq!(status["data"]["enabled"], false);
         assert!(
@@ -301,8 +302,8 @@ mod vector_lancedb {
 #[test]
 fn context_build_command_rejects_zero_max_items() -> anyhow::Result<()> {
     let temp = TempDb::new("context_build_command_rejects_zero_max_items")?;
-    kb(&temp.path, &["init"])?.success()?;
-    let created = kb(
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
         &temp.path,
         &[
             "--json",
@@ -318,7 +319,7 @@ fn context_build_command_rejects_zero_max_items() -> anyhow::Result<()> {
         .as_str()
         .context("expected JSON string")?;
 
-    kb(
+    kanban(
         &temp.path,
         &["context", "build", task_id, "--max-items", "0"],
     )?

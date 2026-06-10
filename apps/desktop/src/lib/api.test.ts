@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { KanbanApi, type SearchIndexStatus, type SearchTasksMeta, type Task } from "./api"
+import { KanbanApi, type ApiError, type SearchIndexStatus, type SearchTasksMeta, type Task } from "./api"
 
 const runtimeConfig = {
   apiBaseUrl: "http://127.0.0.1:8721",
@@ -91,6 +91,36 @@ describe("KanbanApi task search", () => {
     await api.listTasks({ signal: controller.signal, limit: 10 })
 
     expect(calledInit(fetchMock).signal).toBe(controller.signal)
+  })
+
+  it("rejects malformed task list envelopes before React consumes them", async () => {
+    mockFetch({ data: { not: "an array" }, meta: { limit: 10, offset: 0, total: 1 } })
+    const api = new KanbanApi(runtimeConfig)
+
+    await expect(api.listTasks({ limit: 10 })).rejects.toMatchObject({
+      code: "invalid_response",
+      message: "tasks response data must be an array",
+    } satisfies Partial<ApiError>)
+  })
+
+  it("rejects malformed search envelopes before returning hydrated rows", async () => {
+    mockFetch({
+      data: {
+        meta: {
+          backend: "tantivy",
+          stale: false,
+          index_version: "v1",
+          last_event_id: 12,
+          index_lag_events: 0,
+        },
+      },
+    })
+    const api = new KanbanApi(runtimeConfig)
+
+    await expect(api.searchTasks({ query: "broken" })).rejects.toMatchObject({
+      code: "invalid_response",
+      message: "search hits must be an array",
+    } satisfies Partial<ApiError>)
   })
 
   it("preserves unknown totals while keeping numeric limit and offset", async () => {

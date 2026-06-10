@@ -107,6 +107,53 @@ export type RunLog = {
   truncated: boolean
 }
 
+export type HealthStatus = {
+  ok: boolean
+  db: string
+  version: string
+}
+
+export type BoardStats = {
+  board: string
+  tasks_total?: number
+  open_tasks?: number
+  running_tasks?: number
+  blocked_tasks?: number
+  ready_tasks?: number
+  done_tasks?: number
+  archived_tasks?: number
+  runs_total?: number
+  active_runs?: number
+  events_total?: number
+  [key: string]: string | number | boolean | null | undefined
+}
+
+export type DoctorIssue = {
+  code: string
+  message: string
+  severity?: string
+  task_id?: string | null
+  details?: Record<string, unknown>
+  [key: string]: string | number | boolean | null | undefined | Record<string, unknown>
+}
+
+export type DoctorReport = {
+  ok: boolean
+  checked_at?: number
+  issues?: DoctorIssue[]
+  warnings?: DoctorIssue[]
+  repairs?: DoctorIssue[]
+  [key: string]: string | number | boolean | null | undefined | DoctorIssue[]
+}
+
+export type CheckpointReport = {
+  ok: boolean
+  path?: string
+  created_at?: number
+  size_bytes?: number
+  [key: string]: string | number | boolean | null | undefined
+}
+
 export type Dependencies = {
   parents: Task[]
   children: Task[]
@@ -207,7 +254,33 @@ export class KanbanApi {
   }
 
   async health(options: RequestOptions = {}) {
-    return this.request<{ ok: boolean; db: string; version: string }>("/health", options)
+    return this.request<HealthStatus>("/health", options)
+  }
+
+  async stats(options: RequestOptions = {}) {
+    const params = new URLSearchParams({ board: this.board })
+    return this.request<BoardStats>(`/api/v1/stats?${params.toString()}`, options)
+  }
+
+  async searchStatus(options: RequestOptions = {}) {
+    const params = new URLSearchParams({ board: this.board })
+    return this.request<SearchMeta>(`/api/v1/search/status?${params.toString()}`, options)
+  }
+
+  async doctor(options: RequestOptions = {}) {
+    return this.request<DoctorReport>("/api/v1/maintenance/doctor", {
+      method: "POST",
+      body: { board: this.board, actor: this.actor },
+      signal: options.signal,
+    })
+  }
+
+  async checkpoint(options: RequestOptions = {}) {
+    return this.request<CheckpointReport>("/api/v1/maintenance/checkpoint", {
+      method: "POST",
+      body: { board: this.board, actor: this.actor },
+      signal: options.signal,
+    })
   }
 
   async listBoardColumns(options: RequestOptions = {}) {
@@ -323,6 +396,16 @@ export class KanbanApi {
     const envelope = await this.requestEnvelope<EventRecord[], EventMeta>(
       `/api/v1/events?${params.toString()}`,
       options,
+    )
+    return { events: envelope.data, meta: envelope.meta ?? {} } satisfies EventPage
+  }
+
+  async listBoardEvents(options: { after?: number; limit?: number; signal?: AbortSignal } = {}) {
+    const params = new URLSearchParams({ board: this.board, limit: String(options.limit ?? 100) })
+    if (typeof options.after === "number") params.set("after", String(options.after))
+    const envelope = await this.requestEnvelope<EventRecord[], EventMeta>(
+      `/api/v1/events?${params.toString()}`,
+      { signal: options.signal },
     )
     return { events: envelope.data, meta: envelope.meta ?? {} } satisfies EventPage
   }

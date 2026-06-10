@@ -17,6 +17,7 @@ import {
   canBlockTask,
   canCompleteTask,
   completeTaskBody,
+  requiresForceConfirmation,
 } from "@/lib/action-policy"
 
 export type LegalTaskAction = {
@@ -24,6 +25,7 @@ export type LegalTaskAction = {
   icon: LucideIcon
   enabled: boolean
   danger?: boolean
+  confirmation?: string
   run: (api: KanbanApi, task: Task) => Promise<unknown>
 }
 
@@ -56,7 +58,10 @@ export function legalActions(task: Task, claimToken: string | null, blockReason:
     {
       label: "Complete",
       icon: CheckCircle2,
-      enabled: canCompleteTask(task.status, claimToken),
+      enabled: canCompleteTask(task.status),
+      confirmation: requiresForceConfirmation(task.status, "complete", claimToken)
+        ? `Force complete running task #${task.seq} without a claim token?`
+        : undefined,
       run: (api, item) => api.transition(item, "complete", completeTaskBody(item.status, claimToken)),
     },
     {
@@ -69,6 +74,9 @@ export function legalActions(task: Task, claimToken: string | null, blockReason:
       label: "Block",
       icon: XCircle,
       enabled: canBlockTask(task.status, claimToken, blockReason),
+      confirmation: requiresForceConfirmation(task.status, "block", claimToken)
+        ? `Force block running task #${task.seq} without a claim token?`
+        : undefined,
       danger: true,
       run: (api, item) => api.transition(item, "block", blockTaskBody(claimToken, blockReason)),
     },

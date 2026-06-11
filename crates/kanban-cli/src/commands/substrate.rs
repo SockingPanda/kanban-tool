@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
-use kanban_context::ContextPolicy;
+use kanban_context::{ContextDiagnostic, ContextPack, ContextPolicy};
 use kanban_entity::EntityUri;
 #[cfg(not(feature = "graph-oxigraph"))]
 use kanban_graph::DisabledGraphStore;
@@ -16,7 +16,9 @@ use kanban_sqlite::{
     rebuild_vector_store, sync_graph_store, sync_vector_store, vector_store_status,
 };
 #[cfg(feature = "vector-lancedb")]
-use kanban_sqlite::{rebuild_vector_store_with, sync_vector_store_with};
+use kanban_sqlite::{
+    configured_vector_store_status, rebuild_vector_store_with, sync_vector_store_with,
+};
 
 use crate::args::{
     ContextCommand, DerivedCommand, EntityCommand, GraphCommand, OutboxCommand, VectorCommand,
@@ -369,9 +371,17 @@ fn configured_vector_status(
 ) -> Result<kanban_vector::VectorStoreStatus> {
     #[cfg(feature = "vector-lancedb")]
     {
-        if let Some(store) = configured_lancedb_store(db_path, vector_config_path)? {
-            return kanban_sqlite::vector_store_status_with(db_path, board, &store)
-                .map_err(Into::into);
+        if let Some(config) = kanban_local::resolved_vector_config(vector_config_path)? {
+            if config.provider != "ollama" {
+                bail!("unsupported vector provider in config: {}", config.provider);
+            }
+            return configured_vector_store_status(
+                db_path,
+                board,
+                &config.model,
+                config.dimensions,
+            )
+            .map_err(Into::into);
         }
     }
     vector_store_status(db_path, board).map_err(Into::into)
@@ -414,12 +424,46 @@ fn build_configured_context_pack(
 ) -> Result<kanban_context::ContextPack> {
     #[cfg(feature = "vector-lancedb")]
     {
-        if let Some(store) = configured_lancedb_store(db_path, vector_config_path)? {
-            return kanban_sqlite::build_context_pack_with_vector_store(
-                db_path, board, task_ref, policy, &store,
-            )
-            .map_err(Into::into);
+        match configured_lancedb_store(db_path, vector_config_path) {
+            Ok(Some(store)) => {
+                return kanban_sqlite::build_context_pack_with_vector_store(
+                    db_path, board, task_ref, policy, &store,
+                )
+                .map_err(Into::into);
+            }
+            Ok(None) => {}
+            Err(error) => {
+                let pack = kanban_sqlite::build_context_pack(db_path, board, task_ref, policy)?;
+                return Ok(mark_vector_store_construction_error(pack, &error));
+            }
         }
     }
     kanban_sqlite::build_context_pack(db_path, board, task_ref, policy).map_err(Into::into)
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn mark_vector_store_construction_error(
+    mut pack: ContextPack,
+    error: &impl std::fmt::Display,
+) -> ContextPack {
+    if !pack.degraded.iter().any(|marker| marker == "vector_error") {
+        pack.degraded.push("vector_error".to_owned());
+    }
+    pack.diagnostics.push(ContextDiagnostic {
+        source: "vector".to_owned(),
+        code: "vector_error".to_owned(),
+        message: bounded_diagnostic_message(error),
+    });
+    pack
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn bounded_diagnostic_message(error: &impl std::fmt::Display) -> String {
+    const MAX_DIAGNOSTIC_MESSAGE_LEN: usize = 240;
+    let mut message = error.to_string().replace(['\r', '\n'], " ");
+    if message.len() > MAX_DIAGNOSTIC_MESSAGE_LEN {
+        message.truncate(MAX_DIAGNOSTIC_MESSAGE_LEN);
+        message.push_str("...");
+    }
+    message
 }

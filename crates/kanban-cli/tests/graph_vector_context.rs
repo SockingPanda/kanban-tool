@@ -263,6 +263,25 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
 mod vector_lancedb {
     use super::*;
 
+    struct StaticProvider {
+        model: &'static str,
+        dimensions: usize,
+    }
+
+    impl kanban_vector::EmbeddingProvider for StaticProvider {
+        fn embedding_model(&self) -> &str {
+            self.model
+        }
+
+        fn dimensions(&self) -> usize {
+            self.dimensions
+        }
+
+        fn embed(&self, _text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
+            Ok(vec![0.0; self.dimensions])
+        }
+    }
+
     #[test]
     fn vector_status_reports_lancedb_degraded_without_embedding_provider() -> anyhow::Result<()> {
         let temp =
@@ -403,6 +422,100 @@ dimensions = 1024
                 .context("expected JSON string")?
                 .contains("explicit-model")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn context_build_degrades_when_configured_vector_store_construction_fails() -> anyhow::Result<()>
+    {
+        let temp =
+            TempDb::new("context_build_degrades_when_configured_vector_store_construction_fails")?;
+        kanban(&temp.path, &["init"])?.success()?;
+        let created = kanban(
+            &temp.path,
+            &[
+                "--json",
+                "task",
+                "create",
+                "schema mismatch context",
+                "--description",
+                "ready spec schema mismatch needle",
+            ],
+        )?
+        .success_json()?;
+        let task_id = created["data"]["id"]
+            .as_str()
+            .context("expected JSON string")?;
+
+        let provider = std::sync::Arc::new(StaticProvider {
+            model: "static-test",
+            dimensions: 2,
+        });
+        let _store = kanban_vector::LanceDbStore::connect(kanban_vector::LanceDbConfig::new(
+            kanban_local::vector_store_path(temp.path.clone()),
+            provider,
+        ))
+        .context("seed 2-dimensional LanceDB table")?;
+
+        let vector_config = temp.dir.join("mismatched-vector.toml");
+        std::fs::write(
+            &vector_config,
+            r#"[vector]
+provider = "ollama"
+endpoint = "http://127.0.0.1:1"
+model = "offline-test-model"
+dimensions = 3
+"#,
+        )?;
+        let vector_config_arg = vector_config.to_string_lossy().to_string();
+
+        let status = kanban(
+            &temp.path,
+            &[
+                "--json",
+                "vector",
+                "status",
+                "--vector-config",
+                &vector_config_arg,
+            ],
+        )?
+        .success_json()?;
+        assert_eq!(status["data"]["enabled"], true);
+        assert!(
+            status["data"]["message"]
+                .as_str()
+                .context("expected JSON string")?
+                .contains("offline-test-model")
+        );
+
+        let context = kanban(
+            &temp.path,
+            &[
+                "--json",
+                "context",
+                "build",
+                task_id,
+                "--vector-config",
+                &vector_config_arg,
+            ],
+        )?
+        .success_json()?;
+        assert_eq!(context["data"]["subject"], format!("kb://task/{task_id}"));
+        assert!(
+            context["data"]["degraded"]
+                .as_array()
+                .context("expected JSON array")?
+                .contains(&serde_json::json!("vector_error"))
+        );
+        assert!(
+            context["data"]["diagnostics"]
+                .as_array()
+                .context("expected JSON array")?
+                .iter()
+                .any(|diagnostic| diagnostic["source"] == "vector"
+                    && diagnostic["code"] == "vector_error")
+        );
+        assert_eq!(context["data"]["items"][0]["source"], "subject");
         Ok(())
     }
 }

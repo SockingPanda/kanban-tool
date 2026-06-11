@@ -198,6 +198,28 @@ pub fn vector_store_status_with(
     vector_store_status_with_conn(&conn, &board_id, store)
 }
 
+#[cfg(feature = "vector-lancedb")]
+pub fn configured_vector_store_status(
+    path: impl AsRef<Path>,
+    board: &str,
+    embedding_model: &str,
+    dimensions: usize,
+) -> Result<VectorStoreStatus> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    vector_store_status_from_base(
+        &conn,
+        &board_id,
+        VectorStoreStatus {
+            backend: "lancedb".to_owned(),
+            enabled: true,
+            message: format!(
+                "LanceDB vector store enabled for model {embedding_model} ({dimensions} dimensions)"
+            ),
+        },
+    )
+}
+
 pub(crate) fn vector_store_status_with_conn(
     conn: &Connection,
     board_id: &str,

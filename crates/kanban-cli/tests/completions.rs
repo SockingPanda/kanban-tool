@@ -242,6 +242,7 @@ fn generated_bash_and_zsh_completions_include_dynamic_helper_hook() -> anyhow::R
             "kanban __complete",
             "task-ref",
             "dependency-task-ref",
+            "dep list",
             "comment-kind",
         ] {
             anyhow::ensure!(

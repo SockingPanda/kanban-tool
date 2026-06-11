@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
 use kanban_sqlite::FinishPolicy;
 
 #[derive(Debug, Parser)]
@@ -85,6 +86,9 @@ pub(crate) enum Command {
     },
     Dispatch(DispatchArgs),
     Serve(ServeArgs),
+    Completions {
+        shell: Shell,
+    },
     Doctor,
     Stats,
     Backup(BackupArgs),

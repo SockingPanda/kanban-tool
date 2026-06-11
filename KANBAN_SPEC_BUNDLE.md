@@ -1705,6 +1705,21 @@ Active board 解析顺序：
 
 `kanban board use <board>` 会把当前目录写成项目级 `.kb/config.toml`；后续子目录自动继承该 active board。该配置只选择本地项目的 board，不创建新 DB。
 
+### 1.1 Shell completions
+
+```bash
+kanban completions <shell>
+```
+
+Writes a static completion script to stdout. Supported shells:
+
+```text
+bash | zsh | fish | powershell | elvish
+```
+
+This command does not open the SQLite database and does not include dynamic
+task or board refs.
+
 ---
 
 ## 2. Exit Codes

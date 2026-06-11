@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { AppShell } from "@/app/AppShell"
+import { reconcileSelectedTaskId } from "@/app/task-selection"
 import { fallbackColumns } from "@/features/board/board-config"
 import { executeDragTransition, planDragTransition } from "@/features/board/drag-policy"
 import { useBoardTasks } from "@/features/board/useBoardTasks"
@@ -98,17 +99,15 @@ function App() {
   }, [tasksQuery.dataUpdatedAt])
 
   useEffect(() => {
-    setSelectedId((current) =>
-      current && tasks.some((task) => task.id === current) ? current : tasks[0]?.id ?? null,
-    )
+    setSelectedId((current) => reconcileSelectedTaskId(current, tasks))
   }, [tasks])
 
   const detailQuery = useTaskDetail(api, selectedId)
   const boardSelectedTask = useMemo(
-    () => tasks.find((task) => task.id === selectedId) ?? tasks[0] ?? null,
+    () => (selectedId ? tasks.find((task) => task.id === selectedId) ?? null : null),
     [selectedId, tasks],
   )
-  const selectedTask = detailQuery.data?.task ?? boardSelectedTask
+  const selectedTask = selectedId ? detailQuery.data?.task ?? boardSelectedTask : null
   const detail = taskDetailOrEmpty(detailQuery.data)
 
   useEffect(() => {
@@ -340,6 +339,7 @@ function App() {
       onNewTitleChange={setNewTitle}
       onNewDescriptionChange={setNewDescription}
       onSelectTask={setSelectedId}
+      onCloseTaskDetail={() => setSelectedId(null)}
       onDropTask={(taskId, status) => void dropTask(taskId, status)}
       onBlockReasonChange={setBlockReason}
       onDependencyInputChange={setDependencyInput}

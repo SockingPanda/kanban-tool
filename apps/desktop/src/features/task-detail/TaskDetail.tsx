@@ -1,16 +1,18 @@
 import { CircleDot, FileText, GitBranch, MessageSquare, Save, X } from "lucide-react"
-import type { ReactNode } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
+import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import { legalActions } from "@/features/task-actions/legal-actions"
 import { isBlockableStatus } from "@/lib/action-policy"
 import type { KanbanApi, Run, Task, TaskStatus } from "@/lib/api"
 import { formatRelativeTime, shortId } from "@/lib/utils"
 
+import { isLongDescription, visibleDescription } from "./description-state"
 import type { DetailState } from "./detail-state"
 import type { TaskEditDraft } from "./task-draft"
 
@@ -59,26 +61,43 @@ export function TaskDetail({
   onSaveTask: () => Promise<void>
   onAddComment: () => Promise<void>
 }) {
-  if (!task) {
-    return <aside className="w-[420px] border-l border-neutral-200 bg-white p-4 text-sm text-neutral-500">No task selected.</aside>
-  }
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false)
+
+  useEffect(() => {
+    setDescriptionExpanded(false)
+  }, [task?.id])
+
+  if (!task) return null
 
   const actions = legalActions(task, claimToken, blockReason)
+  const longDescription = isLongDescription(task.description)
 
   return (
-    <aside className="flex w-[420px] shrink-0 flex-col border-l border-neutral-200 bg-white">
-      <div className="border-b border-neutral-200 p-4">
+    <>
+      <div className="border-b border-neutral-200 p-4 pr-12">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+          <SheetHeader className="min-w-0">
             <div className="text-xs text-neutral-500">#{task.seq} {shortId(task.id)}</div>
-            <h2 className="mt-1 text-lg font-semibold leading-snug">{task.title}</h2>
-          </div>
+            <SheetTitle className="mt-1">{task.title}</SheetTitle>
+          </SheetHeader>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <Badge variant={badgeVariant(task.status)}>{task.status}</Badge>
             {detailLoading ? <span className="text-xs text-neutral-500">refreshing</span> : null}
           </div>
         </div>
-        <p className="mt-2 text-sm text-neutral-600">{task.description || "No description yet."}</p>
+        <SheetDescription className="mt-2 whitespace-pre-wrap">
+          {visibleDescription(task.description, descriptionExpanded)}
+        </SheetDescription>
+        {longDescription ? (
+          <Button
+            className="mt-2 px-0"
+            variant="ghost"
+            size="sm"
+            onClick={() => setDescriptionExpanded((current) => !current)}
+          >
+            {descriptionExpanded ? "Show less" : "Show more"}
+          </Button>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -91,10 +110,9 @@ export function TaskDetail({
                   value={editDraft.title}
                   onChange={(event) => setEditDraft({ ...editDraft, title: event.target.value })}
                 />
-                <Textarea
-                  className="min-h-28"
+                <AutosizeDescriptionTextarea
                   value={editDraft.description}
-                  onChange={(event) => setEditDraft({ ...editDraft, description: event.target.value })}
+                  onChange={(value) => setEditDraft({ ...editDraft, description: value })}
                   placeholder="Description"
                 />
                 <div className="grid grid-cols-2 gap-2">
@@ -238,7 +256,7 @@ export function TaskDetail({
                     </span>
                     {detail.runLog.truncated ? <span>truncated</span> : null}
                   </div>
-                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-mono leading-relaxed">
+                  <pre className="whitespace-pre-wrap font-mono leading-relaxed">
                     {detail.runLog.content || "(empty)"}
                   </pre>
                 </div>
@@ -267,8 +285,45 @@ export function TaskDetail({
           </div>
         </Section>
       </div>
-    </aside>
+    </>
   )
+}
+
+function AutosizeDescriptionTextarea({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  useLayoutEffect(() => {
+    autosizeTextarea(textareaRef.current)
+  }, [value])
+
+  function handleChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    onChange(event.target.value)
+    autosizeTextarea(event.currentTarget)
+  }
+
+  return (
+    <Textarea
+      ref={textareaRef}
+      className="min-h-28 overflow-y-hidden"
+      value={value}
+      onChange={handleChange}
+      placeholder={placeholder}
+    />
+  )
+}
+
+function autosizeTextarea(textarea: HTMLTextAreaElement | null) {
+  if (!textarea) return
+  textarea.style.height = "auto"
+  textarea.style.height = `${textarea.scrollHeight}px`
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

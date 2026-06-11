@@ -19,6 +19,8 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { shouldOpenTaskDetailSheet } from "@/app/task-selection"
 import { BoardView } from "@/features/board/BoardView"
 import { filterStatuses } from "@/features/board/board-config"
 import { EventsView } from "@/features/events/EventsView"
@@ -32,7 +34,7 @@ import { SettingsView } from "@/features/settings/SettingsView"
 import { TaskDetail } from "@/features/task-detail/TaskDetail"
 import type { DetailState } from "@/features/task-detail/detail-state"
 import type { TaskEditDraft } from "@/features/task-detail/task-draft"
-import { apiEndpointLabel, shouldShowTaskDetail, shouldShowTaskExplorerToolbar } from "@/app/shell-rules"
+import { apiEndpointLabel, shouldShowTaskExplorerToolbar } from "@/app/shell-rules"
 import type {
   BoardColumn,
   KanbanApi,
@@ -102,6 +104,7 @@ export function AppShell({
   onNewTitleChange,
   onNewDescriptionChange,
   onSelectTask,
+  onCloseTaskDetail,
   onDropTask,
   onBlockReasonChange,
   onDependencyInputChange,
@@ -158,6 +161,7 @@ export function AppShell({
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
   onSelectTask: (taskId: string) => void
+  onCloseTaskDetail: () => void
   onDropTask: (taskId: string, targetStatus: TaskStatus) => void
   onBlockReasonChange: (value: string) => void
   onDependencyInputChange: (value: string) => void
@@ -176,7 +180,7 @@ export function AppShell({
     taskActivityLabel = " · refreshing"
   }
   const showTaskExplorerToolbar = shouldShowTaskExplorerToolbar(view)
-  const showDetailPanel = shouldShowTaskDetail(view)
+  const showDetailSheet = shouldOpenTaskDetailSheet(view, selectedTask)
 
   return (
     <div className="flex h-screen bg-[#f7f7f5] text-neutral-950">
@@ -239,31 +243,38 @@ export function AppShell({
             />
           </section>
 
-          {showDetailPanel ? (
-            <TaskDetail
-              api={api}
-              task={selectedTask}
-              detail={detail}
-              activeRun={activeRun}
-              blockReason={blockReason}
-              setBlockReason={onBlockReasonChange}
-              dependencyInput={dependencyInput}
-              setDependencyInput={onDependencyInputChange}
-              claimToken={claimToken}
-              commentBody={commentBody}
-              setCommentBody={onCommentBodyChange}
-              editDraft={editDraft}
-              draftDirty={draftDirty}
-              setEditDraft={onEditDraftChange}
-              detailLoading={detailLoading}
-              pendingAction={pendingAction}
-              onAction={onAction}
-              onAddDependency={onAddDependency}
-              onRemoveDependency={onRemoveDependency}
-              onSaveTask={onSaveTask}
-              onAddComment={onAddComment}
-            />
-          ) : null}
+          <Sheet
+            open={showDetailSheet}
+            onOpenChange={(open) => {
+              if (!open) onCloseTaskDetail()
+            }}
+          >
+            <SheetContent side="right" className="w-[min(620px,calc(100vw-32px))] p-0">
+              <TaskDetail
+                api={api}
+                task={selectedTask}
+                detail={detail}
+                activeRun={activeRun}
+                blockReason={blockReason}
+                setBlockReason={onBlockReasonChange}
+                dependencyInput={dependencyInput}
+                setDependencyInput={onDependencyInputChange}
+                claimToken={claimToken}
+                commentBody={commentBody}
+                setCommentBody={onCommentBodyChange}
+                editDraft={editDraft}
+                draftDirty={draftDirty}
+                setEditDraft={onEditDraftChange}
+                detailLoading={detailLoading}
+                pendingAction={pendingAction}
+                onAction={onAction}
+                onAddDependency={onAddDependency}
+                onRemoveDependency={onRemoveDependency}
+                onSaveTask={onSaveTask}
+                onAddComment={onAddComment}
+              />
+            </SheetContent>
+          </Sheet>
         </div>
 
         <StatusBar lastRefreshAt={lastRefreshAt} queueCounts={queueCounts} />

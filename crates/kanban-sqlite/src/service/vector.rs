@@ -202,6 +202,7 @@ pub fn vector_store_status_with(
 pub fn configured_vector_store_status(
     path: impl AsRef<Path>,
     board: &str,
+    endpoint: &str,
     embedding_model: &str,
     dimensions: usize,
 ) -> Result<VectorStoreStatus> {
@@ -214,7 +215,7 @@ pub fn configured_vector_store_status(
             backend: "lancedb".to_owned(),
             enabled: true,
             message: format!(
-                "LanceDB vector store enabled for model {embedding_model} ({dimensions} dimensions)"
+                "LanceDB vector store enabled for Ollama endpoint {endpoint}, model {embedding_model} ({dimensions} dimensions)"
             ),
         },
     )

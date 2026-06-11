@@ -273,6 +273,7 @@ pub(crate) fn configured_vector_status(
     kanban_sqlite::configured_vector_store_status(
         state.db_path(),
         board,
+        &config.endpoint,
         &config.model,
         config.dimensions,
     )

@@ -487,6 +487,12 @@ dimensions = 3
                 .context("expected JSON string")?
                 .contains("offline-test-model")
         );
+        assert!(
+            status["data"]["message"]
+                .as_str()
+                .context("expected JSON string")?
+                .contains("http://127.0.0.1:1")
+        );
 
         let context = kanban(
             &temp.path,

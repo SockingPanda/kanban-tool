@@ -1,4 +1,6 @@
 use std::str::FromStr;
+#[cfg(feature = "vector-lancedb")]
+use std::sync::Arc;
 
 use axum::{Json, extract::rejection::JsonRejection, http::HeaderMap};
 use kanban_core::TaskStatus;
@@ -219,6 +221,37 @@ pub(crate) fn parse_status_filters(raw_query: Option<&str>) -> Result<Vec<TaskSt
         .filter_map(|(key, value)| (key == "status").then_some(value))
         .map(|value| TaskStatus::from_str(value.trim()).map_err(ApiError::from))
         .collect()
+}
+
+#[cfg(feature = "vector-lancedb")]
+pub(crate) fn configured_lancedb_store(
+    state: &AppState,
+) -> Result<Option<kanban_vector::LanceDbStore>, ApiError> {
+    let Some(config) = kanban_local::resolved_vector_config(None)
+        .map_err(|error| ApiError(kanban_core::KanbanError::Storage(error.to_string())))?
+    else {
+        return Ok(None);
+    };
+    if config.provider != "ollama" {
+        return Err(invalid_input(format!(
+            "unsupported vector provider in config: {}",
+            config.provider
+        )));
+    }
+    let provider = Arc::new(
+        kanban_vector::OllamaEmbeddingProvider::new(
+            config.endpoint.clone(),
+            config.model.clone(),
+            config.dimensions,
+        )
+        .map_err(|error| ApiError(kanban_core::KanbanError::Storage(error.to_string())))?,
+    );
+    kanban_vector::LanceDbStore::connect(kanban_vector::LanceDbConfig::new(
+        kanban_local::vector_store_path(state.db_path().clone()),
+        provider,
+    ))
+    .map(Some)
+    .map_err(|error| ApiError(kanban_core::KanbanError::Storage(error.to_string())))
 }
 
 pub(crate) fn parse_predicate(value: &str) -> Result<Predicate, ApiError> {

@@ -5,6 +5,8 @@ use axum::{
 
 use crate::dto::{ContextBuildQuery, Envelope};
 use crate::error::{ApiError, extractor_error, invalid_input, validate_page_bounds};
+#[cfg(feature = "vector-lancedb")]
+use crate::handlers::shared::configured_lancedb_store;
 use crate::state::AppState;
 
 pub(crate) async fn build_context(
@@ -28,6 +30,19 @@ pub(crate) async fn build_context(
         vector_limit: query.vector_limit,
         max_items: query.max_items,
     };
+    #[cfg(feature = "vector-lancedb")]
+    if let Some(store) = configured_lancedb_store(&state)? {
+        return Ok(Json(Envelope {
+            data: kanban_sqlite::build_context_pack_with_vector_store(
+                state.db_path(),
+                &query.board,
+                &task_id,
+                policy,
+                &store,
+            )?,
+            meta: None,
+        }));
+    }
     Ok(Json(Envelope {
         data: kanban_sqlite::build_context_pack(state.db_path(), &query.board, &task_id, policy)?,
         meta: None,

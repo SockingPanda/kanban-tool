@@ -7,7 +7,8 @@ use assert_cmd::Command;
 use predicates::{Predicate, str::contains};
 
 pub fn kanban(db_path: &Path, args: &[&str]) -> anyhow::Result<CmdResult> {
-    kanban_in_dir(db_path, args, Path::new(env!("CARGO_MANIFEST_DIR")))
+    let current_dir = db_path.parent().unwrap_or_else(|| Path::new("."));
+    kanban_in_dir(db_path, args, current_dir)
 }
 
 pub fn kanban_in_dir(
@@ -35,6 +36,33 @@ pub fn kanban_in_dir_env(
         command.env("KB_BOARD", board);
     } else {
         command.env_remove("KB_BOARD");
+    }
+    command.env("XDG_CONFIG_HOME", current_dir.join(".xdg-config"));
+    let output = command
+        .output()
+        .context("failed to execute kanban command")?;
+    Ok(CmdResult { output })
+}
+
+pub fn kanban_in_dir_envs(
+    db_path: &Path,
+    args: &[&str],
+    current_dir: &Path,
+    envs: &[(&str, &Path)],
+) -> anyhow::Result<CmdResult> {
+    let mut command =
+        Command::cargo_bin("kanban").context("failed to locate kanban test binary")?;
+    command
+        .current_dir(current_dir)
+        .arg("--db")
+        .arg(db_path)
+        .args(args)
+        .env_remove("KB_BOARD");
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    if !envs.iter().any(|(key, _)| *key == "XDG_CONFIG_HOME") {
+        command.env("XDG_CONFIG_HOME", current_dir.join(".xdg-config"));
     }
     let output = command
         .output()

@@ -27,6 +27,7 @@ kanban-core.workspace = true
 kanban-context.workspace = true
 kanban-entity.workspace = true
 kanban-graph.workspace = true
+kanban-local.workspace = true
 kanban-search.workspace = true
 kanban-sqlite.workspace = true
 kanban-vector.workspace = true

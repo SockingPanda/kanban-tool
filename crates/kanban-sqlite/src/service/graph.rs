@@ -14,7 +14,7 @@ use super::{
 #[cfg(feature = "vector-lancedb")]
 use super::{
     push_context_diagnostic, push_degraded_marker, vector_storage, vector_store_path,
-    vector_store_status_with,
+    vector_store_status_with_conn,
 };
 
 use std::path::Path;
@@ -153,7 +153,7 @@ pub(crate) fn context_vector_status(
     diagnostics: &mut Vec<ContextDiagnostic>,
 ) -> VectorStoreStatus {
     let status = match store {
-        Some(store) => vector_store_status_with(conn, board_id, store),
+        Some(store) => vector_store_status_with_conn(conn, board_id, store),
         None => vector_store_status(path, board),
     };
     match status {

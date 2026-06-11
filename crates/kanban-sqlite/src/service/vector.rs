@@ -117,7 +117,7 @@ pub fn sync_vector_store_with(
     let last_event_id = current_last_event_id(&conn, &board_id)?;
     let state = derived_status_by_name(&conn, LANCEDB_CHUNKS_STORE)?;
     if !has_pending_vector_outbox_for_board(&conn, &board_id, last_event_id)? {
-        return vector_store_status_with(&conn, &board_id, store);
+        return vector_store_status_with_conn(&conn, &board_id, store);
     }
     let jobs = pending_vector_outbox_for_board(&conn, &board_id, last_event_id)?;
     let full_rebuild = state.last_event_id == 0 || jobs.iter().any(|job| job.action == "rebuild");
@@ -188,7 +188,40 @@ pub fn sync_vector_store_with(
     }
 }
 
-pub(crate) fn vector_store_status_with(
+pub fn vector_store_status_with(
+    path: impl AsRef<Path>,
+    board: &str,
+    store: &(impl VectorStore + ?Sized),
+) -> Result<VectorStoreStatus> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    vector_store_status_with_conn(&conn, &board_id, store)
+}
+
+#[cfg(feature = "vector-lancedb")]
+pub fn configured_vector_store_status(
+    path: impl AsRef<Path>,
+    board: &str,
+    endpoint: &str,
+    embedding_model: &str,
+    dimensions: usize,
+) -> Result<VectorStoreStatus> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    vector_store_status_from_base(
+        &conn,
+        &board_id,
+        VectorStoreStatus {
+            backend: "lancedb".to_owned(),
+            enabled: true,
+            message: format!(
+                "LanceDB vector store enabled for Ollama endpoint {endpoint}, model {embedding_model} ({dimensions} dimensions)"
+            ),
+        },
+    )
+}
+
+pub(crate) fn vector_store_status_with_conn(
     conn: &Connection,
     board_id: &str,
     store: &(impl VectorStore + ?Sized),

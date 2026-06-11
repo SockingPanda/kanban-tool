@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::{EmbeddingProvider, VectorError, ensure_dimensions};
+
+const OLLAMA_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const OLLAMA_READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone)]
 pub struct OllamaEmbeddingProvider {
@@ -59,10 +63,16 @@ impl EmbeddingProvider for OllamaEmbeddingProvider {
 
     fn embed(&self, text: &str) -> Result<Vec<f32>, VectorError> {
         let url = format!("{}/api/embed", self.endpoint);
-        let response = ureq::post(&url)
+        let agent = ureq::AgentBuilder::new()
+            .timeout_connect(OLLAMA_CONNECT_TIMEOUT)
+            .timeout_read(OLLAMA_READ_TIMEOUT)
+            .build();
+        let response = agent
+            .post(&url)
             .send_json(EmbedRequest {
                 model: &self.model,
                 input: text,
+                dimensions: self.dimensions,
             })
             .map_err(ollama_error)?;
         let body: EmbedResponse = response
@@ -81,6 +91,7 @@ impl EmbeddingProvider for OllamaEmbeddingProvider {
 struct EmbedRequest<'a> {
     model: &'a str,
     input: &'a str,
+    dimensions: usize,
 }
 
 #[derive(Debug, Deserialize)]

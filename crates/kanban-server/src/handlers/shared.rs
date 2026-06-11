@@ -227,7 +227,7 @@ pub(crate) fn parse_status_filters(raw_query: Option<&str>) -> Result<Vec<TaskSt
 pub(crate) fn configured_lancedb_store(
     state: &AppState,
 ) -> Result<Option<kanban_vector::LanceDbStore>, ApiError> {
-    let Some(config) = kanban_local::resolved_vector_config(None)
+    let Some(config) = kanban_local::resolved_vector_config(state.vector_config_path())
         .map_err(|error| ApiError(kanban_core::KanbanError::Storage(error.to_string())))?
     else {
         return Ok(None);
@@ -252,6 +252,32 @@ pub(crate) fn configured_lancedb_store(
     ))
     .map(Some)
     .map_err(|error| ApiError(kanban_core::KanbanError::Storage(error.to_string())))
+}
+
+#[cfg(feature = "vector-lancedb")]
+pub(crate) fn configured_vector_status(
+    state: &AppState,
+    board: &str,
+) -> Result<Option<kanban_vector::VectorStoreStatus>, ApiError> {
+    let Some(config) = kanban_local::resolved_vector_config(state.vector_config_path())
+        .map_err(|error| ApiError(kanban_core::KanbanError::Storage(error.to_string())))?
+    else {
+        return Ok(None);
+    };
+    if config.provider != "ollama" {
+        return Err(invalid_input(format!(
+            "unsupported vector provider in config: {}",
+            config.provider
+        )));
+    }
+    kanban_sqlite::configured_vector_store_status(
+        state.db_path(),
+        board,
+        &config.model,
+        config.dimensions,
+    )
+    .map(Some)
+    .map_err(ApiError::from)
 }
 
 pub(crate) fn parse_predicate(value: &str) -> Result<Predicate, ApiError> {

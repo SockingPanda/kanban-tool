@@ -1,5 +1,5 @@
 import { CircleDot, FileText, GitBranch, MessageSquare, Save, X } from "lucide-react"
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -110,10 +110,9 @@ export function TaskDetail({
                   value={editDraft.title}
                   onChange={(event) => setEditDraft({ ...editDraft, title: event.target.value })}
                 />
-                <Textarea
-                  className="min-h-28"
+                <AutosizeDescriptionTextarea
                   value={editDraft.description}
-                  onChange={(event) => setEditDraft({ ...editDraft, description: event.target.value })}
+                  onChange={(value) => setEditDraft({ ...editDraft, description: value })}
                   placeholder="Description"
                 />
                 <div className="grid grid-cols-2 gap-2">
@@ -288,6 +287,43 @@ export function TaskDetail({
       </div>
     </>
   )
+}
+
+function AutosizeDescriptionTextarea({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  useLayoutEffect(() => {
+    autosizeTextarea(textareaRef.current)
+  }, [value])
+
+  function handleChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    onChange(event.target.value)
+    autosizeTextarea(event.currentTarget)
+  }
+
+  return (
+    <Textarea
+      ref={textareaRef}
+      className="min-h-28 overflow-y-hidden"
+      value={value}
+      onChange={handleChange}
+      placeholder={placeholder}
+    />
+  )
+}
+
+function autosizeTextarea(textarea: HTMLTextAreaElement | null) {
+  if (!textarea) return
+  textarea.style.height = "auto"
+  textarea.style.height = `${textarea.scrollHeight}px`
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

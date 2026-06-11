@@ -267,8 +267,8 @@ export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
   return {
     apiBaseUrl: import.meta.env.VITE_KB_API_BASE_URL ?? "",
     dbPath: "external API",
-    actor: "desktop-dev",
-    board: "default",
+    actor: import.meta.env.VITE_KB_ACTOR ?? "desktop-dev",
+    board: import.meta.env.VITE_KB_BOARD ?? "default",
   }
 }
 

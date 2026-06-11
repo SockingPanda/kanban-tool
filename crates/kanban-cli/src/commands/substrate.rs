@@ -378,6 +378,7 @@ fn configured_vector_status(
             return configured_vector_store_status(
                 db_path,
                 board,
+                &config.endpoint,
                 &config.model,
                 config.dimensions,
             )

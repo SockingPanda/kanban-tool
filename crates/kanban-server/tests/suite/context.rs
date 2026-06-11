@@ -209,5 +209,11 @@ dimensions = 3
             .context("value")?
             .contains("offline-api-test-model")
     );
+    assert!(
+        json["data"]["message"]
+            .as_str()
+            .context("value")?
+            .contains("http://127.0.0.1:1")
+    );
     Ok(())
 }

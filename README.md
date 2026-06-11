@@ -123,3 +123,13 @@ source:
 cargo install --path crates/kanban-cli --bin kanban
 kanban --help
 ```
+
+Generate static shell completions to stdout with:
+
+```bash
+kanban completions bash
+kanban completions zsh
+kanban completions fish
+kanban completions powershell
+kanban completions elvish
+```

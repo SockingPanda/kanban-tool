@@ -44,6 +44,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: DepCommand,
     },
+    Dag {
+        #[command(subcommand)]
+        command: DagCommand,
+    },
     Events {
         task_ref: Option<String>,
     },
@@ -412,6 +416,11 @@ pub(crate) enum DepCommand {
     List {
         task_ref: String,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum DagCommand {
+    Show,
 }
 
 #[derive(Debug, Args)]

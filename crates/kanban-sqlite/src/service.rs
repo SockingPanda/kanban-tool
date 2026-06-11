@@ -7,6 +7,7 @@ mod boards;
 mod comment_identity;
 mod comments;
 mod context;
+mod dag;
 mod dependencies;
 mod dispatch;
 mod entities;
@@ -28,6 +29,7 @@ mod vector;
 pub use boards::*;
 pub use comments::*;
 pub use context::*;
+pub use dag::*;
 pub use dependencies::*;
 pub use dispatch::*;
 pub use entities::{

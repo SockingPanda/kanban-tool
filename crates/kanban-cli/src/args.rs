@@ -320,9 +320,32 @@ pub(crate) struct GraphQueryArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum VectorCommand {
-    Status,
-    Rebuild,
-    Sync,
+    Status(VectorConfigPathArgs),
+    Configure(VectorConfigureArgs),
+    Rebuild(VectorConfigPathArgs),
+    Sync(VectorConfigPathArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct VectorConfigPathArgs {
+    #[arg(long = "vector-config", alias = "config")]
+    pub(crate) vector_config: Option<std::path::PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct VectorConfigureArgs {
+    #[arg(long, default_value = kanban_local::DEFAULT_VECTOR_PROVIDER)]
+    pub(crate) provider: String,
+    #[arg(long, default_value = kanban_local::DEFAULT_OLLAMA_ENDPOINT)]
+    pub(crate) endpoint: String,
+    #[arg(long, default_value = kanban_local::DEFAULT_OLLAMA_EMBEDDING_MODEL)]
+    pub(crate) model: String,
+    #[arg(long, default_value_t = kanban_local::DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS)]
+    pub(crate) dimensions: usize,
+    #[arg(long)]
+    pub(crate) skip_check: bool,
+    #[arg(long = "vector-config", alias = "config")]
+    pub(crate) vector_config: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -341,6 +364,8 @@ pub(crate) struct ContextBuildArgs {
     pub(crate) vector_limit: usize,
     #[arg(long, default_value_t = 20)]
     pub(crate) max_items: usize,
+    #[arg(long = "vector-config", alias = "config")]
+    pub(crate) vector_config: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Args)]

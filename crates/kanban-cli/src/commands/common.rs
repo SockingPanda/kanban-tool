@@ -1,14 +1,9 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use kanban_core::TaskStatus;
 use kanban_entity::Predicate;
 use kanban_sqlite::TaskListSort;
-
-use crate::commands::dispatch::unquote;
 
 pub(crate) fn parse_predicate(value: &str) -> Result<Predicate> {
     match value {
@@ -82,63 +77,17 @@ pub(crate) fn active_board(flag: Option<&str>) -> Result<String> {
             return Ok(board.to_owned());
         }
     }
-    if let Some(path) = nearest_board_config()?
-        && let Some(board) = read_board_config(&path)?
+    if let Some(board) = kanban_local::nearest_active_board_config()?
+        .map(|board| board.trim().to_owned())
+        .filter(|board| !board.is_empty())
     {
         return Ok(board);
     }
     Ok("default".to_owned())
 }
 
-pub(crate) fn nearest_board_config() -> Result<Option<PathBuf>> {
-    let mut dir = std::env::current_dir().context("failed to resolve current directory")?;
-    loop {
-        let candidate = dir.join(".kb").join("config.toml");
-        if candidate.is_file() {
-            return Ok(Some(candidate));
-        }
-        if !dir.pop() {
-            return Ok(None);
-        }
-    }
-}
-
 pub(crate) fn write_board_config(board: &str) -> Result<()> {
-    let path = nearest_board_config()?.unwrap_or_else(|| {
-        std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join(".kb")
-            .join("config.toml")
-    });
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create {}", parent.display()))?;
-    }
-    fs::write(
-        &path,
-        format!("board = \"{}\"\n", escape_toml_string(board)),
-    )
-    .with_context(|| format!("failed to write {}", path.display()))
-}
-
-pub(crate) fn read_board_config(path: &Path) -> Result<Option<String>> {
-    let text =
-        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
-    for raw_line in text.lines() {
-        let line = raw_line.split('#').next().unwrap_or("").trim();
-        let Some((key, value)) = line.split_once('=') else {
-            continue;
-        };
-        if key.trim() == "board" {
-            let board = unquote(value.trim()).trim();
-            if !board.is_empty() {
-                return Ok(Some(board.to_owned()));
-            }
-        }
-    }
-    Ok(None)
-}
-
-pub(crate) fn escape_toml_string(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
+    kanban_local::write_active_board_config(board)
+        .with_context(|| "failed to write project board config")?;
+    Ok(())
 }

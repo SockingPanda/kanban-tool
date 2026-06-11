@@ -32,6 +32,12 @@ pub(super) fn validate_page_bounds(
 #[derive(Debug)]
 pub(super) struct ApiError(pub(super) KanbanError);
 
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
 impl From<KanbanError> for ApiError {
     fn from(value: KanbanError) -> Self {
         Self(value)

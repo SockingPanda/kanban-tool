@@ -4,6 +4,7 @@ use std::{path::PathBuf, time::Duration};
 pub struct AppState {
     db_path: PathBuf,
     default_actor: String,
+    vector_config_path: Option<PathBuf>,
 }
 
 impl AppState {
@@ -11,7 +12,13 @@ impl AppState {
         Self {
             db_path: db_path.into(),
             default_actor: default_actor.into(),
+            vector_config_path: None,
         }
+    }
+
+    pub fn with_vector_config_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.vector_config_path = Some(path.into());
+        self
     }
 
     pub fn db_path(&self) -> &PathBuf {
@@ -20,6 +27,10 @@ impl AppState {
 
     pub fn default_actor(&self) -> &str {
         &self.default_actor
+    }
+
+    pub fn vector_config_path(&self) -> Option<&std::path::Path> {
+        self.vector_config_path.as_deref()
     }
 }
 

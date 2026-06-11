@@ -5,6 +5,8 @@ use axum::{
 
 use crate::dto::{BoardQuery, Envelope};
 use crate::error::{ApiError, extractor_error};
+#[cfg(feature = "vector-lancedb")]
+use crate::handlers::shared::configured_vector_status;
 use crate::state::AppState;
 
 pub(crate) async fn vector_status(
@@ -12,6 +14,13 @@ pub(crate) async fn vector_status(
     query: Result<Query<BoardQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<kanban_vector::VectorStoreStatus>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
+    #[cfg(feature = "vector-lancedb")]
+    if let Some(status) = configured_vector_status(&state, &query.board)? {
+        return Ok(Json(Envelope {
+            data: status,
+            meta: None,
+        }));
+    }
     Ok(Json(Envelope {
         data: kanban_sqlite::vector_store_status(state.db_path(), &query.board)?,
         meta: None,

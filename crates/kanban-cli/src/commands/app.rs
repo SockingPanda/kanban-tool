@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use kanban_sqlite::{begin_database_runtime, dispatch_once, init_database, list_events, list_runs};
 
 use crate::args::*;
@@ -27,6 +27,12 @@ use crate::output::print_or_json;
 
 pub(crate) fn run() -> Result<()> {
     let cli = Cli::parse();
+    if let Command::Completions { shell } = &cli.command {
+        let mut command = Cli::command();
+        clap_complete::generate(*shell, &mut command, "kanban", &mut std::io::stdout());
+        return Ok(());
+    }
+
     let db_path = cli.db.clone().unwrap_or_else(default_db_path);
     let actor = cli.actor.clone().unwrap_or_else(default_actor);
     let board = active_board(cli.board.as_deref())?;
@@ -110,6 +116,7 @@ pub(crate) fn run() -> Result<()> {
             }
         }
         Command::Serve(args) => serve(args, db_path, &board, actor)?,
+        Command::Completions { .. } => unreachable!("handled before database initialization"),
         Command::Doctor => handle_doctor(&db_path, cli.json)?,
         Command::Stats => handle_stats(&db_path, &board, cli.json)?,
         Command::Backup(args) => handle_backup(&db_path, args, cli.json)?,

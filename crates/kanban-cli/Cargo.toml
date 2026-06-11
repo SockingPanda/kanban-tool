@@ -30,6 +30,7 @@ vector-lancedb = [
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+clap_complete = "4.5"
 kanban-core.workspace = true
 kanban-context.workspace = true
 kanban-entity.workspace = true

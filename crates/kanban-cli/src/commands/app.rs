@@ -173,7 +173,7 @@ const BASH_DYNAMIC_COMPLETIONS: &str = r#"
 # Dynamic kanban candidates. Static clap completions remain the fallback.
 _kanban_dynamic_completions() {
     local cur prev words kind
-    local -a cmd
+    local -a cmd positional
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     words=" ${COMP_WORDS[*]} "
@@ -188,33 +188,59 @@ _kanban_dynamic_completions() {
                     ((i++))
                 fi
                 ;;
+            --actor)
+                if (( i + 1 < COMP_CWORD )); then
+                    ((i++))
+                fi
+                ;;
+            --json)
+                ;;
+            --*)
+                ;;
+            *)
+                positional+=("${COMP_WORDS[i]}")
+                ;;
         esac
     done
+
+    if [[ "$cur" == -* ]]; then
+        _kanban "$@"
+        return
+    fi
 
     case "$prev" in
         --board)
             kind="board"
             ;;
         --status)
-            kind="status"
+            case "${positional[0]} ${positional[1]}" in
+                "task create"|"task list"|search\ *)
+                    kind="status"
+                    ;;
+            esac
             ;;
         --kind)
-            if [[ "$words" == *" comment add "* ]]; then
+            if [[ "${positional[0]} ${positional[1]}" == "comment add" ]]; then
                 kind="comment-kind"
             fi
             ;;
     esac
 
     if [[ -z "$kind" ]]; then
-        case "$words" in
-            *" dep add "*|*" dep remove "*|*" dep list "*)
+        case "${positional[0]} ${positional[1]} ${#positional[@]}" in
+            "dep add 2"|"dep add 3"|"dep remove 2"|"dep remove 3"|"dep list 2")
                 kind="dependency-task-ref"
                 ;;
-            *" task show "*|*" task promote "*|*" task start "*|*" task claim "*|*" task heartbeat "*|*" task done "*|*" task complete "*|*" task review "*|*" task block "*|*" task unblock "*|*" task archive "*|*" events "*|*" runs "*|*" comment list "*|*" comment add "*)
+            "task show 2"|"task update 2"|"task promote 2"|"task start 2"|"task claim 2"|"task heartbeat 2"|"task done 2"|"task complete 2"|"task review 2"|"task block 2"|"task unblock 2"|"task archive 2"|"comment list 2"|"comment add 2"|"context build 2")
                 kind="task-ref"
                 ;;
-            *" board show "*|*" board use "*|*" board archive "*)
+            "board show 2"|"board use 2"|"board archive 2")
                 kind="board"
+                ;;
+        esac
+        case "${positional[0]} ${#positional[@]}" in
+            "events 1"|"runs 1")
+                kind="task-ref"
                 ;;
         esac
     fi
@@ -232,7 +258,8 @@ const ZSH_DYNAMIC_COMPLETIONS: &str = r#"
 
 # Dynamic kanban candidates. Static clap completions remain above as documentation/fallback.
 _kanban_dynamic_completions() {
-  local -a candidates cmd
+  local -a candidates cmd positional
+  local cur="${words[CURRENT]}" prev="${words[CURRENT-1]}"
   local kind="" output
   cmd=(kanban)
   for ((i = 2; i < CURRENT; i++)); do
@@ -243,31 +270,56 @@ _kanban_dynamic_completions() {
           ((i++))
         fi
         ;;
+      --actor)
+        if (( i + 1 < CURRENT )); then
+          ((i++))
+        fi
+        ;;
+      --json)
+        ;;
+      --*)
+        ;;
+      *)
+        positional+=("${words[i]}")
+        ;;
     esac
   done
-  case "${words[CURRENT-1]}" in
+  if [[ "$cur" == -* ]]; then
+    _kanban "$@"
+    return
+  fi
+  case "$prev" in
     --board)
       kind="board"
       ;;
     --status)
-      kind="status"
+      case "${positional[1]} ${positional[2]}" in
+        "task create"|"task list"|search\ *)
+          kind="status"
+          ;;
+      esac
       ;;
     --kind)
-      if [[ " ${words[*]} " == *" comment add "* ]]; then
+      if [[ "${positional[1]} ${positional[2]}" == "comment add" ]]; then
         kind="comment-kind"
       fi
       ;;
   esac
   if [[ -z "$kind" ]]; then
-    case " ${words[*]} " in
-      *" dep add "*|*" dep remove "*|*" dep list "*)
+    case "${positional[1]} ${positional[2]} ${#positional[@]}" in
+      "dep add 2"|"dep add 3"|"dep remove 2"|"dep remove 3"|"dep list 2")
         kind="dependency-task-ref"
         ;;
-      *" task show "*|*" task promote "*|*" task start "*|*" task claim "*|*" task heartbeat "*|*" task done "*|*" task complete "*|*" task review "*|*" task block "*|*" task unblock "*|*" task archive "*|*" events "*|*" runs "*|*" comment list "*|*" comment add "*)
+      "task show 2"|"task update 2"|"task promote 2"|"task start 2"|"task claim 2"|"task heartbeat 2"|"task done 2"|"task complete 2"|"task review 2"|"task block 2"|"task unblock 2"|"task archive 2"|"comment list 2"|"comment add 2"|"context build 2")
         kind="task-ref"
         ;;
-      *" board show "*|*" board use "*|*" board archive "*)
+      "board show 2"|"board use 2"|"board archive 2")
         kind="board"
+        ;;
+    esac
+    case "${positional[1]} ${#positional[@]}" in
+      "events 1"|"runs 1")
+        kind="task-ref"
         ;;
     esac
   fi

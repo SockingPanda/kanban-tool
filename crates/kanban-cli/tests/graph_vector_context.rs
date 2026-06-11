@@ -1,7 +1,7 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kanban};
+use common::{TempDb, kanban, kanban_in_dir_envs};
 #[test]
 fn substrate_commands_report_entities_outbox_and_derived_status() -> anyhow::Result<()> {
     let temp = TempDb::new("substrate_commands_report_entities_outbox_and_derived_status")?;
@@ -294,6 +294,114 @@ mod vector_lancedb {
                 .as_str()
                 .context("expected JSON string")?
                 .contains("dirty=true")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn vector_configure_uses_global_project_and_explicit_config_precedence() -> anyhow::Result<()> {
+        let temp =
+            TempDb::new("vector_configure_uses_global_project_and_explicit_config_precedence")?;
+        kanban(&temp.path, &["init"])?.success()?;
+        let workspace = temp.dir.join("workspace");
+        std::fs::create_dir_all(&workspace)?;
+        let xdg_config_home = temp.dir.join("xdg-config");
+
+        let configured = kanban_in_dir_envs(
+            &temp.path,
+            &[
+                "--json",
+                "vector",
+                "configure",
+                "--provider",
+                "ollama",
+                "--endpoint",
+                "http://127.0.0.1:11434",
+                "--model",
+                "qwen3-embedding:0.6b",
+                "--dimensions",
+                "1024",
+                "--skip-check",
+            ],
+            &workspace,
+            &[("XDG_CONFIG_HOME", &xdg_config_home)],
+        )?
+        .success_json()?;
+        assert_eq!(configured["data"]["provider"], "ollama");
+        let global_config = xdg_config_home.join("kb/config.toml");
+        let config = std::fs::read_to_string(&global_config)?;
+        assert!(config.contains("[vector]"));
+        assert!(config.contains("model = \"qwen3-embedding:0.6b\""));
+
+        let status = kanban_in_dir_envs(
+            &temp.path,
+            &["--json", "vector", "status"],
+            &workspace,
+            &[("XDG_CONFIG_HOME", &xdg_config_home)],
+        )?
+        .success_json()?;
+        assert_eq!(status["data"]["backend"], "lancedb");
+        assert_eq!(status["data"]["enabled"], true);
+        assert!(
+            status["data"]["message"]
+                .as_str()
+                .context("expected JSON string")?
+                .contains("qwen3-embedding:0.6b")
+        );
+
+        std::fs::create_dir_all(workspace.join(".kb"))?;
+        std::fs::write(
+            workspace.join(".kb/config.toml"),
+            r#"[vector]
+provider = "ollama"
+endpoint = "http://127.0.0.1:11434"
+model = "project-model"
+dimensions = 1024
+"#,
+        )?;
+        let project_status = kanban_in_dir_envs(
+            &temp.path,
+            &["--json", "vector", "status"],
+            &workspace,
+            &[("XDG_CONFIG_HOME", &xdg_config_home)],
+        )?
+        .success_json()?;
+        assert!(
+            project_status["data"]["message"]
+                .as_str()
+                .context("expected JSON string")?
+                .contains("project-model")
+        );
+
+        let explicit_config = temp.dir.join("explicit-vector.toml");
+        std::fs::write(
+            &explicit_config,
+            r#"[vector]
+provider = "ollama"
+endpoint = "http://127.0.0.1:11434"
+model = "explicit-model"
+dimensions = 1024
+"#,
+        )?;
+        let explicit_arg = explicit_config.to_string_lossy().to_string();
+        let explicit_status = kanban_in_dir_envs(
+            &temp.path,
+            &[
+                "--json",
+                "vector",
+                "status",
+                "--vector-config",
+                &explicit_arg,
+            ],
+            &workspace,
+            &[("XDG_CONFIG_HOME", &xdg_config_home)],
+        )?
+        .success_json()?;
+        assert!(
+            explicit_status["data"]["message"]
+                .as_str()
+                .context("expected JSON string")?
+                .contains("explicit-model")
         );
         Ok(())
     }

@@ -7,7 +7,14 @@ authors.workspace = true
 
 [features]
 default = []
-vector-lancedb = ["dep:arrow-array", "dep:arrow-schema", "dep:futures", "dep:lancedb", "dep:tokio"]
+vector-lancedb = [
+  "dep:arrow-array",
+  "dep:arrow-schema",
+  "dep:futures",
+  "dep:lancedb",
+  "dep:tokio",
+  "dep:ureq",
+]
 
 [dependencies]
 arrow-array = { workspace = true, optional = true }
@@ -19,6 +26,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, optional = true }
+ureq = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true

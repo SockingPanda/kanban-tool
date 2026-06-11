@@ -1,7 +1,10 @@
 use std::{
     ffi::OsStr,
+    fs, io,
     path::{Path, PathBuf},
 };
+
+use serde::{Deserialize, Serialize};
 
 pub const INDEX_LAYOUT_VERSION: &str = "v1";
 pub const TASK_INDEX_NAME: &str = "tasks";
@@ -9,6 +12,38 @@ pub const GRAPH_STORE_NAME: &str = "graph";
 pub const VECTOR_STORE_NAME: &str = "vectors";
 pub const BLOBS_DIR_NAME: &str = "blobs";
 pub const ATTACHMENTS_DIR_NAME: &str = "attachments";
+
+pub const DEFAULT_VECTOR_PROVIDER: &str = "ollama";
+pub const DEFAULT_OLLAMA_ENDPOINT: &str = "http://127.0.0.1:11434";
+pub const DEFAULT_OLLAMA_EMBEDDING_MODEL: &str = "qwen3-embedding:0.6b";
+pub const DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS: usize = 1024;
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub board: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vector: Option<VectorConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VectorConfig {
+    pub provider: String,
+    pub endpoint: String,
+    pub model: String,
+    pub dimensions: usize,
+}
+
+impl Default for VectorConfig {
+    fn default() -> Self {
+        Self {
+            provider: DEFAULT_VECTOR_PROVIDER.to_owned(),
+            endpoint: DEFAULT_OLLAMA_ENDPOINT.to_owned(),
+            model: DEFAULT_OLLAMA_EMBEDDING_MODEL.to_owned(),
+            dimensions: DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS,
+        }
+    }
+}
 
 pub fn default_db_path() -> PathBuf {
     default_data_dir()
@@ -34,6 +69,17 @@ pub fn default_state_dir() -> Option<PathBuf> {
         dirs_next::home_dir(),
         dirs_next::data_dir(),
     )
+}
+
+pub fn default_config_dir() -> Option<PathBuf> {
+    dirs_next::config_dir()
+}
+
+pub fn global_config_path() -> PathBuf {
+    default_config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("kb")
+        .join("config.toml")
 }
 
 fn state_dir_from_parts(
@@ -105,6 +151,110 @@ pub fn attachment_blob_path(
         .join(filename)
 }
 
+pub fn nearest_project_config() -> io::Result<Option<PathBuf>> {
+    let mut dir = std::env::current_dir()?;
+    loop {
+        let candidate = dir.join(".kb").join("config.toml");
+        if candidate.is_file() {
+            return Ok(Some(candidate));
+        }
+        if !dir.pop() {
+            return Ok(None);
+        }
+    }
+}
+
+pub fn project_config_path_for_write() -> io::Result<PathBuf> {
+    nearest_project_config().map(|path| {
+        path.unwrap_or_else(|| {
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join(".kb")
+                .join("config.toml")
+        })
+    })
+}
+
+pub fn read_project_config(path: &Path) -> Result<ProjectConfig, ConfigError> {
+    let text = fs::read_to_string(path)?;
+    Ok(toml::from_str(&text)?)
+}
+
+pub fn write_project_config(path: &Path, config: &ProjectConfig) -> Result<(), ConfigError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let text = toml::to_string_pretty(config)?;
+    fs::write(path, text)?;
+    Ok(())
+}
+
+pub fn write_active_board_config_at(path: &Path, board: &str) -> Result<(), ConfigError> {
+    let mut config = if path.is_file() {
+        read_project_config(path)?
+    } else {
+        ProjectConfig::default()
+    };
+    config.board = Some(board.to_owned());
+    write_project_config(path, &config)
+}
+
+pub fn write_active_board_config(board: &str) -> Result<PathBuf, ConfigError> {
+    let path = project_config_path_for_write()?;
+    write_active_board_config_at(&path, board)?;
+    Ok(path)
+}
+
+pub fn write_vector_config_at(path: &Path, vector: VectorConfig) -> Result<(), ConfigError> {
+    let mut config = if path.is_file() {
+        read_project_config(path)?
+    } else {
+        ProjectConfig::default()
+    };
+    config.vector = Some(vector);
+    write_project_config(path, &config)
+}
+
+pub fn write_vector_config(vector: VectorConfig) -> Result<PathBuf, ConfigError> {
+    let path = global_config_path();
+    write_vector_config_at(&path, vector)?;
+    Ok(path)
+}
+
+pub fn resolved_vector_config(
+    explicit_path: Option<&Path>,
+) -> Result<Option<VectorConfig>, ConfigError> {
+    if let Some(path) = explicit_path {
+        return Ok(read_project_config(path)?.vector);
+    }
+    if let Some(path) = nearest_project_config()?
+        && let Some(vector) = read_project_config(&path)?.vector
+    {
+        return Ok(Some(vector));
+    }
+    if global_config_path().is_file() {
+        return Ok(read_project_config(&global_config_path())?.vector);
+    }
+    Ok(None)
+}
+
+pub fn nearest_active_board_config() -> Result<Option<String>, ConfigError> {
+    let Some(path) = nearest_project_config()? else {
+        return Ok(None);
+    };
+    Ok(read_project_config(&path)?.board)
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    #[error("{0}")]
+    Io(#[from] io::Error),
+    #[error("{0}")]
+    Parse(#[from] toml::de::Error),
+    #[error("{0}")]
+    Serialize(#[from] toml::ser::Error),
+}
+
 pub fn default_actor() -> String {
     std::env::var("USER")
         .or_else(|_| std::env::var("USERNAME"))
@@ -114,6 +264,81 @@ pub fn default_actor() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn project_config_round_trips_vector_settings_and_preserves_them_on_board_update() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join(".kb").join("config.toml");
+        let vector = VectorConfig {
+            provider: "ollama".to_owned(),
+            endpoint: "http://127.0.0.1:11434".to_owned(),
+            model: "qwen3-embedding:0.6b".to_owned(),
+            dimensions: 1024,
+        };
+
+        write_project_config(
+            &path,
+            &ProjectConfig {
+                board: Some("kanban-tool".to_owned()),
+                vector: Some(vector.clone()),
+            },
+        )
+        .unwrap();
+        write_active_board_config_at(&path, "next-board").unwrap();
+
+        let config = read_project_config(&path).unwrap();
+        assert_eq!(config.board.as_deref(), Some("next-board"));
+        assert_eq!(config.vector, Some(vector));
+    }
+
+    #[test]
+    fn explicit_project_vector_config_overrides_global_config() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let global = tempdir.path().join("global.toml");
+        let project = tempdir.path().join("project.toml");
+        let explicit = tempdir.path().join("explicit.toml");
+        write_vector_config_at(
+            &global,
+            VectorConfig {
+                model: "global".to_owned(),
+                ..VectorConfig::default()
+            },
+        )
+        .unwrap();
+        write_vector_config_at(
+            &project,
+            VectorConfig {
+                model: "project".to_owned(),
+                ..VectorConfig::default()
+            },
+        )
+        .unwrap();
+        write_vector_config_at(
+            &explicit,
+            VectorConfig {
+                model: "explicit".to_owned(),
+                ..VectorConfig::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            read_project_config(&explicit)
+                .unwrap()
+                .vector
+                .unwrap()
+                .model,
+            "explicit"
+        );
+        assert_eq!(
+            read_project_config(&project).unwrap().vector.unwrap().model,
+            "project"
+        );
+        assert_eq!(
+            read_project_config(&global).unwrap().vector.unwrap().model,
+            "global"
+        );
+    }
 
     #[test]
     fn default_paths_match_kb_data_layout() {

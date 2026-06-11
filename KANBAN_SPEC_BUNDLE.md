@@ -1893,7 +1893,20 @@ kanban task list --assignee agent-default --json
 
 ```bash
 kanban task show <task_ref>
+kanban task show <task_ref> --details
 ```
+
+Default human output remains the compact one-line task summary:
+
+```text
+agent-work#12 t_01HX... [ready] 实现状态机
+```
+
+`--details` switches only human output to a readable field list. It includes the
+task ref/id/status/title, full multiline description, assignee, priority,
+scheduled_at, due_at, created_at, updated_at, and other task snapshot fields when
+available. `--json task show` returns the same `TaskRecord` envelope with or
+without `--details`.
 
 `task_ref` 支持：
 

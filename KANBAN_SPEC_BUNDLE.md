@@ -2087,7 +2087,108 @@ kanban dep list <task_ref>
 
 ---
 
-## 8. Comment Commands
+## 8. DAG Commands
+
+```bash
+kanban dag show
+kanban dag show --json
+```
+
+`kanban dag show` returns an LLM-friendly snapshot for the active board. The
+CLI calls the SQLite service query; it does not assemble graph SQL in the CLI.
+Human output is a concise summary. JSON output is the stable contract and uses
+the standard envelope:
+
+```json
+{
+  "data": {
+    "board": {
+      "id": "b_...",
+      "slug": "default",
+      "name": "Default"
+    },
+    "snapshot": {
+      "generated_at": 1717520000000,
+      "node_count": 3,
+      "edge_count": 1,
+      "sort": [
+        "priority desc",
+        "due_at asc nulls last",
+        "scheduled_at asc nulls last",
+        "dependency fan-out desc",
+        "created_at asc",
+        "ref asc",
+        "id asc"
+      ]
+    },
+    "raw": {
+      "nodes": [
+        {
+          "id": "t_...",
+          "ref": "default#1",
+          "seq": 1,
+          "title": "Implement state machine",
+          "status": "ready",
+          "priority": 10,
+          "due_at": null,
+          "scheduled_at": null,
+          "created_at": 1717520000000,
+          "archived_at": null,
+          "why": "default#1 is currently ready"
+        }
+      ],
+      "edges": [
+        {
+          "parent": "t_parent",
+          "child": "t_child",
+          "why": "t_parent must finish before t_child can run"
+        }
+      ]
+    },
+    "derived": {
+      "blocked_by": [
+        {
+          "task_id": "t_child",
+          "tasks": ["t_parent"],
+          "why": "default#2 is blocked by default#1"
+        }
+      ],
+      "unblocks": [
+        {
+          "task_id": "t_parent",
+          "tasks": ["t_child"],
+          "why": "default#1 unblocks default#2"
+        }
+      ],
+      "actionable": [
+        {
+          "task_id": "t_ready",
+          "ref": "default#3",
+          "why": "default#3 is ready with no unfinished parent dependencies"
+        }
+      ],
+      "frontier": [
+        {
+          "task_id": "t_ready",
+          "ref": "default#3",
+          "why": "default#3 is frontier because it is ready and all parent dependencies are done or absent"
+        }
+      ]
+    }
+  }
+}
+```
+
+Frontier v1 includes only unarchived `todo` and `ready` tasks with no unfinished
+parent dependencies. It excludes `done`, `archived`, `blocked`, `running`, and
+`review` tasks. Nodes and frontier entries use the documented stable sort:
+priority descending, due date ascending with nulls last, scheduled time
+ascending with nulls last, dependency fan-out descending, created time
+ascending, then task ref and id.
+
+---
+
+## 9. Comment Commands
 
 ```bash
 kanban comment add <task_ref> <body> [--kind text|system|worker] [--author-type human|agent|system] [--agent-type <type>]
@@ -2113,7 +2214,7 @@ JSON output uses the standard envelope and returns `CommentRecord` for `add` or
 
 ---
 
-## 9. Event Commands
+## 10. Event Commands
 
 ```bash
 kanban events <task_ref>
@@ -2124,7 +2225,7 @@ kanban events --board default
 
 ---
 
-## 10. Run Commands
+## 11. Run Commands
 
 ```bash
 kanban runs <task_ref>
@@ -2137,7 +2238,7 @@ kanban run logs <run_id> --tail-bytes 65536
 
 ---
 
-## 11. Dispatcher / Server Commands
+## 12. Dispatcher / Server Commands
 
 ```bash
 kanban serve
@@ -2165,9 +2266,9 @@ calls `sync_search_index` every `--search-sync-interval-ms` milliseconds
 
 ---
 
-## 12. Search Commands
+## 13. Search Commands
 
-### 12.1 `kanban search`
+### 13.1 `kanban search`
 
 ```bash
 kanban search <query> [--status ready] [--status review] [--assignee worker-a] [--include-archived] [--limit 20] [--offset 0] [--json]
@@ -2211,7 +2312,7 @@ JSON output:
 }
 ```
 
-### 12.2 `kanban index`
+### 13.2 `kanban index`
 
 ```bash
 kanban index status
@@ -2252,7 +2353,7 @@ Background sync errors do not make search fail open to stale Tantivy results; th
 
 ---
 
-## 13. Maintenance Commands
+## 14. Maintenance Commands
 
 ```bash
 kanban doctor
@@ -2284,7 +2385,7 @@ kanban context build t_... [--lexical-limit 5]
 
 `kanban derived status` 中的 `last_event_id` 是 store 级成功处理水位，不是当前 board 的局部水位。`dirty=true` 表示该 store 仍有任意 board 的 pending/running/failed outbox，或最近一次派生更新失败；board-scoped `kanban index sync`、`kanban graph sync`、`kanban vector sync` 只清理当前 board 的 job，不能因为本 board clean 就强制清掉全局 dirty。
 
-### 13.1 `kanban doctor`
+### 14.1 `kanban doctor`
 
 检查：
 
@@ -2308,7 +2409,7 @@ kanban context build t_... [--lexical-limit 5]
 
 ---
 
-## 14. JSON Output Contract
+## 15. JSON Output Contract
 
 成功：
 

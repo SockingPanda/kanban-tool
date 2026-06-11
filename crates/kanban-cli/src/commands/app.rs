@@ -207,7 +207,7 @@ _kanban_dynamic_completions() {
 
     if [[ -z "$kind" ]]; then
         case "$words" in
-            *" dep add "*|*" dep remove "*)
+            *" dep add "*|*" dep remove "*|*" dep list "*)
                 kind="dependency-task-ref"
                 ;;
             *" task show "*|*" task promote "*|*" task start "*|*" task claim "*|*" task heartbeat "*|*" task done "*|*" task complete "*|*" task review "*|*" task block "*|*" task unblock "*|*" task archive "*|*" events "*|*" runs "*|*" comment list "*|*" comment add "*)
@@ -260,7 +260,7 @@ _kanban_dynamic_completions() {
   esac
   if [[ -z "$kind" ]]; then
     case " ${words[*]} " in
-      *" dep add "*|*" dep remove "*)
+      *" dep add "*|*" dep remove "*|*" dep list "*)
         kind="dependency-task-ref"
         ;;
       *" task show "*|*" task promote "*|*" task start "*|*" task claim "*|*" task heartbeat "*|*" task done "*|*" task complete "*|*" task review "*|*" task block "*|*" task unblock "*|*" task archive "*|*" events "*|*" runs "*|*" comment list "*|*" comment add "*)

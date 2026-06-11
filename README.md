@@ -133,3 +133,8 @@ kanban completions fish
 kanban completions powershell
 kanban completions elvish
 ```
+
+Bash and zsh completion scripts also include dynamic local candidates for task
+refs, board slugs, statuses, and comment kinds through the internal
+`kanban __complete` helper. Other shells currently receive static command and
+option completions only.

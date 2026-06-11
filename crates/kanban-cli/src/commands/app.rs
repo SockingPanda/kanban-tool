@@ -1,6 +1,11 @@
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
-use kanban_sqlite::{begin_database_runtime, dispatch_once, init_database, list_events, list_runs};
+use clap_complete::Shell;
+use kanban_sqlite::{
+    CompletionCandidateKind, begin_database_runtime, completion_candidates, dispatch_once,
+    init_database, list_events, list_runs,
+};
+use std::io::Write;
 
 use crate::args::*;
 use crate::commands::{
@@ -28,8 +33,21 @@ use crate::output::print_or_json;
 pub(crate) fn run() -> Result<()> {
     let cli = Cli::parse();
     if let Command::Completions { shell } = &cli.command {
-        let mut command = Cli::command();
-        clap_complete::generate(*shell, &mut command, "kanban", &mut std::io::stdout());
+        generate_completions(*shell)?;
+        return Ok(());
+    }
+    if let Command::Complete(args) = &cli.command {
+        let db_path = cli.db.clone().unwrap_or_else(default_db_path);
+        let board = active_board(cli.board.as_deref()).unwrap_or_else(|_| "default".to_owned());
+        let candidates = completion_candidates(
+            &db_path,
+            &board,
+            completion_kind(args.kind),
+            args.current.as_deref(),
+        );
+        for candidate in candidates {
+            println!("{candidate}");
+        }
         return Ok(());
     }
 
@@ -117,6 +135,7 @@ pub(crate) fn run() -> Result<()> {
         }
         Command::Serve(args) => serve(args, db_path, &board, actor)?,
         Command::Completions { .. } => unreachable!("handled before database initialization"),
+        Command::Complete(..) => unreachable!("handled before database initialization"),
         Command::Doctor => handle_doctor(&db_path, cli.json)?,
         Command::Stats => handle_stats(&db_path, &board, cli.json)?,
         Command::Backup(args) => handle_backup(&db_path, args, cli.json)?,
@@ -127,3 +146,192 @@ pub(crate) fn run() -> Result<()> {
     }
     Ok(())
 }
+
+fn completion_kind(kind: CompleteKind) -> CompletionCandidateKind {
+    match kind {
+        CompleteKind::TaskRef => CompletionCandidateKind::TaskRef,
+        CompleteKind::DependencyTaskRef => CompletionCandidateKind::DependencyTaskRef,
+        CompleteKind::Board => CompletionCandidateKind::Board,
+        CompleteKind::Status => CompletionCandidateKind::Status,
+        CompleteKind::CommentKind => CompletionCandidateKind::CommentKind,
+    }
+}
+
+fn generate_completions(shell: Shell) -> Result<()> {
+    let mut command = Cli::command();
+    let mut buffer = Vec::new();
+    clap_complete::generate(shell, &mut command, "kanban", &mut buffer);
+    match shell {
+        Shell::Bash => buffer.extend_from_slice(BASH_DYNAMIC_COMPLETIONS.as_bytes()),
+        Shell::Zsh => buffer.extend_from_slice(ZSH_DYNAMIC_COMPLETIONS.as_bytes()),
+        _ => {}
+    }
+    std::io::stdout().write_all(&buffer)?;
+    Ok(())
+}
+
+const BASH_DYNAMIC_COMPLETIONS: &str = r#"
+
+# Dynamic kanban candidates. Static clap completions remain the fallback.
+_kanban_dynamic_completions() {
+    local cur prev words kind
+    local -a cmd positional
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    words=" ${COMP_WORDS[*]} "
+    kind=""
+    cmd=(kanban)
+
+    for ((i = 1; i < COMP_CWORD; i++)); do
+        case "${COMP_WORDS[i]}" in
+            --db|--board)
+                if (( i + 1 < COMP_CWORD )); then
+                    cmd+=("${COMP_WORDS[i]}" "${COMP_WORDS[i + 1]}")
+                    ((i++))
+                fi
+                ;;
+            --actor)
+                if (( i + 1 < COMP_CWORD )); then
+                    ((i++))
+                fi
+                ;;
+            --json)
+                ;;
+            --*)
+                ;;
+            *)
+                positional+=("${COMP_WORDS[i]}")
+                ;;
+        esac
+    done
+
+    if [[ "$cur" == -* ]]; then
+        _kanban "$@"
+        return
+    fi
+
+    case "$prev" in
+        --board)
+            kind="board"
+            ;;
+        --status)
+            case "${positional[0]} ${positional[1]}" in
+                "task create"|"task list"|search\ *)
+                    kind="status"
+                    ;;
+            esac
+            ;;
+        --kind)
+            if [[ "${positional[0]} ${positional[1]}" == "comment add" ]]; then
+                kind="comment-kind"
+            fi
+            ;;
+    esac
+
+    if [[ -z "$kind" ]]; then
+        case "${positional[0]} ${positional[1]} ${#positional[@]}" in
+            "dep add 2"|"dep add 3"|"dep remove 2"|"dep remove 3"|"dep list 2")
+                kind="dependency-task-ref"
+                ;;
+            "task show 2"|"task update 2"|"task promote 2"|"task start 2"|"task claim 2"|"task heartbeat 2"|"task done 2"|"task complete 2"|"task review 2"|"task block 2"|"task unblock 2"|"task archive 2"|"comment list 2"|"comment add 2"|"context build 2")
+                kind="task-ref"
+                ;;
+            "board show 2"|"board use 2"|"board archive 2")
+                kind="board"
+                ;;
+        esac
+        case "${positional[0]} ${#positional[@]}" in
+            "events 1"|"runs 1")
+                kind="task-ref"
+                ;;
+        esac
+    fi
+
+    if [[ -n "$kind" ]]; then
+        COMPREPLY=( $(compgen -W "$("${cmd[@]}" __complete "$kind" "$cur" 2>/dev/null)" -- "$cur") )
+        return 0
+    fi
+    _kanban "$@"
+}
+complete -o default -F _kanban_dynamic_completions kanban
+"#;
+
+const ZSH_DYNAMIC_COMPLETIONS: &str = r#"
+
+# Dynamic kanban candidates. Static clap completions remain above as documentation/fallback.
+_kanban_dynamic_completions() {
+  local -a candidates cmd positional
+  local cur="${words[CURRENT]}" prev="${words[CURRENT-1]}"
+  local kind="" output
+  cmd=(kanban)
+  for ((i = 2; i < CURRENT; i++)); do
+    case "${words[i]}" in
+      --db|--board)
+        if (( i + 1 < CURRENT )); then
+          cmd+=("${words[i]}" "${words[i + 1]}")
+          ((i++))
+        fi
+        ;;
+      --actor)
+        if (( i + 1 < CURRENT )); then
+          ((i++))
+        fi
+        ;;
+      --json)
+        ;;
+      --*)
+        ;;
+      *)
+        positional+=("${words[i]}")
+        ;;
+    esac
+  done
+  if [[ "$cur" == -* ]]; then
+    _kanban "$@"
+    return
+  fi
+  case "$prev" in
+    --board)
+      kind="board"
+      ;;
+    --status)
+      case "${positional[1]} ${positional[2]}" in
+        "task create"|"task list"|search\ *)
+          kind="status"
+          ;;
+      esac
+      ;;
+    --kind)
+      if [[ "${positional[1]} ${positional[2]}" == "comment add" ]]; then
+        kind="comment-kind"
+      fi
+      ;;
+  esac
+  if [[ -z "$kind" ]]; then
+    case "${positional[1]} ${positional[2]} ${#positional[@]}" in
+      "dep add 2"|"dep add 3"|"dep remove 2"|"dep remove 3"|"dep list 2")
+        kind="dependency-task-ref"
+        ;;
+      "task show 2"|"task update 2"|"task promote 2"|"task start 2"|"task claim 2"|"task heartbeat 2"|"task done 2"|"task complete 2"|"task review 2"|"task block 2"|"task unblock 2"|"task archive 2"|"comment list 2"|"comment add 2"|"context build 2")
+        kind="task-ref"
+        ;;
+      "board show 2"|"board use 2"|"board archive 2")
+        kind="board"
+        ;;
+    esac
+    case "${positional[1]} ${#positional[@]}" in
+      "events 1"|"runs 1")
+        kind="task-ref"
+        ;;
+    esac
+  fi
+  if [[ -n "$kind" ]]; then
+    output="$("${cmd[@]}" __complete "$kind" "$PREFIX" 2>/dev/null)"
+    candidates=("${(@f)output}")
+    compadd -- "$candidates[@]"
+    return
+  fi
+  _kanban "$@"
+}
+compdef _kanban_dynamic_completions kanban
+"#;

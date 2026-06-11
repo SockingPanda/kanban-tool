@@ -6,6 +6,7 @@ pub const MAX_SEARCH_LIMIT: usize = 1000;
 mod boards;
 mod comment_identity;
 mod comments;
+mod completions;
 mod context;
 mod dag;
 mod dependencies;
@@ -28,6 +29,7 @@ mod vector;
 
 pub use boards::*;
 pub use comments::*;
+pub use completions::*;
 pub use context::*;
 pub use dag::*;
 pub use dependencies::*;

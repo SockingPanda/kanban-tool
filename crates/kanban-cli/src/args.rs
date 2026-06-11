@@ -93,6 +93,8 @@ pub(crate) enum Command {
     Completions {
         shell: Shell,
     },
+    #[command(name = "__complete", hide = true)]
+    Complete(CompleteArgs),
     Doctor,
     Stats,
     Backup(BackupArgs),
@@ -100,6 +102,24 @@ pub(crate) enum Command {
     Import(ImportArgs),
     Checkpoint,
     Vacuum,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct CompleteArgs {
+    pub(crate) kind: CompleteKind,
+    pub(crate) current: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum CompleteKind {
+    #[value(name = "task-ref")]
+    TaskRef,
+    #[value(name = "dependency-task-ref")]
+    DependencyTaskRef,
+    Board,
+    Status,
+    #[value(name = "comment-kind")]
+    CommentKind,
 }
 
 #[derive(Debug, Subcommand)]

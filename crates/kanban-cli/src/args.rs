@@ -100,6 +100,8 @@ pub(crate) enum TaskCommand {
     List(ListArgs),
     Show {
         task_ref: String,
+        #[arg(long)]
+        details: bool,
     },
     Update(UpdateArgs),
     Promote {

@@ -12,7 +12,7 @@ use crate::args::TaskCommand;
 use crate::commands::common::{
     optional_clearable, parse_status, parse_task_list_sort, validate_page_bounds,
 };
-use crate::output::{print_or_json, print_task, task_line};
+use crate::output::{print_or_json, print_task, print_task_with_details, task_line};
 
 pub(crate) fn handle_task(
     command: TaskCommand,
@@ -86,7 +86,9 @@ pub(crate) fn handle_task(
                 tasks.iter().map(task_line).collect::<Vec<_>>().join("\n")
             })?;
         }
-        TaskCommand::Show { task_ref } => print_task(json, &get_task(db_path, board, &task_ref)?)?,
+        TaskCommand::Show { task_ref, details } => {
+            print_task_with_details(json, details, &get_task(db_path, board, &task_ref)?)?
+        }
         TaskCommand::Update(args) => {
             let mut task = update_task(
                 db_path,

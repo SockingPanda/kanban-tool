@@ -1709,16 +1709,36 @@ Active board 解析顺序：
 
 ```bash
 kanban completions <shell>
+kanban __complete <kind> [prefix]
 ```
 
-Writes a static completion script to stdout. Supported shells:
+`kanban completions <shell>` writes a completion script to stdout. Supported
+shells:
 
 ```text
 bash | zsh | fish | powershell | elvish
 ```
 
-This command does not open the SQLite database and does not include dynamic
-task or board refs.
+Static command and option completion is generated for all supported shells.
+Bash and zsh scripts additionally include dynamic hooks that call the hidden
+internal `kanban __complete` helper for DB-backed candidates:
+
+- task refs for task, comment, event, run, and dependency commands;
+- board slugs for `--board` and board identity arguments;
+- status values for `--status`;
+- comment kind values for `comment add --kind`.
+
+`kanban __complete` is an internal newline-delimited helper for shell scripts
+and tests. It accepts:
+
+```text
+task-ref | dependency-task-ref | board | status | comment-kind
+```
+
+The helper must be quiet for completion use: missing DB files, uninitialized
+DBs, missing board config, or read/query failures return success with no
+candidates and no stderr. Static completion generation itself does not open or
+create the SQLite database.
 
 ---
 

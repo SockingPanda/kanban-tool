@@ -232,6 +232,81 @@ pub struct TaskListPage {
     pub total: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DagSnapshot {
+    pub board: DagBoardSnapshot,
+    pub snapshot: DagSnapshotMeta,
+    pub raw: DagRawGraph,
+    pub derived: DagDerivedGraph,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DagBoardSnapshot {
+    pub id: String,
+    pub slug: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DagSnapshotMeta {
+    pub generated_at: i64,
+    pub node_count: usize,
+    pub edge_count: usize,
+    pub sort: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DagRawGraph {
+    pub nodes: Vec<DagNode>,
+    pub edges: Vec<DagEdge>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DagDerivedGraph {
+    pub blocked_by: Vec<DagAdjacency>,
+    pub unblocks: Vec<DagAdjacency>,
+    pub actionable: Vec<DagTaskReason>,
+    pub frontier: Vec<DagTaskReason>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DagNode {
+    pub id: String,
+    #[serde(rename = "ref")]
+    pub task_ref: String,
+    pub seq: i64,
+    pub title: String,
+    pub status: TaskStatus,
+    pub priority: i64,
+    pub due_at: Option<i64>,
+    pub scheduled_at: Option<i64>,
+    pub created_at: i64,
+    pub archived_at: Option<i64>,
+    pub why: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DagEdge {
+    pub parent: String,
+    pub child: String,
+    pub why: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DagAdjacency {
+    pub task_id: String,
+    pub tasks: Vec<String>,
+    pub why: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DagTaskReason {
+    pub task_id: String,
+    #[serde(rename = "ref")]
+    pub task_ref: String,
+    pub why: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventListOptions {
     pub task_ref: Option<String>,

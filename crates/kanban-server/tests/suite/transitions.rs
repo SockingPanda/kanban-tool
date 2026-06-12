@@ -36,6 +36,46 @@ async fn transitions_claim_returns_token_run_and_running_task() -> anyhow::Resul
 }
 
 #[tokio::test]
+async fn transitions_claim_and_heartbeat_reject_nonpositive_ttl_with_bad_request()
+-> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("api ttl validation"),
+    )
+    .context("task")?;
+    let app = test.router();
+
+    for ttl_ms in [0, -1] {
+        let (status, json) = post_json(
+            app.clone(),
+            &format!("/api/v1/tasks/{}/transitions/claim", task.id),
+            json!({"actor":"worker-a","ttl_ms":ttl_ms}),
+        )
+        .await?;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(json["error"]["code"], "invalid_input");
+    }
+
+    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 1_000)
+        .context("claim")?;
+    for ttl_ms in [0, -1] {
+        let (status, json) = post_json(
+            app.clone(),
+            &format!("/api/v1/tasks/{}/transitions/heartbeat", task.id),
+            json!({"claim_token":claim.claim_token,"ttl_ms":ttl_ms}),
+        )
+        .await?;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(json["error"]["code"], "invalid_input");
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn transitions_heartbeat_extends_claim_and_rejects_bad_token() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
@@ -359,11 +399,24 @@ async fn reclaim_transition_force_and_expired_close_active_run() -> anyhow::Resu
         kanban_sqlite::claim_task(&db_path, "default", "worker", &force_task.id, 60_000)
             .context("force claim")?;
     let expired_claim =
-        kanban_sqlite::claim_task(&db_path, "default", "worker", &expired_task.id, -1)
+        kanban_sqlite::claim_task(&db_path, "default", "worker", &expired_task.id, 60_000)
             .context("expired claim")?;
-    let maxed_claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &maxed_task.id, -1)
-        .context("maxed claim")?;
+    let maxed_claim =
+        kanban_sqlite::claim_task(&db_path, "default", "worker", &maxed_task.id, 60_000)
+            .context("maxed claim")?;
     let conn = kanban_sqlite::connect_file(&db_path).context("connect")?;
+    for task_id in [&expired_task.id, &maxed_task.id] {
+        conn.execute(
+            "UPDATE tasks SET claim_expires_at=0 WHERE id=?1",
+            (task_id,),
+        )
+        .context("expire task claim")?;
+        conn.execute(
+            "UPDATE task_runs SET claim_expires_at=0 WHERE task_id=?1 AND status='running'",
+            (task_id,),
+        )
+        .context("expire run claim")?;
+    }
     conn.execute(
         "UPDATE tasks SET retry_count=0, max_retries=1 WHERE id=?1",
         (&maxed_task.id,),

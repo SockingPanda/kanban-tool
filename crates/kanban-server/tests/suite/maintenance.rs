@@ -11,7 +11,18 @@ async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Resul
         kanban_sqlite::CreateTask::ready("stale claim"),
     )
     .context("stale task")?;
-    kanban_sqlite::claim_task(&db_path, "default", "worker", &stale.id, -1).context("claim")?;
+    kanban_sqlite::claim_task(&db_path, "default", "worker", &stale.id, 60_000).context("claim")?;
+    let conn = kanban_sqlite::connect_file(&db_path).context("connect")?;
+    conn.execute(
+        "UPDATE tasks SET claim_expires_at=0 WHERE id=?1",
+        (&stale.id,),
+    )
+    .context("expire task claim")?;
+    conn.execute(
+        "UPDATE task_runs SET claim_expires_at=0 WHERE task_id=?1 AND status='running'",
+        (&stale.id,),
+    )
+    .context("expire run claim")?;
     let blocked_a = kanban_sqlite::create_task(
         &db_path,
         "default",

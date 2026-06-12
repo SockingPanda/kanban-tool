@@ -54,6 +54,77 @@ fn explicit_ready_create_requires_ready_prerequisites() -> anyhow::Result<()> {
 }
 
 #[test]
+fn claim_rejects_nonpositive_ttl_without_mutating_task() -> anyhow::Result<()> {
+    let temp = TempDb::new("claim_rejects_nonpositive_ttl_without_mutating_task")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("claim ttl validation"),
+    )?;
+
+    for ttl_ms in [0, -1] {
+        let err = result_err(claim_task(
+            &temp.path, "default", "worker", &task.id, ttl_ms,
+        ))?;
+        assert!(err.to_string().contains("ttl_ms must be positive"));
+    }
+
+    let unchanged = get_task(&temp.path, "default", &task.id)?;
+    assert_eq!(unchanged.status, TaskStatus::Ready);
+    assert!(unchanged.claim_token.is_none());
+    assert!(unchanged.claim_owner.is_none());
+    assert!(unchanged.claim_expires_at.is_none());
+    assert!(list_runs(&temp.path, "default", Some(&task.id))?.is_empty());
+    assert!(
+        list_events(&temp.path, "default", Some(&task.id))?
+            .iter()
+            .all(|event| event.kind != "task.claimed")
+    );
+    Ok(())
+}
+
+#[test]
+fn heartbeat_rejects_nonpositive_ttl_without_shortening_claim() -> anyhow::Result<()> {
+    let temp = TempDb::new("heartbeat_rejects_nonpositive_ttl_without_shortening_claim")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("heartbeat ttl validation"),
+    )?;
+    let claim = claim_task(&temp.path, "default", "worker", &task.id, 300_000)?;
+
+    for ttl_ms in [0, -1] {
+        let err = result_err(kanban_sqlite::heartbeat_task(
+            &temp.path,
+            "default",
+            "worker",
+            &task.id,
+            &claim.claim_token,
+            ttl_ms,
+        ))?;
+        assert!(err.to_string().contains("ttl_ms must be positive"));
+    }
+
+    let unchanged = get_task(&temp.path, "default", &task.id)?;
+    assert_eq!(unchanged.status, TaskStatus::Running);
+    assert_eq!(
+        unchanged.claim_expires_at, claim.task.claim_expires_at,
+        "invalid heartbeat must not shorten or extend the active lease"
+    );
+    assert_eq!(unchanged.last_heartbeat_at, claim.task.last_heartbeat_at);
+    let heartbeat_events = list_events(&temp.path, "default", Some(&task.id))?
+        .into_iter()
+        .filter(|event| event.kind == "task.heartbeat")
+        .count();
+    assert_eq!(heartbeat_events, 0);
+    Ok(())
+}
+
+#[test]
 fn force_archive_running_task_closes_active_run() -> anyhow::Result<()> {
     let temp = TempDb::new("force_archive_running_task_closes_active_run")?;
     init_database(&temp.path, "tester")?;

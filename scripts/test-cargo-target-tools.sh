@@ -51,6 +51,67 @@ assert_failure() {
   fi
 }
 
+assert_process_exits() {
+  local pid="$1"
+  local label="$2"
+  local i
+
+  for i in {1..200}; do
+    if ! kill -0 "$pid" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.02
+  done
+
+  fail "$label still running after interruption: pid $pid"
+}
+
+assert_no_bare_target_writing_cargo() {
+  local file line_number line
+  local files=(
+    "$ROOT/justfile"
+    "$ROOT/scripts/smoke-v1-local.sh"
+    "$ROOT/scripts/package-cli-linux.sh"
+  )
+
+  for file in "${files[@]}"; do
+    line_number=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line_number=$((line_number + 1))
+      [[ "$line" =~ ^[[:space:]]*# ]] && continue
+      if [[ "$line" =~ (^|[^[:alnum:]_/.-])cargo[[:space:]]+(build|check|clippy|test|run|nextest[[:space:]]+run) ]]; then
+        if [[ "$line" != *cargo-build-lock.sh* && "$line" != *'"$LOCK"'* ]]; then
+          fail "bare target-writing cargo command in ${file#$ROOT/}:$line_number: $line"
+        fi
+      fi
+    done < "$file"
+  done
+}
+
+assert_signal_status() {
+  local signal="$1"
+  local expected_status="$2"
+  local marker="$TMPDIR/signal-${signal}-ready"
+  local pid status
+
+  rm -f "$marker"
+  env --default-signal="$signal" KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- bash -c '
+    set -euo pipefail
+    touch "$1"
+    while true; do
+      sleep 1
+    done
+  ' _ "$marker" 2>"$TMPDIR/signal-${signal}.stderr" &
+  pid=$!
+  wait_for_file "$marker" "signal $signal lock holder"
+  kill "-$signal" "$pid"
+  set +e
+  wait "$pid"
+  status=$?
+  set -e
+  [[ "$status" -eq "$expected_status" ]] || fail "expected $signal wrapper status $expected_status, got $status"
+}
+
 expected_cli_target="$TARGET_ROOT/cli"
 actual_cli_target="$(KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LANE_SCRIPT" cli)"
 [[ "$actual_cli_target" == "$expected_cli_target" ]] || fail "unexpected cli lane path: $actual_cli_target"
@@ -61,6 +122,7 @@ assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LANE_SCRIPT" check 
 
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$TARGET_ROOT/main"
 assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TARGET_ROOT/analysis-123" "$LOCK_SCRIPT" -- true
+assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TARGET_ROOT/analysis-123" "$LOCK_SCRIPT" --lane cli -- true
 
 locked="$TMPDIR/locked"
 release="$TMPDIR/release"
@@ -103,23 +165,40 @@ set -e
 [[ "$failure_status" -eq 42 ]] || fail "expected wrapped command status 42, got $failure_status"
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- true
 
-interrupted_locked="$TMPDIR/interrupted-locked"
+assert_signal_status INT 130
+assert_signal_status HUP 129
+
+descendant_pid_file="$TMPDIR/descendant.pid"
+descendant_started="$TMPDIR/descendant-started"
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- bash -c '
   set -euo pipefail
-  trap "exit 0" TERM
-  touch "$1"
-  while true; do
-    sleep 1
-  done
-' _ "$interrupted_locked" &
+  (
+    trap "" TERM
+    touch "$2"
+    while true; do
+      sleep 1
+    done
+  ) &
+  echo "$!" > "$1"
+  wait
+' _ "$descendant_pid_file" "$descendant_started" 2>"$TMPDIR/descendant.stderr" &
 interrupted_pid=$!
-wait_for_file "$interrupted_locked" "interrupted lock holder"
+wait_for_file "$descendant_started" "long-lived descendant"
+wait_for_file "$descendant_pid_file" "long-lived descendant pid"
+descendant_pid="$(cat "$descendant_pid_file")"
 kill -TERM "$interrupted_pid"
 set +e
 wait "$interrupted_pid"
 interrupted_status=$?
 set -e
 [[ "$interrupted_status" -eq 143 ]] || fail "expected interrupted wrapper status 143, got $interrupted_status"
+assert_process_exits "$descendant_pid" "long-lived descendant"
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- true
+
+outer_lock_marker="$TMPDIR/outer-lock-marker"
+KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- "$LOCK_SCRIPT" --lane cli -- bash -c 'touch "$1"' _ "$outer_lock_marker"
+[[ -e "$outer_lock_marker" ]] || fail "nested lock-held command did not run"
+
+assert_no_bare_target_writing_cargo
 
 echo "cargo target lane and build lock tests passed"

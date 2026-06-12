@@ -56,43 +56,24 @@
 
 普通小改动默认跑受影响范围验证，不要把每个阶段都升级成全量 workspace gate。
 
-- Rust 单 crate 改动：
-  - `cargo fmt --check`
-  - `cargo check -p <crate> --tests`
-  - `cargo nextest run -p <crate> --no-fail-fast <filter>` 或 `cargo test -p <crate> <filter>`
-- Rust 跨 crate 改动：
-  - `cargo fmt --check`
-  - `cargo check --workspace --exclude kanban-desktop --tests`
-  - `cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast`
-- CLI / server / sqlite 测试优先使用 package 或 integration target：
-  - `cargo nextest run -p kanban-cli --test task --no-fail-fast`
-  - `cargo nextest run -p kanban-server -E 'test(tasks::)' --no-fail-fast`
-  - `cargo nextest run -p kanban-sqlite -E 'test(transitions::)' --no-fail-fast`
-- 文档或配置小改动：
-  - `git diff --check`
-  - 仅运行与该配置直接相关的静态检查或 dry-run。
-- 如果本机安装了 `just`，可以使用等价 `just fmt`、`just check-p <crate>`、`just test-p <crate>`；直接 `cargo` 命令仍是 canonical fallback。
-- 并行 worktree / agent 开发时，优先把 Cargo 构建缓存放到内置 NVMe 的 lane 目录，避免在外置系统盘下重复冷构建：
-  - `CARGO_TARGET_DIR=/media/kanban-user/Data/cargo-targets/kanban-tool/main`
-  - `CARGO_TARGET_DIR=/media/kanban-user/Data/cargo-targets/kanban-tool/cli`
-  - `CARGO_TARGET_DIR=/media/kanban-user/Data/cargo-targets/kanban-tool/server`
-  - `CARGO_TARGET_DIR=/media/kanban-user/Data/cargo-targets/kanban-tool/sqlite`
-  - `CARGO_TARGET_DIR=/media/kanban-user/Data/cargo-targets/kanban-tool/desktop`
-- 多个 agent 并行时不要共用同一个 `CARGO_TARGET_DIR`，按 lane 分配，例如：
-  - `CARGO_TARGET_DIR=/media/kanban-user/Data/cargo-targets/kanban-tool/cli just check-p kanban-cli`
-  - `CARGO_TARGET_DIR=/media/kanban-user/Data/cargo-targets/kanban-tool/server just check-p kanban-server`
-  - `CARGO_TARGET_DIR=/media/kanban-user/Data/cargo-targets/kanban-tool/sqlite just test-p kanban-sqlite`
+### 默认使用 just
+
+- 本仓库本地验证优先使用 `just`；会写 Cargo target 的 recipes 已经内置共享 target root 与构建锁。
+- 不要直接运行会写 Cargo target 的 raw `cargo build/test/check/clippy/nextest/run`；需要新验证入口时，先加 `just` recipe。
+- 查看可用入口：`just --summary`。
+
+常用验证：
+
+- Rust 快速检查：`just fmt`、`just check`、`just test`、`just clippy`、`just rust-fast`。
+- 单 crate：`just check-p kanban-cli`、`just test-p kanban-cli`、`just clippy-p kanban-cli`。
+- feature 组合：`just feature-p kanban-cli tantivy-backend`。
+- Desktop / Web：`just desktop-check`、`just desktop-package`、`just web-test`、`just web-typecheck`、`just web-build`。
+- CLI package 与 smoke：`just cli-package`、`just smoke`。
+- 脚本 / 文档小改动：`just target-tools`、`just diff-check`。
 
 以下只用于 milestone / release / explicit full gate：
 
-- `cargo test --workspace`
-- `cargo clippy --workspace --all-targets -- -D warnings`
-- feature matrix
-- `pnpm --dir apps/desktop test`
-- `pnpm --dir apps/desktop typecheck`
-- `pnpm --dir apps/desktop build`
-- `pnpm --dir apps/desktop tauri build`
-- `scripts/smoke-v1-local.sh`
+- `just release`
 
 ## Rust workspace 约定
 

@@ -8,31 +8,31 @@ fmt-check:
     cargo fmt -- --check
 
 fix *args:
-    cargo clippy --fix --tests --allow-dirty "$@"
+    scripts/cargo-build-lock.sh -- cargo clippy --fix --tests --allow-dirty "$@"
 
 clippy:
-    cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings
+    scripts/cargo-build-lock.sh -- cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings
 
 clippy-p package:
-    cargo clippy -p {{package}} --tests -- -D warnings
+    scripts/cargo-build-lock.sh -- cargo clippy -p {{package}} --tests -- -D warnings
 
 check:
-    cargo check --workspace --exclude kanban-desktop --tests
+    scripts/cargo-build-lock.sh -- cargo check --workspace --exclude kanban-desktop --tests
 
 test *args:
-    if cargo nextest --version >/dev/null 2>&1; then cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast "$@"; else cargo test --workspace --exclude kanban-desktop "$@"; fi
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop "$@"; fi
 
 test-p package *args:
-    shift; if cargo nextest --version >/dev/null 2>&1; then cargo nextest run -p {{package}} --no-fail-fast "$@"; else cargo test -p {{package}} "$@"; fi
+    shift; if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run -p {{package}} --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test -p {{package}} "$@"; fi
 
 check-p package:
-    cargo check -p {{package}} --tests
+    scripts/cargo-build-lock.sh -- cargo check -p {{package}} --tests
 
 rust-fast:
     cargo fmt -- --check
-    cargo check --workspace --exclude kanban-desktop --tests
-    if cargo nextest --version >/dev/null 2>&1; then cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast; else cargo test --workspace --exclude kanban-desktop; fi
-    cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings
+    scripts/cargo-build-lock.sh -- cargo check --workspace --exclude kanban-desktop --tests
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop; fi
+    scripts/cargo-build-lock.sh -- cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings
 
 web-test:
     pnpm --dir apps/desktop test
@@ -44,7 +44,7 @@ web-build:
     pnpm --dir apps/desktop build
 
 desktop-check:
-    cargo check -p kanban-desktop --tests
+    scripts/cargo-build-lock.sh -- cargo check -p kanban-desktop --tests
     pnpm --dir apps/desktop typecheck
     pnpm --dir apps/desktop test
 
@@ -52,11 +52,23 @@ desktop-build:
     pnpm --dir apps/desktop build
 
 desktop-package:
-    pnpm --dir apps/desktop tauri build
+    scripts/cargo-build-lock.sh -- pnpm --dir apps/desktop tauri build
+
+cli-package:
+    scripts/package-cli-linux.sh --format deb
+
+smoke:
+    scripts/smoke-v1-local.sh
+
+target-tools:
+    scripts/test-cargo-target-tools.sh
+
+diff-check:
+    git diff --check
 
 feature-p package features:
-    if cargo nextest --version >/dev/null 2>&1; then cargo nextest run -p {{package}} --features "{{features}}" --no-fail-fast; else cargo test -p {{package}} --features "{{features}}"; fi
-    cargo clippy -p {{package}} --all-targets --features "{{features}}" -- -D warnings
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run -p {{package}} --features "{{features}}" --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test -p {{package}} --features "{{features}}"; fi
+    scripts/cargo-build-lock.sh -- cargo clippy -p {{package}} --all-targets --features "{{features}}" -- -D warnings
 
 release:
     just rust-fast
@@ -77,5 +89,5 @@ release:
     just feature-p kanban-server tantivy-backend,graph-oxigraph,vector-lancedb
     just desktop-check
     just desktop-package
-    scripts/smoke-v1-local.sh
-    git diff --check
+    just smoke
+    just diff-check

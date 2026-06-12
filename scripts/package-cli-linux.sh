@@ -6,6 +6,8 @@ PACKAGE_NAME="kanban-tool-cli"
 BIN_NAME="kanban"
 REVISION="1"
 BUILD_ARGS=()
+LOCK="$ROOT/scripts/cargo-build-lock.sh"
+TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-/media/kanban-user/Data/cargo-targets/kanban-tool}"
 
 usage() {
   cat <<'EOF'
@@ -21,7 +23,7 @@ Options:
   -h, --help                   Show this help.
 
 Outputs:
-  target/release/bundle/cli/deb/*.deb
+  ${KANBAN_CARGO_TARGET_ROOT:-/media/kanban-user/Data/cargo-targets/kanban-tool}/release/bundle/cli/deb/*.deb
 EOF
 }
 
@@ -62,8 +64,10 @@ command -v cargo >/dev/null 2>&1 || { echo "error: cargo is required" >&2; exit 
 VERSION="$(cargo pkgid -p kanban-cli | sed 's/.*#//')"
 TARGET_TRIPLE="$(rustc -vV | awk '/^host:/ { print $2 }')"
 RUST_ARCH="${TARGET_TRIPLE%%-*}"
-CARGO_TARGET_ROOT="$ROOT/target"
-TARGET_DIR="$CARGO_TARGET_ROOT/release"
+while [[ "$TARGET_ROOT" != "/" && "$TARGET_ROOT" == */ ]]; do
+  TARGET_ROOT="${TARGET_ROOT%/}"
+done
+TARGET_DIR="$TARGET_ROOT/release"
 BIN_PATH="$TARGET_DIR/$BIN_NAME"
 BUNDLE_DIR="$TARGET_DIR/bundle/cli"
 TMPDIR="$(mktemp -d)"
@@ -91,7 +95,7 @@ install_payload() {
 build_binary() {
   (
     cd "$ROOT"
-    cargo build -p kanban-cli --release --target-dir "$CARGO_TARGET_ROOT" "${BUILD_ARGS[@]}"
+    "$LOCK" -- cargo build -p kanban-cli --release "${BUILD_ARGS[@]}"
   )
   [[ -x "$BIN_PATH" ]] || { echo "error: expected binary not found: $BIN_PATH" >&2; exit 1; }
 }

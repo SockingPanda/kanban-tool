@@ -414,7 +414,7 @@ pub(crate) enum RunCommand {
 #[derive(Debug, Args, Clone)]
 pub(crate) struct ClaimArgs {
     pub(crate) task_ref: String,
-    #[arg(long, default_value_t = 300_000)]
+    #[arg(long, default_value_t = 300_000, allow_hyphen_values = true, value_parser = parse_positive_i64)]
     pub(crate) ttl_ms: i64,
 }
 
@@ -423,8 +423,18 @@ pub(crate) struct HeartbeatArgs {
     pub(crate) task_ref: String,
     #[arg(long)]
     pub(crate) claim_token: String,
-    #[arg(long, default_value_t = 300_000)]
+    #[arg(long, default_value_t = 300_000, allow_hyphen_values = true, value_parser = parse_positive_i64)]
     pub(crate) ttl_ms: i64,
+}
+
+fn parse_positive_i64(value: &str) -> std::result::Result<i64, String> {
+    let parsed = value
+        .parse::<i64>()
+        .map_err(|err| format!("invalid integer for ttl_ms: {err}"))?;
+    if parsed <= 0 {
+        return Err("ttl_ms must be positive".to_owned());
+    }
+    Ok(parsed)
 }
 
 #[derive(Debug, Args, Clone)]

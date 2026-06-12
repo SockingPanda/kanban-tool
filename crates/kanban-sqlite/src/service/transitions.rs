@@ -70,6 +70,7 @@ pub fn claim_task(
     task_ref: &str,
     ttl_ms: i64,
 ) -> Result<ClaimResult> {
+    ensure_positive_ttl(ttl_ms)?;
     claim_task_with_profile(path, board, actor, task_ref, ttl_ms, "manual")
 }
 
@@ -81,6 +82,7 @@ pub fn claim_task_with_profile(
     ttl_ms: i64,
     worker_profile: &str,
 ) -> Result<ClaimResult> {
+    ensure_positive_ttl(ttl_ms)?;
     claim_task_with_profile_and_metadata(path, board, actor, task_ref, ttl_ms, worker_profile, "{}")
 }
 
@@ -93,6 +95,7 @@ pub fn claim_task_with_profile_and_metadata(
     worker_profile: &str,
     metadata_json: &str,
 ) -> Result<ClaimResult> {
+    ensure_positive_ttl(ttl_ms)?;
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     if !json_valid(&conn, metadata_json)? {
@@ -125,6 +128,7 @@ pub(crate) fn claim_task_conn(
     metadata_json: &str,
     now: i64,
 ) -> Result<ClaimResult> {
+    ensure_positive_ttl(ttl_ms)?;
     conn.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
     match claim_task_in_current_tx(
         conn,
@@ -155,6 +159,7 @@ pub(crate) fn claim_next_ready_conn(
     ttl_ms: i64,
     now: i64,
 ) -> Result<Option<ClaimResult>> {
+    ensure_positive_ttl(ttl_ms)?;
     conn.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
     if let Err(err) = ensure_board_active(conn, board_id) {
         let _ = conn.execute_batch("ROLLBACK");
@@ -206,6 +211,7 @@ pub(crate) fn claim_task_in_current_tx(
     metadata_json: &str,
     now: i64,
 ) -> Result<ClaimResult> {
+    ensure_positive_ttl(ttl_ms)?;
     ensure_board_active(conn, board_id)?;
     let task = get_task_by_id(conn, board_id, task_id)?;
     if !is_claimable_task(task.status, task.claim_token.is_some()) {
@@ -263,6 +269,7 @@ pub fn heartbeat_task(
     token: &str,
     ttl_ms: i64,
 ) -> Result<TaskRecord> {
+    ensure_positive_ttl(ttl_ms)?;
     heartbeat_task_with_note(path, board, actor, task_ref, token, ttl_ms, None)
 }
 
@@ -275,6 +282,7 @@ pub fn heartbeat_task_with_note(
     ttl_ms: i64,
     note: Option<&str>,
 ) -> Result<TaskRecord> {
+    ensure_positive_ttl(ttl_ms)?;
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
@@ -297,6 +305,7 @@ pub(crate) fn heartbeat_task_conn(
     note: Option<&str>,
     now: i64,
 ) -> Result<()> {
+    ensure_positive_ttl(ttl_ms)?;
     if task.status != TaskStatus::Running || task.claim_token.as_deref() != Some(token) {
         return Err(KanbanError::InvalidTransition(
             "heartbeat requires matching running claim".into(),
@@ -336,6 +345,13 @@ pub(crate) fn heartbeat_task_conn(
             &json!({ "note": note }).to_string(),
             now,
         )?;
+    }
+    Ok(())
+}
+
+fn ensure_positive_ttl(ttl_ms: i64) -> Result<()> {
+    if ttl_ms <= 0 {
+        return Err(KanbanError::InvalidInput("ttl_ms must be positive".into()));
     }
     Ok(())
 }

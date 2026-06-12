@@ -215,6 +215,56 @@ fn task_complete_alias_finishes_running_task() -> anyhow::Result<()> {
 }
 
 #[test]
+fn task_claim_start_and_heartbeat_reject_nonpositive_ttl_ms() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_claim_start_and_heartbeat_reject_nonpositive_ttl_ms")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "cli ttl validation",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"]
+        .as_str()
+        .context("expected JSON string")?;
+
+    for command in ["claim", "start"] {
+        for ttl_ms in ["0", "-1"] {
+            kanban(&temp.path, &["task", command, task_id, "--ttl-ms", ttl_ms])?
+                .failure_containing("ttl_ms must be positive")?;
+        }
+    }
+
+    let claim = kanban(&temp.path, &["--json", "task", "claim", task_id])?.success_json()?;
+    let token = claim["data"]["claim_token"]
+        .as_str()
+        .context("expected JSON string")?;
+
+    for ttl_ms in ["0", "-1"] {
+        kanban(
+            &temp.path,
+            &[
+                "task",
+                "heartbeat",
+                task_id,
+                "--claim-token",
+                token,
+                "--ttl-ms",
+                ttl_ms,
+            ],
+        )?
+        .failure_containing("ttl_ms must be positive")?;
+    }
+    Ok(())
+}
+
+#[test]
 fn task_reclaim_expired_alias_matches_default_reclaim() -> anyhow::Result<()> {
     let bare = TempDb::new("task_reclaim_expired_alias_matches_bare_reclaim_bare")?;
     let explicit = TempDb::new("task_reclaim_expired_alias_matches_bare_reclaim_explicit")?;

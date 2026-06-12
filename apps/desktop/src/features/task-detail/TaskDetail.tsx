@@ -1,5 +1,7 @@
-import { CircleDot, FileText, GitBranch, MessageSquare, Save, X } from "lucide-react"
+import { CircleDot, FileText, GitBranch, MessageSquare, Pencil, Save, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react"
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
+import remarkGfm from "remark-gfm"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -37,6 +39,7 @@ export function TaskDetail({
   onAddDependency,
   onRemoveDependency,
   onSaveTask,
+  onCancelEdit,
   onAddComment,
 }: {
   api: KanbanApi | null
@@ -58,19 +61,33 @@ export function TaskDetail({
   onAction: (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null }) => Promise<unknown>
   onAddDependency: () => Promise<void>
   onRemoveDependency: (parentTaskId: string) => Promise<void>
-  onSaveTask: () => Promise<void>
+  onSaveTask: () => Promise<boolean>
+  onCancelEdit: () => void
   onAddComment: () => Promise<void>
 }) {
   const [descriptionExpanded, setDescriptionExpanded] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   useEffect(() => {
     setDescriptionExpanded(false)
+    setEditing(false)
   }, [task?.id])
 
   if (!task) return null
 
   const actions = legalActions(task, claimToken, blockReason)
   const longDescription = isLongDescription(task.description)
+  const renderedDescription = visibleDescription(task.description, descriptionExpanded)
+
+  async function saveAndClose() {
+    const saved = await onSaveTask()
+    if (saved) setEditing(false)
+  }
+
+  function cancelEdit() {
+    onCancelEdit()
+    setEditing(false)
+  }
 
   return (
     <>
@@ -78,30 +95,40 @@ export function TaskDetail({
         <div className="flex items-start justify-between gap-3">
           <SheetHeader className="min-w-0">
             <div className="text-xs text-neutral-500">#{task.seq} {shortId(task.id)}</div>
-            <SheetTitle className="mt-1">{task.title}</SheetTitle>
+            <SheetTitle className="mt-1">{editing ? "Edit task" : task.title}</SheetTitle>
           </SheetHeader>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <Badge variant={badgeVariant(task.status)}>{task.status}</Badge>
             {detailLoading ? <span className="text-xs text-neutral-500">refreshing</span> : null}
           </div>
         </div>
-        <SheetDescription className="mt-2 whitespace-pre-wrap">
-          {visibleDescription(task.description, descriptionExpanded)}
-        </SheetDescription>
-        {longDescription ? (
-          <Button
-            className="mt-2 px-0"
-            variant="ghost"
-            size="sm"
-            onClick={() => setDescriptionExpanded((current) => !current)}
-          >
-            {descriptionExpanded ? "Show less" : "Show more"}
-          </Button>
+        {!editing ? (
+          <>
+            <SheetDescription asChild>
+              <MarkdownDescription>{renderedDescription}</MarkdownDescription>
+            </SheetDescription>
+            <div className="mt-2 flex items-center gap-2">
+              {longDescription ? (
+                <Button
+                  className="px-0"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDescriptionExpanded((current) => !current)}
+                >
+                  {descriptionExpanded ? "Show less" : "Show more"}
+                </Button>
+              ) : null}
+              <Button variant="outline" size="sm" disabled={!editDraft} onClick={() => setEditing(true)}>
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </Button>
+            </div>
+          </>
         ) : null}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        {editDraft ? (
+        {editing && editDraft ? (
           <>
             <Section title="Task detail">
               <div className="space-y-2">
@@ -138,10 +165,16 @@ export function TaskDetail({
                     onChange={(event) => setEditDraft({ ...editDraft, dueAt: event.target.value })}
                   />
                 </div>
-                <Button disabled={!api || pendingAction === "save" || !editDraft.title.trim()} onClick={() => void onSaveTask()}>
-                  <Save className="h-4 w-4" />
-                  {pendingAction === "save" ? "Saving" : "Save"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button disabled={!api || pendingAction === "save" || !editDraft.title.trim()} onClick={() => void saveAndClose()}>
+                    <Save className="h-4 w-4" />
+                    {pendingAction === "save" ? "Saving" : "Save"}
+                  </Button>
+                  <Button variant="outline" disabled={pendingAction === "save"} onClick={cancelEdit}>
+                    <X className="h-4 w-4" />
+                    Cancel
+                  </Button>
+                </div>
               </div>
             </Section>
 
@@ -287,6 +320,30 @@ export function TaskDetail({
       </div>
     </>
   )
+}
+
+export function MarkdownDescription({ children }: { children: string }) {
+  return (
+    <div className="task-markdown mt-2 text-sm text-neutral-700">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        urlTransform={safeMarkdownUrl}
+        components={{
+          a: ({ href, children, ...props }) => (
+            <a href={href} target="_blank" rel="noreferrer noopener" {...props}>
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {children}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
+function safeMarkdownUrl(value: string) {
+  return defaultUrlTransform(value)
 }
 
 function AutosizeDescriptionTextarea({

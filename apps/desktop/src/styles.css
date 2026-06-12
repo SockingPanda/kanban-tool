@@ -30,3 +30,82 @@ textarea {
 #root {
   min-height: 100vh;
 }
+
+.task-markdown {
+  overflow-wrap: anywhere;
+}
+
+.task-markdown > :first-child {
+  margin-top: 0;
+}
+
+.task-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.task-markdown p,
+.task-markdown ul,
+.task-markdown ol,
+.task-markdown blockquote,
+.task-markdown pre,
+.task-markdown table {
+  margin: 0.5rem 0;
+}
+
+.task-markdown ul,
+.task-markdown ol {
+  padding-left: 1.25rem;
+}
+
+.task-markdown ul {
+  list-style: disc;
+}
+
+.task-markdown ol {
+  list-style: decimal;
+}
+
+.task-markdown a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.task-markdown code {
+  border-radius: 0.25rem;
+  background: #f5f5f4;
+  padding: 0.1rem 0.25rem;
+  font-size: 0.86em;
+}
+
+.task-markdown pre {
+  overflow-x: auto;
+  border-radius: 0.375rem;
+  background: #171717;
+  padding: 0.75rem;
+  color: #fafafa;
+}
+
+.task-markdown pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.task-markdown blockquote {
+  border-left: 3px solid #d4d4d4;
+  padding-left: 0.75rem;
+  color: #525252;
+}
+
+.task-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.task-markdown th,
+.task-markdown td {
+  border: 1px solid #e5e5e5;
+  padding: 0.25rem 0.375rem;
+}

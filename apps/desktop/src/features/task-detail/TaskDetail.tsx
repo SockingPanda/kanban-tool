@@ -90,12 +90,15 @@ export function TaskDetail({
   }
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-neutral-200 p-4 pr-12">
         <div className="flex items-start justify-between gap-3">
           <SheetHeader className="min-w-0">
             <div className="text-xs text-neutral-500">#{task.seq} {shortId(task.id)}</div>
             <SheetTitle className="mt-1">{editing ? "Edit task" : task.title}</SheetTitle>
+            <SheetDescription className="sr-only">
+              Task details, legal transitions, dependencies, comments, runs, and event timeline.
+            </SheetDescription>
           </SheetHeader>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <Badge variant={badgeVariant(task.status)}>{task.status}</Badge>
@@ -103,14 +106,21 @@ export function TaskDetail({
           </div>
         </div>
         {!editing ? (
+          <Button className="mt-3" variant="outline" size="sm" disabled={!editDraft} onClick={() => setEditing(true)}>
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {!editing ? (
           <>
-            <SheetDescription asChild>
+            <Section title="Description">
               <MarkdownDescription>{renderedDescription}</MarkdownDescription>
-            </SheetDescription>
-            <div className="mt-2 flex items-center gap-2">
               {longDescription ? (
                 <Button
-                  className="px-0"
+                  className="mt-2 px-0"
                   variant="ghost"
                   size="sm"
                   onClick={() => setDescriptionExpanded((current) => !current)}
@@ -118,16 +128,12 @@ export function TaskDetail({
                   {descriptionExpanded ? "Show less" : "Show more"}
                 </Button>
               ) : null}
-              <Button variant="outline" size="sm" disabled={!editDraft} onClick={() => setEditing(true)}>
-                <Pencil className="h-3.5 w-3.5" />
-                Edit
-              </Button>
-            </div>
+            </Section>
+
+            <Separator className="my-4" />
           </>
         ) : null}
-      </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {editing && editDraft ? (
           <>
             <Section title="Task detail">
@@ -318,7 +324,7 @@ export function TaskDetail({
           </div>
         </Section>
       </div>
-    </>
+    </div>
   )
 }
 

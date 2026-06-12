@@ -207,6 +207,7 @@ async fn transitions_block_unblock_recomputes_target_status() -> anyhow::Result<
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )
@@ -285,6 +286,7 @@ async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() -> a
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )
@@ -301,6 +303,7 @@ async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() -> a
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )
@@ -317,6 +320,7 @@ async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() -> a
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )
@@ -333,6 +337,7 @@ async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() -> a
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
         std::slice::from_ref(&parent.id),

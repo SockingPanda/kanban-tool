@@ -152,6 +152,7 @@ fn tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters() 
             priority: 10,
             scheduled_at: None,
             due_at: Some(1_767_312_000_000),
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -167,6 +168,7 @@ fn tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters() 
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -300,6 +302,7 @@ fn stale_tantivy_index_falls_back_to_sqlite_before_current_filters_are_applied()
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -315,6 +318,7 @@ fn stale_tantivy_index_falls_back_to_sqlite_before_current_filters_are_applied()
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -330,6 +334,7 @@ fn stale_tantivy_index_falls_back_to_sqlite_before_current_filters_are_applied()
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -908,6 +913,7 @@ fn tantivy_missing_or_corrupt_index_falls_back_to_sqlite() -> anyhow::Result<()>
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;

@@ -114,6 +114,7 @@ export function AppShell({
   onAddDependency,
   onRemoveDependency,
   onSaveTask,
+  onCancelTaskEdit,
   onAddComment,
 }: {
   config: RuntimeConfig | null
@@ -170,7 +171,8 @@ export function AppShell({
   onAction: (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null }) => Promise<unknown>
   onAddDependency: () => Promise<void>
   onRemoveDependency: (parentTaskId: string) => Promise<void>
-  onSaveTask: () => Promise<void>
+  onSaveTask: () => Promise<boolean>
+  onCancelTaskEdit: () => void
   onAddComment: () => Promise<void>
 }) {
   let taskActivityLabel = ""
@@ -271,6 +273,7 @@ export function AppShell({
                 onAddDependency={onAddDependency}
                 onRemoveDependency={onRemoveDependency}
                 onSaveTask={onSaveTask}
+                onCancelEdit={onCancelTaskEdit}
                 onAddComment={onAddComment}
               />
             </SheetContent>

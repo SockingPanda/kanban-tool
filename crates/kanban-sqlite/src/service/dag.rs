@@ -3,14 +3,15 @@ use std::{
     path::Path,
 };
 
-use kanban_core::{Clock, Result, SystemClock, TaskStatus};
+use kanban_core::{Clock, KanbanError, Result, SystemClock, TaskStatus};
 use rusqlite::params;
 
 use crate::connect_file;
 
 use super::{
-    DagAdjacency, DagBoardSnapshot, DagDerivedGraph, DagEdge, DagNode, DagRawGraph, DagSnapshot,
-    DagSnapshotMeta, DagTaskReason, board_id, get_board_conn, query_tasks, storage,
+    DagAdjacency, DagAncestors, DagBoardSnapshot, DagDerivedGraph, DagEdge, DagNode, DagRawGraph,
+    DagSnapshot, DagSnapshotMeta, DagTaskReason, board_id, get_board_conn, query_tasks,
+    resolve_task, storage,
 };
 
 pub fn dag_snapshot(path: impl AsRef<Path>, board: &str) -> Result<DagSnapshot> {
@@ -21,7 +22,7 @@ pub fn dag_snapshot(path: impl AsRef<Path>, board: &str) -> Result<DagSnapshot> 
         .into_iter()
         .filter(|task| task.status != TaskStatus::Archived && task.archived_at.is_none())
         .map(|task| DagNode {
-            why: format!("{} is currently {}", task.task_ref, task.status.as_str()),
+            why: format!("{} 当前状态为 {}", task.task_ref, task.status.as_str()),
             id: task.id,
             task_ref: task.task_ref,
             seq: task.seq,
@@ -69,7 +70,7 @@ pub fn dag_snapshot(path: impl AsRef<Path>, board: &str) -> Result<DagSnapshot> 
             continue;
         }
         edges.push(DagEdge {
-            why: format!("{parent} must finish before {child} can run"),
+            why: format!("{parent} 必须先完成，{child} 才能执行"),
             parent: parent.clone(),
             child: child.clone(),
         });
@@ -114,13 +115,13 @@ pub fn dag_snapshot(path: impl AsRef<Path>, board: &str) -> Result<DagSnapshot> 
                 task_ref: node.task_ref.clone(),
                 why: if unfinished.is_empty() {
                     format!(
-                        "{} is {} with no unfinished parent dependencies",
+                        "{} 状态为 {}，没有未完成的前置依赖",
                         node.task_ref,
                         node.status.as_str()
                     )
                 } else {
                     format!(
-                        "{} is {} but waits on unfinished parents: {}",
+                        "{} 状态为 {}，等待未完成的前置依赖：{}",
                         node.task_ref,
                         node.status.as_str(),
                         refs_for(&unfinished, &ref_by_id).join(", ")
@@ -143,7 +144,7 @@ pub fn dag_snapshot(path: impl AsRef<Path>, board: &str) -> Result<DagSnapshot> 
             task_id: node.id.clone(),
             task_ref: node.task_ref.clone(),
             why: format!(
-                "{} is frontier because it is {} and all parent dependencies are done or absent",
+                "{} 是 frontier：状态为 {}，且前置依赖已完成或不存在",
                 node.task_ref,
                 node.status.as_str()
             ),
@@ -183,6 +184,148 @@ pub fn dag_snapshot(path: impl AsRef<Path>, board: &str) -> Result<DagSnapshot> 
     })
 }
 
+pub fn dag_ancestors(path: impl AsRef<Path>, board: &str, task_ref: &str) -> Result<DagAncestors> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    let task = resolve_task(&conn, &board_id, task_ref)?;
+    let snapshot = dag_snapshot(path, board)?;
+    let node_by_id = snapshot
+        .raw
+        .nodes
+        .iter()
+        .cloned()
+        .map(|node| (node.id.clone(), node))
+        .collect::<HashMap<_, _>>();
+    let target = node_by_id
+        .get(&task.id)
+        .cloned()
+        .ok_or_else(|| KanbanError::NotFound(format!("task {task_ref} in active DAG snapshot")))?;
+
+    let mut parents_by_child: HashMap<String, Vec<String>> = HashMap::new();
+    let mut children_by_parent: HashMap<String, Vec<String>> = HashMap::new();
+    for edge in &snapshot.raw.edges {
+        parents_by_child
+            .entry(edge.child.clone())
+            .or_default()
+            .push(edge.parent.clone());
+        children_by_parent
+            .entry(edge.parent.clone())
+            .or_default()
+            .push(edge.child.clone());
+    }
+
+    let node_rank = snapshot
+        .raw
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| (node.id.clone(), index))
+        .collect::<HashMap<_, _>>();
+    for parents in parents_by_child.values_mut() {
+        parents.sort_by_key(|id| node_rank.get(id).copied().unwrap_or(usize::MAX));
+    }
+    for children in children_by_parent.values_mut() {
+        children.sort_by_key(|id| node_rank.get(id).copied().unwrap_or(usize::MAX));
+    }
+
+    let mut subset = HashSet::new();
+    let mut stack = vec![target.id.clone()];
+    while let Some(task_id) = stack.pop() {
+        if !subset.insert(task_id.clone()) {
+            continue;
+        }
+        if let Some(parents) = parents_by_child.get(&task_id) {
+            for parent in parents.iter().rev() {
+                stack.push(parent.clone());
+            }
+        }
+    }
+
+    let ordered_ids =
+        topological_subset(&subset, &children_by_parent, &parents_by_child, &node_rank);
+    let nodes = ordered_ids
+        .iter()
+        .filter_map(|task_id| node_by_id.get(task_id).cloned())
+        .collect::<Vec<_>>();
+    let ordered_refs = nodes
+        .iter()
+        .map(|node| node.task_ref.clone())
+        .collect::<Vec<_>>();
+    let edges = snapshot
+        .raw
+        .edges
+        .into_iter()
+        .filter(|edge| subset.contains(&edge.parent) && subset.contains(&edge.child))
+        .collect::<Vec<_>>();
+
+    Ok(DagAncestors {
+        target,
+        nodes,
+        edges,
+        ordered_refs,
+        generated_at: SystemClock.now_ms(),
+    })
+}
+
+fn topological_subset(
+    subset: &HashSet<String>,
+    children_by_parent: &HashMap<String, Vec<String>>,
+    parents_by_child: &HashMap<String, Vec<String>>,
+    node_rank: &HashMap<String, usize>,
+) -> Vec<String> {
+    let mut in_degree = subset
+        .iter()
+        .map(|task_id| {
+            let count = parents_by_child
+                .get(task_id)
+                .into_iter()
+                .flatten()
+                .filter(|parent| subset.contains(*parent))
+                .count();
+            (task_id.clone(), count)
+        })
+        .collect::<HashMap<_, _>>();
+    let mut ready = in_degree
+        .iter()
+        .filter(|(_, count)| **count == 0)
+        .map(|(task_id, _)| task_id.clone())
+        .collect::<Vec<_>>();
+    sort_ids_by_rank(&mut ready, node_rank);
+
+    let mut ordered = Vec::new();
+    while let Some(task_id) = ready.first().cloned() {
+        ready.remove(0);
+        ordered.push(task_id.clone());
+        if let Some(children) = children_by_parent.get(&task_id) {
+            for child in children.iter().filter(|child| subset.contains(*child)) {
+                if let Some(count) = in_degree.get_mut(child) {
+                    *count -= 1;
+                    if *count == 0 {
+                        ready.push(child.clone());
+                    }
+                }
+            }
+            sort_ids_by_rank(&mut ready, node_rank);
+        }
+    }
+
+    if ordered.len() != subset.len() {
+        let mut remaining = subset
+            .iter()
+            .filter(|task_id| !ordered.contains(*task_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        sort_ids_by_rank(&mut remaining, node_rank);
+        ordered.extend(remaining);
+    }
+
+    ordered
+}
+
+fn sort_ids_by_rank(ids: &mut [String], node_rank: &HashMap<String, usize>) {
+    ids.sort_by_key(|id| node_rank.get(id).copied().unwrap_or(usize::MAX));
+}
+
 fn adjacency_from_map(
     nodes: &[DagNode],
     map: &HashMap<String, Vec<String>>,
@@ -200,9 +343,9 @@ fn adjacency_from_map(
             Some(DagAdjacency {
                 task_id: node.id.clone(),
                 why: if incoming {
-                    format!("{} is blocked by {}", node.task_ref, refs.join(", "))
+                    format!("{} 被以下前置任务阻塞：{}", node.task_ref, refs.join(", "))
                 } else {
-                    format!("{} unblocks {}", node.task_ref, refs.join(", "))
+                    format!("{} 解除后会放行：{}", node.task_ref, refs.join(", "))
                 },
                 tasks,
             })

@@ -441,6 +441,13 @@ kanban dep remove <parent_ref> <child_ref>
 kanban dep list <task_ref>
 ```
 
+Human output for add/remove is Chinese-first:
+
+```text
+已添加依赖：default#1 -> default#2
+已移除依赖：default#1 -> default#2
+```
+
 添加 dependency 后：
 
 - 如果 child 当前是 `ready` 且 parent 未完成，child 降级为 `todo`。
@@ -456,6 +463,8 @@ kanban dep list <task_ref>
 ```bash
 kanban dag show
 kanban dag show --json
+kanban dag ancestors <task_ref>
+kanban dag ancestors <task_ref> --json
 ```
 
 `kanban dag show` returns an LLM-friendly snapshot for the active board. The
@@ -498,14 +507,14 @@ the standard envelope:
           "scheduled_at": null,
           "created_at": 1717520000000,
           "archived_at": null,
-          "why": "default#1 is currently ready"
+          "why": "default#1 当前状态为 ready"
         }
       ],
       "edges": [
         {
           "parent": "t_parent",
           "child": "t_child",
-          "why": "t_parent must finish before t_child can run"
+          "why": "t_parent 必须先完成，t_child 才能执行"
         }
       ]
     },
@@ -514,28 +523,28 @@ the standard envelope:
         {
           "task_id": "t_child",
           "tasks": ["t_parent"],
-          "why": "default#2 is blocked by default#1"
+          "why": "default#2 被以下前置任务阻塞：default#1"
         }
       ],
       "unblocks": [
         {
           "task_id": "t_parent",
           "tasks": ["t_child"],
-          "why": "default#1 unblocks default#2"
+          "why": "default#1 解除后会放行：default#2"
         }
       ],
       "actionable": [
         {
           "task_id": "t_ready",
           "ref": "default#3",
-          "why": "default#3 is ready with no unfinished parent dependencies"
+          "why": "default#3 状态为 ready，没有未完成的前置依赖"
         }
       ],
       "frontier": [
         {
           "task_id": "t_ready",
           "ref": "default#3",
-          "why": "default#3 is frontier because it is ready and all parent dependencies are done or absent"
+          "why": "default#3 是 frontier：状态为 ready，且前置依赖已完成或不存在"
         }
       ]
     }
@@ -549,6 +558,105 @@ parent dependencies. It excludes `done`, `archived`, `blocked`, `running`, and
 priority descending, due date ascending with nulls last, scheduled time
 ascending with nulls last, dependency fan-out descending, created time
 ascending, then task ref and id.
+
+`kanban dag ancestors <task_ref>` returns the target task plus all unarchived
+ancestor tasks reachable through parent -> child dependency edges. Ancestors are
+ordered before descendants and the target appears last. Same-level ordering
+follows the `dag show` node order where practical. Human output is
+LLM-friendly Markdown:
+
+```markdown
+# Ancestors for default#3
+
+Target: default#3 `t_target` [todo] Implement feature
+Generated at: 1717520000000
+
+## Ordered Tasks
+- [1] default#1 `t_root` [done] Root prerequisite
+- [2] default#2 `t_middle` [ready] Middle prerequisite
+- [3] default#3 `t_target` [todo] Implement feature
+
+## Dependency Edges
+- `t_root` -> `t_middle`: t_root 必须先完成，t_middle 才能执行
+- `t_middle` -> `t_target`: t_middle 必须先完成，t_target 才能执行
+```
+
+JSON output uses the standard envelope:
+
+```json
+{
+  "data": {
+    "target": {
+      "id": "t_target",
+      "ref": "default#3",
+      "seq": 3,
+      "title": "Implement feature",
+      "status": "todo",
+      "priority": 0,
+      "due_at": null,
+      "scheduled_at": null,
+      "created_at": 1717520000000,
+      "archived_at": null,
+      "why": "default#3 当前状态为 todo"
+    },
+    "nodes": [
+      {
+        "id": "t_root",
+        "ref": "default#1",
+        "seq": 1,
+        "title": "Root prerequisite",
+        "status": "done",
+        "priority": 0,
+        "due_at": null,
+        "scheduled_at": null,
+        "created_at": 1717510000000,
+        "archived_at": null,
+        "why": "default#1 当前状态为 done"
+      },
+      {
+        "id": "t_middle",
+        "ref": "default#2",
+        "seq": 2,
+        "title": "Middle prerequisite",
+        "status": "ready",
+        "priority": 0,
+        "due_at": null,
+        "scheduled_at": null,
+        "created_at": 1717515000000,
+        "archived_at": null,
+        "why": "default#2 当前状态为 ready"
+      },
+      {
+        "id": "t_target",
+        "ref": "default#3",
+        "seq": 3,
+        "title": "Implement feature",
+        "status": "todo",
+        "priority": 0,
+        "due_at": null,
+        "scheduled_at": null,
+        "created_at": 1717520000000,
+        "archived_at": null,
+        "why": "default#3 当前状态为 todo"
+      }
+    ],
+    "edges": [
+      {
+        "parent": "t_root",
+        "child": "t_middle",
+        "why": "t_root 必须先完成，t_middle 才能执行"
+      },
+      {
+        "parent": "t_middle",
+        "child": "t_target",
+        "why": "t_middle 必须先完成，t_target 才能执行"
+      }
+    ],
+    "ordered_refs": ["default#1", "default#2", "default#3"],
+    "generated_at": 1717520000000
+  }
+}
+```
 
 ---
 

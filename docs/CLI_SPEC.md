@@ -294,7 +294,11 @@ kanban task update <task_ref> [OPTIONS]
 - max_retries
 - metadata
 
-不允许通过 update 修改 status；status 必须通过 transition command。
+不允许通过 update 修改 status；status 必须通过 transition command。允许字段仍由
+command service 处理，因此修改 description、scheduled_at 等会影响 spec 或
+schedule 的字段后，服务会根据 spec、schedule 和当前 dependencies 重新计算
+active task 的目标状态并写入对应事件。Dependency edge 通过 `kanban dep`
+命令修改；`max_retries` 只更新 retry policy，不是 status recompute 触发器。
 
 Examples：
 
@@ -440,6 +444,8 @@ kanban dep list <task_ref>
 添加 dependency 后：
 
 - 如果 child 当前是 `ready` 且 parent 未完成，child 降级为 `todo`。
+- 重复添加同一 parent/child edge 是 idempotent no-op：不追加新的
+  `dependency.added` event，也不再次触发 child 状态重算。
 - 如果产生环，返回 exit code 6 或 invalid input。
 - 当前版本拒绝跨 board dependency，即使 parent/child 通过全局 `t_...` 或显式 `board#seq` 解析成功。
 

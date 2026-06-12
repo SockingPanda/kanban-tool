@@ -19,15 +19,19 @@ pub(crate) async fn add_dependency(
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
     let child = kanban_sqlite::get_task_by_id_global(state.db_path(), &child_task_id)?;
-    kanban_sqlite::add_dependency(
+    let outcome = kanban_sqlite::add_dependency_with_outcome(
         state.db_path(),
         &child.board_id,
         &actor,
         &body.parent_task_id,
         &child_task_id,
     )?;
+    let status = match outcome {
+        kanban_sqlite::AddDependencyOutcome::Added => StatusCode::CREATED,
+        kanban_sqlite::AddDependencyOutcome::AlreadyExists => StatusCode::OK,
+    };
     Ok((
-        StatusCode::CREATED,
+        status,
         Json(Envelope {
             data: dependencies_dto(&state, &child_task_id)?,
             meta: None,

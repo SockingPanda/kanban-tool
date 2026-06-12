@@ -90,6 +90,10 @@ pub fn build_desktop_router(state: AppState) -> Router {
     build_router(state).layer(desktop_cors_layer())
 }
 
+pub fn build_serve_router(state: AppState) -> Router {
+    build_router(state)
+}
+
 fn desktop_cors_layer() -> CorsLayer {
     CorsLayer::new()
         .allow_origin(AllowOrigin::list([
@@ -123,5 +127,5 @@ pub async fn serve_with_search_sync(
 ) -> std::io::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let _search_sync_task = spawn_search_sync_task(state.clone(), search_sync);
-    axum::serve(listener, build_desktop_router(state)).await
+    axum::serve(listener, build_serve_router(state)).await
 }

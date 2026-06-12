@@ -30,6 +30,7 @@ import {
 import { queryKeys } from "@/lib/query-keys"
 import { hasNextPage } from "@/lib/pagination"
 import { useDebouncedValue } from "@/lib/use-debounced-value"
+import { reconcileClaimTokenForTask, reconcileClaimTokensForTasks } from "@/lib/claim-tokens"
 
 const PAGE_SIZE = 100
 const EMPTY_TASKS: Task[] = []
@@ -99,6 +100,10 @@ function App() {
   }, [tasksQuery.dataUpdatedAt])
 
   useEffect(() => {
+    setClaimTokens((current) => reconcileClaimTokensForTasks(current, tasks, config?.actor ?? null))
+  }, [config?.actor, tasks])
+
+  useEffect(() => {
     setSelectedId((current) => reconcileSelectedTaskId(current, tasks))
   }, [tasks])
 
@@ -113,6 +118,11 @@ function App() {
   useEffect(() => {
     setDraftState((current) => reconcileTaskDraft(current, selectedTask))
   }, [selectedTask])
+
+  useEffect(() => {
+    if (!selectedTask) return
+    setClaimTokens((current) => reconcileClaimTokenForTask(current, selectedTask, config?.actor ?? null))
+  }, [config?.actor, selectedTask])
 
   useEffect(() => {
     setBlockReason("")
@@ -187,6 +197,7 @@ function App() {
         return result
       }
       if (isTask(result)) {
+        setClaimTokens((current) => reconcileClaimTokenForTask(current, result, config?.actor ?? null))
         await invalidateTaskData(result.id)
         return result
       }

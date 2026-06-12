@@ -51,6 +51,70 @@ fn claim_complete_and_dependencies_promote_children() -> anyhow::Result<()> {
 }
 
 #[test]
+fn duplicate_add_dependency_is_idempotent_noop() -> anyhow::Result<()> {
+    let temp = TempDb::new("duplicate_add_dependency_is_idempotent_noop")?;
+    init_database(&temp.path, "tester")?;
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "unfinished parent".into(),
+            description: Some("spec".into()),
+            status: Some(TaskStatus::Todo),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: None,
+            metadata_json: "{}".into(),
+        },
+    )?;
+    let child = create_task(&temp.path, "default", "tester", CreateTask::ready("child"))?;
+
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+    let child_after_first = get_task(&temp.path, "default", &child.id)?;
+    let events_after_first = list_events(&temp.path, "default", Some(&child.id))?;
+    let added_after_first = events_after_first
+        .iter()
+        .filter(|event| event.kind == "dependency.added")
+        .count();
+    let recomputed_after_first = events_after_first
+        .iter()
+        .filter(|event| event.kind == "task.recomputed")
+        .count();
+
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+
+    let child_after_second = get_task(&temp.path, "default", &child.id)?;
+    let events_after_second = list_events(&temp.path, "default", Some(&child.id))?;
+    assert_eq!(
+        list_dependencies(&temp.path, "default", &child.id)?.len(),
+        1
+    );
+    assert_eq!(child_after_second.status, child_after_first.status);
+    assert_eq!(
+        child_after_second.lock_version,
+        child_after_first.lock_version
+    );
+    assert_eq!(
+        events_after_second
+            .iter()
+            .filter(|event| event.kind == "dependency.added")
+            .count(),
+        added_after_first
+    );
+    assert_eq!(
+        events_after_second
+            .iter()
+            .filter(|event| event.kind == "task.recomputed")
+            .count(),
+        recomputed_after_first
+    );
+    Ok(())
+}
+
+#[test]
 fn block_unblock_recomputes_target_and_cycle_detection_rejects_cycles() -> anyhow::Result<()> {
     let temp = TempDb::new("block_unblock_recomputes_target_and_cycle_detection_rejects_cycles")?;
     init_database(&temp.path, "tester")?;

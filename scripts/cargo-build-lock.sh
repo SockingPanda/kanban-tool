@@ -2,38 +2,32 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LANE_SCRIPT="$ROOT/scripts/cargo-target-lane.sh"
 TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-$HOME/.cache/kanban-tool/cargo-target}"
-LOCK_FILE="$(printf '%s' "${TARGET_ROOT%/}")/.build.lock"
-DEFAULT_LANE="${KANBAN_CARGO_TARGET_LANE:-main}"
 CHILD_PID=""
 CHILD_PGID=""
 
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/cargo-build-lock.sh [--lane <lane> | --target-dir <path>] -- <command> [args...]
+  scripts/cargo-build-lock.sh -- <command> [args...]
 
 Run a Cargo build/test/check/clippy/nextest command after acquiring the
 kanban-tool local build lock. The wrapper serializes commands that write to the
-shared Cargo target root and exports CARGO_TARGET_DIR for the command.
+shared Cargo target root and exports CARGO_TARGET_DIR to that root for the
+command.
 
 Options:
-  --lane <lane>        Use one allowed lane from cargo-target-lane.sh.
-                       Default: main, unless CARGO_TARGET_DIR is already set.
-  --target-dir <path>  Use and validate an explicit allowed CARGO_TARGET_DIR.
-  -h, --help           Show this help.
+  -h, --help  Show this help.
 
 Environment:
-  CARGO_TARGET_DIR            If set, it must already be one of the allowed lanes,
-                              even when --lane or --target-dir is also passed.
-  KANBAN_CARGO_TARGET_LANE    Default lane when CARGO_TARGET_DIR is unset.
+  CARGO_TARGET_DIR            If set, it must equal the configured shared target
+                              root.
   KANBAN_CARGO_TARGET_ROOT    Override target root for local tests.
                               Default: $HOME/.cache/kanban-tool/cargo-target
 
 Examples:
   scripts/cargo-build-lock.sh -- cargo check --workspace --exclude kanban-desktop --tests
-  scripts/cargo-build-lock.sh --lane cli -- cargo nextest run -p kanban-cli --no-fail-fast
+  scripts/cargo-build-lock.sh -- cargo nextest run -p kanban-cli --no-fail-fast
 USAGE
 }
 
@@ -86,32 +80,42 @@ forward_signal() {
   exit "$exit_code"
 }
 
+normalize_path() {
+  local path="$1"
+  while [[ "$path" != "/" && "$path" == */ ]]; do
+    path="${path%/}"
+  done
+  printf '%s\n' "$path"
+}
+
+target_root() {
+  normalize_path "$TARGET_ROOT"
+}
+
+validate_inherited_target_dir() {
+  local expected="$1"
+  local actual
+
+  if [[ -z "${CARGO_TARGET_DIR:-}" ]]; then
+    return 0
+  fi
+
+  actual="$(normalize_path "$CARGO_TARGET_DIR")"
+  if [[ "$actual" != "$expected" ]]; then
+    error "CARGO_TARGET_DIR must be the kanban-tool shared target root: $expected"
+    error "got: $CARGO_TARGET_DIR"
+    return 2
+  fi
+}
+
 main() {
-  local lane_arg=""
-  local target_dir_arg=""
   local target_dir=""
-  local inherited_target_dir=""
+  local lock_file=""
   local lock_dir
   local status
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --lane)
-        if [[ $# -lt 2 ]]; then
-          error "--lane requires a value"
-          exit 2
-        fi
-        lane_arg="$2"
-        shift 2
-        ;;
-      --target-dir)
-        if [[ $# -lt 2 ]]; then
-          error "--target-dir requires a value"
-          exit 2
-        fi
-        target_dir_arg="$2"
-        shift 2
-        ;;
       -h|--help)
         usage
         exit 0
@@ -134,11 +138,6 @@ main() {
     exit 2
   fi
 
-  if [[ -n "$lane_arg" && -n "$target_dir_arg" ]]; then
-    error "use either --lane or --target-dir, not both"
-    exit 2
-  fi
-
   if ! command -v flock >/dev/null 2>&1; then
     error "flock is required for kanban-tool Cargo build locking"
     exit 1
@@ -148,21 +147,11 @@ main() {
     exit 1
   fi
 
-  if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
-    inherited_target_dir="$($LANE_SCRIPT check "$CARGO_TARGET_DIR")"
-  fi
+  target_dir="$(target_root)"
+  validate_inherited_target_dir "$target_dir"
+  lock_file="$target_dir/.build.lock"
 
-  if [[ -n "$target_dir_arg" ]]; then
-    target_dir="$($LANE_SCRIPT check "$target_dir_arg")"
-  elif [[ -n "$lane_arg" ]]; then
-    target_dir="$($LANE_SCRIPT "$lane_arg")"
-  elif [[ -n "$inherited_target_dir" ]]; then
-    target_dir="$inherited_target_dir"
-  else
-    target_dir="$($LANE_SCRIPT "$DEFAULT_LANE")"
-  fi
-
-  lock_dir="$(dirname "$LOCK_FILE")"
+  lock_dir="$(dirname "$lock_file")"
   mkdir -p "$lock_dir" "$target_dir"
 
   if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]]; then
@@ -171,9 +160,9 @@ main() {
     exit $?
   fi
 
-  exec 9>"$LOCK_FILE"
+  exec 9>"$lock_file"
   if ! flock -n 9; then
-    echo "正在等待其他构建/测试释放 Cargo target 锁：$LOCK_FILE" >&2
+    echo "正在等待其他构建/测试释放 Cargo target 锁：$lock_file" >&2
     flock 9
   fi
 

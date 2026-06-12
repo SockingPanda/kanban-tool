@@ -7,7 +7,7 @@ BIN_NAME="kanban"
 REVISION="1"
 BUILD_ARGS=()
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
-LANE_SCRIPT="$ROOT/scripts/cargo-target-lane.sh"
+TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-$HOME/.cache/kanban-tool/cargo-target}"
 
 usage() {
   cat <<'EOF'
@@ -23,7 +23,7 @@ Options:
   -h, --help                   Show this help.
 
 Outputs:
-  $(scripts/cargo-target-lane.sh cli)/release/bundle/cli/deb/*.deb
+  ${KANBAN_CARGO_TARGET_ROOT:-$HOME/.cache/kanban-tool/cargo-target}/release/bundle/cli/deb/*.deb
 EOF
 }
 
@@ -64,7 +64,10 @@ command -v cargo >/dev/null 2>&1 || { echo "error: cargo is required" >&2; exit 
 VERSION="$(cargo pkgid -p kanban-cli | sed 's/.*#//')"
 TARGET_TRIPLE="$(rustc -vV | awk '/^host:/ { print $2 }')"
 RUST_ARCH="${TARGET_TRIPLE%%-*}"
-TARGET_DIR="$("$LANE_SCRIPT" cli)/release"
+while [[ "$TARGET_ROOT" != "/" && "$TARGET_ROOT" == */ ]]; do
+  TARGET_ROOT="${TARGET_ROOT%/}"
+done
+TARGET_DIR="$TARGET_ROOT/release"
 BIN_PATH="$TARGET_DIR/$BIN_NAME"
 BUNDLE_DIR="$TARGET_DIR/bundle/cli"
 TMPDIR="$(mktemp -d)"
@@ -92,7 +95,7 @@ install_payload() {
 build_binary() {
   (
     cd "$ROOT"
-    "$LOCK" --lane cli -- cargo build -p kanban-cli --release "${BUILD_ARGS[@]}"
+    "$LOCK" -- cargo build -p kanban-cli --release "${BUILD_ARGS[@]}"
   )
   [[ -x "$BIN_PATH" ]] || { echo "error: expected binary not found: $BIN_PATH" >&2; exit 1; }
 }

@@ -56,46 +56,44 @@
 
 普通小改动默认跑受影响范围验证，不要把每个阶段都升级成全量 workspace gate。
 
-### Cargo target lane 与构建锁
+### Cargo target root 与构建锁
 
 - 并行 worktree / agent 开发时，kanban-tool 共享同一个项目级 Cargo target 根：`$HOME/.cache/kanban-tool/cargo-target`。
-- 固定允许 lane 只有 `main`、`cli`、`server`、`sqlite`、`desktop`。需要新增 lane 时，必须同时显式更新 `scripts/cargo-target-lane.sh` 和本文件。
-- 使用 `scripts/cargo-target-lane.sh <lane>` 输出允许的 `CARGO_TARGET_DIR`；使用 `scripts/cargo-target-lane.sh check <path>` 校验已有路径。
-- 不要创建 `review-*`、`retry-*`、`analysis-*`、按任务号命名或其他临时 lane；这会导致 LanceDB/DataFusion/Arrow 等依赖链重复冷编译并占用大量磁盘空间。
+- `scripts/cargo-build-lock.sh -- <command>` 会设置 `CARGO_TARGET_DIR` 为这个共享 target 根，并用同一个文件锁串行化会写 Cargo target 的命令。
 - `cargo build`、`cargo test`、`cargo check`、`cargo clippy`、`cargo nextest`、`cargo run`、Tauri build、smoke 等会写 Cargo target 的命令必须通过 `scripts/cargo-build-lock.sh -- ...` 串行化。已有构建/测试运行时，其他分支/agent 应等待。
 - 构建锁文件固定在 `$HOME/.cache/kanban-tool/cargo-target/.build.lock`。脚本会在等待时输出简洁中文提示，并在被包装命令成功、失败或中断后由本机文件锁自动释放。
-- 默认 lane 是 `main`；也可以用 `scripts/cargo-build-lock.sh --lane cli -- <command>` 等固定 lane。若已设置 `CARGO_TARGET_DIR`，脚本会先校验它是否属于允许 lane。
+- 若已设置 `CARGO_TARGET_DIR`，脚本会先校验它是否等于共享 target 根；其他路径会被拒绝，避免重复冷编译并占用大量磁盘空间。
 
 - Rust 单 crate 改动：
   - `cargo fmt --check`
-  - `scripts/cargo-build-lock.sh --lane <lane> -- cargo check -p <crate> --tests`
-  - `scripts/cargo-build-lock.sh --lane <lane> -- cargo nextest run -p <crate> --no-fail-fast <filter>` 或 `scripts/cargo-build-lock.sh --lane <lane> -- cargo test -p <crate> <filter>`
+  - `scripts/cargo-build-lock.sh -- cargo check -p <crate> --tests`
+  - `scripts/cargo-build-lock.sh -- cargo nextest run -p <crate> --no-fail-fast <filter>` 或 `scripts/cargo-build-lock.sh -- cargo test -p <crate> <filter>`
 - Rust 跨 crate 改动：
   - `cargo fmt --check`
-  - `scripts/cargo-build-lock.sh --lane main -- cargo check --workspace --exclude kanban-desktop --tests`
-  - `scripts/cargo-build-lock.sh --lane main -- cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast`
+  - `scripts/cargo-build-lock.sh -- cargo check --workspace --exclude kanban-desktop --tests`
+  - `scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast`
 - CLI / server / sqlite 测试优先使用 package 或 integration target：
-  - `scripts/cargo-build-lock.sh --lane cli -- cargo nextest run -p kanban-cli --test task --no-fail-fast`
-  - `scripts/cargo-build-lock.sh --lane server -- cargo nextest run -p kanban-server -E 'test(tasks::)' --no-fail-fast`
-  - `scripts/cargo-build-lock.sh --lane sqlite -- cargo nextest run -p kanban-sqlite -E 'test(transitions::)' --no-fail-fast`
+  - `scripts/cargo-build-lock.sh -- cargo nextest run -p kanban-cli --test task --no-fail-fast`
+  - `scripts/cargo-build-lock.sh -- cargo nextest run -p kanban-server -E 'test(tasks::)' --no-fail-fast`
+  - `scripts/cargo-build-lock.sh -- cargo nextest run -p kanban-sqlite -E 'test(transitions::)' --no-fail-fast`
 - Cargo target / 构建锁脚本改动：
   - `scripts/test-cargo-target-tools.sh`
   - `git diff --check`
 - 文档或配置小改动：
   - `git diff --check`
   - 仅运行与该配置直接相关的静态检查或 dry-run。
-- 如果本机安装了 `just`，可以使用等价命令；会写 Cargo target 的 `just` recipes 由 recipe 自身负责按内部 lane 调用 `scripts/cargo-build-lock.sh`。直接运行会写 Cargo target 的 raw `cargo` 命令时，必须显式包一层 `scripts/cargo-build-lock.sh`；`cargo fmt` 可直接运行，因为它不写 Cargo target。
+- 如果本机安装了 `just`，可以使用等价命令；会写 Cargo target 的 `just` recipes 由 recipe 自身负责调用 `scripts/cargo-build-lock.sh`。直接运行会写 Cargo target 的 raw `cargo` 命令时，必须显式包一层 `scripts/cargo-build-lock.sh`；`cargo fmt` 可直接运行，因为它不写 Cargo target。
 
 以下只用于 milestone / release / explicit full gate：
 
-- `scripts/cargo-build-lock.sh --lane main -- cargo test --workspace`
-- `scripts/cargo-build-lock.sh --lane main -- cargo clippy --workspace --all-targets -- -D warnings`
+- `scripts/cargo-build-lock.sh -- cargo test --workspace`
+- `scripts/cargo-build-lock.sh -- cargo clippy --workspace --all-targets -- -D warnings`
 - feature matrix；其中每个写 Cargo target 的 `cargo` 命令都要通过 `scripts/cargo-build-lock.sh`。
 - `pnpm --dir apps/desktop test`
 - `pnpm --dir apps/desktop typecheck`
 - `pnpm --dir apps/desktop build`
-- `scripts/cargo-build-lock.sh --lane desktop -- pnpm --dir apps/desktop tauri build`
-- `scripts/cargo-build-lock.sh --lane main -- scripts/smoke-v1-local.sh`
+- `scripts/cargo-build-lock.sh -- pnpm --dir apps/desktop tauri build`
+- `scripts/cargo-build-lock.sh -- scripts/smoke-v1-local.sh`
 
 ## Rust workspace 约定
 

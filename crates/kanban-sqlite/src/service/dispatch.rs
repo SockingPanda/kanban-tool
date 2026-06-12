@@ -48,9 +48,34 @@ pub fn dispatch_once(
             exit_code: None,
         });
     };
-    std::fs::create_dir_all(&options.log_dir).map_err(|e| KanbanError::Storage(e.to_string()))?;
     let log_path = options.log_dir.join(format!("{}.log", claim.run_id));
-    let output = run_worker_with_heartbeat(path, board, &options, &claim, &log_path)?;
+    if let Err(err) =
+        std::fs::create_dir_all(&options.log_dir).map_err(|e| KanbanError::Storage(e.to_string()))
+    {
+        recover_claimed_dispatch_failure(
+            &conn,
+            &board_id,
+            &claim,
+            &options.actor,
+            "dispatcher setup failed",
+            None,
+        )?;
+        return Err(err);
+    }
+    let output = match run_worker_with_heartbeat(path, board, &options, &claim, &log_path) {
+        Ok(output) => output,
+        Err(err) => {
+            recover_claimed_dispatch_failure(
+                &conn,
+                &board_id,
+                &claim,
+                &options.actor,
+                "dispatcher worker failed",
+                Some(&log_path),
+            )?;
+            return Err(err);
+        }
+    };
     let exit = output.status.code().unwrap_or(1);
     let fresh = get_task_by_id(&conn, &board_id, &claim.task.id)?;
     let target = if output.status.success() {
@@ -145,6 +170,39 @@ pub fn dispatch_once(
         task_id: Some(claim.task.id),
         run_id: Some(claim.run_id),
         exit_code: Some(exit),
+    })
+}
+
+fn recover_claimed_dispatch_failure(
+    conn: &Connection,
+    board_id: &str,
+    claim: &ClaimResult,
+    actor: &str,
+    reason: &str,
+    log_path: Option<&Path>,
+) -> Result<()> {
+    with_immediate_tx(conn, || {
+        ensure_board_active(conn, board_id)?;
+        let fresh = get_task_by_id(conn, board_id, &claim.task.id)?;
+        retry_running_task(
+            conn,
+            board_id,
+            &fresh,
+            actor,
+            "failed",
+            None,
+            reason,
+            SystemClock.now_ms(),
+            None,
+        )?;
+        if let Some(log_path) = log_path {
+            conn.execute(
+                "UPDATE task_runs SET log_path=?1 WHERE id=?2",
+                params![log_path.to_string_lossy(), claim.run_id],
+            )
+            .map_err(storage)?;
+        }
+        Ok(())
     })
 }
 

@@ -101,10 +101,10 @@ It always builds the release CLI binary first:
 ./scripts/package-cli-linux.sh --format deb
 ```
 
-The `.deb` is written to:
+The `.deb` is written under the locked `cli` Cargo target lane:
 
-```text
-target/release/bundle/cli/deb/
+```bash
+$(./scripts/cargo-target-lane.sh cli)/release/bundle/cli/deb/
 ```
 
 Feature flags can be passed through to the cargo build:

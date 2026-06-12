@@ -7,6 +7,7 @@ TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-$HOME/.cache/kanban-tool/cargo-target}"
 LOCK_FILE="$(printf '%s' "${TARGET_ROOT%/}")/.build.lock"
 DEFAULT_LANE="${KANBAN_CARGO_TARGET_LANE:-main}"
 CHILD_PID=""
+CHILD_PGID=""
 
 usage() {
   cat <<'USAGE'
@@ -24,7 +25,8 @@ Options:
   -h, --help           Show this help.
 
 Environment:
-  CARGO_TARGET_DIR            If set, it must already be one of the allowed lanes.
+  CARGO_TARGET_DIR            If set, it must already be one of the allowed lanes,
+                              even when --lane or --target-dir is also passed.
   KANBAN_CARGO_TARGET_LANE    Default lane when CARGO_TARGET_DIR is unset.
   KANBAN_CARGO_TARGET_ROOT    Override target root for local tests.
                               Default: $HOME/.cache/kanban-tool/cargo-target
@@ -39,12 +41,44 @@ error() {
   echo "error: $*" >&2
 }
 
+cleanup_process_group() {
+  local signal="$1"
+  local pgid="$2"
+  local i
+
+  if [[ -z "$pgid" ]]; then
+    return 0
+  fi
+
+  kill -s "$signal" -- "-$pgid" >/dev/null 2>&1 || true
+
+  for i in {1..100}; do
+    if ! kill -0 -- "-$pgid" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.02
+  done
+
+  kill -KILL -- "-$pgid" >/dev/null 2>&1 || true
+  for i in {1..100}; do
+    if ! kill -0 -- "-$pgid" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.02
+  done
+}
+
 forward_signal() {
   local signal="$1"
   local exit_code="$2"
 
   trap - INT TERM HUP
-  if [[ -n "$CHILD_PID" ]] && kill -0 "$CHILD_PID" >/dev/null 2>&1; then
+  if [[ -n "$CHILD_PGID" ]]; then
+    cleanup_process_group "$signal" "$CHILD_PGID"
+    if [[ -n "$CHILD_PID" ]]; then
+      wait "$CHILD_PID" >/dev/null 2>&1 || true
+    fi
+  elif [[ -n "$CHILD_PID" ]] && kill -0 "$CHILD_PID" >/dev/null 2>&1; then
     kill -s "$signal" "$CHILD_PID" >/dev/null 2>&1 || true
     wait "$CHILD_PID" >/dev/null 2>&1 || true
   fi
@@ -56,6 +90,7 @@ main() {
   local lane_arg=""
   local target_dir_arg=""
   local target_dir=""
+  local inherited_target_dir=""
   local lock_dir
   local status
 
@@ -108,19 +143,33 @@ main() {
     error "flock is required for kanban-tool Cargo build locking"
     exit 1
   fi
+  if ! command -v setsid >/dev/null 2>&1; then
+    error "setsid is required for kanban-tool Cargo build locking"
+    exit 1
+  fi
+
+  if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+    inherited_target_dir="$($LANE_SCRIPT check "$CARGO_TARGET_DIR")"
+  fi
 
   if [[ -n "$target_dir_arg" ]]; then
     target_dir="$($LANE_SCRIPT check "$target_dir_arg")"
   elif [[ -n "$lane_arg" ]]; then
     target_dir="$($LANE_SCRIPT "$lane_arg")"
-  elif [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
-    target_dir="$($LANE_SCRIPT check "$CARGO_TARGET_DIR")"
+  elif [[ -n "$inherited_target_dir" ]]; then
+    target_dir="$inherited_target_dir"
   else
     target_dir="$($LANE_SCRIPT "$DEFAULT_LANE")"
   fi
 
   lock_dir="$(dirname "$LOCK_FILE")"
   mkdir -p "$lock_dir" "$target_dir"
+
+  if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]]; then
+    export CARGO_TARGET_DIR="$target_dir"
+    "$@"
+    exit $?
+  fi
 
   exec 9>"$LOCK_FILE"
   if ! flock -n 9; then
@@ -129,8 +178,10 @@ main() {
   fi
 
   export CARGO_TARGET_DIR="$target_dir"
-  "$@" &
+  export KANBAN_CARGO_BUILD_LOCK_HELD=1
+  setsid "$@" &
   CHILD_PID=$!
+  CHILD_PGID=$CHILD_PID
 
   trap 'forward_signal INT 130' INT
   trap 'forward_signal TERM 143' TERM
@@ -142,6 +193,7 @@ main() {
   set -e
 
   CHILD_PID=""
+  CHILD_PGID=""
   trap - INT TERM HUP
   exit "$status"
 }

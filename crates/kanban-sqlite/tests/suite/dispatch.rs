@@ -81,6 +81,49 @@ fn dispatch_once_rejects_untrusted_log_dir_before_claiming() -> anyhow::Result<(
 }
 
 #[test]
+fn dispatch_once_recovers_post_claim_log_dir_setup_failure() -> anyhow::Result<()> {
+    let temp = TempDb::new("dispatch_once_recovers_post_claim_log_dir_setup_failure")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("log dir setup fails after claim"),
+    )?;
+    set_retry_policy(&temp.path, &task.id, 2)?;
+    let log_dir = temp.dir.join("logs");
+    std::fs::write(&log_dir, "not a directory")?;
+
+    let err = result_err(dispatch_once(
+        &temp.path,
+        "default",
+        DispatchOptions {
+            actor: "dispatcher".into(),
+            command: "printf should-not-run".into(),
+            worker_profile: "default".into(),
+            claim_ttl_ms: 300_000,
+            heartbeat_interval_ms: 30_000,
+            on_success: FinishPolicy::Done,
+            on_failure: FinishPolicy::Blocked,
+            log_dir,
+        },
+    ))?;
+
+    assert!(err.to_string().contains("storage error"), "{err}");
+    let fresh = get_task(&temp.path, "default", &task.id)?;
+    assert_eq!(fresh.status, TaskStatus::Ready);
+    assert_eq!(fresh.retry_count, 1);
+    assert!(fresh.claim_token.is_none());
+    assert!(fresh.current_run_id.is_some());
+    let runs = list_runs(&temp.path, "default", Some(&task.id))?;
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].status, "failed");
+    assert_eq!(runs[0].error.as_deref(), Some("dispatcher setup failed"));
+    assert!(runs[0].finished_at.is_some());
+    Ok(())
+}
+
+#[test]
 fn dispatch_once_does_not_claim_review_or_dependency_blocked_tasks() -> anyhow::Result<()> {
     let temp = TempDb::new("dispatch_once_does_not_claim_review_or_dependency_blocked_tasks")?;
     init_database(&temp.path, "tester")?;

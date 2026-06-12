@@ -28,11 +28,11 @@ import {
   loadRuntimeConfig,
 } from "@/lib/api"
 import { queryKeys } from "@/lib/query-keys"
-import { hasNextPage } from "@/lib/pagination"
+import { hasNextPage, hasPreviousPage, lastPageOffset } from "@/lib/pagination"
 import { useDebouncedValue } from "@/lib/use-debounced-value"
 import { reconcileClaimTokenForTask, reconcileClaimTokensForTasks } from "@/lib/claim-tokens"
 
-const PAGE_SIZE = 100
+const DEFAULT_PAGE_SIZE = 100
 const EMPTY_TASKS: Task[] = []
 
 type RunActionOptions = {
@@ -50,6 +50,7 @@ function App() {
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all")
   const [showArchived, setShowArchived] = useState(false)
   const [pageOffset, setPageOffset] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE)
   const [newTitle, setNewTitle] = useState("")
   const [newDescription, setNewDescription] = useState("")
   const [blockReason, setBlockReason] = useState("")
@@ -87,12 +88,12 @@ function App() {
     search: debouncedSearch,
     statusFilter,
     showArchived,
-    limit: PAGE_SIZE,
+    limit: rowsPerPage,
     offset: pageOffset,
   })
 
   const tasks = tasksQuery.data?.tasks ?? EMPTY_TASKS
-  const page = tasksQuery.data?.page ?? { limit: PAGE_SIZE, offset: pageOffset, total: null }
+  const page = tasksQuery.data?.page ?? { limit: rowsPerPage, offset: pageOffset, total: null }
   const searchMeta = tasksQuery.data?.searchMeta ?? null
 
   useEffect(() => {
@@ -307,7 +308,8 @@ function App() {
   }
 
   const hasNext = hasNextPage(page, tasks.length)
-  const hasPreviousPage = page.offset > 0
+  const hasPrevious = hasPreviousPage(page)
+  const lastOffset = lastPageOffset(page)
 
   return (
     <AppShell
@@ -329,7 +331,9 @@ function App() {
       page={page}
       visibleTaskCount={tasks.length}
       hasNextPage={hasNext}
-      hasPreviousPage={hasPreviousPage}
+      hasPreviousPage={hasPrevious}
+      canGoLastPage={lastOffset !== null && lastOffset !== page.offset}
+      rowsPerPage={rowsPerPage}
       newTitle={newTitle}
       newDescription={newDescription}
       blockReason={blockReason}
@@ -350,8 +354,14 @@ function App() {
       onStatusFilterChange={setStatusFilter}
       onShowArchivedChange={setShowArchived}
       onRefreshTasks={() => void tasksQuery.refetch()}
-      onPreviousPage={() => setPageOffset((current) => Math.max(0, current - PAGE_SIZE))}
-      onNextPage={() => setPageOffset((current) => current + PAGE_SIZE)}
+      onFirstPage={() => setPageOffset(0)}
+      onPreviousPage={() => setPageOffset((current) => Math.max(0, current - rowsPerPage))}
+      onNextPage={() => setPageOffset((current) => current + rowsPerPage)}
+      onLastPage={() => setPageOffset(lastOffset ?? pageOffset)}
+      onRowsPerPageChange={(value) => {
+        setRowsPerPage(value)
+        setPageOffset(0)
+      }}
       onCreateTask={(event) => void createTask(event)}
       onNewTitleChange={setNewTitle}
       onNewDescriptionChange={setNewDescription}

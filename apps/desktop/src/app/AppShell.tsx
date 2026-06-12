@@ -1,4 +1,4 @@
-import type { ElementType, FormEvent } from "react"
+import type { ElementType, FormEvent, ReactNode } from "react"
 import {
   Activity,
   Command,
@@ -14,6 +14,7 @@ import {
   SquareKanban,
   TerminalSquare,
   Plus,
+  Server,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -78,6 +79,8 @@ export function AppShell({
   visibleTaskCount,
   hasNextPage,
   hasPreviousPage,
+  canGoLastPage,
+  rowsPerPage,
   newTitle,
   newDescription,
   blockReason,
@@ -98,8 +101,11 @@ export function AppShell({
   onStatusFilterChange,
   onShowArchivedChange,
   onRefreshTasks,
+  onFirstPage,
   onPreviousPage,
   onNextPage,
+  onLastPage,
+  onRowsPerPageChange,
   onCreateTask,
   onNewTitleChange,
   onNewDescriptionChange,
@@ -136,6 +142,8 @@ export function AppShell({
   visibleTaskCount: number
   hasNextPage: boolean
   hasPreviousPage: boolean
+  canGoLastPage: boolean
+  rowsPerPage: number
   newTitle: string
   newDescription: string
   blockReason: string
@@ -156,8 +164,11 @@ export function AppShell({
   onStatusFilterChange: (value: TaskStatus | "all") => void
   onShowArchivedChange: (value: boolean) => void
   onRefreshTasks: () => void
+  onFirstPage: () => void
   onPreviousPage: () => void
   onNextPage: () => void
+  onLastPage: () => void
+  onRowsPerPageChange: (value: number) => void
   onCreateTask: (event: FormEvent) => void
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
@@ -213,6 +224,7 @@ export function AppShell({
           <section className="flex min-w-0 flex-1 flex-col">
             {showTaskExplorerToolbar ? (
               <TaskExplorerToolbar
+                view={view}
                 page={page}
                 visibleTaskCount={visibleTaskCount}
                 taskActivityLabel={taskActivityLabel}
@@ -242,6 +254,17 @@ export function AppShell({
               detail={detail}
               onSelectTask={onSelectTask}
               onDropTask={onDropTask}
+              page={page}
+              hasNextPage={hasNextPage}
+              hasPreviousPage={hasPreviousPage}
+              canGoLastPage={canGoLastPage}
+              rowsPerPage={rowsPerPage}
+              tasksRefreshing={tasksRefreshing}
+              onFirstPage={onFirstPage}
+              onPreviousPage={onPreviousPage}
+              onNextPage={onNextPage}
+              onLastPage={onLastPage}
+              onRowsPerPageChange={onRowsPerPageChange}
             />
           </section>
 
@@ -296,7 +319,7 @@ function ShellSidebar({
   onViewChange: (value: OperatorView) => void
 }) {
   return (
-    <aside className="flex w-52 shrink-0 flex-col border-r border-neutral-200 bg-[#fbfbfa]">
+    <aside className="flex w-56 shrink-0 flex-col border-r border-neutral-200 bg-[#fbfbfa]">
       <div className="flex h-14 items-center gap-2 px-4">
         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-neutral-950 text-sm font-semibold text-white">
           kb
@@ -306,16 +329,29 @@ function ShellSidebar({
           <div className="text-xs text-neutral-500">local queue</div>
         </div>
       </div>
-      <nav className="space-y-1 px-2 py-3">
-        {sidebarViews.map((item) => (
-          <NavItem
-            key={item}
-            icon={viewIcon(item)}
-            label={viewLabel(item)}
-            active={view === item}
-            onClick={() => onViewChange(item)}
-          />
-        ))}
+      <nav className="space-y-4 px-2 py-3">
+        <NavGroup label="Task Explorer">
+          {sidebarViews.filter((item) => ["board", "list", "runs", "events"].includes(item)).map((item) => (
+            <NavItem
+              key={item}
+              icon={viewIcon(item)}
+              label={viewLabel(item)}
+              active={view === item}
+              onClick={() => onViewChange(item)}
+            />
+          ))}
+        </NavGroup>
+        <NavGroup label="System">
+          {sidebarViews.filter((item) => ["maintenance", "health", "settings"].includes(item)).map((item) => (
+            <NavItem
+              key={item}
+              icon={viewIcon(item)}
+              label={viewLabel(item)}
+              active={view === item}
+              onClick={() => onViewChange(item)}
+            />
+          ))}
+        </NavGroup>
       </nav>
       <div className="mt-auto space-y-3 border-t border-neutral-200 p-3 text-xs text-neutral-500">
         <div className="flex items-center gap-2">
@@ -324,7 +360,7 @@ function ShellSidebar({
         </div>
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            <Server className="h-3.5 w-3.5" />
             API
           </span>
           <span>{config ? apiEndpointLabel(config.apiBaseUrl) : "-"}</span>
@@ -415,7 +451,7 @@ function ShellHeader({
       </label>
       <div className="ml-auto flex items-center gap-2">
         <Badge variant="secondary">actor {config?.actor ?? "-"}</Badge>
-        <Badge variant="ready">dispatcher observed</Badge>
+        <Badge variant="ready">local dispatcher</Badge>
         <Button variant="ghost" size="icon">
           <Command className="h-4 w-4" />
         </Button>
@@ -425,6 +461,7 @@ function ShellHeader({
 }
 
 function TaskExplorerToolbar({
+  view,
   page,
   visibleTaskCount,
   taskActivityLabel,
@@ -440,6 +477,7 @@ function TaskExplorerToolbar({
   onPreviousPage,
   onNextPage,
 }: {
+  view: OperatorView
   page: PageMeta
   visibleTaskCount: number
   taskActivityLabel: string
@@ -475,14 +513,16 @@ function TaskExplorerToolbar({
           {pageRangeLabel(page, visibleTaskCount)}
           {taskActivityLabel}
         </span>
-        <span className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" disabled={!hasPreviousPage || tasksRefreshing} onClick={onPreviousPage}>
-            Previous
-          </Button>
-          <Button variant="ghost" size="sm" disabled={!hasNextPage || tasksRefreshing} onClick={onNextPage}>
-            Next
-          </Button>
-        </span>
+        {view === "board" ? (
+          <span className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" disabled={!hasPreviousPage || tasksRefreshing} onClick={onPreviousPage}>
+              Previous
+            </Button>
+            <Button variant="ghost" size="sm" disabled={!hasNextPage || tasksRefreshing} onClick={onNextPage}>
+              Next
+            </Button>
+          </span>
+        ) : null}
       </div>
     </>
   )
@@ -500,6 +540,17 @@ function MainView({
   detail,
   onSelectTask,
   onDropTask,
+  page,
+  hasNextPage,
+  hasPreviousPage,
+  canGoLastPage,
+  rowsPerPage,
+  tasksRefreshing,
+  onFirstPage,
+  onPreviousPage,
+  onNextPage,
+  onLastPage,
+  onRowsPerPageChange,
 }: {
   api: KanbanApi | null
   config: RuntimeConfig | null
@@ -512,6 +563,17 @@ function MainView({
   detail: DetailState
   onSelectTask: (taskId: string) => void
   onDropTask: (taskId: string, targetStatus: TaskStatus) => void
+  page: PageMeta
+  hasNextPage: boolean
+  hasPreviousPage: boolean
+  canGoLastPage: boolean
+  rowsPerPage: number
+  tasksRefreshing: boolean
+  onFirstPage: () => void
+  onPreviousPage: () => void
+  onNextPage: () => void
+  onLastPage: () => void
+  onRowsPerPageChange: (value: number) => void
 }) {
   if (view === "board") {
     return (
@@ -525,7 +587,26 @@ function MainView({
       />
     )
   }
-  if (view === "list") return <ListView tasks={tasks} selectedId={selectedId} onSelectTask={onSelectTask} />
+  if (view === "list") {
+    return (
+      <ListView
+        tasks={tasks}
+        selectedId={selectedId}
+        page={page}
+        hasNextPage={hasNextPage}
+        hasPreviousPage={hasPreviousPage}
+        canGoLastPage={canGoLastPage}
+        rowsPerPage={rowsPerPage}
+        tasksRefreshing={tasksRefreshing}
+        onSelectTask={onSelectTask}
+        onFirstPage={onFirstPage}
+        onPreviousPage={onPreviousPage}
+        onNextPage={onNextPage}
+        onLastPage={onLastPage}
+        onRowsPerPageChange={onRowsPerPageChange}
+      />
+    )
+  }
   if (view === "events") return <EventsView api={api} />
   if (view === "runs") return <RunsView selectedTask={selectedTask} detail={detail} />
   if (view === "maintenance") return <MaintenanceView api={api} />
@@ -582,6 +663,15 @@ function NavItem({
       <Icon className="h-4 w-4" />
       {label}
     </button>
+  )
+}
+
+function NavGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="mb-1 px-2 text-[11px] font-medium uppercase tracking-normal text-neutral-400">{label}</div>
+      <div className="space-y-1">{children}</div>
+    </div>
   )
 }
 

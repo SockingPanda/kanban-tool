@@ -4,6 +4,8 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+import { sheetContentClassName, sheetOverlayClassName } from "./sheet-motion"
+
 const Sheet = SheetPrimitive.Root
 const SheetTrigger = SheetPrimitive.Trigger
 const SheetClose = SheetPrimitive.Close
@@ -12,7 +14,7 @@ const SheetPortal = SheetPrimitive.Portal
 function SheetOverlay({ className, ...props }: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Overlay>) {
   return (
     <SheetPrimitive.Overlay
-      className={cn("fixed inset-0 z-50 bg-black/35", className)}
+      className={sheetOverlayClassName(className)}
       {...props}
     />
   )
@@ -30,8 +32,9 @@ function SheetContent({
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Content
+        data-side={side}
         className={cn(
-          "fixed z-50 flex flex-col gap-0 border-neutral-200 bg-white shadow-lg outline-none",
+          sheetContentClassName(side),
           side === "right" && "inset-y-0 right-0 h-full w-[min(560px,calc(100vw-32px))] border-l",
           side === "left" && "inset-y-0 left-0 h-full w-[min(560px,calc(100vw-32px))] border-r",
           side === "top" && "inset-x-0 top-0 max-h-[85vh] border-b",

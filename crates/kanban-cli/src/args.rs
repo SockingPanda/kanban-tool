@@ -480,6 +480,7 @@ pub(crate) enum DepCommand {
 #[derive(Debug, Subcommand)]
 pub(crate) enum DagCommand {
     Show,
+    Ancestors { task_ref: String },
 }
 
 #[derive(Debug, Args)]

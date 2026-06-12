@@ -264,11 +264,12 @@ function App() {
   }
 
   async function saveTask() {
-    if (!api || !selectedTask || !draftState) return
-    if (draftState.taskId !== selectedTask.id) return
+    if (!api || !selectedTask || !draftState) return false
+    if (draftState.taskId !== selectedTask.id) return false
+    if (!draftState.draft.title.trim()) return false
     const taskId = selectedTask.id
     const draft = draftState.draft
-    await runAction(async () => {
+    const result = await runAction(async () => {
       const updated = await api.updateTask(taskId, {
         title: draft.title.trim(),
         description: draft.description.trim() || null,
@@ -280,6 +281,11 @@ function App() {
       setDraftState((current) => reconcileSavedTaskDraft(current, updated))
       return updated
     }, { label: "save", fallbackTaskId: taskId })
+    return isTask(result)
+  }
+
+  function cancelTaskEdit() {
+    setDraftState((current) => reconcileTaskDraft(current, selectedTask, { force: true }))
   }
 
   async function addComment() {
@@ -360,6 +366,7 @@ function App() {
       onAddDependency={addDependency}
       onRemoveDependency={removeDependency}
       onSaveTask={saveTask}
+      onCancelTaskEdit={cancelTaskEdit}
       onAddComment={addComment}
     />
   )

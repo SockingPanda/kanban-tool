@@ -56,6 +56,91 @@ fn task_crud_writes_events_and_hides_archived_by_default() -> anyhow::Result<()>
 }
 
 #[test]
+fn task_create_with_invalid_max_retries_rolls_back_task_and_events() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_create_with_invalid_max_retries_rolls_back_task_and_events")?;
+    init_database(&temp.path, "tester")?;
+
+    let error = result_err(create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Invalid retry policy".into(),
+            description: Some("ready spec".into()),
+            status: None,
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: Some(0),
+            metadata_json: "{}".into(),
+        },
+    ))?;
+    assert!(error.to_string().contains("max_retries"));
+    assert!(list_tasks(&temp.path, "default", &[], false)?.is_empty());
+    assert!(
+        list_events(&temp.path, "default", None)?
+            .iter()
+            .all(|event| event.kind != "task.created")
+    );
+
+    Ok(())
+}
+
+#[test]
+fn task_update_with_invalid_max_retries_rolls_back_task_and_events() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_update_with_invalid_max_retries_rolls_back_task_and_events")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Original title".into(),
+            description: Some("ready spec".into()),
+            status: None,
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: Some(2),
+            metadata_json: "{}".into(),
+        },
+    )?;
+    let events_before = list_events(&temp.path, "default", Some(&task.id))?.len();
+
+    let error = result_err(update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        TaskPatch {
+            title: Some("Should roll back".into()),
+            description: None,
+            assignee: None,
+            priority: None,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: Some(Some(0)),
+            metadata_json: None,
+            expected_lock_version: Some(task.lock_version),
+        },
+    ))?;
+    assert!(error.to_string().contains("max_retries"));
+
+    let unchanged = get_task(&temp.path, "default", &task.id)?;
+    assert_eq!(unchanged.title, task.title);
+    assert_eq!(unchanged.max_retries, task.max_retries);
+    assert_eq!(unchanged.lock_version, task.lock_version);
+    assert_eq!(
+        list_events(&temp.path, "default", Some(&task.id))?.len(),
+        events_before
+    );
+
+    Ok(())
+}
+
+#[test]
 fn task_update_description_preserves_explicit_todo_status() -> anyhow::Result<()> {
     let temp = TempDb::new("task_update_description_preserves_explicit_todo_status")?;
     init_database(&temp.path, "tester")?;

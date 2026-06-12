@@ -23,7 +23,7 @@ Options:
   -h, --help                   Show this help.
 
 Outputs:
-  target/release/bundle/cli/deb/*.deb
+  $(scripts/cargo-target-lane.sh cli)/release/bundle/cli/deb/*.deb
 EOF
 }
 

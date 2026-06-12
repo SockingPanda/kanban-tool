@@ -163,12 +163,12 @@ describe("KanbanApi task search", () => {
   })
 
   it("uses /health outside the API v1 prefix", async () => {
-    const fetchMock = mockFetch({ data: { ok: true, db: "ok", version: "0.1.0" } })
+    const fetchMock = mockFetch({ data: { ok: true, db: "ok", version: "1.1.0" } })
     const api = new KanbanApi(runtimeConfig)
 
     const health = await api.health()
 
-    expect(health).toEqual({ ok: true, db: "ok", version: "0.1.0" })
+    expect(health).toEqual({ ok: true, db: "ok", version: "1.1.0" })
     expect(calledUrl(fetchMock).pathname).toBe("/health")
   })
 

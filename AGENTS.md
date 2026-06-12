@@ -60,6 +60,9 @@
 
 - 本仓库本地验证优先使用 `just`；会写 Cargo target 的 recipes 已经内置共享 target root 与构建锁。
 - 不要直接运行会写 Cargo target 的 raw `cargo build/test/check/clippy/nextest/run`；需要新验证入口时，先加 `just` recipe。
+- 验证、review、acceptance gate 必须在用户指定的工作树 / 目录中执行；不要为验证擅自切换到额外 worktree、临时 clone、新路径或隔离目录。
+- 不要额外设置 `KANBAN_CARGO_TARGET_ROOT`、`CARGO_TARGET_DIR` 或其它自定义 target/cache 隔离变量；使用本仓库 `just` recipes 内置的共享 target root 与构建锁。
+- 如果确实需要任何额外隔离、新路径、临时 target 或不同工作树，必须先得到用户明确授权。
 - 查看可用入口：`just --summary`。
 
 常用验证：

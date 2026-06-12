@@ -76,6 +76,45 @@ async fn transitions_claim_and_heartbeat_reject_nonpositive_ttl_with_bad_request
 }
 
 #[tokio::test]
+async fn transitions_reject_unknown_json_fields_in_mutation_bodies() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("strict json"),
+    )?;
+    let app = test.router();
+
+    let cases = [
+        ("promote", json!({"actor":"tester","actro":"typo"})),
+        (
+            "specify",
+            json!({"actor":"tester","description":"ready","descripton":"typo"}),
+        ),
+        ("complete", json!({"force":true,"summmary":"typo"})),
+        ("block", json!({"reason":"waiting","reeason":"typo"})),
+        ("archive", json!({"force":true,"froce":"typo"})),
+    ];
+
+    for (transition, body) in cases {
+        let (status, json) = post_json(
+            app.clone(),
+            &format!("/api/v1/tasks/{}/transitions/{transition}", task.id),
+            body,
+        )
+        .await?;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{transition}: {json}");
+        assert_eq!(
+            json["error"]["code"], "invalid_input",
+            "{transition}: {json}"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn transitions_heartbeat_extends_claim_and_rejects_bad_token() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();

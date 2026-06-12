@@ -4,7 +4,7 @@ pub use axum::{
     http::{HeaderValue, Request, StatusCode, header},
 };
 pub use http_body_util::BodyExt;
-pub use kanban_server::{AppState, build_desktop_router, build_router};
+pub use kanban_server::{AppState, build_desktop_router, build_router, build_serve_router};
 pub use serde_json::{Value, json};
 pub use tower::ServiceExt;
 
@@ -44,6 +44,10 @@ impl TestApp {
 
     pub fn desktop_router(&self) -> axum::Router {
         build_desktop_router(AppState::new(&self.db_path, self.default_actor.clone()))
+    }
+
+    pub fn serve_router(&self) -> axum::Router {
+        build_serve_router(AppState::new(&self.db_path, self.default_actor.clone()))
     }
 }
 

@@ -84,7 +84,7 @@
 - 文档或配置小改动：
   - `git diff --check`
   - 仅运行与该配置直接相关的静态检查或 dry-run。
-- 如果本机安装了 `just`，可以使用等价命令，但写 Cargo target 的 `just` 入口仍要通过构建锁，例如 `scripts/cargo-build-lock.sh --lane cli -- just check-p kanban-cli`。直接 `cargo` 命令仍是 canonical fallback。
+- 如果本机安装了 `just`，可以使用等价命令；会写 Cargo target 的 `just` recipes 由 recipe 自身负责按内部 lane 调用 `scripts/cargo-build-lock.sh`。直接运行会写 Cargo target 的 raw `cargo` 命令时，必须显式包一层 `scripts/cargo-build-lock.sh`；`cargo fmt` 可直接运行，因为它不写 Cargo target。
 
 以下只用于 milestone / release / explicit full gate：
 

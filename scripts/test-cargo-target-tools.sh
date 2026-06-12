@@ -112,6 +112,18 @@ assert_signal_status() {
   [[ "$status" -eq "$expected_status" ]] || fail "expected $signal wrapper status $expected_status, got $status"
 }
 
+assert_package_help_output_path() {
+  local help_output
+
+  help_output="$("$ROOT/scripts/package-cli-linux.sh" --help)"
+  [[ "$help_output" == *'$(scripts/cargo-target-lane.sh cli)/release/bundle/cli/deb/*.deb'* ]] || {
+    fail "package help does not document the locked cli lane output path"
+  }
+  [[ "$help_output" != *'target/release/bundle/cli/deb/*.deb'* ]] || {
+    fail "package help still documents the old bare target/release output path"
+  }
+}
+
 expected_cli_target="$TARGET_ROOT/cli"
 actual_cli_target="$(KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LANE_SCRIPT" cli)"
 [[ "$actual_cli_target" == "$expected_cli_target" ]] || fail "unexpected cli lane path: $actual_cli_target"
@@ -200,5 +212,6 @@ KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- "$LOCK_SCRI
 [[ -e "$outer_lock_marker" ]] || fail "nested lock-held command did not run"
 
 assert_no_bare_target_writing_cargo
+assert_package_help_output_path
 
 echo "cargo target lane and build lock tests passed"

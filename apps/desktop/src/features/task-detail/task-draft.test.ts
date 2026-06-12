@@ -74,6 +74,24 @@ describe("task draft helpers", () => {
     })
     expect(reconcileSavedTaskDraft(null, task({ id: "t_2", title: "Saved current task" }))).toBeNull()
   })
+
+  it("force-reconciles a dirty draft back to the current task for cancel", () => {
+    const current = {
+      taskId: "t_1",
+      draft: taskToDraft(task({ title: "Unsaved title", description: "Unsaved description" })),
+      dirty: true,
+    }
+
+    expect(
+      reconcileTaskDraft(current, task({ id: "t_1", title: "Server title", description: "Server description" }), {
+        force: true,
+      }),
+    ).toEqual({
+      taskId: "t_1",
+      draft: taskToDraft(task({ id: "t_1", title: "Server title", description: "Server description" })),
+      dirty: false,
+    })
+  })
 })
 
 function task(overrides: Partial<Task> = {}): Task {

@@ -599,8 +599,59 @@ JSON output uses the standard envelope:
       "archived_at": null,
       "why": "default#3 当前状态为 todo"
     },
-    "nodes": [],
-    "edges": [],
+    "nodes": [
+      {
+        "id": "t_root",
+        "ref": "default#1",
+        "seq": 1,
+        "title": "Root prerequisite",
+        "status": "done",
+        "priority": 0,
+        "due_at": null,
+        "scheduled_at": null,
+        "created_at": 1717510000000,
+        "archived_at": null,
+        "why": "default#1 当前状态为 done"
+      },
+      {
+        "id": "t_middle",
+        "ref": "default#2",
+        "seq": 2,
+        "title": "Middle prerequisite",
+        "status": "ready",
+        "priority": 0,
+        "due_at": null,
+        "scheduled_at": null,
+        "created_at": 1717515000000,
+        "archived_at": null,
+        "why": "default#2 当前状态为 ready"
+      },
+      {
+        "id": "t_target",
+        "ref": "default#3",
+        "seq": 3,
+        "title": "Implement feature",
+        "status": "todo",
+        "priority": 0,
+        "due_at": null,
+        "scheduled_at": null,
+        "created_at": 1717520000000,
+        "archived_at": null,
+        "why": "default#3 当前状态为 todo"
+      }
+    ],
+    "edges": [
+      {
+        "parent": "t_root",
+        "child": "t_middle",
+        "why": "t_root 必须先完成，t_middle 才能执行"
+      },
+      {
+        "parent": "t_middle",
+        "child": "t_target",
+        "why": "t_middle 必须先完成，t_target 才能执行"
+      }
+    ],
     "ordered_refs": ["default#1", "default#2", "default#3"],
     "generated_at": 1717520000000
   }

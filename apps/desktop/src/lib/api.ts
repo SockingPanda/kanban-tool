@@ -96,6 +96,8 @@ export type CommentRecord = {
   board_id: string
   task_id: string
   author: string
+  author_type: string
+  agent_type: string | null
   body: string
   kind: "text" | "system" | "worker"
   created_at: number

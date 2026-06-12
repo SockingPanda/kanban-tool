@@ -13,6 +13,7 @@ use crate::error::{ApiError, extractor_error, invalid_input};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct ActorBody {
     pub(crate) actor: Option<String>,
 }
@@ -38,6 +39,7 @@ pub(crate) struct ClaimBody {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct SpecifyBody {
     pub(crate) actor: Option<String>,
     pub(crate) description: Option<String>,
@@ -55,6 +57,7 @@ pub(crate) struct HeartbeatBody {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TokenBody {
     pub(crate) actor: Option<String>,
     pub(crate) claim_token: Option<String>,
@@ -75,6 +78,7 @@ pub(crate) struct ReclaimBody {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct BlockBody {
     pub(crate) actor: Option<String>,
     pub(crate) reason: String,
@@ -84,6 +88,7 @@ pub(crate) struct BlockBody {
 }
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct ArchiveBody {
     pub(crate) actor: Option<String>,
     #[serde(default)]
@@ -91,6 +96,7 @@ pub(crate) struct ArchiveBody {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct AddDependencyBody {
     pub(crate) parent_task_id: String,
     pub(crate) actor: Option<String>,

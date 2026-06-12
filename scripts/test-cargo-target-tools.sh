@@ -6,8 +6,11 @@ TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
 TARGET_ROOT="$TMPDIR/cargo-targets/kanban-tool"
-LANE_SCRIPT="$ROOT/scripts/cargo-target-lane.sh"
 LOCK_SCRIPT="$ROOT/scripts/cargo-build-lock.sh"
+REMOVED_FLAG="--la""ne"
+REMOVED_PATH_FLAG="--target-""dir"
+REMOVED_ENV="KANBAN_CARGO_TARGET_""LANE"
+REMOVED_HELPER="cargo-target-la""ne"
 
 fail() {
   echo "error: $*" >&2
@@ -84,6 +87,9 @@ assert_no_bare_target_writing_cargo() {
           fail "bare target-writing cargo command in ${file#$ROOT/}:$line_number: $line"
         fi
       fi
+      if [[ "$line" == *"$REMOVED_FLAG"* || "$line" == *"$REMOVED_ENV"* || "$line" == *"$REMOVED_HELPER"* ]]; then
+        fail "removed target split contract in ${file#$ROOT/}:$line_number: $line"
+      fi
     done < "$file"
   done
 }
@@ -95,7 +101,7 @@ assert_signal_status() {
   local pid status
 
   rm -f "$marker"
-  env --default-signal="$signal" KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- bash -c '
+  env --default-signal="$signal" KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '
     set -euo pipefail
     touch "$1"
     while true; do
@@ -116,25 +122,21 @@ assert_package_help_output_path() {
   local help_output
 
   help_output="$("$ROOT/scripts/package-cli-linux.sh" --help)"
-  [[ "$help_output" == *'$(scripts/cargo-target-lane.sh cli)/release/bundle/cli/deb/*.deb'* ]] || {
-    fail "package help does not document the locked cli lane output path"
+  [[ "$help_output" == *'${KANBAN_CARGO_TARGET_ROOT:-/media/kanban-user/Data/cargo-targets/kanban-tool}/release/bundle/cli/deb/*.deb'* ]] || {
+    fail "package help does not document the shared target root output path"
   }
-  [[ "$help_output" != *'target/release/bundle/cli/deb/*.deb'* ]] || {
-    fail "package help still documents the old bare target/release output path"
+  [[ "$help_output" != *"$REMOVED_HELPER.sh"* ]] || {
+    fail "package help still documents the removed target helper"
   }
 }
 
-expected_cli_target="$TARGET_ROOT/cli"
-actual_cli_target="$(KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LANE_SCRIPT" cli)"
-[[ "$actual_cli_target" == "$expected_cli_target" ]] || fail "unexpected cli lane path: $actual_cli_target"
+[[ ! -e "$ROOT/scripts/$REMOVED_HELPER.sh" ]] || fail "removed target helper still exists"
 
-KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LANE_SCRIPT" check "$expected_cli_target/" >/dev/null
-assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LANE_SCRIPT" review-vector
-assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LANE_SCRIPT" check "$TARGET_ROOT/review-vector"
-
-KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$TARGET_ROOT/main"
+KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT/" "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$TARGET_ROOT"
+KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TARGET_ROOT/" "$LOCK_SCRIPT" -- true
 assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TARGET_ROOT/analysis-123" "$LOCK_SCRIPT" -- true
-assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TARGET_ROOT/analysis-123" "$LOCK_SCRIPT" --lane cli -- true
+assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" "$REMOVED_FLAG" cli -- true
+assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" "$REMOVED_PATH_FLAG" "$TARGET_ROOT" -- true
 
 locked="$TMPDIR/locked"
 release="$TMPDIR/release"
@@ -142,7 +144,7 @@ first_done="$TMPDIR/first-done"
 second_done="$TMPDIR/second-done"
 wait_stderr="$TMPDIR/wait.stderr"
 
-KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- bash -c '
+KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '
   set -euo pipefail
   touch "$1"
   while [[ ! -e "$2" ]]; do
@@ -154,7 +156,7 @@ first_pid=$!
 
 wait_for_file "$locked" "first lock holder"
 
-KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- bash -c '
+KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '
   set -euo pipefail
   [[ -e "$1" ]]
   touch "$2"
@@ -171,18 +173,18 @@ wait "$second_pid"
 [[ -e "$second_done" ]] || fail "second command did not finish"
 
 set +e
-KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- bash -c 'exit 42'
+KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c 'exit 42'
 failure_status=$?
 set -e
 [[ "$failure_status" -eq 42 ]] || fail "expected wrapped command status 42, got $failure_status"
-KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- true
+KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- true
 
 assert_signal_status INT 130
 assert_signal_status HUP 129
 
 descendant_pid_file="$TMPDIR/descendant.pid"
 descendant_started="$TMPDIR/descendant-started"
-KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- bash -c '
+KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '
   set -euo pipefail
   (
     trap "" TERM
@@ -205,13 +207,13 @@ interrupted_status=$?
 set -e
 [[ "$interrupted_status" -eq 143 ]] || fail "expected interrupted wrapper status 143, got $interrupted_status"
 assert_process_exits "$descendant_pid" "long-lived descendant"
-KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- true
+KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- true
 
 outer_lock_marker="$TMPDIR/outer-lock-marker"
-KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" --lane cli -- "$LOCK_SCRIPT" --lane cli -- bash -c 'touch "$1"' _ "$outer_lock_marker"
+KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash -c 'touch "$1"' _ "$outer_lock_marker"
 [[ -e "$outer_lock_marker" ]] || fail "nested lock-held command did not run"
 
 assert_no_bare_target_writing_cargo
 assert_package_help_output_path
 
-echo "cargo target lane and build lock tests passed"
+echo "cargo target root and build lock tests passed"

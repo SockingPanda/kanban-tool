@@ -101,10 +101,10 @@ It always builds the release CLI binary first:
 ./scripts/package-cli-linux.sh --format deb
 ```
 
-The `.deb` is written under the locked `cli` Cargo target lane:
+The `.deb` is written under the shared locked Cargo target root:
 
 ```bash
-$(./scripts/cargo-target-lane.sh cli)/release/bundle/cli/deb/
+${KANBAN_CARGO_TARGET_ROOT:-/media/kanban-user/Data/cargo-targets/kanban-tool}/release/bundle/cli/deb/
 ```
 
 Feature flags can be passed through to the cargo build:

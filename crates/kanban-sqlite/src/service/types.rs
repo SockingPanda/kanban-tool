@@ -244,6 +244,15 @@ pub struct DagSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DagAncestors {
+    pub target: DagNode,
+    pub nodes: Vec<DagNode>,
+    pub edges: Vec<DagEdge>,
+    pub ordered_refs: Vec<String>,
+    pub generated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DagBoardSnapshot {
     pub id: String,
     pub slug: String,

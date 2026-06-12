@@ -22,7 +22,7 @@ pub(crate) fn handle_dep(
             print_or_json(
                 json,
                 &serde_json::json!({"parent": parent_ref, "child": child_ref}),
-                || "Dependency added".into(),
+                || format!("已添加依赖：{parent_ref} -> {child_ref}"),
             )?;
         }
         DepCommand::Remove {
@@ -33,7 +33,7 @@ pub(crate) fn handle_dep(
             print_or_json(
                 json,
                 &serde_json::json!({"parent": parent_ref, "child": child_ref}),
-                || "Dependency removed".into(),
+                || format!("已移除依赖：{parent_ref} -> {child_ref}"),
             )?;
         }
         DepCommand::List { task_ref } => {

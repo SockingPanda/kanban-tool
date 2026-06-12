@@ -316,7 +316,7 @@ pub(crate) fn run_worker_with_heartbeat(
         .map_err(|e| KanbanError::Storage(e.to_string()))?;
 
     let heartbeat_interval = Duration::from_millis(options.heartbeat_interval_ms as u64);
-    let poll_interval = heartbeat_interval.min(Duration::from_millis(10));
+    let poll_interval = heartbeat_interval.min(Duration::from_millis(250));
     let mut elapsed_since_heartbeat = Duration::ZERO;
     loop {
         match child

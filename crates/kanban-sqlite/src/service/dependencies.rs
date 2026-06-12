@@ -19,6 +19,12 @@ use rusqlite::{Connection, params};
 
 use serde_json::json;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AddDependencyOutcome {
+    Added,
+    AlreadyExists,
+}
+
 pub fn add_dependency(
     path: impl AsRef<Path>,
     board: &str,
@@ -26,6 +32,16 @@ pub fn add_dependency(
     parent_ref: &str,
     child_ref: &str,
 ) -> Result<()> {
+    add_dependency_with_outcome(path, board, actor, parent_ref, child_ref).map(|_| ())
+}
+
+pub fn add_dependency_with_outcome(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    parent_ref: &str,
+    child_ref: &str,
+) -> Result<AddDependencyOutcome> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
@@ -44,7 +60,7 @@ pub(crate) fn add_dependency_in_current_tx(
     parent: &TaskRecord,
     child: &TaskRecord,
     now: i64,
-) -> Result<()> {
+) -> Result<AddDependencyOutcome> {
     if parent.id == child.id {
         return Err(KanbanError::InvalidInput(
             "dependency cannot point to itself".into(),
@@ -65,11 +81,15 @@ pub(crate) fn add_dependency_in_current_tx(
             "cannot add incomplete dependency to running task".into(),
         ));
     }
-    conn.execute(
+    let inserted = conn
+        .execute(
         "INSERT OR IGNORE INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES (?1, ?2, ?3, ?4)",
         params![board_id, parent.id, child.id, now],
     )
-    .map_err(storage)?;
+        .map_err(storage)?;
+    if inserted == 0 {
+        return Ok(AddDependencyOutcome::AlreadyExists);
+    }
     upsert_dependency_relation(conn, &parent.id, &child.id, now)?;
     let fresh_child = get_task_by_id(conn, board_id, &child.id)?;
     if is_active_recomputable_status(fresh_child.status) {
@@ -100,7 +120,8 @@ pub(crate) fn add_dependency_in_current_tx(
         actor,
         &payload,
         now,
-    )
+    )?;
+    Ok(AddDependencyOutcome::Added)
 }
 
 pub fn remove_dependency(

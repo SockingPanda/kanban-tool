@@ -85,7 +85,7 @@ Linux 发布分为两个独立 `.deb` 包：
 Debian / Ubuntu：
 
 ```bash
-sudo apt install ./kanban-tool-cli_1.0.0-1_amd64.deb
+sudo apt install ./kanban-tool-cli_1.1.0-1_amd64.deb
 kanban --help
 ```
 

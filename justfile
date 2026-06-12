@@ -54,6 +54,18 @@ desktop-build:
 desktop-package:
     scripts/cargo-build-lock.sh -- pnpm --dir apps/desktop tauri build
 
+cli-package:
+    scripts/package-cli-linux.sh --format deb
+
+smoke:
+    scripts/smoke-v1-local.sh
+
+target-tools:
+    scripts/test-cargo-target-tools.sh
+
+diff-check:
+    git diff --check
+
 feature-p package features:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run -p {{package}} --features "{{features}}" --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test -p {{package}} --features "{{features}}"; fi
     scripts/cargo-build-lock.sh -- cargo clippy -p {{package}} --all-targets --features "{{features}}" -- -D warnings
@@ -77,5 +89,5 @@ release:
     just feature-p kanban-server tantivy-backend,graph-oxigraph,vector-lancedb
     just desktop-check
     just desktop-package
-    scripts/smoke-v1-local.sh
-    git diff --check
+    just smoke
+    just diff-check

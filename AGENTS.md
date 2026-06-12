@@ -56,44 +56,24 @@
 
 普通小改动默认跑受影响范围验证，不要把每个阶段都升级成全量 workspace gate。
 
-### Cargo target root 与构建锁
+### 默认使用 just
 
-- 并行 worktree / agent 开发时，kanban-tool 共享同一个项目级 Cargo target 根：`$HOME/.cache/kanban-tool/cargo-target`。
-- `scripts/cargo-build-lock.sh -- <command>` 会设置 `CARGO_TARGET_DIR` 为这个共享 target 根，并用同一个文件锁串行化会写 Cargo target 的命令。
-- `cargo build`、`cargo test`、`cargo check`、`cargo clippy`、`cargo nextest`、`cargo run`、Tauri build、smoke 等会写 Cargo target 的命令必须通过 `scripts/cargo-build-lock.sh -- ...` 串行化。已有构建/测试运行时，其他分支/agent 应等待。
-- 构建锁文件固定在 `$HOME/.cache/kanban-tool/cargo-target/.build.lock`。脚本会在等待时输出简洁中文提示，并在被包装命令成功、失败或中断后由本机文件锁自动释放。
-- 若已设置 `CARGO_TARGET_DIR`，脚本会先校验它是否等于共享 target 根；其他路径会被拒绝，避免重复冷编译并占用大量磁盘空间。
+- 本仓库本地验证优先使用 `just`；会写 Cargo target 的 recipes 已经内置共享 target root 与构建锁。
+- 不要直接运行会写 Cargo target 的 raw `cargo build/test/check/clippy/nextest/run`；需要新验证入口时，先加 `just` recipe。
+- 查看可用入口：`just --summary`。
 
-- Rust 单 crate 改动：
-  - `cargo fmt --check`
-  - `scripts/cargo-build-lock.sh -- cargo check -p <crate> --tests`
-  - `scripts/cargo-build-lock.sh -- cargo nextest run -p <crate> --no-fail-fast <filter>` 或 `scripts/cargo-build-lock.sh -- cargo test -p <crate> <filter>`
-- Rust 跨 crate 改动：
-  - `cargo fmt --check`
-  - `scripts/cargo-build-lock.sh -- cargo check --workspace --exclude kanban-desktop --tests`
-  - `scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast`
-- CLI / server / sqlite 测试优先使用 package 或 integration target：
-  - `scripts/cargo-build-lock.sh -- cargo nextest run -p kanban-cli --test task --no-fail-fast`
-  - `scripts/cargo-build-lock.sh -- cargo nextest run -p kanban-server -E 'test(tasks::)' --no-fail-fast`
-  - `scripts/cargo-build-lock.sh -- cargo nextest run -p kanban-sqlite -E 'test(transitions::)' --no-fail-fast`
-- Cargo target / 构建锁脚本改动：
-  - `scripts/test-cargo-target-tools.sh`
-  - `git diff --check`
-- 文档或配置小改动：
-  - `git diff --check`
-  - 仅运行与该配置直接相关的静态检查或 dry-run。
-- 如果本机安装了 `just`，可以使用等价命令；会写 Cargo target 的 `just` recipes 由 recipe 自身负责调用 `scripts/cargo-build-lock.sh`。直接运行会写 Cargo target 的 raw `cargo` 命令时，必须显式包一层 `scripts/cargo-build-lock.sh`；`cargo fmt` 可直接运行，因为它不写 Cargo target。
+常用验证：
+
+- Rust 快速检查：`just fmt`、`just check`、`just test`、`just clippy`、`just rust-fast`。
+- 单 crate：`just check-p kanban-cli`、`just test-p kanban-cli`、`just clippy-p kanban-cli`。
+- feature 组合：`just feature-p kanban-cli tantivy-backend`。
+- Desktop / Web：`just desktop-check`、`just desktop-package`、`just web-test`、`just web-typecheck`、`just web-build`。
+- CLI package 与 smoke：`just cli-package`、`just smoke`。
+- 脚本 / 文档小改动：`just target-tools`、`just diff-check`。
 
 以下只用于 milestone / release / explicit full gate：
 
-- `scripts/cargo-build-lock.sh -- cargo test --workspace`
-- `scripts/cargo-build-lock.sh -- cargo clippy --workspace --all-targets -- -D warnings`
-- feature matrix；其中每个写 Cargo target 的 `cargo` 命令都要通过 `scripts/cargo-build-lock.sh`。
-- `pnpm --dir apps/desktop test`
-- `pnpm --dir apps/desktop typecheck`
-- `pnpm --dir apps/desktop build`
-- `scripts/cargo-build-lock.sh -- pnpm --dir apps/desktop tauri build`
-- `scripts/cargo-build-lock.sh -- scripts/smoke-v1-local.sh`
+- `just release`
 
 ## Rust workspace 约定
 

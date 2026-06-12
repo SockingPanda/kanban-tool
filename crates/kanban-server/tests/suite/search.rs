@@ -20,6 +20,7 @@ async fn search_returns_hits_with_tasks_and_sqlite_status() -> anyhow::Result<()
                 priority: 0,
                 scheduled_at: None,
                 due_at: None,
+                max_retries: None,
                 metadata_json: "{}".to_owned(),
             },
         )
@@ -75,6 +76,7 @@ mod tantivy_backend {
                 priority: 0,
                 scheduled_at: None,
                 due_at: None,
+                max_retries: None,
                 metadata_json: "{}".to_owned(),
             },
         )
@@ -140,6 +142,7 @@ async fn search_treats_like_wildcards_as_literal_text() -> anyhow::Result<()> {
                 priority: 0,
                 scheduled_at: None,
                 due_at: None,
+                max_retries: None,
                 metadata_json: "{}".to_owned(),
             },
         )

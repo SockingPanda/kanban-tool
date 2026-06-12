@@ -19,6 +19,7 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
             priority: 10,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -34,6 +35,7 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -49,6 +51,7 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -64,6 +67,7 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -201,6 +205,7 @@ fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_te
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -216,6 +221,7 @@ fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_te
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -243,6 +249,7 @@ fn sqlite_search_treats_like_wildcards_and_escape_characters_as_literal_query_te
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;

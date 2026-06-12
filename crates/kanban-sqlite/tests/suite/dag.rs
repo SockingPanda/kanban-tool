@@ -117,6 +117,7 @@ fn dag_snapshot_sort_is_stable_and_uses_documented_keys() -> anyhow::Result<()> 
             priority: 2,
             scheduled_at: None,
             due_at: Some(100),
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -152,6 +153,7 @@ fn create_ready(temp: &TempDb, title: &str, priority: i64) -> anyhow::Result<Tas
             priority,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )

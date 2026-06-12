@@ -35,6 +35,7 @@ pub fn create_task_with_dependencies(
 ) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
+    validate_retry_policy(input.max_retries)?;
     let title = input.title.trim().to_owned();
     if title.is_empty() {
         return Err(KanbanError::InvalidInput("title is required".into()));
@@ -79,6 +80,16 @@ pub fn create_task_with_dependencies(
             &payload,
             now,
         )?;
+        if input.max_retries.is_some() {
+            update_retry_policy_in_current_tx(
+                &conn,
+                &board_id,
+                actor,
+                &id,
+                input.max_retries,
+                now,
+            )?;
+        }
         for parent_ref in depends_on {
             let parent = resolve_task(&conn, &board_id, parent_ref)?;
             let child = get_task_by_id(&conn, &board_id, &id)?;
@@ -97,6 +108,7 @@ pub fn update_task(
 ) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
+    validate_retry_policy(patch.max_retries.flatten())?;
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let mut task = resolve_task(&conn, &board_id, task_ref)?;
@@ -159,6 +171,9 @@ pub fn update_task(
             "{}",
             now,
         )?;
+        if let Some(max_retries) = patch.max_retries {
+            update_retry_policy_in_current_tx(&conn, &board_id, actor, &task.id, max_retries, now)?;
+        }
         get_task_by_id(&conn, &board_id, &task.id)
     })
 }
@@ -299,38 +314,54 @@ pub fn set_task_retry_policy_by_id(
     task_id: &str,
     max_retries: Option<i64>,
 ) -> Result<TaskRecord> {
+    validate_retry_policy(max_retries)?;
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        let board_id = active_board_id_for_task(&conn, task_id)?;
+        update_retry_policy_in_current_tx(&conn, &board_id, actor, task_id, max_retries, now)?;
+        get_task_by_id(&conn, &board_id, task_id)
+    })
+}
+
+fn validate_retry_policy(max_retries: Option<i64>) -> Result<()> {
     if max_retries.is_some_and(|value| value <= 0) {
         return Err(KanbanError::InvalidInput(
             "max_retries must be a positive integer".into(),
         ));
     }
-    let conn = connect_file(path.as_ref())?;
-    let now = SystemClock.now_ms();
-    with_immediate_tx(&conn, || {
-        let board_id = active_board_id_for_task(&conn, task_id)?;
-        let changed = conn
-            .execute(
-                "UPDATE tasks SET max_retries=?1, updated_at=?2, lock_version=lock_version+1 WHERE id=?3 AND board_id=?4",
-                params![max_retries, now, task_id, board_id],
-            )
-            .map_err(storage)?;
-        if changed != 1 {
-            return Err(KanbanError::InvalidTransition(
-                "retry policy update failed".into(),
-            ));
-        }
-        insert_event(
-            &conn,
-            &board_id,
-            Some(task_id),
-            None,
-            "task.retry_policy.updated",
-            actor,
-            &json!({ "max_retries": max_retries }).to_string(),
-            now,
-        )?;
-        get_task_by_id(&conn, &board_id, task_id)
-    })
+    Ok(())
+}
+
+fn update_retry_policy_in_current_tx(
+    conn: &Connection,
+    board_id: &str,
+    actor: &str,
+    task_id: &str,
+    max_retries: Option<i64>,
+    now: i64,
+) -> Result<()> {
+    let changed = conn
+        .execute(
+            "UPDATE tasks SET max_retries=?1, updated_at=?2, lock_version=lock_version+1 WHERE id=?3 AND board_id=?4",
+            params![max_retries, now, task_id, board_id],
+        )
+        .map_err(storage)?;
+    if changed != 1 {
+        return Err(KanbanError::InvalidTransition(
+            "retry policy update failed".into(),
+        ));
+    }
+    insert_event(
+        conn,
+        board_id,
+        Some(task_id),
+        None,
+        "task.retry_policy.updated",
+        actor,
+        &json!({ "max_retries": max_retries }).to_string(),
+        now,
+    )
 }
 
 pub(crate) fn task_query_where(board_id: &str, options: &TaskListOptions) -> (String, Vec<Value>) {

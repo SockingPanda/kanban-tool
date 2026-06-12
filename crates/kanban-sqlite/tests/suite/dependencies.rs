@@ -107,6 +107,7 @@ fn add_dependency_rolls_back_edge_and_status_when_event_insert_fails() -> anyhow
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -152,6 +153,7 @@ fn remove_dependency_recomputes_child_to_ready_when_unblocked() -> anyhow::Resul
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -196,6 +198,7 @@ fn adding_incomplete_parent_to_running_child_is_rejected_without_force() -> anyh
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -240,6 +243,7 @@ fn add_dependency_reloads_child_inside_transaction_before_demoting_ready() -> an
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -290,6 +294,7 @@ fn promote_task_reloads_dependencies_inside_transaction() -> anyhow::Result<()> 
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -305,6 +310,7 @@ fn promote_task_reloads_dependencies_inside_transaction() -> anyhow::Result<()> 
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;

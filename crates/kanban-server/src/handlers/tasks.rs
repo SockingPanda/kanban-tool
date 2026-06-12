@@ -127,23 +127,16 @@ pub(crate) async fn create_task(
         priority: body.priority,
         scheduled_at: body.scheduled_at,
         due_at: body.due_at,
+        max_retries: body.max_retries,
         metadata_json: metadata_json(body.metadata)?,
     };
-    let mut task = kanban_sqlite::create_task_with_dependencies(
+    let task = kanban_sqlite::create_task_with_dependencies(
         state.db_path(),
         &board,
         &actor,
         input,
         &body.depends_on,
     )?;
-    if body.max_retries.is_some() {
-        task = kanban_sqlite::set_task_retry_policy_by_id(
-            state.db_path(),
-            &actor,
-            &task.id,
-            body.max_retries,
-        )?;
-    }
     Ok((
         StatusCode::CREATED,
         Json(Envelope {
@@ -184,16 +177,9 @@ pub(crate) async fn update_task(
     let body_actor = object.get("actor").and_then(|value| value.as_str());
     let actor = actor(body_actor, &headers, &state);
     let retry_policy = retry_policy_from_value(object)?;
-    let patch = patch_from_value(object)?;
-    let mut task = kanban_sqlite::update_task_by_id(state.db_path(), &actor, &task_id, patch)?;
-    if let Some(max_retries) = retry_policy {
-        task = kanban_sqlite::set_task_retry_policy_by_id(
-            state.db_path(),
-            &actor,
-            &task_id,
-            max_retries,
-        )?;
-    }
+    let mut patch = patch_from_value(object)?;
+    patch.max_retries = retry_policy;
+    let task = kanban_sqlite::update_task_by_id(state.db_path(), &actor, &task_id, patch)?;
     Ok(Json(Envelope {
         data: TaskDto::from(task),
         meta: None,

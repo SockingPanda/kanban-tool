@@ -16,6 +16,7 @@ fn context_broker_hydrates_subject_and_reports_disabled_derived_stores() -> anyh
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -31,6 +32,7 @@ fn context_broker_hydrates_subject_and_reports_disabled_derived_stores() -> anyh
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;

@@ -37,6 +37,7 @@ async fn context_graph_and_vector_apis_return_default_fallbacks() -> anyhow::Res
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".to_owned(),
         },
     )
@@ -141,6 +142,7 @@ async fn context_api_degrades_when_configured_vector_store_construction_fails() 
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".to_owned(),
         },
     )

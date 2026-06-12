@@ -63,6 +63,7 @@ async fn tasks_creates_task_with_dependencies_and_degrades_ready_to_todo() -> an
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".to_owned(),
         },
     )
@@ -117,6 +118,41 @@ async fn tasks_create_with_missing_dependency_rolls_back_task() -> anyhow::Resul
     assert_eq!(json["error"]["code"], "not_found");
     let tasks = kanban_sqlite::list_tasks(&db_path, "default", &[], false).context("tasks")?;
     assert!(tasks.iter().all(|task| task.title != "must not persist"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn tasks_create_with_invalid_max_retries_rolls_back_task_and_events() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let before_events = kanban_sqlite::list_events(&db_path, "default", None)?.len();
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app,
+        "/api/v1/boards/default/tasks",
+        json!({
+            "title": "invalid retry create",
+            "description": "ready spec",
+            "max_retries": 0
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    let tasks = kanban_sqlite::list_tasks(&db_path, "default", &[], false).context("tasks")?;
+    assert!(
+        tasks
+            .iter()
+            .all(|task| task.title != "invalid retry create"),
+        "invalid create must not persist task"
+    );
+    let after_events = kanban_sqlite::list_events(&db_path, "default", None)?.len();
+    assert_eq!(
+        after_events, before_events,
+        "invalid create must not write events"
+    );
     Ok(())
 }
 
@@ -240,6 +276,7 @@ async fn tasks_lists_with_single_status_filter() -> anyhow::Result<()> {
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".to_owned(),
         },
     )
@@ -288,6 +325,7 @@ async fn tasks_lists_with_repeated_status_filters() -> anyhow::Result<()> {
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".to_owned(),
         },
     )
@@ -378,6 +416,7 @@ async fn tasks_lists_with_assignee_search_sort_and_rejects_label_filter() -> any
                 priority,
                 scheduled_at: None,
                 due_at: None,
+                max_retries: None,
                 metadata_json: "{}".to_owned(),
             },
         )
@@ -623,6 +662,44 @@ async fn tasks_patch_future_scheduled_at_recomputes_status_to_scheduled() -> any
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["scheduled_at"], scheduled_at);
     assert_eq!(json["data"]["status"], "scheduled");
+    Ok(())
+}
+
+#[tokio::test]
+async fn tasks_patch_with_invalid_max_retries_rolls_back_task_and_events() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("before invalid retry patch"),
+    )
+    .context("task")?;
+    let before_events = kanban_sqlite::list_events(&db_path, "default", Some(&task.id))?.len();
+    let app = test.router();
+
+    let (status, json) = patch_json(
+        app,
+        &format!("/api/v1/tasks/{}", task.id),
+        json!({
+            "title": "after invalid retry patch",
+            "max_retries": 0
+        }),
+        None,
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    let fresh = kanban_sqlite::get_task(&db_path, "default", &task.id)?;
+    assert_eq!(fresh.title, "before invalid retry patch");
+    assert_eq!(fresh.lock_version, task.lock_version);
+    let after_events = kanban_sqlite::list_events(&db_path, "default", Some(&task.id))?.len();
+    assert_eq!(
+        after_events, before_events,
+        "invalid patch must not write events"
+    );
     Ok(())
 }
 

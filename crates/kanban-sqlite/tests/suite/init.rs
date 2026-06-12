@@ -7,7 +7,7 @@ fn init_creates_schema_default_board_and_columns() -> anyhow::Result<()> {
     let result = init_database(&temp.path, "test-actor")?;
 
     assert_eq!(result.board_slug, "default");
-    let conn = Connection::open(&temp.path)?;
+    let conn = connect_file(&temp.path)?;
     let integrity: String = conn.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
     assert_eq!(integrity, "ok");
     let board_count: i64 = conn.query_row(
@@ -38,7 +38,7 @@ fn init_is_idempotent() -> anyhow::Result<()> {
     init_database(&temp.path, "first")?;
     init_database(&temp.path, "second")?;
 
-    let conn = Connection::open(&temp.path)?;
+    let conn = connect_file(&temp.path)?;
     let board_count: i64 = conn.query_row("SELECT COUNT(*) FROM boards", [], |row| row.get(0))?;
     let column_count: i64 =
         conn.query_row("SELECT COUNT(*) FROM board_columns", [], |row| row.get(0))?;
@@ -151,5 +151,61 @@ fn init_upgrades_v1_database_and_backfills_task_entities() -> anyhow::Result<()>
         |row| row.get(0),
     )?;
     assert_eq!(task_entity_title, "Upgrade task");
+    Ok(())
+}
+
+#[test]
+fn init_backfill_preserves_existing_entity_relations() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_backfill_preserves_existing_entity_relations")?;
+
+    init_database(&temp.path, "tester")?;
+    let first = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("relation subject"),
+    )?;
+    let second = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("relation object"),
+    )?;
+
+    let conn = Connection::open(&temp.path)?;
+    conn.execute(
+        "INSERT INTO entity_relations(subject_uri, predicate, object_uri, graph_uri, authoritative_store, source_table, source_id, source_event_id, metadata_json, created_at, updated_at) \
+         VALUES (?1, 'related_to', ?2, 'kb://graph/indexed', 'graph', 'test', 'relation-1', NULL, '{}', 10, 10)",
+        params![
+            format!("kb://task/{}", first.id),
+            format!("kb://task/{}", second.id)
+        ],
+    )?;
+    let first_entity_rowid: i64 = conn.query_row(
+        "SELECT rowid FROM entities WHERE uri=?1",
+        [format!("kb://task/{}", first.id)],
+        |row| row.get(0),
+    )?;
+    drop(conn);
+
+    init_database(&temp.path, "tester")?;
+
+    let conn = Connection::open(&temp.path)?;
+    let refreshed_first_entity_rowid: i64 = conn.query_row(
+        "SELECT rowid FROM entities WHERE uri=?1",
+        [format!("kb://task/{}", first.id)],
+        |row| row.get(0),
+    )?;
+    assert_eq!(refreshed_first_entity_rowid, first_entity_rowid);
+    let relation_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM entity_relations \
+         WHERE subject_uri=?1 AND predicate='related_to' AND object_uri=?2",
+        params![
+            format!("kb://task/{}", first.id),
+            format!("kb://task/{}", second.id)
+        ],
+        |row| row.get(0),
+    )?;
+    assert_eq!(relation_count, 1);
     Ok(())
 }

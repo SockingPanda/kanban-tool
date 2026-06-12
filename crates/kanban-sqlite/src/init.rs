@@ -287,62 +287,72 @@ fn seed_derived_store_state(conn: &Connection, now: i64) -> Result<()> {
 
 fn backfill_entities(conn: &Connection) -> Result<()> {
     conn.execute(
-        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
-         SELECT 'kb://board/' || id, 'board', 'boards', id, id, NULL, name, description, NULL, created_at, updated_at, archived_at FROM boards",
+        "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://board/' || id, 'board', 'boards', id, id, NULL, name, description, NULL, created_at, updated_at, archived_at FROM boards WHERE true \
+         ON CONFLICT(uri) DO UPDATE SET kind=excluded.kind, source_table=excluded.source_table, source_id=excluded.source_id, board_id=excluded.board_id, task_id=excluded.task_id, title=excluded.title, summary=excluded.summary, content_hash=excluded.content_hash, updated_at=excluded.updated_at, archived_at=excluded.archived_at",
         [],
     )
     .map_err(|err| KanbanError::Storage(err.to_string()))?;
     conn.execute(
-        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
-         SELECT 'kb://column/' || id, 'column', 'board_columns', id, board_id, NULL, title, status, NULL, created_at, updated_at, NULL FROM board_columns",
+        "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://column/' || id, 'column', 'board_columns', id, board_id, NULL, title, status, NULL, created_at, updated_at, NULL FROM board_columns WHERE true \
+         ON CONFLICT(uri) DO UPDATE SET kind=excluded.kind, source_table=excluded.source_table, source_id=excluded.source_id, board_id=excluded.board_id, task_id=excluded.task_id, title=excluded.title, summary=excluded.summary, content_hash=excluded.content_hash, updated_at=excluded.updated_at, archived_at=excluded.archived_at",
         [],
     )
     .map_err(|err| KanbanError::Storage(err.to_string()))?;
     conn.execute(
-        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
-         SELECT 'kb://task/' || id, 'task', 'tasks', id, board_id, id, title, description, NULL, created_at, updated_at, archived_at FROM tasks",
+        "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://task/' || id, 'task', 'tasks', id, board_id, id, title, description, NULL, created_at, updated_at, archived_at FROM tasks WHERE true \
+         ON CONFLICT(uri) DO UPDATE SET kind=excluded.kind, source_table=excluded.source_table, source_id=excluded.source_id, board_id=excluded.board_id, task_id=excluded.task_id, title=excluded.title, summary=excluded.summary, content_hash=excluded.content_hash, updated_at=excluded.updated_at, archived_at=excluded.archived_at",
         [],
     )
     .map_err(|err| KanbanError::Storage(err.to_string()))?;
     conn.execute(
-        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
-         SELECT 'kb://run/' || id, 'run', 'task_runs', id, board_id, task_id, id, COALESCE(summary, error), NULL, started_at, COALESCE(finished_at, last_heartbeat_at, started_at), NULL FROM task_runs",
+        "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://run/' || id, 'run', 'task_runs', id, board_id, task_id, id, COALESCE(summary, error), NULL, started_at, COALESCE(finished_at, last_heartbeat_at, started_at), NULL FROM task_runs WHERE true \
+         ON CONFLICT(uri) DO UPDATE SET kind=excluded.kind, source_table=excluded.source_table, source_id=excluded.source_id, board_id=excluded.board_id, task_id=excluded.task_id, title=excluded.title, summary=excluded.summary, content_hash=excluded.content_hash, updated_at=excluded.updated_at, archived_at=excluded.archived_at",
         [],
     )
     .map_err(|err| KanbanError::Storage(err.to_string()))?;
     conn.execute(
-        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
-         SELECT 'kb://event/' || event_id, 'event', 'task_events', event_id, board_id, task_id, kind, payload_json, NULL, created_at, created_at, NULL FROM task_events",
+        "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://event/' || event_id, 'event', 'task_events', event_id, board_id, task_id, kind, payload_json, NULL, created_at, created_at, NULL FROM task_events WHERE true \
+         ON CONFLICT(uri) DO UPDATE SET kind=excluded.kind, source_table=excluded.source_table, source_id=excluded.source_id, board_id=excluded.board_id, task_id=excluded.task_id, title=excluded.title, summary=excluded.summary, content_hash=excluded.content_hash, updated_at=excluded.updated_at, archived_at=excluded.archived_at",
         [],
     )
     .map_err(|err| KanbanError::Storage(err.to_string()))?;
     conn.execute(
-        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
-         SELECT 'kb://comment/' || id, 'comment', 'task_comments', id, board_id, task_id, author, body, NULL, created_at, created_at, NULL FROM task_comments",
+        "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://comment/' || id, 'comment', 'task_comments', id, board_id, task_id, author, body, NULL, created_at, created_at, NULL FROM task_comments WHERE true \
+         ON CONFLICT(uri) DO UPDATE SET kind=excluded.kind, source_table=excluded.source_table, source_id=excluded.source_id, board_id=excluded.board_id, task_id=excluded.task_id, title=excluded.title, summary=excluded.summary, content_hash=excluded.content_hash, updated_at=excluded.updated_at, archived_at=excluded.archived_at",
         [],
     )
     .map_err(|err| KanbanError::Storage(err.to_string()))?;
     conn.execute(
-        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
-         SELECT 'kb://artifact/' || id, 'attachment', 'task_attachments', id, board_id, task_id, filename, rel_path, sha256, created_at, created_at, NULL FROM task_attachments",
+        "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://artifact/' || id, 'attachment', 'task_attachments', id, board_id, task_id, filename, rel_path, sha256, created_at, created_at, NULL FROM task_attachments WHERE true \
+         ON CONFLICT(uri) DO UPDATE SET kind=excluded.kind, source_table=excluded.source_table, source_id=excluded.source_id, board_id=excluded.board_id, task_id=excluded.task_id, title=excluded.title, summary=excluded.summary, content_hash=excluded.content_hash, updated_at=excluded.updated_at, archived_at=excluded.archived_at",
         [],
     )
     .map_err(|err| KanbanError::Storage(err.to_string()))?;
     conn.execute(
-        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
-         SELECT 'kb://label/' || id, 'label', 'labels', id, board_id, NULL, name, color, NULL, created_at, updated_at, NULL FROM labels",
+        "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://label/' || id, 'label', 'labels', id, board_id, NULL, name, color, NULL, created_at, updated_at, NULL FROM labels WHERE true \
+         ON CONFLICT(uri) DO UPDATE SET kind=excluded.kind, source_table=excluded.source_table, source_id=excluded.source_id, board_id=excluded.board_id, task_id=excluded.task_id, title=excluded.title, summary=excluded.summary, content_hash=excluded.content_hash, updated_at=excluded.updated_at, archived_at=excluded.archived_at",
         [],
     )
     .map_err(|err| KanbanError::Storage(err.to_string()))?;
     conn.execute(
-        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
-         SELECT 'kb://task-label/' || task_id || '/' || label_id, 'task_label', 'task_labels', task_id || ':' || label_id, board_id, task_id, label_id, NULL, NULL, created_at, created_at, NULL FROM task_labels",
+        "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://task-label/' || task_id || '/' || label_id, 'task_label', 'task_labels', task_id || ':' || label_id, board_id, task_id, label_id, NULL, NULL, created_at, created_at, NULL FROM task_labels WHERE true \
+         ON CONFLICT(uri) DO UPDATE SET kind=excluded.kind, source_table=excluded.source_table, source_id=excluded.source_id, board_id=excluded.board_id, task_id=excluded.task_id, title=excluded.title, summary=excluded.summary, content_hash=excluded.content_hash, updated_at=excluded.updated_at, archived_at=excluded.archived_at",
         [],
     )
     .map_err(|err| KanbanError::Storage(err.to_string()))?;
     conn.execute(
-        "INSERT OR REPLACE INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
-         SELECT 'kb://setting/' || key, 'setting', 'app_settings', key, NULL, NULL, key, value_json, NULL, updated_at, updated_at, NULL FROM app_settings",
+        "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) \
+         SELECT 'kb://setting/' || key, 'setting', 'app_settings', key, NULL, NULL, key, value_json, NULL, updated_at, updated_at, NULL FROM app_settings WHERE true \
+         ON CONFLICT(uri) DO UPDATE SET kind=excluded.kind, source_table=excluded.source_table, source_id=excluded.source_id, board_id=excluded.board_id, task_id=excluded.task_id, title=excluded.title, summary=excluded.summary, content_hash=excluded.content_hash, updated_at=excluded.updated_at, archived_at=excluded.archived_at",
         [],
     )
     .map_err(|err| KanbanError::Storage(err.to_string()))?;

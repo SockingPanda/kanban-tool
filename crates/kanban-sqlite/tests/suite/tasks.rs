@@ -17,6 +17,7 @@ fn task_crud_writes_events_and_hides_archived_by_default() -> anyhow::Result<()>
             priority: 10,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -40,6 +41,7 @@ fn task_crud_writes_events_and_hides_archived_by_default() -> anyhow::Result<()>
             priority: Some(20),
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: None,
             expected_lock_version: Some(task.lock_version),
         },
@@ -70,6 +72,7 @@ fn task_update_description_preserves_explicit_todo_status() -> anyhow::Result<()
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -89,6 +92,7 @@ fn task_update_description_preserves_explicit_todo_status() -> anyhow::Result<()
             priority: None,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: None,
             expected_lock_version: None,
         },

@@ -17,6 +17,7 @@ fn explicit_ready_create_requires_ready_prerequisites() -> anyhow::Result<()> {
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     ))?;
@@ -40,6 +41,7 @@ fn explicit_ready_create_requires_ready_prerequisites() -> anyhow::Result<()> {
             priority: 0,
             scheduled_at: Some(now_ms() + 60_000),
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     ))?;
@@ -252,6 +254,7 @@ fn clearing_schedule_recomputes_complete_task_without_dependencies_to_ready() ->
             priority: 0,
             scheduled_at: Some(now_ms() + 3_600_000),
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -294,6 +297,7 @@ fn clearing_schedule_recomputes_incomplete_dependencies_to_todo() -> anyhow::Res
             priority: 0,
             scheduled_at: Some(now_ms() + 3_600_000),
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -330,6 +334,7 @@ fn clearing_schedule_recomputes_missing_description_to_triage() -> anyhow::Resul
             priority: 0,
             scheduled_at: Some(now_ms() + 3_600_000),
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -365,6 +370,7 @@ fn updating_description_recomputes_active_triage_to_ready() -> anyhow::Result<()
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;

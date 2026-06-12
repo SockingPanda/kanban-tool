@@ -139,6 +139,7 @@ fn dispatch_once_does_not_claim_review_or_dependency_blocked_tasks() -> anyhow::
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -250,6 +251,7 @@ fn dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming() -> anyho
             priority: 10,
             scheduled_at: Some(now - 1_000),
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -265,6 +267,7 @@ fn dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming() -> anyho
             priority: 1,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;
@@ -432,6 +435,7 @@ fn todo_without_description_is_not_promoted_or_claimed_by_dispatch() -> anyhow::
             priority: 1,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".into(),
         },
     )?;

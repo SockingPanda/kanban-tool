@@ -136,6 +136,7 @@ pub struct CreateTask {
     pub priority: i64,
     pub scheduled_at: Option<i64>,
     pub due_at: Option<i64>,
+    pub max_retries: Option<i64>,
     pub metadata_json: String,
 }
 
@@ -149,6 +150,7 @@ impl CreateTask {
             priority: 0,
             scheduled_at: None,
             due_at: None,
+            max_retries: None,
             metadata_json: "{}".to_owned(),
         }
     }
@@ -162,6 +164,7 @@ pub struct TaskPatch {
     pub priority: Option<i64>,
     pub scheduled_at: Option<Option<i64>>,
     pub due_at: Option<Option<i64>>,
+    pub max_retries: Option<Option<i64>>,
     pub metadata_json: Option<String>,
     pub expected_lock_version: Option<i64>,
 }

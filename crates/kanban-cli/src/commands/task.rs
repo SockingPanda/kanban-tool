@@ -4,8 +4,7 @@ use anyhow::Result;
 use kanban_sqlite::{
     CreateTask, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListSort, TaskPatch, archive_task,
     block_task, claim_task, complete_task, create_task, get_task, heartbeat_task, list_tasks,
-    list_tasks_page, promote_task, reclaim_expired, set_task_retry_policy_by_id,
-    submit_review_task, unblock_task, update_task,
+    list_tasks_page, promote_task, reclaim_expired, submit_review_task, unblock_task, update_task,
 };
 
 use crate::args::TaskCommand;
@@ -23,7 +22,7 @@ pub(crate) fn handle_task(
 ) -> Result<()> {
     match command {
         TaskCommand::Create(args) => {
-            let mut task = create_task(
+            let task = create_task(
                 db_path,
                 board,
                 actor,
@@ -35,12 +34,10 @@ pub(crate) fn handle_task(
                     priority: args.priority,
                     scheduled_at: args.scheduled_at,
                     due_at: args.due_at,
+                    max_retries: args.max_retries,
                     metadata_json: args.metadata,
                 },
             )?;
-            if args.max_retries.is_some() {
-                task = set_task_retry_policy_by_id(db_path, actor, &task.id, args.max_retries)?;
-            }
             print_task(json, &task)?;
         }
         TaskCommand::List(args) => {
@@ -90,7 +87,7 @@ pub(crate) fn handle_task(
             print_task_with_details(json, details, &get_task(db_path, board, &task_ref)?)?
         }
         TaskCommand::Update(args) => {
-            let mut task = update_task(
+            let task = update_task(
                 db_path,
                 board,
                 actor,
@@ -106,22 +103,19 @@ pub(crate) fn handle_task(
                     priority: args.priority,
                     scheduled_at: optional_clearable(args.scheduled_at, args.clear_scheduled_at),
                     due_at: optional_clearable(args.due_at, args.clear_due_at),
+                    max_retries: if args.max_retries.is_some() || args.clear_max_retries {
+                        Some(if args.clear_max_retries {
+                            None
+                        } else {
+                            args.max_retries
+                        })
+                    } else {
+                        None
+                    },
                     metadata_json: args.metadata,
                     expected_lock_version: args.expected_lock_version,
                 },
             )?;
-            if args.max_retries.is_some() || args.clear_max_retries {
-                task = set_task_retry_policy_by_id(
-                    db_path,
-                    actor,
-                    &task.id,
-                    if args.clear_max_retries {
-                        None
-                    } else {
-                        args.max_retries
-                    },
-                )?;
-            }
             print_task(json, &task)?;
         }
         TaskCommand::Promote { task_ref } => {

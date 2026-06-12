@@ -87,12 +87,17 @@ fn dag_snapshot_reports_raw_and_derived_graph_with_frontier() -> anyhow::Result<
             excluded.title
         );
     }
+    assert!(snapshot.derived.frontier.iter().all(
+        |entry| entry.why.contains("frontier") && entry.why.contains("前置依赖已完成或不存在")
+    ));
+    assert!(snapshot.raw.nodes[0].why.contains("当前状态为"));
+    assert!(snapshot.raw.edges[0].why.contains("必须先完成"));
     assert!(
         snapshot
             .derived
-            .frontier
+            .blocked_by
             .iter()
-            .all(|entry| entry.why.contains("frontier"))
+            .any(|entry| entry.why.contains("被以下前置任务阻塞"))
     );
     Ok(())
 }
@@ -137,6 +142,68 @@ fn dag_snapshot_sort_is_stable_and_uses_documented_keys() -> anyhow::Result<()> 
     assert_eq!(node_ids[0], due.id);
     assert_eq!(node_ids[1], no_due.id);
     assert_eq!(node_ids[2], parent.id);
+    Ok(())
+}
+
+#[test]
+fn dag_ancestors_returns_topological_subset_and_excludes_archived() -> anyhow::Result<()> {
+    let temp = TempDb::new("dag_ancestors_returns_topological_subset_and_excludes_archived")?;
+    init_database(&temp.path, "tester")?;
+
+    let root = create_ready(&temp, "root", 10)?;
+    let sibling = create_ready(&temp, "sibling", 9)?;
+    let middle = create_ready(&temp, "middle", 8)?;
+    let target = create_ready(&temp, "target", 7)?;
+    let archived_parent = create_ready(&temp, "archived parent", 20)?;
+
+    add_dependency(&temp.path, "default", "tester", &root.id, &middle.id)?;
+    add_dependency(&temp.path, "default", "tester", &sibling.id, &target.id)?;
+    add_dependency(&temp.path, "default", "tester", &middle.id, &target.id)?;
+    add_dependency(
+        &temp.path,
+        "default",
+        "tester",
+        &archived_parent.id,
+        &target.id,
+    )?;
+    archive_task(&temp.path, "default", "tester", &archived_parent.id, false)?;
+
+    let ancestors = kanban_sqlite::dag_ancestors(&temp.path, "default", &target.id)?;
+
+    assert_eq!(ancestors.target.id, target.id);
+    assert_eq!(
+        ancestors
+            .nodes
+            .iter()
+            .map(|node| node.id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            root.id.as_str(),
+            sibling.id.as_str(),
+            middle.id.as_str(),
+            target.id.as_str()
+        ]
+    );
+    assert_eq!(
+        ancestors.ordered_refs,
+        ancestors
+            .nodes
+            .iter()
+            .map(|node| node.task_ref.clone())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        !ancestors
+            .nodes
+            .iter()
+            .any(|node| node.id == archived_parent.id)
+    );
+    assert!(
+        ancestors
+            .edges
+            .iter()
+            .all(|edge| edge.why.contains("必须先完成"))
+    );
     Ok(())
 }
 

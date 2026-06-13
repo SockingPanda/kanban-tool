@@ -18,16 +18,11 @@ export function selectedDependencyCountForTask(taskId: string, snapshot: Selecte
 }
 
 export function sortBoardColumnTasks(tasks: Task[], status: TaskStatus) {
-  const sorted = [...tasks]
-  if (status !== "todo") return sorted
+  if (status !== "todo") return [...tasks]
 
-  return sorted.sort((left, right) => {
-    const dependencyRank = Number(Boolean(left.dependency_blocked)) - Number(Boolean(right.dependency_blocked))
-    if (dependencyRank !== 0) return dependencyRank
-    if (left.position !== right.position) return left.position - right.position
-    if (left.created_at !== right.created_at) return left.created_at - right.created_at
-    return left.seq - right.seq
-  })
+  const unblocked = tasks.filter((task) => !task.dependency_blocked)
+  const blocked = tasks.filter((task) => task.dependency_blocked)
+  return [...unblocked, ...blocked]
 }
 
 export function dependencyBlockedTodoClass(task: Task) {

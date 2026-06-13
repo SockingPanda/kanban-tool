@@ -73,6 +73,20 @@ describe("board card state", () => {
     expect(sortBoardColumnTasks([blocked, unblocked], "todo").map((item) => item.id)).toEqual(["unblocked", "blocked"])
   })
 
+  it("preserves API order within each todo dependency rank", () => {
+    const firstBlocked = task("blocked-1", { status: "todo", dependency_blocked: true, position: 3 })
+    const firstUnblocked = task("unblocked-1", { status: "todo", dependency_blocked: false, position: 4 })
+    const secondBlocked = task("blocked-2", { status: "todo", dependency_blocked: true, position: 1 })
+    const secondUnblocked = task("unblocked-2", { status: "todo", dependency_blocked: false, position: 2 })
+
+    expect(sortBoardColumnTasks([firstBlocked, firstUnblocked, secondBlocked, secondUnblocked], "todo").map((item) => item.id)).toEqual([
+      "unblocked-1",
+      "unblocked-2",
+      "blocked-1",
+      "blocked-2",
+    ])
+  })
+
   it("does not reorder non-todo columns by dependency-blocked state", () => {
     const blocked = task("blocked", { status: "ready", dependency_blocked: true, position: 1 })
     const unblocked = task("unblocked", { status: "ready", dependency_blocked: false, position: 2 })

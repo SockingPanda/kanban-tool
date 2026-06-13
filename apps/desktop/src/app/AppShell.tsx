@@ -35,6 +35,7 @@ import { SettingsView } from "@/features/settings/SettingsView"
 import { TaskDetail } from "@/features/task-detail/TaskDetail"
 import type { DetailState } from "@/features/task-detail/detail-state"
 import type { TaskEditDraft } from "@/features/task-detail/task-draft"
+import type { SelectedDependencySnapshot } from "@/features/board/board-card-state"
 import { apiEndpointLabel, shouldShowTaskExplorerToolbar } from "@/app/shell-rules"
 import type {
   BoardColumn,
@@ -68,6 +69,7 @@ export function AppShell({
   groupedTasks,
   selectedTask,
   selectedId,
+  dependencySnapshot,
   detail,
   activeRun,
   search,
@@ -131,6 +133,7 @@ export function AppShell({
   groupedTasks: Map<TaskStatus, Task[]>
   selectedTask: Task | null
   selectedId: string | null
+  dependencySnapshot: SelectedDependencySnapshot
   detail: DetailState
   activeRun?: Run
   search: string
@@ -251,6 +254,7 @@ export function AppShell({
               groupedTasks={groupedTasks}
               selectedTask={selectedTask}
               selectedId={selectedId}
+              dependencySnapshot={dependencySnapshot}
               detail={detail}
               onSelectTask={onSelectTask}
               onDropTask={onDropTask}
@@ -537,6 +541,7 @@ function MainView({
   groupedTasks,
   selectedTask,
   selectedId,
+  dependencySnapshot,
   detail,
   onSelectTask,
   onDropTask,
@@ -560,6 +565,7 @@ function MainView({
   groupedTasks: Map<TaskStatus, Task[]>
   selectedTask: Task | null
   selectedId: string | null
+  dependencySnapshot: SelectedDependencySnapshot
   detail: DetailState
   onSelectTask: (taskId: string) => void
   onDropTask: (taskId: string, targetStatus: TaskStatus) => void
@@ -581,7 +587,7 @@ function MainView({
         columns={columns}
         groupedTasks={groupedTasks}
         selectedId={selectedTask?.id ?? selectedId ?? undefined}
-        dependencies={detail.dependencies}
+        dependencySnapshot={dependencySnapshot}
         onSelectTask={onSelectTask}
         onDropTask={onDropTask}
       />

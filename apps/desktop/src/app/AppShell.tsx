@@ -365,12 +365,12 @@ function ShellSidebar({
   onViewChange: (value: OperatorView) => void
 }) {
   return (
-    <aside className={cn("flex shrink-0 flex-col border-r border-border bg-sidebar transition-[width] duration-200", open ? "w-60" : "w-14")}>
-      <div className={cn("flex h-14 items-center gap-2 px-3", !open && "justify-center px-2")}>
+    <aside className={cn("flex shrink-0 flex-col border-r border-border bg-sidebar transition-[width] duration-200", open ? "w-60 max-sm:w-14" : "w-14")}>
+      <div className={cn("flex h-14 items-center gap-2 px-3 max-sm:justify-center max-sm:px-2", !open && "justify-center px-2")}>
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
           kb
         </div>
-        <div className={cn("min-w-0", !open && "hidden")}>
+        <div className={cn("min-w-0 max-sm:hidden", !open && "hidden")}>
           <div className="text-sm font-semibold">Kanban Tool</div>
           <div className="text-xs text-muted-foreground">local queue</div>
         </div>
@@ -401,7 +401,7 @@ function ShellSidebar({
           ))}
         </NavGroup>
       </nav>
-      <div className={cn("mt-auto space-y-3 border-t border-border p-3 text-xs text-muted-foreground", !open && "hidden")}>
+      <div className={cn("mt-auto space-y-3 border-t border-border p-3 text-xs text-muted-foreground max-sm:hidden", !open && "hidden")}>
         <div className="flex items-center gap-2">
           <Database className="h-3.5 w-3.5" />
           <span className="truncate">{config?.dbPath ?? "loading db"}</span>
@@ -771,12 +771,13 @@ function NavItem({
       className={cn(
         "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         !open && "justify-center",
+        "max-sm:justify-center",
         active && "bg-sidebar-accent text-sidebar-accent-foreground",
       )}
       onClick={onClick}
     >
       <Icon className="h-4 w-4 shrink-0" />
-      <span className={cn(!open && "sr-only")}>{label}</span>
+      <span className={cn("max-sm:sr-only", !open && "sr-only")}>{label}</span>
     </button>
   )
 }
@@ -784,7 +785,7 @@ function NavItem({
 function NavGroup({ label, open, children }: { label: string; open: boolean; children: ReactNode }) {
   return (
     <div>
-      <div className={cn("mb-1 px-2 text-[11px] font-medium uppercase tracking-normal text-muted-foreground", !open && "sr-only")}>{label}</div>
+      <div className={cn("mb-1 px-2 text-[11px] font-medium uppercase tracking-normal text-muted-foreground max-sm:sr-only", !open && "sr-only")}>{label}</div>
       <div className="space-y-1">{children}</div>
     </div>
   )

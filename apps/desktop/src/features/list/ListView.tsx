@@ -13,6 +13,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { NativeSelect } from "@/components/ui/native-select"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip } from "@/components/ui/tooltip"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -249,10 +254,10 @@ export function ListView({
             onChange={(event) => onSearchChange(event.target.value)}
           />
         </div>
-        <label className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground">
+        <Label className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1">
           Status
-          <select
-            className="bg-transparent text-foreground outline-none"
+          <NativeSelect
+            className="h-6 border-0 bg-transparent px-0"
             value={statusFilter}
             onChange={(event) => onStatusFilterChange(event.target.value as TaskStatus | "all")}
           >
@@ -262,8 +267,8 @@ export function ListView({
                 {status}
               </option>
             ))}
-          </select>
-        </label>
+          </NativeSelect>
+        </Label>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
@@ -322,52 +327,51 @@ export function ListView({
         </div>
       </div>
 
-      <div className="min-h-0 min-w-0 flex-1 overflow-auto">
-        <table className="w-full min-w-[980px] border-separate border-spacing-0 text-sm">
-          <thead className="sticky top-0 z-10 bg-muted text-xs font-medium uppercase tracking-normal text-muted-foreground">
+      <ScrollArea className="min-w-0 flex-1">
+        <Table className="min-w-[980px] border-separate border-spacing-0">
+          <TableHeader className="sticky top-0 z-10 bg-muted">
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
+              <TableRow key={headerGroup.id} className="hover:bg-transparent">
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="border-b border-border px-3 py-2 text-left font-medium">
+                  <TableHead key={header.id} className="border-b border-border">
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
+                  </TableHead>
                 ))}
-              </tr>
+              </TableRow>
             ))}
-          </thead>
-          <tbody>
+          </TableHeader>
+          <TableBody>
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <tr
+                <TableRow
                   key={row.id}
                   className={cn(
-                    "border-b border-border hover:bg-muted/60",
                     selectedId === row.original.id && "bg-muted",
                   )}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="max-w-[320px] border-b border-border px-3 py-2 align-middle">
+                    <TableCell key={cell.id} className="max-w-[320px] border-b border-border">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               ))
             ) : (
-              <tr>
-                <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={table.getAllLeafColumns().length}>
+              <TableRow>
+                <TableCell className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={table.getAllLeafColumns().length}>
                   No tasks match the current filters.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </ScrollArea>
 
       <div className="flex h-10 items-center gap-2 border-t border-border bg-card px-4 text-xs text-muted-foreground">
-        <label className="flex items-center gap-2">
+        <Label className="flex items-center gap-2">
           Rows
-          <select
-            className="rounded-md border border-border bg-background px-2 py-1 text-foreground outline-none"
+          <NativeSelect
+            className="h-7"
             value={rowsPerPage}
             onChange={(event) => onRowsPerPageChange(Number(event.target.value))}
           >
@@ -376,21 +380,25 @@ export function ListView({
                 {value}
               </option>
             ))}
-          </select>
-        </label>
+          </NativeSelect>
+        </Label>
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" size="icon" disabled={!hasPreviousPage || tasksRefreshing} onClick={onFirstPage}>
-            <ChevronsLeft className="h-4 w-4" />
-          </Button>
+          <Tooltip content="First page">
+            <Button variant="ghost" size="icon" disabled={!hasPreviousPage || tasksRefreshing} onClick={onFirstPage}>
+              <ChevronsLeft className="h-4 w-4" />
+            </Button>
+          </Tooltip>
           <Button variant="ghost" size="sm" disabled={!hasPreviousPage || tasksRefreshing} onClick={onPreviousPage}>
             Previous
           </Button>
           <Button variant="ghost" size="sm" disabled={!hasNextPage || tasksRefreshing} onClick={onNextPage}>
             Next
           </Button>
-          <Button variant="ghost" size="icon" disabled={!canGoLastPage || tasksRefreshing} onClick={onLastPage}>
-            <ChevronsRight className="h-4 w-4" />
-          </Button>
+          <Tooltip content="Last page">
+            <Button variant="ghost" size="icon" disabled={!canGoLastPage || tasksRefreshing} onClick={onLastPage}>
+              <ChevronsRight className="h-4 w-4" />
+            </Button>
+          </Tooltip>
         </div>
       </div>
     </div>

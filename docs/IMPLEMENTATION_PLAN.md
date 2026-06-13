@@ -110,19 +110,19 @@
 
 ## Phase 4：Dependencies
 
-目标：支持 parent/child 依赖和自动 promotion。
+目标：支持 parent/child 依赖和显式 manual promotion。
 
 交付：
 
 - `kanban dep add/remove/list`。
 - cycle detection。
 - dependency-aware create/promote/claim。
-- parent complete 后尝试 promote children。
+- parent complete 后不自动 promote children；child 保持 `todo`，由 derived dependency fields 表达是否仍被阻塞。
 
 验收：
 
 - child 依赖未完成 parent 时不能 ready/running。
-- parent 完成后 child 可 promotion。
+- parent 完成后 child 可被手动 promotion。
 - cycle 添加失败。
 
 测试：
@@ -130,7 +130,7 @@
 - direct cycle。
 - indirect cycle。
 - child demotion when dependency added。
-- promotion after completion。
+- manual promotion after completion。
 
 ---
 

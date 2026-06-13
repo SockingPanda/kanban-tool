@@ -35,9 +35,9 @@ pub enum TaskStatus {
 | Status | 是否可编辑 | 是否可 claim | 是否默认展示 | 是否参与 promotion | 说明 |
 |---|---:|---:|---:|---:|---|
 | `triage` | 是 | 否 | 是 | 否 | 待澄清。 |
-| `todo` | 是 | 否 | 是 | 是 | 已定义，但依赖或人工排序未 ready。 |
-| `scheduled` | 是 | 否 | 是 | 是 | 等时间到。 |
-| `ready` | 是 | 是 | 是 | 是 | 可执行。 |
+| `todo` | 是 | 否 | 是 | 否 | 已定义，但依赖未完成，或尚未被人工提升到 ready。 |
+| `scheduled` | 是 | 否 | 是 | 否 | 等时间到；到期后仍需显式 promote 才进入 ready。 |
+| `ready` | 是 | 是 | 是 | 否 | 已显式进入可执行队列。 |
 | `running` | 部分 | 否 | 是 | 否 | 正在执行。 |
 | `blocked` | 是 | 否 | 是 | 否 | 阻塞。 |
 | `review` | 是 | 否 | 是 | 否 | 待检查。 |
@@ -127,7 +127,7 @@ Side effects：
 - update status。
 - insert `task_events(kind='task.promoted')`。
 
-Promote 通常由 dispatcher 或 complete/unblock 后的 service 内部触发，也可由 CLI 手动触发：
+Promote 是显式 ready 意图，通常由人工 CLI/Web action 触发：
 
 ```bash
 kanban task promote t_xxx
@@ -213,7 +213,7 @@ Side effects：
 - clear claim fields。
 - update active run status `succeeded`。
 - insert `task_events(kind='task.completed')`。
-- 尝试 promote child tasks。
+- 不自动 promote child tasks；child 保持 `todo`，由 derived dependency state 表示是否仍被 parent 阻塞。
 
 ---
 
@@ -434,6 +434,6 @@ UI column 不是状态真相，只是展示配置。
 3. `ready -> running` 并发 claim 只有一个成功。
 4. expired claim reclaim。
 5. block/unblock 重新计算目标状态。
-6. completion 后 child promotion。
+6. completion 后 child 保持 `todo`，并清除 derived dependency-blocked state。
 7. archived task 不被 dispatcher 处理。
 8. illegal direct transition 返回 `invalid_transition`。

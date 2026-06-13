@@ -31,6 +31,27 @@ describe("KanbanApi task search", () => {
     expect(url.searchParams.getAll("status")).toEqual(["ready"])
   })
 
+  it("passes list search, priority filters, and sort to the task list endpoint", async () => {
+    const fetchMock = mockFetch({ data: [] })
+    const api = new KanbanApi(runtimeConfig)
+
+    await api.listTasks({
+      query: " dashboard ",
+      statuses: ["ready", "blocked"],
+      priorities: [0, 2],
+      sort: "priority",
+      limit: 25,
+      offset: 0,
+    })
+
+    const url = calledUrl(fetchMock)
+    expect(url.pathname).toBe("/api/v1/boards/default/tasks")
+    expect(url.searchParams.get("q")).toBe("dashboard")
+    expect(url.searchParams.get("sort")).toBe("priority")
+    expect(url.searchParams.getAll("status")).toEqual(["ready", "blocked"])
+    expect(url.searchParams.getAll("priority")).toEqual(["0", "2"])
+  })
+
   it("keeps list task pagination metadata from the response envelope", async () => {
     const fetchMock = mockFetch({
       data: [task({ id: "t_list", title: "plain list" })],

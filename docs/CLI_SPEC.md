@@ -237,7 +237,7 @@ Options：
 | `--include-archived` | 包含 archived。 |
 | `--limit <n>` | 限制数量。 |
 | `--offset <n>` | 分页偏移。 |
-| `--sort <field>` | priority/priority_desc/created/updated/position. `priority` sorts P0 -> P3; `priority_desc` sorts P3 -> P0. |
+| `--sort <field>` | `seq` / `title` / `status` / `position` / `priority` / `assignee` / `scheduled_at` / `due_at` / `created_at` / `updated_at`。降序可用 `<field>_desc`，也兼容 API 风格 `-<field>`。`priority` sorts P0 -> P3; `priority_desc` / `-priority` sorts P3 -> P0. |
 
 Examples：
 

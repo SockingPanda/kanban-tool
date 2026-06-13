@@ -8,12 +8,12 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-neutral-900 text-white ring-neutral-900",
-        secondary: "bg-neutral-100 text-neutral-700 ring-neutral-200",
-        ready: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-        running: "bg-sky-50 text-sky-700 ring-sky-200",
-        blocked: "bg-red-50 text-red-700 ring-red-200",
-        review: "bg-amber-50 text-amber-800 ring-amber-200",
+        default: "bg-primary text-primary-foreground ring-primary",
+        secondary: "bg-muted text-muted-foreground ring-border",
+        ready: "bg-[var(--status-ready-bg)] text-[var(--status-ready-fg)] ring-[var(--status-ready-ring)]",
+        running: "bg-[var(--status-running-bg)] text-[var(--status-running-fg)] ring-[var(--status-running-ring)]",
+        blocked: "bg-[var(--status-blocked-bg)] text-[var(--status-blocked-fg)] ring-[var(--status-blocked-ring)]",
+        review: "bg-[var(--status-review-bg)] text-[var(--status-review-fg)] ring-[var(--status-review-ring)]",
       },
     },
     defaultVariants: {

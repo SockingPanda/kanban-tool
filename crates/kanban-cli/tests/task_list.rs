@@ -80,6 +80,75 @@ fn task_list_supports_search_assignee_sort_limit_and_offset() -> anyhow::Result<
 }
 
 #[test]
+fn task_list_supports_expanded_table_sort_fields() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_list_supports_expanded_table_sort_fields")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "Alpha table sort",
+            "--description",
+            "ready spec",
+            "--assignee",
+            "worker-a",
+        ],
+    )?
+    .success()?;
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "Beta table sort",
+            "--description",
+            "ready spec",
+            "--assignee",
+            "worker-b",
+        ],
+    )?
+    .success()?;
+
+    let title_desc = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "list",
+            "--search",
+            "table sort",
+            "--sort",
+            "title_desc",
+        ],
+    )?
+    .success_json()?;
+    let title_data = title_desc["data"]
+        .as_array()
+        .context("expected JSON array")?;
+    assert_eq!(title_data[0]["title"], "Beta table sort");
+
+    let api_style_desc = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "list",
+            "--search",
+            "table sort",
+            "--sort=-assignee",
+        ],
+    )?
+    .success_json()?;
+    let assignee_data = api_style_desc["data"]
+        .as_array()
+        .context("expected JSON array")?;
+    assert_eq!(assignee_data[0]["assignee"], "worker-b");
+
+    Ok(())
+}
+
+#[test]
 fn task_list_command_rejects_unbounded_limit() -> anyhow::Result<()> {
     let temp = TempDb::new("task_list_command_rejects_unbounded_limit")?;
     kanban(&temp.path, &["init"])?.success()?;

@@ -62,6 +62,7 @@ pub(crate) fn handle_task(
                     board,
                     TaskListOptions {
                         statuses,
+                        priorities: vec![],
                         include_archived: args.include_archived,
                         assignee: args.assignee,
                         search: args.search,

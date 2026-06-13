@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import { useMemo, useRef } from "react"
 
 import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import type { BoardColumn as ApiBoardColumn, Task, TaskStatus } from "@/lib/api"
 import { cn, formatRelativeTime } from "@/lib/utils"
 
@@ -49,7 +50,7 @@ export function BoardView({
       }}
     >
       <div
-        className="grid min-h-0 flex-1 gap-px overflow-hidden bg-neutral-200"
+        className="grid min-h-0 flex-1 gap-px overflow-hidden bg-border"
         style={{ gridTemplateColumns: `repeat(${Math.max(1, columns.length)}, minmax(160px, 1fr))` }}
       >
         {columns.map((column) => (
@@ -98,21 +99,21 @@ function BoardColumn({
     <div
       ref={ref}
       className={cn(
-        "flex min-h-0 min-w-0 flex-col bg-[#f7f7f5]",
-        isDropTarget && "outline outline-2 outline-offset-[-2px] outline-neutral-900",
+        "flex min-h-0 min-w-0 flex-col bg-muted/60",
+        isDropTarget && "outline outline-2 outline-offset-[-2px] outline-ring",
       )}
     >
-      <div className="border-b border-neutral-200 bg-white px-3 py-2">
+      <div className="border-b border-border bg-card px-3 py-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className={cn("h-2 w-2 rounded-full", statusAccent[column.status])} />
             <span className="text-sm font-semibold">{column.title}</span>
           </div>
-          <span className="text-xs text-neutral-500">{tasks.length}</span>
+          <span className="text-xs text-muted-foreground">{tasks.length}</span>
         </div>
-        <div className="mt-0.5 text-xs text-neutral-500">{columnHints[column.status]}</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">{columnHints[column.status]}</div>
       </div>
-      <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto p-2 pb-8 scroll-pb-8">
+      <ScrollArea className="flex-1" viewportRef={parentRef} viewportClassName="p-2 pb-8 scroll-pb-8">
         <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
           {rowVirtualizer.getVirtualItems().map((virtualRow) => {
             const task = tasks[virtualRow.index]
@@ -135,7 +136,7 @@ function BoardColumn({
             )
           })}
         </div>
-      </div>
+      </ScrollArea>
     </div>
   )
 }
@@ -160,8 +161,8 @@ function TaskCard({
     <button
       ref={ref}
       className={cn(
-        "w-full rounded-md border bg-white p-2 text-left transition-colors hover:border-neutral-300",
-        selected ? "border-neutral-900 shadow-sm" : "border-neutral-200",
+        "w-full rounded-md border bg-card p-2 text-left text-card-foreground transition-colors hover:border-ring",
+        selected ? "border-ring shadow-sm" : "border-border",
         dependencyBlockedTodoClass(task),
         isDragging && "opacity-60",
       )}
@@ -171,7 +172,7 @@ function TaskCard({
         <span className={cn("mt-1.5 h-2 w-2 rounded-full", statusAccent[task.status])} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">#{task.seq} {task.title}</div>
-          <div className="mt-1 flex flex-wrap gap-1 text-xs text-neutral-500">
+          <div className="mt-1 flex flex-wrap gap-1 text-xs text-muted-foreground">
             <Badge variant="secondary" className={cn("px-1.5 py-0 text-[11px] leading-5", priorityBadgeClass(task.priority))}>
               {priorityBadgeLabel(task.priority)}
             </Badge>
@@ -180,7 +181,7 @@ function TaskCard({
             {task.status === "running" ? <span>heartbeat {formatRelativeTime(task.last_heartbeat_at)}</span> : null}
             {typeof dependencyCount === "number" ? <span>{dependencyCount} deps</span> : null}
           </div>
-          {task.status_reason ? <div className="mt-1 line-clamp-2 text-xs text-red-700">{task.status_reason}</div> : null}
+          {task.status_reason ? <div className="mt-1 line-clamp-2 text-xs text-destructive">{task.status_reason}</div> : null}
         </div>
       </div>
     </button>

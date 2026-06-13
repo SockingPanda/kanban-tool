@@ -8,7 +8,7 @@ export function sheetOverlayClassName(className?: string) {
 
 export function sheetContentClassName(side: SheetSide) {
   return cn(
-    "kb-sheet-content fixed z-50 flex flex-col gap-0 border-neutral-200 bg-white shadow-lg outline-none",
+    "kb-sheet-content fixed z-50 flex flex-col gap-0 border-border bg-card text-card-foreground shadow-lg outline-none",
     `kb-sheet-content-${side}`,
   )
 }

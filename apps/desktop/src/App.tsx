@@ -2,6 +2,15 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { AppShell } from "@/app/AppShell"
+import { parseSidebarOpen, serializeSidebarOpen, SIDEBAR_OPEN_STORAGE_KEY } from "@/app/sidebar-state"
+import {
+  applyRootTheme,
+  effectiveTheme,
+  nextThemeMode,
+  parseThemeMode,
+  THEME_STORAGE_KEY,
+  type ThemeMode,
+} from "@/app/theme"
 import { reconcileSelectedTaskId } from "@/app/task-selection"
 import { fallbackColumns } from "@/features/board/board-config"
 import { sortBoardColumnTasks } from "@/features/board/board-card-state"
@@ -9,6 +18,7 @@ import { executeDragTransition, planDragTransition } from "@/features/board/drag
 import { useBoardTasks } from "@/features/board/useBoardTasks"
 import { useEventPoller } from "@/features/events/useEventPoller"
 import type { OperatorView } from "@/features/navigation/view-types"
+import { defaultListSort, listSortToApiSort, type ListSortState } from "@/features/list/table-state"
 import { invalidateTaskDetailAndBoard } from "@/features/task-detail/detail-invalidation"
 import { taskDetailOrEmpty, useTaskDetail } from "@/features/task-detail/useTaskDetail"
 import {
@@ -46,9 +56,17 @@ function App() {
   const [config, setConfig] = useState<RuntimeConfig | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [view, setView] = useState<OperatorView>("board")
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
+    typeof window === "undefined" ? "system" : parseThemeMode(window.localStorage.getItem(THEME_STORAGE_KEY)),
+  )
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window === "undefined" ? true : parseSidebarOpen(window.localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY)),
+  )
   const [search, setSearch] = useState("")
   const debouncedSearch = useDebouncedValue(search, 250)
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all")
+  const [priorityFilters, setPriorityFilters] = useState<number[]>([])
+  const [listSort, setListSort] = useState<ListSortState>(defaultListSort)
   const [showArchived, setShowArchived] = useState(false)
   const [pageOffset, setPageOffset] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE)
@@ -69,11 +87,26 @@ function App() {
       .catch((err: unknown) => setError(errorMessage(err)))
   }, [])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const media = window.matchMedia("(prefers-color-scheme: dark)")
+    const apply = () => applyRootTheme(document.documentElement.classList, effectiveTheme(themeMode, media.matches))
+    apply()
+    window.localStorage.setItem(THEME_STORAGE_KEY, themeMode)
+    media.addEventListener("change", apply)
+    return () => media.removeEventListener("change", apply)
+  }, [themeMode])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(SIDEBAR_OPEN_STORAGE_KEY, serializeSidebarOpen(sidebarOpen))
+  }, [sidebarOpen])
+
   const api = useMemo(() => (config ? new KanbanApi(config) : null), [config])
 
   useEffect(() => {
     setPageOffset(0)
-  }, [debouncedSearch, showArchived, statusFilter])
+  }, [debouncedSearch, showArchived, statusFilter, priorityFilters, listSort])
 
   const columnsQuery = useQuery({
     enabled: Boolean(api),
@@ -88,6 +121,9 @@ function App() {
     api,
     search: debouncedSearch,
     statusFilter,
+    priorityFilters: view === "list" ? priorityFilters : [],
+    sort: view === "list" ? listSortToApiSort(listSort) : "-updated_at",
+    mode: view === "list" ? "list" : "board",
     showArchived,
     limit: rowsPerPage,
     offset: pageOffset,
@@ -329,6 +365,8 @@ function App() {
       config={config}
       api={api}
       view={view}
+      themeMode={themeMode}
+      sidebarOpen={sidebarOpen}
       columns={visibleColumns as BoardColumn[]}
       tasks={tasks}
       groupedTasks={groupedTasks}
@@ -341,6 +379,8 @@ function App() {
       debouncedSearch={debouncedSearch}
       searchMeta={searchMeta}
       statusFilter={statusFilter}
+      priorityFilters={priorityFilters}
+      listSort={listSort}
       showArchived={showArchived}
       page={page}
       visibleTaskCount={tasks.length}
@@ -365,7 +405,18 @@ function App() {
       queueCounts={queueCounts}
       onSearchChange={setSearch}
       onViewChange={setView}
+      onThemeModeChange={setThemeMode}
+      onCycleThemeMode={() => setThemeMode((current) => nextThemeMode(current))}
+      onSidebarOpenChange={setSidebarOpen}
       onStatusFilterChange={setStatusFilter}
+      onPriorityFiltersChange={setPriorityFilters}
+      onListSortChange={setListSort}
+      onResetListFilters={() => {
+        setSearch("")
+        setStatusFilter("all")
+        setPriorityFilters([])
+        setPageOffset(0)
+      }}
       onShowArchivedChange={setShowArchived}
       onRefreshTasks={() => void tasksQuery.refetch()}
       onFirstPage={() => setPageOffset(0)}

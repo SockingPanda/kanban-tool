@@ -1,8 +1,12 @@
 import { useQuery } from "@tanstack/react-query"
 import { Activity, Database, RefreshCcw } from "lucide-react"
 
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import type { KanbanApi, RuntimeConfig } from "@/lib/api"
 
 export function HealthView({ api, config }: { api: KanbanApi | null; config: RuntimeConfig | null }) {
@@ -16,11 +20,11 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
   })
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto bg-white p-4">
-      <section className="rounded-md border border-neutral-200 bg-neutral-50 p-4">
+    <ScrollArea className="flex-1 bg-card p-4">
+      <Card className="p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
-            <Activity className="h-4 w-4 text-neutral-500" />
+            <Activity className="h-4 w-4 text-muted-foreground" />
             Runtime health
           </h2>
           <Button variant="ghost" size="sm" disabled={healthQuery.isFetching} onClick={() => void healthQuery.refetch()}>
@@ -35,14 +39,18 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
             <Metric label="version" value={healthQuery.data.version} />
           </div>
         ) : (
-          <div className="text-sm text-neutral-500">{healthQuery.isLoading ? "Loading health." : "No health response."}</div>
+          healthQuery.isLoading ? <Skeleton className="h-16" /> : <div className="text-sm text-muted-foreground">No health response.</div>
         )}
-        {healthQuery.error ? <div className="mt-3 text-sm text-red-700">{healthQuery.error.message}</div> : null}
-      </section>
+        {healthQuery.error ? (
+          <Alert className="mt-3 border-destructive/50">
+            <AlertDescription className="text-destructive">{healthQuery.error.message}</AlertDescription>
+          </Alert>
+        ) : null}
+      </Card>
 
-      <section className="mt-4 rounded-md border border-neutral-200 bg-neutral-50 p-4">
+      <Card className="mt-4 p-4">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-          <Database className="h-4 w-4 text-neutral-500" />
+          <Database className="h-4 w-4 text-muted-foreground" />
           Runtime config
         </h2>
         <div className="space-y-2 text-sm">
@@ -51,25 +59,25 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
           <InfoRow label="api" value={config?.apiBaseUrl || "same-origin"} />
           <InfoRow label="db" value={config?.dbPath ?? "-"} />
         </div>
-      </section>
-    </div>
+      </Card>
+    </ScrollArea>
   )
 }
 
 function Metric({ label, value, tone = "secondary" }: { label: string; value: string; tone?: "ready" | "blocked" | "secondary" }) {
   return (
-    <div className="rounded border border-neutral-200 bg-white p-3">
-      <div className="text-xs text-neutral-500">{label}</div>
+    <Card className="p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-1"><Badge variant={tone}>{value}</Badge></div>
-    </div>
+    </Card>
   )
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-3 rounded border border-neutral-200 bg-white px-3 py-2">
-      <span className="text-neutral-500">{label}</span>
+    <Card className="flex justify-between gap-3 px-3 py-2">
+      <span className="text-muted-foreground">{label}</span>
       <span className="truncate font-medium">{value}</span>
-    </div>
+    </Card>
   )
 }

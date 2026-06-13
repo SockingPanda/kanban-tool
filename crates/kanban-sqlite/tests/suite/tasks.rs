@@ -243,3 +243,80 @@ fn task_update_description_preserves_explicit_todo_status() -> anyhow::Result<()
     assert_eq!(updated.status, TaskStatus::Todo);
     Ok(())
 }
+
+#[test]
+fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_list_page_filters_priorities_and_sorts_by_table_fields")?;
+    init_database(&temp.path, "tester")?;
+
+    for (title, priority, assignee) in [
+        ("bravo", 2, Some("worker-b")),
+        ("alpha", 0, Some("worker-a")),
+        ("charlie", 3, None),
+    ] {
+        create_task(
+            &temp.path,
+            "default",
+            "tester",
+            CreateTask {
+                title: title.into(),
+                description: Some("ready spec".into()),
+                status: Some(TaskStatus::Ready),
+                assignee: assignee.map(str::to_owned),
+                priority,
+                scheduled_at: None,
+                due_at: None,
+                max_retries: None,
+                metadata_json: "{}".into(),
+            },
+        )?;
+    }
+
+    let page = kanban_sqlite::list_tasks_page(
+        &temp.path,
+        "default",
+        kanban_sqlite::TaskListOptions {
+            statuses: vec![],
+            priorities: vec![0, 2],
+            include_archived: false,
+            assignee: None,
+            search: None,
+            sort: kanban_sqlite::TaskListSort::Title,
+            limit: 100,
+            offset: 0,
+        },
+    )?;
+
+    assert_eq!(page.total, 2);
+    assert_eq!(
+        page.tasks
+            .iter()
+            .map(|task| task.title.as_str())
+            .collect::<Vec<_>>(),
+        ["alpha", "bravo"]
+    );
+
+    let page = kanban_sqlite::list_tasks_page(
+        &temp.path,
+        "default",
+        kanban_sqlite::TaskListOptions {
+            statuses: vec![],
+            priorities: vec![],
+            include_archived: false,
+            assignee: None,
+            search: None,
+            sort: kanban_sqlite::TaskListSort::AssigneeDesc,
+            limit: 100,
+            offset: 0,
+        },
+    )?;
+    assert_eq!(
+        page.tasks
+            .iter()
+            .map(|task| task.assignee.as_deref())
+            .collect::<Vec<_>>(),
+        [Some("worker-b"), Some("worker-a"), None]
+    );
+
+    Ok(())
+}

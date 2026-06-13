@@ -386,6 +386,13 @@ pub(crate) fn task_query_where(board_id: &str, options: &TaskListOptions) -> (St
                 .map(|status| Value::Text(status.as_str().to_owned())),
         );
     }
+    if !options.priorities.is_empty() {
+        let placeholders = std::iter::repeat_n("?", options.priorities.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        clauses.push(format!("priority IN ({placeholders})"));
+        params.extend(options.priorities.iter().copied().map(Value::Integer));
+    }
     if let Some(assignee) = options
         .assignee
         .as_deref()
@@ -443,10 +450,28 @@ pub(crate) fn sqlite_like_literal(value: &str) -> String {
 
 pub(crate) fn task_order_by(sort: TaskListSort) -> &'static str {
     match sort {
+        TaskListSort::Seq => "seq ASC",
+        TaskListSort::SeqDesc => "seq DESC",
+        TaskListSort::Title => "lower(title) ASC, seq ASC",
+        TaskListSort::TitleDesc => "lower(title) DESC, seq DESC",
+        TaskListSort::Status => {
+            "CASE status WHEN 'triage' THEN 10 WHEN 'todo' THEN 20 WHEN 'scheduled' THEN 30 WHEN 'ready' THEN 40 WHEN 'running' THEN 50 WHEN 'blocked' THEN 60 WHEN 'review' THEN 70 WHEN 'done' THEN 80 ELSE 90 END ASC, position ASC, seq ASC"
+        }
+        TaskListSort::StatusDesc => {
+            "CASE status WHEN 'triage' THEN 10 WHEN 'todo' THEN 20 WHEN 'scheduled' THEN 30 WHEN 'ready' THEN 40 WHEN 'running' THEN 50 WHEN 'blocked' THEN 60 WHEN 'review' THEN 70 WHEN 'done' THEN 80 ELSE 90 END DESC, position DESC, seq DESC"
+        }
         TaskListSort::Position => "position ASC, created_at ASC, seq ASC",
         TaskListSort::PositionDesc => "position DESC, created_at DESC, seq DESC",
         TaskListSort::Priority => "priority ASC, created_at ASC, seq ASC",
         TaskListSort::PriorityDesc => "priority DESC, created_at DESC, seq DESC",
+        TaskListSort::Assignee => "COALESCE(assignee, claim_owner, '') ASC, seq ASC",
+        TaskListSort::AssigneeDesc => "COALESCE(assignee, claim_owner, '') DESC, seq DESC",
+        TaskListSort::ScheduledAt => {
+            "COALESCE(scheduled_at, 9223372036854775807) ASC, created_at ASC, seq ASC"
+        }
+        TaskListSort::ScheduledAtDesc => {
+            "COALESCE(scheduled_at, -9223372036854775808) DESC, created_at DESC, seq DESC"
+        }
         TaskListSort::CreatedAt => "created_at ASC, seq ASC",
         TaskListSort::CreatedAtDesc => "created_at DESC, seq DESC",
         TaskListSort::UpdatedAt => "updated_at ASC, seq ASC",

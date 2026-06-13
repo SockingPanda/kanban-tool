@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
-use kanban_context::{ContextDiagnostic, ContextPack, ContextPolicy};
+use kanban_context::ContextPolicy;
+#[cfg(feature = "vector-lancedb")]
+use kanban_context::{ContextDiagnostic, ContextPack};
 use kanban_entity::EntityUri;
 #[cfg(not(feature = "graph-oxigraph"))]
 use kanban_graph::DisabledGraphStore;
@@ -369,6 +371,8 @@ fn configured_vector_status(
     board: &str,
     vector_config_path: Option<&Path>,
 ) -> Result<kanban_vector::VectorStoreStatus> {
+    #[cfg(not(feature = "vector-lancedb"))]
+    let _ = vector_config_path;
     #[cfg(feature = "vector-lancedb")]
     {
         if let Some(config) = kanban_local::resolved_vector_config(vector_config_path)? {
@@ -393,6 +397,8 @@ fn rebuild_configured_vector_store(
     board: &str,
     vector_config_path: Option<&Path>,
 ) -> Result<kanban_vector::VectorStoreStatus> {
+    #[cfg(not(feature = "vector-lancedb"))]
+    let _ = vector_config_path;
     #[cfg(feature = "vector-lancedb")]
     {
         if let Some(store) = configured_lancedb_store(db_path, vector_config_path)? {
@@ -407,6 +413,8 @@ fn sync_configured_vector_store(
     board: &str,
     vector_config_path: Option<&Path>,
 ) -> Result<kanban_vector::VectorStoreStatus> {
+    #[cfg(not(feature = "vector-lancedb"))]
+    let _ = vector_config_path;
     #[cfg(feature = "vector-lancedb")]
     {
         if let Some(store) = configured_lancedb_store(db_path, vector_config_path)? {
@@ -423,6 +431,8 @@ fn build_configured_context_pack(
     policy: ContextPolicy,
     vector_config_path: Option<&Path>,
 ) -> Result<kanban_context::ContextPack> {
+    #[cfg(not(feature = "vector-lancedb"))]
+    let _ = vector_config_path;
     #[cfg(feature = "vector-lancedb")]
     {
         match configured_lancedb_store(db_path, vector_config_path) {

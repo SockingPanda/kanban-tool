@@ -255,6 +255,50 @@ fn dispatch_once_does_not_claim_review_or_dependency_blocked_tasks() -> anyhow::
 }
 
 #[test]
+fn dispatch_once_does_not_auto_promote_unblocked_todo() -> anyhow::Result<()> {
+    let temp = TempDb::new("dispatch_once_does_not_auto_promote_unblocked_todo")?;
+    init_database(&temp.path, "tester")?;
+    let todo = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "manual ready intent required".into(),
+            description: Some("spec".into()),
+            status: Some(TaskStatus::Todo),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: None,
+            metadata_json: "{}".into(),
+        },
+    )?;
+
+    let result = dispatch_once(
+        &temp.path,
+        "default",
+        DispatchOptions {
+            actor: "dispatcher".into(),
+            command: "true".into(),
+            worker_profile: "default".into(),
+            claim_ttl_ms: 300_000,
+            heartbeat_interval_ms: 30_000,
+            on_success: FinishPolicy::Done,
+            on_failure: FinishPolicy::Blocked,
+            log_dir: temp.dir.join("logs"),
+        },
+    )?;
+
+    assert_eq!(result.claimed, 0);
+    let fresh = get_task(&temp.path, "default", &todo.id)?;
+    assert_eq!(fresh.status, TaskStatus::Todo);
+    assert!(!fresh.dependency_blocked);
+    assert!(list_runs(&temp.path, "default", Some(&todo.id))?.is_empty());
+    Ok(())
+}
+
+#[test]
 fn claim_actor_with_quotes_and_control_chars_writes_valid_event_json() -> anyhow::Result<()> {
     let temp = TempDb::new("claim_actor_with_quotes_and_control_chars_writes_valid_event_json")?;
     init_database(&temp.path, "tester")?;
@@ -285,8 +329,8 @@ fn claim_actor_with_quotes_and_control_chars_writes_valid_event_json() -> anyhow
 }
 
 #[test]
-fn dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming() -> anyhow::Result<()> {
-    let temp = TempDb::new("dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming")?;
+fn dispatch_once_does_not_promote_scheduled_or_todo_before_claiming() -> anyhow::Result<()> {
+    let temp = TempDb::new("dispatch_once_does_not_promote_scheduled_or_todo_before_claiming")?;
     init_database(&temp.path, "tester")?;
     let now = now_ms();
     let scheduled = create_task(
@@ -337,21 +381,21 @@ fn dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming() -> anyho
         },
     )?;
 
-    assert_eq!(result.claimed, 1);
+    assert_eq!(result.claimed, 0);
     assert_eq!(
         get_task(&temp.path, "default", &scheduled.id)?.status,
-        TaskStatus::Done
+        TaskStatus::Scheduled
     );
     assert_eq!(
         get_task(&temp.path, "default", &todo.id)?.status,
-        TaskStatus::Ready
+        TaskStatus::Todo
     );
     for task_id in [&scheduled.id, &todo.id] {
         assert!(
-            list_events(&temp.path, "default", Some(task_id))?
+            !list_events(&temp.path, "default", Some(task_id))?
                 .iter()
                 .any(|event| event.kind == "task.promoted"),
-            "missing task.promoted for {task_id}"
+            "unexpected task.promoted for {task_id}"
         );
     }
     Ok(())

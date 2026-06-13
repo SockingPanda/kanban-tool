@@ -49,6 +49,8 @@ export type Task = {
   result_json: string | null
   metadata_json: string
   lock_version: number
+  dependency_blocked: boolean
+  unfinished_parent_count: number
 }
 
 export type Run = {

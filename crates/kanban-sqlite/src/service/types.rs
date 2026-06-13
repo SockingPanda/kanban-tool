@@ -57,6 +57,8 @@ pub struct TaskRecord {
     pub result_json: Option<String>,
     pub metadata_json: String,
     pub lock_version: i64,
+    pub dependency_blocked: bool,
+    pub unfinished_parent_count: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

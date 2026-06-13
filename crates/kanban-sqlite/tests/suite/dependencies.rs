@@ -1,8 +1,8 @@
 use crate::common::*;
 
 #[test]
-fn claim_complete_and_dependencies_promote_children() -> anyhow::Result<()> {
-    let temp = TempDb::new("claim_complete_and_dependencies_promote_children")?;
+fn claim_complete_leaves_dependency_child_todo_until_manual_promote() -> anyhow::Result<()> {
+    let temp = TempDb::new("claim_complete_leaves_dependency_child_todo_until_manual_promote")?;
     init_database(&temp.path, "tester")?;
     let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("父任务"))?;
     let child = create_task(&temp.path, "default", "tester", CreateTask::ready("子任务"))?;
@@ -41,8 +41,14 @@ fn claim_complete_and_dependencies_promote_children() -> anyhow::Result<()> {
     );
     assert_eq!(
         get_task(&temp.path, "default", &child.id)?.status,
-        TaskStatus::Ready
+        TaskStatus::Todo
     );
+    assert!(
+        !get_task(&temp.path, "default", &child.id)?.dependency_blocked,
+        "done parent should clear derived dependency-blocked state without auto-promoting"
+    );
+    let promoted = promote_task(&temp.path, "default", "tester", &child.id)?;
+    assert_eq!(promoted.status, TaskStatus::Ready);
     assert_eq!(
         list_runs(&temp.path, "default", Some(&parent.id))?[0].status,
         "succeeded"
@@ -148,10 +154,11 @@ fn block_unblock_recomputes_target_and_cycle_detection_rejects_cycles() -> anyho
         Some(&claim.claim_token),
         false,
     )?;
-    assert_eq!(
-        get_task(&temp.path, "default", &child.id)?.status,
-        TaskStatus::Ready
-    );
+    let child = get_task(&temp.path, "default", &child.id)?;
+    assert_eq!(child.status, TaskStatus::Todo);
+    assert!(!child.dependency_blocked);
+    let promoted = promote_task(&temp.path, "default", "tester", &child.id)?;
+    assert_eq!(promoted.status, TaskStatus::Ready);
     Ok(())
 }
 
@@ -202,8 +209,8 @@ fn add_dependency_rolls_back_edge_and_status_when_event_insert_fails() -> anyhow
 }
 
 #[test]
-fn remove_dependency_recomputes_child_to_ready_when_unblocked() -> anyhow::Result<()> {
-    let temp = TempDb::new("remove_dependency_recomputes_child_to_ready_when_unblocked")?;
+fn remove_dependency_keeps_child_todo_until_manual_promote() -> anyhow::Result<()> {
+    let temp = TempDb::new("remove_dependency_keeps_child_todo_until_manual_promote")?;
     init_database(&temp.path, "tester")?;
     let parent = create_task(
         &temp.path,
@@ -237,12 +244,15 @@ fn remove_dependency_recomputes_child_to_ready_when_unblocked() -> anyhow::Resul
     kanban_sqlite::remove_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
 
     let child = get_task(&temp.path, "default", &child.id)?;
-    assert_eq!(child.status, TaskStatus::Ready);
+    assert_eq!(child.status, TaskStatus::Todo);
+    assert!(!child.dependency_blocked);
     assert!(
-        list_events(&temp.path, "default", Some(&child.id))?
+        !list_events(&temp.path, "default", Some(&child.id))?
             .iter()
             .any(|event| event.kind == "task.promoted")
     );
+    let promoted = promote_task(&temp.path, "default", "tester", &child.id)?;
+    assert_eq!(promoted.status, TaskStatus::Ready);
     Ok(())
 }
 

@@ -35,6 +35,8 @@ const baseTask: Task = {
   result_json: null,
   metadata_json: "{}",
   lock_version: 0,
+  dependency_blocked: false,
+  unfinished_parent_count: 0,
 }
 
 function task(id: string, status: Task["status"], priority: number): Task {

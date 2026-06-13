@@ -8,7 +8,7 @@
 - CLI 负责脚本化、本地开发流与 agent/automation 入口。
 - SQLite 负责持久化任务、状态、依赖、评论、事件、运行记录。
 - Rust core 负责状态机与一致性约束。
-- Dispatcher 是可选本地调度器，用于自动提升、claim、heartbeat、reclaim 和执行 worker profile。
+- Dispatcher 是可选本地调度器，用于 claim 显式 `ready` 任务、heartbeat、reclaim 和执行 worker profile；不自动提升 `todo/scheduled`。
 
 ## 范围约束
 

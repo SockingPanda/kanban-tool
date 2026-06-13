@@ -1,4 +1,4 @@
-import type { Dependencies } from "@/lib/api"
+import type { Dependencies, Task, TaskStatus } from "@/lib/api"
 export { priorityBadgeClass, priorityLabel as priorityBadgeLabel } from "@/lib/priority"
 
 export type SelectedDependencySnapshot = {
@@ -15,4 +15,19 @@ export function selectedDependencyCountForTask(taskId: string, snapshot: Selecte
   if (!snapshot.dependencies) return undefined
 
   return snapshot.dependencies.parents.length + snapshot.dependencies.children.length
+}
+
+export function sortBoardColumnTasks(tasks: Task[], status: TaskStatus) {
+  if (status !== "todo") return [...tasks]
+
+  const unblocked = tasks.filter((task) => !task.dependency_blocked)
+  const blocked = tasks.filter((task) => task.dependency_blocked)
+  return [...unblocked, ...blocked]
+}
+
+export function dependencyBlockedTodoClass(task: Task) {
+  if (task.status === "todo" && task.dependency_blocked) {
+    return "border-red-500 hover:border-red-600"
+  }
+  return null
 }

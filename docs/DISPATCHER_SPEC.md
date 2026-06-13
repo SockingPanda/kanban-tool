@@ -8,12 +8,11 @@ Dispatcher 是本地可选调度器。它只处理本机 SQLite DB，不处理�
 
 Dispatcher 负责：
 
-1. promotion：把符合条件的 `todo/scheduled` 任务提升到 `ready`。
-2. reclaim：回收超时、崩溃或失联的 `running` 任务。
-3. claim：从 `ready` 队列选择任务并进入 `running`。
-4. run：执行本地 worker profile。
-5. heartbeat：维持 claim。
-6. finish：根据 worker 结果写回 `done/review/blocked/ready`。
+1. reclaim：回收超时、崩溃或失联的 `running` 任务。
+2. claim：从 `ready` 队列选择任务并进入 `running`。
+3. run：执行本地 worker profile。
+4. heartbeat：维持 claim。
+5. finish：根据 worker 结果写回 `done/review/blocked/ready`。
 
 Dispatcher 不负责：
 
@@ -35,9 +34,8 @@ kanban dispatch --once
 执行一轮：
 
 1. reclaim expired。
-2. promote due/ready。
-3. claim up to capacity。
-4. 对已 claim task 启动 worker。
+2. claim up to capacity。
+3. 对已 claim task 启动 worker。
 
 ### 2.2 常驻运行
 
@@ -94,8 +92,6 @@ loop {
     let now = clock.now_ms();
 
     reclaim_expired(now)?;
-    promote_due_tasks(now)?;
-
     while running_count() < max_concurrency {
         match claim_next_ready_task(now)? {
             Some(claimed) => spawn_worker(claimed)?,
@@ -111,36 +107,7 @@ loop {
 
 ## 4. Promotion
 
-### 4.1 Scheduled promotion
-
-```text
-scheduled -> ready
-```
-
-Guard：
-
-- `scheduled_at <= now`。
-- 所有 parent dependency 为 `done`。
-
-### 4.2 Todo promotion
-
-```text
-todo -> ready
-```
-
-Guard：
-
-- 所有 parent dependency 为 `done`。
-- spec complete。
-
-### 4.3 Promotion transaction
-
-每个 task 独立 transaction 或批量 transaction 均可。建议批量，但限制 batch size。
-
-每个 promotion 必须写：
-
-- task status update。
-- `task_events(kind='task.promoted')`。
+Dispatcher 不执行 `todo/scheduled -> ready` promotion。`ready` 表示显式人工 promote 意图；依赖完成或计划到期只会改变查询返回的 derived state，不会把 task 放入 ready 队列。
 
 ---
 
@@ -391,7 +358,7 @@ kanban run logs r_01HX...
 | Worker 崩溃 | heartbeat 停止，claim 过期，reclaim。 |
 | SQLite busy | 等待 busy_timeout；仍失败则记录错误并下轮重试。 |
 | Task 被人工 block | Dispatcher 不再处理。 |
-| Board 被归档 | Dispatcher 不再 promote/claim/reclaim 该 board；若仍有 running task/run，board archive 本身会被拒绝。 |
+| Board 被归档 | Dispatcher 不再 claim/reclaim 该 board；若仍有 running task/run，board archive 本身会被拒绝。 |
 | Task 被人工 force complete | Worker 后续 complete 失败，因 token/run 已关闭。 |
 | DB integrity failed | Dispatcher 停止，提示运行 `kanban doctor`。 |
 
@@ -401,7 +368,6 @@ kanban run logs r_01HX...
 
 MVP dispatcher 必须实现：
 
-- promote due tasks。
 - claim one ready task。
 - spawn command。
 - heartbeat。

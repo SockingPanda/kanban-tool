@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AppShell } from "@/app/AppShell"
 import { reconcileSelectedTaskId } from "@/app/task-selection"
 import { fallbackColumns } from "@/features/board/board-config"
+import { sortBoardColumnTasks } from "@/features/board/board-card-state"
 import { executeDragTransition, planDragTransition } from "@/features/board/drag-policy"
 import { useBoardTasks } from "@/features/board/useBoardTasks"
 import { useEventPoller } from "@/features/events/useEventPoller"
@@ -168,6 +169,9 @@ function App() {
     for (const column of visibleColumns) map.set(column.status, [])
     for (const task of tasks) {
       if (map.has(task.status)) map.get(task.status)!.push(task)
+    }
+    for (const [status, columnTasks] of map) {
+      map.set(status, sortBoardColumnTasks(columnTasks, status))
     }
     return map
   }, [tasks, visibleColumns])

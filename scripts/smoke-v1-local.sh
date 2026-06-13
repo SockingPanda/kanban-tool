@@ -6,7 +6,7 @@ TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
-KB=("$LOCK" -- cargo run -q -p kanban-cli --bin kanban -- --db "$TMPDIR/kb.db" --json)
+KB=("$LOCK" -- cargo run -q -p kanban-cli --bin kanban -- --db "$TMPDIR/kb.db" --board default --json)
 
 "${KB[@]}" init >/dev/null
 task_json="$("${KB[@]}" task create "v1 smoke task" --description "ready spec" --max-retries 2)"
@@ -21,7 +21,7 @@ task_id="$(printf '%s' "$task_json" | python3 -c 'import json,sys; print(json.lo
 "${KB[@]}" backup --out "$TMPDIR/backup.sqlite" >/dev/null
 "${KB[@]}" export --out "$TMPDIR/board.jsonl" >/dev/null
 
-"$LOCK" -- cargo run -q -p kanban-cli --bin kanban -- --db "$TMPDIR/imported.db" --json import --input "$TMPDIR/board.jsonl" --replace >/dev/null
-"$LOCK" -- cargo run -q -p kanban-cli --bin kanban -- --db "$TMPDIR/imported.db" --json task show "$task_id" >/dev/null
+"$LOCK" -- cargo run -q -p kanban-cli --bin kanban -- --db "$TMPDIR/imported.db" --board default --json import --input "$TMPDIR/board.jsonl" --replace >/dev/null
+"$LOCK" -- cargo run -q -p kanban-cli --bin kanban -- --db "$TMPDIR/imported.db" --board default --json task show "$task_id" >/dev/null
 
 echo "v1 local smoke passed in $ROOT"

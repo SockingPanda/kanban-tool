@@ -157,7 +157,7 @@ async fn transitions_heartbeat_extends_claim_and_rejects_bad_token() -> anyhow::
 }
 
 #[tokio::test]
-async fn transitions_complete_moves_running_done_and_promotes_child() -> anyhow::Result<()> {
+async fn transitions_complete_moves_running_done_and_leaves_child_todo() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let parent = kanban_sqlite::create_task(
@@ -190,7 +190,8 @@ async fn transitions_complete_moves_running_done_and_promotes_child() -> anyhow:
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "done");
     let child = kanban_sqlite::get_task_by_id_global(&db_path, &child.id).context("child")?;
-    assert_eq!(child.status, kanban_core::TaskStatus::Ready);
+    assert_eq!(child.status, kanban_core::TaskStatus::Todo);
+    assert!(!child.dependency_blocked);
     Ok(())
 }
 

@@ -371,6 +371,8 @@ function task(overrides: Partial<Task> = {}): Task {
     result_json: null,
     metadata_json: "{}",
     lock_version: 0,
+    dependency_blocked: false,
+    unfinished_parent_count: 0,
     ...overrides,
   }
 }

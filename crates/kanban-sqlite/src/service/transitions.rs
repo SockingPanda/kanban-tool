@@ -430,7 +430,6 @@ pub fn complete_task_with_summary_and_result(
             result_json,
             now,
         )?;
-        promote_children(&conn, &board_id, actor, &task.id, now)?;
         get_task_by_id(&conn, &board_id, &task.id)
     })
 }
@@ -1072,40 +1071,6 @@ pub(crate) fn guarded_set_status_with_reason(
         &payload,
         update.now,
     )
-}
-
-pub(crate) fn promote_children(
-    conn: &Connection,
-    board_id: &str,
-    actor: &str,
-    parent_id: &str,
-    now: i64,
-) -> Result<()> {
-    let mut stmt = conn
-        .prepare("SELECT child_task_id FROM task_dependencies WHERE parent_task_id=?1")
-        .map_err(storage)?;
-    let child_ids = stmt
-        .query_map([parent_id], |r| r.get::<_, String>(0))
-        .map_err(storage)?
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)?;
-    for child_id in child_ids {
-        let child = get_task_by_id(conn, board_id, &child_id)?;
-        if matches!(child.status, TaskStatus::Todo | TaskStatus::Scheduled)
-            && recompute_ready_status(conn, &child, now)? == TaskStatus::Ready
-        {
-            guarded_set_status(
-                conn,
-                board_id,
-                &child,
-                TaskStatus::Ready,
-                actor,
-                "task.promoted",
-                now,
-            )?;
-        }
-    }
-    Ok(())
 }
 
 pub(crate) fn recompute_ready_status(

@@ -195,6 +195,8 @@ pub fn assert_task_dto_exposes_ui_fields_without_claim_token(task: &Value) {
         "retry_count",
         "max_retries",
         "result_summary",
+        "dependency_blocked",
+        "unfinished_parent_count",
     ] {
         assert!(task.get(exposed).is_some(), "{exposed} must be exposed");
     }

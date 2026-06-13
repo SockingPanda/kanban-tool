@@ -37,6 +37,22 @@ describe("event invalidation helpers", () => {
     })
 
     expect(
+      affectedQueriesForEvents([eventRecord({ task_id: "t_4", kind: "dependency.added" })]),
+    ).toEqual({
+      taskIds: new Set(["t_4"]),
+      invalidateBoardTasks: true,
+      invalidateEvents: true,
+    })
+
+    expect(
+      affectedQueriesForEvents([eventRecord({ task_id: "t_4", kind: "dependency.removed" })]),
+    ).toEqual({
+      taskIds: new Set(["t_4"]),
+      invalidateBoardTasks: true,
+      invalidateEvents: true,
+    })
+
+    expect(
       affectedQueriesForEvents([eventRecord({ task_id: "t_2", kind: "task.completed" })]),
     ).toEqual({
       taskIds: new Set(["t_2"]),

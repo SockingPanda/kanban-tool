@@ -94,18 +94,14 @@ pub(crate) fn add_dependency_in_current_tx(
     let fresh_child = get_task_by_id(conn, board_id, &child.id)?;
     if is_active_recomputable_status(fresh_child.status) {
         let target = recompute_ready_status(conn, &fresh_child, now)?;
-        if target != fresh_child.status {
+        if target != fresh_child.status && target != TaskStatus::Ready {
             guarded_set_status(
                 conn,
                 board_id,
                 &fresh_child,
                 target,
                 actor,
-                if target == TaskStatus::Ready {
-                    "task.promoted"
-                } else {
-                    "task.recomputed"
-                },
+                "task.recomputed",
                 now,
             )?;
         }
@@ -150,18 +146,14 @@ pub fn remove_dependency(
             TaskStatus::Triage | TaskStatus::Todo | TaskStatus::Scheduled | TaskStatus::Ready
         ) {
             let target = recompute_ready_status(&conn, &fresh_child, now)?;
-            if target != fresh_child.status {
+            if target != fresh_child.status && target != TaskStatus::Ready {
                 guarded_set_status(
                     &conn,
                     &board_id,
                     &fresh_child,
                     target,
                     actor,
-                    if target == TaskStatus::Ready {
-                        "task.promoted"
-                    } else {
-                        "task.recomputed"
-                    },
+                    "task.recomputed",
                     now,
                 )?;
             }

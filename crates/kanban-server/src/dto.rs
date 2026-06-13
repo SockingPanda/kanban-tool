@@ -52,6 +52,8 @@ pub(super) struct TaskDto {
     pub(super) result_json: Option<String>,
     pub(super) metadata_json: String,
     pub(super) lock_version: i64,
+    pub(super) dependency_blocked: bool,
+    pub(super) unfinished_parent_count: i64,
 }
 
 impl From<kanban_sqlite::TaskRecord> for TaskDto {
@@ -87,6 +89,8 @@ impl From<kanban_sqlite::TaskRecord> for TaskDto {
             result_json: task.result_json,
             metadata_json: task.metadata_json,
             lock_version: task.lock_version,
+            dependency_blocked: task.dependency_blocked,
+            unfinished_parent_count: task.unfinished_parent_count,
         }
     }
 }

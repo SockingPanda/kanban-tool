@@ -9,6 +9,7 @@ import { cn, formatRelativeTime } from "@/lib/utils"
 import {
   priorityBadgeClass,
   priorityBadgeLabel,
+  dependencyBlockedTodoClass,
   selectedDependencyCountForTask,
   type SelectedDependencySnapshot,
 } from "./board-card-state"
@@ -161,6 +162,7 @@ function TaskCard({
       className={cn(
         "w-full rounded-md border bg-white p-2 text-left transition-colors hover:border-neutral-300",
         selected ? "border-neutral-900 shadow-sm" : "border-neutral-200",
+        dependencyBlockedTodoClass(task),
         isDragging && "opacity-60",
       )}
       onClick={onSelect}

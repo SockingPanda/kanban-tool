@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 
-import type { KanbanApi, SearchTasksResult, TaskPageResult, TaskStatus } from "@/lib/api"
+import type { KanbanApi, SearchTasksResult, TaskListSort, TaskPageResult, TaskStatus } from "@/lib/api"
 import { queryKeys } from "@/lib/query-keys"
 
 export type BoardTasksData = {
@@ -13,6 +13,9 @@ export function useBoardTasks({
   api,
   search,
   statusFilter,
+  priorityFilters = [],
+  sort = "-updated_at",
+  mode = "board",
   showArchived,
   limit,
   offset,
@@ -20,6 +23,9 @@ export function useBoardTasks({
   api: KanbanApi | null
   search: string
   statusFilter: TaskStatus | "all"
+  priorityFilters?: number[]
+  sort?: TaskListSort
+  mode?: "board" | "list"
   showArchived: boolean
   limit: number
   offset: number
@@ -33,13 +39,16 @@ export function useBoardTasks({
       board: api?.board ?? "pending",
       search: normalizedSearch,
       status: statusFilter,
+      priorities: priorityFilters,
+      sort,
+      mode,
       showArchived,
       limit,
       offset,
     }),
     queryFn: async ({ signal }) => {
       if (!api) throw new Error("API client is not ready")
-      if (normalizedSearch) {
+      if (mode === "board" && normalizedSearch) {
         const result = await api.searchTasks({
           query: normalizedSearch,
           includeArchived: showArchived,
@@ -58,6 +67,9 @@ export function useBoardTasks({
       const result = await api.listTasks({
         includeArchived: showArchived,
         statuses,
+        priorities: priorityFilters,
+        query: normalizedSearch,
+        sort,
         limit,
         offset,
         signal,

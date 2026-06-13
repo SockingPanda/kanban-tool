@@ -15,6 +15,10 @@ import {
   TerminalSquare,
   Plus,
   Server,
+  Monitor,
+  Moon,
+  PanelLeft,
+  Sun,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -33,10 +37,12 @@ import { primaryViews, sidebarViews } from "@/features/navigation/view-types"
 import { RunsView } from "@/features/runs/RunsView"
 import { SettingsView } from "@/features/settings/SettingsView"
 import { TaskDetail } from "@/features/task-detail/TaskDetail"
+import type { ThemeMode } from "@/app/theme"
 import type { DetailState } from "@/features/task-detail/detail-state"
 import type { TaskEditDraft } from "@/features/task-detail/task-draft"
 import type { SelectedDependencySnapshot } from "@/features/board/board-card-state"
 import { apiEndpointLabel, shouldShowTaskExplorerToolbar } from "@/app/shell-rules"
+import type { ListSortState } from "@/features/list/table-state"
 import type {
   BoardColumn,
   KanbanApi,
@@ -64,6 +70,8 @@ export function AppShell({
   config,
   api,
   view,
+  themeMode,
+  sidebarOpen,
   columns,
   tasks,
   groupedTasks,
@@ -76,6 +84,8 @@ export function AppShell({
   debouncedSearch,
   searchMeta,
   statusFilter,
+  priorityFilters,
+  listSort,
   showArchived,
   page,
   visibleTaskCount,
@@ -100,7 +110,13 @@ export function AppShell({
   queueCounts,
   onSearchChange,
   onViewChange,
+  onThemeModeChange,
+  onCycleThemeMode,
+  onSidebarOpenChange,
   onStatusFilterChange,
+  onPriorityFiltersChange,
+  onListSortChange,
+  onResetListFilters,
   onShowArchivedChange,
   onRefreshTasks,
   onFirstPage,
@@ -128,6 +144,8 @@ export function AppShell({
   config: RuntimeConfig | null
   api: KanbanApi | null
   view: OperatorView
+  themeMode: ThemeMode
+  sidebarOpen: boolean
   columns: BoardColumn[]
   tasks: Task[]
   groupedTasks: Map<TaskStatus, Task[]>
@@ -140,6 +158,8 @@ export function AppShell({
   debouncedSearch: string
   searchMeta: SearchTasksMeta | null
   statusFilter: TaskStatus | "all"
+  priorityFilters: number[]
+  listSort: ListSortState
   showArchived: boolean
   page: PageMeta
   visibleTaskCount: number
@@ -164,7 +184,13 @@ export function AppShell({
   queueCounts: { ready: number; running: number; blocked: number }
   onSearchChange: (value: string) => void
   onViewChange: (value: OperatorView) => void
+  onThemeModeChange: (value: ThemeMode) => void
+  onCycleThemeMode: () => void
+  onSidebarOpenChange: (value: boolean) => void
   onStatusFilterChange: (value: TaskStatus | "all") => void
+  onPriorityFiltersChange: (value: number[]) => void
+  onListSortChange: (value: ListSortState) => void
+  onResetListFilters: () => void
   onShowArchivedChange: (value: boolean) => void
   onRefreshTasks: () => void
   onFirstPage: () => void
@@ -199,13 +225,15 @@ export function AppShell({
   const showDetailSheet = shouldOpenTaskDetailSheet(view, selectedTask)
 
   return (
-    <div className="flex h-screen bg-[#f7f7f5] text-neutral-950">
-      <ShellSidebar config={config} view={view} onViewChange={onViewChange} />
+    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
+      <ShellSidebar config={config} view={view} open={sidebarOpen} onViewChange={onViewChange} />
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <ShellHeader
           config={config}
           view={view}
+          themeMode={themeMode}
+          sidebarOpen={sidebarOpen}
           search={search}
           debouncedSearch={debouncedSearch}
           searchMeta={searchMeta}
@@ -214,16 +242,19 @@ export function AppShell({
           tasksRefreshing={tasksRefreshing}
           onSearchChange={onSearchChange}
           onViewChange={onViewChange}
+          onThemeModeChange={onThemeModeChange}
+          onCycleThemeMode={onCycleThemeMode}
+          onSidebarOpenChange={onSidebarOpenChange}
           onStatusFilterChange={onStatusFilterChange}
           onShowArchivedChange={onShowArchivedChange}
           onRefreshTasks={onRefreshTasks}
         />
 
         {error ? (
-          <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>
+          <div className="border-b border-[var(--status-blocked-ring)] bg-[var(--status-blocked-bg)] px-4 py-2 text-sm text-[var(--status-blocked-fg)]">{error}</div>
         ) : null}
 
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1">
           <section className="flex min-w-0 flex-1 flex-col">
             {showTaskExplorerToolbar ? (
               <TaskExplorerToolbar
@@ -263,7 +294,16 @@ export function AppShell({
               hasPreviousPage={hasPreviousPage}
               canGoLastPage={canGoLastPage}
               rowsPerPage={rowsPerPage}
+              search={search}
+              statusFilter={statusFilter}
+              priorityFilters={priorityFilters}
+              listSort={listSort}
               tasksRefreshing={tasksRefreshing}
+              onSearchChange={onSearchChange}
+              onStatusFilterChange={onStatusFilterChange}
+              onPriorityFiltersChange={onPriorityFiltersChange}
+              onListSortChange={onListSortChange}
+              onResetListFilters={onResetListFilters}
               onFirstPage={onFirstPage}
               onPreviousPage={onPreviousPage}
               onNextPage={onNextPage}
@@ -316,48 +356,52 @@ export function AppShell({
 function ShellSidebar({
   config,
   view,
+  open,
   onViewChange,
 }: {
   config: RuntimeConfig | null
   view: OperatorView
+  open: boolean
   onViewChange: (value: OperatorView) => void
 }) {
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-neutral-200 bg-[#fbfbfa]">
-      <div className="flex h-14 items-center gap-2 px-4">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-neutral-950 text-sm font-semibold text-white">
+    <aside className={cn("flex shrink-0 flex-col border-r border-border bg-sidebar transition-[width] duration-200", open ? "w-60 max-sm:w-14" : "w-14")}>
+      <div className={cn("flex h-14 items-center gap-2 px-3 max-sm:justify-center max-sm:px-2", !open && "justify-center px-2")}>
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
           kb
         </div>
-        <div>
+        <div className={cn("min-w-0 max-sm:hidden", !open && "hidden")}>
           <div className="text-sm font-semibold">Kanban Tool</div>
-          <div className="text-xs text-neutral-500">local queue</div>
+          <div className="text-xs text-muted-foreground">local queue</div>
         </div>
       </div>
       <nav className="space-y-4 px-2 py-3">
-        <NavGroup label="Task Explorer">
+        <NavGroup label="Task Explorer" open={open}>
           {sidebarViews.filter((item) => ["board", "list", "runs", "events"].includes(item)).map((item) => (
             <NavItem
               key={item}
               icon={viewIcon(item)}
               label={viewLabel(item)}
               active={view === item}
+              open={open}
               onClick={() => onViewChange(item)}
             />
           ))}
         </NavGroup>
-        <NavGroup label="System">
+        <NavGroup label="System" open={open}>
           {sidebarViews.filter((item) => ["maintenance", "health", "settings"].includes(item)).map((item) => (
             <NavItem
               key={item}
               icon={viewIcon(item)}
               label={viewLabel(item)}
               active={view === item}
+              open={open}
               onClick={() => onViewChange(item)}
             />
           ))}
         </NavGroup>
       </nav>
-      <div className="mt-auto space-y-3 border-t border-neutral-200 p-3 text-xs text-neutral-500">
+      <div className={cn("mt-auto space-y-3 border-t border-border p-3 text-xs text-muted-foreground max-sm:hidden", !open && "hidden")}>
         <div className="flex items-center gap-2">
           <Database className="h-3.5 w-3.5" />
           <span className="truncate">{config?.dbPath ?? "loading db"}</span>
@@ -377,6 +421,8 @@ function ShellSidebar({
 function ShellHeader({
   config,
   view,
+  themeMode,
+  sidebarOpen,
   search,
   debouncedSearch,
   searchMeta,
@@ -385,12 +431,17 @@ function ShellHeader({
   tasksRefreshing,
   onSearchChange,
   onViewChange,
+  onThemeModeChange,
+  onCycleThemeMode,
+  onSidebarOpenChange,
   onStatusFilterChange,
   onShowArchivedChange,
   onRefreshTasks,
 }: {
   config: RuntimeConfig | null
   view: OperatorView
+  themeMode: ThemeMode
+  sidebarOpen: boolean
   search: string
   debouncedSearch: string
   searchMeta: SearchTasksMeta | null
@@ -399,14 +450,27 @@ function ShellHeader({
   tasksRefreshing: boolean
   onSearchChange: (value: string) => void
   onViewChange: (value: OperatorView) => void
+  onThemeModeChange: (value: ThemeMode) => void
+  onCycleThemeMode: () => void
+  onSidebarOpenChange: (value: boolean) => void
   onStatusFilterChange: (value: TaskStatus | "all") => void
   onShowArchivedChange: (value: boolean) => void
   onRefreshTasks: () => void
 }) {
+  const ThemeIcon = themeMode === "dark" ? Moon : themeMode === "light" ? Sun : Monitor
   return (
-    <header className="flex h-14 items-center gap-3 border-b border-neutral-200 bg-white px-4">
-      <div className="relative w-80">
-        <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-neutral-400" />
+    <header className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 sm:flex-nowrap sm:gap-3 sm:px-4">
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+        title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+        onClick={() => onSidebarOpenChange(!sidebarOpen)}
+      >
+        <PanelLeft className="h-4 w-4" />
+      </Button>
+      <div className="relative min-w-0 flex-1 basis-64 sm:w-80 sm:flex-none">
+        <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
         <Input
           className="pl-8"
           placeholder="Search tasks"
@@ -418,13 +482,13 @@ function ShellHeader({
       <Button variant="secondary" size="icon" onClick={onRefreshTasks} disabled={tasksRefreshing}>
         {tasksRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
       </Button>
-      <div className="flex rounded-md border border-neutral-200 bg-neutral-50 p-0.5 text-sm">
+      <div className="flex rounded-md border border-border bg-muted p-0.5 text-sm">
         {primaryViews.map((item) => (
           <button
             key={item}
             className={cn(
-              "rounded px-3 py-1 text-neutral-500",
-              view === item && "bg-white text-neutral-950 shadow-sm",
+              "rounded px-3 py-1 text-muted-foreground",
+              view === item && "bg-background text-foreground shadow-sm",
             )}
             onClick={() => onViewChange(item)}
           >
@@ -432,8 +496,8 @@ function ShellHeader({
           </button>
         ))}
       </div>
-      <div className="flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs">
-        <SlidersHorizontal className="h-3.5 w-3.5 text-neutral-500" />
+      <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1 text-xs">
+        <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
         <select
           className="bg-transparent outline-none"
           value={statusFilter}
@@ -445,7 +509,7 @@ function ShellHeader({
           ))}
         </select>
       </div>
-      <label className="flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs text-neutral-600">
+      <label className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground">
         <input
           type="checkbox"
           checked={showArchived}
@@ -456,6 +520,19 @@ function ShellHeader({
       <div className="ml-auto flex items-center gap-2">
         <Badge variant="secondary">actor {config?.actor ?? "-"}</Badge>
         <Badge variant="ready">local dispatcher</Badge>
+        <select
+          className="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none"
+          value={themeMode}
+          aria-label="Theme mode"
+          onChange={(event) => onThemeModeChange(event.target.value as ThemeMode)}
+        >
+          <option value="system">system</option>
+          <option value="light">light</option>
+          <option value="dark">dark</option>
+        </select>
+        <Button variant="ghost" size="icon" aria-label="Cycle theme mode" title={`Theme: ${themeMode}`} onClick={onCycleThemeMode}>
+          <ThemeIcon className="h-4 w-4" />
+        </Button>
         <Button variant="ghost" size="icon">
           <Command className="h-4 w-4" />
         </Button>
@@ -499,7 +576,7 @@ function TaskExplorerToolbar({
 }) {
   return (
     <>
-      <form onSubmit={onCreateTask} className="grid grid-cols-[1fr_1.4fr_auto] gap-2 border-b border-neutral-200 bg-white px-4 py-3">
+      <form onSubmit={onCreateTask} className="grid grid-cols-[1fr_1.4fr_auto] gap-2 border-b border-border bg-card px-4 py-3">
         <Input value={newTitle} onChange={(event) => onNewTitleChange(event.target.value)} placeholder="New task title" />
         <Input
           value={newDescription}
@@ -512,7 +589,7 @@ function TaskExplorerToolbar({
         </Button>
       </form>
 
-      <div className="flex h-8 items-center justify-between border-b border-neutral-200 bg-white px-4 text-xs text-neutral-500">
+      <div className="flex h-8 items-center justify-between border-b border-border bg-card px-4 text-xs text-muted-foreground">
         <span>
           {pageRangeLabel(page, visibleTaskCount)}
           {taskActivityLabel}
@@ -550,7 +627,16 @@ function MainView({
   hasPreviousPage,
   canGoLastPage,
   rowsPerPage,
+  search,
+  statusFilter,
+  priorityFilters,
+  listSort,
   tasksRefreshing,
+  onSearchChange,
+  onStatusFilterChange,
+  onPriorityFiltersChange,
+  onListSortChange,
+  onResetListFilters,
   onFirstPage,
   onPreviousPage,
   onNextPage,
@@ -574,7 +660,16 @@ function MainView({
   hasPreviousPage: boolean
   canGoLastPage: boolean
   rowsPerPage: number
+  search: string
+  statusFilter: TaskStatus | "all"
+  priorityFilters: number[]
+  listSort: ListSortState
   tasksRefreshing: boolean
+  onSearchChange: (value: string) => void
+  onStatusFilterChange: (value: TaskStatus | "all") => void
+  onPriorityFiltersChange: (value: number[]) => void
+  onListSortChange: (value: ListSortState) => void
+  onResetListFilters: () => void
   onFirstPage: () => void
   onPreviousPage: () => void
   onNextPage: () => void
@@ -603,7 +698,16 @@ function MainView({
         hasPreviousPage={hasPreviousPage}
         canGoLastPage={canGoLastPage}
         rowsPerPage={rowsPerPage}
+        search={search}
+        statusFilter={statusFilter}
+        priorityFilters={priorityFilters}
+        listSort={listSort}
         tasksRefreshing={tasksRefreshing}
+        onSearchChange={onSearchChange}
+        onStatusFilterChange={onStatusFilterChange}
+        onPriorityFiltersChange={onPriorityFiltersChange}
+        onListSortChange={onListSortChange}
+        onResetListFilters={onResetListFilters}
         onSelectTask={onSelectTask}
         onFirstPage={onFirstPage}
         onPreviousPage={onPreviousPage}
@@ -628,7 +732,7 @@ function StatusBar({
   queueCounts: { ready: number; running: number; blocked: number }
 }) {
   return (
-    <footer className="flex h-8 items-center justify-between border-t border-neutral-200 bg-white px-4 text-xs text-neutral-500">
+    <footer className="flex h-8 items-center justify-between border-t border-border bg-card px-4 text-xs text-muted-foreground">
       <span>Last refresh {lastRefreshAt ? new Date(lastRefreshAt).toLocaleTimeString() : "-"}</span>
       <span>
         ready {queueCounts.ready} / running {queueCounts.running} / blocked {queueCounts.blocked}
@@ -651,31 +755,37 @@ function NavItem({
   icon: Icon,
   label,
   active = false,
+  open = true,
   onClick,
 }: {
   icon: ElementType
   label: string
   active?: boolean
+  open?: boolean
   onClick: () => void
 }) {
   return (
     <button
+      title={!open ? label : undefined}
+      aria-label={label}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-neutral-600",
-        active && "bg-neutral-100 text-neutral-950",
+        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        !open && "justify-center",
+        "max-sm:justify-center",
+        active && "bg-sidebar-accent text-sidebar-accent-foreground",
       )}
       onClick={onClick}
     >
-      <Icon className="h-4 w-4" />
-      {label}
+      <Icon className="h-4 w-4 shrink-0" />
+      <span className={cn("max-sm:sr-only", !open && "sr-only")}>{label}</span>
     </button>
   )
 }
 
-function NavGroup({ label, children }: { label: string; children: ReactNode }) {
+function NavGroup({ label, open, children }: { label: string; open: boolean; children: ReactNode }) {
   return (
     <div>
-      <div className="mb-1 px-2 text-[11px] font-medium uppercase tracking-normal text-neutral-400">{label}</div>
+      <div className={cn("mb-1 px-2 text-[11px] font-medium uppercase tracking-normal text-muted-foreground max-sm:sr-only", !open && "sr-only")}>{label}</div>
       <div className="space-y-1">{children}</div>
     </div>
   )

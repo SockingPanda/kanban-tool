@@ -15,8 +15,8 @@ use crate::error::{ApiError, extractor_error, invalid_input, validate_page_bound
 use crate::state::AppState;
 
 use super::shared::{
-    actor, metadata_json, parse_status_filters, parse_task_sort, patch_from_value,
-    retry_policy_from_value,
+    actor, metadata_json, parse_priority_filters, parse_status_filters, parse_task_sort,
+    patch_from_value, retry_policy_from_value,
 };
 
 #[derive(Debug, Deserialize)]
@@ -77,6 +77,7 @@ pub(crate) async fn list_tasks(
         return Err(invalid_input("label filter is not supported yet"));
     }
     let statuses = parse_status_filters(raw_query.as_deref())?;
+    let priorities = parse_priority_filters(raw_query.as_deref())?;
     let assignee = query
         .assignee
         .as_deref()
@@ -96,6 +97,7 @@ pub(crate) async fn list_tasks(
         &board,
         kanban_sqlite::TaskListOptions {
             statuses,
+            priorities,
             include_archived: query.include_archived,
             assignee,
             search,

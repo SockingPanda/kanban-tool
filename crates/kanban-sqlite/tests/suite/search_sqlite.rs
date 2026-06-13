@@ -172,6 +172,7 @@ fn sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely() -> anyhow::Res
         "default",
         kanban_sqlite::TaskListOptions {
             statuses: vec![],
+            priorities: vec![],
             include_archived: false,
             assignee: None,
             search: None,

@@ -1,9 +1,12 @@
-import type { TaskStatus } from "./api"
+import type { TaskListSort, TaskStatus } from "./api"
 
 export type BoardTaskQuery = {
   board: string
   search: string
   status: TaskStatus | "all"
+  priorities: number[]
+  sort: TaskListSort
+  mode: "board" | "list"
   showArchived: boolean
   limit: number
   offset: number
@@ -21,6 +24,9 @@ export const queryKeys = {
       {
         search: query.search,
         status: query.status,
+        priorities: query.priorities,
+        sort: query.sort,
+        mode: query.mode,
         showArchived: query.showArchived,
         limit: query.limit,
         offset: query.offset,

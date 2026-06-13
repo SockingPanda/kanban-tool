@@ -182,13 +182,14 @@ Query params：
 | Param | 说明 |
 |---|---|
 | `status` | 可重复：`?status=ready&status=running`。 |
+| `priority` | 可重复：`?priority=0&priority=2`，值为 P0-P3 的 `0..3`。 |
 | `assignee` | 按 assignee。 |
 | `label` | 按 label。 |
 | `q` | title/description 搜索。 |
 | `include_archived` | bool。 |
 | `limit` | 默认 100。 |
 | `offset` | 分页 offset。 |
-| `sort` | `position` / `priority` / `-priority` / `created_at` / `updated_at`. `priority` sorts P0 -> P3; `-priority` sorts P3 -> P0. |
+| `sort` | `seq` / `title` / `status` / `position` / `priority` / `assignee` / `scheduled_at` / `due_at` / `created_at` / `updated_at`，前缀 `-` 表示降序。`priority` sorts P0 -> P3; `-priority` sorts P3 -> P0. |
 
 Response：
 

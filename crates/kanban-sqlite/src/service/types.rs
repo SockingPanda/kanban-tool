@@ -228,10 +228,20 @@ pub struct DispatchResult {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskListSort {
+    Seq,
+    SeqDesc,
+    Title,
+    TitleDesc,
+    Status,
+    StatusDesc,
     Position,
     PositionDesc,
     Priority,
     PriorityDesc,
+    Assignee,
+    AssigneeDesc,
+    ScheduledAt,
+    ScheduledAtDesc,
     CreatedAt,
     CreatedAtDesc,
     UpdatedAt,
@@ -243,6 +253,7 @@ pub enum TaskListSort {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskListOptions {
     pub statuses: Vec<TaskStatus>,
+    pub priorities: Vec<i64>,
     pub include_archived: bool,
     pub assignee: Option<String>,
     pub search: Option<String>,

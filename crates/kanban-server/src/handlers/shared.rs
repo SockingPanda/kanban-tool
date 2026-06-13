@@ -201,10 +201,20 @@ pub(crate) fn optional_json_body<T: Default>(
 
 pub(crate) fn parse_task_sort(sort: Option<&str>) -> Result<kanban_sqlite::TaskListSort, ApiError> {
     let sort = match sort.unwrap_or("position") {
+        "seq" => kanban_sqlite::TaskListSort::Seq,
+        "-seq" => kanban_sqlite::TaskListSort::SeqDesc,
+        "title" => kanban_sqlite::TaskListSort::Title,
+        "-title" => kanban_sqlite::TaskListSort::TitleDesc,
+        "status" => kanban_sqlite::TaskListSort::Status,
+        "-status" => kanban_sqlite::TaskListSort::StatusDesc,
         "position" => kanban_sqlite::TaskListSort::Position,
         "-position" => kanban_sqlite::TaskListSort::PositionDesc,
         "priority" => kanban_sqlite::TaskListSort::Priority,
         "-priority" => kanban_sqlite::TaskListSort::PriorityDesc,
+        "assignee" => kanban_sqlite::TaskListSort::Assignee,
+        "-assignee" => kanban_sqlite::TaskListSort::AssigneeDesc,
+        "scheduled_at" => kanban_sqlite::TaskListSort::ScheduledAt,
+        "-scheduled_at" => kanban_sqlite::TaskListSort::ScheduledAtDesc,
         "created_at" => kanban_sqlite::TaskListSort::CreatedAt,
         "-created_at" => kanban_sqlite::TaskListSort::CreatedAtDesc,
         "updated_at" => kanban_sqlite::TaskListSort::UpdatedAt,
@@ -214,6 +224,26 @@ pub(crate) fn parse_task_sort(sort: Option<&str>) -> Result<kanban_sqlite::TaskL
         value => return Err(invalid_input(format!("unsupported sort: {value}"))),
     };
     Ok(sort)
+}
+
+pub(crate) fn parse_priority_filters(raw_query: Option<&str>) -> Result<Vec<i64>, ApiError> {
+    let Some(raw_query) = raw_query else {
+        return Ok(Vec::new());
+    };
+    let pairs = serde_urlencoded::from_str::<Vec<(String, String)>>(raw_query)
+        .map_err(|error| invalid_input(error.to_string()))?;
+    pairs
+        .into_iter()
+        .filter_map(|(key, value)| (key == "priority").then_some(value))
+        .map(|value| {
+            let value = value
+                .trim()
+                .parse::<i64>()
+                .map_err(|_| invalid_input(format!("invalid priority filter: {value}")))?;
+            kanban_sqlite::validate_priority(value).map_err(ApiError::from)?;
+            Ok(value)
+        })
+        .collect()
 }
 
 pub(crate) fn parse_status_filters(raw_query: Option<&str>) -> Result<Vec<TaskStatus>, ApiError> {

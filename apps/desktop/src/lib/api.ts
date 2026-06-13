@@ -225,6 +225,26 @@ export type TaskPageResult = {
   page: PageMeta
 }
 
+export type TaskListSort =
+  | "seq"
+  | "-seq"
+  | "title"
+  | "-title"
+  | "status"
+  | "-status"
+  | "priority"
+  | "-priority"
+  | "assignee"
+  | "-assignee"
+  | "scheduled_at"
+  | "-scheduled_at"
+  | "due_at"
+  | "-due_at"
+  | "created_at"
+  | "-created_at"
+  | "updated_at"
+  | "-updated_at"
+
 export type SearchTasksResult = {
   tasks: Task[]
   searchMeta: SearchTasksMeta
@@ -332,8 +352,10 @@ export class KanbanApi {
     params.set("include_archived", String(options.includeArchived ?? false))
     params.set("limit", String(limit))
     params.set("offset", String(offset))
-    params.set("sort", "-updated_at")
+    params.set("sort", options.sort ?? "-updated_at")
+    if (options.query?.trim()) params.set("q", options.query.trim())
     for (const status of options.statuses ?? []) params.append("status", status)
+    for (const priority of options.priorities ?? []) params.append("priority", String(priority))
     const envelope = await this.requestEnvelope<Task[], PageEnvelopeMeta>(
       `/api/v1/boards/${this.board}/tasks?${params.toString()}`,
       { signal: options.signal },
@@ -505,6 +527,9 @@ type RequestOptions = {
 type TaskListOptions = {
   includeArchived?: boolean
   statuses?: TaskStatus[]
+  priorities?: number[]
+  query?: string
+  sort?: TaskListSort
   limit?: number
   offset?: number
   signal?: AbortSignal

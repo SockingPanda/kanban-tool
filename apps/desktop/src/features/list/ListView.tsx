@@ -6,12 +6,13 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table"
-import { CalendarClock, ChevronsLeft, ChevronsRight, Eye, MoreHorizontal, Rows3 } from "lucide-react"
+import { ArrowDown, ArrowUp, CalendarClock, ChevronsLeft, ChevronsRight, Eye, MoreHorizontal, Rows3, Search, X } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -28,11 +29,14 @@ import { cn, formatRelativeTime, shortId } from "@/lib/utils"
 
 import {
   defaultListColumnVisibility,
-  filterListTasks,
+  hasActiveListFilters,
   listColumnLabels,
   selectedRowCount,
+  sortForColumn,
+  togglePriorityFilter,
   type ListColumnId,
-  type PriorityFilter,
+  type ListSortDirection,
+  type ListSortState,
 } from "./table-state"
 
 export function ListView({
@@ -43,7 +47,16 @@ export function ListView({
   hasPreviousPage,
   canGoLastPage,
   rowsPerPage,
+  search,
+  statusFilter,
+  priorityFilters,
+  listSort,
   tasksRefreshing,
+  onSearchChange,
+  onStatusFilterChange,
+  onPriorityFiltersChange,
+  onListSortChange,
+  onResetListFilters,
   onSelectTask,
   onFirstPage,
   onPreviousPage,
@@ -58,7 +71,16 @@ export function ListView({
   hasPreviousPage: boolean
   canGoLastPage: boolean
   rowsPerPage: number
+  search: string
+  statusFilter: TaskStatus | "all"
+  priorityFilters: number[]
+  listSort: ListSortState
   tasksRefreshing: boolean
+  onSearchChange: (value: string) => void
+  onStatusFilterChange: (value: TaskStatus | "all") => void
+  onPriorityFiltersChange: (value: number[]) => void
+  onListSortChange: (value: ListSortState) => void
+  onResetListFilters: () => void
   onSelectTask: (taskId: string) => void
   onFirstPage: () => void
   onPreviousPage: () => void
@@ -66,15 +88,8 @@ export function ListView({
   onLastPage: () => void
   onRowsPerPageChange: (value: number) => void
 }) {
-  const [tableStatus, setTableStatus] = useState<TaskStatus | "all">("all")
-  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all")
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(defaultListColumnVisibility)
-
-  const filteredTasks = useMemo(
-    () => filterListTasks(tasks, tableStatus, priorityFilter),
-    [priorityFilter, tableStatus, tasks],
-  )
 
   const columns = useMemo<ColumnDef<Task>[]>(
     () => [
@@ -99,39 +114,47 @@ export function ListView({
       },
       {
         accessorKey: "ref",
-        header: "Ref",
+        header: ({ column }) => (
+          <SortableHeader columnId="ref" listSort={listSort} onListSortChange={onListSortChange} onHide={() => column.toggleVisibility(false)} />
+        ),
         cell: ({ row }) => (
           <div>
-            <div className="font-medium text-neutral-800">{row.original.ref || `#${row.original.seq}`}</div>
-            <div className="text-xs text-neutral-500">{shortId(row.original.id)}</div>
+            <div className="font-medium text-foreground">{row.original.ref || `#${row.original.seq}`}</div>
+            <div className="text-xs text-muted-foreground">{shortId(row.original.id)}</div>
           </div>
         ),
       },
       {
         accessorKey: "title",
-        header: "Title",
+        header: ({ column }) => (
+          <SortableHeader columnId="title" listSort={listSort} onListSortChange={onListSortChange} onHide={() => column.toggleVisibility(false)} />
+        ),
         cell: ({ row }) => (
           <div className="min-w-0">
             <button
-              className="block max-w-full truncate text-left font-medium text-neutral-950 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-neutral-400"
+              className="block max-w-full truncate text-left font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
               onClick={() => onSelectTask(row.original.id)}
             >
               {row.original.title}
             </button>
             {row.original.status_reason ? (
-              <div className="truncate text-xs text-neutral-500">{row.original.status_reason}</div>
+              <div className="truncate text-xs text-muted-foreground">{row.original.status_reason}</div>
             ) : null}
           </div>
         ),
       },
       {
         accessorKey: "status",
-        header: "Status",
+        header: ({ column }) => (
+          <SortableHeader columnId="status" listSort={listSort} onListSortChange={onListSortChange} onHide={() => column.toggleVisibility(false)} />
+        ),
         cell: ({ row }) => <Badge variant={badgeVariant(row.original.status)}>{row.original.status}</Badge>,
       },
       {
         accessorKey: "priority",
-        header: "Priority",
+        header: ({ column }) => (
+          <SortableHeader columnId="priority" listSort={listSort} onListSortChange={onListSortChange} onHide={() => column.toggleVisibility(false)} />
+        ),
         cell: ({ row }) => (
           <Badge variant="secondary" className={priorityBadgeClass(row.original.priority)}>
             {priorityLabel(row.original.priority)}
@@ -140,16 +163,20 @@ export function ListView({
       },
       {
         accessorKey: "assignee",
-        header: "Assignee",
+        header: ({ column }) => (
+          <SortableHeader columnId="assignee" listSort={listSort} onListSortChange={onListSortChange} onHide={() => column.toggleVisibility(false)} />
+        ),
         cell: ({ row }) => (
-          <span className="truncate text-neutral-600">{row.original.assignee ?? row.original.claim_owner ?? "-"}</span>
+          <span className="truncate text-muted-foreground">{row.original.assignee ?? row.original.claim_owner ?? "-"}</span>
         ),
       },
       {
         id: "schedule",
-        header: "Scheduled / due",
+        header: ({ column }) => (
+          <SortableHeader columnId="schedule" listSort={listSort} onListSortChange={onListSortChange} onHide={() => column.toggleVisibility(false)} />
+        ),
         cell: ({ row }) => (
-          <div className="space-y-0.5 text-xs text-neutral-600">
+          <div className="space-y-0.5 text-xs text-muted-foreground">
             <DateLine label="s" value={row.original.scheduled_at} />
             <DateLine label="d" value={row.original.due_at} />
           </div>
@@ -158,9 +185,11 @@ export function ListView({
       {
         id: "updated",
         accessorKey: "updated_at",
-        header: "Updated",
+        header: ({ column }) => (
+          <SortableHeader columnId="updated" listSort={listSort} onListSortChange={onListSortChange} onHide={() => column.toggleVisibility(false)} />
+        ),
         cell: ({ row }) => (
-          <span className="whitespace-nowrap text-xs text-neutral-500">{formatRelativeTime(row.original.updated_at)}</span>
+          <span className="whitespace-nowrap text-xs text-muted-foreground">{formatRelativeTime(row.original.updated_at)}</span>
         ),
       },
       {
@@ -189,11 +218,11 @@ export function ListView({
         ),
       },
     ],
-    [onSelectTask],
+    [listSort, onListSortChange, onSelectTask],
   )
 
   const table = useReactTable({
-    data: filteredTasks,
+    data: tasks,
     columns,
     getRowId: (row) => row.id,
     getCoreRowModel: getCoreRowModel(),
@@ -206,18 +235,28 @@ export function ListView({
   })
 
   const selectedCount = selectedRowCount(rowSelection)
+  const activeFilters = hasActiveListFilters(search, statusFilter, priorityFilters)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-white">
-      <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 px-4 py-3">
-        <label className="flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs text-neutral-600">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-card">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+        <div className="relative min-w-0 flex-1 basis-64 sm:w-72 sm:flex-none">
+          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+          <Input
+            className="pl-8"
+            placeholder="Filter tasks"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+          />
+        </div>
+        <label className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground">
           Status
           <select
-            className="bg-transparent text-neutral-950 outline-none"
-            value={tableStatus}
-            onChange={(event) => setTableStatus(event.target.value as TaskStatus | "all")}
+            className="bg-transparent text-foreground outline-none"
+            value={statusFilter}
+            onChange={(event) => onStatusFilterChange(event.target.value as TaskStatus | "all")}
           >
-            <option value="all">all page rows</option>
+            <option value="all">all active</option>
             {filterStatuses.map((status) => (
               <option key={status} value={status}>
                 {status}
@@ -225,24 +264,29 @@ export function ListView({
             ))}
           </select>
         </label>
-        <label className="flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs text-neutral-600">
-          Priority
-          <select
-            className="bg-transparent text-neutral-950 outline-none"
-            value={priorityFilter}
-            onChange={(event) => {
-              const value = event.target.value
-              setPriorityFilter(value === "all" ? "all" : (Number(value) as PriorityFilter))
-            }}
-          >
-            <option value="all">all</option>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm">
+              Priority
+              {priorityFilters.length ? ` (${priorityFilters.length})` : ""}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
             {priorityLevels.map((priority) => (
-              <option key={priority} value={priority}>
+              <DropdownMenuCheckboxItem
+                key={priority}
+                checked={priorityFilters.includes(priority)}
+                onCheckedChange={() => onPriorityFiltersChange(togglePriorityFilter(priorityFilters, priority))}
+              >
                 {priorityLabel(priority)}
-              </option>
+              </DropdownMenuCheckboxItem>
             ))}
-          </select>
-        </label>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button variant="ghost" size="sm" disabled={!activeFilters} onClick={onResetListFilters}>
+          <X className="h-3.5 w-3.5" />
+          Reset
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
@@ -269,22 +313,22 @@ export function ListView({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <div className="text-xs text-neutral-500">
-          {selectedCount} selected · {filteredTasks.length} current-page rows
+        <div className="text-xs text-muted-foreground">
+          {selectedCount} selected · {tasks.length} rows
         </div>
-        <div className="ml-auto flex items-center gap-2 text-xs text-neutral-500">
+        <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
           <span>{pageRangeLabel(page, tasks.length)}</span>
           {tasksRefreshing ? <span>refreshing</span> : null}
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="min-h-0 min-w-0 flex-1 overflow-auto">
         <table className="w-full min-w-[980px] border-separate border-spacing-0 text-sm">
-          <thead className="sticky top-0 z-10 bg-neutral-50 text-xs font-medium uppercase tracking-normal text-neutral-500">
+          <thead className="sticky top-0 z-10 bg-muted text-xs font-medium uppercase tracking-normal text-muted-foreground">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="border-b border-neutral-200 px-3 py-2 text-left font-medium">
+                  <th key={header.id} className="border-b border-border px-3 py-2 text-left font-medium">
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
                 ))}
@@ -297,12 +341,12 @@ export function ListView({
                 <tr
                   key={row.id}
                   className={cn(
-                    "border-b border-neutral-100 hover:bg-neutral-50",
-                    selectedId === row.original.id && "bg-neutral-100",
+                    "border-b border-border hover:bg-muted/60",
+                    selectedId === row.original.id && "bg-muted",
                   )}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="max-w-[320px] border-b border-neutral-100 px-3 py-2 align-middle">
+                    <td key={cell.id} className="max-w-[320px] border-b border-border px-3 py-2 align-middle">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
@@ -310,8 +354,8 @@ export function ListView({
               ))
             ) : (
               <tr>
-                <td className="px-4 py-10 text-center text-sm text-neutral-500" colSpan={table.getAllLeafColumns().length}>
-                  No tasks match the current page filters.
+                <td className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={table.getAllLeafColumns().length}>
+                  No tasks match the current filters.
                 </td>
               </tr>
             )}
@@ -319,11 +363,11 @@ export function ListView({
         </table>
       </div>
 
-      <div className="flex h-10 items-center gap-2 border-t border-neutral-200 bg-white px-4 text-xs text-neutral-500">
+      <div className="flex h-10 items-center gap-2 border-t border-border bg-card px-4 text-xs text-muted-foreground">
         <label className="flex items-center gap-2">
           Rows
           <select
-            className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-neutral-950 outline-none"
+            className="rounded-md border border-border bg-background px-2 py-1 text-foreground outline-none"
             value={rowsPerPage}
             onChange={(event) => onRowsPerPageChange(Number(event.target.value))}
           >
@@ -356,10 +400,55 @@ export function ListView({
 function DateLine({ label, value }: { label: string; value: number | null }) {
   return (
     <div className="flex items-center gap-1">
-      <CalendarClock className="h-3 w-3 text-neutral-400" />
-      <span className="font-medium text-neutral-400">{label}</span>
+      <CalendarClock className="h-3 w-3 text-muted-foreground" />
+      <span className="font-medium text-muted-foreground">{label}</span>
       <span>{value ? formatRelativeTime(value) : "-"}</span>
     </div>
+  )
+}
+
+function SortableHeader({
+  columnId,
+  listSort,
+  onListSortChange,
+  onHide,
+}: {
+  columnId: ListColumnId
+  listSort: ListSortState
+  onListSortChange: (value: ListSortState) => void
+  onHide: () => void
+}) {
+  const field = sortForColumn(columnId)
+  const active = field ? listSort.field === field : false
+  const label = listColumnLabels[columnId]
+
+  function setDirection(direction: ListSortDirection) {
+    if (!field) return
+    onListSortChange({ field, direction })
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-7 px-1.5 text-xs uppercase">
+          {label}
+          {active && listSort.direction === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : null}
+          {active && listSort.direction === "desc" ? <ArrowDown className="h-3.5 w-3.5" /> : null}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuItem disabled={!field} onSelect={() => setDirection("asc")}>
+          <ArrowUp className="h-4 w-4" />
+          Asc
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={!field} onSelect={() => setDirection("desc")}>
+          <ArrowDown className="h-4 w-4" />
+          Desc
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onHide}>Hide</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

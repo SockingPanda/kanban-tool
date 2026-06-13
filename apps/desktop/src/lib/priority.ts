@@ -12,10 +12,10 @@ export function priorityLabel(priority: number) {
 }
 
 export function priorityBadgeClass(priority: number) {
-  if (priority === 0) return "bg-red-50 text-red-700 ring-red-200"
-  if (priority === 1) return "bg-orange-50 text-orange-700 ring-orange-200"
-  if (priority === 2) return "bg-amber-50 text-amber-800 ring-amber-200"
-  return "bg-neutral-100 text-neutral-700 ring-neutral-200"
+  if (priority === 0) return "bg-[var(--priority-p0-bg)] text-[var(--priority-p0-fg)] ring-[var(--priority-p0-ring)]"
+  if (priority === 1) return "bg-[var(--priority-p1-bg)] text-[var(--priority-p1-fg)] ring-[var(--priority-p1-ring)]"
+  if (priority === 2) return "bg-[var(--priority-p2-bg)] text-[var(--priority-p2-fg)] ring-[var(--priority-p2-ring)]"
+  return "bg-muted text-muted-foreground ring-border"
 }
 
 export function prioritySelectValue(priority: number) {

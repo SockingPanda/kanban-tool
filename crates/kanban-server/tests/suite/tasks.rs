@@ -442,6 +442,74 @@ async fn tasks_lists_with_assignee_search_sort_and_rejects_label_filter() -> any
 }
 
 #[tokio::test]
+async fn tasks_lists_with_priority_filters_and_table_sort_fields() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    for (title, priority, assignee) in [
+        ("bravo", 2, Some("worker-b")),
+        ("alpha", 0, Some("worker-a")),
+        ("charlie", 3, None),
+    ] {
+        kanban_sqlite::create_task(
+            &db_path,
+            "default",
+            "seed",
+            kanban_sqlite::CreateTask {
+                title: title.to_owned(),
+                description: Some(format!("{title} details")),
+                status: Some(kanban_core::TaskStatus::Ready),
+                assignee: assignee.map(str::to_owned),
+                priority,
+                scheduled_at: None,
+                due_at: None,
+                max_retries: None,
+                metadata_json: "{}".to_owned(),
+            },
+        )
+        .context("seed task")?;
+    }
+    let app = test.router();
+
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/tasks?priority=0&priority=2&sort=title",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    let tasks = json["data"].as_array().context("tasks array")?;
+    let titles: Vec<_> = tasks.iter().map(|task| task["title"].clone()).collect();
+    assert_eq!(titles, [json!("alpha"), json!("bravo")]);
+
+    let (status, json) = get_json(app, "/api/v1/boards/default/tasks?sort=-assignee").await?;
+    assert_eq!(status, StatusCode::OK);
+    let tasks = json["data"].as_array().context("tasks array")?;
+    let assignees: Vec<_> = tasks.iter().map(|task| task["assignee"].clone()).collect();
+    assert_eq!(
+        assignees,
+        [json!("worker-b"), json!("worker-a"), Value::Null]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn tasks_rejects_invalid_priority_filter() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let app = test.router();
+
+    let (status, json) = get_json(app, "/api/v1/boards/default/tasks?priority=9").await?;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .context("message")?
+            .contains("priority must be one of P0, P1, P2, P3")
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn tasks_rejects_unbounded_limit() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let app = test.router();

@@ -149,8 +149,11 @@ Guard：
 默认排序：
 
 ```sql
-ORDER BY priority DESC, created_at ASC
+ORDER BY priority ASC, created_at ASC
 ```
+
+`priority` is the implemented P0-P3 integer level where `0` (P0) is highest and
+`3` (P3) is lowest/default, so dispatcher/frontier claim order selects P0 first.
 
 可选后续扩展：
 
@@ -198,7 +201,7 @@ WHERE tasks.board_id = ?
     WHERE d.child_task_id = tasks.id
       AND p.status != 'done'
   )
-ORDER BY priority DESC, created_at ASC
+ORDER BY priority ASC, created_at ASC
 LIMIT 1;
 
 UPDATE tasks

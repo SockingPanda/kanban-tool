@@ -20,7 +20,7 @@ fn task_show_defaults_to_one_line_summary() -> anyhow::Result<()> {
             "--assignee",
             "operator",
             "--priority",
-            "7",
+            "2",
         ],
     )?
     .success_json()?;
@@ -56,7 +56,7 @@ fn task_show_details_prints_full_readable_record() -> anyhow::Result<()> {
             "--assignee",
             "executor",
             "--priority",
-            "42",
+            "1",
             "--scheduled-at",
             "1767225600000",
             "--due-at",
@@ -75,7 +75,7 @@ fn task_show_details_prints_full_readable_record() -> anyhow::Result<()> {
     assert!(stdout.contains("status: ready"), "{stdout}");
     assert!(stdout.contains("title: detailed task title"), "{stdout}");
     assert!(stdout.contains("assignee: executor"), "{stdout}");
-    assert!(stdout.contains("priority: 42"), "{stdout}");
+    assert!(stdout.contains("priority: P1"), "{stdout}");
     assert!(stdout.contains("scheduled_at: 1767225600000"), "{stdout}");
     assert!(stdout.contains("due_at: 1767312000000"), "{stdout}");
     assert!(stdout.contains("created_at: "), "{stdout}");
@@ -84,6 +84,28 @@ fn task_show_details_prints_full_readable_record() -> anyhow::Result<()> {
         stdout.contains("description:\n  first detail line\n  second detail line"),
         "{stdout}"
     );
+    Ok(())
+}
+
+#[test]
+fn task_create_rejects_invalid_priority() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_create_rejects_invalid_priority")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    let output = kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "bad priority",
+            "--description",
+            "ready spec",
+            "--priority",
+            "70",
+        ],
+    )?;
+
+    output.failure_containing("priority must be one of P0, P1, P2, P3")?;
     Ok(())
 }
 

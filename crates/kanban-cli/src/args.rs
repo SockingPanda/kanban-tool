@@ -208,7 +208,7 @@ pub(crate) struct CreateArgs {
     pub(crate) status: Option<String>,
     #[arg(long)]
     pub(crate) assignee: Option<String>,
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_PRIORITY)]
     pub(crate) priority: i64,
     #[arg(long)]
     pub(crate) scheduled_at: Option<i64>,

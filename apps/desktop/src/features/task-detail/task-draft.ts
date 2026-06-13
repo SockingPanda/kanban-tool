@@ -1,4 +1,5 @@
 import type { Task } from "@/lib/api"
+import { prioritySelectValue } from "@/lib/priority"
 
 export type TaskEditDraft = {
   title: string
@@ -20,7 +21,7 @@ export function taskToDraft(task: Task): TaskEditDraft {
     title: task.title,
     description: task.description ?? "",
     assignee: task.assignee ?? "",
-    priority: String(task.priority),
+    priority: prioritySelectValue(task.priority),
     scheduledAt: formatDateInput(task.scheduled_at),
     dueAt: formatDateInput(task.due_at),
   }

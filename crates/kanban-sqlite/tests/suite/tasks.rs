@@ -14,7 +14,7 @@ fn task_crud_writes_events_and_hides_archived_by_default() -> anyhow::Result<()>
             description: Some("规格".into()),
             status: None,
             assignee: None,
-            priority: 10,
+            priority: 1,
             scheduled_at: None,
             due_at: None,
             max_retries: None,
@@ -38,7 +38,7 @@ fn task_crud_writes_events_and_hides_archived_by_default() -> anyhow::Result<()>
             title: Some("实现 Task CRUD v0.5".into()),
             description: None,
             assignee: Some(Some("worker-a".into())),
-            priority: Some(20),
+            priority: Some(2),
             scheduled_at: None,
             due_at: None,
             max_retries: None,
@@ -83,6 +83,59 @@ fn task_create_with_invalid_max_retries_rolls_back_task_and_events() -> anyhow::
             .iter()
             .all(|event| event.kind != "task.created")
     );
+
+    Ok(())
+}
+
+#[test]
+fn task_create_and_update_reject_invalid_priority() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_create_and_update_reject_invalid_priority")?;
+    init_database(&temp.path, "tester")?;
+
+    let create_error = result_err(create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Invalid priority".into(),
+            description: Some("ready spec".into()),
+            status: None,
+            assignee: None,
+            priority: 70,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: None,
+            metadata_json: "{}".into(),
+        },
+    ))?;
+    assert!(
+        create_error
+            .to_string()
+            .contains("priority must be one of P0, P1, P2, P3")
+    );
+
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Valid priority"),
+    )?;
+    let update_error = result_err(update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        TaskPatch {
+            priority: Some(-1),
+            ..TaskPatch::default()
+        },
+    ))?;
+    assert!(
+        update_error
+            .to_string()
+            .contains("priority must be one of P0, P1, P2, P3")
+    );
+    assert_eq!(get_task(&temp.path, "default", &task.id)?.priority, 3);
 
     Ok(())
 }

@@ -1,8 +1,9 @@
 use crate::connect_file;
 
 use super::{
-    ExportResult, ImportResult, board_id, comment_identity::infer_comment_author_type,
-    connect_existing_database, doctor_report_conn, storage, with_immediate_tx, with_read_tx,
+    DEFAULT_PRIORITY, ExportResult, ImportResult, board_id,
+    comment_identity::infer_comment_author_type, connect_existing_database, doctor_report_conn,
+    normalize_legacy_priority, storage, with_immediate_tx, with_read_tx,
 };
 
 use std::{
@@ -458,18 +459,25 @@ pub(crate) fn normalize_import_record(
     record_type: &str,
     data: &mut Map<String, serde_json::Value>,
 ) {
-    if record_type != "comment" {
-        return;
+    if record_type == "task" {
+        let normalized = data
+            .get("priority")
+            .and_then(|value| value.as_i64())
+            .map(normalize_legacy_priority)
+            .unwrap_or(DEFAULT_PRIORITY);
+        data.insert("priority".into(), json!(normalized));
     }
-    if !data.contains_key("author_type") {
-        let author_type = data
-            .get("kind")
-            .and_then(|value| value.as_str())
-            .map(infer_comment_author_type)
-            .unwrap_or("human");
-        data.insert("author_type".into(), json!(author_type));
+    if record_type == "comment" {
+        if !data.contains_key("author_type") {
+            let author_type = data
+                .get("kind")
+                .and_then(|value| value.as_str())
+                .map(infer_comment_author_type)
+                .unwrap_or("human");
+            data.insert("author_type".into(), json!(author_type));
+        }
+        data.entry("agent_type").or_insert(serde_json::Value::Null);
     }
-    data.entry("agent_type").or_insert(serde_json::Value::Null);
 }
 
 pub(crate) fn is_sql_identifier(value: &str) -> bool {

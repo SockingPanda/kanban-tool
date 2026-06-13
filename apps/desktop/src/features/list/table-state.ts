@@ -1,6 +1,7 @@
 import type { Task, TaskStatus } from "@/lib/api"
+import type { PriorityFilter } from "@/lib/priority"
 
-export type PriorityFilter = "all" | "positive" | "zero" | "negative"
+export type { PriorityFilter }
 
 export type ListColumnId =
   | "select"
@@ -50,8 +51,6 @@ function matchesStatus(task: Task, status: TaskStatus | "all") {
 }
 
 function matchesPriority(task: Task, priority: PriorityFilter) {
-  if (priority === "positive") return task.priority > 0
-  if (priority === "zero") return task.priority === 0
-  if (priority === "negative") return task.priority < 0
+  if (priority !== "all") return task.priority === priority
   return true
 }

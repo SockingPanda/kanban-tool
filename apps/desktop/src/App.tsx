@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { AppShell } from "@/app/AppShell"
+import { createBoardSwitchReset } from "@/app/board-switch-state"
 import { parseSidebarOpen, serializeSidebarOpen, SIDEBAR_OPEN_STORAGE_KEY } from "@/app/sidebar-state"
 import {
   applyRootTheme,
@@ -38,6 +39,7 @@ import {
   TaskStatus,
   loadRuntimeConfig,
 } from "@/lib/api"
+import { switchRuntimeBoard } from "@/lib/runtime-board"
 import { queryKeys } from "@/lib/query-keys"
 import { hasNextPage, hasPreviousPage, lastPageOffset } from "@/lib/pagination"
 import { useDebouncedValue } from "@/lib/use-debounced-value"
@@ -117,6 +119,15 @@ function App() {
     },
   })
 
+  const boardsQuery = useQuery({
+    enabled: Boolean(api),
+    queryKey: queryKeys.boards(),
+    queryFn: ({ signal }) => {
+      if (!api) throw new Error("API client is not ready")
+      return api.listBoards({ signal })
+    },
+  })
+
   const tasksQuery = useBoardTasks({
     api,
     search: debouncedSearch,
@@ -178,6 +189,10 @@ function App() {
   useEffect(() => {
     if (columnsQuery.error) setError(errorMessage(columnsQuery.error))
   }, [columnsQuery.error])
+
+  useEffect(() => {
+    if (boardsQuery.error) setError(errorMessage(boardsQuery.error))
+  }, [boardsQuery.error])
 
   useEffect(() => {
     if (tasksQuery.error) setError(errorMessage(tasksQuery.error))
@@ -356,6 +371,46 @@ function App() {
     })
   }
 
+  async function switchBoard(board: string) {
+    if (!config || board === config.board) return
+    setPendingAction("board")
+    setError(null)
+    try {
+      const nextConfig = await switchRuntimeBoard(config, board)
+      const reset = createBoardSwitchReset({
+        config: nextConfig,
+        selectedId,
+        pageOffset,
+        newTitle,
+        newDescription,
+        blockReason,
+        dependencyInput,
+        commentBody,
+        draftState,
+        claimTokens,
+        lastRefreshAt,
+        error,
+      })
+      setConfig(reset.config)
+      setSelectedId(reset.selectedId)
+      setPageOffset(reset.pageOffset)
+      setNewTitle(reset.newTitle)
+      setNewDescription(reset.newDescription)
+      setBlockReason(reset.blockReason)
+      setDependencyInput(reset.dependencyInput)
+      setCommentBody(reset.commentBody)
+      setDraftState(reset.draftState)
+      setClaimTokens(reset.claimTokens)
+      setLastRefreshAt(reset.lastRefreshAt)
+      setError(reset.error)
+      await queryClient.invalidateQueries()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
   const hasNext = hasNextPage(page, tasks.length)
   const hasPrevious = hasPreviousPage(page)
   const lastOffset = lastPageOffset(page)
@@ -364,6 +419,9 @@ function App() {
     <AppShell
       config={config}
       api={api}
+      boards={boardsQuery.data ?? []}
+      boardsLoading={boardsQuery.isLoading}
+      boardsError={boardsQuery.error ? errorMessage(boardsQuery.error) : null}
       view={view}
       themeMode={themeMode}
       sidebarOpen={sidebarOpen}
@@ -404,6 +462,7 @@ function App() {
       lastRefreshAt={lastRefreshAt}
       queueCounts={queueCounts}
       onSearchChange={setSearch}
+      onBoardChange={(board) => void switchBoard(board)}
       onViewChange={setView}
       onThemeModeChange={setThemeMode}
       onCycleThemeMode={() => setThemeMode((current) => nextThemeMode(current))}

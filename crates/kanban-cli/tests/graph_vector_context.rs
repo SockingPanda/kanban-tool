@@ -1,7 +1,9 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kanban, kanban_in_dir_envs};
+#[cfg(feature = "vector-lancedb")]
+use common::kanban_in_dir_envs;
+use common::{TempDb, kanban};
 #[test]
 fn substrate_commands_report_entities_outbox_and_derived_status() -> anyhow::Result<()> {
     let temp = TempDb::new("substrate_commands_report_entities_outbox_and_derived_status")?;

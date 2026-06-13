@@ -19,7 +19,7 @@ describe("task draft helpers", () => {
       title: "Keep boundary behavior",
       description: "",
       assignee: "",
-      priority: "7",
+      priority: "3",
       scheduledAt: "",
       dueAt: "",
     })

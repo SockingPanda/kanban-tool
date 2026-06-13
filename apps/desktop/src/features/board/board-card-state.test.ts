@@ -60,10 +60,10 @@ describe("board card state", () => {
     ).toBe(5)
   })
 
-  it("keeps numeric priority label semantics", () => {
-    expect(priorityBadgeLabel(7)).toBe("P7")
+  it("labels priority levels and falls back to P3 for legacy values", () => {
+    expect(priorityBadgeLabel(7)).toBe("P3")
     expect(priorityBadgeLabel(0)).toBe("P0")
-    expect(priorityBadgeLabel(-2)).toBe("P-2")
+    expect(priorityBadgeLabel(-2)).toBe("P3")
   })
 })
 

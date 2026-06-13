@@ -167,7 +167,7 @@ pub(crate) fn claim_next_ready_conn(
     }
     let selected = conn
         .query_row(
-            "SELECT id FROM tasks WHERE board_id=?1 AND status='ready' AND claim_token IS NULL AND (assignee IS NULL OR assignee=?2) AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status != 'done') ORDER BY priority DESC, created_at ASC LIMIT 1",
+            "SELECT id FROM tasks WHERE board_id=?1 AND status='ready' AND claim_token IS NULL AND (assignee IS NULL OR assignee=?2) AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status != 'done') ORDER BY priority ASC, created_at ASC LIMIT 1",
             params![board_id, worker_profile],
             |row| row.get::<_, String>(0),
         )

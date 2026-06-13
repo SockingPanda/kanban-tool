@@ -186,7 +186,7 @@ Options：
 | `--description <text>` | Markdown 描述。 |
 | `--status <status>` | 显式初始状态：triage/todo/scheduled/ready。 |
 | `--assignee <name>` | assignee/worker profile。 |
-| `--priority <int>` | 优先级，默认 0。 |
+| `--priority <int>` | Priority level `0..3`: `0` = P0 highest, `3` = P3 lowest/default. Invalid values are rejected. |
 | `--scheduled-at <epoch_ms>` | 计划时间，Unix epoch milliseconds。 |
 | `--due-at <epoch_ms>` | 截止时间，Unix epoch milliseconds。 |
 | `--max-retries <n>` | worker 失败或 reclaim 后最多重试次数。 |
@@ -195,7 +195,7 @@ Options：
 Examples：
 
 ```bash
-kanban task create "实现状态机" --priority 10
+kanban task create "实现状态机" --priority 0
 kanban task create "明早检查报告" --scheduled-at 1780640400000
 ```
 
@@ -237,7 +237,7 @@ Options：
 | `--include-archived` | 包含 archived。 |
 | `--limit <n>` | 限制数量。 |
 | `--offset <n>` | 分页偏移。 |
-| `--sort <field>` | priority/created/updated/position。 |
+| `--sort <field>` | priority/priority_desc/created/updated/position. `priority` sorts P0 -> P3; `priority_desc` sorts P3 -> P0. |
 
 Examples：
 
@@ -303,7 +303,7 @@ active task 的目标状态并写入对应事件。Dependency edge 通过 `kanba
 Examples：
 
 ```bash
-kanban task update 12 --priority 20
+kanban task update 12 --priority 1
 kanban task update t_01HX --description "新的规格"
 kanban task update t_01HX --max-retries 2
 kanban task update t_01HX --clear-max-retries
@@ -485,7 +485,7 @@ the standard envelope:
       "node_count": 3,
       "edge_count": 1,
       "sort": [
-        "priority desc",
+        "priority asc",
         "due_at asc nulls last",
         "scheduled_at asc nulls last",
         "dependency fan-out desc",
@@ -502,7 +502,7 @@ the standard envelope:
           "seq": 1,
           "title": "Implement state machine",
           "status": "ready",
-          "priority": 10,
+          "priority": 0,
           "due_at": null,
           "scheduled_at": null,
           "created_at": 1717520000000,
@@ -555,7 +555,7 @@ the standard envelope:
 Frontier v1 includes only unarchived `todo` and `ready` tasks with no unfinished
 parent dependencies. It excludes `done`, `archived`, `blocked`, `running`, and
 `review` tasks. Nodes and frontier entries use the documented stable sort:
-priority descending, due date ascending with nulls last, scheduled time
+priority ascending (P0 -> P3), due date ascending with nulls last, scheduled time
 ascending with nulls last, dependency fan-out descending, created time
 ascending, then task ref and id.
 

@@ -1,4 +1,5 @@
 import type { Dependencies } from "@/lib/api"
+export { priorityBadgeClass, priorityLabel as priorityBadgeLabel } from "@/lib/priority"
 
 export type SelectedDependencySnapshot = {
   selectedTaskId?: string | null
@@ -14,8 +15,4 @@ export function selectedDependencyCountForTask(taskId: string, snapshot: Selecte
   if (!snapshot.dependencies) return undefined
 
   return snapshot.dependencies.parents.length + snapshot.dependencies.children.length
-}
-
-export function priorityBadgeLabel(priority: number) {
-  return `P${priority}`
 }

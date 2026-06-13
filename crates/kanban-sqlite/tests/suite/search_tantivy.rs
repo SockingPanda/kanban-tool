@@ -149,7 +149,7 @@ fn tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters() 
             description: Some("plain ready spec".into()),
             status: Some(TaskStatus::Ready),
             assignee: Some("worker-a".into()),
-            priority: 10,
+            priority: 1,
             scheduled_at: None,
             due_at: Some(1_767_312_000_000),
             max_retries: None,

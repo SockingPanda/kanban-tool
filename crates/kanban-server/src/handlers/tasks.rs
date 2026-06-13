@@ -46,7 +46,7 @@ pub(crate) struct CreateTaskBody {
     description: Option<String>,
     status: Option<TaskStatus>,
     assignee: Option<String>,
-    #[serde(default)]
+    #[serde(default = "kanban_sqlite::default_priority")]
     priority: i64,
     scheduled_at: Option<i64>,
     due_at: Option<i64>,

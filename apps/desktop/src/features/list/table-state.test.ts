@@ -44,15 +44,15 @@ function task(id: string, status: Task["status"], priority: number): Task {
 describe("list table state helpers", () => {
   it("filters the current page by status and priority", () => {
     const tasks = [
-      task("t_1", "ready", 5),
+      task("t_1", "ready", 3),
       task("t_2", "ready", 0),
-      task("t_3", "blocked", -1),
+      task("t_3", "blocked", 1),
       task("t_4", "review", 2),
     ]
 
     expect(filterListTasks(tasks, "ready", "all").map((item) => item.id)).toEqual(["t_1", "t_2"])
-    expect(filterListTasks(tasks, "all", "positive").map((item) => item.id)).toEqual(["t_1", "t_4"])
-    expect(filterListTasks(tasks, "blocked", "negative").map((item) => item.id)).toEqual(["t_3"])
+    expect(filterListTasks(tasks, "all", 2).map((item) => item.id)).toEqual(["t_4"])
+    expect(filterListTasks(tasks, "blocked", 1).map((item) => item.id)).toEqual(["t_3"])
   })
 
   it("counts selected rows without treating false entries as selected", () => {

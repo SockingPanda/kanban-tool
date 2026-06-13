@@ -6,7 +6,12 @@ import { Badge } from "@/components/ui/badge"
 import type { BoardColumn as ApiBoardColumn, Task, TaskStatus } from "@/lib/api"
 import { cn, formatRelativeTime } from "@/lib/utils"
 
-import { priorityBadgeLabel, selectedDependencyCountForTask, type SelectedDependencySnapshot } from "./board-card-state"
+import {
+  priorityBadgeClass,
+  priorityBadgeLabel,
+  selectedDependencyCountForTask,
+  type SelectedDependencySnapshot,
+} from "./board-card-state"
 import { columnHints, statusAccent } from "./board-config"
 
 export function BoardView({
@@ -165,7 +170,7 @@ function TaskCard({
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">#{task.seq} {task.title}</div>
           <div className="mt-1 flex flex-wrap gap-1 text-xs text-neutral-500">
-            <Badge variant="secondary" className="px-1.5 py-0 text-[11px] leading-5">
+            <Badge variant="secondary" className={cn("px-1.5 py-0 text-[11px] leading-5", priorityBadgeClass(task.priority))}>
               {priorityBadgeLabel(task.priority)}
             </Badge>
             {task.due_at ? <span>due {formatRelativeTime(task.due_at)}</span> : null}

@@ -451,10 +451,15 @@ Human output for add/remove is Chinese-first:
 添加 dependency 后：
 
 - 如果 child 当前是 `ready` 且 parent 未完成，child 降级为 `todo`。
+- parent 完成或 dependency 移除后，child 保持 `todo`；需要 `kanban task promote <task_ref>` 才显式进入 `ready`。
 - 重复添加同一 parent/child edge 是 idempotent no-op：不追加新的
   `dependency.added` event，也不再次触发 child 状态重算。
 - 如果产生环，返回 exit code 6 或 invalid input。
 - 当前版本拒绝跨 board dependency，即使 parent/child 通过全局 `t_...` 或显式 `board#seq` 解析成功。
+
+`task list/show --json` 返回 derived dependency fields：`dependency_blocked`
+和 `unfinished_parent_count`。它们用于区分仍被未完成 parent 阻塞的 `todo`
+与已解除依赖但尚未人工 promote 的 `todo`。
 
 ---
 

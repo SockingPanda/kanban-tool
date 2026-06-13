@@ -176,7 +176,6 @@ CLI 可以直接打开 SQLite DB 调用 service，不需要 server 常驻。
 
 职责：
 
-- promotion。
 - claim。
 - heartbeat。
 - reclaim。
@@ -242,8 +241,7 @@ Worker/CLI/Web
   -> update tasks to done or review
   -> clear claim fields
   -> insert task_events(kind='task.completed')
-  -> promote children that are now unblocked
-  -> insert promotion events
+  -> children remain todo; derived dependency state reflects whether they are still blocked
   -> COMMIT
 ```
 

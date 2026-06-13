@@ -210,7 +210,9 @@ Response：
       "scheduled_at": null,
       "due_at": null,
       "created_at": 1717520000000,
-      "updated_at": 1717520000000
+      "updated_at": 1717520000000,
+      "dependency_blocked": false,
+      "unfinished_parent_count": 0
     }
   ],
   "meta": {
@@ -250,6 +252,7 @@ Notes：
 - `status` 只能是 `triage|todo|scheduled|ready`。
 - 若不传 `status`，服务端计算初始状态。
 - 若存在未完成 dependencies，不能创建为 `ready`。
+- Task responses expose derived dependency fields: `dependency_blocked` and `unfinished_parent_count`. They are query metadata and are not writable task fields.
 - `priority` is an integer level `0..3`: `0` = P0 highest, `3` = P3 lowest/default. Create rejects invalid values.
 
 ### 4.3 Get task
@@ -515,7 +518,9 @@ Request：
 Response status is `201 Created` when a new edge is inserted. Re-adding the
 same parent/child edge is idempotent and returns `200 OK` with the same
 dependency envelope; it does not write another `dependency.added` event or
-recompute the child status again.
+recompute the child status again. Dependency changes may demote an invalid
+`ready` child to `todo`, but they do not auto-promote `todo` children to
+`ready`.
 
 ### 6.2 Remove dependency
 

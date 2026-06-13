@@ -2,9 +2,9 @@ use crate::connect_file;
 
 use super::{
     ClaimResult, DispatchOptions, DispatchResult, FinishPolicy, allowed_run_log_roots, board_id,
-    claim_next_ready_conn, ensure_board_active, finish_running, get_task_by_id, guarded_set_status,
-    heartbeat_task_conn, normalize_existing_aware, promote_children, query_tasks, reclaim_expired,
-    recompute_ready_status, retry_running_task, storage, with_immediate_tx,
+    claim_next_ready_conn, ensure_board_active, finish_running, get_task_by_id,
+    heartbeat_task_conn, normalize_existing_aware, reclaim_expired, retry_running_task, storage,
+    with_immediate_tx,
 };
 
 use std::{
@@ -31,7 +31,6 @@ pub fn dispatch_once(
     let conn = connect_file(path)?;
     let board_id = board_id(&conn, board)?;
     let now = SystemClock.now_ms();
-    promote_due_tasks(&conn, &board_id, &options.actor, now)?;
     let Some(claim) = claim_next_ready_conn(
         &conn,
         &board_id,
@@ -100,13 +99,6 @@ pub fn dispatch_once(
                     Some(&log_path),
                     None,
                     None,
-                    SystemClock.now_ms(),
-                )?;
-                promote_children(
-                    &conn,
-                    &board_id,
-                    &options.actor,
-                    &fresh.id,
                     SystemClock.now_ms(),
                 )?;
             }
@@ -204,45 +196,6 @@ fn recover_claimed_dispatch_failure(
         }
         Ok(())
     })
-}
-
-pub(crate) fn promote_due_tasks(
-    conn: &Connection,
-    board_id: &str,
-    actor: &str,
-    now: i64,
-) -> Result<usize> {
-    let candidates = query_tasks(conn, board_id)?
-        .into_iter()
-        .filter(|task| matches!(task.status, TaskStatus::Todo | TaskStatus::Scheduled))
-        .collect::<Vec<_>>();
-    let mut promoted = 0;
-    for task in candidates {
-        let was_promoted = with_immediate_tx(conn, || {
-            ensure_board_active(conn, board_id)?;
-            let fresh = get_task_by_id(conn, board_id, &task.id)?;
-            if !matches!(fresh.status, TaskStatus::Todo | TaskStatus::Scheduled) {
-                return Ok(false);
-            }
-            if recompute_ready_status(conn, &fresh, now)? != TaskStatus::Ready {
-                return Ok(false);
-            }
-            guarded_set_status(
-                conn,
-                board_id,
-                &fresh,
-                TaskStatus::Ready,
-                actor,
-                "task.promoted",
-                now,
-            )?;
-            Ok(true)
-        })?;
-        if was_promoted {
-            promoted += 1;
-        }
-    }
-    Ok(promoted)
 }
 
 pub(crate) struct WorkerOutput {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 
-import type { Dependencies } from "@/lib/api"
+import type { Dependencies, Task } from "@/lib/api"
 
-import { priorityBadgeLabel, selectedDependencyCountForTask } from "./board-card-state"
+import { dependencyBlockedTodoClass, priorityBadgeLabel, sortBoardColumnTasks, selectedDependencyCountForTask } from "./board-card-state"
 
 describe("board card state", () => {
   it("hides dependency metadata for unselected tasks", () => {
@@ -65,6 +65,26 @@ describe("board card state", () => {
     expect(priorityBadgeLabel(0)).toBe("P0")
     expect(priorityBadgeLabel(-2)).toBe("P3")
   })
+
+  it("sorts unblocked todo cards before dependency-blocked todo cards", () => {
+    const blocked = task("blocked", { status: "todo", dependency_blocked: true, position: 1, created_at: 1 })
+    const unblocked = task("unblocked", { status: "todo", dependency_blocked: false, position: 2, created_at: 2 })
+
+    expect(sortBoardColumnTasks([blocked, unblocked], "todo").map((item) => item.id)).toEqual(["unblocked", "blocked"])
+  })
+
+  it("does not reorder non-todo columns by dependency-blocked state", () => {
+    const blocked = task("blocked", { status: "ready", dependency_blocked: true, position: 1 })
+    const unblocked = task("unblocked", { status: "ready", dependency_blocked: false, position: 2 })
+
+    expect(sortBoardColumnTasks([blocked, unblocked], "ready").map((item) => item.id)).toEqual(["blocked", "unblocked"])
+  })
+
+  it("adds red border styling only for dependency-blocked todo cards", () => {
+    expect(dependencyBlockedTodoClass(task("blocked", { status: "todo", dependency_blocked: true }))).toContain("border-red")
+    expect(dependencyBlockedTodoClass(task("ready", { status: "ready", dependency_blocked: true }))).toBeNull()
+    expect(dependencyBlockedTodoClass(task("todo", { status: "todo", dependency_blocked: false }))).toBeNull()
+  })
 })
 
 function dependencies(parentCount: number, childCount: number): Dependencies {
@@ -74,7 +94,11 @@ function dependencies(parentCount: number, childCount: number): Dependencies {
   }
 }
 
-function task(id: string) {
+function task(id: string, overrides: Partial<Task> = {}): Task {
+  return { ...baseTask(id), ...overrides }
+}
+
+function baseTask(id: string): Task {
   return {
     id,
     board_id: "b_1",
@@ -106,5 +130,7 @@ function task(id: string) {
     result_json: null,
     metadata_json: "{}",
     lock_version: 0,
+    dependency_blocked: false,
+    unfinished_parent_count: 0,
   }
 }

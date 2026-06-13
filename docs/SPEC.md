@@ -219,13 +219,14 @@ CLI 见 [`CLI_SPEC.md`](CLI_SPEC.md)。
 
 Dispatcher 是本地可选组件。它不负责多人协作，只负责本地自动化：
 
-1. 把满足条件的 `todo/scheduled` 提升为 `ready`。
-2. 从 `ready` 中 claim 任务。
+1. 从 `ready` 中 claim 任务。
 3. 为 claim 创建 `task_runs`。
-4. 运行 worker profile。
-5. 周期性 heartbeat。
-6. 超时或崩溃后 reclaim。
-7. 根据 worker exit status 写入 `done/review/blocked/ready`。
+3. 运行 worker profile。
+4. 周期性 heartbeat。
+5. 超时或崩溃后 reclaim。
+6. 根据 worker exit status 写入 `done/review/blocked/ready`。
+
+`ready` 表示显式人工 promote 意图；parent 完成、dependency 移除或 schedule 到期不会被 dispatcher 自动提升到 `ready`。
 
 Dispatcher 见 [`DISPATCHER_SPEC.md`](DISPATCHER_SPEC.md)。
 

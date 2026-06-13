@@ -14,7 +14,8 @@ const KNOWLEDGE_SUBSTRATE_MIGRATION: &str =
     include_str!("../../../migrations/002_knowledge_substrate.sql");
 const COMMENT_AUTHOR_IDENTITY_MIGRATION: &str =
     include_str!("../../../migrations/003_comment_author_identity.sql");
-const LATEST_MIGRATION_VERSION: i64 = 3;
+const PRIORITY_LEVELS_MIGRATION: &str = include_str!("../../../migrations/004_priority_levels.sql");
+const LATEST_MIGRATION_VERSION: i64 = 4;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] =
     &["fnv64:0ca871be950fc8a6", "fnv64:3b08da4e2b6041f5"];
 
@@ -39,6 +40,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 3,
         name: "003_comment_author_identity",
         sql: COMMENT_AUTHOR_IDENTITY_MIGRATION,
+    },
+    Migration {
+        version: 4,
+        name: "004_priority_levels",
+        sql: PRIORITY_LEVELS_MIGRATION,
     },
 ];
 

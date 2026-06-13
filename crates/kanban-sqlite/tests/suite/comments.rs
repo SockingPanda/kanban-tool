@@ -267,6 +267,104 @@ fn legacy_jsonl_import_infers_comment_author_identity() -> anyhow::Result<()> {
 }
 
 #[test]
+fn legacy_jsonl_import_normalizes_task_priority() -> anyhow::Result<()> {
+    let source = TempDb::new("legacy_jsonl_import_normalizes_task_priority_source")?;
+    let legacy_path = source.dir.join("legacy-priority.jsonl");
+    let records = vec![
+        serde_json::json!({
+            "type": "board",
+            "data": {
+                "id": "b_import",
+                "slug": "default",
+                "name": "Default",
+                "description": null,
+                "created_at": 1,
+                "updated_at": 1,
+                "archived_at": null
+            }
+        }),
+        serde_json::json!({
+            "type": "column",
+            "data": {
+                "id": "col_import_ready",
+                "board_id": "b_import",
+                "status": "ready",
+                "title": "Ready",
+                "position": 40,
+                "hidden": 0,
+                "wip_limit": null,
+                "created_at": 1,
+                "updated_at": 1
+            }
+        }),
+    ];
+    let mut lines = records
+        .into_iter()
+        .map(|record| record.to_string())
+        .collect::<Vec<_>>();
+    for (seq, title, priority) in [
+        (1, "negative", -5),
+        (2, "zero", 0),
+        (3, "two", 2),
+        (4, "eighty", 80),
+    ] {
+        lines.push(
+            serde_json::json!({
+                "type": "task",
+                "data": {
+                    "id": format!("t_import_{seq}"),
+                    "board_id": "b_import",
+                    "seq": seq,
+                    "title": title,
+                    "description": "ready spec",
+                    "status": "ready",
+                    "status_reason": null,
+                    "assignee": null,
+                    "priority": priority,
+                    "position": seq * 1024,
+                    "scheduled_at": null,
+                    "due_at": null,
+                    "created_by": "test",
+                    "created_at": 1,
+                    "updated_at": 1,
+                    "started_at": null,
+                    "completed_at": null,
+                    "archived_at": null,
+                    "claim_token": null,
+                    "claim_owner": null,
+                    "claim_expires_at": null,
+                    "last_heartbeat_at": null,
+                    "current_run_id": null,
+                    "retry_count": 0,
+                    "max_retries": null,
+                    "result_summary": null,
+                    "result_json": null,
+                    "metadata_json": "{}",
+                    "lock_version": 0
+                }
+            })
+            .to_string(),
+        );
+    }
+    std::fs::write(&legacy_path, format!("{}\n", lines.join("\n")))?;
+
+    let target = TempDb::new("legacy_jsonl_import_normalizes_task_priority_target")?;
+    init_database(&target.path, "tester")?;
+    import_jsonl(&target.path, &legacy_path, true)?;
+
+    let tasks = list_tasks(&target.path, "default", &[], true)?;
+    let priorities = tasks
+        .iter()
+        .map(|task| (task.title.as_str(), task.priority))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        priorities,
+        vec![("negative", 0), ("zero", 0), ("two", 2), ("eighty", 3)]
+    );
+    Ok(())
+}
+
+#[test]
 fn legacy_jsonl_import_infers_agent_author_type_without_dropping_agent_type() -> anyhow::Result<()>
 {
     let source = TempDb::new("legacy_jsonl_import_preserves_agent_type_source")?;

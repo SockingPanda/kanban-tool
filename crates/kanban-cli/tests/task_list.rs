@@ -33,7 +33,7 @@ fn task_list_supports_search_assignee_sort_limit_and_offset() -> anyhow::Result<
             "--assignee",
             "worker-a",
             "--priority",
-            "10",
+            "3",
         ],
     )?
     .success()?;
@@ -48,7 +48,7 @@ fn task_list_supports_search_assignee_sort_limit_and_offset() -> anyhow::Result<
             "--assignee",
             "worker-b",
             "--priority",
-            "100",
+            "2",
         ],
     )?
     .success()?;

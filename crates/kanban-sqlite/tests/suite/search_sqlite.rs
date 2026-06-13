@@ -16,7 +16,7 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
             description: Some("plain spec".into()),
             status: Some(TaskStatus::Ready),
             assignee: Some("worker-a".into()),
-            priority: 10,
+            priority: 1,
             scheduled_at: None,
             due_at: None,
             max_retries: None,

@@ -23,6 +23,7 @@ import {
 import { filterStatuses } from "@/features/board/board-config"
 import type { PageMeta, Task, TaskStatus } from "@/lib/api"
 import { pageRangeLabel } from "@/lib/pagination"
+import { priorityBadgeClass, priorityLabel, priorityLevels } from "@/lib/priority"
 import { cn, formatRelativeTime, shortId } from "@/lib/utils"
 
 import {
@@ -131,7 +132,11 @@ export function ListView({
       {
         accessorKey: "priority",
         header: "Priority",
-        cell: ({ row }) => <span className="tabular-nums">{row.original.priority}</span>,
+        cell: ({ row }) => (
+          <Badge variant="secondary" className={priorityBadgeClass(row.original.priority)}>
+            {priorityLabel(row.original.priority)}
+          </Badge>
+        ),
       },
       {
         accessorKey: "assignee",
@@ -225,12 +230,17 @@ export function ListView({
           <select
             className="bg-transparent text-neutral-950 outline-none"
             value={priorityFilter}
-            onChange={(event) => setPriorityFilter(event.target.value as PriorityFilter)}
+            onChange={(event) => {
+              const value = event.target.value
+              setPriorityFilter(value === "all" ? "all" : (Number(value) as PriorityFilter))
+            }}
           >
             <option value="all">all</option>
-            <option value="positive">&gt; 0</option>
-            <option value="zero">0</option>
-            <option value="negative">&lt; 0</option>
+            {priorityLevels.map((priority) => (
+              <option key={priority} value={priority}>
+                {priorityLabel(priority)}
+              </option>
+            ))}
           </select>
         </label>
         <DropdownMenu>

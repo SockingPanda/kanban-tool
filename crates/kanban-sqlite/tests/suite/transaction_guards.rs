@@ -57,7 +57,7 @@ fn update_rolls_back_task_state_when_event_insert_fails() -> anyhow::Result<()> 
         &task.id,
         TaskPatch {
             title: Some("changed title".into()),
-            priority: Some(99),
+            priority: Some(0),
             ..TaskPatch::default()
         },
     ))?;

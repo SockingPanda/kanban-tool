@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { KanbanApi, type ApiError, type SearchIndexStatus, type SearchTasksMeta, type Task } from "./api"
+import { KanbanApi, type ApiError, type Board, type SearchIndexStatus, type SearchTasksMeta, type Task } from "./api"
 
 const runtimeConfig = {
   apiBaseUrl: "http://127.0.0.1:8721",
@@ -193,6 +193,40 @@ describe("KanbanApi task search", () => {
     expect(calledUrl(fetchMock).pathname).toBe("/health")
   })
 
+  it("lists active boards through the boards endpoint", async () => {
+    const boards = [
+      board({ id: "b_default", slug: "default", name: "Default" }),
+      board({ id: "b_ops", slug: "ops", name: "Ops" }),
+    ]
+    const fetchMock = mockFetch({ data: boards })
+    const api = new KanbanApi(runtimeConfig)
+
+    const result = await api.listBoards()
+
+    expect(result).toEqual(boards)
+    expect(calledUrl(fetchMock).pathname).toBe("/api/v1/boards")
+    expect(calledUrl(fetchMock).searchParams.get("include_archived")).toBe("false")
+  })
+
+  it("can include archived boards when listing boards", async () => {
+    const fetchMock = mockFetch({ data: [board({ archived_at: 10 })] })
+    const api = new KanbanApi(runtimeConfig)
+
+    await api.listBoards({ includeArchived: true })
+
+    expect(calledUrl(fetchMock).searchParams.get("include_archived")).toBe("true")
+  })
+
+  it("rejects malformed board list envelopes before React consumes them", async () => {
+    mockFetch({ data: { not: "an array" } })
+    const api = new KanbanApi(runtimeConfig)
+
+    await expect(api.listBoards()).rejects.toMatchObject({
+      code: "invalid_response",
+      message: "boards response data must be an array",
+    } satisfies Partial<ApiError>)
+  })
+
   it("uses backend-shaped maintenance and status envelopes", async () => {
     const searchStatusEnvelope = {
       backend: "sqlite",
@@ -356,6 +390,19 @@ function eventRecord(overrides: Partial<import("./api").EventRecord> = {}): impo
     actor: "seed",
     payload: {},
     created_at: 1,
+    ...overrides,
+  }
+}
+
+function board(overrides: Partial<Board> = {}): Board {
+  return {
+    id: "b_1",
+    slug: "default",
+    name: "Default",
+    description: null,
+    created_at: 1,
+    updated_at: 1,
+    archived_at: null,
     ...overrides,
   }
 }

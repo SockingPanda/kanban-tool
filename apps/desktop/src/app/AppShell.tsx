@@ -1,6 +1,7 @@
 import type { ElementType, FormEvent, ReactNode } from "react"
 import {
   Activity,
+  ChevronDown,
   Command,
   Database,
   DatabaseBackup,
@@ -21,10 +22,19 @@ import {
   Sun,
 } from "lucide-react"
 
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { Skeleton } from "@/components/ui/skeleton"
 import { shouldOpenTaskDetailSheet } from "@/app/task-selection"
 import { BoardView } from "@/features/board/BoardView"
 import { filterStatuses } from "@/features/board/board-config"
@@ -45,6 +55,7 @@ import { apiEndpointLabel, shouldShowTaskExplorerToolbar } from "@/app/shell-rul
 import type { ListSortState } from "@/features/list/table-state"
 import type {
   BoardColumn,
+  Board,
   KanbanApi,
   Run,
   RuntimeConfig,
@@ -69,6 +80,9 @@ const viewMetadata: Record<OperatorView, { label: string; icon: ElementType }> =
 export function AppShell({
   config,
   api,
+  boards,
+  boardsLoading,
+  boardsError,
   view,
   themeMode,
   sidebarOpen,
@@ -109,6 +123,7 @@ export function AppShell({
   lastRefreshAt,
   queueCounts,
   onSearchChange,
+  onBoardChange,
   onViewChange,
   onThemeModeChange,
   onCycleThemeMode,
@@ -143,6 +158,9 @@ export function AppShell({
 }: {
   config: RuntimeConfig | null
   api: KanbanApi | null
+  boards: Board[]
+  boardsLoading: boolean
+  boardsError: string | null
   view: OperatorView
   themeMode: ThemeMode
   sidebarOpen: boolean
@@ -183,6 +201,7 @@ export function AppShell({
   lastRefreshAt: number | null
   queueCounts: { ready: number; running: number; blocked: number }
   onSearchChange: (value: string) => void
+  onBoardChange: (board: string) => void
   onViewChange: (value: OperatorView) => void
   onThemeModeChange: (value: ThemeMode) => void
   onCycleThemeMode: () => void
@@ -226,7 +245,17 @@ export function AppShell({
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
-      <ShellSidebar config={config} view={view} open={sidebarOpen} onViewChange={onViewChange} />
+      <ShellSidebar
+        config={config}
+        boards={boards}
+        boardsLoading={boardsLoading}
+        boardsError={boardsError}
+        switchingBoard={pendingAction === "board"}
+        view={view}
+        open={sidebarOpen}
+        onBoardChange={onBoardChange}
+        onViewChange={onViewChange}
+      />
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <ShellHeader
@@ -355,13 +384,23 @@ export function AppShell({
 
 function ShellSidebar({
   config,
+  boards,
+  boardsLoading,
+  boardsError,
+  switchingBoard,
   view,
   open,
+  onBoardChange,
   onViewChange,
 }: {
   config: RuntimeConfig | null
+  boards: Board[]
+  boardsLoading: boolean
+  boardsError: string | null
+  switchingBoard: boolean
   view: OperatorView
   open: boolean
+  onBoardChange: (value: string) => void
   onViewChange: (value: OperatorView) => void
 }) {
   return (
@@ -402,6 +441,14 @@ function ShellSidebar({
         </NavGroup>
       </nav>
       <div className={cn("mt-auto space-y-3 border-t border-border p-3 text-xs text-muted-foreground max-sm:hidden", !open && "hidden")}>
+        <BoardSwitcher
+          config={config}
+          boards={boards}
+          loading={boardsLoading}
+          error={boardsError}
+          switching={switchingBoard}
+          onBoardChange={onBoardChange}
+        />
         <div className="flex items-center gap-2">
           <Database className="h-3.5 w-3.5" />
           <span className="truncate">{config?.dbPath ?? "loading db"}</span>
@@ -415,6 +462,74 @@ function ShellSidebar({
         </div>
       </div>
     </aside>
+  )
+}
+
+function BoardSwitcher({
+  config,
+  boards,
+  loading,
+  error,
+  switching,
+  onBoardChange,
+}: {
+  config: RuntimeConfig | null
+  boards: Board[]
+  loading: boolean
+  error: string | null
+  switching: boolean
+  onBoardChange: (value: string) => void
+}) {
+  const activeBoard = boards.find((board) => board.slug === config?.board || board.id === config?.board)
+  const activeLabel = activeBoard?.name ?? config?.board ?? "loading board"
+
+  if (!config || loading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-4 w-2/3" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto w-full justify-start gap-2 px-2 py-2 text-left"
+            disabled={switching || boards.length === 0}
+          >
+            <SquareKanban className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-medium text-foreground">{activeLabel}</span>
+              <span className="block truncate text-[11px] text-muted-foreground">board {config.board}</span>
+            </span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="right" align="end" className="w-64">
+          <DropdownMenuRadioGroup value={config.board} onValueChange={onBoardChange}>
+            {boards.map((board) => (
+              <DropdownMenuRadioItem key={board.id} value={board.slug} className="items-start gap-2">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{board.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{board.slug}</span>
+                </span>
+                {board.slug === config.board ? <Badge variant="secondary">active</Badge> : null}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {error ? (
+        <Alert className="px-2 py-1 text-xs">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+    </div>
   )
 }
 

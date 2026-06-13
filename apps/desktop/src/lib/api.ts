@@ -18,6 +18,16 @@ export type RuntimeConfig = {
   board: string
 }
 
+export type Board = {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  created_at: number
+  updated_at: number
+  archived_at: number | null
+}
+
 export type Task = {
   id: string
   board_id: string
@@ -315,6 +325,16 @@ export class KanbanApi {
     return this.request<HealthStatus>("/health", options)
   }
 
+  async listBoards(options: BoardListOptions = {}) {
+    const params = new URLSearchParams({
+      include_archived: String(options.includeArchived ?? false),
+    })
+    const boards = await this.request<Board[]>(`/api/v1/boards?${params.toString()}`, {
+      signal: options.signal,
+    })
+    return expectArray<Board>(boards, "boards response data")
+  }
+
   async stats(options: RequestOptions = {}) {
     const params = new URLSearchParams({ board: this.board })
     return this.request<BoardStats>(`/api/v1/stats?${params.toString()}`, options)
@@ -532,6 +552,11 @@ type TaskListOptions = {
   sort?: TaskListSort
   limit?: number
   offset?: number
+  signal?: AbortSignal
+}
+
+type BoardListOptions = {
+  includeArchived?: boolean
   signal?: AbortSignal
 }
 

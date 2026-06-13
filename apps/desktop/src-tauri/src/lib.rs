@@ -19,7 +19,7 @@ pub struct RuntimeConfig {
 }
 
 struct EmbeddedApiRuntime {
-    config: RuntimeConfig,
+    config: Mutex<RuntimeConfig>,
     _runtime_guard: kanban_sqlite::DatabaseRuntimeGuard,
     shutdown_tx: Mutex<Option<oneshot::Sender<()>>>,
 }
@@ -52,7 +52,30 @@ impl Drop for EmbeddedApiRuntime {
 
 #[tauri::command]
 fn runtime_config(runtime: State<'_, EmbeddedApiRuntime>) -> RuntimeConfig {
-    runtime.config.clone()
+    runtime
+        .config
+        .lock()
+        .expect("runtime config lock poisoned")
+        .clone()
+}
+
+#[tauri::command]
+fn set_runtime_board(
+    board: String,
+    runtime: State<'_, EmbeddedApiRuntime>,
+) -> Result<RuntimeConfig, String> {
+    let db_path = runtime
+        .config
+        .lock()
+        .expect("runtime config lock poisoned")
+        .db_path
+        .clone();
+    let board = kanban_sqlite::get_board(&db_path, &board)
+        .map_err(|error| error.to_string())?
+        .slug;
+    let mut config = runtime.config.lock().expect("runtime config lock poisoned");
+    config.board = board;
+    Ok(config.clone())
 }
 
 pub fn run() {
@@ -62,7 +85,7 @@ pub fn run() {
             app.manage(runtime);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![runtime_config])
+        .invoke_handler(tauri::generate_handler![runtime_config, set_runtime_board])
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
                 window.app_handle().state::<EmbeddedApiRuntime>().shutdown();
@@ -122,12 +145,12 @@ fn start_embedded_api() -> Result<EmbeddedApiRuntime, String> {
         .map_err(|_| "embedded API did not report a listening address".to_owned())??;
 
     Ok(EmbeddedApiRuntime {
-        config: RuntimeConfig {
+        config: Mutex::new(RuntimeConfig {
             api_base_url: format!("http://{addr}"),
             db_path,
             actor,
             board: "default".to_owned(),
-        },
+        }),
         _runtime_guard: runtime_guard,
         shutdown_tx: Mutex::new(Some(shutdown_tx)),
     })

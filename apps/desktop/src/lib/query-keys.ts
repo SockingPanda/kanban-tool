@@ -13,6 +13,7 @@ export type BoardTaskQuery = {
 }
 
 export const queryKeys = {
+  boards: () => ["boards"] as const,
   columns: (board: string) => ["columns", board] as const,
   events: (board: string) => ["events", board] as const,
   stats: (board: string) => ["stats", board] as const,

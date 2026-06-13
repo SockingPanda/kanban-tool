@@ -165,7 +165,7 @@ pub fn dag_snapshot(path: impl AsRef<Path>, board: &str) -> Result<DagSnapshot> 
             node_count: nodes.len(),
             edge_count: edges.len(),
             sort: vec![
-                "priority desc".to_owned(),
+                "priority asc".to_owned(),
                 "due_at asc nulls last".to_owned(),
                 "scheduled_at asc nulls last".to_owned(),
                 "dependency fan-out desc".to_owned(),
@@ -378,9 +378,8 @@ fn refs_for(task_ids: &[String], ref_by_id: &HashMap<String, String>) -> Vec<Str
 
 fn sort_nodes(nodes: &mut [DagNode], fan_out: &HashMap<String, usize>) {
     nodes.sort_by(|left, right| {
-        right
-            .priority
-            .cmp(&left.priority)
+        left.priority
+            .cmp(&right.priority)
             .then_with(|| nulls_last(left.due_at, right.due_at))
             .then_with(|| nulls_last(left.scheduled_at, right.scheduled_at))
             .then_with(|| {

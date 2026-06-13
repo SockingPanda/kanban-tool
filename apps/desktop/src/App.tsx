@@ -284,7 +284,7 @@ function App() {
         title: draft.title.trim(),
         description: draft.description.trim() || null,
         assignee: draft.assignee.trim() || null,
-        priority: Number(draft.priority) || 0,
+        priority: Number(draft.priority),
         due_at: parseDateInput(draft.dueAt),
         scheduled_at: parseDateInput(draft.scheduledAt),
       })

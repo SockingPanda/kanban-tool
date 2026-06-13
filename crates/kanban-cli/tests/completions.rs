@@ -168,7 +168,8 @@ fn dynamic_completion_returns_enum_candidates_without_db() -> anyhow::Result<()>
     let temp = tempfile::tempdir()?;
     let db_path = temp.path().join("missing").join("kb.db");
 
-    let statuses = common::kanban(&db_path, &["__complete", "status"])?.success_stdout()?;
+    let statuses = common::kanban_in_dir(&db_path, &["__complete", "status"], temp.path())?
+        .success_stdout()?;
     assert_candidates_include(
         &statuses,
         &[
@@ -184,7 +185,8 @@ fn dynamic_completion_returns_enum_candidates_without_db() -> anyhow::Result<()>
         ],
     )?;
 
-    let kinds = common::kanban(&db_path, &["__complete", "comment-kind"])?.success_stdout()?;
+    let kinds = common::kanban_in_dir(&db_path, &["__complete", "comment-kind"], temp.path())?
+        .success_stdout()?;
     assert_candidates_include(&kinds, &["text", "system", "worker"])?;
     Ok(())
 }
@@ -239,7 +241,7 @@ fn generated_bash_and_zsh_completions_include_dynamic_helper_hook() -> anyhow::R
         );
         let stdout = String::from_utf8(output.stdout)?;
         for expected in [
-            "kanban __complete",
+            "\"${cmd[@]}\" __complete",
             "task-ref",
             "task update",
             "dependency-task-ref",

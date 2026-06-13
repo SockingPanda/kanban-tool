@@ -14,7 +14,7 @@ async fn tasks_creates_task_and_event_with_body_actor_priority() -> anyhow::Resu
             "description": "ready spec",
             "status": "ready",
             "assignee": "worker-a",
-            "priority": 10,
+            "priority": 1,
             "scheduled_at": null,
             "due_at": null,
             "metadata": {"source": "test"},
@@ -31,7 +31,7 @@ async fn tasks_creates_task_and_event_with_body_actor_priority() -> anyhow::Resu
     assert_eq!(task["description"], "ready spec");
     assert_eq!(task["status"], "ready");
     assert_eq!(task["assignee"], "worker-a");
-    assert_eq!(task["priority"], 10);
+    assert_eq!(task["priority"], 1);
     assert_task_dto_exposes_ui_fields_without_claim_token(task);
     assert_eq!(task["metadata_json"], r#"{"source":"test"}"#);
 
@@ -400,9 +400,9 @@ async fn tasks_lists_with_assignee_search_sort_and_rejects_label_filter() -> any
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     for (title, assignee, priority) in [
-        ("alpha bug", Some("alice"), 10),
-        ("beta bug", Some("alice"), 30),
-        ("alpha chore", Some("bob"), 20),
+        ("alpha bug", Some("alice"), 1),
+        ("beta bug", Some("alice"), 3),
+        ("alpha chore", Some("bob"), 2),
     ] {
         kanban_sqlite::create_task(
             &db_path,
@@ -514,6 +514,47 @@ async fn tasks_returns_error_envelope_for_json_and_query_extractor_errors() -> a
 }
 
 #[tokio::test]
+async fn tasks_rejects_priority_outside_p0_p3() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/tasks",
+        json!({"title":"bad priority","description":"ready spec","priority":70}),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert_eq!(
+        json["error"]["message"],
+        "invalid input: priority must be one of P0, P1, P2, P3"
+    );
+
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("valid priority"),
+    )?;
+    let (status, json) = patch_json(
+        app,
+        &format!("/api/v1/tasks/{}", task.id),
+        json!({"priority": -1}),
+        None,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert_eq!(
+        json["error"]["message"],
+        "invalid input: priority must be one of P0, P1, P2, P3"
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn tasks_patches_editable_fields_and_uses_header_actor_when_body_actor_absent()
 -> anyhow::Result<()> {
     let test = TestApp::new()?;
@@ -534,7 +575,7 @@ async fn tasks_patches_editable_fields_and_uses_header_actor_when_body_actor_abs
             "title": "after update",
             "description": null,
             "assignee": "worker-b",
-            "priority": 20,
+            "priority": 2,
             "due_at": future_epoch_ms()?,
             "metadata": {"updated": true},
             "expected_lock_version": task.lock_version
@@ -547,7 +588,7 @@ async fn tasks_patches_editable_fields_and_uses_header_actor_when_body_actor_abs
     assert_eq!(json["data"]["title"], "after update");
     assert_eq!(json["data"]["description"], Value::Null);
     assert_eq!(json["data"]["assignee"], "worker-b");
-    assert_eq!(json["data"]["priority"], 20);
+    assert_eq!(json["data"]["priority"], 2);
     assert_eq!(json["data"]["metadata_json"], r#"{"updated":true}"#);
     assert_eq!(json["data"]["status"], "triage");
 

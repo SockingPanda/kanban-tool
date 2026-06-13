@@ -188,7 +188,7 @@ Query params：
 | `include_archived` | bool。 |
 | `limit` | 默认 100。 |
 | `offset` | 分页 offset。 |
-| `sort` | `position` / `priority` / `created_at` / `updated_at`。 |
+| `sort` | `position` / `priority` / `-priority` / `created_at` / `updated_at`. `priority` sorts P0 -> P3; `-priority` sorts P3 -> P0. |
 
 Response：
 
@@ -204,7 +204,7 @@ Response：
       "title": "实现状态机",
       "description": "...",
       "status": "ready",
-      "priority": 10,
+      "priority": 0,
       "position": 1024,
       "assignee": null,
       "scheduled_at": null,
@@ -234,7 +234,7 @@ Request：
   "description": "Markdown spec",
   "status": "ready",
   "assignee": "local-worker",
-  "priority": 10,
+  "priority": 0,
   "scheduled_at": null,
   "due_at": null,
   "max_retries": 2,
@@ -250,6 +250,7 @@ Notes：
 - `status` 只能是 `triage|todo|scheduled|ready`。
 - 若不传 `status`，服务端计算初始状态。
 - 若存在未完成 dependencies，不能创建为 `ready`。
+- `priority` is an integer level `0..3`: `0` = P0 highest, `3` = P3 lowest/default. Create rejects invalid values.
 
 ### 4.3 Get task
 
@@ -278,7 +279,7 @@ PATCH /api/v1/tasks/{task_id}
   "title": "新的标题",
   "description": "新的描述",
   "assignee": "worker-a",
-  "priority": 20,
+  "priority": 1,
   "scheduled_at": 1717520000000,
   "due_at": 1717600000000,
   "max_retries": 2,
@@ -287,6 +288,8 @@ PATCH /api/v1/tasks/{task_id}
   "expected_lock_version": 7
 }
 ```
+
+`priority` updates reject values outside `0..3`.
 
 `max_retries: null` 清空 retry policy。
 

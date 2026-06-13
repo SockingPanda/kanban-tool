@@ -60,7 +60,7 @@ fn init_records_and_enforces_migration_checksum() -> anyhow::Result<()> {
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    assert_eq!(user_version, 3);
+    assert_eq!(user_version, 4);
     assert_eq!(name, "001_initial");
     assert!(checksum.starts_with("fnv64:"), "checksum: {checksum}");
 
@@ -86,7 +86,7 @@ fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 3);
+    assert_eq!(user_version, 4);
     for table in [
         "entities",
         "relation_predicates",
@@ -144,13 +144,64 @@ fn init_upgrades_v1_database_and_backfills_task_entities() -> anyhow::Result<()>
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 3);
+    assert_eq!(user_version, 4);
     let task_entity_title: String = conn.query_row(
         "SELECT title FROM entities WHERE uri='kb://task/t_test'",
         [],
         |row| row.get(0),
     )?;
     assert_eq!(task_entity_title, "Upgrade task");
+    Ok(())
+}
+
+#[test]
+fn init_upgrades_legacy_priority_values_to_p0_p3_range() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_upgrades_legacy_priority_values_to_p0_p3_range")?;
+
+    let v1_sql = include_str!("../../../../migrations/001_initial.sql");
+    let conn = Connection::open(&temp.path)?;
+    conn.execute_batch(v1_sql)?;
+    conn.execute(
+        "INSERT INTO boards(id, slug, name, description, created_at, updated_at, archived_at) VALUES ('b_test', 'default', 'Default', NULL, 1, 1, NULL)",
+        [],
+    )?;
+    for (seq, title, priority) in [
+        (1, "negative", -5),
+        (2, "zero", 0),
+        (3, "two", 2),
+        (4, "eighty", 80),
+    ] {
+        conn.execute(
+            "INSERT INTO tasks(id, board_id, seq, title, description, status, priority, created_by, created_at, updated_at, metadata_json) VALUES (?1, 'b_test', ?2, ?3, 'ready spec', 'ready', ?4, 'tester', 2, 2, '{}')",
+            params![format!("t_test_{seq}"), seq, title, priority],
+        )?;
+    }
+    conn.pragma_update(None, "user_version", 1)?;
+    drop(conn);
+
+    init_database(&temp.path, "tester")?;
+
+    let conn = Connection::open(&temp.path)?;
+    let priorities = conn
+        .prepare("SELECT title, priority FROM tasks ORDER BY seq")?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    assert_eq!(
+        priorities,
+        vec![
+            ("negative".to_owned(), 0),
+            ("zero".to_owned(), 0),
+            ("two".to_owned(), 2),
+            ("eighty".to_owned(), 3),
+        ]
+    );
+    let check_error = result_err(conn.execute(
+        "INSERT INTO tasks(id, board_id, seq, title, description, status, priority, created_by, created_at, updated_at, metadata_json) VALUES ('t_bad', 'b_test', 5, 'bad', 'ready spec', 'ready', 4, 'tester', 2, 2, '{}')",
+        [],
+    ))?;
+    assert!(check_error.to_string().contains("CHECK"));
     Ok(())
 }
 

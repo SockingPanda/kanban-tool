@@ -63,7 +63,7 @@ pub(crate) fn task_details(task: &kanban_sqlite::TaskRecord) -> String {
             option_display(task.status_reason.as_deref())
         ),
         format!("assignee: {}", option_display(task.assignee.as_deref())),
-        format!("priority: {}", task.priority),
+        format!("priority: P{}", task.priority),
         format!("position: {}", task.position),
         format!("scheduled_at: {}", option_i64(task.scheduled_at)),
         format!("due_at: {}", option_i64(task.due_at)),

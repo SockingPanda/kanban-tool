@@ -298,7 +298,7 @@ fn dispatch_once_promotes_eligible_scheduled_and_todo_before_claiming() -> anyho
             description: Some("ready spec".into()),
             status: Some(TaskStatus::Scheduled),
             assignee: None,
-            priority: 10,
+            priority: 0,
             scheduled_at: Some(now - 1_000),
             due_at: None,
             max_retries: None,

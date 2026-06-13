@@ -3,7 +3,7 @@ use crate::connect_file;
 use super::{
     CreateTask, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage, TaskListSort, TaskPatch,
     TaskRecord, add_dependency_in_current_tx, board_id, board_id_any, insert_event, json_valid,
-    recompute_ready_status, storage, with_immediate_tx,
+    recompute_ready_status, storage, validate_priority, with_immediate_tx,
 };
 
 use std::path::Path;
@@ -36,6 +36,7 @@ pub fn create_task_with_dependencies(
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     validate_retry_policy(input.max_retries)?;
+    validate_priority(input.priority)?;
     let title = input.title.trim().to_owned();
     if title.is_empty() {
         return Err(KanbanError::InvalidInput("title is required".into()));
@@ -109,6 +110,9 @@ pub fn update_task(
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     validate_retry_policy(patch.max_retries.flatten())?;
+    if let Some(priority) = patch.priority {
+        validate_priority(priority)?;
+    }
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let mut task = resolve_task(&conn, &board_id, task_ref)?;
@@ -459,7 +463,7 @@ pub(crate) const TASK_COLUMNS: &str = "id,board_id,(SELECT slug FROM boards WHER
 pub(crate) fn query_tasks(conn: &Connection, board_id: &str) -> Result<Vec<TaskRecord>> {
     let mut stmt = conn
         .prepare(&format!(
-            "SELECT {TASK_COLUMNS} FROM tasks WHERE board_id=?1 ORDER BY CASE status WHEN 'triage' THEN 10 WHEN 'todo' THEN 20 WHEN 'scheduled' THEN 30 WHEN 'ready' THEN 40 WHEN 'running' THEN 50 WHEN 'blocked' THEN 60 WHEN 'review' THEN 70 WHEN 'done' THEN 80 ELSE 90 END, position ASC, priority DESC, created_at ASC"
+            "SELECT {TASK_COLUMNS} FROM tasks WHERE board_id=?1 ORDER BY CASE status WHEN 'triage' THEN 10 WHEN 'todo' THEN 20 WHEN 'scheduled' THEN 30 WHEN 'ready' THEN 40 WHEN 'running' THEN 50 WHEN 'blocked' THEN 60 WHEN 'review' THEN 70 WHEN 'done' THEN 80 ELSE 90 END, position ASC, priority ASC, created_at ASC"
         ))
         .map_err(storage)?;
     let rows = stmt.query_map([board_id], task_from_row).map_err(storage)?;

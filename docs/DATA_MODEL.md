@@ -134,7 +134,7 @@ Task public identity 有两层：
 | 字段 | 说明 |
 |---|---|
 | `status` | canonical status。 |
-| `priority` | 数值越大越优先。 |
+| `priority` | integer enum-like priority level: `0` = P0 highest, `1` = P1, `2` = P2, `3` = P3 lowest/default. DB default is `3` and values are constrained with `CHECK(priority BETWEEN 0 AND 3)` after migrations. Create/update commands reject values outside P0-P3. |
 | `position` | UI 排序键。 |
 | `scheduled_at` | 计划时间。 |
 | `due_at` | 截止时间，仅展示/过滤，不驱动状态机。 |
@@ -478,7 +478,7 @@ ORDER BY
     ELSE 90
   END,
   position ASC,
-  priority DESC,
+  priority ASC,
   created_at ASC;
 ```
 
@@ -497,7 +497,7 @@ WHERE t.board_id = ?
     WHERE d.child_task_id = t.id
       AND p.status != 'done'
   )
-ORDER BY t.priority DESC, t.created_at ASC
+ORDER BY t.priority ASC, t.created_at ASC
 LIMIT ?;
 ```
 

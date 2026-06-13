@@ -3,6 +3,26 @@ use std::{fs, path::PathBuf};
 use kanban_core::TaskStatus;
 use serde::{Deserialize, Serialize};
 
+pub const DEFAULT_PRIORITY: i64 = 3;
+pub const PRIORITY_ERROR: &str = "priority must be one of P0, P1, P2, P3";
+
+pub fn default_priority() -> i64 {
+    DEFAULT_PRIORITY
+}
+
+pub fn validate_priority(priority: i64) -> kanban_core::Result<()> {
+    if (0..=3).contains(&priority) {
+        return Ok(());
+    }
+    Err(kanban_core::KanbanError::InvalidInput(
+        PRIORITY_ERROR.to_owned(),
+    ))
+}
+
+pub fn normalize_legacy_priority(priority: i64) -> i64 {
+    priority.clamp(0, 3)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskRecord {
     pub id: String,
@@ -147,7 +167,7 @@ impl CreateTask {
             description: Some("ready spec".to_owned()),
             status: Some(TaskStatus::Ready),
             assignee: None,
-            priority: 0,
+            priority: DEFAULT_PRIORITY,
             scheduled_at: None,
             due_at: None,
             max_retries: None,

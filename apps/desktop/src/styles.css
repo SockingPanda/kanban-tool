@@ -17,6 +17,9 @@
   --sidebar-accent-foreground: #171717;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
+  --terminal-bg: #171717;
+  --terminal-fg: #fafafa;
+  --terminal-muted-foreground: #a3a3a3;
   --status-ready-bg: #ecfdf5;
   --status-ready-fg: #047857;
   --status-ready-ring: #a7f3d0;
@@ -65,6 +68,9 @@
   --sidebar-accent-foreground: #f4f4f0;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
+  --terminal-bg: #111211;
+  --terminal-fg: #f4f4f0;
+  --terminal-muted-foreground: #aba99f;
   --status-ready-bg: #052e24;
   --status-ready-fg: #86efac;
   --status-ready-ring: #047857;
@@ -105,6 +111,9 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-terminal-bg: var(--terminal-bg);
+  --color-terminal-fg: var(--terminal-fg);
+  --color-terminal-muted-foreground: var(--terminal-muted-foreground);
 }
 
 * {

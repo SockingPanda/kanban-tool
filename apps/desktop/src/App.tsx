@@ -115,6 +115,15 @@ function App() {
   )
   const selectedTask = selectedId ? detailQuery.data?.task ?? boardSelectedTask : null
   const detail = taskDetailOrEmpty(detailQuery.data)
+  const dependencySnapshot = useMemo(
+    () => ({
+      selectedTaskId: selectedId,
+      detailTaskId: detailQuery.data?.task.id ?? null,
+      dependencies: detailQuery.data?.detail.dependencies ?? null,
+      loading: Boolean(selectedId && detailQuery.isFetching),
+    }),
+    [detailQuery.data?.detail.dependencies, detailQuery.data?.task.id, detailQuery.isFetching, selectedId],
+  )
 
   useEffect(() => {
     setDraftState((current) => reconcileTaskDraft(current, selectedTask))
@@ -321,6 +330,7 @@ function App() {
       groupedTasks={groupedTasks}
       selectedTask={selectedTask}
       selectedId={selectedId}
+      dependencySnapshot={dependencySnapshot}
       detail={detail}
       activeRun={activeRun}
       search={search}

@@ -2,23 +2,25 @@ import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useMemo, useRef } from "react"
 
-import type { BoardColumn as ApiBoardColumn, Dependencies, Task, TaskStatus } from "@/lib/api"
+import { Badge } from "@/components/ui/badge"
+import type { BoardColumn as ApiBoardColumn, Task, TaskStatus } from "@/lib/api"
 import { cn, formatRelativeTime } from "@/lib/utils"
 
+import { priorityBadgeLabel, selectedDependencyCountForTask, type SelectedDependencySnapshot } from "./board-card-state"
 import { columnHints, statusAccent } from "./board-config"
 
 export function BoardView({
   columns,
   groupedTasks,
   selectedId,
-  dependencies,
+  dependencySnapshot,
   onSelectTask,
   onDropTask,
 }: {
   columns: ApiBoardColumn[]
   groupedTasks: Map<TaskStatus, Task[]>
   selectedId?: string
-  dependencies: Dependencies
+  dependencySnapshot: SelectedDependencySnapshot
   onSelectTask: (taskId: string) => void
   onDropTask: (taskId: string, targetStatus: TaskStatus) => void
 }) {
@@ -50,7 +52,7 @@ export function BoardView({
             column={column}
             tasks={groupedTasks.get(column.status) ?? []}
             selectedId={selectedId}
-            dependencies={dependencies}
+            dependencySnapshot={dependencySnapshot}
             onSelect={onSelectTask}
           />
         ))}
@@ -63,13 +65,13 @@ function BoardColumn({
   column,
   tasks,
   selectedId,
-  dependencies,
+  dependencySnapshot,
   onSelect,
 }: {
   column: ApiBoardColumn
   tasks: Task[]
   selectedId?: string
-  dependencies: Dependencies
+  dependencySnapshot: SelectedDependencySnapshot
   onSelect: (taskId: string) => void
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null)
@@ -90,7 +92,7 @@ function BoardColumn({
     <div
       ref={ref}
       className={cn(
-        "flex min-w-0 flex-col bg-[#f7f7f5]",
+        "flex min-h-0 min-w-0 flex-col bg-[#f7f7f5]",
         isDropTarget && "outline outline-2 outline-offset-[-2px] outline-neutral-900",
       )}
     >
@@ -104,7 +106,7 @@ function BoardColumn({
         </div>
         <div className="mt-0.5 text-xs text-neutral-500">{columnHints[column.status]}</div>
       </div>
-      <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto p-2 pb-8 scroll-pb-8">
         <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
           {rowVirtualizer.getVirtualItems().map((virtualRow) => {
             const task = tasks[virtualRow.index]
@@ -120,11 +122,7 @@ function BoardColumn({
                 <TaskCard
                   task={task}
                   selected={task.id === selectedId}
-                  dependencyCount={
-                    task.id === selectedId
-                      ? dependencies.parents.length + dependencies.children.length
-                      : undefined
-                  }
+                  dependencyCount={selectedDependencyCountForTask(task.id, dependencySnapshot)}
                   onSelect={() => onSelect(task.id)}
                 />
               </div>
@@ -167,7 +165,9 @@ function TaskCard({
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">#{task.seq} {task.title}</div>
           <div className="mt-1 flex flex-wrap gap-1 text-xs text-neutral-500">
-            <span>P{task.priority}</span>
+            <Badge variant="secondary" className="px-1.5 py-0 text-[11px] leading-5">
+              {priorityBadgeLabel(task.priority)}
+            </Badge>
             {task.due_at ? <span>due {formatRelativeTime(task.due_at)}</span> : null}
             {task.scheduled_at ? <span>scheduled {formatRelativeTime(task.scheduled_at)}</span> : null}
             {task.status === "running" ? <span>heartbeat {formatRelativeTime(task.last_heartbeat_at)}</span> : null}

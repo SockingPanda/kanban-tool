@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { NativeSelect } from "@/components/ui/native-select"
+import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip } from "@/components/ui/tooltip"
@@ -43,6 +43,16 @@ import {
   type ListSortDirection,
   type ListSortState,
 } from "./table-state"
+
+const statusFilterOptions: MenuSelectOption<TaskStatus | "all">[] = [
+  { value: "all", label: "all active" },
+  ...filterStatuses.map((status) => ({ value: status, label: status })),
+]
+
+const rowsPerPageOptions: MenuSelectOption<string>[] = [25, 50, 100, 200].map((value) => ({
+  value: String(value),
+  label: String(value),
+}))
 
 export function ListView({
   tasks,
@@ -254,21 +264,16 @@ export function ListView({
             onChange={(event) => onSearchChange(event.target.value)}
           />
         </div>
-        <Label className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1">
-          Status
-          <NativeSelect
-            className="h-6 border-0 bg-transparent px-0"
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground">Status</Label>
+          <MenuSelect
+            ariaLabel="List status filter"
             value={statusFilter}
-            onChange={(event) => onStatusFilterChange(event.target.value as TaskStatus | "all")}
-          >
-            <option value="all">all active</option>
-            {filterStatuses.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </NativeSelect>
-        </Label>
+            options={statusFilterOptions}
+            onValueChange={onStatusFilterChange}
+            triggerClassName="min-w-28"
+          />
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
@@ -368,20 +373,16 @@ export function ListView({
       </ScrollArea>
 
       <div className="flex h-10 items-center gap-2 border-t border-border bg-card px-4 text-xs text-muted-foreground">
-        <Label className="flex items-center gap-2">
+        <Label className="flex items-center gap-2" id="rows-per-page-label">
           Rows
-          <NativeSelect
-            className="h-7"
-            value={rowsPerPage}
-            onChange={(event) => onRowsPerPageChange(Number(event.target.value))}
-          >
-            {[25, 50, 100, 200].map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </NativeSelect>
         </Label>
+        <MenuSelect
+          ariaLabel="Rows per page"
+          value={String(rowsPerPage)}
+          options={rowsPerPageOptions}
+          onValueChange={(value) => onRowsPerPageChange(Number(value))}
+          triggerClassName="h-7 min-w-20"
+        />
         <div className="ml-auto flex items-center gap-1">
           <Tooltip content="First page">
             <Button variant="ghost" size="icon" disabled={!hasPreviousPage || tasksRefreshing} onClick={onFirstPage}>

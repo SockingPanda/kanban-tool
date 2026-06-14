@@ -27,12 +27,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { shouldOpenTaskDetailSheet } from "@/app/task-selection"
@@ -81,6 +83,17 @@ const viewMetadata: Record<OperatorView, { label: string; icon: ElementType }> =
   health: { label: "Health", icon: HeartPulse },
   settings: { label: "Settings", icon: Settings },
 }
+
+const statusFilterOptions: MenuSelectOption<TaskStatus | "all">[] = [
+  { value: "all", label: "all active" },
+  ...filterStatuses.map((status) => ({ value: status, label: status })),
+]
+
+const themeModeOptions: MenuSelectOption<ThemeMode>[] = [
+  { value: "system", label: "system" },
+  { value: "light", label: "light" },
+  { value: "dark", label: "dark" },
+]
 
 export function AppShell({
   config,
@@ -632,52 +645,56 @@ function ShellHeader({
       </Button>
       <div className="flex rounded-md border border-border bg-muted p-0.5 text-sm">
         {primaryViews.map((item) => (
-          <button
+          <Button
             key={item}
+            type="button"
+            variant="ghost"
+            size="sm"
             className={cn(
-              "rounded px-3 py-1 text-muted-foreground",
+              "h-7 px-3 text-muted-foreground hover:bg-background",
               view === item && "bg-background text-foreground shadow-sm",
             )}
             onClick={() => onViewChange(item)}
           >
             {viewLabel(item)}
-          </button>
+          </Button>
         ))}
       </div>
-      <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1 text-xs">
+      <div className="flex items-center gap-1">
         <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-        <select
-          className="bg-transparent outline-none"
+        <MenuSelect
+          ariaLabel="Status filter"
+          prefix="Status"
+          options={statusFilterOptions}
           value={statusFilter}
-          onChange={(event) => onStatusFilterChange(event.target.value as TaskStatus | "all")}
-        >
-          <option value="all">all active</option>
-          {filterStatuses.map((status) => (
-            <option key={status} value={status}>{status}</option>
-          ))}
-        </select>
-      </div>
-      <label className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
-          checked={showArchived}
-          onChange={(event) => onShowArchivedChange(event.target.checked)}
+          onValueChange={onStatusFilterChange}
+          triggerClassName="min-w-32"
         />
-        Archived
-      </label>
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant={showArchived ? "secondary" : "outline"} size="sm">
+            Archived
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuCheckboxItem checked={showArchived} onCheckedChange={(value) => onShowArchivedChange(Boolean(value))}>
+            Include archived tasks
+          </DropdownMenuCheckboxItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <div className="ml-auto flex items-center gap-2">
         <Badge variant="secondary">actor {config?.actor ?? "-"}</Badge>
         <Badge variant="ready">local dispatcher</Badge>
-        <select
-          className="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none"
+        <MenuSelect
+          ariaLabel="Theme mode"
+          prefix="Theme"
+          options={themeModeOptions}
           value={themeMode}
-          aria-label="Theme mode"
-          onChange={(event) => onThemeModeChange(event.target.value as ThemeMode)}
-        >
-          <option value="system">system</option>
-          <option value="light">light</option>
-          <option value="dark">dark</option>
-        </select>
+          onValueChange={onThemeModeChange}
+          triggerClassName="min-w-28"
+          align="end"
+        />
         <Button variant="ghost" size="icon" aria-label="Cycle theme mode" title={`Theme: ${themeMode}`} onClick={onCycleThemeMode}>
           <ThemeIcon className="h-4 w-4" />
         </Button>

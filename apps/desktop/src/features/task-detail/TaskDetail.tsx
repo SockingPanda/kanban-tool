@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { InputGroup, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
+import { InputGroup, InputGroupButton, InputGroupInput, InputGroupTextarea } from "@/components/ui/input-group"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -19,7 +19,7 @@ import { legalActions } from "@/features/task-actions/legal-actions"
 import { isBlockableStatus } from "@/lib/action-policy"
 import type { KanbanApi, Run, Task, TaskStatus } from "@/lib/api"
 import { priorityBadgeClass, priorityLabel, priorityLevels } from "@/lib/priority"
-import { formatRelativeTime, shortId } from "@/lib/utils"
+import { cn, formatRelativeTime, shortId } from "@/lib/utils"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -342,7 +342,7 @@ export function TaskDetail({
                       <span>{comment.author}</span>
                       <span>{formatRelativeTime(comment.created_at)}</span>
                     </div>
-                    <div className="whitespace-pre-wrap text-card-foreground">{comment.body}</div>
+                    <MarkdownDescription className="mt-1 text-card-foreground">{comment.body}</MarkdownDescription>
                   </Card>
                 ))
               ) : (
@@ -354,7 +354,8 @@ export function TaskDetail({
             <Field>
               <FieldLabel>Comment body</FieldLabel>
               <InputGroup>
-                <InputGroupInput
+                <InputGroupTextarea
+                  className="min-h-20 resize-y py-2"
                   aria-label="Comment body"
                   name="comment-body"
                   autoComplete="off"
@@ -363,6 +364,7 @@ export function TaskDetail({
                   placeholder="Add handoff note"
                 />
                 <InputGroupButton
+                  className="h-auto self-stretch"
                   variant="outline"
                   aria-label="Add comment"
                   disabled={!commentBody.trim() || pendingAction === "comment"}
@@ -430,9 +432,9 @@ export function TaskDetail({
   )
 }
 
-export function MarkdownDescription({ children }: { children: string }) {
+export function MarkdownDescription({ children, className }: { children: string; className?: string }) {
   return (
-    <div className="task-markdown mt-2 text-sm text-foreground">
+    <div className={cn("task-markdown mt-2 text-sm text-foreground", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         urlTransform={safeMarkdownUrl}

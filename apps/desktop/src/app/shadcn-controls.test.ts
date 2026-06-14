@@ -147,4 +147,14 @@ describe("desktop shadcn control convergence", () => {
       expect(content).toContain("Empty")
     }
   })
+
+  it("uses the shadcn-compatible textarea composition for task comments", () => {
+    const detail = source("features/task-detail/TaskDetail.tsx")
+
+    expect(source("components/ui/input-group.tsx")).toContain("InputGroupTextarea")
+    expect(detail).toContain("InputGroupTextarea")
+    expect(detail).toContain('name="comment-body"')
+    expect(detail).toContain('aria-label="Comment body"')
+    expect(detail).toContain('autoComplete="off"')
+  })
 })

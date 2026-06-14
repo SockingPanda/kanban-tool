@@ -15,6 +15,8 @@
 - migrations/001_initial.sql
 - migrations/003_comment_author_identity.sql
 
+`docs/SPEC.md`、`docs/CLI_SPEC.md`、`docs/API_SPEC.md`、`docs/DISPATCHER_SPEC.md` 等分主题文档是当前行为的权威来源；本文件是这些源文档的同步快照，便于一次性阅读和离线传递。
+
 
 
 ---
@@ -31,7 +33,7 @@
 - CLI 负责脚本化、本地开发流与 agent/automation 入口。
 - SQLite 负责持久化任务、状态、依赖、评论、事件、运行记录。
 - Rust core 负责状态机与一致性约束。
-- Dispatcher 是可选本地调度器，用于自动提升、claim、heartbeat、reclaim 和执行 worker profile。
+- Dispatcher 是可选本地调度器，用于 claim 显式 `ready` 任务、heartbeat、reclaim 和执行 worker profile；不自动提升 `todo/scheduled`。
 
 ## 范围约束
 
@@ -310,13 +312,14 @@ CLI 见 [`CLI_SPEC.md`](CLI_SPEC.md)。
 
 Dispatcher 是本地可选组件。它不负责多人协作，只负责本地自动化：
 
-1. 把满足条件的 `todo/scheduled` 提升为 `ready`。
-2. 从 `ready` 中 claim 任务。
+1. 从 `ready` 中 claim 任务。
 3. 为 claim 创建 `task_runs`。
-4. 运行 worker profile。
-5. 周期性 heartbeat。
-6. 超时或崩溃后 reclaim。
-7. 根据 worker exit status 写入 `done/review/blocked/ready`。
+3. 运行 worker profile。
+4. 周期性 heartbeat。
+5. 超时或崩溃后 reclaim。
+6. 根据 worker exit status 写入 `done/review/blocked/ready`。
+
+`ready` 表示显式人工 promote 意图；parent 完成、dependency 移除或 schedule 到期不会被 dispatcher 自动提升到 `ready`。
 
 Dispatcher 见 [`DISPATCHER_SPEC.md`](DISPATCHER_SPEC.md)。
 
@@ -536,8 +539,7 @@ CLI 可以直接打开 SQLite DB 调用 service，不需要 server 常驻。
 
 职责：
 
-- promotion。
-- claim。
+- claim 显式 `ready` 任务。
 - heartbeat。
 - reclaim。
 - worker profile 执行。
@@ -602,8 +604,7 @@ Worker/CLI/Web
   -> update tasks to done or review
   -> clear claim fields
   -> insert task_events(kind='task.completed')
-  -> promote children that are now unblocked
-  -> insert promotion events
+  -> children remain todo; derived dependency state reflects whether they are still blocked
   -> COMMIT
 ```
 
@@ -641,7 +642,6 @@ kanban serve
 启动：
 
 - localhost HTTP server。
-- 可选内嵌 dispatcher。
 - Web UI。
 
 适用：日常看板 UI。
@@ -652,11 +652,7 @@ kanban serve
 kanban dispatch
 ```
 
-启动本地调度循环。也可以在 server 中开启：
-
-```bash
-kanban serve --dispatcher
-```
+启动本地调度循环。与 server 同进程运行 dispatcher 是后续扩展；当前 CLI 使用独立 `kanban dispatch` 前台 loop。
 
 ---
 
@@ -904,7 +900,7 @@ Side effects：
 - update status。
 - insert `task_events(kind='task.promoted')`。
 
-Promote 通常由 dispatcher 或 complete/unblock 后的 service 内部触发，也可由 CLI 手动触发：
+Promote 是显式 ready 意图，通常由人工 CLI/Web action 触发：
 
 ```bash
 kanban task promote t_xxx
@@ -990,7 +986,7 @@ Side effects：
 - clear claim fields。
 - update active run status `succeeded`。
 - insert `task_events(kind='task.completed')`。
-- 尝试 promote child tasks。
+- 不自动 promote child tasks；child 保持 `todo`，由 derived dependency state 表示是否仍被 parent 阻塞。
 
 ---
 
@@ -1196,7 +1192,7 @@ UI column 不是状态真相，只是展示配置。
 3. `ready -> running` 并发 claim 只有一个成功。
 4. expired claim reclaim。
 5. block/unblock 重新计算目标状态。
-6. completion 后 child promotion。
+6. completion 后 child 保持 `todo`，需要显式 promote。
 7. archived task 不被 dispatcher 处理。
 8. illegal direct transition 返回 `invalid_transition`。
 
@@ -1605,7 +1601,7 @@ ORDER BY
     ELSE 90
   END,
   position ASC,
-  priority DESC,
+  priority ASC,
   created_at ASC;
 ```
 
@@ -1624,7 +1620,7 @@ WHERE t.board_id = ?
     WHERE d.child_task_id = t.id
       AND p.status != 'done'
   )
-ORDER BY t.priority DESC, t.created_at ASC
+ORDER BY t.priority ASC, t.created_at ASC
 LIMIT ?;
 ```
 
@@ -2147,7 +2143,7 @@ the standard envelope:
       "node_count": 3,
       "edge_count": 1,
       "sort": [
-        "priority desc",
+        "priority asc",
         "due_at asc nulls last",
         "scheduled_at asc nulls last",
         "dependency fan-out desc",
@@ -2217,7 +2213,7 @@ the standard envelope:
 Frontier v1 includes only unarchived `todo` and `ready` tasks with no unfinished
 parent dependencies. It excludes `done`, `archived`, `blocked`, `running`, and
 `review` tasks. Nodes and frontier entries use the documented stable sort:
-priority descending, due date ascending with nulls last, scheduled time
+priority ascending (P0 -> P3), due date ascending with nulls last, scheduled time
 ascending with nulls last, dependency fan-out descending, created time
 ascending, then task ref and id.
 
@@ -2580,7 +2576,7 @@ Response：
   "data": {
     "ok": true,
     "db": "ok",
-    "version": "0.1.0"
+    "version": "1.1.2"
   }
 }
 ```
@@ -3183,12 +3179,11 @@ Dispatcher 是本地可选调度器。它只处理本机 SQLite DB，不处理�
 
 Dispatcher 负责：
 
-1. promotion：把符合条件的 `todo/scheduled` 任务提升到 `ready`。
-2. reclaim：回收超时、崩溃或失联的 `running` 任务。
-3. claim：从 `ready` 队列选择任务并进入 `running`。
-4. run：执行本地 worker profile。
-5. heartbeat：维持 claim。
-6. finish：根据 worker 结果写回 `done/review/blocked/ready`。
+1. reclaim：回收超时、崩溃或失联的 `running` 任务。
+2. claim：从 `ready` 队列选择任务并进入 `running`。
+3. run：执行本地 worker profile。
+4. heartbeat：维持 claim。
+5. finish：根据 worker 结果写回 `done/review/blocked/ready`。
 
 Dispatcher 不负责：
 
@@ -3210,25 +3205,21 @@ kanban dispatch --once
 执行一轮：
 
 1. reclaim expired。
-2. promote due/ready。
-3. claim up to capacity。
-4. 对已 claim task 启动 worker。
+2. claim up to capacity。
+3. 对已 claim task 启动 worker。
 
 ### 2.2 常驻运行
 
 ```bash
 kanban dispatch
+kanban dispatch --max-iterations 10
 ```
 
-循环执行。
+前台循环执行。`--max-iterations` 用于测试、脚本或受控 smoke；不传时持续运行直到进程收到外部停止信号。
 
 ### 2.3 与 server 同进程
 
-```bash
-kanban serve --dispatcher
-```
-
-适合日常 Web UI。
+后续扩展。当前实现先提供独立 `kanban dispatch` 前台 loop；`kanban serve` 不启动 dispatcher。
 
 ---
 
@@ -3241,8 +3232,6 @@ loop {
     let now = clock.now_ms();
 
     reclaim_expired(now)?;
-    promote_due_tasks(now)?;
-
     while running_count() < max_concurrency {
         match claim_next_ready_task(now)? {
             Some(claimed) => spawn_worker(claimed)?,
@@ -3258,36 +3247,7 @@ loop {
 
 ## 4. Promotion
 
-### 4.1 Scheduled promotion
-
-```text
-scheduled -> ready
-```
-
-Guard：
-
-- `scheduled_at <= now`。
-- 所有 parent dependency 为 `done`。
-
-### 4.2 Todo promotion
-
-```text
-todo -> ready
-```
-
-Guard：
-
-- 所有 parent dependency 为 `done`。
-- spec complete。
-
-### 4.3 Promotion transaction
-
-每个 task 独立 transaction 或批量 transaction 均可。建议批量，但限制 batch size。
-
-每个 promotion 必须写：
-
-- task status update。
-- `task_events(kind='task.promoted')`。
+Dispatcher 不执行 `todo/scheduled -> ready` promotion。`ready` 表示显式人工 promote 意图；依赖完成或计划到期只会改变查询返回的 derived state，不会把 task 放入 ready 队列。
 
 ---
 
@@ -3296,8 +3256,19 @@ Guard：
 默认排序：
 
 ```sql
-ORDER BY priority DESC, created_at ASC
+ORDER BY priority ASC, created_at ASC
 ```
+
+`priority` is the implemented P0-P3 integer level where `0` (P0) is highest and
+`3` (P3) is lowest/default, so dispatcher/frontier claim order selects P0 first
+among tasks that are already `ready`.
+
+Priority does not place work into the ready queue. P0 means incident, current
+blocker, or must-handle-immediately work; P1 is near-term focus; P2 is important
+follow-up; P3 is ordinary backlog/low/default. Ordinary ready tasks should remain
+P1/P2/P3 unless they are truly immediate blockers. A P0 task in `todo`,
+`scheduled`, or `triage` is still not claimable until the normal state-machine
+guards allow explicit promotion to `ready`.
 
 可选后续扩展：
 
@@ -3343,7 +3314,7 @@ WHERE board_id = ?
     WHERE d.child_task_id = tasks.id
       AND p.status != 'done'
   )
-ORDER BY priority DESC, created_at ASC
+ORDER BY priority ASC, created_at ASC
 LIMIT 1;
 
 UPDATE tasks
@@ -3570,8 +3541,7 @@ kanban run logs r_01HX...
 
 MVP dispatcher 必须实现：
 
-- promote due tasks。
-- claim one ready task。
+- claim one explicit `ready` task。
 - spawn command。
 - heartbeat。
 - complete/block based on exit code。
@@ -3702,14 +3672,14 @@ MVP 可暂不实现：
 
 ## Phase 4：Dependencies
 
-目标：支持 parent/child 依赖和自动 promotion。
+目标：支持 parent/child 依赖和显式 manual promotion。
 
 交付：
 
 - `kanban dep add/remove/list`。
 - cycle detection。
 - dependency-aware create/promote/claim。
-- parent complete 后尝试 promote children。
+- parent complete 后不自动 promote children；child 保持 `todo`，由 derived dependency fields 表达是否仍被阻塞。
 
 验收：
 

@@ -25,4 +25,12 @@ describe("desktop shadcn control convergence", () => {
       expect(content, file).not.toContain('type="checkbox"')
     }
   })
+
+  it("keeps the archived shell control as a direct two-state button", () => {
+    const content = source("app/AppShell.tsx")
+
+    expect(content).toContain('aria-pressed={showArchived}')
+    expect(content).toContain("onShowArchivedChange(!showArchived)")
+    expect(content).not.toContain("Include archived tasks")
+  })
 })

@@ -15,6 +15,7 @@ import {
   type SelectedDependencySnapshot,
 } from "./board-card-state"
 import { columnHints, statusAccent } from "./board-config"
+import { boardGridStyle, boardScrollerClassName } from "./board-layout"
 
 export function BoardView({
   columns,
@@ -49,20 +50,19 @@ export function BoardView({
         onDropTask(sourceId, targetStatus)
       }}
     >
-      <div
-        className="grid min-h-0 flex-1 gap-px overflow-hidden bg-border"
-        style={{ gridTemplateColumns: `repeat(${Math.max(1, columns.length)}, minmax(160px, 1fr))` }}
-      >
-        {columns.map((column) => (
-          <BoardColumn
-            key={column.id}
-            column={column}
-            tasks={groupedTasks.get(column.status) ?? []}
-            selectedId={selectedId}
-            dependencySnapshot={dependencySnapshot}
-            onSelect={onSelectTask}
-          />
-        ))}
+      <div className={boardScrollerClassName}>
+        <div className="grid h-full min-h-0 gap-px" style={boardGridStyle(columns.length)}>
+          {columns.map((column) => (
+            <BoardColumn
+              key={column.id}
+              column={column}
+              tasks={groupedTasks.get(column.status) ?? []}
+              selectedId={selectedId}
+              dependencySnapshot={dependencySnapshot}
+              onSelect={onSelectTask}
+            />
+          ))}
+        </div>
       </div>
     </DragDropProvider>
   )
@@ -99,7 +99,7 @@ function BoardColumn({
     <div
       ref={ref}
       className={cn(
-        "flex min-h-0 min-w-0 flex-col bg-muted/60",
+        "flex min-h-0 min-w-0 flex-col overflow-hidden bg-muted/60",
         isDropTarget && "outline outline-2 outline-offset-[-2px] outline-ring",
       )}
     >

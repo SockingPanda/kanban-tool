@@ -6,6 +6,7 @@ describe("board layout", () => {
   it("keeps columns reachable through horizontal board scrolling", () => {
     expect(boardScrollerClassName).toContain("overflow-x-auto")
     expect(boardScrollerClassName).toContain("overflow-y-hidden")
+    expect(boardScrollerClassName).toContain("kb-native-scrollbar-fade")
 
     expect(boardGridStyle(8)).toEqual({
       gridTemplateColumns: "repeat(8, minmax(18rem, 1fr))",

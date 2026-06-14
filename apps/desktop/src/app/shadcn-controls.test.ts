@@ -125,6 +125,8 @@ describe("desktop shadcn control convergence", () => {
     expect(item).toContain("data-slot=\"item\"")
     expect(item).toContain("ItemContent")
     expect(item).toContain("ItemActions")
+    expect(item).toContain('className={cn("flex min-w-0 items-center gap-2", className)}')
+    expect(item).not.toContain("flex shrink-0 items-center gap-2")
 
     for (const file of files) {
       expect(source(file), file).toContain("@/components/ui/item")

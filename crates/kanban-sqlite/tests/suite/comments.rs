@@ -96,6 +96,36 @@ fn comments_infer_author_type_for_legacy_requests() -> anyhow::Result<()> {
 }
 
 #[test]
+fn comments_accept_decision_kind_with_human_default() -> anyhow::Result<()> {
+    let temp = TempDb::new("comments_accept_decision_kind_with_human_default")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("decision comment"),
+    )?;
+
+    let comment = create_comment(
+        &temp.path,
+        &task.id,
+        "alice",
+        "Problem: choose queue. Options: a/b. Choice: a. Reason: simpler. Risk/validation: smoke.",
+        Some("decision"),
+    )?;
+
+    assert_eq!(comment.kind, "decision");
+    assert_eq!(comment.author_type, "human");
+    assert_eq!(comment.agent_type, None);
+
+    let comments = list_comments(&temp.path, &task.id)?;
+    assert_eq!(comments.len(), 1);
+    assert_eq!(comments[0].kind, "decision");
+    assert_eq!(comments[0].author_type, "human");
+    Ok(())
+}
+
+#[test]
 fn comments_reject_agent_type_for_non_agent_authors() -> anyhow::Result<()> {
     let temp = TempDb::new("comments_reject_agent_type_for_non_agent_authors")?;
     init_database(&temp.path, "tester")?;
@@ -200,6 +230,59 @@ fn storage_rejects_agent_type_for_non_agent_author_type() -> anyhow::Result<()> 
         error.to_string().contains("CHECK constraint failed"),
         "error: {error}"
     );
+    Ok(())
+}
+
+#[test]
+fn migration_allows_decision_comment_kind_in_existing_v4_database() -> anyhow::Result<()> {
+    let temp = TempDb::new("migration_allows_decision_comment_kind_in_existing_v4_database")?;
+    let v1_sql = include_str!("../../../../migrations/001_initial.sql").replace(
+        "'text', 'system', 'worker', 'decision'",
+        "'text', 'system', 'worker'",
+    );
+    let conn = Connection::open(&temp.path)?;
+    conn.execute_batch(&v1_sql)?;
+    conn.execute_batch(include_str!(
+        "../../../../migrations/002_knowledge_substrate.sql"
+    ))?;
+    conn.execute_batch(include_str!(
+        "../../../../migrations/003_comment_author_identity.sql"
+    ))?;
+    conn.execute_batch(include_str!(
+        "../../../../migrations/004_priority_levels.sql"
+    ))?;
+    conn.execute(
+        "INSERT INTO boards(id, slug, name, description, created_at, updated_at, archived_at) VALUES ('b_test', 'default', 'Default', NULL, 1, 1, NULL)",
+        [],
+    )?;
+    conn.execute(
+        "INSERT INTO tasks(id, board_id, seq, title, description, status, created_by, created_at, updated_at, metadata_json) VALUES ('t_test', 'b_test', 1, 'Decision', 'ready spec', 'ready', 'tester', 2, 2, '{}')",
+        [],
+    )?;
+    conn.execute(
+        "INSERT INTO task_comments(id, board_id, task_id, author, body, kind, created_at, author_type, agent_type) VALUES ('c_text', 'b_test', 't_test', 'tester', 'existing', 'text', 3, 'human', NULL)",
+        [],
+    )?;
+    let check_error = result_err(conn.execute(
+        "INSERT INTO task_comments(id, board_id, task_id, author, body, kind, created_at, author_type, agent_type) VALUES ('c_decision_before', 'b_test', 't_test', 'tester', 'before', 'decision', 4, 'human', NULL)",
+        [],
+    ))?;
+    assert!(
+        check_error.to_string().contains("CHECK"),
+        "error: {check_error}"
+    );
+    conn.pragma_update(None, "user_version", 4)?;
+    drop(conn);
+
+    init_database(&temp.path, "tester")?;
+
+    let conn = Connection::open(&temp.path)?;
+    let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    assert_eq!(user_version, 5);
+    conn.execute(
+        "INSERT INTO task_comments(id, board_id, task_id, author, body, kind, created_at, author_type, agent_type) VALUES ('c_decision_after', 'b_test', 't_test', 'tester', 'after', 'decision', 5, 'human', NULL)",
+        [],
+    )?;
     Ok(())
 }
 

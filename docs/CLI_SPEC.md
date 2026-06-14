@@ -674,14 +674,29 @@ JSON output uses the standard envelope:
 ## 9. Comment Commands
 
 ```bash
-kanban comment add <task_ref> <body> [--kind text|system|worker] [--author-type human|agent|system] [--agent-type <type>]
+kanban comment add <task_ref> <body> [--kind text|system|worker|decision] [--author-type human|agent|system] [--agent-type <type>]
 kanban comment list <task_ref>
 ```
 
 `--actor` supplies the comment author display identity. If `--kind` is omitted,
 the service default is `text`. If `--author-type` is omitted, the service infers
-`worker -> agent`, `system -> system`, and otherwise `human`. `--agent-type` is
+`worker -> agent`, `system -> system`, and otherwise `human`; `decision` defaults
+to `human` unless `--author-type agent` is provided. `--agent-type` is
 allowed only with `--author-type agent`.
+
+Use `--kind decision` for meaningful multi-option choices. The recommended body
+shape is stable Markdown:
+
+```text
+Problem: <decision problem>
+Options: <option A>; <option B>; <option C>
+Choice: <selected option>
+Reason: <why this option won>
+Risk/validation: <known risk and how it was or will be checked>
+```
+
+Skip decision comments for trivial naming, formatting, or purely mechanical
+choices.
 
 Human output is compact and includes comment id, task id, created_at, kind,
 author identity, author_type, optional agent_type, and body:

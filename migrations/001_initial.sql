@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS task_comments (
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   author TEXT NOT NULL,
   body TEXT NOT NULL CHECK(length(trim(body)) > 0),
-  kind TEXT NOT NULL DEFAULT 'text' CHECK(kind IN ('text', 'system', 'worker')),
+  kind TEXT NOT NULL DEFAULT 'text' CHECK(kind IN ('text', 'system', 'worker', 'decision')),
   created_at INTEGER NOT NULL
 );
 

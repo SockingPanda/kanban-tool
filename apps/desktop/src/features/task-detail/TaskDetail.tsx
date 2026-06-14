@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { NativeSelect } from "@/components/ui/native-select"
+import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -21,6 +21,11 @@ import { formatRelativeTime, shortId } from "@/lib/utils"
 import { isLongDescription, visibleDescription } from "./description-state"
 import type { DetailState } from "./detail-state"
 import type { TaskEditDraft } from "./task-draft"
+
+const priorityOptions: MenuSelectOption<string>[] = priorityLevels.map((priority) => ({
+  value: String(priority),
+  label: priorityLabel(priority),
+}))
 
 export function TaskDetail({
   api,
@@ -161,17 +166,13 @@ export function TaskDetail({
                     onChange={(event) => setEditDraft({ ...editDraft, assignee: event.target.value })}
                     placeholder="Assignee"
                   />
-                  <NativeSelect
-                    className="h-10 w-full px-3"
+                  <MenuSelect
+                    ariaLabel="Task priority"
+                    options={priorityOptions}
                     value={editDraft.priority}
-                    onChange={(event) => setEditDraft({ ...editDraft, priority: event.target.value })}
-                  >
-                    {priorityLevels.map((priority) => (
-                      <option key={priority} value={priority}>
-                        {priorityLabel(priority)}
-                      </option>
-                    ))}
-                  </NativeSelect>
+                    onValueChange={(priority) => setEditDraft({ ...editDraft, priority })}
+                    triggerClassName="h-10 w-full"
+                  />
                   <Input
                     type="datetime-local"
                     value={editDraft.scheduledAt}

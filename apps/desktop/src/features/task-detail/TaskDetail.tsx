@@ -47,6 +47,7 @@ export function TaskDetail({
   onAction,
   onAddDependency,
   onRemoveDependency,
+  onSelectTask,
   onSaveTask,
   onCancelEdit,
   onAddComment,
@@ -70,6 +71,7 @@ export function TaskDetail({
   onAction: (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null }) => Promise<unknown>
   onAddDependency: () => Promise<void>
   onRemoveDependency: (parentTaskId: string) => Promise<void>
+  onSelectTask: (taskId: string) => void
   onSaveTask: () => Promise<boolean>
   onCancelEdit: () => void
   onAddComment: () => Promise<void>
@@ -240,9 +242,10 @@ export function TaskDetail({
               title="Parents"
               tasks={detail.dependencies.parents}
               pending={pendingAction === "dependency"}
+              onSelect={onSelectTask}
               onRemove={(parentTaskId) => void onRemoveDependency(parentTaskId)}
             />
-            <DependencyGroup title="Children" tasks={detail.dependencies.children} />
+            <DependencyGroup title="Children" tasks={detail.dependencies.children} onSelect={onSelectTask} />
             <div className="flex gap-2">
               <Input
                 value={dependencyInput}
@@ -411,17 +414,21 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-function DependencyGroup({
+export function DependencyGroup({
   title,
   tasks,
   pending = false,
+  onSelect,
   onRemove,
 }: {
   title: string
   tasks: Task[]
   pending?: boolean
+  onSelect?: (taskId: string) => void
   onRemove?: (taskId: string) => void
 }) {
+  const dependencyKind = title === "Parents" ? "parent" : "child"
+
   return (
     <div>
       <div className="mb-1 text-xs text-muted-foreground">{title}</div>
@@ -429,13 +436,23 @@ function DependencyGroup({
         {tasks.length ? (
           tasks.map((task) => (
             <span key={task.id} className="inline-flex items-center overflow-hidden rounded-md border border-border bg-muted">
-              <Badge variant={dependencyBadgeVariant(task.status)}>
-                #{task.seq} {task.status}
-              </Badge>
+              <button
+                type="button"
+                className="inline-flex border-0 bg-transparent p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                aria-label={`Open ${dependencyKind} dependency #${task.seq} ${task.title}`}
+                title={`Open ${task.title}`}
+                onClick={() => onSelect?.(task.id)}
+              >
+                <Badge variant={dependencyBadgeVariant(task.status)}>
+                  #{task.seq} {task.status}
+                </Badge>
+              </button>
               {onRemove ? (
                 <button
+                  type="button"
                   className="px-1.5 text-muted-foreground hover:text-destructive"
                   disabled={pending}
+                  aria-label={`Remove parent dependency #${task.seq} ${task.title}`}
                   title="Remove parent dependency"
                   onClick={() => onRemove(task.id)}
                 >

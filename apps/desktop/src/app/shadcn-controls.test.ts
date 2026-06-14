@@ -20,6 +20,17 @@ describe("desktop shadcn control convergence", () => {
     expect(content).not.toContain("cloneElement")
   })
 
+  it("mounts the TooltipProvider above List tooltip usage", () => {
+    const main = source("main.tsx")
+    const list = source("features/list/ListView.tsx")
+
+    expect(main).toContain("TooltipProvider")
+    expect(main).toContain("<TooltipProvider>")
+    expect(main).toContain("<App />")
+    expect(list).toContain("TooltipTrigger")
+    expect(list).toContain("TooltipContent")
+  })
+
   it("keeps task cards, table task links, dependency chips, and shell nav off ad hoc buttons", () => {
     const files = [
       "app/AppShell.tsx",

@@ -5,7 +5,19 @@ import type { ElementType, ReactNode } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Card } from "@/components/ui/card"
+import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { BoardStats, CheckpointReport, DoctorDerivedStore, DoctorReport, KanbanApi, SearchIndexStatus, StaleClaim } from "@/lib/api"
@@ -58,16 +70,23 @@ export function MaintenanceView({ api }: { api: KanbanApi | null }) {
           {doctorMutation.error ? <ErrorText error={doctorMutation.error} /> : null}
         </Panel>
         <Panel title="Checkpoint" icon={DatabaseBackup}>
-          <Button
-            variant="secondary"
-            disabled={!api || checkpointMutation.isPending}
-            onClick={() => {
-              if (!window.confirm("Run WAL checkpoint now?")) return
-              checkpointMutation.mutate()
-            }}
-          >
-            Create checkpoint
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="secondary" disabled={!api || checkpointMutation.isPending}>
+                Create checkpoint
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Run WAL checkpoint?</AlertDialogTitle>
+                <AlertDialogDescription>Run WAL checkpoint now?</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => checkpointMutation.mutate()}>Continue</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           {checkpointMutation.data ? <CheckpointResultView result={checkpointMutation.data} /> : null}
           {checkpointMutation.error ? <ErrorText error={checkpointMutation.error} /> : null}
         </Panel>
@@ -247,7 +266,11 @@ function Subheading({ children }: { children: ReactNode }) {
 }
 
 function EmptyText({ children }: { children: ReactNode }) {
-  return <div className="text-sm text-muted-foreground">{children}</div>
+  return (
+    <Empty className="items-start p-0 text-left">
+      <EmptyDescription>{children}</EmptyDescription>
+    </Empty>
+  )
 }
 
 function nullableNumber(value: number | null) {

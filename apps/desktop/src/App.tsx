@@ -44,9 +44,34 @@ import { queryKeys } from "@/lib/query-keys"
 import { hasNextPage, hasPreviousPage, lastPageOffset } from "@/lib/pagination"
 import { useDebouncedValue } from "@/lib/use-debounced-value"
 import { reconcileClaimTokenForTask, reconcileClaimTokensForTasks } from "@/lib/claim-tokens"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 
 const DEFAULT_PAGE_SIZE = 100
 const EMPTY_TASKS: Task[] = []
+
+type PlannedDragTransition = {
+  task: Task
+  plan: Extract<ReturnType<typeof planDragTransition>, { ok: true }>
+}
 
 type RunActionOptions = {
   label?: string
@@ -81,6 +106,9 @@ function App() {
   const [claimTokens, setClaimTokens] = useState<Record<string, string>>({})
   const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null)
   const [pendingAction, setPendingAction] = useState<string | null>(null)
+  const [dragReasonRequest, setDragReasonRequest] = useState<PlannedDragTransition | null>(null)
+  const [dragConfirmRequest, setDragConfirmRequest] = useState<PlannedDragTransition | null>(null)
+  const [dragReasonDraft, setDragReasonDraft] = useState("")
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -311,21 +339,51 @@ function App() {
     const task = tasksById.get(taskId)
     if (!task) return
     const token = claimTokens[task.id] ?? null
-    let plan = planDragTransition(task, targetStatus, token)
+    const plan = planDragTransition(task, targetStatus, token)
     if (!plan.ok) {
       setError(plan.reason)
       return
     }
     if (plan.promptReason) {
-      const reason = window.prompt("Block reason")
-      if (!reason?.trim()) {
-        setError("A block reason is required.")
-        return
-      }
-      plan = { ...plan, body: { ...plan.body, reason: reason.trim() }, promptReason: false }
+      setDragReasonDraft("")
+      setDragReasonRequest({ task, plan })
+      return
     }
-    if (plan.confirm && !window.confirm(plan.confirm)) return
+    requestDragExecution({ task, plan })
+  }
+
+  function requestDragExecution(request: PlannedDragTransition) {
+    if (request.plan.confirm) {
+      setDragConfirmRequest(request)
+      return
+    }
+    void executePlannedDrag(request)
+  }
+
+  async function executePlannedDrag({ task, plan }: PlannedDragTransition) {
+    if (!api) return
     await runAction(() => executeDragTransition(api, task, plan), { label: "transition", fallbackTaskId: task.id })
+  }
+
+  function submitDragReason(event: FormEvent) {
+    event.preventDefault()
+    if (!dragReasonRequest) return
+    const reason = dragReasonDraft.trim()
+    if (!reason) {
+      setError("A block reason is required.")
+      return
+    }
+    const request = {
+      task: dragReasonRequest.task,
+      plan: {
+        ...dragReasonRequest.plan,
+        body: { ...dragReasonRequest.plan.body, reason },
+        promptReason: false,
+      },
+    }
+    setDragReasonRequest(null)
+    setDragReasonDraft("")
+    requestDragExecution(request)
   }
 
   async function saveTask() {
@@ -416,90 +474,159 @@ function App() {
   const lastOffset = lastPageOffset(page)
 
   return (
-    <AppShell
-      config={config}
-      api={api}
-      boards={boardsQuery.data ?? []}
-      boardsLoading={boardsQuery.isLoading}
-      boardsError={boardsQuery.error ? errorMessage(boardsQuery.error) : null}
-      view={view}
-      themeMode={themeMode}
-      sidebarOpen={sidebarOpen}
-      columns={visibleColumns as BoardColumn[]}
-      tasks={tasks}
-      groupedTasks={groupedTasks}
-      selectedTask={selectedTask}
-      selectedId={selectedId}
-      dependencySnapshot={dependencySnapshot}
-      detail={detail}
-      activeRun={activeRun}
-      search={search}
-      debouncedSearch={debouncedSearch}
-      searchMeta={searchMeta}
-      statusFilter={statusFilter}
-      priorityFilters={priorityFilters}
-      listSort={listSort}
-      showArchived={showArchived}
-      page={page}
-      hasNextPage={hasNext}
-      hasPreviousPage={hasPrevious}
-      canGoLastPage={lastOffset !== null && lastOffset !== page.offset}
-      rowsPerPage={rowsPerPage}
-      newTitle={newTitle}
-      newDescription={newDescription}
-      blockReason={blockReason}
-      dependencyInput={dependencyInput}
-      commentBody={commentBody}
-      editDraft={draftState?.draft ?? null}
-      draftDirty={draftState?.dirty ?? false}
-      claimToken={claimToken}
-      tasksRefreshing={tasksQuery.isFetching}
-      detailLoading={detailQuery.isFetching}
-      pendingAction={pendingAction}
-      error={error}
-      lastRefreshAt={lastRefreshAt}
-      queueCounts={queueCounts}
-      onSearchChange={setSearch}
-      onBoardChange={(board) => void switchBoard(board)}
-      onViewChange={setView}
-      onThemeModeChange={setThemeMode}
-      onCycleThemeMode={() => setThemeMode((current) => nextThemeMode(current))}
-      onSidebarOpenChange={setSidebarOpen}
-      onStatusFilterChange={setStatusFilter}
-      onPriorityFiltersChange={setPriorityFilters}
-      onListSortChange={setListSort}
-      onResetListFilters={() => {
-        setStatusFilter("all")
-        setPriorityFilters([])
-        setPageOffset(0)
-      }}
-      onShowArchivedChange={setShowArchived}
-      onRefreshTasks={() => void tasksQuery.refetch()}
-      onFirstPage={() => setPageOffset(0)}
-      onPreviousPage={() => setPageOffset((current) => Math.max(0, current - rowsPerPage))}
-      onNextPage={() => setPageOffset((current) => current + rowsPerPage)}
-      onLastPage={() => setPageOffset(lastOffset ?? pageOffset)}
-      onRowsPerPageChange={(value) => {
-        setRowsPerPage(value)
-        setPageOffset(0)
-      }}
-      onCreateTask={(event) => void createTask(event)}
-      onNewTitleChange={setNewTitle}
-      onNewDescriptionChange={setNewDescription}
-      onSelectTask={setSelectedId}
-      onCloseTaskDetail={() => setSelectedId(null)}
-      onDropTask={(taskId, status) => void dropTask(taskId, status)}
-      onBlockReasonChange={setBlockReason}
-      onDependencyInputChange={setDependencyInput}
-      onCommentBodyChange={setCommentBody}
-      onEditDraftChange={updateDraft}
-      onAction={runAction}
-      onAddDependency={addDependency}
-      onRemoveDependency={removeDependency}
-      onSaveTask={saveTask}
-      onCancelTaskEdit={cancelTaskEdit}
-      onAddComment={addComment}
-    />
+    <>
+      <AppShell
+        config={config}
+        api={api}
+        boards={boardsQuery.data ?? []}
+        boardsLoading={boardsQuery.isLoading}
+        boardsError={boardsQuery.error ? errorMessage(boardsQuery.error) : null}
+        view={view}
+        themeMode={themeMode}
+        sidebarOpen={sidebarOpen}
+        columns={visibleColumns as BoardColumn[]}
+        tasks={tasks}
+        groupedTasks={groupedTasks}
+        selectedTask={selectedTask}
+        selectedId={selectedId}
+        dependencySnapshot={dependencySnapshot}
+        detail={detail}
+        activeRun={activeRun}
+        search={search}
+        debouncedSearch={debouncedSearch}
+        searchMeta={searchMeta}
+        statusFilter={statusFilter}
+        priorityFilters={priorityFilters}
+        listSort={listSort}
+        showArchived={showArchived}
+        page={page}
+        hasNextPage={hasNext}
+        hasPreviousPage={hasPrevious}
+        canGoLastPage={lastOffset !== null && lastOffset !== page.offset}
+        rowsPerPage={rowsPerPage}
+        newTitle={newTitle}
+        newDescription={newDescription}
+        blockReason={blockReason}
+        dependencyInput={dependencyInput}
+        commentBody={commentBody}
+        editDraft={draftState?.draft ?? null}
+        draftDirty={draftState?.dirty ?? false}
+        claimToken={claimToken}
+        tasksRefreshing={tasksQuery.isFetching}
+        detailLoading={detailQuery.isFetching}
+        pendingAction={pendingAction}
+        error={error}
+        lastRefreshAt={lastRefreshAt}
+        queueCounts={queueCounts}
+        onSearchChange={setSearch}
+        onBoardChange={(board) => void switchBoard(board)}
+        onViewChange={setView}
+        onThemeModeChange={setThemeMode}
+        onCycleThemeMode={() => setThemeMode((current) => nextThemeMode(current))}
+        onSidebarOpenChange={setSidebarOpen}
+        onStatusFilterChange={setStatusFilter}
+        onPriorityFiltersChange={setPriorityFilters}
+        onListSortChange={setListSort}
+        onResetListFilters={() => {
+          setStatusFilter("all")
+          setPriorityFilters([])
+          setPageOffset(0)
+        }}
+        onShowArchivedChange={setShowArchived}
+        onRefreshTasks={() => void tasksQuery.refetch()}
+        onFirstPage={() => setPageOffset(0)}
+        onPreviousPage={() => setPageOffset((current) => Math.max(0, current - rowsPerPage))}
+        onNextPage={() => setPageOffset((current) => current + rowsPerPage)}
+        onLastPage={() => setPageOffset(lastOffset ?? pageOffset)}
+        onRowsPerPageChange={(value) => {
+          setRowsPerPage(value)
+          setPageOffset(0)
+        }}
+        onCreateTask={(event) => void createTask(event)}
+        onNewTitleChange={setNewTitle}
+        onNewDescriptionChange={setNewDescription}
+        onSelectTask={setSelectedId}
+        onCloseTaskDetail={() => setSelectedId(null)}
+        onDropTask={(taskId, status) => void dropTask(taskId, status)}
+        onBlockReasonChange={setBlockReason}
+        onDependencyInputChange={setDependencyInput}
+        onCommentBodyChange={setCommentBody}
+        onEditDraftChange={updateDraft}
+        onAction={runAction}
+        onAddDependency={addDependency}
+        onRemoveDependency={removeDependency}
+        onSaveTask={saveTask}
+        onCancelTaskEdit={cancelTaskEdit}
+        onAddComment={addComment}
+      />
+      <Dialog
+        open={Boolean(dragReasonRequest)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDragReasonRequest(null)
+            setDragReasonDraft("")
+          }
+        }}
+      >
+        <DialogContent>
+          <form onSubmit={submitDragReason} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Block reason</DialogTitle>
+              <DialogDescription>Record why this task is being moved to blocked.</DialogDescription>
+            </DialogHeader>
+            <Textarea
+              aria-label="Block reason"
+              name="block-reason"
+              autoComplete="off"
+              value={dragReasonDraft}
+              onChange={(event) => setDragReasonDraft(event.target.value)}
+              placeholder="Block reason"
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setDragReasonRequest(null)
+                  setDragReasonDraft("")
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!dragReasonDraft.trim()}>
+                Continue
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog
+        open={Boolean(dragConfirmRequest)}
+        onOpenChange={(open) => {
+          if (!open) setDragConfirmRequest(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm transition</AlertDialogTitle>
+            <AlertDialogDescription>{dragConfirmRequest?.plan.confirm}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                const request = dragConfirmRequest
+                setDragConfirmRequest(null)
+                if (request) void executePlannedDrag(request)
+              }}
+            >
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 

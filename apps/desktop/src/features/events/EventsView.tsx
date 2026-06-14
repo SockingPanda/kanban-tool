@@ -3,6 +3,7 @@ import { CircleDot, RefreshCcw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { EventRecord, KanbanApi } from "@/lib/api"
@@ -41,7 +42,9 @@ export function EventsView({ api }: { api: KanbanApi | null }) {
             <Skeleton className="h-12" />
           </div>
         ) : (
-          <div className="text-sm text-muted-foreground">No events returned.</div>
+          <Empty>
+            <EmptyDescription>No events returned.</EmptyDescription>
+          </Empty>
         )}
       </ScrollArea>
     </div>

@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { HealthStatus, KanbanApi, RuntimeConfig } from "@/lib/api"
@@ -69,7 +70,11 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
             ))}
           </div>
         ) : (
-          healthQuery.isLoading ? <Skeleton className="h-16" /> : <div className="text-sm text-muted-foreground">No health response.</div>
+          healthQuery.isLoading ? <Skeleton className="h-16" /> : (
+            <Empty className="p-0">
+              <EmptyDescription>No health response.</EmptyDescription>
+            </Empty>
+          )
         )}
         {runtimeModel?.warning ? (
           <Alert className="mt-3 border-destructive/50">

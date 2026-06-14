@@ -1,4 +1,4 @@
-import type { ElementType, FormEvent, ReactNode } from "react"
+import { useEffect, useState, type ElementType, type FormEvent, type ReactNode, type TransitionEvent } from "react"
 import {
   Activity,
   ChevronDown,
@@ -47,6 +47,11 @@ import { primaryViews, sidebarViews } from "@/features/navigation/view-types"
 import { RunsView } from "@/features/runs/RunsView"
 import { SettingsView } from "@/features/settings/SettingsView"
 import { TaskDetail } from "@/features/task-detail/TaskDetail"
+import {
+  isSidebarWidthTransition,
+  nextSidebarContentOpen,
+  SIDEBAR_WIDTH_TRANSITION_MS,
+} from "@/app/sidebar-animation"
 import type { ThemeMode } from "@/app/theme"
 import type { DetailState } from "@/features/task-detail/detail-state"
 import type { TaskEditDraft } from "@/features/task-detail/task-draft"
@@ -403,44 +408,72 @@ function ShellSidebar({
   onBoardChange: (value: string) => void
   onViewChange: (value: OperatorView) => void
 }) {
+  const [contentOpen, setContentOpen] = useState(open)
+
+  useEffect(() => {
+    setContentOpen((current) =>
+      nextSidebarContentOpen(current, { type: "width-transition-start", sidebarOpen: open }),
+    )
+    const timeoutId = globalThis.setTimeout(() => {
+      setContentOpen((current) =>
+        nextSidebarContentOpen(current, { type: "width-transition-finish", sidebarOpen: open }),
+      )
+    }, SIDEBAR_WIDTH_TRANSITION_MS)
+
+    return () => globalThis.clearTimeout(timeoutId)
+  }, [open])
+
+  function handleTransitionEnd(event: TransitionEvent<HTMLElement>) {
+    if (event.currentTarget !== event.target || !isSidebarWidthTransition(event.propertyName)) return
+    setContentOpen((current) =>
+      nextSidebarContentOpen(current, { type: "width-transition-finish", sidebarOpen: open }),
+    )
+  }
+
   return (
-    <aside className={cn("flex shrink-0 flex-col border-r border-border bg-sidebar transition-[width] duration-200", open ? "w-60 max-sm:w-14" : "w-14")}>
-      <div className={cn("flex h-14 items-center gap-2 px-3 max-sm:justify-center max-sm:px-2", !open && "justify-center px-2")}>
+    <aside
+      className={cn(
+        "flex shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200",
+        open ? "w-60 max-sm:w-14" : "w-14",
+      )}
+      onTransitionEnd={handleTransitionEnd}
+    >
+      <div className={cn("flex h-14 items-center gap-2 px-3 max-sm:justify-center max-sm:px-2", !contentOpen && "justify-center px-2")}>
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
           kb
         </div>
-        <div className={cn("min-w-0 max-sm:hidden", !open && "hidden")}>
+        <div className={cn("min-w-0 max-sm:hidden", !contentOpen && "hidden")}>
           <div className="text-sm font-semibold">Kanban Tool</div>
           <div className="text-xs text-muted-foreground">local queue</div>
         </div>
       </div>
       <nav className="space-y-4 px-2 py-3">
-        <NavGroup label="Task Explorer" open={open}>
+        <NavGroup label="Task Explorer" open={contentOpen}>
           {sidebarViews.filter((item) => ["board", "list", "runs", "events"].includes(item)).map((item) => (
             <NavItem
               key={item}
               icon={viewIcon(item)}
               label={viewLabel(item)}
               active={view === item}
-              open={open}
+              open={contentOpen}
               onClick={() => onViewChange(item)}
             />
           ))}
         </NavGroup>
-        <NavGroup label="System" open={open}>
+        <NavGroup label="System" open={contentOpen}>
           {sidebarViews.filter((item) => ["maintenance", "health", "settings"].includes(item)).map((item) => (
             <NavItem
               key={item}
               icon={viewIcon(item)}
               label={viewLabel(item)}
               active={view === item}
-              open={open}
+              open={contentOpen}
               onClick={() => onViewChange(item)}
             />
           ))}
         </NavGroup>
       </nav>
-      <div className={cn("mt-auto space-y-3 border-t border-border p-3 text-xs text-muted-foreground max-sm:hidden", !open && "hidden")}>
+      <div className={cn("mt-auto space-y-3 border-t border-border p-3 text-xs text-muted-foreground max-sm:hidden", !contentOpen && "hidden")}>
         <BoardSwitcher
           config={config}
           boards={boards}

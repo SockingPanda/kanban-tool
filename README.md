@@ -10,6 +10,8 @@
 - Rust core 负责状态机与一致性约束。
 - Dispatcher 是可选本地调度器，用于 claim 显式 `ready` 任务、heartbeat、reclaim 和执行 worker profile；不自动提升 `todo/scheduled`。
 
+`docs/SPEC.md`、`docs/CLI_SPEC.md`、`docs/API_SPEC.md`、`docs/DISPATCHER_SPEC.md` 等分主题文档是当前行为的权威来源；`KANBAN_SPEC_BUNDLE.md` 是这些源文档的同步快照，便于一次性阅读和离线传递。
+
 ## 范围约束
 
 明确包含：
@@ -85,7 +87,7 @@ Linux 发布分为两个独立 `.deb` 包：
 Debian / Ubuntu：
 
 ```bash
-sudo apt install ./kanban-tool-cli_1.1.1-1_amd64.deb
+sudo apt install ./kanban-tool-cli_1.1.2-1_amd64.deb
 kanban --help
 ```
 

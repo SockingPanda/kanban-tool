@@ -6,13 +6,24 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Iterable
+from typing import Iterable, NotRequired, TypedDict
 
 
 Command = list[str]
+Classifications = dict[str, list[str]]
+
+
+class Plan(TypedDict):
+    base: str
+    changed_files: list[str]
+    classifications: Classifications
+    commands: list[Command]
+    full_gate_recommended: bool
+    release_authoritative_command: str
+    notes: list[str]
+    sources: NotRequired[dict[str, list[str]]]
 
 
 @dataclass(frozen=True)
@@ -206,8 +217,8 @@ def changed_files(base: str) -> dict[str, list[str]]:
     return sources
 
 
-def classify(paths: Iterable[str]) -> dict[str, list[str]]:
-    results = {name: [] for name in CLASSIFIERS}
+def classify(paths: Iterable[str]) -> Classifications:
+    results: Classifications = {name: [] for name in CLASSIFIERS}
     for path in paths:
         for name, predicate in CLASSIFIERS.items():
             if predicate(path):
@@ -239,7 +250,7 @@ def dedupe_commands(commands: Iterable[Command]) -> list[Command]:
     return deduped
 
 
-def build_plan(base: str, paths: list[str]) -> dict[str, object]:
+def build_plan(base: str, paths: list[str]) -> Plan:
     classifications = classify(paths)
     docs_only = bool(paths) and set(classifications) == {"docs-only"}
     commands: list[Command] = []
@@ -275,12 +286,12 @@ def build_plan(base: str, paths: list[str]) -> dict[str, object]:
     }
 
 
-def print_plan(plan: dict[str, object]) -> None:
+def print_plan(plan: Plan) -> None:
     print(f"base: {plan['base']}")
     print(f"full_gate_recommended: {str(plan['full_gate_recommended']).lower()}")
     print("changed_files:")
     changed = plan["changed_files"]
-    if isinstance(changed, list) and changed:
+    if changed:
         for path in changed:
             print(f"  - {path}")
     else:
@@ -288,7 +299,7 @@ def print_plan(plan: dict[str, object]) -> None:
 
     print("classifications:")
     classifications = plan["classifications"]
-    if isinstance(classifications, dict) and classifications:
+    if classifications:
         for name, files in classifications.items():
             print(f"  {name}:")
             for path in files:
@@ -298,29 +309,23 @@ def print_plan(plan: dict[str, object]) -> None:
 
     print("commands:")
     commands = plan["commands"]
-    if isinstance(commands, list) and commands:
+    if commands:
         for command in commands:
             print(f"  - {' '.join(command)}")
     else:
         print("  - <none>")
 
     notes = plan["notes"]
-    if isinstance(notes, list) and notes:
+    if notes:
         print("notes:")
         for note in notes:
             print(f"  - {note}")
 
 
-def execute(plan: dict[str, object]) -> int:
+def execute(plan: Plan) -> int:
     commands = plan["commands"]
-    if not isinstance(commands, list):
-        print("invalid plan: commands must be a list", file=sys.stderr)
-        return 2
 
     for command in commands:
-        if not isinstance(command, list) or not all(isinstance(part, str) for part in command):
-            print(f"invalid command in plan: {command!r}", file=sys.stderr)
-            return 2
         print(f"+ {' '.join(command)}", flush=True)
         completed = subprocess.run(command)
         if completed.returncode != 0:

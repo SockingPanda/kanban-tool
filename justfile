@@ -83,23 +83,9 @@ feature-p package features:
     scripts/cargo-build-lock.sh -- cargo clippy -p {{package}} --all-targets --features "{{features}}" -- -D warnings
 
 release:
-    just rust-fast
-    just feature-p kanban-sqlite tantivy-backend
-    just feature-p kanban-sqlite graph-oxigraph
-    just feature-p kanban-sqlite vector-lancedb
-    just feature-p kanban-sqlite tantivy-backend,graph-oxigraph,vector-lancedb
-    just feature-p kanban-search tantivy-backend
-    just feature-p kanban-graph graph-oxigraph
-    just feature-p kanban-vector vector-lancedb
-    just feature-p kanban-cli tantivy-backend
-    just feature-p kanban-cli graph-oxigraph
-    just feature-p kanban-cli vector-lancedb
-    just feature-p kanban-cli tantivy-backend,graph-oxigraph,vector-lancedb
-    just feature-p kanban-server tantivy-backend
-    just feature-p kanban-server graph-oxigraph
-    just feature-p kanban-server vector-lancedb
-    just feature-p kanban-server tantivy-backend,graph-oxigraph,vector-lancedb
-    just desktop-check
+    just affected-self-test
+    just affected
+    just cli-package
     just desktop-package
     just smoke
     just diff-check

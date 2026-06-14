@@ -3,7 +3,7 @@ import type { CSSProperties } from "react"
 const BOARD_COLUMN_MIN_WIDTH_REM = 18
 const DEFAULT_REM_PX = 16
 
-export const boardScrollerClassName = "min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden bg-border"
+export const boardScrollerClassName = "kb-native-scrollbar-fade min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden bg-border"
 
 export function boardGridStyle(columnCount: number): CSSProperties {
   const trackCount = Math.max(1, columnCount)

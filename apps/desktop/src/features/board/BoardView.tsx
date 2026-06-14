@@ -1,6 +1,6 @@
 import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { useLayoutEffect, useMemo, useRef } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -33,6 +33,7 @@ export function BoardView({
   onDropTask: (taskId: string, targetStatus: TaskStatus) => void
 }) {
   const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const scrollEndTimerRef = useRef<number | null>(null)
   const taskIds = useMemo(() => {
     const ids = new Set<string>()
     for (const tasks of groupedTasks.values()) {
@@ -45,6 +46,24 @@ export function BoardView({
     if (scrollerRef.current) clampBoardScrollLeft(scrollerRef.current, columns.length)
   }, [columns.length])
 
+  useEffect(() => {
+    return () => {
+      if (scrollEndTimerRef.current) window.clearTimeout(scrollEndTimerRef.current)
+    }
+  }, [])
+
+  function handleBoardScroll() {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+
+    scroller.dataset.scrolling = "true"
+    if (scrollEndTimerRef.current) window.clearTimeout(scrollEndTimerRef.current)
+    scrollEndTimerRef.current = window.setTimeout(() => {
+      scroller.removeAttribute("data-scrolling")
+      scrollEndTimerRef.current = null
+    }, 700)
+  }
+
   return (
     <DragDropProvider
       onDragEnd={(event) => {
@@ -55,7 +74,7 @@ export function BoardView({
         onDropTask(sourceId, targetStatus)
       }}
     >
-      <div ref={scrollerRef} className={boardScrollerClassName}>
+      <div ref={scrollerRef} className={boardScrollerClassName} onScroll={handleBoardScroll}>
         <div className="grid h-full min-h-0 gap-px" style={boardGridStyle(columns.length)}>
           {columns.map((column) => (
             <BoardColumn

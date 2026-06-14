@@ -74,7 +74,7 @@
 - CLI package 与 smoke：`just cli-package`、`just smoke`。
 - 脚本 / 文档小改动：`just target-tools`、`just diff-check`。
 
-以下只用于 milestone / release / explicit full gate：
+以下用于本地发布打包 / explicit release gate：
 
 - `just release`
 

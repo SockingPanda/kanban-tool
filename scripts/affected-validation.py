@@ -270,7 +270,7 @@ def build_plan(base: str, paths: list[str]) -> Plan:
     notes: list[str] = []
     if full_gate_recommended:
         notes.append(
-            "`just release` remains the authoritative full gate for release-sensitive diffs."
+            "`just release` remains the authoritative release gate for release-sensitive diffs."
         )
     if not paths:
         notes.append("No base, staged, working tree, or untracked file changes detected.")

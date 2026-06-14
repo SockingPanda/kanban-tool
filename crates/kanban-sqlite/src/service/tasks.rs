@@ -408,15 +408,86 @@ pub(crate) fn task_query_where(board_id: &str, options: &TaskListOptions) -> (St
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        let needle = format!("%{}%", sqlite_like_literal(&search.to_lowercase()));
-        clauses.push(
-            "(lower(title) LIKE ? ESCAPE '\\' OR lower(COALESCE(description, '')) LIKE ? ESCAPE '\\')"
-                .to_owned(),
-        );
-        params.push(Value::Text(needle.clone()));
-        params.push(Value::Text(needle));
+        if let Some((clause, search_params)) = task_ref_filter(search, "tasks.") {
+            clauses.push(clause);
+            params.extend(search_params);
+        } else {
+            let needle = format!("%{}%", sqlite_like_literal(&search.to_lowercase()));
+            clauses.push(
+                "(lower(title) LIKE ? ESCAPE '\\' OR lower(COALESCE(description, '')) LIKE ? ESCAPE '\\')"
+                    .to_owned(),
+            );
+            params.push(Value::Text(needle.clone()));
+            params.push(Value::Text(needle));
+        }
     }
     (clauses.join(" AND "), params)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum TaskSearchQuery {
+    TaskId(String),
+    Seq(i64),
+    BoardSeq { board: String, seq: i64 },
+    RefNoMatch,
+    Text,
+}
+
+pub(crate) fn classify_task_search_query(search: &str) -> TaskSearchQuery {
+    let search = search.trim();
+    if search.starts_with("t_") {
+        return TaskSearchQuery::TaskId(search.to_owned());
+    }
+    if let Some((board, seq_ref)) = split_board_seq_ref(search) {
+        return parse_task_search_seq(seq_ref)
+            .map(|seq| TaskSearchQuery::BoardSeq {
+                board: board.to_owned(),
+                seq,
+            })
+            .unwrap_or(TaskSearchQuery::RefNoMatch);
+    }
+    if search.starts_with('#') {
+        return parse_task_search_seq(search)
+            .map(TaskSearchQuery::Seq)
+            .unwrap_or(TaskSearchQuery::RefNoMatch);
+    }
+    if search.chars().all(|ch| ch.is_ascii_digit()) {
+        return parse_task_search_seq(search)
+            .map(TaskSearchQuery::Seq)
+            .unwrap_or(TaskSearchQuery::RefNoMatch);
+    }
+    TaskSearchQuery::Text
+}
+
+pub(crate) fn task_ref_filter(search: &str, task_prefix: &str) -> Option<(String, Vec<Value>)> {
+    match classify_task_search_query(search) {
+        TaskSearchQuery::TaskId(task_id) => {
+            Some((format!("{task_prefix}id=?"), vec![Value::Text(task_id)]))
+        }
+        TaskSearchQuery::Seq(seq) => {
+            Some((format!("{task_prefix}seq=?"), vec![Value::Integer(seq)]))
+        }
+        TaskSearchQuery::BoardSeq { board, seq } => Some((
+            format!(
+                "{task_prefix}seq=? AND EXISTS (SELECT 1 FROM boards b WHERE b.id={task_prefix}board_id AND (b.slug=? OR b.id=?))"
+            ),
+            vec![
+                Value::Integer(seq),
+                Value::Text(board.clone()),
+                Value::Text(board),
+            ],
+        )),
+        TaskSearchQuery::RefNoMatch => Some(("0=1".to_owned(), Vec::new())),
+        TaskSearchQuery::Text => None,
+    }
+}
+
+fn parse_task_search_seq(seq_ref: &str) -> Option<i64> {
+    let seq = seq_ref.strip_prefix('#').unwrap_or(seq_ref);
+    if seq.is_empty() || !seq.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+    seq.parse().ok()
 }
 
 pub(crate) fn validate_page_bounds(limit: usize, max_limit: usize, offset: usize) -> Result<()> {

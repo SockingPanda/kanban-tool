@@ -42,7 +42,7 @@ def is_desktop(path: str) -> bool:
 
 
 def is_cli(path: str) -> bool:
-    return path.startswith("crates/kanban-cli/")
+    return path.startswith("crates/kanban-cli/") or path == "docs/CLI_SPEC.md"
 
 
 def is_server_api(path: str) -> bool:
@@ -143,6 +143,12 @@ RULES = (
             ["just", "check-p", "kanban-context"],
             ["just", "test-p", "kanban-context"],
             ["just", "clippy-p", "kanban-context"],
+            ["just", "check-p", "kanban-indexer"],
+            ["just", "test-p", "kanban-indexer"],
+            ["just", "clippy-p", "kanban-indexer"],
+            ["just", "check-p", "kanban-entity"],
+            ["just", "test-p", "kanban-entity"],
+            ["just", "clippy-p", "kanban-entity"],
         ),
     ),
     Rule(
@@ -212,7 +218,8 @@ def classify(paths: Iterable[str]) -> dict[str, list[str]]:
 def has_full_gate_file(path: str) -> bool:
     file_name = PurePosixPath(path).name.lower()
     return (
-        path in FULL_GATE_PATTERNS
+        PurePosixPath(path).name in {"Cargo.toml", "Cargo.lock"}
+        or path in FULL_GATE_PATTERNS
         or path.startswith("scripts/release")
         or path.startswith("scripts/package")
         or "release" in file_name
@@ -345,6 +352,13 @@ def self_test() -> None:
             False,
         ),
         (
+            "cli spec",
+            ["docs/CLI_SPEC.md"],
+            {"docs-only", "cli"},
+            [["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
+            False,
+        ),
+        (
             "server api",
             ["crates/kanban-server/src/router.rs", "docs/API_SPEC.md"],
             {"server/api", "docs-only"},
@@ -360,9 +374,19 @@ def self_test() -> None:
         ),
         (
             "search graph vector context",
-            ["crates/kanban-vector/src/lib.rs", "crates/kanban-context/src/lib.rs"],
+            [
+                "crates/kanban-vector/src/lib.rs",
+                "crates/kanban-context/src/lib.rs",
+                "crates/kanban-indexer/src/lib.rs",
+                "crates/kanban-entity/src/lib.rs",
+            ],
             {"search/graph/vector/context"},
-            [["just", "check-p", "kanban-vector"], ["just", "check-p", "kanban-context"]],
+            [
+                ["just", "check-p", "kanban-vector"],
+                ["just", "check-p", "kanban-context"],
+                ["just", "check-p", "kanban-indexer"],
+                ["just", "check-p", "kanban-entity"],
+            ],
             False,
         ),
         (
@@ -377,6 +401,20 @@ def self_test() -> None:
             ["Cargo.toml"],
             {"scripts/packaging/release-sensitive"},
             [["just", "rust-fast"], ["just", "affected-self-test"], ["just", "diff-check"]],
+            True,
+        ),
+        (
+            "nested crate manifest",
+            ["crates/kanban-cli/Cargo.toml"],
+            {"cli"},
+            [["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
+            True,
+        ),
+        (
+            "desktop tauri manifest",
+            ["apps/desktop/src-tauri/Cargo.toml"],
+            {"desktop", "scripts/packaging/release-sensitive"},
+            [["just", "desktop-check"], ["just", "affected-self-test"], ["just", "diff-check"]],
             True,
         ),
     ]

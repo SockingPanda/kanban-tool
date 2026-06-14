@@ -154,6 +154,9 @@ export function TaskDetail({
               <div className="space-y-2">
                 {draftDirty ? <div className="text-xs font-medium text-amber-700">Unsaved changes</div> : null}
                 <Input
+                  aria-label="Task title"
+                  name="task-title"
+                  autoComplete="off"
                   value={editDraft.title}
                   onChange={(event) => setEditDraft({ ...editDraft, title: event.target.value })}
                 />
@@ -164,6 +167,9 @@ export function TaskDetail({
                 />
                 <div className="grid grid-cols-2 gap-2">
                   <Input
+                    aria-label="Task assignee"
+                    name="task-assignee"
+                    autoComplete="off"
                     value={editDraft.assignee}
                     onChange={(event) => setEditDraft({ ...editDraft, assignee: event.target.value })}
                     placeholder="Assignee"
@@ -177,11 +183,17 @@ export function TaskDetail({
                   />
                   <Input
                     type="datetime-local"
+                    aria-label="Scheduled at"
+                    name="task-scheduled-at"
+                    autoComplete="off"
                     value={editDraft.scheduledAt}
                     onChange={(event) => setEditDraft({ ...editDraft, scheduledAt: event.target.value })}
                   />
                   <Input
                     type="datetime-local"
+                    aria-label="Due at"
+                    name="task-due-at"
+                    autoComplete="off"
                     value={editDraft.dueAt}
                     onChange={(event) => setEditDraft({ ...editDraft, dueAt: event.target.value })}
                   />
@@ -189,7 +201,7 @@ export function TaskDetail({
                 <div className="flex gap-2">
                   <Button disabled={!api || pendingAction === "save" || !editDraft.title.trim()} onClick={() => void saveAndClose()}>
                     <Save className="h-4 w-4" />
-                    {pendingAction === "save" ? "Saving" : "Save"}
+                    {pendingAction === "save" ? "Saving…" : "Save"}
                   </Button>
                   <Button variant="outline" disabled={pendingAction === "save"} onClick={cancelEdit}>
                     <X className="h-4 w-4" />
@@ -227,6 +239,9 @@ export function TaskDetail({
           {isBlockableStatus(task.status) ? (
             <Textarea
               className="mt-3"
+              aria-label="Block reason"
+              name="block-reason"
+              autoComplete="off"
               placeholder="Block reason"
               value={blockReason}
               onChange={(event) => setBlockReason(event.target.value)}
@@ -248,11 +263,19 @@ export function TaskDetail({
             <DependencyGroup title="Children" tasks={detail.dependencies.children} onSelect={onSelectTask} />
             <div className="flex gap-2">
               <Input
+                aria-label="Parent task id"
+                name="parent-task-id"
+                autoComplete="off"
                 value={dependencyInput}
                 onChange={(event) => setDependencyInput(event.target.value)}
                 placeholder="Parent task id"
               />
-              <Button variant="outline" disabled={!dependencyInput.trim() || pendingAction === "dependency"} onClick={() => void onAddDependency()}>
+              <Button
+                variant="outline"
+                aria-label="Add parent dependency"
+                disabled={!dependencyInput.trim() || pendingAction === "dependency"}
+                onClick={() => void onAddDependency()}
+              >
                 <GitBranch className="h-4 w-4" />
               </Button>
             </div>
@@ -280,11 +303,19 @@ export function TaskDetail({
             </div>
             <div className="flex gap-2">
               <Input
+                aria-label="Comment body"
+                name="comment-body"
+                autoComplete="off"
                 value={commentBody}
                 onChange={(event) => setCommentBody(event.target.value)}
                 placeholder="Add handoff note"
               />
-              <Button variant="outline" disabled={!commentBody.trim() || pendingAction === "comment"} onClick={() => void onAddComment()}>
+              <Button
+                variant="outline"
+                aria-label="Add comment"
+                disabled={!commentBody.trim() || pendingAction === "comment"}
+                onClick={() => void onAddComment()}
+              >
                 <MessageSquare className="h-4 w-4" />
               </Button>
             </div>
@@ -392,6 +423,9 @@ function AutosizeDescriptionTextarea({
     <Textarea
       ref={textareaRef}
       className="min-h-28 overflow-y-hidden"
+      aria-label={placeholder}
+      name="task-description"
+      autoComplete="off"
       value={value}
       onChange={handleChange}
       placeholder={placeholder}

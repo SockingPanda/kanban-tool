@@ -27,7 +27,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -672,18 +671,16 @@ function ShellHeader({
           triggerClassName="min-w-32"
         />
       </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant={showArchived ? "secondary" : "outline"} size="sm">
-            Archived
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          <DropdownMenuCheckboxItem checked={showArchived} onCheckedChange={(value) => onShowArchivedChange(Boolean(value))}>
-            Include archived tasks
-          </DropdownMenuCheckboxItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <Button
+        type="button"
+        variant={showArchived ? "secondary" : "outline"}
+        size="sm"
+        aria-pressed={showArchived}
+        aria-label={showArchived ? "Archived tasks included" : "Archived tasks hidden"}
+        onClick={() => onShowArchivedChange(!showArchived)}
+      >
+        Archived
+      </Button>
       <div className="ml-auto flex items-center gap-2">
         <Badge variant="secondary">actor {config?.actor ?? "-"}</Badge>
         <Badge variant="ready">local dispatcher</Badge>

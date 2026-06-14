@@ -89,6 +89,54 @@ fn search_command_rejects_unbounded_limit() -> anyhow::Result<()> {
 }
 
 #[test]
+fn search_command_matches_task_refs_exactly() -> anyhow::Result<()> {
+    let temp = TempDb::new("search_command_matches_task_refs_exactly")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let first = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "first cli task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "title mentions 1 but numeric search is exact",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success()?;
+    let first_id = first["data"]["id"].as_str().context("task id")?;
+
+    for query in ["1", "#1", "default#1", first_id] {
+        let json = kanban(&temp.path, &["--json", "search", query])?.success_json()?;
+        let hits = json["data"]["hits"]
+            .as_array()
+            .context("expected JSON array")?;
+        assert_eq!(hits.len(), 1, "{query}: {json}");
+        assert_eq!(hits[0]["task"]["id"], first_id, "{query}: {json}");
+    }
+
+    let json = kanban(&temp.path, &["--json", "search", "other#1"])?.success_json()?;
+    assert!(
+        json["data"]["hits"]
+            .as_array()
+            .context("expected JSON array")?
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[test]
 fn search_command_treats_like_wildcards_and_escape_characters_as_literal_text() -> anyhow::Result<()>
 {
     let temp =

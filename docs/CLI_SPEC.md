@@ -186,16 +186,20 @@ Options：
 | `--description <text>` | Markdown 描述。 |
 | `--status <status>` | 显式初始状态：triage/todo/scheduled/ready。 |
 | `--assignee <name>` | assignee/worker profile。 |
-| `--priority <int>` | Priority level `0..3`: `0` = P0 highest, `3` = P3 lowest/default. Invalid values are rejected. |
+| `--priority <int>` | Priority level `0..3`: `0` = P0 incident/blocker/must-handle-immediately, `1` = P1 near-term focus, `2` = P2 important follow-up, `3` = P3 ordinary backlog/low/default. Invalid values are rejected. |
 | `--scheduled-at <epoch_ms>` | 计划时间，Unix epoch milliseconds。 |
 | `--due-at <epoch_ms>` | 截止时间，Unix epoch milliseconds。 |
 | `--max-retries <n>` | worker 失败或 reclaim 后最多重试次数。 |
 | `--metadata <json>` | 扩展 JSON。 |
 
+Priority 只表达相对重要性和排序，不表达可 claim 状态。`ready` 才表示任务已被显式放入可执行队列；普通 ready 任务通常仍应是 P1/P2/P3，不能为了表示“下一批可做”全部标成 P0。P0 只用于 incident、当前目标 blocker 或必须立即处理的任务；若 P0 task 仍缺规格、排期未到或依赖未完成，它仍保持 `triage` / `scheduled` / `todo`，不能被 claim。
+
 Examples：
 
 ```bash
-kanban task create "实现状态机" --priority 0
+kanban task create "修复 claim 队列阻断回归" --priority 0
+kanban task create "实现状态机" --priority 1
+kanban task create "补充文档示例" --priority 2
 kanban task create "明早检查报告" --scheduled-at 1780640400000
 ```
 
@@ -238,6 +242,8 @@ Options：
 | `--limit <n>` | 限制数量。 |
 | `--offset <n>` | 分页偏移。 |
 | `--sort <field>` | `seq` / `title` / `status` / `position` / `priority` / `assignee` / `scheduled_at` / `due_at` / `created_at` / `updated_at`。降序可用 `<field>_desc`，也兼容 API 风格 `-<field>`。`priority` sorts P0 -> P3; `priority_desc` / `-priority` sorts P3 -> P0. |
+
+Priority sort does not promote work into `ready`; it only orders tasks within the selected result set.
 
 Examples：
 
@@ -507,7 +513,7 @@ the standard envelope:
           "seq": 1,
           "title": "Implement state machine",
           "status": "ready",
-          "priority": 0,
+          "priority": 1,
           "due_at": null,
           "scheduled_at": null,
           "created_at": 1717520000000,
@@ -597,7 +603,7 @@ JSON output uses the standard envelope:
       "seq": 3,
       "title": "Implement feature",
       "status": "todo",
-      "priority": 0,
+      "priority": 1,
       "due_at": null,
       "scheduled_at": null,
       "created_at": 1717520000000,
@@ -611,7 +617,7 @@ JSON output uses the standard envelope:
         "seq": 1,
         "title": "Root prerequisite",
         "status": "done",
-        "priority": 0,
+        "priority": 1,
         "due_at": null,
         "scheduled_at": null,
         "created_at": 1717510000000,
@@ -624,7 +630,7 @@ JSON output uses the standard envelope:
         "seq": 2,
         "title": "Middle prerequisite",
         "status": "ready",
-        "priority": 0,
+        "priority": 1,
         "due_at": null,
         "scheduled_at": null,
         "created_at": 1717515000000,
@@ -637,7 +643,7 @@ JSON output uses the standard envelope:
         "seq": 3,
         "title": "Implement feature",
         "status": "todo",
-        "priority": 0,
+        "priority": 1,
         "due_at": null,
         "scheduled_at": null,
         "created_at": 1717520000000,

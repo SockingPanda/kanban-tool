@@ -169,6 +169,29 @@ Task public identity 有两层：
 |---|---|
 | `lock_version` | optimistic lock。 |
 
+### 5.2 Priority 语义
+
+`priority` 表示任务的相对重要性和排序权重，不表示状态机可执行性。`ready`
+表示任务已经被人工或服务显式放入可 claim 队列；P0-P3 只影响列表、DAG/frontier
+和 dispatcher 在可选任务之间的排序。
+
+优先级约定：
+
+| Priority | 语义 | 示例 |
+|---|---|---|
+| `0` / P0 | incident、阻断当前目标、必须立即处理的任务。少量使用，不作为普通 ready 默认值。 | 修复导致本地队列无法 claim 的回归；解除发布前 P1/P0 reviewer blocker。 |
+| `1` / P1 | 近期待办焦点，当前迭代或当前工作流应优先完成。 | 今天要完成的实现切片；当前 PR 必须补齐的测试。 |
+| `2` / P2 | 重要 follow-up，但不阻塞当前主线。 | 整理文档示例；补充非关键 smoke。 |
+| `3` / P3 | 普通 backlog、低优先级或默认值。 | 想法、低风险清理、未来可做的体验改进。 |
+
+`ready` 与 P0 不能互相替代：
+
+- 普通可执行任务应是 `ready` + P1/P2/P3，而不是为了进入队列全部标成 P0。
+- P0 任务如果仍缺规格、排期未到或依赖未完成，仍不能被 claim；它应保持
+  `triage`、`scheduled` 或 `todo`，直到满足状态机 guard 后再 promote 到 `ready`。
+- Dispatcher 只 claim `ready` 任务；在多个 `ready` 任务之间，才按 priority 从
+  P0 到 P3 排序。
+
 ---
 
 ## 6. Dependency

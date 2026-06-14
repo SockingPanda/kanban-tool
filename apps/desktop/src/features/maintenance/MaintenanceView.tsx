@@ -16,8 +16,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { BoardStats, CheckpointReport, DoctorDerivedStore, DoctorReport, KanbanApi, SearchIndexStatus, StaleClaim } from "@/lib/api"
@@ -97,12 +98,14 @@ export function MaintenanceView({ api }: { api: KanbanApi | null }) {
 
 function Panel({ title, icon: Icon, children }: { title: string; icon: ElementType; children: ReactNode }) {
   return (
-    <Card className="p-4">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        {title}
-      </h2>
-      {children}
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
     </Card>
   )
 }
@@ -254,10 +257,12 @@ function CheckpointResultView({ result }: { result: CheckpointReport }) {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <Card className="p-2">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="truncate font-medium">{value}</div>
-    </Card>
+    <Item className="border-border bg-card p-2">
+      <ItemContent>
+        <ItemDescription>{label}</ItemDescription>
+        <ItemTitle>{value}</ItemTitle>
+      </ItemContent>
+    </Item>
   )
 }
 
@@ -279,10 +284,14 @@ function nullableNumber(value: number | null) {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-3">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="truncate font-medium">{value}</span>
-    </div>
+    <Item className="px-0 py-0">
+      <ItemContent>
+        <ItemTitle className="text-sm font-normal text-muted-foreground">{label}</ItemTitle>
+      </ItemContent>
+      <ItemActions className="min-w-0">
+        <span className="truncate font-medium">{value}</span>
+      </ItemActions>
+    </Item>
   )
 }
 

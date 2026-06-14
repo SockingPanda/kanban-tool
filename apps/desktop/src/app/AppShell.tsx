@@ -41,8 +41,11 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarHeader,
+  SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
 } from "@/components/ui/sidebar"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -255,7 +258,11 @@ export function AppShell({
   const showDetailSheet = shouldOpenTaskDetailSheet(view, selectedTask)
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
+    <SidebarProvider
+      open={sidebarOpen}
+      onOpenChange={onSidebarOpenChange}
+      className="h-screen w-screen overflow-hidden bg-background text-foreground"
+    >
       <ShellSidebar
         config={config}
         boards={boards}
@@ -268,7 +275,7 @@ export function AppShell({
         onViewChange={onViewChange}
       />
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+      <SidebarInset className="flex flex-col overflow-hidden bg-background">
         <ShellHeader
           config={config}
           view={view}
@@ -382,8 +389,8 @@ export function AppShell({
         </div>
 
         <StatusBar lastRefreshAt={lastRefreshAt} queueCounts={queueCounts} />
-      </main>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 
@@ -875,18 +882,20 @@ function SidebarNavItem({
   onClick: () => void
 }) {
   return (
-    <SidebarMenuButton
-      title={!open ? label : undefined}
-      aria-label={label}
-      className={cn(
-        !open && "justify-center",
-      )}
-      active={active}
-      onClick={onClick}
-    >
-      <Icon className="h-4 w-4 shrink-0" />
-      <span className={cn("max-sm:sr-only", !open && "sr-only")}>{label}</span>
-    </SidebarMenuButton>
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        title={!open ? label : undefined}
+        aria-label={label}
+        className={cn(
+          !open && "justify-center",
+        )}
+        active={active}
+        onClick={onClick}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className={cn("max-sm:sr-only", !open && "sr-only")}>{label}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   )
 }
 

@@ -3,20 +3,16 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const TooltipProvider = TooltipPrimitive.Provider
-const TooltipTrigger = TooltipPrimitive.Trigger
+function TooltipProvider({ delayDuration = 0, ...props }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
+  return <TooltipPrimitive.Provider data-slot="tooltip-provider" delayDuration={delayDuration} {...props} />
+}
 
-function Tooltip({ children, content }: { children: React.ReactNode; content?: string }) {
-  if (content) {
-    return (
-      <TooltipPrimitive.Root>
-        <TooltipTrigger asChild>{children}</TooltipTrigger>
-        <TooltipContent>{content}</TooltipContent>
-      </TooltipPrimitive.Root>
-    )
-  }
+function Tooltip({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
+  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+}
 
-  return <TooltipPrimitive.Root>{children}</TooltipPrimitive.Root>
+function TooltipTrigger({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
+  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
 
 function TooltipContent({
@@ -27,6 +23,7 @@ function TooltipContent({
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
+        data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
           "z-50 overflow-hidden rounded-md border border-border bg-card px-2 py-1 text-xs text-card-foreground shadow-sm animate-in fade-in-0 zoom-in-95",

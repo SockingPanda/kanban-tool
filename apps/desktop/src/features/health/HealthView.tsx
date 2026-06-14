@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { HealthStatus, KanbanApi, RuntimeConfig } from "@/lib/api"
@@ -107,21 +108,27 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
 
 function Metric({ label, value, tone = "secondary" }: { label: string; value: string; tone?: MetricTone }) {
   return (
-    <Card className="min-w-0 p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 min-w-0">
-        <Badge variant={tone} className="max-w-full truncate">{value}</Badge>
-      </div>
-    </Card>
+    <Item className="min-w-0 border-border bg-card p-3">
+      <ItemContent>
+        <ItemDescription>{label}</ItemDescription>
+        <ItemTitle className="mt-1">
+          <Badge variant={tone} className="max-w-full truncate">{value}</Badge>
+        </ItemTitle>
+      </ItemContent>
+    </Item>
   )
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <Card className="flex justify-between gap-3 px-3 py-2">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="truncate font-medium">{value}</span>
-    </Card>
+    <Item className="border-border bg-card px-3 py-2">
+      <ItemContent>
+        <ItemTitle className="text-muted-foreground">{label}</ItemTitle>
+      </ItemContent>
+      <ItemActions className="min-w-0">
+        <span className="truncate font-medium">{value}</span>
+      </ItemActions>
+    </Item>
   )
 }
 

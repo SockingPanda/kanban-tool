@@ -1,6 +1,6 @@
 import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { useMemo, useRef } from "react"
+import { useLayoutEffect, useMemo, useRef } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -15,7 +15,7 @@ import {
   type SelectedDependencySnapshot,
 } from "./board-card-state"
 import { columnHints, statusAccent } from "./board-config"
-import { boardGridStyle, boardScrollerClassName } from "./board-layout"
+import { boardGridStyle, boardScrollerClassName, clampBoardScrollLeft } from "./board-layout"
 
 export function BoardView({
   columns,
@@ -32,6 +32,7 @@ export function BoardView({
   onSelectTask: (taskId: string) => void
   onDropTask: (taskId: string, targetStatus: TaskStatus) => void
 }) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
   const taskIds = useMemo(() => {
     const ids = new Set<string>()
     for (const tasks of groupedTasks.values()) {
@@ -39,6 +40,10 @@ export function BoardView({
     }
     return ids
   }, [groupedTasks])
+
+  useLayoutEffect(() => {
+    if (scrollerRef.current) clampBoardScrollLeft(scrollerRef.current, columns.length)
+  }, [columns.length])
 
   return (
     <DragDropProvider
@@ -50,7 +55,7 @@ export function BoardView({
         onDropTask(sourceId, targetStatus)
       }}
     >
-      <div className={boardScrollerClassName}>
+      <div ref={scrollerRef} className={boardScrollerClassName}>
         <div className="grid h-full min-h-0 gap-px" style={boardGridStyle(columns.length)}>
           {columns.map((column) => (
             <BoardColumn

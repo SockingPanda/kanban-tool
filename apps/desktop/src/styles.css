@@ -145,6 +145,67 @@ samp {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
+.kb-scroll-area__scrollbar {
+  opacity: 0;
+  transition:
+    opacity 180ms ease,
+    background-color 120ms ease;
+}
+
+.kb-scroll-area:hover .kb-scroll-area__scrollbar,
+.kb-scroll-area:focus-within .kb-scroll-area__scrollbar,
+.kb-scroll-area[data-scrolling="true"] .kb-scroll-area__scrollbar,
+.kb-scroll-area__scrollbar:hover,
+.kb-scroll-area__scrollbar:active {
+  opacity: 1;
+}
+
+.kb-native-scrollbar-fade {
+  scrollbar-color: transparent transparent;
+  scrollbar-width: thin;
+  transition: scrollbar-color 180ms ease;
+}
+
+.kb-native-scrollbar-fade:hover,
+.kb-native-scrollbar-fade:focus-within,
+.kb-native-scrollbar-fade[data-scrolling="true"] {
+  scrollbar-color: var(--border) transparent;
+}
+
+.kb-native-scrollbar-fade::-webkit-scrollbar {
+  height: 10px;
+}
+
+.kb-native-scrollbar-fade::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.kb-native-scrollbar-fade::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-color: transparent;
+  background-clip: content-box;
+  transition: background-color 180ms ease;
+}
+
+.kb-native-scrollbar-fade:hover::-webkit-scrollbar-thumb,
+.kb-native-scrollbar-fade:focus-within::-webkit-scrollbar-thumb,
+.kb-native-scrollbar-fade[data-scrolling="true"]::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+}
+
+.kb-native-scrollbar-fade::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-scroll-area__scrollbar,
+  .kb-native-scrollbar-fade,
+  .kb-native-scrollbar-fade::-webkit-scrollbar-thumb {
+    transition-duration: 1ms !important;
+  }
+}
+
 #root {
   min-height: 100vh;
 }

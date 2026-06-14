@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { KanbanApi, type ApiError, type Board, type SearchIndexStatus, type SearchTasksMeta, type Task } from "./api"
+import { KanbanApi, loadRuntimeConfig, type ApiError, type Board, type SearchIndexStatus, type SearchTasksMeta, type Task } from "./api"
 
 const runtimeConfig = {
   apiBaseUrl: "http://127.0.0.1:8721",
@@ -332,6 +332,33 @@ describe("KanbanApi task search", () => {
 
     expect(calledUrl(fetchMock).pathname).toBe("/api/v1/tasks/t_child/dependencies/t_parent")
     expect(calledInit(fetchMock).method).toBe("DELETE")
+  })
+})
+
+describe("loadRuntimeConfig web mode", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
+  })
+
+  it("requires an explicit API base URL outside Tauri to avoid stale dev runtimes", async () => {
+    vi.stubEnv("VITE_KB_API_BASE_URL", "")
+
+    await expect(loadRuntimeConfig()).rejects.toThrow("VITE_KB_API_BASE_URL")
+  })
+
+  it("uses the explicit API base URL and optional dev database label outside Tauri", async () => {
+    vi.stubEnv("VITE_KB_API_BASE_URL", "/__kb_api__")
+    vi.stubEnv("VITE_KB_DB_PATH", "/tmp/current-kanban.db")
+    vi.stubEnv("VITE_KB_ACTOR", "web-test")
+    vi.stubEnv("VITE_KB_BOARD", "ops")
+
+    await expect(loadRuntimeConfig()).resolves.toEqual({
+      apiBaseUrl: "/__kb_api__",
+      dbPath: "/tmp/current-kanban.db",
+      actor: "web-test",
+      board: "ops",
+    })
   })
 })
 

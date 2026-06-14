@@ -109,7 +109,11 @@ Response：
 `db_path` and `db_fingerprint` let local Desktop/Web development surfaces verify
 which local SQLite runtime answered the request. If the configured database file
 has been deleted, `/health` returns `400 invalid_input` instead of recreating an
-empty SQLite file.
+empty SQLite file. Other API routes apply the same missing-file guard before
+running handlers, so stale/deleted runtimes fail explicitly instead of opening a
+new empty database at the configured path. `/health` also validates that the
+database has the expected migrated schema and returns `400 invalid_input` for an
+empty or uninitialized SQLite file.
 
 ---
 

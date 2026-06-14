@@ -611,8 +611,9 @@ Request：
 
 Notes：
 
-- `kind` 默认为 `text`，当前允许 `text|system|worker`。
-- `author_type` marks who produced the comment and allows `human|agent|system`. If omitted, the service infers `worker -> agent`, `system -> system`, and all other kinds as `human`.
+- `kind` 默认为 `text`，当前允许 `text|system|worker|decision`。
+- `decision` records meaningful multi-option choices. Use this stable Markdown body shape: `Problem: ...`, `Options: ...`, `Choice: ...`, `Reason: ...`, `Risk/validation: ...`. Skip it for trivial naming, formatting, or purely mechanical choices.
+- `author_type` marks who produced the comment and allows `human|agent|system`. If omitted, the service infers `worker -> agent`, `system -> system`, and all other kinds as `human`; `decision` therefore defaults to `human`.
 - `agent_type` is optional open text for `author_type=agent` comments, such as `executor` or `reviewer`. Non-empty `agent_type` with `author_type=human` or `system` is rejected as `400 invalid_input`.
 - `author` 走通用 actor 语义；也可以用 `X-KB-Actor` 或 server 默认 actor。
 - 创建评论会写入 `task.comment.created` event。

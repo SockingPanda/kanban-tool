@@ -332,7 +332,7 @@ run.finished
 | `author_type` | `human` / `agent` / `system`，表示评论作者身份；旧请求按 `kind` 推断。 |
 | `agent_type` | 可选 open text，仅用于 `author_type=agent`，例如 `executor` / `reviewer`。 |
 | `body` | Markdown 文本。 |
-| `kind` | `text` / `system` / `worker`，保留为兼容展示/来源分类，不等同于作者身份。 |
+| `kind` | `text` / `system` / `worker` / `decision`，保留为兼容展示/来源分类，不等同于作者身份。`decision` 用于记录有意义的多选项取舍。 |
 | `created_at` | 创建时间。 |
 
 Comment 创建时也写一条 `task_events(kind='task.comment.created')`。

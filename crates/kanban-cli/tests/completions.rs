@@ -187,7 +187,7 @@ fn dynamic_completion_returns_enum_candidates_without_db() -> anyhow::Result<()>
 
     let kinds = common::kanban_in_dir(&db_path, &["__complete", "comment-kind"], temp.path())?
         .success_stdout()?;
-    assert_candidates_include(&kinds, &["text", "system", "worker"])?;
+    assert_candidates_include(&kinds, &["text", "system", "worker", "decision"])?;
     Ok(())
 }
 

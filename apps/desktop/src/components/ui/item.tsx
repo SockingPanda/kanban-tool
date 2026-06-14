@@ -25,7 +25,7 @@ function ItemDescription({ className, ...props }: React.ComponentProps<"p">) {
 }
 
 function ItemActions({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="item-actions" className={cn("flex shrink-0 items-center gap-2", className)} {...props} />
+  return <div data-slot="item-actions" className={cn("flex min-w-0 items-center gap-2", className)} {...props} />
 }
 
 function ItemMedia({ className, ...props }: React.ComponentProps<"div">) {

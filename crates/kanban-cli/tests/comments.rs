@@ -155,6 +155,68 @@ fn comment_kind_worker_infers_agent_author_type() -> anyhow::Result<()> {
 }
 
 #[test]
+fn comment_kind_decision_roundtrips_and_defaults_to_human() -> anyhow::Result<()> {
+    let temp = TempDb::new("comment_kind_decision_roundtrips_and_defaults_to_human")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let task_id = create_task(&temp, "decision comment")?;
+
+    let body = "Problem: choose migration path\nOptions: rebuild table or loosen service only\nChoice: rebuild table\nReason: DB CHECK is authoritative\nRisk/validation: migration and CLI smoke";
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json", "--board", "default", "--actor", "alice", "comment", "add", &task_id, body,
+            "--kind", "decision",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(added["data"]["kind"], "decision");
+    assert_eq!(added["data"]["author_type"], "human");
+    assert!(added["data"]["agent_type"].is_null());
+
+    let listed = kanban(
+        &temp.path,
+        &["--json", "--board", "default", "comment", "list", &task_id],
+    )?
+    .success_json()?;
+    assert_eq!(listed["data"][0]["kind"], "decision");
+    assert_eq!(listed["data"][0]["author_type"], "human");
+    Ok(())
+}
+
+#[test]
+fn codex_can_write_agent_decision_comment() -> anyhow::Result<()> {
+    let temp = TempDb::new("codex_can_write_agent_decision_comment")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let task_id = create_task(&temp, "codex decision")?;
+
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--board",
+            "default",
+            "--actor",
+            "codex",
+            "comment",
+            "add",
+            &task_id,
+            "Problem: pick validation. Options: unit/smoke. Choice: both. Reason: API and CLI are touched. Risk/validation: targeted tests.",
+            "--kind",
+            "decision",
+            "--author-type",
+            "agent",
+            "--agent-type",
+            "codex",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(added["data"]["kind"], "decision");
+    assert_eq!(added["data"]["author_type"], "agent");
+    assert_eq!(added["data"]["agent_type"], "codex");
+    Ok(())
+}
+
+#[test]
 fn comment_agent_type_requires_agent_author_type() -> anyhow::Result<()> {
     let temp = TempDb::new("comment_agent_type_requires_agent_author_type")?;
     kanban(&temp.path, &["--board", "default", "init"])?.success()?;

@@ -105,3 +105,52 @@ async fn comments_accept_agent_identity_and_reject_non_agent_type() -> anyhow::R
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn comments_accept_decision_kind_with_default_and_agent_identity() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("decision comment"),
+    )
+    .context("task")?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/comments", task.id),
+        json!({
+            "author": "operator",
+            "body": "Problem: choose policy. Options: a/b. Choice: a. Reason: simpler. Risk/validation: API test.",
+            "kind": "decision"
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(json["data"]["kind"], "decision");
+    assert_eq!(json["data"]["author_type"], "human");
+    assert_eq!(json["data"]["agent_type"], serde_json::Value::Null);
+
+    let (status, json) = post_json(
+        app,
+        &format!("/api/v1/tasks/{}/comments", task.id),
+        json!({
+            "author": "codex",
+            "body": "Problem: choose validation. Options: CLI/API. Choice: both. Reason: both surfaces changed. Risk/validation: targeted tests.",
+            "kind": "decision",
+            "author_type": "agent",
+            "agent_type": "codex"
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(json["data"]["kind"], "decision");
+    assert_eq!(json["data"]["author_type"], "agent");
+    assert_eq!(json["data"]["agent_type"], "codex");
+    Ok(())
+}

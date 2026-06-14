@@ -2,7 +2,7 @@ use crate::connect_file;
 
 use super::{
     MAX_SEARCH_LIMIT, board_id, current_last_event_id, search_lag, sqlite_like_literal, storage,
-    validate_page_bounds,
+    task_ref_filter, validate_page_bounds,
 };
 #[cfg(feature = "tantivy-backend")]
 use super::{mark_derived_store_dirty, mark_derived_store_failure, mark_derived_store_success};
@@ -129,11 +129,18 @@ fn sqlite_search_tasks(
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, &query.board)?;
     let (where_sql, mut params) = search_task_where(&board_id, &query);
+    let exact_ref_search = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_some_and(|value| task_ref_filter(value, "t.").is_some());
     let needle = query
         .q
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
+        .filter(|_| !exact_ref_search)
         .map(|value| format!("%{}%", sqlite_like_literal(&value.to_lowercase())));
     let (score_sql, snippet_sql, outer_filter, mut search_params) = if let Some(needle) =
         needle.as_deref()
@@ -170,6 +177,8 @@ fn sqlite_search_tasks(
                 Value::Text(needle.to_owned()),
             ],
         )
+    } else if exact_ref_search {
+        ("120.0", "t.id", "WHERE score > 0.0", Vec::new())
     } else {
         ("0.0", "NULL", "", Vec::new())
     };
@@ -561,31 +570,32 @@ fn max_event_id(left: Option<i64>, right: Option<i64>) -> Option<i64> {
 #[cfg(feature = "tantivy-backend")]
 fn tantivy_literal_sqlite_fallback_required(query: &SearchQuery) -> bool {
     query.q.as_deref().map(str::trim).is_some_and(|q| {
-        q.chars().any(|ch| {
-            matches!(
-                ch,
-                '"' | '+'
-                    | '-'
-                    | '!'
-                    | '('
-                    | ')'
-                    | '{'
-                    | '}'
-                    | '['
-                    | ']'
-                    | '^'
-                    | '~'
-                    | '*'
-                    | '?'
-                    | ':'
-                    | '\\'
-                    | '/'
-                    | '&'
-                    | '|'
-                    | '%'
-                    | '_'
-            )
-        })
+        task_ref_filter(q, "t.").is_some()
+            || q.chars().any(|ch| {
+                matches!(
+                    ch,
+                    '"' | '+'
+                        | '-'
+                        | '!'
+                        | '('
+                        | ')'
+                        | '{'
+                        | '}'
+                        | '['
+                        | ']'
+                        | '^'
+                        | '~'
+                        | '*'
+                        | '?'
+                        | ':'
+                        | '\\'
+                        | '/'
+                        | '&'
+                        | '|'
+                        | '%'
+                        | '_'
+                )
+            })
     })
 }
 
@@ -637,6 +647,16 @@ fn search_task_where(board_id: &str, query: &SearchQuery) -> (String, Vec<Value>
     {
         clauses.push("t.assignee=?".to_owned());
         params.push(Value::Text(assignee.to_owned()));
+    }
+    if let Some(search) = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        && let Some((clause, search_params)) = task_ref_filter(search, "t.")
+    {
+        clauses.push(clause);
+        params.extend(search_params);
     }
     (clauses.join(" AND "), params)
 }

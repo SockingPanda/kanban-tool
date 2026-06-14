@@ -149,6 +149,57 @@ fn task_list_supports_expanded_table_sort_fields() -> anyhow::Result<()> {
 }
 
 #[test]
+fn task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_list_search_matches_task_refs_exactly")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let first = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "first cli list task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "title mentions 1 but numeric list search is exact",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success()?;
+    let first_id = first["data"]["id"].as_str().context("task id")?;
+
+    for query in ["1", "#1", "default#1", first_id] {
+        let json =
+            kanban(&temp.path, &["--json", "task", "list", "--search", query])?.success_json()?;
+        let tasks = json["data"].as_array().context("expected JSON array")?;
+        assert_eq!(tasks.len(), 1, "{query}: {json}");
+        assert_eq!(tasks[0]["id"], first_id, "{query}: {json}");
+    }
+
+    let json = kanban(
+        &temp.path,
+        &["--json", "task", "list", "--search", "other#1"],
+    )?
+    .success_json()?;
+    assert!(
+        json["data"]
+            .as_array()
+            .context("expected JSON array")?
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[test]
 fn task_list_command_rejects_unbounded_limit() -> anyhow::Result<()> {
     let temp = TempDb::new("task_list_command_rejects_unbounded_limit")?;
     kanban(&temp.path, &["init"])?.success()?;

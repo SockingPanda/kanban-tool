@@ -157,3 +157,50 @@ async fn search_treats_like_wildcards_as_literal_text() -> anyhow::Result<()> {
     assert_eq!(hits[0]["task"]["title"], "literal percent % api");
     Ok(())
 }
+
+#[tokio::test]
+async fn search_matches_task_refs_exactly() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let first = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("first api task"),
+    )
+    .context("seed first task")?;
+    let _second = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("title mentions 1 but must not match numeric search"),
+    )
+    .context("seed second task")?;
+    let app = test.router();
+
+    for query in ["1", "%231", "default%231", first.id.as_str()] {
+        let (status, json) = get_json(
+            app.clone(),
+            &format!("/api/v1/search/tasks?board=default&q={query}&limit=10"),
+        )
+        .await?;
+        assert_eq!(status, StatusCode::OK, "{query}: {json}");
+        let hits = json["data"]["hits"].as_array().context("hits array")?;
+        assert_eq!(hits.len(), 1, "{query}: {json}");
+        assert_eq!(hits[0]["task"]["id"], first.id, "{query}: {json}");
+    }
+
+    let (status, json) = get_json(
+        app,
+        "/api/v1/search/tasks?board=default&q=other%231&limit=10",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        json["data"]["hits"]
+            .as_array()
+            .context("hits array")?
+            .is_empty()
+    );
+    Ok(())
+}

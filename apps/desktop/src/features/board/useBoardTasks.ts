@@ -9,52 +9,92 @@ export type BoardTasksData = {
   searchMeta: SearchTasksResult["searchMeta"] | null
 }
 
-export function useBoardTasks({
-  api,
-  search,
-  statusFilter,
-  priorityFilters = [],
-  sort = "-updated_at",
-  mode = "board",
-  showArchived,
-  limit,
-  offset,
-}: {
-  api: KanbanApi | null
+export type BoardTaskRequestInput = {
+  mode?: "board" | "list"
   search: string
   statusFilter: TaskStatus | "all"
   priorityFilters?: number[]
   sort?: TaskListSort
-  mode?: "board" | "list"
   showArchived: boolean
   limit: number
   offset: number
-}) {
+}
+
+export type BoardTaskRequest = {
+  mode: "board" | "list"
+  search: string
+  statusFilter: TaskStatus | "all"
+  priorityFilters: number[]
+  sort: TaskListSort
+  statuses: TaskStatus[]
+  showArchived: boolean
+  limit: number
+  offset: number
+}
+
+export function resolveBoardTaskRequest({
+  mode = "board",
+  search,
+  statusFilter,
+  priorityFilters = [],
+  sort = "-updated_at",
+  showArchived,
+  limit,
+  offset,
+}: BoardTaskRequestInput): BoardTaskRequest {
   const normalizedSearch = search.trim()
-  const statuses = statusFilter === "all" ? [] : [statusFilter]
+  if (mode === "board") {
+    return {
+      mode,
+      search: normalizedSearch,
+      statusFilter: "all",
+      statuses: [],
+      priorityFilters: [],
+      sort: "-updated_at",
+      showArchived,
+      limit,
+      offset: 0,
+    }
+  }
+
+  return {
+    mode,
+    search: normalizedSearch,
+    statusFilter,
+    statuses: statusFilter === "all" ? [] : [statusFilter],
+    priorityFilters,
+    sort,
+    showArchived,
+    limit,
+    offset,
+  }
+}
+
+export function useBoardTasks({ api, ...input }: BoardTaskRequestInput & { api: KanbanApi | null }) {
+  const request = resolveBoardTaskRequest(input)
 
   return useQuery({
     enabled: Boolean(api),
     queryKey: queryKeys.boardTasks({
       board: api?.board ?? "pending",
-      search: normalizedSearch,
-      status: statusFilter,
-      priorities: priorityFilters,
-      sort,
-      mode,
-      showArchived,
-      limit,
-      offset,
+      search: request.search,
+      status: request.statusFilter,
+      priorities: request.priorityFilters,
+      sort: request.sort,
+      mode: request.mode,
+      showArchived: request.showArchived,
+      limit: request.limit,
+      offset: request.offset,
     }),
     queryFn: async ({ signal }) => {
       if (!api) throw new Error("API client is not ready")
-      if (mode === "board" && normalizedSearch) {
+      if (request.mode === "board" && request.search) {
         const result = await api.searchTasks({
-          query: normalizedSearch,
-          includeArchived: showArchived,
-          statuses,
-          limit,
-          offset,
+          query: request.search,
+          includeArchived: request.showArchived,
+          statuses: request.statuses,
+          limit: request.limit,
+          offset: request.offset,
           signal,
         })
         return {
@@ -65,13 +105,13 @@ export function useBoardTasks({
       }
 
       const result = await api.listTasks({
-        includeArchived: showArchived,
-        statuses,
-        priorities: priorityFilters,
-        query: normalizedSearch,
-        sort,
-        limit,
-        offset,
+        includeArchived: request.showArchived,
+        statuses: request.statuses,
+        priorities: request.priorityFilters,
+        query: request.search,
+        sort: request.sort,
+        limit: request.limit,
+        offset: request.offset,
         signal,
       })
       return { tasks: result.tasks, page: result.page, searchMeta: null } satisfies BoardTasksData

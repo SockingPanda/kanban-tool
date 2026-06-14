@@ -136,8 +136,8 @@ function App() {
     sort: view === "list" ? listSortToApiSort(listSort) : "-updated_at",
     mode: view === "list" ? "list" : "board",
     showArchived,
-    limit: rowsPerPage,
-    offset: pageOffset,
+    limit: view === "list" ? rowsPerPage : DEFAULT_PAGE_SIZE,
+    offset: view === "list" ? pageOffset : 0,
   })
 
   const tasks = tasksQuery.data?.tasks ?? EMPTY_TASKS
@@ -441,7 +441,6 @@ function App() {
       listSort={listSort}
       showArchived={showArchived}
       page={page}
-      visibleTaskCount={tasks.length}
       hasNextPage={hasNext}
       hasPreviousPage={hasPrevious}
       canGoLastPage={lastOffset !== null && lastOffset !== page.offset}
@@ -454,7 +453,6 @@ function App() {
       editDraft={draftState?.draft ?? null}
       draftDirty={draftState?.dirty ?? false}
       claimToken={claimToken}
-      tasksLoading={tasksQuery.isLoading}
       tasksRefreshing={tasksQuery.isFetching}
       detailLoading={detailQuery.isFetching}
       pendingAction={pendingAction}
@@ -471,7 +469,6 @@ function App() {
       onPriorityFiltersChange={setPriorityFilters}
       onListSortChange={setListSort}
       onResetListFilters={() => {
-        setSearch("")
         setStatusFilter("all")
         setPriorityFilters([])
         setPageOffset(0)

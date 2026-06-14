@@ -6,13 +6,12 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table"
-import { ArrowDown, ArrowUp, CalendarClock, ChevronsLeft, ChevronsRight, Eye, MoreHorizontal, Rows3, Search, X } from "lucide-react"
+import { ArrowDown, ArrowUp, CalendarClock, ChevronsLeft, ChevronsRight, Eye, MoreHorizontal, Rows3, X } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -62,12 +61,10 @@ export function ListView({
   hasPreviousPage,
   canGoLastPage,
   rowsPerPage,
-  search,
   statusFilter,
   priorityFilters,
   listSort,
   tasksRefreshing,
-  onSearchChange,
   onStatusFilterChange,
   onPriorityFiltersChange,
   onListSortChange,
@@ -86,12 +83,10 @@ export function ListView({
   hasPreviousPage: boolean
   canGoLastPage: boolean
   rowsPerPage: number
-  search: string
   statusFilter: TaskStatus | "all"
   priorityFilters: number[]
   listSort: ListSortState
   tasksRefreshing: boolean
-  onSearchChange: (value: string) => void
   onStatusFilterChange: (value: TaskStatus | "all") => void
   onPriorityFiltersChange: (value: number[]) => void
   onListSortChange: (value: ListSortState) => void
@@ -250,20 +245,11 @@ export function ListView({
   })
 
   const selectedCount = selectedRowCount(rowSelection)
-  const activeFilters = hasActiveListFilters(search, statusFilter, priorityFilters)
+  const activeFilters = hasActiveListFilters("", statusFilter, priorityFilters)
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-card">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-        <div className="relative min-w-0 flex-1 basis-64 sm:w-72 sm:flex-none">
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-8"
-            placeholder="Filter tasks"
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-          />
-        </div>
         <div className="flex items-center gap-2">
           <Label className="text-xs text-muted-foreground">Status</Label>
           <MenuSelect

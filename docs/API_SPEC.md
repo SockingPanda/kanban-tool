@@ -99,10 +99,17 @@ Response：
   "data": {
     "ok": true,
     "db": "ok",
-    "version": "1.1.1"
+    "version": "1.1.1",
+    "db_path": "/home/alice/.local/share/kb/kb.db",
+    "db_fingerprint": "sqlite:131072:1717520000000"
   }
 }
 ```
+
+`db_path` and `db_fingerprint` let local Desktop/Web development surfaces verify
+which local SQLite runtime answered the request. If the configured database file
+has been deleted, `/health` returns `400 invalid_input` instead of recreating an
+empty SQLite file.
 
 ---
 

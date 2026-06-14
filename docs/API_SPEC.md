@@ -193,7 +193,7 @@ Query params：
 | Param | 说明 |
 |---|---|
 | `status` | 可重复：`?status=ready&status=running`。 |
-| `priority` | 可重复：`?priority=0&priority=2`，值为 P0-P3 的 `0..3`。 |
+| `priority` | 可重复：`?priority=0&priority=2`，值为 P0-P3 的 `0..3`。P0 表示 incident/blocker/must-handle-immediately；P3 是普通 backlog/低优先级/默认。 |
 | `assignee` | 按 assignee。 |
 | `label` | 按 label。 |
 | `q` | title/description 搜索。 |
@@ -201,6 +201,8 @@ Query params：
 | `limit` | 默认 100。 |
 | `offset` | 分页 offset。 |
 | `sort` | `seq` / `title` / `status` / `position` / `priority` / `assignee` / `scheduled_at` / `due_at` / `created_at` / `updated_at`，前缀 `-` 表示降序。`priority` sorts P0 -> P3; `-priority` sorts P3 -> P0. |
+
+Priority 只表达相对重要性和排序，不表达可 claim 状态。`ready` 才表示任务已显式进入可执行队列；普通 `ready` task 可以是 P1/P2/P3，不应为了表示“可做”全部标成 P0。P0 只用于 incident、当前目标 blocker 或必须立即处理的任务；P0 task 若仍缺规格、排期未到或依赖未完成，仍不能被 claim。
 
 Response：
 
@@ -216,7 +218,7 @@ Response：
       "title": "实现状态机",
       "description": "...",
       "status": "ready",
-      "priority": 0,
+      "priority": 1,
       "position": 1024,
       "assignee": null,
       "scheduled_at": null,
@@ -248,7 +250,7 @@ Request：
   "description": "Markdown spec",
   "status": "ready",
   "assignee": "local-worker",
-  "priority": 0,
+  "priority": 1,
   "scheduled_at": null,
   "due_at": null,
   "max_retries": 2,
@@ -265,7 +267,7 @@ Notes：
 - 若不传 `status`，服务端计算初始状态。
 - 若存在未完成 dependencies，不能创建为 `ready`。
 - Task responses expose derived dependency fields: `dependency_blocked` and `unfinished_parent_count`. They are query metadata and are not writable task fields.
-- `priority` is an integer level `0..3`: `0` = P0 highest, `3` = P3 lowest/default. Create rejects invalid values.
+- `priority` is an integer level `0..3`: `0` = P0 incident/blocker/must-handle-immediately, `1` = P1 near-term focus, `2` = P2 important follow-up, `3` = P3 ordinary backlog/low/default. Create rejects invalid values.
 
 ### 4.3 Get task
 

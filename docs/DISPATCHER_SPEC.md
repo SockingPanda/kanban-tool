@@ -120,7 +120,15 @@ ORDER BY priority ASC, created_at ASC
 ```
 
 `priority` is the implemented P0-P3 integer level where `0` (P0) is highest and
-`3` (P3) is lowest/default, so dispatcher/frontier claim order selects P0 first.
+`3` (P3) is lowest/default, so dispatcher/frontier claim order selects P0 first
+among tasks that are already `ready`.
+
+Priority does not place work into the ready queue. P0 means incident, current
+blocker, or must-handle-immediately work; P1 is near-term focus; P2 is important
+follow-up; P3 is ordinary backlog/low/default. Ordinary ready tasks should remain
+P1/P2/P3 unless they are truly immediate blockers. A P0 task in `todo`,
+`scheduled`, or `triage` is still not claimable until the normal state-machine
+guards allow explicit promotion to `ready`.
 
 可选后续扩展：
 

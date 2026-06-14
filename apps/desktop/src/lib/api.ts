@@ -125,6 +125,8 @@ export type HealthStatus = {
   ok: boolean
   db: string
   version: string
+  db_path?: string
+  db_fingerprint?: string
 }
 
 export type BoardStats = {
@@ -298,12 +300,24 @@ export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
   if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
     return invoke<RuntimeConfig>("runtime_config")
   }
+  const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_KB_API_BASE_URL)
+  if (!apiBaseUrl) {
+    throw new Error(
+      "VITE_KB_API_BASE_URL is required outside Tauri; set it to an explicit API origin or an explicit Vite proxy base such as /__kb_api__.",
+    )
+  }
   return {
-    apiBaseUrl: import.meta.env.VITE_KB_API_BASE_URL ?? "",
-    dbPath: "external API",
+    apiBaseUrl,
+    dbPath: import.meta.env.VITE_KB_DB_PATH?.trim() || "external API",
     actor: import.meta.env.VITE_KB_ACTOR ?? "desktop-dev",
     board: import.meta.env.VITE_KB_BOARD ?? "default",
   }
+}
+
+function normalizeApiBaseUrl(value: string | undefined) {
+  const trimmed = value?.trim()
+  if (!trimmed) return ""
+  return trimmed.length > 1 ? trimmed.replace(/\/+$/, "") : trimmed
 }
 
 export class KanbanApi {

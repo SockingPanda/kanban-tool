@@ -492,6 +492,80 @@ async fn tasks_lists_with_priority_filters_and_table_sort_fields() -> anyhow::Re
 }
 
 #[tokio::test]
+async fn tasks_accepts_list_view_sort_contract_for_ref_title_and_status() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    for (title, status) in [
+        ("charlie contract sort", kanban_core::TaskStatus::Ready),
+        ("alpha contract sort", kanban_core::TaskStatus::Ready),
+        ("bravo contract sort", kanban_core::TaskStatus::Todo),
+    ] {
+        kanban_sqlite::create_task(
+            &db_path,
+            "default",
+            "seed",
+            kanban_sqlite::CreateTask {
+                title: title.to_owned(),
+                description: Some(format!("{title} details")),
+                status: Some(status),
+                assignee: None,
+                priority: 3,
+                scheduled_at: None,
+                due_at: None,
+                max_retries: None,
+                metadata_json: "{}".to_owned(),
+            },
+        )
+        .context("seed task")?;
+    }
+    let app = test.router();
+
+    for (sort, field, expected) in [
+        ("seq", "seq", vec![json!(1), json!(2), json!(3)]),
+        ("-seq", "seq", vec![json!(3), json!(2), json!(1)]),
+        (
+            "title",
+            "title",
+            vec![
+                json!("alpha contract sort"),
+                json!("bravo contract sort"),
+                json!("charlie contract sort"),
+            ],
+        ),
+        (
+            "-title",
+            "title",
+            vec![
+                json!("charlie contract sort"),
+                json!("bravo contract sort"),
+                json!("alpha contract sort"),
+            ],
+        ),
+        (
+            "status",
+            "status",
+            vec![json!("todo"), json!("ready"), json!("ready")],
+        ),
+        (
+            "-status",
+            "status",
+            vec![json!("ready"), json!("ready"), json!("todo")],
+        ),
+    ] {
+        let (status, json) = get_json(
+            app.clone(),
+            &format!("/api/v1/boards/default/tasks?sort={sort}"),
+        )
+        .await?;
+        assert_eq!(status, StatusCode::OK, "{sort}");
+        let tasks = json["data"].as_array().context("tasks array")?;
+        let actual: Vec<_> = tasks.iter().map(|task| task[field].clone()).collect();
+        assert_eq!(actual, expected, "{sort}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn tasks_rejects_invalid_priority_filter() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let app = test.router();

@@ -66,6 +66,18 @@ target-tools:
 diff-check:
     git diff --check
 
+affected-plan base="main":
+    scripts/affected-validation.py --base "{{base}}" --mode plan
+
+affected-json base="main":
+    scripts/affected-validation.py --base "{{base}}" --mode json
+
+affected base="main":
+    scripts/affected-validation.py --base "{{base}}" --mode run
+
+affected-self-test:
+    scripts/affected-validation.py --self-test
+
 feature-p package features:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run -p {{package}} --features "{{features}}" --no-fail-fast --no-tests pass; else scripts/cargo-build-lock.sh -- cargo test -p {{package}} --features "{{features}}"; fi
     scripts/cargo-build-lock.sh -- cargo clippy -p {{package}} --all-targets --features "{{features}}" -- -D warnings

@@ -138,3 +138,21 @@ Bash and zsh completion scripts also include dynamic local candidates for task
 refs, board slugs, statuses, and comment kinds through the internal
 `kanban __complete` helper. Other shells currently receive static command and
 option completions only.
+
+## Affected validation
+
+Use the affected validation router to choose a focused local validation set from
+the current git diff:
+
+```bash
+just affected-plan base="main"
+just affected-json base="main"
+just affected base="main"
+```
+
+The router combines the branch diff from `base...HEAD`, staged changes, working
+tree changes, and untracked files. It classifies changed paths into docs,
+desktop, CLI, server/API, SQLite/core/state-machine, search/graph/vector/context,
+and scripts/packaging/release-sensitive groups, then emits matching `just`
+commands. Release-sensitive diffs set `full_gate_recommended=true`; `just
+release` remains the authoritative full gate.

@@ -1,13 +1,41 @@
 import { useQuery } from "@tanstack/react-query"
 import { Activity, Database, RefreshCcw } from "lucide-react"
 
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { KanbanApi, RuntimeConfig } from "@/lib/api"
+import type { HealthStatus, KanbanApi, RuntimeConfig } from "@/lib/api"
+
+type MetricTone = "ready" | "blocked" | "secondary"
+
+type HealthMetric = {
+  label: string
+  value: string
+  tone: MetricTone
+}
+
+type RuntimeWarning = {
+  title: string
+  message: string
+}
+
+export function buildHealthRuntimeModel(health: HealthStatus, config: RuntimeConfig | null) {
+  const metrics: HealthMetric[] = [
+    { label: "ok", value: String(health.ok), tone: health.ok ? "ready" : "blocked" },
+    { label: "db", value: health.db, tone: health.db === "ok" ? "ready" : "blocked" },
+    { label: "version", value: health.version, tone: "secondary" },
+    { label: "db_path", value: reportedValue(health.db_path), tone: "secondary" },
+    { label: "db_fingerprint", value: reportedValue(health.db_fingerprint), tone: "secondary" },
+  ]
+
+  return {
+    metrics,
+    warning: runtimeMismatchWarning(health.db_path, config?.dbPath),
+  }
+}
 
 export function HealthView({ api, config }: { api: KanbanApi | null; config: RuntimeConfig | null }) {
   const healthQuery = useQuery({
@@ -18,6 +46,8 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
       return api.health({ signal })
     },
   })
+
+  const runtimeModel = healthQuery.data ? buildHealthRuntimeModel(healthQuery.data, config) : null
 
   return (
     <ScrollArea className="flex-1 bg-card p-4">
@@ -33,14 +63,20 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
           </Button>
         </div>
         {healthQuery.data ? (
-          <div className="grid grid-cols-3 gap-3 text-sm">
-            <Metric label="ok" value={String(healthQuery.data.ok)} tone={healthQuery.data.ok ? "ready" : "blocked"} />
-            <Metric label="db" value={healthQuery.data.db} tone={healthQuery.data.db === "ok" ? "ready" : "blocked"} />
-            <Metric label="version" value={healthQuery.data.version} />
+          <div className="grid gap-3 text-sm md:grid-cols-3 xl:grid-cols-5">
+            {runtimeModel?.metrics.map((metric) => (
+              <Metric key={metric.label} label={metric.label} value={metric.value} tone={metric.tone} />
+            ))}
           </div>
         ) : (
           healthQuery.isLoading ? <Skeleton className="h-16" /> : <div className="text-sm text-muted-foreground">No health response.</div>
         )}
+        {runtimeModel?.warning ? (
+          <Alert className="mt-3 border-destructive/50">
+            <AlertTitle className="text-destructive">{runtimeModel.warning.title}</AlertTitle>
+            <AlertDescription className="text-destructive">{runtimeModel.warning.message}</AlertDescription>
+          </Alert>
+        ) : null}
         {healthQuery.error ? (
           <Alert className="mt-3 border-destructive/50">
             <AlertDescription className="text-destructive">{healthQuery.error.message}</AlertDescription>
@@ -64,11 +100,13 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
   )
 }
 
-function Metric({ label, value, tone = "secondary" }: { label: string; value: string; tone?: "ready" | "blocked" | "secondary" }) {
+function Metric({ label, value, tone = "secondary" }: { label: string; value: string; tone?: MetricTone }) {
   return (
-    <Card className="p-3">
+    <Card className="min-w-0 p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1"><Badge variant={tone}>{value}</Badge></div>
+      <div className="mt-1 min-w-0">
+        <Badge variant={tone} className="max-w-full truncate">{value}</Badge>
+      </div>
     </Card>
   )
 }
@@ -80,4 +118,28 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <span className="truncate font-medium">{value}</span>
     </Card>
   )
+}
+
+function reportedValue(value: string | undefined) {
+  const trimmed = value?.trim()
+  return trimmed || "not reported"
+}
+
+function runtimeMismatchWarning(healthDbPath: string | undefined, configDbPath: string | undefined): RuntimeWarning | null {
+  const healthPath = normalizedConcretePath(healthDbPath)
+  const configPath = normalizedConcretePath(configDbPath)
+  if (!healthPath || !configPath || healthPath === configPath) return null
+
+  return {
+    title: "Runtime database mismatch",
+    message:
+      `Health is responding from ${healthPath}, but the desktop runtime is configured for ${configPath}. ` +
+      "Restart kanban serve, check that this window is using the intended port, and verify VITE_KB_API_BASE_URL / VITE_KB_DEV_PROXY_TARGET.",
+  }
+}
+
+function normalizedConcretePath(path: string | undefined) {
+  const trimmed = path?.trim()
+  if (!trimmed || trimmed === "external API" || trimmed === "not reported") return null
+  return trimmed.replace(/[\\/]+$/, "")
 }

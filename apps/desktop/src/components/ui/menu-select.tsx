@@ -1,13 +1,10 @@
-import { ChevronDown } from "lucide-react"
-
-import { Button } from "@/components/ui/button"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 
 export type MenuSelectOption<TValue extends string> = {
@@ -39,31 +36,20 @@ export function MenuSelect<TValue extends string>({
   const selected = options.find((option) => option.value === value)
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          aria-label={ariaLabel}
-          className={cn("justify-between", triggerClassName, className)}
-        >
-          <span className="truncate">
-            {prefix ? <span className="text-muted-foreground">{prefix} </span> : null}
-            {selected?.label ?? value}
-          </span>
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align={align} className={contentClassName}>
-        <DropdownMenuRadioGroup value={value} onValueChange={(next) => onValueChange(next as TValue)}>
-          {options.map((option) => (
-            <DropdownMenuRadioItem key={option.value} value={option.value}>
-              {option.label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Select value={value} onValueChange={(next) => onValueChange(next as TValue)}>
+      <SelectTrigger aria-label={ariaLabel} className={cn("justify-between", triggerClassName, className)}>
+        <SelectValue aria-label={selected?.label ?? value}>
+          {prefix ? <span className="text-muted-foreground">{prefix} </span> : null}
+          {selected?.label ?? value}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent align={align} className={contentClassName}>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }

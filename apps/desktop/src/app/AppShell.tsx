@@ -32,6 +32,16 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+} from "@/components/ui/sidebar"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { shouldOpenTaskDetailSheet } from "@/app/task-selection"
@@ -418,14 +428,13 @@ function ShellSidebar({
   }
 
   return (
-    <aside
+    <Sidebar
       className={cn(
-        "flex shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200",
         open ? "w-60 max-sm:w-14" : "w-14",
       )}
       onTransitionEnd={handleTransitionEnd}
     >
-      <div className={cn("flex h-14 items-center gap-2 px-3 max-sm:justify-center max-sm:px-2", !contentOpen && "justify-center px-2")}>
+      <SidebarHeader className={cn(!contentOpen && "justify-center px-2")}>
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
           kb
         </div>
@@ -433,11 +442,11 @@ function ShellSidebar({
           <div className="text-sm font-semibold">Kanban Tool</div>
           <div className="text-xs text-muted-foreground">local queue</div>
         </div>
-      </div>
-      <nav className="space-y-4 px-2 py-3">
-        <NavGroup label="Task Explorer" open={contentOpen}>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarNavGroup label="Task Explorer" open={contentOpen}>
           {sidebarViews.filter((item) => ["board", "list", "runs", "events"].includes(item)).map((item) => (
-            <NavItem
+            <SidebarNavItem
               key={item}
               icon={viewIcon(item)}
               label={viewLabel(item)}
@@ -446,10 +455,10 @@ function ShellSidebar({
               onClick={() => onViewChange(item)}
             />
           ))}
-        </NavGroup>
-        <NavGroup label="System" open={contentOpen}>
+        </SidebarNavGroup>
+        <SidebarNavGroup label="System" open={contentOpen}>
           {sidebarViews.filter((item) => ["maintenance", "health", "settings"].includes(item)).map((item) => (
-            <NavItem
+            <SidebarNavItem
               key={item}
               icon={viewIcon(item)}
               label={viewLabel(item)}
@@ -458,9 +467,9 @@ function ShellSidebar({
               onClick={() => onViewChange(item)}
             />
           ))}
-        </NavGroup>
-      </nav>
-      <div className={cn("mt-auto space-y-3 border-t border-border p-3 text-xs text-muted-foreground max-sm:hidden", !contentOpen && "hidden")}>
+        </SidebarNavGroup>
+      </SidebarContent>
+      <SidebarFooter className={cn(!contentOpen && "hidden")}>
         <BoardSwitcher
           config={config}
           boards={boards}
@@ -480,8 +489,8 @@ function ShellSidebar({
           </span>
           <span>{config ? apiEndpointLabel(config.apiBaseUrl) : "-"}</span>
         </div>
-      </div>
-    </aside>
+      </SidebarFooter>
+    </Sidebar>
   )
 }
 
@@ -847,7 +856,7 @@ function SearchBackendBadge({ meta }: { meta: SearchTasksMeta }) {
   )
 }
 
-function NavItem({
+function SidebarNavItem({
   icon: Icon,
   label,
   active = false,
@@ -861,29 +870,27 @@ function NavItem({
   onClick: () => void
 }) {
   return (
-    <button
+    <SidebarMenuButton
       title={!open ? label : undefined}
       aria-label={label}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         !open && "justify-center",
-        "max-sm:justify-center",
-        active && "bg-sidebar-accent text-sidebar-accent-foreground",
       )}
+      active={active}
       onClick={onClick}
     >
       <Icon className="h-4 w-4 shrink-0" />
       <span className={cn("max-sm:sr-only", !open && "sr-only")}>{label}</span>
-    </button>
+    </SidebarMenuButton>
   )
 }
 
-function NavGroup({ label, open, children }: { label: string; open: boolean; children: ReactNode }) {
+function SidebarNavGroup({ label, open, children }: { label: string; open: boolean; children: ReactNode }) {
   return (
-    <div>
-      <div className={cn("mb-1 px-2 text-[11px] font-medium uppercase tracking-normal text-muted-foreground max-sm:sr-only", !open && "sr-only")}>{label}</div>
-      <div className="space-y-1">{children}</div>
-    </div>
+    <SidebarGroup>
+      <SidebarGroupLabel className={cn(!open && "sr-only")}>{label}</SidebarGroupLabel>
+      <SidebarMenu>{children}</SidebarMenu>
+    </SidebarGroup>
   )
 }
 

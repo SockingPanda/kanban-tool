@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { BoardColumn as ApiBoardColumn, Task, TaskStatus } from "@/lib/api"
 import { cn, formatRelativeTime } from "@/lib/utils"
@@ -182,10 +183,12 @@ function TaskCard({
   })
 
   return (
-    <button
+    <Button
+      type="button"
       ref={ref}
+      variant="outline"
       className={cn(
-        "w-full rounded-md border bg-card p-2 text-left text-card-foreground transition-colors hover:border-ring",
+        "h-auto w-full justify-start rounded-md bg-card p-2 text-left text-card-foreground transition-colors hover:border-ring",
         selected ? "border-ring shadow-sm" : "border-border",
         dependencyBlockedTodoClass(task),
         isDragging && "opacity-60",
@@ -208,7 +211,7 @@ function TaskCard({
           {task.status_reason ? <div className="mt-1 line-clamp-2 text-xs text-destructive">{task.status_reason}</div> : null}
         </div>
       </div>
-    </button>
+    </Button>
   )
 }
 

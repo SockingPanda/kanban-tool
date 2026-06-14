@@ -1,12 +1,12 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
 
-import { DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@/components/ui/dropdown-menu"
+import { Select, SelectItem, SelectTrigger } from "@/components/ui/select"
 
 import { MenuSelect, type MenuSelectOption } from "./menu-select"
 
 describe("MenuSelect", () => {
-  it("wires the selected radio value and emits menu changes", () => {
+  it("wires the selected value and emits select changes with accessible trigger label", () => {
     const options: MenuSelectOption<"all" | "ready" | "blocked">[] = [
       { value: "all", label: "all active" },
       { value: "ready", label: "ready" },
@@ -22,22 +22,26 @@ describe("MenuSelect", () => {
       onValueChange,
     })
 
-    const radioGroup = findElement(tree, DropdownMenuRadioGroup)
-    expect(radioGroup?.props.value).toBe("ready")
-    expect(radioGroup?.props.onValueChange).toBeTypeOf("function")
+    const select = findElement(tree, Select)
+    expect(select?.props.value).toBe("ready")
+    expect(select?.props.onValueChange).toBeTypeOf("function")
 
-    radioGroup?.props.onValueChange?.("blocked")
+    select?.props.onValueChange?.("blocked")
     expect(onValueChange).toHaveBeenCalledWith("blocked")
 
-    const radioItems = findElements(tree, DropdownMenuRadioItem)
-    expect(radioItems.map((item) => item.props.value)).toEqual(["all", "ready", "blocked"])
-    expect(radioItems.map((item) => item.props.children)).toEqual(["all active", "ready", "blocked"])
+    const trigger = findElement(tree, SelectTrigger)
+    expect(trigger?.props["aria-label"]).toBe("Status filter")
+
+    const items = findElements(tree, SelectItem)
+    expect(items.map((item) => item.props.value)).toEqual(["all", "ready", "blocked"])
+    expect(items.map((item) => item.props.children)).toEqual(["all active", "ready", "blocked"])
   })
 })
 
 type InspectableProps = {
   children?: ReactNode
   value?: string
+  "aria-label"?: string
   onValueChange?: (value: string) => void
 }
 

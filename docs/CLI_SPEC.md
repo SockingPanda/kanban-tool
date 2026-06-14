@@ -237,13 +237,18 @@ Options：
 |---|---|
 | `--status <status>` | 按状态过滤，可重复。 |
 | `--assignee <name>` | 按 assignee。 |
-| `--search <query>` | title/description 模糊搜索。 |
+| `--search <query>` | title/description 模糊搜索；task ref 形状按精确匹配处理。 |
 | `--include-archived` | 包含 archived。 |
 | `--limit <n>` | 限制数量。 |
 | `--offset <n>` | 分页偏移。 |
 | `--sort <field>` | `seq` / `title` / `status` / `position` / `priority` / `assignee` / `scheduled_at` / `due_at` / `created_at` / `updated_at`。降序可用 `<field>_desc`，也兼容 API 风格 `-<field>`。`priority` sorts P0 -> P3; `priority_desc` / `-priority` sorts P3 -> P0. |
 
 Priority sort does not promote work into `ready`; it only orders tasks within the selected result set.
+
+`--search` 对 task ref 形状使用精确匹配而不是文本 contains 匹配：
+纯数字 `12`、`#12` 匹配 active board 内的 seq；`board#12` / `board/#12`
+只在该 board 与当前列表请求的 board 相同时匹配；`t_...` 只匹配当前列表请求 board
+内的 task id。其他文本仍执行 title/description 模糊搜索。
 
 Examples：
 
@@ -773,6 +778,11 @@ kanban search <query> [--status ready] [--status review] [--assignee worker-a] [
 ```
 
 默认实现使用 SQLite fallback，不依赖外部/派生索引。启用 `tantivy-backend` feature 且 `index/v1/tasks/` 存在可读 Tantivy 索引时，`kanban search` 使用 Tantivy；缺失或损坏时回落 SQLite，并在 meta 中标记 stale。搜索匹配 task title、description、comments、run summary/error、event kind/payload。
+
+Task ref 形状的 query 始终使用 SQLite 精确匹配语义，即使当前存在可用 Tantivy index：
+纯数字 `12`、`#12` 匹配请求 board 内的 seq；`board#12` / `board/#12`
+只在显式 board 与请求 board 相同时匹配；`t_...` 只匹配请求 board 内的 task id。
+这些 query 不会因为 title、description 或聚合搜索文本包含相同数字/ref 片段而返回额外 task。
 
 Human output compactly includes seq/id, status, score, title, and snippet when available:
 

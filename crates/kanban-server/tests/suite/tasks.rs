@@ -442,6 +442,44 @@ async fn tasks_lists_with_assignee_search_sort_and_rejects_label_filter() -> any
 }
 
 #[tokio::test]
+async fn tasks_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let first = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("first api list task"),
+    )
+    .context("seed first task")?;
+    let _second = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("title mentions 1 but must not match numeric search"),
+    )
+    .context("seed second task")?;
+    let app = test.router();
+
+    for query in ["1", "%231", "default%231", first.id.as_str()] {
+        let (status, json) = get_json(
+            app.clone(),
+            &format!("/api/v1/boards/default/tasks?q={query}&limit=10"),
+        )
+        .await?;
+        assert_eq!(status, StatusCode::OK, "{query}: {json}");
+        let tasks = json["data"].as_array().context("tasks array")?;
+        assert_eq!(tasks.len(), 1, "{query}: {json}");
+        assert_eq!(tasks[0]["id"], first.id, "{query}: {json}");
+    }
+
+    let (status, json) = get_json(app, "/api/v1/boards/default/tasks?q=other%231&limit=10").await?;
+    assert_eq!(status, StatusCode::OK);
+    assert!(json["data"].as_array().context("tasks array")?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
 async fn tasks_lists_with_priority_filters_and_table_sort_fields() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();

@@ -386,6 +386,7 @@ export function AppShell({
                 onAction={onAction}
                 onAddDependency={onAddDependency}
                 onRemoveDependency={onRemoveDependency}
+                onSelectTask={onSelectTask}
                 onSaveTask={onSaveTask}
                 onCancelEdit={onCancelTaskEdit}
                 onAddComment={onAddComment}

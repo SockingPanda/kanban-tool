@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest"
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 
 import { boardGridStyle, boardScrollerClassName, clampBoardScrollLeft } from "./board-layout"
+
+const sourceRoot = fileURLToPath(new URL("../../", import.meta.url))
+
+function source(relativePath: string) {
+  return readFileSync(new URL(relativePath, `file://${sourceRoot}`), "utf8")
+}
 
 describe("board layout", () => {
   it("keeps columns reachable through horizontal board scrolling", () => {
@@ -38,5 +46,15 @@ describe("board layout", () => {
     clampBoardScrollLeft(scroller, 7)
 
     expect(scroller.scrollLeft).toBe(1116)
+  })
+
+  it("keeps shadcn task cards from expanding beyond their column", () => {
+    const boardView = source("features/board/BoardView.tsx")
+
+    expect(boardView).toContain("<Button")
+    expect(boardView).toContain("h-auto min-w-0 w-full shrink overflow-hidden")
+    expect(boardView).toContain('className="flex min-w-0 w-full items-start gap-2"')
+    expect(boardView).toContain('className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", statusAccent[task.status])}')
+    expect(boardView).toContain('className="min-w-0 flex-1"')
   })
 })

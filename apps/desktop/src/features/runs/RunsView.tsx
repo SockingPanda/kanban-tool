@@ -2,6 +2,7 @@ import { FileText } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { Run, Task } from "@/lib/api"
 import { formatRelativeTime, shortId } from "@/lib/utils"
@@ -26,7 +27,9 @@ export function RunsView({
       <div className="grid min-h-0 flex-1 grid-cols-[360px_1fr]">
         <ScrollArea className="border-r border-border p-3">
           {detail.runs.length ? detail.runs.map((run) => <RunRow key={run.id} run={run} />) : (
-            <div className="text-sm text-muted-foreground">No runs for the selected task.</div>
+            <Empty>
+              <EmptyDescription>No runs for the selected task.</EmptyDescription>
+            </Empty>
           )}
         </ScrollArea>
         <ScrollArea className="p-3">
@@ -42,7 +45,9 @@ export function RunsView({
               <pre className="whitespace-pre-wrap font-mono leading-relaxed">{detail.runLog.content || "(empty)"}</pre>
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">No log available for the selected task.</div>
+            <Empty>
+              <EmptyDescription>No log available for the selected task.</EmptyDescription>
+            </Empty>
           )}
         </ScrollArea>
       </div>

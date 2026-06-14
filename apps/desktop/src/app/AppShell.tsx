@@ -23,6 +23,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Field, FieldLabel } from "@/components/ui/field"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { InputGroup, InputGroupInput } from "@/components/ui/input-group"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
 import {
   Sidebar,
@@ -44,6 +46,7 @@ import {
 } from "@/components/ui/sidebar"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { shouldOpenTaskDetailSheet } from "@/app/task-selection"
 import { BoardView } from "@/features/board/BoardView"
 import { EventsView } from "@/features/events/EventsView"
@@ -632,23 +635,15 @@ function ShellHeader({
       >
         {tasksRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
       </Button>
-      <div className="flex rounded-md border border-border bg-muted p-0.5 text-sm">
-        {primaryViews.map((item) => (
-          <Button
-            key={item}
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={cn(
-              "h-7 px-3 text-muted-foreground hover:bg-background",
-              view === item && "bg-background text-foreground shadow-sm",
-            )}
-            onClick={() => onViewChange(item)}
-          >
-            {viewLabel(item)}
-          </Button>
-        ))}
-      </div>
+      <Tabs value={primaryViews.includes(view) ? view : ""} onValueChange={(value) => onViewChange(value as OperatorView)}>
+        <TabsList>
+          {primaryViews.map((item) => (
+            <TabsTrigger key={item} value={item}>
+              {viewLabel(item)}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
       <Button
         type="button"
         variant={showArchived ? "secondary" : "outline"}
@@ -696,22 +691,32 @@ function TaskExplorerToolbar({
 }) {
   return (
     <form onSubmit={onCreateTask} className="grid grid-cols-[1fr_1.4fr_auto] gap-2 border-b border-border bg-card px-4 py-3">
-      <Input
-        aria-label="New task title"
-        name="new-task-title"
-        autoComplete="off"
-        value={newTitle}
-        onChange={(event) => onNewTitleChange(event.target.value)}
-        placeholder="New task title"
-      />
-      <Input
-        aria-label="New task description"
-        name="new-task-description"
-        autoComplete="off"
-        value={newDescription}
-        onChange={(event) => onNewDescriptionChange(event.target.value)}
-        placeholder="Optional spec or description"
-      />
+      <Field>
+        <FieldLabel className="sr-only">New task title</FieldLabel>
+        <InputGroup>
+          <InputGroupInput
+            aria-label="New task title"
+            name="new-task-title"
+            autoComplete="off"
+            value={newTitle}
+            onChange={(event) => onNewTitleChange(event.target.value)}
+            placeholder="New task title"
+          />
+        </InputGroup>
+      </Field>
+      <Field>
+        <FieldLabel className="sr-only">New task description</FieldLabel>
+        <InputGroup>
+          <InputGroupInput
+            aria-label="New task description"
+            name="new-task-description"
+            autoComplete="off"
+            value={newDescription}
+            onChange={(event) => onNewDescriptionChange(event.target.value)}
+            placeholder="Optional spec or description"
+          />
+        </InputGroup>
+      </Field>
       <Button type="submit" disabled={!newTitle.trim() || pendingAction === "create"}>
         <Plus className="h-4 w-4" />
         New task

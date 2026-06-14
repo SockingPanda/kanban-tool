@@ -12,6 +12,7 @@ import { useMemo, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Label } from "@/components/ui/label"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination"
@@ -352,8 +353,10 @@ export function ListView({
               ))
             ) : (
               <TableRow>
-                <TableCell className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={table.getAllLeafColumns().length}>
-                  No tasks match the current filters.
+                <TableCell className="px-4 py-10" colSpan={table.getAllLeafColumns().length}>
+                  <Empty className="p-0">
+                    <EmptyDescription>No tasks match the current filters.</EmptyDescription>
+                  </Empty>
                 </TableCell>
               </TableRow>
             )}

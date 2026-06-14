@@ -99,4 +99,52 @@ describe("desktop shadcn control convergence", () => {
     expect(content).toContain("onShowArchivedChange(!showArchived)")
     expect(content).not.toContain("Include archived tasks")
   })
+
+  it("replaces browser-native confirmations and prompts with shadcn dialog primitives", () => {
+    const files = [
+      "App.tsx",
+      "features/task-detail/TaskDetail.tsx",
+      "features/maintenance/MaintenanceView.tsx",
+    ]
+
+    for (const file of files) {
+      const content = source(file)
+      expect(content, file).not.toContain("window.confirm")
+      expect(content, file).not.toContain("window.prompt")
+    }
+
+    expect(source("components/ui/alert-dialog.tsx")).toContain("@radix-ui/react-alert-dialog")
+    expect(source("components/ui/dialog.tsx")).toContain("@radix-ui/react-dialog")
+    expect(source("components/ui/tabs.tsx")).toContain("@radix-ui/react-tabs")
+    expect(source("App.tsx")).toContain("AlertDialog")
+    expect(source("App.tsx")).toContain("Dialog")
+    expect(source("features/task-detail/TaskDetail.tsx")).toContain("AlertDialog")
+    expect(source("features/maintenance/MaintenanceView.tsx")).toContain("AlertDialog")
+  })
+
+  it("routes shell tabs, input compositions, empty states, and field groups through shadcn primitives", () => {
+    expect(source("components/ui/input-group.tsx")).toContain("InputGroup")
+    expect(source("components/ui/empty.tsx")).toContain("Empty")
+    expect(source("components/ui/field.tsx")).toContain("Field")
+
+    const shell = source("app/AppShell.tsx")
+    const detail = source("features/task-detail/TaskDetail.tsx")
+    const list = source("features/list/ListView.tsx")
+    const events = source("features/events/EventsView.tsx")
+    const runs = source("features/runs/RunsView.tsx")
+    const maintenance = source("features/maintenance/MaintenanceView.tsx")
+    const health = source("features/health/HealthView.tsx")
+
+    expect(shell).toContain("Tabs")
+    expect(shell).toContain("TabsList")
+    expect(shell).toContain("TabsTrigger")
+    expect(shell).toContain("InputGroup")
+    expect(shell).toContain("Field")
+    expect(detail).toContain("InputGroup")
+    expect(detail).toContain("Field")
+
+    for (const content of [list, events, runs, detail, maintenance, health]) {
+      expect(content).toContain("Empty")
+    }
+  })
 })

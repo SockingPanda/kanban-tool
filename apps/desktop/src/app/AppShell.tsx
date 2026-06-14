@@ -2,7 +2,6 @@ import { useEffect, useState, type ElementType, type FormEvent, type ReactNode, 
 import {
   Activity,
   ChevronDown,
-  Command,
   Database,
   DatabaseBackup,
   HeartPulse,
@@ -11,7 +10,6 @@ import {
   RefreshCcw,
   Search,
   Settings,
-  SlidersHorizontal,
   SquareKanban,
   TerminalSquare,
   Plus,
@@ -38,7 +36,6 @@ import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { shouldOpenTaskDetailSheet } from "@/app/task-selection"
 import { BoardView } from "@/features/board/BoardView"
-import { filterStatuses } from "@/features/board/board-config"
 import { EventsView } from "@/features/events/EventsView"
 import { HealthView } from "@/features/health/HealthView"
 import { ListView } from "@/features/list/ListView"
@@ -70,7 +67,6 @@ import type {
   TaskStatus,
   PageMeta,
 } from "@/lib/api"
-import { pageRangeLabel } from "@/lib/pagination"
 import { cn } from "@/lib/utils"
 
 const viewMetadata: Record<OperatorView, { label: string; icon: ElementType }> = {
@@ -82,11 +78,6 @@ const viewMetadata: Record<OperatorView, { label: string; icon: ElementType }> =
   health: { label: "Health", icon: HeartPulse },
   settings: { label: "Settings", icon: Settings },
 }
-
-const statusFilterOptions: MenuSelectOption<TaskStatus | "all">[] = [
-  { value: "all", label: "all active" },
-  ...filterStatuses.map((status) => ({ value: status, label: status })),
-]
 
 const themeModeOptions: MenuSelectOption<ThemeMode>[] = [
   { value: "system", label: "system" },
@@ -119,7 +110,6 @@ export function AppShell({
   listSort,
   showArchived,
   page,
-  visibleTaskCount,
   hasNextPage,
   hasPreviousPage,
   canGoLastPage,
@@ -132,7 +122,6 @@ export function AppShell({
   editDraft,
   draftDirty,
   claimToken,
-  tasksLoading,
   tasksRefreshing,
   detailLoading,
   pendingAction,
@@ -197,7 +186,6 @@ export function AppShell({
   listSort: ListSortState
   showArchived: boolean
   page: PageMeta
-  visibleTaskCount: number
   hasNextPage: boolean
   hasPreviousPage: boolean
   canGoLastPage: boolean
@@ -210,7 +198,6 @@ export function AppShell({
   editDraft: TaskEditDraft | null
   draftDirty: boolean
   claimToken: string | null
-  tasksLoading: boolean
   tasksRefreshing: boolean
   detailLoading: boolean
   pendingAction: string | null
@@ -251,12 +238,6 @@ export function AppShell({
   onCancelTaskEdit: () => void
   onAddComment: () => Promise<void>
 }) {
-  let taskActivityLabel = ""
-  if (tasksLoading) {
-    taskActivityLabel = " · loading"
-  } else if (tasksRefreshing) {
-    taskActivityLabel = " · refreshing"
-  }
   const showTaskExplorerToolbar = shouldShowTaskExplorerToolbar(view)
   const showDetailSheet = shouldOpenTaskDetailSheet(view, selectedTask)
 
@@ -283,7 +264,6 @@ export function AppShell({
           search={search}
           debouncedSearch={debouncedSearch}
           searchMeta={searchMeta}
-          statusFilter={statusFilter}
           showArchived={showArchived}
           tasksRefreshing={tasksRefreshing}
           onSearchChange={onSearchChange}
@@ -291,34 +271,30 @@ export function AppShell({
           onThemeModeChange={onThemeModeChange}
           onCycleThemeMode={onCycleThemeMode}
           onSidebarOpenChange={onSidebarOpenChange}
-          onStatusFilterChange={onStatusFilterChange}
           onShowArchivedChange={onShowArchivedChange}
           onRefreshTasks={onRefreshTasks}
         />
 
         {error ? (
-          <div className="border-b border-[var(--status-blocked-ring)] bg-[var(--status-blocked-bg)] px-4 py-2 text-sm text-[var(--status-blocked-fg)]">{error}</div>
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="border-b border-[var(--status-blocked-ring)] bg-[var(--status-blocked-bg)] px-4 py-2 text-sm text-[var(--status-blocked-fg)]"
+          >
+            {error}
+          </div>
         ) : null}
 
         <div className="flex min-h-0 min-w-0 flex-1">
           <section className="flex min-w-0 flex-1 flex-col">
             {showTaskExplorerToolbar ? (
               <TaskExplorerToolbar
-                view={view}
-                page={page}
-                visibleTaskCount={visibleTaskCount}
-                taskActivityLabel={taskActivityLabel}
-                hasNextPage={hasNextPage}
-                hasPreviousPage={hasPreviousPage}
                 newTitle={newTitle}
                 newDescription={newDescription}
-                tasksRefreshing={tasksRefreshing}
                 pendingAction={pendingAction}
                 onCreateTask={onCreateTask}
                 onNewTitleChange={onNewTitleChange}
                 onNewDescriptionChange={onNewDescriptionChange}
-                onPreviousPage={onPreviousPage}
-                onNextPage={onNextPage}
               />
             ) : null}
 
@@ -340,12 +316,10 @@ export function AppShell({
               hasPreviousPage={hasPreviousPage}
               canGoLastPage={canGoLastPage}
               rowsPerPage={rowsPerPage}
-              search={search}
               statusFilter={statusFilter}
               priorityFilters={priorityFilters}
               listSort={listSort}
               tasksRefreshing={tasksRefreshing}
-              onSearchChange={onSearchChange}
               onStatusFilterChange={onStatusFilterChange}
               onPriorityFiltersChange={onPriorityFiltersChange}
               onListSortChange={onListSortChange}
@@ -587,7 +561,6 @@ function ShellHeader({
   search,
   debouncedSearch,
   searchMeta,
-  statusFilter,
   showArchived,
   tasksRefreshing,
   onSearchChange,
@@ -595,7 +568,6 @@ function ShellHeader({
   onThemeModeChange,
   onCycleThemeMode,
   onSidebarOpenChange,
-  onStatusFilterChange,
   onShowArchivedChange,
   onRefreshTasks,
 }: {
@@ -606,7 +578,6 @@ function ShellHeader({
   search: string
   debouncedSearch: string
   searchMeta: SearchTasksMeta | null
-  statusFilter: TaskStatus | "all"
   showArchived: boolean
   tasksRefreshing: boolean
   onSearchChange: (value: string) => void
@@ -614,7 +585,6 @@ function ShellHeader({
   onThemeModeChange: (value: ThemeMode) => void
   onCycleThemeMode: () => void
   onSidebarOpenChange: (value: boolean) => void
-  onStatusFilterChange: (value: TaskStatus | "all") => void
   onShowArchivedChange: (value: boolean) => void
   onRefreshTasks: () => void
 }) {
@@ -634,13 +604,23 @@ function ShellHeader({
         <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
         <Input
           className="pl-8"
+          aria-label="Search tasks"
+          name="task-search"
+          autoComplete="off"
           placeholder="Search tasks"
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
         />
       </div>
       {debouncedSearch.trim() && searchMeta ? <SearchBackendBadge meta={searchMeta} /> : null}
-      <Button variant="secondary" size="icon" onClick={onRefreshTasks} disabled={tasksRefreshing}>
+      <Button
+        variant="secondary"
+        size="icon"
+        aria-label={tasksRefreshing ? "Refreshing tasks" : "Refresh tasks"}
+        title={tasksRefreshing ? "Refreshing tasks" : "Refresh tasks"}
+        onClick={onRefreshTasks}
+        disabled={tasksRefreshing}
+      >
         {tasksRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
       </Button>
       <div className="flex rounded-md border border-border bg-muted p-0.5 text-sm">
@@ -659,17 +639,6 @@ function ShellHeader({
             {viewLabel(item)}
           </Button>
         ))}
-      </div>
-      <div className="flex items-center gap-1">
-        <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-        <MenuSelect
-          ariaLabel="Status filter"
-          prefix="Status"
-          options={statusFilterOptions}
-          value={statusFilter}
-          onValueChange={onStatusFilterChange}
-          triggerClassName="min-w-32"
-        />
       </div>
       <Button
         type="button"
@@ -696,79 +665,49 @@ function ShellHeader({
         <Button variant="ghost" size="icon" aria-label="Cycle theme mode" title={`Theme: ${themeMode}`} onClick={onCycleThemeMode}>
           <ThemeIcon className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon">
-          <Command className="h-4 w-4" />
-        </Button>
       </div>
     </header>
   )
 }
 
 function TaskExplorerToolbar({
-  view,
-  page,
-  visibleTaskCount,
-  taskActivityLabel,
-  hasNextPage,
-  hasPreviousPage,
   newTitle,
   newDescription,
-  tasksRefreshing,
   pendingAction,
   onCreateTask,
   onNewTitleChange,
   onNewDescriptionChange,
-  onPreviousPage,
-  onNextPage,
 }: {
-  view: OperatorView
-  page: PageMeta
-  visibleTaskCount: number
-  taskActivityLabel: string
-  hasNextPage: boolean
-  hasPreviousPage: boolean
   newTitle: string
   newDescription: string
-  tasksRefreshing: boolean
   pendingAction: string | null
   onCreateTask: (event: FormEvent) => void
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
-  onPreviousPage: () => void
-  onNextPage: () => void
 }) {
   return (
-    <>
-      <form onSubmit={onCreateTask} className="grid grid-cols-[1fr_1.4fr_auto] gap-2 border-b border-border bg-card px-4 py-3">
-        <Input value={newTitle} onChange={(event) => onNewTitleChange(event.target.value)} placeholder="New task title" />
-        <Input
-          value={newDescription}
-          onChange={(event) => onNewDescriptionChange(event.target.value)}
-          placeholder="Optional spec or description"
-        />
-        <Button type="submit" disabled={!newTitle.trim() || pendingAction === "create"}>
-          <Plus className="h-4 w-4" />
-          New task
-        </Button>
-      </form>
-
-      <div className="flex h-8 items-center justify-between border-b border-border bg-card px-4 text-xs text-muted-foreground">
-        <span>
-          {pageRangeLabel(page, visibleTaskCount)}
-          {taskActivityLabel}
-        </span>
-        {view === "board" ? (
-          <span className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" disabled={!hasPreviousPage || tasksRefreshing} onClick={onPreviousPage}>
-              Previous
-            </Button>
-            <Button variant="ghost" size="sm" disabled={!hasNextPage || tasksRefreshing} onClick={onNextPage}>
-              Next
-            </Button>
-          </span>
-        ) : null}
-      </div>
-    </>
+    <form onSubmit={onCreateTask} className="grid grid-cols-[1fr_1.4fr_auto] gap-2 border-b border-border bg-card px-4 py-3">
+      <Input
+        aria-label="New task title"
+        name="new-task-title"
+        autoComplete="off"
+        value={newTitle}
+        onChange={(event) => onNewTitleChange(event.target.value)}
+        placeholder="New task title"
+      />
+      <Input
+        aria-label="New task description"
+        name="new-task-description"
+        autoComplete="off"
+        value={newDescription}
+        onChange={(event) => onNewDescriptionChange(event.target.value)}
+        placeholder="Optional spec or description"
+      />
+      <Button type="submit" disabled={!newTitle.trim() || pendingAction === "create"}>
+        <Plus className="h-4 w-4" />
+        New task
+      </Button>
+    </form>
   )
 }
 
@@ -790,12 +729,10 @@ function MainView({
   hasPreviousPage,
   canGoLastPage,
   rowsPerPage,
-  search,
   statusFilter,
   priorityFilters,
   listSort,
   tasksRefreshing,
-  onSearchChange,
   onStatusFilterChange,
   onPriorityFiltersChange,
   onListSortChange,
@@ -823,12 +760,10 @@ function MainView({
   hasPreviousPage: boolean
   canGoLastPage: boolean
   rowsPerPage: number
-  search: string
   statusFilter: TaskStatus | "all"
   priorityFilters: number[]
   listSort: ListSortState
   tasksRefreshing: boolean
-  onSearchChange: (value: string) => void
   onStatusFilterChange: (value: TaskStatus | "all") => void
   onPriorityFiltersChange: (value: number[]) => void
   onListSortChange: (value: ListSortState) => void
@@ -861,12 +796,10 @@ function MainView({
         hasPreviousPage={hasPreviousPage}
         canGoLastPage={canGoLastPage}
         rowsPerPage={rowsPerPage}
-        search={search}
         statusFilter={statusFilter}
         priorityFilters={priorityFilters}
         listSort={listSort}
         tasksRefreshing={tasksRefreshing}
-        onSearchChange={onSearchChange}
         onStatusFilterChange={onStatusFilterChange}
         onPriorityFiltersChange={onPriorityFiltersChange}
         onListSortChange={onListSortChange}

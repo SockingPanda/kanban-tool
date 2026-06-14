@@ -12,12 +12,6 @@ use crate::{
 pub(crate) async fn health(
     State(state): State<AppState>,
 ) -> Result<Json<Envelope<serde_json::Value>>, ApiError> {
-    if !state.db_path().is_file() {
-        return Err(invalid_input(format!(
-            "database file is missing: {}",
-            state.db_path().display()
-        )));
-    }
     let metadata = std::fs::metadata(state.db_path()).map_err(|error| {
         invalid_input(format!(
             "database file is unreadable: {} ({error})",
@@ -30,7 +24,13 @@ pub(crate) async fn health(
         .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
-    let _conn = kanban_sqlite::connect_file(state.db_path())?;
+    let report = kanban_sqlite::doctor_database(state.db_path())?;
+    if !report.ok {
+        return Err(invalid_input(format!(
+            "database failed health check: {}",
+            state.db_path().display()
+        )));
+    }
     Ok(Json(Envelope {
         data: json!({
             "ok": true,

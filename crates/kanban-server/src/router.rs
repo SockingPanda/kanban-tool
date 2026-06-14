@@ -2,11 +2,15 @@ use std::net::SocketAddr;
 
 use axum::{
     Router,
+    body::Body,
     http::{HeaderValue, Method, header},
+    middleware::{Next, from_fn_with_state},
+    response::Response,
     routing::{delete, get, post},
 };
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
+use crate::error::invalid_input;
 use crate::handlers::api::*;
 use crate::handlers::health::health;
 use crate::state::{AppState, SearchSyncConfig, spawn_search_sync_task};
@@ -83,6 +87,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/stream/events", get(stream_events))
         .route("/api/v1/maintenance/doctor", post(doctor))
         .route("/api/v1/maintenance/checkpoint", post(checkpoint))
+        .layer(from_fn_with_state(state.clone(), require_existing_database))
         .with_state(state)
 }
 
@@ -114,6 +119,20 @@ fn desktop_cors_layer() -> CorsLayer {
             header::CONTENT_TYPE,
             header::HeaderName::from_static("x-kb-actor"),
         ])
+}
+
+async fn require_existing_database(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    request: axum::http::Request<Body>,
+    next: Next,
+) -> Result<Response, crate::error::ApiError> {
+    if !state.db_path().is_file() {
+        return Err(invalid_input(format!(
+            "database file is missing: {}",
+            state.db_path().display()
+        )));
+    }
+    Ok(next.run(request).await)
 }
 
 pub async fn serve(addr: SocketAddr, state: AppState) -> std::io::Result<()> {

@@ -15,6 +15,8 @@ describe("desktop shadcn control convergence", () => {
     const content = source("components/ui/tooltip.tsx")
 
     expect(content).toContain('@radix-ui/react-tooltip')
+    expect(content).toContain("data-slot=\"tooltip-provider\"")
+    expect(content).toContain("data-slot=\"tooltip\"")
     expect(content).toContain("TooltipTrigger")
     expect(content).toContain("TooltipContent")
     expect(content).not.toContain("cloneElement")
@@ -82,14 +84,51 @@ describe("desktop shadcn control convergence", () => {
     expect(content).toContain("onLastPage")
   })
 
-  it("routes shell navigation through the local sidebar primitive", () => {
+  it("routes shell navigation through the shadcn-compatible sidebar primitive", () => {
     const shell = source("app/AppShell.tsx")
     const sidebar = source("components/ui/sidebar.tsx")
 
+    expect(shell).toContain("SidebarProvider")
+    expect(shell).toContain("SidebarInset")
     expect(shell).toContain("Sidebar")
+    expect(shell).toContain("SidebarMenuItem")
     expect(shell).toContain("SidebarMenuButton")
     expect(shell).not.toContain("function NavItem")
+    expect(sidebar).toContain("SidebarProvider")
+    expect(sidebar).toContain("data-slot=\"sidebar\"")
     expect(sidebar).toContain("SidebarMenuButton")
+  })
+
+  it("backs separators and pagination with shadcn-compatible primitive contracts", () => {
+    const separator = source("components/ui/separator.tsx")
+    const pagination = source("components/ui/pagination.tsx")
+
+    expect(separator).toContain("@radix-ui/react-separator")
+    expect(separator).toContain("SeparatorPrimitive.Root")
+    expect(separator).toContain("data-slot=\"separator\"")
+    expect(pagination).toContain("PaginationLink")
+    expect(pagination).toContain("PaginationPrevious")
+    expect(pagination).toContain("PaginationNext")
+    expect(pagination).toContain("data-slot=\"pagination-content\"")
+  })
+
+  it("uses the shadcn-compatible item primitive for dense system display rows", () => {
+    const item = source("components/ui/item.tsx")
+    const files = [
+      "features/maintenance/MaintenanceView.tsx",
+      "features/health/HealthView.tsx",
+      "features/settings/SettingsView.tsx",
+      "features/runs/RunsView.tsx",
+      "features/task-detail/TaskDetail.tsx",
+    ]
+
+    expect(item).toContain("data-slot=\"item\"")
+    expect(item).toContain("ItemContent")
+    expect(item).toContain("ItemActions")
+
+    for (const file of files) {
+      expect(source(file), file).toContain("@/components/ui/item")
+    }
   })
 
   it("keeps the archived shell control as a direct two-state button", () => {

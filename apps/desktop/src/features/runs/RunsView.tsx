@@ -3,6 +3,7 @@ import { FileText } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
+import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { Run, Task } from "@/lib/api"
 import { formatRelativeTime, shortId } from "@/lib/utils"
@@ -74,10 +75,14 @@ function RunRow({ run }: { run: Run }) {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-3 text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="truncate font-medium">{value}</span>
-    </div>
+    <Item className="px-0 py-0 text-xs">
+      <ItemContent>
+        <ItemTitle className="text-xs font-normal text-muted-foreground">{label}</ItemTitle>
+      </ItemContent>
+      <ItemActions className="min-w-0">
+        <span className="truncate font-medium">{value}</span>
+      </ItemActions>
+    </Item>
   )
 }
 

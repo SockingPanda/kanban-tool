@@ -10,6 +10,7 @@ import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupButton, InputGroupInput, InputGroupTextarea } from "@/components/ui/input-group"
+import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -564,10 +565,14 @@ export function DependencyGroup({
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-3">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="truncate font-medium">{value}</span>
-    </div>
+    <Item className="px-0 py-0">
+      <ItemContent>
+        <ItemTitle className="text-sm font-normal text-muted-foreground">{label}</ItemTitle>
+      </ItemContent>
+      <ItemActions className="min-w-0">
+        <span className="truncate font-medium">{value}</span>
+      </ItemActions>
+    </Item>
   )
 }
 

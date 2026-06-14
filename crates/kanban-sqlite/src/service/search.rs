@@ -570,31 +570,32 @@ fn max_event_id(left: Option<i64>, right: Option<i64>) -> Option<i64> {
 #[cfg(feature = "tantivy-backend")]
 fn tantivy_literal_sqlite_fallback_required(query: &SearchQuery) -> bool {
     query.q.as_deref().map(str::trim).is_some_and(|q| {
-        q.chars().any(|ch| {
-            matches!(
-                ch,
-                '"' | '+'
-                    | '-'
-                    | '!'
-                    | '('
-                    | ')'
-                    | '{'
-                    | '}'
-                    | '['
-                    | ']'
-                    | '^'
-                    | '~'
-                    | '*'
-                    | '?'
-                    | ':'
-                    | '\\'
-                    | '/'
-                    | '&'
-                    | '|'
-                    | '%'
-                    | '_'
-            )
-        })
+        task_ref_filter(q, "t.").is_some()
+            || q.chars().any(|ch| {
+                matches!(
+                    ch,
+                    '"' | '+'
+                        | '-'
+                        | '!'
+                        | '('
+                        | ')'
+                        | '{'
+                        | '}'
+                        | '['
+                        | ']'
+                        | '^'
+                        | '~'
+                        | '*'
+                        | '?'
+                        | ':'
+                        | '\\'
+                        | '/'
+                        | '&'
+                        | '|'
+                        | '%'
+                        | '_'
+                )
+            })
     })
 }
 

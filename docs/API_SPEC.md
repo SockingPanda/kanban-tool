@@ -196,13 +196,18 @@ Query params：
 | `priority` | 可重复：`?priority=0&priority=2`，值为 P0-P3 的 `0..3`。P0 表示 incident/blocker/must-handle-immediately；P3 是普通 backlog/低优先级/默认。 |
 | `assignee` | 按 assignee。 |
 | `label` | 按 label。 |
-| `q` | title/description 搜索。 |
+| `q` | title/description 搜索；task ref 形状按精确匹配处理。 |
 | `include_archived` | bool。 |
 | `limit` | 默认 100。 |
 | `offset` | 分页 offset。 |
 | `sort` | `seq` / `title` / `status` / `position` / `priority` / `assignee` / `scheduled_at` / `due_at` / `created_at` / `updated_at`，前缀 `-` 表示降序。`priority` sorts P0 -> P3; `-priority` sorts P3 -> P0. |
 
 Priority 只表达相对重要性和排序，不表达可 claim 状态。`ready` 才表示任务已显式进入可执行队列；普通 `ready` task 可以是 P1/P2/P3，不应为了表示“可做”全部标成 P0。P0 只用于 incident、当前目标 blocker 或必须立即处理的任务；P0 task 若仍缺规格、排期未到或依赖未完成，仍不能被 claim。
+
+`q` 对 task ref 形状使用精确匹配而不是文本 contains 匹配：纯数字 `12`、
+`#12` 匹配 `{board}` 内的 seq；`board#12` / `board/#12` 只在显式 board
+与 `{board}` 相同时匹配；`t_...` 只匹配 `{board}` 内的 task id。其他文本仍执行
+title/description 模糊搜索。
 
 Response：
 
@@ -812,6 +817,13 @@ GET /api/v1/search/tasks?board=default&q=needle&status=ready&assignee=worker-a&i
 ```
 
 Default backend is SQLite fallback. When the binary is built with `tantivy-backend` and `index/v1/tasks/` exists beside the SQLite DB, search uses the Tantivy task index. Missing, corrupt, or stale Tantivy indexes fall back to SQLite with stale metadata. Search matches task title, description, comments, run summary/error, and event kind/payload.
+
+Task ref-shaped `q` values always use SQLite exact-match semantics, even when a
+usable Tantivy index exists: pure numeric `12` and `#12` match seq within the
+requested `board`; `board#12` and `board/#12` match only when the qualified board
+is the requested board; `t_...` matches only a task id on the requested board.
+Ref-shaped queries do not return fuzzy matches from title, description, comments,
+runs, or events.
 
 Response:
 

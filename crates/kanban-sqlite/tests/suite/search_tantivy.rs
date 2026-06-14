@@ -1065,3 +1065,138 @@ fn tantivy_literal_special_searches_fall_back_to_sqlite_after_rebuild() -> anyho
     }
     Ok(())
 }
+
+#[test]
+fn tantivy_exact_task_ref_searches_fall_back_to_sqlite_after_rebuild() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_exact_task_ref_searches_fall_back_to_sqlite_after_rebuild")?;
+    init_database(&temp.path, "tester")?;
+    create_board(
+        &temp.path,
+        "tester",
+        CreateBoard {
+            slug: "other".into(),
+            name: "Other".into(),
+            description: None,
+        },
+    )?;
+
+    let first = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("first exact ref task"),
+    )?;
+    let mentions_one = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("title mentions 1 but is not task one"),
+    )?;
+    let archived = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("archived exact ref task"),
+    )?;
+    archive_task(&temp.path, "default", "tester", &archived.id, false)?;
+    let other = create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("other board same seq"),
+    )?;
+
+    kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+
+    for query in ["1", "#1", "default#1", "default/#1", first.id.as_str()] {
+        let results = search_tasks(
+            &temp.path,
+            kanban_search::SearchQuery {
+                board: "default".into(),
+                q: Some(query.to_owned()),
+                statuses: vec![TaskStatus::Ready],
+                assignee: None,
+                include_archived: false,
+                limit: 10,
+                offset: 0,
+            },
+        )?;
+        assert_eq!(results.meta.backend, "sqlite", "{query}");
+        assert!(results.meta.stale, "{query}");
+        assert_eq!(
+            results
+                .hits
+                .iter()
+                .map(|hit| hit.task_id.as_str())
+                .collect::<Vec<_>>(),
+            vec![first.id.as_str()],
+            "{query}"
+        );
+    }
+
+    let numeric_results = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("1".into()),
+            statuses: vec![],
+            assignee: None,
+            include_archived: false,
+            limit: 10,
+            offset: 0,
+        },
+    )?;
+    assert!(
+        !numeric_results
+            .hits
+            .iter()
+            .any(|hit| hit.task_id == mentions_one.id)
+    );
+
+    for query in ["other#1", "other/#1", other.id.as_str(), "#3"] {
+        let results = search_tasks(
+            &temp.path,
+            kanban_search::SearchQuery {
+                board: "default".into(),
+                q: Some(query.to_owned()),
+                statuses: vec![],
+                assignee: None,
+                include_archived: false,
+                limit: 10,
+                offset: 0,
+            },
+        )?;
+        assert_eq!(results.meta.backend, "sqlite", "{query}");
+        assert_eq!(
+            results
+                .hits
+                .iter()
+                .map(|hit| hit.task_id.as_str())
+                .collect::<Vec<_>>(),
+            Vec::<&str>::new(),
+            "{query}"
+        );
+    }
+
+    let archived_results = search_tasks(
+        &temp.path,
+        kanban_search::SearchQuery {
+            board: "default".into(),
+            q: Some("#3".into()),
+            statuses: vec![],
+            assignee: None,
+            include_archived: true,
+            limit: 10,
+            offset: 0,
+        },
+    )?;
+    assert_eq!(
+        archived_results
+            .hits
+            .iter()
+            .map(|hit| hit.task_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![archived.id.as_str()]
+    );
+    Ok(())
+}

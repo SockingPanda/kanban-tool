@@ -470,9 +470,10 @@ export function DependencyGroup({
         {tasks.length ? (
           tasks.map((task) => (
             <span key={task.id} className="inline-flex items-center overflow-hidden rounded-md border border-border bg-muted">
-              <button
+              <Button
                 type="button"
-                className="inline-flex border-0 bg-transparent p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                variant="ghost"
+                className="h-auto border-0 bg-transparent p-0 text-left"
                 aria-label={`Open ${dependencyKind} dependency #${task.seq} ${task.title}`}
                 title={`Open ${task.title}`}
                 onClick={() => onSelect?.(task.id)}
@@ -480,18 +481,19 @@ export function DependencyGroup({
                 <Badge variant={dependencyBadgeVariant(task.status)}>
                   #{task.seq} {task.status}
                 </Badge>
-              </button>
+              </Button>
               {onRemove ? (
-                <button
+                <Button
                   type="button"
-                  className="px-1.5 text-muted-foreground hover:text-destructive"
+                  variant="ghost"
+                  className="h-auto rounded-none px-1.5 text-muted-foreground hover:text-destructive"
                   disabled={pending}
                   aria-label={`Remove parent dependency #${task.seq} ${task.title}`}
                   title="Remove parent dependency"
                   onClick={() => onRemove(task.id)}
                 >
                   <X className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               ) : null}
             </span>
           ))

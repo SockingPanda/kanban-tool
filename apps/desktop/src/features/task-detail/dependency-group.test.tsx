@@ -55,20 +55,20 @@ type ButtonProps = {
 }
 
 function findButtonByLabel(node: ReactNode, label: string) {
-  return findButtons(node).find((button) => button.props["aria-label"] === label) ?? null
+  return findButtonControls(node).find((button) => button.props["aria-label"] === label) ?? null
 }
 
 function findButtonByTitle(node: ReactNode, title: string) {
-  return findButtons(node).find((button) => button.props.title === title) ?? null
+  return findButtonControls(node).find((button) => button.props.title === title) ?? null
 }
 
-function findButtons(node: ReactNode): ReactElement<ButtonProps>[] {
-  if (Array.isArray(node)) return node.flatMap((child) => findButtons(child))
+function findButtonControls(node: ReactNode): ReactElement<ButtonProps>[] {
+  if (Array.isArray(node)) return node.flatMap((child) => findButtonControls(child))
   if (!isValidElement(node)) return []
 
   const element = node as ReactElement<ButtonProps>
-  const matches = element.type === "button" ? [element] : []
-  return matches.concat(findButtons(element.props.children))
+  const matches = element.props.type === "button" ? [element] : []
+  return matches.concat(findButtonControls(element.props.children))
 }
 
 function taskFixture(overrides: Pick<Task, "id" | "seq" | "title" | "status">): Task {

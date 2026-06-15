@@ -187,7 +187,8 @@ fn dynamic_completion_returns_enum_candidates_without_db() -> anyhow::Result<()>
 
     let kinds = common::kanban_in_dir(&db_path, &["__complete", "comment-kind"], temp.path())?
         .success_stdout()?;
-    assert_candidates_include(&kinds, &["text", "system", "worker", "decision"])?;
+    assert_candidates_include(&kinds, &["note", "decision"])?;
+    assert_candidates_exclude(&kinds, &["text", "system", "worker"])?;
     Ok(())
 }
 
@@ -264,6 +265,17 @@ fn assert_candidates_include(stdout: &str, expected: &[&str]) -> anyhow::Result<
         anyhow::ensure!(
             candidates.contains(expected),
             "expected candidates to include {expected:?}, got:\n{stdout}"
+        );
+    }
+    Ok(())
+}
+
+fn assert_candidates_exclude(stdout: &str, unexpected: &[&str]) -> anyhow::Result<()> {
+    let candidates = stdout.lines().collect::<Vec<_>>();
+    for unexpected in unexpected {
+        anyhow::ensure!(
+            !candidates.contains(unexpected),
+            "expected candidates to exclude {unexpected:?}, got:\n{stdout}"
         );
     }
     Ok(())

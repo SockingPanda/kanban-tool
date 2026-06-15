@@ -3,7 +3,8 @@ use crate::connect_file;
 use super::{
     CommentRecord, CreateComment, active_board_id_for_task,
     comment_identity::{normalize_comment_agent_type, normalize_comment_author_type},
-    insert_event, resolve_task, resolve_task_without_active_board, storage, with_immediate_tx,
+    insert_event, json_valid, resolve_task, resolve_task_without_active_board, storage,
+    with_immediate_tx,
 };
 
 use std::path::Path;
@@ -30,6 +31,7 @@ pub fn create_comment(
             kind: kind.map(str::to_owned),
             author_type: None,
             agent_type: None,
+            metadata_json: None,
         },
     )
 }
@@ -54,16 +56,17 @@ pub fn create_comment_with_options(
         if body.is_empty() {
             return Err(KanbanError::InvalidInput("comment body is required".into()));
         }
-        let kind = input.kind.as_deref().unwrap_or("text").trim();
-        if !matches!(kind, "text" | "system" | "worker" | "decision") {
+        let kind = input.kind.as_deref().unwrap_or("note").trim();
+        if !matches!(kind, "note" | "decision") {
             return Err(KanbanError::InvalidInput("invalid comment kind".into()));
         }
         let author_type = normalize_comment_author_type(input.author_type.as_deref(), kind)?;
         let agent_type = normalize_comment_agent_type(input.agent_type.as_deref(), author_type)?;
+        let metadata_json = normalize_comment_metadata_json(&conn, input.metadata_json.as_deref())?;
         let id = new_typed_id("c");
         conn.execute(
-            "INSERT INTO task_comments(id, board_id, task_id, author, author_type, agent_type, body, kind, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            params![id, board_id, task.id, author, author_type, agent_type, body, kind, now],
+            "INSERT INTO task_comments(id, board_id, task_id, author, author_type, agent_type, body, kind, metadata_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![id, board_id, task.id, author, author_type, agent_type, body, kind, metadata_json, now],
         )
         .map_err(storage)?;
         insert_event(
@@ -85,6 +88,7 @@ pub fn create_comment_with_options(
             agent_type: agent_type.map(str::to_owned),
             body: body.to_owned(),
             kind: kind.to_owned(),
+            metadata_json,
             created_at: now,
         })
     })
@@ -96,7 +100,7 @@ pub fn list_comments(path: impl AsRef<Path>, task_ref: &str) -> Result<Vec<Comme
     let board_id = task.board_id.clone();
     let mut stmt = conn
         .prepare(
-            "SELECT id, board_id, task_id, author, author_type, agent_type, body, kind, created_at \
+            "SELECT id, board_id, task_id, author, author_type, agent_type, body, kind, metadata_json, created_at \
              FROM task_comments WHERE board_id=?1 AND task_id=?2 ORDER BY created_at ASC, id ASC",
         )
         .map_err(storage)?;
@@ -117,6 +121,30 @@ pub(crate) fn comment_from_row(row: &Row<'_>) -> rusqlite::Result<CommentRecord>
         agent_type: row.get(5)?,
         body: row.get(6)?,
         kind: row.get(7)?,
-        created_at: row.get(8)?,
+        metadata_json: row.get(8)?,
+        created_at: row.get(9)?,
     })
+}
+
+fn normalize_comment_metadata_json(
+    conn: &rusqlite::Connection,
+    metadata_json: Option<&str>,
+) -> Result<String> {
+    let metadata_json = metadata_json
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("{}");
+    if !json_valid(conn, metadata_json)? {
+        return Err(KanbanError::InvalidInput(
+            "metadata_json must be valid JSON".into(),
+        ));
+    }
+    let value = serde_json::from_str::<serde_json::Value>(metadata_json)
+        .map_err(|_| KanbanError::InvalidInput("metadata_json must be valid JSON".into()))?;
+    if !value.is_object() {
+        return Err(KanbanError::InvalidInput(
+            "metadata_json must be a JSON object".into(),
+        ));
+    }
+    Ok(metadata_json.to_owned())
 }

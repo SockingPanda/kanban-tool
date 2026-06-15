@@ -155,6 +155,7 @@ pub(super) struct CommentDto {
     pub(super) agent_type: Option<String>,
     pub(super) body: String,
     pub(super) kind: String,
+    pub(super) metadata_json: String,
     pub(super) created_at: i64,
 }
 
@@ -169,6 +170,7 @@ impl From<kanban_sqlite::CommentRecord> for CommentDto {
             agent_type: comment.agent_type,
             body: comment.body,
             kind: comment.kind,
+            metadata_json: comment.metadata_json,
             created_at: comment.created_at,
         }
     }

@@ -26,6 +26,7 @@ pub(crate) struct CommentBody {
     pub(crate) kind: Option<String>,
     pub(crate) author_type: Option<String>,
     pub(crate) agent_type: Option<String>,
+    pub(crate) metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]

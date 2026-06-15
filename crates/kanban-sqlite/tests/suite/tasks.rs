@@ -484,6 +484,53 @@ fn task_label_mutations_by_id_use_task_board_and_reject_archived_targets() -> an
 }
 
 #[test]
+fn task_label_mutations_by_ref_reject_archived_tasks() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_label_mutations_by_ref_reject_archived_tasks")?;
+    init_database(&temp.path, "tester")?;
+
+    let add_target = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Archived add label target"),
+    )?;
+    archive_task(&temp.path, "default", "tester", &add_target.id, false)?;
+    let add_error = result_err(kanban_sqlite::add_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &add_target.task_ref,
+        "backend",
+    ))?;
+    assert!(add_error.to_string().contains("task "));
+
+    let remove_target = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Archived remove label target"),
+    )?;
+    kanban_sqlite::add_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &remove_target.task_ref,
+        "backend",
+    )?;
+    archive_task(&temp.path, "default", "tester", &remove_target.id, false)?;
+    let remove_error = result_err(kanban_sqlite::remove_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &remove_target.task_ref,
+        "backend",
+    ))?;
+    assert!(remove_error.to_string().contains("task "));
+
+    Ok(())
+}
+
+#[test]
 fn label_ref_resolution_prefers_exact_l_prefixed_name_before_id() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ref_resolution_prefers_exact_l_prefixed_name_before_id")?;
     init_database(&temp.path, "tester")?;

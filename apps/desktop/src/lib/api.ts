@@ -425,6 +425,9 @@ export class KanbanApi {
     params.set("limit", String(limit))
     params.set("offset", String(offset))
     for (const status of options.statuses ?? []) params.append("status", status)
+    for (const label of options.labels ?? []) {
+      if (label.trim()) params.append("label", label.trim())
+    }
     const envelope = await this.requestEnvelope<SearchTasksResponse, PageEnvelopeMeta>(
       `/api/v1/search/tasks?${params.toString()}`,
       { signal: options.signal },

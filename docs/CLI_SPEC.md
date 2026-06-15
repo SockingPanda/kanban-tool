@@ -849,8 +849,9 @@ kanban search <query> [--status ready] [--status review] [--assignee worker-a] [
 
 默认实现使用 SQLite fallback，不依赖外部/派生索引。启用 `tantivy-backend` feature 且 `index/v1/tasks/` 存在可读 Tantivy 索引时，`kanban search` 使用 Tantivy；缺失或损坏时回落 SQLite，并在 meta 中标记 stale。搜索匹配 task title、description、comments、run summary/error、event kind/payload。
 
-`--label <name-or-id>` 可重复；多个 label 使用 AND 语义过滤 hydrated task
-results。
+`--label <name-or-id>` 可重复；多个 label 使用 AND 语义在 search
+pagination 前过滤 task。带 label 过滤的 Tantivy search 会回落到 SQLite
+fallback，以保持当前 label membership 与分页语义正确。
 
 Task ref 形状的 query 始终使用 SQLite 精确匹配语义，即使当前存在可用 Tantivy index：
 纯数字 `12`、`#12` 匹配请求 board 内的 seq；`board#12` / `board/#12`

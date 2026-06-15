@@ -15,15 +15,23 @@ describe("desktop input accessibility contracts", () => {
     expect(source("components/ui/textarea.tsx")).toContain("focus-visible:ring-2")
   })
 
-  it("names shell and task form fields without browser autocomplete noise", () => {
+  it("names shell and Add task dialog fields without browser autocomplete noise", () => {
     const appShell = source("app/AppShell.tsx")
     const taskDetail = source("features/task-detail/TaskDetail.tsx")
+    const addTaskDialog = appShell.slice(
+      appShell.indexOf("function AddTaskDialog"),
+      appShell.indexOf("function MainView"),
+    )
 
     expect(appShell).toContain('aria-label="Search tasks"')
     expect(appShell).toContain('name="task-search"')
     expect(appShell).toContain('autoComplete="off"')
-    expect(appShell).toContain('name="new-task-title"')
-    expect(appShell).toContain('name="new-task-description"')
+    expect(addTaskDialog).toContain('aria-label="Add task"')
+    expect(addTaskDialog).toContain('aria-label="New task title"')
+    expect(addTaskDialog).toContain('name="new-task-title"')
+    expect(addTaskDialog).toContain('aria-label="New task description"')
+    expect(addTaskDialog).toContain('name="new-task-description"')
+    expect(addTaskDialog).toContain('autoComplete="off"')
 
     for (const name of [
       "task-title",

@@ -627,7 +627,7 @@ Desktop TaskDetail comment list：
 
 - `note`：按普通 markdown comment 渲染。
 - `decision`：
-  - 展示 comment body 作为摘要。
+  - 展示 comment body 作为自然语言摘要，例如“已决定继续使用 comment metadata 承载结构化决策信息，正文保留为简短结论，方便没有结构化渲染的环境阅读。”
   - 展示所有 option slug。
   - selected option 使用明确绿色/selected 状态。
   - 点击 option 展开 `title` 和 `detail`。
@@ -643,6 +643,8 @@ kanban comment add <task-ref> "<body>"
 kanban comment add <task-ref> "<body>" --kind note
 kanban comment add <task-ref> "<body>" --kind decision --metadata-json '<json>'
 ```
+
+`kind=decision` 的 body 是自然语言 fallback 摘要，不重复完整选项表；`options`、`selected`、`reason`、`risk` 和 `verification` 只放在 `metadata_json` 中，由 Desktop 在正文下方结构化渲染。
 
 可后续增加更友好的命令：
 

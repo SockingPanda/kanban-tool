@@ -4,7 +4,8 @@ use super::{
     DEFAULT_PRIORITY, ExportResult, ImportResult, board_id,
     comment_identity::infer_comment_author_type,
     comment_metadata::normalize_imported_comment_metadata_json, connect_existing_database,
-    doctor_report_conn, normalize_legacy_priority, storage, with_immediate_tx, with_read_tx,
+    doctor_report_conn, mark_label_atom_store_dirty, normalize_legacy_priority, storage,
+    with_immediate_tx, with_read_tx,
 };
 
 use std::{
@@ -121,6 +122,7 @@ pub fn import_jsonl(
         }
         reject_imported_active_claims(&conn)?;
         validate_imported_snapshot(&conn)?;
+        mark_imported_label_atom_boards_dirty(&conn)?;
         let report = doctor_report_conn(&conn, db_path.parent())?;
         if !report.ok {
             return Err(KanbanError::InvalidInput(
@@ -326,6 +328,27 @@ pub(crate) fn validate_imported_snapshot(conn: &Connection) -> Result<()> {
         return Err(KanbanError::InvalidInput(
             "imported data must contain columns for every board".into(),
         ));
+    }
+    Ok(())
+}
+
+fn mark_imported_label_atom_boards_dirty(conn: &Connection) -> Result<()> {
+    let now = SystemClock.now_ms();
+    let mut stmt = conn
+        .prepare(
+            "SELECT board_id FROM label_semantics \
+             UNION \
+             SELECT board_id FROM label_atoms \
+             ORDER BY board_id ASC",
+        )
+        .map_err(storage)?;
+    let board_ids = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(storage)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)?;
+    for board_id in board_ids {
+        mark_label_atom_store_dirty(conn, &board_id, now)?;
     }
     Ok(())
 }

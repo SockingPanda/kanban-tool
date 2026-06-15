@@ -612,12 +612,13 @@ decision 不是 task status，不是 event，不是 ADR 替代品。
 Validation rules:
 
 - `options` 必须非空。
+- 每个 option 必须是 object，且有非空 string `slug`、`title`、`detail`。
 - 每个 option 必须有唯一 `slug`。
 - `selected` 必须匹配某个 option slug。
-- `reason` 必填。
-- `risk` 可选但推荐。
-- `verification` 可选但推荐。
-- `slug` 使用稳定 ASCII slug，便于 CLI、JSON 和前端引用。
+- `reason` 必填且非空。
+- `risk` 可选但推荐；如果出现，必须是非空 string。
+- `verification` 可选但推荐；如果出现，必须是非空 string。
+- `slug` 使用稳定小写 ASCII slug，必须以小写字母或数字开头，只包含小写字母、数字和 `-`，便于 CLI、JSON 和前端引用。
 - `detail` 可以是 Markdown 文本，但 Desktop 渲染必须走安全 markdown 规则。
 
 ### Desktop Rendering Rules

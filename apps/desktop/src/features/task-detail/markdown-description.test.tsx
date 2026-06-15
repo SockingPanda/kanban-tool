@@ -82,6 +82,128 @@ describe("MarkdownDescription", () => {
     expect(html).toContain("&lt;script&gt;")
     expect(html).not.toContain('href="javascript:alert')
   })
+
+  it("renders decision comments with selected option and structured fields", () => {
+    const html = renderToStaticMarkup(
+      <Sheet open>
+        <TaskDetail
+          api={null}
+          task={task}
+          detail={{
+            ...emptyDetail,
+            comments: [
+              {
+                id: "c_decision",
+                board_id: task.board_id,
+                task_id: task.id,
+                author: "codex",
+                author_type: "agent",
+                agent_type: "codex",
+                body: "Choose where to store decisions.",
+                kind: "decision",
+                metadata_json: JSON.stringify({
+                  options: [
+                    { slug: "metadata", title: "Use metadata", detail: "**Keep** it in comment metadata." },
+                    { slug: "table", title: "Add table", detail: "Create separate decision rows." },
+                  ],
+                  selected: "metadata",
+                  reason: "Keeps the choice next to the discussion.",
+                  risk: "Schema drift.",
+                  verification: "Render and service tests.",
+                }),
+                created_at: task.created_at,
+              },
+            ],
+          }}
+          blockReason=""
+          setBlockReason={() => undefined}
+          dependencyInput=""
+          setDependencyInput={() => undefined}
+          claimToken={null}
+          commentBody=""
+          setCommentBody={() => undefined}
+          editDraft={null}
+          draftDirty={false}
+          setEditDraft={() => undefined}
+          detailLoading={false}
+          pendingAction={null}
+          onAction={async () => undefined}
+          onAddDependency={async () => undefined}
+          onRemoveDependency={async () => undefined}
+          onSelectTask={() => undefined}
+          onSaveTask={async () => true}
+          onCancelEdit={() => undefined}
+          onAddComment={async () => undefined}
+        />
+      </Sheet>,
+    )
+
+    expect(html).toContain("decision")
+    expect(html).toContain("metadata")
+    expect(html).toContain("table")
+    expect(html).toContain("Use metadata")
+    expect(html).toContain("<strong>Keep</strong>")
+    expect(html).toContain("Keeps the choice next to the discussion.")
+    expect(html).toContain("Schema drift.")
+    expect(html).toContain("Render and service tests.")
+    expect(html.split("bg-[var(--status-ready-bg)]").length - 1).toBeGreaterThanOrEqual(2)
+  })
+
+  it("shows invalid decision metadata as an alert while keeping body fallback", () => {
+    const html = renderToStaticMarkup(
+      <Sheet open>
+        <TaskDetail
+          api={null}
+          task={task}
+          detail={{
+            ...emptyDetail,
+            comments: [
+              {
+                id: "c_bad_decision",
+                board_id: task.board_id,
+                task_id: task.id,
+                author: "codex",
+                author_type: "agent",
+                agent_type: "codex",
+                body: "Fallback decision body.",
+                kind: "decision",
+                metadata_json: JSON.stringify({
+                  options: [{ slug: " metadata ", title: "Metadata", detail: "Invalid raw slug." }],
+                  selected: "metadata",
+                  reason: "Whitespace-padded slugs must not be accepted.",
+                }),
+                created_at: task.created_at,
+              },
+            ],
+          }}
+          blockReason=""
+          setBlockReason={() => undefined}
+          dependencyInput=""
+          setDependencyInput={() => undefined}
+          claimToken={null}
+          commentBody=""
+          setCommentBody={() => undefined}
+          editDraft={null}
+          draftDirty={false}
+          setEditDraft={() => undefined}
+          detailLoading={false}
+          pendingAction={null}
+          onAction={async () => undefined}
+          onAddDependency={async () => undefined}
+          onRemoveDependency={async () => undefined}
+          onSelectTask={() => undefined}
+          onSaveTask={async () => true}
+          onCancelEdit={() => undefined}
+          onAddComment={async () => undefined}
+        />
+      </Sheet>,
+    )
+
+    expect(html).toContain("Fallback decision body.")
+    expect(html).toContain('role="alert"')
+    expect(html).toContain("Invalid decision metadata")
+    expect(html).toContain("option slug must be lowercase ASCII letters, digits, or hyphen")
+  })
 })
 
 const task: Task = {

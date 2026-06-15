@@ -128,7 +128,8 @@ async fn comments_accept_decision_kind_with_default_and_agent_identity() -> anyh
         json!({
             "author": "operator",
             "body": "Problem: choose policy. Options: a/b. Choice: a. Reason: simpler. Risk/validation: API test.",
-            "kind": "decision"
+            "kind": "decision",
+            "metadata": decision_metadata()
         }),
     )
     .await?;
@@ -146,7 +147,8 @@ async fn comments_accept_decision_kind_with_default_and_agent_identity() -> anyh
             "body": "Problem: choose validation. Options: CLI/API. Choice: both. Reason: both surfaces changed. Risk/validation: targeted tests.",
             "kind": "decision",
             "author_type": "agent",
-            "agent_type": "codex"
+            "agent_type": "codex",
+            "metadata": decision_metadata()
         }),
     )
     .await?;
@@ -176,4 +178,65 @@ async fn comments_accept_decision_kind_with_default_and_agent_identity() -> anyh
             .contains("metadata_json")
     );
     Ok(())
+}
+
+#[tokio::test]
+async fn comments_reject_invalid_decision_metadata_schema() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("invalid decision comment"),
+    )
+    .context("task")?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app,
+        &format!("/api/v1/tasks/{}/comments", task.id),
+        json!({
+            "author": "operator",
+            "body": "bad decision",
+            "kind": "decision",
+            "metadata": {
+                "options": [{"slug": "a", "title": "A", "detail": "A"}],
+                "selected": "missing",
+                "reason": "because"
+            }
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .context("message")?
+            .contains("selected")
+    );
+    Ok(())
+}
+
+fn decision_metadata() -> serde_json::Value {
+    json!({
+        "options": [
+            {
+                "slug": "sqlite",
+                "title": "Use SQLite metadata",
+                "detail": "Keep the decision payload in task comment metadata."
+            },
+            {
+                "slug": "table",
+                "title": "Add a table",
+                "detail": "Store decisions in a separate table."
+            }
+        ],
+        "selected": "sqlite",
+        "reason": "Keeps decisions local to the discussion.",
+        "risk": "Schema drift would make older comments ambiguous.",
+        "verification": "API tests cover valid and invalid decision comments."
+    })
 }

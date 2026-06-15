@@ -1,11 +1,13 @@
-import { CircleDot, FileText, GitBranch, MessageSquare, Pencil, Save, X } from "lucide-react"
+import { ChevronDown, CircleDot, FileText, GitBranch, MessageSquare, Pencil, Save, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react"
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
 import remarkGfm from "remark-gfm"
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -18,7 +20,7 @@ import { SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet
 import { Textarea } from "@/components/ui/textarea"
 import { legalActions } from "@/features/task-actions/legal-actions"
 import { isBlockableStatus } from "@/lib/action-policy"
-import type { KanbanApi, Run, Task, TaskStatus } from "@/lib/api"
+import type { CommentRecord, KanbanApi, Run, Task, TaskStatus } from "@/lib/api"
 import { priorityBadgeClass, priorityLabel, priorityLevels } from "@/lib/priority"
 import { cn, formatRelativeTime, shortId } from "@/lib/utils"
 import {
@@ -340,10 +342,14 @@ export function TaskDetail({
                 detail.comments.slice(-4).map((comment) => (
                   <Card key={comment.id} className="p-2 text-sm">
                     <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{comment.author}</span>
+                      <span className="flex items-center gap-1.5">
+                        {comment.author}
+                        {comment.kind === "decision" ? <Badge variant="secondary">decision</Badge> : null}
+                      </span>
                       <span>{formatRelativeTime(comment.created_at)}</span>
                     </div>
                     <MarkdownDescription className="mt-1 text-card-foreground">{comment.body}</MarkdownDescription>
+                    {comment.kind === "decision" ? <DecisionComment comment={comment} /> : null}
                   </Card>
                 ))
               ) : (
@@ -431,6 +437,154 @@ export function TaskDetail({
       </ScrollArea>
     </div>
   )
+}
+
+type DecisionOption = {
+  slug: string
+  title: string
+  detail: string
+}
+
+type DecisionMetadata = {
+  options: DecisionOption[]
+  selected: string
+  reason: string
+  risk?: string
+  verification?: string
+}
+
+type ParsedDecision = { ok: true; metadata: DecisionMetadata } | { ok: false; error: string }
+
+export function DecisionComment({ comment }: { comment: CommentRecord }) {
+  const decision = parseDecisionMetadata(comment.metadata_json)
+  if (!decision.ok) {
+    return (
+      <Alert className="mt-2 border-destructive/50 bg-destructive/5">
+        <AlertTitle className="text-destructive">Invalid decision metadata</AlertTitle>
+        <AlertDescription className="text-destructive">{decision.error}</AlertDescription>
+      </Alert>
+    )
+  }
+
+  const { metadata } = decision
+  return (
+    <div className="mt-2 space-y-2 rounded-md border border-border bg-muted/30 p-2">
+      <div className="flex flex-wrap gap-1.5">
+        {metadata.options.map((option) => {
+          const selected = option.slug === metadata.selected
+          return (
+            <Collapsible key={option.slug} defaultOpen={selected}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "text-muted-foreground hover:bg-background",
+                    selected && "border-[var(--status-ready-ring)] bg-[var(--status-ready-bg)] text-[var(--status-ready-fg)]",
+                  )}
+                  aria-label={`Show decision option ${option.slug}`}
+                >
+                  {option.slug}
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent
+                className={cn(
+                  "mt-1 max-w-full rounded-md border border-border bg-background p-2 text-xs",
+                  selected && "border-[var(--status-ready-ring)] bg-[var(--status-ready-bg)] text-[var(--status-ready-fg)]",
+                )}
+              >
+                <div className="font-medium text-foreground">{option.title}</div>
+                <MarkdownDescription className="mt-1 text-xs text-muted-foreground">{option.detail}</MarkdownDescription>
+              </CollapsibleContent>
+            </Collapsible>
+          )
+        })}
+      </div>
+      <DecisionField label="reason" value={metadata.reason} />
+      {metadata.risk ? <DecisionField label="risk" value={metadata.risk} /> : null}
+      {metadata.verification ? <DecisionField label="verification" value={metadata.verification} /> : null}
+    </div>
+  )
+}
+
+function DecisionField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[6rem_1fr] gap-2 text-xs">
+      <div className="font-medium uppercase tracking-normal text-muted-foreground">{label}</div>
+      <MarkdownDescription className="mt-0 text-xs">{value}</MarkdownDescription>
+    </div>
+  )
+}
+
+function parseDecisionMetadata(metadataJson: string): ParsedDecision {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(metadataJson)
+  } catch {
+    return { ok: false, error: "metadata_json is not valid JSON" }
+  }
+  if (!isObject(parsed)) return { ok: false, error: "metadata_json must be an object" }
+  const options = parsed.options
+  if (!Array.isArray(options) || options.length === 0) {
+    return { ok: false, error: "options must be a non-empty array" }
+  }
+
+  const seen = new Set<string>()
+  const decisionOptions: DecisionOption[] = []
+  for (const option of options) {
+    if (!isObject(option)) return { ok: false, error: "options must be objects" }
+    const slug = nonEmptyRawString(option.slug)
+    const title = nonEmptyString(option.title)
+    const detail = nonEmptyString(option.detail)
+    if (!slug || !title || !detail) return { ok: false, error: "each option needs slug, title, and detail" }
+    if (!isDecisionSlug(slug)) return { ok: false, error: "option slug must be lowercase ASCII letters, digits, or hyphen" }
+    if (seen.has(slug)) return { ok: false, error: "option slugs must be unique" }
+    seen.add(slug)
+    decisionOptions.push({ slug, title, detail })
+  }
+
+  const selected = nonEmptyRawString(parsed.selected)
+  if (!selected || !seen.has(selected)) return { ok: false, error: "selected must match an option slug" }
+  const reason = nonEmptyString(parsed.reason)
+  if (!reason) return { ok: false, error: "reason must be a non-empty string" }
+  const risk = optionalNonEmptyString(parsed.risk)
+  if (risk === false) return { ok: false, error: "risk must be a non-empty string" }
+  const verification = optionalNonEmptyString(parsed.verification)
+  if (verification === false) return { ok: false, error: "verification must be a non-empty string" }
+
+  return {
+    ok: true,
+    metadata: {
+      options: decisionOptions,
+      selected,
+      reason,
+      risk,
+      verification,
+    },
+  }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function nonEmptyString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+function nonEmptyRawString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : null
+}
+
+function optionalNonEmptyString(value: unknown) {
+  if (value === undefined) return undefined
+  return nonEmptyString(value) ?? false
+}
+
+function isDecisionSlug(value: string) {
+  return /^[a-z0-9][a-z0-9-]*$/.test(value)
 }
 
 export function MarkdownDescription({ children, className }: { children: string; className?: string }) {

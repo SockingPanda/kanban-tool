@@ -166,14 +166,26 @@ fn comment_kind_decision_roundtrips_and_defaults_to_user() -> anyhow::Result<()>
     let added = kanban(
         &temp.path,
         &[
-            "--json", "--board", "default", "--actor", "alice", "comment", "add", &task_id, body,
-            "--kind", "decision",
+            "--json",
+            "--board",
+            "default",
+            "--actor",
+            "alice",
+            "comment",
+            "add",
+            &task_id,
+            body,
+            "--kind",
+            "decision",
+            "--metadata-json",
+            &decision_metadata(),
         ],
     )?
     .success_json()?;
     assert_eq!(added["data"]["kind"], "decision");
     assert_eq!(added["data"]["author_type"], "user");
     assert!(added["data"]["agent_type"].is_null());
+    assert_eq!(added["data"]["metadata_json"], decision_metadata());
 
     let listed = kanban(
         &temp.path,
@@ -209,12 +221,54 @@ fn codex_can_write_agent_decision_comment() -> anyhow::Result<()> {
             "agent",
             "--agent-type",
             "codex",
+            "--metadata-json",
+            &decision_metadata(),
         ],
     )?
     .success_json()?;
     assert_eq!(added["data"]["kind"], "decision");
     assert_eq!(added["data"]["author_type"], "agent");
     assert_eq!(added["data"]["agent_type"], "codex");
+    Ok(())
+}
+
+#[test]
+fn comment_add_rejects_invalid_decision_metadata() -> anyhow::Result<()> {
+    let temp = TempDb::new("comment_add_rejects_invalid_decision_metadata")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let task_id = create_task(&temp, "invalid decision metadata")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "--board",
+            "default",
+            "comment",
+            "add",
+            &task_id,
+            "bad decision",
+            "--kind",
+            "decision",
+        ],
+    )?
+    .failure_containing("decision metadata options must be a non-empty array")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "--board",
+            "default",
+            "comment",
+            "add",
+            &task_id,
+            "bad decision",
+            "--kind",
+            "decision",
+            "--metadata-json",
+            r#"{"options":[{"slug":"a","title":"A","detail":"A"}],"selected":"missing","reason":"because"}"#,
+        ],
+    )?
+    .failure_containing("decision metadata selected must match an option slug")?;
     Ok(())
 }
 
@@ -465,4 +519,8 @@ fn comment_add_and_list_resolve_board_qualified_refs() -> anyhow::Result<()> {
     assert_eq!(listed_slash["data"][0]["body"], "qualified body");
     assert_eq!(listed_slash["data"][0]["task_id"], task_id);
     Ok(())
+}
+
+fn decision_metadata() -> String {
+    r#"{"options":[{"slug":"sqlite","title":"Use SQLite","detail":"Keep the decision payload in comment metadata."},{"slug":"table","title":"Add a table","detail":"Store decisions in a separate table."}],"selected":"sqlite","reason":"Keeps decisions local to the discussion.","risk":"Schema drift would make older comments ambiguous.","verification":"CLI tests cover valid and invalid decision comments."}"#.into()
 }

@@ -240,7 +240,7 @@ Options：
 |---|---|
 | `--status <status>` | 按状态过滤，可重复。 |
 | `--assignee <name>` | 按 assignee。 |
-| `--label <name>` | 按 label name 或 id 过滤，可重复；多个 label 使用 AND 语义。 |
+| `--label <name>` | 按 label 名称或 id 过滤，可重复；多个 label 使用 AND 语义。 |
 | `--search <query>` | title/description 模糊搜索；task ref 形状按精确匹配处理。 |
 | `--include-archived` | 包含 archived。 |
 | `--limit <n>` | 限制数量。 |
@@ -270,17 +270,16 @@ kanban task show <task_ref>
 kanban task show <task_ref> --details
 ```
 
-Default human output remains the compact one-line task summary:
+默认人类可读输出仍是紧凑的单行 task 摘要：
 
 ```text
 agent-work#12 t_01HX... [ready] 实现状态机
 ```
 
-`--details` switches only human output to a readable field list. It includes the
-task ref/id/status/title, full multiline description, assignee, priority,
-labels, scheduled_at, due_at, created_at, updated_at, and other task snapshot
-fields when available. `--json task show` returns the same `TaskRecord` envelope with or
-without `--details`.
+`--details` 只改变人类可读输出，显示为易读字段列表。可用时包含 task
+ref/id/status/title、完整多行 description、assignee、priority、labels、
+scheduled_at、due_at、created_at、updated_at，以及其他 task snapshot 字段。
+`--json task show` 无论是否带 `--details`，都返回相同的 `TaskRecord` envelope。
 
 `task_ref` 支持：
 
@@ -479,7 +478,7 @@ Human output for add/remove is Chinese-first:
 
 ---
 
-## 8. Label 命令
+## 8. 标签命令
 
 ```bash
 kanban label list
@@ -489,9 +488,9 @@ kanban label remove <task_ref> <label>
 ```
 
 `label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
-label，返回已有 label。`label add` 接受 task ref 和 label name 或 id；如果按
+label，返回已有 label。`label add` 接受 task ref 和 label 名称或 id；如果按
 name 指定的 label 不存在，会先在该 task 所属 board 创建 label，再绑定到 task。
-`label remove` 接受 task ref 和 label name 或 id。空白 label name 会被拒绝。
+`label remove` 接受 task ref 和 label 名称或 id。空白 label 名称会被拒绝。
 
 Label 变更对 task-label 关联保持幂等。只有关联实际变化时，才追加
 `task.label.added` / `task.label.removed` event；该操作不改变 task status。
@@ -847,9 +846,9 @@ kanban search <query> [--status ready] [--status review] [--assignee worker-a] [
 
 默认实现使用 SQLite fallback，不依赖外部/派生索引。启用 `tantivy-backend` feature 且 `index/v1/tasks/` 存在可读 Tantivy 索引时，`kanban search` 使用 Tantivy；缺失或损坏时回落 SQLite，并在 meta 中标记 stale。搜索匹配 task title、description、comments、run summary/error、event kind/payload。
 
-`--label <name-or-id>` 可重复；多个 label 使用 AND 语义在 search
-pagination 前过滤 task。带 label 过滤的 Tantivy search 会回落到 SQLite
-fallback，以保持当前 label membership 与分页语义正确。
+`--label <name-or-id>` 可重复；多个 label 使用 AND 语义，并在 search
+分页前过滤 task。带 label 过滤的 Tantivy search 会回落到 SQLite fallback，
+以保持当前 label 关联关系和分页语义正确。
 
 Task ref 形状的 query 始终使用 SQLite 精确匹配语义，即使当前存在可用 Tantivy index：
 纯数字 `12`、`#12` 匹配请求 board 内的 seq；`board#12` / `board/#12`

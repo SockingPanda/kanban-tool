@@ -1,9 +1,10 @@
 use crate::connect_file;
 
 use super::{
-    CreateTask, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage, TaskListSort, TaskPatch,
-    TaskRecord, add_dependency_in_current_tx, board_id, board_id_any, insert_event, json_valid,
-    recompute_ready_status, storage, validate_priority, with_immediate_tx,
+    CreateLabel, CreateTask, LabelRecord, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage,
+    TaskListSort, TaskPatch, TaskRecord, add_dependency_in_current_tx, board_id, board_id_any,
+    insert_event, json_valid, recompute_ready_status, storage, validate_priority,
+    with_immediate_tx,
 };
 
 use std::path::Path;
@@ -33,10 +34,32 @@ pub fn create_task_with_dependencies(
     input: CreateTask,
     depends_on: &[String],
 ) -> Result<TaskRecord> {
+    create_task_with_labels_and_dependencies(path, board, actor, input, &[], depends_on)
+}
+
+pub fn create_task_with_labels(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    input: CreateTask,
+    labels: &[String],
+) -> Result<TaskRecord> {
+    create_task_with_labels_and_dependencies(path, board, actor, input, labels, &[])
+}
+
+pub fn create_task_with_labels_and_dependencies(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    input: CreateTask,
+    labels: &[String],
+    depends_on: &[String],
+) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     validate_retry_policy(input.max_retries)?;
     validate_priority(input.priority)?;
+    let labels = normalize_label_names(labels)?;
     let title = input.title.trim().to_owned();
     if title.is_empty() {
         return Err(KanbanError::InvalidInput("title is required".into()));
@@ -96,7 +119,94 @@ pub fn create_task_with_dependencies(
             let child = get_task_by_id(&conn, &board_id, &id)?;
             add_dependency_in_current_tx(&conn, &board_id, actor, &parent, &child, now)?;
         }
+        for label in &labels {
+            let label = ensure_label_in_current_tx(&conn, &board_id, label, None, now)?;
+            attach_label_in_current_tx(&conn, &board_id, actor, &id, &label.id, now)?;
+        }
         get_task_by_id(&conn, &board_id, &id)
+    })
+}
+
+pub fn create_label(
+    path: impl AsRef<Path>,
+    board: &str,
+    input: CreateLabel,
+) -> Result<LabelRecord> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
+        ensure_label_in_current_tx(&conn, &board_id, &input.name, input.color.as_deref(), now)
+    })
+}
+
+pub fn list_labels(path: impl AsRef<Path>, board: &str) -> Result<Vec<LabelRecord>> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    list_labels_conn(&conn, &board_id)
+}
+
+pub fn list_task_labels(
+    path: impl AsRef<Path>,
+    board: &str,
+    task_ref: &str,
+) -> Result<Vec<LabelRecord>> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    let task = resolve_task(&conn, &board_id, task_ref)?;
+    task_labels_conn(&conn, &board_id, &task.id)
+}
+
+pub fn add_task_label(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    label_name: &str,
+) -> Result<TaskRecord> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
+        let task = resolve_task(&conn, &board_id, task_ref)?;
+        let label = ensure_label_in_current_tx(&conn, &task.board_id, label_name, None, now)?;
+        attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        get_task_by_id(&conn, &task.board_id, &task.id)
+    })
+}
+
+pub fn remove_task_label(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    label_ref: &str,
+) -> Result<TaskRecord> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
+        let task = resolve_task(&conn, &board_id, task_ref)?;
+        let label = resolve_label(&conn, &task.board_id, label_ref)?;
+        let changed = conn
+            .execute(
+                "DELETE FROM task_labels WHERE board_id=?1 AND task_id=?2 AND label_id=?3",
+                params![task.board_id, task.id, label.id],
+            )
+            .map_err(storage)?;
+        if changed > 0 {
+            insert_event(
+                &conn,
+                &task.board_id,
+                Some(&task.id),
+                None,
+                "task.label.removed",
+                actor,
+                &json!({ "label_id": label.id, "label": label.name }).to_string(),
+                now,
+            )?;
+        }
+        get_task_by_id(&conn, &task.board_id, &task.id)
     })
 }
 
@@ -393,6 +503,19 @@ pub(crate) fn task_query_where(board_id: &str, options: &TaskListOptions) -> (St
         clauses.push(format!("priority IN ({placeholders})"));
         params.extend(options.priorities.iter().copied().map(Value::Integer));
     }
+    for label in options
+        .labels
+        .iter()
+        .map(|label| label.trim())
+        .filter(|label| !label.is_empty())
+    {
+        clauses.push(
+            "EXISTS (SELECT 1 FROM task_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.task_id=tasks.id AND tl.board_id=tasks.board_id AND l.board_id=tasks.board_id AND (l.name=? OR l.id=?))"
+                .to_owned(),
+        );
+        params.push(Value::Text(label.to_owned()));
+        params.push(Value::Text(label.to_owned()));
+    }
     if let Some(assignee) = options
         .assignee
         .as_deref()
@@ -554,7 +677,7 @@ pub(crate) fn task_order_by(sort: TaskListSort) -> &'static str {
     }
 }
 
-pub(crate) const TASK_COLUMNS: &str = "id,board_id,(SELECT slug FROM boards WHERE boards.id=tasks.board_id) AS board_slug,((SELECT slug FROM boards WHERE boards.id=tasks.board_id) || '#' || seq) AS task_ref,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,result_json,metadata_json,lock_version,EXISTS(SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS dependency_blocked,(SELECT COUNT(*) FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS unfinished_parent_count";
+pub(crate) const TASK_COLUMNS: &str = "id,board_id,(SELECT slug FROM boards WHERE boards.id=tasks.board_id) AS board_slug,((SELECT slug FROM boards WHERE boards.id=tasks.board_id) || '#' || seq) AS task_ref,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,result_json,metadata_json,lock_version,EXISTS(SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS dependency_blocked,(SELECT COUNT(*) FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS unfinished_parent_count,COALESCE((SELECT json_group_array(json_object('id', id, 'board_id', board_id, 'name', name, 'color', color, 'created_at', created_at, 'updated_at', updated_at)) FROM (SELECT l.id, l.board_id, l.name, l.color, l.created_at, l.updated_at FROM task_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.task_id=tasks.id ORDER BY l.name ASC)), '[]') AS labels_json";
 
 pub(crate) fn query_tasks(conn: &Connection, board_id: &str) -> Result<Vec<TaskRecord>> {
     let mut stmt = conn
@@ -675,6 +798,9 @@ pub(crate) fn get_task_by_seq(
 
 pub(crate) fn task_from_row(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
     let status: String = row.get(7)?;
+    let labels_json: String = row.get(33)?;
+    let labels: Vec<LabelRecord> = serde_json::from_str(&labels_json)
+        .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
     Ok(TaskRecord {
         id: row.get(0)?,
         board_id: row.get(1)?,
@@ -710,6 +836,140 @@ pub(crate) fn task_from_row(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
         lock_version: row.get(30)?,
         dependency_blocked: row.get(31)?,
         unfinished_parent_count: row.get(32)?,
+        labels,
+    })
+}
+
+fn normalize_label_names(labels: &[String]) -> Result<Vec<String>> {
+    labels
+        .iter()
+        .map(|label| normalize_label_name(label))
+        .collect()
+}
+
+fn normalize_label_name(label: &str) -> Result<String> {
+    let label = label.trim();
+    if label.is_empty() {
+        return Err(KanbanError::InvalidInput("label name is required".into()));
+    }
+    Ok(label.to_owned())
+}
+
+fn ensure_label_in_current_tx(
+    conn: &Connection,
+    board_id: &str,
+    name: &str,
+    color: Option<&str>,
+    now: i64,
+) -> Result<LabelRecord> {
+    let name = normalize_label_name(name)?;
+    if let Some(existing) = label_by_name(conn, board_id, &name)? {
+        return Ok(existing);
+    }
+    let id = kanban_core::new_label_id();
+    conn.execute(
+        "INSERT INTO labels(id, board_id, name, color, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+        params![id, board_id, name, color, now],
+    )
+    .map_err(storage)?;
+    label_by_id(conn, board_id, &id)?.ok_or_else(|| KanbanError::NotFound(format!("label {id}")))
+}
+
+fn attach_label_in_current_tx(
+    conn: &Connection,
+    board_id: &str,
+    actor: &str,
+    task_id: &str,
+    label_id: &str,
+    now: i64,
+) -> Result<()> {
+    let changed = conn
+        .execute(
+            "INSERT OR IGNORE INTO task_labels(board_id, task_id, label_id, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![board_id, task_id, label_id, now],
+        )
+        .map_err(storage)?;
+    if changed > 0 {
+        let label = label_by_id(conn, board_id, label_id)?
+            .ok_or_else(|| KanbanError::NotFound(format!("label {label_id}")))?;
+        insert_event(
+            conn,
+            board_id,
+            Some(task_id),
+            None,
+            "task.label.added",
+            actor,
+            &json!({ "label_id": label.id, "label": label.name }).to_string(),
+            now,
+        )?;
+    }
+    Ok(())
+}
+
+fn list_labels_conn(conn: &Connection, board_id: &str) -> Result<Vec<LabelRecord>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, board_id, name, color, created_at, updated_at FROM labels WHERE board_id=?1 ORDER BY name ASC",
+        )
+        .map_err(storage)?;
+    let rows = stmt
+        .query_map([board_id], label_from_row)
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
+fn task_labels_conn(conn: &Connection, board_id: &str, task_id: &str) -> Result<Vec<LabelRecord>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT l.id, l.board_id, l.name, l.color, l.created_at, l.updated_at FROM task_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.board_id=?1 AND tl.task_id=?2 ORDER BY l.name ASC",
+        )
+        .map_err(storage)?;
+    let rows = stmt
+        .query_map(params![board_id, task_id], label_from_row)
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
+fn resolve_label(conn: &Connection, board_id: &str, label_ref: &str) -> Result<LabelRecord> {
+    let label_ref = normalize_label_name(label_ref)?;
+    let label = if label_ref.starts_with("l_") {
+        label_by_id(conn, board_id, &label_ref)?
+    } else {
+        label_by_name(conn, board_id, &label_ref)?
+    };
+    label.ok_or_else(|| KanbanError::NotFound(format!("label {label_ref}")))
+}
+
+fn label_by_name(conn: &Connection, board_id: &str, name: &str) -> Result<Option<LabelRecord>> {
+    conn.query_row(
+        "SELECT id, board_id, name, color, created_at, updated_at FROM labels WHERE board_id=?1 AND name=?2",
+        params![board_id, name],
+        label_from_row,
+    )
+    .optional()
+    .map_err(storage)
+}
+
+fn label_by_id(conn: &Connection, board_id: &str, label_id: &str) -> Result<Option<LabelRecord>> {
+    conn.query_row(
+        "SELECT id, board_id, name, color, created_at, updated_at FROM labels WHERE board_id=?1 AND id=?2",
+        params![board_id, label_id],
+        label_from_row,
+    )
+    .optional()
+    .map_err(storage)
+}
+
+fn label_from_row(row: &Row<'_>) -> rusqlite::Result<LabelRecord> {
+    Ok(LabelRecord {
+        id: row.get(0)?,
+        board_id: row.get(1)?,
+        name: row.get(2)?,
+        color: row.get(3)?,
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
     })
 }
 

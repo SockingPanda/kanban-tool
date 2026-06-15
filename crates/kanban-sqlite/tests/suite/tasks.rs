@@ -278,6 +278,7 @@ fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Resu
         kanban_sqlite::TaskListOptions {
             statuses: vec![],
             priorities: vec![0, 2],
+            labels: vec![],
             include_archived: false,
             assignee: None,
             search: None,
@@ -302,6 +303,7 @@ fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Resu
         kanban_sqlite::TaskListOptions {
             statuses: vec![],
             priorities: vec![],
+            labels: vec![],
             include_archived: false,
             assignee: None,
             search: None,
@@ -317,6 +319,133 @@ fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Resu
             .collect::<Vec<_>>(),
         [Some("worker-b"), Some("worker-a"), None]
     );
+
+    Ok(())
+}
+
+#[test]
+fn labels_create_attach_filter_and_remove_without_status_side_effects() -> anyhow::Result<()> {
+    let temp = TempDb::new("labels_create_attach_filter_and_remove_without_status_side_effects")?;
+    init_database(&temp.path, "tester")?;
+
+    let ready = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Ready task"),
+    )?;
+    let todo = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "Todo task".into(),
+            description: Some("ready spec".into()),
+            status: Some(TaskStatus::Todo),
+            assignee: None,
+            priority: 3,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: None,
+            metadata_json: "{}".into(),
+        },
+    )?;
+
+    let backend = kanban_sqlite::create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".into(),
+            color: Some("#336699".into()),
+        },
+    )?;
+    assert_eq!(backend.name, "backend");
+    assert_eq!(
+        kanban_sqlite::create_label(
+            &temp.path,
+            "default",
+            kanban_sqlite::CreateLabel {
+                name: "backend".into(),
+                color: None,
+            },
+        )?
+        .id,
+        backend.id
+    );
+
+    let labeled =
+        kanban_sqlite::add_task_label(&temp.path, "default", "tester", &ready.id, "backend")?;
+    assert_eq!(labeled.status, TaskStatus::Ready);
+    assert_eq!(
+        labeled
+            .labels
+            .iter()
+            .map(|label| label.name.as_str())
+            .collect::<Vec<_>>(),
+        ["backend"]
+    );
+
+    let duplicate =
+        kanban_sqlite::add_task_label(&temp.path, "default", "tester", &ready.id, "backend")?;
+    assert_eq!(duplicate.labels.len(), 1);
+
+    let created_from_add =
+        kanban_sqlite::add_task_label(&temp.path, "default", "tester", &todo.id, "frontend")?;
+    assert_eq!(created_from_add.status, TaskStatus::Todo);
+    assert_eq!(created_from_add.labels[0].name, "frontend");
+
+    let page = kanban_sqlite::list_tasks_page(
+        &temp.path,
+        "default",
+        kanban_sqlite::TaskListOptions {
+            statuses: vec![],
+            priorities: vec![],
+            labels: vec!["backend".into()],
+            include_archived: false,
+            assignee: None,
+            search: None,
+            sort: kanban_sqlite::TaskListSort::Seq,
+            limit: 100,
+            offset: 0,
+        },
+    )?;
+    assert_eq!(page.total, 1);
+    assert_eq!(page.tasks[0].id, ready.id);
+    assert_eq!(page.tasks[0].labels[0].id, backend.id);
+
+    let removed =
+        kanban_sqlite::remove_task_label(&temp.path, "default", "tester", &ready.id, "backend")?;
+    assert_eq!(removed.status, TaskStatus::Ready);
+    assert!(removed.labels.is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn labels_reject_blank_names() -> anyhow::Result<()> {
+    let temp = TempDb::new("labels_reject_blank_names")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Label target"),
+    )?;
+
+    let create_error = result_err(kanban_sqlite::create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "  ".into(),
+            color: None,
+        },
+    ))?;
+    assert!(create_error.to_string().contains("label name is required"));
+
+    let attach_error = result_err(kanban_sqlite::add_task_label(
+        &temp.path, "default", "tester", &task.id, "",
+    ))?;
+    assert!(attach_error.to_string().contains("label name is required"));
 
     Ok(())
 }

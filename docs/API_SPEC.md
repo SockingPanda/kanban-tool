@@ -195,7 +195,7 @@ Query params：
 | `status` | 可重复：`?status=ready&status=running`。 |
 | `priority` | 可重复：`?priority=0&priority=2`，值为 P0-P3 的 `0..3`。P0 表示 incident/blocker/must-handle-immediately；P3 是普通 backlog/低优先级/默认。 |
 | `assignee` | 按 assignee。 |
-| `label` | 按 label。 |
+| `label` | 按 label name 或 id 过滤，可重复；多个 label 使用 AND 语义。 |
 | `q` | title/description 搜索；task ref 形状按精确匹配处理。 |
 | `include_archived` | bool。 |
 | `limit` | 默认 100。 |
@@ -230,6 +230,14 @@ Response：
       "due_at": null,
       "created_at": 1717520000000,
       "updated_at": 1717520000000,
+      "labels": [
+        {
+          "id": "l_01HX...",
+          "board_id": "b_01HX...",
+          "name": "core",
+          "color": null
+        }
+      ],
       "dependency_blocked": false,
       "unfinished_parent_count": 0
     }
@@ -273,6 +281,7 @@ Notes：
 - 若存在未完成 dependencies（parent 不是 `done` 或 `archived`），不能创建为 `ready`。
 - Task responses expose derived dependency fields: `dependency_blocked` and `unfinished_parent_count`. They are query metadata and are not writable task fields.
 - `priority` is an integer level `0..3`: `0` = P0 incident/blocker/must-handle-immediately, `1` = P1 near-term focus, `2` = P2 important follow-up, `3` = P3 ordinary backlog/low/default. Create rejects invalid values.
+- `labels` is optional. Names are trimmed, blank names are rejected, and missing board labels are created before being attached to the task.
 
 ### 4.3 Get task
 
@@ -805,9 +814,48 @@ MVP 不允许 column 改变 canonical status。
 ```http
 GET /api/v1/boards/{board}/labels
 POST /api/v1/boards/{board}/labels
+GET /api/v1/tasks/{task_id}/labels
 POST /api/v1/tasks/{task_id}/labels
 DELETE /api/v1/tasks/{task_id}/labels/{label_id}
 ```
+
+Board label create request:
+
+```json
+{
+  "name": "core",
+  "color": "blue"
+}
+```
+
+Label response shape:
+
+```json
+{
+  "id": "l_01HX...",
+  "board_id": "b_01HX...",
+  "name": "core",
+  "color": "blue"
+}
+```
+
+`POST /api/v1/boards/{board}/labels` is board-scoped and idempotent by label
+name. If the label already exists on the board, the response returns the
+existing label. Blank names are rejected.
+
+Task label add request:
+
+```json
+{
+  "name": "core"
+}
+```
+
+`POST /api/v1/tasks/{task_id}/labels` attaches the named label to the task. If
+the label does not exist on the task's board, it is created first. Re-attaching
+an existing task-label relation is a no-op and returns the label. `DELETE`
+accepts a label id or label name in `{label_id}`. Label attach/remove writes a
+task label event only when the join row changes and does not change task status.
 
 ---
 

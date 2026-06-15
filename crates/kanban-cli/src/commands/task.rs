@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 use kanban_sqlite::{
     CreateTask, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListSort, TaskPatch, archive_task,
-    block_task, claim_task, complete_task, create_task, get_task, heartbeat_task, list_tasks,
-    list_tasks_page, promote_task, reclaim_expired, submit_review_task, unblock_task, update_task,
+    block_task, claim_task, complete_task, get_task, heartbeat_task, list_tasks, list_tasks_page,
+    promote_task, reclaim_expired, submit_review_task, unblock_task, update_task,
 };
 
 use crate::args::TaskCommand;
@@ -22,7 +22,7 @@ pub(crate) fn handle_task(
 ) -> Result<()> {
     match command {
         TaskCommand::Create(args) => {
-            let task = create_task(
+            let task = kanban_sqlite::create_task_with_labels(
                 db_path,
                 board,
                 actor,
@@ -37,6 +37,7 @@ pub(crate) fn handle_task(
                     max_retries: args.max_retries,
                     metadata_json: args.metadata,
                 },
+                &args.labels,
             )?;
             print_task(json, &task)?;
         }
@@ -53,6 +54,7 @@ pub(crate) fn handle_task(
                 .collect::<Result<Vec<_>>>()?;
             let uses_page_options = args.search.is_some()
                 || args.assignee.is_some()
+                || !args.labels.is_empty()
                 || args.limit.is_some()
                 || args.offset.is_some()
                 || args.sort.is_some();
@@ -63,6 +65,7 @@ pub(crate) fn handle_task(
                     TaskListOptions {
                         statuses,
                         priorities: vec![],
+                        labels: args.labels,
                         include_archived: args.include_archived,
                         assignee: args.assignee,
                         search: args.search,

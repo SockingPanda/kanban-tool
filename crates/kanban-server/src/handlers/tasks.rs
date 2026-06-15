@@ -10,7 +10,7 @@ use kanban_core::TaskStatus;
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::dto::{Envelope, TaskDto};
+use crate::dto::{Envelope, LabelDto, TaskDto};
 use crate::error::{ApiError, extractor_error, invalid_input, validate_page_bounds};
 use crate::state::AppState;
 
@@ -32,7 +32,6 @@ pub(crate) struct TaskListQuery {
     q: Option<String>,
     search: Option<String>,
     sort: Option<String>,
-    label: Option<String>,
 }
 
 fn default_limit() -> usize {
@@ -53,7 +52,23 @@ pub(crate) struct CreateTaskBody {
     max_retries: Option<i64>,
     metadata: Option<serde_json::Value>,
     #[serde(default)]
+    labels: Vec<String>,
+    #[serde(default)]
     depends_on: Vec<String>,
+    actor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CreateLabelBody {
+    name: String,
+    color: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AddTaskLabelBody {
+    name: String,
     actor: Option<String>,
 }
 
@@ -69,15 +84,9 @@ pub(crate) async fn list_tasks(
         kanban_sqlite::MAX_TASK_LIST_LIMIT,
         query.offset,
     )?;
-    if query
-        .label
-        .as_deref()
-        .is_some_and(|label| !label.trim().is_empty())
-    {
-        return Err(invalid_input("label filter is not supported yet"));
-    }
     let statuses = parse_status_filters(raw_query.as_deref())?;
     let priorities = parse_priority_filters(raw_query.as_deref())?;
+    let labels = parse_label_filters(raw_query.as_deref())?;
     let assignee = query
         .assignee
         .as_deref()
@@ -98,6 +107,7 @@ pub(crate) async fn list_tasks(
         kanban_sqlite::TaskListOptions {
             statuses,
             priorities,
+            labels,
             include_archived: query.include_archived,
             assignee,
             search,
@@ -111,6 +121,22 @@ pub(crate) async fn list_tasks(
         data: tasks,
         meta: Some(json!({ "limit": query.limit, "offset": query.offset, "total": page.total })),
     }))
+}
+
+fn parse_label_filters(raw_query: Option<&str>) -> Result<Vec<String>, ApiError> {
+    let Some(raw_query) = raw_query else {
+        return Ok(Vec::new());
+    };
+    let pairs = serde_urlencoded::from_str::<Vec<(String, String)>>(raw_query)
+        .map_err(|error| invalid_input(error.to_string()))?;
+    Ok(pairs
+        .into_iter()
+        .filter_map(|(key, value)| {
+            (key == "label")
+                .then(|| value.trim().to_owned())
+                .filter(|value| !value.is_empty())
+        })
+        .collect())
 }
 
 pub(crate) async fn create_task(
@@ -132,11 +158,12 @@ pub(crate) async fn create_task(
         max_retries: body.max_retries,
         metadata_json: metadata_json(body.metadata)?,
     };
-    let task = kanban_sqlite::create_task_with_dependencies(
+    let task = kanban_sqlite::create_task_with_labels_and_dependencies(
         state.db_path(),
         &board,
         &actor,
         input,
+        &body.labels,
         &body.depends_on,
     )?;
     Ok((
@@ -146,6 +173,86 @@ pub(crate) async fn create_task(
             meta: None,
         }),
     ))
+}
+
+pub(crate) async fn list_board_labels(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+) -> Result<Json<Envelope<Vec<LabelDto>>>, ApiError> {
+    Ok(Json(Envelope {
+        data: kanban_sqlite::list_labels(state.db_path(), &board)?
+            .into_iter()
+            .map(LabelDto::from)
+            .collect(),
+        meta: None,
+    }))
+}
+
+pub(crate) async fn create_board_label(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+    body: Result<Json<CreateLabelBody>, JsonRejection>,
+) -> Result<(StatusCode, Json<Envelope<LabelDto>>), ApiError> {
+    let Json(body) = body.map_err(extractor_error)?;
+    let label = kanban_sqlite::create_label(
+        state.db_path(),
+        &board,
+        kanban_sqlite::CreateLabel {
+            name: body.name,
+            color: body.color,
+        },
+    )?;
+    Ok((
+        StatusCode::CREATED,
+        Json(Envelope {
+            data: LabelDto::from(label),
+            meta: None,
+        }),
+    ))
+}
+
+pub(crate) async fn list_task_labels(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+) -> Result<Json<Envelope<Vec<LabelDto>>>, ApiError> {
+    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    Ok(Json(Envelope {
+        data: task.labels.into_iter().map(LabelDto::from).collect(),
+        meta: None,
+    }))
+}
+
+pub(crate) async fn add_task_label(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    headers: HeaderMap,
+    body: Result<Json<AddTaskLabelBody>, JsonRejection>,
+) -> Result<(StatusCode, Json<Envelope<TaskDto>>), ApiError> {
+    let Json(body) = body.map_err(extractor_error)?;
+    let actor = actor(body.actor.as_deref(), &headers, &state);
+    let task =
+        kanban_sqlite::add_task_label(state.db_path(), "default", &actor, &task_id, &body.name)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(Envelope {
+            data: TaskDto::from(task),
+            meta: None,
+        }),
+    ))
+}
+
+pub(crate) async fn remove_task_label(
+    State(state): State<AppState>,
+    Path((task_id, label_ref)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Result<Json<Envelope<TaskDto>>, ApiError> {
+    let actor = actor(None, &headers, &state);
+    let task =
+        kanban_sqlite::remove_task_label(state.db_path(), "default", &actor, &task_id, &label_ref)?;
+    Ok(Json(Envelope {
+        data: TaskDto::from(task),
+        meta: None,
+    }))
 }
 
 pub(crate) async fn get_task(

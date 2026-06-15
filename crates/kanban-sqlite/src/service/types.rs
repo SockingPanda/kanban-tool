@@ -59,6 +59,17 @@ pub struct TaskRecord {
     pub lock_version: i64,
     pub dependency_blocked: bool,
     pub unfinished_parent_count: i64,
+    pub labels: Vec<LabelRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelRecord {
+    pub id: String,
+    pub board_id: String,
+    pub name: String,
+    pub color: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -164,6 +175,12 @@ pub struct CreateTask {
     pub metadata_json: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateLabel {
+    pub name: String,
+    pub color: Option<String>,
+}
+
 impl CreateTask {
     pub fn ready(title: impl Into<String>) -> Self {
         Self {
@@ -256,6 +273,7 @@ pub enum TaskListSort {
 pub struct TaskListOptions {
     pub statuses: Vec<TaskStatus>,
     pub priorities: Vec<i64>,
+    pub labels: Vec<String>,
     pub include_archived: bool,
     pub assignee: Option<String>,
     pub search: Option<String>,

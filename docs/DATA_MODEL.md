@@ -210,7 +210,7 @@ Task public identity 有两层：
 
 ```text
 parent done or archived => child may become ready
-parent not done or archived => child cannot be ready/running
+parent neither done nor archived => child cannot be ready/running
 ```
 
 添加依赖时必须做环检测。归档 parent 会满足 hard dependency guard，但 dependency edge 保留为历史，不会自动 promote child。

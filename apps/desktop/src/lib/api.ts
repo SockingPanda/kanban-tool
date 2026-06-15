@@ -73,6 +73,40 @@ export type LabelRecord = {
   updated_at: number
 }
 
+export type LabelSuggestionEvidenceAtom = {
+  atom_id: string
+  label_id: string
+  label_name: string
+  polarity: string
+  kind: string
+  text: string
+  score: number
+}
+
+export type SelectedLabelSuggestion = {
+  label_id: string
+  label_name: string
+  score: number
+  weight: number
+  already_applied: boolean
+  evidence_atoms: LabelSuggestionEvidenceAtom[]
+  negative_evidence_atoms: LabelSuggestionEvidenceAtom[]
+}
+
+export type LabelSuggestionCandidate = SelectedLabelSuggestion
+
+export type LabelSuggestionResult = {
+  task_id: string
+  board_id: string
+  selected_labels: SelectedLabelSuggestion[]
+  candidates: LabelSuggestionCandidate[]
+  coverage: number
+  residual_norm: number
+  needs_new_label: boolean
+  degraded: boolean
+  diagnostics: string[]
+}
+
 export type Run = {
   id: string
   task_id: string
@@ -509,6 +543,13 @@ export class KanbanApi {
     return this.request<Task>(`/api/v1/tasks/${taskId}/labels`, {
       method: "POST",
       body: { name, actor: this.actor },
+      signal: options.signal,
+    })
+  }
+
+  async suggestTaskLabels(taskId: string, options: RequestOptions & { limit?: number } = {}) {
+    const params = new URLSearchParams({ limit: String(options.limit ?? 5) })
+    return this.request<LabelSuggestionResult>(`/api/v1/tasks/${taskId}/labels/suggestions?${params.toString()}`, {
       signal: options.signal,
     })
   }

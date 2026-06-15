@@ -15,12 +15,13 @@ export function useTaskDetail(api: KanbanApi | null, taskId: string | null) {
     queryKey: taskId ? queryKeys.taskDetail(taskId) : ["task-detail", "none"],
     queryFn: async ({ signal }) => {
       if (!api || !taskId) throw new Error("Task detail query is not ready")
-      const [task, dependencies, runs, eventsPage, comments] = await Promise.all([
+      const [task, dependencies, runs, eventsPage, comments, labelSuggestions] = await Promise.all([
         api.getTask(taskId, { signal }),
         api.listDependencies(taskId, { signal }),
         api.listRuns(taskId, { signal }),
         api.listEvents(taskId, { signal }),
         api.listComments(taskId, { signal }),
+        api.suggestTaskLabels(taskId, { signal }),
       ])
       const runWithLog = runs.find((run) => Boolean(run.log_path)) ?? null
       const runLog = runWithLog
@@ -35,6 +36,7 @@ export function useTaskDetail(api: KanbanApi | null, taskId: string | null) {
           events: eventsPage.events,
           comments,
           runLog,
+          labelSuggestions,
         },
       } satisfies TaskDetailData
     },

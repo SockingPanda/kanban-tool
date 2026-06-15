@@ -1,4 +1,4 @@
-import type { CommentRecord, Dependencies, EventRecord, Run, RunLog } from "@/lib/api"
+import type { CommentRecord, Dependencies, EventRecord, LabelSuggestionResult, Run, RunLog } from "@/lib/api"
 
 export type DetailState = {
   dependencies: Dependencies
@@ -6,6 +6,7 @@ export type DetailState = {
   events: EventRecord[]
   comments: CommentRecord[]
   runLog: RunLog | null
+  labelSuggestions: LabelSuggestionResult | null
 }
 
 export const emptyDetail: DetailState = {
@@ -14,4 +15,5 @@ export const emptyDetail: DetailState = {
   events: [],
   comments: [],
   runLog: null,
+  labelSuggestions: null,
 }

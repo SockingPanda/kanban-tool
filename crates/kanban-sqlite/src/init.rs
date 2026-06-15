@@ -23,7 +23,9 @@ const LABEL_SEMANTICS_ATOMS_MIGRATION: &str =
     include_str!("../../../migrations/007_label_semantics_atoms.sql");
 const LABEL_ATOM_INDEX_BOARDS_MIGRATION: &str =
     include_str!("../../../migrations/008_label_atom_index_boards.sql");
-const LATEST_MIGRATION_VERSION: i64 = 8;
+const LABEL_SEMANTIC_PROPOSALS_MIGRATION: &str =
+    include_str!("../../../migrations/009_label_semantic_proposals.sql");
+const LATEST_MIGRATION_VERSION: i64 = 9;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] =
     &["fnv64:0ca871be950fc8a6", "fnv64:3b08da4e2b6041f5"];
 
@@ -73,6 +75,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 8,
         name: "008_label_atom_index_boards",
         sql: LABEL_ATOM_INDEX_BOARDS_MIGRATION,
+    },
+    Migration {
+        version: 9,
+        name: "009_label_semantic_proposals",
+        sql: LABEL_SEMANTIC_PROPOSALS_MIGRATION,
     },
 ];
 
@@ -294,6 +301,18 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
         (
             "label_atom_index_boards",
             &["store_name", "board_id", "dirty", "updated_at"][..],
+        ),
+        (
+            "label_semantic_proposals",
+            &[
+                "id",
+                "board_id",
+                "task_id",
+                "status",
+                "name",
+                "diagnostics_json",
+                "resolved_label_id",
+            ][..],
         ),
     ];
     for (table, columns) in required {

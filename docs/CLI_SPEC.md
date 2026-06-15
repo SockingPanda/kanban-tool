@@ -486,6 +486,11 @@ kanban label create <name> [--color <color>]
 kanban label add <task_ref> <label>
 kanban label remove <task_ref> <label>
 kanban label suggest <task_ref> [--limit 5] [--atom-limit 24] [--min-score 0.15] [--vector-config <toml>] [--json]
+kanban label propose <task_ref> [--proposal-json <path>] [--json]
+kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]
+kanban label proposals show <proposal_id> [--json]
+kanban label proposals accept <proposal_id> [--reason <text>] [--json]
+kanban label proposals reject <proposal_id> [--reason <text>] [--json]
 ```
 
 `label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
@@ -549,6 +554,54 @@ JSON 输出：
 
 Human output 简洁列出建议 label、score、weight、already_applied；degraded 时追加
 diagnostics 行。
+
+`label propose` 是独立的新 label semantics 提案流程，不复用或改变 `label suggest`。
+它先读取当前 task-level label suggestions 的启发式 `coverage` / `residual_norm` /
+top1 existing label。没有 `--proposal-json` 时默认 provider 不可用，命令成功返回
+degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms` 或
+`task_labels`。日常 label suggestion 不依赖该 proposal provider。
+
+`--proposal-json` 提供本地/offline provider 输出：
+
+```json
+{
+  "name": "database",
+  "description": "Database persistence work",
+  "applies_when": ["touches SQLite migrations"],
+  "excludes_when": ["UI-only polish"],
+  "positive_examples": ["new table migration"],
+  "negative_examples": ["CSS-only tweak"]
+}
+```
+
+数组字段缺省时按空数组处理。`name` 不能为空，且 description 或任一语义数组至少
+需要提供一个非空值。只有当前启发式 coverage 不足时才持久化 proposal。与现有
+label 发生 normalized-name 冲突的候选会写成 `rejected` proposal，并在 diagnostics
+中返回 `near_duplicate_label_conflict`；该 normalized-name 检查忽略大小写、空白
+和标点，是 deterministic near-duplicate heuristic。
+
+`label proposals accept` 只接受 `proposed` proposal。accept 会创建 canonical
+label、`label_semantics` 与 `label_atoms`，并标脏 label atom index；它不会自动
+给来源 task 写入 `task_labels`。`label proposals reject` 标记 proposal 为
+`rejected`。accepted/rejected proposal 不能再次决策。
+
+`label propose --json` 返回结构化 attempt：
+
+```json
+{
+  "data": {
+    "task_id": "t_...",
+    "board_id": "b_...",
+    "proposal": null,
+    "degraded": true,
+    "diagnostics": ["label_proposal_provider_unavailable", "vector_store_disabled"],
+    "heuristic_coverage": 0.0,
+    "heuristic_residual_norm": 1.0,
+    "top1_existing_label_id": null,
+    "top1_existing_label_name": null
+  }
+}
+```
 
 ---
 

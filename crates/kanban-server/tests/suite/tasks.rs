@@ -548,6 +548,134 @@ async fn task_label_suggestions_route_returns_degraded_json_without_provider() -
 }
 
 #[tokio::test]
+async fn task_label_proposal_route_degrades_without_provider() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("label proposal route degraded target"),
+    )?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app,
+        &format!("/api/v1/tasks/{}/label-proposals", task.id),
+        json!({}),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["proposal"], serde_json::Value::Null);
+    assert_eq!(json["data"]["degraded"], true);
+    assert!(
+        json["data"]["diagnostics"]
+            .as_array()
+            .context("diagnostics")?
+            .iter()
+            .any(|value| value == "label_proposal_provider_unavailable")
+    );
+    assert!(kanban_sqlite::list_labels(&db_path, "default")?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn task_label_proposal_route_accepts_and_rejects_without_task_binding() -> anyhow::Result<()>
+{
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("label proposal route target"),
+    )?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/label-proposals", task.id),
+        json!({
+            "proposal": {
+                "name": "database",
+                "description": "Database persistence work",
+                "applies_when": ["touches SQLite migrations"],
+                "excludes_when": ["UI-only"],
+                "positive_examples": ["new table"],
+                "negative_examples": ["CSS"]
+            },
+            "actor": "api-proposer"
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::CREATED);
+    let proposal_id = json["data"]["proposal"]["id"]
+        .as_str()
+        .context("proposal id")?
+        .to_owned();
+    assert_eq!(json["data"]["proposal"]["status"], "proposed");
+
+    let (status, json) = get_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/label-proposals", task.id),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"].as_array().context("proposals")?.len(), 1);
+
+    let (status, json) = get_json(
+        app.clone(),
+        &format!("/api/v1/label-proposals/{proposal_id}"),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["name"], "database");
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/label-proposals/{proposal_id}/accept"),
+        json!({ "reason": "覆盖不足，接受", "actor": "api-reviewer" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["status"], "accepted");
+    assert!(json["data"]["resolved_label_id"].as_str().is_some());
+    assert!(
+        kanban_sqlite::get_task(&db_path, "default", &task.id)?
+            .labels
+            .is_empty()
+    );
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/label-proposals", task.id),
+        json!({
+            "proposal": {
+                "name": "release",
+                "description": "Release workflow",
+                "applies_when": ["packaging"]
+            }
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    let reject_id = json["data"]["proposal"]["id"]
+        .as_str()
+        .context("reject proposal id")?;
+    let (status, json) = post_json(
+        app,
+        &format!("/api/v1/label-proposals/{reject_id}/reject"),
+        json!({ "reason": "不采用" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["status"], "rejected");
+    Ok(())
+}
+
+#[tokio::test]
 async fn task_label_routes_use_task_board_and_reject_archived_targets() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();

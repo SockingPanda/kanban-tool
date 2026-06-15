@@ -119,7 +119,7 @@ pub(crate) fn task_details(task: &kanban_sqlite::TaskRecord) -> String {
 
 pub(crate) fn label_line(label: &kanban_sqlite::LabelRecord) -> String {
     let color = label.color.as_deref().unwrap_or("-");
-    format!("{} {} color={}", label.id, label.name, color)
+    format!("{} {} color={}", label.name, label.id, color)
 }
 
 fn task_label_suffix(task: &kanban_sqlite::TaskRecord) -> String {

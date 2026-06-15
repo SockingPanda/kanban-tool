@@ -4,11 +4,19 @@ use crate::common::*;
 async fn search_returns_hits_with_tasks_and_sqlite_status() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    for (title, assignee) in [
-        ("alpha api search", Some("worker-a")),
-        ("beta api search", Some("worker-b")),
+    for (title, assignee, labels) in [
+        (
+            "alpha api search",
+            Some("worker-a"),
+            vec!["backend".to_owned()],
+        ),
+        (
+            "beta api search",
+            Some("worker-b"),
+            vec!["frontend".to_owned()],
+        ),
     ] {
-        kanban_sqlite::create_task(
+        kanban_sqlite::create_task_with_labels(
             &db_path,
             "default",
             "seed",
@@ -23,6 +31,7 @@ async fn search_returns_hits_with_tasks_and_sqlite_status() -> anyhow::Result<()
                 max_retries: None,
                 metadata_json: "{}".to_owned(),
             },
+            &labels,
         )
         .context("seed task")?;
     }
@@ -47,6 +56,17 @@ async fn search_returns_hits_with_tasks_and_sqlite_status() -> anyhow::Result<()
             .context("value")?
             .contains("api-needle")
     );
+
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/search/tasks?board=default&q=api-needle&label=frontend&limit=10",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    let hits = json["data"]["hits"].as_array().context("hits array")?;
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0]["task"]["title"], "beta api search");
+    assert_eq!(hits[0]["task"]["labels"][0]["name"], "frontend");
 
     let (status, json) = get_json(app, "/api/v1/search/status?board=default").await?;
     assert_eq!(status, StatusCode::OK);

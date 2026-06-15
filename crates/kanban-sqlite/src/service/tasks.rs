@@ -175,6 +175,23 @@ pub fn add_task_label(
     })
 }
 
+pub fn add_task_label_by_id(
+    path: impl AsRef<Path>,
+    actor: &str,
+    task_id: &str,
+    label_name: &str,
+) -> Result<TaskRecord> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        let board_id = active_board_id_for_label_mutation(&conn, task_id)?;
+        let task = get_task_by_id(&conn, &board_id, task_id)?;
+        let label = ensure_label_in_current_tx(&conn, &task.board_id, label_name, None, now)?;
+        attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        get_task_by_id(&conn, &task.board_id, &task.id)
+    })
+}
+
 pub fn remove_task_label(
     path: impl AsRef<Path>,
     board: &str,
@@ -187,25 +204,23 @@ pub fn remove_task_label(
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
-        let label = resolve_label(&conn, &task.board_id, label_ref)?;
-        let changed = conn
-            .execute(
-                "DELETE FROM task_labels WHERE board_id=?1 AND task_id=?2 AND label_id=?3",
-                params![task.board_id, task.id, label.id],
-            )
-            .map_err(storage)?;
-        if changed > 0 {
-            insert_event(
-                &conn,
-                &task.board_id,
-                Some(&task.id),
-                None,
-                "task.label.removed",
-                actor,
-                &json!({ "label_id": label.id, "label": label.name }).to_string(),
-                now,
-            )?;
-        }
+        remove_task_label_in_current_tx(&conn, &task.board_id, actor, &task.id, label_ref, now)?;
+        get_task_by_id(&conn, &task.board_id, &task.id)
+    })
+}
+
+pub fn remove_task_label_by_id(
+    path: impl AsRef<Path>,
+    actor: &str,
+    task_id: &str,
+    label_ref: &str,
+) -> Result<TaskRecord> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        let board_id = active_board_id_for_label_mutation(&conn, task_id)?;
+        let task = get_task_by_id(&conn, &board_id, task_id)?;
+        remove_task_label_in_current_tx(&conn, &task.board_id, actor, &task.id, label_ref, now)?;
         get_task_by_id(&conn, &task.board_id, &task.id)
     })
 }
@@ -934,10 +949,12 @@ fn task_labels_conn(conn: &Connection, board_id: &str, task_id: &str) -> Result<
 
 fn resolve_label(conn: &Connection, board_id: &str, label_ref: &str) -> Result<LabelRecord> {
     let label_ref = normalize_label_name(label_ref)?;
-    let label = if label_ref.starts_with("l_") {
+    let label = if let Some(label) = label_by_name(conn, board_id, &label_ref)? {
+        Some(label)
+    } else if label_ref.starts_with("l_") {
         label_by_id(conn, board_id, &label_ref)?
     } else {
-        label_by_name(conn, board_id, &label_ref)?
+        None
     };
     label.ok_or_else(|| KanbanError::NotFound(format!("label {label_ref}")))
 }
@@ -974,12 +991,54 @@ fn label_from_row(row: &Row<'_>) -> rusqlite::Result<LabelRecord> {
 }
 
 pub(crate) fn active_board_id_for_task(conn: &Connection, task_id: &str) -> Result<String> {
-    conn.query_row(
+    let board_id = conn
+        .query_row(
         "SELECT tasks.board_id FROM tasks JOIN boards ON boards.id=tasks.board_id WHERE tasks.id=?1 AND boards.archived_at IS NULL",
+        [task_id],
+        |r| r.get(0),
+    )
+        .optional()
+        .map_err(storage)?;
+    board_id.ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
+}
+
+fn active_board_id_for_label_mutation(conn: &Connection, task_id: &str) -> Result<String> {
+    conn.query_row(
+        "SELECT tasks.board_id FROM tasks JOIN boards ON boards.id=tasks.board_id WHERE tasks.id=?1 AND boards.archived_at IS NULL AND tasks.status != 'archived'",
         [task_id],
         |r| r.get(0),
     )
     .optional()
     .map_err(storage)?
     .ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
+}
+
+fn remove_task_label_in_current_tx(
+    conn: &Connection,
+    board_id: &str,
+    actor: &str,
+    task_id: &str,
+    label_ref: &str,
+    now: i64,
+) -> Result<()> {
+    let label = resolve_label(conn, board_id, label_ref)?;
+    let changed = conn
+        .execute(
+            "DELETE FROM task_labels WHERE board_id=?1 AND task_id=?2 AND label_id=?3",
+            params![board_id, task_id, label.id],
+        )
+        .map_err(storage)?;
+    if changed > 0 {
+        insert_event(
+            conn,
+            board_id,
+            Some(task_id),
+            None,
+            "task.label.removed",
+            actor,
+            &json!({ "label_id": label.id, "label": label.name }).to_string(),
+            now,
+        )?;
+    }
+    Ok(())
 }

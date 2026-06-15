@@ -136,6 +136,11 @@ fn task_create_and_label_commands_round_trip_labels() -> anyhow::Result<()> {
         names,
         [serde_json::json!("backend"), serde_json::json!("frontend")]
     );
+    let listed_human = kanban(&temp.path, &["label", "list"])?.success_stdout()?;
+    assert!(listed_human.contains("backend "), "{listed_human}");
+    assert!(listed_human.contains(" color=-"), "{listed_human}");
+    assert!(listed_human.contains("frontend "), "{listed_human}");
+    assert!(listed_human.contains(" color=#4477aa"), "{listed_human}");
 
     let human = kanban(&temp.path, &["task", "show", task_id])?.success_stdout()?;
     assert!(human.contains("[backend,frontend]"), "{human}");
@@ -146,6 +151,37 @@ fn task_create_and_label_commands_round_trip_labels() -> anyhow::Result<()> {
     )?
     .success_json()?;
     assert_eq!(removed["data"]["labels"][0]["name"], "backend");
+    Ok(())
+}
+
+#[test]
+fn label_remove_accepts_l_prefixed_label_name() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_remove_accepts_l_prefixed_label_name")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "l-prefixed label cli task",
+            "--description",
+            "ready spec",
+            "--label",
+            "l_bug",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+
+    let removed =
+        kanban(&temp.path, &["--json", "label", "remove", task_id, "l_bug"])?.success_json()?;
+    assert!(
+        removed["data"]["labels"]
+            .as_array()
+            .context("labels")?
+            .is_empty()
+    );
     Ok(())
 }
 

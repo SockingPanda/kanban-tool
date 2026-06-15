@@ -864,10 +864,14 @@ task label event only when the join row changes and does not change task status.
 ### 13.1 Search tasks
 
 ```http
-GET /api/v1/search/tasks?board=default&q=needle&status=ready&assignee=worker-a&include_archived=false&limit=20&offset=0
+GET /api/v1/search/tasks?board=default&q=needle&status=ready&label=backend&assignee=worker-a&include_archived=false&limit=20&offset=0
 ```
 
 Default backend is SQLite fallback. When the binary is built with `tantivy-backend` and `index/v1/tasks/` exists beside the SQLite DB, search uses the Tantivy task index. Missing, corrupt, or stale Tantivy indexes fall back to SQLite with stale metadata. Search matches task title, description, comments, run summary/error, and event kind/payload.
+
+`label` filters by label name or id, may be repeated, and uses AND semantics
+before scoring and pagination. Label-filtered search uses SQLite fallback even
+when a Tantivy index is available, so results reflect current task-label rows.
 
 Task ref-shaped `q` values always use SQLite exact-match semantics, even when a
 usable Tantivy index exists: pure numeric `12` and `#12` match seq within the

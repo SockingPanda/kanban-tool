@@ -509,6 +509,81 @@ async fn labels_routes_create_list_add_and_remove_task_labels() -> anyhow::Resul
 }
 
 #[tokio::test]
+async fn task_label_routes_use_task_board_and_reject_archived_targets() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    kanban_sqlite::create_board(
+        &db_path,
+        "seed",
+        kanban_sqlite::CreateBoard {
+            slug: "other".into(),
+            name: "Other".into(),
+            description: None,
+        },
+    )?;
+    let other_task = kanban_sqlite::create_task(
+        &db_path,
+        "other",
+        "seed",
+        kanban_sqlite::CreateTask::ready("non-default route target"),
+    )?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels", other_task.id),
+        json!({ "name": "backend", "actor": "api-labeler" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(json["data"]["board_slug"], "other");
+    assert_eq!(json["data"]["labels"][0]["name"], "backend");
+    assert!(kanban_sqlite::list_labels(&db_path, "default")?.is_empty());
+    let other_labels = kanban_sqlite::list_labels(&db_path, "other")?;
+    assert_eq!(other_labels[0].name, "backend");
+
+    let (status, json) = delete_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels/backend", other_task.id),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        json["data"]["labels"]
+            .as_array()
+            .context("labels")?
+            .is_empty()
+    );
+
+    let archived_task = kanban_sqlite::create_task(
+        &db_path,
+        "other",
+        "seed",
+        kanban_sqlite::CreateTask::ready("archived route target"),
+    )?;
+    kanban_sqlite::archive_task(&db_path, "other", "seed", &archived_task.id, false)?;
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels", archived_task.id),
+        json!({ "name": "blocked" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(json["error"]["code"], "not_found");
+
+    kanban_sqlite::archive_board(&db_path, "other", "seed")?;
+    let (status, json) = post_json(
+        app,
+        &format!("/api/v1/tasks/{}/labels", other_task.id),
+        json!({ "name": "blocked" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(json["error"]["code"], "not_found");
+    Ok(())
+}
+
+#[tokio::test]
 async fn tasks_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();

@@ -123,7 +123,7 @@ pub(crate) async fn list_tasks(
     }))
 }
 
-fn parse_label_filters(raw_query: Option<&str>) -> Result<Vec<String>, ApiError> {
+pub(crate) fn parse_label_filters(raw_query: Option<&str>) -> Result<Vec<String>, ApiError> {
     let Some(raw_query) = raw_query else {
         return Ok(Vec::new());
     };
@@ -230,8 +230,7 @@ pub(crate) async fn add_task_label(
 ) -> Result<(StatusCode, Json<Envelope<TaskDto>>), ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let task =
-        kanban_sqlite::add_task_label(state.db_path(), "default", &actor, &task_id, &body.name)?;
+    let task = kanban_sqlite::add_task_label_by_id(state.db_path(), &actor, &task_id, &body.name)?;
     Ok((
         StatusCode::CREATED,
         Json(Envelope {
@@ -248,7 +247,7 @@ pub(crate) async fn remove_task_label(
 ) -> Result<Json<Envelope<TaskDto>>, ApiError> {
     let actor = actor(None, &headers, &state);
     let task =
-        kanban_sqlite::remove_task_label(state.db_path(), "default", &actor, &task_id, &label_ref)?;
+        kanban_sqlite::remove_task_label_by_id(state.db_path(), &actor, &task_id, &label_ref)?;
     Ok(Json(Envelope {
         data: TaskDto::from(task),
         meta: None,

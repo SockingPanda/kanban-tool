@@ -422,6 +422,94 @@ fn labels_create_attach_filter_and_remove_without_status_side_effects() -> anyho
 }
 
 #[test]
+fn task_label_mutations_by_id_use_task_board_and_reject_archived_targets() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("task_label_mutations_by_id_use_task_board_and_reject_archived_targets")?;
+    init_database(&temp.path, "tester")?;
+    create_board(
+        &temp.path,
+        "tester",
+        CreateBoard {
+            slug: "other".into(),
+            name: "Other".into(),
+            description: None,
+        },
+    )?;
+
+    let other_task = create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("Other board label target"),
+    )?;
+    let labeled =
+        kanban_sqlite::add_task_label_by_id(&temp.path, "tester", &other_task.id, "backend")?;
+    assert_eq!(labeled.board_slug, "other");
+    assert_eq!(labeled.labels[0].name, "backend");
+    assert!(kanban_sqlite::list_labels(&temp.path, "default")?.is_empty());
+    assert_eq!(
+        kanban_sqlite::list_labels(&temp.path, "other")?[0].name,
+        "backend"
+    );
+
+    let removed =
+        kanban_sqlite::remove_task_label_by_id(&temp.path, "tester", &other_task.id, "backend")?;
+    assert!(removed.labels.is_empty());
+
+    let archived_task = create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("Archived label target"),
+    )?;
+    archive_task(&temp.path, "other", "tester", &archived_task.id, false)?;
+    let archived_task_error = result_err(kanban_sqlite::add_task_label_by_id(
+        &temp.path,
+        "tester",
+        &archived_task.id,
+        "blocked",
+    ))?;
+    assert!(archived_task_error.to_string().contains("task "));
+
+    archive_board(&temp.path, "other", "tester")?;
+    let archived_board_error = result_err(kanban_sqlite::add_task_label_by_id(
+        &temp.path,
+        "tester",
+        &other_task.id,
+        "blocked",
+    ))?;
+    assert!(archived_board_error.to_string().contains("task "));
+
+    Ok(())
+}
+
+#[test]
+fn label_ref_resolution_prefers_exact_l_prefixed_name_before_id() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ref_resolution_prefers_exact_l_prefixed_name_before_id")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reserved-looking label target"),
+    )?;
+
+    let labeled =
+        kanban_sqlite::add_task_label(&temp.path, "default", "tester", &task.id, "l_bug")?;
+    assert_eq!(labeled.labels[0].name, "l_bug");
+
+    let removed =
+        kanban_sqlite::remove_task_label(&temp.path, "default", "tester", &task.id, "l_bug")?;
+    assert!(removed.labels.is_empty());
+    assert_eq!(
+        kanban_sqlite::list_labels(&temp.path, "default")?[0].name,
+        "l_bug"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn labels_reject_blank_names() -> anyhow::Result<()> {
     let temp = TempDb::new("labels_reject_blank_names")?;
     init_database(&temp.path, "tester")?;

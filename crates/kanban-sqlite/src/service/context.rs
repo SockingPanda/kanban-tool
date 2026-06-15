@@ -79,6 +79,7 @@ fn build_context_pack_inner(
             board: board.to_owned(),
             q: Some(task.title.clone()),
             statuses: vec![],
+            labels: vec![],
             assignee: None,
             include_archived: true,
             limit: policy.lexical_limit,

@@ -5,6 +5,7 @@ pub const MAX_SEARCH_LIMIT: usize = 1000;
 
 mod boards;
 mod comment_identity;
+mod comment_metadata;
 mod comments;
 mod completions;
 mod context;

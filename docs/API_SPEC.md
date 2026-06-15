@@ -622,7 +622,7 @@ Notes：
 - `decision` records meaningful multi-option choices; body remains the readable fallback, and structured decision metadata is carried by `metadata`.
 - `author_type` marks who produced the comment and allows `user|agent`. If omitted, the service defaults to `user`.
 - `agent_type` is optional open text for `author_type=agent` comments, such as `executor` or `reviewer`. Non-empty `agent_type` with `author_type=user` is rejected as `400 invalid_input`.
-- `metadata` 默认为 `{}`，必须是 JSON object；response 使用 `metadata_json` 字符串保持现有 DTO 风格。
+- `metadata` 默认为 `{}`，必须是 JSON object；response 使用 `metadata_json` 字符串保持现有 DTO 风格。`kind=decision` 时必须包含非空 `options`，每个 option 必须有非空 `slug` / `title` / `detail`，slug 必须是唯一小写 ASCII slug，`selected` 必须匹配 option slug，`reason` 必须非空，`risk` / `verification` 如果出现也必须非空。无效 decision metadata 返回 `400 invalid_input`。
 - `author` 走通用 actor 语义；也可以用 `X-KB-Actor` 或 server 默认 actor。
 - 创建评论会写入 `task.comment.created` event。
 

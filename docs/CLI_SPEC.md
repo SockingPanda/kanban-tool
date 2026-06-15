@@ -687,10 +687,13 @@ kanban comment list <task_ref>
 the service default is `note`. If `--author-type` is omitted, the service default
 is `user`; pass `--author-type agent --agent-type <type>` for Codex/dispatcher or
 other automated writers. `--metadata-json` defaults to `{}` and must be a JSON
-object.
+object. For `--kind decision`, it is required to satisfy the structured
+decision schema: non-empty `options`, unique lowercase ASCII option `slug`
+values, `selected` matching one slug, non-empty `reason`, and optional
+non-empty `risk` / `verification`.
 
-Use `--kind decision` for meaningful multi-option choices. Until the structured
-decision schema is enabled, body remains the human-readable fallback:
+Use `--kind decision` for meaningful multi-option choices. Body remains the
+human-readable fallback:
 
 ```text
 Problem: <decision problem>
@@ -698,6 +701,29 @@ Options: <option A>; <option B>; <option C>
 Choice: <selected option>
 Reason: <why this option won>
 Risk/validation: <known risk and how it was or will be checked>
+```
+
+Decision metadata example:
+
+```json
+{
+  "options": [
+    {
+      "slug": "comment-metadata",
+      "title": "Use comment metadata",
+      "detail": "Store structured decision data in task_comments.metadata_json."
+    },
+    {
+      "slug": "decision-table",
+      "title": "Create decision table",
+      "detail": "Create a separate task_decisions table with option rows."
+    }
+  ],
+  "selected": "comment-metadata",
+  "reason": "Keeps decisions close to task discussion and avoids a parallel timeline.",
+  "risk": "metadata schema needs validation discipline.",
+  "verification": "CLI/API/Desktop tests cover creation, reading, rendering, and invalid metadata rejection."
+}
 ```
 
 Skip decision comments for trivial naming, formatting, or purely mechanical

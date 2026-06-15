@@ -2,8 +2,9 @@ use crate::connect_file;
 
 use super::{
     DEFAULT_PRIORITY, ExportResult, ImportResult, board_id,
-    comment_identity::infer_comment_author_type, connect_existing_database, doctor_report_conn,
-    normalize_legacy_priority, storage, with_immediate_tx, with_read_tx,
+    comment_identity::infer_comment_author_type,
+    comment_metadata::normalize_imported_comment_metadata_json, connect_existing_database,
+    doctor_report_conn, normalize_legacy_priority, storage, with_immediate_tx, with_read_tx,
 };
 
 use std::{
@@ -494,14 +495,10 @@ pub(crate) fn normalize_import_record(
             data.insert("author_type".into(), json!(author_type));
         }
         data.entry("agent_type").or_insert(serde_json::Value::Null);
-        data.insert(
-            "kind".into(),
-            json!(normalize_imported_comment_kind(
-                &legacy_kind,
-                has_metadata_json
-            )),
-        );
-        let metadata_json = normalize_imported_comment_metadata_json(data.get("metadata_json"))?;
+        let kind = normalize_imported_comment_kind(&legacy_kind, has_metadata_json);
+        data.insert("kind".into(), json!(kind));
+        let metadata_json =
+            normalize_imported_comment_metadata_json(kind, data.get("metadata_json"))?;
         data.insert("metadata_json".into(), json!(metadata_json));
     }
     Ok(())
@@ -518,37 +515,6 @@ fn normalize_imported_comment_kind(kind: &str, has_metadata_json: bool) -> &'sta
     match (kind, has_metadata_json) {
         ("decision", true) => "decision",
         _ => "note",
-    }
-}
-
-fn normalize_imported_comment_metadata_json(
-    metadata_json: Option<&serde_json::Value>,
-) -> Result<String> {
-    let Some(metadata_json) = metadata_json else {
-        return Ok("{}".into());
-    };
-    match metadata_json {
-        serde_json::Value::Null => Ok("{}".into()),
-        serde_json::Value::Object(_) => Ok(metadata_json.to_string()),
-        serde_json::Value::String(value) => {
-            let trimmed = value.trim();
-            if trimmed.is_empty() {
-                return Ok("{}".into());
-            }
-            let parsed = serde_json::from_str::<serde_json::Value>(trimmed).map_err(|_| {
-                KanbanError::InvalidInput("metadata_json must be valid JSON".into())
-            })?;
-            if parsed.is_object() {
-                Ok(trimmed.to_owned())
-            } else {
-                Err(KanbanError::InvalidInput(
-                    "metadata_json must be a JSON object".into(),
-                ))
-            }
-        }
-        _ => Err(KanbanError::InvalidInput(
-            "metadata_json must be a JSON object".into(),
-        )),
     }
 }
 

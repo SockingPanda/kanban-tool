@@ -73,6 +73,36 @@ pub struct LabelRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelSemanticsRecord {
+    pub label_id: String,
+    pub board_id: String,
+    pub label_name: String,
+    pub description: Option<String>,
+    pub applies_when: Vec<String>,
+    pub excludes_when: Vec<String>,
+    pub positive_examples: Vec<String>,
+    pub negative_examples: Vec<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub atoms: Vec<LabelAtomRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelAtomRecord {
+    pub id: String,
+    pub label_id: String,
+    pub board_id: String,
+    pub label_name: String,
+    pub polarity: String,
+    pub kind: String,
+    pub text: String,
+    pub ordinal: i64,
+    pub content_hash: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventRecord {
     pub id: i64,
     pub event_id: String,
@@ -179,6 +209,16 @@ pub struct CreateTask {
 pub struct CreateLabel {
     pub name: String,
     pub color: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UpsertLabelSemantics {
+    pub label_ref: String,
+    pub description: Option<String>,
+    pub applies_when: Vec<String>,
+    pub excludes_when: Vec<String>,
+    pub positive_examples: Vec<String>,
+    pub negative_examples: Vec<String>,
 }
 
 impl CreateTask {

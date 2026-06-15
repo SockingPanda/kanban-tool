@@ -17,6 +17,7 @@ kanban-context.workspace = true
 kanban-entity.workspace = true
 kanban-graph.workspace = true
 kanban-indexer.workspace = true
+kanban-labels.workspace = true
 kanban-local.workspace = true
 kanban-search.workspace = true
 kanban-vector.workspace = true

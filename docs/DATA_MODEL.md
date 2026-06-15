@@ -406,6 +406,50 @@ Label 只用于分类、过滤和展示；添加或移除 label 不改变 `tasks
 不触发 dependency recompute，也不会让 dispatcher claim `review` 或其他非
 `ready` 状态。
 
+### 11.1 Label semantics
+
+`labels` 仍是 canonical label identity：名称、颜色和 board 作用域由 `labels`
+定义。`task_labels` 仍是 task 的最终 label 绑定事实。语义推荐和向量检索使用
+额外 truth 表，不替代这两张表。
+
+表：`label_semantics`
+
+| 字段 | 说明 |
+|---|---|
+| `label_id` | 关联 `labels(id)`，一条 label 最多一条 semantics。 |
+| `board_id` | 冗余 board scope，用复合外键保证 label/board 一致。 |
+| `description` | label 的自然语言说明。 |
+| `applies_when` | JSON string array，正向适用条件。 |
+| `excludes_when` | JSON string array，反向排除条件。 |
+| `positive_examples` | JSON string array，正向示例。 |
+| `negative_examples` | JSON string array，反向示例。 |
+| `created_at` / `updated_at` | 语义记录时间。 |
+
+表：`label_atoms`
+
+`label_atoms` 是从 `label_semantics` 与 label name 展开的稳定、可检索 atom truth。
+它保存 positive 与 negative 两种 polarity，供后续 Group OMP/NNLS label solver 和
+LanceDB atom retrieval 使用。
+
+| 字段 | 说明 |
+|---|---|
+| `id` | 稳定 `la_...` atom id。 |
+| `label_id` / `board_id` | 关联 canonical label 与 board。 |
+| `polarity` | `positive` / `negative`。 |
+| `kind` | `name`、`description`、`applies_when`、`positive_example`、`excludes_when`、`negative_example`。 |
+| `text` | trim 后的 atom 文本，空文本不入库。 |
+| `ordinal` | 同一 label 展开后的稳定顺序。 |
+| `content_hash` | atom 内容 hash，用于派生层判断变化。 |
+| `created_at` / `updated_at` | atom truth 时间。 |
+
+派生向量表：`kb_label_atoms`
+
+`kb_label_atoms` 是 LanceDB 中的可重建 label atom 向量表，独立于 task chunk 表
+`kb_chunks`。它按 `board_id`、`embedding_model`、`polarity` 查询 atom evidence，
+返回 `label_id`、atom id、`polarity`、`kind`、`text` 和 score 等字段，用于构造
+语义 label 候选。派生表损坏或缺少 provider 时只让 label atom index degraded，
+不影响普通 label CRUD、`task_labels` 绑定或 task 状态机。
+
 ---
 
 ## 12. Column
@@ -486,7 +530,7 @@ Knowledge Substrate 表只支持实体身份、关系镜像、派生 outbox 和�
 
 | 字段 | 说明 |
 |---|---|
-| `store_name` | 派生 store 名称，例如 `tantivy_tasks`、`oxigraph_relations`、`lancedb_chunks`。 |
+| `store_name` | 派生 store 名称，例如 `tantivy_tasks`、`oxigraph_relations`、`lancedb_chunks`、`lancedb_label_atoms`。 |
 | `schema_version` | store schema/contract 版本。 |
 | `last_event_id` | store 已成功提交的全局 `task_events.id` 水位。 |
 | `dirty` | 是否仍有未完成 outbox、失败 outbox 或最近一次 store 更新失败。 |

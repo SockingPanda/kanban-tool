@@ -980,6 +980,13 @@ dimensions = 1024
 
 `kanban derived status` 中的 `last_event_id` 是 store 级成功处理水位，不是当前 board 的局部水位。`dirty=true` 表示该 store 仍有任意 board 的 pending/running/failed outbox，或最近一次派生更新失败；board-scoped `kanban index sync`、`kanban graph sync`、`kanban vector sync` 只清理当前 board 的 job，不能因为本 board clean 就强制清掉全局 dirty。
 
+语义 label atom 使用独立 derived store `lancedb_label_atoms`，对应 LanceDB 表
+`kb_label_atoms`。它不属于普通 task event outbox fanout：`kanban vector sync/rebuild`
+只维护 `lancedb_chunks` / `kb_chunks`，不会把 label atom store 标记为完成。label
+semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
+`lancedb_label_atoms`；provider 或 feature 不可用时该 store 可报告 degraded，但不影响
+普通 `kanban label` CRUD 和 `task_labels` 绑定。
+
 ### 15.1 `kanban doctor`
 
 检查：

@@ -17,6 +17,7 @@ mod events;
 mod graph;
 mod graph_api;
 mod import_export;
+mod label_semantics;
 mod maintenance;
 mod projections;
 mod run_logs;
@@ -44,6 +45,7 @@ pub use events::*;
 pub use graph::*;
 pub use graph_api::*;
 pub use import_export::*;
+pub use label_semantics::*;
 pub use maintenance::*;
 pub use run_logs::{resolve_run_log_path, run_log_path_status};
 pub use runs::*;
@@ -68,8 +70,9 @@ pub(crate) use run_logs::{
 };
 #[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
 pub(crate) use vector::has_pending_outbox_for_target;
+pub(crate) use vector::vector_storage;
 #[cfg(feature = "vector-lancedb")]
-pub(crate) use vector::{vector_storage, vector_store_path, vector_store_status_with_conn};
+pub(crate) use vector::{vector_store_path, vector_store_status_with_conn};
 
 pub(crate) const fn dependency_parent_is_satisfied(status: kanban_core::TaskStatus) -> bool {
     matches!(

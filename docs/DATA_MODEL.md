@@ -551,6 +551,35 @@ board 标脏；单个 board 的 label atom rebuild 成功只清理该 board 的 
 只有该 store 下所有 board 都不 dirty 时，`derived_store_state.dirty` 才能变为
 `false`。
 
+### 11.2 Label semantic proposals
+
+表：`label_semantic_proposals`
+
+`label_semantic_proposals` 是新增 label 的持久提案生命周期，不是 canonical
+label truth。它只记录“现有 label atom suggestion 覆盖不足时，外部/manual provider
+给出的候选语义”。未显式 accept 前，不创建 `labels`、`label_semantics`、
+`label_atoms` 或 `task_labels`。
+
+| 字段 | 说明 |
+|---|---|
+| `id` | `lp_...` proposal id。 |
+| `board_id` / `task_id` | 提案来源 task。 |
+| `status` | `proposed` / `accepted` / `rejected`。provider 不可用不写成 status，而是返回 degraded attempt。 |
+| `name` / `description` / `applies_when` / `excludes_when` / `positive_examples` / `negative_examples` | 候选 label semantics。数组字段为 JSON string array。 |
+| `heuristic_coverage` / `heuristic_residual_norm` | 来自当前 atom-hit suggestion 的启发式覆盖/残差元数据，不表示完整 solver refit。 |
+| `top1_existing_label_id` / `top1_existing_label_name` | 当前启发式 top1 existing label。 |
+| `diagnostics_json` | JSON string array，包含 degraded、冲突或 validation 诊断。 |
+| `decision_reason` / `resolved_label_id` / `decided_at` | accept/reject 决策信息；accept 后 `resolved_label_id` 指向新建 canonical label。 |
+
+Accept 只允许 `proposed` proposal。accept 创建同 board 的 canonical `labels` 行，
+并写入对应 `label_semantics` / `label_atoms`，同时标脏 `lancedb_label_atoms`
+派生 store；它不写入 `task_labels`，不会把新 label 自动绑定到来源 task。
+
+Reject 将 proposal 标记为 `rejected`。与现有 label 发生 normalized-name 冲突的
+候选会持久化为 `rejected`，diagnostics 包含 `near_duplicate_label_conflict`。
+Normalized-name 冲突是忽略大小写、空白和标点后的 deterministic near-duplicate
+heuristic。
+
 ## 14. 常用查询
 
 ### 14.1 Board task list

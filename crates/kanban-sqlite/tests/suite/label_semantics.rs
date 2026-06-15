@@ -41,6 +41,300 @@ fn task_label_suggestions_degrade_when_vector_store_disabled() -> anyhow::Result
 }
 
 #[test]
+fn label_proposal_migration_and_provider_unavailable_are_non_polluting() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_proposal_migration_and_provider_unavailable_are_non_polluting")?;
+    init_database(&temp.path, "tester")?;
+    let conn = connect_file(&temp.path)?;
+    let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    assert_eq!(user_version, 9);
+    let has_table: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_semantic_proposals'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(has_table, 1);
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("proposal degraded target"),
+    )?;
+
+    let attempt = propose_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        kanban_sqlite::LabelSuggestionOptions::default(),
+    )?;
+
+    assert!(attempt.degraded);
+    assert!(attempt.proposal.is_none());
+    assert!(
+        attempt
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_proposal_provider_unavailable")
+    );
+    assert_eq!(table_count(&conn, "labels")?, 0);
+    assert_eq!(table_count(&conn, "label_semantics")?, 0);
+    assert_eq!(table_count(&conn, "label_atoms")?, 0);
+    assert_eq!(table_count(&conn, "task_labels")?, 0);
+    Ok(())
+}
+
+#[test]
+fn label_proposal_manual_candidate_accepts_without_task_binding() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_proposal_manual_candidate_accepts_without_task_binding")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("proposal manual target"),
+    )?;
+    let provider = ManualLabelProposalProvider::new(LabelProposalCandidate {
+        name: "database".to_owned(),
+        description: Some("Database persistence work".to_owned()),
+        applies_when: vec!["touches SQLite migrations".to_owned()],
+        excludes_when: vec!["frontend-only work".to_owned()],
+        positive_examples: vec!["new table migration".to_owned()],
+        negative_examples: vec!["CSS polish".to_owned()],
+    });
+
+    let attempt = propose_task_label_with(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &provider,
+        kanban_sqlite::LabelSuggestionOptions::default(),
+    )?;
+    let proposal = attempt.proposal.context("proposal")?;
+    assert_eq!(proposal.status, LabelProposalStatus::Proposed);
+    assert_eq!(proposal.heuristic_residual_norm, 1.0);
+
+    let accepted = accept_label_proposal(
+        &temp.path,
+        "tester",
+        &proposal.id,
+        Some("覆盖不足，接受新 label".to_owned()),
+    )?;
+
+    assert_eq!(accepted.status, LabelProposalStatus::Accepted);
+    let label_id = accepted.resolved_label_id.context("resolved label")?;
+    let semantics = get_label_semantics(&temp.path, "default", &label_id)?;
+    assert_eq!(semantics.label_name, "database");
+    assert!(
+        semantics
+            .atoms
+            .iter()
+            .any(|atom| atom.kind == "applies_when")
+    );
+    assert!(
+        get_task(&temp.path, "default", &task.id)?.labels.is_empty(),
+        "accept must not attach task_labels"
+    );
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "task_labels")?, 0);
+    Ok(())
+}
+
+#[test]
+fn label_proposal_validation_rejects_blank_or_empty_semantics() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_proposal_validation_rejects_blank_or_empty_semantics")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("proposal validation target"),
+    )?;
+
+    for candidate in [
+        LabelProposalCandidate {
+            name: " ".to_owned(),
+            description: Some("has semantics".to_owned()),
+            ..LabelProposalCandidate::default()
+        },
+        LabelProposalCandidate {
+            name: "empty-semantics".to_owned(),
+            ..LabelProposalCandidate::default()
+        },
+    ] {
+        let provider = ManualLabelProposalProvider::new(candidate);
+        let error = result_err(propose_task_label_with(
+            &temp.path,
+            "default",
+            "tester",
+            &task.id,
+            &provider,
+            kanban_sqlite::LabelSuggestionOptions::default(),
+        ))?;
+        assert!(error.to_string().contains("label proposal"));
+    }
+    Ok(())
+}
+
+#[test]
+fn label_proposal_near_duplicate_is_persisted_rejected_and_cannot_accept() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_proposal_near_duplicate_is_persisted_rejected_and_cannot_accept")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "Back End".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("duplicate proposal target"),
+    )?;
+    let provider = ManualLabelProposalProvider::new(LabelProposalCandidate {
+        name: "backend".to_owned(),
+        description: Some("Duplicate backend semantics".to_owned()),
+        ..LabelProposalCandidate::default()
+    });
+
+    let attempt = propose_task_label_with(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &provider,
+        kanban_sqlite::LabelSuggestionOptions::default(),
+    )?;
+    let proposal = attempt.proposal.context("proposal")?;
+    assert_eq!(proposal.status, LabelProposalStatus::Rejected);
+    assert!(
+        proposal
+            .diagnostics
+            .iter()
+            .any(|code| code == "near_duplicate_label_conflict")
+    );
+    let error = result_err(accept_label_proposal(
+        &temp.path,
+        "tester",
+        &proposal.id,
+        None,
+    ))?;
+    assert!(error.to_string().contains("already rejected"));
+    Ok(())
+}
+
+#[test]
+fn label_proposal_reject_then_accept_fails_and_list_filters() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_proposal_reject_then_accept_fails_and_list_filters")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("proposal reject target"),
+    )?;
+    let provider = ManualLabelProposalProvider::new(LabelProposalCandidate {
+        name: "ops".to_owned(),
+        description: Some("Operational work".to_owned()),
+        applies_when: vec!["operator workflow".to_owned()],
+        ..LabelProposalCandidate::default()
+    });
+    let proposal = propose_task_label_with(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &provider,
+        kanban_sqlite::LabelSuggestionOptions::default(),
+    )?
+    .proposal
+    .context("proposal")?;
+
+    let rejected = reject_label_proposal(
+        &temp.path,
+        "tester",
+        &proposal.id,
+        Some("人工拒绝".to_owned()),
+    )?;
+
+    assert_eq!(rejected.status, LabelProposalStatus::Rejected);
+    let error = result_err(accept_label_proposal(
+        &temp.path,
+        "tester",
+        &proposal.id,
+        None,
+    ))?;
+    assert!(error.to_string().contains("already rejected"));
+    let listed = list_label_proposals(
+        &temp.path,
+        "default",
+        LabelProposalListOptions {
+            task_ref: Some(task.id),
+            status: Some(LabelProposalStatus::Rejected),
+        },
+    )?;
+    assert_eq!(listed.len(), 1);
+    assert_eq!(
+        get_label_proposal(&temp.path, &proposal.id)?.status,
+        LabelProposalStatus::Rejected
+    );
+    Ok(())
+}
+
+#[test]
+fn label_proposal_jsonl_export_import_round_trips() -> anyhow::Result<()> {
+    let source = TempDb::new("label_proposal_jsonl_export_import_round_trips_source")?;
+    init_database(&source.path, "tester")?;
+    let task = create_task(
+        &source.path,
+        "default",
+        "tester",
+        CreateTask::ready("proposal export target"),
+    )?;
+    let provider = ManualLabelProposalProvider::new(LabelProposalCandidate {
+        name: "release".to_owned(),
+        description: Some("Release workflow".to_owned()),
+        applies_when: vec!["packaging or release gate".to_owned()],
+        ..LabelProposalCandidate::default()
+    });
+    let proposal = propose_task_label_with(
+        &source.path,
+        "default",
+        "tester",
+        &task.id,
+        &provider,
+        kanban_sqlite::LabelSuggestionOptions::default(),
+    )?
+    .proposal
+    .context("proposal")?;
+    let export_path = source.dir.join("proposal.jsonl");
+    export_jsonl(&source.path, "default", &export_path)?;
+    let export = std::fs::read_to_string(&export_path)?;
+    assert!(export.contains("\"type\":\"label_semantic_proposal\""));
+
+    let target = TempDb::new("label_proposal_jsonl_export_import_round_trips_target")?;
+    init_database(&target.path, "tester")?;
+    import_jsonl(&target.path, &export_path, true)?;
+
+    let imported = get_label_proposal(&target.path, &proposal.id)?;
+    assert_eq!(imported.name, "release");
+    assert_eq!(imported.status, LabelProposalStatus::Proposed);
+    Ok(())
+}
+
+fn table_count(conn: &Connection, table: &str) -> anyhow::Result<i64> {
+    Ok(
+        conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })?,
+    )
+}
+
+#[test]
 fn task_label_suggestions_aggregate_atom_hits_and_penalize_negative_evidence() -> anyhow::Result<()>
 {
     let temp =
@@ -474,8 +768,8 @@ fn doctor_reports_missing_label_semantics_tables_unhealthy() -> anyhow::Result<(
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(8));
-        assert_eq!(report.user_version, 8);
+        assert_eq!(report.migration_version, Some(9));
+        assert_eq!(report.user_version, 9);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())

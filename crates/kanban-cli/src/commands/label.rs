@@ -6,9 +6,13 @@ use anyhow::{Result, bail};
 #[cfg(feature = "vector-lancedb")]
 use kanban_sqlite::suggest_task_labels_with;
 use kanban_sqlite::{
-    CreateLabel, LabelSuggestionOptions, LabelSuggestionResult, MAX_TASK_LIST_LIMIT,
-    add_task_label, create_label, list_labels, remove_task_label, suggest_task_labels,
+    CreateLabel, LabelProposalCandidate, LabelProposalListOptions, LabelProposalStatus,
+    LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult,
+    MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, accept_label_proposal, add_task_label,
+    create_label, get_label_proposal, list_label_proposals, list_labels, propose_task_label,
+    propose_task_label_with, reject_label_proposal, remove_task_label, suggest_task_labels,
 };
+use std::{fs, str::FromStr};
 
 use crate::args::LabelCommand;
 use crate::commands::common::validate_page_bounds;
@@ -63,6 +67,71 @@ pub(crate) fn handle_label(
             )?;
             print_or_json(json, &suggestions, || label_suggestion_lines(&suggestions))?;
         }
+        LabelCommand::Propose(args) => {
+            validate_label_suggest_bounds(args.limit, args.atom_limit)?;
+            let options = LabelSuggestionOptions {
+                limit: args.limit,
+                atom_limit: args.atom_limit,
+                min_score: args.min_score,
+            };
+            let attempt = if let Some(path) = args.proposal_json {
+                let candidate = read_proposal_candidate(&path)?;
+                let provider = ManualLabelProposalProvider::new(candidate);
+                propose_task_label_with(db_path, board, actor, &args.task_ref, &provider, options)?
+            } else {
+                propose_task_label(db_path, board, actor, &args.task_ref, options)?
+            };
+            print_or_json(json, &attempt, || {
+                if let Some(proposal) = &attempt.proposal {
+                    format!(
+                        "{} {} [{}] coverage={:.3} residual_norm={:.3}",
+                        proposal.id,
+                        proposal.name,
+                        proposal.status,
+                        attempt.heuristic_coverage,
+                        attempt.heuristic_residual_norm
+                    )
+                } else {
+                    format!(
+                        "No label proposal. degraded={} diagnostics={}",
+                        attempt.degraded,
+                        attempt.diagnostics.join(",")
+                    )
+                }
+            })?;
+        }
+        LabelCommand::Proposals { command } => match command {
+            crate::args::LabelProposalsCommand::List(args) => {
+                let status = args
+                    .status
+                    .as_deref()
+                    .map(LabelProposalStatus::from_str)
+                    .transpose()?;
+                let proposals = list_label_proposals(
+                    db_path,
+                    board,
+                    LabelProposalListOptions {
+                        task_ref: args.task,
+                        status,
+                    },
+                )?;
+                print_or_json(json, &proposals, || proposal_lines(&proposals))?;
+            }
+            crate::args::LabelProposalsCommand::Show { proposal_id } => {
+                let proposal = get_label_proposal(db_path, &proposal_id)?;
+                print_or_json(json, &proposal, || proposal_line(&proposal))?;
+            }
+            crate::args::LabelProposalsCommand::Accept(args) => {
+                let proposal =
+                    accept_label_proposal(db_path, actor, &args.proposal_id, args.reason)?;
+                print_or_json(json, &proposal, || proposal_line(&proposal))?;
+            }
+            crate::args::LabelProposalsCommand::Reject(args) => {
+                let proposal =
+                    reject_label_proposal(db_path, actor, &args.proposal_id, args.reason)?;
+                print_or_json(json, &proposal, || proposal_line(&proposal))?;
+            }
+        },
     }
     Ok(())
 }
@@ -104,6 +173,40 @@ fn label_suggestion_lines(result: &LabelSuggestionResult) -> String {
         result.coverage, result.residual_norm, result.needs_new_label
     ));
     lines.join("\n")
+}
+
+fn read_proposal_candidate(path: &std::path::Path) -> Result<LabelProposalCandidate> {
+    let raw = fs::read_to_string(path)?;
+    serde_json::from_str(&raw).map_err(Into::into)
+}
+
+fn proposal_lines(proposals: &[LabelSemanticProposalRecord]) -> String {
+    if proposals.is_empty() {
+        return "No label proposals.".to_owned();
+    }
+    proposals
+        .iter()
+        .map(proposal_line)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn proposal_line(proposal: &LabelSemanticProposalRecord) -> String {
+    let resolved = proposal
+        .resolved_label_id
+        .as_deref()
+        .map(|id| format!(" resolved_label_id={id}"))
+        .unwrap_or_default();
+    format!(
+        "{} {} [{}] task={} coverage={:.3} residual_norm={:.3}{}",
+        proposal.id,
+        proposal.name,
+        proposal.status,
+        proposal.task_id,
+        proposal.heuristic_coverage,
+        proposal.heuristic_residual_norm,
+        resolved
+    )
 }
 
 fn suggest_with_optional_vector_config(

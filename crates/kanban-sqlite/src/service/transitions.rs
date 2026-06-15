@@ -167,7 +167,7 @@ pub(crate) fn claim_next_ready_conn(
     }
     let selected = conn
         .query_row(
-            "SELECT id FROM tasks WHERE board_id=?1 AND status='ready' AND claim_token IS NULL AND (assignee IS NULL OR assignee=?2) AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status != 'done') ORDER BY priority ASC, created_at ASC LIMIT 1",
+            "SELECT id FROM tasks WHERE board_id=?1 AND status='ready' AND claim_token IS NULL AND (assignee IS NULL OR assignee=?2) AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) ORDER BY priority ASC, created_at ASC LIMIT 1",
             params![board_id, worker_profile],
             |row| row.get::<_, String>(0),
         )
@@ -224,7 +224,7 @@ pub(crate) fn claim_task_in_current_tx(
     let run_id = new_run_id();
     let expires = now + ttl_ms;
     let changed = conn.execute(
-        "UPDATE tasks SET status='running', claim_token=?1, claim_owner=?2, claim_expires_at=?3, last_heartbeat_at=?4, started_at=COALESCE(started_at, ?4), updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='ready' AND claim_token IS NULL AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status != 'done')",
+        "UPDATE tasks SET status='running', claim_token=?1, claim_owner=?2, claim_expires_at=?3, last_heartbeat_at=?4, started_at=COALESCE(started_at, ?4), updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='ready' AND claim_token IS NULL AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived'))",
         params![token, actor, expires, now, task_id, board_id],
     ).map_err(storage)?;
     if changed != 1 {
@@ -1098,6 +1098,6 @@ pub(crate) fn ensure_dependencies_done(conn: &Connection, task_id: &str) -> Resu
 }
 
 pub(crate) fn dependencies_done(conn: &Connection, task_id: &str) -> Result<bool> {
-    let count: i64 = conn.query_row("SELECT COUNT(*) FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=?1 AND p.status != 'done'", [task_id], |r| r.get(0)).map_err(storage)?;
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=?1 AND p.status NOT IN ('done','archived')", [task_id], |r| r.get(0)).map_err(storage)?;
     Ok(count == 0)
 }

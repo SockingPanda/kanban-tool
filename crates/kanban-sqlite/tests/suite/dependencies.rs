@@ -57,6 +57,39 @@ fn claim_complete_leaves_dependency_child_todo_until_manual_promote() -> anyhow:
 }
 
 #[test]
+fn archived_parent_unblocks_child_without_auto_promote() -> anyhow::Result<()> {
+    let temp = TempDb::new("archived_parent_unblocks_child_without_auto_promote")?;
+    init_database(&temp.path, "tester")?;
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("archived parent"),
+    )?;
+    let child = create_task(&temp.path, "default", "tester", CreateTask::ready("child"))?;
+
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+    assert_eq!(
+        get_task(&temp.path, "default", &child.id)?.status,
+        TaskStatus::Todo
+    );
+
+    archive_task(&temp.path, "default", "tester", &parent.id, false)?;
+
+    let child = get_task(&temp.path, "default", &child.id)?;
+    assert_eq!(child.status, TaskStatus::Todo);
+    assert!(!child.dependency_blocked);
+    assert_eq!(child.unfinished_parent_count, 0);
+    assert_eq!(
+        list_dependencies(&temp.path, "default", &child.id)?,
+        vec![(parent.id.clone(), child.id.clone())]
+    );
+    let promoted = promote_task(&temp.path, "default", "tester", &child.id)?;
+    assert_eq!(promoted.status, TaskStatus::Ready);
+    Ok(())
+}
+
+#[test]
 fn duplicate_add_dependency_is_idempotent_noop() -> anyhow::Result<()> {
     let temp = TempDb::new("duplicate_add_dependency_is_idempotent_noop")?;
     init_database(&temp.path, "tester")?;
@@ -297,6 +330,38 @@ fn adding_incomplete_parent_to_running_child_is_rejected_without_force() -> anyh
         TaskStatus::Running
     );
     assert!(list_dependencies(&temp.path, "default", &child.id)?.is_empty());
+    Ok(())
+}
+
+#[test]
+fn adding_archived_parent_to_running_child_is_allowed() -> anyhow::Result<()> {
+    let temp = TempDb::new("adding_archived_parent_to_running_child_is_allowed")?;
+    init_database(&temp.path, "tester")?;
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("archived parent"),
+    )?;
+    archive_task(&temp.path, "default", "tester", &parent.id, false)?;
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("running child"),
+    )?;
+    claim_task(&temp.path, "default", "worker", &child.id, 300_000)?;
+
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+
+    let fresh = get_task(&temp.path, "default", &child.id)?;
+    assert_eq!(fresh.status, TaskStatus::Running);
+    assert!(!fresh.dependency_blocked);
+    assert_eq!(fresh.unfinished_parent_count, 0);
+    assert_eq!(
+        list_dependencies(&temp.path, "default", &child.id)?,
+        vec![(parent.id, child.id)]
+    );
     Ok(())
 }
 

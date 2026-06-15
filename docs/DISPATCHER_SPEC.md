@@ -174,7 +174,7 @@ WHERE tasks.board_id = ?
     FROM task_dependencies d
     JOIN tasks p ON p.id = d.parent_task_id
     WHERE d.child_task_id = tasks.id
-      AND p.status != 'done'
+      AND p.status NOT IN ('done','archived')
   )
 ORDER BY priority ASC, created_at ASC
 LIMIT 1;

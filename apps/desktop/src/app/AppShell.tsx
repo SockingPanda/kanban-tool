@@ -285,6 +285,7 @@ export function AppShell({
         <ShellHeader
           config={config}
           view={view}
+          canCreateTask={Boolean(api)}
           themeMode={themeMode}
           sidebarOpen={sidebarOpen}
           search={search}
@@ -576,6 +577,7 @@ function BoardSwitcher({
 function ShellHeader({
   config,
   view,
+  canCreateTask,
   themeMode,
   sidebarOpen,
   search,
@@ -599,6 +601,7 @@ function ShellHeader({
 }: {
   config: RuntimeConfig | null
   view: OperatorView
+  canCreateTask: boolean
   themeMode: ThemeMode
   sidebarOpen: boolean
   search: string
@@ -678,6 +681,7 @@ function ShellHeader({
       <div className="ml-auto flex items-center gap-2">
         {showAddTask ? (
           <AddTaskDialog
+            canCreateTask={canCreateTask}
             newTitle={newTitle}
             newDescription={newDescription}
             pendingAction={pendingAction}
@@ -706,6 +710,7 @@ function ShellHeader({
 }
 
 function AddTaskDialog({
+  canCreateTask,
   newTitle,
   newDescription,
   pendingAction,
@@ -713,6 +718,7 @@ function AddTaskDialog({
   onNewTitleChange,
   onNewDescriptionChange,
 }: {
+  canCreateTask: boolean
   newTitle: string
   newDescription: string
   pendingAction: string | null
@@ -725,7 +731,7 @@ function AddTaskDialog({
 
   async function submitTask(event: FormEvent) {
     event.preventDefault()
-    if (!newTitle.trim() || creating) return
+    if (!canCreateTask || !newTitle.trim() || creating) return
     const created = await onCreateTask()
     if (created) setAddTaskOpen(false)
   }
@@ -764,7 +770,7 @@ function AddTaskDialog({
             <Button type="button" variant="outline" onClick={() => setAddTaskOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!newTitle.trim() || creating}>
+            <Button type="submit" disabled={!canCreateTask || !newTitle.trim() || creating}>
               {creating ? "Creating…" : "Create task"}
             </Button>
           </DialogFooter>

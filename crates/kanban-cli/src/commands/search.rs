@@ -20,6 +20,16 @@ pub(crate) fn handle_search(
         .iter()
         .map(|status| parse_status(status))
         .collect::<Result<Vec<_>>>()?;
+    let search_limit = if args.labels.is_empty() {
+        args.limit
+    } else {
+        MAX_SEARCH_LIMIT
+    };
+    let search_offset = if args.labels.is_empty() {
+        args.offset
+    } else {
+        0
+    };
     let results = search_tasks(
         db_path,
         SearchQuery {
@@ -28,11 +38,17 @@ pub(crate) fn handle_search(
             statuses,
             assignee: args.assignee,
             include_archived: args.include_archived,
-            limit: args.limit,
-            offset: args.offset,
+            limit: search_limit,
+            offset: search_offset,
         },
     )?;
-    let hits = results
+    let labels = args
+        .labels
+        .iter()
+        .map(|label| label.trim().to_owned())
+        .filter(|label| !label.is_empty())
+        .collect::<Vec<_>>();
+    let mut hits = results
         .hits
         .into_iter()
         .map(|hit| {
@@ -46,6 +62,21 @@ pub(crate) fn handle_search(
             })
         })
         .collect::<Result<Vec<_>>>()?;
+    if !labels.is_empty() {
+        hits.retain(|hit| {
+            labels.iter().all(|label| {
+                hit.task
+                    .labels
+                    .iter()
+                    .any(|task_label| task_label.name == *label || task_label.id == *label)
+            })
+        });
+        hits = hits
+            .into_iter()
+            .skip(args.offset)
+            .take(args.limit)
+            .collect();
+    }
     let output = SearchOutput {
         hits,
         meta: results.meta,

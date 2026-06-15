@@ -61,6 +61,16 @@ export type Task = {
   lock_version: number
   dependency_blocked: boolean
   unfinished_parent_count: number
+  labels: LabelRecord[]
+}
+
+export type LabelRecord = {
+  id: string
+  board_id: string
+  name: string
+  color: string | null
+  created_at: number
+  updated_at: number
 }
 
 export type Run = {
@@ -391,6 +401,9 @@ export class KanbanApi {
     if (options.query?.trim()) params.set("q", options.query.trim())
     for (const status of options.statuses ?? []) params.append("status", status)
     for (const priority of options.priorities ?? []) params.append("priority", String(priority))
+    for (const label of options.labels ?? []) {
+      if (label.trim()) params.append("label", label.trim())
+    }
     const envelope = await this.requestEnvelope<Task[], PageEnvelopeMeta>(
       `/api/v1/boards/${this.board}/tasks?${params.toString()}`,
       { signal: options.signal },
@@ -489,6 +502,21 @@ export class KanbanApi {
     })
   }
 
+  async addTaskLabel(taskId: string, name: string, options: RequestOptions = {}) {
+    return this.request<Task>(`/api/v1/tasks/${taskId}/labels`, {
+      method: "POST",
+      body: { name, actor: this.actor },
+      signal: options.signal,
+    })
+  }
+
+  async removeTaskLabel(taskId: string, labelId: string, options: RequestOptions = {}) {
+    return this.request<Task>(`/api/v1/tasks/${taskId}/labels/${labelId}`, {
+      method: "DELETE",
+      signal: options.signal,
+    })
+  }
+
   async listEvents(taskId: string, options: RequestOptions = {}) {
     const params = new URLSearchParams({ board: this.board, task_id: taskId, limit: "50" })
     const envelope = await this.requestEnvelope<EventRecord[], EventMeta>(
@@ -563,6 +591,7 @@ type TaskListOptions = {
   includeArchived?: boolean
   statuses?: TaskStatus[]
   priorities?: number[]
+  labels?: string[]
   query?: string
   sort?: TaskListSort
   limit?: number

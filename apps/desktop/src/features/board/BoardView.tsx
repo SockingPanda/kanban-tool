@@ -208,6 +208,15 @@ function TaskCard({
             {task.status === "running" ? <span>heartbeat {formatRelativeTime(task.last_heartbeat_at)}</span> : null}
             {typeof dependencyCount === "number" ? <span>{dependencyCount} deps</span> : null}
           </div>
+          {task.labels.length ? (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {task.labels.map((label) => (
+                <Badge key={label.id} variant="secondary" className="max-w-full truncate px-1.5 py-0 text-[11px] leading-5">
+                  {label.name}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
           {task.status_reason ? <div className="mt-1 line-clamp-2 break-words text-xs text-destructive">{task.status_reason}</div> : null}
         </div>
       </div>

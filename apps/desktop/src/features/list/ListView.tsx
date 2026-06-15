@@ -154,6 +154,15 @@ export function ListView({
             {row.original.status_reason ? (
               <div className="truncate text-xs text-muted-foreground">{row.original.status_reason}</div>
             ) : null}
+            {row.original.labels.length ? (
+              <div className="mt-1 flex max-w-full flex-wrap gap-1">
+                {row.original.labels.map((label) => (
+                  <Badge key={label.id} variant="secondary" className="max-w-32 truncate px-1.5 py-0 text-[11px] leading-5">
+                    {label.name}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
           </div>
         ),
       },

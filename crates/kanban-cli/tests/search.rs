@@ -76,6 +76,57 @@ fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
 }
 
 #[test]
+fn search_command_filters_by_label() -> anyhow::Result<()> {
+    let temp = TempDb::new("search_command_filters_by_label")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "Backend search label",
+            "--description",
+            "ready spec shared-label-needle",
+            "--label",
+            "backend",
+        ],
+    )?
+    .success()?;
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "Frontend search label",
+            "--description",
+            "ready spec shared-label-needle",
+            "--label",
+            "frontend",
+        ],
+    )?
+    .success()?;
+
+    let json = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "search",
+            "shared-label-needle",
+            "--label",
+            "backend",
+        ],
+    )?
+    .success_json()?;
+    let hits = json["data"]["hits"]
+        .as_array()
+        .context("expected JSON array")?;
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0]["task"]["title"], "Backend search label");
+    assert_eq!(hits[0]["task"]["labels"][0]["name"], "backend");
+    Ok(())
+}
+
+#[test]
 fn search_command_rejects_unbounded_limit() -> anyhow::Result<()> {
     let temp = TempDb::new("search_command_rejects_unbounded_limit")?;
     kanban(&temp.path, &["init"])?.success()?;

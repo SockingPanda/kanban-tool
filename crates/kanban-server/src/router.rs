@@ -23,10 +23,22 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/boards/:board/archive", post(archive_board))
         .route("/api/v1/boards/:board/columns", get(list_board_columns))
         .route(
+            "/api/v1/boards/:board/labels",
+            get(list_board_labels).post(create_board_label),
+        )
+        .route(
             "/api/v1/boards/:board/tasks",
             get(list_tasks).post(create_task),
         )
         .route("/api/v1/tasks/:task_id", get(get_task).patch(update_task))
+        .route(
+            "/api/v1/tasks/:task_id/labels",
+            get(list_task_labels).post(add_task_label),
+        )
+        .route(
+            "/api/v1/tasks/:task_id/labels/:label_id",
+            delete(remove_task_label),
+        )
         .route(
             "/api/v1/tasks/:task_id/transitions/specify",
             post(specify_task),

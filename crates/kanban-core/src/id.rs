@@ -16,6 +16,10 @@ pub fn new_run_id() -> String {
     new_typed_id("r")
 }
 
+pub fn new_label_id() -> String {
+    new_typed_id("l")
+}
+
 pub fn new_event_id() -> String {
     new_typed_id("e")
 }
@@ -29,6 +33,7 @@ mod tests {
         assert!(new_board_id().starts_with("b_"));
         assert!(new_task_id().starts_with("t_"));
         assert!(new_run_id().starts_with("r_"));
+        assert!(new_label_id().starts_with("l_"));
         assert!(new_event_id().starts_with("e_"));
     }
 }

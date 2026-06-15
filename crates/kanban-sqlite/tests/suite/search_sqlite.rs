@@ -173,6 +173,7 @@ fn sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely() -> anyhow::Res
         kanban_sqlite::TaskListOptions {
             statuses: vec![],
             priorities: vec![],
+            labels: vec![],
             include_archived: false,
             assignee: None,
             search: None,
@@ -233,6 +234,7 @@ fn sqlite_task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
             kanban_sqlite::TaskListOptions {
                 statuses: vec![TaskStatus::Ready],
                 priorities: vec![],
+                labels: vec![],
                 include_archived: false,
                 assignee: None,
                 search: Some(query.to_owned()),
@@ -257,6 +259,7 @@ fn sqlite_task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
         kanban_sqlite::TaskListOptions {
             statuses: vec![],
             priorities: vec![],
+            labels: vec![],
             include_archived: false,
             assignee: None,
             search: Some("1".into()),
@@ -279,6 +282,7 @@ fn sqlite_task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
             kanban_sqlite::TaskListOptions {
                 statuses: vec![TaskStatus::Ready],
                 priorities: vec![],
+                labels: vec![],
                 include_archived,
                 assignee: None,
                 search: Some(query.to_owned()),
@@ -302,6 +306,7 @@ fn sqlite_task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
         kanban_sqlite::TaskListOptions {
             statuses: vec![],
             priorities: vec![],
+            labels: vec![],
             include_archived: true,
             assignee: None,
             search: Some("#3".into()),

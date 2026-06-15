@@ -479,7 +479,7 @@ Human output for add/remove is Chinese-first:
 
 ---
 
-## 8. Label Commands
+## 8. Label 命令
 
 ```bash
 kanban label list
@@ -488,17 +488,15 @@ kanban label add <task_ref> <label>
 kanban label remove <task_ref> <label>
 ```
 
-`label create` creates a board-scoped label; creating an existing label name on
-the same board returns the existing label. `label add` accepts a task ref and a
-label name or id. When a name is missing, it creates the label on the task's
-board before attaching it. `label remove` accepts a task ref and label name or
-id. Blank label names are rejected.
+`label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
+label，返回已有 label。`label add` 接受 task ref 和 label name 或 id；如果按
+name 指定的 label 不存在，会先在该 task 所属 board 创建 label，再绑定到 task。
+`label remove` 接受 task ref 和 label name 或 id。空白 label name 会被拒绝。
 
-Label changes are idempotent for the task-label join. They append
-`task.label.added` / `task.label.removed` events only when the relation actually
-changes, and they do not mutate task status.
+Label 变更对 task-label 关联保持幂等。只有关联实际变化时，才追加
+`task.label.added` / `task.label.removed` event；该操作不改变 task status。
 
-Examples:
+示例：
 
 ```bash
 kanban label create backend --color blue
@@ -507,13 +505,13 @@ kanban label remove t_01HX... backend
 kanban label list --json
 ```
 
-Human output uses compact label rows:
+人类可读输出使用紧凑 label 行：
 
 ```text
 backend l_01HX... color=blue
 ```
 
-Task human summaries append labels in brackets when present:
+Task 的人类可读摘要如果存在 labels，会在末尾追加方括号标签列表：
 
 ```text
 default#12 t_01HX... [ready] 修复 API 回归 [backend,p1]

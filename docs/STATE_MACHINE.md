@@ -63,7 +63,7 @@ else if required spec missing:
     triage
 else if scheduled_at > now:
     scheduled
-else if parent dependencies exist and not all parents done:
+else if parent dependencies exist and not all parents are done or archived:
     todo
 else:
     ready
@@ -99,7 +99,7 @@ Guard：
 - title 非空。
 - description/spec 满足本地校验。
 - 如果 `scheduled_at > now`，目标必须是 `scheduled`。
-- 如果 parent dependencies 未全部 done，目标必须是 `todo`。
+- 如果 parent dependencies 未全部进入 `done` 或 `archived`，目标必须是 `todo`。
 - 否则可进入 `ready`。
 
 Side effects：
@@ -118,7 +118,7 @@ scheduled -> ready
 
 Guard：
 
-- 所有 parent dependency 都是 `done`。
+- 所有 parent dependency 都是 `done` 或 `archived`。
 - task 未 archived。
 - 对 `scheduled`，必须 `scheduled_at <= now`。
 
@@ -145,7 +145,7 @@ Guard：
 
 - task.status == `ready`。
 - `claim_token IS NULL`。
-- 所有 parent dependency 都是 `done`。
+- 所有 parent dependency 都是 `done` 或 `archived`。
 - task 未 archived。
 
 Atomic side effects in one transaction：
@@ -384,13 +384,13 @@ MVP 可不实现 reopen。若实现，必须写 event，并重新检查依赖和
 parent_task_id -> child_task_id
 ```
 
-表示 child 被 parent 阻塞。只有 parent 为 `done` 时，child 才能进入 `ready` 或 `running`。
+表示 child 被 parent 阻塞。只有 parent 为 `done` 或 `archived` 时，child 才能进入 `ready` 或 `running`。归档 parent 会满足 hard dependency guard，但不会删除 dependency edge，也不会自动 promote child。
 
 ### 5.2 规则
 
 1. parent != child。
 2. 新增依赖不能产生环。
-3. 如果给一个 `ready` child 增加未完成 parent，child 必须降级为 `todo`。
+3. 如果给一个 `ready` child 增加未完成 parent（不是 `done` 或 `archived`），child 必须降级为 `todo`。
 4. 如果 parent 从 `done` 被 reopen，所有依赖它的 child 必须重新评估；若 child 不是 terminal/running，可降级为 `todo`。
 5. `running` child 不应被新增未完成依赖；除非 force，并且需要 block/reclaim。
 

@@ -70,4 +70,11 @@ pub(crate) use vector::has_pending_outbox_for_target;
 #[cfg(feature = "vector-lancedb")]
 pub(crate) use vector::{vector_storage, vector_store_path, vector_store_status_with_conn};
 
+pub(crate) const fn dependency_parent_is_satisfied(status: kanban_core::TaskStatus) -> bool {
+    matches!(
+        status,
+        kanban_core::TaskStatus::Done | kanban_core::TaskStatus::Archived
+    )
+}
+
 use transaction::{storage, with_immediate_tx, with_read_tx};

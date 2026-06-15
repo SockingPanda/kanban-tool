@@ -489,7 +489,12 @@ export function DecisionComment({ comment }: { comment: CommentRecord }) {
                   <ChevronDown className="h-3 w-3" />
                 </Button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="mt-1 max-w-full rounded-md border border-border bg-background p-2 text-xs">
+              <CollapsibleContent
+                className={cn(
+                  "mt-1 max-w-full rounded-md border border-border bg-background p-2 text-xs",
+                  selected && "border-[var(--status-ready-ring)] bg-[var(--status-ready-bg)] text-[var(--status-ready-fg)]",
+                )}
+              >
                 <div className="font-medium text-foreground">{option.title}</div>
                 <MarkdownDescription className="mt-1 text-xs text-muted-foreground">{option.detail}</MarkdownDescription>
               </CollapsibleContent>

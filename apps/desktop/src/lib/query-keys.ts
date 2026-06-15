@@ -34,4 +34,5 @@ export const queryKeys = {
       },
     ] as const,
   taskDetail: (taskId: string) => ["task-detail", taskId] as const,
+  taskLabelSuggestions: (taskId: string) => ["task-label-suggestions", taskId] as const,
 }

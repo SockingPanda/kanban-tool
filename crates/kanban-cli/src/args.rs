@@ -188,6 +188,8 @@ pub(crate) struct CommentAddArgs {
     pub(crate) author_type: Option<String>,
     #[arg(long)]
     pub(crate) agent_type: Option<String>,
+    #[arg(long)]
+    pub(crate) metadata_json: Option<String>,
 }
 
 #[derive(Debug, Args)]

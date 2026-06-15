@@ -70,10 +70,11 @@ fn comment_add_and_list_json_roundtrip() -> anyhow::Result<()> {
     assert!(added["data"]["id"].as_str().unwrap_or("").starts_with("c_"));
     assert_eq!(added["data"]["task_id"], task_id);
     assert_eq!(added["data"]["body"], "hello from cli");
-    assert_eq!(added["data"]["kind"], "text");
+    assert_eq!(added["data"]["kind"], "note");
     assert_eq!(added["data"]["author"], "alice");
-    assert_eq!(added["data"]["author_type"], "human");
+    assert_eq!(added["data"]["author_type"], "user");
     assert!(added["data"]["agent_type"].is_null());
+    assert_eq!(added["data"]["metadata_json"], "{}");
 
     let listed = kanban(
         &temp.path,
@@ -110,8 +111,8 @@ fn comment_human_output_is_readable() -> anyhow::Result<()> {
     .success_stdout()?;
     assert!(added.contains("c_"));
     assert!(added.contains(&task_id));
-    assert!(added.contains("[text]"));
-    assert!(added.contains("bob (human)"));
+    assert!(added.contains("[note]"));
+    assert!(added.contains("bob (user)"));
     assert!(added.contains("human output body"));
 
     let listed = kanban(
@@ -120,17 +121,17 @@ fn comment_human_output_is_readable() -> anyhow::Result<()> {
     )?
     .success_stdout()?;
     assert!(listed.contains("c_"));
-    assert!(listed.contains("[text]"));
-    assert!(listed.contains("bob (human)"));
+    assert!(listed.contains("[note]"));
+    assert!(listed.contains("bob (user)"));
     assert!(listed.contains("human output body"));
     Ok(())
 }
 
 #[test]
-fn comment_kind_worker_infers_agent_author_type() -> anyhow::Result<()> {
-    let temp = TempDb::new("comment_kind_worker_infers_agent_author_type")?;
+fn comment_add_accepts_metadata_json() -> anyhow::Result<()> {
+    let temp = TempDb::new("comment_add_accepts_metadata_json")?;
     kanban(&temp.path, &["--board", "default", "init"])?.success()?;
-    let task_id = create_task(&temp, "worker comment")?;
+    let task_id = create_task(&temp, "metadata comment")?;
 
     let added = kanban(
         &temp.path,
@@ -143,20 +144,21 @@ fn comment_kind_worker_infers_agent_author_type() -> anyhow::Result<()> {
             "comment",
             "add",
             &task_id,
-            "worker output",
-            "--kind",
-            "worker",
+            "metadata output",
+            "--metadata-json",
+            r#"{"source":"cli"}"#,
         ],
     )?
     .success_json()?;
-    assert_eq!(added["data"]["kind"], "worker");
-    assert_eq!(added["data"]["author_type"], "agent");
+    assert_eq!(added["data"]["kind"], "note");
+    assert_eq!(added["data"]["author_type"], "user");
+    assert_eq!(added["data"]["metadata_json"], r#"{"source":"cli"}"#);
     Ok(())
 }
 
 #[test]
-fn comment_kind_decision_roundtrips_and_defaults_to_human() -> anyhow::Result<()> {
-    let temp = TempDb::new("comment_kind_decision_roundtrips_and_defaults_to_human")?;
+fn comment_kind_decision_roundtrips_and_defaults_to_user() -> anyhow::Result<()> {
+    let temp = TempDb::new("comment_kind_decision_roundtrips_and_defaults_to_user")?;
     kanban(&temp.path, &["--board", "default", "init"])?.success()?;
     let task_id = create_task(&temp, "decision comment")?;
 
@@ -170,7 +172,7 @@ fn comment_kind_decision_roundtrips_and_defaults_to_human() -> anyhow::Result<()
     )?
     .success_json()?;
     assert_eq!(added["data"]["kind"], "decision");
-    assert_eq!(added["data"]["author_type"], "human");
+    assert_eq!(added["data"]["author_type"], "user");
     assert!(added["data"]["agent_type"].is_null());
 
     let listed = kanban(
@@ -179,7 +181,7 @@ fn comment_kind_decision_roundtrips_and_defaults_to_human() -> anyhow::Result<()
     )?
     .success_json()?;
     assert_eq!(listed["data"][0]["kind"], "decision");
-    assert_eq!(listed["data"][0]["author_type"], "human");
+    assert_eq!(listed["data"][0]["author_type"], "user");
     Ok(())
 }
 
@@ -276,7 +278,7 @@ fn comment_add_rejects_invalid_input() -> anyhow::Result<()> {
     kanban(
         &temp.path,
         &[
-            "--board", "default", "comment", "add", &task_id, "bad kind", "--kind", "invalid",
+            "--board", "default", "comment", "add", &task_id, "bad kind", "--kind", "text",
         ],
     )?
     .failure_containing("invalid comment kind")?;
@@ -290,10 +292,24 @@ fn comment_add_rejects_invalid_input() -> anyhow::Result<()> {
             &task_id,
             "bad author type",
             "--author-type",
-            "robot",
+            "human",
         ],
     )?
     .failure_containing("invalid comment author_type")?;
+    kanban(
+        &temp.path,
+        &[
+            "--board",
+            "default",
+            "comment",
+            "add",
+            &task_id,
+            "bad metadata",
+            "--metadata-json",
+            "{bad",
+        ],
+    )?
+    .failure_containing("metadata_json must be valid JSON")?;
     Ok(())
 }
 

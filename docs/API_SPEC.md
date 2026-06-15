@@ -862,6 +862,69 @@ Task 标签添加请求：
 当前 `labels` 列表。只有关联行发生变化时，label attach/remove 才写入 task
 label event；该操作不改变 task status。
 
+### 12.1 Task label suggestions
+
+```http
+GET /api/v1/tasks/{task_id}/labels/suggestions?limit=5&atom_limit=24&min_score=0.15
+```
+
+返回 task-level label suggestions。第一版使用 `lancedb_label_atoms` atom hit
+aggregation：用 task title + description 查询 label atoms，按 label 汇总正向 atom
+similarity，并用负向 atom similarity 做惩罚。当前不会调用 full label solver refit，
+也不会创建新 label 或写入 `label_semantics` / `label_atoms`。
+
+未配置 provider、未启用 `vector-lancedb` feature、LanceDB 表缺失、索引为空或索引
+dirty 时，接口仍返回 `200` 和结构化 degraded JSON；普通 label CRUD、task
+list/search/filter 与状态转移不受影响。无 provider 时 `needs_new_label=false`，
+避免把 #105 的新 label 创建流程误触发。
+
+Response：
+
+```json
+{
+  "data": {
+    "task_id": "t_01HX...",
+    "board_id": "b_01HX...",
+    "selected_labels": [
+      {
+        "label_id": "l_01HX...",
+        "label_name": "backend",
+        "score": 0.82,
+        "weight": 0.82,
+        "already_applied": false,
+        "evidence_atoms": [
+          {
+            "atom_id": "la_...",
+            "label_id": "l_01HX...",
+            "label_name": "backend",
+            "polarity": "positive",
+            "kind": "applies_when",
+            "text": "touches server code",
+            "score": 0.91
+          }
+        ],
+        "negative_evidence_atoms": []
+      }
+    ],
+    "candidates": [],
+    "coverage": 0.82,
+    "residual_norm": 0.18,
+    "needs_new_label": false,
+    "degraded": true,
+    "diagnostics": ["solver_refit_unavailable"]
+  }
+}
+```
+
+稳定 diagnostics 包括：
+
+- `vector_store_disabled`
+- `label_atom_index_dirty`
+- `label_atom_index_empty`
+- `label_atom_index_error`
+- `solver_refit_unavailable`
+- `vector_query_error`
+
 ---
 
 ## 13. Search

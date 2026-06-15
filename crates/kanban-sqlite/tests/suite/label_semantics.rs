@@ -2,6 +2,242 @@ use crate::common::*;
 use rusqlite::OptionalExtension;
 
 #[test]
+fn task_label_suggestions_degrade_when_vector_store_disabled() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_label_suggestions_degrade_when_vector_store_disabled")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("label suggestion target"),
+    )?;
+
+    let result = kanban_sqlite::suggest_task_labels(
+        &temp.path,
+        "default",
+        &task.id,
+        kanban_sqlite::LabelSuggestionOptions::default(),
+    )?;
+
+    assert_eq!(result.task_id, task.id);
+    assert!(result.degraded);
+    assert!(result.selected_labels.is_empty());
+    assert_eq!(result.coverage, 0.0);
+    assert_eq!(result.residual_norm, 1.0);
+    assert!(!result.needs_new_label);
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|code| code == "vector_store_disabled")
+    );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|code| code == "solver_refit_unavailable")
+    );
+    Ok(())
+}
+
+#[test]
+fn task_label_suggestions_aggregate_atom_hits_and_penalize_negative_evidence() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("task_label_suggestions_aggregate_atom_hits_and_penalize_negative_evidence")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let frontend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "frontend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        kanban_sqlite::CreateTask {
+            title: "Fix API route".to_owned(),
+            description: Some("Touches server handler code".to_owned()),
+            ..CreateTask::ready("unused")
+        },
+    )?;
+    let labeled =
+        kanban_sqlite::add_task_label(&temp.path, "default", "tester", &task.id, "backend")?;
+
+    let store = StaticLabelAtomStore {
+        hits: vec![
+            atom_hit(&backend, "positive", "applies_when", "server handlers", 0.0),
+            atom_hit(&frontend, "positive", "name", "frontend", 0.2),
+            atom_hit(&frontend, "negative", "excludes_when", "server only", 0.0),
+        ],
+    };
+    let result = kanban_sqlite::suggest_task_labels_with(
+        &temp.path,
+        "default",
+        &labeled.id,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            limit: 5,
+            atom_limit: 10,
+            min_score: 0.01,
+        },
+    )?;
+
+    assert_eq!(result.candidates[0].label_name, "backend");
+    assert_eq!(result.candidates[0].score, 1.0);
+    assert!(result.candidates[0].already_applied);
+    assert_eq!(result.selected_labels.len(), 2);
+    assert_eq!(result.selected_labels[0].label_name, "backend");
+    assert_eq!(result.selected_labels[1].label_name, "frontend");
+    assert!(
+        result.selected_labels[1].score < 0.04,
+        "negative evidence should suppress frontend score: {result:?}"
+    );
+    assert!(result.coverage > 0.99);
+    assert!(!result.needs_new_label);
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|code| code == "solver_refit_unavailable")
+    );
+    Ok(())
+}
+
+#[test]
+fn task_label_suggestions_signal_new_label_when_enabled_index_has_no_selected_labels()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "task_label_suggestions_signal_new_label_when_enabled_index_has_no_selected_labels",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("uncovered task"),
+    )?;
+    let store = StaticLabelAtomStore { hits: Vec::new() };
+
+    let result = kanban_sqlite::suggest_task_labels_with(
+        &temp.path,
+        "default",
+        &task.id,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions::default(),
+    )?;
+
+    assert!(result.needs_new_label);
+    assert_eq!(result.coverage, 0.0);
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_atom_index_empty")
+    );
+    Ok(())
+}
+
+struct StaticLabelAtomStore {
+    hits: Vec<kanban_vector::LabelAtomHit>,
+}
+
+impl kanban_vector::VectorStore for StaticLabelAtomStore {
+    fn chunk_embedding_model(&self) -> &str {
+        "test-model"
+    }
+
+    fn status(&self) -> kanban_vector::VectorStoreStatus {
+        kanban_vector::VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
+        }
+    }
+
+    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn upsert(
+        &self,
+        _chunks: &[kanban_vector::EmbeddingChunk],
+    ) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn query(
+        &self,
+        _query: &kanban_vector::VectorQuery,
+    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
+        Ok(Vec::new())
+    }
+
+    fn query_label_atoms(
+        &self,
+        query: &kanban_vector::LabelAtomQuery,
+    ) -> Result<Vec<kanban_vector::LabelAtomHit>, kanban_vector::VectorError> {
+        Ok(self
+            .hits
+            .iter()
+            .filter(|hit| {
+                query
+                    .board_id
+                    .as_ref()
+                    .is_none_or(|board_id| &hit.board_id == board_id)
+                    && query
+                        .embedding_model
+                        .as_ref()
+                        .is_none_or(|model| &hit.embedding_model == model)
+                    && query
+                        .polarity
+                        .as_ref()
+                        .is_none_or(|polarity| &hit.polarity == polarity)
+            })
+            .take(query.limit)
+            .cloned()
+            .collect())
+    }
+}
+
+fn atom_hit(
+    label: &kanban_sqlite::LabelRecord,
+    polarity: &str,
+    kind: &str,
+    text: &str,
+    distance: f32,
+) -> kanban_vector::LabelAtomHit {
+    kanban_vector::LabelAtomHit {
+        atom_id: format!("la_{}_{}", label.name, kind),
+        label_id: label.id.clone(),
+        label_name: label.name.clone(),
+        board_id: label.board_id.clone(),
+        polarity: polarity.to_owned(),
+        kind: kind.to_owned(),
+        text: text.to_owned(),
+        ordinal: 0,
+        content_hash: "hash".to_owned(),
+        embedding_model: "test-model".to_owned(),
+        score: distance,
+    }
+}
+
+#[test]
 fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow::Result<()> {
     let temp = TempDb::new("label_semantics_crud_expands_stable_atoms_and_keeps_label_binding")?;
     init_database(&temp.path, "tester")?;

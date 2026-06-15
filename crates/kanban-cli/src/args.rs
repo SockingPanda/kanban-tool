@@ -188,6 +188,7 @@ pub(crate) enum LabelCommand {
     Create(LabelCreateArgs),
     Add(LabelTaskArgs),
     Remove(LabelTaskArgs),
+    Suggest(LabelSuggestArgs),
 }
 
 #[derive(Debug, Args)]
@@ -201,6 +202,19 @@ pub(crate) struct LabelCreateArgs {
 pub(crate) struct LabelTaskArgs {
     pub(crate) task_ref: String,
     pub(crate) label: String,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelSuggestArgs {
+    pub(crate) task_ref: String,
+    #[arg(long, default_value_t = 5)]
+    pub(crate) limit: usize,
+    #[arg(long, default_value_t = 24)]
+    pub(crate) atom_limit: usize,
+    #[arg(long, default_value_t = 0.15)]
+    pub(crate) min_score: f32,
+    #[arg(long = "vector-config", alias = "config")]
+    pub(crate) vector_config: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Args)]

@@ -217,6 +217,27 @@ describe("KanbanApi task search", () => {
     expect(calledInit(removeFetch).method).toBe("DELETE")
   })
 
+  it("requests task label suggestions through the task label route", async () => {
+    const suggestion = {
+      task_id: "t_1",
+      board_id: "b_1",
+      selected_labels: [],
+      candidates: [],
+      coverage: 0,
+      residual_norm: 1,
+      needs_new_label: false,
+      degraded: true,
+      diagnostics: ["vector_store_disabled"],
+    }
+    const fetchMock = mockFetch({ data: suggestion })
+    const api = new KanbanApi(runtimeConfig)
+
+    await expect(api.suggestTaskLabels("t_1", { limit: 3 })).resolves.toEqual(suggestion)
+    const url = calledUrl(fetchMock)
+    expect(url.pathname).toBe("/api/v1/tasks/t_1/labels/suggestions")
+    expect(url.searchParams.get("limit")).toBe("3")
+  })
+
   it("lists active boards through the boards endpoint", async () => {
     const boards = [
       board({ id: "b_default", slug: "default", name: "Default" }),

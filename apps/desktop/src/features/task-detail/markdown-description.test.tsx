@@ -246,6 +246,71 @@ describe("MarkdownDescription", () => {
     expect(html).toContain('aria-label="Add label"')
     expect(html).toContain('aria-label="Remove label backend"')
   })
+
+  it("renders degraded label suggestions and already applied state", () => {
+    const html = renderToStaticMarkup(
+      <Sheet open>
+        <TaskDetail
+          api={null}
+          task={{
+            ...task,
+            labels: [
+              { id: "l_backend", board_id: task.board_id, name: "backend", color: null, created_at: 1, updated_at: 1 },
+            ],
+          }}
+          detail={{
+            ...emptyDetail,
+            labelSuggestions: {
+              task_id: task.id,
+              board_id: task.board_id,
+              selected_labels: [
+                {
+                  label_id: "l_backend",
+                  label_name: "backend",
+                  score: 0.82,
+                  weight: 0.82,
+                  already_applied: true,
+                  evidence_atoms: [],
+                  negative_evidence_atoms: [],
+                },
+              ],
+              candidates: [],
+              coverage: 0.82,
+              residual_norm: 0.18,
+              needs_new_label: false,
+              degraded: true,
+              diagnostics: ["solver_refit_unavailable"],
+            },
+          }}
+          blockReason=""
+          setBlockReason={() => undefined}
+          dependencyInput=""
+          setDependencyInput={() => undefined}
+          claimToken={null}
+          commentBody=""
+          setCommentBody={() => undefined}
+          editDraft={null}
+          draftDirty={false}
+          setEditDraft={() => undefined}
+          detailLoading={false}
+          pendingAction={null}
+          onAction={async () => undefined}
+          onAddDependency={async () => undefined}
+          onRemoveDependency={async () => undefined}
+          onSelectTask={() => undefined}
+          onSaveTask={async () => true}
+          onCancelEdit={() => undefined}
+          onAddComment={async () => undefined}
+        />
+      </Sheet>,
+    )
+
+    expect(html).toContain("Suggestions")
+    expect(html).toContain("Degraded")
+    expect(html).toContain("solver_refit_unavailable")
+    expect(html).toContain("Applied")
+    expect(html).toContain("coverage 82%")
+  })
 })
 
 const task: Task = {

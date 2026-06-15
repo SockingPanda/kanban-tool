@@ -2,15 +2,16 @@ use std::path::PathBuf;
 #[cfg(feature = "vector-lancedb")]
 use std::{path::Path, sync::Arc};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 #[cfg(feature = "vector-lancedb")]
 use kanban_sqlite::suggest_task_labels_with;
 use kanban_sqlite::{
-    CreateLabel, LabelSuggestionOptions, LabelSuggestionResult, add_task_label, create_label,
-    list_labels, remove_task_label, suggest_task_labels,
+    CreateLabel, LabelSuggestionOptions, LabelSuggestionResult, MAX_TASK_LIST_LIMIT,
+    add_task_label, create_label, list_labels, remove_task_label, suggest_task_labels,
 };
 
 use crate::args::LabelCommand;
+use crate::commands::common::validate_page_bounds;
 use crate::output::{label_line, print_or_json, print_task};
 
 pub(crate) fn handle_label(
@@ -47,6 +48,7 @@ pub(crate) fn handle_label(
             print_task(json, &task)?;
         }
         LabelCommand::Suggest(args) => {
+            validate_label_suggest_bounds(args.limit, args.atom_limit)?;
             let options = LabelSuggestionOptions {
                 limit: args.limit,
                 atom_limit: args.atom_limit,
@@ -62,6 +64,18 @@ pub(crate) fn handle_label(
             print_or_json(json, &suggestions, || label_suggestion_lines(&suggestions))?;
         }
     }
+    Ok(())
+}
+
+fn validate_label_suggest_bounds(limit: usize, atom_limit: usize) -> Result<()> {
+    if limit == 0 {
+        bail!("limit must be >= 1");
+    }
+    if atom_limit == 0 {
+        bail!("atom_limit must be >= 1");
+    }
+    validate_page_bounds(limit, MAX_TASK_LIST_LIMIT, 0)?;
+    validate_page_bounds(atom_limit, MAX_TASK_LIST_LIMIT, 0)?;
     Ok(())
 }
 

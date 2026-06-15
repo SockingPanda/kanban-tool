@@ -19,7 +19,9 @@ const DECISION_COMMENT_KIND_MIGRATION: &str =
     include_str!("../../../migrations/005_decision_comment_kind.sql");
 const COMMENT_METADATA_CONTRACT_MIGRATION: &str =
     include_str!("../../../migrations/006_comment_metadata_contract.sql");
-const LATEST_MIGRATION_VERSION: i64 = 6;
+const LABEL_SEMANTICS_ATOMS_MIGRATION: &str =
+    include_str!("../../../migrations/007_label_semantics_atoms.sql");
+const LATEST_MIGRATION_VERSION: i64 = 7;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] =
     &["fnv64:0ca871be950fc8a6", "fnv64:3b08da4e2b6041f5"];
 
@@ -59,6 +61,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 6,
         name: "006_comment_metadata_contract",
         sql: COMMENT_METADATA_CONTRACT_MIGRATION,
+    },
+    Migration {
+        version: 7,
+        name: "007_label_semantics_atoms",
+        sql: LABEL_SEMANTICS_ATOMS_MIGRATION,
     },
 ];
 
@@ -251,6 +258,31 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
         (
             "derived_store_state",
             &["store_name", "schema_version", "last_event_id", "dirty"][..],
+        ),
+        (
+            "label_semantics",
+            &[
+                "label_id",
+                "board_id",
+                "description",
+                "applies_when",
+                "excludes_when",
+                "positive_examples",
+                "negative_examples",
+            ][..],
+        ),
+        (
+            "label_atoms",
+            &[
+                "id",
+                "label_id",
+                "board_id",
+                "polarity",
+                "kind",
+                "text",
+                "ordinal",
+                "content_hash",
+            ][..],
         ),
     ];
     for (table, columns) in required {

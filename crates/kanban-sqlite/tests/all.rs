@@ -11,6 +11,7 @@ mod suite {
     mod dispatch;
     mod graph_oxigraph;
     mod init;
+    mod label_semantics;
     mod maintenance;
     mod retry_policy;
     mod search_sqlite;

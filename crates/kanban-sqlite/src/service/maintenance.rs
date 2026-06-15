@@ -19,7 +19,7 @@ use std::{
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock};
 
-use kanban_indexer::{OutboxTarget, derived_store_for_name};
+use kanban_indexer::{OUTBOX_DERIVED_STORE_SEEDS, OutboxTarget, derived_store_for_name};
 
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -242,15 +242,30 @@ pub(crate) fn doctor_derived_store_reports(
             let seed = derived_store_for_name(&store.store_name).ok_or_else(|| {
                 KanbanError::Storage(format!("unknown derived store: {}", store.store_name))
             })?;
+            let outbox_backed = OUTBOX_DERIVED_STORE_SEEDS
+                .iter()
+                .any(|outbox_seed| outbox_seed.store_name == store.store_name);
             Ok(DoctorDerivedStoreReport {
                 store_name: store.store_name,
                 schema_version: store.schema_version,
                 last_event_id: store.last_event_id,
                 dirty: store.dirty,
                 last_error: store.last_error,
-                pending_outbox: count_outbox_for_target(conn, seed.target, "pending")?,
-                running_outbox: count_outbox_for_target(conn, seed.target, "running")?,
-                failed_outbox: count_outbox_for_target(conn, seed.target, "failed")?,
+                pending_outbox: if outbox_backed {
+                    count_outbox_for_target(conn, seed.target, "pending")?
+                } else {
+                    0
+                },
+                running_outbox: if outbox_backed {
+                    count_outbox_for_target(conn, seed.target, "running")?
+                } else {
+                    0
+                },
+                failed_outbox: if outbox_backed {
+                    count_outbox_for_target(conn, seed.target, "failed")?
+                } else {
+                    0
+                },
             })
         })
         .collect()

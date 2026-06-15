@@ -23,7 +23,14 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Field, FieldLabel } from "@/components/ui/field"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +39,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { InputGroup, InputGroupInput } from "@/components/ui/input-group"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
 import {
   Sidebar,
@@ -50,6 +56,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
 import { shouldOpenTaskDetailSheet } from "@/app/task-selection"
 import { BoardView } from "@/features/board/BoardView"
 import { EventsView } from "@/features/events/EventsView"
@@ -237,7 +244,7 @@ export function AppShell({
   onNextPage: () => void
   onLastPage: () => void
   onRowsPerPageChange: (value: number) => void
-  onCreateTask: (event: FormEvent) => void
+  onCreateTask: () => Promise<boolean>
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
   onSelectTask: (taskId: string) => void
@@ -254,7 +261,6 @@ export function AppShell({
   onCancelTaskEdit: () => void
   onAddComment: () => Promise<void>
 }) {
-  const showTaskExplorerToolbar = shouldShowTaskExplorerToolbar(view)
   const showDetailSheet = shouldOpenTaskDetailSheet(view, selectedTask)
 
   return (
@@ -285,7 +291,10 @@ export function AppShell({
           debouncedSearch={debouncedSearch}
           searchMeta={searchMeta}
           showArchived={showArchived}
+          newTitle={newTitle}
+          newDescription={newDescription}
           tasksRefreshing={tasksRefreshing}
+          pendingAction={pendingAction}
           onSearchChange={onSearchChange}
           onViewChange={onViewChange}
           onThemeModeChange={onThemeModeChange}
@@ -293,6 +302,9 @@ export function AppShell({
           onSidebarOpenChange={onSidebarOpenChange}
           onShowArchivedChange={onShowArchivedChange}
           onRefreshTasks={onRefreshTasks}
+          onCreateTask={onCreateTask}
+          onNewTitleChange={onNewTitleChange}
+          onNewDescriptionChange={onNewDescriptionChange}
         />
 
         {error ? (
@@ -307,17 +319,6 @@ export function AppShell({
 
         <div className="flex min-h-0 min-w-0 flex-1">
           <section className="flex min-w-0 flex-1 flex-col">
-            {showTaskExplorerToolbar ? (
-              <TaskExplorerToolbar
-                newTitle={newTitle}
-                newDescription={newDescription}
-                pendingAction={pendingAction}
-                onCreateTask={onCreateTask}
-                onNewTitleChange={onNewTitleChange}
-                onNewDescriptionChange={onNewDescriptionChange}
-              />
-            ) : null}
-
             <MainView
               api={api}
               config={config}
@@ -581,7 +582,10 @@ function ShellHeader({
   debouncedSearch,
   searchMeta,
   showArchived,
+  newTitle,
+  newDescription,
   tasksRefreshing,
+  pendingAction,
   onSearchChange,
   onViewChange,
   onThemeModeChange,
@@ -589,6 +593,9 @@ function ShellHeader({
   onSidebarOpenChange,
   onShowArchivedChange,
   onRefreshTasks,
+  onCreateTask,
+  onNewTitleChange,
+  onNewDescriptionChange,
 }: {
   config: RuntimeConfig | null
   view: OperatorView
@@ -598,7 +605,10 @@ function ShellHeader({
   debouncedSearch: string
   searchMeta: SearchTasksMeta | null
   showArchived: boolean
+  newTitle: string
+  newDescription: string
   tasksRefreshing: boolean
+  pendingAction: string | null
   onSearchChange: (value: string) => void
   onViewChange: (value: OperatorView) => void
   onThemeModeChange: (value: ThemeMode) => void
@@ -606,8 +616,12 @@ function ShellHeader({
   onSidebarOpenChange: (value: boolean) => void
   onShowArchivedChange: (value: boolean) => void
   onRefreshTasks: () => void
+  onCreateTask: () => Promise<boolean>
+  onNewTitleChange: (value: string) => void
+  onNewDescriptionChange: (value: string) => void
 }) {
   const ThemeIcon = themeMode === "dark" ? Moon : themeMode === "light" ? Sun : Monitor
+  const showAddTask = shouldShowTaskExplorerToolbar(view)
   return (
     <header className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 sm:flex-nowrap sm:gap-3 sm:px-4">
       <Button
@@ -662,6 +676,16 @@ function ShellHeader({
         Archived
       </Button>
       <div className="ml-auto flex items-center gap-2">
+        {showAddTask ? (
+          <AddTaskDialog
+            newTitle={newTitle}
+            newDescription={newDescription}
+            pendingAction={pendingAction}
+            onCreateTask={onCreateTask}
+            onNewTitleChange={onNewTitleChange}
+            onNewDescriptionChange={onNewDescriptionChange}
+          />
+        ) : null}
         <Badge variant="secondary">actor {config?.actor ?? "-"}</Badge>
         <Badge variant="ready">local dispatcher</Badge>
         <MenuSelect
@@ -681,7 +705,7 @@ function ShellHeader({
   )
 }
 
-function TaskExplorerToolbar({
+function AddTaskDialog({
   newTitle,
   newDescription,
   pendingAction,
@@ -692,43 +716,61 @@ function TaskExplorerToolbar({
   newTitle: string
   newDescription: string
   pendingAction: string | null
-  onCreateTask: (event: FormEvent) => void
+  onCreateTask: () => Promise<boolean>
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
 }) {
+  const [addTaskOpen, setAddTaskOpen] = useState(false)
+  const creating = pendingAction === "create"
+
+  async function submitTask(event: FormEvent) {
+    event.preventDefault()
+    if (!newTitle.trim() || creating) return
+    const created = await onCreateTask()
+    if (created) setAddTaskOpen(false)
+  }
+
   return (
-    <form onSubmit={onCreateTask} className="grid grid-cols-[1fr_1.4fr_auto] gap-2 border-b border-border bg-card px-4 py-3">
-      <Field>
-        <FieldLabel className="sr-only">New task title</FieldLabel>
-        <InputGroup>
-          <InputGroupInput
-            aria-label="New task title"
-            name="new-task-title"
-            autoComplete="off"
-            value={newTitle}
-            onChange={(event) => onNewTitleChange(event.target.value)}
-            placeholder="New task title"
-          />
-        </InputGroup>
-      </Field>
-      <Field>
-        <FieldLabel className="sr-only">New task description</FieldLabel>
-        <InputGroup>
-          <InputGroupInput
-            aria-label="New task description"
-            name="new-task-description"
-            autoComplete="off"
-            value={newDescription}
-            onChange={(event) => onNewDescriptionChange(event.target.value)}
-            placeholder="Optional spec or description"
-          />
-        </InputGroup>
-      </Field>
-      <Button type="submit" disabled={!newTitle.trim() || pendingAction === "create"}>
+    <Dialog open={addTaskOpen} onOpenChange={setAddTaskOpen}>
+      <Button type="button" aria-label="Add task" onClick={() => setAddTaskOpen(true)}>
         <Plus className="h-4 w-4" />
-        New task
+        Add task
       </Button>
-    </form>
+      <DialogContent>
+        <form onSubmit={submitTask} className="space-y-4">
+          <DialogHeader>
+            <DialogTitle>Add task</DialogTitle>
+            <DialogDescription>Create a task on the active board.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              aria-label="New task title"
+              name="new-task-title"
+              autoComplete="off"
+              value={newTitle}
+              onChange={(event) => onNewTitleChange(event.target.value)}
+              placeholder="Title"
+            />
+            <Textarea
+              aria-label="New task description"
+              name="new-task-description"
+              autoComplete="off"
+              value={newDescription}
+              onChange={(event) => onNewDescriptionChange(event.target.value)}
+              placeholder="Optional spec or description"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setAddTaskOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!newTitle.trim() || creating}>
+              {creating ? "Creating…" : "Create task"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 

@@ -693,14 +693,11 @@ values, `selected` matching one slug, non-empty `reason`, and optional
 non-empty `risk` / `verification`.
 
 Use `--kind decision` for meaningful multi-option choices. Body remains the
-human-readable fallback:
+human-readable fallback summary, while structured options and selection data
+live only in `--metadata-json`:
 
 ```text
-Problem: <decision problem>
-Options: <option A>; <option B>; <option C>
-Choice: <selected option>
-Reason: <why this option won>
-Risk/validation: <known risk and how it was or will be checked>
+已决定继续使用 comment metadata 承载结构化决策信息，正文保留为简短结论，方便没有结构化渲染的环境阅读。
 ```
 
 Decision metadata example:

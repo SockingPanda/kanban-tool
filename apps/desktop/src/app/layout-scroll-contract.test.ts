@@ -54,7 +54,7 @@ describe("desktop layout and scroll contracts", () => {
     expect(SIDEBAR_WIDTH_TRANSITION_MS).toBe(200)
     expect(isSidebarWidthTransition("width")).toBe(true)
     expect(isSidebarWidthTransition("opacity")).toBe(false)
-    expect(appShell).toContain('"flex shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200"')
+    expect(source("components/ui/sidebar.tsx")).toContain('"flex shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200"')
     expect(appShell).toContain('open ? "w-60 max-sm:w-14" : "w-14"')
     expect(appShell).toContain('!contentOpen && "hidden"')
     expect(appShell).toContain("onTransitionEnd={handleTransitionEnd}")

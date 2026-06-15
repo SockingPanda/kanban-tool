@@ -12,11 +12,13 @@ import { useMemo, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Label } from "@/components/ui/label"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
+import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tooltip } from "@/components/ui/tooltip"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -141,12 +143,14 @@ export function ListView({
         ),
         cell: ({ row }) => (
           <div className="min-w-0">
-            <button
-              className="block max-w-full truncate text-left font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-auto max-w-full justify-start truncate px-0 py-0 text-left font-medium text-foreground underline-offset-2 hover:bg-transparent hover:underline"
               onClick={() => onSelectTask(row.original.id)}
             >
               {row.original.title}
-            </button>
+            </Button>
             {row.original.status_reason ? (
               <div className="truncate text-xs text-muted-foreground">{row.original.status_reason}</div>
             ) : null}
@@ -349,8 +353,10 @@ export function ListView({
               ))
             ) : (
               <TableRow>
-                <TableCell className="px-4 py-10 text-center text-sm text-muted-foreground" colSpan={table.getAllLeafColumns().length}>
-                  No tasks match the current filters.
+                <TableCell className="px-4 py-10" colSpan={table.getAllLeafColumns().length}>
+                  <Empty className="p-0">
+                    <EmptyDescription>No tasks match the current filters.</EmptyDescription>
+                  </Empty>
                 </TableCell>
               </TableRow>
             )}
@@ -369,24 +375,52 @@ export function ListView({
           onValueChange={(value) => onRowsPerPageChange(Number(value))}
           triggerClassName="h-7 min-w-20"
         />
-        <div className="ml-auto flex items-center gap-1">
-          <Tooltip content="First page">
-            <Button variant="ghost" size="icon" disabled={!hasPreviousPage || tasksRefreshing} onClick={onFirstPage}>
-              <ChevronsLeft className="h-4 w-4" />
-            </Button>
-          </Tooltip>
-          <Button variant="ghost" size="sm" disabled={!hasPreviousPage || tasksRefreshing} onClick={onPreviousPage}>
-            Previous
-          </Button>
-          <Button variant="ghost" size="sm" disabled={!hasNextPage || tasksRefreshing} onClick={onNextPage}>
-            Next
-          </Button>
-          <Tooltip content="Last page">
-            <Button variant="ghost" size="icon" disabled={!canGoLastPage || tasksRefreshing} onClick={onLastPage}>
-              <ChevronsRight className="h-4 w-4" />
-            </Button>
-          </Tooltip>
-        </div>
+        <Pagination className="ml-auto">
+          <PaginationContent>
+            <PaginationItem>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="First page"
+                    disabled={!hasPreviousPage || tasksRefreshing}
+                    onClick={onFirstPage}
+                  >
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>First page</TooltipContent>
+              </Tooltip>
+            </PaginationItem>
+            <PaginationItem>
+              <Button variant="ghost" size="sm" disabled={!hasPreviousPage || tasksRefreshing} onClick={onPreviousPage}>
+                Previous
+              </Button>
+            </PaginationItem>
+            <PaginationItem>
+              <Button variant="ghost" size="sm" disabled={!hasNextPage || tasksRefreshing} onClick={onNextPage}>
+                Next
+              </Button>
+            </PaginationItem>
+            <PaginationItem>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Last page"
+                    disabled={!canGoLastPage || tasksRefreshing}
+                    onClick={onLastPage}
+                  >
+                    <ChevronsRight className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Last page</TooltipContent>
+              </Tooltip>
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
       </div>
     </div>
   )

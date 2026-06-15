@@ -58,7 +58,7 @@ pub fn upsert_label_semantics(
             negative_examples,
         };
         rebuild_atoms_for_label(&conn, &definition, &label.board_id, now)?;
-        mark_label_atom_store_dirty(&conn, now)?;
+        mark_label_atom_store_dirty(&conn, &label.board_id, now)?;
         get_label_semantics_conn(&conn, &label.board_id, &label.id)
     })
 }
@@ -111,7 +111,7 @@ pub fn delete_label_semantics(path: impl AsRef<Path>, board: &str, label_ref: &s
             params![board_id, label.id],
         )
         .map_err(storage)?;
-        mark_label_atom_store_dirty(&conn, now)?;
+        mark_label_atom_store_dirty(&conn, &board_id, now)?;
         Ok(())
     })
 }
@@ -160,7 +160,7 @@ pub fn rebuild_label_atom_index_with(
     {
         Ok(()) => {
             let now = SystemClock.now_ms();
-            mark_label_atom_store_success(&conn, true, now)?;
+            mark_label_atom_store_success(&conn, &board_id, now)?;
             let derived = derived_status_by_name(&conn, LANCEDB_LABEL_ATOMS_STORE)?;
             let mut status = store.status();
             status.message = format!(
@@ -173,7 +173,12 @@ pub fn rebuild_label_atom_index_with(
             Ok(status)
         }
         Err(error) => {
-            mark_label_atom_store_failure(&conn, &error.to_string(), SystemClock.now_ms())?;
+            mark_label_atom_store_failure(
+                &conn,
+                &board_id,
+                &error.to_string(),
+                SystemClock.now_ms(),
+            )?;
             Err(vector_storage(error))
         }
     }
@@ -350,21 +355,38 @@ fn resolve_label(conn: &Connection, board_id: &str, label_ref: &str) -> Result<R
     if label_ref.is_empty() {
         return Err(KanbanError::InvalidInput("label ref is required".into()));
     }
-    let sql = if label_ref.starts_with("l_") {
-        "SELECT id,board_id,name FROM labels WHERE board_id=?1 AND id=?2"
+    let label = conn
+        .query_row(
+            "SELECT id,board_id,name FROM labels WHERE board_id=?1 AND name=?2",
+            params![board_id, label_ref],
+            |row| {
+                Ok(ResolvedLabel {
+                    id: row.get(0)?,
+                    board_id: row.get(1)?,
+                    name: row.get(2)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(storage)?;
+    let label = if label.is_some() || !label_ref.starts_with("l_") {
+        label
     } else {
-        "SELECT id,board_id,name FROM labels WHERE board_id=?1 AND name=?2"
+        conn.query_row(
+            "SELECT id,board_id,name FROM labels WHERE board_id=?1 AND id=?2",
+            params![board_id, label_ref],
+            |row| {
+                Ok(ResolvedLabel {
+                    id: row.get(0)?,
+                    board_id: row.get(1)?,
+                    name: row.get(2)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(storage)?
     };
-    conn.query_row(sql, params![board_id, label_ref], |row| {
-        Ok(ResolvedLabel {
-            id: row.get(0)?,
-            board_id: row.get(1)?,
-            name: row.get(2)?,
-        })
-    })
-    .optional()
-    .map_err(storage)?
-    .ok_or_else(|| KanbanError::NotFound(format!("label {label_ref}")))
+    label.ok_or_else(|| KanbanError::NotFound(format!("label {label_ref}")))
 }
 
 struct ResolvedLabel {
@@ -388,7 +410,7 @@ fn label_atom_index_status_from_base(
     Ok(status)
 }
 
-fn mark_label_atom_store_dirty(conn: &Connection, now: i64) -> Result<()> {
+fn mark_label_atom_store_dirty(conn: &Connection, board_id: &str, now: i64) -> Result<()> {
     conn.execute(
         "INSERT INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
          VALUES (?1, ?2, 0, 1, NULL, NULL, NULL, ?3) \
@@ -396,19 +418,34 @@ fn mark_label_atom_store_dirty(conn: &Connection, now: i64) -> Result<()> {
         params![LANCEDB_LABEL_ATOMS_STORE, DERIVED_STORE_SCHEMA_VERSION, now],
     )
     .map_err(storage)?;
+    conn.execute(
+        "INSERT INTO label_atom_index_boards(store_name, board_id, dirty, last_rebuild_at, last_error, updated_at) \
+         VALUES (?1, ?2, 1, NULL, NULL, ?3) \
+         ON CONFLICT(store_name, board_id) DO UPDATE SET dirty=1, last_error=NULL, updated_at=excluded.updated_at",
+        params![LANCEDB_LABEL_ATOMS_STORE, board_id, now],
+    )
+    .map_err(storage)?;
     Ok(())
 }
 
-fn mark_label_atom_store_success(conn: &Connection, rebuilt: bool, now: i64) -> Result<()> {
+fn mark_label_atom_store_success(conn: &Connection, board_id: &str, now: i64) -> Result<()> {
+    conn.execute(
+        "INSERT INTO label_atom_index_boards(store_name, board_id, dirty, last_rebuild_at, last_error, updated_at) \
+         VALUES (?1, ?2, 0, ?3, NULL, ?3) \
+         ON CONFLICT(store_name, board_id) DO UPDATE SET dirty=0, last_rebuild_at=excluded.last_rebuild_at, last_error=NULL, updated_at=excluded.updated_at",
+        params![LANCEDB_LABEL_ATOMS_STORE, board_id, now],
+    )
+    .map_err(storage)?;
+    let dirty = has_dirty_label_atom_boards(conn)?;
     conn.execute(
         "INSERT INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
-         VALUES (?1, ?2, 0, 0, ?3, ?4, NULL, ?5) \
-         ON CONFLICT(store_name) DO UPDATE SET dirty=0, last_rebuild_at=COALESCE(excluded.last_rebuild_at, derived_store_state.last_rebuild_at), last_sync_at=COALESCE(excluded.last_sync_at, derived_store_state.last_sync_at), last_error=NULL, updated_at=excluded.updated_at",
+         VALUES (?1, ?2, 0, ?3, ?4, NULL, NULL, ?5) \
+         ON CONFLICT(store_name) DO UPDATE SET dirty=excluded.dirty, last_rebuild_at=COALESCE(excluded.last_rebuild_at, derived_store_state.last_rebuild_at), last_error=CASE WHEN excluded.dirty=0 THEN NULL ELSE derived_store_state.last_error END, updated_at=excluded.updated_at",
         params![
             LANCEDB_LABEL_ATOMS_STORE,
             DERIVED_STORE_SCHEMA_VERSION,
-            rebuilt.then_some(now),
-            (!rebuilt).then_some(now),
+            i64::from(dirty),
+            now,
             now
         ],
     )
@@ -416,7 +453,12 @@ fn mark_label_atom_store_success(conn: &Connection, rebuilt: bool, now: i64) -> 
     Ok(())
 }
 
-fn mark_label_atom_store_failure(conn: &Connection, error: &str, now: i64) -> Result<()> {
+fn mark_label_atom_store_failure(
+    conn: &Connection,
+    board_id: &str,
+    error: &str,
+    now: i64,
+) -> Result<()> {
     conn.execute(
         "INSERT INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
          VALUES (?1, ?2, 0, 1, NULL, NULL, ?3, ?4) \
@@ -429,7 +471,23 @@ fn mark_label_atom_store_failure(conn: &Connection, error: &str, now: i64) -> Re
         ],
     )
     .map_err(storage)?;
+    conn.execute(
+        "INSERT INTO label_atom_index_boards(store_name, board_id, dirty, last_rebuild_at, last_error, updated_at) \
+         VALUES (?1, ?2, 1, NULL, ?3, ?4) \
+         ON CONFLICT(store_name, board_id) DO UPDATE SET dirty=1, last_error=excluded.last_error, updated_at=excluded.updated_at",
+        params![LANCEDB_LABEL_ATOMS_STORE, board_id, error, now],
+    )
+    .map_err(storage)?;
     Ok(())
+}
+
+fn has_dirty_label_atom_boards(conn: &Connection) -> Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM label_atom_index_boards WHERE store_name=?1 AND dirty=1)",
+        [LANCEDB_LABEL_ATOMS_STORE],
+        |row| row.get(0),
+    )
+    .map_err(storage)
 }
 
 fn normalize_optional_text(text: Option<String>) -> Option<String> {

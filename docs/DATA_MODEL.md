@@ -543,6 +543,14 @@ Knowledge Substrate 表只支持实体身份、关系镜像、派生 outbox 和�
 
 `last_error` 成功后清空，失败时保留错误证据并保持 `dirty=true`。Operator 应通过 `kanban derived status`、`kanban doctor`、maintenance API 和对应 `sync/rebuild` 命令恢复派生层；派生 store 损坏或落后不改变 SQLite task truth。
 
+表：`label_atom_index_boards`
+
+`label_atom_index_boards` 只跟踪可重建的 `lancedb_label_atoms` 派生层在各 board
+上的刷新状态，不是 label truth。`label_semantics` / `label_atoms` 更新会把对应
+board 标脏；单个 board 的 label atom rebuild 成功只清理该 board 的 dirty 标记。
+只有该 store 下所有 board 都不 dirty 时，`derived_store_state.dirty` 才能变为
+`false`。
+
 ## 14. 常用查询
 
 ### 14.1 Board task list

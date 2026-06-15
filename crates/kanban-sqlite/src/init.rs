@@ -21,7 +21,9 @@ const COMMENT_METADATA_CONTRACT_MIGRATION: &str =
     include_str!("../../../migrations/006_comment_metadata_contract.sql");
 const LABEL_SEMANTICS_ATOMS_MIGRATION: &str =
     include_str!("../../../migrations/007_label_semantics_atoms.sql");
-const LATEST_MIGRATION_VERSION: i64 = 7;
+const LABEL_ATOM_INDEX_BOARDS_MIGRATION: &str =
+    include_str!("../../../migrations/008_label_atom_index_boards.sql");
+const LATEST_MIGRATION_VERSION: i64 = 8;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] =
     &["fnv64:0ca871be950fc8a6", "fnv64:3b08da4e2b6041f5"];
 
@@ -66,6 +68,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 7,
         name: "007_label_semantics_atoms",
         sql: LABEL_SEMANTICS_ATOMS_MIGRATION,
+    },
+    Migration {
+        version: 8,
+        name: "008_label_atom_index_boards",
+        sql: LABEL_ATOM_INDEX_BOARDS_MIGRATION,
     },
 ];
 
@@ -283,6 +290,10 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
                 "ordinal",
                 "content_hash",
             ][..],
+        ),
+        (
+            "label_atom_index_boards",
+            &["store_name", "board_id", "dirty", "updated_at"][..],
         ),
     ];
     for (table, columns) in required {

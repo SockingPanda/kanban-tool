@@ -143,11 +143,15 @@ pub(crate) const BOARD_SCOPED_EXPORT_TABLES: &[(&str, &str)] = &[
     ("event", "task_events"),
     ("attachment", "task_attachments"),
     ("label", "labels"),
+    ("label_semantics", "label_semantics"),
+    ("label_atom", "label_atoms"),
     ("task_label", "task_labels"),
 ];
 
 pub(crate) const IMPORT_DELETE_ORDER: &[&str] = &[
     "task_labels",
+    "label_atoms",
+    "label_semantics",
     "labels",
     "task_attachments",
     "task_events",
@@ -402,6 +406,8 @@ pub(crate) fn database_has_user_records(conn: &Connection) -> Result<bool> {
         "task_events",
         "task_attachments",
         "labels",
+        "label_semantics",
+        "label_atoms",
         "task_labels",
         "app_settings",
     ] {
@@ -537,6 +543,8 @@ pub(crate) fn import_table_for_type(record_type: &str) -> Result<&'static str> {
         "event" => Ok("task_events"),
         "attachment" => Ok("task_attachments"),
         "label" => Ok("labels"),
+        "label_semantics" => Ok("label_semantics"),
+        "label_atom" => Ok("label_atoms"),
         "task_label" => Ok("task_labels"),
         "setting" => Ok("app_settings"),
         _ => Err(KanbanError::InvalidInput(format!(

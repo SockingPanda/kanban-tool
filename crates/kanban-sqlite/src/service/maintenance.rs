@@ -592,6 +592,12 @@ pub(crate) fn doctor_tables_present(
             "derived_store_state",
         ]);
     }
+    if migration_version.unwrap_or(0) >= 7 || user_version >= 7 {
+        required_tables.extend(["label_semantics", "label_atoms"]);
+    }
+    if migration_version.unwrap_or(0) >= 8 || user_version >= 8 {
+        required_tables.push("label_atom_index_boards");
+    }
     for table in required_tables {
         if !table_exists(conn, table)? {
             return Ok(false);

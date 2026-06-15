@@ -333,12 +333,22 @@ run.finished
 | `agent_type` | 可选 open text，仅用于 `author_type=agent`，例如 `executor` / `reviewer`。 |
 | `body` | Markdown 文本。 |
 | `kind` | `note` / `decision`，表示 comment 内容语义，不表示作者身份。 |
-| `metadata_json` | `kind` 对应的结构化 payload；默认 `{}`，必须是合法 JSON object。 |
+| `metadata_json` | `kind` 对应的结构化 payload；默认 `{}`，必须是合法 JSON object。`kind=decision` 时必须符合 decision schema。 |
 | `created_at` | 创建时间。 |
 
 旧 comment rows / JSONL import 会迁移到新语义：旧 `human` 变为 `user`，旧 `agent/system` 或 `worker/system` 来源变为 `agent`，旧 `text/system/worker` 内容变为 `note`。没有结构化 metadata 的旧 `decision` 也按 `note` 保留 body fallback。
 
 Comment 创建时也写一条 `task_events(kind='task.comment.created')`。
+
+Decision comment metadata schema：
+
+- `options`：非空 array。
+- 每个 option 是 object，且包含非空 string `slug`、`title`、`detail`。
+- `slug` 必须是稳定小写 ASCII slug：以小写字母或数字开头，只包含小写字母、数字和 `-`；同一 decision 内唯一。
+- `selected`：非空 string，必须匹配某个 option slug。
+- `reason`：非空 string。
+- `risk` / `verification`：可选；如果出现，必须是非空 string。
+- 未知顶层字段允许保留，但不参与状态机、dispatcher 或 event 语义。
 
 ---
 

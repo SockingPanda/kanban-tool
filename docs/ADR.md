@@ -364,3 +364,391 @@ Archived board 默认不可写；归档只标记 board，不改 task 状态，�
 - CLI 必须维护 task ref parser/resolver。
 - Archived board 需要区分 read-only history 与 mutation guard。
 - 裸 `#12` 只能作为兼容输入，文档和输出不能依赖它。
+
+---
+
+## ADR-0011：Schema Train 边界：status、type、tags、dependency type 与 decision comments
+
+### Status
+
+Proposed
+
+### Context
+
+`kanban-tool` 接下来会进入一组 schema/model 扩展：
+
+- `task_type`：表达任务是什么类型。
+- `dependency_type`：表达任务之间是什么关系。
+- tags/labels：表达可搜索、可筛选、可推荐的多维标签。
+- comments：承载人和 agent 的协作记录。
+- decision comments：记录人或 LLM/agent 在多个方案之间做出的选择。
+
+当前 comment 模型里的 `kind` 混用了两类概念：
+
+- 谁写的：system / worker / agent / user。
+- 写的是什么：普通记录 / 决策记录。
+
+这会让后续结构化 decision comment 变脏。需要先把模型边界切开：
+
+- author/source 轴：谁留下了这条 comment。
+- content kind 轴：这条 comment 表达什么语义。
+
+本项目是 dogfood local tool，不需要为早期 comment schema 保留沉重兼容层。可以直接修改模型，只要迁移清晰，并让 CLI/API/Desktop 一次性跟上。
+
+### Decision
+
+保留现有核心原则：
+
+- `tasks.status` 继续是唯一 canonical workflow state。
+- hard dependency 继续是状态机和 dispatcher guard 的事实来源。
+- `task_events` 继续是 append-only audit trail。
+- comments 继续承载协作记录，但 comment schema 要拆清楚作者和内容语义。
+- 新字段默认不改变状态机、dispatcher claim 或 ready eligibility，除非本 ADR 明确允许。
+
+### Field Responsibilities
+
+| Field / Model | 责任 | 是否影响状态机 | 是否影响 dispatcher | 是否影响 DAG/frontier | 是否用于 search/context/UI |
+|---|---|---:|---:|---:|---:|
+| `status` | canonical workflow state | 是 | 是 | 是 | 是 |
+| `priority` | ready/frontier/dispatcher 的排序权重 | 否 | 是，排序 | 是，排序 | 是 |
+| `scheduled_at` | 计划时间，参与 scheduled/ready guard | 是 | 是 | 是 | 是 |
+| `due_at` | 截止时间，只展示、筛选、排序 | 否 | 可排序 | 可排序 | 是 |
+| `task_type` | 任务类别，例如 bug/feature/research/ops/follow_up | 否 | 否 | 可用于解释/排序，不改变 eligibility | 是 |
+| tags/labels | 多标签分类、搜索、推荐和 UI grouping | 否 | 否 | 否，除非未来显式配置排序策略 | 是 |
+| `dependency_type` | 依赖边语义，区分 hard block 和 soft relation | 仅 hard block | 仅 hard block | 是，但必须区分 hard/soft | 是 |
+| `comment.author_type` | 评论作者角色：`user` 或 `agent` | 否 | 否 | 否 | 是 |
+| `comment.author` | 展示名，例如 `kanban-user`、`codex` | 否 | 否 | 否 | 是 |
+| `comment.agent_type` | 可选 agent 细分，例如 `codex`、`executor`、`dispatcher` | 否 | 否 | 否 | 是 |
+| `comment.kind` | 内容语义：`note` 或 `decision` | 否 | 否 | 否 | 是 |
+| `comment.metadata_json` | `comment.kind` 对应的结构化 payload | 否 | 否 | 否 | 是 |
+| `event.kind` | append-only audit event 类型 | 否，event 是结果不是输入 | 否 | 否 | 是 |
+
+### Workflow State
+
+`status` 仍然是任务是否可执行、是否被 claim、是否 blocked/review/done 的唯一事实来源。
+
+任何新字段都不能隐式表达状态：
+
+- `task_type=bug` 不表示高优先级。
+- tag `blocked` 不表示 task blocked。
+- decision selected option 不表示 task done。
+- comment 中写 “blocked” 不改变 task status。
+
+状态变化只能通过 transition command。
+
+### Task Type
+
+`task_type` 表达“这个 task 是什么工作类别”，不表达“它现在处于什么执行状态”。
+
+建议第一批 task types：
+
+```text
+bug | feature | research | ops | docs | refactor | test | follow_up
+```
+
+`task_type` 可以用于：
+
+- Desktop/List/Board 筛选。
+- Search/context 过滤。
+- DAG/frontier 解释。
+- 未来排序加权。
+
+`task_type` 不用于：
+
+- dispatcher claim eligibility。
+- 状态机 transition guard。
+- hard dependency 判断。
+- 替代 tags/labels。
+
+枚举策略：
+
+- 第一版使用受控枚举。
+- 后续如需要开放扩展，再单独做 ADR。
+- 未知 type 应被拒绝，而不是静默写入。
+
+### Tags / Labels
+
+tags/labels 表达多维、可叠加的分类。一个 task 可以有多个 tag。
+
+tags 适合表达：
+
+- area：`desktop`、`cli`、`sqlite`
+- domain：`search`、`dispatcher`、`comments`
+- semantic group：`llm-facing`、`release-risk`
+- 用户临时整理方式
+
+tags 不适合表达：
+
+- workflow state
+- hard dependency
+- execution ownership
+- decision result
+
+未来 semantic tag recommender 可以推荐 tag，但推荐结果必须显式保存后才成为 task 标签。
+
+### Dependency Type
+
+现有 dependency 的核心语义是 hard prerequisite：
+
+```text
+parent done => child may become ready
+parent not done => child cannot be ready/running
+```
+
+引入 `dependency_type` 后，必须保留 hard dependency 的清晰语义。
+
+建议第一批 dependency types：
+
+| Type | 语义 | 是否阻塞 child |
+|---|---|---:|
+| `blocks` | parent 是 child 的硬前置条件 | 是 |
+| `relates_to` | 相关任务，仅用于导航/search/context | 否 |
+| `informs` | parent 提供背景、设计输入或决策依据 | 否 |
+| `spawned_from` | child 由 parent 执行过程中发现 | 否 |
+| `duplicates` | 重复或替代关系 | 否 |
+
+只有 `blocks` 参与：
+
+- dependency blocked 判断
+- promote guard
+- claim guard
+- dispatcher eligibility
+- hard DAG blocking
+
+soft dependency 可以进入 DAG 可视化、Desktop 展示和 context，但不能让任务变成 blocked，也不能阻止 claim。
+
+### Comment Author Model
+
+comment 的作者模型只表达“谁写的”。
+
+本项目是本地 dogfood 工具，不建用户系统。作者角色只保留两类：
+
+```text
+user | agent
+```
+
+规则：
+
+- `user`：本地操作者，也就是“我”。
+- `agent`：不是我写的，都算 agent。
+- `author`：展示名，例如 `kanban-user`、`codex`。
+- `agent_type`：仅当 `author_type=agent` 时可用，例如 `codex`、`executor`、`reviewer`、`dispatcher`。
+- 不引入 users table、identity table、RBAC 或权限模型。
+
+这意味着不再使用 comment kind 表示 `system`、`worker` 或 `agent`。这些都属于 author/source 轴。
+
+### Comment Kind Model
+
+`comment.kind` 只表达“这条 comment 的内容语义”。
+
+第一版只保留两类：
+
+```text
+note | decision
+```
+
+#### `note`
+
+普通协作记录。包括：
+
+- 进展说明
+- 交接记录
+- 执行总结
+- 问题描述
+- reviewer 反馈
+- 验证记录
+- 人或 agent 的普通回复
+
+“遇到的问题”默认也是 `note`。如果问题真的阻塞任务，应该同时通过 transition command 把 task 变成 `blocked`，并写入 `status_reason`。
+
+#### `decision`
+
+结构化选择记录。用于表达：
+
+- 有多个 option。
+- 最终选择了其中一个。
+- 有选择理由、风险和验证方式。
+
+decision 不是 task status，不是 event，不是 ADR 替代品。
+
+### Comment Metadata
+
+`comment.metadata_json` 是 `comment.kind` 的结构化 payload。
+
+规则：
+
+- `kind=note` 时，metadata 默认 `{}`。
+- `kind=decision` 时，metadata 必须符合 decision schema。
+- metadata 非法 JSON 或 schema 不匹配时拒绝写入。
+- metadata 不参与状态机。
+- metadata 不替代 event。
+- metadata 不应该变成随意塞字段的长期垃圾桶。
+
+### Decision Comment Schema
+
+建议第一版 shape：
+
+```json
+{
+  "options": [
+    {
+      "slug": "comment-metadata",
+      "title": "Use comment metadata",
+      "detail": "Store structured decision data in task_comments.metadata_json."
+    },
+    {
+      "slug": "decision-table",
+      "title": "Create decision table",
+      "detail": "Create a separate task_decisions table with option rows."
+    }
+  ],
+  "selected": "comment-metadata",
+  "reason": "Keeps decisions close to task discussion and avoids a parallel timeline.",
+  "risk": "metadata schema needs validation discipline.",
+  "verification": "CLI/API/Desktop tests cover creation, reading, rendering, and invalid metadata rejection."
+}
+```
+
+Validation rules:
+
+- `options` 必须非空。
+- 每个 option 必须有唯一 `slug`。
+- `selected` 必须匹配某个 option slug。
+- `reason` 必填。
+- `risk` 可选但推荐。
+- `verification` 可选但推荐。
+- `slug` 使用稳定 ASCII slug，便于 CLI、JSON 和前端引用。
+- `detail` 可以是 Markdown 文本，但 Desktop 渲染必须走安全 markdown 规则。
+
+### Desktop Rendering Rules
+
+Desktop TaskDetail comment list：
+
+- `note`：按普通 markdown comment 渲染。
+- `decision`：
+  - 展示 comment body 作为摘要。
+  - 展示所有 option slug。
+  - selected option 使用明确绿色/selected 状态。
+  - 点击 option 展开 `title` 和 `detail`。
+  - 展示 reason、risk、verification。
+  - 如果 decision metadata 无效，不应该静默当作 selected；应显示错误状态或 degraded note。
+
+### CLI / API Rules
+
+CLI：
+
+```bash
+kanban comment add <task-ref> "<body>"
+kanban comment add <task-ref> "<body>" --kind note
+kanban comment add <task-ref> "<body>" --kind decision --metadata-json '<json>'
+```
+
+可后续增加更友好的命令：
+
+```bash
+kanban decision add <task-ref> ...
+```
+
+但第一版不要求。
+
+API：
+
+- comment create request 显式包含：
+  - `body`
+  - `author_type`
+  - `author`
+  - `agent_type`
+  - `kind`
+  - `metadata`
+- comment response 返回同样字段。
+- 不再把 `system/worker` 作为 kind 返回。
+
+### Event Kind
+
+`event.kind` 只记录系统事实：
+
+- `comment.added`
+- `task.created`
+- `task.updated`
+- `task.claimed`
+- `task.completed`
+- `dependency.added`
+
+event 不承载 decision 本体。添加 decision comment 时，event 只记录 `comment.added`，decision 内容在 comment snapshot 中。
+
+### Dispatcher And Frontier Rules
+
+Dispatcher claim eligibility 只能看：
+
+- `status`
+- hard dependency (`dependency_type=blocks`)
+- `scheduled_at`
+- claim token / lease
+- board archived state
+- assignee / worker profile
+
+Dispatcher 排序可以看：
+
+- `priority`
+- `created_at`
+- future explicit dispatcher policy
+
+Dispatcher 不看：
+
+- `task_type`
+- tags
+- `comment.kind`
+- `comment.metadata_json`
+- decision selected option
+- soft dependency
+
+Frontier 可以展示和解释更多字段，但不得把 soft 字段解释成 hard blocker。
+
+### Migration Strategy
+
+本项目是 dogfood 版本，不做沉重兼容层。采用直接 schema train：
+
+1. 本 ADR 固定边界。
+2. 修改 `task_comments`：
+   - 增加 `author_type`
+   - 保留/明确 `author`
+   - 增加 `agent_type`
+   - 收窄 `kind` 为 `note | decision`
+   - 增加 `metadata_json`
+3. 更新 Rust domain/API/CLI/Desktop type。
+4. 迁移现有 comment：
+   - 不是用户本人写的，一律 `author_type=agent`
+   - 用户本人写的，`author_type=user`
+   - 普通历史 comment 一律 `kind=note`
+   - 已有 decision comment 若能识别则 `kind=decision`，否则 `note`
+5. 实现 decision metadata validation。
+6. 实现 Desktop decision rendering。
+7. 后续再做 `task_type`、`dependency_type`、tags/labels 扩展。
+
+### Consequences
+
+优点：
+
+- comment 模型语义清楚：作者归作者，内容类型归内容类型。
+- decision comment 可以成为真正结构化对象。
+- Desktop 渲染会简单很多。
+- LLM/agent 做选择时可以留下可索引、可展开、可复盘的记录。
+- 不再让 `system/worker` 这类来源概念污染 content kind。
+
+代价：
+
+- 需要 schema migration。
+- 需要一次性更新 CLI/API/Desktop。
+- 旧 comment JSON shape 会改变。
+- 需要认真做 decision metadata validation，避免 `metadata_json` 变成任意垃圾桶。
+- 全局 `kanban-tool` skill 需要同步，因为 CLI/API/comment JSON 行为会变化。
+
+### Non-Goals
+
+- 不引入多用户系统。
+- 不引入 RBAC、团队、组织、邀请或云同步。
+- 不用 decision comment 替代 ADR。
+- 不让 comment metadata 影响 dispatcher claim。
+- 不让 tags/type/metadata 变成隐式 status。
+- 不把 `task_dependencies` 改成完整知识图谱。
+- 不在本 ADR 中实现具体 migration。

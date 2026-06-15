@@ -809,7 +809,7 @@ MVP 不允许 column 改变 canonical status。
 
 ---
 
-## 12. Labels
+## 12. 标签 API
 
 ```http
 GET /api/v1/boards/{board}/labels
@@ -819,7 +819,7 @@ POST /api/v1/tasks/{task_id}/labels
 DELETE /api/v1/tasks/{task_id}/labels/{label_id}
 ```
 
-Board label 创建请求：
+Board 级 label 创建请求：
 
 ```json
 {
@@ -828,7 +828,7 @@ Board label 创建请求：
 }
 ```
 
-Label 响应结构：
+Label 响应结构，用于 board 级 label 创建和 label 列表：
 
 ```json
 {
@@ -855,9 +855,12 @@ Task label 添加请求：
 
 `POST /api/v1/tasks/{task_id}/labels` 会把指定 name 的 label 绑定到 task。如果
 该 task 所属 board 上还不存在该 label，会先创建 label。重复绑定已有 task-label
-关系是 no-op，并返回 label。`DELETE` 的 `{label_id}` 接受 label id 或 label name。
-只有 join row 发生变化时，label attach/remove 才写入 task label event；该操作不
-改变 task status。
+关系是 no-op。成功响应返回更新后的 task，包含当前 `labels` 列表。
+
+`DELETE /api/v1/tasks/{task_id}/labels/{label_id}` 会移除 task 上的指定 label，
+`{label_id}` 接受 label id 或 label name。成功响应同样返回更新后的 task，包含
+当前 `labels` 列表。只有 join row 发生变化时，label attach/remove 才写入 task
+label event；该操作不改变 task status。
 
 ---
 
@@ -871,9 +874,9 @@ GET /api/v1/search/tasks?board=default&q=needle&status=ready&label=backend&assig
 
 Default backend is SQLite fallback. When the binary is built with `tantivy-backend` and `index/v1/tasks/` exists beside the SQLite DB, search uses the Tantivy task index. Missing, corrupt, or stale Tantivy indexes fall back to SQLite with stale metadata. Search matches task title, description, comments, run summary/error, and event kind/payload.
 
-`label` filters by label name or id, may be repeated, and uses AND semantics
-before scoring and pagination. Label-filtered search uses SQLite fallback even
-when a Tantivy index is available, so results reflect current task-label rows.
+`label` 按 label name 或 id 过滤，可重复，并在评分和分页前使用 AND 语义。
+带 label 过滤的 search 即使存在可用 Tantivy index，也会使用 SQLite fallback，
+以确保结果反映当前 task-label 关联行。
 
 Task ref-shaped `q` values always use SQLite exact-match semantics, even when a
 usable Tantivy index exists: pure numeric `12` and `#12` match seq within the

@@ -93,13 +93,15 @@ async fn maintenance_reports_doctor_and_checkpoint_results() -> anyhow::Result<(
     assert_eq!(json["data"]["outbox_pending"], 0);
     assert_eq!(json["data"]["derived_dirty_stores"], 0);
     assert_eq!(json["data"]["derived_error_stores"], 0);
-    assert_eq!(
-        json["data"]["derived_stores"]
-            .as_array()
-            .context("value")?
-            .len(),
-        3
-    );
+    let derived_stores = json["data"]["derived_stores"].as_array().context("value")?;
+    assert_eq!(derived_stores.len(), 4);
+    assert!(derived_stores.iter().any(|store| {
+        store["store_name"] == "lancedb_label_atoms"
+            && store["dirty"] == false
+            && store["pending_outbox"] == 0
+            && store["running_outbox"] == 0
+            && store["failed_outbox"] == 0
+    }));
 
     let (status, json) = post_json(app, "/api/v1/maintenance/checkpoint", json!({})).await?;
     assert_eq!(status, StatusCode::OK);

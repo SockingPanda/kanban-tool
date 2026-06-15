@@ -68,7 +68,7 @@ fn substrate_commands_report_entities_outbox_and_derived_status() -> anyhow::Res
 
     let derived = kanban(&temp.path, &["--json", "derived", "status"])?.success_json()?;
     let stores = derived["data"].as_array().context("expected JSON array")?;
-    assert_eq!(stores.len(), 3);
+    assert_eq!(stores.len(), 4);
     assert!(
         stores
             .iter()
@@ -83,6 +83,11 @@ fn substrate_commands_report_entities_outbox_and_derived_status() -> anyhow::Res
         stores
             .iter()
             .any(|store| store["store_name"] == "lancedb_chunks")
+    );
+    assert!(
+        stores
+            .iter()
+            .any(|store| store["store_name"] == "lancedb_label_atoms" && store["dirty"] == false)
     );
     Ok(())
 }

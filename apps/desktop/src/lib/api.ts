@@ -111,7 +111,8 @@ export type CommentRecord = {
   author_type: string
   agent_type: string | null
   body: string
-  kind: "text" | "system" | "worker" | "decision"
+  kind: "note" | "decision"
+  metadata_json: string
   created_at: number
 }
 

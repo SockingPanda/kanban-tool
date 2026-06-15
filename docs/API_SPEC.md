@@ -586,10 +586,11 @@ Response：
       "board_id": "b_01HX...",
       "task_id": "t_01HX...",
       "author": "alice",
-      "author_type": "human",
+      "author_type": "user",
       "agent_type": null,
       "body": "这里需要确认边界条件。",
-      "kind": "text",
+      "kind": "note",
+      "metadata_json": "{}",
       "created_at": 1717520000000
     }
   ]
@@ -607,19 +608,21 @@ Request：
 ```json
 {
   "body": "这里需要确认边界条件。",
-  "kind": "text",
-  "author_type": "human",
+  "kind": "note",
+  "author_type": "user",
   "agent_type": null,
-  "author": "alice"
+  "author": "alice",
+  "metadata": {}
 }
 ```
 
 Notes：
 
-- `kind` 默认为 `text`，当前允许 `text|system|worker|decision`。
-- `decision` records meaningful multi-option choices. Use this stable Markdown body shape: `Problem: ...`, `Options: ...`, `Choice: ...`, `Reason: ...`, `Risk/validation: ...`. Skip it for trivial naming, formatting, or purely mechanical choices.
-- `author_type` marks who produced the comment and allows `human|agent|system`. If omitted, the service infers `worker -> agent`, `system -> system`, and all other kinds as `human`; `decision` therefore defaults to `human`.
-- `agent_type` is optional open text for `author_type=agent` comments, such as `executor` or `reviewer`. Non-empty `agent_type` with `author_type=human` or `system` is rejected as `400 invalid_input`.
+- `kind` 默认为 `note`，当前允许 `note|decision`。
+- `decision` records meaningful multi-option choices; body remains the readable fallback, and structured decision metadata is carried by `metadata`.
+- `author_type` marks who produced the comment and allows `user|agent`. If omitted, the service defaults to `user`.
+- `agent_type` is optional open text for `author_type=agent` comments, such as `executor` or `reviewer`. Non-empty `agent_type` with `author_type=user` is rejected as `400 invalid_input`.
+- `metadata` 默认为 `{}`，必须是 JSON object；response 使用 `metadata_json` 字符串保持现有 DTO 风格。
 - `author` 走通用 actor 语义；也可以用 `X-KB-Actor` 或 server 默认 actor。
 - 创建评论会写入 `task.comment.created` event。
 

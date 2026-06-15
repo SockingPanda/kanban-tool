@@ -34,8 +34,8 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     let doctor = kanban(&temp.path, &["--json", "doctor"])?.success_json()?;
 
     assert_eq!(doctor["data"]["integrity_check"], "ok");
-    assert_eq!(doctor["data"]["migration_version"], 6);
-    assert_eq!(doctor["data"]["user_version"], 6);
+    assert_eq!(doctor["data"]["migration_version"], 8);
+    assert_eq!(doctor["data"]["user_version"], 8);
     assert_eq!(doctor["data"]["expired_running_tasks"], 1);
     assert_eq!(doctor["data"]["dependency_cycles"], 0);
     assert_eq!(doctor["data"]["archived_dependency_edges"], 0);
@@ -53,7 +53,7 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
             .as_array()
             .context("expected JSON array")?
             .len(),
-        3
+        4
     );
     assert!(
         doctor["data"]["derived_stores"]
@@ -63,6 +63,17 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
             .any(|store| store["store_name"] == "tantivy_tasks"
                 && store["dirty"] == true
                 && store["pending_outbox"] == 2
+                && store["failed_outbox"] == 0)
+    );
+    assert!(
+        doctor["data"]["derived_stores"]
+            .as_array()
+            .context("expected JSON array")?
+            .iter()
+            .any(|store| store["store_name"] == "lancedb_label_atoms"
+                && store["dirty"] == false
+                && store["pending_outbox"] == 0
+                && store["running_outbox"] == 0
                 && store["failed_outbox"] == 0)
     );
     assert_eq!(doctor["data"]["ok"], false);

@@ -14,8 +14,9 @@ use lancedb::query::{ExecutableQuery, QueryBase, Select};
 use tokio::runtime::Runtime;
 
 use crate::{
-    EmbeddingChunk, EmbeddingProvider, LanceDbConfig, VectorError, VectorHit, VectorQuery,
-    VectorStore, VectorStoreStatus, ensure_dimensions,
+    EmbeddingChunk, EmbeddingProvider, LabelAtomHit, LabelAtomQuery, LabelAtomVector,
+    LanceDbConfig, VectorError, VectorHit, VectorQuery, VectorStore, VectorStoreStatus,
+    ensure_dimensions,
 };
 
 const VECTOR_COLUMN: &str = "vector";
@@ -65,6 +66,18 @@ impl LanceDbStore {
                 .await
                 .map_err(map_lancedb_error)?;
             ensure_table(&connection, &table_name, dimensions).await
+        })
+    }
+
+    fn label_atom_table(&self, dimensions: usize) -> Result<Table, VectorError> {
+        let table_name = self.config.label_atom_table_name.clone();
+        let path = path_string(&self.config)?;
+        self.runtime.block_on(async {
+            let connection = lancedb::connect(&path)
+                .execute()
+                .await
+                .map_err(map_lancedb_error)?;
+            ensure_label_atom_table(&connection, &table_name, dimensions).await
         })
     }
 }
@@ -221,6 +234,127 @@ impl VectorStore for LanceDbStore {
             batches_to_hits(&batches)
         })
     }
+
+    fn delete_label_atoms_for_board(&self, board_id: &str) -> Result<(), VectorError> {
+        let provider = self.provider()?;
+        let embedding_model = provider.embedding_model().to_owned();
+        let table = self.label_atom_table(provider.dimensions())?;
+        self.runtime.block_on(async {
+            let predicate = col("board_id")
+                .eq(lit(board_id.to_owned()))
+                .and(col("embedding_model").eq(lit(embedding_model)));
+            table.delete(&predicate).await.map_err(map_lancedb_error)?;
+            Ok(())
+        })
+    }
+
+    fn upsert_label_atoms(&self, atoms: &[LabelAtomVector]) -> Result<(), VectorError> {
+        let provider = self.provider()?;
+        if atoms.is_empty() {
+            return Ok(());
+        }
+
+        let expected_model = provider.embedding_model();
+        if let Some(atom) = atoms
+            .iter()
+            .find(|atom| atom.embedding_model != expected_model)
+        {
+            return Err(VectorError::EmbeddingModelMismatch {
+                expected: expected_model.to_owned(),
+                actual: atom.embedding_model.clone(),
+            });
+        }
+
+        let dimensions = provider.dimensions();
+        let mut embeddings = Vec::with_capacity(atoms.len());
+        for atom in atoms {
+            let embedding = provider.embed(&atom.text)?;
+            ensure_dimensions(&embedding, dimensions)?;
+            embeddings.push(embedding);
+        }
+
+        let table = self.label_atom_table(dimensions)?;
+        let batch = label_atoms_to_batch(atoms, &embeddings, dimensions)?;
+        let schema = batch.schema();
+        let reader = RecordBatchIterator::new(vec![Ok(batch)], schema);
+        self.runtime.block_on(async {
+            let mut merge = table.merge_insert(&["atom_key"]);
+            merge.when_matched_update_all(None);
+            merge.when_not_matched_insert_all();
+            merge
+                .execute(Box::new(reader))
+                .await
+                .map_err(map_lancedb_error)?;
+            Ok(())
+        })
+    }
+
+    fn query_label_atoms(&self, query: &LabelAtomQuery) -> Result<Vec<LabelAtomHit>, VectorError> {
+        if query.limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let provider = self.provider()?;
+        let embedding_model = query
+            .embedding_model
+            .as_deref()
+            .unwrap_or(provider.embedding_model());
+        if embedding_model != provider.embedding_model() {
+            return Ok(Vec::new());
+        }
+
+        let embedding = provider.embed(&query.text)?;
+        ensure_dimensions(&embedding, provider.dimensions())?;
+        let table_name = self.config.label_atom_table_name.clone();
+        let path = path_string(&self.config)?;
+        self.runtime.block_on(async {
+            let connection = lancedb::connect(&path)
+                .execute()
+                .await
+                .map_err(map_lancedb_error)?;
+            let table = match connection.open_table(&table_name).execute().await {
+                Ok(table) => table,
+                Err(lancedb::Error::TableNotFound { .. }) => return Ok(Vec::new()),
+                Err(err) => return Err(map_lancedb_error(err)),
+            };
+            validate_vector_schema(&table, provider.dimensions()).await?;
+            let mut filter = col("embedding_model").eq(lit(embedding_model.to_owned()));
+            if let Some(board_id) = &query.board_id {
+                filter = filter.and(col("board_id").eq(lit(board_id.clone())));
+            }
+            if let Some(polarity) = &query.polarity {
+                filter = filter.and(col("polarity").eq(lit(polarity.clone())));
+            }
+            let stream = table
+                .query()
+                .nearest_to(embedding)
+                .map_err(map_lancedb_error)?
+                .column(VECTOR_COLUMN)
+                .only_if_expr(filter)
+                .limit(query.limit)
+                .select(Select::columns(&[
+                    "atom_id",
+                    "label_id",
+                    "label_name",
+                    "board_id",
+                    "polarity",
+                    "kind",
+                    "text",
+                    "ordinal",
+                    "content_hash",
+                    "embedding_model",
+                    "_distance",
+                ]))
+                .execute()
+                .await
+                .map_err(map_lancedb_error)?;
+            let batches = stream
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(map_lancedb_error)?;
+            batches_to_label_atom_hits(&batches)
+        })
+    }
 }
 
 async fn ensure_table(
@@ -235,6 +369,31 @@ async fn ensure_table(
         }
         Err(lancedb::Error::TableNotFound { .. }) => {
             let schema = vector_schema(dimensions);
+            let table = connection
+                .create_empty_table(table_name, schema)
+                .mode(CreateTableMode::exist_ok(|request| request))
+                .execute()
+                .await
+                .map_err(map_lancedb_error)?;
+            validate_vector_schema(&table, dimensions).await?;
+            Ok(table)
+        }
+        Err(err) => Err(map_lancedb_error(err)),
+    }
+}
+
+async fn ensure_label_atom_table(
+    connection: &lancedb::Connection,
+    table_name: &str,
+    dimensions: usize,
+) -> Result<Table, VectorError> {
+    match connection.open_table(table_name).execute().await {
+        Ok(table) => {
+            validate_vector_schema(&table, dimensions).await?;
+            Ok(table)
+        }
+        Err(lancedb::Error::TableNotFound { .. }) => {
+            let schema = label_atom_schema(dimensions);
             let table = connection
                 .create_empty_table(table_name, schema)
                 .mode(CreateTableMode::exist_ok(|request| request))
@@ -285,6 +444,32 @@ fn vector_schema(dimensions: usize) -> SchemaRef {
         Field::new("source_event_id", DataType::Int64, true),
         Field::new("metadata_json", DataType::Utf8, false),
         Field::new("ordinal", DataType::Int64, false),
+        Field::new(
+            VECTOR_COLUMN,
+            DataType::FixedSizeList(
+                Arc::new(Field::new("item", DataType::Float32, true)),
+                dimensions as i32,
+            ),
+            false,
+        ),
+    ]))
+}
+
+fn label_atom_schema(dimensions: usize) -> SchemaRef {
+    Arc::new(Schema::new(vec![
+        Field::new("atom_key", DataType::Utf8, false),
+        Field::new("atom_id", DataType::Utf8, false),
+        Field::new("label_id", DataType::Utf8, false),
+        Field::new("label_name", DataType::Utf8, false),
+        Field::new("board_id", DataType::Utf8, false),
+        Field::new("polarity", DataType::Utf8, false),
+        Field::new("kind", DataType::Utf8, false),
+        Field::new("text", DataType::Utf8, false),
+        Field::new("ordinal", DataType::Int64, false),
+        Field::new("content_hash", DataType::Utf8, false),
+        Field::new("embedding_model", DataType::Utf8, false),
+        Field::new("created_at", DataType::Int64, false),
+        Field::new("updated_at", DataType::Int64, false),
         Field::new(
             VECTOR_COLUMN,
             DataType::FixedSizeList(
@@ -415,6 +600,97 @@ fn chunks_to_batch(
     .map_err(|err| VectorError::Store(err.to_string()))
 }
 
+fn label_atoms_to_batch(
+    atoms: &[LabelAtomVector],
+    embeddings: &[Vec<f32>],
+    dimensions: usize,
+) -> Result<RecordBatch, VectorError> {
+    let schema = label_atom_schema(dimensions);
+    let vectors = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+        embeddings
+            .iter()
+            .map(|embedding| Some(embedding.iter().copied().map(Some))),
+        dimensions as i32,
+    );
+
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(StringArray::from(
+                atoms
+                    .iter()
+                    .map(LabelAtomVector::atom_key)
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(StringArray::from(
+                atoms
+                    .iter()
+                    .map(|atom| atom.atom_id.clone())
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(StringArray::from(
+                atoms
+                    .iter()
+                    .map(|atom| atom.label_id.clone())
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(StringArray::from(
+                atoms
+                    .iter()
+                    .map(|atom| atom.label_name.clone())
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(StringArray::from(
+                atoms
+                    .iter()
+                    .map(|atom| atom.board_id.clone())
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(StringArray::from(
+                atoms
+                    .iter()
+                    .map(|atom| atom.polarity.clone())
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(StringArray::from(
+                atoms
+                    .iter()
+                    .map(|atom| atom.kind.clone())
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(StringArray::from(
+                atoms
+                    .iter()
+                    .map(|atom| atom.text.clone())
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(Int64Array::from(
+                atoms.iter().map(|atom| atom.ordinal).collect::<Vec<_>>(),
+            )),
+            Arc::new(StringArray::from(
+                atoms
+                    .iter()
+                    .map(|atom| atom.content_hash.clone())
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(StringArray::from(
+                atoms
+                    .iter()
+                    .map(|atom| atom.embedding_model.clone())
+                    .collect::<Vec<_>>(),
+            )),
+            Arc::new(Int64Array::from(
+                atoms.iter().map(|atom| atom.created_at).collect::<Vec<_>>(),
+            )),
+            Arc::new(Int64Array::from(
+                atoms.iter().map(|atom| atom.updated_at).collect::<Vec<_>>(),
+            )),
+            Arc::new(vectors),
+        ],
+    )
+    .map_err(|err| VectorError::Store(err.to_string()))
+}
+
 fn batches_to_hits(batches: &[RecordBatch]) -> Result<Vec<VectorHit>, VectorError> {
     let mut hits = Vec::new();
     for batch in batches {
@@ -441,6 +717,40 @@ fn batches_to_hits(batches: &[RecordBatch]) -> Result<Vec<VectorHit>, VectorErro
                 score: distance.value(row),
                 text: optional_string(text, row),
                 summary: optional_string(summary, row),
+            });
+        }
+    }
+    Ok(hits)
+}
+
+fn batches_to_label_atom_hits(batches: &[RecordBatch]) -> Result<Vec<LabelAtomHit>, VectorError> {
+    let mut hits = Vec::new();
+    for batch in batches {
+        let atom_id = string_column(batch, "atom_id")?;
+        let label_id = string_column(batch, "label_id")?;
+        let label_name = string_column(batch, "label_name")?;
+        let board_id = string_column(batch, "board_id")?;
+        let polarity = string_column(batch, "polarity")?;
+        let kind = string_column(batch, "kind")?;
+        let text = string_column(batch, "text")?;
+        let ordinal = int64_column(batch, "ordinal")?;
+        let content_hash = string_column(batch, "content_hash")?;
+        let embedding_model = string_column(batch, "embedding_model")?;
+        let distance = float32_column(batch, "_distance")?;
+
+        for row in 0..batch.num_rows() {
+            hits.push(LabelAtomHit {
+                atom_id: atom_id.value(row).to_owned(),
+                label_id: label_id.value(row).to_owned(),
+                label_name: label_name.value(row).to_owned(),
+                board_id: board_id.value(row).to_owned(),
+                polarity: polarity.value(row).to_owned(),
+                kind: kind.value(row).to_owned(),
+                text: text.value(row).to_owned(),
+                ordinal: ordinal.value(row),
+                content_hash: content_hash.value(row).to_owned(),
+                embedding_model: embedding_model.value(row).to_owned(),
+                score: distance.value(row),
             });
         }
     }
@@ -489,8 +799,8 @@ mod tests {
     use std::sync::Arc;
 
     use crate::{
-        ChunkBuilder, EmbeddingProvider, LanceDbConfig, LanceDbStore, TaskChunkSource, VectorError,
-        VectorQuery, VectorStore,
+        ChunkBuilder, EmbeddingProvider, LabelAtomQuery, LabelAtomVector, LanceDbConfig,
+        LanceDbStore, TaskChunkSource, VectorError, VectorQuery, VectorStore,
     };
 
     struct StaticProvider;
@@ -719,6 +1029,112 @@ mod tests {
     }
 
     #[test]
+    fn lancedb_store_upserts_and_queries_label_atoms_in_separate_table() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let static_store =
+            LanceDbStore::connect(LanceDbConfig::new(tempdir.path(), Arc::new(StaticProvider)))
+                .unwrap();
+        let other_store = LanceDbStore::connect(LanceDbConfig::new(
+            tempdir.path(),
+            Arc::new(OtherModelProvider),
+        ))
+        .unwrap();
+
+        static_store
+            .upsert_label_atoms(&[
+                build_label_atom(
+                    "la_alpha",
+                    "l_alpha",
+                    "b_1",
+                    "positive",
+                    "static-test",
+                    "alpha atom",
+                ),
+                build_label_atom(
+                    "la_beta",
+                    "l_beta",
+                    "b_2",
+                    "negative",
+                    "static-test",
+                    "beta atom",
+                ),
+            ])
+            .unwrap();
+        other_store
+            .upsert_label_atoms(&[build_label_atom(
+                "la_other",
+                "l_other",
+                "b_1",
+                "positive",
+                "other-test",
+                "alpha other",
+            )])
+            .unwrap();
+
+        let hits = static_store
+            .query_label_atoms(&LabelAtomQuery {
+                text: "alpha".to_owned(),
+                limit: 10,
+                board_id: Some("b_1".to_owned()),
+                embedding_model: Some("static-test".to_owned()),
+                polarity: Some("positive".to_owned()),
+            })
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].atom_id, "la_alpha");
+
+        assert!(
+            static_store
+                .query_label_atoms(&LabelAtomQuery {
+                    text: "alpha".to_owned(),
+                    limit: 10,
+                    board_id: Some("b_1".to_owned()),
+                    embedding_model: Some("other-test".to_owned()),
+                    polarity: None,
+                })
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            static_store
+                .query(&VectorQuery {
+                    text: "alpha".to_owned(),
+                    limit: 10,
+                })
+                .unwrap()
+                .is_empty(),
+            "label atoms must not populate kb_chunks"
+        );
+
+        static_store.delete_label_atoms_for_board("b_1").unwrap();
+        assert!(
+            static_store
+                .query_label_atoms(&LabelAtomQuery {
+                    text: "alpha".to_owned(),
+                    limit: 10,
+                    board_id: Some("b_1".to_owned()),
+                    embedding_model: Some("static-test".to_owned()),
+                    polarity: None,
+                })
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            other_store
+                .query_label_atoms(&LabelAtomQuery {
+                    text: "alpha".to_owned(),
+                    limit: 10,
+                    board_id: Some("b_1".to_owned()),
+                    embedding_model: Some("other-test".to_owned()),
+                    polarity: None,
+                })
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
     fn lancedb_store_rejects_embedding_dimension_mismatch() {
         let tempdir = tempfile::tempdir().unwrap();
         let store =
@@ -771,5 +1187,29 @@ mod tests {
             })
             .unwrap()
             .remove(0)
+    }
+
+    fn build_label_atom(
+        atom_id: &str,
+        label_id: &str,
+        board_id: &str,
+        polarity: &str,
+        embedding_model: &str,
+        text: &str,
+    ) -> LabelAtomVector {
+        LabelAtomVector {
+            atom_id: atom_id.to_owned(),
+            label_id: label_id.to_owned(),
+            label_name: label_id.trim_start_matches("l_").to_owned(),
+            board_id: board_id.to_owned(),
+            polarity: polarity.to_owned(),
+            kind: "description".to_owned(),
+            text: text.to_owned(),
+            ordinal: 0,
+            content_hash: format!("hash-{atom_id}"),
+            embedding_model: embedding_model.to_owned(),
+            created_at: 1,
+            updated_at: 2,
+        }
     }
 }

@@ -5,8 +5,8 @@ use super::storage;
 use kanban_core::{KanbanError, Result};
 
 use kanban_indexer::{
-    DERIVED_STORE_SEEDS, DerivedStoreUpdate, OUTBOX_FANOUT_TARGETS, OutboxTarget,
-    derived_store_for_name,
+    DERIVED_STORE_SEEDS, DerivedStoreUpdate, OUTBOX_DERIVED_STORE_SEEDS, OUTBOX_FANOUT_TARGETS,
+    OutboxTarget, derived_store_for_name,
 };
 
 pub(crate) fn upsert_board_entity(conn: &Connection, board_id: &str) -> Result<()> {
@@ -129,7 +129,7 @@ pub(crate) fn enqueue_index_outbox(
         )
         .map_err(storage)?;
     }
-    for seed in DERIVED_STORE_SEEDS {
+    for seed in OUTBOX_DERIVED_STORE_SEEDS {
         mark_derived_store_dirty(conn, seed.store_name, now)?;
     }
     Ok(())

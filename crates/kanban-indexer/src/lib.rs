@@ -62,6 +62,7 @@ pub const OUTBOX_FANOUT_TARGETS: &[OutboxTarget] = &[
 pub const TANTIVY_TASKS_STORE: &str = "tantivy_tasks";
 pub const OXIGRAPH_RELATIONS_STORE: &str = "oxigraph_relations";
 pub const LANCEDB_CHUNKS_STORE: &str = "lancedb_chunks";
+pub const LANCEDB_LABEL_ATOMS_STORE: &str = "lancedb_label_atoms";
 pub const DERIVED_STORE_SCHEMA_VERSION: i64 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,6 +73,29 @@ pub struct DerivedStoreSeed {
 }
 
 pub const DERIVED_STORE_SEEDS: &[DerivedStoreSeed] = &[
+    DerivedStoreSeed {
+        store_name: TANTIVY_TASKS_STORE,
+        target: OutboxTarget::Tantivy,
+        schema_version: DERIVED_STORE_SCHEMA_VERSION,
+    },
+    DerivedStoreSeed {
+        store_name: OXIGRAPH_RELATIONS_STORE,
+        target: OutboxTarget::Oxigraph,
+        schema_version: DERIVED_STORE_SCHEMA_VERSION,
+    },
+    DerivedStoreSeed {
+        store_name: LANCEDB_CHUNKS_STORE,
+        target: OutboxTarget::Lancedb,
+        schema_version: DERIVED_STORE_SCHEMA_VERSION,
+    },
+    DerivedStoreSeed {
+        store_name: LANCEDB_LABEL_ATOMS_STORE,
+        target: OutboxTarget::Lancedb,
+        schema_version: DERIVED_STORE_SCHEMA_VERSION,
+    },
+];
+
+pub const OUTBOX_DERIVED_STORE_SEEDS: &[DerivedStoreSeed] = &[
     DerivedStoreSeed {
         store_name: TANTIVY_TASKS_STORE,
         target: OutboxTarget::Tantivy,
@@ -202,9 +226,9 @@ pub enum IndexerError {
 #[cfg(test)]
 mod tests {
     use super::{
-        DERIVED_STORE_SCHEMA_VERSION, LANCEDB_CHUNKS_STORE, OUTBOX_FANOUT_TARGETS,
-        OXIGRAPH_RELATIONS_STORE, OutboxTarget, TANTIVY_TASKS_STORE, derived_store_for_name,
-        derived_store_for_target,
+        DERIVED_STORE_SCHEMA_VERSION, LANCEDB_CHUNKS_STORE, LANCEDB_LABEL_ATOMS_STORE,
+        OUTBOX_DERIVED_STORE_SEEDS, OUTBOX_FANOUT_TARGETS, OXIGRAPH_RELATIONS_STORE, OutboxTarget,
+        TANTIVY_TASKS_STORE, derived_store_for_name, derived_store_for_target,
     };
 
     #[test]
@@ -229,10 +253,27 @@ mod tests {
                 LANCEDB_CHUNKS_STORE
             ]
         );
+        assert_eq!(
+            OUTBOX_DERIVED_STORE_SEEDS
+                .iter()
+                .map(|seed| seed.store_name)
+                .collect::<Vec<_>>(),
+            vec![
+                TANTIVY_TASKS_STORE,
+                OXIGRAPH_RELATIONS_STORE,
+                LANCEDB_CHUNKS_STORE
+            ]
+        );
         assert_eq!(DERIVED_STORE_SCHEMA_VERSION, 1);
         assert_eq!(
             derived_store_for_name(TANTIVY_TASKS_STORE).unwrap().target,
             OutboxTarget::Tantivy
+        );
+        assert_eq!(
+            derived_store_for_name(LANCEDB_LABEL_ATOMS_STORE)
+                .unwrap()
+                .target,
+            OutboxTarget::Lancedb
         );
         assert!(derived_store_for_target(OutboxTarget::All).is_none());
     }

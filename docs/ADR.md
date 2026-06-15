@@ -491,8 +491,8 @@ tags 不适合表达：
 现有 dependency 的核心语义是 hard prerequisite：
 
 ```text
-parent done => child may become ready
-parent not done => child cannot be ready/running
+parent done or archived => child may become ready
+parent neither done nor archived => child cannot be ready/running
 ```
 
 引入 `dependency_type` 后，必须保留 hard dependency 的清晰语义。

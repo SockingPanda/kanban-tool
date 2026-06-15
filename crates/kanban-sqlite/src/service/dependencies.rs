@@ -1,9 +1,9 @@
 use crate::connect_file;
 
 use super::{
-    TaskRecord, board_id, delete_dependency_relation, ensure_board_active, get_task_by_id,
-    guarded_set_status, insert_event, recompute_ready_status, resolve_task, storage,
-    upsert_dependency_relation, with_immediate_tx,
+    TaskRecord, board_id, delete_dependency_relation, dependency_parent_is_satisfied,
+    ensure_board_active, get_task_by_id, guarded_set_status, insert_event, recompute_ready_status,
+    resolve_task, storage, upsert_dependency_relation, with_immediate_tx,
 };
 
 use std::{
@@ -76,7 +76,7 @@ pub(crate) fn add_dependency_in_current_tx(
             "dependency cycle detected".into(),
         ));
     }
-    if child.status == TaskStatus::Running && parent.status != TaskStatus::Done {
+    if child.status == TaskStatus::Running && !dependency_parent_is_satisfied(parent.status) {
         return Err(KanbanError::InvalidTransition(
             "cannot add incomplete dependency to running task".into(),
         ));

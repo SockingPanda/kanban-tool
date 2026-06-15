@@ -173,7 +173,7 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
             "SELECT COUNT(*) FROM task_dependencies d \
              JOIN tasks p ON p.id=d.parent_task_id \
              JOIN tasks c ON c.id=d.child_task_id \
-             WHERE (p.status='archived' AND c.status!='archived') OR (c.status='archived' AND p.status!='archived')",
+             WHERE c.status='archived' AND p.status!='archived'",
             [],
             |row| row.get(0),
         )
@@ -424,7 +424,7 @@ pub(crate) fn count_executable_dependency_violations(conn: &Connection) -> Resul
          FROM tasks t \
          JOIN task_dependencies d ON d.child_task_id=t.id \
          JOIN tasks p ON p.id=d.parent_task_id \
-         WHERE t.status IN ('ready', 'running') AND p.status!='done'",
+         WHERE t.status IN ('ready', 'running') AND p.status NOT IN ('done','archived')",
         [],
         |row| row.get(0),
     )

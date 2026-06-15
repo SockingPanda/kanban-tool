@@ -174,6 +174,7 @@ pub struct LabelGroupCandidate {
     pub negative_score: f32,
     pub suppressed: bool,
     pub evidence_atoms: Vec<LabelAtomEvidence>,
+    pub negative_evidence_atoms: Vec<LabelAtomEvidence>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -183,6 +184,7 @@ pub struct SelectedLabel {
     pub weight: f32,
     pub score: f32,
     pub evidence_atoms: Vec<LabelAtomEvidence>,
+    pub negative_evidence_atoms: Vec<LabelAtomEvidence>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -228,7 +230,7 @@ pub fn retrieve_label_groups(
     labels: &[SemanticLabel],
     config: &LabelSolverConfig,
 ) -> Result<Vec<LabelGroupCandidate>, LabelSolverError> {
-    validate_query_dimension(query_embedding, labels)?;
+    validate_solver_inputs(query_embedding, labels)?;
 
     let mut candidates = labels
         .iter()
@@ -236,6 +238,7 @@ pub fn retrieve_label_groups(
             let mut positive_score = 0.0_f32;
             let mut negative_score = 0.0_f32;
             let mut evidence_atoms = Vec::new();
+            let mut negative_evidence_atoms = Vec::new();
 
             for atom in &label.atoms {
                 let similarity = cosine_similarity(query_embedding, &atom.embedding);
@@ -252,11 +255,25 @@ pub fn retrieve_label_groups(
                     }
                     LabelAtomPolarity::Negative => {
                         negative_score = negative_score.max(similarity);
+                        if similarity >= config.min_evidence_score {
+                            negative_evidence_atoms.push(LabelAtomEvidence {
+                                source: atom.source.clone(),
+                                similarity,
+                                contribution: similarity.max(0.0)
+                                    * config.negative_suppression_factor,
+                            });
+                        }
                     }
                 }
             }
 
             evidence_atoms.sort_by(|left, right| {
+                right
+                    .contribution
+                    .total_cmp(&left.contribution)
+                    .then_with(|| left.source.text.cmp(&right.source.text))
+            });
+            negative_evidence_atoms.sort_by(|left, right| {
                 right
                     .contribution
                     .total_cmp(&left.contribution)
@@ -270,7 +287,9 @@ pub fn retrieve_label_groups(
                 0.0
             };
             let score = (positive_score - suppression).max(0.0);
-            (score >= config.min_candidate_score).then(|| LabelGroupCandidate {
+            let keep_candidate = score >= config.min_candidate_score
+                || (suppressed && positive_score >= config.min_candidate_score);
+            keep_candidate.then(|| LabelGroupCandidate {
                 label_id: label.definition.id.clone(),
                 label_name: label.definition.name.clone(),
                 score,
@@ -278,6 +297,7 @@ pub fn retrieve_label_groups(
                 negative_score,
                 suppressed,
                 evidence_atoms,
+                negative_evidence_atoms,
             })
         })
         .collect::<Vec<_>>();
@@ -297,7 +317,7 @@ pub fn resolve_label_groups(
     labels: &[SemanticLabel],
     config: &LabelSolverConfig,
 ) -> Result<LabelSolverResult, LabelSolverError> {
-    validate_query_dimension(query_embedding, labels)?;
+    validate_solver_inputs(query_embedding, labels)?;
     let candidates = retrieve_label_groups(query_embedding, labels, config)?;
     let query_norm = l2_norm(query_embedding);
 
@@ -362,6 +382,7 @@ pub fn resolve_label_groups(
                 weight,
                 score: candidate.score,
                 evidence_atoms: candidate.evidence_atoms.clone(),
+                negative_evidence_atoms: candidate.negative_evidence_atoms.clone(),
             }
         })
         .collect::<Vec<_>>();
@@ -383,6 +404,8 @@ pub enum LabelSolverError {
     LabelMismatch { expected: String, actual: String },
     #[error("semantic label requires at least one embedded atom")]
     EmptyAtoms,
+    #[error("query embedding has no semantic signal")]
+    ZeroQueryEmbedding,
 }
 
 fn ensure_dimension(actual: usize, expected: usize) -> Result<(), LabelSolverError> {
@@ -413,15 +436,47 @@ fn push_atom_source(
     });
 }
 
-fn validate_query_dimension(
+fn validate_solver_inputs(
     query_embedding: &[f32],
     labels: &[SemanticLabel],
 ) -> Result<(), LabelSolverError> {
-    if let Some(label) = labels.first() {
-        ensure_dimension(query_embedding.len(), label.embedding_dimension)?;
-        for other in labels.iter().skip(1) {
-            ensure_dimension(other.embedding_dimension, label.embedding_dimension)?;
+    if l2_norm(query_embedding) == 0.0 {
+        return Err(LabelSolverError::ZeroQueryEmbedding);
+    }
+
+    let Some(first_label) = labels.first() else {
+        return Ok(());
+    };
+
+    validate_semantic_label(first_label)?;
+    ensure_dimension(query_embedding.len(), first_label.embedding_dimension)?;
+
+    for label in labels.iter().skip(1) {
+        validate_semantic_label(label)?;
+        ensure_dimension(label.embedding_dimension, first_label.embedding_dimension)?;
+    }
+    Ok(())
+}
+
+fn validate_semantic_label(label: &SemanticLabel) -> Result<(), LabelSolverError> {
+    if label.atoms.is_empty() {
+        return Err(LabelSolverError::EmptyAtoms);
+    }
+
+    for atom in &label.atoms {
+        if atom.source.label_id != label.definition.id {
+            return Err(LabelSolverError::LabelMismatch {
+                expected: label.definition.id.clone(),
+                actual: atom.source.label_id.clone(),
+            });
         }
+        if atom.source.label_name != label.definition.name {
+            return Err(LabelSolverError::LabelMismatch {
+                expected: label.definition.name.clone(),
+                actual: atom.source.label_name.clone(),
+            });
+        }
+        ensure_dimension(atom.embedding.len(), label.embedding_dimension)?;
     }
     Ok(())
 }
@@ -707,13 +762,22 @@ mod tests {
             vec![vec![1.0, 0.0, 0.0]],
             vec![vec![1.0, 0.0, 0.0]],
         )];
+        let config = LabelSolverConfig {
+            negative_suppression_factor: 1.0,
+            ..LabelSolverConfig::default()
+        };
 
-        let candidates =
-            retrieve_label_groups(&[1.0, 0.0, 0.0], &labels, &LabelSolverConfig::default())
-                .unwrap();
+        let candidates = retrieve_label_groups(&[1.0, 0.0, 0.0], &labels, &config).unwrap();
 
         assert!(candidates[0].suppressed);
+        assert_eq!(candidates[0].score, 0.0);
         assert!(candidates[0].score < candidates[0].positive_score);
+        assert_eq!(candidates[0].negative_evidence_atoms.len(), 1);
+        assert_eq!(
+            candidates[0].negative_evidence_atoms[0].source.polarity,
+            LabelAtomPolarity::Negative
+        );
+        assert!(candidates[0].negative_evidence_atoms[0].similarity > 0.9);
     }
 
     #[test]
@@ -729,7 +793,9 @@ mod tests {
             resolve_label_groups(&[0.0, 0.0, 1.0], &labels, &LabelSolverConfig::default()).unwrap();
 
         assert!(result.needs_new_label);
-        assert!(result.coverage < LabelSolverConfig::default().min_coverage);
+        assert!(result.candidates.is_empty());
+        assert_eq!(result.coverage, 0.0);
+        assert_eq!(result.residual_norm, 1.0);
     }
 
     #[test]
@@ -747,6 +813,64 @@ mod tests {
                 expected: 3,
                 actual: 2
             })
+        ));
+    }
+
+    #[test]
+    fn public_semantic_label_dimension_mismatch_returns_error() {
+        let def = definition("l_backend", "Backend");
+        let source = def.atom_sources().remove(0);
+        let labels = vec![SemanticLabel {
+            definition: def,
+            atoms: vec![EmbeddedLabelAtom {
+                source,
+                embedding: vec![1.0, 0.0],
+            }],
+            embedding_dimension: 3,
+        }];
+
+        assert!(matches!(
+            resolve_label_groups(&[1.0, 0.0, 0.0], &labels, &LabelSolverConfig::default()),
+            Err(LabelSolverError::DimensionMismatch {
+                expected: 3,
+                actual: 2
+            })
+        ));
+    }
+
+    #[test]
+    fn public_semantic_label_source_mismatch_returns_error() {
+        let def = definition("l_backend", "Backend");
+        let mut source = def.atom_sources().remove(0);
+        source.label_id = "l_frontend".to_owned();
+        let labels = vec![SemanticLabel {
+            definition: def,
+            atoms: vec![EmbeddedLabelAtom {
+                source,
+                embedding: vec![1.0, 0.0, 0.0],
+            }],
+            embedding_dimension: 3,
+        }];
+
+        assert!(matches!(
+            retrieve_label_groups(&[1.0, 0.0, 0.0], &labels, &LabelSolverConfig::default()),
+            Err(LabelSolverError::LabelMismatch { expected, actual })
+                if expected == "l_backend" && actual == "l_frontend"
+        ));
+    }
+
+    #[test]
+    fn zero_query_embedding_returns_error() {
+        let labels = vec![embedded_label(
+            "l_backend",
+            "Backend",
+            vec![vec![1.0, 0.0, 0.0]],
+            vec![],
+        )];
+
+        assert!(matches!(
+            resolve_label_groups(&[0.0, 0.0, 0.0], &labels, &LabelSolverConfig::default()),
+            Err(LabelSolverError::ZeroQueryEmbedding)
         ));
     }
 }

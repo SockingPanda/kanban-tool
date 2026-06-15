@@ -598,6 +598,9 @@ pub(crate) fn doctor_tables_present(
     if migration_version.unwrap_or(0) >= 8 || user_version >= 8 {
         required_tables.push("label_atom_index_boards");
     }
+    if migration_version.unwrap_or(0) >= 9 || user_version >= 9 {
+        required_tables.push("label_semantic_proposals");
+    }
     for table in required_tables {
         if !table_exists(conn, table)? {
             return Ok(false);

@@ -103,6 +103,99 @@ pub struct LabelAtomRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelProposalStatus {
+    Proposed,
+    Accepted,
+    Rejected,
+}
+
+impl std::fmt::Display for LabelProposalStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            Self::Proposed => "proposed",
+            Self::Accepted => "accepted",
+            Self::Rejected => "rejected",
+        };
+        f.write_str(value)
+    }
+}
+
+impl std::str::FromStr for LabelProposalStatus {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "proposed" => Ok(Self::Proposed),
+            "accepted" => Ok(Self::Accepted),
+            "rejected" => Ok(Self::Rejected),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid label proposal status: {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct LabelProposalCandidate {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub applies_when: Vec<String>,
+    #[serde(default)]
+    pub excludes_when: Vec<String>,
+    #[serde(default)]
+    pub positive_examples: Vec<String>,
+    #[serde(default)]
+    pub negative_examples: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelSemanticProposalRecord {
+    pub id: String,
+    pub board_id: String,
+    pub task_id: String,
+    pub status: LabelProposalStatus,
+    pub name: String,
+    pub description: Option<String>,
+    pub applies_when: Vec<String>,
+    pub excludes_when: Vec<String>,
+    pub positive_examples: Vec<String>,
+    pub negative_examples: Vec<String>,
+    pub heuristic_coverage: f32,
+    pub heuristic_residual_norm: f32,
+    pub top1_existing_label_id: Option<String>,
+    pub top1_existing_label_name: Option<String>,
+    pub diagnostics: Vec<String>,
+    pub created_by: String,
+    pub decision_reason: Option<String>,
+    pub resolved_label_id: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub decided_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelProposalAttempt {
+    pub task_id: String,
+    pub board_id: String,
+    pub proposal: Option<LabelSemanticProposalRecord>,
+    pub degraded: bool,
+    pub diagnostics: Vec<String>,
+    pub heuristic_coverage: f32,
+    pub heuristic_residual_norm: f32,
+    pub top1_existing_label_id: Option<String>,
+    pub top1_existing_label_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LabelProposalListOptions {
+    pub task_ref: Option<String>,
+    pub status: Option<LabelProposalStatus>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventRecord {
     pub id: i64,
     pub event_id: String,

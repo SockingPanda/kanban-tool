@@ -189,6 +189,11 @@ pub(crate) enum LabelCommand {
     Add(LabelTaskArgs),
     Remove(LabelTaskArgs),
     Suggest(LabelSuggestArgs),
+    Propose(LabelProposeArgs),
+    Proposals {
+        #[command(subcommand)]
+        command: LabelProposalsCommand,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -215,6 +220,42 @@ pub(crate) struct LabelSuggestArgs {
     pub(crate) min_score: f32,
     #[arg(long = "vector-config", alias = "config")]
     pub(crate) vector_config: Option<std::path::PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelProposeArgs {
+    pub(crate) task_ref: String,
+    #[arg(long = "proposal-json")]
+    pub(crate) proposal_json: Option<std::path::PathBuf>,
+    #[arg(long, default_value_t = 5)]
+    pub(crate) limit: usize,
+    #[arg(long, default_value_t = 24)]
+    pub(crate) atom_limit: usize,
+    #[arg(long, default_value_t = 0.15)]
+    pub(crate) min_score: f32,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum LabelProposalsCommand {
+    List(LabelProposalsListArgs),
+    Show { proposal_id: String },
+    Accept(LabelProposalDecisionArgs),
+    Reject(LabelProposalDecisionArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelProposalsListArgs {
+    #[arg(long)]
+    pub(crate) task: Option<String>,
+    #[arg(long)]
+    pub(crate) status: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelProposalDecisionArgs {
+    pub(crate) proposal_id: String,
+    #[arg(long)]
+    pub(crate) reason: Option<String>,
 }
 
 #[derive(Debug, Args)]

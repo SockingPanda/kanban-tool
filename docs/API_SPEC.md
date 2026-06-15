@@ -925,6 +925,76 @@ Response：
 - `solver_refit_unavailable`
 - `vector_query_error`
 
+### 12.2 Label semantic proposals
+
+```http
+POST /api/v1/tasks/{task_id}/label-proposals
+GET /api/v1/tasks/{task_id}/label-proposals
+GET /api/v1/label-proposals/{proposal_id}
+POST /api/v1/label-proposals/{proposal_id}/accept
+POST /api/v1/label-proposals/{proposal_id}/reject
+```
+
+`POST /api/v1/tasks/{task_id}/label-proposals` 创建一次新 label proposal attempt。
+请求 body 可为空或仅包含 `actor`；此时默认 provider 不可用，接口返回 `200`
+degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms` 或
+`task_labels`。
+
+带本地/offline provider 输出时：
+
+```json
+{
+  "proposal": {
+    "name": "database",
+    "description": "Database persistence work",
+    "applies_when": ["touches SQLite migrations"],
+    "excludes_when": ["UI-only polish"],
+    "positive_examples": ["new table migration"],
+    "negative_examples": ["CSS-only tweak"]
+  },
+  "actor": "alice"
+}
+```
+
+数组字段缺省时按空数组处理。服务先读取当前 label suggestion 的启发式
+`coverage` / `residual_norm` / top1 existing label。coverage 充足时不写 proposal；
+coverage 不足且候选语义有效时，返回 `201` 并持久化 `proposed` proposal。与现有
+label 发生 normalized-name 冲突的候选持久化为 `rejected`，diagnostics 包含
+`near_duplicate_label_conflict`。Normalized-name conflict 忽略大小写、空白和标点，
+是 deterministic near-duplicate heuristic。
+
+Attempt response：
+
+```json
+{
+  "data": {
+    "task_id": "t_...",
+    "board_id": "b_...",
+    "proposal": null,
+    "degraded": true,
+    "diagnostics": ["label_proposal_provider_unavailable", "vector_store_disabled"],
+    "heuristic_coverage": 0.0,
+    "heuristic_residual_norm": 1.0,
+    "top1_existing_label_id": null,
+    "top1_existing_label_name": null
+  }
+}
+```
+
+Accept/reject body：
+
+```json
+{
+  "reason": "coverage 不足，接受新 label",
+  "actor": "alice"
+}
+```
+
+Accept 只允许 `proposed` proposal。成功后会创建 canonical `labels` 行与对应
+`label_semantics` / `label_atoms`，并标脏 label atom index；不会自动写
+`task_labels`。Reject 标记为 `rejected`。accepted/rejected proposal 再次决策返回
+普通 `400 invalid_input` error envelope。
+
 ---
 
 ## 13. Search

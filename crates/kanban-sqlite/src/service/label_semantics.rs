@@ -1,8 +1,8 @@
 use crate::connect_file;
 
 use super::{
-    LabelAtomRecord, LabelSemanticsRecord, UpsertLabelSemantics, board_id, derived_status_by_name,
-    storage, vector_storage, with_immediate_tx,
+    LabelAtomRecord, LabelProposalCandidate, LabelSemanticsRecord, UpsertLabelSemantics, board_id,
+    derived_status_by_name, storage, vector_storage, with_immediate_tx,
 };
 
 use std::path::Path;
@@ -31,23 +31,6 @@ pub fn upsert_label_semantics(
         let positive_examples = normalize_text_list(input.positive_examples);
         let negative_examples = normalize_text_list(input.negative_examples);
 
-        conn.execute(
-            "INSERT INTO label_semantics(label_id, board_id, description, applies_when, excludes_when, positive_examples, negative_examples, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8) \
-             ON CONFLICT(label_id) DO UPDATE SET description=excluded.description, applies_when=excluded.applies_when, excludes_when=excluded.excludes_when, positive_examples=excluded.positive_examples, negative_examples=excluded.negative_examples, updated_at=excluded.updated_at",
-            params![
-                label.id,
-                label.board_id,
-                description,
-                json_array(&applies_when)?,
-                json_array(&excludes_when)?,
-                json_array(&positive_examples)?,
-                json_array(&negative_examples)?,
-                now
-            ],
-        )
-        .map_err(storage)?;
-
         let definition = LabelDefinition {
             id: label.id.clone(),
             name: label.name.clone(),
@@ -57,10 +40,55 @@ pub fn upsert_label_semantics(
             excludes_when,
             negative_examples,
         };
-        rebuild_atoms_for_label(&conn, &definition, &label.board_id, now)?;
+        upsert_label_semantics_in_tx(&conn, &label.board_id, &definition, now)?;
         mark_label_atom_store_dirty(&conn, &label.board_id, now)?;
         get_label_semantics_conn(&conn, &label.board_id, &label.id)
     })
+}
+
+pub(crate) fn upsert_label_semantics_candidate_in_tx(
+    conn: &Connection,
+    board_id: &str,
+    label_id: &str,
+    label_name: &str,
+    candidate: &LabelProposalCandidate,
+    now: i64,
+) -> Result<()> {
+    let definition = LabelDefinition {
+        id: label_id.to_owned(),
+        name: label_name.to_owned(),
+        description: candidate.description.clone(),
+        applies_when: candidate.applies_when.clone(),
+        positive_examples: candidate.positive_examples.clone(),
+        excludes_when: candidate.excludes_when.clone(),
+        negative_examples: candidate.negative_examples.clone(),
+    };
+    upsert_label_semantics_in_tx(conn, board_id, &definition, now)
+}
+
+pub(crate) fn upsert_label_semantics_in_tx(
+    conn: &Connection,
+    board_id: &str,
+    definition: &LabelDefinition,
+    now: i64,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO label_semantics(label_id, board_id, description, applies_when, excludes_when, positive_examples, negative_examples, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8) \
+         ON CONFLICT(label_id) DO UPDATE SET description=excluded.description, applies_when=excluded.applies_when, excludes_when=excluded.excludes_when, positive_examples=excluded.positive_examples, negative_examples=excluded.negative_examples, updated_at=excluded.updated_at",
+        params![
+            definition.id,
+            board_id,
+            definition.description,
+            json_array(&definition.applies_when)?,
+            json_array(&definition.excludes_when)?,
+            json_array(&definition.positive_examples)?,
+            json_array(&definition.negative_examples)?,
+            now
+        ],
+    )
+    .map_err(storage)?;
+    rebuild_atoms_for_label(conn, definition, board_id, now)
 }
 
 pub fn get_label_semantics(

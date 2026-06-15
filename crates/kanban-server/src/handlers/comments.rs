@@ -8,7 +8,7 @@ use crate::dto::{CommentDto, Envelope};
 use crate::error::{ApiError, extractor_error};
 use crate::state::AppState;
 
-use super::shared::{CommentBody, actor};
+use super::shared::{CommentBody, actor, metadata_json};
 
 pub(crate) async fn list_comments(
     State(state): State<AppState>,
@@ -31,6 +31,7 @@ pub(crate) async fn create_comment(
 ) -> Result<(StatusCode, Json<Envelope<CommentDto>>), ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.author.as_deref(), &headers, &state);
+    let metadata_json = metadata_json(body.metadata)?;
     let comment = kanban_sqlite::create_comment_with_options(
         state.db_path(),
         &task_id,
@@ -40,6 +41,7 @@ pub(crate) async fn create_comment(
             kind: body.kind,
             author_type: body.author_type,
             agent_type: body.agent_type,
+            metadata_json: Some(metadata_json),
         },
     )?;
     Ok((

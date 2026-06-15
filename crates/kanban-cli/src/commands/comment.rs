@@ -27,6 +27,7 @@ pub(crate) fn handle_comment(
                     kind: args.kind,
                     author_type: args.author_type,
                     agent_type: args.agent_type,
+                    metadata_json: args.metadata_json,
                 },
             )?;
             print_or_json(json, &comment, || comment_line(&comment))?;

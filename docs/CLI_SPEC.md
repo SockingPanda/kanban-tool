@@ -679,18 +679,18 @@ JSON output uses the standard envelope:
 ## 9. Comment Commands
 
 ```bash
-kanban comment add <task_ref> <body> [--kind text|system|worker|decision] [--author-type human|agent|system] [--agent-type <type>]
+kanban comment add <task_ref> <body> [--kind note|decision] [--author-type user|agent] [--agent-type <type>] [--metadata-json <json>]
 kanban comment list <task_ref>
 ```
 
 `--actor` supplies the comment author display identity. If `--kind` is omitted,
-the service default is `text`. If `--author-type` is omitted, the service infers
-`worker -> agent`, `system -> system`, and otherwise `human`; `decision` defaults
-to `human` unless `--author-type agent` is provided. `--agent-type` is
-allowed only with `--author-type agent`.
+the service default is `note`. If `--author-type` is omitted, the service default
+is `user`; pass `--author-type agent --agent-type <type>` for Codex/dispatcher or
+other automated writers. `--metadata-json` defaults to `{}` and must be a JSON
+object.
 
-Use `--kind decision` for meaningful multi-option choices. The recommended body
-shape is stable Markdown:
+Use `--kind decision` for meaningful multi-option choices. Until the structured
+decision schema is enabled, body remains the human-readable fallback:
 
 ```text
 Problem: <decision problem>
@@ -707,13 +707,13 @@ Human output is compact and includes comment id, task id, created_at, kind,
 author identity, author_type, optional agent_type, and body:
 
 ```text
-c_01HX... task=t_01HX... created_at=1717520000000 [text] alice (human): ready for review
-c_01HX... task=t_01HX... created_at=1717520000100 [worker] worker-a (agent/root): tests passed
+c_01HX... task=t_01HX... created_at=1717520000000 [note] alice (user): ready for review
+c_01HX... task=t_01HX... created_at=1717520000100 [note] codex (agent/root): tests passed
 ```
 
 JSON output uses the standard envelope and returns `CommentRecord` for `add` or
-`Vec<CommentRecord>` for `list`. Creating a comment writes
-`task_events(kind='task.comment.created')`.
+`Vec<CommentRecord>` for `list`, including `metadata_json`. Creating a comment
+writes `task_events(kind='task.comment.created')`.
 
 ---
 

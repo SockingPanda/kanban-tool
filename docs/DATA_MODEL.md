@@ -329,11 +329,14 @@ run.finished
 | `id` | Comment ID。 |
 | `task_id` | 关联 task。 |
 | `author` | actor string。 |
-| `author_type` | `human` / `agent` / `system`，表示评论作者身份；旧请求按 `kind` 推断。 |
+| `author_type` | `user` / `agent`，表示评论作者身份；本地操作者是 `user`，其它自动化来源是 `agent`。 |
 | `agent_type` | 可选 open text，仅用于 `author_type=agent`，例如 `executor` / `reviewer`。 |
 | `body` | Markdown 文本。 |
-| `kind` | `text` / `system` / `worker` / `decision`，保留为兼容展示/来源分类，不等同于作者身份。`decision` 用于记录有意义的多选项取舍。 |
+| `kind` | `note` / `decision`，表示 comment 内容语义，不表示作者身份。 |
+| `metadata_json` | `kind` 对应的结构化 payload；默认 `{}`，必须是合法 JSON object。 |
 | `created_at` | 创建时间。 |
+
+旧 comment rows / JSONL import 会迁移到新语义：旧 `human` 变为 `user`，旧 `agent/system` 或 `worker/system` 来源变为 `agent`，旧 `text/system/worker` 内容变为 `note`。没有结构化 metadata 的旧 `decision` 也按 `note` 保留 body fallback。
 
 Comment 创建时也写一条 `task_events(kind='task.comment.created')`。
 

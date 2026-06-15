@@ -427,7 +427,7 @@ pub(crate) fn insert_jsonl_record(conn: &Connection, record: &serde_json::Value)
         .and_then(|value| value.as_object())
         .cloned()
         .ok_or_else(|| KanbanError::InvalidInput("export record data is required".into()))?;
-    normalize_import_record(record_type, &mut data);
+    normalize_import_record(record_type, &mut data)?;
     if data.is_empty() {
         return Err(KanbanError::InvalidInput(
             "export record data cannot be empty".into(),
@@ -458,7 +458,7 @@ pub(crate) fn insert_jsonl_record(conn: &Connection, record: &serde_json::Value)
 pub(crate) fn normalize_import_record(
     record_type: &str,
     data: &mut Map<String, serde_json::Value>,
-) {
+) -> Result<()> {
     if record_type == "task" {
         let normalized = data
             .get("priority")
@@ -468,15 +468,87 @@ pub(crate) fn normalize_import_record(
         data.insert("priority".into(), json!(normalized));
     }
     if record_type == "comment" {
+        let has_metadata_json = data.contains_key("metadata_json");
+        let legacy_kind = data
+            .get("kind")
+            .and_then(|value| value.as_str())
+            .unwrap_or("note")
+            .to_owned();
         if !data.contains_key("author_type") {
-            let author_type = data
-                .get("kind")
+            let has_agent_type = data
+                .get("agent_type")
                 .and_then(|value| value.as_str())
-                .map(infer_comment_author_type)
-                .unwrap_or("human");
+                .is_some_and(|value| !value.trim().is_empty());
+            let author_type = if has_agent_type {
+                "agent"
+            } else {
+                infer_comment_author_type(&legacy_kind)
+            };
+            data.insert("author_type".into(), json!(author_type));
+        } else {
+            let author_type = data
+                .get("author_type")
+                .and_then(|value| value.as_str())
+                .map(normalize_imported_comment_author_type)
+                .unwrap_or("user");
             data.insert("author_type".into(), json!(author_type));
         }
         data.entry("agent_type").or_insert(serde_json::Value::Null);
+        data.insert(
+            "kind".into(),
+            json!(normalize_imported_comment_kind(
+                &legacy_kind,
+                has_metadata_json
+            )),
+        );
+        let metadata_json = normalize_imported_comment_metadata_json(data.get("metadata_json"))?;
+        data.insert("metadata_json".into(), json!(metadata_json));
+    }
+    Ok(())
+}
+
+fn normalize_imported_comment_author_type(author_type: &str) -> &'static str {
+    match author_type {
+        "agent" | "system" => "agent",
+        _ => "user",
+    }
+}
+
+fn normalize_imported_comment_kind(kind: &str, has_metadata_json: bool) -> &'static str {
+    match (kind, has_metadata_json) {
+        ("decision", true) => "decision",
+        _ => "note",
+    }
+}
+
+fn normalize_imported_comment_metadata_json(
+    metadata_json: Option<&serde_json::Value>,
+) -> Result<String> {
+    let Some(metadata_json) = metadata_json else {
+        return Ok("{}".into());
+    };
+    match metadata_json {
+        serde_json::Value::Null => Ok("{}".into()),
+        serde_json::Value::Object(_) => Ok(metadata_json.to_string()),
+        serde_json::Value::String(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return Ok("{}".into());
+            }
+            let parsed = serde_json::from_str::<serde_json::Value>(trimmed).map_err(|_| {
+                KanbanError::InvalidInput("metadata_json must be valid JSON".into())
+            })?;
+            if parsed.is_object() {
+                Ok(trimmed.to_owned())
+            } else {
+                Err(KanbanError::InvalidInput(
+                    "metadata_json must be a JSON object".into(),
+                ))
+            }
+        }
+        _ => Err(KanbanError::InvalidInput(
+            "metadata_json must be a JSON object".into(),
+        )),
     }
 }
 

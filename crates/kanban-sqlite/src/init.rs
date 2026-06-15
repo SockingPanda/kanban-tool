@@ -17,7 +17,9 @@ const COMMENT_AUTHOR_IDENTITY_MIGRATION: &str =
 const PRIORITY_LEVELS_MIGRATION: &str = include_str!("../../../migrations/004_priority_levels.sql");
 const DECISION_COMMENT_KIND_MIGRATION: &str =
     include_str!("../../../migrations/005_decision_comment_kind.sql");
-const LATEST_MIGRATION_VERSION: i64 = 5;
+const COMMENT_METADATA_CONTRACT_MIGRATION: &str =
+    include_str!("../../../migrations/006_comment_metadata_contract.sql");
+const LATEST_MIGRATION_VERSION: i64 = 6;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] =
     &["fnv64:0ca871be950fc8a6", "fnv64:3b08da4e2b6041f5"];
 
@@ -52,6 +54,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 5,
         name: "005_decision_comment_kind",
         sql: DECISION_COMMENT_KIND_MIGRATION,
+    },
+    Migration {
+        version: 6,
+        name: "006_comment_metadata_contract",
+        sql: COMMENT_METADATA_CONTRACT_MIGRATION,
     },
 ];
 
@@ -209,6 +216,7 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
                 "agent_type",
                 "body",
                 "kind",
+                "metadata_json",
                 "created_at",
             ][..],
         ),

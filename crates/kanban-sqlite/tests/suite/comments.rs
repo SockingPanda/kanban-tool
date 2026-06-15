@@ -11,15 +11,16 @@ fn comments_create_and_list_author_identity_fields() -> anyhow::Result<()> {
         CreateTask::ready("comment identity"),
     )?;
 
-    let human = create_comment_with_options(
+    let user = create_comment_with_options(
         &temp.path,
         &task.id,
         CreateComment {
             author: " alice ".into(),
             body: " human note ".into(),
-            kind: Some("text".into()),
-            author_type: Some("human".into()),
+            kind: Some("note".into()),
+            author_type: Some("user".into()),
             agent_type: None,
+            metadata_json: Some(r#"{"source":"test"}"#.into()),
         },
     )?;
     let agent = create_comment_with_options(
@@ -28,42 +29,34 @@ fn comments_create_and_list_author_identity_fields() -> anyhow::Result<()> {
         CreateComment {
             author: "runner".into(),
             body: "agent note".into(),
-            kind: Some("worker".into()),
+            kind: Some("note".into()),
             author_type: Some("agent".into()),
             agent_type: Some(" executor ".into()),
-        },
-    )?;
-    let system = create_comment_with_options(
-        &temp.path,
-        &task.id,
-        CreateComment {
-            author: "system".into(),
-            body: "system note".into(),
-            kind: Some("system".into()),
-            author_type: Some("system".into()),
-            agent_type: None,
+            metadata_json: None,
         },
     )?;
 
-    assert_eq!(human.author, "alice");
-    assert_eq!(human.author_type, "human");
-    assert_eq!(human.agent_type, None);
+    assert_eq!(user.author, "alice");
+    assert_eq!(user.author_type, "user");
+    assert_eq!(user.agent_type, None);
+    assert_eq!(user.kind, "note");
+    assert_eq!(user.metadata_json, r#"{"source":"test"}"#);
     assert_eq!(agent.author_type, "agent");
     assert_eq!(agent.agent_type.as_deref(), Some("executor"));
-    assert_eq!(system.author_type, "system");
+    assert_eq!(agent.metadata_json, "{}");
 
     let comments = list_comments(&temp.path, &task.id)?;
-    assert_eq!(comments.len(), 3);
-    assert_eq!(comments[0].author_type, "human");
+    assert_eq!(comments.len(), 2);
+    assert_eq!(comments[0].author_type, "user");
+    assert_eq!(comments[0].metadata_json, r#"{"source":"test"}"#);
     assert_eq!(comments[1].author_type, "agent");
     assert_eq!(comments[1].agent_type.as_deref(), Some("executor"));
-    assert_eq!(comments[2].author_type, "system");
     Ok(())
 }
 
 #[test]
-fn comments_infer_author_type_for_legacy_requests() -> anyhow::Result<()> {
-    let temp = TempDb::new("comments_infer_author_type_for_legacy_requests")?;
+fn comments_default_to_user_note_empty_metadata() -> anyhow::Result<()> {
+    let temp = TempDb::new("comments_default_to_user_note_empty_metadata")?;
     init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
@@ -72,32 +65,18 @@ fn comments_infer_author_type_for_legacy_requests() -> anyhow::Result<()> {
         CreateTask::ready("legacy comment identity"),
     )?;
 
-    let text = create_comment(&temp.path, &task.id, "human", "text note", None)?;
-    let worker = create_comment(
-        &temp.path,
-        &task.id,
-        "runner",
-        "worker note",
-        Some("worker"),
-    )?;
-    let system = create_comment(
-        &temp.path,
-        &task.id,
-        "system",
-        "system note",
-        Some("system"),
-    )?;
+    let comment = create_comment(&temp.path, &task.id, "alice", "note body", None)?;
 
-    assert_eq!(text.author_type, "human");
-    assert_eq!(worker.author_type, "agent");
-    assert_eq!(system.author_type, "system");
-    assert_eq!(worker.agent_type, None);
+    assert_eq!(comment.kind, "note");
+    assert_eq!(comment.author_type, "user");
+    assert_eq!(comment.agent_type, None);
+    assert_eq!(comment.metadata_json, "{}");
     Ok(())
 }
 
 #[test]
-fn comments_accept_decision_kind_with_human_default() -> anyhow::Result<()> {
-    let temp = TempDb::new("comments_accept_decision_kind_with_human_default")?;
+fn comments_accept_decision_kind_with_user_default() -> anyhow::Result<()> {
+    let temp = TempDb::new("comments_accept_decision_kind_with_user_default")?;
     init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
@@ -115,13 +94,13 @@ fn comments_accept_decision_kind_with_human_default() -> anyhow::Result<()> {
     )?;
 
     assert_eq!(comment.kind, "decision");
-    assert_eq!(comment.author_type, "human");
+    assert_eq!(comment.author_type, "user");
     assert_eq!(comment.agent_type, None);
 
     let comments = list_comments(&temp.path, &task.id)?;
     assert_eq!(comments.len(), 1);
     assert_eq!(comments[0].kind, "decision");
-    assert_eq!(comments[0].author_type, "human");
+    assert_eq!(comments[0].author_type, "user");
     Ok(())
 }
 
@@ -143,8 +122,9 @@ fn comments_reject_agent_type_for_non_agent_authors() -> anyhow::Result<()> {
             author: "alice".into(),
             body: "note".into(),
             kind: None,
-            author_type: Some("human".into()),
+            author_type: Some("user".into()),
             agent_type: Some("executor".into()),
+            metadata_json: None,
         },
     ))?;
 
@@ -154,8 +134,51 @@ fn comments_reject_agent_type_for_non_agent_authors() -> anyhow::Result<()> {
 }
 
 #[test]
-fn migration_backfills_comment_author_type_from_kind() -> anyhow::Result<()> {
-    let temp = TempDb::new("migration_backfills_comment_author_type_from_kind")?;
+fn comments_reject_invalid_metadata_json() -> anyhow::Result<()> {
+    let temp = TempDb::new("comments_reject_invalid_metadata_json")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("invalid metadata"),
+    )?;
+
+    let invalid_json = result_err(create_comment_with_options(
+        &temp.path,
+        &task.id,
+        CreateComment {
+            author: "alice".into(),
+            body: "note".into(),
+            kind: None,
+            author_type: None,
+            agent_type: None,
+            metadata_json: Some("{not-json".into()),
+        },
+    ))?;
+    assert!(matches!(invalid_json, KanbanError::InvalidInput(_)));
+    assert!(invalid_json.to_string().contains("metadata_json"));
+
+    let invalid_shape = result_err(create_comment_with_options(
+        &temp.path,
+        &task.id,
+        CreateComment {
+            author: "alice".into(),
+            body: "note".into(),
+            kind: None,
+            author_type: None,
+            agent_type: None,
+            metadata_json: Some("[]".into()),
+        },
+    ))?;
+    assert!(matches!(invalid_shape, KanbanError::InvalidInput(_)));
+    assert!(invalid_shape.to_string().contains("JSON object"));
+    Ok(())
+}
+
+#[test]
+fn migration_backfills_comment_contract_and_metadata() -> anyhow::Result<()> {
+    let temp = TempDb::new("migration_backfills_comment_contract_and_metadata")?;
     let v2_sql = include_str!("../../../../migrations/001_initial.sql");
     let conn = Connection::open(&temp.path)?;
     conn.execute_batch(v2_sql)?;
@@ -202,10 +225,14 @@ fn migration_backfills_comment_author_type_from_kind() -> anyhow::Result<()> {
         .iter()
         .find(|comment| comment.id == "c_system")
         .ok_or_else(|| test_error("missing system comment"))?;
-    assert_eq!(text.author_type, "human");
+    assert_eq!(text.author_type, "user");
+    assert_eq!(text.kind, "note");
+    assert_eq!(text.metadata_json, "{}");
     assert_eq!(worker.author_type, "agent");
+    assert_eq!(worker.kind, "note");
     assert_eq!(worker.agent_type, None);
-    assert_eq!(system.author_type, "system");
+    assert_eq!(system.author_type, "agent");
+    assert_eq!(system.kind, "note");
     Ok(())
 }
 
@@ -222,7 +249,7 @@ fn storage_rejects_agent_type_for_non_agent_author_type() -> anyhow::Result<()> 
 
     let error = result_err(connect_file(&temp.path)?.execute(
         "INSERT INTO task_comments(id, board_id, task_id, author, author_type, agent_type, body, kind, created_at) \
-         VALUES ('c_bad', ?1, ?2, 'tester', 'human', 'executor', 'bad', 'text', 1)",
+         VALUES ('c_bad', ?1, ?2, 'tester', 'user', 'executor', 'bad', 'note', 1)",
         params![task.board_id, task.id],
     ))?;
 
@@ -234,8 +261,34 @@ fn storage_rejects_agent_type_for_non_agent_author_type() -> anyhow::Result<()> 
 }
 
 #[test]
-fn migration_allows_decision_comment_kind_in_existing_v4_database() -> anyhow::Result<()> {
-    let temp = TempDb::new("migration_allows_decision_comment_kind_in_existing_v4_database")?;
+fn storage_rejects_non_object_comment_metadata_json() -> anyhow::Result<()> {
+    let temp = TempDb::new("storage_rejects_non_object_comment_metadata_json")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("storage metadata invariant"),
+    )?;
+
+    let error = result_err(connect_file(&temp.path)?.execute(
+        "INSERT INTO task_comments(id, board_id, task_id, author, author_type, agent_type, body, kind, metadata_json, created_at) \
+         VALUES ('c_bad', ?1, ?2, 'tester', 'user', NULL, 'bad', 'note', '[]', 1)",
+        params![task.board_id, task.id],
+    ))?;
+
+    assert!(
+        error.to_string().contains("CHECK constraint failed"),
+        "error: {error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn migration_narrows_comment_kind_and_adds_metadata_to_existing_v5_database() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("migration_narrows_comment_kind_and_adds_metadata_to_existing_v5_database")?;
     let v1_sql = include_str!("../../../../migrations/001_initial.sql").replace(
         "'text', 'system', 'worker', 'decision'",
         "'text', 'system', 'worker'",
@@ -251,6 +304,9 @@ fn migration_allows_decision_comment_kind_in_existing_v4_database() -> anyhow::R
     conn.execute_batch(include_str!(
         "../../../../migrations/004_priority_levels.sql"
     ))?;
+    conn.execute_batch(include_str!(
+        "../../../../migrations/005_decision_comment_kind.sql"
+    ))?;
     conn.execute(
         "INSERT INTO boards(id, slug, name, description, created_at, updated_at, archived_at) VALUES ('b_test', 'default', 'Default', NULL, 1, 1, NULL)",
         [],
@@ -263,24 +319,25 @@ fn migration_allows_decision_comment_kind_in_existing_v4_database() -> anyhow::R
         "INSERT INTO task_comments(id, board_id, task_id, author, body, kind, created_at, author_type, agent_type) VALUES ('c_text', 'b_test', 't_test', 'tester', 'existing', 'text', 3, 'human', NULL)",
         [],
     )?;
-    let check_error = result_err(conn.execute(
+    conn.execute(
         "INSERT INTO task_comments(id, board_id, task_id, author, body, kind, created_at, author_type, agent_type) VALUES ('c_decision_before', 'b_test', 't_test', 'tester', 'before', 'decision', 4, 'human', NULL)",
         [],
-    ))?;
-    assert!(
-        check_error.to_string().contains("CHECK"),
-        "error: {check_error}"
-    );
-    conn.pragma_update(None, "user_version", 4)?;
+    )?;
+    conn.pragma_update(None, "user_version", 5)?;
     drop(conn);
 
     init_database(&temp.path, "tester")?;
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 5);
+    assert_eq!(user_version, 6);
+    let comments = list_comments(&temp.path, "t_test")?;
+    assert_eq!(comments.len(), 2);
+    assert!(comments.iter().all(|comment| comment.kind == "note"));
+    assert!(comments.iter().all(|comment| comment.author_type == "user"));
+    assert!(comments.iter().all(|comment| comment.metadata_json == "{}"));
     conn.execute(
-        "INSERT INTO task_comments(id, board_id, task_id, author, body, kind, created_at, author_type, agent_type) VALUES ('c_decision_after', 'b_test', 't_test', 'tester', 'after', 'decision', 5, 'human', NULL)",
+        "INSERT INTO task_comments(id, board_id, task_id, author, body, kind, created_at, author_type, agent_type, metadata_json) VALUES ('c_decision_after', 'b_test', 't_test', 'tester', 'after', 'decision', 5, 'user', NULL, '{}')",
         [],
     )?;
     Ok(())
@@ -296,20 +353,18 @@ fn legacy_jsonl_import_infers_comment_author_identity() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("legacy import"),
     )?;
-    create_comment(&source.path, &task.id, "human", "text note", Some("text"))?;
-    create_comment(
+    create_comment(&source.path, &task.id, "human", "text note", None)?;
+    create_comment_with_options(
         &source.path,
         &task.id,
-        "runner",
-        "worker note",
-        Some("worker"),
-    )?;
-    create_comment(
-        &source.path,
-        &task.id,
-        "system",
-        "system note",
-        Some("system"),
+        CreateComment {
+            author: "runner".into(),
+            body: "worker note".into(),
+            kind: Some("note".into()),
+            author_type: Some("agent".into()),
+            agent_type: None,
+            metadata_json: None,
+        },
     )?;
 
     let export_path = source.dir.join("comments.jsonl");
@@ -327,25 +382,23 @@ fn legacy_jsonl_import_infers_comment_author_identity() -> anyhow::Result<()> {
     import_jsonl(&target.path, &legacy_path, true)?;
 
     let comments = list_comments(&target.path, &task.id)?;
-    assert_eq!(comments.len(), 3);
+    assert_eq!(comments.len(), 2);
     let text = comments
         .iter()
-        .find(|comment| comment.kind == "text")
+        .find(|comment| comment.body == "text note")
         .ok_or_else(|| test_error("missing text comment"))?;
     let worker = comments
         .iter()
-        .find(|comment| comment.kind == "worker")
+        .find(|comment| comment.body == "worker note")
         .ok_or_else(|| test_error("missing worker comment"))?;
-    let system = comments
-        .iter()
-        .find(|comment| comment.kind == "system")
-        .ok_or_else(|| test_error("missing system comment"))?;
-    assert_eq!(text.author_type, "human");
+    assert_eq!(text.kind, "note");
+    assert_eq!(worker.kind, "note");
+    assert_eq!(text.author_type, "user");
     assert_eq!(worker.author_type, "agent");
-    assert_eq!(system.author_type, "system");
     assert_eq!(text.agent_type, None);
     assert_eq!(worker.agent_type, None);
-    assert_eq!(system.agent_type, None);
+    assert_eq!(text.metadata_json, "{}");
+    assert_eq!(worker.metadata_json, "{}");
     Ok(())
 }
 
@@ -464,9 +517,10 @@ fn legacy_jsonl_import_infers_agent_author_type_without_dropping_agent_type() ->
         CreateComment {
             author: "runner".into(),
             body: "agent note".into(),
-            kind: Some("worker".into()),
+            kind: Some("note".into()),
             author_type: Some("agent".into()),
             agent_type: Some("executor".into()),
+            metadata_json: Some(r#"{"origin":"legacy"}"#.into()),
         },
     )?;
 
@@ -486,9 +540,50 @@ fn legacy_jsonl_import_infers_agent_author_type_without_dropping_agent_type() ->
 
     let comments = list_comments(&target.path, &task.id)?;
     assert_eq!(comments.len(), 1);
-    assert_eq!(comments[0].kind, "worker");
+    assert_eq!(comments[0].kind, "note");
     assert_eq!(comments[0].author_type, "agent");
     assert_eq!(comments[0].agent_type.as_deref(), Some("executor"));
+    assert_eq!(comments[0].metadata_json, r#"{"origin":"legacy"}"#);
+    Ok(())
+}
+
+#[test]
+fn jsonl_import_rejects_comment_metadata_json_non_object() -> anyhow::Result<()> {
+    let source = TempDb::new("jsonl_import_rejects_comment_metadata_json_non_object_source")?;
+    init_database(&source.path, "tester")?;
+    let task = create_task(
+        &source.path,
+        "default",
+        "tester",
+        CreateTask::ready("invalid metadata import"),
+    )?;
+    create_comment_with_options(
+        &source.path,
+        &task.id,
+        CreateComment {
+            author: "runner".into(),
+            body: "agent note".into(),
+            kind: Some("note".into()),
+            author_type: Some("agent".into()),
+            agent_type: Some("executor".into()),
+            metadata_json: Some(r#"{"origin":"export"}"#.into()),
+        },
+    )?;
+
+    let export_path = source.dir.join("comments.jsonl");
+    export_jsonl(&source.path, "default", &export_path)?;
+    let invalid_export = std::fs::read_to_string(&export_path)?
+        .lines()
+        .map(replace_comment_metadata_json_with_array)
+        .collect::<anyhow::Result<Vec<_>>>()?
+        .join("\n");
+    let invalid_path = source.dir.join("invalid-comments.jsonl");
+    std::fs::write(&invalid_path, format!("{invalid_export}\n"))?;
+
+    let target = TempDb::new("jsonl_import_rejects_comment_metadata_json_non_object_target")?;
+    init_database(&target.path, "tester")?;
+    let error = result_err(import_jsonl(&target.path, &invalid_path, true))?;
+    assert!(error.to_string().contains("metadata_json"));
     Ok(())
 }
 
@@ -498,8 +593,22 @@ fn strip_comment_identity_fields(line: &str) -> anyhow::Result<String> {
         let data = value["data"]
             .as_object_mut()
             .ok_or_else(|| test_error("expected comment data object"))?;
+        if data.get("body").and_then(|value| value.as_str()) == Some("worker note") {
+            data.insert("kind".into(), serde_json::json!("worker"));
+        }
         data.remove("author_type");
         data.remove("agent_type");
+    }
+    Ok(value.to_string())
+}
+
+fn replace_comment_metadata_json_with_array(line: &str) -> anyhow::Result<String> {
+    let mut value = serde_json::from_str::<serde_json::Value>(line)?;
+    if value["type"] == "comment" {
+        let data = value["data"]
+            .as_object_mut()
+            .ok_or_else(|| test_error("expected comment data object"))?;
+        data.insert("metadata_json".into(), serde_json::json!("[]"));
     }
     Ok(value.to_string())
 }

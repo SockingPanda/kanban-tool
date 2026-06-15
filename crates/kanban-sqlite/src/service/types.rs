@@ -137,6 +137,7 @@ pub struct CommentRecord {
     pub agent_type: Option<String>,
     pub body: String,
     pub kind: String,
+    pub metadata_json: String,
     pub created_at: i64,
 }
 
@@ -147,6 +148,7 @@ pub struct CreateComment {
     pub kind: Option<String>,
     pub author_type: Option<String>,
     pub agent_type: Option<String>,
+    pub metadata_json: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -2,9 +2,8 @@ use kanban_core::{KanbanError, Result};
 
 pub(crate) fn infer_comment_author_type(kind: &str) -> &'static str {
     match kind {
-        "worker" => "agent",
-        "system" => "system",
-        _ => "human",
+        "worker" | "system" => "agent",
+        _ => "user",
     }
 }
 
@@ -13,9 +12,8 @@ pub(crate) fn normalize_comment_author_type<'a>(
     kind: &str,
 ) -> Result<&'a str> {
     match author_type.map(str::trim) {
-        Some("human") => Ok("human"),
+        Some("user") => Ok("user"),
         Some("agent") => Ok("agent"),
-        Some("system") => Ok("system"),
         Some(_) => Err(KanbanError::InvalidInput(
             "invalid comment author_type".into(),
         )),

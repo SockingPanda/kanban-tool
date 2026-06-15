@@ -186,6 +186,56 @@ fn label_remove_accepts_l_prefixed_label_name() -> anyhow::Result<()> {
 }
 
 #[test]
+fn label_commands_reject_archived_tasks() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_commands_reject_archived_tasks")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    let add_target = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "archived add label cli task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let add_task_id = add_target["data"]["id"].as_str().context("task id")?;
+    kanban(&temp.path, &["--json", "task", "archive", add_task_id])?.success_json()?;
+    kanban(
+        &temp.path,
+        &["--json", "label", "add", add_task_id, "backend"],
+    )?
+    .failure_containing("not found: task")?;
+
+    let remove_target = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "archived remove label cli task",
+            "--description",
+            "ready spec",
+            "--label",
+            "backend",
+        ],
+    )?
+    .success_json()?;
+    let remove_task_id = remove_target["data"]["id"].as_str().context("task id")?;
+    kanban(&temp.path, &["--json", "task", "archive", remove_task_id])?.success_json()?;
+    kanban(
+        &temp.path,
+        &["--json", "label", "remove", remove_task_id, "backend"],
+    )?
+    .failure_containing("not found: task")?;
+
+    Ok(())
+}
+
+#[test]
 fn task_create_rejects_invalid_priority() -> anyhow::Result<()> {
     let temp = TempDb::new("task_create_rejects_invalid_priority")?;
     kanban(&temp.path, &["init"])?.success()?;

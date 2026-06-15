@@ -169,6 +169,7 @@ pub fn add_task_label(
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
+        ensure_task_allows_label_mutation(&conn, &task.id)?;
         let label = ensure_label_in_current_tx(&conn, &task.board_id, label_name, None, now)?;
         attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
         get_task_by_id(&conn, &task.board_id, &task.id)
@@ -204,6 +205,7 @@ pub fn remove_task_label(
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
+        ensure_task_allows_label_mutation(&conn, &task.id)?;
         remove_task_label_in_current_tx(&conn, &task.board_id, actor, &task.id, label_ref, now)?;
         get_task_by_id(&conn, &task.board_id, &task.id)
     })
@@ -1011,6 +1013,10 @@ fn active_board_id_for_label_mutation(conn: &Connection, task_id: &str) -> Resul
     .optional()
     .map_err(storage)?
     .ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
+}
+
+fn ensure_task_allows_label_mutation(conn: &Connection, task_id: &str) -> Result<()> {
+    active_board_id_for_label_mutation(conn, task_id).map(|_| ())
 }
 
 fn remove_task_label_in_current_tx(

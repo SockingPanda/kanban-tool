@@ -88,6 +88,7 @@ describe("KanbanApi task search", () => {
       query: " hydrated ",
       includeArchived: false,
       statuses: ["ready", "review"],
+      labels: [" backend ", "api"],
       limit: 20,
       offset: 40,
     })
@@ -104,6 +105,7 @@ describe("KanbanApi task search", () => {
     expect(url.searchParams.get("limit")).toBe("20")
     expect(url.searchParams.get("offset")).toBe("40")
     expect(url.searchParams.getAll("status")).toEqual(["ready", "review"])
+    expect(url.searchParams.getAll("label")).toEqual(["backend", "api"])
   })
 
   it("passes AbortSignal through queryable API requests", async () => {

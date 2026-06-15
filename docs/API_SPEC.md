@@ -819,7 +819,7 @@ POST /api/v1/tasks/{task_id}/labels
 DELETE /api/v1/tasks/{task_id}/labels/{label_id}
 ```
 
-Board label create request:
+Board label 创建请求：
 
 ```json
 {
@@ -828,22 +828,24 @@ Board label create request:
 }
 ```
 
-Label response shape:
+Label 响应结构：
 
 ```json
 {
   "id": "l_01HX...",
   "board_id": "b_01HX...",
   "name": "core",
-  "color": "blue"
+  "color": "blue",
+  "created_at": 1717520000000,
+  "updated_at": 1717520000000
 }
 ```
 
-`POST /api/v1/boards/{board}/labels` is board-scoped and idempotent by label
-name. If the label already exists on the board, the response returns the
-existing label. Blank names are rejected.
+`POST /api/v1/boards/{board}/labels` 按 board 作用域创建 label，并按 label
+name 保持幂等。如果该 board 上已存在同名 label，响应返回已有 label。空白 name
+会被拒绝。
 
-Task label add request:
+Task label 添加请求：
 
 ```json
 {
@@ -851,11 +853,11 @@ Task label add request:
 }
 ```
 
-`POST /api/v1/tasks/{task_id}/labels` attaches the named label to the task. If
-the label does not exist on the task's board, it is created first. Re-attaching
-an existing task-label relation is a no-op and returns the label. `DELETE`
-accepts a label id or label name in `{label_id}`. Label attach/remove writes a
-task label event only when the join row changes and does not change task status.
+`POST /api/v1/tasks/{task_id}/labels` 会把指定 name 的 label 绑定到 task。如果
+该 task 所属 board 上还不存在该 label，会先创建 label。重复绑定已有 task-label
+关系是 no-op，并返回 label。`DELETE` 的 `{label_id}` 接受 label id 或 label name。
+只有 join row 发生变化时，label attach/remove 才写入 task label event；该操作不
+改变 task status。
 
 ---
 

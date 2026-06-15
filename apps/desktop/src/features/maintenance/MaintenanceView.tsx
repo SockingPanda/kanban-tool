@@ -5,7 +5,20 @@ import type { ElementType, ReactNode } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Card } from "@/components/ui/card"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Empty, EmptyDescription } from "@/components/ui/empty"
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { BoardStats, CheckpointReport, DoctorDerivedStore, DoctorReport, KanbanApi, SearchIndexStatus, StaleClaim } from "@/lib/api"
@@ -58,16 +71,23 @@ export function MaintenanceView({ api }: { api: KanbanApi | null }) {
           {doctorMutation.error ? <ErrorText error={doctorMutation.error} /> : null}
         </Panel>
         <Panel title="Checkpoint" icon={DatabaseBackup}>
-          <Button
-            variant="secondary"
-            disabled={!api || checkpointMutation.isPending}
-            onClick={() => {
-              if (!window.confirm("Run WAL checkpoint now?")) return
-              checkpointMutation.mutate()
-            }}
-          >
-            Create checkpoint
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="secondary" disabled={!api || checkpointMutation.isPending}>
+                Create checkpoint
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Run WAL checkpoint?</AlertDialogTitle>
+                <AlertDialogDescription>Run WAL checkpoint now?</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => checkpointMutation.mutate()}>Continue</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           {checkpointMutation.data ? <CheckpointResultView result={checkpointMutation.data} /> : null}
           {checkpointMutation.error ? <ErrorText error={checkpointMutation.error} /> : null}
         </Panel>
@@ -78,12 +98,14 @@ export function MaintenanceView({ api }: { api: KanbanApi | null }) {
 
 function Panel({ title, icon: Icon, children }: { title: string; icon: ElementType; children: ReactNode }) {
   return (
-    <Card className="p-4">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        {title}
-      </h2>
-      {children}
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
     </Card>
   )
 }
@@ -235,10 +257,12 @@ function CheckpointResultView({ result }: { result: CheckpointReport }) {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <Card className="p-2">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="truncate font-medium">{value}</div>
-    </Card>
+    <Item className="border-border bg-card p-2">
+      <ItemContent>
+        <ItemDescription>{label}</ItemDescription>
+        <ItemTitle>{value}</ItemTitle>
+      </ItemContent>
+    </Item>
   )
 }
 
@@ -247,7 +271,11 @@ function Subheading({ children }: { children: ReactNode }) {
 }
 
 function EmptyText({ children }: { children: ReactNode }) {
-  return <div className="text-sm text-muted-foreground">{children}</div>
+  return (
+    <Empty className="items-start p-0 text-left">
+      <EmptyDescription>{children}</EmptyDescription>
+    </Empty>
+  )
 }
 
 function nullableNumber(value: number | null) {
@@ -256,10 +284,14 @@ function nullableNumber(value: number | null) {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-3">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="truncate font-medium">{value}</span>
-    </div>
+    <Item className="px-0 py-0">
+      <ItemContent>
+        <ItemTitle className="text-sm font-normal text-muted-foreground">{label}</ItemTitle>
+      </ItemContent>
+      <ItemActions className="min-w-0">
+        <span className="truncate font-medium">{value}</span>
+      </ItemActions>
+    </Item>
   )
 }
 

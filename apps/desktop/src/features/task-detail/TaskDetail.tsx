@@ -6,7 +6,11 @@ import remarkGfm from "remark-gfm"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Empty, EmptyDescription } from "@/components/ui/empty"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { InputGroup, InputGroupButton, InputGroupInput, InputGroupTextarea } from "@/components/ui/input-group"
+import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -16,7 +20,18 @@ import { legalActions } from "@/features/task-actions/legal-actions"
 import { isBlockableStatus } from "@/lib/action-policy"
 import type { KanbanApi, Run, Task, TaskStatus } from "@/lib/api"
 import { priorityBadgeClass, priorityLabel, priorityLevels } from "@/lib/priority"
-import { formatRelativeTime, shortId } from "@/lib/utils"
+import { cn, formatRelativeTime, shortId } from "@/lib/utils"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 import { isLongDescription, visibleDescription } from "./description-state"
 import type { DetailState } from "./detail-state"
@@ -217,35 +232,66 @@ export function TaskDetail({
 
         <Section title="Legal transitions">
           <div className="grid grid-cols-2 gap-2">
-            {actions.map((action) => (
-              <Button
-                key={action.label}
-                variant={action.danger ? "destructive" : "secondary"}
-                disabled={!api || Boolean(pendingAction) || !action.enabled}
-                onClick={() => {
-                  if (!api) return
-                  if (action.confirmation && !window.confirm(action.confirmation)) return
-                  void onAction(() => action.run(api, task), { fallbackTaskId: task.id, label: action.label.toLowerCase() })
-                }}
-              >
-                <action.icon className="h-4 w-4" />
-                {action.label}
-              </Button>
-            ))}
+            {actions.map((action) => {
+              const actionButton = (
+                <Button
+                  key={action.label}
+                  variant={action.danger ? "destructive" : "secondary"}
+                  disabled={!api || Boolean(pendingAction) || !action.enabled}
+                  onClick={
+                    action.confirmation
+                      ? undefined
+                      : () => {
+                          if (!api) return
+                          void onAction(() => action.run(api, task), { fallbackTaskId: task.id, label: action.label.toLowerCase() })
+                        }
+                  }
+                >
+                  <action.icon className="h-4 w-4" />
+                  {action.label}
+                </Button>
+              )
+              if (!action.confirmation) return actionButton
+              return (
+                <AlertDialog key={action.label}>
+                  <AlertDialogTrigger asChild>{actionButton}</AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Confirm action</AlertDialogTitle>
+                      <AlertDialogDescription>{action.confirmation}</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        variant={action.danger ? "destructive" : "default"}
+                        onClick={() => {
+                          if (!api) return
+                          void onAction(() => action.run(api, task), { fallbackTaskId: task.id, label: action.label.toLowerCase() })
+                        }}
+                      >
+                        Continue
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )
+            })}
           </div>
           {task.status === "blocked" ? (
             <div className="mt-2 text-xs text-muted-foreground">Unblock asks the service to recompute schedule and dependency state.</div>
           ) : null}
           {isBlockableStatus(task.status) ? (
-            <Textarea
-              className="mt-3"
-              aria-label="Block reason"
-              name="block-reason"
-              autoComplete="off"
-              placeholder="Block reason"
-              value={blockReason}
-              onChange={(event) => setBlockReason(event.target.value)}
-            />
+            <Field className="mt-3">
+              <FieldLabel>Block reason</FieldLabel>
+              <Textarea
+                aria-label="Block reason"
+                name="block-reason"
+                autoComplete="off"
+                placeholder="Block reason"
+                value={blockReason}
+                onChange={(event) => setBlockReason(event.target.value)}
+              />
+            </Field>
           ) : null}
         </Section>
 
@@ -261,24 +307,27 @@ export function TaskDetail({
               onRemove={(parentTaskId) => void onRemoveDependency(parentTaskId)}
             />
             <DependencyGroup title="Children" tasks={detail.dependencies.children} onSelect={onSelectTask} />
-            <div className="flex gap-2">
-              <Input
-                aria-label="Parent task id"
-                name="parent-task-id"
-                autoComplete="off"
-                value={dependencyInput}
-                onChange={(event) => setDependencyInput(event.target.value)}
-                placeholder="Parent task id"
-              />
-              <Button
-                variant="outline"
-                aria-label="Add parent dependency"
-                disabled={!dependencyInput.trim() || pendingAction === "dependency"}
-                onClick={() => void onAddDependency()}
-              >
-                <GitBranch className="h-4 w-4" />
-              </Button>
-            </div>
+            <Field>
+              <FieldLabel>Parent task id</FieldLabel>
+              <InputGroup>
+                <InputGroupInput
+                  aria-label="Parent task id"
+                  name="parent-task-id"
+                  autoComplete="off"
+                  value={dependencyInput}
+                  onChange={(event) => setDependencyInput(event.target.value)}
+                  placeholder="Parent task id"
+                />
+                <InputGroupButton
+                  variant="outline"
+                  aria-label="Add parent dependency"
+                  disabled={!dependencyInput.trim() || pendingAction === "dependency"}
+                  onClick={() => void onAddDependency()}
+                >
+                  <GitBranch className="h-4 w-4" />
+                </InputGroupButton>
+              </InputGroup>
+            </Field>
           </div>
         </Section>
 
@@ -294,31 +343,38 @@ export function TaskDetail({
                       <span>{comment.author}</span>
                       <span>{formatRelativeTime(comment.created_at)}</span>
                     </div>
-                    <div className="whitespace-pre-wrap text-card-foreground">{comment.body}</div>
+                    <MarkdownDescription className="mt-1 text-card-foreground">{comment.body}</MarkdownDescription>
                   </Card>
                 ))
               ) : (
-                <div className="text-sm text-muted-foreground">No comments yet.</div>
+                <Empty className="items-start p-0 text-left">
+                  <EmptyDescription>No comments yet.</EmptyDescription>
+                </Empty>
               )}
             </div>
-            <div className="flex gap-2">
-              <Input
-                aria-label="Comment body"
-                name="comment-body"
-                autoComplete="off"
-                value={commentBody}
-                onChange={(event) => setCommentBody(event.target.value)}
-                placeholder="Add handoff note"
-              />
-              <Button
-                variant="outline"
-                aria-label="Add comment"
-                disabled={!commentBody.trim() || pendingAction === "comment"}
-                onClick={() => void onAddComment()}
-              >
-                <MessageSquare className="h-4 w-4" />
-              </Button>
-            </div>
+            <Field>
+              <FieldLabel>Comment body</FieldLabel>
+              <InputGroup>
+                <InputGroupTextarea
+                  className="min-h-20 resize-y py-2"
+                  aria-label="Comment body"
+                  name="comment-body"
+                  autoComplete="off"
+                  value={commentBody}
+                  onChange={(event) => setCommentBody(event.target.value)}
+                  placeholder="Add handoff note"
+                />
+                <InputGroupButton
+                  className="h-auto self-stretch"
+                  variant="outline"
+                  aria-label="Add comment"
+                  disabled={!commentBody.trim() || pendingAction === "comment"}
+                  onClick={() => void onAddComment()}
+                >
+                  <MessageSquare className="h-4 w-4" />
+                </InputGroupButton>
+              </InputGroup>
+            </Field>
           </div>
         </Section>
 
@@ -349,7 +405,9 @@ export function TaskDetail({
               ) : null}
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">No runs yet.</div>
+            <Empty className="items-start p-0 text-left">
+              <EmptyDescription>No runs yet.</EmptyDescription>
+            </Empty>
           )}
         </Section>
 
@@ -375,9 +433,9 @@ export function TaskDetail({
   )
 }
 
-export function MarkdownDescription({ children }: { children: string }) {
+export function MarkdownDescription({ children, className }: { children: string; className?: string }) {
   return (
-    <div className="task-markdown mt-2 text-sm text-foreground">
+    <div className={cn("task-markdown mt-2 text-sm text-foreground", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         urlTransform={safeMarkdownUrl}
@@ -470,9 +528,10 @@ export function DependencyGroup({
         {tasks.length ? (
           tasks.map((task) => (
             <span key={task.id} className="inline-flex items-center overflow-hidden rounded-md border border-border bg-muted">
-              <button
+              <Button
                 type="button"
-                className="inline-flex border-0 bg-transparent p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                variant="ghost"
+                className="h-auto border-0 bg-transparent p-0 text-left"
                 aria-label={`Open ${dependencyKind} dependency #${task.seq} ${task.title}`}
                 title={`Open ${task.title}`}
                 onClick={() => onSelect?.(task.id)}
@@ -480,18 +539,19 @@ export function DependencyGroup({
                 <Badge variant={dependencyBadgeVariant(task.status)}>
                   #{task.seq} {task.status}
                 </Badge>
-              </button>
+              </Button>
               {onRemove ? (
-                <button
+                <Button
                   type="button"
-                  className="px-1.5 text-muted-foreground hover:text-destructive"
+                  variant="ghost"
+                  className="h-auto rounded-none px-1.5 text-muted-foreground hover:text-destructive"
                   disabled={pending}
                   aria-label={`Remove parent dependency #${task.seq} ${task.title}`}
                   title="Remove parent dependency"
                   onClick={() => onRemove(task.id)}
                 >
                   <X className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               ) : null}
             </span>
           ))
@@ -505,10 +565,14 @@ export function DependencyGroup({
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-3">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="truncate font-medium">{value}</span>
-    </div>
+    <Item className="px-0 py-0">
+      <ItemContent>
+        <ItemTitle className="text-sm font-normal text-muted-foreground">{label}</ItemTitle>
+      </ItemContent>
+      <ItemActions className="min-w-0">
+        <span className="truncate font-medium">{value}</span>
+      </ItemActions>
+    </Item>
   )
 }
 

@@ -2,6 +2,8 @@ import { FileText } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import { Empty, EmptyDescription } from "@/components/ui/empty"
+import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { Run, Task } from "@/lib/api"
 import { formatRelativeTime, shortId } from "@/lib/utils"
@@ -26,7 +28,9 @@ export function RunsView({
       <div className="grid min-h-0 flex-1 grid-cols-[360px_1fr]">
         <ScrollArea className="border-r border-border p-3">
           {detail.runs.length ? detail.runs.map((run) => <RunRow key={run.id} run={run} />) : (
-            <div className="text-sm text-muted-foreground">No runs for the selected task.</div>
+            <Empty>
+              <EmptyDescription>No runs for the selected task.</EmptyDescription>
+            </Empty>
           )}
         </ScrollArea>
         <ScrollArea className="p-3">
@@ -42,7 +46,9 @@ export function RunsView({
               <pre className="whitespace-pre-wrap font-mono leading-relaxed">{detail.runLog.content || "(empty)"}</pre>
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">No log available for the selected task.</div>
+            <Empty>
+              <EmptyDescription>No log available for the selected task.</EmptyDescription>
+            </Empty>
           )}
         </ScrollArea>
       </div>
@@ -69,10 +75,14 @@ function RunRow({ run }: { run: Run }) {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-3 text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="truncate font-medium">{value}</span>
-    </div>
+    <Item className="px-0 py-0 text-xs">
+      <ItemContent>
+        <ItemTitle className="text-xs font-normal text-muted-foreground">{label}</ItemTitle>
+      </ItemContent>
+      <ItemActions className="min-w-0">
+        <span className="truncate font-medium">{value}</span>
+      </ItemActions>
+    </Item>
   )
 }
 

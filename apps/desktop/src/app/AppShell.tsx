@@ -23,6 +23,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Field, FieldLabel } from "@/components/ui/field"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,9 +32,24 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { InputGroup, InputGroupInput } from "@/components/ui/input-group"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { shouldOpenTaskDetailSheet } from "@/app/task-selection"
 import { BoardView } from "@/features/board/BoardView"
 import { EventsView } from "@/features/events/EventsView"
@@ -242,7 +258,11 @@ export function AppShell({
   const showDetailSheet = shouldOpenTaskDetailSheet(view, selectedTask)
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
+    <SidebarProvider
+      open={sidebarOpen}
+      onOpenChange={onSidebarOpenChange}
+      className="h-screen w-screen overflow-hidden bg-background text-foreground"
+    >
       <ShellSidebar
         config={config}
         boards={boards}
@@ -255,7 +275,7 @@ export function AppShell({
         onViewChange={onViewChange}
       />
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+      <SidebarInset className="flex flex-col overflow-hidden bg-background">
         <ShellHeader
           config={config}
           view={view}
@@ -369,8 +389,8 @@ export function AppShell({
         </div>
 
         <StatusBar lastRefreshAt={lastRefreshAt} queueCounts={queueCounts} />
-      </main>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 
@@ -418,14 +438,13 @@ function ShellSidebar({
   }
 
   return (
-    <aside
+    <Sidebar
       className={cn(
-        "flex shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200",
         open ? "w-60 max-sm:w-14" : "w-14",
       )}
       onTransitionEnd={handleTransitionEnd}
     >
-      <div className={cn("flex h-14 items-center gap-2 px-3 max-sm:justify-center max-sm:px-2", !contentOpen && "justify-center px-2")}>
+      <SidebarHeader className={cn(!contentOpen && "justify-center px-2")}>
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
           kb
         </div>
@@ -433,11 +452,11 @@ function ShellSidebar({
           <div className="text-sm font-semibold">Kanban Tool</div>
           <div className="text-xs text-muted-foreground">local queue</div>
         </div>
-      </div>
-      <nav className="space-y-4 px-2 py-3">
-        <NavGroup label="Task Explorer" open={contentOpen}>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarNavGroup label="Task Explorer" open={contentOpen}>
           {sidebarViews.filter((item) => ["board", "list", "runs", "events"].includes(item)).map((item) => (
-            <NavItem
+            <SidebarNavItem
               key={item}
               icon={viewIcon(item)}
               label={viewLabel(item)}
@@ -446,10 +465,10 @@ function ShellSidebar({
               onClick={() => onViewChange(item)}
             />
           ))}
-        </NavGroup>
-        <NavGroup label="System" open={contentOpen}>
+        </SidebarNavGroup>
+        <SidebarNavGroup label="System" open={contentOpen}>
           {sidebarViews.filter((item) => ["maintenance", "health", "settings"].includes(item)).map((item) => (
-            <NavItem
+            <SidebarNavItem
               key={item}
               icon={viewIcon(item)}
               label={viewLabel(item)}
@@ -458,9 +477,9 @@ function ShellSidebar({
               onClick={() => onViewChange(item)}
             />
           ))}
-        </NavGroup>
-      </nav>
-      <div className={cn("mt-auto space-y-3 border-t border-border p-3 text-xs text-muted-foreground max-sm:hidden", !contentOpen && "hidden")}>
+        </SidebarNavGroup>
+      </SidebarContent>
+      <SidebarFooter className={cn(!contentOpen && "hidden")}>
         <BoardSwitcher
           config={config}
           boards={boards}
@@ -480,8 +499,8 @@ function ShellSidebar({
           </span>
           <span>{config ? apiEndpointLabel(config.apiBaseUrl) : "-"}</span>
         </div>
-      </div>
-    </aside>
+      </SidebarFooter>
+    </Sidebar>
   )
 }
 
@@ -623,23 +642,15 @@ function ShellHeader({
       >
         {tasksRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
       </Button>
-      <div className="flex rounded-md border border-border bg-muted p-0.5 text-sm">
-        {primaryViews.map((item) => (
-          <Button
-            key={item}
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={cn(
-              "h-7 px-3 text-muted-foreground hover:bg-background",
-              view === item && "bg-background text-foreground shadow-sm",
-            )}
-            onClick={() => onViewChange(item)}
-          >
-            {viewLabel(item)}
-          </Button>
-        ))}
-      </div>
+      <Tabs value={primaryViews.includes(view) ? view : ""} onValueChange={(value) => onViewChange(value as OperatorView)}>
+        <TabsList>
+          {primaryViews.map((item) => (
+            <TabsTrigger key={item} value={item}>
+              {viewLabel(item)}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
       <Button
         type="button"
         variant={showArchived ? "secondary" : "outline"}
@@ -687,22 +698,32 @@ function TaskExplorerToolbar({
 }) {
   return (
     <form onSubmit={onCreateTask} className="grid grid-cols-[1fr_1.4fr_auto] gap-2 border-b border-border bg-card px-4 py-3">
-      <Input
-        aria-label="New task title"
-        name="new-task-title"
-        autoComplete="off"
-        value={newTitle}
-        onChange={(event) => onNewTitleChange(event.target.value)}
-        placeholder="New task title"
-      />
-      <Input
-        aria-label="New task description"
-        name="new-task-description"
-        autoComplete="off"
-        value={newDescription}
-        onChange={(event) => onNewDescriptionChange(event.target.value)}
-        placeholder="Optional spec or description"
-      />
+      <Field>
+        <FieldLabel className="sr-only">New task title</FieldLabel>
+        <InputGroup>
+          <InputGroupInput
+            aria-label="New task title"
+            name="new-task-title"
+            autoComplete="off"
+            value={newTitle}
+            onChange={(event) => onNewTitleChange(event.target.value)}
+            placeholder="New task title"
+          />
+        </InputGroup>
+      </Field>
+      <Field>
+        <FieldLabel className="sr-only">New task description</FieldLabel>
+        <InputGroup>
+          <InputGroupInput
+            aria-label="New task description"
+            name="new-task-description"
+            autoComplete="off"
+            value={newDescription}
+            onChange={(event) => onNewDescriptionChange(event.target.value)}
+            placeholder="Optional spec or description"
+          />
+        </InputGroup>
+      </Field>
       <Button type="submit" disabled={!newTitle.trim() || pendingAction === "create"}>
         <Plus className="h-4 w-4" />
         New task
@@ -847,7 +868,7 @@ function SearchBackendBadge({ meta }: { meta: SearchTasksMeta }) {
   )
 }
 
-function NavItem({
+function SidebarNavItem({
   icon: Icon,
   label,
   active = false,
@@ -861,29 +882,29 @@ function NavItem({
   onClick: () => void
 }) {
   return (
-    <button
-      title={!open ? label : undefined}
-      aria-label={label}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-        !open && "justify-center",
-        "max-sm:justify-center",
-        active && "bg-sidebar-accent text-sidebar-accent-foreground",
-      )}
-      onClick={onClick}
-    >
-      <Icon className="h-4 w-4 shrink-0" />
-      <span className={cn("max-sm:sr-only", !open && "sr-only")}>{label}</span>
-    </button>
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        title={!open ? label : undefined}
+        aria-label={label}
+        className={cn(
+          !open && "justify-center",
+        )}
+        active={active}
+        onClick={onClick}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        <span className={cn("max-sm:sr-only", !open && "sr-only")}>{label}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   )
 }
 
-function NavGroup({ label, open, children }: { label: string; open: boolean; children: ReactNode }) {
+function SidebarNavGroup({ label, open, children }: { label: string; open: boolean; children: ReactNode }) {
   return (
-    <div>
-      <div className={cn("mb-1 px-2 text-[11px] font-medium uppercase tracking-normal text-muted-foreground max-sm:sr-only", !open && "sr-only")}>{label}</div>
-      <div className="space-y-1">{children}</div>
-    </div>
+    <SidebarGroup>
+      <SidebarGroupLabel className={cn(!open && "sr-only")}>{label}</SidebarGroupLabel>
+      <SidebarMenu>{children}</SidebarMenu>
+    </SidebarGroup>
   )
 }
 

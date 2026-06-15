@@ -1,29 +1,38 @@
+import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-export function TooltipProvider({ children }: { children: React.ReactNode }) {
-  return <>{children}</>
+function TooltipProvider({ delayDuration = 0, ...props }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
+  return <TooltipPrimitive.Provider data-slot="tooltip-provider" delayDuration={delayDuration} {...props} />
 }
 
-export function Tooltip({
-  children,
-  content,
-}: {
-  children: React.ReactElement<{ title?: string; "aria-label"?: string }>
-  content: string
-}) {
-  return React.cloneElement(children, {
-    title: children.props.title ?? content,
-    "aria-label": children.props["aria-label"] ?? content,
-  })
+function Tooltip({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
+  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 
-export function TooltipContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+function TooltipTrigger({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
+  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+}
+
+function TooltipContent({
+  className,
+  sideOffset = 4,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>) {
   return (
-    <div
-      className={cn("rounded-md border border-border bg-card px-2 py-1 text-xs text-card-foreground shadow-sm", className)}
-      {...props}
-    />
+    <TooltipPrimitive.Portal>
+      <TooltipPrimitive.Content
+        data-slot="tooltip-content"
+        sideOffset={sideOffset}
+        className={cn(
+          "z-50 overflow-hidden rounded-md border border-border bg-card px-2 py-1 text-xs text-card-foreground shadow-sm animate-in fade-in-0 zoom-in-95",
+          className,
+        )}
+        {...props}
+      />
+    </TooltipPrimitive.Portal>
   )
 }
+
+export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }

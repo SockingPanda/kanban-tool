@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { BoardColumn as ApiBoardColumn, Task, TaskStatus } from "@/lib/api"
 import { cn, formatRelativeTime } from "@/lib/utils"
@@ -182,18 +183,20 @@ function TaskCard({
   })
 
   return (
-    <button
+    <Button
+      type="button"
       ref={ref}
+      variant="outline"
       className={cn(
-        "w-full rounded-md border bg-card p-2 text-left text-card-foreground transition-colors hover:border-ring",
+        "h-auto min-w-0 w-full shrink overflow-hidden justify-start rounded-md bg-card p-2 text-left text-card-foreground transition-colors hover:border-ring",
         selected ? "border-ring shadow-sm" : "border-border",
         dependencyBlockedTodoClass(task),
         isDragging && "opacity-60",
       )}
       onClick={onSelect}
     >
-      <div className="flex items-start gap-2">
-        <span className={cn("mt-1.5 h-2 w-2 rounded-full", statusAccent[task.status])} />
+      <div className="flex min-w-0 w-full items-start gap-2">
+        <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", statusAccent[task.status])} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">#{task.seq} {task.title}</div>
           <div className="mt-1 flex flex-wrap gap-1 text-xs text-muted-foreground">
@@ -205,10 +208,10 @@ function TaskCard({
             {task.status === "running" ? <span>heartbeat {formatRelativeTime(task.last_heartbeat_at)}</span> : null}
             {typeof dependencyCount === "number" ? <span>{dependencyCount} deps</span> : null}
           </div>
-          {task.status_reason ? <div className="mt-1 line-clamp-2 text-xs text-destructive">{task.status_reason}</div> : null}
+          {task.status_reason ? <div className="mt-1 line-clamp-2 break-words text-xs text-destructive">{task.status_reason}</div> : null}
         </div>
       </div>
-    </button>
+    </Button>
   )
 }
 

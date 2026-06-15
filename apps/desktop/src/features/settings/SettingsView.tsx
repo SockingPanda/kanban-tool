@@ -1,6 +1,7 @@
 import { Settings } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
+import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { RuntimeConfig } from "@/lib/api"
 
@@ -25,9 +26,13 @@ export function SettingsView({ config }: { config: RuntimeConfig | null }) {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <Card className="flex justify-between gap-3 px-3 py-2">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="truncate font-medium">{value}</span>
-    </Card>
+    <Item className="border-border bg-card px-3 py-2">
+      <ItemContent>
+        <ItemTitle className="text-muted-foreground">{label}</ItemTitle>
+      </ItemContent>
+      <ItemActions className="min-w-0">
+        <span className="truncate font-medium">{value}</span>
+      </ItemActions>
+    </Item>
   )
 }

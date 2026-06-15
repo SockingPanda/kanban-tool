@@ -486,7 +486,7 @@ kanban label create <name> [--color <color>]
 kanban label add <task_ref> <label>
 kanban label remove <task_ref> <label>
 kanban label suggest <task_ref> [--limit 5] [--atom-limit 24] [--min-score 0.15] [--vector-config <toml>] [--json]
-kanban label propose <task_ref> [--proposal-json <path>] [--json]
+kanban label propose <task_ref> [--proposal-json <path>] [--limit 5] [--atom-limit 24] [--min-score 0.15] [--json]
 kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]
 kanban label proposals show <proposal_id> [--json]
 kanban label proposals accept <proposal_id> [--reason <text>] [--json]
@@ -560,6 +560,8 @@ diagnostics 行。
 top1 existing label。没有 `--proposal-json` 时默认 provider 不可用，命令成功返回
 degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms` 或
 `task_labels`。日常 label suggestion 不依赖该 proposal provider。
+`--limit`、`--atom-limit`、`--min-score` 会在 proposal 持久化前调节底层 label
+suggestion 启发式，用于计算 coverage、residual_norm 和 top1 existing label。
 
 `--proposal-json` 提供本地/offline provider 输出：
 

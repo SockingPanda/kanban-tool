@@ -7,6 +7,7 @@ pub struct SearchQuery {
     pub board: String,
     pub q: Option<String>,
     pub statuses: Vec<TaskStatus>,
+    pub labels: Vec<String>,
     pub assignee: Option<String>,
     pub include_archived: bool,
     pub limit: usize,

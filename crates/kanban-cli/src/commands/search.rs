@@ -20,12 +20,19 @@ pub(crate) fn handle_search(
         .iter()
         .map(|status| parse_status(status))
         .collect::<Result<Vec<_>>>()?;
+    let labels = args
+        .labels
+        .iter()
+        .map(|label| label.trim().to_owned())
+        .filter(|label| !label.is_empty())
+        .collect::<Vec<_>>();
     let results = search_tasks(
         db_path,
         SearchQuery {
             board: board.to_owned(),
             q: Some(args.query),
             statuses,
+            labels,
             assignee: args.assignee,
             include_archived: args.include_archived,
             limit: args.limit,

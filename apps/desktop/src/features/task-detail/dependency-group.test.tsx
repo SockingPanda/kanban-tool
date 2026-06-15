@@ -105,5 +105,6 @@ function taskFixture(overrides: Pick<Task, "id" | "seq" | "title" | "status">): 
     lock_version: 0,
     dependency_blocked: false,
     unfinished_parent_count: 0,
+    labels: [],
   }
 }

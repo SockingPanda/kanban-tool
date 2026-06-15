@@ -37,12 +37,14 @@ pub(crate) fn print_or_json<T: serde::Serialize>(
 }
 
 pub(crate) fn task_line(task: &kanban_sqlite::TaskRecord) -> String {
+    let labels = task_label_suffix(task);
     format!(
-        "{} {} [{}] {}",
+        "{} {} [{}] {}{}",
         task.task_ref,
         task.id,
         task.status.as_str(),
-        task.title
+        task.title,
+        labels
     )
 }
 
@@ -55,6 +57,18 @@ pub(crate) fn task_details(task: &kanban_sqlite::TaskRecord) -> String {
         format!("seq: {}", task.seq),
         format!("status: {}", task.status.as_str()),
         format!("title: {}", task.title),
+        format!(
+            "labels: {}",
+            if task.labels.is_empty() {
+                "-".to_owned()
+            } else {
+                task.labels
+                    .iter()
+                    .map(|label| label.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            }
+        ),
     ];
     push_multiline_field(&mut lines, "description", task.description.as_deref());
     lines.extend([
@@ -101,6 +115,26 @@ pub(crate) fn task_details(task: &kanban_sqlite::TaskRecord) -> String {
         format!("lock_version: {}", task.lock_version),
     ]);
     lines.join("\n")
+}
+
+pub(crate) fn label_line(label: &kanban_sqlite::LabelRecord) -> String {
+    let color = label.color.as_deref().unwrap_or("-");
+    format!("{} {} color={}", label.name, label.id, color)
+}
+
+fn task_label_suffix(task: &kanban_sqlite::TaskRecord) -> String {
+    if task.labels.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " [{}]",
+            task.labels
+                .iter()
+                .map(|label| label.name.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    }
 }
 
 fn option_display(value: Option<&str>) -> &str {

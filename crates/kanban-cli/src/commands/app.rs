@@ -16,6 +16,7 @@ use crate::commands::{
     dep::handle_dep,
     dispatch::{dispatch_loop, dispatch_options},
     index::handle_index,
+    label::handle_label,
     maintenance::{
         handle_backup, handle_checkpoint, handle_doctor, handle_export, handle_import,
         handle_stats, handle_vacuum,
@@ -71,6 +72,7 @@ pub(crate) fn run() -> Result<()> {
         Command::Comment { command } => {
             handle_comment(command, &db_path, &board, &actor, cli.json)?
         }
+        Command::Label { command } => handle_label(command, &db_path, &board, &actor, cli.json)?,
         Command::Dep { command } => handle_dep(command, &db_path, &board, &actor, cli.json)?,
         Command::Dag { command } => handle_dag(command, &db_path, &board, cli.json)?,
         Command::Events { task_ref } => {

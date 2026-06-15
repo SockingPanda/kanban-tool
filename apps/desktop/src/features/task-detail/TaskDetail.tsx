@@ -1,4 +1,4 @@
-import { ChevronDown, CircleDot, FileText, GitBranch, MessageSquare, Pencil, Save, X } from "lucide-react"
+import { ChevronDown, CircleDot, FileText, GitBranch, MessageSquare, Pencil, Plus, Save, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react"
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -95,13 +95,16 @@ export function TaskDetail({
 }) {
   const [descriptionExpanded, setDescriptionExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [labelInput, setLabelInput] = useState("")
 
   useEffect(() => {
     setDescriptionExpanded(false)
     setEditing(false)
+    setLabelInput("")
   }, [task?.id])
 
   if (!task) return null
+  const currentTask = task
 
   const actions = legalActions(task, claimToken, blockReason)
   const longDescription = isLongDescription(task.description)
@@ -115,6 +118,21 @@ export function TaskDetail({
   function cancelEdit() {
     onCancelEdit()
     setEditing(false)
+  }
+
+  async function addLabel() {
+    if (!api || !labelInput.trim()) return
+    const name = labelInput.trim()
+    await onAction(async () => {
+      const updated = await api.addTaskLabel(currentTask.id, name)
+      setLabelInput("")
+      return updated
+    }, { fallbackTaskId: currentTask.id, label: "label" })
+  }
+
+  async function removeLabel(labelId: string) {
+    if (!api) return
+    await onAction(() => api.removeTaskLabel(currentTask.id, labelId), { fallbackTaskId: currentTask.id, label: "label" })
   }
 
   return (
@@ -295,6 +313,57 @@ export function TaskDetail({
               />
             </Field>
           ) : null}
+        </Section>
+
+        <Separator className="my-4" />
+
+        <Section title="Labels">
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-1.5">
+              {task.labels.length ? (
+                task.labels.map((label) => (
+                  <span key={label.id} className="inline-flex max-w-full items-center overflow-hidden rounded-md border border-border bg-muted">
+                    <Badge variant="secondary" className="max-w-48 truncate rounded-r-none px-2">
+                      {label.name}
+                    </Badge>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-6 rounded-none px-1.5 text-muted-foreground hover:text-destructive"
+                      disabled={!api || pendingAction === "label"}
+                      aria-label={`Remove label ${label.name}`}
+                      onClick={() => void removeLabel(label.id)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </span>
+                ))
+              ) : (
+                <span className="text-sm text-muted-foreground">none</span>
+              )}
+            </div>
+            <Field>
+              <FieldLabel>Label name</FieldLabel>
+              <InputGroup>
+                <InputGroupInput
+                  aria-label="Label name"
+                  name="label-name"
+                  autoComplete="off"
+                  value={labelInput}
+                  onChange={(event) => setLabelInput(event.target.value)}
+                  placeholder="Label name"
+                />
+                <InputGroupButton
+                  variant="outline"
+                  aria-label="Add label"
+                  disabled={!api || !labelInput.trim() || pendingAction === "label"}
+                  onClick={() => void addLabel()}
+                >
+                  <Plus className="h-4 w-4" />
+                </InputGroupButton>
+              </InputGroup>
+            </Field>
+          </div>
         </Section>
 
         <Separator className="my-4" />

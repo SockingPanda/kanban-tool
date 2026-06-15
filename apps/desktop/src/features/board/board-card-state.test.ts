@@ -146,5 +146,6 @@ function baseTask(id: string): Task {
     lock_version: 0,
     dependency_blocked: false,
     unfinished_parent_count: 0,
+    labels: [],
   }
 }

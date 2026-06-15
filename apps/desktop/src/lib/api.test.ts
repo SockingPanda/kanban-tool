@@ -39,6 +39,7 @@ describe("KanbanApi task search", () => {
       query: " dashboard ",
       statuses: ["ready", "blocked"],
       priorities: [0, 2],
+      labels: [" backend ", "api"],
       sort: "priority",
       limit: 25,
       offset: 0,
@@ -50,6 +51,7 @@ describe("KanbanApi task search", () => {
     expect(url.searchParams.get("sort")).toBe("priority")
     expect(url.searchParams.getAll("status")).toEqual(["ready", "blocked"])
     expect(url.searchParams.getAll("priority")).toEqual(["0", "2"])
+    expect(url.searchParams.getAll("label")).toEqual(["backend", "api"])
   })
 
   it("keeps list task pagination metadata from the response envelope", async () => {
@@ -86,6 +88,7 @@ describe("KanbanApi task search", () => {
       query: " hydrated ",
       includeArchived: false,
       statuses: ["ready", "review"],
+      labels: [" backend ", "api"],
       limit: 20,
       offset: 40,
     })
@@ -102,6 +105,7 @@ describe("KanbanApi task search", () => {
     expect(url.searchParams.get("limit")).toBe("20")
     expect(url.searchParams.get("offset")).toBe("40")
     expect(url.searchParams.getAll("status")).toEqual(["ready", "review"])
+    expect(url.searchParams.getAll("label")).toEqual(["backend", "api"])
   })
 
   it("passes AbortSignal through queryable API requests", async () => {
@@ -191,6 +195,26 @@ describe("KanbanApi task search", () => {
 
     expect(health).toEqual({ ok: true, db: "ok", version: "1.1.0" })
     expect(calledUrl(fetchMock).pathname).toBe("/health")
+  })
+
+  it("adds and removes task labels through task label routes", async () => {
+    const updated = task({
+      labels: [
+        { id: "l_backend", board_id: "b_1", name: "backend", color: null, created_at: 1, updated_at: 1 },
+      ],
+    })
+    const fetchMock = mockFetch({ data: updated })
+    const api = new KanbanApi(runtimeConfig)
+
+    await expect(api.addTaskLabel("t_1", "backend")).resolves.toEqual(updated)
+    expect(calledUrl(fetchMock).pathname).toBe("/api/v1/tasks/t_1/labels")
+    expect(JSON.parse(calledInit(fetchMock).body as string)).toEqual({ name: "backend", actor: "desktop-test" })
+
+    vi.unstubAllGlobals()
+    const removeFetch = mockFetch({ data: task({ labels: [] }) })
+    await api.removeTaskLabel("t_1", "l_backend")
+    expect(calledUrl(removeFetch).pathname).toBe("/api/v1/tasks/t_1/labels/l_backend")
+    expect(calledInit(removeFetch).method).toBe("DELETE")
   })
 
   it("lists active boards through the boards endpoint", async () => {
@@ -468,6 +492,7 @@ function task(overrides: Partial<Task> = {}): Task {
     lock_version: 0,
     dependency_blocked: false,
     unfinished_parent_count: 0,
+    labels: [],
     ...overrides,
   }
 }

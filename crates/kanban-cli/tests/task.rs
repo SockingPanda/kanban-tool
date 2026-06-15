@@ -74,6 +74,7 @@ fn task_show_details_prints_full_readable_record() -> anyhow::Result<()> {
     assert!(stdout.contains(&format!("id: {task_id}")), "{stdout}");
     assert!(stdout.contains("status: ready"), "{stdout}");
     assert!(stdout.contains("title: detailed task title"), "{stdout}");
+    assert!(stdout.contains("labels: -"), "{stdout}");
     assert!(stdout.contains("assignee: executor"), "{stdout}");
     assert!(stdout.contains("priority: P1"), "{stdout}");
     assert!(stdout.contains("scheduled_at: 1767225600000"), "{stdout}");
@@ -84,6 +85,153 @@ fn task_show_details_prints_full_readable_record() -> anyhow::Result<()> {
         stdout.contains("description:\n  first detail line\n  second detail line"),
         "{stdout}"
     );
+    Ok(())
+}
+
+#[test]
+fn task_create_and_label_commands_round_trip_labels() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_create_and_label_commands_round_trip_labels")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "labeled cli task",
+            "--description",
+            "ready spec",
+            "--label",
+            "backend",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    assert_eq!(created["data"]["labels"][0]["name"], "backend");
+
+    let label = kanban(
+        &temp.path,
+        &[
+            "--json", "label", "create", "frontend", "--color", "#4477aa",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(label["data"]["name"], "frontend");
+
+    let added =
+        kanban(&temp.path, &["--json", "label", "add", task_id, "frontend"])?.success_json()?;
+    assert_eq!(
+        added["data"]["labels"].as_array().context("labels")?.len(),
+        2
+    );
+
+    let listed = kanban(&temp.path, &["--json", "label", "list"])?.success_json()?;
+    let names: Vec<_> = listed["data"]
+        .as_array()
+        .context("labels")?
+        .iter()
+        .map(|label| label["name"].clone())
+        .collect();
+    assert_eq!(
+        names,
+        [serde_json::json!("backend"), serde_json::json!("frontend")]
+    );
+    let listed_human = kanban(&temp.path, &["label", "list"])?.success_stdout()?;
+    assert!(listed_human.contains("backend "), "{listed_human}");
+    assert!(listed_human.contains(" color=-"), "{listed_human}");
+    assert!(listed_human.contains("frontend "), "{listed_human}");
+    assert!(listed_human.contains(" color=#4477aa"), "{listed_human}");
+
+    let human = kanban(&temp.path, &["task", "show", task_id])?.success_stdout()?;
+    assert!(human.contains("[backend,frontend]"), "{human}");
+
+    let removed = kanban(
+        &temp.path,
+        &["--json", "label", "remove", task_id, "frontend"],
+    )?
+    .success_json()?;
+    assert_eq!(removed["data"]["labels"][0]["name"], "backend");
+    Ok(())
+}
+
+#[test]
+fn label_remove_accepts_l_prefixed_label_name() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_remove_accepts_l_prefixed_label_name")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "l-prefixed label cli task",
+            "--description",
+            "ready spec",
+            "--label",
+            "l_bug",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+
+    let removed =
+        kanban(&temp.path, &["--json", "label", "remove", task_id, "l_bug"])?.success_json()?;
+    assert!(
+        removed["data"]["labels"]
+            .as_array()
+            .context("labels")?
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[test]
+fn label_commands_reject_archived_tasks() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_commands_reject_archived_tasks")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    let add_target = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "archived add label cli task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let add_task_id = add_target["data"]["id"].as_str().context("task id")?;
+    kanban(&temp.path, &["--json", "task", "archive", add_task_id])?.success_json()?;
+    kanban(
+        &temp.path,
+        &["--json", "label", "add", add_task_id, "backend"],
+    )?
+    .failure_containing("not found: task")?;
+
+    let remove_target = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "archived remove label cli task",
+            "--description",
+            "ready spec",
+            "--label",
+            "backend",
+        ],
+    )?
+    .success_json()?;
+    let remove_task_id = remove_target["data"]["id"].as_str().context("task id")?;
+    kanban(&temp.path, &["--json", "task", "archive", remove_task_id])?.success_json()?;
+    kanban(
+        &temp.path,
+        &["--json", "label", "remove", remove_task_id, "backend"],
+    )?
+    .failure_containing("not found: task")?;
+
     Ok(())
 }
 

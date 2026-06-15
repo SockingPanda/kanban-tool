@@ -80,6 +80,54 @@ fn task_list_supports_search_assignee_sort_limit_and_offset() -> anyhow::Result<
 }
 
 #[test]
+fn task_list_filters_by_repeatable_labels() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_list_filters_by_repeatable_labels")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "backend only",
+            "--description",
+            "ready spec",
+            "--label",
+            "backend",
+        ],
+    )?
+    .success()?;
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "backend api",
+            "--description",
+            "ready spec",
+            "--label",
+            "backend",
+            "--label",
+            "api",
+        ],
+    )?
+    .success()?;
+
+    let tasks = kanban(
+        &temp.path,
+        &[
+            "--json", "task", "list", "--label", "backend", "--label", "api",
+        ],
+    )?
+    .success_json()?;
+    let data = tasks["data"].as_array().context("expected JSON array")?;
+    assert_eq!(data.len(), 1);
+    assert_eq!(data[0]["title"], "backend api");
+    assert_eq!(data[0]["labels"][0]["name"], "api");
+    assert_eq!(data[0]["labels"][1]["name"], "backend");
+    Ok(())
+}
+
+#[test]
 fn task_list_supports_expanded_table_sort_fields() -> anyhow::Result<()> {
     let temp = TempDb::new("task_list_supports_expanded_table_sort_fields")?;
     kanban(&temp.path, &["init"])?.success()?;

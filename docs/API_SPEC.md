@@ -195,7 +195,7 @@ Query params：
 | `status` | 可重复：`?status=ready&status=running`。 |
 | `priority` | 可重复：`?priority=0&priority=2`，值为 P0-P3 的 `0..3`。P0 表示 incident/blocker/must-handle-immediately；P3 是普通 backlog/低优先级/默认。 |
 | `assignee` | 按 assignee。 |
-| `label` | 按 label。 |
+| `label` | 按 label 名称或 id 过滤，可重复；多个 label 使用 AND 语义。 |
 | `q` | title/description 搜索；task ref 形状按精确匹配处理。 |
 | `include_archived` | bool。 |
 | `limit` | 默认 100。 |
@@ -230,6 +230,14 @@ Response：
       "due_at": null,
       "created_at": 1717520000000,
       "updated_at": 1717520000000,
+      "labels": [
+        {
+          "id": "l_01HX...",
+          "board_id": "b_01HX...",
+          "name": "core",
+          "color": null
+        }
+      ],
       "dependency_blocked": false,
       "unfinished_parent_count": 0
     }
@@ -271,8 +279,9 @@ Notes：
 - `status` 只能是 `triage|todo|scheduled|ready`。
 - 若不传 `status`，服务端计算初始状态。
 - 若存在未完成 dependencies（parent 不是 `done` 或 `archived`），不能创建为 `ready`。
-- Task responses expose derived dependency fields: `dependency_blocked` and `unfinished_parent_count`. They are query metadata and are not writable task fields.
-- `priority` is an integer level `0..3`: `0` = P0 incident/blocker/must-handle-immediately, `1` = P1 near-term focus, `2` = P2 important follow-up, `3` = P3 ordinary backlog/low/default. Create rejects invalid values.
+- Task 响应会暴露派生 dependency 字段：`dependency_blocked` 和 `unfinished_parent_count`。它们是查询元数据，不是可写 task 字段。
+- `priority` 是整数等级 `0..3`：`0` = P0 incident/blocker/must-handle-immediately，`1` = P1 近期重点，`2` = P2 重要后续，`3` = P3 普通 backlog/低优先级/默认。创建时会拒绝非法值。
+- `labels` 可选。名称会先 trim；空白名称会被拒绝；缺失的 board label 会在绑定到 task 前创建。
 
 ### 4.3 Get task
 
@@ -800,14 +809,58 @@ MVP 不允许 column 改变 canonical status。
 
 ---
 
-## 12. Labels
+## 12. 标签 API
 
 ```http
 GET /api/v1/boards/{board}/labels
 POST /api/v1/boards/{board}/labels
+GET /api/v1/tasks/{task_id}/labels
 POST /api/v1/tasks/{task_id}/labels
 DELETE /api/v1/tasks/{task_id}/labels/{label_id}
 ```
+
+Board 级标签创建请求：
+
+```json
+{
+  "name": "core",
+  "color": "blue"
+}
+```
+
+Label 响应结构，用于 board 级标签创建和 label 列表：
+
+```json
+{
+  "id": "l_01HX...",
+  "board_id": "b_01HX...",
+  "name": "core",
+  "color": "blue",
+  "created_at": 1717520000000,
+  "updated_at": 1717520000000
+}
+```
+
+`POST /api/v1/boards/{board}/labels` 按 board 作用域创建 label，并按 label
+名称保持幂等。如果该 board 上已存在同名 label，响应返回已有 label。空白 name
+会被拒绝。
+
+Task 标签添加请求：
+
+```json
+{
+  "name": "core"
+}
+```
+
+`POST /api/v1/tasks/{task_id}/labels` 会把指定 name 的 label 绑定到 task。如果
+该 task 所属 board 上还不存在该 label，会先创建 label。重复绑定已有 task-label
+关系不会重复写入。成功响应返回更新后的 task，包含当前 `labels` 列表。
+
+`DELETE /api/v1/tasks/{task_id}/labels/{label_id}` 会移除 task 上的指定 label，
+`{label_id}` 接受 label id 或 label 名称。成功响应同样返回更新后的 task，包含
+当前 `labels` 列表。只有关联行发生变化时，label attach/remove 才写入 task
+label event；该操作不改变 task status。
 
 ---
 
@@ -816,17 +869,19 @@ DELETE /api/v1/tasks/{task_id}/labels/{label_id}
 ### 13.1 Search tasks
 
 ```http
-GET /api/v1/search/tasks?board=default&q=needle&status=ready&assignee=worker-a&include_archived=false&limit=20&offset=0
+GET /api/v1/search/tasks?board=default&q=needle&status=ready&label=backend&assignee=worker-a&include_archived=false&limit=20&offset=0
 ```
 
-Default backend is SQLite fallback. When the binary is built with `tantivy-backend` and `index/v1/tasks/` exists beside the SQLite DB, search uses the Tantivy task index. Missing, corrupt, or stale Tantivy indexes fall back to SQLite with stale metadata. Search matches task title, description, comments, run summary/error, and event kind/payload.
+默认后端是 SQLite fallback。二进制启用 `tantivy-backend` 且 SQLite DB 旁存在 `index/v1/tasks/` 时，search 使用 Tantivy task index。Tantivy index 缺失、损坏或过期时会回落到 SQLite，并带上 stale metadata。搜索匹配 task title、description、comments、run summary/error 和 event kind/payload。
 
-Task ref-shaped `q` values always use SQLite exact-match semantics, even when a
-usable Tantivy index exists: pure numeric `12` and `#12` match seq within the
-requested `board`; `board#12` and `board/#12` match only when the qualified board
-is the requested board; `t_...` matches only a task id on the requested board.
-Ref-shaped queries do not return fuzzy matches from title, description, comments,
-runs, or events.
+`label` 按 label 名称或 id 过滤，可重复，并在评分和分页前使用 AND 语义。
+带 label 过滤的 search 即使存在可用 Tantivy index，也会使用 SQLite fallback，
+以确保结果反映当前 task-label 关联行。
+
+Task ref 形状的 `q` 始终使用 SQLite 精确匹配语义，即使当前存在可用 Tantivy index：
+纯数字 `12` 和 `#12` 匹配请求 `board` 内的 seq；`board#12` 和 `board/#12`
+只在显式 board 等于请求 board 时匹配；`t_...` 只匹配请求 board 内的 task id。
+Ref 形状 query 不会从 title、description、comments、runs 或 events 中返回模糊匹配。
 
 Response:
 

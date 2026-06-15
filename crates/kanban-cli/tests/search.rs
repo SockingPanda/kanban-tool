@@ -2,6 +2,8 @@ mod common;
 
 use anyhow::Context;
 use common::{TempDb, kanban};
+use kanban_core::TaskStatus;
+use kanban_sqlite::{CreateTask, connect_file, create_task, create_task_with_labels};
 use pretty_assertions::assert_eq;
 #[test]
 fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
@@ -72,6 +74,123 @@ fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
     assert!(stdout.contains("score="), "{stdout}");
     assert!(stdout.contains("Alpha search surface"), "{stdout}");
     assert!(stdout.contains("unique-needle"), "{stdout}");
+    Ok(())
+}
+
+#[test]
+fn search_command_filters_by_label() -> anyhow::Result<()> {
+    let temp = TempDb::new("search_command_filters_by_label")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "Backend search label",
+            "--description",
+            "ready spec shared-label-needle",
+            "--label",
+            "backend",
+        ],
+    )?
+    .success()?;
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "Frontend search label",
+            "--description",
+            "ready spec shared-label-needle",
+            "--label",
+            "frontend",
+        ],
+    )?
+    .success()?;
+
+    let json = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "search",
+            "shared-label-needle",
+            "--label",
+            "backend",
+        ],
+    )?
+    .success_json()?;
+    let hits = json["data"]["hits"]
+        .as_array()
+        .context("expected JSON array")?;
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0]["task"]["title"], "Backend search label");
+    assert_eq!(hits[0]["task"]["labels"][0]["name"], "backend");
+    Ok(())
+}
+
+#[test]
+fn search_command_filters_labels_before_search_pagination() -> anyhow::Result<()> {
+    let temp = TempDb::new("search_command_filters_labels_before_search_pagination")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let labeled = create_task_with_labels(
+        &temp.path,
+        "default",
+        "seed",
+        CreateTask {
+            title: "deep labeled cli search match".into(),
+            description: Some("ready spec deep-label-needle".into()),
+            status: Some(TaskStatus::Ready),
+            assignee: None,
+            priority: 3,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: None,
+            metadata_json: "{}".into(),
+        },
+        &["backend".into()],
+    )?;
+    for index in 0..kanban_sqlite::MAX_SEARCH_LIMIT {
+        create_task(
+            &temp.path,
+            "default",
+            "seed",
+            CreateTask {
+                title: format!("unlabeled cli search match {index}"),
+                description: Some("ready spec deep-label-needle".into()),
+                status: Some(TaskStatus::Ready),
+                assignee: None,
+                priority: 3,
+                scheduled_at: None,
+                due_at: None,
+                max_retries: None,
+                metadata_json: "{}".into(),
+            },
+        )?;
+    }
+    connect_file(&temp.path)?.execute(
+        "UPDATE tasks SET updated_at=seq WHERE board_id=(SELECT id FROM boards WHERE slug='default')",
+        [],
+    )?;
+
+    let json = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "search",
+            "deep-label-needle",
+            "--label",
+            "backend",
+            "--limit",
+            "1",
+        ],
+    )?
+    .success_json()?;
+    let hits = json["data"]["hits"]
+        .as_array()
+        .context("expected JSON array")?;
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0]["task"]["id"], labeled.id);
+    assert_eq!(hits[0]["task"]["labels"][0]["name"], "backend");
     Ok(())
 }
 

@@ -146,6 +146,7 @@ describe("MarkdownDescription", () => {
     expect(html).toContain("Keeps the choice next to the discussion.")
     expect(html).toContain("Schema drift.")
     expect(html).toContain("Render and service tests.")
+    expect(html.split("bg-[var(--status-ready-bg)]").length - 1).toBeGreaterThanOrEqual(2)
   })
 
   it("shows invalid decision metadata as an alert while keeping body fallback", () => {

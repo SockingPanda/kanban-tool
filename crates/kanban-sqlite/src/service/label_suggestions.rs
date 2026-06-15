@@ -248,7 +248,13 @@ fn empty_result(
 fn bounded_diagnostic_message(error: &impl std::fmt::Display) -> String {
     let message = error.to_string();
     if message.len() > 240 {
-        format!("{}...", &message[..240])
+        let boundary = message
+            .char_indices()
+            .map(|(index, _)| index)
+            .take_while(|index| *index <= 240)
+            .last()
+            .unwrap_or(0);
+        format!("{}...", &message[..boundary])
     } else {
         message
     }
@@ -296,5 +302,22 @@ impl CandidateAccumulator {
             evidence_atoms: self.evidence_atoms,
             negative_evidence_atoms: self.negative_evidence_atoms,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bounded_diagnostic_message_truncates_non_ascii_on_char_boundary() {
+        let message = format!("{}🙂tail", "界".repeat(79));
+
+        let diagnostic = std::panic::catch_unwind(|| bounded_diagnostic_message(&message))
+            .expect("diagnostic truncation should not panic on non-ASCII input");
+
+        assert!(diagnostic.ends_with("..."));
+        assert!(diagnostic.is_char_boundary(diagnostic.len()));
+        assert!(diagnostic.len() <= 243);
     }
 }

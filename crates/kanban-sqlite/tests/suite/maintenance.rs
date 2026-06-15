@@ -208,6 +208,33 @@ fn doctor_reports_executable_status_invariant_violations() -> anyhow::Result<()>
 }
 
 #[test]
+fn doctor_accepts_archived_parent_for_active_child_dependency() -> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_accepts_archived_parent_for_active_child_dependency")?;
+    init_database(&temp.path, "tester")?;
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("archived parent"),
+    )?;
+    archive_task(&temp.path, "default", "tester", &parent.id, false)?;
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("active child"),
+    )?;
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+
+    let report = doctor_database(&temp.path)?;
+
+    assert_eq!(report.archived_dependency_edges, 0);
+    assert_eq!(report.executable_dependency_violations, 0);
+    assert!(report.ok);
+    Ok(())
+}
+
+#[test]
 fn doctor_counts_each_dependency_cycle_once() -> anyhow::Result<()> {
     let temp = TempDb::new("doctor_counts_each_dependency_cycle_once")?;
     init_database(&temp.path, "tester")?;

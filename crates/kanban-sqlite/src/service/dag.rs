@@ -10,8 +10,8 @@ use crate::connect_file;
 
 use super::{
     DagAdjacency, DagAncestors, DagBoardSnapshot, DagDerivedGraph, DagEdge, DagNode, DagRawGraph,
-    DagSnapshot, DagSnapshotMeta, DagTaskReason, board_id, get_board_conn, query_tasks,
-    resolve_task, storage,
+    DagSnapshot, DagSnapshotMeta, DagTaskReason, board_id, dependency_parent_is_satisfied,
+    get_board_conn, query_tasks, resolve_task, storage,
 };
 
 pub fn dag_snapshot(path: impl AsRef<Path>, board: &str) -> Result<DagSnapshot> {
@@ -359,7 +359,11 @@ fn unfinished_parents(
 ) -> Vec<String> {
     parents
         .iter()
-        .filter(|parent| status_by_id.get(*parent) != Some(&TaskStatus::Done))
+        .filter(|parent| {
+            status_by_id
+                .get(*parent)
+                .is_none_or(|status| !dependency_parent_is_satisfied(*status))
+        })
         .cloned()
         .collect()
 }

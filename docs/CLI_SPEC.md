@@ -461,15 +461,15 @@ Human output for add/remove is Chinese-first:
 
 添加 dependency 后：
 
-- 如果 child 当前是 `ready` 且 parent 未完成，child 降级为 `todo`。
-- parent 完成或 dependency 移除后，child 保持 `todo`；需要 `kanban task promote <task_ref>` 才显式进入 `ready`。
+- 如果 child 当前是 `ready` 且 parent 未完成（不是 `done` 或 `archived`），child 降级为 `todo`。
+- parent 完成、归档或 dependency 移除后，child 保持 `todo`；需要 `kanban task promote <task_ref>` 才显式进入 `ready`。归档 parent 不会删除 dependency edge。
 - 重复添加同一 parent/child edge 是 idempotent no-op：不追加新的
   `dependency.added` event，也不再次触发 child 状态重算。
 - 如果产生环，返回 exit code 6 或 invalid input。
 - 当前版本拒绝跨 board dependency，即使 parent/child 通过全局 `t_...` 或显式 `board#seq` 解析成功。
 
 `task list/show --json` 返回 derived dependency fields：`dependency_blocked`
-和 `unfinished_parent_count`。它们用于区分仍被未完成 parent 阻塞的 `todo`
+和 `unfinished_parent_count`。未完成 parent 指状态不是 `done` 或 `archived` 的 parent；这些字段用于区分仍被未完成 parent 阻塞的 `todo`
 与已解除依赖但尚未人工 promote 的 `todo`。
 
 ---
@@ -569,7 +569,7 @@ the standard envelope:
 ```
 
 Frontier v1 includes only unarchived `todo` and `ready` tasks with no unfinished
-parent dependencies. It excludes `done`, `archived`, `blocked`, `running`, and
+parent dependencies, where unfinished means not `done` or `archived`. It excludes `done`, `archived`, `blocked`, `running`, and
 `review` tasks. Nodes and frontier entries use the documented stable sort:
 priority ascending (P0 -> P3), due date ascending with nulls last, scheduled time
 ascending with nulls last, dependency fan-out descending, created time
@@ -920,7 +920,7 @@ dimensions = 1024
 - running task 是否缺 claim。
 - expired claim 数量。
 - dependency cycle。
-- archived dependency edge。
+- archived dependency edge（archived parent -> active child is allowed history; archived child from active parent is reported）。
 - 缺失 run log 文件。
 - 可疑 run log 路径。
 - `ready/running` task 带有未完成 parent dependency。

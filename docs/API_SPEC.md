@@ -270,7 +270,7 @@ Notes：
 
 - `status` 只能是 `triage|todo|scheduled|ready`。
 - 若不传 `status`，服务端计算初始状态。
-- 若存在未完成 dependencies，不能创建为 `ready`。
+- 若存在未完成 dependencies（parent 不是 `done` 或 `archived`），不能创建为 `ready`。
 - Task responses expose derived dependency fields: `dependency_blocked` and `unfinished_parent_count`. They are query metadata and are not writable task fields.
 - `priority` is an integer level `0..3`: `0` = P0 incident/blocker/must-handle-immediately, `1` = P1 near-term focus, `2` = P2 important follow-up, `3` = P3 ordinary backlog/low/default. Create rejects invalid values.
 
@@ -896,7 +896,7 @@ If background sync is disabled, delayed, or fails, search keeps returning curren
 POST /api/v1/maintenance/doctor
 ```
 
-Response includes SQLite integrity, migration/user version, expired running tasks, orphan run checks, dependency cycle count, archived dependency edge count, missing and suspicious run log counts, executable status invariant counts for dependency/spec/schedule violations, and Knowledge Substrate diagnostics.
+Response includes SQLite integrity, migration/user version, expired running tasks, orphan run checks, dependency cycle count, archived dependency edge count, missing and suspicious run log counts, executable status invariant counts for dependency/spec/schedule violations, and Knowledge Substrate diagnostics. Archived parent -> active child edges are allowed historical dependency edges; archived child edges from active parents are counted.
 
 Derived-layer diagnostics are read-only:
 

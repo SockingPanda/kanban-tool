@@ -255,6 +255,51 @@ fn dispatch_once_does_not_claim_review_or_dependency_blocked_tasks() -> anyhow::
 }
 
 #[test]
+fn dispatch_once_claims_ready_task_with_only_archived_parent() -> anyhow::Result<()> {
+    let temp = TempDb::new("dispatch_once_claims_ready_task_with_only_archived_parent")?;
+    init_database(&temp.path, "tester")?;
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("archived parent"),
+    )?;
+    archive_task(&temp.path, "default", "tester", &parent.id, false)?;
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("ready child"),
+    )?;
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+    connect_file(&temp.path)?
+        .execute("UPDATE tasks SET status='ready' WHERE id=?1", [&child.id])?;
+
+    let result = dispatch_once(
+        &temp.path,
+        "default",
+        DispatchOptions {
+            actor: "dispatcher".into(),
+            command: "true".into(),
+            worker_profile: "default".into(),
+            claim_ttl_ms: 300_000,
+            heartbeat_interval_ms: 30_000,
+            on_success: FinishPolicy::Done,
+            on_failure: FinishPolicy::Blocked,
+            log_dir: temp.dir.join("logs"),
+        },
+    )?;
+
+    assert_eq!(result.claimed, 1);
+    assert_eq!(result.task_id.as_deref(), Some(child.id.as_str()));
+    assert_eq!(
+        get_task(&temp.path, "default", &child.id)?.status,
+        TaskStatus::Done
+    );
+    Ok(())
+}
+
+#[test]
 fn dispatch_once_does_not_auto_promote_unblocked_todo() -> anyhow::Result<()> {
     let temp = TempDb::new("dispatch_once_does_not_auto_promote_unblocked_todo")?;
     init_database(&temp.path, "tester")?;

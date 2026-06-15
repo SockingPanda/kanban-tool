@@ -209,11 +209,11 @@ Task public identity 有两层：
 语义：
 
 ```text
-parent done => child may become ready
-parent not done => child cannot be ready/running
+parent done or archived => child may become ready
+parent neither done nor archived => child cannot be ready/running
 ```
 
-添加依赖时必须做环检测。
+添加依赖时必须做环检测。归档 parent 会满足 hard dependency guard，但 dependency edge 保留为历史，不会自动 promote child。
 
 ---
 
@@ -518,7 +518,7 @@ WHERE t.board_id = ?
     FROM task_dependencies d
     JOIN tasks p ON p.id = d.parent_task_id
     WHERE d.child_task_id = t.id
-      AND p.status != 'done'
+      AND p.status NOT IN ('done','archived')
   )
 ORDER BY t.priority ASC, t.created_at ASC
 LIMIT ?;

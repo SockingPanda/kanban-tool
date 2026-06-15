@@ -45,6 +45,7 @@ const baseTask: Task = {
   lock_version: 0,
   dependency_blocked: false,
   unfinished_parent_count: 0,
+  labels: [],
 }
 
 function task(id: string, status: Task["status"], priority: number): Task {

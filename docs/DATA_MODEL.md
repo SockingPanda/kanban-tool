@@ -395,9 +395,16 @@ Label 是轻量分类。
 | `id` | Label ID。 |
 | `board_id` | 所属 board。 |
 | `name` | 标签名。 |
-| `color` | UI color token。 |
+| `color` | UI 颜色 token。 |
+| `created_at` | 创建时间。 |
+| `updated_at` | 更新时间。 |
 
 同一 board 内 label name 唯一。
+
+Task 与 label 的关联通过 `task_labels(task_id, label_id)` 关联表表达。
+Label 只用于分类、过滤和展示；添加或移除 label 不改变 `tasks.status`，
+不触发 dependency recompute，也不会让 dispatcher claim `review` 或其他非
+`ready` 状态。
 
 ---
 

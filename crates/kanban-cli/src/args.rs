@@ -41,6 +41,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: CommentCommand,
     },
+    Label {
+        #[command(subcommand)]
+        command: LabelCommand,
+    },
     Dep {
         #[command(subcommand)]
         command: DepCommand,
@@ -178,6 +182,27 @@ pub(crate) enum CommentCommand {
     List { task_ref: String },
 }
 
+#[derive(Debug, Subcommand)]
+pub(crate) enum LabelCommand {
+    List,
+    Create(LabelCreateArgs),
+    Add(LabelTaskArgs),
+    Remove(LabelTaskArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelCreateArgs {
+    pub(crate) name: String,
+    #[arg(long)]
+    pub(crate) color: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelTaskArgs {
+    pub(crate) task_ref: String,
+    pub(crate) label: String,
+}
+
 #[derive(Debug, Args)]
 pub(crate) struct CommentAddArgs {
     pub(crate) task_ref: String,
@@ -220,6 +245,8 @@ pub(crate) struct CreateArgs {
     pub(crate) max_retries: Option<i64>,
     #[arg(long, default_value = "{}")]
     pub(crate) metadata: String,
+    #[arg(long = "label")]
+    pub(crate) labels: Vec<String>,
 }
 
 #[derive(Debug, Args)]
@@ -230,6 +257,8 @@ pub(crate) struct ListArgs {
     pub(crate) search: Option<String>,
     #[arg(long)]
     pub(crate) assignee: Option<String>,
+    #[arg(long = "label")]
+    pub(crate) labels: Vec<String>,
     #[arg(long)]
     pub(crate) include_archived: bool,
     #[arg(long)]
@@ -247,6 +276,8 @@ pub(crate) struct SearchArgs {
     pub(crate) status: Vec<String>,
     #[arg(long)]
     pub(crate) assignee: Option<String>,
+    #[arg(long = "label")]
+    pub(crate) labels: Vec<String>,
     #[arg(long)]
     pub(crate) include_archived: bool,
     #[arg(long, default_value_t = 20)]

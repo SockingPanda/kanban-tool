@@ -54,6 +54,7 @@ pub(super) struct TaskDto {
     pub(super) lock_version: i64,
     pub(super) dependency_blocked: bool,
     pub(super) unfinished_parent_count: i64,
+    pub(super) labels: Vec<LabelDto>,
 }
 
 impl From<kanban_sqlite::TaskRecord> for TaskDto {
@@ -91,6 +92,30 @@ impl From<kanban_sqlite::TaskRecord> for TaskDto {
             lock_version: task.lock_version,
             dependency_blocked: task.dependency_blocked,
             unfinished_parent_count: task.unfinished_parent_count,
+            labels: task.labels.into_iter().map(LabelDto::from).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct LabelDto {
+    pub(super) id: String,
+    pub(super) board_id: String,
+    pub(super) name: String,
+    pub(super) color: Option<String>,
+    pub(super) created_at: i64,
+    pub(super) updated_at: i64,
+}
+
+impl From<kanban_sqlite::LabelRecord> for LabelDto {
+    fn from(label: kanban_sqlite::LabelRecord) -> Self {
+        Self {
+            id: label.id,
+            board_id: label.board_id,
+            name: label.name,
+            color: label.color,
+            created_at: label.created_at,
+            updated_at: label.updated_at,
         }
     }
 }

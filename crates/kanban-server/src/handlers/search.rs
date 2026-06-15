@@ -10,7 +10,10 @@ use crate::dto::{Envelope, SearchTaskHitDto, SearchTasksDto, TaskDto};
 use crate::error::{ApiError, extractor_error, validate_page_bounds};
 use crate::state::AppState;
 
-use super::shared::{default_board, parse_status_filters};
+use super::{
+    shared::{default_board, parse_status_filters},
+    tasks::parse_label_filters,
+};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct SearchTasksQuery {
@@ -44,6 +47,7 @@ pub(crate) async fn search_tasks(
     let Query(query) = query.map_err(extractor_error)?;
     validate_page_bounds(query.limit, kanban_sqlite::MAX_SEARCH_LIMIT, query.offset)?;
     let statuses = parse_status_filters(raw_query.as_deref())?;
+    let labels = parse_label_filters(raw_query.as_deref())?;
     let q = query
         .q
         .as_deref()
@@ -62,6 +66,7 @@ pub(crate) async fn search_tasks(
             board: query.board,
             q,
             statuses,
+            labels,
             assignee,
             include_archived: query.include_archived,
             limit: query.limit,

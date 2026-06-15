@@ -204,6 +204,48 @@ describe("MarkdownDescription", () => {
     expect(html).toContain("Invalid decision metadata")
     expect(html).toContain("option slug must be lowercase ASCII letters, digits, or hyphen")
   })
+
+  it("renders task labels and label input controls", () => {
+    const html = renderToStaticMarkup(
+      <Sheet open>
+        <TaskDetail
+          api={null}
+          task={{
+            ...task,
+            labels: [
+              { id: "l_backend", board_id: task.board_id, name: "backend", color: null, created_at: 1, updated_at: 1 },
+            ],
+          }}
+          detail={emptyDetail}
+          blockReason=""
+          setBlockReason={() => undefined}
+          dependencyInput=""
+          setDependencyInput={() => undefined}
+          claimToken={null}
+          commentBody=""
+          setCommentBody={() => undefined}
+          editDraft={null}
+          draftDirty={false}
+          setEditDraft={() => undefined}
+          detailLoading={false}
+          pendingAction={null}
+          onAction={async () => undefined}
+          onAddDependency={async () => undefined}
+          onRemoveDependency={async () => undefined}
+          onSelectTask={() => undefined}
+          onSaveTask={async () => true}
+          onCancelEdit={() => undefined}
+          onAddComment={async () => undefined}
+        />
+      </Sheet>,
+    )
+
+    expect(html).toContain("Labels")
+    expect(html).toContain("backend")
+    expect(html).toContain('aria-label="Label name"')
+    expect(html).toContain('aria-label="Add label"')
+    expect(html).toContain('aria-label="Remove label backend"')
+  })
 })
 
 const task: Task = {
@@ -239,4 +281,5 @@ const task: Task = {
   lock_version: 0,
   dependency_blocked: false,
   unfinished_parent_count: 0,
+  labels: [],
 }

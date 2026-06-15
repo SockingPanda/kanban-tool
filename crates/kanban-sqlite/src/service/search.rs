@@ -75,7 +75,7 @@ pub fn search_tasks(path: impl AsRef<Path>, query: SearchQuery) -> Result<Search
             if search_index_ahead(last_event_id, validated_indexed_last_event_id) {
                 return sqlite_search_tasks(path_ref, query, true, validated_indexed_last_event_id);
             }
-            if tantivy_literal_sqlite_fallback_required(&query) {
+            if tantivy_sqlite_fallback_required(&query) {
                 return sqlite_search_tasks(path_ref, query, true, validated_indexed_last_event_id);
             }
             match kanban_search::tantivy_backend::search_task_index(
@@ -568,35 +568,36 @@ fn max_event_id(left: Option<i64>, right: Option<i64>) -> Option<i64> {
 }
 
 #[cfg(feature = "tantivy-backend")]
-fn tantivy_literal_sqlite_fallback_required(query: &SearchQuery) -> bool {
-    query.q.as_deref().map(str::trim).is_some_and(|q| {
-        task_ref_filter(q, "t.").is_some()
-            || q.chars().any(|ch| {
-                matches!(
-                    ch,
-                    '"' | '+'
-                        | '-'
-                        | '!'
-                        | '('
-                        | ')'
-                        | '{'
-                        | '}'
-                        | '['
-                        | ']'
-                        | '^'
-                        | '~'
-                        | '*'
-                        | '?'
-                        | ':'
-                        | '\\'
-                        | '/'
-                        | '&'
-                        | '|'
-                        | '%'
-                        | '_'
-                )
-            })
-    })
+fn tantivy_sqlite_fallback_required(query: &SearchQuery) -> bool {
+    query.labels.iter().any(|label| !label.trim().is_empty())
+        || query.q.as_deref().map(str::trim).is_some_and(|q| {
+            task_ref_filter(q, "t.").is_some()
+                || q.chars().any(|ch| {
+                    matches!(
+                        ch,
+                        '"' | '+'
+                            | '-'
+                            | '!'
+                            | '('
+                            | ')'
+                            | '{'
+                            | '}'
+                            | '['
+                            | ']'
+                            | '^'
+                            | '~'
+                            | '*'
+                            | '?'
+                            | ':'
+                            | '\\'
+                            | '/'
+                            | '&'
+                            | '|'
+                            | '%'
+                            | '_'
+                    )
+                })
+        })
 }
 
 fn sqlite_search_meta(
@@ -638,6 +639,19 @@ fn search_task_where(board_id: &str, query: &SearchQuery) -> (String, Vec<Value>
                 .iter()
                 .map(|status| Value::Text(status.as_str().to_owned())),
         );
+    }
+    for label in query
+        .labels
+        .iter()
+        .map(|label| label.trim())
+        .filter(|label| !label.is_empty())
+    {
+        clauses.push(
+            "EXISTS (SELECT 1 FROM task_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.task_id=t.id AND tl.board_id=t.board_id AND l.board_id=t.board_id AND (l.name=? OR l.id=?))"
+                .to_owned(),
+        );
+        params.push(Value::Text(label.to_owned()));
+        params.push(Value::Text(label.to_owned()));
     }
     if let Some(assignee) = query
         .assignee

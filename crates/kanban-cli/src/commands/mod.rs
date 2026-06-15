@@ -6,6 +6,7 @@ pub(crate) mod dag;
 pub(crate) mod dep;
 pub(crate) mod dispatch;
 pub(crate) mod index;
+pub(crate) mod label;
 pub(crate) mod maintenance;
 pub(crate) mod run;
 pub(crate) mod search;

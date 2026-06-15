@@ -197,19 +197,26 @@ async fn tasks_create_with_multiple_dependencies_rolls_back_prior_edges_on_later
 }
 
 #[tokio::test]
-async fn tasks_rejects_unsupported_create_fields() -> anyhow::Result<()> {
+async fn tasks_create_accepts_labels_and_exposes_task_label_dto() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let app = test.router();
 
     let (status, json) = post_json(
         app,
         "/api/v1/boards/default/tasks",
-        json!({ "title": "labels not yet supported", "labels": ["backend"] }),
+        json!({
+            "title": "labels are supported",
+            "description": "ready spec",
+            "labels": ["backend", "api"]
+        }),
     )
     .await?;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(json["error"]["code"], "invalid_input");
+    assert_eq!(status, StatusCode::CREATED);
+    let labels = json["data"]["labels"].as_array().context("labels array")?;
+    assert_eq!(labels.len(), 2);
+    let names: Vec<_> = labels.iter().map(|label| label["name"].clone()).collect();
+    assert_eq!(names, [json!("api"), json!("backend")]);
     Ok(())
 }
 
@@ -396,15 +403,15 @@ async fn tasks_sorts_by_updated_at_ascending_and_descending() -> anyhow::Result<
 }
 
 #[tokio::test]
-async fn tasks_lists_with_assignee_search_sort_and_rejects_label_filter() -> anyhow::Result<()> {
+async fn tasks_lists_with_assignee_search_sort_and_label_filter() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    for (title, assignee, priority) in [
-        ("alpha bug", Some("alice"), 1),
-        ("beta bug", Some("alice"), 3),
-        ("alpha chore", Some("bob"), 2),
+    for (title, assignee, priority, labels) in [
+        ("alpha bug", Some("alice"), 1, vec!["backend".to_owned()]),
+        ("beta bug", Some("alice"), 3, vec!["backend".to_owned()]),
+        ("alpha chore", Some("bob"), 2, vec!["frontend".to_owned()]),
     ] {
-        kanban_sqlite::create_task(
+        kanban_sqlite::create_task_with_labels(
             &db_path,
             "default",
             "seed",
@@ -419,6 +426,7 @@ async fn tasks_lists_with_assignee_search_sort_and_rejects_label_filter() -> any
                 max_retries: None,
                 metadata_json: "{}".to_owned(),
             },
+            &labels,
         )
         .context("seed task")?;
     }
@@ -434,10 +442,144 @@ async fn tasks_lists_with_assignee_search_sort_and_rejects_label_filter() -> any
     assert_eq!(tasks.len(), 2);
     assert_eq!(tasks[0]["title"], "beta bug");
     assert_eq!(tasks[1]["title"], "alpha bug");
+    assert_eq!(tasks[0]["labels"][0]["name"], "backend");
 
     let (status, json) = get_json(app, "/api/v1/boards/default/tasks?label=backend").await?;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(json["error"]["code"], "invalid_input");
+    assert_eq!(status, StatusCode::OK);
+    let tasks = json["data"].as_array().context("label tasks array")?;
+    assert_eq!(tasks.len(), 2);
+    assert!(
+        tasks
+            .iter()
+            .all(|task| task["labels"][0]["name"] == "backend")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn labels_routes_create_list_add_and_remove_task_labels() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("label route target"),
+    )?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/labels",
+        json!({ "name": "backend", "color": "#225577" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    let label_id = json["data"]["id"].as_str().context("label id")?.to_owned();
+    assert_eq!(json["data"]["name"], "backend");
+
+    let (status, json) = get_json(app.clone(), "/api/v1/boards/default/labels").await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"].as_array().context("board labels")?.len(), 1);
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels", task.id),
+        json!({ "name": "backend", "actor": "api-labeler" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(json["data"]["labels"][0]["id"], label_id);
+
+    let (status, json) =
+        get_json(app.clone(), &format!("/api/v1/tasks/{}/labels", task.id)).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"][0]["name"], "backend");
+
+    let (status, json) =
+        delete_json(app, &format!("/api/v1/tasks/{}/labels/{label_id}", task.id)).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        json["data"]["labels"]
+            .as_array()
+            .context("task labels")?
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn task_label_routes_use_task_board_and_reject_archived_targets() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    kanban_sqlite::create_board(
+        &db_path,
+        "seed",
+        kanban_sqlite::CreateBoard {
+            slug: "other".into(),
+            name: "Other".into(),
+            description: None,
+        },
+    )?;
+    let other_task = kanban_sqlite::create_task(
+        &db_path,
+        "other",
+        "seed",
+        kanban_sqlite::CreateTask::ready("non-default route target"),
+    )?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels", other_task.id),
+        json!({ "name": "backend", "actor": "api-labeler" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(json["data"]["board_slug"], "other");
+    assert_eq!(json["data"]["labels"][0]["name"], "backend");
+    assert!(kanban_sqlite::list_labels(&db_path, "default")?.is_empty());
+    let other_labels = kanban_sqlite::list_labels(&db_path, "other")?;
+    assert_eq!(other_labels[0].name, "backend");
+
+    let (status, json) = delete_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels/backend", other_task.id),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        json["data"]["labels"]
+            .as_array()
+            .context("labels")?
+            .is_empty()
+    );
+
+    let archived_task = kanban_sqlite::create_task(
+        &db_path,
+        "other",
+        "seed",
+        kanban_sqlite::CreateTask::ready("archived route target"),
+    )?;
+    kanban_sqlite::archive_task(&db_path, "other", "seed", &archived_task.id, false)?;
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels", archived_task.id),
+        json!({ "name": "blocked" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(json["error"]["code"], "not_found");
+
+    kanban_sqlite::archive_board(&db_path, "other", "seed")?;
+    let (status, json) = post_json(
+        app,
+        &format!("/api/v1/tasks/{}/labels", other_task.id),
+        json!({ "name": "blocked" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(json["error"]["code"], "not_found");
     Ok(())
 }
 

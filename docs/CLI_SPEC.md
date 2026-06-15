@@ -190,6 +190,7 @@ Options：
 | `--scheduled-at <epoch_ms>` | 计划时间，Unix epoch milliseconds。 |
 | `--due-at <epoch_ms>` | 截止时间，Unix epoch milliseconds。 |
 | `--max-retries <n>` | worker 失败或 reclaim 后最多重试次数。 |
+| `--label <name>` | 创建时附加 label，可重复；缺失的 board label 会按名称创建。 |
 | `--metadata <json>` | 扩展 JSON。 |
 
 Priority 只表达相对重要性和排序，不表达可 claim 状态。`ready` 才表示任务已被显式放入可执行队列；普通 ready 任务通常仍应是 P1/P2/P3，不能为了表示“下一批可做”全部标成 P0。P0 只用于 incident、当前目标 blocker 或必须立即处理的任务；若 P0 task 仍缺规格、排期未到或依赖未完成，它仍保持 `triage` / `scheduled` / `todo`，不能被 claim。
@@ -201,6 +202,7 @@ kanban task create "修复 claim 队列阻断回归" --priority 0
 kanban task create "实现状态机" --priority 1
 kanban task create "补充文档示例" --priority 2
 kanban task create "明早检查报告" --scheduled-at 1780640400000
+kanban task create "修复 API 回归" --label backend --label p1
 ```
 
 Human output：
@@ -220,7 +222,8 @@ JSON output：
     "ref": "agent-work#12",
     "seq": 12,
     "status": "ready",
-    "title": "实现状态机"
+    "title": "实现状态机",
+    "labels": []
   }
 }
 ```
@@ -237,6 +240,7 @@ Options：
 |---|---|
 | `--status <status>` | 按状态过滤，可重复。 |
 | `--assignee <name>` | 按 assignee。 |
+| `--label <name>` | 按 label 名称或 id 过滤，可重复；多个 label 使用 AND 语义。 |
 | `--search <query>` | title/description 模糊搜索；task ref 形状按精确匹配处理。 |
 | `--include-archived` | 包含 archived。 |
 | `--limit <n>` | 限制数量。 |
@@ -255,6 +259,7 @@ Examples：
 ```bash
 kanban task list
 kanban task list --status ready --status running
+kanban task list --label backend --label p1
 kanban task list --assignee agent-default --json
 ```
 
@@ -265,17 +270,16 @@ kanban task show <task_ref>
 kanban task show <task_ref> --details
 ```
 
-Default human output remains the compact one-line task summary:
+默认人类可读输出仍是紧凑的单行 task 摘要：
 
 ```text
 agent-work#12 t_01HX... [ready] 实现状态机
 ```
 
-`--details` switches only human output to a readable field list. It includes the
-task ref/id/status/title, full multiline description, assignee, priority,
-scheduled_at, due_at, created_at, updated_at, and other task snapshot fields when
-available. `--json task show` returns the same `TaskRecord` envelope with or
-without `--details`.
+`--details` 只改变人类可读输出，显示为易读字段列表。可用时包含 task
+ref/id/status/title、完整多行 description、assignee、priority、labels、
+scheduled_at、due_at、created_at、updated_at，以及其他 task snapshot 字段。
+`--json task show` 无论是否带 `--details`，都返回相同的 `TaskRecord` envelope。
 
 `task_ref` 支持：
 
@@ -474,7 +478,47 @@ Human output for add/remove is Chinese-first:
 
 ---
 
-## 8. DAG Commands
+## 8. 标签命令
+
+```bash
+kanban label list
+kanban label create <name> [--color <color>]
+kanban label add <task_ref> <label>
+kanban label remove <task_ref> <label>
+```
+
+`label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
+label，返回已有 label。`label add` 接受 task ref 和 label 名称或 id；如果按
+name 指定的 label 不存在，会先在该 task 所属 board 创建 label，再绑定到 task。
+`label remove` 接受 task ref 和 label 名称或 id。空白 label 名称会被拒绝。
+
+Label 变更对 task-label 关联保持幂等。只有关联实际变化时，才追加
+`task.label.added` / `task.label.removed` event；该操作不改变 task status。
+
+示例：
+
+```bash
+kanban label create backend --color blue
+kanban label add default#12 backend
+kanban label remove t_01HX... backend
+kanban label list --json
+```
+
+人类可读输出使用紧凑 label 行：
+
+```text
+backend l_01HX... color=blue
+```
+
+Task 的人类可读摘要如果存在 labels，会在末尾追加方括号标签列表：
+
+```text
+default#12 t_01HX... [ready] 修复 API 回归 [backend,p1]
+```
+
+---
+
+## 9. DAG Commands
 
 ```bash
 kanban dag show
@@ -676,7 +720,7 @@ JSON output uses the standard envelope:
 
 ---
 
-## 9. Comment Commands
+## 10. Comment Commands
 
 ```bash
 kanban comment add <task_ref> <body> [--kind note|decision] [--author-type user|agent] [--agent-type <type>] [--metadata-json <json>]
@@ -740,7 +784,7 @@ writes `task_events(kind='task.comment.created')`.
 
 ---
 
-## 10. Event Commands
+## 11. Event Commands
 
 ```bash
 kanban events <task_ref>
@@ -751,7 +795,7 @@ kanban events --board default
 
 ---
 
-## 11. Run Commands
+## 12. Run Commands
 
 ```bash
 kanban runs <task_ref>
@@ -764,7 +808,7 @@ kanban run logs <run_id> --tail-bytes 65536
 
 ---
 
-## 12. Dispatcher / Server Commands
+## 13. Dispatcher / Server Commands
 
 ```bash
 kanban serve
@@ -792,15 +836,19 @@ calls `sync_search_index` every `--search-sync-interval-ms` milliseconds
 
 ---
 
-## 13. Search Commands
+## 14. Search Commands
 
-### 13.1 `kanban search`
+### 14.1 `kanban search`
 
 ```bash
-kanban search <query> [--status ready] [--status review] [--assignee worker-a] [--include-archived] [--limit 20] [--offset 0] [--json]
+kanban search <query> [--status ready] [--status review] [--assignee worker-a] [--label backend] [--include-archived] [--limit 20] [--offset 0] [--json]
 ```
 
 默认实现使用 SQLite fallback，不依赖外部/派生索引。启用 `tantivy-backend` feature 且 `index/v1/tasks/` 存在可读 Tantivy 索引时，`kanban search` 使用 Tantivy；缺失或损坏时回落 SQLite，并在 meta 中标记 stale。搜索匹配 task title、description、comments、run summary/error、event kind/payload。
+
+`--label <name-or-id>` 可重复；多个 label 使用 AND 语义，并在 search
+分页前过滤 task。带 label 过滤的 Tantivy search 会回落到 SQLite fallback，
+以保持当前 label 关联关系和分页语义正确。
 
 Task ref 形状的 query 始终使用 SQLite 精确匹配语义，即使当前存在可用 Tantivy index：
 纯数字 `12`、`#12` 匹配请求 board 内的 seq；`board#12` / `board/#12`
@@ -843,7 +891,7 @@ JSON output:
 }
 ```
 
-### 13.2 `kanban index`
+### 14.2 `kanban index`
 
 ```bash
 kanban index status
@@ -884,7 +932,7 @@ Background sync errors do not make search fail open to stale Tantivy results; th
 
 ---
 
-## 14. Maintenance Commands
+## 15. Maintenance Commands
 
 ```bash
 kanban doctor
@@ -932,7 +980,7 @@ dimensions = 1024
 
 `kanban derived status` 中的 `last_event_id` 是 store 级成功处理水位，不是当前 board 的局部水位。`dirty=true` 表示该 store 仍有任意 board 的 pending/running/failed outbox，或最近一次派生更新失败；board-scoped `kanban index sync`、`kanban graph sync`、`kanban vector sync` 只清理当前 board 的 job，不能因为本 board clean 就强制清掉全局 dirty。
 
-### 14.1 `kanban doctor`
+### 15.1 `kanban doctor`
 
 检查：
 
@@ -956,7 +1004,7 @@ dimensions = 1024
 
 ---
 
-## 15. JSON Output Contract
+## 16. JSON Output Contract
 
 成功：
 

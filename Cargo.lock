@@ -3773,6 +3773,7 @@ dependencies = [
  "kanban-entity",
  "kanban-graph",
  "kanban-indexer",
+ "kanban-labels",
  "kanban-local",
  "kanban-search",
  "kanban-vector",

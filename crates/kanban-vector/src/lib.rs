@@ -40,6 +40,32 @@ pub struct EmbeddingChunk {
     pub metadata_json: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelAtomVector {
+    pub atom_id: String,
+    pub label_id: String,
+    pub label_name: String,
+    pub board_id: String,
+    pub polarity: String,
+    pub kind: String,
+    pub text: String,
+    pub ordinal: i64,
+    pub content_hash: String,
+    pub embedding_model: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+impl LabelAtomVector {
+    pub fn atom_key(&self) -> String {
+        atom_key(&self.atom_id, &self.embedding_model)
+    }
+}
+
+pub fn atom_key(atom_id: &str, embedding_model: &str) -> String {
+    format!("{atom_id}#{embedding_model}")
+}
+
 impl EmbeddingChunk {
     pub fn chunk_key(&self) -> String {
         chunk_key(self.chunk.uri.as_str(), &self.embedding_model)
@@ -124,11 +150,35 @@ pub struct VectorQuery {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelAtomQuery {
+    pub text: String,
+    pub limit: usize,
+    pub board_id: Option<String>,
+    pub embedding_model: Option<String>,
+    pub polarity: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VectorHit {
     pub chunk: ChunkRef,
     pub score: f32,
     pub text: Option<String>,
     pub summary: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelAtomHit {
+    pub atom_id: String,
+    pub label_id: String,
+    pub label_name: String,
+    pub board_id: String,
+    pub polarity: String,
+    pub kind: String,
+    pub text: String,
+    pub ordinal: i64,
+    pub content_hash: String,
+    pub embedding_model: String,
+    pub score: f32,
 }
 
 pub trait EmbeddingProvider {
@@ -146,6 +196,15 @@ pub trait VectorStore {
     fn delete_entities(&self, entity_uris: &[String]) -> Result<(), VectorError>;
     fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError>;
     fn query(&self, query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError>;
+    fn delete_label_atoms_for_board(&self, _board_id: &str) -> Result<(), VectorError> {
+        Err(VectorError::Disabled)
+    }
+    fn upsert_label_atoms(&self, _atoms: &[LabelAtomVector]) -> Result<(), VectorError> {
+        Err(VectorError::Disabled)
+    }
+    fn query_label_atoms(&self, _query: &LabelAtomQuery) -> Result<Vec<LabelAtomHit>, VectorError> {
+        Ok(Vec::new())
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -182,6 +241,7 @@ impl VectorStore for DisabledVectorStore {
 pub struct LanceDbConfig {
     pub path: PathBuf,
     pub table_name: String,
+    pub label_atom_table_name: String,
     pub provider: Option<Arc<dyn EmbeddingProvider + Send + Sync>>,
 }
 
@@ -194,6 +254,7 @@ impl LanceDbConfig {
         Self {
             path: path.into(),
             table_name: "kb_chunks".to_owned(),
+            label_atom_table_name: "kb_label_atoms".to_owned(),
             provider: Some(provider),
         }
     }
@@ -202,6 +263,7 @@ impl LanceDbConfig {
         Self {
             path: path.into(),
             table_name: "kb_chunks".to_owned(),
+            label_atom_table_name: "kb_label_atoms".to_owned(),
             provider: None,
         }
     }

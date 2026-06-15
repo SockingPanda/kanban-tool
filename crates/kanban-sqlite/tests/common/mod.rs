@@ -8,20 +8,25 @@ pub use std::{
 pub use kanban_core::{KanbanError, TaskStatus, new_run_id};
 pub use kanban_sqlite::{
     BoardListOptions, CreateBoard, CreateComment, CreateTask, DispatchOptions, FinishPolicy,
-    TaskPatch, TaskRecord, add_dependency, archive_board, archive_task, begin_database_replace,
-    begin_database_runtime, block_task, build_context_pack, claim_task, complete_task,
-    connect_file, create_board, create_comment, create_comment_with_options, create_task,
-    derived_store_statuses, dispatch_once, doctor_database, export_jsonl, get_board,
-    get_run_by_id_global, get_task, import_jsonl, init_database, list_board_columns, list_boards,
-    list_comments, list_dependencies, list_events, list_outbox, list_runs, list_tasks,
-    promote_task, search_tasks, set_task_retry_policy_by_id, specify_task, submit_review_task,
-    unblock_task, update_task,
+    TaskPatch, TaskRecord, UpsertLabelSemantics, add_dependency, archive_board, archive_task,
+    begin_database_replace, begin_database_runtime, block_task, build_context_pack, claim_task,
+    complete_task, connect_file, create_board, create_comment, create_comment_with_options,
+    create_label, create_task, delete_label_semantics, derived_store_statuses, dispatch_once,
+    doctor_database, export_jsonl, get_board, get_label_semantics, get_run_by_id_global, get_task,
+    import_jsonl, init_database, list_board_columns, list_boards, list_comments, list_dependencies,
+    list_events, list_label_atoms, list_outbox, list_runs, list_tasks, promote_task, search_tasks,
+    set_task_retry_policy_by_id, specify_task, submit_review_task, unblock_task, update_task,
+    upsert_label_semantics,
 };
 #[cfg(feature = "vector-lancedb")]
-pub use kanban_sqlite::{rebuild_vector_store_with, sync_vector_store_with};
+pub use kanban_sqlite::{
+    label_atom_index_status_with, query_label_atom_index_with, rebuild_label_atom_index_with,
+    rebuild_vector_store_with, sync_vector_store_with,
+};
 #[cfg(feature = "vector-lancedb")]
 pub use kanban_vector::{
-    EmbeddingChunk, VectorError, VectorHit, VectorQuery, VectorStore, VectorStoreStatus,
+    EmbeddingChunk, LabelAtomHit, LabelAtomQuery, LabelAtomVector, VectorError, VectorHit,
+    VectorQuery, VectorStore, VectorStoreStatus,
 };
 pub use rusqlite::{Connection, params};
 
@@ -91,7 +96,9 @@ pub fn insert_board(path: &Path, slug: &str, id: &str) -> anyhow::Result<()> {
 pub struct RecordingVectorStore {
     embedding_model: Option<String>,
     live_chunks: std::sync::Mutex<Vec<EmbeddingChunk>>,
+    live_label_atoms: std::sync::Mutex<Vec<LabelAtomVector>>,
     upserted: std::sync::Mutex<Vec<String>>,
+    upserted_label_atoms: std::sync::Mutex<Vec<LabelAtomVector>>,
     upserted_models: std::sync::Mutex<Vec<String>>,
     deleted: std::sync::Mutex<Vec<String>>,
     deleted_boards: std::sync::Mutex<Vec<String>>,
@@ -152,6 +159,14 @@ impl RecordingVectorStore {
             .iter()
             .map(|chunk| chunk.text.clone())
             .collect())
+    }
+
+    pub fn upserted_label_atoms(&self) -> anyhow::Result<Vec<LabelAtomVector>> {
+        Ok(self
+            .upserted_label_atoms
+            .lock()
+            .map_err(|err| test_error(format!("upserted_label_atoms mutex poisoned: {err}")))?
+            .clone())
     }
 }
 
@@ -233,6 +248,80 @@ impl VectorStore for RecordingVectorStore {
     fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
         Ok(Vec::new())
     }
+
+    fn delete_label_atoms_for_board(&self, board_id: &str) -> Result<(), VectorError> {
+        self.live_label_atoms
+            .lock()
+            .map_err(|err| VectorError::Store(format!("live_label_atoms mutex poisoned: {err}")))?
+            .retain(|atom| atom.board_id != board_id);
+        Ok(())
+    }
+
+    fn upsert_label_atoms(&self, atoms: &[LabelAtomVector]) -> Result<(), VectorError> {
+        if let Some(atom) = atoms
+            .iter()
+            .find(|atom| atom.embedding_model != self.expected_model())
+        {
+            return Err(VectorError::EmbeddingModelMismatch {
+                expected: self.expected_model().to_owned(),
+                actual: atom.embedding_model.clone(),
+            });
+        }
+        self.upserted_label_atoms
+            .lock()
+            .map_err(|err| {
+                VectorError::Store(format!("upserted_label_atoms mutex poisoned: {err}"))
+            })?
+            .extend(atoms.iter().cloned());
+        let mut live = self
+            .live_label_atoms
+            .lock()
+            .map_err(|err| VectorError::Store(format!("live_label_atoms mutex poisoned: {err}")))?;
+        for atom in atoms {
+            live.retain(|existing| existing.atom_key() != atom.atom_key());
+            live.push(atom.clone());
+        }
+        Ok(())
+    }
+
+    fn query_label_atoms(&self, query: &LabelAtomQuery) -> Result<Vec<LabelAtomHit>, VectorError> {
+        let atoms = self
+            .live_label_atoms
+            .lock()
+            .map_err(|err| VectorError::Store(format!("live_label_atoms mutex poisoned: {err}")))?
+            .clone();
+        Ok(atoms
+            .into_iter()
+            .filter(|atom| {
+                query
+                    .board_id
+                    .as_ref()
+                    .is_none_or(|board_id| &atom.board_id == board_id)
+                    && query
+                        .embedding_model
+                        .as_ref()
+                        .is_none_or(|model| &atom.embedding_model == model)
+                    && query
+                        .polarity
+                        .as_ref()
+                        .is_none_or(|polarity| &atom.polarity == polarity)
+            })
+            .take(query.limit)
+            .map(|atom| LabelAtomHit {
+                atom_id: atom.atom_id,
+                label_id: atom.label_id,
+                label_name: atom.label_name,
+                board_id: atom.board_id,
+                polarity: atom.polarity,
+                kind: atom.kind,
+                text: atom.text,
+                ordinal: atom.ordinal,
+                content_hash: atom.content_hash,
+                embedding_model: atom.embedding_model,
+                score: 1.0,
+            })
+            .collect())
+    }
 }
 
 #[cfg(feature = "vector-lancedb")]
@@ -265,6 +354,17 @@ impl VectorStore for FailingVectorStore {
 
     fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
         Ok(Vec::new())
+    }
+
+    fn delete_label_atoms_for_board(&self, _board_id: &str) -> Result<(), VectorError> {
+        Ok(())
+    }
+
+    fn upsert_label_atoms(&self, _atoms: &[LabelAtomVector]) -> Result<(), VectorError> {
+        Err(VectorError::DimensionMismatch {
+            expected: 3,
+            actual: 2,
+        })
     }
 }
 

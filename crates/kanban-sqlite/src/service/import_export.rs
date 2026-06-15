@@ -4,7 +4,8 @@ use super::{
     DEFAULT_PRIORITY, ExportResult, ImportResult, board_id,
     comment_identity::infer_comment_author_type,
     comment_metadata::normalize_imported_comment_metadata_json, connect_existing_database,
-    doctor_report_conn, normalize_legacy_priority, storage, with_immediate_tx, with_read_tx,
+    doctor_report_conn, mark_label_atom_store_dirty, normalize_legacy_priority, storage,
+    with_immediate_tx, with_read_tx,
 };
 
 use std::{
@@ -121,6 +122,7 @@ pub fn import_jsonl(
         }
         reject_imported_active_claims(&conn)?;
         validate_imported_snapshot(&conn)?;
+        mark_imported_label_atom_boards_dirty(&conn)?;
         let report = doctor_report_conn(&conn, db_path.parent())?;
         if !report.ok {
             return Err(KanbanError::InvalidInput(
@@ -143,11 +145,15 @@ pub(crate) const BOARD_SCOPED_EXPORT_TABLES: &[(&str, &str)] = &[
     ("event", "task_events"),
     ("attachment", "task_attachments"),
     ("label", "labels"),
+    ("label_semantics", "label_semantics"),
+    ("label_atom", "label_atoms"),
     ("task_label", "task_labels"),
 ];
 
 pub(crate) const IMPORT_DELETE_ORDER: &[&str] = &[
     "task_labels",
+    "label_atoms",
+    "label_semantics",
     "labels",
     "task_attachments",
     "task_events",
@@ -326,6 +332,27 @@ pub(crate) fn validate_imported_snapshot(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn mark_imported_label_atom_boards_dirty(conn: &Connection) -> Result<()> {
+    let now = SystemClock.now_ms();
+    let mut stmt = conn
+        .prepare(
+            "SELECT board_id FROM label_semantics \
+             UNION \
+             SELECT board_id FROM label_atoms \
+             ORDER BY board_id ASC",
+        )
+        .map_err(storage)?;
+    let board_ids = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(storage)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)?;
+    for board_id in board_ids {
+        mark_label_atom_store_dirty(conn, &board_id, now)?;
+    }
+    Ok(())
+}
+
 pub(crate) fn create_temp_export_file(out_path: &Path) -> Result<(PathBuf, File)> {
     let file_name = out_path
         .file_name()
@@ -402,6 +429,8 @@ pub(crate) fn database_has_user_records(conn: &Connection) -> Result<bool> {
         "task_events",
         "task_attachments",
         "labels",
+        "label_semantics",
+        "label_atoms",
         "task_labels",
         "app_settings",
     ] {
@@ -537,6 +566,8 @@ pub(crate) fn import_table_for_type(record_type: &str) -> Result<&'static str> {
         "event" => Ok("task_events"),
         "attachment" => Ok("task_attachments"),
         "label" => Ok("labels"),
+        "label_semantics" => Ok("label_semantics"),
+        "label_atom" => Ok("label_atoms"),
         "task_label" => Ok("task_labels"),
         "setting" => Ok("app_settings"),
         _ => Err(KanbanError::InvalidInput(format!(

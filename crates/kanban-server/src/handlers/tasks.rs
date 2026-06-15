@@ -94,6 +94,20 @@ pub(crate) struct AddTaskLabelBody {
     actor: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct LabelProposalBody {
+    proposal: Option<kanban_sqlite::LabelProposalCandidate>,
+    actor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct LabelProposalDecisionBody {
+    reason: Option<String>,
+    actor: Option<String>,
+}
+
 pub(crate) async fn list_tasks(
     State(state): State<AppState>,
     Path(board): Path<String>,
@@ -281,6 +295,141 @@ pub(crate) async fn add_task_label(
             meta: None,
         }),
     ))
+}
+
+pub(crate) async fn propose_task_label(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    headers: HeaderMap,
+    body: Result<Json<LabelProposalBody>, JsonRejection>,
+) -> Result<
+    (
+        StatusCode,
+        Json<Envelope<kanban_sqlite::LabelProposalAttempt>>,
+    ),
+    ApiError,
+> {
+    let body = match body {
+        Ok(Json(body)) => body,
+        Err(JsonRejection::MissingJsonContentType(_)) => LabelProposalBody {
+            proposal: None,
+            actor: None,
+        },
+        Err(error) => return Err(extractor_error(error)),
+    };
+    let actor = actor(body.actor.as_deref(), &headers, &state);
+    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let options = kanban_sqlite::LabelSuggestionOptions::default();
+    let attempt = if let Some(candidate) = body.proposal {
+        let provider = kanban_sqlite::ManualLabelProposalProvider::new(candidate);
+        kanban_sqlite::propose_task_label_with(
+            state.db_path(),
+            &task.board_slug,
+            &actor,
+            &task.id,
+            &provider,
+            options,
+        )?
+    } else {
+        kanban_sqlite::propose_task_label(
+            state.db_path(),
+            &task.board_slug,
+            &actor,
+            &task.id,
+            options,
+        )?
+    };
+    Ok((
+        if attempt.proposal.is_some() {
+            StatusCode::CREATED
+        } else {
+            StatusCode::OK
+        },
+        Json(Envelope {
+            data: attempt,
+            meta: None,
+        }),
+    ))
+}
+
+pub(crate) async fn list_task_label_proposals(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+) -> Result<Json<Envelope<Vec<kanban_sqlite::LabelSemanticProposalRecord>>>, ApiError> {
+    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let proposals = kanban_sqlite::list_label_proposals(
+        state.db_path(),
+        &task.board_slug,
+        kanban_sqlite::LabelProposalListOptions {
+            task_ref: Some(task.id),
+            status: None,
+        },
+    )?;
+    Ok(Json(Envelope {
+        data: proposals,
+        meta: None,
+    }))
+}
+
+pub(crate) async fn get_label_proposal(
+    State(state): State<AppState>,
+    Path(proposal_id): Path<String>,
+) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticProposalRecord>>, ApiError> {
+    Ok(Json(Envelope {
+        data: kanban_sqlite::get_label_proposal(state.db_path(), &proposal_id)?,
+        meta: None,
+    }))
+}
+
+pub(crate) async fn accept_label_proposal(
+    State(state): State<AppState>,
+    Path(proposal_id): Path<String>,
+    headers: HeaderMap,
+    body: Result<Json<LabelProposalDecisionBody>, JsonRejection>,
+) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticProposalRecord>>, ApiError> {
+    let body = optional_decision_body(body)?;
+    let actor = actor(body.actor.as_deref(), &headers, &state);
+    Ok(Json(Envelope {
+        data: kanban_sqlite::accept_label_proposal(
+            state.db_path(),
+            &actor,
+            &proposal_id,
+            body.reason,
+        )?,
+        meta: None,
+    }))
+}
+
+pub(crate) async fn reject_label_proposal(
+    State(state): State<AppState>,
+    Path(proposal_id): Path<String>,
+    headers: HeaderMap,
+    body: Result<Json<LabelProposalDecisionBody>, JsonRejection>,
+) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticProposalRecord>>, ApiError> {
+    let body = optional_decision_body(body)?;
+    let actor = actor(body.actor.as_deref(), &headers, &state);
+    Ok(Json(Envelope {
+        data: kanban_sqlite::reject_label_proposal(
+            state.db_path(),
+            &actor,
+            &proposal_id,
+            body.reason,
+        )?,
+        meta: None,
+    }))
+}
+
+fn optional_decision_body(
+    body: Result<Json<LabelProposalDecisionBody>, JsonRejection>,
+) -> Result<LabelProposalDecisionBody, ApiError> {
+    match body {
+        Ok(Json(body)) => Ok(body),
+        Err(JsonRejection::MissingJsonContentType(_)) => Ok(LabelProposalDecisionBody {
+            reason: None,
+            actor: None,
+        }),
+        Err(error) => Err(extractor_error(error)),
+    }
 }
 
 fn suggest_task_labels_for_state(

@@ -40,6 +40,22 @@ pub fn build_router(state: AppState) -> Router {
             get(suggest_task_labels),
         )
         .route(
+            "/api/v1/tasks/:task_id/label-proposals",
+            get(list_task_label_proposals).post(propose_task_label),
+        )
+        .route(
+            "/api/v1/label-proposals/:proposal_id",
+            get(get_label_proposal),
+        )
+        .route(
+            "/api/v1/label-proposals/:proposal_id/accept",
+            post(accept_label_proposal),
+        )
+        .route(
+            "/api/v1/label-proposals/:proposal_id/reject",
+            post(reject_label_proposal),
+        )
+        .route(
             "/api/v1/tasks/:task_id/labels/:label_id",
             delete(remove_task_label),
         )

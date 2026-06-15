@@ -200,6 +200,181 @@ fn label_suggest_returns_degraded_json_without_vector_provider() -> anyhow::Resu
 }
 
 #[test]
+fn label_propose_without_provider_returns_degraded_without_polluting_labels() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_propose_without_provider_returns_degraded_without_polluting_labels")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "proposal degraded cli task",
+            "--description",
+            "ready spec",
+            "--status",
+            "ready",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+
+    let attempt = kanban(&temp.path, &["--json", "label", "propose", task_id])?.success_json()?;
+
+    assert_eq!(attempt["data"]["proposal"], serde_json::Value::Null);
+    assert_eq!(attempt["data"]["degraded"], true);
+    assert!(
+        attempt["data"]["diagnostics"]
+            .as_array()
+            .context("diagnostics")?
+            .iter()
+            .any(|value| value == "label_proposal_provider_unavailable")
+    );
+    let labels = kanban(&temp.path, &["--json", "label", "list"])?.success_json()?;
+    assert!(labels["data"].as_array().context("labels")?.is_empty());
+    Ok(())
+}
+
+#[test]
+fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_proposals_json_accept_reject_list_show_round_trip")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "proposal json cli task",
+            "--description",
+            "ready spec",
+            "--status",
+            "ready",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+    let proposal_path = temp.dir.join("proposal.json");
+    std::fs::write(
+        &proposal_path,
+        serde_json::json!({
+            "name": "database",
+            "description": "Database persistence work",
+            "applies_when": ["touches SQLite migrations"],
+            "excludes_when": ["UI-only polish"],
+            "positive_examples": ["new table migration"],
+            "negative_examples": ["CSS tweak"]
+        })
+        .to_string(),
+    )?;
+
+    let proposal_path_arg = proposal_path.to_str().context("proposal path")?;
+    let attempt = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "propose",
+            task_id,
+            "--proposal-json",
+            proposal_path_arg,
+        ],
+    )?
+    .success_json()?;
+    let proposal = &attempt["data"]["proposal"];
+    let proposal_id = proposal["id"].as_str().context("proposal id")?;
+    assert_eq!(proposal["status"], "proposed");
+
+    let listed = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "proposals",
+            "list",
+            "--status",
+            "proposed",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(listed["data"].as_array().context("listed")?.len(), 1);
+    let shown = kanban(
+        &temp.path,
+        &["--json", "label", "proposals", "show", proposal_id],
+    )?
+    .success_json()?;
+    assert_eq!(shown["data"]["name"], "database");
+
+    let accepted = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "proposals",
+            "accept",
+            proposal_id,
+            "--reason",
+            "覆盖不足，接受",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(accepted["data"]["status"], "accepted");
+    assert!(accepted["data"]["resolved_label_id"].as_str().is_some());
+    let task_after = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
+    assert!(
+        task_after["data"]["labels"]
+            .as_array()
+            .context("task labels")?
+            .is_empty(),
+        "accept must not auto-bind task labels"
+    );
+
+    let reject_path = temp.dir.join("reject-proposal.json");
+    std::fs::write(
+        &reject_path,
+        serde_json::json!({
+            "name": "release",
+            "description": "Release workflow",
+            "applies_when": ["packaging"]
+        })
+        .to_string(),
+    )?;
+    let reject_path_arg = reject_path.to_str().context("reject path")?;
+    let reject_attempt = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "propose",
+            task_id,
+            "--proposal-json",
+            reject_path_arg,
+        ],
+    )?
+    .success_json()?;
+    let reject_id = reject_attempt["data"]["proposal"]["id"]
+        .as_str()
+        .context("reject id")?;
+    let rejected = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "proposals",
+            "reject",
+            reject_id,
+            "--reason",
+            "不采用",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(rejected["data"]["status"], "rejected");
+    Ok(())
+}
+
+#[test]
 fn label_suggest_rejects_out_of_bounds_limits() -> anyhow::Result<()> {
     let temp = TempDb::new("label_suggest_rejects_out_of_bounds_limits")?;
     kanban(&temp.path, &["init"])?.success()?;

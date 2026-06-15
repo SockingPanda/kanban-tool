@@ -17,6 +17,7 @@ mod events;
 mod graph;
 mod graph_api;
 mod import_export;
+mod label_proposals;
 mod label_semantics;
 mod label_suggestions;
 mod maintenance;
@@ -46,6 +47,7 @@ pub use events::*;
 pub use graph::*;
 pub use graph_api::*;
 pub use import_export::*;
+pub use label_proposals::*;
 pub use label_semantics::*;
 pub use label_suggestions::*;
 pub use maintenance::*;
@@ -65,6 +67,9 @@ pub(crate) use entities::{
 pub(crate) use graph::{
     context_graph_items, context_vector_items, context_vector_status, derived_status_by_name,
     graph_relation_snapshot_for_board,
+};
+pub(crate) use label_semantics::{
+    mark_label_atom_store_dirty, upsert_label_semantics_candidate_in_tx,
 };
 pub(crate) use projections::*;
 pub(crate) use run_logs::{

@@ -221,6 +221,69 @@ pub struct UpsertLabelSemantics {
     pub negative_examples: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LabelSuggestionOptions {
+    pub limit: usize,
+    pub atom_limit: usize,
+    pub min_score: f32,
+}
+
+impl Default for LabelSuggestionOptions {
+    fn default() -> Self {
+        Self {
+            limit: 5,
+            atom_limit: 24,
+            min_score: 0.15,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelSuggestionResult {
+    pub task_id: String,
+    pub board_id: String,
+    pub selected_labels: Vec<SelectedLabelSuggestion>,
+    pub candidates: Vec<LabelSuggestionCandidate>,
+    pub coverage: f32,
+    pub residual_norm: f32,
+    pub needs_new_label: bool,
+    pub degraded: bool,
+    pub diagnostics: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SelectedLabelSuggestion {
+    pub label_id: String,
+    pub label_name: String,
+    pub score: f32,
+    pub weight: f32,
+    pub already_applied: bool,
+    pub evidence_atoms: Vec<LabelSuggestionEvidenceAtom>,
+    pub negative_evidence_atoms: Vec<LabelSuggestionEvidenceAtom>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelSuggestionCandidate {
+    pub label_id: String,
+    pub label_name: String,
+    pub score: f32,
+    pub weight: f32,
+    pub already_applied: bool,
+    pub evidence_atoms: Vec<LabelSuggestionEvidenceAtom>,
+    pub negative_evidence_atoms: Vec<LabelSuggestionEvidenceAtom>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelSuggestionEvidenceAtom {
+    pub atom_id: String,
+    pub label_id: String,
+    pub label_name: String,
+    pub polarity: String,
+    pub kind: String,
+    pub text: String,
+    pub score: f32,
+}
+
 impl CreateTask {
     pub fn ready(title: impl Into<String>) -> Self {
         Self {

@@ -485,6 +485,7 @@ kanban label list
 kanban label create <name> [--color <color>]
 kanban label add <task_ref> <label>
 kanban label remove <task_ref> <label>
+kanban label suggest <task_ref> [--limit 5] [--atom-limit 24] [--min-score 0.15] [--vector-config <toml>] [--json]
 ```
 
 `label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
@@ -515,6 +516,39 @@ Task 的人类可读摘要如果存在 labels，会在末尾追加方括号标�
 ```text
 default#12 t_01HX... [ready] 修复 API 回归 [backend,p1]
 ```
+
+`label suggest` 返回 task-level label suggestions。当前实现使用
+`lancedb_label_atoms` atom hit aggregation：用 task title + description 查询语义
+label atoms，按 label 聚合正向 similarity，并按负向 atom similarity 惩罚分数。
+它不会调用 full label solver refit，不会自动创建新 label，也不会写入 new-label
+proposal。应用建议时仍使用现有 `label add <task_ref> <label>` / API attach 流程。
+
+默认未配置 vector provider 或二进制未启用 `vector-lancedb` 时，命令成功返回
+degraded 结果而不是失败；无 provider 时 `needs_new_label=false`。`--vector-config`
+使用与 `kanban vector configure/status` 相同的 TOML 解析规则。`LabelAtomHit.score`
+来自 LanceDB `_distance`，CLI/API suggestion 分数会先转换为
+`1 / (1 + max(distance, 0))` similarity 再聚合。
+
+JSON 输出：
+
+```json
+{
+  "data": {
+    "task_id": "t_01HX...",
+    "board_id": "b_01HX...",
+    "selected_labels": [],
+    "candidates": [],
+    "coverage": 0.0,
+    "residual_norm": 1.0,
+    "needs_new_label": false,
+    "degraded": true,
+    "diagnostics": ["solver_refit_unavailable", "vector_store_disabled"]
+  }
+}
+```
+
+Human output 简洁列出建议 label、score、weight、already_applied；degraded 时追加
+diagnostics 行。
 
 ---
 

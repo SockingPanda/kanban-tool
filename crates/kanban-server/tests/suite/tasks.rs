@@ -509,6 +509,45 @@ async fn labels_routes_create_list_add_and_remove_task_labels() -> anyhow::Resul
 }
 
 #[tokio::test]
+async fn task_label_suggestions_route_returns_degraded_json_without_provider() -> anyhow::Result<()>
+{
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("label suggestion route target"),
+    )?;
+    let app = test.router();
+
+    let (status, json) = get_json(
+        app,
+        &format!("/api/v1/tasks/{}/labels/suggestions?limit=3", task.id),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["task_id"], task.id);
+    assert_eq!(json["data"]["degraded"], true);
+    assert_eq!(json["data"]["needs_new_label"], false);
+    assert!(
+        json["data"]["selected_labels"]
+            .as_array()
+            .context("selected labels")?
+            .is_empty()
+    );
+    assert!(
+        json["data"]["diagnostics"]
+            .as_array()
+            .context("diagnostics")?
+            .iter()
+            .any(|value| value == "vector_store_disabled")
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn task_label_routes_use_task_board_and_reject_archived_targets() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();

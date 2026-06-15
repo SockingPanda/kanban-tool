@@ -34,8 +34,30 @@ pub(crate) struct TaskListQuery {
     sort: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct LabelSuggestionQuery {
+    #[serde(default = "default_label_suggestion_limit")]
+    limit: usize,
+    #[serde(default = "default_label_suggestion_atom_limit")]
+    atom_limit: usize,
+    #[serde(default = "default_label_suggestion_min_score")]
+    min_score: f32,
+}
+
 fn default_limit() -> usize {
     100
+}
+
+fn default_label_suggestion_limit() -> usize {
+    kanban_sqlite::LabelSuggestionOptions::default().limit
+}
+
+fn default_label_suggestion_atom_limit() -> usize {
+    kanban_sqlite::LabelSuggestionOptions::default().atom_limit
+}
+
+fn default_label_suggestion_min_score() -> f32 {
+    kanban_sqlite::LabelSuggestionOptions::default().min_score
 }
 
 #[derive(Debug, Deserialize)]
@@ -222,6 +244,27 @@ pub(crate) async fn list_task_labels(
     }))
 }
 
+pub(crate) async fn suggest_task_labels(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    query: Result<Query<LabelSuggestionQuery>, QueryRejection>,
+) -> Result<Json<Envelope<kanban_sqlite::LabelSuggestionResult>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
+    validate_page_bounds(query.atom_limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
+    let options = kanban_sqlite::LabelSuggestionOptions {
+        limit: query.limit,
+        atom_limit: query.atom_limit,
+        min_score: query.min_score,
+    };
+    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let result = suggest_task_labels_for_state(&state, &task.board_slug, &task_id, options)?;
+    Ok(Json(Envelope {
+        data: result,
+        meta: None,
+    }))
+}
+
 pub(crate) async fn add_task_label(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
@@ -238,6 +281,29 @@ pub(crate) async fn add_task_label(
             meta: None,
         }),
     ))
+}
+
+fn suggest_task_labels_for_state(
+    state: &AppState,
+    board: &str,
+    task_id: &str,
+    options: kanban_sqlite::LabelSuggestionOptions,
+) -> Result<kanban_sqlite::LabelSuggestionResult, ApiError> {
+    #[cfg(feature = "vector-lancedb")]
+    {
+        if let Some(store) = super::shared::configured_lancedb_store(state)? {
+            return kanban_sqlite::suggest_task_labels_with(
+                state.db_path(),
+                board,
+                task_id,
+                &store,
+                options,
+            )
+            .map_err(ApiError::from);
+        }
+    }
+    kanban_sqlite::suggest_task_labels(state.db_path(), board, task_id, options)
+        .map_err(ApiError::from)
 }
 
 pub(crate) async fn remove_task_label(

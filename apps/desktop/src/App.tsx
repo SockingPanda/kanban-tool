@@ -303,10 +303,9 @@ function App() {
     }
   }
 
-  async function createTask(event: FormEvent) {
-    event.preventDefault()
-    if (!api || !newTitle.trim()) return
-    await runAction(async () => {
+  async function createTask() {
+    if (!api || !newTitle.trim()) return false
+    const result = await runAction(async () => {
       const task = await api.createTask({
         title: newTitle.trim(),
         description: newDescription.trim() || undefined,
@@ -316,6 +315,7 @@ function App() {
       setNewDescription("")
       return task
     }, "create")
+    return isTask(result)
   }
 
   async function addDependency() {
@@ -542,7 +542,7 @@ function App() {
           setRowsPerPage(value)
           setPageOffset(0)
         }}
-        onCreateTask={(event) => void createTask(event)}
+        onCreateTask={createTask}
         onNewTitleChange={setNewTitle}
         onNewDescriptionChange={setNewDescription}
         onSelectTask={setSelectedId}

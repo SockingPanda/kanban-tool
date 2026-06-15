@@ -163,10 +163,12 @@ describe("desktop shadcn control convergence", () => {
     expect(source("features/maintenance/MaintenanceView.tsx")).toContain("AlertDialog")
   })
 
-  it("routes shell tabs, input compositions, empty states, and field groups through shadcn primitives", () => {
+  it("routes shell tabs, dialogs, input compositions, empty states, and field groups through shadcn primitives", () => {
     expect(source("components/ui/input-group.tsx")).toContain("InputGroup")
     expect(source("components/ui/empty.tsx")).toContain("Empty")
     expect(source("components/ui/field.tsx")).toContain("Field")
+    expect(source("components/ui/dialog.tsx")).toContain("DialogContent")
+    expect(source("components/ui/textarea.tsx")).toContain("Textarea")
 
     const shell = source("app/AppShell.tsx")
     const detail = source("features/task-detail/TaskDetail.tsx")
@@ -179,8 +181,9 @@ describe("desktop shadcn control convergence", () => {
     expect(shell).toContain("Tabs")
     expect(shell).toContain("TabsList")
     expect(shell).toContain("TabsTrigger")
-    expect(shell).toContain("InputGroup")
-    expect(shell).toContain("Field")
+    expect(shell).toContain("DialogContent")
+    expect(shell).toContain("Input")
+    expect(shell).toContain("Textarea")
     expect(detail).toContain("InputGroup")
     expect(detail).toContain("Field")
 

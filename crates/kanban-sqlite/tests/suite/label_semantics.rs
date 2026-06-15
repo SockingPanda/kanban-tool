@@ -1,4 +1,5 @@
 use crate::common::*;
+use rusqlite::OptionalExtension;
 
 #[test]
 fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow::Result<()> {
@@ -170,6 +171,14 @@ fn label_semantics_jsonl_export_import_round_trips_truth_and_atoms() -> anyhow::
             ))
             .collect::<Vec<_>>(),
         source_atoms
+    );
+    assert!(
+        label_atom_store_dirty(&target.path)?,
+        "imported label truth must mark global label atom store dirty"
+    );
+    assert!(
+        label_atom_board_dirty(&target.path, "default")?,
+        "imported label truth must mark the imported board dirty"
     );
     Ok(())
 }
@@ -413,4 +422,114 @@ fn label_atom_rebuild_keeps_global_dirty_until_all_dirty_boards_rebuild() -> any
         "all dirty label atom boards were rebuilt"
     );
     Ok(())
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn label_semantics_jsonl_import_marks_label_atom_boards_dirty_and_rebuild_clears_per_board()
+-> anyhow::Result<()> {
+    let source = TempDb::new(
+        "label_semantics_jsonl_import_marks_label_atom_boards_dirty_and_rebuild_clears_source",
+    )?;
+    init_database(&source.path, "tester")?;
+    create_board(
+        &source.path,
+        "tester",
+        CreateBoard {
+            slug: "second".to_owned(),
+            name: "Second".to_owned(),
+            description: None,
+        },
+    )?;
+    for (board, label) in [("default", "backend"), ("second", "frontend")] {
+        create_label(
+            &source.path,
+            board,
+            kanban_sqlite::CreateLabel {
+                name: label.to_owned(),
+                color: None,
+            },
+        )?;
+        upsert_label_semantics(
+            &source.path,
+            board,
+            UpsertLabelSemantics {
+                label_ref: label.to_owned(),
+                description: Some(format!("{label} work")),
+                applies_when: vec![format!("{label} scope")],
+                ..UpsertLabelSemantics::default()
+            },
+        )?;
+    }
+
+    let default_export = source.dir.join("default-labels.jsonl");
+    let second_export = source.dir.join("second-labels.jsonl");
+    let import_path = source.dir.join("two-board-labels.jsonl");
+    export_jsonl(&source.path, "default", &default_export)?;
+    export_jsonl(&source.path, "second", &second_export)?;
+    let merged_export = format!(
+        "{}{}",
+        std::fs::read_to_string(&default_export)?,
+        std::fs::read_to_string(&second_export)?
+    );
+    std::fs::write(&import_path, merged_export)?;
+
+    let target = TempDb::new(
+        "label_semantics_jsonl_import_marks_label_atom_boards_dirty_and_rebuild_clears_target",
+    )?;
+    init_database(&target.path, "tester")?;
+    import_jsonl(&target.path, &import_path, true)?;
+
+    assert!(label_atom_store_dirty(&target.path)?);
+    assert!(label_atom_board_dirty(&target.path, "default")?);
+    assert!(label_atom_board_dirty(&target.path, "second")?);
+    let status = label_atom_index_status_with(
+        &target.path,
+        "default",
+        &RecordingVectorStore::with_embedding_model("static-test"),
+    )?;
+    assert!(status.message.contains("dirty=true"));
+    assert!(status.message.contains("board_dirty=true"));
+
+    let store = RecordingVectorStore::with_embedding_model("static-test");
+    rebuild_label_atom_index_with(&target.path, "default", &store)?;
+    assert!(
+        !label_atom_board_dirty(&target.path, "default")?,
+        "rebuilt board should be clean"
+    );
+    assert!(
+        label_atom_board_dirty(&target.path, "second")?,
+        "unrebuilt imported board must remain dirty"
+    );
+    assert!(
+        label_atom_store_dirty(&target.path)?,
+        "global store remains dirty while another imported board is dirty"
+    );
+
+    rebuild_label_atom_index_with(&target.path, "second", &store)?;
+    assert!(!label_atom_board_dirty(&target.path, "second")?);
+    assert!(!label_atom_store_dirty(&target.path)?);
+    Ok(())
+}
+
+fn label_atom_store_dirty(path: &Path) -> anyhow::Result<bool> {
+    let stores = derived_store_statuses(path)?;
+    Ok(stores
+        .iter()
+        .find(|store| store.store_name == "lancedb_label_atoms")
+        .ok_or_else(|| test_error("missing lancedb_label_atoms"))?
+        .dirty)
+}
+
+fn label_atom_board_dirty(path: &Path, board: &str) -> anyhow::Result<bool> {
+    let board = get_board(path, board)?;
+    Ok(connect_file(path)?
+        .query_row(
+            "SELECT dirty FROM label_atom_index_boards \
+             WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+            [board.id],
+            |row| row.get(0),
+        )
+        .optional()?
+        .unwrap_or(false))
 }

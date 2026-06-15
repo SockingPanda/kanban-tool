@@ -397,20 +397,31 @@ struct ResolvedLabel {
 
 fn label_atom_index_status_from_base(
     conn: &Connection,
-    _board_id: &str,
+    board_id: &str,
     mut status: VectorStoreStatus,
 ) -> Result<VectorStoreStatus> {
     let state = derived_status_by_name(conn, LANCEDB_LABEL_ATOMS_STORE)?;
+    let board = label_atom_index_board_status(conn, board_id)?;
     status.message = format!(
-        "{}; dirty={} last_error={}",
+        "{}; dirty={} last_error={}; board_dirty={} board_last_rebuild_at={} board_last_error={}",
         status.message,
         state.dirty,
-        state.last_error.as_deref().unwrap_or("none")
+        state.last_error.as_deref().unwrap_or("none"),
+        board.dirty,
+        board
+            .last_rebuild_at
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "none".to_owned()),
+        board.last_error.as_deref().unwrap_or("none")
     );
     Ok(status)
 }
 
-fn mark_label_atom_store_dirty(conn: &Connection, board_id: &str, now: i64) -> Result<()> {
+pub(crate) fn mark_label_atom_store_dirty(
+    conn: &Connection,
+    board_id: &str,
+    now: i64,
+) -> Result<()> {
     conn.execute(
         "INSERT INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
          VALUES (?1, ?2, 0, 1, NULL, NULL, NULL, ?3) \
@@ -488,6 +499,39 @@ fn has_dirty_label_atom_boards(conn: &Connection) -> Result<bool> {
         |row| row.get(0),
     )
     .map_err(storage)
+}
+
+struct LabelAtomIndexBoardStatus {
+    dirty: bool,
+    last_rebuild_at: Option<i64>,
+    last_error: Option<String>,
+}
+
+fn label_atom_index_board_status(
+    conn: &Connection,
+    board_id: &str,
+) -> Result<LabelAtomIndexBoardStatus> {
+    conn.query_row(
+        "SELECT dirty,last_rebuild_at,last_error \
+         FROM label_atom_index_boards WHERE store_name=?1 AND board_id=?2",
+        params![LANCEDB_LABEL_ATOMS_STORE, board_id],
+        |row| {
+            Ok(LabelAtomIndexBoardStatus {
+                dirty: row.get::<_, bool>(0)?,
+                last_rebuild_at: row.get(1)?,
+                last_error: row.get(2)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(storage)
+    .map(|status| {
+        status.unwrap_or(LabelAtomIndexBoardStatus {
+            dirty: false,
+            last_rebuild_at: None,
+            last_error: None,
+        })
+    })
 }
 
 fn normalize_optional_text(text: Option<String>) -> Option<String> {

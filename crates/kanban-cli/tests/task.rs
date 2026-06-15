@@ -200,6 +200,46 @@ fn label_suggest_returns_degraded_json_without_vector_provider() -> anyhow::Resu
 }
 
 #[test]
+fn label_suggest_rejects_out_of_bounds_limits() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_suggest_rejects_out_of_bounds_limits")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "bounded suggestion cli task",
+            "--description",
+            "ready spec",
+            "--status",
+            "ready",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+
+    kanban(
+        &temp.path,
+        &["label", "suggest", task_id, "--limit", "1001"],
+    )?
+    .failure_containing("limit must be <= 1000")?;
+    kanban(
+        &temp.path,
+        &["label", "suggest", task_id, "--atom-limit", "1001"],
+    )?
+    .failure_containing("limit must be <= 1000")?;
+    kanban(&temp.path, &["label", "suggest", task_id, "--limit", "0"])?
+        .failure_containing("limit must be >= 1")?;
+    kanban(
+        &temp.path,
+        &["label", "suggest", task_id, "--atom-limit", "0"],
+    )?
+    .failure_containing("atom_limit must be >= 1")?;
+    Ok(())
+}
+
+#[test]
 fn label_remove_accepts_l_prefixed_label_name() -> anyhow::Result<()> {
     let temp = TempDb::new("label_remove_accepts_l_prefixed_label_name")?;
     kanban(&temp.path, &["init"])?.success()?;

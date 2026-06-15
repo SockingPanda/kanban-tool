@@ -21,7 +21,7 @@ export function useTaskDetail(api: KanbanApi | null, taskId: string | null) {
         api.listRuns(taskId, { signal }),
         api.listEvents(taskId, { signal }),
         api.listComments(taskId, { signal }),
-        api.suggestTaskLabels(taskId, { signal }).catch(() => null),
+        api.suggestTaskLabels(taskId, { signal }),
       ])
       const runWithLog = runs.find((run) => Boolean(run.log_path)) ?? null
       const runLog = runWithLog

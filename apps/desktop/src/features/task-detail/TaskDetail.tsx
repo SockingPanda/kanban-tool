@@ -136,8 +136,7 @@ export function TaskDetail({
   }
 
   async function applySuggestedLabel(labelName: string) {
-    if (!api) return
-    await onAction(() => api.addTaskLabel(currentTask.id, labelName), { fallbackTaskId: currentTask.id, label: "label" })
+    await applySuggestedTaskLabel(api, currentTask.id, labelName, onAction)
   }
 
   return (
@@ -685,6 +684,16 @@ export function MarkdownDescription({ children, className }: { children: string;
       </ReactMarkdown>
     </div>
   )
+}
+
+export async function applySuggestedTaskLabel(
+  api: Pick<KanbanApi, "addTaskLabel"> | null,
+  taskId: string,
+  labelName: string,
+  onAction: (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null }) => Promise<unknown>,
+) {
+  if (!api) return undefined
+  return onAction(() => api.addTaskLabel(taskId, labelName), { fallbackTaskId: taskId, label: "label" })
 }
 
 function safeMarkdownUrl(value: string) {

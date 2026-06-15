@@ -85,22 +85,96 @@ fn comments_accept_decision_kind_with_user_default() -> anyhow::Result<()> {
         CreateTask::ready("decision comment"),
     )?;
 
-    let comment = create_comment(
+    let comment = create_comment_with_options(
         &temp.path,
         &task.id,
-        "alice",
-        "Problem: choose queue. Options: a/b. Choice: a. Reason: simpler. Risk/validation: smoke.",
-        Some("decision"),
+        CreateComment {
+            author: "alice".into(),
+            body: "Problem: choose queue. Choice: sqlite. Reason: local invariant.".into(),
+            kind: Some("decision".into()),
+            author_type: None,
+            agent_type: None,
+            metadata_json: Some(decision_metadata()),
+        },
     )?;
 
     assert_eq!(comment.kind, "decision");
     assert_eq!(comment.author_type, "user");
     assert_eq!(comment.agent_type, None);
+    assert_eq!(comment.metadata_json, decision_metadata());
 
     let comments = list_comments(&temp.path, &task.id)?;
     assert_eq!(comments.len(), 1);
     assert_eq!(comments[0].kind, "decision");
     assert_eq!(comments[0].author_type, "user");
+    Ok(())
+}
+
+#[test]
+fn comments_reject_invalid_decision_metadata_schema() -> anyhow::Result<()> {
+    let temp = TempDb::new("comments_reject_invalid_decision_metadata_schema")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("decision schema"),
+    )?;
+
+    for (name, metadata, message) in [
+        (
+            "missing reason",
+            r#"{"options":[{"slug":"a","title":"A","detail":"A"}],"selected":"a"}"#,
+            "reason",
+        ),
+        (
+            "empty options",
+            r#"{"options":[],"selected":"a","reason":"because"}"#,
+            "options",
+        ),
+        (
+            "selected mismatch",
+            r#"{"options":[{"slug":"a","title":"A","detail":"A"}],"selected":"b","reason":"because"}"#,
+            "selected",
+        ),
+        (
+            "duplicate slug",
+            r#"{"options":[{"slug":"a","title":"A","detail":"A"},{"slug":"a","title":"B","detail":"B"}],"selected":"a","reason":"because"}"#,
+            "unique",
+        ),
+        (
+            "bad slug",
+            r#"{"options":[{"slug":"Bad Slug","title":"A","detail":"A"}],"selected":"Bad Slug","reason":"because"}"#,
+            "slug",
+        ),
+        (
+            "padded slug",
+            r#"{"options":[{"slug":" a ","title":"A","detail":"A"}],"selected":"a","reason":"because"}"#,
+            "slug",
+        ),
+        (
+            "padded selected",
+            r#"{"options":[{"slug":"a","title":"A","detail":"A"}],"selected":" a ","reason":"because"}"#,
+            "selected",
+        ),
+    ] {
+        let error = result_err(create_comment_with_options(
+            &temp.path,
+            &task.id,
+            CreateComment {
+                author: "alice".into(),
+                body: name.into(),
+                kind: Some("decision".into()),
+                author_type: None,
+                agent_type: None,
+                metadata_json: Some(metadata.into()),
+            },
+        ))?;
+        assert!(
+            error.to_string().contains(message),
+            "{name}: expected {message}, got {error}"
+        );
+    }
     Ok(())
 }
 
@@ -587,6 +661,106 @@ fn jsonl_import_rejects_comment_metadata_json_non_object() -> anyhow::Result<()>
     Ok(())
 }
 
+#[test]
+fn jsonl_import_rejects_invalid_decision_metadata_schema() -> anyhow::Result<()> {
+    let source = TempDb::new("jsonl_import_rejects_invalid_decision_metadata_schema_source")?;
+    let import_path = source.dir.join("invalid-decision.jsonl");
+    let records = vec![
+        serde_json::json!({
+            "type": "board",
+            "data": {
+                "id": "b_import",
+                "slug": "default",
+                "name": "Default",
+                "description": null,
+                "created_at": 1,
+                "updated_at": 1,
+                "archived_at": null
+            }
+        }),
+        serde_json::json!({
+            "type": "column",
+            "data": {
+                "id": "col_import_ready",
+                "board_id": "b_import",
+                "status": "ready",
+                "title": "Ready",
+                "position": 40,
+                "hidden": 0,
+                "wip_limit": null,
+                "created_at": 1,
+                "updated_at": 1
+            }
+        }),
+        serde_json::json!({
+            "type": "task",
+            "data": {
+                "id": "t_import",
+                "board_id": "b_import",
+                "seq": 1,
+                "title": "Decision import",
+                "description": "ready spec",
+                "status": "ready",
+                "status_reason": null,
+                "assignee": null,
+                "priority": 3,
+                "position": 1024,
+                "scheduled_at": null,
+                "due_at": null,
+                "created_by": "test",
+                "created_at": 1,
+                "updated_at": 1,
+                "started_at": null,
+                "completed_at": null,
+                "archived_at": null,
+                "claim_token": null,
+                "claim_owner": null,
+                "claim_expires_at": null,
+                "last_heartbeat_at": null,
+                "current_run_id": null,
+                "retry_count": 0,
+                "max_retries": null,
+                "result_summary": null,
+                "result_json": null,
+                "metadata_json": "{}",
+                "lock_version": 0
+            }
+        }),
+        serde_json::json!({
+            "type": "comment",
+            "data": {
+                "id": "c_import",
+                "board_id": "b_import",
+                "task_id": "t_import",
+                "author": "tester",
+                "author_type": "user",
+                "agent_type": null,
+                "body": "invalid decision",
+                "kind": "decision",
+                "metadata_json": r#"{"options":[{"slug":" import ","title":"Import","detail":"Import detail"}],"selected":"import","reason":"because"}"#,
+                "created_at": 1
+            }
+        }),
+    ];
+    std::fs::write(
+        &import_path,
+        format!(
+            "{}\n",
+            records
+                .into_iter()
+                .map(|record| record.to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+        ),
+    )?;
+
+    let target = TempDb::new("jsonl_import_rejects_invalid_decision_metadata_schema_target")?;
+    init_database(&target.path, "tester")?;
+    let error = result_err(import_jsonl(&target.path, &import_path, true))?;
+    assert!(error.to_string().contains("slug"), "error: {error}");
+    Ok(())
+}
+
 fn strip_comment_identity_fields(line: &str) -> anyhow::Result<String> {
     let mut value = serde_json::from_str::<serde_json::Value>(line)?;
     if value["type"] == "comment" {
@@ -622,4 +796,8 @@ fn remove_comment_author_type(line: &str) -> anyhow::Result<String> {
         data.remove("author_type");
     }
     Ok(value.to_string())
+}
+
+fn decision_metadata() -> String {
+    r#"{"options":[{"slug":"sqlite","title":"Use SQLite","detail":"Keep the decision payload in comment metadata."},{"slug":"table","title":"Add a table","detail":"Store decisions in a separate table."}],"selected":"sqlite","reason":"Keeps decisions local to the discussion.","risk":"Schema drift would make older comments ambiguous.","verification":"Service, CLI, API, and Desktop tests cover the contract."}"#.into()
 }

@@ -289,7 +289,7 @@ pub(crate) async fn get_label_semantics(
 ) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticsRecord>>, ApiError> {
     let label_id = require_label_id_path(label_id)?;
     Ok(Json(Envelope {
-        data: kanban_sqlite::get_label_semantics(state.db_path(), &board, &label_id)?,
+        data: kanban_sqlite::get_label_semantics_by_id(state.db_path(), &board, &label_id)?,
         meta: None,
     }))
 }
@@ -302,11 +302,12 @@ pub(crate) async fn upsert_label_semantics(
     let Json(body) = body.map_err(extractor_error)?;
     let label_id = require_label_id_path(label_id)?;
     Ok(Json(Envelope {
-        data: kanban_sqlite::upsert_label_semantics(
+        data: kanban_sqlite::upsert_label_semantics_by_id(
             state.db_path(),
             &board,
+            &label_id,
             kanban_sqlite::UpsertLabelSemantics {
-                label_ref: label_id,
+                label_ref: label_id.clone(),
                 description: body.description,
                 applies_when: body.applies_when,
                 excludes_when: body.excludes_when,
@@ -323,7 +324,7 @@ pub(crate) async fn delete_label_semantics(
     Path((board, label_id)): Path<(String, String)>,
 ) -> Result<Json<Envelope<serde_json::Value>>, ApiError> {
     let label_id = require_label_id_path(label_id)?;
-    kanban_sqlite::delete_label_semantics(state.db_path(), &board, &label_id)?;
+    kanban_sqlite::delete_label_semantics_by_id(state.db_path(), &board, &label_id)?;
     Ok(Json(Envelope {
         data: json!({ "deleted": true }),
         meta: None,
@@ -353,8 +354,18 @@ pub(crate) async fn label_atom_index_status(
     State(state): State<AppState>,
     Path(board): Path<String>,
 ) -> Result<Json<Envelope<kanban_vector::VectorStoreStatus>>, ApiError> {
+    let index_state = state.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        label_atom_index_status_for_state(&index_state, &board)
+    })
+    .await
+    .map_err(|error| {
+        ApiError(kanban_core::KanbanError::Storage(format!(
+            "label atom index status worker failed: {error}"
+        )))
+    })??;
     Ok(Json(Envelope {
-        data: label_atom_index_status_for_state(&state, &board)?,
+        data: result,
         meta: None,
     }))
 }

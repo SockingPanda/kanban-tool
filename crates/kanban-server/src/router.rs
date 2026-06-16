@@ -27,6 +27,29 @@ pub fn build_router(state: AppState) -> Router {
             get(list_board_labels).post(create_board_label),
         )
         .route(
+            "/api/v1/boards/:board/labels/semantics",
+            get(list_label_semantics),
+        )
+        .route(
+            "/api/v1/boards/:board/labels/:label_id/semantics",
+            get(get_label_semantics)
+                .put(upsert_label_semantics)
+                .delete(delete_label_semantics),
+        )
+        .route("/api/v1/boards/:board/labels/atoms", get(list_label_atoms))
+        .route(
+            "/api/v1/boards/:board/labels/atom-index/status",
+            get(label_atom_index_status),
+        )
+        .route(
+            "/api/v1/boards/:board/labels/atom-index/rebuild",
+            post(rebuild_label_atom_index),
+        )
+        .route(
+            "/api/v1/boards/:board/labels/atom-index/query",
+            get(query_label_atom_index),
+        )
+        .route(
             "/api/v1/boards/:board/tasks",
             get(list_tasks).post(create_task),
         )

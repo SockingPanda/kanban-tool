@@ -212,6 +212,9 @@ pub trait VectorStore {
     fn delete_entities(&self, entity_uris: &[String]) -> Result<(), VectorError>;
     fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError>;
     fn query(&self, query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError>;
+    fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
+        Err(VectorError::Disabled)
+    }
     fn delete_label_atoms_for_board(&self, _board_id: &str) -> Result<(), VectorError> {
         Err(VectorError::Disabled)
     }

@@ -32,7 +32,7 @@ fn task_label_suggestions_degrade_when_vector_store_disabled() -> anyhow::Result
             .any(|code| code == "vector_store_disabled")
     );
     assert!(
-        result
+        !result
             .diagnostics
             .iter()
             .any(|code| code == "solver_refit_unavailable")
@@ -335,8 +335,7 @@ fn table_count(conn: &Connection, table: &str) -> anyhow::Result<i64> {
 }
 
 #[test]
-fn task_label_suggestions_aggregate_atom_hits_and_penalize_negative_evidence() -> anyhow::Result<()>
-{
+fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> anyhow::Result<()> {
     let temp =
         TempDb::new("task_label_suggestions_aggregate_atom_hits_and_penalize_negative_evidence")?;
     init_database(&temp.path, "tester")?;
@@ -391,17 +390,13 @@ fn task_label_suggestions_aggregate_atom_hits_and_penalize_negative_evidence() -
     assert_eq!(result.candidates[0].label_name, "backend");
     assert_eq!(result.candidates[0].score, 1.0);
     assert!(result.candidates[0].already_applied);
-    assert_eq!(result.selected_labels.len(), 2);
+    assert_eq!(result.selected_labels.len(), 1);
     assert_eq!(result.selected_labels[0].label_name, "backend");
-    assert_eq!(result.selected_labels[1].label_name, "frontend");
-    assert!(
-        result.selected_labels[1].score < 0.04,
-        "negative evidence should suppress frontend score: {result:?}"
-    );
     assert!(result.coverage > 0.99);
+    assert!(result.residual_norm < 0.01);
     assert!(!result.needs_new_label);
     assert!(
-        result
+        !result
             .diagnostics
             .iter()
             .any(|code| code == "solver_refit_unavailable")
@@ -443,6 +438,221 @@ fn task_label_suggestions_signal_new_label_when_enabled_index_has_no_selected_la
     Ok(())
 }
 
+#[test]
+fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_label_suggestions_query_positive_atoms_by_residual_rounds")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let docs = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "docs".to_owned(),
+            color: None,
+        },
+    )?;
+    let frontend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "frontend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("API docs update"),
+    )?;
+    let store = ResidualRecordingLabelAtomStore::new(vec![
+        (
+            atom_hit(&backend, "positive", "applies_when", "server handlers", 0.0),
+            vec![1.0, 0.0, 0.0],
+        ),
+        (
+            atom_hit(&docs, "positive", "applies_when", "documentation", 0.0),
+            vec![0.0, 1.0, 0.0],
+        ),
+        (
+            atom_hit(&frontend, "positive", "name", "frontend", 0.0),
+            vec![0.0, 0.0, 1.0],
+        ),
+        (
+            atom_hit(&frontend, "negative", "excludes_when", "server docs", 0.0),
+            vec![0.0, 0.0, 1.0],
+        ),
+    ]);
+
+    let result = kanban_sqlite::suggest_task_labels_with(
+        &temp.path,
+        "default",
+        &task.id,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            limit: 3,
+            atom_limit: 12,
+            min_score: 0.01,
+        },
+    )?;
+
+    assert_eq!(
+        result
+            .selected_labels
+            .iter()
+            .map(|label| label.label_name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["backend", "docs"]
+    );
+    assert!(result.coverage > 0.99);
+    assert!(result.residual_norm < 0.01);
+    assert!(!result.needs_new_label);
+    let queries = store.queries()?;
+    assert!(
+        queries
+            .iter()
+            .filter(|query| query.polarity.as_deref() == Some("positive"))
+            .count()
+            >= 2,
+        "solver should issue multiple positive residual vector queries: {queries:?}"
+    );
+    assert!(queries.iter().all(
+        |query| query.include_vector && query.embedding_model.as_deref() == Some("test-model")
+    ));
+    Ok(())
+}
+
+struct ResidualRecordingLabelAtomStore {
+    atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>,
+    queries: std::sync::Mutex<Vec<kanban_vector::LabelAtomVectorQuery>>,
+}
+
+impl ResidualRecordingLabelAtomStore {
+    fn new(atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>) -> Self {
+        Self {
+            atoms,
+            queries: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    fn queries(&self) -> anyhow::Result<Vec<kanban_vector::LabelAtomVectorQuery>> {
+        Ok(self
+            .queries
+            .lock()
+            .map_err(|err| test_error(format!("queries mutex poisoned: {err}")))?
+            .clone())
+    }
+}
+
+impl kanban_vector::VectorStore for ResidualRecordingLabelAtomStore {
+    fn chunk_embedding_model(&self) -> &str {
+        "test-model"
+    }
+
+    fn status(&self) -> kanban_vector::VectorStoreStatus {
+        kanban_vector::VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
+        }
+    }
+
+    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn upsert(
+        &self,
+        _chunks: &[kanban_vector::EmbeddingChunk],
+    ) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn query(
+        &self,
+        _query: &kanban_vector::VectorQuery,
+    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
+        Ok(Vec::new())
+    }
+
+    fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
+        Ok(vec![1.0, 1.0, 0.0])
+    }
+
+    fn query_label_atoms_by_vector(
+        &self,
+        query: &kanban_vector::LabelAtomVectorQuery,
+    ) -> Result<Vec<kanban_vector::LabelAtomVectorHit>, kanban_vector::VectorError> {
+        self.queries
+            .lock()
+            .map_err(|err| {
+                kanban_vector::VectorError::Store(format!("queries mutex poisoned: {err}"))
+            })?
+            .push(query.clone());
+        let mut hits = self
+            .atoms
+            .iter()
+            .filter(|(hit, _vector)| {
+                query
+                    .board_id
+                    .as_ref()
+                    .is_none_or(|board_id| &hit.board_id == board_id)
+                    && query
+                        .embedding_model
+                        .as_ref()
+                        .is_none_or(|model| &hit.embedding_model == model)
+                    && query
+                        .polarity
+                        .as_ref()
+                        .is_none_or(|polarity| &hit.polarity == polarity)
+            })
+            .map(|(hit, vector)| {
+                let similarity = cosine(&query.vector, vector);
+                (similarity, hit.clone(), vector.clone())
+            })
+            .filter(|(similarity, _hit, _vector)| *similarity > 0.0)
+            .collect::<Vec<_>>();
+        hits.sort_by(|left, right| right.0.total_cmp(&left.0));
+        Ok(hits
+            .into_iter()
+            .take(query.limit)
+            .map(|(similarity, mut hit, vector)| {
+                hit.score = (1.0 / similarity.max(0.0001)) - 1.0;
+                kanban_vector::LabelAtomVectorHit {
+                    hit,
+                    vector: query.include_vector.then_some(vector),
+                }
+            })
+            .collect())
+    }
+}
+
+fn cosine(left: &[f32], right: &[f32]) -> f32 {
+    let dot = left
+        .iter()
+        .zip(right)
+        .map(|(left, right)| left * right)
+        .sum::<f32>();
+    let left_norm = left.iter().map(|value| value * value).sum::<f32>().sqrt();
+    let right_norm = right.iter().map(|value| value * value).sum::<f32>().sqrt();
+    if left_norm == 0.0 || right_norm == 0.0 {
+        0.0
+    } else {
+        dot / (left_norm * right_norm)
+    }
+}
+
 struct StaticLabelAtomStore {
     hits: Vec<kanban_vector::LabelAtomHit>,
 }
@@ -482,10 +692,14 @@ impl kanban_vector::VectorStore for StaticLabelAtomStore {
         Ok(Vec::new())
     }
 
-    fn query_label_atoms(
+    fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
+        Ok(vec![1.0, 0.0, 0.0])
+    }
+
+    fn query_label_atoms_by_vector(
         &self,
-        query: &kanban_vector::LabelAtomQuery,
-    ) -> Result<Vec<kanban_vector::LabelAtomHit>, kanban_vector::VectorError> {
+        query: &kanban_vector::LabelAtomVectorQuery,
+    ) -> Result<Vec<kanban_vector::LabelAtomVectorHit>, kanban_vector::VectorError> {
         Ok(self
             .hits
             .iter()
@@ -505,6 +719,17 @@ impl kanban_vector::VectorStore for StaticLabelAtomStore {
             })
             .take(query.limit)
             .cloned()
+            .map(|hit| {
+                let vector = match (hit.label_name.as_str(), hit.polarity.as_str()) {
+                    ("backend", "positive") => vec![1.0, 0.0, 0.0],
+                    ("frontend", _) => vec![0.0, 1.0, 0.0],
+                    _ => vec![0.0, 0.0, 1.0],
+                };
+                kanban_vector::LabelAtomVectorHit {
+                    hit,
+                    vector: query.include_vector.then_some(vector),
+                }
+            })
             .collect())
     }
 }

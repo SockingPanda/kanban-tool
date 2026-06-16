@@ -615,6 +615,10 @@ coverage 不足的候选还会执行残差 top1+margin 校验：候选语义的 
 候选持久化为 `rejected` proposal，diagnostics 包含
 `label_proposal_residual_top1_failed` 或
 `label_proposal_residual_margin_insufficient`，用于审计为什么没有进入可接受状态。
+如果 residual validation 不可用或 degraded，且没有明确通过 top1+margin 校验，
+attempt 返回 `degraded=true`、`proposal=null`，不新增 proposal row，也不创建
+canonical label、`label_semantics`、`label_atoms` 或 `task_labels`；diagnostics 包含
+`label_proposal_residual_validation_unavailable` 和具体原因。
 
 `label proposals accept` 只接受 `proposed` proposal。accept 会创建 canonical
 label、`label_semantics` 与 `label_atoms`，并标脏 label atom index；它不会自动

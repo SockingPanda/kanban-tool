@@ -728,6 +728,114 @@ async fn task_label_proposal_route_accepts_and_rejects_without_task_binding() ->
 }
 
 #[tokio::test]
+async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let label = kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let app = test.router();
+
+    let (status, json) = request_json(
+        app.clone(),
+        "PUT",
+        &format!("/api/v1/boards/default/labels/{}/semantics", label.id),
+        Some(json!({
+            "description": "Backend service work",
+            "applies_when": ["touches Rust service code"],
+            "excludes_when": ["CSS-only"],
+            "positive_examples": ["add API handler"],
+            "negative_examples": ["adjust spacing"]
+        })),
+        None,
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["label_name"], "backend");
+    assert_eq!(json["data"]["description"], "Backend service work");
+    assert_eq!(
+        json["data"]["applies_when"],
+        json!(["touches Rust service code"])
+    );
+    assert!(
+        json["data"]["atoms"]
+            .as_array()
+            .context("atoms")?
+            .iter()
+            .any(|atom| atom["polarity"] == "negative" && atom["text"] == "CSS-only")
+    );
+
+    let (status, json) = get_json(
+        app.clone(),
+        &format!("/api/v1/boards/default/labels/{}/semantics", label.id),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["label_name"], "backend");
+
+    let (status, json) = get_json(app.clone(), "/api/v1/boards/default/labels/semantics").await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"].as_array().context("semantics")?.len(), 1);
+
+    let (status, json) = get_json(app.clone(), "/api/v1/boards/default/labels/atoms").await?;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        json["data"]
+            .as_array()
+            .context("atoms")?
+            .iter()
+            .any(|atom| atom["kind"] == "positive_example" && atom["text"] == "add API handler")
+    );
+
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/labels/atom-index/status",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["enabled"], false);
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/labels/atom-index/rebuild",
+        json!({}),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .context("error message")?
+            .contains("requires a configured label atom vector store")
+    );
+
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/labels/atom-index/query?q=backend&polarity=positive",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+
+    let (status, json) = delete_json(
+        app.clone(),
+        &format!("/api/v1/boards/default/labels/{}/semantics", label.id),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["deleted"], true);
+    assert!(kanban_sqlite::list_label_atoms(&db_path, "default")?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
 async fn task_label_routes_use_task_board_and_reject_archived_targets() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();

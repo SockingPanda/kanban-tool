@@ -270,14 +270,43 @@ describe("MarkdownDescription", () => {
                   score: 0.82,
                   weight: 0.82,
                   already_applied: true,
-                  evidence_atoms: [],
-                  negative_evidence_atoms: [],
+                  evidence_atoms: [
+                    {
+                      atom_id: "la_positive",
+                      label_id: "l_backend",
+                      label_name: "backend",
+                      polarity: "positive",
+                      kind: "applies_when",
+                      text: "touches Rust service code",
+                      score: 0.81,
+                    },
+                    {
+                      atom_id: "la_example",
+                      label_id: "l_backend",
+                      label_name: "backend",
+                      polarity: "positive",
+                      kind: "positive_example",
+                      text: "add API handler",
+                      score: 0.73,
+                    },
+                  ],
+                  negative_evidence_atoms: [
+                    {
+                      atom_id: "la_negative",
+                      label_id: "l_backend",
+                      label_name: "backend",
+                      polarity: "negative",
+                      kind: "excludes_when",
+                      text: "CSS-only",
+                      score: 0.42,
+                    },
+                  ],
                 },
               ],
               candidates: [],
               coverage: 0.82,
               residual_norm: 0.18,
-              needs_new_label: false,
+              needs_new_label: true,
               degraded: true,
               diagnostics: ["label_atom_index_dirty"],
             },
@@ -310,6 +339,11 @@ describe("MarkdownDescription", () => {
     expect(html).toContain("label_atom_index_dirty")
     expect(html).toContain("Applied")
     expect(html).toContain("coverage 82%")
+    expect(html).toContain("residual 0.180")
+    expect(html).toContain("new label may be needed")
+    expect(html).toContain("touches Rust service code")
+    expect(html).toContain("add API handler")
+    expect(html).toContain("negative evidence 1")
   })
 })
 

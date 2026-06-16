@@ -44,6 +44,14 @@ pub(crate) struct LabelSuggestionQuery {
     min_score: f32,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct LabelAtomIndexQuery {
+    q: String,
+    polarity: Option<String>,
+    #[serde(default = "default_label_atom_query_limit")]
+    limit: usize,
+}
+
 fn default_limit() -> usize {
     100
 }
@@ -58,6 +66,10 @@ fn default_label_suggestion_atom_limit() -> usize {
 
 fn default_label_suggestion_min_score() -> f32 {
     kanban_sqlite::LabelSuggestionOptions::default().min_score
+}
+
+fn default_label_atom_query_limit() -> usize {
+    24
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,6 +118,20 @@ pub(crate) struct LabelProposalBody {
 pub(crate) struct LabelProposalDecisionBody {
     reason: Option<String>,
     actor: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct UpsertLabelSemanticsBody {
+    description: Option<String>,
+    #[serde(default)]
+    applies_when: Vec<String>,
+    #[serde(default)]
+    excludes_when: Vec<String>,
+    #[serde(default)]
+    positive_examples: Vec<String>,
+    #[serde(default)]
+    negative_examples: Vec<String>,
 }
 
 pub(crate) async fn list_tasks(
@@ -245,6 +271,112 @@ pub(crate) async fn create_board_label(
             meta: None,
         }),
     ))
+}
+
+pub(crate) async fn list_label_semantics(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+) -> Result<Json<Envelope<Vec<kanban_sqlite::LabelSemanticsRecord>>>, ApiError> {
+    Ok(Json(Envelope {
+        data: kanban_sqlite::list_label_semantics(state.db_path(), &board)?,
+        meta: None,
+    }))
+}
+
+pub(crate) async fn get_label_semantics(
+    State(state): State<AppState>,
+    Path((board, label_id)): Path<(String, String)>,
+) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticsRecord>>, ApiError> {
+    Ok(Json(Envelope {
+        data: kanban_sqlite::get_label_semantics(state.db_path(), &board, &label_id)?,
+        meta: None,
+    }))
+}
+
+pub(crate) async fn upsert_label_semantics(
+    State(state): State<AppState>,
+    Path((board, label_id)): Path<(String, String)>,
+    body: Result<Json<UpsertLabelSemanticsBody>, JsonRejection>,
+) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticsRecord>>, ApiError> {
+    let Json(body) = body.map_err(extractor_error)?;
+    Ok(Json(Envelope {
+        data: kanban_sqlite::upsert_label_semantics(
+            state.db_path(),
+            &board,
+            kanban_sqlite::UpsertLabelSemantics {
+                label_ref: label_id,
+                description: body.description,
+                applies_when: body.applies_when,
+                excludes_when: body.excludes_when,
+                positive_examples: body.positive_examples,
+                negative_examples: body.negative_examples,
+            },
+        )?,
+        meta: None,
+    }))
+}
+
+pub(crate) async fn delete_label_semantics(
+    State(state): State<AppState>,
+    Path((board, label_id)): Path<(String, String)>,
+) -> Result<Json<Envelope<serde_json::Value>>, ApiError> {
+    kanban_sqlite::delete_label_semantics(state.db_path(), &board, &label_id)?;
+    Ok(Json(Envelope {
+        data: json!({ "deleted": true }),
+        meta: None,
+    }))
+}
+
+pub(crate) async fn list_label_atoms(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+) -> Result<Json<Envelope<Vec<kanban_sqlite::LabelAtomRecord>>>, ApiError> {
+    Ok(Json(Envelope {
+        data: kanban_sqlite::list_label_atoms(state.db_path(), &board)?,
+        meta: None,
+    }))
+}
+
+pub(crate) async fn label_atom_index_status(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+) -> Result<Json<Envelope<kanban_vector::VectorStoreStatus>>, ApiError> {
+    Ok(Json(Envelope {
+        data: label_atom_index_status_for_state(&state, &board)?,
+        meta: None,
+    }))
+}
+
+pub(crate) async fn rebuild_label_atom_index(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+) -> Result<Json<Envelope<kanban_vector::VectorStoreStatus>>, ApiError> {
+    Ok(Json(Envelope {
+        data: rebuild_label_atom_index_for_state(&state, &board)?,
+        meta: None,
+    }))
+}
+
+pub(crate) async fn query_label_atom_index(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+    query: Result<Query<LabelAtomIndexQuery>, QueryRejection>,
+) -> Result<Json<Envelope<Vec<kanban_vector::LabelAtomHit>>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
+    let text = query.q.trim();
+    if text.is_empty() {
+        return Err(invalid_input("q is required"));
+    }
+    let polarity = query
+        .polarity
+        .as_deref()
+        .map(parse_label_atom_polarity)
+        .transpose()?;
+    Ok(Json(Envelope {
+        data: query_label_atom_index_for_state(&state, &board, text, polarity, query.limit)?,
+        meta: None,
+    }))
 }
 
 pub(crate) async fn list_task_labels(
@@ -527,6 +659,80 @@ fn propose_task_label_for_state(
         ),
     }
     .map_err(ApiError::from)
+}
+
+fn label_atom_index_status_for_state(
+    state: &AppState,
+    board: &str,
+) -> Result<kanban_vector::VectorStoreStatus, ApiError> {
+    #[cfg(feature = "vector-lancedb")]
+    {
+        if let Some(store) = super::shared::configured_lancedb_store(state)? {
+            return kanban_sqlite::label_atom_index_status_with(state.db_path(), board, &store)
+                .map_err(ApiError::from);
+        }
+    }
+    kanban_sqlite::label_atom_index_status(state.db_path(), board).map_err(ApiError::from)
+}
+
+fn rebuild_label_atom_index_for_state(
+    state: &AppState,
+    board: &str,
+) -> Result<kanban_vector::VectorStoreStatus, ApiError> {
+    #[cfg(feature = "vector-lancedb")]
+    {
+        if let Some(store) = super::shared::configured_lancedb_store(state)? {
+            return kanban_sqlite::rebuild_label_atom_index_with(state.db_path(), board, &store)
+                .map_err(ApiError::from);
+        }
+    }
+    #[cfg(not(feature = "vector-lancedb"))]
+    let _ = (state, board);
+    Err(invalid_input(
+        "label atom index rebuild requires a configured label atom vector store",
+    ))
+}
+
+fn query_label_atom_index_for_state(
+    state: &AppState,
+    board: &str,
+    text: &str,
+    polarity: Option<String>,
+    limit: usize,
+) -> Result<Vec<kanban_vector::LabelAtomHit>, ApiError> {
+    #[cfg(feature = "vector-lancedb")]
+    {
+        if let Some(store) = super::shared::configured_lancedb_store(state)? {
+            return kanban_sqlite::query_label_atom_index_with(
+                state.db_path(),
+                board,
+                &store,
+                kanban_vector::LabelAtomQuery {
+                    text: text.to_owned(),
+                    limit,
+                    board_id: None,
+                    embedding_model: None,
+                    polarity,
+                },
+            )
+            .map_err(ApiError::from);
+        }
+    }
+    #[cfg(not(feature = "vector-lancedb"))]
+    let _ = (state, board, text, polarity, limit);
+    Err(invalid_input(
+        "label atom index query requires a configured label atom vector store",
+    ))
+}
+
+fn parse_label_atom_polarity(value: &str) -> Result<String, ApiError> {
+    match value.trim() {
+        "positive" => Ok("positive".to_owned()),
+        "negative" => Ok("negative".to_owned()),
+        other => Err(invalid_input(format!(
+            "unsupported label atom polarity: {other}"
+        ))),
+    }
 }
 
 pub(crate) async fn remove_task_label(

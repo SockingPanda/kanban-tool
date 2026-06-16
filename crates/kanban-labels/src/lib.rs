@@ -5,6 +5,7 @@
 //! `labels` / `task_labels` 的 canonical 存储。
 
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -160,9 +161,12 @@ impl SemanticLabel {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LabelAtomEvidence {
+    pub atom_id: Option<String>,
     pub source: LabelAtomSource,
     pub similarity: f32,
     pub contribution: f32,
+    #[serde(skip)]
+    pub vector: Option<Vec<f32>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -198,6 +202,7 @@ pub struct LabelSolverConfig {
     pub min_coverage: f32,
     pub max_residual_norm: f32,
     pub refit_iterations: usize,
+    pub max_positive_atoms_per_label: usize,
 }
 
 impl Default for LabelSolverConfig {
@@ -212,6 +217,7 @@ impl Default for LabelSolverConfig {
             min_coverage: 0.55,
             max_residual_norm: 0.75,
             refit_iterations: 40,
+            max_positive_atoms_per_label: 3,
         }
     }
 }
@@ -223,6 +229,18 @@ pub struct LabelSolverResult {
     pub coverage: f32,
     pub residual_norm: f32,
     pub needs_new_label: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RetrievedLabelAtom {
+    pub atom_id: String,
+    pub label_id: String,
+    pub label_name: String,
+    pub polarity: LabelAtomPolarity,
+    pub kind: LabelAtomKind,
+    pub text: String,
+    pub vector: Vec<f32>,
+    pub score: f32,
 }
 
 pub fn retrieve_label_groups(
@@ -247,9 +265,11 @@ pub fn retrieve_label_groups(
                         positive_score = positive_score.max(similarity);
                         if similarity >= config.min_evidence_score {
                             evidence_atoms.push(LabelAtomEvidence {
+                                atom_id: None,
                                 source: atom.source.clone(),
                                 similarity,
                                 contribution: similarity.max(0.0),
+                                vector: Some(atom.embedding.clone()),
                             });
                         }
                     }
@@ -257,10 +277,12 @@ pub fn retrieve_label_groups(
                         negative_score = negative_score.max(similarity);
                         if similarity >= config.min_evidence_score {
                             negative_evidence_atoms.push(LabelAtomEvidence {
+                                atom_id: None,
                                 source: atom.source.clone(),
                                 similarity,
                                 contribution: similarity.max(0.0)
                                     * config.negative_suppression_factor,
+                                vector: None,
                             });
                         }
                     }
@@ -396,6 +418,348 @@ pub fn resolve_label_groups(
     })
 }
 
+pub fn resolve_label_groups_by_residual<R>(
+    query_embedding: &[f32],
+    config: &LabelSolverConfig,
+    mut retrieve: R,
+) -> Result<LabelSolverResult, LabelSolverError>
+where
+    R: FnMut(&[f32], LabelAtomPolarity, usize) -> Result<Vec<RetrievedLabelAtom>, LabelSolverError>,
+{
+    validate_residual_inputs(query_embedding, config)?;
+    let query_norm = l2_norm(query_embedding);
+    let normalized_query = normalize_for_fit(query_embedding);
+    let mut residual = normalize_for_fit(query_embedding);
+    let mut selected_label_ids = HashSet::new();
+    let mut selected_vectors = Vec::new();
+    let mut selected_basis = Vec::new();
+    let mut candidates_by_label: HashMap<String, LabelGroupCandidate> = HashMap::new();
+    let retrieval_limit = config
+        .max_candidates
+        .saturating_mul(config.max_positive_atoms_per_label.max(1))
+        .max(config.max_candidates)
+        .max(1);
+
+    while selected_label_ids.len() < config.max_selected_labels {
+        let positive_hits = retrieve(&residual, LabelAtomPolarity::Positive, retrieval_limit)?;
+        let negative_hits = retrieve(
+            &normalized_query,
+            LabelAtomPolarity::Negative,
+            retrieval_limit,
+        )?;
+        let groups = residual_candidates(
+            &residual,
+            &normalized_query,
+            positive_hits,
+            negative_hits,
+            &selected_label_ids,
+            config,
+        )?;
+        for candidate in &groups {
+            candidates_by_label
+                .entry(candidate.label_id.clone())
+                .and_modify(|existing| {
+                    if candidate.score > existing.score {
+                        *existing = candidate.clone();
+                    }
+                })
+                .or_insert_with(|| candidate.clone());
+        }
+
+        let next = groups
+            .into_iter()
+            .filter(|candidate| candidate.score >= config.min_candidate_score)
+            .filter_map(|candidate| {
+                let vector = candidate_group_vector(&candidate)?;
+                let gain = dot(&residual, &vector).max(0.0) * candidate.score.max(0.0);
+                (gain > 0.0).then_some((candidate, vector, gain))
+            })
+            .max_by(|left, right| {
+                left.2
+                    .total_cmp(&right.2)
+                    .then_with(|| right.0.label_name.cmp(&left.0.label_name))
+            });
+
+        let Some((candidate, _vector, _gain)) = next else {
+            break;
+        };
+        let basis_atoms = candidate_basis_atoms(&candidate);
+        if basis_atoms.is_empty() {
+            break;
+        }
+        selected_label_ids.insert(candidate.label_id.clone());
+        for (evidence, atom_vector) in basis_atoms {
+            selected_vectors.push(atom_vector);
+            selected_basis.push(SelectedBasisAtom {
+                label_id: candidate.label_id.clone(),
+                label_name: candidate.label_name.clone(),
+                score: candidate.score,
+                evidence,
+                negative_evidence_atoms: candidate.negative_evidence_atoms.clone(),
+            });
+        }
+        let weights = fit_non_negative(&selected_vectors, query_embedding, config.refit_iterations);
+        residual = fit_residual(query_embedding, &selected_vectors, &weights, query_norm);
+    }
+
+    let weights = fit_non_negative(&selected_vectors, query_embedding, config.refit_iterations);
+    let fitted = fitted_vector(&selected_vectors, &weights);
+    let residual_norm = normalized_residual_norm(query_embedding, &fitted);
+    let coverage = coverage_from_residual(residual_norm);
+    let selected_labels = selected_labels_from_basis(&selected_basis, &weights);
+    let mut candidates = candidates_by_label.into_values().collect::<Vec<_>>();
+    candidates.sort_by(|left, right| {
+        right
+            .score
+            .total_cmp(&left.score)
+            .then_with(|| left.label_name.cmp(&right.label_name))
+    });
+    candidates.truncate(config.max_candidates);
+    Ok(LabelSolverResult {
+        candidates,
+        selected_labels,
+        coverage,
+        residual_norm,
+        needs_new_label: coverage < config.min_coverage || residual_norm > config.max_residual_norm,
+    })
+}
+
+fn validate_residual_inputs(
+    query_embedding: &[f32],
+    config: &LabelSolverConfig,
+) -> Result<(), LabelSolverError> {
+    if l2_norm(query_embedding) == 0.0 {
+        return Err(LabelSolverError::ZeroQueryEmbedding);
+    }
+    if config.max_positive_atoms_per_label == 0 {
+        return Err(LabelSolverError::InvalidConfig(
+            "max_positive_atoms_per_label must be >= 1".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn residual_candidates(
+    positive_query: &[f32],
+    negative_query: &[f32],
+    positive_hits: Vec<RetrievedLabelAtom>,
+    negative_hits: Vec<RetrievedLabelAtom>,
+    selected_label_ids: &HashSet<String>,
+    config: &LabelSolverConfig,
+) -> Result<Vec<LabelGroupCandidate>, LabelSolverError> {
+    let mut positives_by_label: HashMap<String, Vec<RetrievedLabelAtom>> = HashMap::new();
+    for hit in positive_hits {
+        validate_retrieved_atom(&hit, positive_query.len(), LabelAtomPolarity::Positive)?;
+        if !selected_label_ids.contains(&hit.label_id) {
+            positives_by_label
+                .entry(hit.label_id.clone())
+                .or_default()
+                .push(hit);
+        }
+    }
+    let mut negatives_by_label: HashMap<String, Vec<RetrievedLabelAtom>> = HashMap::new();
+    for hit in negative_hits {
+        validate_retrieved_atom(&hit, negative_query.len(), LabelAtomPolarity::Negative)?;
+        negatives_by_label
+            .entry(hit.label_id.clone())
+            .or_default()
+            .push(hit);
+    }
+
+    let mut candidates = Vec::new();
+    for (label_id, mut positives) in positives_by_label {
+        positives.sort_by(|left, right| {
+            right
+                .score
+                .total_cmp(&left.score)
+                .then_with(|| left.atom_id.cmp(&right.atom_id))
+        });
+        positives.truncate(config.max_positive_atoms_per_label);
+        let Some(first) = positives.first() else {
+            continue;
+        };
+        let mut evidence_atoms = positives
+            .iter()
+            .map(|hit| atom_evidence(hit, positive_query))
+            .collect::<Vec<_>>();
+        evidence_atoms.sort_by(|left, right| {
+            right
+                .contribution
+                .total_cmp(&left.contribution)
+                .then_with(|| left.source.text.cmp(&right.source.text))
+        });
+        let positive_score = evidence_atoms
+            .iter()
+            .map(|atom| atom.similarity)
+            .fold(0.0_f32, f32::max);
+        let mut negative_evidence_atoms = negatives_by_label
+            .remove(&label_id)
+            .unwrap_or_default()
+            .iter()
+            .map(|hit| atom_evidence(hit, negative_query))
+            .filter(|evidence| evidence.similarity >= config.min_evidence_score)
+            .collect::<Vec<_>>();
+        negative_evidence_atoms.sort_by(|left, right| {
+            right
+                .contribution
+                .total_cmp(&left.contribution)
+                .then_with(|| left.source.text.cmp(&right.source.text))
+        });
+        negative_evidence_atoms.truncate(config.max_positive_atoms_per_label);
+        let negative_score = negative_evidence_atoms
+            .iter()
+            .map(|atom| atom.similarity)
+            .fold(0.0_f32, f32::max);
+        let suppressed = negative_score >= config.negative_suppression_threshold;
+        let suppression = if suppressed {
+            negative_score * config.negative_suppression_factor
+        } else {
+            0.0
+        };
+        let score = (positive_score - suppression).max(0.0);
+        if score >= config.min_candidate_score
+            || (suppressed && positive_score >= config.min_candidate_score)
+        {
+            candidates.push(LabelGroupCandidate {
+                label_id,
+                label_name: first.label_name.clone(),
+                score,
+                positive_score,
+                negative_score,
+                suppressed,
+                evidence_atoms,
+                negative_evidence_atoms,
+            });
+        }
+    }
+    candidates.sort_by(|left, right| {
+        right
+            .score
+            .total_cmp(&left.score)
+            .then_with(|| left.label_name.cmp(&right.label_name))
+    });
+    candidates.truncate(config.max_candidates);
+    Ok(candidates)
+}
+
+#[derive(Debug, Clone)]
+struct SelectedBasisAtom {
+    label_id: String,
+    label_name: String,
+    score: f32,
+    evidence: LabelAtomEvidence,
+    negative_evidence_atoms: Vec<LabelAtomEvidence>,
+}
+
+fn candidate_basis_atoms(candidate: &LabelGroupCandidate) -> Vec<(LabelAtomEvidence, Vec<f32>)> {
+    candidate
+        .evidence_atoms
+        .iter()
+        .filter_map(|evidence| {
+            let mut vector = evidence.vector.clone()?;
+            normalize_in_place(&mut vector);
+            Some((evidence.clone(), vector))
+        })
+        .collect()
+}
+
+fn selected_labels_from_basis(
+    selected_basis: &[SelectedBasisAtom],
+    weights: &[f32],
+) -> Vec<SelectedLabel> {
+    let mut by_label: Vec<SelectedLabel> = Vec::new();
+    for (basis, weight) in selected_basis.iter().zip(weights) {
+        if *weight <= 0.0 {
+            continue;
+        }
+        let mut evidence = basis.evidence.clone();
+        evidence.contribution = *weight;
+        if let Some(existing) = by_label
+            .iter_mut()
+            .find(|label| label.label_id == basis.label_id)
+        {
+            existing.weight += *weight;
+            existing.evidence_atoms.push(evidence);
+        } else {
+            by_label.push(SelectedLabel {
+                label_id: basis.label_id.clone(),
+                label_name: basis.label_name.clone(),
+                weight: *weight,
+                score: basis.score,
+                evidence_atoms: vec![evidence],
+                negative_evidence_atoms: basis.negative_evidence_atoms.clone(),
+            });
+        }
+    }
+    for label in &mut by_label {
+        label.evidence_atoms.sort_by(|left, right| {
+            right
+                .contribution
+                .total_cmp(&left.contribution)
+                .then_with(|| left.source.text.cmp(&right.source.text))
+        });
+    }
+    by_label
+}
+
+fn validate_retrieved_atom(
+    atom: &RetrievedLabelAtom,
+    expected_dimension: usize,
+    expected_polarity: LabelAtomPolarity,
+) -> Result<(), LabelSolverError> {
+    if atom.polarity != expected_polarity {
+        return Err(LabelSolverError::RetrievedPolarityMismatch {
+            expected: expected_polarity,
+            actual: atom.polarity,
+        });
+    }
+    ensure_dimension(atom.vector.len(), expected_dimension)
+}
+
+fn atom_evidence(atom: &RetrievedLabelAtom, residual: &[f32]) -> LabelAtomEvidence {
+    let similarity = cosine_similarity(residual, &atom.vector)
+        .max(atom.score)
+        .max(0.0);
+    LabelAtomEvidence {
+        atom_id: Some(atom.atom_id.clone()),
+        source: LabelAtomSource {
+            label_id: atom.label_id.clone(),
+            label_name: atom.label_name.clone(),
+            polarity: atom.polarity,
+            kind: atom.kind,
+            text: atom.text.clone(),
+        },
+        similarity,
+        contribution: similarity,
+        vector: Some(atom.vector.clone()),
+    }
+}
+
+fn candidate_group_vector(candidate: &LabelGroupCandidate) -> Option<Vec<f32>> {
+    let dimension = candidate
+        .evidence_atoms
+        .iter()
+        .find_map(|evidence| evidence.vector.as_ref().map(Vec::len))?;
+    let mut vector = vec![0.0; dimension];
+    let mut total_weight = 0.0_f32;
+    for evidence in &candidate.evidence_atoms {
+        let Some(atom_vector) = evidence.vector.as_ref() else {
+            continue;
+        };
+        let weight = evidence.contribution.max(0.0);
+        add_scaled(&mut vector, atom_vector, weight);
+        total_weight += weight;
+    }
+    if total_weight == 0.0 {
+        return None;
+    }
+    for value in &mut vector {
+        *value /= total_weight;
+    }
+    normalize_in_place(&mut vector);
+    Some(vector)
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum LabelSolverError {
     #[error("embedding dimension mismatch: expected {expected}, got {actual}")]
@@ -406,6 +770,13 @@ pub enum LabelSolverError {
     EmptyAtoms,
     #[error("query embedding has no semantic signal")]
     ZeroQueryEmbedding,
+    #[error("invalid label solver config: {0}")]
+    InvalidConfig(String),
+    #[error("retrieved atom polarity mismatch: expected {expected:?}, got {actual:?}")]
+    RetrievedPolarityMismatch {
+        expected: LabelAtomPolarity,
+        actual: LabelAtomPolarity,
+    },
 }
 
 fn ensure_dimension(actual: usize, expected: usize) -> Result<(), LabelSolverError> {
@@ -675,6 +1046,29 @@ mod tests {
         SemanticLabel::new(def, atoms).unwrap()
     }
 
+    fn retrieved_atom(
+        label_id: &str,
+        label_name: &str,
+        polarity: LabelAtomPolarity,
+        vector: Vec<f32>,
+        score: f32,
+        ordinal: usize,
+    ) -> RetrievedLabelAtom {
+        RetrievedLabelAtom {
+            atom_id: format!("{label_id}_{ordinal}"),
+            label_id: label_id.to_owned(),
+            label_name: label_name.to_owned(),
+            polarity,
+            kind: match polarity {
+                LabelAtomPolarity::Positive => LabelAtomKind::AppliesWhen,
+                LabelAtomPolarity::Negative => LabelAtomKind::ExcludesWhen,
+            },
+            text: format!("{label_name} {ordinal}"),
+            vector,
+            score,
+        }
+    }
+
     #[test]
     fn atom_source_generation_trims_and_skips_empty_text() {
         let sources = definition("l_backend", "Backend").atom_sources();
@@ -752,6 +1146,314 @@ mod tests {
         );
         assert!(result.coverage > 0.9);
         assert!(!result.needs_new_label);
+    }
+
+    #[test]
+    fn residual_solver_activates_later_labels_from_dynamic_residual_queries() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 3,
+            min_candidate_score: 0.01,
+            ..LabelSolverConfig::default()
+        };
+        let mut positive_queries = Vec::new();
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 1.0, 1.0],
+            &config,
+            |residual, polarity, limit| {
+                assert!(limit >= 3);
+                match polarity {
+                    LabelAtomPolarity::Positive => {
+                        positive_queries.push(residual.to_vec());
+                        let axis = if residual[0] > 0.4 {
+                            (0, "l_backend", "backend")
+                        } else if residual[1] > 0.4 {
+                            (1, "l_docs", "docs")
+                        } else {
+                            (2, "l_tests", "tests")
+                        };
+                        let mut vector = vec![0.0, 0.0, 0.0];
+                        vector[axis.0] = 1.0;
+                        Ok(vec![retrieved_atom(
+                            axis.1,
+                            axis.2,
+                            LabelAtomPolarity::Positive,
+                            vector,
+                            0.95,
+                            positive_queries.len(),
+                        )])
+                    }
+                    LabelAtomPolarity::Negative => Ok(Vec::new()),
+                }
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            result
+                .selected_labels
+                .iter()
+                .map(|label| label.label_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["backend", "docs", "tests"]
+        );
+        assert!(positive_queries.len() >= 3);
+        assert!(result.coverage > 0.99);
+        assert!(result.residual_norm < 0.01);
+    }
+
+    #[test]
+    fn residual_solver_keeps_negative_atoms_out_of_refit_basis() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 1,
+            negative_suppression_factor: 1.0,
+            min_candidate_score: 0.0,
+            ..LabelSolverConfig::default()
+        };
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 0.0, 0.0],
+            &config,
+            |_residual, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => Ok(vec![retrieved_atom(
+                    "l_frontend",
+                    "frontend",
+                    LabelAtomPolarity::Positive,
+                    vec![1.0, 0.0, 0.0],
+                    1.0,
+                    1,
+                )]),
+                LabelAtomPolarity::Negative => Ok(vec![retrieved_atom(
+                    "l_frontend",
+                    "frontend",
+                    LabelAtomPolarity::Negative,
+                    vec![1.0, 0.0, 0.0],
+                    1.0,
+                    2,
+                )]),
+            },
+        )
+        .unwrap();
+
+        assert!(result.candidates[0].suppressed);
+        assert_eq!(result.candidates[0].score, 0.0);
+        assert!(result.selected_labels.is_empty());
+        assert_eq!(result.coverage, 0.0);
+        assert_eq!(result.residual_norm, 1.0);
+    }
+
+    #[test]
+    fn residual_solver_scores_negative_atoms_against_original_query() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 2,
+            max_positive_atoms_per_label: 1,
+            min_candidate_score: 0.01,
+            negative_suppression_factor: 1.0,
+            negative_suppression_threshold: 0.8,
+            ..LabelSolverConfig::default()
+        };
+        let mut negative_queries = Vec::new();
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 1.0, 0.0],
+            &config,
+            |query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => {
+                    if query[0] > 0.4 {
+                        Ok(vec![retrieved_atom(
+                            "l_backend",
+                            "backend",
+                            LabelAtomPolarity::Positive,
+                            vec![1.0, 0.0, 0.0],
+                            1.0,
+                            1,
+                        )])
+                    } else {
+                        Ok(vec![retrieved_atom(
+                            "l_docs",
+                            "docs",
+                            LabelAtomPolarity::Positive,
+                            vec![0.0, 1.0, 0.0],
+                            1.0,
+                            2,
+                        )])
+                    }
+                }
+                LabelAtomPolarity::Negative => {
+                    negative_queries.push(query.to_vec());
+                    Ok(vec![retrieved_atom(
+                        "l_docs",
+                        "docs",
+                        LabelAtomPolarity::Negative,
+                        vec![1.0, 1.0, 0.0],
+                        1.0,
+                        3,
+                    )])
+                }
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            result
+                .selected_labels
+                .iter()
+                .map(|label| label.label_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["backend"]
+        );
+        assert!(
+            result
+                .candidates
+                .iter()
+                .any(|candidate| candidate.label_name == "docs" && candidate.suppressed)
+        );
+        assert!(negative_queries.len() >= 2);
+        assert!(negative_queries.iter().all(|query| {
+            (query[0] - std::f32::consts::FRAC_1_SQRT_2).abs() < 0.0001
+                && (query[1] - std::f32::consts::FRAC_1_SQRT_2).abs() < 0.0001
+                && query[2].abs() < 0.0001
+        }));
+    }
+
+    #[test]
+    fn residual_solver_refits_selected_label_with_atom_level_basis() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 1,
+            max_positive_atoms_per_label: 2,
+            min_candidate_score: 0.01,
+            ..LabelSolverConfig::default()
+        };
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 1.0, 0.0],
+            &config,
+            |_query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => Ok(vec![
+                    retrieved_atom(
+                        "l_fullstack",
+                        "fullstack",
+                        LabelAtomPolarity::Positive,
+                        vec![1.0, 0.0, 0.0],
+                        1.0,
+                        1,
+                    ),
+                    retrieved_atom(
+                        "l_fullstack",
+                        "fullstack",
+                        LabelAtomPolarity::Positive,
+                        vec![0.0, 1.0, 0.0],
+                        1.0,
+                        2,
+                    ),
+                ]),
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.selected_labels.len(), 1);
+        let selected = &result.selected_labels[0];
+        assert_eq!(selected.label_name, "fullstack");
+        assert_eq!(selected.evidence_atoms.len(), 2);
+        assert!(
+            selected
+                .evidence_atoms
+                .iter()
+                .all(|atom| (atom.contribution - std::f32::consts::FRAC_1_SQRT_2).abs() < 0.0001)
+        );
+        assert!((selected.weight - std::f32::consts::SQRT_2).abs() < 0.0001);
+        assert!(result.coverage > 0.99);
+        assert!(result.residual_norm < 0.01);
+    }
+
+    #[test]
+    fn residual_solver_limits_top_positive_atoms_per_label() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 1,
+            max_positive_atoms_per_label: 2,
+            min_candidate_score: 0.01,
+            ..LabelSolverConfig::default()
+        };
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 0.0, 0.0],
+            &config,
+            |_residual, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => Ok(vec![
+                    retrieved_atom(
+                        "l_backend",
+                        "backend",
+                        LabelAtomPolarity::Positive,
+                        vec![1.0, 0.0, 0.0],
+                        1.0,
+                        1,
+                    ),
+                    retrieved_atom(
+                        "l_backend",
+                        "backend",
+                        LabelAtomPolarity::Positive,
+                        vec![0.9, 0.1, 0.0],
+                        0.9,
+                        2,
+                    ),
+                    retrieved_atom(
+                        "l_backend",
+                        "backend",
+                        LabelAtomPolarity::Positive,
+                        vec![0.8, 0.2, 0.0],
+                        0.8,
+                        3,
+                    ),
+                ]),
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.candidates[0].evidence_atoms.len(), 2);
+        assert_eq!(
+            result.candidates[0].evidence_atoms[0].atom_id.as_deref(),
+            Some("l_backend_1")
+        );
+        assert_eq!(
+            result.candidates[0].evidence_atoms[1].atom_id.as_deref(),
+            Some("l_backend_2")
+        );
+    }
+
+    #[test]
+    fn residual_solver_rejects_zero_query_and_retrieved_dimension_mismatch() {
+        let config = LabelSolverConfig::default();
+        assert!(matches!(
+            resolve_label_groups_by_residual(&[0.0, 0.0, 0.0], &config, |_, _, _| Ok(Vec::new())),
+            Err(LabelSolverError::ZeroQueryEmbedding)
+        ));
+
+        let error = resolve_label_groups_by_residual(
+            &[1.0, 0.0, 0.0],
+            &config,
+            |_residual, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => Ok(vec![retrieved_atom(
+                    "l_backend",
+                    "backend",
+                    LabelAtomPolarity::Positive,
+                    vec![1.0, 0.0],
+                    1.0,
+                    1,
+                )]),
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            LabelSolverError::DimensionMismatch {
+                expected: 3,
+                actual: 2
+            }
+        ));
     }
 
     #[test]

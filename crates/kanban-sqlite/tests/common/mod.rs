@@ -263,6 +263,10 @@ impl VectorStore for RecordingVectorStore {
         Ok(Vec::new())
     }
 
+    fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
+        Ok(vec![1.0, 1.0, 1.0])
+    }
+
     fn delete_label_atoms_for_board(&self, board_id: &str) -> Result<(), VectorError> {
         self.live_label_atoms
             .lock()
@@ -370,7 +374,7 @@ impl VectorStore for RecordingVectorStore {
             })
             .take(query.limit)
             .map(|atom| {
-                let vector = query.include_vector.then(|| vec![1.0, 0.0, 0.0]);
+                let vector = query.include_vector.then(|| vector_for_label_atom(&atom));
                 LabelAtomVectorHit {
                     hit: LabelAtomHit {
                         atom_id: atom.atom_id,
@@ -464,6 +468,23 @@ impl VectorStore for QueryFailingVectorStore {
     fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
         Err(VectorError::Store("query exploded".to_owned()))
     }
+
+    fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
+        Ok(vec![1.0, 0.0, 0.0])
+    }
+
+    fn query_label_atoms_by_vector(
+        &self,
+        _query: &LabelAtomVectorQuery,
+    ) -> Result<Vec<LabelAtomVectorHit>, VectorError> {
+        Err(VectorError::Store("query exploded".to_owned()))
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn vector_for_label_atom(atom: &LabelAtomVector) -> Vec<f32> {
+    let _ = atom;
+    vec![1.0, 0.0, 0.0]
 }
 
 #[cfg(feature = "tantivy-backend")]

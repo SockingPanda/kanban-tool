@@ -237,6 +237,70 @@ fn label_propose_without_provider_returns_degraded_without_polluting_labels() ->
     Ok(())
 }
 
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn label_propose_with_vector_config_attempts_configured_store() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_propose_with_vector_config_attempts_configured_store")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "proposal configured vector cli task",
+            "--description",
+            "ready spec",
+            "--status",
+            "ready",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+    let vector_config = temp.dir.join("vector.toml");
+    std::fs::write(
+        &vector_config,
+        r#"[vector]
+provider = "ollama"
+endpoint = "http://127.0.0.1:1"
+model = "offline-cli-test-model"
+dimensions = 3
+"#,
+    )?;
+
+    let attempt = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "propose",
+            task_id,
+            "--vector-config",
+            vector_config.to_str().context("vector config path")?,
+        ],
+    )?
+    .success_json()?;
+
+    let diagnostics = attempt["data"]["diagnostics"]
+        .as_array()
+        .context("diagnostics")?;
+    assert_eq!(attempt["data"]["proposal"], serde_json::Value::Null);
+    assert_eq!(attempt["data"]["degraded"], true);
+    assert!(
+        diagnostics
+            .iter()
+            .any(|value| value == "vector_query_error"),
+        "{diagnostics:?}"
+    );
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|value| value == "vector_store_disabled"),
+        "{diagnostics:?}"
+    );
+    Ok(())
+}
+
 #[test]
 fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<()> {
     let temp = TempDb::new("label_proposals_json_accept_reject_list_show_round_trip")?;

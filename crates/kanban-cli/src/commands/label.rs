@@ -3,15 +3,15 @@ use std::path::PathBuf;
 use std::{path::Path, sync::Arc};
 
 use anyhow::{Result, bail};
-#[cfg(feature = "vector-lancedb")]
-use kanban_sqlite::suggest_task_labels_with;
 use kanban_sqlite::{
     CreateLabel, LabelProposalCandidate, LabelProposalListOptions, LabelProposalStatus,
     LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult,
     MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, accept_label_proposal, add_task_label,
-    create_label, get_label_proposal, list_label_proposals, list_labels, propose_task_label,
-    propose_task_label_with, reject_label_proposal, remove_task_label, suggest_task_labels,
+    create_label, get_label_proposal, list_label_proposals, list_labels, propose_task_label_with,
+    reject_label_proposal, remove_task_label, suggest_task_labels,
 };
+#[cfg(feature = "vector-lancedb")]
+use kanban_sqlite::{propose_task_label_with_store, suggest_task_labels_with};
 use std::{fs, str::FromStr};
 
 use crate::args::LabelCommand;
@@ -77,9 +77,25 @@ pub(crate) fn handle_label(
             let attempt = if let Some(path) = args.proposal_json {
                 let candidate = read_proposal_candidate(&path)?;
                 let provider = ManualLabelProposalProvider::new(candidate);
-                propose_task_label_with(db_path, board, actor, &args.task_ref, &provider, options)?
+                propose_with_optional_vector_config(
+                    db_path,
+                    board,
+                    actor,
+                    &args.task_ref,
+                    &provider,
+                    options,
+                    args.vector_config.as_deref(),
+                )?
             } else {
-                propose_task_label(db_path, board, actor, &args.task_ref, options)?
+                propose_with_optional_vector_config(
+                    db_path,
+                    board,
+                    actor,
+                    &args.task_ref,
+                    &kanban_sqlite::DisabledLabelProposalProvider,
+                    options,
+                    args.vector_config.as_deref(),
+                )?
             };
             print_or_json(json, &attempt, || {
                 if let Some(proposal) = &attempt.proposal {
@@ -226,6 +242,29 @@ fn suggest_with_optional_vector_config(
         }
     }
     suggest_task_labels(db_path, board, task_ref, options).map_err(Into::into)
+}
+
+fn propose_with_optional_vector_config(
+    db_path: &PathBuf,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    provider: &dyn kanban_sqlite::LabelProposalProvider,
+    options: LabelSuggestionOptions,
+    vector_config_path: Option<&std::path::Path>,
+) -> Result<kanban_sqlite::LabelProposalAttempt> {
+    #[cfg(not(feature = "vector-lancedb"))]
+    let _ = vector_config_path;
+    #[cfg(feature = "vector-lancedb")]
+    {
+        if let Some(store) = configured_lancedb_store(db_path, vector_config_path)? {
+            return propose_task_label_with_store(
+                db_path, board, actor, task_ref, provider, &store, options,
+            )
+            .map_err(Into::into);
+        }
+    }
+    propose_task_label_with(db_path, board, actor, task_ref, provider, options).map_err(Into::into)
 }
 
 #[cfg(feature = "vector-lancedb")]

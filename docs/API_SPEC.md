@@ -964,6 +964,14 @@ label 发生 normalized-name 冲突的候选持久化为 `rejected`，diagnostic
 `near_duplicate_label_conflict`。Normalized-name conflict 忽略大小写、空白和标点，
 是 deterministic near-duplicate heuristic。
 
+当 server 配置了可用 vector provider 时，proposal attempt 与 label suggestion
+使用同一套 LanceDB label atom store。coverage 不足的候选会在持久化前执行残差
+top1+margin 校验：候选语义的 residual score 必须超过现有 label top1，且超过幅度
+达到固定 margin。校验失败时候选仍会以 `rejected` proposal 持久化，diagnostics
+包含 `label_proposal_residual_top1_failed` 或
+`label_proposal_residual_margin_insufficient`。未配置 provider、feature 不可用或
+vector 检索失败时返回 degraded attempt，不创建 canonical label 或 `task_labels`。
+
 Attempt response：
 
 ```json

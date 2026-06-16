@@ -367,7 +367,7 @@ Archived board 默认不可写；归档只标记 board，不改 task 状态，�
 
 ---
 
-## ADR-0011：Schema Train 边界：status、type、tags、dependency type 与 decision comments
+## ADR-0011：Schema Train 边界：status、type、labels、dependency type 与 decision comments
 
 ### Status
 
@@ -379,7 +379,7 @@ Proposed
 
 - `task_type`：表达任务是什么类型。
 - `dependency_type`：表达任务之间是什么关系。
-- tags/labels：表达可搜索、可筛选、可推荐的多维标签。
+- labels：表达可搜索、可筛选、可推荐的多维标签。
 - comments：承载人和 agent 的协作记录。
 - decision comments：记录人或 LLM/agent 在多个方案之间做出的选择。
 
@@ -414,7 +414,7 @@ Proposed
 | `scheduled_at` | 计划时间，参与 scheduled/ready guard | 是 | 是 | 是 | 是 |
 | `due_at` | 截止时间，只展示、筛选、排序 | 否 | 可排序 | 可排序 | 是 |
 | `task_type` | 任务类别，例如 bug/feature/research/ops/follow_up | 否 | 否 | 可用于解释/排序，不改变 eligibility | 是 |
-| tags/labels | 多标签分类、搜索、推荐和 UI grouping | 否 | 否 | 否，除非未来显式配置排序策略 | 是 |
+| labels | 多标签分类、搜索、推荐和 UI grouping | 否 | 否 | 否，除非未来显式配置排序策略 | 是 |
 | `dependency_type` | 依赖边语义，区分 hard block 和 soft relation | 仅 hard block | 仅 hard block | 是，但必须区分 hard/soft | 是 |
 | `comment.author_type` | 评论作者角色：`user` 或 `agent` | 否 | 否 | 否 | 是 |
 | `comment.author` | 展示名，例如 `kanban-user`、`codex` | 否 | 否 | 否 | 是 |
@@ -430,7 +430,7 @@ Proposed
 任何新字段都不能隐式表达状态：
 
 - `task_type=bug` 不表示高优先级。
-- tag `blocked` 不表示 task blocked。
+- label `blocked` 不表示 task blocked。
 - decision selected option 不表示 task done。
 - comment 中写 “blocked” 不改变 task status。
 
@@ -458,7 +458,7 @@ bug | feature | research | ops | docs | refactor | test | follow_up
 - dispatcher claim eligibility。
 - 状态机 transition guard。
 - hard dependency 判断。
-- 替代 tags/labels。
+- 替代 labels。
 
 枚举策略：
 
@@ -466,25 +466,25 @@ bug | feature | research | ops | docs | refactor | test | follow_up
 - 后续如需要开放扩展，再单独做 ADR。
 - 未知 type 应被拒绝，而不是静默写入。
 
-### Tags / Labels
+### Labels
 
-tags/labels 表达多维、可叠加的分类。一个 task 可以有多个 tag。
+labels 表达多维、可叠加的分类。一个 task 可以有多个 label。
 
-tags 适合表达：
+labels 适合表达：
 
 - area：`desktop`、`cli`、`sqlite`
 - domain：`search`、`dispatcher`、`comments`
 - semantic group：`llm-facing`、`release-risk`
 - 用户临时整理方式
 
-tags 不适合表达：
+labels 不适合表达：
 
 - workflow state
 - hard dependency
 - execution ownership
 - decision result
 
-未来 semantic tag recommender 可以推荐 tag，但推荐结果必须显式保存后才成为 task 标签。
+未来 semantic label recommender 可以推荐 label，但推荐结果必须显式保存后才成为 task label。
 
 ### Dependency Type
 
@@ -699,7 +699,7 @@ Dispatcher 排序可以看：
 Dispatcher 不看：
 
 - `task_type`
-- tags
+- labels
 - `comment.kind`
 - `comment.metadata_json`
 - decision selected option
@@ -726,7 +726,7 @@ Frontier 可以展示和解释更多字段，但不得把 soft 字段解释成 h
    - 已有 decision comment 若能识别则 `kind=decision`，否则 `note`
 5. 实现 decision metadata validation。
 6. 实现 Desktop decision rendering。
-7. 后续再做 `task_type`、`dependency_type`、tags/labels 扩展。
+7. 后续再做 `task_type`、`dependency_type`、labels 扩展。
 
 ### Consequences
 
@@ -752,6 +752,6 @@ Frontier 可以展示和解释更多字段，但不得把 soft 字段解释成 h
 - 不引入 RBAC、团队、组织、邀请或云同步。
 - 不用 decision comment 替代 ADR。
 - 不让 comment metadata 影响 dispatcher claim。
-- 不让 tags/type/metadata 变成隐式 status。
+- 不让 labels/type/metadata 变成隐式 status。
 - 不把 `task_dependencies` 改成完整知识图谱。
 - 不在本 ADR 中实现具体 migration。

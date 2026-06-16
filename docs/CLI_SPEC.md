@@ -486,7 +486,7 @@ kanban label create <name> [--color <color>]
 kanban label add <task_ref> <label>
 kanban label remove <task_ref> <label>
 kanban label suggest <task_ref> [--limit 5] [--atom-limit 24] [--min-score 0.15] [--vector-config <toml>] [--json]
-kanban label propose <task_ref> [--proposal-json <path>] [--limit 5] [--atom-limit 24] [--min-score 0.15] [--json]
+kanban label propose <task_ref> [--proposal-json <path>] [--limit 5] [--atom-limit 24] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]
 kanban label proposals show <proposal_id> [--json]
 kanban label proposals accept <proposal_id> [--reason <text>] [--json]
@@ -564,6 +564,10 @@ degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms`
 `task_labels`。日常 label suggestion 不依赖该 proposal provider。
 `--limit`、`--atom-limit`、`--min-score` 会在 proposal 持久化前调节底层 label
 suggestion solver，用于计算 coverage、residual_norm 和 top1 existing label。
+`--vector-config` 使用与 `label suggest` 相同的 TOML 解析规则；配置可用时，
+proposal attempt 会用同一套 LanceDB label atom store 做 suggestion 与后续残差
+校验。未配置或 feature/provider 不可用时保持 degraded fallback，不写入普通 label
+或 task-label 关联。
 
 `--proposal-json` 提供本地/offline provider 输出：
 
@@ -583,6 +587,11 @@ suggestion solver，用于计算 coverage、residual_norm 和 top1 existing labe
 label 发生 normalized-name 冲突的候选会写成 `rejected` proposal，并在 diagnostics
 中返回 `near_duplicate_label_conflict`；该 normalized-name 检查忽略大小写、空白
 和标点，是 deterministic near-duplicate heuristic。
+coverage 不足的候选还会执行残差 top1+margin 校验：候选语义的 residual score
+必须超过现有 label top1，且超过幅度达到固定 margin。校验失败时 attempt 仍会把
+候选持久化为 `rejected` proposal，diagnostics 包含
+`label_proposal_residual_top1_failed` 或
+`label_proposal_residual_margin_insufficient`，用于审计为什么没有进入可接受状态。
 
 `label proposals accept` 只接受 `proposed` proposal。accept 会创建 canonical
 label、`label_semantics` 与 `label_atoms`，并标脏 label atom index；它不会自动

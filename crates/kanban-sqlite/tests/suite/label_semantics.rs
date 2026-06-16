@@ -426,6 +426,77 @@ fn label_proposal_coverage_sufficient_does_not_call_provider_or_persist_candidat
 }
 
 #[test]
+fn label_proposal_coverage_sufficient_preserves_degraded_diagnostics() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_proposal_coverage_sufficient_preserves_degraded_diagnostics")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Backend API route"),
+    )?;
+    let board = get_board(&temp.path, "default")?;
+    connect_file(&temp.path)?.execute(
+        "INSERT INTO label_atom_index_boards(\
+             store_name,board_id,dirty,last_rebuild_at,last_error,updated_at\
+         ) VALUES ('lancedb_label_atoms',?1,1,NULL,NULL,1)",
+        [board.id],
+    )?;
+    let store = ProposalValidationStore::new(vec![
+        ("Backend API route", vec![1.0, 0.0, 0.0]),
+        ("backend", vec![1.0, 0.0, 0.0]),
+    ])
+    .with_status_message("test vector store; dirty=true last_error=none; board_dirty=true")
+    .with_atoms(vec![(
+        atom_hit(&backend, "positive", "applies_when", "backend", 0.0),
+        vec![1.0, 0.0, 0.0],
+    )]);
+    let provider = CountingProposalProvider::new();
+
+    let attempt = propose_task_label_with_store(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &provider,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            limit: 3,
+            atom_limit: 10,
+            min_score: 0.01,
+        },
+    )?;
+
+    assert!(attempt.proposal.is_none());
+    assert!(attempt.degraded);
+    assert_eq!(provider.calls()?, 0);
+    assert!(
+        attempt
+            .diagnostics
+            .iter()
+            .any(|code| code == "heuristic_coverage_sufficient")
+    );
+    assert!(
+        attempt
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_atom_index_dirty")
+    );
+    let proposals =
+        list_label_proposals(&temp.path, "default", LabelProposalListOptions::default())?;
+    assert!(proposals.is_empty());
+    Ok(())
+}
+
+#[test]
 fn label_proposal_validation_rejects_blank_or_empty_semantics() -> anyhow::Result<()> {
     let temp = TempDb::new("label_proposal_validation_rejects_blank_or_empty_semantics")?;
     init_database(&temp.path, "tester")?;
@@ -961,6 +1032,7 @@ impl kanban_sqlite::LabelProposalProvider for CountingProposalProvider {
 struct ProposalValidationStore {
     embeddings: Vec<(String, Vec<f32>)>,
     atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>,
+    status_message: &'static str,
 }
 
 impl ProposalValidationStore {
@@ -971,11 +1043,17 @@ impl ProposalValidationStore {
                 .map(|(text, vector)| (text.to_owned(), vector))
                 .collect(),
             atoms: Vec::new(),
+            status_message: "test vector store; dirty=false last_error=none; board_dirty=false",
         }
     }
 
     fn with_atoms(mut self, atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>) -> Self {
         self.atoms = atoms;
+        self
+    }
+
+    fn with_status_message(mut self, status_message: &'static str) -> Self {
+        self.status_message = status_message;
         self
     }
 
@@ -1002,7 +1080,7 @@ impl kanban_vector::VectorStore for ProposalValidationStore {
         kanban_vector::VectorStoreStatus {
             backend: "test-vector".to_owned(),
             enabled: true,
-            message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
+            message: self.status_message.to_owned(),
         }
     }
 

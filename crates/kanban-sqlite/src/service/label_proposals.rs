@@ -94,7 +94,7 @@ pub fn propose_task_label_with(
     board: &str,
     actor: &str,
     task_ref: &str,
-    provider: &impl LabelProposalProvider,
+    provider: &(impl LabelProposalProvider + ?Sized),
     options: LabelSuggestionOptions,
 ) -> Result<LabelProposalAttempt> {
     let store = DisabledVectorStore;
@@ -106,7 +106,7 @@ pub fn propose_task_label_with_store(
     board: &str,
     actor: &str,
     task_ref: &str,
-    provider: &impl LabelProposalProvider,
+    provider: &(impl LabelProposalProvider + ?Sized),
     store: &(impl VectorStore + ?Sized),
     options: LabelSuggestionOptions,
 ) -> Result<LabelProposalAttempt> {
@@ -133,7 +133,7 @@ pub fn propose_task_label_with_store(
             task_id: task.id,
             board_id: task.board_id,
             proposal: None,
-            degraded: false,
+            degraded: suggestions.degraded,
             diagnostics,
             heuristic_coverage: suggestions.coverage,
             heuristic_residual_norm: suggestions.residual_norm,
@@ -283,6 +283,10 @@ fn validate_candidate_residual(
     residual: &[f32],
     candidate: &LabelProposalCandidate,
 ) -> ResidualValidation {
+    // Keep this validation aligned with the suggestion solver inputs: positive
+    // atoms are scored against the residual, while negative atoms suppress from
+    // the original query. That makes persisted rejected proposals comparable to
+    // the top existing label returned by residual suggestions.
     if residual.is_empty() || l2_norm(residual) == 0.0 {
         return ResidualValidation::unavailable("label_proposal_residual_vector_unavailable");
     }

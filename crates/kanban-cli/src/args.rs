@@ -233,6 +233,8 @@ pub(crate) struct LabelProposeArgs {
     pub(crate) atom_limit: usize,
     #[arg(long, default_value_t = 0.15)]
     pub(crate) min_score: f32,
+    #[arg(long = "vector-config", alias = "config")]
+    pub(crate) vector_config: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]

@@ -485,6 +485,14 @@ kanban label list
 kanban label create <name> [--color <color>]
 kanban label add <task_ref> <label>
 kanban label remove <task_ref> <label>
+kanban label semantics list [--json]
+kanban label semantics show <label> [--json]
+kanban label semantics upsert <label> [--description <text>] [--applies-when <text>]... [--excludes-when <text>]... [--positive-example <text>]... [--negative-example <text>]... [--json]
+kanban label semantics delete <label> [--json]
+kanban label atoms list [--json]
+kanban label atom-index status [--vector-config <toml>] [--json]
+kanban label atom-index rebuild --vector-config <toml> [--json]
+kanban label atom-index query <text> [--polarity positive|negative] [--limit 24] --vector-config <toml> [--json]
 kanban label suggest <task_ref> [--limit 5] [--atom-limit 24] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label propose <task_ref> [--proposal-json <path>] [--limit 5] [--atom-limit 24] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]
@@ -556,6 +564,21 @@ JSON 输出：
 
 Human output 简洁列出建议 label、score、weight、already_applied；degraded 时追加
 diagnostics 行。
+
+`label semantics` 管理当前 board 上已有 label 的语义字典。`<label>` 接受 label
+name 或 `l_...` id；`upsert` 会写入 `label_semantics` 并同步重建该 label 的
+`label_atoms`，随后标脏派生的 label atom vector index。数组参数可重复；空白值会被
+trim 后丢弃。`delete` 删除该 label 的 semantics 与 atoms，但不删除 canonical label
+或 task-label 绑定，并返回 `{ "data": { "deleted": true } }`。
+
+`label atoms list` 读取 SQLite truth 中的 `label_atoms`。这些 atoms 来自
+`label semantics upsert` 或接受 label proposal 后生成的 semantics；它们是
+`lancedb_label_atoms` 派生索引的输入，不是派生索引本身。
+
+`label atom-index status` 返回 label atom vector index 的状态。未配置 provider 或未
+启用 `vector-lancedb` 时仍成功返回 disabled/degraded 状态。`rebuild` 与 `query`
+需要 `--vector-config <toml>` 和可用的 vector store；无可用 provider/feature 时命令失败，
+不会修改 SQLite truth。`query` 的 `--polarity` 只接受 `positive` 或 `negative`。
 
 `label propose` 是独立的新 label semantics 提案流程，不复用或改变 `label suggest`。
 它先读取当前 task-level label suggestions 的 `coverage` / `residual_norm` /

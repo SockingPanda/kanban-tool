@@ -6,17 +6,21 @@ use super::{
     get_task_by_id, resolve_task, storage,
 };
 
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 
 use kanban_core::{KanbanError, Result};
 use kanban_indexer::LANCEDB_LABEL_ATOMS_STORE;
+use kanban_labels::{
+    LabelAtomKind, LabelAtomPolarity, LabelSolverConfig, LabelSolverError, RetrievedLabelAtom,
+    resolve_label_groups_by_residual,
+};
 use kanban_vector::{
-    DisabledVectorStore, LabelAtomHit, LabelAtomQuery, VectorStore, VectorStoreStatus,
+    DisabledVectorStore, LabelAtomVectorHit, LabelAtomVectorQuery, VectorError, VectorStore,
+    VectorStoreStatus,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
 const NEW_LABEL_COVERAGE_THRESHOLD: f32 = 0.55;
-const NEGATIVE_EVIDENCE_PENALTY: f32 = 0.8;
 
 pub fn suggest_task_labels(
     path: impl AsRef<Path>,
@@ -41,7 +45,6 @@ pub fn suggest_task_labels_with(
     let task = resolve_task(&conn, &board_id, task_ref)?;
     let task = get_task_by_id(&conn, &task.board_id, &task.id)?;
     let mut diagnostics = Vec::new();
-    diagnostics.push("solver_refit_unavailable".to_owned());
 
     let status = store.status();
     if !status.enabled {
@@ -57,14 +60,8 @@ pub fn suggest_task_labels_with(
     push_label_atom_index_diagnostics(&conn, &task.board_id, &status, &mut diagnostics)?;
 
     let query_text = task_query_text(&task.title, task.description.as_deref());
-    let hits = match store.query_label_atoms(&LabelAtomQuery {
-        text: query_text,
-        limit: options.atom_limit,
-        board_id: Some(task.board_id.clone()),
-        embedding_model: Some(store.chunk_embedding_model().to_owned()),
-        polarity: None,
-    }) {
-        Ok(hits) => hits,
+    let query_vector = match store.embed_query_text(&query_text) {
+        Ok(vector) => vector,
         Err(error) => {
             diagnostics.push("vector_query_error".to_owned());
             diagnostics.push(bounded_diagnostic_message(&error));
@@ -78,53 +75,106 @@ pub fn suggest_task_labels_with(
         }
     };
 
-    if hits.is_empty() {
-        diagnostics.push("label_atom_index_empty".to_owned());
-    }
-
     let already_applied = task
         .labels
         .iter()
         .map(|label| label.id.as_str())
         .collect::<std::collections::HashSet<_>>();
-    let mut candidates = aggregate_hits(hits, &already_applied);
-    candidates.sort_by(|left, right| {
-        right
-            .score
-            .total_cmp(&left.score)
-            .then_with(|| left.label_name.cmp(&right.label_name))
-    });
-    if candidates.len() > options.limit {
-        candidates.truncate(options.limit);
+    let solver_config = LabelSolverConfig {
+        max_candidates: options.limit.max(1),
+        max_selected_labels: options.limit.max(1),
+        min_candidate_score: options.min_score,
+        ..LabelSolverConfig::default()
+    };
+    let board_id_for_query = task.board_id.clone();
+    let embedding_model = store.chunk_embedding_model().to_owned();
+    let solver_result = match resolve_label_groups_by_residual(
+        &query_vector,
+        &solver_config,
+        |residual, polarity, limit| {
+            retrieve_residual_atoms(
+                store,
+                residual,
+                polarity,
+                limit.min(options.atom_limit).max(1),
+                &board_id_for_query,
+                &embedding_model,
+            )
+        },
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            diagnostics.push("vector_query_error".to_owned());
+            diagnostics.push(bounded_diagnostic_message(&error));
+            return Ok(empty_result(
+                task.id,
+                task.board_id,
+                diagnostics,
+                true,
+                false,
+            ));
+        }
+    };
+    if solver_result.candidates.is_empty() {
+        diagnostics.push("label_atom_index_empty".to_owned());
     }
 
-    let selected_labels = candidates
+    let mut candidates = solver_result
+        .candidates
         .iter()
-        .filter(|candidate| candidate.score >= options.min_score)
-        .map(|candidate| SelectedLabelSuggestion {
+        .map(|candidate| LabelSuggestionCandidate {
             label_id: candidate.label_id.clone(),
             label_name: candidate.label_name.clone(),
             score: candidate.score,
-            weight: candidate.weight,
-            already_applied: candidate.already_applied,
-            evidence_atoms: candidate.evidence_atoms.clone(),
-            negative_evidence_atoms: candidate.negative_evidence_atoms.clone(),
+            weight: candidate.score,
+            already_applied: already_applied.contains(candidate.label_id.as_str()),
+            evidence_atoms: candidate
+                .evidence_atoms
+                .iter()
+                .map(map_solver_evidence)
+                .collect(),
+            negative_evidence_atoms: candidate
+                .negative_evidence_atoms
+                .iter()
+                .map(map_solver_evidence)
+                .collect(),
         })
         .collect::<Vec<_>>();
-    let coverage = selected_labels
+    candidates.truncate(options.limit);
+
+    let selected_labels = solver_result
+        .selected_labels
         .iter()
-        .map(|candidate| candidate.score)
-        .fold(0.0_f32, f32::max)
-        .clamp(0.0, 1.0);
+        .map(|selected| SelectedLabelSuggestion {
+            label_id: selected.label_id.clone(),
+            label_name: selected.label_name.clone(),
+            score: selected.score,
+            weight: selected.weight,
+            already_applied: already_applied.contains(selected.label_id.as_str()),
+            evidence_atoms: selected
+                .evidence_atoms
+                .iter()
+                .map(map_solver_evidence)
+                .collect(),
+            negative_evidence_atoms: selected
+                .negative_evidence_atoms
+                .iter()
+                .map(map_solver_evidence)
+                .collect(),
+        })
+        .collect::<Vec<_>>();
+    let coverage = solver_result.coverage;
     let degraded = !diagnostics.is_empty();
-    let needs_new_label = selected_labels.is_empty() || coverage < NEW_LABEL_COVERAGE_THRESHOLD;
+    let needs_new_label = selected_labels.is_empty()
+        || coverage < NEW_LABEL_COVERAGE_THRESHOLD
+        || solver_result.needs_new_label;
     Ok(LabelSuggestionResult {
         task_id: task.id,
         board_id: task.board_id,
         selected_labels,
         candidates,
         coverage,
-        residual_norm: (1.0 - coverage).clamp(0.0, 1.0),
+        residual_norm: solver_result.residual_norm,
         needs_new_label,
         degraded,
         diagnostics,
@@ -146,6 +196,110 @@ fn validate_options(options: LabelSuggestionOptions) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+fn retrieve_residual_atoms(
+    store: &(impl VectorStore + ?Sized),
+    residual: &[f32],
+    polarity: LabelAtomPolarity,
+    limit: usize,
+    board_id: &str,
+    embedding_model: &str,
+) -> std::result::Result<Vec<RetrievedLabelAtom>, LabelSolverError> {
+    let polarity_text = match polarity {
+        LabelAtomPolarity::Positive => "positive",
+        LabelAtomPolarity::Negative => "negative",
+    };
+    let hits = store
+        .query_label_atoms_by_vector(&LabelAtomVectorQuery {
+            vector: residual.to_vec(),
+            limit,
+            board_id: Some(board_id.to_owned()),
+            embedding_model: Some(embedding_model.to_owned()),
+            polarity: Some(polarity_text.to_owned()),
+            include_vector: true,
+        })
+        .map_err(solver_vector_error)?;
+    hits.into_iter()
+        .map(|hit| retrieved_atom_from_hit(hit, polarity))
+        .collect()
+}
+
+fn retrieved_atom_from_hit(
+    hit: LabelAtomVectorHit,
+    expected_polarity: LabelAtomPolarity,
+) -> std::result::Result<RetrievedLabelAtom, LabelSolverError> {
+    let actual_polarity = polarity_from_str(&hit.hit.polarity)?;
+    if actual_polarity != expected_polarity {
+        return Err(LabelSolverError::RetrievedPolarityMismatch {
+            expected: expected_polarity,
+            actual: actual_polarity,
+        });
+    }
+    let vector = hit
+        .vector
+        .ok_or_else(|| LabelSolverError::InvalidConfig("label atom vector missing".to_owned()))?;
+    Ok(RetrievedLabelAtom {
+        atom_id: hit.hit.atom_id,
+        label_id: hit.hit.label_id,
+        label_name: hit.hit.label_name,
+        polarity: actual_polarity,
+        kind: kind_from_str(&hit.hit.kind)?,
+        text: hit.hit.text,
+        vector,
+        score: distance_to_similarity(hit.hit.score),
+    })
+}
+
+fn solver_vector_error(error: VectorError) -> LabelSolverError {
+    LabelSolverError::InvalidConfig(error.to_string())
+}
+
+fn polarity_from_str(value: &str) -> std::result::Result<LabelAtomPolarity, LabelSolverError> {
+    match value {
+        "positive" => Ok(LabelAtomPolarity::Positive),
+        "negative" => Ok(LabelAtomPolarity::Negative),
+        other => Err(LabelSolverError::InvalidConfig(format!(
+            "unknown label atom polarity {other}"
+        ))),
+    }
+}
+
+fn kind_from_str(value: &str) -> std::result::Result<LabelAtomKind, LabelSolverError> {
+    match value {
+        "name" => Ok(LabelAtomKind::Name),
+        "description" => Ok(LabelAtomKind::Description),
+        "applies_when" => Ok(LabelAtomKind::AppliesWhen),
+        "positive_example" => Ok(LabelAtomKind::PositiveExample),
+        "excludes_when" => Ok(LabelAtomKind::ExcludesWhen),
+        "negative_example" => Ok(LabelAtomKind::NegativeExample),
+        other => Err(LabelSolverError::InvalidConfig(format!(
+            "unknown label atom kind {other}"
+        ))),
+    }
+}
+
+fn map_solver_evidence(evidence: &kanban_labels::LabelAtomEvidence) -> LabelSuggestionEvidenceAtom {
+    LabelSuggestionEvidenceAtom {
+        atom_id: evidence.atom_id.clone().unwrap_or_default(),
+        label_id: evidence.source.label_id.clone(),
+        label_name: evidence.source.label_name.clone(),
+        polarity: match evidence.source.polarity {
+            LabelAtomPolarity::Positive => "positive".to_owned(),
+            LabelAtomPolarity::Negative => "negative".to_owned(),
+        },
+        kind: match evidence.source.kind {
+            LabelAtomKind::Name => "name",
+            LabelAtomKind::Description => "description",
+            LabelAtomKind::AppliesWhen => "applies_when",
+            LabelAtomKind::PositiveExample => "positive_example",
+            LabelAtomKind::ExcludesWhen => "excludes_when",
+            LabelAtomKind::NegativeExample => "negative_example",
+        }
+        .to_owned(),
+        text: evidence.source.text.clone(),
+        score: evidence.similarity,
+    }
 }
 
 fn push_label_atom_index_diagnostics(
@@ -177,39 +331,6 @@ fn push_label_atom_index_diagnostics(
     diagnostics.sort();
     diagnostics.dedup();
     Ok(())
-}
-
-fn aggregate_hits(
-    hits: Vec<LabelAtomHit>,
-    already_applied: &std::collections::HashSet<&str>,
-) -> Vec<LabelSuggestionCandidate> {
-    let mut groups: HashMap<String, CandidateAccumulator> = HashMap::new();
-    for hit in hits {
-        let score = distance_to_similarity(hit.score);
-        let group = groups.entry(hit.label_id.clone()).or_insert_with(|| {
-            CandidateAccumulator::new(&hit, already_applied.contains(hit.label_id.as_str()))
-        });
-        let evidence = LabelSuggestionEvidenceAtom {
-            atom_id: hit.atom_id,
-            label_id: hit.label_id,
-            label_name: hit.label_name,
-            polarity: hit.polarity.clone(),
-            kind: hit.kind,
-            text: hit.text,
-            score,
-        };
-        if hit.polarity == "negative" {
-            group.negative_score = group.negative_score.max(score);
-            group.negative_evidence_atoms.push(evidence);
-        } else {
-            group.positive_score = group.positive_score.max(score);
-            group.evidence_atoms.push(evidence);
-        }
-    }
-    groups
-        .into_values()
-        .map(CandidateAccumulator::into_candidate)
-        .collect()
 }
 
 fn distance_to_similarity(distance: f32) -> f32 {
@@ -257,51 +378,6 @@ fn bounded_diagnostic_message(error: &impl std::fmt::Display) -> String {
         format!("{}...", &message[..boundary])
     } else {
         message
-    }
-}
-
-struct CandidateAccumulator {
-    label_id: String,
-    label_name: String,
-    already_applied: bool,
-    positive_score: f32,
-    negative_score: f32,
-    evidence_atoms: Vec<LabelSuggestionEvidenceAtom>,
-    negative_evidence_atoms: Vec<LabelSuggestionEvidenceAtom>,
-}
-
-impl CandidateAccumulator {
-    fn new(hit: &LabelAtomHit, already_applied: bool) -> Self {
-        Self {
-            label_id: hit.label_id.clone(),
-            label_name: hit.label_name.clone(),
-            already_applied,
-            positive_score: 0.0,
-            negative_score: 0.0,
-            evidence_atoms: Vec::new(),
-            negative_evidence_atoms: Vec::new(),
-        }
-    }
-
-    fn into_candidate(mut self) -> LabelSuggestionCandidate {
-        self.evidence_atoms
-            .sort_by(|left, right| right.score.total_cmp(&left.score));
-        self.negative_evidence_atoms
-            .sort_by(|left, right| right.score.total_cmp(&left.score));
-        self.evidence_atoms.truncate(3);
-        self.negative_evidence_atoms.truncate(3);
-        let score = (self.positive_score - self.negative_score * NEGATIVE_EVIDENCE_PENALTY)
-            .max(0.0)
-            .clamp(0.0, 1.0);
-        LabelSuggestionCandidate {
-            label_id: self.label_id,
-            label_name: self.label_name,
-            score,
-            weight: score,
-            already_applied: self.already_applied,
-            evidence_atoms: self.evidence_atoms,
-            negative_evidence_atoms: self.negative_evidence_atoms,
-        }
     }
 }
 

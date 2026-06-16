@@ -868,10 +868,12 @@ label event；该操作不改变 task status。
 GET /api/v1/tasks/{task_id}/labels/suggestions?limit=5&atom_limit=24&min_score=0.15
 ```
 
-返回 task-level label suggestions。第一版使用 `lancedb_label_atoms` atom hit
-aggregation：用 task title + description 查询 label atoms，按 label 汇总正向 atom
-similarity，并用负向 atom similarity 做惩罚。当前不会调用 full label solver refit，
-也不会创建新 label 或写入 `label_semantics` / `label_atoms`。
+返回 task-level label suggestions。当前使用 task title + description embedding
+查询 `lancedb_label_atoms`：正向 atoms 按 residual 多轮检索，负向 atoms 固定用原始
+query 检索并做 penalty / suppression。solver 在 label group 层执行 Group OMP 选择，
+再把选中 label 的 top positive atom vectors 作为 basis 做 non-negative refit；
+`coverage` / `residual_norm` 来自 atom-level fitted vector。接口不会创建新 label，
+也不会写入 `label_semantics` / `label_atoms`。
 
 未配置 provider、未启用 `vector-lancedb` feature、LanceDB 表缺失、索引为空或索引
 dirty 时，接口仍返回 `200` 和结构化 degraded JSON；普通 label CRUD、task
@@ -911,7 +913,7 @@ Response：
     "residual_norm": 0.18,
     "needs_new_label": false,
     "degraded": true,
-    "diagnostics": ["solver_refit_unavailable"]
+    "diagnostics": ["label_atom_index_dirty"]
   }
 }
 ```
@@ -922,7 +924,6 @@ Response：
 - `label_atom_index_dirty`
 - `label_atom_index_empty`
 - `label_atom_index_error`
-- `solver_refit_unavailable`
 - `vector_query_error`
 
 ### 12.2 Label semantic proposals

@@ -2,8 +2,10 @@ mod common;
 
 use anyhow::Context;
 use common::{TempDb, kanban};
+use kanban_sqlite::LabelProposalCandidate;
 use pretty_assertions::assert_eq;
 use serde_json::json;
+use std::path::Path;
 
 #[test]
 fn task_show_defaults_to_one_line_summary() -> anyhow::Result<()> {
@@ -436,36 +438,18 @@ fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<(
     )?
     .success_json()?;
     let task_id = task["data"]["id"].as_str().context("task id")?;
-    let proposal_path = temp.dir.join("proposal.json");
-    std::fs::write(
-        &proposal_path,
-        serde_json::json!({
-            "name": "database",
-            "description": "Database persistence work",
-            "applies_when": ["touches SQLite migrations"],
-            "excludes_when": ["UI-only polish"],
-            "positive_examples": ["new table migration"],
-            "negative_examples": ["CSS tweak"]
-        })
-        .to_string(),
-    )?;
-
-    let proposal_path_arg = proposal_path.to_str().context("proposal path")?;
-    let attempt = kanban(
+    let proposal_id = seed_proposed_label_proposal(
         &temp.path,
-        &[
-            "--json",
-            "label",
-            "propose",
-            task_id,
-            "--proposal-json",
-            proposal_path_arg,
-        ],
-    )?
-    .success_json()?;
-    let proposal = &attempt["data"]["proposal"];
-    let proposal_id = proposal["id"].as_str().context("proposal id")?;
-    assert_eq!(proposal["status"], "proposed");
+        task_id,
+        LabelProposalCandidate {
+            name: "database".to_owned(),
+            description: Some("Database persistence work".to_owned()),
+            applies_when: vec!["touches SQLite migrations".to_owned()],
+            excludes_when: vec!["UI-only polish".to_owned()],
+            positive_examples: vec!["new table migration".to_owned()],
+            negative_examples: vec!["CSS tweak".to_owned()],
+        },
+    )?;
 
     let listed = kanban(
         &temp.path,
@@ -482,7 +466,7 @@ fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<(
     assert_eq!(listed["data"].as_array().context("listed")?.len(), 1);
     let shown = kanban(
         &temp.path,
-        &["--json", "label", "proposals", "show", proposal_id],
+        &["--json", "label", "proposals", "show", &proposal_id],
     )?
     .success_json()?;
     assert_eq!(shown["data"]["name"], "database");
@@ -494,7 +478,7 @@ fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<(
             "label",
             "proposals",
             "accept",
-            proposal_id,
+            &proposal_id,
             "--reason",
             "覆盖不足，接受",
         ],
@@ -511,32 +495,16 @@ fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<(
         "accept must not auto-bind task labels"
     );
 
-    let reject_path = temp.dir.join("reject-proposal.json");
-    std::fs::write(
-        &reject_path,
-        serde_json::json!({
-            "name": "release",
-            "description": "Release workflow",
-            "applies_when": ["packaging"]
-        })
-        .to_string(),
-    )?;
-    let reject_path_arg = reject_path.to_str().context("reject path")?;
-    let reject_attempt = kanban(
+    let reject_id = seed_proposed_label_proposal(
         &temp.path,
-        &[
-            "--json",
-            "label",
-            "propose",
-            task_id,
-            "--proposal-json",
-            reject_path_arg,
-        ],
-    )?
-    .success_json()?;
-    let reject_id = reject_attempt["data"]["proposal"]["id"]
-        .as_str()
-        .context("reject id")?;
+        task_id,
+        LabelProposalCandidate {
+            name: "release".to_owned(),
+            description: Some("Release workflow".to_owned()),
+            applies_when: vec!["packaging".to_owned()],
+            ..LabelProposalCandidate::default()
+        },
+    )?;
     let rejected = kanban(
         &temp.path,
         &[
@@ -544,7 +512,7 @@ fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<(
             "label",
             "proposals",
             "reject",
-            reject_id,
+            &reject_id,
             "--reason",
             "不采用",
         ],
@@ -552,6 +520,47 @@ fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<(
     .success_json()?;
     assert_eq!(rejected["data"]["status"], "rejected");
     Ok(())
+}
+
+fn seed_proposed_label_proposal(
+    db_path: &Path,
+    task_id: &str,
+    candidate: LabelProposalCandidate,
+) -> anyhow::Result<String> {
+    let conn = kanban_sqlite::connect_file(db_path)?;
+    let board_id: String =
+        conn.query_row("SELECT board_id FROM tasks WHERE id=?1", [task_id], |row| {
+            row.get(0)
+        })?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_millis() as i64;
+    let proposal_id = format!("lp_cli_{}_{}", candidate.name, now);
+    let applies_when = serde_json::to_string(&candidate.applies_when)?;
+    let excludes_when = serde_json::to_string(&candidate.excludes_when)?;
+    let positive_examples = serde_json::to_string(&candidate.positive_examples)?;
+    let negative_examples = serde_json::to_string(&candidate.negative_examples)?;
+    conn.execute(
+        "INSERT INTO label_semantic_proposals(
+            id, board_id, task_id, status, name, description, applies_when, excludes_when,
+            positive_examples, negative_examples, heuristic_coverage, heuristic_residual_norm,
+            diagnostics_json, created_by, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, 'proposed', ?4, ?5, ?6, ?7, ?8, ?9, 0.0, 1.0, '[]', ?10, ?11, ?11)",
+        (
+            &proposal_id,
+            &board_id,
+            task_id,
+            &candidate.name,
+            candidate.description.as_deref(),
+            &applies_when,
+            &excludes_when,
+            &positive_examples,
+            &negative_examples,
+            "cli-test-proposer",
+            now,
+        ),
+    )?;
+    Ok(proposal_id)
 }
 
 #[test]

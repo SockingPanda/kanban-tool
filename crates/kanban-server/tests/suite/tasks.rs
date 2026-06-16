@@ -581,6 +581,58 @@ async fn task_label_proposal_route_degrades_without_provider() -> anyhow::Result
     Ok(())
 }
 
+#[tokio::test]
+async fn task_label_proposal_route_with_candidate_degrades_without_polluting_truth()
+-> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("label proposal route candidate degraded target"),
+    )?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app,
+        &format!("/api/v1/tasks/{}/label-proposals", task.id),
+        json!({
+            "proposal": {
+                "name": "workflow",
+                "description": "Workflow classification",
+                "applies_when": ["classifies execution flow"],
+                "excludes_when": ["UI-only polish"],
+                "positive_examples": ["triage work queue"],
+                "negative_examples": ["CSS tweak"]
+            },
+            "actor": "api-test-proposer"
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["proposal"], serde_json::Value::Null);
+    assert_eq!(json["data"]["degraded"], true);
+    let diagnostics = json["data"]["diagnostics"]
+        .as_array()
+        .context("diagnostics")?;
+    assert!(
+        diagnostics
+            .iter()
+            .any(|value| value == "label_proposal_residual_validation_unavailable"),
+        "{diagnostics:?}"
+    );
+    let conn = kanban_sqlite::connect_file(&db_path)?;
+    let proposal_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM label_semantic_proposals", [], |row| {
+            row.get(0)
+        })?;
+    assert_eq!(proposal_count, 0);
+    assert!(kanban_sqlite::list_labels(&db_path, "default")?.is_empty());
+    Ok(())
+}
+
 #[cfg(feature = "vector-lancedb")]
 #[tokio::test]
 async fn task_label_proposal_route_attempts_configured_vector_store() -> anyhow::Result<()> {

@@ -287,6 +287,7 @@ pub(crate) async fn get_label_semantics(
     State(state): State<AppState>,
     Path((board, label_id)): Path<(String, String)>,
 ) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticsRecord>>, ApiError> {
+    let label_id = require_label_id_path(label_id)?;
     Ok(Json(Envelope {
         data: kanban_sqlite::get_label_semantics(state.db_path(), &board, &label_id)?,
         meta: None,
@@ -299,6 +300,7 @@ pub(crate) async fn upsert_label_semantics(
     body: Result<Json<UpsertLabelSemanticsBody>, JsonRejection>,
 ) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticsRecord>>, ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
+    let label_id = require_label_id_path(label_id)?;
     Ok(Json(Envelope {
         data: kanban_sqlite::upsert_label_semantics(
             state.db_path(),
@@ -320,11 +322,21 @@ pub(crate) async fn delete_label_semantics(
     State(state): State<AppState>,
     Path((board, label_id)): Path<(String, String)>,
 ) -> Result<Json<Envelope<serde_json::Value>>, ApiError> {
+    let label_id = require_label_id_path(label_id)?;
     kanban_sqlite::delete_label_semantics(state.db_path(), &board, &label_id)?;
     Ok(Json(Envelope {
         data: json!({ "deleted": true }),
         meta: None,
     }))
+}
+
+fn require_label_id_path(label_id: String) -> Result<String, ApiError> {
+    let label_id = label_id.trim();
+    if label_id.starts_with("l_") {
+        Ok(label_id.to_owned())
+    } else {
+        Err(invalid_input("label_id must be a canonical l_ id"))
+    }
 }
 
 pub(crate) async fn list_label_atoms(

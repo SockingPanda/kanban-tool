@@ -874,7 +874,9 @@ label event；该操作不改变 task status。
 
 `GET /api/v1/boards/{board}/labels/semantics` 返回当前 board 已定义 semantics 的
 列表。`GET /api/v1/boards/{board}/labels/{label_id}/semantics` 返回单个 label
-semantics；`{label_id}` 接受 label id 或 label 名称。
+semantics；`{label_id}` 只接受 canonical `l_...` label id。Label name 允许包含
+`/` 等 path 不安全字符，因此 semantics API path 不支持按 label name 寻址；需要按
+名称查找时，先调用 `GET /api/v1/boards/{board}/labels` 获取对应 id。
 
 `PUT /api/v1/boards/{board}/labels/{label_id}/semantics` 写入已有 label 的语义字典，
 同步重建该 label 的 SQLite `label_atoms`，并标脏派生的 label atom vector index。

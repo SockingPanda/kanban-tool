@@ -159,6 +159,16 @@ pub struct LabelAtomQuery {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelAtomVectorQuery {
+    pub vector: Vec<f32>,
+    pub limit: usize,
+    pub board_id: Option<String>,
+    pub embedding_model: Option<String>,
+    pub polarity: Option<String>,
+    pub include_vector: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VectorHit {
     pub chunk: ChunkRef,
     pub score: f32,
@@ -179,6 +189,12 @@ pub struct LabelAtomHit {
     pub content_hash: String,
     pub embedding_model: String,
     pub score: f32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelAtomVectorHit {
+    pub hit: LabelAtomHit,
+    pub vector: Option<Vec<f32>>,
 }
 
 pub trait EmbeddingProvider {
@@ -203,6 +219,12 @@ pub trait VectorStore {
         Err(VectorError::Disabled)
     }
     fn query_label_atoms(&self, _query: &LabelAtomQuery) -> Result<Vec<LabelAtomHit>, VectorError> {
+        Ok(Vec::new())
+    }
+    fn query_label_atoms_by_vector(
+        &self,
+        _query: &LabelAtomVectorQuery,
+    ) -> Result<Vec<LabelAtomVectorHit>, VectorError> {
         Ok(Vec::new())
     }
 }

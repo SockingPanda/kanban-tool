@@ -351,8 +351,18 @@ pub(crate) async fn rebuild_label_atom_index(
     State(state): State<AppState>,
     Path(board): Path<String>,
 ) -> Result<Json<Envelope<kanban_vector::VectorStoreStatus>>, ApiError> {
+    let index_state = state.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        rebuild_label_atom_index_for_state(&index_state, &board)
+    })
+    .await
+    .map_err(|error| {
+        ApiError(kanban_core::KanbanError::Storage(format!(
+            "label atom index rebuild worker failed: {error}"
+        )))
+    })??;
     Ok(Json(Envelope {
-        data: rebuild_label_atom_index_for_state(&state, &board)?,
+        data: result,
         meta: None,
     }))
 }
@@ -373,8 +383,28 @@ pub(crate) async fn query_label_atom_index(
         .as_deref()
         .map(parse_label_atom_polarity)
         .transpose()?;
+    let index_state = state.clone();
+    let index_board = board;
+    let index_text = text.to_owned();
+    let index_polarity = polarity;
+    let index_limit = query.limit;
+    let result = tokio::task::spawn_blocking(move || {
+        query_label_atom_index_for_state(
+            &index_state,
+            &index_board,
+            &index_text,
+            index_polarity,
+            index_limit,
+        )
+    })
+    .await
+    .map_err(|error| {
+        ApiError(kanban_core::KanbanError::Storage(format!(
+            "label atom index query worker failed: {error}"
+        )))
+    })??;
     Ok(Json(Envelope {
-        data: query_label_atom_index_for_state(&state, &board, text, polarity, query.limit)?,
+        data: result,
         meta: None,
     }))
 }

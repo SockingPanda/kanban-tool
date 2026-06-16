@@ -812,7 +812,7 @@ fn label_atom_store_is_seeded_and_not_dirtied_by_task_outbox() -> anyhow::Result
 #[test]
 fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Result<()> {
     let temp = TempDb::new("label_atom_rebuild_status_query_and_failure_are_independent")?;
-    init_database(&temp.path, "tester")?;
+    let init = init_database(&temp.path, "tester")?;
     create_task(
         &temp.path,
         "default",
@@ -856,6 +856,40 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
     )?;
     assert_eq!(hits.len(), 2);
     assert!(hits.iter().all(|hit| hit.polarity == "positive"));
+
+    let vector_hits = query_label_atom_index_by_vector_with(
+        &temp.path,
+        "default",
+        &store,
+        LabelAtomVectorQuery {
+            vector: vec![1.0, 0.0, 0.0],
+            limit: 10,
+            board_id: None,
+            embedding_model: Some("static-test".to_owned()),
+            polarity: Some("positive".to_owned()),
+            include_vector: true,
+        },
+    )?;
+    assert_eq!(vector_hits.len(), 2);
+    assert!(
+        vector_hits
+            .iter()
+            .all(|hit| hit.hit.board_id == init.board_id)
+    );
+    assert!(
+        vector_hits
+            .iter()
+            .all(|hit| hit.vector.as_deref() == Some([1.0, 0.0, 0.0].as_slice()))
+    );
+    let recorded = store.label_atom_vector_queries()?;
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(
+        recorded[0].board_id.as_deref(),
+        Some(init.board_id.as_str())
+    );
+    assert_eq!(recorded[0].embedding_model.as_deref(), Some("static-test"));
+    assert_eq!(recorded[0].polarity.as_deref(), Some("positive"));
+    assert!(recorded[0].include_vector);
 
     let stores = derived_store_statuses(&temp.path)?;
     assert!(

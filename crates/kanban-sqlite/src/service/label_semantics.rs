@@ -11,7 +11,8 @@ use kanban_core::{Clock, KanbanError, Result, SystemClock};
 use kanban_indexer::{DERIVED_STORE_SCHEMA_VERSION, LANCEDB_LABEL_ATOMS_STORE};
 use kanban_labels::{LabelAtomKind, LabelAtomPolarity, LabelDefinition};
 use kanban_vector::{
-    LabelAtomHit, LabelAtomQuery, LabelAtomVector, VectorStore, VectorStoreStatus,
+    LabelAtomHit, LabelAtomQuery, LabelAtomVector, LabelAtomVectorHit, LabelAtomVectorQuery,
+    VectorStore, VectorStoreStatus,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
@@ -222,6 +223,20 @@ pub fn query_label_atom_index_with(
     let board_id = board_id(&conn, board)?;
     query.board_id = Some(board_id);
     store.query_label_atoms(&query).map_err(vector_storage)
+}
+
+pub fn query_label_atom_index_by_vector_with(
+    path: impl AsRef<Path>,
+    board: &str,
+    store: &impl VectorStore,
+    mut query: LabelAtomVectorQuery,
+) -> Result<Vec<LabelAtomVectorHit>> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    query.board_id = Some(board_id);
+    store
+        .query_label_atoms_by_vector(&query)
+        .map_err(vector_storage)
 }
 
 fn get_label_semantics_conn(

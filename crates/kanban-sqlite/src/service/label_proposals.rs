@@ -444,7 +444,7 @@ fn best_existing_label_score(
 
 fn apply_negative_suppression(positive_score: f32, negative_score: f32) -> f32 {
     if negative_score >= NEGATIVE_SUPPRESSION_THRESHOLD {
-        positive_score * (1.0 - NEGATIVE_SUPPRESSION_FACTOR)
+        (positive_score - negative_score * NEGATIVE_SUPPRESSION_FACTOR).max(0.0)
     } else {
         positive_score
     }

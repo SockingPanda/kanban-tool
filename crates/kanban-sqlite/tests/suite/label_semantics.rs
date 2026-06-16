@@ -369,6 +369,75 @@ fn label_proposal_residual_validation_rejects_when_margin_is_insufficient() -> a
 }
 
 #[test]
+fn label_proposal_residual_validation_uses_solver_negative_suppression() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_proposal_residual_validation_uses_solver_negative_suppression")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Residual suppression target"),
+    )?;
+    let store = ProposalValidationStore::new(vec![
+        ("Residual suppression target", vec![1.0, 0.0, 0.0]),
+        ("workflow", vec![0.25, 0.968_245_86, 0.0]),
+        ("candidate residual", vec![0.25, 0.968_245_86, 0.0]),
+    ])
+    .with_atoms(vec![
+        (
+            atom_hit(&backend, "positive", "applies_when", "server handler", 0.0),
+            vec![0.95, 0.312_249_9, 0.0],
+        ),
+        (
+            atom_hit(&backend, "negative", "excludes_when", "client polish", 0.0),
+            vec![0.65, 0.759_934_2, 0.0],
+        ),
+    ]);
+    let provider = ManualLabelProposalProvider::new(LabelProposalCandidate {
+        name: "workflow".to_owned(),
+        applies_when: vec!["candidate residual".to_owned()],
+        ..LabelProposalCandidate::default()
+    });
+
+    let proposal = propose_task_label_with_store(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &provider,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            limit: 1,
+            atom_limit: 10,
+            min_score: 0.99,
+        },
+    )?
+    .proposal
+    .context("proposal")?;
+
+    assert_eq!(proposal.status, LabelProposalStatus::Rejected);
+    assert_eq!(
+        proposal.top1_existing_label_name.as_deref(),
+        Some("backend")
+    );
+    assert!(
+        proposal
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_proposal_residual_top1_failed")
+    );
+    Ok(())
+}
+
+#[test]
 fn label_proposal_coverage_sufficient_does_not_call_provider_or_persist_candidate()
 -> anyhow::Result<()> {
     let temp = TempDb::new("label_proposal_coverage_sufficient_does_not_call_provider_or_persist")?;

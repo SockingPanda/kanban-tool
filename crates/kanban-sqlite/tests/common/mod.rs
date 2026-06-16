@@ -24,13 +24,14 @@ pub use kanban_sqlite::{
 };
 #[cfg(feature = "vector-lancedb")]
 pub use kanban_sqlite::{
-    label_atom_index_status_with, query_label_atom_index_with, rebuild_label_atom_index_with,
-    rebuild_vector_store_with, sync_vector_store_with,
+    label_atom_index_status_with, query_label_atom_index_by_vector_with,
+    query_label_atom_index_with, rebuild_label_atom_index_with, rebuild_vector_store_with,
+    sync_vector_store_with,
 };
 #[cfg(feature = "vector-lancedb")]
 pub use kanban_vector::{
-    EmbeddingChunk, LabelAtomHit, LabelAtomQuery, LabelAtomVector, VectorError, VectorHit,
-    VectorQuery, VectorStore, VectorStoreStatus,
+    EmbeddingChunk, LabelAtomHit, LabelAtomQuery, LabelAtomVector, LabelAtomVectorHit,
+    LabelAtomVectorQuery, VectorError, VectorHit, VectorQuery, VectorStore, VectorStoreStatus,
 };
 pub use rusqlite::{Connection, params};
 
@@ -103,6 +104,7 @@ pub struct RecordingVectorStore {
     live_label_atoms: std::sync::Mutex<Vec<LabelAtomVector>>,
     upserted: std::sync::Mutex<Vec<String>>,
     upserted_label_atoms: std::sync::Mutex<Vec<LabelAtomVector>>,
+    label_atom_vector_queries: std::sync::Mutex<Vec<LabelAtomVectorQuery>>,
     upserted_models: std::sync::Mutex<Vec<String>>,
     deleted: std::sync::Mutex<Vec<String>>,
     deleted_boards: std::sync::Mutex<Vec<String>>,
@@ -170,6 +172,14 @@ impl RecordingVectorStore {
             .upserted_label_atoms
             .lock()
             .map_err(|err| test_error(format!("upserted_label_atoms mutex poisoned: {err}")))?
+            .clone())
+    }
+
+    pub fn label_atom_vector_queries(&self) -> anyhow::Result<Vec<LabelAtomVectorQuery>> {
+        Ok(self
+            .label_atom_vector_queries
+            .lock()
+            .map_err(|err| test_error(format!("label_atom_vector_queries mutex poisoned: {err}")))?
             .clone())
     }
 }
@@ -323,6 +333,60 @@ impl VectorStore for RecordingVectorStore {
                 content_hash: atom.content_hash,
                 embedding_model: atom.embedding_model,
                 score: 1.0,
+            })
+            .collect())
+    }
+
+    fn query_label_atoms_by_vector(
+        &self,
+        query: &LabelAtomVectorQuery,
+    ) -> Result<Vec<LabelAtomVectorHit>, VectorError> {
+        self.label_atom_vector_queries
+            .lock()
+            .map_err(|err| {
+                VectorError::Store(format!("label_atom_vector_queries mutex poisoned: {err}"))
+            })?
+            .push(query.clone());
+        let atoms = self
+            .live_label_atoms
+            .lock()
+            .map_err(|err| VectorError::Store(format!("live_label_atoms mutex poisoned: {err}")))?
+            .clone();
+        Ok(atoms
+            .into_iter()
+            .filter(|atom| {
+                query
+                    .board_id
+                    .as_ref()
+                    .is_none_or(|board_id| &atom.board_id == board_id)
+                    && query
+                        .embedding_model
+                        .as_ref()
+                        .is_none_or(|model| &atom.embedding_model == model)
+                    && query
+                        .polarity
+                        .as_ref()
+                        .is_none_or(|polarity| &atom.polarity == polarity)
+            })
+            .take(query.limit)
+            .map(|atom| {
+                let vector = query.include_vector.then(|| vec![1.0, 0.0, 0.0]);
+                LabelAtomVectorHit {
+                    hit: LabelAtomHit {
+                        atom_id: atom.atom_id,
+                        label_id: atom.label_id,
+                        label_name: atom.label_name,
+                        board_id: atom.board_id,
+                        polarity: atom.polarity,
+                        kind: atom.kind,
+                        text: atom.text,
+                        ordinal: atom.ordinal,
+                        content_hash: atom.content_hash,
+                        embedding_model: atom.embedding_model,
+                        score: 1.0,
+                    },
+                    vector,
+                }
             })
             .collect())
     }

@@ -427,6 +427,114 @@ fn task_label_suggestions_signal_new_label_when_enabled_index_has_no_selected_la
 }
 
 #[test]
+fn task_label_suggestions_degrade_on_label_atom_vector_query_error() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_label_suggestions_degrade_on_label_atom_vector_query_error")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("query failure target"),
+    )?;
+    let store = DiagnosticLabelAtomStore {
+        status_message: "test vector store; dirty=false last_error=none; board_dirty=false",
+        query_error: Some("label atom vector query failed"),
+    };
+
+    let result = kanban_sqlite::suggest_task_labels_with(
+        &temp.path,
+        "default",
+        &task.id,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions::default(),
+    )?;
+
+    assert!(result.degraded);
+    assert!(result.selected_labels.is_empty());
+    assert_eq!(result.coverage, 0.0);
+    assert_eq!(result.residual_norm, 1.0);
+    assert!(!result.needs_new_label);
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|code| code == "vector_query_error")
+    );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|message| message.contains("label atom vector query failed"))
+    );
+    Ok(())
+}
+
+#[test]
+fn task_label_suggestions_report_label_atom_index_dirty_and_errors() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_label_suggestions_report_label_atom_index_dirty_and_errors")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("dirty index target"),
+    )?;
+    let board = get_board(&temp.path, "default")?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "UPDATE derived_store_state \
+         SET dirty=1,last_error='global label atom failure',updated_at=1 \
+         WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "INSERT INTO label_atom_index_boards(\
+             store_name,board_id,dirty,last_rebuild_at,last_error,updated_at\
+         ) VALUES ('lancedb_label_atoms',?1,1,NULL,'board label atom failure',1)",
+        [board.id],
+    )?;
+    let store = DiagnosticLabelAtomStore {
+        status_message: "test vector store; dirty=true last_error=none; board_dirty=true",
+        query_error: None,
+    };
+
+    let result = kanban_sqlite::suggest_task_labels_with(
+        &temp.path,
+        "default",
+        &task.id,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions::default(),
+    )?;
+
+    assert!(result.degraded);
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_atom_index_dirty")
+    );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_atom_index_error")
+    );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|message| message.contains("global label atom failure"))
+    );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|message| message.contains("board label atom failure"))
+    );
+    Ok(())
+}
+
+#[test]
 fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::Result<()> {
     let temp = TempDb::new("task_label_suggestions_query_positive_atoms_by_residual_rounds")?;
     init_database(&temp.path, "tester")?;
@@ -515,6 +623,61 @@ fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::R
         |query| query.include_vector && query.embedding_model.as_deref() == Some("test-model")
     ));
     Ok(())
+}
+
+struct DiagnosticLabelAtomStore {
+    status_message: &'static str,
+    query_error: Option<&'static str>,
+}
+
+impl kanban_vector::VectorStore for DiagnosticLabelAtomStore {
+    fn chunk_embedding_model(&self) -> &str {
+        "test-model"
+    }
+
+    fn status(&self) -> kanban_vector::VectorStoreStatus {
+        kanban_vector::VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: self.status_message.to_owned(),
+        }
+    }
+
+    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn upsert(
+        &self,
+        _chunks: &[kanban_vector::EmbeddingChunk],
+    ) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn query(
+        &self,
+        _query: &kanban_vector::VectorQuery,
+    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
+        Ok(Vec::new())
+    }
+
+    fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
+        Ok(vec![1.0, 0.0, 0.0])
+    }
+
+    fn query_label_atoms_by_vector(
+        &self,
+        _query: &kanban_vector::LabelAtomVectorQuery,
+    ) -> Result<Vec<kanban_vector::LabelAtomVectorHit>, kanban_vector::VectorError> {
+        if let Some(message) = self.query_error {
+            return Err(kanban_vector::VectorError::Store(message.to_owned()));
+        }
+        Ok(Vec::new())
+    }
 }
 
 struct ResidualRecordingLabelAtomStore {

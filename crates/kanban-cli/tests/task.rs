@@ -3,6 +3,7 @@ mod common;
 use anyhow::Context;
 use common::{TempDb, kanban};
 use pretty_assertions::assert_eq;
+use serde_json::json;
 
 #[test]
 fn task_show_defaults_to_one_line_summary() -> anyhow::Result<()> {
@@ -196,6 +197,121 @@ fn label_suggest_returns_degraded_json_without_vector_provider() -> anyhow::Resu
             .iter()
             .any(|value| value == "vector_store_disabled")
     );
+    Ok(())
+}
+
+#[test]
+fn label_semantics_and_atoms_commands_round_trip_json() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_semantics_and_atoms_commands_round_trip_json")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "backend"])?.success()?;
+
+    let semantics = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "semantics",
+            "upsert",
+            "backend",
+            "--description",
+            "Backend service work",
+            "--applies-when",
+            "touches Rust service code",
+            "--excludes-when",
+            "CSS-only",
+            "--positive-example",
+            "add API handler",
+            "--negative-example",
+            "adjust spacing",
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(semantics["data"]["label_name"], "backend");
+    assert_eq!(semantics["data"]["description"], "Backend service work");
+    assert_eq!(
+        semantics["data"]["applies_when"],
+        json!(["touches Rust service code"])
+    );
+    assert_eq!(semantics["data"]["excludes_when"], json!(["CSS-only"]));
+    assert!(
+        semantics["data"]["atoms"]
+            .as_array()
+            .context("atoms")?
+            .iter()
+            .any(|atom| atom["polarity"] == "negative" && atom["text"] == "CSS-only")
+    );
+
+    let listed = kanban(&temp.path, &["--json", "label", "semantics", "list"])?.success_json()?;
+    assert_eq!(listed["data"].as_array().context("semantics")?.len(), 1);
+
+    let shown = kanban(
+        &temp.path,
+        &["--json", "label", "semantics", "show", "backend"],
+    )?
+    .success_json()?;
+    assert_eq!(shown["data"]["label_name"], "backend");
+
+    let atoms = kanban(&temp.path, &["--json", "label", "atoms", "list"])?.success_json()?;
+    assert!(
+        atoms["data"]
+            .as_array()
+            .context("atoms")?
+            .iter()
+            .any(|atom| atom["kind"] == "positive_example" && atom["text"] == "add API handler")
+    );
+
+    let status =
+        kanban(&temp.path, &["--json", "label", "atom-index", "status"])?.success_json()?;
+    assert_eq!(status["data"]["enabled"], false);
+
+    let vector_config = temp.dir.join("vector.toml");
+    std::fs::write(
+        &vector_config,
+        r#"[vector]
+provider = "ollama"
+endpoint = "http://127.0.0.1:1"
+model = "offline-cli-test-model"
+dimensions = 3
+"#,
+    )?;
+    #[cfg(feature = "vector-lancedb")]
+    let expected_index_failure = "Ollama embed request failed";
+    #[cfg(not(feature = "vector-lancedb"))]
+    let expected_index_failure = "requires a configured label atom vector store";
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "atom-index",
+            "rebuild",
+            "--vector-config",
+            vector_config.to_str().context("vector config path")?,
+        ],
+    )?
+    .failure_containing(expected_index_failure)?;
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "atom-index",
+            "query",
+            "backend",
+            "--vector-config",
+            vector_config.to_str().context("vector config path")?,
+        ],
+    )?
+    .failure_containing(expected_index_failure)?;
+
+    let deleted = kanban(
+        &temp.path,
+        &["--json", "label", "semantics", "delete", "backend"],
+    )?
+    .success_json()?;
+    assert_eq!(deleted["data"]["deleted"], true);
+    let atoms_after = kanban(&temp.path, &["--json", "label", "atoms", "list"])?.success_json()?;
+    assert!(atoms_after["data"].as_array().context("atoms")?.is_empty());
     Ok(())
 }
 

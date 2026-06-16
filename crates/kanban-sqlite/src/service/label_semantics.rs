@@ -47,6 +47,38 @@ pub fn upsert_label_semantics(
     })
 }
 
+pub fn upsert_label_semantics_by_id(
+    path: impl AsRef<Path>,
+    board: &str,
+    label_id: &str,
+    input: UpsertLabelSemantics,
+) -> Result<LabelSemanticsRecord> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
+        let label = resolve_label_by_id_exact(&conn, &board_id, label_id)?;
+        let description = normalize_optional_text(input.description);
+        let applies_when = normalize_text_list(input.applies_when);
+        let excludes_when = normalize_text_list(input.excludes_when);
+        let positive_examples = normalize_text_list(input.positive_examples);
+        let negative_examples = normalize_text_list(input.negative_examples);
+
+        let definition = LabelDefinition {
+            id: label.id.clone(),
+            name: label.name.clone(),
+            description,
+            applies_when,
+            positive_examples,
+            excludes_when,
+            negative_examples,
+        };
+        upsert_label_semantics_in_tx(&conn, &label.board_id, &definition, now)?;
+        mark_label_atom_store_dirty(&conn, &label.board_id, now)?;
+        get_label_semantics_conn(&conn, &label.board_id, &label.id)
+    })
+}
+
 pub(crate) fn upsert_label_semantics_candidate_in_tx(
     conn: &Connection,
     board_id: &str,
@@ -103,6 +135,17 @@ pub fn get_label_semantics(
     get_label_semantics_conn(&conn, &board_id, &label.id)
 }
 
+pub fn get_label_semantics_by_id(
+    path: impl AsRef<Path>,
+    board: &str,
+    label_id: &str,
+) -> Result<LabelSemanticsRecord> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    let label = resolve_label_by_id_exact(&conn, &board_id, label_id)?;
+    get_label_semantics_conn(&conn, &board_id, &label.id)
+}
+
 pub fn list_label_semantics(
     path: impl AsRef<Path>,
     board: &str,
@@ -130,6 +173,31 @@ pub fn delete_label_semantics(path: impl AsRef<Path>, board: &str, label_ref: &s
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let label = resolve_label(&conn, &board_id, label_ref)?;
+        conn.execute(
+            "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
+            params![board_id, label.id],
+        )
+        .map_err(storage)?;
+        conn.execute(
+            "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+            params![board_id, label.id],
+        )
+        .map_err(storage)?;
+        mark_label_atom_store_dirty(&conn, &board_id, now)?;
+        Ok(())
+    })
+}
+
+pub fn delete_label_semantics_by_id(
+    path: impl AsRef<Path>,
+    board: &str,
+    label_id: &str,
+) -> Result<()> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
+        let label = resolve_label_by_id_exact(&conn, &board_id, label_id)?;
         conn.execute(
             "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
             params![board_id, label.id],
@@ -430,6 +498,36 @@ fn resolve_label(conn: &Connection, board_id: &str, label_ref: &str) -> Result<R
         .map_err(storage)?
     };
     label.ok_or_else(|| KanbanError::NotFound(format!("label {label_ref}")))
+}
+
+fn resolve_label_by_id_exact(
+    conn: &Connection,
+    board_id: &str,
+    label_id: &str,
+) -> Result<ResolvedLabel> {
+    let label_id = label_id.trim();
+    if label_id.is_empty() {
+        return Err(KanbanError::InvalidInput("label id is required".into()));
+    }
+    if !label_id.starts_with("l_") {
+        return Err(KanbanError::InvalidInput(
+            "label id must be a canonical l_ id".into(),
+        ));
+    }
+    conn.query_row(
+        "SELECT id,board_id,name FROM labels WHERE board_id=?1 AND id=?2",
+        params![board_id, label_id],
+        |row| {
+            Ok(ResolvedLabel {
+                id: row.get(0)?,
+                board_id: row.get(1)?,
+                name: row.get(2)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(storage)?
+    .ok_or_else(|| KanbanError::NotFound(format!("label {label_id}")))
 }
 
 struct ResolvedLabel {

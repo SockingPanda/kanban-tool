@@ -6,15 +6,20 @@ use anyhow::{Result, bail};
 use kanban_sqlite::{
     CreateLabel, LabelProposalCandidate, LabelProposalListOptions, LabelProposalStatus,
     LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult,
-    MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, accept_label_proposal, add_task_label,
-    create_label, get_label_proposal, list_label_proposals, list_labels, propose_task_label_with,
-    reject_label_proposal, remove_task_label, suggest_task_labels,
+    MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics, accept_label_proposal,
+    add_task_label, create_label, delete_label_semantics, get_label_proposal, get_label_semantics,
+    label_atom_index_status, list_label_atoms, list_label_proposals, list_label_semantics,
+    list_labels, propose_task_label_with, reject_label_proposal, remove_task_label,
+    suggest_task_labels, upsert_label_semantics,
 };
 #[cfg(feature = "vector-lancedb")]
-use kanban_sqlite::{propose_task_label_with_store, suggest_task_labels_with};
+use kanban_sqlite::{
+    label_atom_index_status_with, propose_task_label_with_store, query_label_atom_index_with,
+    rebuild_label_atom_index_with, suggest_task_labels_with,
+};
 use std::{fs, str::FromStr};
 
-use crate::args::LabelCommand;
+use crate::args::{LabelAtomPolarityArg, LabelCommand};
 use crate::commands::common::validate_page_bounds;
 use crate::output::{label_line, print_or_json, print_task};
 
@@ -50,6 +55,29 @@ pub(crate) fn handle_label(
         LabelCommand::Remove(args) => {
             let task = remove_task_label(db_path, board, actor, &args.task_ref, &args.label)?;
             print_task(json, &task)?;
+        }
+        LabelCommand::Semantics { command } => {
+            handle_label_semantics(command, db_path, board, json)?
+        }
+        LabelCommand::Atoms { command } => match command {
+            crate::args::LabelAtomsCommand::List => {
+                let atoms = list_label_atoms(db_path, board)?;
+                print_or_json(json, &atoms, || {
+                    atoms
+                        .iter()
+                        .map(|atom| {
+                            format!(
+                                "{} {} {} [{}] score_source={}",
+                                atom.label_name, atom.polarity, atom.kind, atom.id, atom.text
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })?;
+            }
+        },
+        LabelCommand::AtomIndex { command } => {
+            handle_label_atom_index(command, db_path, board, json)?
         }
         LabelCommand::Suggest(args) => {
             validate_label_suggest_bounds(args.limit, args.atom_limit)?;
@@ -152,6 +180,107 @@ pub(crate) fn handle_label(
     Ok(())
 }
 
+fn handle_label_semantics(
+    command: crate::args::LabelSemanticsCommand,
+    db_path: &PathBuf,
+    board: &str,
+    json: bool,
+) -> Result<()> {
+    match command {
+        crate::args::LabelSemanticsCommand::List => {
+            let semantics = list_label_semantics(db_path, board)?;
+            print_or_json(json, &semantics, || label_semantics_lines(&semantics))?;
+        }
+        crate::args::LabelSemanticsCommand::Show { label } => {
+            let semantics = get_label_semantics(db_path, board, &label)?;
+            print_or_json(json, &semantics, || label_semantics_line(&semantics))?;
+        }
+        crate::args::LabelSemanticsCommand::Upsert(args) => {
+            let semantics = upsert_label_semantics(
+                db_path,
+                board,
+                UpsertLabelSemantics {
+                    label_ref: args.label,
+                    description: args.description,
+                    applies_when: args.applies_when,
+                    excludes_when: args.excludes_when,
+                    positive_examples: args.positive_examples,
+                    negative_examples: args.negative_examples,
+                },
+            )?;
+            print_or_json(json, &semantics, || label_semantics_line(&semantics))?;
+        }
+        crate::args::LabelSemanticsCommand::Delete { label } => {
+            delete_label_semantics(db_path, board, &label)?;
+            let deleted = serde_json::json!({ "deleted": true });
+            print_or_json(json, &deleted, || {
+                format!("Deleted label semantics for {label}")
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn handle_label_atom_index(
+    command: crate::args::LabelAtomIndexCommand,
+    db_path: &PathBuf,
+    board: &str,
+    json: bool,
+) -> Result<()> {
+    match command {
+        crate::args::LabelAtomIndexCommand::Status(args) => {
+            let status = label_atom_index_status_optional_config(
+                db_path,
+                board,
+                args.vector_config.as_deref(),
+            )?;
+            print_or_json(json, &status, || {
+                format!(
+                    "label atom index backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+        crate::args::LabelAtomIndexCommand::Rebuild(args) => {
+            let status =
+                rebuild_configured_label_atom_index(db_path, board, args.vector_config.as_path())?;
+            print_or_json(json, &status, || {
+                format!(
+                    "label atom index backend={} enabled={}: {}",
+                    status.backend, status.enabled, status.message
+                )
+            })?;
+        }
+        crate::args::LabelAtomIndexCommand::Query(args) => {
+            validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let hits = query_configured_label_atom_index(
+                db_path,
+                board,
+                &args.text,
+                args.polarity,
+                args.limit,
+                args.vector_config.as_path(),
+            )?;
+            print_or_json(json, &hits, || {
+                if hits.is_empty() {
+                    "No label atom hits.".to_owned()
+                } else {
+                    hits.iter()
+                        .map(|hit| {
+                            format!(
+                                "{} {} {} score={:.3} {}",
+                                hit.label_name, hit.polarity, hit.kind, hit.score, hit.text
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+            })?;
+        }
+    }
+    Ok(())
+}
+
 fn validate_label_suggest_bounds(limit: usize, atom_limit: usize) -> Result<()> {
     if limit == 0 {
         bail!("limit must be >= 1");
@@ -162,6 +291,101 @@ fn validate_label_suggest_bounds(limit: usize, atom_limit: usize) -> Result<()> 
     validate_page_bounds(limit, MAX_TASK_LIST_LIMIT, 0)?;
     validate_page_bounds(atom_limit, MAX_TASK_LIST_LIMIT, 0)?;
     Ok(())
+}
+
+fn label_semantics_lines(records: &[kanban_sqlite::LabelSemanticsRecord]) -> String {
+    if records.is_empty() {
+        return "No label semantics.".to_owned();
+    }
+    records
+        .iter()
+        .map(label_semantics_line)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn label_semantics_line(record: &kanban_sqlite::LabelSemanticsRecord) -> String {
+    format!(
+        "{} description={} applies={} excludes={} examples=+{}/-{} atoms={}",
+        record.label_name,
+        record.description.as_deref().unwrap_or("-"),
+        record.applies_when.len(),
+        record.excludes_when.len(),
+        record.positive_examples.len(),
+        record.negative_examples.len(),
+        record.atoms.len()
+    )
+}
+
+fn label_atom_index_status_optional_config(
+    db_path: &PathBuf,
+    board: &str,
+    vector_config_path: Option<&std::path::Path>,
+) -> Result<kanban_vector::VectorStoreStatus> {
+    #[cfg(not(feature = "vector-lancedb"))]
+    let _ = vector_config_path;
+    #[cfg(feature = "vector-lancedb")]
+    {
+        if let Some(store) = configured_lancedb_store(db_path, vector_config_path)? {
+            return label_atom_index_status_with(db_path, board, &store).map_err(Into::into);
+        }
+    }
+    label_atom_index_status(db_path, board).map_err(Into::into)
+}
+
+fn rebuild_configured_label_atom_index(
+    db_path: &PathBuf,
+    board: &str,
+    vector_config_path: &std::path::Path,
+) -> Result<kanban_vector::VectorStoreStatus> {
+    #[cfg(feature = "vector-lancedb")]
+    {
+        if let Some(store) = configured_lancedb_store(db_path, Some(vector_config_path))? {
+            return rebuild_label_atom_index_with(db_path, board, &store).map_err(Into::into);
+        }
+    }
+    #[cfg(not(feature = "vector-lancedb"))]
+    let _ = (db_path, board, vector_config_path);
+    bail!("label atom index rebuild requires a configured label atom vector store")
+}
+
+fn query_configured_label_atom_index(
+    db_path: &PathBuf,
+    board: &str,
+    text: &str,
+    polarity: Option<LabelAtomPolarityArg>,
+    limit: usize,
+    vector_config_path: &std::path::Path,
+) -> Result<Vec<kanban_vector::LabelAtomHit>> {
+    #[cfg(feature = "vector-lancedb")]
+    {
+        if let Some(store) = configured_lancedb_store(db_path, Some(vector_config_path))? {
+            return query_label_atom_index_with(
+                db_path,
+                board,
+                &store,
+                kanban_vector::LabelAtomQuery {
+                    text: text.to_owned(),
+                    limit,
+                    board_id: None,
+                    embedding_model: None,
+                    polarity: polarity.map(label_atom_polarity_value),
+                },
+            )
+            .map_err(Into::into);
+        }
+    }
+    #[cfg(not(feature = "vector-lancedb"))]
+    let _ = (db_path, board, text, polarity, limit, vector_config_path);
+    bail!("label atom index query requires a configured label atom vector store")
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn label_atom_polarity_value(polarity: LabelAtomPolarityArg) -> String {
+    match polarity {
+        LabelAtomPolarityArg::Positive => "positive".to_owned(),
+        LabelAtomPolarityArg::Negative => "negative".to_owned(),
+    }
 }
 
 fn label_suggestion_lines(result: &LabelSuggestionResult) -> String {

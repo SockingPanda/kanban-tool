@@ -814,6 +814,14 @@ MVP 不允许 column 改变 canonical status。
 ```http
 GET /api/v1/boards/{board}/labels
 POST /api/v1/boards/{board}/labels
+GET /api/v1/boards/{board}/labels/semantics
+GET /api/v1/boards/{board}/labels/{label_id}/semantics
+PUT /api/v1/boards/{board}/labels/{label_id}/semantics
+DELETE /api/v1/boards/{board}/labels/{label_id}/semantics
+GET /api/v1/boards/{board}/labels/atoms
+GET /api/v1/boards/{board}/labels/atom-index/status
+POST /api/v1/boards/{board}/labels/atom-index/rebuild
+GET /api/v1/boards/{board}/labels/atom-index/query?q=<text>&polarity=positive&limit=24
 GET /api/v1/tasks/{task_id}/labels
 POST /api/v1/tasks/{task_id}/labels
 DELETE /api/v1/tasks/{task_id}/labels/{label_id}
@@ -862,7 +870,83 @@ Task 标签添加请求：
 当前 `labels` 列表。只有关联行发生变化时，label attach/remove 才写入 task
 label event；该操作不改变 task status。
 
-### 12.1 Task label suggestions
+### 12.1 Label semantics, atoms, and atom index
+
+`GET /api/v1/boards/{board}/labels/semantics` 返回当前 board 已定义 semantics 的
+列表。`GET /api/v1/boards/{board}/labels/{label_id}/semantics` 返回单个 label
+semantics；`{label_id}` 只接受 canonical `l_...` label id。Label name 允许包含
+`/` 等 path 不安全字符，因此 semantics API path 不支持按 label name 寻址；需要按
+名称查找时，先调用 `GET /api/v1/boards/{board}/labels` 获取对应 id。
+
+`PUT /api/v1/boards/{board}/labels/{label_id}/semantics` 写入已有 label 的语义字典，
+同步重建该 label 的 SQLite `label_atoms`，并标脏派生的 label atom vector index。
+请求 body：
+
+```json
+{
+  "description": "Backend service work",
+  "applies_when": ["touches Rust service code"],
+  "excludes_when": ["CSS-only"],
+  "positive_examples": ["add API handler"],
+  "negative_examples": ["adjust spacing"]
+}
+```
+
+数组字段可缺省为空数组；服务会 trim 并丢弃空白值。响应使用 Envelope：
+
+```json
+{
+  "data": {
+    "label_id": "l_01HX...",
+    "board_id": "b_01HX...",
+    "label_name": "backend",
+    "description": "Backend service work",
+    "applies_when": ["touches Rust service code"],
+    "excludes_when": ["CSS-only"],
+    "positive_examples": ["add API handler"],
+    "negative_examples": ["adjust spacing"],
+    "created_at": 1717520000000,
+    "updated_at": 1717520000000,
+    "atoms": [
+      {
+        "id": "la_...",
+        "label_id": "l_01HX...",
+        "board_id": "b_01HX...",
+        "label_name": "backend",
+        "polarity": "positive",
+        "kind": "applies_when",
+        "text": "touches Rust service code",
+        "ordinal": 2,
+        "content_hash": "...",
+        "created_at": 1717520000000,
+        "updated_at": 1717520000000
+      }
+    ]
+  }
+}
+```
+
+`DELETE /api/v1/boards/{board}/labels/{label_id}/semantics` 删除该 label 的 semantics
+与 SQLite atoms，但不删除 canonical label 或 task-label 绑定。成功返回：
+
+```json
+{ "data": { "deleted": true } }
+```
+
+`GET /api/v1/boards/{board}/labels/atoms` 返回 SQLite truth 中的 `label_atoms`。
+这些 atoms 是 `lancedb_label_atoms` 派生索引的输入。
+
+`GET /api/v1/boards/{board}/labels/atom-index/status` 返回 label atom vector index
+状态。无 vector provider 或未启用 `vector-lancedb` feature 时仍返回 `200` disabled
+状态，并包含 dirty / last_error 诊断信息。
+
+`POST /api/v1/boards/{board}/labels/atom-index/rebuild` 用已配置 vector store 重建
+派生的 `lancedb_label_atoms`。`GET /api/v1/boards/{board}/labels/atom-index/query`
+查询该派生索引，`q` 必填，`polarity` 可选且只接受 `positive` / `negative`，
+`limit` 默认 24。未配置 provider、feature 不可用或 vector store 不可用时，
+rebuild/query 返回显式 API error，不修改 SQLite truth。
+
+### 12.2 Task label suggestions
 
 ```http
 GET /api/v1/tasks/{task_id}/labels/suggestions?limit=5&atom_limit=24&min_score=0.15
@@ -926,7 +1010,7 @@ Response：
 - `label_atom_index_error`
 - `vector_query_error`
 
-### 12.2 Label semantic proposals
+### 12.3 Label semantic proposals
 
 ```http
 POST /api/v1/tasks/{task_id}/label-proposals

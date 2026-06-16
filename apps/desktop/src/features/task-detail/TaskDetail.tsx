@@ -759,8 +759,15 @@ function LabelSuggestionsPanel({
     <div className="space-y-2 rounded-md border border-border p-2">
       <div className="flex items-center justify-between gap-2 text-xs">
         <span className="font-medium text-muted-foreground">Suggestions</span>
-        <span className="text-muted-foreground">coverage {(suggestions.coverage * 100).toFixed(0)}%</span>
+        <span className="text-muted-foreground">
+          coverage {(suggestions.coverage * 100).toFixed(0)}% / residual {suggestions.residual_norm.toFixed(3)}
+        </span>
       </div>
+      {suggestions.needs_new_label ? (
+        <div className="rounded-sm border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+          new label may be needed
+        </div>
+      ) : null}
       {suggestions.degraded ? (
         <Alert className="py-2">
           <AlertTitle className="text-xs">Degraded</AlertTitle>
@@ -770,10 +777,24 @@ function LabelSuggestionsPanel({
       {visible.length ? (
         <div className="space-y-1.5">
           {visible.slice(0, 5).map((suggestion) => (
-            <div key={suggestion.label_id} className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
+            <div key={suggestion.label_id} className="flex items-start justify-between gap-2">
+              <div className="min-w-0 space-y-1">
                 <div className="truncate text-sm font-medium">{suggestion.label_name}</div>
                 <div className="text-xs text-muted-foreground">score {suggestion.score.toFixed(3)}</div>
+                {suggestion.evidence_atoms.length ? (
+                  <div className="space-y-0.5">
+                    {suggestion.evidence_atoms.slice(0, 2).map((atom) => (
+                      <div key={atom.atom_id} className="truncate text-xs text-muted-foreground">
+                        {atom.text}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {suggestion.negative_evidence_atoms.length ? (
+                  <div className="text-xs text-muted-foreground">
+                    negative evidence {suggestion.negative_evidence_atoms.length}
+                  </div>
+                ) : null}
               </div>
               <Button
                 type="button"

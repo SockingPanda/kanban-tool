@@ -1054,7 +1054,10 @@ top1+margin 校验：候选语义的 residual score 必须超过现有 label top
 达到固定 margin。校验失败时候选仍会以 `rejected` proposal 持久化，diagnostics
 包含 `label_proposal_residual_top1_failed` 或
 `label_proposal_residual_margin_insufficient`。未配置 provider、feature 不可用或
-vector 检索失败时返回 degraded attempt，不创建 canonical label 或 `task_labels`。
+vector 检索失败时返回 degraded attempt，不创建 canonical label、`label_semantics`、
+`label_atoms` 或 `task_labels`。如果 residual validation 不可用或 degraded，且没有
+明确通过 top1+margin 校验，attempt 返回 `proposal=null`，不新增 proposal row，
+diagnostics 包含 `label_proposal_residual_validation_unavailable` 和具体原因。
 
 Attempt response：
 

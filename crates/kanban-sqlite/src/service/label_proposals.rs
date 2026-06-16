@@ -178,11 +178,6 @@ pub fn propose_task_label_with_store(
     diagnostics.extend(validation.diagnostics);
     diagnostics.sort();
     diagnostics.dedup();
-    let now = SystemClock.now_ms();
-    let status = conflict
-        .as_ref()
-        .map(|_| LabelProposalStatus::Rejected)
-        .unwrap_or_else(|| validation.status.clone());
     let top1_existing_label_id = validation
         .top1_existing_label_id
         .as_deref()
@@ -191,6 +186,27 @@ pub fn propose_task_label_with_store(
         .top1_existing_label_name
         .as_deref()
         .or_else(|| top1.map(|candidate| candidate.label_name.as_str()));
+    if conflict.is_none()
+        && validation.degraded
+        && validation.status == LabelProposalStatus::Proposed
+    {
+        return Ok(LabelProposalAttempt {
+            task_id: task.id,
+            board_id: task.board_id,
+            proposal: None,
+            degraded: true,
+            diagnostics,
+            heuristic_coverage: suggestions.coverage,
+            heuristic_residual_norm: suggestions.residual_norm,
+            top1_existing_label_id: top1_existing_label_id.map(ToOwned::to_owned),
+            top1_existing_label_name: top1_existing_label_name.map(ToOwned::to_owned),
+        });
+    }
+    let now = SystemClock.now_ms();
+    let status = conflict
+        .as_ref()
+        .map(|_| LabelProposalStatus::Rejected)
+        .unwrap_or_else(|| validation.status.clone());
     let decision_reason = conflict
         .as_ref()
         .map(|name| format!("near-duplicate normalized-name conflict with existing label {name}"))

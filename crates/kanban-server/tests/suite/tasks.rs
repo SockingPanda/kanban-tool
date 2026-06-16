@@ -731,20 +731,21 @@ async fn task_label_proposal_route_accepts_and_rejects_without_task_binding() ->
 async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let label = kanban_sqlite::create_label(
-        &db_path,
-        "default",
-        kanban_sqlite::CreateLabel {
-            name: "backend".to_owned(),
-            color: None,
-        },
-    )?;
     let app = test.router();
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/labels",
+        json!({ "name": "team/backend" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(json["data"]["name"], "team/backend");
+    let label_id = json["data"]["id"].as_str().context("label id")?.to_owned();
 
     let (status, json) = request_json(
         app.clone(),
         "PUT",
-        &format!("/api/v1/boards/default/labels/{}/semantics", label.id),
+        &format!("/api/v1/boards/default/labels/{label_id}/semantics"),
         Some(json!({
             "description": "Backend service work",
             "applies_when": ["touches Rust service code"],
@@ -757,7 +758,7 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
     .await?;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["data"]["label_name"], "backend");
+    assert_eq!(json["data"]["label_name"], "team/backend");
     assert_eq!(json["data"]["description"], "Backend service work");
     assert_eq!(
         json["data"]["applies_when"],
@@ -773,11 +774,25 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
 
     let (status, json) = get_json(
         app.clone(),
-        &format!("/api/v1/boards/default/labels/{}/semantics", label.id),
+        &format!("/api/v1/boards/default/labels/{label_id}/semantics"),
     )
     .await?;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["data"]["label_name"], "backend");
+    assert_eq!(json["data"]["label_name"], "team/backend");
+
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/labels/team-backend/semantics",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .context("error message")?
+            .contains("label_id must be a canonical l_ id")
+    );
 
     let (status, json) = get_json(app.clone(), "/api/v1/boards/default/labels/semantics").await?;
     assert_eq!(status, StatusCode::OK);
@@ -826,7 +841,7 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
 
     let (status, json) = delete_json(
         app.clone(),
-        &format!("/api/v1/boards/default/labels/{}/semantics", label.id),
+        &format!("/api/v1/boards/default/labels/{label_id}/semantics"),
     )
     .await?;
     assert_eq!(status, StatusCode::OK);

@@ -1377,6 +1377,21 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].hit.atom_id, "la_alpha");
         assert_eq!(hits[0].vector.as_deref(), Some([1.0, 0.0, 0.0].as_slice()));
+
+        let hits_without_vectors = static_store
+            .query_label_atoms_by_vector(&LabelAtomVectorQuery {
+                vector: vec![1.0, 0.0, 0.0],
+                limit: 10,
+                board_id: Some("b_1".to_owned()),
+                embedding_model: Some("static-test".to_owned()),
+                polarity: Some("positive".to_owned()),
+                include_vector: false,
+            })
+            .unwrap();
+
+        assert_eq!(hits_without_vectors.len(), 1);
+        assert_eq!(hits_without_vectors[0].hit.atom_id, "la_alpha");
+        assert_eq!(hits_without_vectors[0].vector, None);
         assert!(
             static_store
                 .query(&VectorQuery {

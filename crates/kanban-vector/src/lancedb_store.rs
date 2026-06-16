@@ -235,6 +235,13 @@ impl VectorStore for LanceDbStore {
         })
     }
 
+    fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, VectorError> {
+        let provider = self.provider()?;
+        let embedding = provider.embed(text)?;
+        ensure_dimensions(&embedding, provider.dimensions())?;
+        Ok(embedding)
+    }
+
     fn delete_label_atoms_for_board(&self, board_id: &str) -> Result<(), VectorError> {
         let provider = self.provider()?;
         let embedding_model = provider.embedding_model().to_owned();

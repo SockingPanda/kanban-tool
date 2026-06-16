@@ -229,6 +229,8 @@ pub struct LabelSolverResult {
     pub coverage: f32,
     pub residual_norm: f32,
     pub needs_new_label: bool,
+    #[serde(skip)]
+    pub residual: Vec<f32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -352,6 +354,7 @@ pub fn resolve_label_groups(
             coverage: coverage_from_residual(residual_norm),
             residual_norm,
             needs_new_label: true,
+            residual: normalize_for_fit(query_embedding),
         });
     }
 
@@ -387,6 +390,7 @@ pub fn resolve_label_groups(
 
     let weights = fit_non_negative(&selected_vectors, query_embedding, config.refit_iterations);
     let fitted = fitted_vector(&selected_vectors, &weights);
+    let residual = fit_residual(query_embedding, &selected_vectors, &weights, query_norm);
     let residual_norm = normalized_residual_norm(query_embedding, &fitted);
     let coverage = coverage_from_residual(residual_norm);
 
@@ -415,6 +419,7 @@ pub fn resolve_label_groups(
         coverage,
         residual_norm,
         needs_new_label: coverage < config.min_coverage || residual_norm > config.max_residual_norm,
+        residual,
     })
 }
 
@@ -504,6 +509,7 @@ where
 
     let weights = fit_non_negative(&selected_vectors, query_embedding, config.refit_iterations);
     let fitted = fitted_vector(&selected_vectors, &weights);
+    let residual = fit_residual(query_embedding, &selected_vectors, &weights, query_norm);
     let residual_norm = normalized_residual_norm(query_embedding, &fitted);
     let coverage = coverage_from_residual(residual_norm);
     let selected_labels = selected_labels_from_basis(&selected_basis, &weights);
@@ -521,6 +527,7 @@ where
         coverage,
         residual_norm,
         needs_new_label: coverage < config.min_coverage || residual_norm > config.max_residual_norm,
+        residual,
     })
 }
 

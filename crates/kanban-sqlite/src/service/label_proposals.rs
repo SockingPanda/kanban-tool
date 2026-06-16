@@ -1,19 +1,27 @@
 use crate::connect_file;
 
+use super::label_suggestions::{
+    bounded_diagnostic_message, compute_task_label_suggestions_with, retrieve_residual_atoms,
+};
 use super::{
     LabelProposalAttempt, LabelProposalCandidate, LabelProposalListOptions, LabelProposalStatus,
     LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult, board_id,
     get_task_by_id, insert_event, mark_label_atom_store_dirty, resolve_task, storage,
-    suggest_task_labels, upsert_label_semantics_candidate_in_tx, with_immediate_tx,
+    upsert_label_semantics_candidate_in_tx, with_immediate_tx,
 };
 
-use std::{path::Path, str::FromStr};
+use std::{collections::HashMap, path::Path, str::FromStr};
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_label_id, new_typed_id};
+use kanban_labels::{LabelAtomPolarity, LabelDefinition};
+use kanban_vector::{DisabledVectorStore, VectorStore};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde_json::json;
 
 const PROPOSAL_COVERAGE_THRESHOLD: f32 = 0.55;
+const PROPOSAL_RESIDUAL_MARGIN: f32 = 0.05;
+const NEGATIVE_SUPPRESSION_THRESHOLD: f32 = 0.65;
+const NEGATIVE_SUPPRESSION_FACTOR: f32 = 0.8;
 
 pub trait LabelProposalProvider {
     fn propose_label(
@@ -86,17 +94,53 @@ pub fn propose_task_label_with(
     board: &str,
     actor: &str,
     task_ref: &str,
-    provider: &impl LabelProposalProvider,
+    provider: &(impl LabelProposalProvider + ?Sized),
+    options: LabelSuggestionOptions,
+) -> Result<LabelProposalAttempt> {
+    let store = DisabledVectorStore;
+    propose_task_label_with_store(path, board, actor, task_ref, provider, &store, options)
+}
+
+pub fn propose_task_label_with_store(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    provider: &(impl LabelProposalProvider + ?Sized),
+    store: &(impl VectorStore + ?Sized),
     options: LabelSuggestionOptions,
 ) -> Result<LabelProposalAttempt> {
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
     let task_ref = resolve_task(&conn, &board_id, task_ref)?;
     let task = get_task_by_id(&conn, &task_ref.board_id, &task_ref.id)?;
-    let suggestions = suggest_task_labels(path.as_ref(), &task.board_slug, &task.id, options)?;
+    let computation = compute_task_label_suggestions_with(
+        path.as_ref(),
+        &task.board_slug,
+        &task.id,
+        store,
+        options,
+    )?;
+    let suggestions = computation.result;
     let top1 = suggestions.candidates.first();
     let mut diagnostics = suggestions.diagnostics.clone();
     diagnostics.push("label_proposal_heuristic_context".to_owned());
+    if suggestions.coverage >= PROPOSAL_COVERAGE_THRESHOLD && !suggestions.needs_new_label {
+        diagnostics.push("heuristic_coverage_sufficient".to_owned());
+        diagnostics.sort();
+        diagnostics.dedup();
+        return Ok(LabelProposalAttempt {
+            task_id: task.id,
+            board_id: task.board_id,
+            proposal: None,
+            degraded: suggestions.degraded,
+            diagnostics,
+            heuristic_coverage: suggestions.coverage,
+            heuristic_residual_norm: suggestions.residual_norm,
+            top1_existing_label_id: top1.map(|candidate| candidate.label_id.clone()),
+            top1_existing_label_name: top1.map(|candidate| candidate.label_name.clone()),
+        });
+    }
     let Some(candidate) = provider.propose_label(&task, &suggestions)? else {
         diagnostics.extend(provider.unavailable_diagnostics());
         diagnostics.sort();
@@ -114,35 +158,43 @@ pub fn propose_task_label_with(
         });
     };
     let candidate = normalize_candidate(candidate)?;
-    if suggestions.coverage >= PROPOSAL_COVERAGE_THRESHOLD {
-        diagnostics.push("heuristic_coverage_sufficient".to_owned());
-        diagnostics.sort();
-        diagnostics.dedup();
-        return Ok(LabelProposalAttempt {
-            task_id: task.id,
-            board_id: task.board_id,
-            proposal: None,
-            degraded: false,
-            diagnostics,
-            heuristic_coverage: suggestions.coverage,
-            heuristic_residual_norm: suggestions.residual_norm,
-            top1_existing_label_id: top1.map(|candidate| candidate.label_id.clone()),
-            top1_existing_label_name: top1.map(|candidate| candidate.label_name.clone()),
-        });
-    }
 
     let conflict = normalized_label_conflict(&conn, &task.board_id, &candidate.name)?;
     if conflict.is_some() {
         diagnostics.push("near_duplicate_label_conflict".to_owned());
     }
+    let validation = if conflict.is_some() {
+        ResidualValidation::not_run()
+    } else {
+        validate_candidate_residual(
+            store,
+            &task.board_id,
+            store.chunk_embedding_model(),
+            &computation.query_vector,
+            &computation.residual_vector,
+            &candidate,
+        )
+    };
+    diagnostics.extend(validation.diagnostics);
     diagnostics.sort();
     diagnostics.dedup();
     let now = SystemClock.now_ms();
-    let status = if conflict.is_some() {
-        LabelProposalStatus::Rejected
-    } else {
-        LabelProposalStatus::Proposed
-    };
+    let status = conflict
+        .as_ref()
+        .map(|_| LabelProposalStatus::Rejected)
+        .unwrap_or_else(|| validation.status.clone());
+    let top1_existing_label_id = validation
+        .top1_existing_label_id
+        .as_deref()
+        .or_else(|| top1.map(|candidate| candidate.label_id.as_str()));
+    let top1_existing_label_name = validation
+        .top1_existing_label_name
+        .as_deref()
+        .or_else(|| top1.map(|candidate| candidate.label_name.as_str()));
+    let decision_reason = conflict
+        .as_ref()
+        .map(|name| format!("near-duplicate normalized-name conflict with existing label {name}"))
+        .or(validation.decision_reason);
     let proposal = with_immediate_tx(&conn, || {
         let proposal = insert_proposal_in_tx(
             &conn,
@@ -152,12 +204,10 @@ pub fn propose_task_label_with(
             status.clone(),
             &candidate,
             &suggestions,
-            top1.map(|candidate| candidate.label_id.as_str()),
-            top1.map(|candidate| candidate.label_name.as_str()),
+            top1_existing_label_id,
+            top1_existing_label_name,
             &diagnostics,
-            conflict.as_ref().map(|name| {
-                format!("near-duplicate normalized-name conflict with existing label {name}")
-            }),
+            decision_reason,
             now,
         )?;
         insert_event(
@@ -180,13 +230,243 @@ pub fn propose_task_label_with(
         task_id: task.id,
         board_id: task.board_id,
         proposal: Some(proposal),
-        degraded: conflict.is_some(),
+        degraded: conflict.is_some() || validation.degraded || suggestions.degraded,
         diagnostics,
         heuristic_coverage: suggestions.coverage,
         heuristic_residual_norm: suggestions.residual_norm,
-        top1_existing_label_id: top1.map(|candidate| candidate.label_id.clone()),
-        top1_existing_label_name: top1.map(|candidate| candidate.label_name.clone()),
+        top1_existing_label_id: top1_existing_label_id.map(ToOwned::to_owned),
+        top1_existing_label_name: top1_existing_label_name.map(ToOwned::to_owned),
     })
+}
+
+struct ResidualValidation {
+    status: LabelProposalStatus,
+    degraded: bool,
+    diagnostics: Vec<String>,
+    decision_reason: Option<String>,
+    top1_existing_label_id: Option<String>,
+    top1_existing_label_name: Option<String>,
+}
+
+impl ResidualValidation {
+    fn not_run() -> Self {
+        Self {
+            status: LabelProposalStatus::Proposed,
+            degraded: false,
+            diagnostics: Vec::new(),
+            decision_reason: None,
+            top1_existing_label_id: None,
+            top1_existing_label_name: None,
+        }
+    }
+
+    fn unavailable(message: impl Into<String>) -> Self {
+        Self {
+            status: LabelProposalStatus::Proposed,
+            degraded: true,
+            diagnostics: vec![
+                "label_proposal_residual_validation_unavailable".to_owned(),
+                message.into(),
+            ],
+            decision_reason: None,
+            top1_existing_label_id: None,
+            top1_existing_label_name: None,
+        }
+    }
+}
+
+fn validate_candidate_residual(
+    store: &(impl VectorStore + ?Sized),
+    board_id: &str,
+    embedding_model: &str,
+    query_vector: &[f32],
+    residual: &[f32],
+    candidate: &LabelProposalCandidate,
+) -> ResidualValidation {
+    // Keep this validation aligned with the suggestion solver inputs: positive
+    // atoms are scored against the residual, while negative atoms suppress from
+    // the original query. That makes persisted rejected proposals comparable to
+    // the top existing label returned by residual suggestions.
+    if residual.is_empty() || l2_norm(residual) == 0.0 {
+        return ResidualValidation::unavailable("label_proposal_residual_vector_unavailable");
+    }
+
+    let candidate_score = match candidate_residual_score(store, query_vector, residual, candidate) {
+        Ok(score) => score,
+        Err(error) => {
+            return ResidualValidation::unavailable(bounded_diagnostic_message(&error));
+        }
+    };
+    let existing =
+        match best_existing_label_score(store, board_id, embedding_model, query_vector, residual) {
+            Ok(existing) => existing,
+            Err(error) => {
+                return ResidualValidation::unavailable(bounded_diagnostic_message(&error));
+            }
+        };
+    let existing_score = existing
+        .as_ref()
+        .map(|score| score.score)
+        .unwrap_or(0.0_f32);
+    let mut diagnostics = Vec::new();
+    if existing_score >= candidate_score {
+        diagnostics.push("label_proposal_residual_top1_failed".to_owned());
+        return ResidualValidation {
+            status: LabelProposalStatus::Rejected,
+            degraded: false,
+            diagnostics,
+            decision_reason: Some(format!(
+                "candidate residual score {candidate_score:.3} did not beat existing label score {existing_score:.3}"
+            )),
+            top1_existing_label_id: existing.as_ref().map(|score| score.label_id.clone()),
+            top1_existing_label_name: existing.as_ref().map(|score| score.label_name.clone()),
+        };
+    }
+    if candidate_score - existing_score < PROPOSAL_RESIDUAL_MARGIN {
+        diagnostics.push("label_proposal_residual_margin_insufficient".to_owned());
+        return ResidualValidation {
+            status: LabelProposalStatus::Rejected,
+            degraded: false,
+            diagnostics,
+            decision_reason: Some(format!(
+                "candidate residual score margin {:.3} is below required {PROPOSAL_RESIDUAL_MARGIN:.3}",
+                candidate_score - existing_score
+            )),
+            top1_existing_label_id: existing.as_ref().map(|score| score.label_id.clone()),
+            top1_existing_label_name: existing.as_ref().map(|score| score.label_name.clone()),
+        };
+    }
+    diagnostics.push("label_proposal_residual_top1_verified".to_owned());
+    ResidualValidation {
+        status: LabelProposalStatus::Proposed,
+        degraded: false,
+        diagnostics,
+        decision_reason: None,
+        top1_existing_label_id: existing.as_ref().map(|score| score.label_id.clone()),
+        top1_existing_label_name: existing.map(|score| score.label_name),
+    }
+}
+
+fn candidate_residual_score(
+    store: &(impl VectorStore + ?Sized),
+    query_vector: &[f32],
+    residual: &[f32],
+    candidate: &LabelProposalCandidate,
+) -> std::result::Result<f32, kanban_vector::VectorError> {
+    let definition = LabelDefinition {
+        id: "proposal_candidate".to_owned(),
+        name: candidate.name.clone(),
+        description: candidate.description.clone(),
+        applies_when: candidate.applies_when.clone(),
+        positive_examples: candidate.positive_examples.clone(),
+        excludes_when: candidate.excludes_when.clone(),
+        negative_examples: candidate.negative_examples.clone(),
+    };
+    let mut positive_score = 0.0_f32;
+    let mut negative_score = 0.0_f32;
+    for source in definition.atom_sources() {
+        let vector = store.embed_query_text(&source.text)?;
+        match source.polarity {
+            LabelAtomPolarity::Positive => {
+                positive_score = positive_score.max(cosine_similarity(residual, &vector).max(0.0))
+            }
+            LabelAtomPolarity::Negative => {
+                negative_score =
+                    negative_score.max(cosine_similarity(query_vector, &vector).max(0.0))
+            }
+        }
+    }
+    Ok(apply_negative_suppression(positive_score, negative_score))
+}
+
+#[derive(Debug, Clone)]
+struct ExistingLabelScore {
+    label_id: String,
+    label_name: String,
+    score: f32,
+}
+
+fn best_existing_label_score(
+    store: &(impl VectorStore + ?Sized),
+    board_id: &str,
+    embedding_model: &str,
+    query_vector: &[f32],
+    residual: &[f32],
+) -> Result<Option<ExistingLabelScore>> {
+    let positive_hits = retrieve_residual_atoms(
+        store,
+        residual,
+        LabelAtomPolarity::Positive,
+        16,
+        board_id,
+        embedding_model,
+    )
+    .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
+    let negative_hits = retrieve_residual_atoms(
+        store,
+        query_vector,
+        LabelAtomPolarity::Negative,
+        16,
+        board_id,
+        embedding_model,
+    )
+    .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
+
+    let mut scores: HashMap<String, ExistingLabelScore> = HashMap::new();
+    for hit in positive_hits {
+        scores
+            .entry(hit.label_id.clone())
+            .and_modify(|score| score.score = score.score.max(hit.score))
+            .or_insert(ExistingLabelScore {
+                label_id: hit.label_id,
+                label_name: hit.label_name,
+                score: hit.score,
+            });
+    }
+    let mut negative_scores: HashMap<String, f32> = HashMap::new();
+    for hit in negative_hits {
+        negative_scores
+            .entry(hit.label_id)
+            .and_modify(|score| *score = score.max(hit.score))
+            .or_insert(hit.score);
+    }
+    for (label_id, negative_score) in negative_scores {
+        if let Some(score) = scores.get_mut(&label_id) {
+            score.score = apply_negative_suppression(score.score, negative_score);
+        }
+    }
+    Ok(scores.into_values().max_by(|left, right| {
+        left.score
+            .total_cmp(&right.score)
+            .then_with(|| right.label_name.cmp(&left.label_name))
+    }))
+}
+
+fn apply_negative_suppression(positive_score: f32, negative_score: f32) -> f32 {
+    if negative_score >= NEGATIVE_SUPPRESSION_THRESHOLD {
+        (positive_score - negative_score * NEGATIVE_SUPPRESSION_FACTOR).max(0.0)
+    } else {
+        positive_score
+    }
+}
+
+fn cosine_similarity(left: &[f32], right: &[f32]) -> f32 {
+    let dot = left
+        .iter()
+        .zip(right)
+        .map(|(left, right)| left * right)
+        .sum::<f32>();
+    let left_norm = l2_norm(left);
+    let right_norm = l2_norm(right);
+    if left_norm == 0.0 || right_norm == 0.0 || left.len() != right.len() {
+        0.0
+    } else {
+        dot / (left_norm * right_norm)
+    }
+}
+
+fn l2_norm(values: &[f32]) -> f32 {
+    values.iter().map(|value| value * value).sum::<f32>().sqrt()
 }
 
 pub fn list_label_proposals(

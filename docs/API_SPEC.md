@@ -1043,8 +1043,8 @@ degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms`
 
 数组字段缺省时按空数组处理。服务先读取当前 label suggestion 的启发式
 `coverage` / `residual_norm` / top1 existing label。coverage 充足时不写 proposal；
-coverage 不足且候选语义有效时，返回 `201` 并持久化 `proposed` proposal。与现有
-label 发生 normalized-name 冲突的候选持久化为 `rejected`，diagnostics 包含
+coverage 不足且候选语义有效，并且残差 top1+margin 校验明确通过时，返回 `201` 并持久化
+`proposed` proposal。与现有 label 发生 normalized-name 冲突的候选持久化为 `rejected`，diagnostics 包含
 `near_duplicate_label_conflict`。Normalized-name conflict 忽略大小写、空白和标点，
 是 deterministic near-duplicate heuristic。
 

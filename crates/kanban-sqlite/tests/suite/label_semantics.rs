@@ -95,13 +95,21 @@ fn label_proposal_manual_candidate_accepts_without_task_binding() -> anyhow::Res
         positive_examples: vec!["new table migration".to_owned()],
         negative_examples: vec!["CSS polish".to_owned()],
     });
+    let store = ProposalValidationStore::new(vec![
+        ("proposal manual target", vec![0.0, 1.0, 0.0]),
+        ("database", vec![0.0, 1.0, 0.0]),
+        ("Database persistence work", vec![0.0, 1.0, 0.0]),
+        ("touches SQLite migrations", vec![0.0, 1.0, 0.0]),
+        ("new table migration", vec![0.0, 1.0, 0.0]),
+    ]);
 
-    let attempt = propose_task_label_with(
+    let attempt = propose_task_label_with_store(
         &temp.path,
         "default",
         "tester",
         &task.id,
         &provider,
+        &store,
         kanban_sqlite::LabelSuggestionOptions::default(),
     )?;
     let proposal = attempt.proposal.context("proposal")?;
@@ -206,6 +214,70 @@ fn label_proposal_residual_validation_passes_and_accept_keeps_task_unbound() -> 
         get_task(&temp.path, "default", &task.id)?.labels.is_empty(),
         "accepting a label proposal must not auto-attach task_labels"
     );
+    Ok(())
+}
+
+#[test]
+fn label_proposal_residual_validation_unavailable_after_candidate_is_non_polluting()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_proposal_residual_validation_unavailable_after_candidate_is_non_polluting",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("uncovered residual validation target"),
+    )?;
+    let store = ResidualValidationUnavailableStore::new();
+    let provider = ManualLabelProposalProvider::new(LabelProposalCandidate {
+        name: "workflow".to_owned(),
+        description: Some("residual validation candidate".to_owned()),
+        applies_when: vec!["residual validation candidate".to_owned()],
+        ..LabelProposalCandidate::default()
+    });
+
+    let attempt = propose_task_label_with_store(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &provider,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions::default(),
+    )?;
+
+    assert!(attempt.degraded);
+    assert!(
+        attempt.proposal.is_none(),
+        "residual validation unavailable must not persist a proposed proposal"
+    );
+    assert!(attempt.heuristic_coverage < 0.55);
+    assert!(
+        attempt
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_atom_index_empty")
+    );
+    assert!(
+        attempt
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_proposal_residual_validation_unavailable")
+    );
+    assert!(
+        attempt
+            .diagnostics
+            .iter()
+            .any(|message| message.contains("residual validation atom query failed"))
+    );
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "label_semantic_proposals")?, 0);
+    assert_eq!(table_count(&conn, "labels")?, 0);
+    assert_eq!(table_count(&conn, "label_semantics")?, 0);
+    assert_eq!(table_count(&conn, "label_atoms")?, 0);
+    assert_eq!(table_count(&conn, "task_labels")?, 0);
     Ok(())
 }
 
@@ -668,12 +740,19 @@ fn label_proposal_reject_then_accept_fails_and_list_filters() -> anyhow::Result<
         applies_when: vec!["operator workflow".to_owned()],
         ..LabelProposalCandidate::default()
     });
-    let proposal = propose_task_label_with(
+    let store = ProposalValidationStore::new(vec![
+        ("proposal reject target", vec![0.0, 1.0, 0.0]),
+        ("ops", vec![0.0, 1.0, 0.0]),
+        ("Operational work", vec![0.0, 1.0, 0.0]),
+        ("operator workflow", vec![0.0, 1.0, 0.0]),
+    ]);
+    let proposal = propose_task_label_with_store(
         &temp.path,
         "default",
         "tester",
         &task.id,
         &provider,
+        &store,
         kanban_sqlite::LabelSuggestionOptions::default(),
     )?
     .proposal
@@ -726,12 +805,19 @@ fn label_proposal_jsonl_export_import_round_trips() -> anyhow::Result<()> {
         applies_when: vec!["packaging or release gate".to_owned()],
         ..LabelProposalCandidate::default()
     });
-    let proposal = propose_task_label_with(
+    let store = ProposalValidationStore::new(vec![
+        ("proposal export target", vec![0.0, 1.0, 0.0]),
+        ("release", vec![0.0, 1.0, 0.0]),
+        ("Release workflow", vec![0.0, 1.0, 0.0]),
+        ("packaging or release gate", vec![0.0, 1.0, 0.0]),
+    ]);
+    let proposal = propose_task_label_with_store(
         &source.path,
         "default",
         "tester",
         &task.id,
         &provider,
+        &store,
         kanban_sqlite::LabelSuggestionOptions::default(),
     )?
     .proposal
@@ -1137,6 +1223,88 @@ impl ProposalValidationStore {
             })
             .map(|(_key, vector)| vector.clone())
             .unwrap_or_else(|| vec![0.0, 0.0, 1.0])
+    }
+}
+
+struct ResidualValidationUnavailableStore {
+    validation_started: std::sync::Mutex<bool>,
+}
+
+impl ResidualValidationUnavailableStore {
+    fn new() -> Self {
+        Self {
+            validation_started: std::sync::Mutex::new(false),
+        }
+    }
+
+    fn mark_validation_started(&self, text: &str) -> Result<(), kanban_vector::VectorError> {
+        if text.contains("residual validation candidate") {
+            *self.validation_started.lock().map_err(|err| {
+                kanban_vector::VectorError::Store(format!(
+                    "validation_started mutex poisoned: {err}"
+                ))
+            })? = true;
+        }
+        Ok(())
+    }
+}
+
+impl kanban_vector::VectorStore for ResidualValidationUnavailableStore {
+    fn chunk_embedding_model(&self) -> &str {
+        "test-model"
+    }
+
+    fn status(&self) -> kanban_vector::VectorStoreStatus {
+        kanban_vector::VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
+        }
+    }
+
+    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn upsert(
+        &self,
+        _chunks: &[kanban_vector::EmbeddingChunk],
+    ) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn query(
+        &self,
+        _query: &kanban_vector::VectorQuery,
+    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
+        Ok(Vec::new())
+    }
+
+    fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
+        self.mark_validation_started(text)?;
+        if text.contains("residual validation candidate") {
+            Ok(vec![0.0, 1.0, 0.0])
+        } else {
+            Ok(vec![1.0, 0.0, 0.0])
+        }
+    }
+
+    fn query_label_atoms_by_vector(
+        &self,
+        _query: &kanban_vector::LabelAtomVectorQuery,
+    ) -> Result<Vec<kanban_vector::LabelAtomVectorHit>, kanban_vector::VectorError> {
+        if *self.validation_started.lock().map_err(|err| {
+            kanban_vector::VectorError::Store(format!("validation_started mutex poisoned: {err}"))
+        })? {
+            return Err(kanban_vector::VectorError::Store(
+                "residual validation atom query failed".to_owned(),
+            ));
+        }
+        Ok(Vec::new())
     }
 }
 

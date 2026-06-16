@@ -135,6 +135,297 @@ fn label_proposal_manual_candidate_accepts_without_task_binding() -> anyhow::Res
 }
 
 #[test]
+fn label_proposal_residual_validation_passes_and_accept_keeps_task_unbound() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_proposal_residual_validation_passes_and_accept_keeps_task_unbound")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        kanban_sqlite::CreateTask {
+            title: "API documentation update".to_owned(),
+            description: Some("Server route docs are missing".to_owned()),
+            ..CreateTask::ready("unused")
+        },
+    )?;
+    let store = ProposalValidationStore::new(vec![
+        (
+            "API documentation update\n\nServer route docs are missing",
+            vec![1.0, 0.65, 0.0],
+        ),
+        ("documentation", vec![0.0, 1.0, 0.0]),
+        ("Documentation work", vec![0.0, 1.0, 0.0]),
+        ("backend", vec![1.0, 0.0, 0.0]),
+        ("server routes", vec![1.0, 0.0, 0.0]),
+    ])
+    .with_atoms(vec![(
+        atom_hit(&backend, "positive", "applies_when", "server routes", 0.0),
+        vec![1.0, 0.0, 0.0],
+    )]);
+    let provider = ManualLabelProposalProvider::new(LabelProposalCandidate {
+        name: "documentation".to_owned(),
+        description: Some("Documentation work".to_owned()),
+        applies_when: vec!["documentation".to_owned()],
+        ..LabelProposalCandidate::default()
+    });
+
+    let attempt = propose_task_label_with_store(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &provider,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            limit: 1,
+            atom_limit: 10,
+            min_score: 0.01,
+        },
+    )?;
+
+    let proposal = attempt.proposal.context("proposal")?;
+    assert_eq!(proposal.status, LabelProposalStatus::Proposed);
+    assert!(
+        proposal
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_proposal_residual_top1_verified")
+    );
+    let accepted = accept_label_proposal(&temp.path, "tester", &proposal.id, None)?;
+    assert_eq!(accepted.status, LabelProposalStatus::Accepted);
+    assert!(
+        get_task(&temp.path, "default", &task.id)?.labels.is_empty(),
+        "accepting a label proposal must not auto-attach task_labels"
+    );
+    Ok(())
+}
+
+#[test]
+fn label_proposal_residual_validation_rejects_when_existing_wins() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_proposal_residual_validation_rejects_when_existing_wins")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let docs = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "docs".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("API documentation update"),
+    )?;
+    let store = ProposalValidationStore::new(vec![
+        ("API documentation update", vec![1.0, 0.65, 0.0]),
+        ("workflow", vec![0.0, 0.8, 0.6]),
+        ("Workflow classification", vec![0.0, 0.8, 0.6]),
+        ("backend", vec![1.0, 0.0, 0.0]),
+        ("docs", vec![0.0, 1.0, 0.0]),
+    ])
+    .with_atoms(vec![
+        (
+            atom_hit(&backend, "positive", "applies_when", "backend", 0.0),
+            vec![1.0, 0.0, 0.0],
+        ),
+        (
+            atom_hit(&docs, "positive", "applies_when", "docs", 0.0),
+            vec![0.0, 1.0, 0.0],
+        ),
+    ]);
+    let provider = ManualLabelProposalProvider::new(LabelProposalCandidate {
+        name: "workflow".to_owned(),
+        description: Some("Workflow classification".to_owned()),
+        ..LabelProposalCandidate::default()
+    });
+
+    let proposal = propose_task_label_with_store(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &provider,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            limit: 1,
+            atom_limit: 10,
+            min_score: 0.01,
+        },
+    )?
+    .proposal
+    .context("proposal")?;
+
+    assert_eq!(proposal.status, LabelProposalStatus::Rejected);
+    assert_eq!(proposal.top1_existing_label_name.as_deref(), Some("docs"));
+    assert!(
+        proposal
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_proposal_residual_top1_failed")
+    );
+    let error = result_err(accept_label_proposal(
+        &temp.path,
+        "tester",
+        &proposal.id,
+        None,
+    ))?;
+    assert!(error.to_string().contains("already rejected"));
+    Ok(())
+}
+
+#[test]
+fn label_proposal_residual_validation_rejects_when_margin_is_insufficient() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_proposal_residual_validation_rejects_when_margin_is_insufficient")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let docs = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "docs".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("API documentation update"),
+    )?;
+    let store = ProposalValidationStore::new(vec![
+        ("API documentation update", vec![1.0, 0.65, 0.0]),
+        ("manuals", vec![0.0, 1.0, 0.0]),
+        ("Manual writing", vec![0.0, 1.0, 0.0]),
+        ("backend", vec![1.0, 0.0, 0.0]),
+        ("docs", vec![0.0, 1.0, 0.2]),
+    ])
+    .with_atoms(vec![
+        (
+            atom_hit(&backend, "positive", "applies_when", "backend", 0.0),
+            vec![1.0, 0.0, 0.0],
+        ),
+        (
+            atom_hit(&docs, "positive", "applies_when", "docs", 0.0),
+            vec![0.0, 1.0, 0.2],
+        ),
+    ]);
+    let provider = ManualLabelProposalProvider::new(LabelProposalCandidate {
+        name: "manuals".to_owned(),
+        description: Some("Manual writing".to_owned()),
+        ..LabelProposalCandidate::default()
+    });
+
+    let proposal = propose_task_label_with_store(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &provider,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            limit: 1,
+            atom_limit: 10,
+            min_score: 0.01,
+        },
+    )?
+    .proposal
+    .context("proposal")?;
+
+    assert_eq!(proposal.status, LabelProposalStatus::Rejected);
+    assert!(
+        proposal
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_proposal_residual_margin_insufficient")
+    );
+    Ok(())
+}
+
+#[test]
+fn label_proposal_coverage_sufficient_does_not_call_provider_or_persist_candidate()
+-> anyhow::Result<()> {
+    let temp = TempDb::new("label_proposal_coverage_sufficient_does_not_call_provider_or_persist")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Backend API route"),
+    )?;
+    let store = ProposalValidationStore::new(vec![
+        ("Backend API route", vec![1.0, 0.0, 0.0]),
+        ("backend", vec![1.0, 0.0, 0.0]),
+    ])
+    .with_atoms(vec![(
+        atom_hit(&backend, "positive", "applies_when", "backend", 0.0),
+        vec![1.0, 0.0, 0.0],
+    )]);
+    let provider = CountingProposalProvider::new();
+
+    let attempt = propose_task_label_with_store(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &provider,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            limit: 3,
+            atom_limit: 10,
+            min_score: 0.01,
+        },
+    )?;
+
+    assert!(attempt.proposal.is_none());
+    assert_eq!(provider.calls()?, 0);
+    let proposals =
+        list_label_proposals(&temp.path, "default", LabelProposalListOptions::default())?;
+    assert!(proposals.is_empty());
+    assert!(
+        attempt
+            .diagnostics
+            .iter()
+            .any(|code| code == "heuristic_coverage_sufficient")
+    );
+    Ok(())
+}
+
+#[test]
 fn label_proposal_validation_rejects_blank_or_empty_semantics() -> anyhow::Result<()> {
     let temp = TempDb::new("label_proposal_validation_rejects_blank_or_empty_semantics")?;
     init_database(&temp.path, "tester")?;
@@ -628,6 +919,158 @@ fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::R
 struct DiagnosticLabelAtomStore {
     status_message: &'static str,
     query_error: Option<&'static str>,
+}
+
+struct CountingProposalProvider {
+    calls: std::sync::Mutex<usize>,
+}
+
+impl CountingProposalProvider {
+    fn new() -> Self {
+        Self {
+            calls: std::sync::Mutex::new(0),
+        }
+    }
+
+    fn calls(&self) -> anyhow::Result<usize> {
+        Ok(*self
+            .calls
+            .lock()
+            .map_err(|err| test_error(format!("calls mutex poisoned: {err}")))?)
+    }
+}
+
+impl kanban_sqlite::LabelProposalProvider for CountingProposalProvider {
+    fn propose_label(
+        &self,
+        _task: &kanban_sqlite::TaskRecord,
+        _suggestions: &kanban_sqlite::LabelSuggestionResult,
+    ) -> kanban_core::Result<Option<LabelProposalCandidate>> {
+        *self
+            .calls
+            .lock()
+            .map_err(|err| KanbanError::Storage(format!("calls mutex poisoned: {err}")))? += 1;
+        Ok(Some(LabelProposalCandidate {
+            name: "should-not-be-called".to_owned(),
+            description: Some("Provider should not run when coverage is sufficient".to_owned()),
+            ..LabelProposalCandidate::default()
+        }))
+    }
+}
+
+struct ProposalValidationStore {
+    embeddings: Vec<(String, Vec<f32>)>,
+    atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>,
+}
+
+impl ProposalValidationStore {
+    fn new(embeddings: Vec<(&str, Vec<f32>)>) -> Self {
+        Self {
+            embeddings: embeddings
+                .into_iter()
+                .map(|(text, vector)| (text.to_owned(), vector))
+                .collect(),
+            atoms: Vec::new(),
+        }
+    }
+
+    fn with_atoms(mut self, atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>) -> Self {
+        self.atoms = atoms;
+        self
+    }
+
+    fn embedding_for(&self, text: &str) -> Vec<f32> {
+        self.embeddings
+            .iter()
+            .find(|(key, _vector)| key == text)
+            .or_else(|| {
+                self.embeddings
+                    .iter()
+                    .find(|(key, _vector)| text.contains(key) || key.contains(text))
+            })
+            .map(|(_key, vector)| vector.clone())
+            .unwrap_or_else(|| vec![0.0, 0.0, 1.0])
+    }
+}
+
+impl kanban_vector::VectorStore for ProposalValidationStore {
+    fn chunk_embedding_model(&self) -> &str {
+        "test-model"
+    }
+
+    fn status(&self) -> kanban_vector::VectorStoreStatus {
+        kanban_vector::VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
+        }
+    }
+
+    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn upsert(
+        &self,
+        _chunks: &[kanban_vector::EmbeddingChunk],
+    ) -> Result<(), kanban_vector::VectorError> {
+        Ok(())
+    }
+
+    fn query(
+        &self,
+        _query: &kanban_vector::VectorQuery,
+    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
+        Ok(Vec::new())
+    }
+
+    fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
+        Ok(self.embedding_for(text))
+    }
+
+    fn query_label_atoms_by_vector(
+        &self,
+        query: &kanban_vector::LabelAtomVectorQuery,
+    ) -> Result<Vec<kanban_vector::LabelAtomVectorHit>, kanban_vector::VectorError> {
+        let mut hits = self
+            .atoms
+            .iter()
+            .filter(|(hit, _vector)| {
+                query
+                    .board_id
+                    .as_ref()
+                    .is_none_or(|board_id| &hit.board_id == board_id)
+                    && query
+                        .embedding_model
+                        .as_ref()
+                        .is_none_or(|model| &hit.embedding_model == model)
+                    && query
+                        .polarity
+                        .as_ref()
+                        .is_none_or(|polarity| &hit.polarity == polarity)
+            })
+            .filter_map(|(hit, vector)| {
+                let similarity = cosine(&query.vector, vector);
+                (similarity > 0.0).then_some((similarity, hit.clone(), vector.clone()))
+            })
+            .collect::<Vec<_>>();
+        hits.sort_by(|left, right| right.0.total_cmp(&left.0));
+        Ok(hits
+            .into_iter()
+            .take(query.limit)
+            .map(|(similarity, mut hit, vector)| {
+                hit.score = (1.0 / similarity.max(0.0001)) - 1.0;
+                kanban_vector::LabelAtomVectorHit {
+                    hit,
+                    vector: query.include_vector.then_some(vector),
+                }
+            })
+            .collect())
+    }
 }
 
 impl kanban_vector::VectorStore for DiagnosticLabelAtomStore {

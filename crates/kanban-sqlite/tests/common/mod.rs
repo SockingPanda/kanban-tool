@@ -18,9 +18,10 @@ pub use kanban_sqlite::{
     export_jsonl, get_board, get_label_proposal, get_label_semantics, get_run_by_id_global,
     get_task, import_jsonl, init_database, list_board_columns, list_boards, list_comments,
     list_dependencies, list_events, list_label_atoms, list_label_proposals, list_outbox, list_runs,
-    list_tasks, promote_task, propose_task_label, propose_task_label_with, reject_label_proposal,
-    search_tasks, set_task_retry_policy_by_id, specify_task, submit_review_task, unblock_task,
-    update_task, upsert_label_semantics,
+    list_tasks, promote_task, propose_task_label, propose_task_label_with,
+    propose_task_label_with_store, reject_label_proposal, search_tasks,
+    set_task_retry_policy_by_id, specify_task, submit_review_task, unblock_task, update_task,
+    upsert_label_semantics,
 };
 #[cfg(feature = "vector-lancedb")]
 pub use kanban_sqlite::{

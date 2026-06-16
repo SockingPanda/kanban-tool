@@ -1011,6 +1011,17 @@ mod tests {
             store.delete_board("b_1"),
             Err(VectorError::MissingEmbeddingProvider)
         ));
+        assert!(matches!(
+            store.query_label_atoms_by_vector(&LabelAtomVectorQuery {
+                vector: vec![1.0, 0.0, 0.0],
+                limit: 10,
+                board_id: Some("b_1".to_owned()),
+                embedding_model: Some("static-test".to_owned()),
+                polarity: None,
+                include_vector: false,
+            }),
+            Err(VectorError::MissingEmbeddingProvider)
+        ));
     }
 
     #[test]
@@ -1244,6 +1255,24 @@ mod tests {
             "label atoms must not populate kb_chunks"
         );
 
+        static_store
+            .upsert(&[build_chunk(
+                &ChunkBuilder::new("static-test"),
+                "t_alpha",
+                "alpha work",
+            )])
+            .unwrap();
+        assert_eq!(
+            static_store
+                .query(&VectorQuery {
+                    text: "alpha".to_owned(),
+                    limit: 10,
+                })
+                .unwrap()
+                .len(),
+            1
+        );
+
         static_store.delete_label_atoms_for_board("b_1").unwrap();
         assert!(
             static_store
@@ -1256,6 +1285,17 @@ mod tests {
                 })
                 .unwrap()
                 .is_empty()
+        );
+        assert_eq!(
+            static_store
+                .query(&VectorQuery {
+                    text: "alpha".to_owned(),
+                    limit: 10,
+                })
+                .unwrap()
+                .len(),
+            1,
+            "deleting label atoms must not delete kb_chunks rows"
         );
         assert_eq!(
             other_store

@@ -812,7 +812,7 @@ fn label_atom_store_is_seeded_and_not_dirtied_by_task_outbox() -> anyhow::Result
 #[test]
 fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Result<()> {
     let temp = TempDb::new("label_atom_rebuild_status_query_and_failure_are_independent")?;
-    init_database(&temp.path, "tester")?;
+    let init = init_database(&temp.path, "tester")?;
     create_task(
         &temp.path,
         "default",
@@ -874,7 +874,7 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
     assert!(
         vector_hits
             .iter()
-            .all(|hit| hit.hit.board_id == "b_default")
+            .all(|hit| hit.hit.board_id == init.board_id)
     );
     assert!(
         vector_hits
@@ -883,7 +883,10 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
     );
     let recorded = store.label_atom_vector_queries()?;
     assert_eq!(recorded.len(), 1);
-    assert_eq!(recorded[0].board_id.as_deref(), Some("b_default"));
+    assert_eq!(
+        recorded[0].board_id.as_deref(),
+        Some(init.board_id.as_str())
+    );
     assert_eq!(recorded[0].embedding_model.as_deref(), Some("static-test"));
     assert_eq!(recorded[0].polarity.as_deref(), Some("positive"));
     assert!(recorded[0].include_vector);

@@ -355,6 +355,78 @@ fn label_propose_without_provider_returns_degraded_without_polluting_labels() ->
     Ok(())
 }
 
+#[test]
+fn label_propose_with_proposal_json_degrades_without_polluting_truth() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_propose_with_proposal_json_degrades_without_polluting_truth")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "proposal json degraded cli task",
+            "--description",
+            "ready spec",
+            "--status",
+            "ready",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+    let proposal_path = temp.dir.join("candidate.json");
+    std::fs::write(
+        &proposal_path,
+        json!({
+            "name": "workflow",
+            "description": "Workflow classification",
+            "applies_when": ["classifies execution flow"],
+            "excludes_when": ["UI-only polish"],
+            "positive_examples": ["triage work queue"],
+            "negative_examples": ["CSS tweak"]
+        })
+        .to_string(),
+    )?;
+
+    let attempt = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "propose",
+            task_id,
+            "--proposal-json",
+            proposal_path.to_str().context("proposal json path")?,
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(attempt["data"]["proposal"], serde_json::Value::Null);
+    assert_eq!(attempt["data"]["degraded"], true);
+    let diagnostics = attempt["data"]["diagnostics"]
+        .as_array()
+        .context("diagnostics")?;
+    assert!(
+        diagnostics
+            .iter()
+            .any(|value| value == "label_proposal_residual_validation_unavailable"),
+        "{diagnostics:?}"
+    );
+    let conn = kanban_sqlite::connect_file(&temp.path)?;
+    let proposal_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM label_semantic_proposals", [], |row| {
+            row.get(0)
+        })?;
+    assert_eq!(proposal_count, 0);
+    assert!(
+        kanban(&temp.path, &["--json", "label", "list"])?.success_json()?["data"]
+            .as_array()
+            .context("labels")?
+            .is_empty()
+    );
+    Ok(())
+}
+
 #[cfg(feature = "vector-lancedb")]
 #[test]
 fn label_propose_with_vector_config_attempts_configured_store() -> anyhow::Result<()> {

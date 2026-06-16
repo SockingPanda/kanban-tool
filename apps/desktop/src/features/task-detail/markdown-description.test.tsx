@@ -279,7 +279,7 @@ describe("MarkdownDescription", () => {
               residual_norm: 0.18,
               needs_new_label: false,
               degraded: true,
-              diagnostics: ["solver_refit_unavailable"],
+              diagnostics: ["label_atom_index_dirty"],
             },
           }}
           blockReason=""
@@ -307,7 +307,7 @@ describe("MarkdownDescription", () => {
 
     expect(html).toContain("Suggestions")
     expect(html).toContain("Degraded")
-    expect(html).toContain("solver_refit_unavailable")
+    expect(html).toContain("label_atom_index_dirty")
     expect(html).toContain("Applied")
     expect(html).toContain("coverage 82%")
   })

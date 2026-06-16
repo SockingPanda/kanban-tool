@@ -31,12 +31,6 @@ fn task_label_suggestions_degrade_when_vector_store_disabled() -> anyhow::Result
             .iter()
             .any(|code| code == "vector_store_disabled")
     );
-    assert!(
-        !result
-            .diagnostics
-            .iter()
-            .any(|code| code == "solver_refit_unavailable")
-    );
     Ok(())
 }
 
@@ -395,12 +389,6 @@ fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> an
     assert!(result.coverage > 0.99);
     assert!(result.residual_norm < 0.01);
     assert!(!result.needs_new_label);
-    assert!(
-        !result
-            .diagnostics
-            .iter()
-            .any(|code| code == "solver_refit_unavailable")
-    );
     Ok(())
 }
 

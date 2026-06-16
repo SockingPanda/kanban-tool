@@ -428,10 +428,11 @@ where
 {
     validate_residual_inputs(query_embedding, config)?;
     let query_norm = l2_norm(query_embedding);
+    let normalized_query = normalize_for_fit(query_embedding);
     let mut residual = normalize_for_fit(query_embedding);
     let mut selected_label_ids = HashSet::new();
     let mut selected_vectors = Vec::new();
-    let mut selected_meta = Vec::new();
+    let mut selected_basis = Vec::new();
     let mut candidates_by_label: HashMap<String, LabelGroupCandidate> = HashMap::new();
     let retrieval_limit = config
         .max_candidates
@@ -439,11 +440,16 @@ where
         .max(config.max_candidates)
         .max(1);
 
-    while selected_vectors.len() < config.max_selected_labels {
+    while selected_label_ids.len() < config.max_selected_labels {
         let positive_hits = retrieve(&residual, LabelAtomPolarity::Positive, retrieval_limit)?;
-        let negative_hits = retrieve(&residual, LabelAtomPolarity::Negative, retrieval_limit)?;
+        let negative_hits = retrieve(
+            &normalized_query,
+            LabelAtomPolarity::Negative,
+            retrieval_limit,
+        )?;
         let groups = residual_candidates(
             &residual,
+            &normalized_query,
             positive_hits,
             negative_hits,
             &selected_label_ids,
@@ -474,12 +480,24 @@ where
                     .then_with(|| right.0.label_name.cmp(&left.0.label_name))
             });
 
-        let Some((candidate, vector, _gain)) = next else {
+        let Some((candidate, _vector, _gain)) = next else {
             break;
         };
+        let basis_atoms = candidate_basis_atoms(&candidate);
+        if basis_atoms.is_empty() {
+            break;
+        }
         selected_label_ids.insert(candidate.label_id.clone());
-        selected_vectors.push(vector);
-        selected_meta.push(candidate);
+        for (evidence, atom_vector) in basis_atoms {
+            selected_vectors.push(atom_vector);
+            selected_basis.push(SelectedBasisAtom {
+                label_id: candidate.label_id.clone(),
+                label_name: candidate.label_name.clone(),
+                score: candidate.score,
+                evidence,
+                negative_evidence_atoms: candidate.negative_evidence_atoms.clone(),
+            });
+        }
         let weights = fit_non_negative(&selected_vectors, query_embedding, config.refit_iterations);
         residual = fit_residual(query_embedding, &selected_vectors, &weights, query_norm);
     }
@@ -488,19 +506,7 @@ where
     let fitted = fitted_vector(&selected_vectors, &weights);
     let residual_norm = normalized_residual_norm(query_embedding, &fitted);
     let coverage = coverage_from_residual(residual_norm);
-    let selected_labels = selected_meta
-        .iter()
-        .zip(weights)
-        .filter(|(_candidate, weight)| *weight > 0.0)
-        .map(|(candidate, weight)| SelectedLabel {
-            label_id: candidate.label_id.clone(),
-            label_name: candidate.label_name.clone(),
-            weight,
-            score: candidate.score,
-            evidence_atoms: candidate.evidence_atoms.clone(),
-            negative_evidence_atoms: candidate.negative_evidence_atoms.clone(),
-        })
-        .collect::<Vec<_>>();
+    let selected_labels = selected_labels_from_basis(&selected_basis, &weights);
     let mut candidates = candidates_by_label.into_values().collect::<Vec<_>>();
     candidates.sort_by(|left, right| {
         right
@@ -534,7 +540,8 @@ fn validate_residual_inputs(
 }
 
 fn residual_candidates(
-    residual: &[f32],
+    positive_query: &[f32],
+    negative_query: &[f32],
     positive_hits: Vec<RetrievedLabelAtom>,
     negative_hits: Vec<RetrievedLabelAtom>,
     selected_label_ids: &HashSet<String>,
@@ -542,7 +549,7 @@ fn residual_candidates(
 ) -> Result<Vec<LabelGroupCandidate>, LabelSolverError> {
     let mut positives_by_label: HashMap<String, Vec<RetrievedLabelAtom>> = HashMap::new();
     for hit in positive_hits {
-        validate_retrieved_atom(&hit, residual.len(), LabelAtomPolarity::Positive)?;
+        validate_retrieved_atom(&hit, positive_query.len(), LabelAtomPolarity::Positive)?;
         if !selected_label_ids.contains(&hit.label_id) {
             positives_by_label
                 .entry(hit.label_id.clone())
@@ -552,7 +559,7 @@ fn residual_candidates(
     }
     let mut negatives_by_label: HashMap<String, Vec<RetrievedLabelAtom>> = HashMap::new();
     for hit in negative_hits {
-        validate_retrieved_atom(&hit, residual.len(), LabelAtomPolarity::Negative)?;
+        validate_retrieved_atom(&hit, negative_query.len(), LabelAtomPolarity::Negative)?;
         negatives_by_label
             .entry(hit.label_id.clone())
             .or_default()
@@ -573,7 +580,7 @@ fn residual_candidates(
         };
         let mut evidence_atoms = positives
             .iter()
-            .map(|hit| atom_evidence(hit, residual))
+            .map(|hit| atom_evidence(hit, positive_query))
             .collect::<Vec<_>>();
         evidence_atoms.sort_by(|left, right| {
             right
@@ -589,7 +596,7 @@ fn residual_candidates(
             .remove(&label_id)
             .unwrap_or_default()
             .iter()
-            .map(|hit| atom_evidence(hit, residual))
+            .map(|hit| atom_evidence(hit, negative_query))
             .filter(|evidence| evidence.similarity >= config.min_evidence_score)
             .collect::<Vec<_>>();
         negative_evidence_atoms.sort_by(|left, right| {
@@ -633,6 +640,66 @@ fn residual_candidates(
     });
     candidates.truncate(config.max_candidates);
     Ok(candidates)
+}
+
+#[derive(Debug, Clone)]
+struct SelectedBasisAtom {
+    label_id: String,
+    label_name: String,
+    score: f32,
+    evidence: LabelAtomEvidence,
+    negative_evidence_atoms: Vec<LabelAtomEvidence>,
+}
+
+fn candidate_basis_atoms(candidate: &LabelGroupCandidate) -> Vec<(LabelAtomEvidence, Vec<f32>)> {
+    candidate
+        .evidence_atoms
+        .iter()
+        .filter_map(|evidence| {
+            let mut vector = evidence.vector.clone()?;
+            normalize_in_place(&mut vector);
+            Some((evidence.clone(), vector))
+        })
+        .collect()
+}
+
+fn selected_labels_from_basis(
+    selected_basis: &[SelectedBasisAtom],
+    weights: &[f32],
+) -> Vec<SelectedLabel> {
+    let mut by_label: Vec<SelectedLabel> = Vec::new();
+    for (basis, weight) in selected_basis.iter().zip(weights) {
+        if *weight <= 0.0 {
+            continue;
+        }
+        let mut evidence = basis.evidence.clone();
+        evidence.contribution = *weight;
+        if let Some(existing) = by_label
+            .iter_mut()
+            .find(|label| label.label_id == basis.label_id)
+        {
+            existing.weight += *weight;
+            existing.evidence_atoms.push(evidence);
+        } else {
+            by_label.push(SelectedLabel {
+                label_id: basis.label_id.clone(),
+                label_name: basis.label_name.clone(),
+                weight: *weight,
+                score: basis.score,
+                evidence_atoms: vec![evidence],
+                negative_evidence_atoms: basis.negative_evidence_atoms.clone(),
+            });
+        }
+    }
+    for label in &mut by_label {
+        label.evidence_atoms.sort_by(|left, right| {
+            right
+                .contribution
+                .total_cmp(&left.contribution)
+                .then_with(|| left.source.text.cmp(&right.source.text))
+        });
+    }
+    by_label
 }
 
 fn validate_retrieved_atom(
@@ -1173,6 +1240,131 @@ mod tests {
         assert!(result.selected_labels.is_empty());
         assert_eq!(result.coverage, 0.0);
         assert_eq!(result.residual_norm, 1.0);
+    }
+
+    #[test]
+    fn residual_solver_scores_negative_atoms_against_original_query() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 2,
+            max_positive_atoms_per_label: 1,
+            min_candidate_score: 0.01,
+            negative_suppression_factor: 1.0,
+            negative_suppression_threshold: 0.8,
+            ..LabelSolverConfig::default()
+        };
+        let mut negative_queries = Vec::new();
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 1.0, 0.0],
+            &config,
+            |query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => {
+                    if query[0] > 0.4 {
+                        Ok(vec![retrieved_atom(
+                            "l_backend",
+                            "backend",
+                            LabelAtomPolarity::Positive,
+                            vec![1.0, 0.0, 0.0],
+                            1.0,
+                            1,
+                        )])
+                    } else {
+                        Ok(vec![retrieved_atom(
+                            "l_docs",
+                            "docs",
+                            LabelAtomPolarity::Positive,
+                            vec![0.0, 1.0, 0.0],
+                            1.0,
+                            2,
+                        )])
+                    }
+                }
+                LabelAtomPolarity::Negative => {
+                    negative_queries.push(query.to_vec());
+                    Ok(vec![retrieved_atom(
+                        "l_docs",
+                        "docs",
+                        LabelAtomPolarity::Negative,
+                        vec![1.0, 1.0, 0.0],
+                        1.0,
+                        3,
+                    )])
+                }
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            result
+                .selected_labels
+                .iter()
+                .map(|label| label.label_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["backend"]
+        );
+        assert!(
+            result
+                .candidates
+                .iter()
+                .any(|candidate| candidate.label_name == "docs" && candidate.suppressed)
+        );
+        assert!(negative_queries.len() >= 2);
+        assert!(negative_queries.iter().all(|query| {
+            (query[0] - std::f32::consts::FRAC_1_SQRT_2).abs() < 0.0001
+                && (query[1] - std::f32::consts::FRAC_1_SQRT_2).abs() < 0.0001
+                && query[2].abs() < 0.0001
+        }));
+    }
+
+    #[test]
+    fn residual_solver_refits_selected_label_with_atom_level_basis() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 1,
+            max_positive_atoms_per_label: 2,
+            min_candidate_score: 0.01,
+            ..LabelSolverConfig::default()
+        };
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 1.0, 0.0],
+            &config,
+            |_query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => Ok(vec![
+                    retrieved_atom(
+                        "l_fullstack",
+                        "fullstack",
+                        LabelAtomPolarity::Positive,
+                        vec![1.0, 0.0, 0.0],
+                        1.0,
+                        1,
+                    ),
+                    retrieved_atom(
+                        "l_fullstack",
+                        "fullstack",
+                        LabelAtomPolarity::Positive,
+                        vec![0.0, 1.0, 0.0],
+                        1.0,
+                        2,
+                    ),
+                ]),
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.selected_labels.len(), 1);
+        let selected = &result.selected_labels[0];
+        assert_eq!(selected.label_name, "fullstack");
+        assert_eq!(selected.evidence_atoms.len(), 2);
+        assert!(
+            selected
+                .evidence_atoms
+                .iter()
+                .all(|atom| (atom.contribution - std::f32::consts::FRAC_1_SQRT_2).abs() < 0.0001)
+        );
+        assert!((selected.weight - std::f32::consts::SQRT_2).abs() < 0.0001);
+        assert!(result.coverage > 0.99);
+        assert!(result.residual_norm < 0.01);
     }
 
     #[test]

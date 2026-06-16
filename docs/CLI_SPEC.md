@@ -522,11 +522,13 @@ Task 的人类可读摘要如果存在 labels，会在末尾追加方括号标�
 default#12 t_01HX... [ready] 修复 API 回归 [backend,p1]
 ```
 
-`label suggest` 返回 task-level label suggestions。当前实现使用
-`lancedb_label_atoms` atom hit aggregation：用 task title + description 查询语义
-label atoms，按 label 聚合正向 similarity，并按负向 atom similarity 惩罚分数。
-它不会调用 full label solver refit，不会自动创建新 label，也不会写入 new-label
-proposal。应用建议时仍使用现有 `label add <task_ref> <label>` / API attach 流程。
+`label suggest` 返回 task-level label suggestions。当前实现把 task title +
+description embedding 作为 query，使用 `lancedb_label_atoms` 按残差多轮检索正向
+label atoms，并用原始 query 检索负向 atoms 做 penalty / suppression。solver 在
+label group 层执行 Group OMP 选择，再用选中 label 的 top positive atom vectors 做
+non-negative refit；`coverage` / `residual_norm` 来自该 atom-level fitted vector。
+它不会自动创建新 label，也不会写入 new-label proposal。应用建议时仍使用现有
+`label add <task_ref> <label>` / API attach 流程。
 
 默认未配置 vector provider 或二进制未启用 `vector-lancedb` 时，命令成功返回
 degraded 结果而不是失败；无 provider 时 `needs_new_label=false`。`--vector-config`
@@ -547,7 +549,7 @@ JSON 输出：
     "residual_norm": 1.0,
     "needs_new_label": false,
     "degraded": true,
-    "diagnostics": ["solver_refit_unavailable", "vector_store_disabled"]
+    "diagnostics": ["vector_store_disabled"]
   }
 }
 ```
@@ -556,12 +558,12 @@ Human output 简洁列出建议 label、score、weight、already_applied；degra
 diagnostics 行。
 
 `label propose` 是独立的新 label semantics 提案流程，不复用或改变 `label suggest`。
-它先读取当前 task-level label suggestions 的启发式 `coverage` / `residual_norm` /
+它先读取当前 task-level label suggestions 的 `coverage` / `residual_norm` /
 top1 existing label。没有 `--proposal-json` 时默认 provider 不可用，命令成功返回
 degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms` 或
 `task_labels`。日常 label suggestion 不依赖该 proposal provider。
 `--limit`、`--atom-limit`、`--min-score` 会在 proposal 持久化前调节底层 label
-suggestion 启发式，用于计算 coverage、residual_norm 和 top1 existing label。
+suggestion solver，用于计算 coverage、residual_norm 和 top1 existing label。
 
 `--proposal-json` 提供本地/offline provider 输出：
 

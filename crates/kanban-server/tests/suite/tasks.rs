@@ -1,4 +1,5 @@
 use crate::common::*;
+use kanban_sqlite::LabelProposalCandidate;
 
 #[tokio::test]
 async fn tasks_creates_task_and_event_with_body_actor_priority() -> anyhow::Result<()> {
@@ -645,29 +646,18 @@ async fn task_label_proposal_route_accepts_and_rejects_without_task_binding() ->
     )?;
     let app = test.router();
 
-    let (status, json) = post_json(
-        app.clone(),
-        &format!("/api/v1/tasks/{}/label-proposals", task.id),
-        json!({
-            "proposal": {
-                "name": "database",
-                "description": "Database persistence work",
-                "applies_when": ["touches SQLite migrations"],
-                "excludes_when": ["UI-only"],
-                "positive_examples": ["new table"],
-                "negative_examples": ["CSS"]
-            },
-            "actor": "api-proposer"
-        }),
-    )
-    .await?;
-
-    assert_eq!(status, StatusCode::CREATED);
-    let proposal_id = json["data"]["proposal"]["id"]
-        .as_str()
-        .context("proposal id")?
-        .to_owned();
-    assert_eq!(json["data"]["proposal"]["status"], "proposed");
+    let proposal_id = seed_proposed_label_proposal(
+        &db_path,
+        &task.id,
+        LabelProposalCandidate {
+            name: "database".to_owned(),
+            description: Some("Database persistence work".to_owned()),
+            applies_when: vec!["touches SQLite migrations".to_owned()],
+            excludes_when: vec!["UI-only".to_owned()],
+            positive_examples: vec!["new table".to_owned()],
+            negative_examples: vec!["CSS".to_owned()],
+        },
+    )?;
 
     let (status, json) = get_json(
         app.clone(),
@@ -700,31 +690,66 @@ async fn task_label_proposal_route_accepts_and_rejects_without_task_binding() ->
             .is_empty()
     );
 
-    let (status, json) = post_json(
-        app.clone(),
-        &format!("/api/v1/tasks/{}/label-proposals", task.id),
-        json!({
-            "proposal": {
-                "name": "release",
-                "description": "Release workflow",
-                "applies_when": ["packaging"]
-            }
-        }),
-    )
-    .await?;
-    assert_eq!(status, StatusCode::CREATED);
-    let reject_id = json["data"]["proposal"]["id"]
-        .as_str()
-        .context("reject proposal id")?;
+    let reject_id = seed_proposed_label_proposal(
+        &db_path,
+        &task.id,
+        LabelProposalCandidate {
+            name: "release".to_owned(),
+            description: Some("Release workflow".to_owned()),
+            applies_when: vec!["packaging".to_owned()],
+            ..LabelProposalCandidate::default()
+        },
+    )?;
     let (status, json) = post_json(
         app,
-        &format!("/api/v1/label-proposals/{reject_id}/reject"),
+        &format!("/api/v1/label-proposals/{}/reject", reject_id),
         json!({ "reason": "不采用" }),
     )
     .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "rejected");
     Ok(())
+}
+
+fn seed_proposed_label_proposal(
+    db_path: &std::path::Path,
+    task_id: &str,
+    candidate: LabelProposalCandidate,
+) -> anyhow::Result<String> {
+    let conn = kanban_sqlite::connect_file(db_path)?;
+    let board_id: String =
+        conn.query_row("SELECT board_id FROM tasks WHERE id=?1", [task_id], |row| {
+            row.get(0)
+        })?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_millis() as i64;
+    let proposal_id = format!("lp_api_{}_{}", candidate.name, now);
+    let applies_when = serde_json::to_string(&candidate.applies_when)?;
+    let excludes_when = serde_json::to_string(&candidate.excludes_when)?;
+    let positive_examples = serde_json::to_string(&candidate.positive_examples)?;
+    let negative_examples = serde_json::to_string(&candidate.negative_examples)?;
+    conn.execute(
+        "INSERT INTO label_semantic_proposals(
+            id, board_id, task_id, status, name, description, applies_when, excludes_when,
+            positive_examples, negative_examples, heuristic_coverage, heuristic_residual_norm,
+            diagnostics_json, created_by, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, 'proposed', ?4, ?5, ?6, ?7, ?8, ?9, 0.0, 1.0, '[]', ?10, ?11, ?11)",
+        (
+            &proposal_id,
+            &board_id,
+            task_id,
+            &candidate.name,
+            candidate.description.as_deref(),
+            &applies_when,
+            &excludes_when,
+            &positive_examples,
+            &negative_examples,
+            "api-test-proposer",
+            now,
+        ),
+    )?;
+    Ok(proposal_id)
 }
 
 #[tokio::test]

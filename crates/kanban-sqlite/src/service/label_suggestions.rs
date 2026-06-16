@@ -39,6 +39,22 @@ pub fn suggest_task_labels_with(
     store: &(impl VectorStore + ?Sized),
     options: LabelSuggestionOptions,
 ) -> Result<LabelSuggestionResult> {
+    Ok(compute_task_label_suggestions_with(path, board, task_ref, store, options)?.result)
+}
+
+pub(crate) struct LabelSuggestionComputation {
+    pub result: LabelSuggestionResult,
+    pub query_vector: Vec<f32>,
+    pub residual_vector: Vec<f32>,
+}
+
+pub(crate) fn compute_task_label_suggestions_with(
+    path: impl AsRef<Path>,
+    board: &str,
+    task_ref: &str,
+    store: &(impl VectorStore + ?Sized),
+    options: LabelSuggestionOptions,
+) -> Result<LabelSuggestionComputation> {
     validate_options(options)?;
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
@@ -49,7 +65,7 @@ pub fn suggest_task_labels_with(
     let status = store.status();
     if !status.enabled {
         diagnostics.push("vector_store_disabled".to_owned());
-        return Ok(empty_result(
+        return Ok(empty_computation(
             task.id,
             task.board_id,
             diagnostics,
@@ -65,7 +81,7 @@ pub fn suggest_task_labels_with(
         Err(error) => {
             diagnostics.push("vector_query_error".to_owned());
             diagnostics.push(bounded_diagnostic_message(&error));
-            return Ok(empty_result(
+            return Ok(empty_computation(
                 task.id,
                 task.board_id,
                 diagnostics,
@@ -106,7 +122,7 @@ pub fn suggest_task_labels_with(
         Err(error) => {
             diagnostics.push("vector_query_error".to_owned());
             diagnostics.push(bounded_diagnostic_message(&error));
-            return Ok(empty_result(
+            return Ok(empty_computation(
                 task.id,
                 task.board_id,
                 diagnostics,
@@ -168,16 +184,20 @@ pub fn suggest_task_labels_with(
     let needs_new_label = selected_labels.is_empty()
         || coverage < NEW_LABEL_COVERAGE_THRESHOLD
         || solver_result.needs_new_label;
-    Ok(LabelSuggestionResult {
-        task_id: task.id,
-        board_id: task.board_id,
-        selected_labels,
-        candidates,
-        coverage,
-        residual_norm: solver_result.residual_norm,
-        needs_new_label,
-        degraded,
-        diagnostics,
+    Ok(LabelSuggestionComputation {
+        result: LabelSuggestionResult {
+            task_id: task.id,
+            board_id: task.board_id,
+            selected_labels,
+            candidates,
+            coverage,
+            residual_norm: solver_result.residual_norm,
+            needs_new_label,
+            degraded,
+            diagnostics,
+        },
+        query_vector,
+        residual_vector: solver_result.residual,
     })
 }
 
@@ -198,7 +218,7 @@ fn validate_options(options: LabelSuggestionOptions) -> Result<()> {
     Ok(())
 }
 
-fn retrieve_residual_atoms(
+pub(crate) fn retrieve_residual_atoms(
     store: &(impl VectorStore + ?Sized),
     residual: &[f32],
     polarity: LabelAtomPolarity,
@@ -366,7 +386,21 @@ fn empty_result(
     }
 }
 
-fn bounded_diagnostic_message(error: &impl std::fmt::Display) -> String {
+fn empty_computation(
+    task_id: String,
+    board_id: String,
+    diagnostics: Vec<String>,
+    degraded: bool,
+    needs_new_label: bool,
+) -> LabelSuggestionComputation {
+    LabelSuggestionComputation {
+        result: empty_result(task_id, board_id, diagnostics, degraded, needs_new_label),
+        query_vector: Vec::new(),
+        residual_vector: Vec::new(),
+    }
+}
+
+pub(crate) fn bounded_diagnostic_message(error: &impl std::fmt::Display) -> String {
     let message = error.to_string();
     if message.len() > 240 {
         let boundary = message

@@ -162,9 +162,11 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         match restore_window_action() {
-            RestoreWindowAction::ShowWithoutFocus => {
+            RestoreWindowAction::ShowAndRaiseWithoutFocus => {
+                let _ = window.set_always_on_top(true);
                 let _ = window.unminimize();
                 let _ = window.show();
+                let _ = window.set_always_on_top(false);
             }
         }
     }

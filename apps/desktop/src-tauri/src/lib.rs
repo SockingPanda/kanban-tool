@@ -15,8 +15,10 @@ use tokio::sync::oneshot;
 
 mod tray_lifecycle;
 use tray_lifecycle::{
-    CloseRequestAction, SingleInstanceAction, TRAY_QUIT_ID, TRAY_SHOW_ID, TrayMenuAction,
-    close_request_action, single_instance_launch_action, tray_menu_action,
+    CloseRequestAction, RestoreWindowAction, SingleInstanceAction, TRAY_QUIT_ID, TRAY_SHOW_ID,
+    TrayIconAction, TrayMenuAction, close_request_action, restore_window_action,
+    single_instance_launch_action, tray_icon_left_click_action, tray_icon_left_double_click_action,
+    tray_menu_action,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -133,13 +135,19 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         .on_tray_icon_event(|tray, event| match event {
             TrayIconEvent::Click {
                 button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
+                button_state,
                 ..
+            } if tray_icon_left_click_action(button_state == MouseButtonState::Up)
+                == TrayIconAction::ShowWindow =>
+            {
+                show_main_window(tray.app_handle())
             }
-            | TrayIconEvent::DoubleClick {
+            TrayIconEvent::DoubleClick {
                 button: MouseButton::Left,
                 ..
-            } => show_main_window(tray.app_handle()),
+            } if tray_icon_left_double_click_action() == TrayIconAction::ShowWindow => {
+                show_main_window(tray.app_handle())
+            }
             _ => {}
         });
 
@@ -153,9 +161,12 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
+        match restore_window_action() {
+            RestoreWindowAction::ShowWithoutFocus => {
+                let _ = window.unminimize();
+                let _ = window.show();
+            }
+        }
     }
 }
 

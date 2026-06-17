@@ -16,8 +16,35 @@ pub fn single_instance_launch_action() -> SingleInstanceAction {
     SingleInstanceAction::ShowWindow
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RestoreWindowAction {
+    ShowWithoutFocus,
+}
+
+pub fn restore_window_action() -> RestoreWindowAction {
+    RestoreWindowAction::ShowWithoutFocus
+}
+
 pub const TRAY_SHOW_ID: &str = "show";
 pub const TRAY_QUIT_ID: &str = "quit";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrayIconAction {
+    ShowWindow,
+    Ignore,
+}
+
+pub fn tray_icon_left_click_action(button_is_up: bool) -> TrayIconAction {
+    if button_is_up {
+        TrayIconAction::ShowWindow
+    } else {
+        TrayIconAction::Ignore
+    }
+}
+
+pub fn tray_icon_left_double_click_action() -> TrayIconAction {
+    TrayIconAction::ShowWindow
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayMenuAction {
@@ -55,6 +82,22 @@ mod tests {
         assert_eq!(
             single_instance_launch_action(),
             SingleInstanceAction::ShowWindow
+        );
+    }
+
+    #[test]
+    fn tray_left_double_click_requests_existing_window() {
+        assert_eq!(
+            tray_icon_left_double_click_action(),
+            TrayIconAction::ShowWindow
+        );
+    }
+
+    #[test]
+    fn restore_window_does_not_force_focus() {
+        assert_eq!(
+            restore_window_action(),
+            RestoreWindowAction::ShowWithoutFocus
         );
     }
 }

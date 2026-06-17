@@ -957,8 +957,11 @@ GET /api/v1/tasks/{task_id}/labels/suggestions?limit=5&candidate_limit=32&atom_l
 查询 `lancedb_label_atoms`：正向 atoms 按 residual 多轮检索，负向 atoms 固定用原始
 query 检索并做 penalty / suppression。solver 在 label group 层执行 Group OMP 选择，
 再把选中 label 的 top positive atom vectors 作为 basis 做 non-negative refit；
-`coverage` / `residual_norm` 来自 atom-level fitted vector。接口不会创建新 label，
-也不会写入 `label_semantics` / `label_atoms`。
+`coverage` / `residual_norm` 来自 atom-level fitted vector。候选 label 只有在
+tentative refit 后带来足够 residual norm 降幅才会进入结果；coverage 或
+residual norm 达到停止阈值后，solver 会提前停止而不是凑满
+`max_selected_labels`。接口不会创建新 label，也不会写入 `label_semantics` /
+`label_atoms`。
 
 `limit` 只控制 response 中 `selected_labels` / `candidates` 的最大条数，不会收窄
 solver 内部搜索能力。内部能力由 `candidate_limit`、`atom_limit` 和

@@ -193,11 +193,7 @@ impl VectorStoreBackend for RecordingVectorStore {
     }
 
     fn status(&self) -> VectorStoreStatus {
-        VectorStoreStatus {
-            backend: "test-vector".to_owned(),
-            enabled: true,
-            message: "test vector store".to_owned(),
-        }
+        VectorStoreStatus::new("test-vector", true, "test vector store")
     }
 }
 
@@ -413,11 +409,7 @@ pub struct FailingVectorStore;
 #[cfg(feature = "vector-lancedb")]
 impl VectorStoreBackend for FailingVectorStore {
     fn status(&self) -> VectorStoreStatus {
-        VectorStoreStatus {
-            backend: "test-vector".to_owned(),
-            enabled: true,
-            message: "test vector store".to_owned(),
-        }
+        VectorStoreStatus::new("test-vector", true, "test vector store")
     }
 }
 
@@ -466,11 +458,7 @@ pub struct QueryFailingVectorStore;
 #[cfg(feature = "vector-lancedb")]
 impl VectorStoreBackend for QueryFailingVectorStore {
     fn status(&self) -> VectorStoreStatus {
-        VectorStoreStatus {
-            backend: "test-vector".to_owned(),
-            enabled: true,
-            message: "test vector store".to_owned(),
-        }
+        VectorStoreStatus::new("test-vector", true, "test vector store")
     }
 }
 

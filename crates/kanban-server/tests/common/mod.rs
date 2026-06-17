@@ -11,6 +11,7 @@ pub use tower::ServiceExt;
 pub struct TestApp {
     _dir: tempfile::TempDir,
     db_path: std::path::PathBuf,
+    vector_config_path: std::path::PathBuf,
     default_actor: String,
 }
 
@@ -22,10 +23,17 @@ impl TestApp {
     pub fn with_actor(default_actor: &str) -> Result<Self> {
         let dir = tempfile::tempdir().context("tempdir")?;
         let db_path = dir.path().join("kb.db");
+        let vector_config_path = dir.path().join("config.toml");
+        kanban_local::write_project_config(
+            &vector_config_path,
+            &kanban_local::ProjectConfig::default(),
+        )
+        .context("write empty vector config")?;
         kanban_sqlite::init_database(&db_path, default_actor).context("init db")?;
         Ok(Self {
             _dir: dir,
             db_path,
+            vector_config_path,
             default_actor: default_actor.to_owned(),
         })
     }
@@ -39,15 +47,24 @@ impl TestApp {
     }
 
     pub fn router(&self) -> axum::Router {
-        build_router(AppState::new(&self.db_path, self.default_actor.clone()))
+        build_router(
+            AppState::new(&self.db_path, self.default_actor.clone())
+                .with_vector_config_path(&self.vector_config_path),
+        )
     }
 
     pub fn desktop_router(&self) -> axum::Router {
-        build_desktop_router(AppState::new(&self.db_path, self.default_actor.clone()))
+        build_desktop_router(
+            AppState::new(&self.db_path, self.default_actor.clone())
+                .with_vector_config_path(&self.vector_config_path),
+        )
     }
 
     pub fn serve_router(&self) -> axum::Router {
-        build_serve_router(AppState::new(&self.db_path, self.default_actor.clone()))
+        build_serve_router(
+            AppState::new(&self.db_path, self.default_actor.clone())
+                .with_vector_config_path(&self.vector_config_path),
+        )
     }
 }
 

@@ -944,7 +944,10 @@ canonical 行分隔保留。同一 label 下相同 `polarity + kind + normalized
 
 `GET /api/v1/boards/{board}/labels/atom-index/status` 返回 label atom vector index
 状态。无 vector provider 或未启用 `vector-lancedb` feature 时仍返回 `200` disabled
-状态，并包含 dirty / last_error 诊断信息。
+状态。JSON 保留兼容字段 `message`，并额外返回结构化
+`diagnostics: string[]`、`dirty: boolean | null`、`board_dirty: boolean | null`；
+调用方应使用结构化字段判断 dirty/error，而不要解析 `message` 文案。
+同一 `VectorStoreStatus` shape 也用于 `/api/v1/vector/status`。
 
 `POST /api/v1/boards/{board}/labels/atom-index/rebuild` 用已配置 vector store 重建
 派生的 `lancedb_label_atoms`。`GET /api/v1/boards/{board}/labels/atom-index/query`
@@ -979,7 +982,8 @@ solver 内部搜索能力。内部能力由 `candidate_limit`、`atom_limit` 和
 
 未配置 provider、未启用 `vector-lancedb` feature、LanceDB 表缺失、索引为空或索引
 dirty 时，接口仍返回 `200` 和结构化 degraded JSON；普通 label CRUD、task
-list/search/filter 与状态转移不受影响。无 provider 时 `needs_new_label=false`，
+list/search/filter 与状态转移不受影响。Dirty 判断来自结构化 status/SQLite dirty
+字段，不依赖 `message` 文案。无 provider 时 `needs_new_label=false`，
 避免把 #105 的新 label 创建流程误触发。
 
 Response：

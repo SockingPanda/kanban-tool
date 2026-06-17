@@ -605,7 +605,8 @@ fn label_proposal_coverage_sufficient_preserves_degraded_diagnostics() -> anyhow
         ("Backend API route", vec![1.0, 0.0, 0.0]),
         ("backend", vec![1.0, 0.0, 0.0]),
     ])
-    .with_status_message("test vector store; dirty=true last_error=none; board_dirty=true")
+    .with_status_message("test vector store; status copy changed")
+    .with_status_dirty(true, true)
     .with_atoms(vec![(
         atom_hit(&backend, "positive", "applies_when", "backend", 0.0),
         vec![1.0, 0.0, 0.0],
@@ -973,6 +974,8 @@ fn task_label_suggestions_degrade_on_label_atom_vector_query_error() -> anyhow::
     )?;
     let store = DiagnosticLabelAtomStore {
         status_message: "test vector store; dirty=false last_error=none; board_dirty=false",
+        dirty: false,
+        board_dirty: false,
         query_error: Some("label atom vector query failed"),
     };
 
@@ -1030,7 +1033,9 @@ fn task_label_suggestions_report_label_atom_index_dirty_and_errors() -> anyhow::
         [board.id],
     )?;
     let store = DiagnosticLabelAtomStore {
-        status_message: "test vector store; dirty=true last_error=none; board_dirty=true",
+        status_message: "test vector store; status copy changed",
+        dirty: true,
+        board_dirty: true,
         query_error: None,
     };
 
@@ -1253,6 +1258,8 @@ fn task_label_suggestions_limit_truncates_output_without_narrowing_solver() -> a
 
 struct DiagnosticLabelAtomStore {
     status_message: &'static str,
+    dirty: bool,
+    board_dirty: bool,
     query_error: Option<&'static str>,
 }
 
@@ -1297,6 +1304,8 @@ struct ProposalValidationStore {
     embeddings: Vec<(String, Vec<f32>)>,
     atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>,
     status_message: &'static str,
+    dirty: bool,
+    board_dirty: bool,
 }
 
 impl ProposalValidationStore {
@@ -1308,6 +1317,8 @@ impl ProposalValidationStore {
                 .collect(),
             atoms: Vec::new(),
             status_message: "test vector store; dirty=false last_error=none; board_dirty=false",
+            dirty: false,
+            board_dirty: false,
         }
     }
 
@@ -1318,6 +1329,12 @@ impl ProposalValidationStore {
 
     fn with_status_message(mut self, status_message: &'static str) -> Self {
         self.status_message = status_message;
+        self
+    }
+
+    fn with_status_dirty(mut self, dirty: bool, board_dirty: bool) -> Self {
+        self.dirty = dirty;
+        self.board_dirty = board_dirty;
         self
     }
 
@@ -1364,11 +1381,11 @@ impl kanban_vector::VectorStoreBackend for ResidualValidationUnavailableStore {
     }
 
     fn status(&self) -> kanban_vector::VectorStoreStatus {
-        kanban_vector::VectorStoreStatus {
-            backend: "test-vector".to_owned(),
-            enabled: true,
-            message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
-        }
+        kanban_vector::VectorStoreStatus::new(
+            "test-vector",
+            true,
+            "test vector store; dirty=false last_error=none; board_dirty=false",
+        )
     }
 }
 
@@ -1409,6 +1426,9 @@ impl kanban_vector::VectorStoreBackend for ProposalValidationStore {
             backend: "test-vector".to_owned(),
             enabled: true,
             message: self.status_message.to_owned(),
+            diagnostics: Vec::new(),
+            dirty: Some(self.dirty),
+            board_dirty: Some(self.board_dirty),
         }
     }
 }
@@ -1471,6 +1491,9 @@ impl kanban_vector::VectorStoreBackend for DiagnosticLabelAtomStore {
             backend: "test-vector".to_owned(),
             enabled: true,
             message: self.status_message.to_owned(),
+            diagnostics: Vec::new(),
+            dirty: Some(self.dirty),
+            board_dirty: Some(self.board_dirty),
         }
     }
 }
@@ -1521,11 +1544,11 @@ impl kanban_vector::VectorStoreBackend for ResidualRecordingLabelAtomStore {
     }
 
     fn status(&self) -> kanban_vector::VectorStoreStatus {
-        kanban_vector::VectorStoreStatus {
-            backend: "test-vector".to_owned(),
-            enabled: true,
-            message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
-        }
+        kanban_vector::VectorStoreStatus::new(
+            "test-vector",
+            true,
+            "test vector store; dirty=false last_error=none; board_dirty=false",
+        )
     }
 }
 
@@ -1613,11 +1636,11 @@ impl kanban_vector::VectorStoreBackend for StaticLabelAtomStore {
     }
 
     fn status(&self) -> kanban_vector::VectorStoreStatus {
-        kanban_vector::VectorStoreStatus {
-            backend: "test-vector".to_owned(),
-            enabled: true,
-            message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
-        }
+        kanban_vector::VectorStoreStatus::new(
+            "test-vector",
+            true,
+            "test vector store; dirty=false last_error=none; board_dirty=false",
+        )
     }
 }
 
@@ -2295,7 +2318,20 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
     ))?;
     assert!(failure.to_string().contains("dimension mismatch"));
     let status = label_atom_index_status_with(&temp.path, "default", &store)?;
-    assert!(status.message.contains("dirty=true"));
+    assert_eq!(status.dirty, Some(true));
+    assert_eq!(status.board_dirty, Some(true));
+    assert!(
+        status
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_atom_index_dirty")
+    );
+    assert!(
+        status
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_atom_index_error")
+    );
     assert!(status.message.contains("dimension mismatch"));
     Ok(())
 }
@@ -2423,8 +2459,14 @@ fn label_semantics_jsonl_import_marks_label_atom_boards_dirty_and_rebuild_clears
         "default",
         &RecordingVectorStore::with_embedding_model("static-test"),
     )?;
-    assert!(status.message.contains("dirty=true"));
-    assert!(status.message.contains("board_dirty=true"));
+    assert_eq!(status.dirty, Some(true));
+    assert_eq!(status.board_dirty, Some(true));
+    assert!(
+        status
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_atom_index_dirty")
+    );
 
     let store = RecordingVectorStore::with_embedding_model("static-test");
     rebuild_label_atom_index_with(&target.path, "default", &store)?;

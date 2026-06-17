@@ -24,6 +24,9 @@ fn vector_sync_marks_lancedb_outbox_done_without_touching_other_boards() -> anyh
     let status = sync_vector_store_with(&temp.path, "default", &store)?;
     assert_eq!(status.backend, "test-vector");
     assert!(status.message.contains("synced 1 chunk(s)"));
+    assert_eq!(status.dirty, Some(true));
+    assert_eq!(status.board_dirty, Some(false));
+    assert!(status.diagnostics.iter().any(|code| code == "vector_dirty"));
     assert_eq!(
         store.upserted_texts()?,
         vec!["default board vector task\n\nready spec"]

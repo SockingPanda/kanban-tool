@@ -340,23 +340,40 @@ fn push_label_atom_index_diagnostics(
     status: &VectorStoreStatus,
     diagnostics: &mut Vec<String>,
 ) -> Result<()> {
-    if status.message.contains("dirty=true") || status.message.contains("board_dirty=true") {
+    let state = derived_status_by_name(conn, LANCEDB_LABEL_ATOMS_STORE)?;
+    let board_status = conn
+        .query_row(
+            "SELECT dirty,last_error FROM label_atom_index_boards WHERE store_name=?1 AND board_id=?2",
+            params![LANCEDB_LABEL_ATOMS_STORE, board_id],
+            |row| {
+                Ok((
+                    row.get::<_, bool>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(storage)?;
+    let board_dirty = board_status
+        .as_ref()
+        .map(|(dirty, _error)| *dirty)
+        .unwrap_or(false);
+    if state.dirty
+        || board_dirty
+        || status.dirty.unwrap_or(false)
+        || status.board_dirty.unwrap_or(false)
+        || status
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_atom_index_dirty")
+    {
         diagnostics.push("label_atom_index_dirty".to_owned());
     }
-    if let Some(error) = derived_status_by_name(conn, LANCEDB_LABEL_ATOMS_STORE)?.last_error {
+    if let Some(error) = state.last_error {
         diagnostics.push("label_atom_index_error".to_owned());
         diagnostics.push(bounded_diagnostic_message(&error));
     }
-    let board_error = conn
-        .query_row(
-            "SELECT last_error FROM label_atom_index_boards WHERE store_name=?1 AND board_id=?2",
-            params![LANCEDB_LABEL_ATOMS_STORE, board_id],
-            |row| row.get::<_, Option<String>>(0),
-        )
-        .optional()
-        .map_err(storage)?
-        .flatten();
-    if let Some(error) = board_error {
+    if let Some(error) = board_status.and_then(|(_dirty, error)| error) {
         diagnostics.push("label_atom_index_error".to_owned());
         diagnostics.push(bounded_diagnostic_message(&error));
     }

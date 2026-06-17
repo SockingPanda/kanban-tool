@@ -94,7 +94,7 @@ pub fn rebuild_vector_store_with(
                 derived.dirty,
                 derived.last_event_id
             );
-            Ok(status)
+            vector_store_status_from_base(&conn, &board_id, status)
         }
         Err(error) => {
             mark_derived_store_failure(
@@ -175,7 +175,7 @@ pub fn sync_vector_store_with(
                 derived.dirty,
                 derived.last_event_id
             );
-            Ok(status)
+            vector_store_status_from_base(&conn, &board_id, status)
         }
         Err(error) => {
             mark_derived_store_failure(
@@ -213,13 +213,13 @@ pub fn configured_vector_store_status(
     vector_store_status_from_base(
         &conn,
         &board_id,
-        VectorStoreStatus {
-            backend: "lancedb".to_owned(),
-            enabled: true,
-            message: format!(
+        VectorStoreStatus::new(
+            "lancedb",
+            true,
+            format!(
                 "LanceDB vector store enabled for Ollama endpoint {endpoint}, model {embedding_model} ({dimensions} dimensions)"
             ),
-        },
+        ),
     )
 }
 
@@ -239,12 +239,11 @@ fn vector_store_status_without_provider(
     vector_store_status_from_base(
         conn,
         board_id,
-        VectorStoreStatus {
-            backend: "lancedb".to_owned(),
-            enabled: false,
-            message: "LanceDB configured without an embedding provider; vector retrieval degraded"
-                .to_owned(),
-        },
+        VectorStoreStatus::new(
+            "lancedb",
+            false,
+            "LanceDB configured without an embedding provider; vector retrieval degraded",
+        ),
     )
 }
 
@@ -262,6 +261,20 @@ fn vector_store_status_from_base(
     } else {
         0
     };
+    status.dirty = Some(state.dirty);
+    status.board_dirty = Some(board_has_pending);
+    if !status.enabled {
+        push_status_diagnostic(&mut status.diagnostics, "vector_store_disabled");
+    }
+    if state.dirty {
+        push_status_diagnostic(&mut status.diagnostics, "vector_dirty");
+    }
+    if board_has_pending {
+        push_status_diagnostic(&mut status.diagnostics, "vector_board_dirty");
+    }
+    if state.last_error.is_some() {
+        push_status_diagnostic(&mut status.diagnostics, "vector_error");
+    }
     status.message = format!(
         "{}; dirty={} last_event_id={} lag={} last_error={}",
         status.message,
@@ -271,6 +284,12 @@ fn vector_store_status_from_base(
         state.last_error.as_deref().unwrap_or("none")
     );
     Ok(status)
+}
+
+fn push_status_diagnostic(diagnostics: &mut Vec<String>, code: &str) {
+    if !diagnostics.iter().any(|diagnostic| diagnostic == code) {
+        diagnostics.push(code.to_owned());
+    }
 }
 
 #[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]

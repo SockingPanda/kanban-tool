@@ -20,6 +20,25 @@ pub struct VectorStoreStatus {
     pub backend: String,
     pub enabled: bool,
     pub message: String,
+    #[serde(default)]
+    pub diagnostics: Vec<String>,
+    #[serde(default)]
+    pub dirty: Option<bool>,
+    #[serde(default)]
+    pub board_dirty: Option<bool>,
+}
+
+impl VectorStoreStatus {
+    pub fn new(backend: impl Into<String>, enabled: bool, message: impl Into<String>) -> Self {
+        Self {
+            backend: backend.into(),
+            enabled,
+            message: message.into(),
+            diagnostics: Vec::new(),
+            dirty: None,
+            board_dirty: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -253,11 +272,11 @@ pub struct DisabledVectorStore;
 
 impl VectorStoreBackend for DisabledVectorStore {
     fn status(&self) -> VectorStoreStatus {
-        VectorStoreStatus {
-            backend: "disabled".to_owned(),
-            enabled: false,
-            message: "Vector store is disabled; context retrieval uses lexical fallback".to_owned(),
-        }
+        VectorStoreStatus::new(
+            "disabled",
+            false,
+            "Vector store is disabled; context retrieval uses lexical fallback",
+        )
     }
 }
 

@@ -188,7 +188,7 @@ pub struct LabelAtomHit {
     pub ordinal: i64,
     pub content_hash: String,
     pub embedding_model: String,
-    pub score: f32,
+    pub distance: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

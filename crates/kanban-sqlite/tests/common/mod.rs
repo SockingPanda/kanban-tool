@@ -337,7 +337,7 @@ impl VectorStore for RecordingVectorStore {
                 ordinal: atom.ordinal,
                 content_hash: atom.content_hash,
                 embedding_model: atom.embedding_model,
-                score: 1.0,
+                distance: 1.0,
             })
             .collect())
     }
@@ -388,7 +388,7 @@ impl VectorStore for RecordingVectorStore {
                         ordinal: atom.ordinal,
                         content_hash: atom.content_hash,
                         embedding_model: atom.embedding_model,
-                        score: 1.0,
+                        distance: 1.0,
                     },
                     vector,
                 }

@@ -267,7 +267,7 @@ fn retrieved_atom_from_hit(
         kind: kind_from_str(&hit.hit.kind)?,
         text: hit.hit.text,
         vector,
-        score: distance_to_similarity(hit.hit.score),
+        similarity: None,
     })
 }
 
@@ -351,10 +351,6 @@ fn push_label_atom_index_diagnostics(
     diagnostics.sort();
     diagnostics.dedup();
     Ok(())
-}
-
-fn distance_to_similarity(distance: f32) -> f32 {
-    1.0 / (1.0 + distance.max(0.0))
 }
 
 fn task_query_text(title: &str, description: Option<&str>) -> String {

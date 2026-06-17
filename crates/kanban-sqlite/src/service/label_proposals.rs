@@ -430,21 +430,23 @@ fn best_existing_label_score(
 
     let mut scores: HashMap<String, ExistingLabelScore> = HashMap::new();
     for hit in positive_hits {
+        let hit_score = cosine_similarity(residual, &hit.vector).max(0.0);
         scores
             .entry(hit.label_id.clone())
-            .and_modify(|score| score.score = score.score.max(hit.score))
+            .and_modify(|score| score.score = score.score.max(hit_score))
             .or_insert(ExistingLabelScore {
                 label_id: hit.label_id,
                 label_name: hit.label_name,
-                score: hit.score,
+                score: hit_score,
             });
     }
     let mut negative_scores: HashMap<String, f32> = HashMap::new();
     for hit in negative_hits {
+        let hit_score = cosine_similarity(query_vector, &hit.vector).max(0.0);
         negative_scores
             .entry(hit.label_id)
-            .and_modify(|score| *score = score.max(hit.score))
-            .or_insert(hit.score);
+            .and_modify(|score| *score = score.max(hit_score))
+            .or_insert(hit_score);
     }
     for (label_id, negative_score) in negative_scores {
         if let Some(score) = scores.get_mut(&label_id) {

@@ -830,7 +830,7 @@ fn batches_to_label_atom_hits(batches: &[RecordBatch]) -> Result<Vec<LabelAtomHi
                 ordinal: ordinal.value(row),
                 content_hash: content_hash.value(row).to_owned(),
                 embedding_model: embedding_model.value(row).to_owned(),
-                score: distance.value(row),
+                distance: distance.value(row),
             });
         }
     }
@@ -871,7 +871,7 @@ fn batches_to_label_atom_vector_hits(
                     ordinal: ordinal.value(row),
                     content_hash: content_hash.value(row).to_owned(),
                     embedding_model: embedding_model.value(row).to_owned(),
-                    score: distance.value(row),
+                    distance: distance.value(row),
                 },
                 vector: vectors
                     .as_ref()

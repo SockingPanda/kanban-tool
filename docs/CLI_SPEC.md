@@ -540,9 +540,9 @@ non-negative refit；`coverage` / `residual_norm` 来自该 atom-level fitted ve
 
 默认未配置 vector provider 或二进制未启用 `vector-lancedb` 时，命令成功返回
 degraded 结果而不是失败；无 provider 时 `needs_new_label=false`。`--vector-config`
-使用与 `kanban vector configure/status` 相同的 TOML 解析规则。`LabelAtomHit.score`
-来自 LanceDB `_distance`，CLI/API suggestion 分数会先转换为
-`1 / (1 + max(distance, 0))` similarity 再聚合。
+使用与 `kanban vector configure/status` 相同的 TOML 解析规则。`LabelAtomHit.distance`
+保留 LanceDB `_distance` 的原始语义；suggestion / proposal 的 score 只根据返回
+atom vector 与当前 query/residual 在本地计算 cosine similarity，不从 distance 推导。
 
 JSON 输出：
 
@@ -578,7 +578,8 @@ trim 后丢弃。`delete` 删除该 label 的 semantics 与 atoms，但不删除
 `label atom-index status` 返回 label atom vector index 的状态。未配置 provider 或未
 启用 `vector-lancedb` 时仍成功返回 disabled/degraded 状态。`rebuild` 与 `query`
 需要 `--vector-config <toml>` 和可用的 vector store；无可用 provider/feature 时命令失败，
-不会修改 SQLite truth。`query` 的 `--polarity` 只接受 `positive` 或 `negative`。
+不会修改 SQLite truth。`query` 的 `--polarity` 只接受 `positive` 或 `negative`；
+human 输出和 JSON hit 都把 LanceDB `_distance` 暴露为 `distance`。
 
 `label propose` 是独立的新 label semantics 提案流程，不复用或改变 `label suggest`。
 它先读取当前 task-level label suggestions 的 `coverage` / `residual_norm` /
@@ -611,8 +612,9 @@ label 发生 normalized-name 冲突的候选会写成 `rejected` proposal，并�
 中返回 `near_duplicate_label_conflict`；该 normalized-name 检查忽略大小写、空白
 和标点，是 deterministic near-duplicate heuristic。
 coverage 不足的候选还会执行残差 top1+margin 校验：候选语义的 residual score
-必须超过现有 label top1，且超过幅度达到固定 margin。校验失败时 attempt 仍会把
-候选持久化为 `rejected` proposal，diagnostics 包含
+和现有 label top1 都按返回 atom vector 在本地计算 cosine similarity，不从
+LanceDB distance 推导；候选必须超过现有 label top1，且超过幅度达到固定 margin。
+校验失败时 attempt 仍会把候选持久化为 `rejected` proposal，diagnostics 包含
 `label_proposal_residual_top1_failed` 或
 `label_proposal_residual_margin_insufficient`，用于审计为什么没有进入可接受状态。
 如果 residual validation 不可用或 degraded，且没有明确通过 top1+margin 校验，

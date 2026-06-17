@@ -436,8 +436,8 @@ LanceDB atom retrieval 使用。
 | `id` | 稳定 `la_...` atom id。 |
 | `label_id` / `board_id` | 关联 canonical label 与 board。 |
 | `polarity` | `positive` / `negative`。 |
-| `kind` | `name`、`description`、`applies_when`、`positive_example`、`excludes_when`、`negative_example`。 |
-| `text` | trim 且 collapse whitespace 后的 atom 文本，空文本不入库。 |
+| `kind` | `name`、`description`、`applies_when`、`positive_example`、`excludes_when`、`negative_example`；有 description 时，`description` atom 是 `label: {name}\ndescription: {description}` canonical atom，无 description 时才使用 `name` fallback atom。 |
+| `text` | trim 且规范化 whitespace 后的 atom 文本；每个非空行内部 whitespace collapse，canonical 行分隔保留，空文本不入库。 |
 | `ordinal` | 同一 label 展开后的顺序；同语义重复 atom 去重时保留首次出现的 ordinal。 |
 | `content_hash` | atom 语义内容 hash，用于派生层判断变化；输入为 `label_id + polarity + kind + normalized_text`，不包含 `ordinal`。 |
 | `created_at` / `updated_at` | atom truth 时间。 |

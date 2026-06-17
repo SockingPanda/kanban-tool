@@ -781,7 +781,11 @@ fn kind_to_str(kind: LabelAtomKind) -> &'static str {
 }
 
 fn normalize_atom_text(text: &str) -> String {
-    text.split_whitespace().collect::<Vec<_>>().join(" ")
+    text.lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn stable_hash(text: &str) -> String {

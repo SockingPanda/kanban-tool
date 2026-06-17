@@ -22,20 +22,27 @@ pub struct LabelDefinition {
 impl LabelDefinition {
     pub fn atom_sources(&self) -> Vec<LabelAtomSource> {
         let mut sources = Vec::new();
-        push_atom_source(
-            &mut sources,
-            self,
-            LabelAtomPolarity::Positive,
-            LabelAtomKind::Name,
-            &self.name,
-        );
-        if let Some(description) = &self.description {
+        if let Some(description) = self
+            .description
+            .as_deref()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+        {
+            let canonical = format!("label: {}\ndescription: {}", self.name.trim(), description);
             push_atom_source(
                 &mut sources,
                 self,
                 LabelAtomPolarity::Positive,
                 LabelAtomKind::Description,
-                description,
+                &canonical,
+            );
+        } else {
+            push_atom_source(
+                &mut sources,
+                self,
+                LabelAtomPolarity::Positive,
+                LabelAtomKind::Name,
+                &self.name,
             );
         }
         for text in &self.applies_when {
@@ -1206,13 +1213,21 @@ mod tests {
     fn atom_source_generation_trims_and_skips_empty_text() {
         let sources = definition("l_backend", "Backend").atom_sources();
 
-        assert_eq!(sources.len(), 6);
+        assert_eq!(sources.len(), 5);
         assert!(sources.iter().all(|source| !source.text.is_empty()));
+        let canonical = sources
+            .iter()
+            .find(|source| source.kind == LabelAtomKind::Description)
+            .unwrap();
+        assert_eq!(
+            canonical.text,
+            "label: Backend\ndescription: Core Rust work"
+        );
         assert!(
             sources
                 .iter()
-                .any(|source| source.kind == LabelAtomKind::Description
-                    && source.text == "Core Rust work")
+                .filter(|source| source.polarity == LabelAtomPolarity::Positive)
+                .all(|source| source.kind != LabelAtomKind::Name)
         );
         assert_eq!(
             sources
@@ -1220,6 +1235,24 @@ mod tests {
                 .filter(|source| source.polarity == LabelAtomPolarity::Negative)
                 .count(),
             2
+        );
+    }
+
+    #[test]
+    fn atom_source_generation_falls_back_to_name_without_description() {
+        let mut definition = definition("l_backend", "Backend");
+        definition.description = None;
+        let sources = definition.atom_sources();
+
+        assert!(
+            sources
+                .iter()
+                .any(|source| source.kind == LabelAtomKind::Name && source.text == "Backend")
+        );
+        assert!(
+            sources
+                .iter()
+                .all(|source| source.kind != LabelAtomKind::Description)
         );
     }
 

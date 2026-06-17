@@ -25,6 +25,20 @@ pub fn restore_window_action() -> RestoreWindowAction {
     RestoreWindowAction::ShowAndRaiseWithoutFocus
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrayBackendKind {
+    StatusNotifierItem,
+    TauriTrayIcon,
+}
+
+pub fn tray_backend_kind() -> TrayBackendKind {
+    if cfg!(target_os = "linux") {
+        TrayBackendKind::StatusNotifierItem
+    } else {
+        TrayBackendKind::TauriTrayIcon
+    }
+}
+
 pub const TRAY_SHOW_ID: &str = "show";
 pub const TRAY_QUIT_ID: &str = "quit";
 
@@ -44,6 +58,19 @@ pub fn tray_icon_left_click_action(button_is_up: bool) -> TrayIconAction {
 
 pub fn tray_icon_left_double_click_action() -> TrayIconAction {
     TrayIconAction::ShowWindow
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusNotifierActivationAction {
+    ShowWindow,
+}
+
+pub fn status_notifier_activate_action() -> StatusNotifierActivationAction {
+    StatusNotifierActivationAction::ShowWindow
+}
+
+pub fn status_notifier_secondary_activate_action() -> StatusNotifierActivationAction {
+    StatusNotifierActivationAction::ShowWindow
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,5 +127,25 @@ mod tests {
             restore_window_action(),
             RestoreWindowAction::ShowAndRaiseWithoutFocus
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_tray_uses_status_notifier_activation() {
+        assert_eq!(tray_backend_kind(), TrayBackendKind::StatusNotifierItem);
+        assert_eq!(
+            status_notifier_activate_action(),
+            StatusNotifierActivationAction::ShowWindow
+        );
+        assert_eq!(
+            status_notifier_secondary_activate_action(),
+            StatusNotifierActivationAction::ShowWindow
+        );
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn non_linux_tray_uses_tauri_tray_icon_events() {
+        assert_eq!(tray_backend_kind(), TrayBackendKind::TauriTrayIcon);
     }
 }

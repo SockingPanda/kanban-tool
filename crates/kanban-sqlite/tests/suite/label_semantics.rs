@@ -1139,6 +1139,12 @@ fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::R
     assert!(queries.iter().all(
         |query| query.include_vector && query.embedding_model.as_deref() == Some("test-model")
     ));
+    assert!(
+        queries
+            .iter()
+            .filter(|query| query.polarity.as_deref() == Some("positive"))
+            .all(|query| (vector_norm(&query.vector) - 1.0).abs() < 0.0001)
+    );
     Ok(())
 }
 
@@ -1560,6 +1566,10 @@ fn cosine(left: &[f32], right: &[f32]) -> f32 {
     } else {
         dot / (left_norm * right_norm)
     }
+}
+
+fn vector_norm(vector: &[f32]) -> f32 {
+    vector.iter().map(|value| value * value).sum::<f32>().sqrt()
 }
 
 struct StaticLabelAtomStore {

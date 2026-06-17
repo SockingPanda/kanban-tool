@@ -136,6 +136,7 @@ pub fn propose_task_label_with_store(
             degraded: suggestions.degraded,
             diagnostics,
             heuristic_coverage: suggestions.coverage,
+            heuristic_coverage_cosine: suggestions.coverage_cosine,
             heuristic_residual_norm: suggestions.residual_norm,
             top1_existing_label_id: top1.map(|candidate| candidate.label_id.clone()),
             top1_existing_label_name: top1.map(|candidate| candidate.label_name.clone()),
@@ -152,6 +153,7 @@ pub fn propose_task_label_with_store(
             degraded: true,
             diagnostics,
             heuristic_coverage: suggestions.coverage,
+            heuristic_coverage_cosine: suggestions.coverage_cosine,
             heuristic_residual_norm: suggestions.residual_norm,
             top1_existing_label_id: top1.map(|candidate| candidate.label_id.clone()),
             top1_existing_label_name: top1.map(|candidate| candidate.label_name.clone()),
@@ -197,6 +199,7 @@ pub fn propose_task_label_with_store(
             degraded: true,
             diagnostics,
             heuristic_coverage: suggestions.coverage,
+            heuristic_coverage_cosine: suggestions.coverage_cosine,
             heuristic_residual_norm: suggestions.residual_norm,
             top1_existing_label_id: top1_existing_label_id.map(ToOwned::to_owned),
             top1_existing_label_name: top1_existing_label_name.map(ToOwned::to_owned),
@@ -249,6 +252,7 @@ pub fn propose_task_label_with_store(
         degraded: conflict.is_some() || validation.degraded || suggestions.degraded,
         diagnostics,
         heuristic_coverage: suggestions.coverage,
+        heuristic_coverage_cosine: suggestions.coverage_cosine,
         heuristic_residual_norm: suggestions.residual_norm,
         top1_existing_label_id: top1_existing_label_id.map(ToOwned::to_owned),
         top1_existing_label_name: top1_existing_label_name.map(ToOwned::to_owned),
@@ -499,7 +503,7 @@ pub fn list_label_proposals(
         None => None,
     };
     let status = options.status.map(|status| status.to_string());
-    let mut sql = "SELECT id,board_id,task_id,status,name,description,applies_when,excludes_when,positive_examples,negative_examples,heuristic_coverage,heuristic_residual_norm,top1_existing_label_id,top1_existing_label_name,diagnostics_json,created_by,decision_reason,resolved_label_id,created_at,updated_at,decided_at FROM label_semantic_proposals WHERE board_id=?1".to_owned();
+    let mut sql = "SELECT id,board_id,task_id,status,name,description,applies_when,excludes_when,positive_examples,negative_examples,heuristic_coverage,heuristic_coverage_cosine,heuristic_residual_norm,top1_existing_label_id,top1_existing_label_name,diagnostics_json,created_by,decision_reason,resolved_label_id,created_at,updated_at,decided_at FROM label_semantic_proposals WHERE board_id=?1".to_owned();
     let mut bind_task = false;
     let mut bind_status = false;
     if task_id.is_some() {
@@ -675,8 +679,8 @@ fn insert_proposal_in_tx(
 ) -> Result<LabelSemanticProposalRecord> {
     let id = new_typed_id("lp");
     conn.execute(
-        "INSERT INTO label_semantic_proposals(id, board_id, task_id, status, name, description, applies_when, excludes_when, positive_examples, negative_examples, heuristic_coverage, heuristic_residual_norm, top1_existing_label_id, top1_existing_label_name, diagnostics_json, created_by, decision_reason, resolved_label_id, created_at, updated_at, decided_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, NULL, ?18, ?18, ?19)",
+        "INSERT INTO label_semantic_proposals(id, board_id, task_id, status, name, description, applies_when, excludes_when, positive_examples, negative_examples, heuristic_coverage, heuristic_coverage_cosine, heuristic_residual_norm, top1_existing_label_id, top1_existing_label_name, diagnostics_json, created_by, decision_reason, resolved_label_id, created_at, updated_at, decided_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, NULL, ?19, ?19, ?20)",
         params![
             id,
             board_id,
@@ -689,6 +693,7 @@ fn insert_proposal_in_tx(
             json_array(&candidate.positive_examples)?,
             json_array(&candidate.negative_examples)?,
             suggestions.coverage,
+            suggestions.coverage_cosine,
             suggestions.residual_norm,
             top1_existing_label_id,
             top1_existing_label_name,
@@ -708,7 +713,7 @@ fn get_label_proposal_conn(
     proposal_id: &str,
 ) -> Result<LabelSemanticProposalRecord> {
     conn.query_row(
-        "SELECT id,board_id,task_id,status,name,description,applies_when,excludes_when,positive_examples,negative_examples,heuristic_coverage,heuristic_residual_norm,top1_existing_label_id,top1_existing_label_name,diagnostics_json,created_by,decision_reason,resolved_label_id,created_at,updated_at,decided_at FROM label_semantic_proposals WHERE id=?1",
+        "SELECT id,board_id,task_id,status,name,description,applies_when,excludes_when,positive_examples,negative_examples,heuristic_coverage,heuristic_coverage_cosine,heuristic_residual_norm,top1_existing_label_id,top1_existing_label_name,diagnostics_json,created_by,decision_reason,resolved_label_id,created_at,updated_at,decided_at FROM label_semantic_proposals WHERE id=?1",
         [proposal_id],
         proposal_from_row,
     )
@@ -736,17 +741,18 @@ fn proposal_from_row(row: &Row<'_>) -> rusqlite::Result<LabelSemanticProposalRec
         negative_examples: json_vec(row.get(9)?)
             .map_err(|err| rusqlite::Error::InvalidParameterName(err.to_string()))?,
         heuristic_coverage: row.get(10)?,
-        heuristic_residual_norm: row.get(11)?,
-        top1_existing_label_id: row.get(12)?,
-        top1_existing_label_name: row.get(13)?,
-        diagnostics: json_vec(row.get(14)?)
+        heuristic_coverage_cosine: row.get(11)?,
+        heuristic_residual_norm: row.get(12)?,
+        top1_existing_label_id: row.get(13)?,
+        top1_existing_label_name: row.get(14)?,
+        diagnostics: json_vec(row.get(15)?)
             .map_err(|err| rusqlite::Error::InvalidParameterName(err.to_string()))?,
-        created_by: row.get(15)?,
-        decision_reason: row.get(16)?,
-        resolved_label_id: row.get(17)?,
-        created_at: row.get(18)?,
-        updated_at: row.get(19)?,
-        decided_at: row.get(20)?,
+        created_by: row.get(16)?,
+        decision_reason: row.get(17)?,
+        resolved_label_id: row.get(18)?,
+        created_at: row.get(19)?,
+        updated_at: row.get(20)?,
+        decided_at: row.get(21)?,
     })
 }
 

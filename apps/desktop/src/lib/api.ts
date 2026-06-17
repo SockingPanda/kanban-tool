@@ -101,6 +101,7 @@ export type LabelSuggestionResult = {
   selected_labels: SelectedLabelSuggestion[]
   candidates: LabelSuggestionCandidate[]
   coverage: number
+  coverage_cosine: number
   residual_norm: number
   needs_new_label: boolean
   degraded: boolean

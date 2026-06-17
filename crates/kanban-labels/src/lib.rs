@@ -242,6 +242,7 @@ pub struct LabelSolverResult {
     pub candidates: Vec<LabelGroupCandidate>,
     pub selected_labels: Vec<SelectedLabel>,
     pub coverage: f32,
+    pub coverage_cosine: f32,
     pub residual_norm: f32,
     pub needs_new_label: bool,
     #[serde(skip)]
@@ -368,6 +369,7 @@ pub fn resolve_label_groups(
             candidates,
             selected_labels: Vec::new(),
             coverage: coverage_from_residual(residual_norm),
+            coverage_cosine: 0.0,
             residual_norm,
             needs_new_label: true,
             residual: normalize_for_fit(query_embedding),
@@ -440,6 +442,7 @@ pub fn resolve_label_groups(
     let residual = fit_residual(query_embedding, &selected_vectors, &weights, query_norm);
     let residual_norm = normalized_residual_norm(query_embedding, &fitted);
     let coverage = coverage_from_residual(residual_norm);
+    let coverage_cosine = coverage_cosine(query_embedding, &fitted);
 
     let selected_labels = selected_indices
         .into_iter()
@@ -464,6 +467,7 @@ pub fn resolve_label_groups(
         candidates,
         selected_labels,
         coverage,
+        coverage_cosine,
         residual_norm,
         needs_new_label: coverage < config.min_coverage || residual_norm > config.max_residual_norm,
         residual,
@@ -592,6 +596,7 @@ where
     let residual = fit_residual(query_embedding, &selected_vectors, &weights, query_norm);
     let residual_norm = normalized_residual_norm(query_embedding, &fitted);
     let coverage = coverage_from_residual(residual_norm);
+    let coverage_cosine = coverage_cosine(query_embedding, &fitted);
     let selected_labels = selected_labels_from_basis(&selected_basis, &weights);
     let mut candidates = candidates_by_label.into_values().collect::<Vec<_>>();
     candidates.sort_by(|left, right| {
@@ -605,6 +610,7 @@ where
         candidates,
         selected_labels,
         coverage,
+        coverage_cosine,
         residual_norm,
         needs_new_label: coverage < config.min_coverage || residual_norm > config.max_residual_norm,
         residual,
@@ -1076,6 +1082,12 @@ fn coverage_from_residual(residual_norm: f32) -> f32 {
     (1.0 - residual_norm).clamp(0.0, 1.0)
 }
 
+fn coverage_cosine(query_embedding: &[f32], fitted: &[f32]) -> f32 {
+    cosine_similarity(query_embedding, fitted)
+        .max(0.0)
+        .clamp(0.0, 1.0)
+}
+
 fn selection_stop_reached(residual_norm: f32, config: &LabelSolverConfig) -> bool {
     residual_norm <= config.residual_norm_stop
         || coverage_from_residual(residual_norm) >= config.coverage_stop
@@ -1311,7 +1323,33 @@ mod tests {
                 .all(|label| label.weight >= 0.0)
         );
         assert!(result.coverage > 0.9);
+        assert!(result.coverage_cosine > 0.9);
         assert!(!result.needs_new_label);
+    }
+
+    #[test]
+    fn coverage_cosine_reports_query_to_fitted_alignment() {
+        let labels = vec![embedded_label(
+            "l_backend",
+            "Backend",
+            vec![vec![1.0, 0.0, 0.0]],
+            vec![],
+        )];
+        let config = LabelSolverConfig {
+            max_selected_labels: 1,
+            coverage_stop: 1.0,
+            residual_norm_stop: 0.0,
+            ..LabelSolverConfig::default()
+        };
+
+        let result = resolve_label_groups(&[1.0, 1.0, 0.0], &labels, &config).unwrap();
+
+        assert_eq!(result.selected_labels.len(), 1);
+        assert!((result.coverage_cosine - std::f32::consts::FRAC_1_SQRT_2).abs() < 0.0001);
+        assert!(
+            result.coverage_cosine > result.coverage,
+            "cosine coverage should expose fitted alignment separately from residual heuristic"
+        );
     }
 
     #[test]
@@ -1410,6 +1448,7 @@ mod tests {
         assert_eq!(result.candidates[0].score, 0.0);
         assert!(result.selected_labels.is_empty());
         assert_eq!(result.coverage, 0.0);
+        assert_eq!(result.coverage_cosine, 0.0);
         assert_eq!(result.residual_norm, 1.0);
     }
 
@@ -2099,6 +2138,7 @@ mod tests {
         assert!(result.needs_new_label);
         assert!(result.candidates.is_empty());
         assert_eq!(result.coverage, 0.0);
+        assert_eq!(result.coverage_cosine, 0.0);
         assert_eq!(result.residual_norm, 1.0);
     }
 

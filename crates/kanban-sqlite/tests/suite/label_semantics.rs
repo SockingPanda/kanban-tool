@@ -23,6 +23,7 @@ fn task_label_suggestions_degrade_when_vector_store_disabled() -> anyhow::Result
     assert!(result.degraded);
     assert!(result.selected_labels.is_empty());
     assert_eq!(result.coverage, 0.0);
+    assert_eq!(result.coverage_cosine, 0.0);
     assert_eq!(result.residual_norm, 1.0);
     assert!(!result.needs_new_label);
     assert!(
@@ -40,7 +41,7 @@ fn label_proposal_migration_and_provider_unavailable_are_non_polluting() -> anyh
     init_database(&temp.path, "tester")?;
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 10);
+    assert_eq!(user_version, 11);
     let has_table: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_semantic_proposals'",
         [],
@@ -350,6 +351,7 @@ fn label_proposal_residual_validation_rejects_when_existing_wins() -> anyhow::Re
     .context("proposal")?;
 
     assert_eq!(proposal.status, LabelProposalStatus::Rejected);
+    assert!(proposal.heuristic_coverage_cosine > 0.8);
     assert_eq!(proposal.top1_existing_label_name.as_deref(), Some("docs"));
     assert!(
         proposal
@@ -561,6 +563,7 @@ fn label_proposal_coverage_sufficient_does_not_call_provider_or_persist_candidat
 
     assert!(attempt.proposal.is_none());
     assert_eq!(provider.calls()?, 0);
+    assert!(attempt.heuristic_coverage_cosine > 0.99);
     let proposals =
         list_label_proposals(&temp.path, "default", LabelProposalListOptions::default())?;
     assert!(proposals.is_empty());
@@ -842,6 +845,10 @@ fn label_proposal_jsonl_export_import_round_trips() -> anyhow::Result<()> {
     let imported = get_label_proposal(&target.path, &proposal.id)?;
     assert_eq!(imported.name, "release");
     assert_eq!(imported.status, LabelProposalStatus::Proposed);
+    assert_eq!(
+        imported.heuristic_coverage_cosine,
+        proposal.heuristic_coverage_cosine
+    );
     Ok(())
 }
 
@@ -913,6 +920,7 @@ fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> an
     assert_eq!(result.selected_labels.len(), 1);
     assert_eq!(result.selected_labels[0].label_name, "backend");
     assert!(result.coverage > 0.99);
+    assert!(result.coverage_cosine > 0.99);
     assert!(result.residual_norm < 0.01);
     assert!(!result.needs_new_label);
     Ok(())
@@ -943,6 +951,7 @@ fn task_label_suggestions_signal_new_label_when_enabled_index_has_no_selected_la
 
     assert!(result.needs_new_label);
     assert_eq!(result.coverage, 0.0);
+    assert_eq!(result.coverage_cosine, 0.0);
     assert!(
         result
             .diagnostics
@@ -978,6 +987,7 @@ fn task_label_suggestions_degrade_on_label_atom_vector_query_error() -> anyhow::
     assert!(result.degraded);
     assert!(result.selected_labels.is_empty());
     assert_eq!(result.coverage, 0.0);
+    assert_eq!(result.coverage_cosine, 0.0);
     assert_eq!(result.residual_norm, 1.0);
     assert!(!result.needs_new_label);
     assert!(
@@ -1227,6 +1237,7 @@ fn task_label_suggestions_limit_truncates_output_without_narrowing_solver() -> a
         result.coverage > 0.99,
         "output limit must not reduce internal refit coverage: {result:?}"
     );
+    assert!(result.coverage_cosine > 0.99);
     assert!(result.residual_norm < 0.01);
     let positive_queries = store
         .queries()?
@@ -1960,7 +1971,7 @@ fn init_v10_backfills_stable_label_atom_hashes_and_marks_index_dirty() -> anyhow
     assert!(label_atom_board_dirty(&temp.path, "default")?);
     let user_version: i64 =
         connect_file(&temp.path)?.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 10);
+    assert_eq!(user_version, 11);
     Ok(())
 }
 
@@ -2128,8 +2139,8 @@ fn doctor_reports_missing_label_semantics_tables_unhealthy() -> anyhow::Result<(
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(10));
-        assert_eq!(report.user_version, 10);
+        assert_eq!(report.migration_version, Some(11));
+        assert_eq!(report.user_version, 11);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())

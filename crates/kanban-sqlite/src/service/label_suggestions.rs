@@ -103,7 +103,7 @@ pub(crate) fn compute_task_label_suggestions_with(
         ..LabelSolverConfig::default()
     };
     let board_id_for_query = task.board_id.clone();
-    let embedding_model = store.label_atom_embedding_model().to_owned();
+    let embedding_model = store.embedding_model().to_owned();
     let solver_result = match resolve_label_groups_by_residual(
         &query_vector,
         &solver_config,

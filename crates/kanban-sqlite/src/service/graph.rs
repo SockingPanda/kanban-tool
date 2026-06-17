@@ -161,11 +161,7 @@ pub(crate) fn context_vector_status(
         Err(error) => {
             push_degraded_marker(degraded, "vector_error");
             push_context_diagnostic(diagnostics, "vector", "vector_error", &error);
-            VectorStoreStatus {
-                backend: "lancedb".to_owned(),
-                enabled: true,
-                message: error.to_string(),
-            }
+            VectorStoreStatus::new("lancedb", true, error.to_string())
         }
     }
 }

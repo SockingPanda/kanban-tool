@@ -121,6 +121,9 @@ async fn context_graph_and_vector_apis_return_default_fallbacks() -> anyhow::Res
     let (status, json) = get_json(app, "/api/v1/vector/status?board=default").await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["enabled"], false);
+    assert!(json["data"]["diagnostics"].as_array().is_some());
+    assert!(json["data"].get("dirty").is_some());
+    assert!(json["data"].get("board_dirty").is_some());
     Ok(())
 }
 

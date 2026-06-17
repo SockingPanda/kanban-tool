@@ -225,11 +225,11 @@ pub fn label_atom_index_status(path: impl AsRef<Path>, board: &str) -> Result<Ve
     label_atom_index_status_from_base(
         &conn,
         &board_id,
-        VectorStoreStatus {
-            backend: "disabled".to_owned(),
-            enabled: false,
-            message: "Label atom vector store is disabled or has no provider".to_owned(),
-        },
+        VectorStoreStatus::new(
+            "disabled",
+            false,
+            "Label atom vector store is disabled or has no provider",
+        ),
     )
 }
 
@@ -609,6 +609,17 @@ fn label_atom_index_status_from_base(
 ) -> Result<VectorStoreStatus> {
     let state = derived_status_by_name(conn, LANCEDB_LABEL_ATOMS_STORE)?;
     let board = label_atom_index_board_status(conn, board_id)?;
+    status.dirty = Some(state.dirty);
+    status.board_dirty = Some(board.dirty);
+    if !status.enabled {
+        push_status_diagnostic(&mut status.diagnostics, "label_atom_index_disabled");
+    }
+    if state.dirty || board.dirty {
+        push_status_diagnostic(&mut status.diagnostics, "label_atom_index_dirty");
+    }
+    if state.last_error.is_some() || board.last_error.is_some() {
+        push_status_diagnostic(&mut status.diagnostics, "label_atom_index_error");
+    }
     status.message = format!(
         "{}; dirty={} last_error={}; board_dirty={} board_last_rebuild_at={} board_last_error={}",
         status.message,
@@ -622,6 +633,12 @@ fn label_atom_index_status_from_base(
         board.last_error.as_deref().unwrap_or("none")
     );
     Ok(status)
+}
+
+fn push_status_diagnostic(diagnostics: &mut Vec<String>, code: &str) {
+    if !diagnostics.iter().any(|diagnostic| diagnostic == code) {
+        diagnostics.push(code.to_owned());
+    }
 }
 
 pub(crate) fn mark_label_atom_store_dirty(

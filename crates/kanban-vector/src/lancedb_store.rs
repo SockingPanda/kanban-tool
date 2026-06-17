@@ -93,22 +93,20 @@ impl VectorStoreBackend for LanceDbStore {
 
     fn status(&self) -> VectorStoreStatus {
         match self.provider.as_ref() {
-            Some(provider) => VectorStoreStatus {
-                backend: "lancedb".to_owned(),
-                enabled: true,
-                message: format!(
+            Some(provider) => VectorStoreStatus::new(
+                "lancedb",
+                true,
+                format!(
                     "LanceDB vector store enabled for model {} ({} dimensions)",
                     provider.embedding_model(),
                     provider.dimensions()
                 ),
-            },
-            None => VectorStoreStatus {
-                backend: "lancedb".to_owned(),
-                enabled: false,
-                message:
-                    "LanceDB configured without an embedding provider; vector retrieval degraded"
-                        .to_owned(),
-            },
+            ),
+            None => VectorStoreStatus::new(
+                "lancedb",
+                false,
+                "LanceDB configured without an embedding provider; vector retrieval degraded",
+            ),
         }
     }
 }

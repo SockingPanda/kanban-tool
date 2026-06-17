@@ -595,10 +595,13 @@ collapse，canonical 行分隔保留。同一 label 下相同
 `lancedb_label_atoms` 派生索引的输入，不是派生索引本身。
 
 `label atom-index status` 返回 label atom vector index 的状态。未配置 provider 或未
-启用 `vector-lancedb` 时仍成功返回 disabled/degraded 状态。`rebuild` 与 `query`
-需要 `--vector-config <toml>` 和可用的 vector store；无可用 provider/feature 时命令失败，
-不会修改 SQLite truth。`query` 的 `--polarity` 只接受 `positive` 或 `negative`；
-human 输出和 JSON hit 都把 LanceDB `_distance` 暴露为 `distance`。
+启用 `vector-lancedb` 时仍成功返回 disabled/degraded 状态。JSON 保留兼容字段
+`message`，并返回结构化 `diagnostics: string[]`、`dirty: boolean | null`、
+`board_dirty: boolean | null`；调用方应使用结构化字段判断 dirty/error，而不要解析
+`message` 文案。`rebuild` 与 `query` 需要 `--vector-config <toml>` 和可用的 vector
+store；无可用 provider/feature 时命令失败，不会修改 SQLite truth。`query` 的
+`--polarity` 只接受 `positive` 或 `negative`；human 输出和 JSON hit 都把 LanceDB
+`_distance` 暴露为 `distance`。
 
 `label propose` 是独立的新 label semantics 提案流程，不复用或改变 `label suggest`。
 它先读取当前 task-level label suggestions 的 `coverage` / `coverage_cosine` / `residual_norm` /
@@ -1118,6 +1121,9 @@ kanban context build t_... [--lexical-limit 5] [--vector-config <toml>]
 `kanban import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kanban import --replace` 是 offline-only 操作；运行前必须停止 `kanban serve` 和常驻 `kanban dispatch`，如果检测到 active runtime lock 会直接拒绝。
 `kanban entity`、`kanban outbox`、`kanban derived` 是 Knowledge Substrate 的只读维护入口。SQLite 仍是事实源；这些命令只报告统一 entity registry、派生索引 outbox 和 derived store 状态，不改变 task 状态或 claim。
 `kanban graph` 和 `kanban vector` 是 feature-gated 派生层入口：未启用 `graph-oxigraph` / `vector-lancedb` 或缺少 embedding provider 时返回 disabled/degraded status；启用后仍只作为可重建 relation/vector store，不参与 task 状态事务。
+`kanban vector status --json` 保留 `message` 兼容字段，同时返回结构化
+`diagnostics`、`dirty`、`board_dirty` 字段；dirty/error 判断应使用这些字段，不解析
+`message` 文案。
 `kanban vector configure` 默认写入全局 config：`$XDG_CONFIG_HOME/kb/config.toml`（平台默认通常为 `~/.config/kb/config.toml`），并默认配置本机 Ollama embedding provider。传 `--vector-config <toml>`（别名 `--config`）时写入指定 TOML。configure 默认调用 `/api/embed` 做短文本维度校验；校验失败时不写配置；`--skip-check` 只跳过这次连通性/维度检查。配置格式：
 
 ```toml

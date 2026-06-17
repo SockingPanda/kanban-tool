@@ -7,6 +7,15 @@ pub fn close_request_action() -> CloseRequestAction {
     CloseRequestAction::HideToTray
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SingleInstanceAction {
+    ShowWindow,
+}
+
+pub fn single_instance_launch_action() -> SingleInstanceAction {
+    SingleInstanceAction::ShowWindow
+}
+
 pub const TRAY_SHOW_ID: &str = "show";
 pub const TRAY_QUIT_ID: &str = "quit";
 
@@ -39,5 +48,13 @@ mod tests {
         assert_eq!(tray_menu_action(TRAY_SHOW_ID), TrayMenuAction::ShowWindow);
         assert_eq!(tray_menu_action(TRAY_QUIT_ID), TrayMenuAction::QuitApp);
         assert_eq!(tray_menu_action("unknown"), TrayMenuAction::Ignore);
+    }
+
+    #[test]
+    fn second_launch_requests_existing_window() {
+        assert_eq!(
+            single_instance_launch_action(),
+            SingleInstanceAction::ShowWindow
+        );
     }
 }

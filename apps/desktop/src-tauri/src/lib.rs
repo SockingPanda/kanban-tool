@@ -15,8 +15,8 @@ use tokio::sync::oneshot;
 
 mod tray_lifecycle;
 use tray_lifecycle::{
-    CloseRequestAction, TRAY_QUIT_ID, TRAY_SHOW_ID, TrayMenuAction, close_request_action,
-    tray_menu_action,
+    CloseRequestAction, SingleInstanceAction, TRAY_QUIT_ID, TRAY_SHOW_ID, TrayMenuAction,
+    close_request_action, single_instance_launch_action, tray_menu_action,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -90,6 +90,11 @@ fn set_runtime_board(
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            match single_instance_launch_action() {
+                SingleInstanceAction::ShowWindow => show_main_window(app),
+            }
+        }))
         .setup(|app| {
             let runtime = start_embedded_api().map_err(|error| error.to_string())?;
             app.manage(runtime);

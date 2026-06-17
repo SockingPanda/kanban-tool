@@ -960,8 +960,9 @@ query 检索并做 penalty / suppression。solver 在 label group 层执行 Grou
 `coverage` / `residual_norm` 来自 atom-level fitted vector。候选 label 只有在
 tentative refit 后带来足够 residual norm 降幅才会进入结果；coverage 或
 residual norm 达到停止阈值后，solver 会提前停止而不是凑满
-`max_selected_labels`。接口不会创建新 label，也不会写入 `label_semantics` /
-`label_atoms`。
+`max_selected_labels`。candidate group 与已选 label 语义向量过度相似时会被跳过，
+以减少重复语义 label 同时出现在 `selected_labels`；这不会合并或删除 canonical
+labels。接口不会创建新 label，也不会写入 `label_semantics` / `label_atoms`。
 
 `limit` 只控制 response 中 `selected_labels` / `candidates` 的最大条数，不会收窄
 solver 内部搜索能力。内部能力由 `candidate_limit`、`atom_limit` 和

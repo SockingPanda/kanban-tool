@@ -6,8 +6,18 @@ use std::{
 };
 
 use serde::Serialize;
-use tauri::{Manager, State};
+use tauri::{
+    Manager, State,
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
 use tokio::sync::oneshot;
+
+mod tray_lifecycle;
+use tray_lifecycle::{
+    CloseRequestAction, TRAY_QUIT_ID, TRAY_SHOW_ID, TrayMenuAction, close_request_action,
+    tray_menu_action,
+};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -83,16 +93,70 @@ pub fn run() {
         .setup(|app| {
             let runtime = start_embedded_api().map_err(|error| error.to_string())?;
             app.manage(runtime);
+            setup_tray(app).map_err(|error| error.to_string())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![runtime_config, set_runtime_board])
         .on_window_event(|window, event| {
-            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
-                window.app_handle().state::<EmbeddedApiRuntime>().shutdown();
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                match close_request_action() {
+                    CloseRequestAction::HideToTray => {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                }
             }
         })
         .run(tauri::generate_context!())
         .expect("error while running kanban desktop");
+}
+
+fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
+    let show = MenuItem::with_id(app, TRAY_SHOW_ID, "显示", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "退出", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+
+    let mut tray = TrayIconBuilder::new()
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .tooltip("Kanban Tool")
+        .on_menu_event(|app, event| match tray_menu_action(event.id.as_ref()) {
+            TrayMenuAction::ShowWindow => show_main_window(app),
+            TrayMenuAction::QuitApp => quit_app(app),
+            TrayMenuAction::Ignore => {}
+        })
+        .on_tray_icon_event(|tray, event| match event {
+            TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            }
+            | TrayIconEvent::DoubleClick {
+                button: MouseButton::Left,
+                ..
+            } => show_main_window(tray.app_handle()),
+            _ => {}
+        });
+
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+
+    tray.build(app)?;
+    Ok(())
+}
+
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn quit_app(app: &tauri::AppHandle) {
+    app.state::<EmbeddedApiRuntime>().shutdown();
+    app.exit(0);
 }
 
 fn start_embedded_api() -> Result<EmbeddedApiRuntime, String> {

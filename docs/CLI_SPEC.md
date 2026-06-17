@@ -579,8 +579,11 @@ solver 内部搜索能力。内部能力由 `--candidate-limit`、`--atom-limit`
 `label semantics` 管理当前 board 上已有 label 的语义字典。`<label>` 接受 label
 name 或 `l_...` id；`upsert` 会写入 `label_semantics` 并同步重建该 label 的
 `label_atoms`，随后标脏派生的 label atom vector index。数组参数可重复；空白值会被
-trim 后丢弃。`delete` 删除该 label 的 semantics 与 atoms，但不删除 canonical label
-或 task-label 绑定，并返回 `{ "data": { "deleted": true } }`。
+trim 后丢弃。生成 atoms 时，atom text 会进一步 collapse whitespace；同一 label 下
+相同 `polarity + kind + normalized_text` 的 atom 会去重并保留首次 ordinal，`id` /
+`content_hash` 不包含 ordinal，因此只调整数组顺序不会改变同一文本 atom identity。
+`delete` 删除该 label 的 semantics 与 atoms，但不删除 canonical label 或 task-label
+绑定，并返回 `{ "data": { "deleted": true } }`。
 
 `label atoms list` 读取 SQLite truth 中的 `label_atoms`。这些 atoms 来自
 `label semantics upsert` 或接受 label proposal 后生成的 semantics；它们是

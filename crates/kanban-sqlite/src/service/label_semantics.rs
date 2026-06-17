@@ -359,13 +359,19 @@ fn rebuild_atoms_for_label(
     )
     .map_err(storage)?;
 
+    let mut seen_semantic_keys = std::collections::HashSet::new();
     for (ordinal, source) in definition.atom_sources().into_iter().enumerate() {
         let polarity = polarity_to_str(source.polarity);
         let kind = kind_to_str(source.kind);
-        let content_hash = stable_hash(&format!(
-            "{}\n{}\n{}\n{}\n{}",
-            definition.id, polarity, kind, ordinal, source.text
-        ));
+        let text = normalize_atom_text(&source.text);
+        if text.is_empty() {
+            continue;
+        }
+        let semantic_key = format!("{}\n{}\n{}\n{}", definition.id, polarity, kind, text);
+        if !seen_semantic_keys.insert(semantic_key.clone()) {
+            continue;
+        }
+        let content_hash = stable_hash(&semantic_key);
         let id = format!("la_{content_hash}");
         conn.execute(
             "INSERT INTO label_atoms(id, label_id, board_id, polarity, kind, text, ordinal, content_hash, created_at, updated_at) \
@@ -376,13 +382,73 @@ fn rebuild_atoms_for_label(
                 board_id,
                 polarity,
                 kind,
-                source.text,
+                text,
                 ordinal as i64,
                 content_hash,
                 now
             ],
         )
         .map_err(storage)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn rebuild_label_atoms_for_stable_hash_migration(
+    conn: &Connection,
+    now: i64,
+) -> Result<()> {
+    let rows = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT s.label_id,s.board_id,l.name,s.description,s.applies_when,s.excludes_when,s.positive_examples,s.negative_examples \
+                 FROM label_semantics s JOIN labels l ON l.id=s.label_id AND l.board_id=s.board_id \
+                 ORDER BY s.board_id ASC, s.label_id ASC",
+            )
+            .map_err(storage)?;
+        stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+            ))
+        })
+        .map_err(storage)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)?
+    };
+
+    let mut dirty_boards = std::collections::BTreeSet::new();
+    for (
+        label_id,
+        board_id,
+        name,
+        description,
+        applies_when,
+        excludes_when,
+        positive_examples,
+        negative_examples,
+    ) in rows
+    {
+        let definition = LabelDefinition {
+            id: label_id,
+            name,
+            description,
+            applies_when: json_vec(applies_when)?,
+            excludes_when: json_vec(excludes_when)?,
+            positive_examples: json_vec(positive_examples)?,
+            negative_examples: json_vec(negative_examples)?,
+        };
+        rebuild_atoms_for_label(conn, &definition, &board_id, now)?;
+        dirty_boards.insert(board_id);
+    }
+
+    for board_id in dirty_boards {
+        mark_label_atom_store_dirty(conn, &board_id, now)?;
     }
     Ok(())
 }
@@ -712,6 +778,10 @@ fn kind_to_str(kind: LabelAtomKind) -> &'static str {
         LabelAtomKind::ExcludesWhen => "excludes_when",
         LabelAtomKind::NegativeExample => "negative_example",
     }
+}
+
+fn normalize_atom_text(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn stable_hash(text: &str) -> String {

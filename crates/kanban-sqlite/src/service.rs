@@ -69,7 +69,8 @@ pub(crate) use graph::{
     graph_relation_snapshot_for_board,
 };
 pub(crate) use label_semantics::{
-    mark_label_atom_store_dirty, upsert_label_semantics_candidate_in_tx,
+    mark_label_atom_store_dirty, rebuild_label_atoms_for_stable_hash_migration,
+    upsert_label_semantics_candidate_in_tx,
 };
 pub(crate) use projections::*;
 pub(crate) use run_logs::{

@@ -40,7 +40,7 @@ fn label_proposal_migration_and_provider_unavailable_are_non_polluting() -> anyh
     init_database(&temp.path, "tester")?;
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 9);
+    assert_eq!(user_version, 10);
     let has_table: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_semantic_proposals'",
         [],
@@ -1841,6 +1841,217 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
 }
 
 #[test]
+fn label_atom_hashes_are_stable_across_reordered_sources_and_mark_index_dirty() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_atom_hashes_are_stable_across_reordered_sources_and_mark_index_dirty")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            applies_when: vec![
+                "touches Rust service code".to_owned(),
+                "updates SQLite repository".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let first_atoms = list_label_atoms(&temp.path, "default")?;
+    let first_identity_by_text = first_atoms
+        .iter()
+        .filter(|atom| atom.kind == "applies_when")
+        .map(|atom| {
+            (
+                atom.text.clone(),
+                (atom.id.clone(), atom.content_hash.clone()),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    let board = get_board(&temp.path, "default")?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "UPDATE derived_store_state SET dirty=0 WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE label_atom_index_boards SET dirty=0 \
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [&board.id],
+    )?;
+
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            applies_when: vec![
+                "updates SQLite repository".to_owned(),
+                "touches Rust service code".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let reordered_atoms = list_label_atoms(&temp.path, "default")?;
+    let reordered_identity_by_text = reordered_atoms
+        .iter()
+        .filter(|atom| atom.kind == "applies_when")
+        .map(|atom| {
+            (
+                atom.text.clone(),
+                (atom.id.clone(), atom.content_hash.clone()),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    assert_eq!(reordered_identity_by_text, first_identity_by_text);
+    assert!(label_atom_store_dirty(&temp.path)?);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+    Ok(())
+}
+
+#[test]
+fn label_atom_rebuild_deduplicates_normalized_text_and_keeps_first_ordinal() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_atom_rebuild_deduplicates_normalized_text_and_keeps_first_ordinal")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            applies_when: vec![
+                "touches   server code".to_owned(),
+                " touches server code ".to_owned(),
+                "touches server code".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    let atoms = list_label_atoms(&temp.path, "default")?;
+    let applies = atoms
+        .iter()
+        .filter(|atom| atom.kind == "applies_when")
+        .collect::<Vec<_>>();
+    assert_eq!(applies.len(), 1);
+    assert_eq!(applies[0].text, "touches server code");
+    assert_eq!(applies[0].ordinal, 1);
+    Ok(())
+}
+
+#[test]
+fn init_v10_backfills_stable_label_atom_hashes_and_marks_index_dirty() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_v10_backfills_stable_label_atom_hashes_and_marks_index_dirty")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let semantics = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            applies_when: vec![
+                "touches   server code".to_owned(),
+                "touches server code".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+        (&semantics.board_id, &semantics.label_id),
+    )?;
+    for (id, text, ordinal, content_hash) in [
+        ("la_old_name", "backend", 0_i64, "old_name"),
+        (
+            "la_old_applies_1",
+            "touches   server code",
+            1_i64,
+            "old_applies_1",
+        ),
+        (
+            "la_old_applies_2",
+            "touches server code",
+            2_i64,
+            "old_applies_2",
+        ),
+    ] {
+        conn.execute(
+            "INSERT INTO label_atoms(id,label_id,board_id,polarity,kind,text,ordinal,content_hash,created_at,updated_at) \
+             VALUES (?1,?2,?3,'positive',?4,?5,?6,?7,1,1)",
+            (
+                id,
+                &semantics.label_id,
+                &semantics.board_id,
+                if ordinal == 0 { "name" } else { "applies_when" },
+                text,
+                ordinal,
+                content_hash,
+            ),
+        )?;
+    }
+    conn.execute(
+        "UPDATE derived_store_state SET dirty=0 WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE label_atom_index_boards SET dirty=0 \
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [&semantics.board_id],
+    )?;
+    conn.execute("DELETE FROM schema_migrations WHERE version=10", [])?;
+    conn.pragma_update(None, "user_version", 9)?;
+    drop(conn);
+
+    init_database(&temp.path, "tester")?;
+
+    let atoms = list_label_atoms(&temp.path, "default")?;
+    assert!(atoms.iter().all(|atom| !atom.id.starts_with("la_old_")));
+    let applies = atoms
+        .iter()
+        .filter(|atom| atom.kind == "applies_when")
+        .collect::<Vec<_>>();
+    assert_eq!(applies.len(), 1);
+    assert_eq!(applies[0].text, "touches server code");
+    assert_eq!(applies[0].ordinal, 1);
+    assert!(label_atom_store_dirty(&temp.path)?);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+    let user_version: i64 =
+        connect_file(&temp.path)?.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    assert_eq!(user_version, 10);
+    Ok(())
+}
+
+#[test]
 fn label_semantics_resolves_l_prefixed_label_name_before_id_fallback() -> anyhow::Result<()> {
     let temp = TempDb::new("label_semantics_resolves_l_prefixed_label_name_before_id_fallback")?;
     init_database(&temp.path, "tester")?;
@@ -2004,8 +2215,8 @@ fn doctor_reports_missing_label_semantics_tables_unhealthy() -> anyhow::Result<(
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(9));
-        assert_eq!(report.user_version, 9);
+        assert_eq!(report.migration_version, Some(10));
+        assert_eq!(report.user_version, 10);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())

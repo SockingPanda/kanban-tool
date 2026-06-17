@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { createBoardSwitchReset } from "./board-switch-state"
+import { createBoardSwitchInvalidationTargets, createBoardSwitchReset } from "./board-switch-state"
 
 describe("createBoardSwitchReset", () => {
   it("clears board-scoped task state and returns a fresh config", () => {
@@ -54,5 +54,21 @@ describe("createBoardSwitchReset", () => {
       lastRefreshAt: null,
       error: null,
     })
+  })
+
+  it("targets board list and old/new board-scoped caches after switching boards", () => {
+    expect(createBoardSwitchInvalidationTargets({ previousBoard: "default", nextBoard: "skills" })).toEqual([
+      ["boards"],
+      ["columns", "default"],
+      ["columns", "skills"],
+      ["tasks", "default"],
+      ["tasks", "skills"],
+      ["events", "default"],
+      ["events", "skills"],
+      ["stats", "default"],
+      ["stats", "skills"],
+      ["search-status", "default"],
+      ["search-status", "skills"],
+    ])
   })
 })

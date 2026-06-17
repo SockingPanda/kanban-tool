@@ -65,8 +65,21 @@ describe("event invalidation helpers", () => {
     ).toEqual({
       taskIds: new Set<string>(),
       invalidateBoardTasks: true,
+      invalidateBoards: true,
       invalidateEvents: true,
     })
+  })
+
+  it("invalidates the board switcher list for board lifecycle events", () => {
+    const affected = affectedQueriesForEvents([eventRecord({ task_id: null, kind: "board.created" })])
+
+    expect(queryKeysForAffectedEvents({ affected, board: "default", selectedTaskId: null })).toEqual([
+      ["events", "default"],
+      ["boards"],
+      ["tasks", "default"],
+      ["stats", "default"],
+      ["search-status", "default"],
+    ])
   })
 
   it("maps event changes to canonical cache keys", () => {

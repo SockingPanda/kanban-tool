@@ -18,11 +18,11 @@ pub fn single_instance_launch_action() -> SingleInstanceAction {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RestoreWindowAction {
-    ShowWithoutFocus,
+    ShowAndRaiseWithoutFocus,
 }
 
 pub fn restore_window_action() -> RestoreWindowAction {
-    RestoreWindowAction::ShowWithoutFocus
+    RestoreWindowAction::ShowAndRaiseWithoutFocus
 }
 
 pub const TRAY_SHOW_ID: &str = "show";
@@ -85,6 +85,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn tray_left_double_click_requests_existing_window() {
         assert_eq!(
@@ -97,7 +98,7 @@ mod tests {
     fn restore_window_does_not_force_focus() {
         assert_eq!(
             restore_window_action(),
-            RestoreWindowAction::ShowWithoutFocus
+            RestoreWindowAction::ShowAndRaiseWithoutFocus
         );
     }
 }

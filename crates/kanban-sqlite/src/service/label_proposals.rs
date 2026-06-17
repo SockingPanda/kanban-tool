@@ -23,6 +23,13 @@ const PROPOSAL_RESIDUAL_MARGIN: f32 = 0.05;
 const NEGATIVE_SUPPRESSION_THRESHOLD: f32 = 0.65;
 const NEGATIVE_SUPPRESSION_FACTOR: f32 = 0.8;
 
+/// Supplies candidate semantics when the SQLite proposal service needs a new label.
+///
+/// This trait is the dependency boundary for future LLM/local-AI providers:
+/// `kanban-sqlite` owns proposal validation and persistence, but concrete
+/// providers live in upper layers such as `kanban-server`, `kanban-cli`, a local
+/// runtime, or a separate AI crate. Do not add LLM SDKs, HTTP AI clients, or
+/// credential handling to this crate.
 pub trait LabelProposalProvider {
     fn propose_label(
         &self,

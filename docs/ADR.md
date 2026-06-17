@@ -755,3 +755,63 @@ Frontier 可以展示和解释更多字段，但不得把 soft 字段解释成 h
 - 不让 labels/type/metadata 变成隐式 status。
 - 不把 `task_dependencies` 改成完整知识图谱。
 - 不在本 ADR 中实现具体 migration。
+
+---
+
+## ADR-0012：Label Proposal Provider 边界
+
+### Status
+
+Accepted
+
+### Context
+
+Semantic label suggestion 的日常路径应保持 deterministic：SQLite 存 canonical
+`labels` / `task_labels` / `label_semantics` / `label_atoms`，LanceDB 只是
+`kb_label_atoms` derived index，solver 只做本地向量计算。Label proposal 是“coverage
+不足时建议新 label semantics”的可选流程，它可以由人工、离线工具或未来本地 LLM provider
+产生 candidate。
+
+真实 LLM provider 如果直接放进 `kanban-sqlite`，会把外部 SDK、HTTP client、prompt、
+credentials 和 runtime 配置拖入 SQLite service。这样会破坏本项目的 local-first / SQLite-only
+边界，也会让 proposal validation 与模型调用耦合过深。
+
+### Decision
+
+`kanban-sqlite` 只定义并消费 `LabelProposalProvider` trait：
+
+- `DisabledLabelProposalProvider`：默认 provider 不可用，返回 degraded attempt，不写 canonical label。
+- `ManualLabelProposalProvider`：接收 CLI/API 显式传入的本地/offline candidate。
+- `propose_task_label_with_store`：从 SQLite 读取 task 和 suggestion context，调用 provider，
+  然后执行 deterministic validation、residual top1+margin gate、proposal persistence、
+  accept/reject lifecycle。
+
+真实 LLM provider 不属于 `kanban-sqlite`。可选实现位置是：
+
+- `kanban-server`：当 localhost server 显式配置本地 provider/runtime 时注入 trait object。
+- `kanban-cli` 或本地 runtime：当命令显式读取本地/offline candidate 或未来本机模型输出时注入。
+- 独立 `kanban-ai` / `kanban-llm` crate：承载 SDK、HTTP client、prompt 和 credential 读取，
+  再向上层暴露实现 `LabelProposalProvider` 的 adapter。
+
+### Consequences
+
+优点：
+
+- SQLite service 不依赖 LLM SDK、HTTP AI client、runtime credentials 或外部模型配置。
+- proposal lifecycle 仍由 deterministic SQLite service 守住，不会因为 provider 类型不同而绕过
+  residual validation 或 accept/reject gate。
+- 日常 `label suggest` 不依赖 proposal provider；provider 不可用只是 degraded proposal attempt。
+- 未来 provider 可以替换或禁用，不需要改 canonical label truth 或 task label binding 语义。
+
+代价：
+
+- 真实 provider 需要在上层做 adapter 和配置装配。
+- server/CLI 需要明确区分“candidate 生成失败”和“SQLite validation 拒绝 candidate”。
+- 需要持续避免把 prompt、credential、HTTP retry 等 concerns 下沉进 `kanban-sqlite`。
+
+### Non-Goals
+
+- 本 ADR 不实现真实 LLM provider。
+- 不上传本地 task 数据到远程服务。
+- 不让 provider 自动绑定 task label。
+- 不改变 proposal accept 后才创建 label semantics / atoms 的生命周期。

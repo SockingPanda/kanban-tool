@@ -137,12 +137,17 @@ pub enum Command {
 - 复杂查询。
 - CAS claim。
 - append event。
+- label proposal validation / persistence，以及 `LabelProposalProvider` trait 边界。
 
 关键要求：
 
 - 所有状态变化必须在 transaction 内完成。
 - claim 必须使用 `BEGIN IMMEDIATE` 或等价机制抢写锁。
 - 不允许业务层执行裸 SQL 更新状态。
+- `kanban-sqlite` 不直接依赖 LLM SDK、HTTP AI client、runtime credentials 或外部模型
+  provider。真实 label proposal provider 只能在 `kanban-server`、`kanban-cli` 本地
+  runtime、或单独 `kanban-ai` / `kanban-llm` crate 中实现，再通过
+  `LabelProposalProvider` trait 注入 SQLite service。
 
 ### 2.3 `kanban-cli`
 
@@ -205,6 +210,29 @@ kanban dispatch --once
 - label suggestion/proposal/atom-index 路径只依赖 `LabelAtomVectorStore`，不依赖 chunk store 语义。
 - label atom 场景获取 model 名称时使用通用 `VectorStoreBackend::embedding_model()`；`chunk_embedding_model()` 仅作为 chunk 路径的兼容入口。
 - LanceDB 表仍按 derived store 隔离：task chunks 写入 `kb_chunks`，label atoms 写入 `kb_label_atoms`。
+
+### 2.7 Label proposal provider boundary
+
+Semantic label proposals 分成两层：
+
+```text
+upper provider layer
+  - manual/offline candidate input
+  - future local LLM / AI runtime integration
+  - credentials, model config, HTTP/client concerns
+        ↓ LabelProposalProvider
+kanban-sqlite
+  - task/suggestion context lookup
+  - deterministic validation
+  - residual top1+margin gate
+  - proposal persistence and accept/reject lifecycle
+```
+
+`kanban-sqlite` 只接受 `LabelProposalProvider` trait object，不拥有真实 LLM provider。
+默认 `DisabledLabelProposalProvider` 只产生 degraded attempt；`ManualLabelProposalProvider`
+用于 CLI/API 显式传入的本地/offline candidate。未来真实 provider 的候选位置是
+`kanban-server`、本地 runtime、或独立 `kanban-ai` / `kanban-llm` crate，并且必须保持
+SQLite service 不知道 credentials、HTTP transport、prompt 模板或外部 SDK。
 
 ---
 

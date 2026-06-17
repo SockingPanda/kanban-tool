@@ -950,7 +950,7 @@ similarity score。未配置 provider、feature 不可用或 vector store 不可
 ### 12.2 Task label suggestions
 
 ```http
-GET /api/v1/tasks/{task_id}/labels/suggestions?limit=5&atom_limit=24&min_score=0.15
+GET /api/v1/tasks/{task_id}/labels/suggestions?limit=5&candidate_limit=32&atom_limit=80&max_selected_labels=4&min_score=0.15
 ```
 
 返回 task-level label suggestions。当前使用 task title + description embedding
@@ -959,6 +959,12 @@ query 检索并做 penalty / suppression。solver 在 label group 层执行 Grou
 再把选中 label 的 top positive atom vectors 作为 basis 做 non-negative refit；
 `coverage` / `residual_norm` 来自 atom-level fitted vector。接口不会创建新 label，
 也不会写入 `label_semantics` / `label_atoms`。
+
+`limit` 只控制 response 中 `selected_labels` / `candidates` 的最大条数，不会收窄
+solver 内部搜索能力。内部能力由 `candidate_limit`、`atom_limit` 和
+`max_selected_labels` 分别控制：候选 label group 数、每轮 atom vector 检索上限、
+以及最多进入 non-negative refit 的 label 数。所有 limit 参数都必须是
+`1..=1000`；`min_score` 必须在 `0..=1`。
 
 未配置 provider、未启用 `vector-lancedb` feature、LanceDB 表缺失、索引为空或索引
 dirty 时，接口仍返回 `200` 和结构化 degraded JSON；普通 label CRUD、task
@@ -1014,7 +1020,7 @@ Response：
 ### 12.3 Label semantic proposals
 
 ```http
-POST /api/v1/tasks/{task_id}/label-proposals
+POST /api/v1/tasks/{task_id}/label-proposals?limit=5&candidate_limit=32&atom_limit=80&max_selected_labels=4&min_score=0.15
 GET /api/v1/tasks/{task_id}/label-proposals
 GET /api/v1/label-proposals/{proposal_id}
 POST /api/v1/label-proposals/{proposal_id}/accept
@@ -1048,6 +1054,10 @@ coverage 不足且候选语义有效，并且残差 top1+margin 校验明确通�
 `proposed` proposal。与现有 label 发生 normalized-name 冲突的候选持久化为 `rejected`，diagnostics 包含
 `near_duplicate_label_conflict`。Normalized-name conflict 忽略大小写、空白和标点，
 是 deterministic near-duplicate heuristic。
+
+POST proposal route 接受与 label suggestion 相同的 query 参数。`limit` 只截断
+suggestion 输出；`candidate_limit`、`atom_limit`、`max_selected_labels` 和 `min_score`
+调节用于 heuristic coverage / residual validation 的底层 solver。
 
 当 server 配置了可用 vector provider 时，proposal attempt 与 label suggestion
 使用同一套 LanceDB label atom store。coverage 不足的候选会在持久化前执行残差

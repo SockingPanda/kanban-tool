@@ -38,8 +38,12 @@ pub(crate) struct TaskListQuery {
 pub(crate) struct LabelSuggestionQuery {
     #[serde(default = "default_label_suggestion_limit")]
     limit: usize,
+    #[serde(default = "default_label_suggestion_candidate_limit")]
+    candidate_limit: usize,
     #[serde(default = "default_label_suggestion_atom_limit")]
     atom_limit: usize,
+    #[serde(default = "default_label_suggestion_max_selected_labels")]
+    max_selected_labels: usize,
     #[serde(default = "default_label_suggestion_min_score")]
     min_score: f32,
 }
@@ -57,11 +61,19 @@ fn default_limit() -> usize {
 }
 
 fn default_label_suggestion_limit() -> usize {
-    kanban_sqlite::LabelSuggestionOptions::default().limit
+    kanban_sqlite::LabelSuggestionOptions::default().output_limit
+}
+
+fn default_label_suggestion_candidate_limit() -> usize {
+    kanban_sqlite::LabelSuggestionOptions::default().candidate_limit
 }
 
 fn default_label_suggestion_atom_limit() -> usize {
     kanban_sqlite::LabelSuggestionOptions::default().atom_limit
+}
+
+fn default_label_suggestion_max_selected_labels() -> usize {
+    kanban_sqlite::LabelSuggestionOptions::default().max_selected_labels
 }
 
 fn default_label_suggestion_min_score() -> f32 {
@@ -449,13 +461,7 @@ pub(crate) async fn suggest_task_labels(
     query: Result<Query<LabelSuggestionQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<kanban_sqlite::LabelSuggestionResult>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
-    validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
-    validate_page_bounds(query.atom_limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
-    let options = kanban_sqlite::LabelSuggestionOptions {
-        limit: query.limit,
-        atom_limit: query.atom_limit,
-        min_score: query.min_score,
-    };
+    let options = label_suggestion_options(query)?;
     let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
     let label_state = state.clone();
     let label_board = task.board_slug;
@@ -496,6 +502,7 @@ pub(crate) async fn add_task_label(
 pub(crate) async fn propose_task_label(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
+    query: Result<Query<LabelSuggestionQuery>, QueryRejection>,
     headers: HeaderMap,
     body: Result<Json<LabelProposalBody>, JsonRejection>,
 ) -> Result<
@@ -505,6 +512,8 @@ pub(crate) async fn propose_task_label(
     ),
     ApiError,
 > {
+    let Query(query) = query.map_err(extractor_error)?;
+    let options = label_suggestion_options(query)?;
     let body = match body {
         Ok(Json(body)) => body,
         Err(JsonRejection::MissingJsonContentType(_)) => LabelProposalBody {
@@ -515,7 +524,6 @@ pub(crate) async fn propose_task_label(
     };
     let actor = actor(body.actor.as_deref(), &headers, &state);
     let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
-    let options = kanban_sqlite::LabelSuggestionOptions::default();
     let label_state = state.clone();
     let label_board = task.board_slug;
     let label_task_id = task.id;
@@ -548,6 +556,29 @@ pub(crate) async fn propose_task_label(
             meta: None,
         }),
     ))
+}
+
+fn label_suggestion_options(
+    query: LabelSuggestionQuery,
+) -> Result<kanban_sqlite::LabelSuggestionOptions, ApiError> {
+    validate_label_suggestion_bound("limit", query.limit)?;
+    validate_label_suggestion_bound("candidate_limit", query.candidate_limit)?;
+    validate_label_suggestion_bound("atom_limit", query.atom_limit)?;
+    validate_label_suggestion_bound("max_selected_labels", query.max_selected_labels)?;
+    Ok(kanban_sqlite::LabelSuggestionOptions {
+        output_limit: query.limit,
+        candidate_limit: query.candidate_limit,
+        atom_limit: query.atom_limit,
+        max_selected_labels: query.max_selected_labels,
+        min_score: query.min_score,
+    })
+}
+
+fn validate_label_suggestion_bound(name: &str, value: usize) -> Result<(), ApiError> {
+    if value == 0 {
+        return Err(invalid_input(format!("{name} must be >= 1")));
+    }
+    validate_page_bounds(value, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)
 }
 
 pub(crate) async fn list_task_label_proposals(

@@ -665,6 +665,11 @@ fn label_suggest_rejects_out_of_bounds_limits() -> anyhow::Result<()> {
         &["label", "suggest", task_id, "--atom-limit", "1001"],
     )?
     .failure_containing("limit must be <= 1000")?;
+    kanban(
+        &temp.path,
+        &["label", "suggest", task_id, "--candidate-limit", "0"],
+    )?
+    .failure_containing("candidate_limit must be >= 1")?;
     kanban(&temp.path, &["label", "suggest", task_id, "--limit", "0"])?
         .failure_containing("limit must be >= 1")?;
     kanban(
@@ -672,6 +677,11 @@ fn label_suggest_rejects_out_of_bounds_limits() -> anyhow::Result<()> {
         &["label", "suggest", task_id, "--atom-limit", "0"],
     )?
     .failure_containing("atom_limit must be >= 1")?;
+    kanban(
+        &temp.path,
+        &["label", "suggest", task_id, "--max-selected-labels", "0"],
+    )?
+    .failure_containing("max_selected_labels must be >= 1")?;
     Ok(())
 }
 

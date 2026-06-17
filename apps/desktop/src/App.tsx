@@ -21,7 +21,7 @@ import { useEventPoller } from "@/features/events/useEventPoller"
 import type { OperatorView } from "@/features/navigation/view-types"
 import { defaultListSort, listSortToApiSort, type ListSortState } from "@/features/list/table-state"
 import { invalidateTaskDetailAndBoard } from "@/features/task-detail/detail-invalidation"
-import { taskDetailOrEmpty, useTaskDetail } from "@/features/task-detail/useTaskDetail"
+import { requestTaskLabelSuggestions, taskDetailOrEmpty, useTaskDetail } from "@/features/task-detail/useTaskDetail"
 import {
   parseDateInput,
   reconcileSavedTaskDraft,
@@ -109,6 +109,7 @@ function App() {
   const [dragReasonRequest, setDragReasonRequest] = useState<PlannedDragTransition | null>(null)
   const [dragConfirmRequest, setDragConfirmRequest] = useState<PlannedDragTransition | null>(null)
   const [dragReasonDraft, setDragReasonDraft] = useState("")
+  const [labelSuggestionsRequested, setLabelSuggestionsRequested] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -185,6 +186,14 @@ function App() {
   }, [tasks])
 
   const detailQuery = useTaskDetail(api, selectedId)
+  const labelSuggestionsQuery = useQuery({
+    enabled: false,
+    queryKey: selectedId ? queryKeys.taskLabelSuggestions(selectedId) : ["task-label-suggestions", "none"],
+    queryFn: ({ signal }) => {
+      if (!api || !selectedId) throw new Error("Label suggestions query is not ready")
+      return requestTaskLabelSuggestions(api, selectedId, signal)
+    },
+  })
   const boardSelectedTask = useMemo(
     () => (selectedId ? tasks.find((task) => task.id === selectedId) ?? null : null),
     [selectedId, tasks],
@@ -204,6 +213,10 @@ function App() {
   useEffect(() => {
     setDraftState((current) => reconcileTaskDraft(current, selectedTask))
   }, [selectedTask])
+
+  useEffect(() => {
+    setLabelSuggestionsRequested(false)
+  }, [selectedId])
 
   useEffect(() => {
     if (!selectedTask) return
@@ -273,8 +286,12 @@ function App() {
     async (taskId: string | null) => {
       if (!api) return
       await invalidateTaskDetailAndBoard(queryClient, api.board, taskId)
+      if (taskId) {
+        queryClient.removeQueries({ queryKey: queryKeys.taskLabelSuggestions(taskId) })
+        if (taskId === selectedId) setLabelSuggestionsRequested(false)
+      }
     },
-    [api, queryClient],
+    [api, queryClient, selectedId],
   )
 
   async function runAction(action: () => Promise<unknown>, options: RunActionOptions | string = "action") {
@@ -421,6 +438,12 @@ function App() {
     }, { label: "comment", fallbackTaskId: taskId })
   }
 
+  async function requestLabelSuggestions() {
+    if (!api || !selectedId) return
+    setLabelSuggestionsRequested(true)
+    await labelSuggestionsQuery.refetch()
+  }
+
   function updateDraft(draft: TaskEditDraft) {
     setDraftState((current) => {
       if (current) return { ...current, draft, dirty: true }
@@ -491,6 +514,15 @@ function App() {
         selectedId={selectedId}
         dependencySnapshot={dependencySnapshot}
         detail={detail}
+        labelSuggestions={labelSuggestionsQuery.data ?? null}
+        labelSuggestionsRequested={
+          labelSuggestionsRequested ||
+          labelSuggestionsQuery.isFetched ||
+          labelSuggestionsQuery.isFetching ||
+          Boolean(labelSuggestionsQuery.error)
+        }
+        labelSuggestionsLoading={labelSuggestionsQuery.isFetching}
+        labelSuggestionsError={labelSuggestionsQuery.error ? errorMessage(labelSuggestionsQuery.error) : null}
         activeRun={activeRun}
         search={search}
         debouncedSearch={debouncedSearch}
@@ -555,6 +587,7 @@ function App() {
         onAction={runAction}
         onAddDependency={addDependency}
         onRemoveDependency={removeDependency}
+        onRequestLabelSuggestions={() => void requestLabelSuggestions()}
         onSaveTask={saveTask}
         onCancelTaskEdit={cancelTaskEdit}
         onAddComment={addComment}

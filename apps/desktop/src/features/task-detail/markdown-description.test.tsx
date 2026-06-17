@@ -245,6 +245,9 @@ describe("MarkdownDescription", () => {
     expect(html).toContain('aria-label="Label name"')
     expect(html).toContain('aria-label="Add label"')
     expect(html).toContain('aria-label="Remove label backend"')
+    expect(html).toContain("Suggest labels")
+    expect(html).not.toContain("Suggestions unavailable")
+    expect(html).not.toContain("No label suggestions.")
   })
 
   it("renders degraded label suggestions and already applied state", () => {
@@ -258,59 +261,58 @@ describe("MarkdownDescription", () => {
               { id: "l_backend", board_id: task.board_id, name: "backend", color: null, created_at: 1, updated_at: 1 },
             ],
           }}
-          detail={{
-            ...emptyDetail,
-            labelSuggestions: {
-              task_id: task.id,
-              board_id: task.board_id,
-              selected_labels: [
-                {
-                  label_id: "l_backend",
-                  label_name: "backend",
-                  score: 0.82,
-                  weight: 0.82,
-                  already_applied: true,
-                  evidence_atoms: [
-                    {
-                      atom_id: "la_positive",
-                      label_id: "l_backend",
-                      label_name: "backend",
-                      polarity: "positive",
-                      kind: "applies_when",
-                      text: "touches Rust service code",
-                      score: 0.81,
-                    },
-                    {
-                      atom_id: "la_example",
-                      label_id: "l_backend",
-                      label_name: "backend",
-                      polarity: "positive",
-                      kind: "positive_example",
-                      text: "add API handler",
-                      score: 0.73,
-                    },
-                  ],
-                  negative_evidence_atoms: [
-                    {
-                      atom_id: "la_negative",
-                      label_id: "l_backend",
-                      label_name: "backend",
-                      polarity: "negative",
-                      kind: "excludes_when",
-                      text: "CSS-only",
-                      score: 0.42,
-                    },
-                  ],
-                },
-              ],
-              candidates: [],
-              coverage: 0.82,
-              residual_norm: 0.18,
-              needs_new_label: true,
-              degraded: true,
-              diagnostics: ["label_atom_index_dirty"],
-            },
+          detail={emptyDetail}
+          labelSuggestions={{
+            task_id: task.id,
+            board_id: task.board_id,
+            selected_labels: [
+              {
+                label_id: "l_backend",
+                label_name: "backend",
+                score: 0.82,
+                weight: 0.82,
+                already_applied: true,
+                evidence_atoms: [
+                  {
+                    atom_id: "la_positive",
+                    label_id: "l_backend",
+                    label_name: "backend",
+                    polarity: "positive",
+                    kind: "applies_when",
+                    text: "touches Rust service code",
+                    score: 0.81,
+                  },
+                  {
+                    atom_id: "la_example",
+                    label_id: "l_backend",
+                    label_name: "backend",
+                    polarity: "positive",
+                    kind: "positive_example",
+                    text: "add API handler",
+                    score: 0.73,
+                  },
+                ],
+                negative_evidence_atoms: [
+                  {
+                    atom_id: "la_negative",
+                    label_id: "l_backend",
+                    label_name: "backend",
+                    polarity: "negative",
+                    kind: "excludes_when",
+                    text: "CSS-only",
+                    score: 0.42,
+                  },
+                ],
+              },
+            ],
+            candidates: [],
+            coverage: 0.82,
+            residual_norm: 0.18,
+            needs_new_label: true,
+            degraded: true,
+            diagnostics: ["label_atom_index_dirty"],
           }}
+          labelSuggestionsRequested
           blockReason=""
           setBlockReason={() => undefined}
           dependencyInput=""

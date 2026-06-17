@@ -535,6 +535,9 @@ description embedding 作为 query，使用 `lancedb_label_atoms` 按残差多�
 label atoms，并用原始 query 检索负向 atoms 做 penalty / suppression。solver 在
 label group 层执行 Group OMP 选择，再用选中 label 的 top positive atom vectors 做
 non-negative refit；`coverage` / `residual_norm` 来自该 atom-level fitted vector。
+候选 label 只有在 tentative refit 后带来足够 residual norm 降幅才会进入结果；
+coverage 或 residual norm 达到停止阈值后，solver 会提前停止而不是凑满
+`--max-selected-labels`。
 它不会自动创建新 label，也不会写入 new-label proposal。应用建议时仍使用现有
 `label add <task_ref> <label>` / API attach 流程。
 

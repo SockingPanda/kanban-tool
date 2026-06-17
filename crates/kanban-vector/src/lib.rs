@@ -227,9 +227,6 @@ pub trait ChunkVectorStore: VectorStoreBackend {
 }
 
 pub trait LabelAtomVectorStore: QueryEmbeddingProvider {
-    fn label_atom_embedding_model(&self) -> &str {
-        self.embedding_model()
-    }
     fn delete_label_atoms_for_board(&self, _board_id: &str) -> Result<(), VectorError> {
         Err(VectorError::Disabled)
     }

@@ -250,7 +250,7 @@ pub fn rebuild_label_atom_index_with(
 ) -> Result<VectorStoreStatus> {
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
-    let atoms = label_atom_vectors_for_board(&conn, &board_id, store.label_atom_embedding_model())?;
+    let atoms = label_atom_vectors_for_board(&conn, &board_id, store.embedding_model())?;
     match store
         .delete_label_atoms_for_board(&board_id)
         .and_then(|()| store.upsert_label_atoms(&atoms))

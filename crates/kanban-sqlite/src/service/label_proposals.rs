@@ -169,7 +169,7 @@ pub fn propose_task_label_with_store(
         validate_candidate_residual(
             store,
             &task.board_id,
-            store.label_atom_embedding_model(),
+            store.embedding_model(),
             &computation.query_vector,
             &computation.residual_vector,
             &candidate,

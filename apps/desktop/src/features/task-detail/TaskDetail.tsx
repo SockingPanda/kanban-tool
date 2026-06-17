@@ -1,4 +1,4 @@
-import { ChevronDown, CircleDot, FileText, GitBranch, MessageSquare, Pencil, Plus, Save, X } from "lucide-react"
+import { ChevronDown, CircleDot, FileText, GitBranch, Loader2, MessageSquare, Pencil, Plus, Save, Sparkles, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react"
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -48,6 +48,10 @@ export function TaskDetail({
   api,
   task,
   detail,
+  labelSuggestions = null,
+  labelSuggestionsRequested = false,
+  labelSuggestionsLoading = false,
+  labelSuggestionsError = null,
   activeRun,
   blockReason,
   setBlockReason,
@@ -64,6 +68,7 @@ export function TaskDetail({
   onAction,
   onAddDependency,
   onRemoveDependency,
+  onRequestLabelSuggestions,
   onSelectTask,
   onSaveTask,
   onCancelEdit,
@@ -72,6 +77,10 @@ export function TaskDetail({
   api: KanbanApi | null
   task: Task | null
   detail: DetailState
+  labelSuggestions?: LabelSuggestionResult | null
+  labelSuggestionsRequested?: boolean
+  labelSuggestionsLoading?: boolean
+  labelSuggestionsError?: string | null
   activeRun?: Run
   blockReason: string
   setBlockReason: (value: string) => void
@@ -88,6 +97,7 @@ export function TaskDetail({
   onAction: (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null }) => Promise<unknown>
   onAddDependency: () => Promise<void>
   onRemoveDependency: (parentTaskId: string) => Promise<void>
+  onRequestLabelSuggestions?: () => void
   onSelectTask: (taskId: string) => void
   onSaveTask: () => Promise<boolean>
   onCancelEdit: () => void
@@ -347,9 +357,13 @@ export function TaskDetail({
               )}
             </div>
             <LabelSuggestionsPanel
-              suggestions={detail.labelSuggestions}
+              suggestions={labelSuggestions}
+              requested={labelSuggestionsRequested}
+              loading={labelSuggestionsLoading}
+              error={labelSuggestionsError}
               pending={pendingAction === "label"}
               disabled={!api}
+              onRequest={onRequestLabelSuggestions}
               onApply={(labelName) => void applySuggestedLabel(labelName)}
             />
             <Field>
@@ -742,33 +756,71 @@ function autosizeTextarea(textarea: HTMLTextAreaElement | null) {
 
 function LabelSuggestionsPanel({
   suggestions,
+  requested,
+  loading,
+  error,
   pending,
   disabled,
+  onRequest,
   onApply,
 }: {
   suggestions: LabelSuggestionResult | null
+  requested: boolean
+  loading: boolean
+  error: string | null
   pending: boolean
   disabled: boolean
+  onRequest?: () => void
   onApply: (labelName: string) => void
 }) {
-  if (!suggestions) {
-    return <div className="text-xs text-muted-foreground">Suggestions unavailable.</div>
+  const requestDisabled = disabled || loading || !onRequest
+  const requestButton = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={requestDisabled}
+      aria-label="Suggest labels"
+      onClick={onRequest}
+    >
+      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+      {loading ? "Suggesting…" : requested || suggestions ? "Refresh suggestions" : "Suggest labels"}
+    </Button>
+  )
+
+  if (!requested && !suggestions && !loading && !error) {
+    return requestButton
   }
-  const visible = suggestions.selected_labels.length ? suggestions.selected_labels : suggestions.candidates
+
+  const visible = suggestions ? (suggestions.selected_labels.length ? suggestions.selected_labels : suggestions.candidates) : []
   return (
     <div className="space-y-2 rounded-md border border-border p-2">
-      <div className="flex items-center justify-between gap-2 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
         <span className="font-medium text-muted-foreground">Suggestions</span>
-        <span className="text-muted-foreground">
-          coverage {(suggestions.coverage * 100).toFixed(0)}% / residual {suggestions.residual_norm.toFixed(3)}
-        </span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {suggestions ? (
+            <span className="text-muted-foreground">
+              coverage {(suggestions.coverage * 100).toFixed(0)}% / residual {suggestions.residual_norm.toFixed(3)}
+            </span>
+          ) : null}
+          {requestButton}
+        </div>
       </div>
-      {suggestions.needs_new_label ? (
+      {loading && !suggestions ? (
+        <div className="text-xs text-muted-foreground">Finding label suggestions…</div>
+      ) : null}
+      {error ? (
+        <Alert className="border-destructive/50 bg-destructive/5 py-2">
+          <AlertTitle className="text-xs text-destructive">Suggestions failed</AlertTitle>
+          <AlertDescription className="text-xs text-destructive">{error}</AlertDescription>
+        </Alert>
+      ) : null}
+      {suggestions?.needs_new_label ? (
         <div className="rounded-sm border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800">
           new label may be needed
         </div>
       ) : null}
-      {suggestions.degraded ? (
+      {suggestions?.degraded ? (
         <Alert className="py-2">
           <AlertTitle className="text-xs">Degraded</AlertTitle>
           <AlertDescription className="text-xs">{suggestions.diagnostics.join(", ")}</AlertDescription>
@@ -809,9 +861,9 @@ function LabelSuggestionsPanel({
             </div>
           ))}
         </div>
-      ) : (
+      ) : !loading && !error ? (
         <div className="text-xs text-muted-foreground">No label suggestions.</div>
-      )}
+      ) : null}
     </div>
   )
 }

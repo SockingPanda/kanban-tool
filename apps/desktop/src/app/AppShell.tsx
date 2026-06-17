@@ -83,6 +83,7 @@ import type {
   BoardColumn,
   Board,
   KanbanApi,
+  LabelSuggestionResult,
   Run,
   RuntimeConfig,
   SearchTasksMeta,
@@ -124,6 +125,10 @@ export function AppShell({
   selectedId,
   dependencySnapshot,
   detail,
+  labelSuggestions,
+  labelSuggestionsRequested,
+  labelSuggestionsLoading,
+  labelSuggestionsError,
   activeRun,
   search,
   debouncedSearch,
@@ -181,6 +186,7 @@ export function AppShell({
   onAction,
   onAddDependency,
   onRemoveDependency,
+  onRequestLabelSuggestions,
   onSaveTask,
   onCancelTaskEdit,
   onAddComment,
@@ -200,6 +206,10 @@ export function AppShell({
   selectedId: string | null
   dependencySnapshot: SelectedDependencySnapshot
   detail: DetailState
+  labelSuggestions: LabelSuggestionResult | null
+  labelSuggestionsRequested: boolean
+  labelSuggestionsLoading: boolean
+  labelSuggestionsError: string | null
   activeRun?: Run
   search: string
   debouncedSearch: string
@@ -257,6 +267,7 @@ export function AppShell({
   onAction: (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null }) => Promise<unknown>
   onAddDependency: () => Promise<void>
   onRemoveDependency: (parentTaskId: string) => Promise<void>
+  onRequestLabelSuggestions: () => void
   onSaveTask: () => Promise<boolean>
   onCancelTaskEdit: () => void
   onAddComment: () => Promise<void>
@@ -365,6 +376,10 @@ export function AppShell({
                 api={api}
                 task={selectedTask}
                 detail={detail}
+                labelSuggestions={labelSuggestions}
+                labelSuggestionsRequested={labelSuggestionsRequested}
+                labelSuggestionsLoading={labelSuggestionsLoading}
+                labelSuggestionsError={labelSuggestionsError}
                 activeRun={activeRun}
                 blockReason={blockReason}
                 setBlockReason={onBlockReasonChange}
@@ -381,6 +396,7 @@ export function AppShell({
                 onAction={onAction}
                 onAddDependency={onAddDependency}
                 onRemoveDependency={onRemoveDependency}
+                onRequestLabelSuggestions={onRequestLabelSuggestions}
                 onSelectTask={onSelectTask}
                 onSaveTask={onSaveTask}
                 onCancelEdit={onCancelTaskEdit}

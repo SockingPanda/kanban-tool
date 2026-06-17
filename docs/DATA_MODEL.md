@@ -437,9 +437,9 @@ LanceDB atom retrieval 使用。
 | `label_id` / `board_id` | 关联 canonical label 与 board。 |
 | `polarity` | `positive` / `negative`。 |
 | `kind` | `name`、`description`、`applies_when`、`positive_example`、`excludes_when`、`negative_example`。 |
-| `text` | trim 后的 atom 文本，空文本不入库。 |
-| `ordinal` | 同一 label 展开后的稳定顺序。 |
-| `content_hash` | atom 内容 hash，用于派生层判断变化。 |
+| `text` | trim 且 collapse whitespace 后的 atom 文本，空文本不入库。 |
+| `ordinal` | 同一 label 展开后的顺序；同语义重复 atom 去重时保留首次出现的 ordinal。 |
+| `content_hash` | atom 语义内容 hash，用于派生层判断变化；输入为 `label_id + polarity + kind + normalized_text`，不包含 `ordinal`。 |
 | `created_at` / `updated_at` | atom truth 时间。 |
 
 派生向量表：`kb_label_atoms`

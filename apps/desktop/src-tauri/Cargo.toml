@@ -22,5 +22,5 @@ kanban-local.workspace = true
 kanban-server = { workspace = true, features = ["vector-lancedb"] }
 kanban-sqlite.workspace = true
 serde.workspace = true
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tokio.workspace = true

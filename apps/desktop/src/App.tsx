@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { AppShell } from "@/app/AppShell"
-import { createBoardSwitchReset } from "@/app/board-switch-state"
+import { createBoardSwitchInvalidationTargets, createBoardSwitchReset } from "@/app/board-switch-state"
 import { parseSidebarOpen, serializeSidebarOpen, SIDEBAR_OPEN_STORAGE_KEY } from "@/app/sidebar-state"
 import {
   applyRootTheme,
@@ -484,7 +484,12 @@ function App() {
       setClaimTokens(reset.claimTokens)
       setLastRefreshAt(reset.lastRefreshAt)
       setError(reset.error)
-      await queryClient.invalidateQueries()
+      await Promise.all(
+        createBoardSwitchInvalidationTargets({
+          previousBoard: config.board,
+          nextBoard: reset.config.board,
+        }).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      )
     } catch (err) {
       setError(errorMessage(err))
     } finally {

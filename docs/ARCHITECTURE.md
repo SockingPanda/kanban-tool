@@ -189,6 +189,22 @@ kanban dispatch
 kanban dispatch --once
 ```
 
+### 2.6 `kanban-vector`
+
+职责：
+
+- 定义可重建向量派生层的数据结构和错误模型。
+- `EmbeddingProvider` 只表示外部 embedding provider 的文本向量化能力。
+- `ChunkVectorStore` 表示 task chunk derived index 的 upsert/delete/query 能力。
+- `LabelAtomVectorStore` 表示 label atom derived index 的 upsert/delete/query 能力，并提供 suggestion/proposal 所需的 query-text embedding。
+- `VectorStore` 只是兼容组合 trait；`LanceDbStore` 可以同时实现 chunk 和 label atom 能力，但上层服务应按实际能力依赖更窄的 trait。
+
+边界要求：
+
+- chunk context/rebuild 路径只依赖 `ChunkVectorStore`。
+- label suggestion/proposal/atom-index 路径只依赖 `LabelAtomVectorStore`，不依赖 chunk store 语义。
+- LanceDB 表仍按 derived store 隔离：task chunks 写入 `kb_chunks`，label atoms 写入 `kb_label_atoms`。
+
 ---
 
 ## 3. 数据流

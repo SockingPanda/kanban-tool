@@ -1347,8 +1347,8 @@ impl ResidualValidationUnavailableStore {
     }
 }
 
-impl kanban_vector::VectorStore for ResidualValidationUnavailableStore {
-    fn chunk_embedding_model(&self) -> &str {
+impl kanban_vector::VectorStoreBackend for ResidualValidationUnavailableStore {
+    fn embedding_model(&self) -> &str {
         "test-model"
     }
 
@@ -1359,29 +1359,9 @@ impl kanban_vector::VectorStore for ResidualValidationUnavailableStore {
             message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
         }
     }
+}
 
-    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn upsert(
-        &self,
-        _chunks: &[kanban_vector::EmbeddingChunk],
-    ) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn query(
-        &self,
-        _query: &kanban_vector::VectorQuery,
-    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
-        Ok(Vec::new())
-    }
-
+impl kanban_vector::QueryEmbeddingProvider for ResidualValidationUnavailableStore {
     fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
         self.mark_validation_started(text)?;
         if text.contains("residual validation candidate") {
@@ -1390,7 +1370,9 @@ impl kanban_vector::VectorStore for ResidualValidationUnavailableStore {
             Ok(vec![1.0, 0.0, 0.0])
         }
     }
+}
 
+impl kanban_vector::LabelAtomVectorStore for ResidualValidationUnavailableStore {
     fn query_label_atoms_by_vector(
         &self,
         _query: &kanban_vector::LabelAtomVectorQuery,
@@ -1406,8 +1388,8 @@ impl kanban_vector::VectorStore for ResidualValidationUnavailableStore {
     }
 }
 
-impl kanban_vector::VectorStore for ProposalValidationStore {
-    fn chunk_embedding_model(&self) -> &str {
+impl kanban_vector::VectorStoreBackend for ProposalValidationStore {
+    fn embedding_model(&self) -> &str {
         "test-model"
     }
 
@@ -1418,33 +1400,15 @@ impl kanban_vector::VectorStore for ProposalValidationStore {
             message: self.status_message.to_owned(),
         }
     }
+}
 
-    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn upsert(
-        &self,
-        _chunks: &[kanban_vector::EmbeddingChunk],
-    ) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn query(
-        &self,
-        _query: &kanban_vector::VectorQuery,
-    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
-        Ok(Vec::new())
-    }
-
+impl kanban_vector::QueryEmbeddingProvider for ProposalValidationStore {
     fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
         Ok(self.embedding_for(text))
     }
+}
 
+impl kanban_vector::LabelAtomVectorStore for ProposalValidationStore {
     fn query_label_atoms_by_vector(
         &self,
         query: &kanban_vector::LabelAtomVectorQuery,
@@ -1486,8 +1450,8 @@ impl kanban_vector::VectorStore for ProposalValidationStore {
     }
 }
 
-impl kanban_vector::VectorStore for DiagnosticLabelAtomStore {
-    fn chunk_embedding_model(&self) -> &str {
+impl kanban_vector::VectorStoreBackend for DiagnosticLabelAtomStore {
+    fn embedding_model(&self) -> &str {
         "test-model"
     }
 
@@ -1498,33 +1462,15 @@ impl kanban_vector::VectorStore for DiagnosticLabelAtomStore {
             message: self.status_message.to_owned(),
         }
     }
+}
 
-    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn upsert(
-        &self,
-        _chunks: &[kanban_vector::EmbeddingChunk],
-    ) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn query(
-        &self,
-        _query: &kanban_vector::VectorQuery,
-    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
-        Ok(Vec::new())
-    }
-
+impl kanban_vector::QueryEmbeddingProvider for DiagnosticLabelAtomStore {
     fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
         Ok(vec![1.0, 0.0, 0.0])
     }
+}
 
+impl kanban_vector::LabelAtomVectorStore for DiagnosticLabelAtomStore {
     fn query_label_atoms_by_vector(
         &self,
         _query: &kanban_vector::LabelAtomVectorQuery,
@@ -1558,8 +1504,8 @@ impl ResidualRecordingLabelAtomStore {
     }
 }
 
-impl kanban_vector::VectorStore for ResidualRecordingLabelAtomStore {
-    fn chunk_embedding_model(&self) -> &str {
+impl kanban_vector::VectorStoreBackend for ResidualRecordingLabelAtomStore {
+    fn embedding_model(&self) -> &str {
         "test-model"
     }
 
@@ -1570,33 +1516,15 @@ impl kanban_vector::VectorStore for ResidualRecordingLabelAtomStore {
             message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
         }
     }
+}
 
-    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn upsert(
-        &self,
-        _chunks: &[kanban_vector::EmbeddingChunk],
-    ) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn query(
-        &self,
-        _query: &kanban_vector::VectorQuery,
-    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
-        Ok(Vec::new())
-    }
-
+impl kanban_vector::QueryEmbeddingProvider for ResidualRecordingLabelAtomStore {
     fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
         Ok(vec![1.0, 1.0, 0.0])
     }
+}
 
+impl kanban_vector::LabelAtomVectorStore for ResidualRecordingLabelAtomStore {
     fn query_label_atoms_by_vector(
         &self,
         query: &kanban_vector::LabelAtomVectorQuery,
@@ -1668,8 +1596,8 @@ struct StaticLabelAtomStore {
     hits: Vec<kanban_vector::LabelAtomHit>,
 }
 
-impl kanban_vector::VectorStore for StaticLabelAtomStore {
-    fn chunk_embedding_model(&self) -> &str {
+impl kanban_vector::VectorStoreBackend for StaticLabelAtomStore {
+    fn embedding_model(&self) -> &str {
         "test-model"
     }
 
@@ -1680,33 +1608,15 @@ impl kanban_vector::VectorStore for StaticLabelAtomStore {
             message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
         }
     }
+}
 
-    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn upsert(
-        &self,
-        _chunks: &[kanban_vector::EmbeddingChunk],
-    ) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn query(
-        &self,
-        _query: &kanban_vector::VectorQuery,
-    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
-        Ok(Vec::new())
-    }
-
+impl kanban_vector::QueryEmbeddingProvider for StaticLabelAtomStore {
     fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
         Ok(vec![1.0, 0.0, 0.0])
     }
+}
 
+impl kanban_vector::LabelAtomVectorStore for StaticLabelAtomStore {
     fn query_label_atoms_by_vector(
         &self,
         query: &kanban_vector::LabelAtomVectorQuery,

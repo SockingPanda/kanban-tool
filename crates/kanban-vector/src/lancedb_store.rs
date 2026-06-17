@@ -14,9 +14,10 @@ use lancedb::query::{ExecutableQuery, QueryBase, Select};
 use tokio::runtime::Runtime;
 
 use crate::{
-    EmbeddingChunk, EmbeddingProvider, LabelAtomHit, LabelAtomQuery, LabelAtomVector,
-    LabelAtomVectorHit, LabelAtomVectorQuery, LanceDbConfig, VectorError, VectorHit, VectorQuery,
-    VectorStore, VectorStoreStatus, ensure_dimensions,
+    ChunkVectorStore, EmbeddingChunk, EmbeddingProvider, LabelAtomHit, LabelAtomQuery,
+    LabelAtomVector, LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore, LanceDbConfig,
+    QueryEmbeddingProvider, VectorError, VectorHit, VectorQuery, VectorStoreBackend,
+    VectorStoreStatus, ensure_dimensions,
 };
 
 const VECTOR_COLUMN: &str = "vector";
@@ -82,8 +83,8 @@ impl LanceDbStore {
     }
 }
 
-impl VectorStore for LanceDbStore {
-    fn chunk_embedding_model(&self) -> &str {
+impl VectorStoreBackend for LanceDbStore {
+    fn embedding_model(&self) -> &str {
         self.provider
             .as_ref()
             .map(|provider| provider.embedding_model())
@@ -110,7 +111,9 @@ impl VectorStore for LanceDbStore {
             },
         }
     }
+}
 
+impl ChunkVectorStore for LanceDbStore {
     fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
         let provider = self.provider()?;
         if chunks.is_empty() {
@@ -234,14 +237,18 @@ impl VectorStore for LanceDbStore {
             batches_to_hits(&batches)
         })
     }
+}
 
+impl QueryEmbeddingProvider for LanceDbStore {
     fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, VectorError> {
         let provider = self.provider()?;
         let embedding = provider.embed(text)?;
         ensure_dimensions(&embedding, provider.dimensions())?;
         Ok(embedding)
     }
+}
 
+impl LabelAtomVectorStore for LanceDbStore {
     fn delete_label_atoms_for_board(&self, board_id: &str) -> Result<(), VectorError> {
         let provider = self.provider()?;
         let embedding_model = provider.embedding_model().to_owned();
@@ -944,8 +951,9 @@ mod tests {
     use std::sync::Arc;
 
     use crate::{
-        ChunkBuilder, EmbeddingProvider, LabelAtomQuery, LabelAtomVector, LabelAtomVectorQuery,
-        LanceDbConfig, LanceDbStore, TaskChunkSource, VectorError, VectorQuery, VectorStore,
+        ChunkBuilder, ChunkVectorStore, EmbeddingProvider, LabelAtomQuery, LabelAtomVector,
+        LabelAtomVectorQuery, LabelAtomVectorStore, LanceDbConfig, LanceDbStore, TaskChunkSource,
+        VectorError, VectorQuery, VectorStoreBackend,
     };
 
     struct StaticProvider;

@@ -55,7 +55,7 @@ desktop-package:
     scripts/cargo-build-lock.sh -- pnpm --dir apps/desktop tauri build
 
 cli-package:
-    scripts/package-cli-linux.sh --format deb
+    scripts/package-cli-linux.sh --format deb --features vector-lancedb
 
 smoke:
     scripts/smoke-v1-local.sh

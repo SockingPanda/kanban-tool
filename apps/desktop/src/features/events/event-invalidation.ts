@@ -25,6 +25,7 @@ const BOARD_AFFECTING_TASK_KINDS = new Set([
   "task.restored",
   "task.deleted",
   "task.export_sanitized",
+  "task.comment.created",
   "task.retry_policy.updated",
   "dependency.added",
   "dependency.removed",

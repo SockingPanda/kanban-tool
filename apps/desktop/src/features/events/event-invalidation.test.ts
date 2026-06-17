@@ -16,7 +16,7 @@ describe("event invalidation helpers", () => {
       affectedQueriesForEvents([eventRecord({ task_id: "t_1", kind: "task.comment.created" })]),
     ).toEqual({
       taskIds: new Set(["t_1"]),
-      invalidateBoardTasks: false,
+      invalidateBoardTasks: true,
       invalidateEvents: true,
     })
 
@@ -99,11 +99,14 @@ describe("event invalidation helpers", () => {
     ])
   })
 
-  it("does not invalidate maintenance keys for task-scoped comment events", () => {
+  it("invalidates board search keys for task-scoped comment events", () => {
     const affected = affectedQueriesForEvents([eventRecord({ task_id: "t_2", kind: "task.comment.created" })])
 
     expect(queryKeysForAffectedEvents({ affected, board: "default", selectedTaskId: "t_2" })).toEqual([
       ["events", "default"],
+      ["tasks", "default"],
+      ["stats", "default"],
+      ["search-status", "default"],
       ["task-detail", "t_2"],
     ])
   })

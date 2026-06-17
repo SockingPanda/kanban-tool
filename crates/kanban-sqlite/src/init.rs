@@ -27,7 +27,9 @@ const LABEL_SEMANTIC_PROPOSALS_MIGRATION: &str =
     include_str!("../../../migrations/009_label_semantic_proposals.sql");
 const STABLE_LABEL_ATOM_HASHES_MIGRATION: &str =
     include_str!("../../../migrations/010_stable_label_atom_hashes.sql");
-const LATEST_MIGRATION_VERSION: i64 = 10;
+const LABEL_PROPOSAL_COSINE_COVERAGE_MIGRATION: &str =
+    include_str!("../../../migrations/011_label_proposal_cosine_coverage.sql");
+const LATEST_MIGRATION_VERSION: i64 = 11;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] =
     &["fnv64:0ca871be950fc8a6", "fnv64:3b08da4e2b6041f5"];
 
@@ -87,6 +89,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 10,
         name: "010_stable_label_atom_hashes",
         sql: STABLE_LABEL_ATOM_HASHES_MIGRATION,
+    },
+    Migration {
+        version: 11,
+        name: "011_label_proposal_cosine_coverage",
+        sql: LABEL_PROPOSAL_COSINE_COVERAGE_MIGRATION,
     },
 ];
 

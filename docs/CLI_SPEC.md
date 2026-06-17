@@ -534,7 +534,8 @@ default#12 t_01HX... [ready] 修复 API 回归 [backend,p1]
 description embedding 作为 query，使用 `lancedb_label_atoms` 按残差多轮检索正向
 label atoms，并用原始 query 检索负向 atoms 做 penalty / suppression。solver 在
 label group 层执行 Group OMP 选择，再用选中 label 的 top positive atom vectors 做
-non-negative refit；`coverage` / `residual_norm` 来自该 atom-level fitted vector。
+non-negative refit；`coverage` / `residual_norm` 来自该 atom-level fitted vector，
+`coverage_cosine` 是原始 query 与 fitted vector 的 cosine similarity。
 候选 label 只有在 tentative refit 后带来足够 residual norm 降幅才会进入结果；
 coverage 或 residual norm 达到停止阈值后，solver 会提前停止而不是凑满
 `--max-selected-labels`。candidate group 与已选 label 语义向量过度相似时会被跳过，
@@ -559,6 +560,7 @@ JSON 输出：
     "selected_labels": [],
     "candidates": [],
     "coverage": 0.0,
+    "coverage_cosine": 0.0,
     "residual_norm": 1.0,
     "needs_new_label": false,
     "degraded": true,
@@ -599,13 +601,13 @@ collapse，canonical 行分隔保留。同一 label 下相同
 human 输出和 JSON hit 都把 LanceDB `_distance` 暴露为 `distance`。
 
 `label propose` 是独立的新 label semantics 提案流程，不复用或改变 `label suggest`。
-它先读取当前 task-level label suggestions 的 `coverage` / `residual_norm` /
+它先读取当前 task-level label suggestions 的 `coverage` / `coverage_cosine` / `residual_norm` /
 top1 existing label。没有 `--proposal-json` 时默认 provider 不可用，命令成功返回
 degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms` 或
 `task_labels`。日常 label suggestion 不依赖该 proposal provider。
 `--limit` 只截断 proposal attempt 中复用的 suggestion 输出；`--candidate-limit`、
 `--atom-limit`、`--max-selected-labels`、`--min-score` 会在 proposal 持久化前调节底层
-label suggestion solver，用于计算 coverage、residual_norm 和 top1 existing label。
+label suggestion solver，用于计算 coverage、coverage_cosine、residual_norm 和 top1 existing label。
 `--vector-config` 使用与 `label suggest` 相同的 TOML 解析规则；配置可用时，
 proposal attempt 会用同一套 LanceDB label atom store 做 suggestion 与后续残差
 校验。未配置或 feature/provider 不可用时保持 degraded fallback，不写入普通 label
@@ -656,6 +658,7 @@ label、`label_semantics` 与 `label_atoms`，并标脏 label atom index；它�
     "degraded": true,
     "diagnostics": ["label_proposal_provider_unavailable", "vector_store_disabled"],
     "heuristic_coverage": 0.0,
+    "heuristic_coverage_cosine": 0.0,
     "heuristic_residual_norm": 1.0,
     "top1_existing_label_id": null,
     "top1_existing_label_name": null

@@ -857,7 +857,9 @@ function LabelSuggestionsPanel({
         <div className="flex flex-wrap items-center justify-end gap-2">
           {suggestions ? (
             <span className="text-muted-foreground">
-              coverage {(suggestions.coverage * 100).toFixed(0)}% / residual {suggestions.residual_norm.toFixed(3)}
+              coverage {(suggestions.coverage * 100).toFixed(0)}% / cosine{" "}
+              {(suggestions.coverage_cosine * 100).toFixed(0)}% / residual{" "}
+              {suggestions.residual_norm.toFixed(3)}
             </span>
           ) : null}
           {requestButton}

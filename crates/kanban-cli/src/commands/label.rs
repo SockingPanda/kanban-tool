@@ -142,11 +142,12 @@ pub(crate) fn handle_label(
             print_or_json(json, &attempt, || {
                 if let Some(proposal) = &attempt.proposal {
                     format!(
-                        "{} {} [{}] coverage={:.3} residual_norm={:.3}",
+                        "{} {} [{}] coverage={:.3} coverage_cosine={:.3} residual_norm={:.3}",
                         proposal.id,
                         proposal.name,
                         proposal.status,
                         attempt.heuristic_coverage,
+                        attempt.heuristic_coverage_cosine,
                         attempt.heuristic_residual_norm
                     )
                 } else {
@@ -436,8 +437,8 @@ fn label_suggestion_lines(result: &LabelSuggestionResult) -> String {
         lines.push(format!("degraded: {}", result.diagnostics.join(",")));
     }
     lines.push(format!(
-        "coverage={:.3} residual_norm={:.3} needs_new_label={}",
-        result.coverage, result.residual_norm, result.needs_new_label
+        "coverage={:.3} coverage_cosine={:.3} residual_norm={:.3} needs_new_label={}",
+        result.coverage, result.coverage_cosine, result.residual_norm, result.needs_new_label
     ));
     lines.join("\n")
 }
@@ -465,12 +466,13 @@ fn proposal_line(proposal: &LabelSemanticProposalRecord) -> String {
         .map(|id| format!(" resolved_label_id={id}"))
         .unwrap_or_default();
     format!(
-        "{} {} [{}] task={} coverage={:.3} residual_norm={:.3}{}",
+        "{} {} [{}] task={} coverage={:.3} coverage_cosine={:.3} residual_norm={:.3}{}",
         proposal.id,
         proposal.name,
         proposal.status,
         proposal.task_id,
         proposal.heuristic_coverage,
+        proposal.heuristic_coverage_cosine,
         proposal.heuristic_residual_norm,
         resolved
     )

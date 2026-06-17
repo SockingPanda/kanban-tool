@@ -568,7 +568,7 @@ label truth。它只记录“现有 label atom suggestion 覆盖不足时，外�
 | `board_id` / `task_id` | 提案来源 task。 |
 | `status` | `proposed` / `accepted` / `rejected`。provider 不可用不写成 status，而是返回 degraded attempt。 |
 | `name` / `description` / `applies_when` / `excludes_when` / `positive_examples` / `negative_examples` | 候选 label semantics。数组字段为 JSON string array。 |
-| `heuristic_coverage` / `heuristic_residual_norm` | 来自当前 residual label suggestion solver 的覆盖/残差元数据，用于记录 proposal 创建时现有 label atoms 的覆盖程度。 |
+| `heuristic_coverage` / `heuristic_coverage_cosine` / `heuristic_residual_norm` | 来自当前 residual label suggestion solver 的覆盖/残差元数据，用于记录 proposal 创建时现有 label atoms 的覆盖程度；`heuristic_coverage_cosine` 是 query 与 fitted vector 的 cosine similarity。 |
 | `top1_existing_label_id` / `top1_existing_label_name` | 当前启发式 top1 existing label。 |
 | `diagnostics_json` | JSON string array，包含 degraded、冲突或 validation 诊断。 |
 | `decision_reason` / `resolved_label_id` / `decided_at` | accept/reject 决策信息；accept 后 `resolved_label_id` 指向新建 canonical label。 |

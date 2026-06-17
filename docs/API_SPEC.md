@@ -963,7 +963,8 @@ GET /api/v1/tasks/{task_id}/labels/suggestions?limit=5&candidate_limit=32&atom_l
 查询 `lancedb_label_atoms`：正向 atoms 按 residual 多轮检索，负向 atoms 固定用原始
 query 检索并做 penalty / suppression。solver 在 label group 层执行 Group OMP 选择，
 再把选中 label 的 top positive atom vectors 作为 basis 做 non-negative refit；
-`coverage` / `residual_norm` 来自 atom-level fitted vector。候选 label 只有在
+`coverage` / `residual_norm` 来自 atom-level fitted vector；`coverage_cosine`
+是原始 query 与 fitted vector 的 cosine similarity。候选 label 只有在
 tentative refit 后带来足够 residual norm 降幅才会进入结果；coverage 或
 residual norm 达到停止阈值后，solver 会提前停止而不是凑满
 `max_selected_labels`。candidate group 与已选 label 语义向量过度相似时会被跳过，
@@ -1011,6 +1012,7 @@ Response：
     ],
     "candidates": [],
     "coverage": 0.82,
+    "coverage_cosine": 0.91,
     "residual_norm": 0.18,
     "needs_new_label": false,
     "degraded": true,
@@ -1059,7 +1061,7 @@ degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms`
 ```
 
 数组字段缺省时按空数组处理。服务先读取当前 label suggestion 的启发式
-`coverage` / `residual_norm` / top1 existing label。coverage 充足时不写 proposal；
+`coverage` / `coverage_cosine` / `residual_norm` / top1 existing label。coverage 充足时不写 proposal；
 coverage 不足且候选语义有效，并且残差 top1+margin 校验明确通过时，返回 `201` 并持久化
 `proposed` proposal。与现有 label 发生 normalized-name 冲突的候选持久化为 `rejected`，diagnostics 包含
 `near_duplicate_label_conflict`。Normalized-name conflict 忽略大小写、空白和标点，
@@ -1092,6 +1094,7 @@ Attempt response：
     "degraded": true,
     "diagnostics": ["label_proposal_provider_unavailable", "vector_store_disabled"],
     "heuristic_coverage": 0.0,
+    "heuristic_coverage_cosine": 0.0,
     "heuristic_residual_norm": 1.0,
     "top1_existing_label_id": null,
     "top1_existing_label_name": null

@@ -48,4 +48,3 @@ export function commentPageState({
     total,
   }
 }
-

@@ -28,7 +28,7 @@ use kanban_indexer::OXIGRAPH_RELATIONS_STORE;
 
 use kanban_search::SearchQuery;
 
-use kanban_vector::VectorStore;
+use kanban_vector::ChunkVectorStore;
 
 use rusqlite::Connection;
 
@@ -47,7 +47,7 @@ pub fn build_context_pack_with_vector_store(
     board: &str,
     task_ref: &str,
     policy: ContextPolicy,
-    vector_store: &impl VectorStore,
+    vector_store: &impl ChunkVectorStore,
 ) -> Result<ContextPack> {
     build_context_pack_inner(path.as_ref(), board, task_ref, policy, Some(vector_store))
 }
@@ -58,7 +58,7 @@ fn build_context_pack_inner(
     task_ref: &str,
     policy: ContextPolicy,
     #[cfg_attr(not(feature = "vector-lancedb"), allow(unused_variables))] vector_store: Option<
-        &dyn VectorStore,
+        &dyn ChunkVectorStore,
     >,
 ) -> Result<ContextPack> {
     validate_page_bounds(policy.lexical_limit, MAX_SEARCH_LIMIT, 0)?;

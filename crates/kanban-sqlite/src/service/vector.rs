@@ -15,7 +15,9 @@ use kanban_indexer::LANCEDB_CHUNKS_STORE;
 #[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
 use kanban_indexer::OutboxTarget;
 
-use kanban_vector::{ChunkBuilder, TaskChunkSource, VectorStore, VectorStoreStatus};
+use kanban_vector::{
+    ChunkBuilder, ChunkVectorStore, TaskChunkSource, VectorStoreBackend, VectorStoreStatus,
+};
 #[cfg(feature = "vector-lancedb")]
 use kanban_vector::{LanceDbConfig, LanceDbStore};
 
@@ -63,7 +65,7 @@ pub fn sync_vector_store(path: impl AsRef<Path>, board: &str) -> Result<VectorSt
 pub fn rebuild_vector_store_with(
     path: impl AsRef<Path>,
     board: &str,
-    store: &impl VectorStore,
+    store: &impl ChunkVectorStore,
 ) -> Result<VectorStoreStatus> {
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
@@ -110,7 +112,7 @@ pub fn rebuild_vector_store_with(
 pub fn sync_vector_store_with(
     path: impl AsRef<Path>,
     board: &str,
-    store: &impl VectorStore,
+    store: &impl ChunkVectorStore,
 ) -> Result<VectorStoreStatus> {
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
@@ -191,7 +193,7 @@ pub fn sync_vector_store_with(
 pub fn vector_store_status_with(
     path: impl AsRef<Path>,
     board: &str,
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl VectorStoreBackend + ?Sized),
 ) -> Result<VectorStoreStatus> {
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
@@ -224,7 +226,7 @@ pub fn configured_vector_store_status(
 pub(crate) fn vector_store_status_with_conn(
     conn: &Connection,
     board_id: &str,
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl VectorStoreBackend + ?Sized),
 ) -> Result<VectorStoreStatus> {
     vector_store_status_from_base(conn, board_id, store.status())
 }

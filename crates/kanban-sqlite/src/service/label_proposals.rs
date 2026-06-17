@@ -14,7 +14,7 @@ use std::{collections::HashMap, path::Path, str::FromStr};
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_label_id, new_typed_id};
 use kanban_labels::{LabelAtomPolarity, LabelDefinition};
-use kanban_vector::{DisabledVectorStore, VectorStore};
+use kanban_vector::{DisabledVectorStore, LabelAtomVectorStore};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde_json::json;
 
@@ -107,7 +107,7 @@ pub fn propose_task_label_with_store(
     actor: &str,
     task_ref: &str,
     provider: &(impl LabelProposalProvider + ?Sized),
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl LabelAtomVectorStore + ?Sized),
     options: LabelSuggestionOptions,
 ) -> Result<LabelProposalAttempt> {
     let conn = connect_file(path.as_ref())?;
@@ -169,7 +169,7 @@ pub fn propose_task_label_with_store(
         validate_candidate_residual(
             store,
             &task.board_id,
-            store.chunk_embedding_model(),
+            store.label_atom_embedding_model(),
             &computation.query_vector,
             &computation.residual_vector,
             &candidate,
@@ -292,7 +292,7 @@ impl ResidualValidation {
 }
 
 fn validate_candidate_residual(
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl LabelAtomVectorStore + ?Sized),
     board_id: &str,
     embedding_model: &str,
     query_vector: &[f32],
@@ -364,7 +364,7 @@ fn validate_candidate_residual(
 }
 
 fn candidate_residual_score(
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl LabelAtomVectorStore + ?Sized),
     query_vector: &[f32],
     residual: &[f32],
     candidate: &LabelProposalCandidate,
@@ -403,7 +403,7 @@ struct ExistingLabelScore {
 }
 
 fn best_existing_label_score(
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl LabelAtomVectorStore + ?Sized),
     board_id: &str,
     embedding_model: &str,
     query_vector: &[f32],

@@ -35,9 +35,9 @@ use kanban_graph::GraphStoreStatus;
 use kanban_graph::{OxigraphStore, RelationGraph};
 #[cfg(feature = "graph-oxigraph")]
 use kanban_indexer::OXIGRAPH_RELATIONS_STORE;
+use kanban_vector::{ChunkVectorStore, VectorStoreStatus};
 #[cfg(feature = "vector-lancedb")]
 use kanban_vector::{LanceDbConfig, LanceDbStore, VectorHit, VectorQuery};
-use kanban_vector::{VectorStore, VectorStoreStatus};
 
 #[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
 use crate::connect_file;
@@ -108,7 +108,7 @@ pub(crate) fn context_vector_items(
     task: &TaskRecord,
     status: &VectorStoreStatus,
     limit: usize,
-    store: Option<&dyn VectorStore>,
+    store: Option<&dyn ChunkVectorStore>,
 ) -> Result<Vec<ContextItem>> {
     if !status.enabled || limit == 0 {
         return Ok(Vec::new());
@@ -137,7 +137,7 @@ pub(crate) fn context_vector_items(
     _task: &TaskRecord,
     _status: &VectorStoreStatus,
     _limit: usize,
-    _store: Option<&dyn VectorStore>,
+    _store: Option<&dyn ChunkVectorStore>,
 ) -> Result<Vec<ContextItem>> {
     Ok(Vec::new())
 }
@@ -148,7 +148,7 @@ pub(crate) fn context_vector_status(
     conn: &Connection,
     board_id: &str,
     board: &str,
-    store: Option<&dyn VectorStore>,
+    store: Option<&dyn ChunkVectorStore>,
     degraded: &mut Vec<String>,
     diagnostics: &mut Vec<ContextDiagnostic>,
 ) -> VectorStoreStatus {
@@ -176,7 +176,7 @@ pub(crate) fn context_vector_status(
     _conn: &Connection,
     _board_id: &str,
     board: &str,
-    _store: Option<&dyn VectorStore>,
+    _store: Option<&dyn ChunkVectorStore>,
     _degraded: &mut Vec<String>,
     _diagnostics: &mut Vec<ContextDiagnostic>,
 ) -> VectorStoreStatus {

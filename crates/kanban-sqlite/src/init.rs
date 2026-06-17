@@ -142,12 +142,10 @@ fn validate_or_apply_migration(conn: &Connection, migration: &Migration) -> Resu
         .optional()
         .map_err(|err| KanbanError::Storage(err.to_string()))?;
     match row {
-        Some((name, _stored)) if name != migration.name => {
-            return Err(KanbanError::Storage(format!(
-                "migration name mismatch for version {}: expected {}, found {name}",
-                migration.version, migration.name
-            )));
-        }
+        Some((name, _stored)) if name != migration.name => Err(KanbanError::Storage(format!(
+            "migration name mismatch for version {}: expected {}, found {name}",
+            migration.version, migration.name
+        ))),
         Some((_name, stored)) if stored.is_empty() => {
             conn.execute(
                 "UPDATE schema_migrations SET checksum=?1 WHERE version=?2",
@@ -160,10 +158,10 @@ fn validate_or_apply_migration(conn: &Connection, migration: &Migration) -> Resu
             if is_allowed_legacy_migration_checksum(migration, &stored) {
                 return Ok(false);
             }
-            return Err(KanbanError::Storage(format!(
+            Err(KanbanError::Storage(format!(
                 "migration checksum mismatch for {}: expected {checksum}, found {stored}",
                 migration.name
-            )));
+            )))
         }
         Some((_name, _stored)) => Ok(false),
         None => {

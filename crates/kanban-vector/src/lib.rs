@@ -203,17 +203,32 @@ pub trait EmbeddingProvider {
     fn embed(&self, text: &str) -> Result<Vec<f32>, VectorError>;
 }
 
-pub trait VectorStore {
-    fn chunk_embedding_model(&self) -> &str {
+pub trait VectorStoreBackend {
+    fn embedding_model(&self) -> &str {
         DEFAULT_EMBEDDING_MODEL
     }
     fn status(&self) -> VectorStoreStatus;
+}
+
+pub trait QueryEmbeddingProvider: VectorStoreBackend {
+    fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
+        Err(VectorError::Disabled)
+    }
+}
+
+pub trait ChunkVectorStore: VectorStoreBackend {
+    fn chunk_embedding_model(&self) -> &str {
+        self.embedding_model()
+    }
     fn delete_board(&self, board_id: &str) -> Result<(), VectorError>;
     fn delete_entities(&self, entity_uris: &[String]) -> Result<(), VectorError>;
     fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError>;
     fn query(&self, query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError>;
-    fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
-        Err(VectorError::Disabled)
+}
+
+pub trait LabelAtomVectorStore: QueryEmbeddingProvider {
+    fn label_atom_embedding_model(&self) -> &str {
+        self.embedding_model()
     }
     fn delete_label_atoms_for_board(&self, _board_id: &str) -> Result<(), VectorError> {
         Err(VectorError::Disabled)
@@ -232,10 +247,14 @@ pub trait VectorStore {
     }
 }
 
+pub trait VectorStore: ChunkVectorStore + LabelAtomVectorStore {}
+
+impl<T> VectorStore for T where T: ChunkVectorStore + LabelAtomVectorStore + ?Sized {}
+
 #[derive(Debug, Clone, Default)]
 pub struct DisabledVectorStore;
 
-impl VectorStore for DisabledVectorStore {
+impl VectorStoreBackend for DisabledVectorStore {
     fn status(&self) -> VectorStoreStatus {
         VectorStoreStatus {
             backend: "disabled".to_owned(),
@@ -243,7 +262,11 @@ impl VectorStore for DisabledVectorStore {
             message: "Vector store is disabled; context retrieval uses lexical fallback".to_owned(),
         }
     }
+}
 
+impl QueryEmbeddingProvider for DisabledVectorStore {}
+
+impl ChunkVectorStore for DisabledVectorStore {
     fn upsert(&self, _chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
         Err(VectorError::Disabled)
     }
@@ -260,6 +283,8 @@ impl VectorStore for DisabledVectorStore {
         Ok(Vec::new())
     }
 }
+
+impl LabelAtomVectorStore for DisabledVectorStore {}
 
 #[cfg(feature = "vector-lancedb")]
 #[derive(Clone)]
@@ -333,9 +358,22 @@ pub enum VectorError {
 #[cfg(test)]
 mod tests {
     use super::{
-        ChunkBuilder, DisabledVectorStore, TaskChunkSource, VectorError, VectorStore,
-        ensure_dimensions,
+        ChunkBuilder, ChunkVectorStore, DisabledVectorStore, LabelAtomVectorStore, TaskChunkSource,
+        VectorError, VectorStore, VectorStoreBackend, ensure_dimensions,
     };
+
+    fn assert_chunk_store<T: ChunkVectorStore>(_store: &T) {}
+    fn assert_label_atom_store<T: LabelAtomVectorStore>(_store: &T) {}
+    fn assert_vector_store<T: VectorStore>(_store: &T) {}
+
+    #[test]
+    fn disabled_store_implements_split_vector_traits() {
+        let store = DisabledVectorStore;
+
+        assert_chunk_store(&store);
+        assert_label_atom_store(&store);
+        assert_vector_store(&store);
+    }
 
     #[test]
     fn disabled_vector_store_rejects_writes() {

@@ -12,7 +12,7 @@ use kanban_indexer::{DERIVED_STORE_SCHEMA_VERSION, LANCEDB_LABEL_ATOMS_STORE};
 use kanban_labels::{LabelAtomKind, LabelAtomPolarity, LabelDefinition};
 use kanban_vector::{
     LabelAtomHit, LabelAtomQuery, LabelAtomVector, LabelAtomVectorHit, LabelAtomVectorQuery,
-    VectorStore, VectorStoreStatus,
+    LabelAtomVectorStore, VectorStoreBackend, VectorStoreStatus,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
@@ -236,7 +236,7 @@ pub fn label_atom_index_status(path: impl AsRef<Path>, board: &str) -> Result<Ve
 pub fn label_atom_index_status_with(
     path: impl AsRef<Path>,
     board: &str,
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl VectorStoreBackend + ?Sized),
 ) -> Result<VectorStoreStatus> {
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
@@ -246,11 +246,11 @@ pub fn label_atom_index_status_with(
 pub fn rebuild_label_atom_index_with(
     path: impl AsRef<Path>,
     board: &str,
-    store: &impl VectorStore,
+    store: &impl LabelAtomVectorStore,
 ) -> Result<VectorStoreStatus> {
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
-    let atoms = label_atom_vectors_for_board(&conn, &board_id, store.chunk_embedding_model())?;
+    let atoms = label_atom_vectors_for_board(&conn, &board_id, store.label_atom_embedding_model())?;
     match store
         .delete_label_atoms_for_board(&board_id)
         .and_then(|()| store.upsert_label_atoms(&atoms))
@@ -284,7 +284,7 @@ pub fn rebuild_label_atom_index_with(
 pub fn query_label_atom_index_with(
     path: impl AsRef<Path>,
     board: &str,
-    store: &impl VectorStore,
+    store: &impl LabelAtomVectorStore,
     mut query: LabelAtomQuery,
 ) -> Result<Vec<LabelAtomHit>> {
     let conn = connect_file(path.as_ref())?;
@@ -296,7 +296,7 @@ pub fn query_label_atom_index_with(
 pub fn query_label_atom_index_by_vector_with(
     path: impl AsRef<Path>,
     board: &str,
-    store: &impl VectorStore,
+    store: &impl LabelAtomVectorStore,
     mut query: LabelAtomVectorQuery,
 ) -> Result<Vec<LabelAtomVectorHit>> {
     let conn = connect_file(path.as_ref())?;

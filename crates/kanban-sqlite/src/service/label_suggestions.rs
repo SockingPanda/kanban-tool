@@ -15,8 +15,8 @@ use kanban_labels::{
     resolve_label_groups_by_residual,
 };
 use kanban_vector::{
-    DisabledVectorStore, LabelAtomVectorHit, LabelAtomVectorQuery, VectorError, VectorStore,
-    VectorStoreStatus,
+    DisabledVectorStore, LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore,
+    VectorError, VectorStoreStatus,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -36,7 +36,7 @@ pub fn suggest_task_labels_with(
     path: impl AsRef<Path>,
     board: &str,
     task_ref: &str,
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl LabelAtomVectorStore + ?Sized),
     options: LabelSuggestionOptions,
 ) -> Result<LabelSuggestionResult> {
     Ok(compute_task_label_suggestions_with(path, board, task_ref, store, options)?.result)
@@ -52,7 +52,7 @@ pub(crate) fn compute_task_label_suggestions_with(
     path: impl AsRef<Path>,
     board: &str,
     task_ref: &str,
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl LabelAtomVectorStore + ?Sized),
     options: LabelSuggestionOptions,
 ) -> Result<LabelSuggestionComputation> {
     validate_options(options)?;
@@ -103,7 +103,7 @@ pub(crate) fn compute_task_label_suggestions_with(
         ..LabelSolverConfig::default()
     };
     let board_id_for_query = task.board_id.clone();
-    let embedding_model = store.chunk_embedding_model().to_owned();
+    let embedding_model = store.label_atom_embedding_model().to_owned();
     let solver_result = match resolve_label_groups_by_residual(
         &query_vector,
         &solver_config,
@@ -230,7 +230,7 @@ fn validate_options(options: LabelSuggestionOptions) -> Result<()> {
 }
 
 pub(crate) fn retrieve_residual_atoms(
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl LabelAtomVectorStore + ?Sized),
     residual: &[f32],
     polarity: LabelAtomPolarity,
     limit: usize,

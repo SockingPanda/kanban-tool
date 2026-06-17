@@ -537,7 +537,9 @@ label group 层执行 Group OMP 选择，再用选中 label 的 top positive ato
 non-negative refit；`coverage` / `residual_norm` 来自该 atom-level fitted vector。
 候选 label 只有在 tentative refit 后带来足够 residual norm 降幅才会进入结果；
 coverage 或 residual norm 达到停止阈值后，solver 会提前停止而不是凑满
-`--max-selected-labels`。
+`--max-selected-labels`。candidate group 与已选 label 语义向量过度相似时会被跳过，
+以减少重复语义 label 同时出现在 selected labels；这不会合并或删除 canonical
+labels。
 它不会自动创建新 label，也不会写入 new-label proposal。应用建议时仍使用现有
 `label add <task_ref> <label>` / API attach 流程。
 

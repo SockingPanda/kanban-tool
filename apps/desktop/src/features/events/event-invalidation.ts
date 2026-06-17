@@ -3,6 +3,7 @@ import { queryKeys } from "@/lib/query-keys"
 
 export type AffectedQueries = {
   taskIds: Set<string>
+  invalidateBoards?: boolean
   invalidateBoardTasks: boolean
   invalidateEvents: boolean
 }
@@ -24,10 +25,13 @@ const BOARD_AFFECTING_TASK_KINDS = new Set([
   "task.restored",
   "task.deleted",
   "task.export_sanitized",
+  "task.comment.created",
   "task.retry_policy.updated",
   "dependency.added",
   "dependency.removed",
 ])
+
+const BOARD_LIFECYCLE_KINDS = new Set(["board.created", "board.updated", "board.archived"])
 
 export function nextEventCursor(current: number, events: EventRecord[], meta: EventMeta) {
   if (typeof meta.next_after === "number" && Number.isFinite(meta.next_after)) return meta.next_after
@@ -35,16 +39,19 @@ export function nextEventCursor(current: number, events: EventRecord[], meta: Ev
 }
 
 export function affectedQueriesForEvents(events: EventRecord[]): AffectedQueries {
+  let invalidateBoards = false
   let invalidateBoardTasks = false
   const taskIds = new Set<string>()
 
   for (const event of events) {
     if (event.task_id) taskIds.add(event.task_id)
+    if (BOARD_LIFECYCLE_KINDS.has(event.kind)) invalidateBoards = true
     if (!event.task_id || BOARD_AFFECTING_TASK_KINDS.has(event.kind)) invalidateBoardTasks = true
   }
 
   return {
     taskIds,
+    ...(invalidateBoards ? { invalidateBoards } : {}),
     invalidateBoardTasks,
     invalidateEvents: events.length > 0,
   }
@@ -62,6 +69,7 @@ export function queryKeysForAffectedEvents({
   const keys = []
 
   if (affected.invalidateEvents) keys.push(queryKeys.events(board))
+  if (affected.invalidateBoards) keys.push(queryKeys.boards())
   if (affected.invalidateBoardTasks) {
     keys.push(queryKeys.boardTasksRoot(board))
     keys.push(queryKeys.stats(board))

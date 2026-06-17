@@ -5,7 +5,7 @@ type SidebarContentEvent =
   | { type: "width-transition-finish"; sidebarOpen: boolean }
 
 export function nextSidebarContentOpen(currentContentOpen: boolean, event: SidebarContentEvent): boolean {
-  if (event.type === "width-transition-start") return currentContentOpen
+  if (event.type === "width-transition-start") return event.sidebarOpen || currentContentOpen
   return event.sidebarOpen
 }
 

@@ -892,10 +892,13 @@ semantics；`{label_id}` 只接受 canonical `l_...` label id。Label name 允�
 }
 ```
 
-数组字段可缺省为空数组；服务会 trim 并丢弃空白值。生成 atoms 时，atom text 会
-进一步 collapse whitespace；同一 label 下相同 `polarity + kind + normalized_text`
-的 atom 会去重并保留首次 ordinal，`id` / `content_hash` 不包含 ordinal，因此只调整
-数组顺序不会改变同一文本 atom identity。响应使用 Envelope：
+数组字段可缺省为空数组；服务会 trim 并丢弃空白值。生成 atoms 时，有 description
+的 label 会生成一个 canonical `description` atom：
+`label: {name}\ndescription: {description}`；没有 description 时才使用 `name`
+fallback atom。atom text 会进一步规范化 whitespace：每个非空行内部 collapse，
+canonical 行分隔保留。同一 label 下相同 `polarity + kind + normalized_text` 的 atom
+会去重并保留首次 ordinal，`id` / `content_hash` 不包含 ordinal，因此只调整数组顺序
+不会改变同一文本 atom identity。响应使用 Envelope：
 
 ```json
 {

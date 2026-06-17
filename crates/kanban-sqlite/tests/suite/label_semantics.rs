@@ -1800,9 +1800,12 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
 
     assert_eq!(semantics.label_id, label.id);
     assert_eq!(semantics.applies_when, vec!["touches server code"]);
-    assert_eq!(semantics.atoms.len(), 6);
-    assert_eq!(semantics.atoms[0].kind, "name");
-    assert_eq!(semantics.atoms[0].text, "backend");
+    assert_eq!(semantics.atoms.len(), 5);
+    assert_eq!(semantics.atoms[0].kind, "description");
+    assert_eq!(
+        semantics.atoms[0].text,
+        "label: backend\ndescription: Backend implementation work"
+    );
     assert!(
         semantics
             .atoms
@@ -2287,8 +2290,8 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
 
     let store = RecordingVectorStore::with_embedding_model("static-test");
     let status = rebuild_label_atom_index_with(&temp.path, "default", &store)?;
-    assert!(status.message.contains("rebuilt 3 label atom(s)"));
-    assert_eq!(store.upserted_label_atoms()?.len(), 3);
+    assert!(status.message.contains("rebuilt 2 label atom(s)"));
+    assert_eq!(store.upserted_label_atoms()?.len(), 2);
     let hits = query_label_atom_index_with(
         &temp.path,
         "default",
@@ -2301,7 +2304,7 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
             polarity: Some("positive".to_owned()),
         },
     )?;
-    assert_eq!(hits.len(), 2);
+    assert_eq!(hits.len(), 1);
     assert!(hits.iter().all(|hit| hit.polarity == "positive"));
 
     let vector_hits = query_label_atom_index_by_vector_with(
@@ -2317,7 +2320,7 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
             include_vector: true,
         },
     )?;
-    assert_eq!(vector_hits.len(), 2);
+    assert_eq!(vector_hits.len(), 1);
     assert!(
         vector_hits
             .iter()

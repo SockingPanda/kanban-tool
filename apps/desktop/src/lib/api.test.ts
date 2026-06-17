@@ -232,10 +232,22 @@ describe("KanbanApi task search", () => {
     const fetchMock = mockFetch({ data: suggestion })
     const api = new KanbanApi(runtimeConfig)
 
-    await expect(api.suggestTaskLabels("t_1", { limit: 3 })).resolves.toEqual(suggestion)
+    await expect(
+      api.suggestTaskLabels("t_1", {
+        limit: 3,
+        candidateLimit: 32,
+        atomLimit: 80,
+        maxSelectedLabels: 4,
+        minScore: 0.15,
+      }),
+    ).resolves.toEqual(suggestion)
     const url = calledUrl(fetchMock)
     expect(url.pathname).toBe("/api/v1/tasks/t_1/labels/suggestions")
     expect(url.searchParams.get("limit")).toBe("3")
+    expect(url.searchParams.get("candidate_limit")).toBe("32")
+    expect(url.searchParams.get("atom_limit")).toBe("80")
+    expect(url.searchParams.get("max_selected_labels")).toBe("4")
+    expect(url.searchParams.get("min_score")).toBe("0.15")
   })
 
   it("lists active boards through the boards endpoint", async () => {

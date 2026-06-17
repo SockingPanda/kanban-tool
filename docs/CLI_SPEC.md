@@ -493,8 +493,8 @@ kanban label atoms list [--json]
 kanban label atom-index status [--vector-config <toml>] [--json]
 kanban label atom-index rebuild --vector-config <toml> [--json]
 kanban label atom-index query <text> [--polarity positive|negative] [--limit 24] --vector-config <toml> [--json]
-kanban label suggest <task_ref> [--limit 5] [--atom-limit 24] [--min-score 0.15] [--vector-config <toml>] [--json]
-kanban label propose <task_ref> [--proposal-json <path>] [--limit 5] [--atom-limit 24] [--min-score 0.15] [--vector-config <toml>] [--json]
+kanban label suggest <task_ref> [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
+kanban label propose <task_ref> [--proposal-json <path>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]
 kanban label proposals show <proposal_id> [--json]
 kanban label proposals accept <proposal_id> [--reason <text>] [--json]
@@ -565,6 +565,12 @@ JSON 输出：
 Human output 简洁列出建议 label、score、weight、already_applied；degraded 时追加
 diagnostics 行。
 
+`--limit` 只控制最终输出中 `selected_labels` / `candidates` 的最大条数，不会收窄
+solver 内部搜索能力。内部能力由 `--candidate-limit`、`--atom-limit` 和
+`--max-selected-labels` 分别控制：候选 label group 数、每轮 atom vector 检索上限、
+以及最多进入 non-negative refit 的 label 数。所有 limit 参数都必须是
+`1..=1000`；`--min-score` 必须在 `0..=1`。
+
 `label semantics` 管理当前 board 上已有 label 的语义字典。`<label>` 接受 label
 name 或 `l_...` id；`upsert` 会写入 `label_semantics` 并同步重建该 label 的
 `label_atoms`，随后标脏派生的 label atom vector index。数组参数可重复；空白值会被
@@ -586,8 +592,9 @@ human 输出和 JSON hit 都把 LanceDB `_distance` 暴露为 `distance`。
 top1 existing label。没有 `--proposal-json` 时默认 provider 不可用，命令成功返回
 degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms` 或
 `task_labels`。日常 label suggestion 不依赖该 proposal provider。
-`--limit`、`--atom-limit`、`--min-score` 会在 proposal 持久化前调节底层 label
-suggestion solver，用于计算 coverage、residual_norm 和 top1 existing label。
+`--limit` 只截断 proposal attempt 中复用的 suggestion 输出；`--candidate-limit`、
+`--atom-limit`、`--max-selected-labels`、`--min-score` 会在 proposal 持久化前调节底层
+label suggestion solver，用于计算 coverage、residual_norm 和 top1 existing label。
 `--vector-config` 使用与 `label suggest` 相同的 TOML 解析规则；配置可用时，
 proposal attempt 会用同一套 LanceDB label atom store 做 suggestion 与后续残差
 校验。未配置或 feature/provider 不可用时保持 degraded fallback，不写入普通 label

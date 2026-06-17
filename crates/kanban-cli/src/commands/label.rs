@@ -80,10 +80,17 @@ pub(crate) fn handle_label(
             handle_label_atom_index(command, db_path, board, json)?
         }
         LabelCommand::Suggest(args) => {
-            validate_label_suggest_bounds(args.limit, args.atom_limit)?;
+            validate_label_suggest_bounds(
+                args.limit,
+                args.candidate_limit,
+                args.atom_limit,
+                args.max_selected_labels,
+            )?;
             let options = LabelSuggestionOptions {
-                limit: args.limit,
+                output_limit: args.limit,
+                candidate_limit: args.candidate_limit,
                 atom_limit: args.atom_limit,
+                max_selected_labels: args.max_selected_labels,
                 min_score: args.min_score,
             };
             let suggestions = suggest_with_optional_vector_config(
@@ -96,10 +103,17 @@ pub(crate) fn handle_label(
             print_or_json(json, &suggestions, || label_suggestion_lines(&suggestions))?;
         }
         LabelCommand::Propose(args) => {
-            validate_label_suggest_bounds(args.limit, args.atom_limit)?;
+            validate_label_suggest_bounds(
+                args.limit,
+                args.candidate_limit,
+                args.atom_limit,
+                args.max_selected_labels,
+            )?;
             let options = LabelSuggestionOptions {
-                limit: args.limit,
+                output_limit: args.limit,
+                candidate_limit: args.candidate_limit,
                 atom_limit: args.atom_limit,
+                max_selected_labels: args.max_selected_labels,
                 min_score: args.min_score,
             };
             let attempt = if let Some(path) = args.proposal_json {
@@ -281,15 +295,28 @@ fn handle_label_atom_index(
     Ok(())
 }
 
-fn validate_label_suggest_bounds(limit: usize, atom_limit: usize) -> Result<()> {
+fn validate_label_suggest_bounds(
+    limit: usize,
+    candidate_limit: usize,
+    atom_limit: usize,
+    max_selected_labels: usize,
+) -> Result<()> {
     if limit == 0 {
         bail!("limit must be >= 1");
+    }
+    if candidate_limit == 0 {
+        bail!("candidate_limit must be >= 1");
     }
     if atom_limit == 0 {
         bail!("atom_limit must be >= 1");
     }
+    if max_selected_labels == 0 {
+        bail!("max_selected_labels must be >= 1");
+    }
     validate_page_bounds(limit, MAX_TASK_LIST_LIMIT, 0)?;
+    validate_page_bounds(candidate_limit, MAX_TASK_LIST_LIMIT, 0)?;
     validate_page_bounds(atom_limit, MAX_TASK_LIST_LIMIT, 0)?;
+    validate_page_bounds(max_selected_labels, MAX_TASK_LIST_LIMIT, 0)?;
     Ok(())
 }
 

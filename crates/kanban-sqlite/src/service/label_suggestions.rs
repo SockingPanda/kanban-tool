@@ -97,8 +97,8 @@ pub(crate) fn compute_task_label_suggestions_with(
         .map(|label| label.id.as_str())
         .collect::<std::collections::HashSet<_>>();
     let solver_config = LabelSolverConfig {
-        max_candidates: options.limit.max(1),
-        max_selected_labels: options.limit.max(1),
+        max_candidates: options.candidate_limit.max(1),
+        max_selected_labels: options.max_selected_labels.max(1),
         min_candidate_score: options.min_score,
         ..LabelSolverConfig::default()
     };
@@ -156,9 +156,9 @@ pub(crate) fn compute_task_label_suggestions_with(
                 .collect(),
         })
         .collect::<Vec<_>>();
-    candidates.truncate(options.limit);
+    candidates.truncate(options.output_limit);
 
-    let selected_labels = solver_result
+    let mut selected_labels = solver_result
         .selected_labels
         .iter()
         .map(|selected| SelectedLabelSuggestion {
@@ -179,6 +179,7 @@ pub(crate) fn compute_task_label_suggestions_with(
                 .collect(),
         })
         .collect::<Vec<_>>();
+    selected_labels.truncate(options.output_limit);
     let coverage = solver_result.coverage;
     let degraded = !diagnostics.is_empty();
     let needs_new_label = selected_labels.is_empty()
@@ -202,12 +203,22 @@ pub(crate) fn compute_task_label_suggestions_with(
 }
 
 fn validate_options(options: LabelSuggestionOptions) -> Result<()> {
-    if options.limit == 0 {
+    if options.output_limit == 0 {
         return Err(KanbanError::InvalidInput("limit must be >= 1".to_owned()));
+    }
+    if options.candidate_limit == 0 {
+        return Err(KanbanError::InvalidInput(
+            "candidate_limit must be >= 1".to_owned(),
+        ));
     }
     if options.atom_limit == 0 {
         return Err(KanbanError::InvalidInput(
             "atom_limit must be >= 1".to_owned(),
+        ));
+    }
+    if options.max_selected_labels == 0 {
+        return Err(KanbanError::InvalidInput(
+            "max_selected_labels must be >= 1".to_owned(),
         ));
     }
     if !(0.0..=1.0).contains(&options.min_score) {

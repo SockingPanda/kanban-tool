@@ -524,7 +524,10 @@ async fn task_label_suggestions_route_returns_degraded_json_without_provider() -
 
     let (status, json) = get_json(
         app,
-        &format!("/api/v1/tasks/{}/labels/suggestions?limit=3", task.id),
+        &format!(
+            "/api/v1/tasks/{}/labels/suggestions?limit=3&candidate_limit=32&atom_limit=80&max_selected_labels=4&min_score=0.15",
+            task.id
+        ),
     )
     .await?;
 
@@ -562,7 +565,10 @@ async fn task_label_proposal_route_degrades_without_provider() -> anyhow::Result
 
     let (status, json) = post_json(
         app,
-        &format!("/api/v1/tasks/{}/label-proposals", task.id),
+        &format!(
+            "/api/v1/tasks/{}/label-proposals?limit=3&candidate_limit=32&atom_limit=80&max_selected_labels=4&min_score=0.15",
+            task.id
+        ),
         json!({}),
     )
     .await?;

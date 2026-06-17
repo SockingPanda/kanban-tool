@@ -194,9 +194,10 @@ fn label_proposal_residual_validation_passes_and_accept_keeps_task_unbound() -> 
         &provider,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 1,
+            output_limit: 1,
             atom_limit: 10,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -338,9 +339,11 @@ fn label_proposal_residual_validation_rejects_when_existing_wins() -> anyhow::Re
         &provider,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 1,
+            output_limit: 1,
             atom_limit: 10,
+            max_selected_labels: 1,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?
     .proposal
@@ -422,9 +425,11 @@ fn label_proposal_residual_validation_rejects_when_margin_is_insufficient() -> a
         &provider,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 1,
+            output_limit: 1,
             atom_limit: 10,
+            max_selected_labels: 1,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?
     .proposal
@@ -487,9 +492,10 @@ fn label_proposal_residual_validation_uses_solver_negative_suppression() -> anyh
         &provider,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 1,
+            output_limit: 1,
             atom_limit: 10,
             min_score: 0.99,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?
     .proposal
@@ -546,9 +552,10 @@ fn label_proposal_coverage_sufficient_does_not_call_provider_or_persist_candidat
         &provider,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 3,
+            output_limit: 3,
             atom_limit: 10,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -610,9 +617,10 @@ fn label_proposal_coverage_sufficient_preserves_degraded_diagnostics() -> anyhow
         &provider,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 3,
+            output_limit: 3,
             atom_limit: 10,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -892,9 +900,10 @@ fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> an
         &labeled.id,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 5,
+            output_limit: 5,
             atom_limit: 10,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -1110,9 +1119,10 @@ fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::R
         &task.id,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 3,
+            output_limit: 3,
             atom_limit: 12,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -1144,6 +1154,88 @@ fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::R
             .iter()
             .filter(|query| query.polarity.as_deref() == Some("positive"))
             .all(|query| (vector_norm(&query.vector) - 1.0).abs() < 0.0001)
+    );
+    Ok(())
+}
+
+#[test]
+fn task_label_suggestions_limit_truncates_output_without_narrowing_solver() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("task_label_suggestions_limit_truncates_output_without_narrowing_solver")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let docs = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "docs".to_owned(),
+            color: None,
+        },
+    )?;
+    let frontend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "frontend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("API docs update"),
+    )?;
+    let store = ResidualRecordingLabelAtomStore::new(vec![
+        (
+            atom_hit(&backend, "positive", "applies_when", "server handlers", 0.0),
+            vec![1.0, 0.0, 0.0],
+        ),
+        (
+            atom_hit(&docs, "positive", "applies_when", "documentation", 0.0),
+            vec![0.0, 1.0, 0.0],
+        ),
+        (
+            atom_hit(&frontend, "positive", "name", "frontend", 0.0),
+            vec![0.0, 0.0, 1.0],
+        ),
+    ]);
+
+    let result = kanban_sqlite::suggest_task_labels_with(
+        &temp.path,
+        "default",
+        &task.id,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            output_limit: 1,
+            atom_limit: 12,
+            min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
+        },
+    )?;
+
+    assert_eq!(result.selected_labels.len(), 1);
+    assert_eq!(result.candidates.len(), 1);
+    assert!(
+        result.coverage > 0.99,
+        "output limit must not reduce internal refit coverage: {result:?}"
+    );
+    assert!(result.residual_norm < 0.01);
+    let positive_queries = store
+        .queries()?
+        .into_iter()
+        .filter(|query| query.polarity.as_deref() == Some("positive"))
+        .collect::<Vec<_>>();
+    assert!(
+        positive_queries.len() >= 2,
+        "solver should still make residual follow-up queries: {positive_queries:?}"
     );
     Ok(())
 }

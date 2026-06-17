@@ -446,7 +446,15 @@ where
         .max(1);
 
     while selected_label_ids.len() < config.max_selected_labels {
-        let positive_hits = retrieve(&residual, LabelAtomPolarity::Positive, retrieval_limit)?;
+        if l2_norm(&residual) <= f32::EPSILON {
+            break;
+        }
+        let residual_query = normalize_for_fit(&residual);
+        let positive_hits = retrieve(
+            &residual_query,
+            LabelAtomPolarity::Positive,
+            retrieval_limit,
+        )?;
         let negative_hits = retrieve(
             &normalized_query,
             LabelAtomPolarity::Negative,
@@ -1208,6 +1216,11 @@ mod tests {
             vec!["backend", "docs", "tests"]
         );
         assert!(positive_queries.len() >= 3);
+        assert!(
+            positive_queries
+                .iter()
+                .all(|query| (l2_norm(query) - 1.0).abs() < 0.0001)
+        );
         assert!(result.coverage > 0.99);
         assert!(result.residual_norm < 0.01);
     }
@@ -1406,6 +1419,42 @@ mod tests {
         assert!(result.selected_labels.is_empty());
         assert_eq!(result.coverage, 0.0);
         assert_eq!(result.residual_norm, 1.0);
+    }
+
+    #[test]
+    fn residual_solver_stops_before_retrieving_zero_residual() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 2,
+            min_candidate_score: 0.01,
+            ..LabelSolverConfig::default()
+        };
+        let mut positive_queries = Vec::new();
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 0.0, 0.0],
+            &config,
+            |query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => {
+                    positive_queries.push(query.to_vec());
+                    Ok(vec![retrieved_atom(
+                        "l_backend",
+                        "backend",
+                        LabelAtomPolarity::Positive,
+                        vec![1.0, 0.0, 0.0],
+                        1.0,
+                        positive_queries.len(),
+                    )])
+                }
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(positive_queries.len(), 1);
+        assert!((l2_norm(&positive_queries[0]) - 1.0).abs() < 0.0001);
+        assert_eq!(result.selected_labels.len(), 1);
+        assert!(result.coverage > 0.99);
+        assert!(result.residual_norm < 0.01);
     }
 
     #[test]

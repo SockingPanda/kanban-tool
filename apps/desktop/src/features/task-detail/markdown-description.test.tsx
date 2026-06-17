@@ -205,6 +205,58 @@ describe("MarkdownDescription", () => {
     expect(html).toContain("option slug must be lowercase ASCII letters, digits, or hyphen")
   })
 
+  it("renders the first newest-first comment page with pagination controls", () => {
+    const html = renderToStaticMarkup(
+      <Sheet open>
+        <TaskDetail
+          api={null}
+          task={task}
+          detail={{
+            ...emptyDetail,
+            comments: Array.from({ length: 12 }, (_, index) => ({
+              id: `c_${index + 1}`,
+              board_id: task.board_id,
+              task_id: task.id,
+              author: "codex",
+              author_type: "agent",
+              agent_type: "codex",
+              body: `Body ${String(index + 1).padStart(2, "0")}`,
+              kind: "note",
+              metadata_json: "{}",
+              created_at: task.created_at + index,
+            })),
+          }}
+          blockReason=""
+          setBlockReason={() => undefined}
+          dependencyInput=""
+          setDependencyInput={() => undefined}
+          claimToken={null}
+          commentBody=""
+          setCommentBody={() => undefined}
+          editDraft={null}
+          draftDirty={false}
+          setEditDraft={() => undefined}
+          detailLoading={false}
+          pendingAction={null}
+          onAction={async () => undefined}
+          onAddDependency={async () => undefined}
+          onRemoveDependency={async () => undefined}
+          onSelectTask={() => undefined}
+          onSaveTask={async () => true}
+          onCancelEdit={() => undefined}
+          onAddComment={async () => undefined}
+        />
+      </Sheet>,
+    )
+
+    expect(html.indexOf("Body 12")).toBeLessThan(html.indexOf("Body 03"))
+    expect(html).toContain("Page 1 of 2")
+    expect(html).toContain("Newest first")
+    expect(html).toContain('aria-label="Next comments"')
+    expect(html).not.toContain("Body 02")
+    expect(html).not.toContain("Body 01")
+  })
+
   it("renders task labels and label input controls", () => {
     const html = renderToStaticMarkup(
       <Sheet open>

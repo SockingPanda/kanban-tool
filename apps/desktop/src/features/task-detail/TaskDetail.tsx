@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/alert-dialog"
 
 import { isLongDescription, visibleDescription } from "./description-state"
+import { commentPageState, type CommentSortOrder } from "./comment-list-state"
 import type { DetailState } from "./detail-state"
 import type { TaskEditDraft } from "./task-draft"
 
@@ -43,6 +44,11 @@ const priorityOptions: MenuSelectOption<string>[] = priorityLevels.map((priority
   value: String(priority),
   label: priorityLabel(priority),
 }))
+
+const commentSortOptions: MenuSelectOption<CommentSortOrder>[] = [
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+]
 
 export function TaskDetail({
   api,
@@ -106,11 +112,15 @@ export function TaskDetail({
   const [descriptionExpanded, setDescriptionExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [labelInput, setLabelInput] = useState("")
+  const [commentSortOrder, setCommentSortOrder] = useState<CommentSortOrder>("newest")
+  const [commentPage, setCommentPage] = useState(0)
 
   useEffect(() => {
     setDescriptionExpanded(false)
     setEditing(false)
     setLabelInput("")
+    setCommentSortOrder("newest")
+    setCommentPage(0)
   }, [task?.id])
 
   if (!task) return null
@@ -119,6 +129,11 @@ export function TaskDetail({
   const actions = legalActions(task, claimToken, blockReason)
   const longDescription = isLongDescription(task.description)
   const renderedDescription = visibleDescription(task.description, descriptionExpanded)
+  const commentsPage = commentPageState({
+    comments: detail.comments,
+    page: commentPage,
+    sortOrder: commentSortOrder,
+  })
 
   async function saveAndClose() {
     const saved = await onSaveTask()
@@ -430,9 +445,26 @@ export function TaskDetail({
 
         <Section title="Comments">
           <div className="space-y-3">
+            {commentsPage.total ? (
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs text-muted-foreground">
+                  {commentsPage.total} comment{commentsPage.total === 1 ? "" : "s"}
+                </div>
+                <MenuSelect
+                  ariaLabel="Comment sort order"
+                  options={commentSortOptions}
+                  value={commentSortOrder}
+                  onValueChange={(value) => {
+                    setCommentSortOrder(value)
+                    setCommentPage(0)
+                  }}
+                  triggerClassName="h-8 w-36"
+                />
+              </div>
+            ) : null}
             <div className="space-y-2">
-              {detail.comments.length ? (
-                detail.comments.slice(-4).map((comment) => (
+              {commentsPage.total ? (
+                commentsPage.comments.map((comment) => (
                   <Card key={comment.id} className="p-2 text-sm">
                     <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
                       <span className="flex items-center gap-1.5">
@@ -451,6 +483,31 @@ export function TaskDetail({
                 </Empty>
               )}
             </div>
+            {commentsPage.pageCount > 1 ? (
+              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label="Previous comments"
+                  disabled={!commentsPage.hasPreviousPage}
+                  onClick={() => setCommentPage((current) => Math.max(0, current - 1))}
+                >
+                  Previous
+                </Button>
+                <span>
+                  Page {commentsPage.page + 1} of {commentsPage.pageCount}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label="Next comments"
+                  disabled={!commentsPage.hasNextPage}
+                  onClick={() => setCommentPage((current) => current + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            ) : null}
             <Field>
               <FieldLabel>Comment body</FieldLabel>
               <InputGroup>

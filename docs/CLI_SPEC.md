@@ -613,6 +613,11 @@ proposal attempt 会用同一套 LanceDB label atom store 做 suggestion 与后�
 校验。未配置或 feature/provider 不可用时保持 degraded fallback，不写入普通 label
 或 task-label 关联。
 
+Provider boundary：CLI 当前只使用 disabled provider 或 `--proposal-json` 显式传入的
+本地/offline candidate。真实 LLM provider 不属于 `kanban-sqlite`；未来若接入本机
+AI/runtime，应在 CLI/local runtime 或独立 AI crate 中实现 `LabelProposalProvider`
+adapter，再把 candidate 交给 SQLite service 做 deterministic validation 和 persistence。
+
 `--proposal-json` 提供本地/offline provider 输出：
 
 ```json

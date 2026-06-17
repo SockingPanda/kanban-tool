@@ -1044,6 +1044,12 @@ POST /api/v1/label-proposals/{proposal_id}/reject
 degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms` 或
 `task_labels`。
 
+Provider boundary：API 当前只支持空/default provider 或请求 body 中显式传入的
+本地/offline candidate。真实 LLM provider 不在 `kanban-sqlite` 中实现；如果未来
+server 支持本机 AI/runtime，它必须在 server/local/独立 AI crate 层实现
+`LabelProposalProvider` adapter，并把 candidate 交给 SQLite service 做 deterministic
+validation 和 persistence。
+
 带本地/offline provider 输出时：
 
 ```json

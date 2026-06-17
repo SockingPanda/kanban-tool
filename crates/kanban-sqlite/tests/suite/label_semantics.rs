@@ -1378,7 +1378,7 @@ impl kanban_vector::VectorStore for ProposalValidationStore {
             .into_iter()
             .take(query.limit)
             .map(|(similarity, mut hit, vector)| {
-                hit.score = (1.0 / similarity.max(0.0001)) - 1.0;
+                hit.distance = (1.0 / similarity.max(0.0001)) - 1.0;
                 kanban_vector::LabelAtomVectorHit {
                     hit,
                     vector: query.include_vector.then_some(vector),
@@ -1537,7 +1537,7 @@ impl kanban_vector::VectorStore for ResidualRecordingLabelAtomStore {
             .into_iter()
             .take(query.limit)
             .map(|(similarity, mut hit, vector)| {
-                hit.score = (1.0 / similarity.max(0.0001)) - 1.0;
+                hit.distance = (1.0 / similarity.max(0.0001)) - 1.0;
                 kanban_vector::LabelAtomVectorHit {
                     hit,
                     vector: query.include_vector.then_some(vector),
@@ -1661,7 +1661,7 @@ fn atom_hit(
         ordinal: 0,
         content_hash: "hash".to_owned(),
         embedding_model: "test-model".to_owned(),
-        score: distance,
+        distance,
     }
 }
 

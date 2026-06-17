@@ -242,7 +242,7 @@ pub struct RetrievedLabelAtom {
     pub kind: LabelAtomKind,
     pub text: String,
     pub vector: Vec<f32>,
-    pub score: f32,
+    pub similarity: Option<f32>,
 }
 
 pub fn retrieve_label_groups(
@@ -576,9 +576,8 @@ fn residual_candidates(
     let mut candidates = Vec::new();
     for (label_id, mut positives) in positives_by_label {
         positives.sort_by(|left, right| {
-            right
-                .score
-                .total_cmp(&left.score)
+            retrieved_similarity(positive_query, right)
+                .total_cmp(&retrieved_similarity(positive_query, left))
                 .then_with(|| left.atom_id.cmp(&right.atom_id))
         });
         positives.truncate(config.max_positive_atoms_per_label);
@@ -724,9 +723,7 @@ fn validate_retrieved_atom(
 }
 
 fn atom_evidence(atom: &RetrievedLabelAtom, residual: &[f32]) -> LabelAtomEvidence {
-    let similarity = cosine_similarity(residual, &atom.vector)
-        .max(atom.score)
-        .max(0.0);
+    let similarity = retrieved_similarity(residual, atom);
     LabelAtomEvidence {
         atom_id: Some(atom.atom_id.clone()),
         source: LabelAtomSource {
@@ -740,6 +737,12 @@ fn atom_evidence(atom: &RetrievedLabelAtom, residual: &[f32]) -> LabelAtomEviden
         contribution: similarity,
         vector: Some(atom.vector.clone()),
     }
+}
+
+fn retrieved_similarity(query: &[f32], atom: &RetrievedLabelAtom) -> f32 {
+    // Retrieved vectors are authoritative for solver math. External store
+    // scores/distances are optional diagnostics and must not inflate evidence.
+    cosine_similarity(query, &atom.vector).max(0.0)
 }
 
 fn candidate_group_vector(candidate: &LabelGroupCandidate) -> Option<Vec<f32>> {
@@ -1058,7 +1061,7 @@ mod tests {
         label_name: &str,
         polarity: LabelAtomPolarity,
         vector: Vec<f32>,
-        score: f32,
+        similarity: f32,
         ordinal: usize,
     ) -> RetrievedLabelAtom {
         RetrievedLabelAtom {
@@ -1072,7 +1075,7 @@ mod tests {
             },
             text: format!("{label_name} {ordinal}"),
             vector,
-            score,
+            similarity: Some(similarity),
         }
     }
 
@@ -1372,6 +1375,37 @@ mod tests {
         assert!((selected.weight - std::f32::consts::SQRT_2).abs() < 0.0001);
         assert!(result.coverage > 0.99);
         assert!(result.residual_norm < 0.01);
+    }
+
+    #[test]
+    fn residual_solver_does_not_promote_retrieved_score_over_local_cosine() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 1,
+            min_candidate_score: 0.05,
+            ..LabelSolverConfig::default()
+        };
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 0.0, 0.0],
+            &config,
+            |_query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => Ok(vec![retrieved_atom(
+                    "l_unrelated",
+                    "unrelated",
+                    LabelAtomPolarity::Positive,
+                    vec![0.0, 1.0, 0.0],
+                    0.99,
+                    1,
+                )]),
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap();
+
+        assert!(result.candidates.is_empty());
+        assert!(result.selected_labels.is_empty());
+        assert_eq!(result.coverage, 0.0);
+        assert_eq!(result.residual_norm, 1.0);
     }
 
     #[test]

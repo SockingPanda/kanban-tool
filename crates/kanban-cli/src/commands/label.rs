@@ -268,8 +268,8 @@ fn handle_label_atom_index(
                     hits.iter()
                         .map(|hit| {
                             format!(
-                                "{} {} {} score={:.3} {}",
-                                hit.label_name, hit.polarity, hit.kind, hit.score, hit.text
+                                "{} {} {} distance={:.3} {}",
+                                hit.label_name, hit.polarity, hit.kind, hit.distance, hit.text
                             )
                         })
                         .collect::<Vec<_>>()

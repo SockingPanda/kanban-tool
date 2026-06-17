@@ -943,8 +943,9 @@ semantics；`{label_id}` 只接受 canonical `l_...` label id。Label name 允�
 `POST /api/v1/boards/{board}/labels/atom-index/rebuild` 用已配置 vector store 重建
 派生的 `lancedb_label_atoms`。`GET /api/v1/boards/{board}/labels/atom-index/query`
 查询该派生索引，`q` 必填，`polarity` 可选且只接受 `positive` / `negative`，
-`limit` 默认 24。未配置 provider、feature 不可用或 vector store 不可用时，
-rebuild/query 返回显式 API error，不修改 SQLite truth。
+`limit` 默认 24；hit 中的 `distance` 是 LanceDB `_distance`，不是 solver
+similarity score。未配置 provider、feature 不可用或 vector store 不可用时，rebuild/query
+返回显式 API error，不修改 SQLite truth。
 
 ### 12.2 Task label suggestions
 
@@ -1050,8 +1051,9 @@ coverage 不足且候选语义有效，并且残差 top1+margin 校验明确通�
 
 当 server 配置了可用 vector provider 时，proposal attempt 与 label suggestion
 使用同一套 LanceDB label atom store。coverage 不足的候选会在持久化前执行残差
-top1+margin 校验：候选语义的 residual score 必须超过现有 label top1，且超过幅度
-达到固定 margin。校验失败时候选仍会以 `rejected` proposal 持久化，diagnostics
+top1+margin 校验：候选语义的 residual score 和现有 label top1 都按返回 atom
+vector 在本地计算 cosine similarity，不从 LanceDB distance 推导；候选必须超过现有
+label top1，且超过幅度达到固定 margin。校验失败时候选仍会以 `rejected` proposal 持久化，diagnostics
 包含 `label_proposal_residual_top1_failed` 或
 `label_proposal_residual_margin_insufficient`。未配置 provider、feature 不可用或
 vector 检索失败时返回 degraded attempt，不创建 canonical label、`label_semantics`、

@@ -446,9 +446,11 @@ LanceDB atom retrieval 使用。
 
 `kb_label_atoms` 是 LanceDB 中的可重建 label atom 向量表，独立于 task chunk 表
 `kb_chunks`。它按 `board_id`、`embedding_model`、`polarity` 查询 atom evidence，
-返回 `label_id`、atom id、`polarity`、`kind`、`text` 和 score 等字段，用于构造
-语义 label 候选。派生表损坏或缺少 provider 时只让 label atom index degraded，
-不影响普通 label CRUD、`task_labels` 绑定或 task 状态机。
+返回 `label_id`、atom id、`polarity`、`kind`、`text` 和 LanceDB `_distance` 原始
+distance 等字段。语义 label 候选会用返回的 atom vector 在本地重新计算
+query/residual cosine similarity，不把 distance 当作 solver score。派生表损坏或缺少
+provider 时只让 label atom index degraded，不影响普通 label CRUD、`task_labels` 绑定
+或 task 状态机。
 
 ---
 

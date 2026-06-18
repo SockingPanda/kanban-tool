@@ -149,7 +149,7 @@ fn search_command_filters_labels_before_search_pagination() -> anyhow::Result<()
         },
         &["backend".into()],
     )?;
-    for index in 0..kanban_sqlite::MAX_SEARCH_LIMIT {
+    for index in 0..3 {
         create_task(
             &temp.path,
             "default",

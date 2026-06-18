@@ -24,7 +24,19 @@ pub(crate) fn all_values<T, F>(
 where
     F: FnMut(&Row<'_>) -> rusqlite::Result<T>,
 {
-    all(conn, sql, params_from_iter(params.iter()), mapper)
+    let mut stmt = conn.prepare(sql).map_err(storage)?;
+    let expected = stmt.parameter_count();
+    if expected != params.len() {
+        return Err(KanbanError::Storage(format!(
+            "expected {expected} SQL parameters, got {}",
+            params.len()
+        )));
+    }
+    let rows = stmt
+        .query_map(params_from_iter(params.iter()), mapper)
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
 }
 
 pub(crate) fn optional<T, P, F>(
@@ -87,38 +99,60 @@ where
 }
 
 #[derive(Debug, Clone, Default)]
-pub(crate) struct SqlWhere {
-    sql: String,
+pub(crate) struct SqlFilter {
+    conditions: Vec<&'static str>,
     params: Vec<Value>,
 }
 
-impl SqlWhere {
-    pub(crate) fn new(sql: impl Into<String>) -> Self {
-        Self {
-            sql: sql.into(),
-            params: Vec::new(),
+impl SqlFilter {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    pub(crate) fn and(&mut self, condition: &'static str, value: impl IntoSqlValue) -> Result<()> {
+        self.and_values(condition, [value])
+    }
+
+    pub(crate) fn and_values<I, V>(&mut self, condition: &'static str, values: I) -> Result<()>
+    where
+        I: IntoIterator<Item = V>,
+        V: IntoSqlValue,
+    {
+        let values = values
+            .into_iter()
+            .map(IntoSqlValue::into_sql_value)
+            .collect::<Vec<_>>();
+        let expected = anonymous_parameter_count(condition);
+        if expected != values.len() {
+            return Err(KanbanError::Storage(format!(
+                "condition `{condition}` expected {expected} SQL parameters, got {}",
+                values.len()
+            )));
         }
+        self.conditions.push(condition);
+        self.params.extend(values);
+        Ok(())
     }
 
-    pub(crate) fn push(&mut self, condition: &str, value: impl IntoSqlValue) {
-        if !self.sql.is_empty() {
-            self.sql.push(' ');
+    pub(crate) fn where_sql(&self) -> String {
+        if self.conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", self.conditions.join(" AND "))
         }
-        self.sql.push_str(condition);
-        self.push_value(value);
-    }
-
-    pub(crate) fn push_value(&mut self, value: impl IntoSqlValue) {
-        self.params.push(value.into_sql_value());
-    }
-
-    pub(crate) fn sql(&self) -> &str {
-        &self.sql
     }
 
     pub(crate) fn params(&self) -> &[Value] {
         &self.params
     }
+}
+
+fn anonymous_parameter_count(condition: &str) -> usize {
+    condition
+        .as_bytes()
+        .iter()
+        .filter(|byte| **byte == b'?')
+        .count()
 }
 
 pub(crate) trait IntoSqlValue {
@@ -269,16 +303,83 @@ mod tests {
     }
 
     #[test]
-    fn sql_where_accumulates_anonymous_conditions_and_params() {
-        let mut where_clause = SqlWhere::new("WHERE board_id=?");
-        where_clause.push_value("b_1");
-        where_clause.push("AND task_id=?", "t_1");
-        where_clause.push("AND status=?", "open");
+    fn sql_filter_builds_where_clause_and_keeps_params_attached_to_conditions() {
+        let mut filter = SqlFilter::new();
+        assert_eq!(filter.where_sql(), "");
+        assert!(filter.params().is_empty());
+
+        filter.and("board_id=?", "b_1").unwrap();
+        filter.and("task_id=?", "t_1").unwrap();
+        filter.and("status=?", "open").unwrap();
 
         assert_eq!(
-            where_clause.sql(),
+            filter.where_sql(),
             "WHERE board_id=? AND task_id=? AND status=?"
         );
-        assert_eq!(where_clause.params().len(), 3);
+        assert_eq!(filter.params().len(), 3);
+    }
+
+    #[test]
+    fn sql_filter_supports_conditions_with_multiple_values() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "CREATE TABLE items(id INTEGER PRIMARY KEY, board_id TEXT NOT NULL, task_id TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO items(id, board_id, task_id) VALUES (1, 'b_1', 't_1'), (2, 'b_1', 't_2')",
+            [],
+        )
+        .unwrap();
+
+        let mut filter = SqlFilter::new();
+        filter.and("board_id=?", "b_1").unwrap();
+        filter
+            .and_values("task_id IN (?, ?)", ["t_1", "t_2"])
+            .unwrap();
+        let sql = format!(
+            "SELECT id FROM items {} ORDER BY id ASC",
+            filter.where_sql()
+        );
+
+        let ids = all_values(&conn, &sql, filter.params(), |row| row.get::<_, i64>(0)).unwrap();
+        assert_eq!(ids, vec![1, 2]);
+    }
+
+    #[test]
+    fn all_values_rejects_parameter_count_mismatch() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "CREATE TABLE items(id INTEGER PRIMARY KEY, board_id TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+
+        let too_few = all_values(
+            &conn,
+            "SELECT id FROM items WHERE board_id=? AND id>?",
+            &[Value::Text("b_1".to_owned())],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap_err();
+        assert!(
+            too_few
+                .to_string()
+                .contains("expected 2 SQL parameters, got 1")
+        );
+
+        let too_many = all_values(
+            &conn,
+            "SELECT id FROM items WHERE board_id=?",
+            &[Value::Text("b_1".to_owned()), Value::Integer(1)],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap_err();
+        assert!(
+            too_many
+                .to_string()
+                .contains("expected 1 SQL parameters, got 2")
+        );
     }
 }

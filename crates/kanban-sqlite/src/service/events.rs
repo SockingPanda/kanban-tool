@@ -1,7 +1,7 @@
 use crate::connect_file;
 
 use super::{
-    EventListOptions, EventRecord, SqlWhere, all_values, board_id_any, enqueue_index_outbox, exec,
+    EventListOptions, EventRecord, SqlFilter, all_values, board_id_any, enqueue_index_outbox, exec,
     one, resolve_task_any, upsert_board_entity, upsert_event_entity, upsert_run_entity,
     upsert_task_entity,
 };
@@ -22,16 +22,16 @@ pub fn list_events(
     let task_id = task_ref
         .map(|r| resolve_task_any(&conn, &board_id, r).map(|t| t.id))
         .transpose()?;
-    let mut where_clause = SqlWhere::new("WHERE board_id=?");
-    where_clause.push_value(board_id);
+    let mut filter = SqlFilter::new();
+    filter.and("board_id=?", board_id)?;
     if let Some(task_id) = task_id {
-        where_clause.push("AND task_id=?", task_id);
+        filter.and("task_id=?", task_id)?;
     }
     let sql = format!(
         "SELECT id,event_id,task_id,run_id,kind,actor,payload_json,created_at FROM task_events {} ORDER BY id ASC",
-        where_clause.sql()
+        filter.where_sql()
     );
-    all_values(&conn, &sql, where_clause.params(), event_from_row)
+    all_values(&conn, &sql, filter.params(), event_from_row)
 }
 
 pub fn list_events_after(
@@ -46,17 +46,17 @@ pub fn list_events_after(
         .as_deref()
         .map(|r| resolve_task_any(&conn, &board_id, r).map(|t| t.id))
         .transpose()?;
-    let mut where_clause = SqlWhere::new("WHERE board_id=? AND id>?");
-    where_clause.push_value(board_id);
-    where_clause.push_value(options.after);
+    let mut filter = SqlFilter::new();
+    filter.and("board_id=?", board_id)?;
+    filter.and("id>?", options.after)?;
     if let Some(task_id) = task_id {
-        where_clause.push("AND task_id=?", task_id);
+        filter.and("task_id=?", task_id)?;
     }
-    let mut params = where_clause.params().to_vec();
+    let mut params = filter.params().to_vec();
     params.push(Value::Integer(options.limit as i64));
     let sql = format!(
         "SELECT id,event_id,task_id,run_id,kind,actor,payload_json,created_at FROM task_events {} ORDER BY id ASC LIMIT ?",
-        where_clause.sql()
+        filter.where_sql()
     );
     all_values(&conn, &sql, &params, event_from_row)
 }

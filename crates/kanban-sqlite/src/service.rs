@@ -25,6 +25,7 @@ mod projections;
 mod run_logs;
 mod runs;
 mod search;
+mod sql;
 mod tasks;
 mod transaction;
 mod transitions;
@@ -75,6 +76,9 @@ pub(crate) use label_semantics::{
 pub(crate) use projections::*;
 pub(crate) use run_logs::{
     allowed_run_log_roots, normalize_existing_aware, run_log_path_status_for_db_dir,
+};
+pub(crate) use sql::{
+    SqlWhere, all, all_values, ensure_changed_one, exec, exec_one, exists, one, optional,
 };
 #[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
 pub(crate) use vector::has_pending_outbox_for_target;

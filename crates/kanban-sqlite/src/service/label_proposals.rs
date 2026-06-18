@@ -5,9 +5,9 @@ use super::label_suggestions::{
 };
 use super::{
     LabelProposalAttempt, LabelProposalCandidate, LabelProposalListOptions, LabelProposalStatus,
-    LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult, board_id,
-    get_task_by_id, insert_event, mark_label_atom_store_dirty, resolve_task, storage,
-    upsert_label_semantics_candidate_in_tx, with_immediate_tx,
+    LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult, SqlWhere, all,
+    all_values, board_id, exec, get_task_by_id, insert_event, mark_label_atom_store_dirty, one,
+    resolve_task, upsert_label_semantics_candidate_in_tx, with_immediate_tx,
 };
 
 use std::{collections::HashMap, path::Path, str::FromStr};
@@ -15,7 +15,7 @@ use std::{collections::HashMap, path::Path, str::FromStr};
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_label_id, new_typed_id};
 use kanban_labels::{LabelAtomPolarity, LabelDefinition};
 use kanban_vector::{DisabledVectorStore, LabelAtomVectorStore};
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use rusqlite::{Connection, Row, named_params};
 use serde_json::json;
 
 const PROPOSAL_COVERAGE_THRESHOLD: f32 = 0.55;
@@ -509,40 +509,20 @@ pub fn list_label_proposals(
         Some(task_ref) => Some(resolve_task(&conn, &board_id, &task_ref)?.id),
         None => None,
     };
-    let status = options.status.map(|status| status.to_string());
-    let mut sql = "SELECT id,board_id,task_id,status,name,description,applies_when,excludes_when,positive_examples,negative_examples,heuristic_coverage,heuristic_coverage_cosine,heuristic_residual_norm,top1_existing_label_id,top1_existing_label_name,diagnostics_json,created_by,decision_reason,resolved_label_id,created_at,updated_at,decided_at FROM label_semantic_proposals WHERE board_id=?1".to_owned();
-    let mut bind_task = false;
-    let mut bind_status = false;
-    if task_id.is_some() {
-        sql.push_str(" AND task_id=?2");
-        bind_task = true;
+    let mut where_clause = SqlWhere::new("WHERE board_id=?");
+    where_clause.push_value(board_id);
+    if let Some(task_id) = task_id {
+        where_clause.push("AND task_id=?", task_id);
     }
-    if status.is_some() {
-        sql.push_str(if bind_task {
-            " AND status=?3"
-        } else {
-            " AND status=?2"
-        });
-        bind_status = true;
+    if let Some(status) = options.status {
+        where_clause.push("AND status=?", status.to_string());
     }
-    sql.push_str(" ORDER BY created_at DESC, id ASC");
-    let mut stmt = conn.prepare(&sql).map_err(storage)?;
-    let rows = match (bind_task, bind_status) {
-        (false, false) => stmt
-            .query_map(params![board_id], proposal_from_row)
-            .map_err(storage)?,
-        (true, false) => stmt
-            .query_map(params![board_id, task_id], proposal_from_row)
-            .map_err(storage)?,
-        (false, true) => stmt
-            .query_map(params![board_id, status], proposal_from_row)
-            .map_err(storage)?,
-        (true, true) => stmt
-            .query_map(params![board_id, task_id, status], proposal_from_row)
-            .map_err(storage)?,
-    };
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)
+    let sql = format!(
+        "SELECT id,board_id,task_id,status,name,description,applies_when,excludes_when,positive_examples,negative_examples,heuristic_coverage,heuristic_coverage_cosine,heuristic_residual_norm,top1_existing_label_id,top1_existing_label_name,diagnostics_json,created_by,decision_reason,resolved_label_id,created_at,updated_at,decided_at \
+         FROM label_semantic_proposals {} ORDER BY created_at DESC, id ASC",
+        where_clause.sql()
+    );
+    all_values(&conn, &sql, where_clause.params(), proposal_from_row)
 }
 
 pub fn get_label_proposal(
@@ -610,11 +590,11 @@ fn decide_label_proposal(
                 )));
             }
             let label_id = new_label_id();
-            conn.execute(
+            exec(
+                &conn,
                 "INSERT INTO labels(id, board_id, name, color, created_at, updated_at) VALUES (?1, ?2, ?3, NULL, ?4, ?4)",
-                params![label_id, proposal.board_id, proposal.name, now],
-            )
-            .map_err(storage)?;
+                (&label_id, &proposal.board_id, &proposal.name, now),
+            )?;
             upsert_label_semantics_candidate_in_tx(
                 &conn,
                 &proposal.board_id,
@@ -626,17 +606,25 @@ fn decide_label_proposal(
             mark_label_atom_store_dirty(&conn, &proposal.board_id, now)?;
             resolved_label_id = Some(label_id);
         }
-        conn.execute(
-            "UPDATE label_semantic_proposals SET status=?1, decision_reason=?2, resolved_label_id=?3, updated_at=?4, decided_at=?4 WHERE id=?5",
-            params![
-                decision.to_string(),
-                normalize_optional(reason),
-                resolved_label_id,
-                now,
-                proposal_id
-            ],
-        )
-        .map_err(storage)?;
+        let decision_status = decision.to_string();
+        let decision_reason = normalize_optional(reason);
+        exec(
+            &conn,
+            "UPDATE label_semantic_proposals
+             SET status=:status,
+                 decision_reason=:decision_reason,
+                 resolved_label_id=:resolved_label_id,
+                 updated_at=:now,
+                 decided_at=:now
+             WHERE id=:proposal_id",
+            named_params! {
+                ":status": decision_status,
+                ":decision_reason": decision_reason,
+                ":resolved_label_id": resolved_label_id,
+                ":now": now,
+                ":proposal_id": proposal_id,
+            },
+        )?;
         insert_event(
             &conn,
             &proposal.board_id,
@@ -685,33 +673,56 @@ fn insert_proposal_in_tx(
     now: i64,
 ) -> Result<LabelSemanticProposalRecord> {
     let id = new_typed_id("lp");
-    conn.execute(
-        "INSERT INTO label_semantic_proposals(id, board_id, task_id, status, name, description, applies_when, excludes_when, positive_examples, negative_examples, heuristic_coverage, heuristic_coverage_cosine, heuristic_residual_norm, top1_existing_label_id, top1_existing_label_name, diagnostics_json, created_by, decision_reason, resolved_label_id, created_at, updated_at, decided_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, NULL, ?19, ?19, ?20)",
-        params![
-            id,
-            board_id,
-            task_id,
-            status.to_string(),
-            candidate.name,
-            candidate.description,
-            json_array(&candidate.applies_when)?,
-            json_array(&candidate.excludes_when)?,
-            json_array(&candidate.positive_examples)?,
-            json_array(&candidate.negative_examples)?,
-            suggestions.coverage,
-            suggestions.coverage_cosine,
-            suggestions.residual_norm,
-            top1_existing_label_id,
-            top1_existing_label_name,
-            json_array(diagnostics)?,
-            actor,
-            decision_reason,
-            now,
-            if status == LabelProposalStatus::Rejected { Some(now) } else { None },
-        ],
-    )
-    .map_err(storage)?;
+    let status_text = status.to_string();
+    let applies_when = json_array(&candidate.applies_when)?;
+    let excludes_when = json_array(&candidate.excludes_when)?;
+    let positive_examples = json_array(&candidate.positive_examples)?;
+    let negative_examples = json_array(&candidate.negative_examples)?;
+    let diagnostics_json = json_array(diagnostics)?;
+    let decided_at = if status == LabelProposalStatus::Rejected {
+        Some(now)
+    } else {
+        None
+    };
+    exec(
+        conn,
+        "INSERT INTO label_semantic_proposals(
+             id, board_id, task_id, status, name, description, applies_when, excludes_when,
+             positive_examples, negative_examples, heuristic_coverage, heuristic_coverage_cosine,
+             heuristic_residual_norm, top1_existing_label_id, top1_existing_label_name,
+             diagnostics_json, created_by, decision_reason, resolved_label_id, created_at,
+             updated_at, decided_at
+         )
+         VALUES (
+             :id, :board_id, :task_id, :status, :name, :description, :applies_when,
+             :excludes_when, :positive_examples, :negative_examples, :heuristic_coverage,
+             :heuristic_coverage_cosine, :heuristic_residual_norm, :top1_existing_label_id,
+             :top1_existing_label_name, :diagnostics_json, :created_by, :decision_reason,
+             NULL, :now, :now, :decided_at
+         )",
+        named_params! {
+            ":id": id,
+            ":board_id": board_id,
+            ":task_id": task_id,
+            ":status": status_text,
+            ":name": candidate.name,
+            ":description": candidate.description,
+            ":applies_when": applies_when,
+            ":excludes_when": excludes_when,
+            ":positive_examples": positive_examples,
+            ":negative_examples": negative_examples,
+            ":heuristic_coverage": suggestions.coverage,
+            ":heuristic_coverage_cosine": suggestions.coverage_cosine,
+            ":heuristic_residual_norm": suggestions.residual_norm,
+            ":top1_existing_label_id": top1_existing_label_id,
+            ":top1_existing_label_name": top1_existing_label_name,
+            ":diagnostics_json": diagnostics_json,
+            ":created_by": actor,
+            ":decision_reason": decision_reason,
+            ":now": now,
+            ":decided_at": decided_at,
+        },
+    )?;
     get_label_proposal_conn(conn, &id)
 }
 
@@ -719,14 +730,13 @@ fn get_label_proposal_conn(
     conn: &Connection,
     proposal_id: &str,
 ) -> Result<LabelSemanticProposalRecord> {
-    conn.query_row(
+    one(
+        conn,
         "SELECT id,board_id,task_id,status,name,description,applies_when,excludes_when,positive_examples,negative_examples,heuristic_coverage,heuristic_coverage_cosine,heuristic_residual_norm,top1_existing_label_id,top1_existing_label_name,diagnostics_json,created_by,decision_reason,resolved_label_id,created_at,updated_at,decided_at FROM label_semantic_proposals WHERE id=?1",
         [proposal_id],
         proposal_from_row,
+        || KanbanError::NotFound(format!("label proposal {proposal_id}")),
     )
-    .optional()
-    .map_err(storage)?
-    .ok_or_else(|| KanbanError::NotFound(format!("label proposal {proposal_id}")))
 }
 
 fn proposal_from_row(row: &Row<'_>) -> rusqlite::Result<LabelSemanticProposalRecord> {
@@ -801,14 +811,12 @@ fn normalized_label_conflict(
     candidate_name: &str,
 ) -> Result<Option<String>> {
     let normalized_candidate = normalize_label_identity(candidate_name);
-    let mut stmt = conn
-        .prepare("SELECT name FROM labels WHERE board_id=?1 ORDER BY name ASC")
-        .map_err(storage)?;
-    let labels = stmt
-        .query_map([board_id], |row| row.get::<_, String>(0))
-        .map_err(storage)?
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)?;
+    let labels = all(
+        conn,
+        "SELECT name FROM labels WHERE board_id=?1 ORDER BY name ASC",
+        [board_id],
+        |row| row.get::<_, String>(0),
+    )?;
     Ok(labels
         .into_iter()
         .find(|name| normalize_label_identity(name) == normalized_candidate))

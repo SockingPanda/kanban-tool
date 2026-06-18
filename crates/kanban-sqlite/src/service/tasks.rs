@@ -2,9 +2,9 @@ use crate::connect_file;
 
 use super::{
     CreateLabel, CreateTask, LabelRecord, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage,
-    TaskListSort, TaskPatch, TaskRecord, add_dependency_in_current_tx, board_id, board_id_any,
-    insert_event, json_valid, recompute_ready_status, storage, validate_priority,
-    with_immediate_tx,
+    TaskListSort, TaskPatch, TaskRecord, add_dependency_in_current_tx, all, all_values, board_id,
+    board_id_any, ensure_changed_one, exec, exec_one, insert_event, json_valid, one, optional,
+    recompute_ready_status, validate_priority, with_immediate_tx,
 };
 
 use std::path::Path;
@@ -14,7 +14,7 @@ use kanban_core::{
     initial_status as core_initial_status, is_active_recomputable_status, new_task_id,
 };
 
-use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter, types::Value};
+use rusqlite::{Connection, Row, named_params, params, types::Value};
 
 use serde_json::json;
 
@@ -82,17 +82,33 @@ pub fn create_task_with_labels_and_dependencies(
     let id = new_task_id();
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
-        let seq: i64 = conn
-            .query_row(
-                "SELECT COALESCE(MAX(seq), 0) + 1 FROM tasks WHERE board_id=?1",
-                [&board_id],
-                |r| r.get(0),
-            )
-            .map_err(storage)?;
-        conn.execute(
-        "INSERT INTO tasks(id, board_id, seq, title, description, status, assignee, priority, position, scheduled_at, due_at, created_by, created_at, updated_at, metadata_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?3 * 1024, ?9, ?10, ?11, ?12, ?12, ?13)",
-        params![id, board_id, seq, title, input.description, status.as_str(), input.assignee, input.priority, input.scheduled_at, input.due_at, actor, now, input.metadata_json],
-        ).map_err(storage)?;
+        let seq: i64 = one(
+            &conn,
+            "SELECT COALESCE(MAX(seq), 0) + 1 FROM tasks WHERE board_id=:board_id",
+            named_params! { ":board_id": board_id },
+            |r| r.get(0),
+            || KanbanError::Storage("missing task sequence aggregate row".into()),
+        )?;
+        exec(
+            &conn,
+            "INSERT INTO tasks(id, board_id, seq, title, description, status, assignee, priority, position, scheduled_at, due_at, created_by, created_at, updated_at, metadata_json) \
+             VALUES (:id, :board_id, :seq, :title, :description, :status, :assignee, :priority, :seq * 1024, :scheduled_at, :due_at, :created_by, :now, :now, :metadata_json)",
+            named_params! {
+                ":id": id,
+                ":board_id": board_id,
+                ":seq": seq,
+                ":title": title,
+                ":description": input.description,
+                ":status": status.as_str(),
+                ":assignee": input.assignee,
+                ":priority": input.priority,
+                ":scheduled_at": input.scheduled_at,
+                ":due_at": input.due_at,
+                ":created_by": actor,
+                ":now": now,
+                ":metadata_json": input.metadata_json,
+            },
+        )?;
         let payload = json!({ "status": status.as_str() }).to_string();
         insert_event(
             &conn,
@@ -285,13 +301,35 @@ pub fn update_task(
         if recompute_needed && is_active_recomputable_status(task.status) {
             task.status = recompute_ready_status(&conn, &task, now)?;
         }
-        let changed = conn.execute(
-        "UPDATE tasks SET title=?1, description=?2, status=?3, assignee=?4, priority=?5, scheduled_at=?6, due_at=?7, metadata_json=?8, updated_at=?9, lock_version=lock_version+1 WHERE id=?10 AND board_id=?11",
-        params![task.title, task.description, task.status.as_str(), task.assignee, task.priority, task.scheduled_at, task.due_at, task.metadata_json, now, task.id, board_id],
-        ).map_err(storage)?;
-        if changed != 1 {
-            return Err(KanbanError::InvalidTransition("task update failed".into()));
-        }
+        exec_one(
+            &conn,
+            "UPDATE tasks
+             SET title=:title,
+                 description=:description,
+                 status=:status,
+                 assignee=:assignee,
+                 priority=:priority,
+                 scheduled_at=:scheduled_at,
+                 due_at=:due_at,
+                 metadata_json=:metadata_json,
+                 updated_at=:now,
+                 lock_version=lock_version+1
+             WHERE id=:task_id AND board_id=:board_id",
+            named_params! {
+                ":title": task.title,
+                ":description": task.description,
+                ":status": task.status.as_str(),
+                ":assignee": task.assignee,
+                ":priority": task.priority,
+                ":scheduled_at": task.scheduled_at,
+                ":due_at": task.due_at,
+                ":metadata_json": task.metadata_json,
+                ":now": now,
+                ":task_id": task.id,
+                ":board_id": board_id,
+            },
+            || KanbanError::InvalidTransition("task update failed".into()),
+        )?;
         insert_event(
             &conn,
             &board_id,
@@ -339,11 +377,18 @@ pub fn specify_task(
         ) {
             task.status = recompute_ready_status(&conn, &task, now)?;
         }
-        conn.execute(
+        exec(
+            &conn,
             "UPDATE tasks SET description=?1, scheduled_at=?2, status=?3, updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6",
-            params![task.description, task.scheduled_at, task.status.as_str(), now, task.id, board_id],
-        )
-        .map_err(storage)?;
+            params![
+                task.description,
+                task.scheduled_at,
+                task.status.as_str(),
+                now,
+                task.id,
+                board_id
+            ],
+        )?;
         insert_event(
             &conn,
             &board_id,
@@ -386,11 +431,13 @@ pub fn list_tasks_page(
     let board_id = board_id(&conn, board)?;
     let (where_sql, params) = task_query_where(&board_id, &options);
     let total_sql = format!("SELECT COUNT(*) FROM tasks {where_sql}");
-    let total: i64 = conn
-        .query_row(&total_sql, params_from_iter(params.iter()), |row| {
-            row.get(0)
-        })
-        .map_err(storage)?;
+    let total: i64 = one(
+        &conn,
+        &total_sql,
+        rusqlite::params_from_iter(params.iter()),
+        |row| row.get(0),
+        || KanbanError::Storage("missing task count aggregate row".into()),
+    )?;
 
     let mut page_params = params;
     page_params.push(Value::Integer(
@@ -403,13 +450,7 @@ pub fn list_tasks_page(
         "SELECT {TASK_COLUMNS} FROM tasks {where_sql} ORDER BY {} LIMIT ? OFFSET ?",
         task_order_by(options.sort)
     );
-    let mut stmt = conn.prepare(&sql).map_err(storage)?;
-    let rows = stmt
-        .query_map(params_from_iter(page_params.iter()), task_from_row)
-        .map_err(storage)?;
-    let tasks = rows
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)?;
+    let tasks = all_values(&conn, &sql, &page_params, task_from_row)?;
     Ok(TaskListPage {
         tasks,
         total: total as usize,
@@ -472,17 +513,14 @@ fn update_retry_policy_in_current_tx(
     max_retries: Option<i64>,
     now: i64,
 ) -> Result<()> {
-    let changed = conn
-        .execute(
-            "UPDATE tasks SET max_retries=?1, updated_at=?2, lock_version=lock_version+1 WHERE id=?3 AND board_id=?4",
-            params![max_retries, now, task_id, board_id],
-        )
-        .map_err(storage)?;
-    if changed != 1 {
-        return Err(KanbanError::InvalidTransition(
-            "retry policy update failed".into(),
-        ));
-    }
+    let changed = exec(
+        conn,
+        "UPDATE tasks SET max_retries=?1, updated_at=?2, lock_version=lock_version+1 WHERE id=?3 AND board_id=?4",
+        params![max_retries, now, task_id, board_id],
+    )?;
+    ensure_changed_one(changed, || {
+        KanbanError::InvalidTransition("retry policy update failed".into())
+    })?;
     insert_event(
         conn,
         board_id,
@@ -697,14 +735,14 @@ pub(crate) fn task_order_by(sort: TaskListSort) -> &'static str {
 pub(crate) const TASK_COLUMNS: &str = "id,board_id,(SELECT slug FROM boards WHERE boards.id=tasks.board_id) AS board_slug,((SELECT slug FROM boards WHERE boards.id=tasks.board_id) || '#' || seq) AS task_ref,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,result_json,metadata_json,lock_version,EXISTS(SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS dependency_blocked,(SELECT COUNT(*) FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS unfinished_parent_count,COALESCE((SELECT json_group_array(json_object('id', id, 'board_id', board_id, 'name', name, 'color', color, 'created_at', created_at, 'updated_at', updated_at)) FROM (SELECT l.id, l.board_id, l.name, l.color, l.created_at, l.updated_at FROM task_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.task_id=tasks.id ORDER BY l.name ASC)), '[]') AS labels_json";
 
 pub(crate) fn query_tasks(conn: &Connection, board_id: &str) -> Result<Vec<TaskRecord>> {
-    let mut stmt = conn
-        .prepare(&format!(
+    all(
+        conn,
+        &format!(
             "SELECT {TASK_COLUMNS} FROM tasks WHERE board_id=?1 ORDER BY CASE status WHEN 'triage' THEN 10 WHEN 'todo' THEN 20 WHEN 'scheduled' THEN 30 WHEN 'ready' THEN 40 WHEN 'running' THEN 50 WHEN 'blocked' THEN 60 WHEN 'review' THEN 70 WHEN 'done' THEN 80 ELSE 90 END, position ASC, priority ASC, created_at ASC"
-        ))
-        .map_err(storage)?;
-    let rows = stmt.query_map([board_id], task_from_row).map_err(storage)?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)
+        ),
+        [board_id],
+        task_from_row,
+    )
 }
 
 pub(crate) fn get_task_by_id(
@@ -712,25 +750,23 @@ pub(crate) fn get_task_by_id(
     board_id: &str,
     task_id: &str,
 ) -> Result<TaskRecord> {
-    conn.query_row(
+    one(
+        conn,
         &format!("SELECT {TASK_COLUMNS} FROM tasks WHERE board_id=?1 AND id=?2"),
         params![board_id, task_id],
         task_from_row,
+        || KanbanError::NotFound(format!("task {task_id}")),
     )
-    .optional()
-    .map_err(storage)?
-    .ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
 }
 
 pub(crate) fn get_task_by_id_global_conn(conn: &Connection, task_id: &str) -> Result<TaskRecord> {
-    conn.query_row(
+    one(
+        conn,
         &format!("SELECT {TASK_COLUMNS} FROM tasks WHERE id=?1"),
         [task_id],
         task_from_row,
+        || KanbanError::NotFound(format!("task {task_id}")),
     )
-    .optional()
-    .map_err(storage)?
-    .ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
 }
 
 pub(crate) fn resolve_task(
@@ -803,14 +839,13 @@ pub(crate) fn get_task_by_seq(
     seq: i64,
     display_ref: &str,
 ) -> Result<TaskRecord> {
-    conn.query_row(
+    one(
+        conn,
         &format!("SELECT {TASK_COLUMNS} FROM tasks WHERE board_id=?1 AND seq=?2"),
         params![board_id, seq],
         task_from_row,
+        || KanbanError::NotFound(format!("task {display_ref}")),
     )
-    .optional()
-    .map_err(storage)?
-    .ok_or_else(|| KanbanError::NotFound(format!("task {display_ref}")))
 }
 
 pub(crate) fn task_from_row(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
@@ -884,11 +919,11 @@ fn ensure_label_in_current_tx(
         return Ok(existing);
     }
     let id = kanban_core::new_label_id();
-    conn.execute(
+    exec(
+        conn,
         "INSERT INTO labels(id, board_id, name, color, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
         params![id, board_id, name, color, now],
-    )
-    .map_err(storage)?;
+    )?;
     label_by_id(conn, board_id, &id)?.ok_or_else(|| KanbanError::NotFound(format!("label {id}")))
 }
 
@@ -900,12 +935,11 @@ fn attach_label_in_current_tx(
     label_id: &str,
     now: i64,
 ) -> Result<()> {
-    let changed = conn
-        .execute(
-            "INSERT OR IGNORE INTO task_labels(board_id, task_id, label_id, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![board_id, task_id, label_id, now],
-        )
-        .map_err(storage)?;
+    let changed = exec(
+        conn,
+        "INSERT OR IGNORE INTO task_labels(board_id, task_id, label_id, created_at) VALUES (?1, ?2, ?3, ?4)",
+        params![board_id, task_id, label_id, now],
+    )?;
     if changed > 0 {
         let label = label_by_id(conn, board_id, label_id)?
             .ok_or_else(|| KanbanError::NotFound(format!("label {label_id}")))?;
@@ -924,29 +958,21 @@ fn attach_label_in_current_tx(
 }
 
 fn list_labels_conn(conn: &Connection, board_id: &str) -> Result<Vec<LabelRecord>> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, board_id, name, color, created_at, updated_at FROM labels WHERE board_id=?1 ORDER BY name ASC",
-        )
-        .map_err(storage)?;
-    let rows = stmt
-        .query_map([board_id], label_from_row)
-        .map_err(storage)?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)
+    all(
+        conn,
+        "SELECT id, board_id, name, color, created_at, updated_at FROM labels WHERE board_id=?1 ORDER BY name ASC",
+        [board_id],
+        label_from_row,
+    )
 }
 
 fn task_labels_conn(conn: &Connection, board_id: &str, task_id: &str) -> Result<Vec<LabelRecord>> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT l.id, l.board_id, l.name, l.color, l.created_at, l.updated_at FROM task_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.board_id=?1 AND tl.task_id=?2 ORDER BY l.name ASC",
-        )
-        .map_err(storage)?;
-    let rows = stmt
-        .query_map(params![board_id, task_id], label_from_row)
-        .map_err(storage)?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)
+    all(
+        conn,
+        "SELECT l.id, l.board_id, l.name, l.color, l.created_at, l.updated_at FROM task_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.board_id=?1 AND tl.task_id=?2 ORDER BY l.name ASC",
+        params![board_id, task_id],
+        label_from_row,
+    )
 }
 
 fn resolve_label(conn: &Connection, board_id: &str, label_ref: &str) -> Result<LabelRecord> {
@@ -962,23 +988,21 @@ fn resolve_label(conn: &Connection, board_id: &str, label_ref: &str) -> Result<L
 }
 
 fn label_by_name(conn: &Connection, board_id: &str, name: &str) -> Result<Option<LabelRecord>> {
-    conn.query_row(
+    optional(
+        conn,
         "SELECT id, board_id, name, color, created_at, updated_at FROM labels WHERE board_id=?1 AND name=?2",
         params![board_id, name],
         label_from_row,
     )
-    .optional()
-    .map_err(storage)
 }
 
 fn label_by_id(conn: &Connection, board_id: &str, label_id: &str) -> Result<Option<LabelRecord>> {
-    conn.query_row(
+    optional(
+        conn,
         "SELECT id, board_id, name, color, created_at, updated_at FROM labels WHERE board_id=?1 AND id=?2",
         params![board_id, label_id],
         label_from_row,
     )
-    .optional()
-    .map_err(storage)
 }
 
 fn label_from_row(row: &Row<'_>) -> rusqlite::Result<LabelRecord> {
@@ -993,26 +1017,23 @@ fn label_from_row(row: &Row<'_>) -> rusqlite::Result<LabelRecord> {
 }
 
 pub(crate) fn active_board_id_for_task(conn: &Connection, task_id: &str) -> Result<String> {
-    let board_id = conn
-        .query_row(
+    let board_id = optional(
+        conn,
         "SELECT tasks.board_id FROM tasks JOIN boards ON boards.id=tasks.board_id WHERE tasks.id=?1 AND boards.archived_at IS NULL",
         [task_id],
         |r| r.get(0),
-    )
-        .optional()
-        .map_err(storage)?;
+    )?;
     board_id.ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
 }
 
 fn active_board_id_for_label_mutation(conn: &Connection, task_id: &str) -> Result<String> {
-    conn.query_row(
+    one(
+        conn,
         "SELECT tasks.board_id FROM tasks JOIN boards ON boards.id=tasks.board_id WHERE tasks.id=?1 AND boards.archived_at IS NULL AND tasks.status != 'archived'",
         [task_id],
         |r| r.get(0),
+        || KanbanError::NotFound(format!("task {task_id}")),
     )
-    .optional()
-    .map_err(storage)?
-    .ok_or_else(|| KanbanError::NotFound(format!("task {task_id}")))
 }
 
 fn ensure_task_allows_label_mutation(conn: &Connection, task_id: &str) -> Result<()> {
@@ -1028,12 +1049,11 @@ fn remove_task_label_in_current_tx(
     now: i64,
 ) -> Result<()> {
     let label = resolve_label(conn, board_id, label_ref)?;
-    let changed = conn
-        .execute(
-            "DELETE FROM task_labels WHERE board_id=?1 AND task_id=?2 AND label_id=?3",
-            params![board_id, task_id, label.id],
-        )
-        .map_err(storage)?;
+    let changed = exec(
+        conn,
+        "DELETE FROM task_labels WHERE board_id=?1 AND task_id=?2 AND label_id=?3",
+        params![board_id, task_id, label.id],
+    )?;
     if changed > 0 {
         insert_event(
             conn,

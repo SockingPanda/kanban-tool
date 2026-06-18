@@ -527,7 +527,7 @@ Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、�
 | `canonical_before_hash` / `canonical_after_hash` | 修改前后 canonical semantics hash。 |
 | `change_json` | before/after/diff 或其它可解释变更快照。 |
 | `validation_status` | `not_required`、`pending`、`passed`、`failed`、`partial`。 |
-| `validation_json` | validation evidence；service 会包装 supplied payload、source signal cases 和 summary。 |
+| `validation_json` | validation evidence；service 会包装 supplied payload、source signal cases 和 summary。`passed` action 需要 automated typed evidence（embedding model、solver options、clean atom index generation、per-signal before/after cases），并按 parent action 校验 positive atom、negative atom 或 bootstrap label policy；`failed` / `partial` 可保存诊断 payload。 |
 | `created_by` / `created_by_type` / `agent_type` | action actor。 |
 | `created_at` | 创建时间。 |
 

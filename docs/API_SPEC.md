@@ -1351,7 +1351,7 @@ content hash、before/after canonical hash 和 diff，并把 validation status �
   "signal_ids": ["los_1", "los_2"],
   "reason": "Source tasks now select the target label after atom rebuild",
   "validation_status": "passed",
-  "validation_json": "{\"cases\":[]}"
+  "validation_json": "{\"evidence_type\":\"automated\",\"embedding_model\":\"local-embeddings-v1\",\"solver_options\":{\"candidate_limit\":24,\"atom_limit\":64},\"index\":{\"status\":\"ready\",\"dirty\":false,\"generation\":42},\"cases\":[{\"signal_id\":\"los_1\",\"case_type\":\"positive_atom\",\"passed\":true,\"before\":{\"target\":{\"label_id\":\"l_cli\",\"selected\":false,\"score\":0.12},\"coverage\":0.61},\"after\":{\"degraded\":false,\"target\":{\"label_id\":\"l_cli\",\"selected\":true,\"score\":0.72},\"coverage\":0.78,\"evidence_atoms\":[{\"id\":\"la_...\",\"content_hash\":\"...\",\"label_id\":\"l_cli\"}]}}]}"
 }
 ```
 
@@ -1360,15 +1360,33 @@ cases、observation task snapshot / suggest input hash 与当前 task hash 对�
 action result 引用和 summary。`parent_action_id` 必须指向同一 board 上 `validation_status=pending`
 的 canonical mutation action，且 parent action 必须带有 canonical result evidence
 （例如 atom/result label/proposal 引用、canonical hash 和非空 change snapshot）。
-`passed` 还必须提供结构化 `validation_json.cases[]`，覆盖每个 linked source signal
-并标明该 signal case 已通过；空 `{}` 或无类型 evidence 会返回 `invalid_input`。
+`passed` 还必须提供 automated typed evidence：top-level `evidence_type="automated"`、
+非空 `embedding_model`、object `solver_options`、`index.status` / `index.generation`
+和覆盖每个 linked source signal 的 `cases[]`；dirty/error atom index、
+空 `{}`、reviewer attestation 或无类型 evidence 会返回 `invalid_input`。Service 不在
+长 SQLite mutation transaction 内执行 embedding/index 查询；调用方在 transaction 外收集
+before/after suggest evidence，service 在短 transaction 中核验 parent action、index
+状态和 evidence contract 后写 validation action。
+
+Typed policy 按 parent action 检查：
+
+- `add_positive_atom`：`case_type="positive_atom"`，`after.degraded=false`，
+  `after.evidence_atoms[]` 必须包含 parent `result_atom_id` 或
+  `result_atom_content_hash`；target label 必须 selected 或 score >= 0.50；
+  score/coverage 不能比 before 恶化。
+- `add_negative_atom`：`case_type="negative_atom"`，`after.evidence_atoms[]`
+  必须包含 parent result atom；false-positive task 上 target label score 必须下降或
+  不再 selected；若提供 `after.positive_controls[]`，每个 control 必须 passed 且未 regressed。
+- `bootstrap_label`：`case_type="bootstrap_label"`，所有 linked source signals
+  都必须有 passed case；new/result label 必须 selected 或 score >= 0.50；
+  evidence atoms 必须来自 result label。
+
 Validation comparability 默认使用 observation 的 `suggest_input_hash`；status、
 `updated_at`、`lock_version` 或 task label binding 只改变完整 snapshot 时写入
 `task_metadata_drift` / `label_binding_drift` warning，不会让 passed validation stale。
 title/description 变化会写入 `suggest_input_drift` 并使 case incomparable；旧
 observation 缺少 `suggest_input_hash` 时写入 `legacy_suggest_input_hash_missing`，
-不能静默 passed。当前实现只是最低限度 evidence gate，完整 typed score/rank/coverage/residual policy
-由后续版本补齐。`passed` 会把 linked source signals 转为 `resolved`；`failed` 与
+不能静默 passed。`passed` 会把 linked source signals 转为 `resolved`；`failed` 与
 `partial` 保留 signals 供后续修正或人工处理。
 
 ---

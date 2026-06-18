@@ -787,15 +787,29 @@ suggest 验证仍是第二阶段。
 case 摘要、task snapshot/suggest input hash 对比和 parent action 结果引用。Parent action 必须是
 同一 board 上 `validation_status=pending` 的 canonical mutation action，并携带
 canonical result evidence（例如 atom/result label/proposal 引用、canonical hash 和
-非空 change snapshot）。`--status passed` 的 input 必须包含结构化 `cases[]`，
-覆盖每个 linked source signal 并标明该 signal case 已通过；空 `{}` 或无类型
-evidence 会被拒绝。Validation comparability 默认使用 observation 的
+非空 change snapshot）。`--status passed` 的 input 必须包含 automated typed
+evidence：`evidence_type="automated"`、非空 `embedding_model`、object
+`solver_options`、clean `index.status`、`index.generation`，以及覆盖每个 linked
+source signal 的 `cases[]`；空 `{}`、dirty/error atom index、reviewer attestation
+或无类型 evidence 会被拒绝。调用方应在 SQLite mutation transaction 外重建 atom index
+并收集 before/after suggest evidence；service 在短 transaction 内重新核验 parent action
+和 supplied evidence 后写 validation action。
+
+`cases[]` 的 `case_type` 必须匹配 parent action：`positive_atom`、`negative_atom`
+或 `bootstrap_label`。Positive atom validation 要求 `after.degraded=false`、
+result atom id/content hash 出现在 `after.evidence_atoms[]`、target label selected
+或 score >= 0.50，且 score/coverage 不恶化。Negative atom validation 要求 result
+atom evidence、false-positive task 上 target label score 下降或不再 selected，并且
+提供的 `after.positive_controls[]` 全部 passed 且未 regressed。Bootstrap label
+validation 要求所有 linked source signals 都有 passed case，new/result label selected
+或 score >= 0.50，且 evidence atoms 来自 result label。
+
+Validation comparability 默认使用 observation 的
 `suggest_input_hash`；status、`updated_at`、`lock_version` 或 task label binding
 只改变完整 snapshot 时写入 `task_metadata_drift` / `label_binding_drift` warning，
 不会让 passed validation stale。title/description 变化会写入 `suggest_input_drift`
 并使 case incomparable；旧 observation 缺少 `suggest_input_hash` 时写入
-`legacy_suggest_input_hash_missing`，不能静默 passed。当前实现只是最低限度 evidence gate，完整 typed
-score/rank/coverage/residual policy 由后续任务补齐。`--status passed` 会把 linked
+`legacy_suggest_input_hash_missing`，不能静默 passed。`--status passed` 会把 linked
 source signals 转为 `resolved`；`failed` / `partial` 保留历史和 evidence，source
 signals 继续等待后续修正或人工处理。
 

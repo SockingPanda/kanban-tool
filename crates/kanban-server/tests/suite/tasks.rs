@@ -1064,7 +1064,7 @@ async fn label_ontology_observation_route_rejects_invalid_signal_contract() -> a
 async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    kanban_sqlite::create_label(
+    let cli_label = kanban_sqlite::create_label(
         &db_path,
         "default",
         kanban_sqlite::CreateLabel {
@@ -1184,7 +1184,14 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
         .as_str()
         .context("apply action id")?
         .to_owned();
-    assert!(json["data"]["result_atom_id"].as_str().is_some());
+    let result_atom_id = json["data"]["result_atom_id"]
+        .as_str()
+        .context("result atom id")?
+        .to_owned();
+    let result_atom_content_hash = json["data"]["result_atom_content_hash"]
+        .as_str()
+        .context("result atom content hash")?
+        .to_owned();
 
     let (status, json) = post_json(
         app.clone(),
@@ -1220,10 +1227,37 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
             "reason": "atom improves suggestion behavior",
             "validation_status": "passed",
             "validation_json": json!({
+                "evidence_type": "automated",
+                "embedding_model": "test-embedding-v1",
+                "solver_options": {"candidate_limit": 24, "atom_limit": 64},
+                "index": {"status": "ready", "dirty": false, "generation": 7},
                 "cases": [{
                     "signal_id": signal_id.clone(),
+                    "case_type": "positive_atom",
                     "passed": true,
-                    "after": {"state": "selected"}
+                    "target_label_id": &cli_label.id,
+                    "before": {
+                        "target": {
+                            "label_id": &cli_label.id,
+                            "selected": false,
+                            "score": 0.12
+                        },
+                        "coverage": 0.61
+                    },
+                    "after": {
+                        "degraded": false,
+                        "target": {
+                            "label_id": &cli_label.id,
+                            "selected": true,
+                            "score": 0.73
+                        },
+                        "coverage": 0.78,
+                        "evidence_atoms": [{
+                            "id": result_atom_id,
+                            "content_hash": result_atom_content_hash,
+                            "label_id": &cli_label.id
+                        }]
+                    }
                 }]
             }).to_string()
         }),

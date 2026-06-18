@@ -967,13 +967,21 @@ fn label_ontology_atom_apply_records_provenance_and_validation_resolves_signal()
             signal_ids: Vec::new(),
             reason: "Source task now selects cli with the new atom as evidence.".to_owned(),
             validation_status: LabelOntologyValidationStatus::Passed,
-            validation_json: json!({
-                "cases": [{
-                    "signal_id": signal_id,
-                    "passed": true,
-                    "after": {"state": "selected"}
-                }]
-            })
+            validation_json: typed_positive_validation_json(
+                &signal_id,
+                apply_action
+                    .target_label_id
+                    .as_deref()
+                    .context("target label")?,
+                apply_action
+                    .result_atom_id
+                    .as_deref()
+                    .context("result atom id")?,
+                apply_action
+                    .result_atom_content_hash
+                    .as_deref()
+                    .context("result atom hash")?,
+            )
             .to_string(),
         },
     )?;
@@ -1033,11 +1041,7 @@ fn label_ontology_validation_allows_status_only_task_drift_with_warning() -> any
     let validation = validate_label_ontology_action(
         &temp.path,
         "default",
-        passed_validation_input(
-            &fixture.apply_action_id,
-            &fixture.signal_id,
-            "Status-only task drift must remain comparable.",
-        ),
+        passed_validation_input(&fixture, "Status-only task drift must remain comparable."),
     )?;
 
     let validation_json: serde_json::Value = serde_json::from_str(&validation.validation_json)?;
@@ -1082,11 +1086,7 @@ fn label_ontology_validation_allows_label_binding_drift_with_warning() -> anyhow
     let validation = validate_label_ontology_action(
         &temp.path,
         "default",
-        passed_validation_input(
-            &fixture.apply_action_id,
-            &fixture.signal_id,
-            "Label binding drift must remain comparable.",
-        ),
+        passed_validation_input(&fixture, "Label binding drift must remain comparable."),
     )?;
 
     let validation_json: serde_json::Value = serde_json::from_str(&validation.validation_json)?;
@@ -1099,6 +1099,197 @@ fn label_ontology_validation_allows_label_binding_drift_with_warning() -> anyhow
         &validation_json["cases"][0]["warnings"],
         "label_binding_drift",
     );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_rejects_dirty_atom_index() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_typed_validation_rejects_dirty_atom_index")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Add ontology validation dirty index guard",
+        "cli-dirty-index",
+    )?;
+    let mut validation_json = typed_positive_fixture_json(&fixture);
+    validation_json["index"] = json!({
+        "status": "dirty",
+        "dirty": true,
+        "generation": 9
+    });
+
+    let error = result_err(validate_label_ontology_action(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Dirty atom index cannot pass automated validation.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("dirty atom index"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_positive_atom_requires_result_atom_evidence()
+-> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_typed_validation_positive_atom_requires_result_atom_evidence")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Add ontology validation result atom guard",
+        "cli-result-atom-evidence",
+    )?;
+    let mut validation_json = typed_positive_fixture_json(&fixture);
+    validation_json["cases"][0]["after"]["evidence_atoms"] = json!([]);
+
+    let error = result_err(validate_label_ontology_action(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Positive atom validation must cite the applied result atom.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("result atom"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_protects_positive_controls() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_typed_validation_negative_atom_protects_positive_controls")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom controls",
+        "cli-negative-positive-control",
+    )?;
+    let validation_json = typed_negative_fixture_json(&fixture, false);
+
+    let error = result_err(validate_label_ontology_action(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Negative atom validation must protect positive control tasks.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("positive control"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_bootstrap_enforces_score_threshold() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_typed_validation_bootstrap_enforces_score_threshold")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Add ontology bootstrap validation threshold"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        LabelOntologyRecordInput {
+            signals: vec![LabelOntologySignalInput {
+                kind: LabelOntologySignalKind::VocabularyGap,
+                target_label_ref: None,
+                related_labels_json: "[]".to_owned(),
+                proposed_action: LabelOntologyProposedAction::BootstrapLabel,
+                candidate_atom: None,
+                proposed_label_name: Some("ontology-ledger".to_owned()),
+                proposal_json: json!({
+                    "name": "ontology-ledger",
+                    "description": "Label ontology ledger work",
+                    "applies_when": ["records ontology observations and signals"]
+                })
+                .to_string(),
+                agent_selected: true,
+                suggest_state: Some(LabelOntologySuggestState::Absent),
+                suggest_score: None,
+                suggest_rank: None,
+                final_selected: true,
+                rationale: "Existing labels do not express ontology ledger storage.".to_owned(),
+                confidence: Some(0.86),
+                signal_key: Some("ontology-ledger-threshold".to_owned()),
+            }],
+            ..sample_record_input(Vec::new())
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer agrees this vocabulary gap is real.",
+        ),
+    )?;
+    let proposal_id =
+        seed_label_semantic_proposal(&temp.path, &task.board_id, &task.id, "ontology-ledger")?;
+    let accepted = accept_label_proposal_with_options(
+        &temp.path,
+        "reviewer",
+        &proposal_id,
+        Some("Bootstrap label from confirmed ontology signal.".to_owned()),
+        LabelProposalDecisionOptions {
+            source_signal_ids: vec![signal_id.clone()],
+        },
+    )?;
+    let result_label_id = accepted
+        .resolved_label_id
+        .as_deref()
+        .context("resolved label")?;
+    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
+    let bootstrap = detail
+        .actions
+        .iter()
+        .find(|action| action.action_type == LabelOntologyActionType::BootstrapLabel)
+        .context("bootstrap action")?;
+
+    let error = result_err(validate_label_ontology_action(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &bootstrap.id,
+            json!({
+                "evidence_type": "automated",
+                "embedding_model": "test-embedding-v1",
+                "solver_options": {"candidate_limit": 24, "atom_limit": 64},
+                "index": {"status": "ready", "dirty": false, "generation": 7},
+                "cases": [{
+                    "signal_id": signal_id,
+                    "case_type": "bootstrap_label",
+                    "passed": true,
+                    "before": {"target": {"selected": false, "score": 0.0}},
+                    "after": {
+                        "degraded": false,
+                        "target": {
+                            "label_id": result_label_id,
+                            "selected": false,
+                            "score": 0.49
+                        },
+                        "evidence_atoms": [{"label_id": result_label_id}]
+                    }
+                }]
+            }),
+            "Bootstrap validation must meet the source-task score threshold.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("bootstrap label"));
 
     Ok(())
 }
@@ -1288,6 +1479,9 @@ struct OntologyValidationFixture {
     observation_id: String,
     signal_id: String,
     apply_action_id: String,
+    target_label_id: String,
+    result_atom_id: String,
+    result_atom_content_hash: String,
 }
 
 fn seed_validation_fixture(
@@ -1295,7 +1489,7 @@ fn seed_validation_fixture(
     title: &str,
     signal_key: &str,
 ) -> anyhow::Result<OntologyValidationFixture> {
-    create_label(
+    let label = create_label(
         &temp.path,
         "default",
         kanban_sqlite::CreateLabel {
@@ -1341,12 +1535,110 @@ fn seed_validation_fixture(
         observation_id: observation.id,
         signal_id,
         apply_action_id: apply_action.id,
+        target_label_id: label.id,
+        result_atom_id: apply_action.result_atom_id.context("result atom id")?,
+        result_atom_content_hash: apply_action
+            .result_atom_content_hash
+            .context("result atom hash")?,
+    })
+}
+
+fn seed_negative_validation_fixture(
+    temp: &TempDb,
+    title: &str,
+    signal_key: &str,
+) -> anyhow::Result<OntologyValidationFixture> {
+    let label = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(&temp.path, "default", "tester", CreateTask::ready(title))?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![LabelOntologySignalInput {
+            kind: LabelOntologySignalKind::FalsePositive,
+            target_label_ref: Some("cli".to_owned()),
+            related_labels_json: "[]".to_owned(),
+            proposed_action: LabelOntologyProposedAction::AddNegativeAtom,
+            candidate_atom: Some(LabelOntologyCandidateAtomInput {
+                polarity: "negative".to_owned(),
+                kind: "excludes_when".to_owned(),
+                text: "does not change user-visible CLI behavior".to_owned(),
+            }),
+            proposed_label_name: None,
+            proposal_json: "{}".to_owned(),
+            agent_selected: true,
+            suggest_state: Some(LabelOntologySuggestState::Selected),
+            suggest_score: Some(0.82),
+            suggest_rank: Some(1),
+            final_selected: false,
+            rationale: "The task was a false positive for the cli label.".to_owned(),
+            confidence: Some(0.9),
+            signal_key: Some(signal_key.to_owned()),
+        }]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed by reviewer.",
+        ),
+    )?;
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "excludes_when".to_owned(),
+            text: "does not change user-visible CLI behavior".to_owned(),
+            reason: "Confirmed false-positive support for CLI label suppression.".to_owned(),
+        },
+    )?;
+    Ok(OntologyValidationFixture {
+        task,
+        observation_id: observation.id,
+        signal_id,
+        apply_action_id: apply_action.id,
+        target_label_id: label.id,
+        result_atom_id: apply_action.result_atom_id.context("result atom id")?,
+        result_atom_content_hash: apply_action
+            .result_atom_content_hash
+            .context("result atom hash")?,
     })
 }
 
 fn passed_validation_input(
+    fixture: &OntologyValidationFixture,
+    reason: &str,
+) -> LabelOntologyValidationInput {
+    LabelOntologyValidationInput {
+        actor: validation_actor(),
+        parent_action_id: fixture.apply_action_id.clone(),
+        signal_ids: Vec::new(),
+        reason: reason.to_owned(),
+        validation_status: LabelOntologyValidationStatus::Passed,
+        validation_json: typed_positive_fixture_json(fixture).to_string(),
+    }
+}
+
+fn validation_input_from_json(
     parent_action_id: &str,
-    signal_id: &str,
+    validation_json: serde_json::Value,
     reason: &str,
 ) -> LabelOntologyValidationInput {
     LabelOntologyValidationInput {
@@ -1355,15 +1647,102 @@ fn passed_validation_input(
         signal_ids: Vec::new(),
         reason: reason.to_owned(),
         validation_status: LabelOntologyValidationStatus::Passed,
-        validation_json: json!({
-            "cases": [{
-                "signal_id": signal_id,
-                "passed": true,
-                "after": {"state": "selected"}
-            }]
-        })
-        .to_string(),
+        validation_json: validation_json.to_string(),
     }
+}
+
+fn typed_positive_fixture_json(fixture: &OntologyValidationFixture) -> serde_json::Value {
+    typed_positive_validation_json(
+        &fixture.signal_id,
+        &fixture.target_label_id,
+        &fixture.result_atom_id,
+        &fixture.result_atom_content_hash,
+    )
+}
+
+fn typed_positive_validation_json(
+    signal_id: &str,
+    target_label_id: &str,
+    result_atom_id: &str,
+    result_atom_content_hash: &str,
+) -> serde_json::Value {
+    json!({
+        "evidence_type": "automated",
+        "embedding_model": "test-embedding-v1",
+        "solver_options": {"candidate_limit": 24, "atom_limit": 64},
+        "index": {"status": "ready", "dirty": false, "generation": 7},
+        "cases": [{
+            "signal_id": signal_id,
+            "case_type": "positive_atom",
+            "passed": true,
+            "target_label_id": target_label_id,
+            "before": {
+                "target": {
+                    "label_id": target_label_id,
+                    "selected": false,
+                    "score": 0.08
+                },
+                "coverage": 0.61
+            },
+            "after": {
+                "degraded": false,
+                "target": {
+                    "label_id": target_label_id,
+                    "selected": true,
+                    "score": 0.74
+                },
+                "coverage": 0.79,
+                "evidence_atoms": [{
+                    "id": result_atom_id,
+                    "content_hash": result_atom_content_hash,
+                    "label_id": target_label_id
+                }]
+            }
+        }]
+    })
+}
+
+fn typed_negative_fixture_json(
+    fixture: &OntologyValidationFixture,
+    positive_control_passed: bool,
+) -> serde_json::Value {
+    json!({
+        "evidence_type": "automated",
+        "embedding_model": "test-embedding-v1",
+        "solver_options": {"candidate_limit": 24, "atom_limit": 64},
+        "index": {"status": "ready", "dirty": false, "generation": 7},
+        "cases": [{
+            "signal_id": fixture.signal_id,
+            "case_type": "negative_atom",
+            "passed": true,
+            "target_label_id": fixture.target_label_id,
+            "before": {
+                "target": {
+                    "label_id": fixture.target_label_id,
+                    "selected": true,
+                    "score": 0.82
+                }
+            },
+            "after": {
+                "degraded": false,
+                "target": {
+                    "label_id": fixture.target_label_id,
+                    "selected": false,
+                    "score": 0.18
+                },
+                "evidence_atoms": [{
+                    "id": fixture.result_atom_id,
+                    "content_hash": fixture.result_atom_content_hash,
+                    "label_id": fixture.target_label_id
+                }],
+                "positive_controls": [{
+                    "task_ref": "default#control",
+                    "passed": positive_control_passed,
+                    "regressed": !positive_control_passed
+                }]
+            }
+        }]
+    })
 }
 
 fn assert_json_array_contains(value: &serde_json::Value, expected: &str) {

@@ -1,10 +1,12 @@
 use crate::connect_file;
 
 use super::{
-    CreateLabel, CreateTask, LabelRecord, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage,
-    TaskListSort, TaskPatch, TaskRecord, add_dependency_in_current_tx, all, all_values, board_id,
-    board_id_any, ensure_changed_one, exec, exec_named, exec_one_named, insert_event, json_valid,
-    optional, recompute_ready_status, required_row, scalar, validate_priority, with_immediate_tx,
+    BootstrapTaskLabel, BootstrapTaskLabelResult, CreateLabel, CreateTask, LabelRecord,
+    MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage, TaskListSort, TaskPatch, TaskRecord,
+    add_dependency_in_current_tx, all, all_values, board_id, board_id_any, ensure_changed_one,
+    exec, exec_named, exec_one_named, insert_event, json_valid, mark_label_atom_store_dirty,
+    optional, recompute_ready_status, required_row, scalar, upsert_label_semantics_candidate_in_tx,
+    validate_priority, with_immediate_tx,
 };
 
 use std::path::Path;
@@ -236,6 +238,76 @@ pub fn add_task_labels_by_id(
             attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
         }
         get_task_by_id(&conn, &task.board_id, &task.id)
+    })
+}
+
+pub fn bootstrap_task_label(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    input: BootstrapTaskLabel,
+) -> Result<BootstrapTaskLabelResult> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    let candidate = bootstrap_label_candidate(input)?;
+    with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
+        let task = resolve_task(&conn, &board_id, task_ref)?;
+        ensure_task_allows_label_mutation(&conn, &task.id)?;
+        let label = ensure_label_in_current_tx(&conn, &task.board_id, &candidate.name, None, now)?;
+        upsert_label_semantics_candidate_in_tx(
+            &conn,
+            &task.board_id,
+            &label.id,
+            &label.name,
+            &candidate,
+            now,
+        )?;
+        mark_label_atom_store_dirty(&conn, &task.board_id, now)?;
+        attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        Ok(BootstrapTaskLabelResult {
+            task: get_task_by_id(&conn, &task.board_id, &task.id)?,
+            semantics: super::label_semantics::get_label_semantics_conn(
+                &conn,
+                &task.board_id,
+                &label.id,
+            )?,
+        })
+    })
+}
+
+pub fn bootstrap_task_label_by_id(
+    path: impl AsRef<Path>,
+    actor: &str,
+    task_id: &str,
+    input: BootstrapTaskLabel,
+) -> Result<BootstrapTaskLabelResult> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    let candidate = bootstrap_label_candidate(input)?;
+    with_immediate_tx(&conn, || {
+        let board_id = active_board_id_for_label_mutation(&conn, task_id)?;
+        let task = get_task_by_id(&conn, &board_id, task_id)?;
+        let label = ensure_label_in_current_tx(&conn, &task.board_id, &candidate.name, None, now)?;
+        upsert_label_semantics_candidate_in_tx(
+            &conn,
+            &task.board_id,
+            &label.id,
+            &label.name,
+            &candidate,
+            now,
+        )?;
+        mark_label_atom_store_dirty(&conn, &task.board_id, now)?;
+        attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        Ok(BootstrapTaskLabelResult {
+            task: get_task_by_id(&conn, &task.board_id, &task.id)?,
+            semantics: super::label_semantics::get_label_semantics_conn(
+                &conn,
+                &task.board_id,
+                &label.id,
+            )?,
+        })
     })
 }
 
@@ -930,6 +1002,46 @@ fn normalize_label_names(labels: &[String]) -> Result<Vec<String>> {
         }
     }
     Ok(normalized)
+}
+
+fn bootstrap_label_candidate(input: BootstrapTaskLabel) -> Result<super::LabelProposalCandidate> {
+    let name = normalize_label_name(&input.name)?;
+    let description = normalize_optional_label_semantic(input.description);
+    let applies_when = normalize_label_semantic_list(input.applies_when);
+    let excludes_when = normalize_label_semantic_list(input.excludes_when);
+    let positive_examples = normalize_label_semantic_list(input.positive_examples);
+    let negative_examples = normalize_label_semantic_list(input.negative_examples);
+    if description.is_none()
+        && applies_when.is_empty()
+        && excludes_when.is_empty()
+        && positive_examples.is_empty()
+        && negative_examples.is_empty()
+    {
+        return Err(KanbanError::InvalidInput(
+            "label bootstrap requires description or semantic examples".into(),
+        ));
+    }
+    Ok(super::LabelProposalCandidate {
+        name,
+        description,
+        applies_when,
+        excludes_when,
+        positive_examples,
+        negative_examples,
+    })
+}
+
+fn normalize_optional_label_semantic(text: Option<String>) -> Option<String> {
+    text.map(|text| text.trim().to_owned())
+        .filter(|text| !text.is_empty())
+}
+
+fn normalize_label_semantic_list(items: Vec<String>) -> Vec<String> {
+    items
+        .into_iter()
+        .map(|item| item.trim().to_owned())
+        .filter(|item| !item.is_empty())
+        .collect()
 }
 
 fn normalize_label_name(label: &str) -> Result<String> {

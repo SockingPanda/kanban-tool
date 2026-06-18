@@ -4,10 +4,11 @@ use std::{path::Path, sync::Arc};
 
 use anyhow::{Result, bail};
 use kanban_sqlite::{
-    CreateLabel, LabelProposalCandidate, LabelProposalListOptions, LabelProposalStatus,
-    LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult,
-    MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics, accept_label_proposal,
-    add_task_labels, create_label, delete_label_semantics, get_label_proposal, get_label_semantics,
+    BootstrapTaskLabel, CreateLabel, LabelProposalCandidate, LabelProposalListOptions,
+    LabelProposalStatus, LabelSemanticProposalRecord, LabelSuggestionOptions,
+    LabelSuggestionResult, MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
+    accept_label_proposal, add_task_labels, bootstrap_task_label, create_label,
+    delete_label_semantics, get_label_proposal, get_label_semantics, get_task,
     label_atom_index_status, list_label_atoms, list_label_proposals, list_label_semantics,
     list_labels, propose_task_label_with, reject_label_proposal, remove_task_label,
     suggest_task_labels, upsert_label_semantics,
@@ -17,6 +18,7 @@ use kanban_sqlite::{
     label_atom_index_status_with, propose_task_label_with_store, query_label_atom_index_with,
     rebuild_label_atom_index_with, suggest_task_labels_with,
 };
+use serde::Serialize;
 use std::{fs, str::FromStr};
 
 use crate::args::{LabelAtomPolarityArg, LabelCommand};
@@ -47,6 +49,79 @@ pub(crate) fn handle_label(
                 },
             )?;
             print_or_json(json, &label, || label_line(&label))?;
+        }
+        LabelCommand::Bootstrap(args) => {
+            let verify = args.verify || args.vector_config.is_some();
+            if verify {
+                validate_label_bootstrap_verification_score(args.min_verify_score)?;
+                ensure_label_bootstrap_verification_available(
+                    db_path,
+                    args.vector_config.as_deref(),
+                )?;
+            }
+            let existing_task = if verify {
+                Some(get_task(db_path, board, &args.task_ref)?)
+            } else {
+                None
+            };
+            let result = bootstrap_task_label(
+                db_path,
+                board,
+                actor,
+                &args.task_ref,
+                BootstrapTaskLabel {
+                    name: args.label,
+                    description: args.description,
+                    applies_when: args.applies_when,
+                    excludes_when: args.excludes_when,
+                    positive_examples: args.positive_examples,
+                    negative_examples: args.negative_examples,
+                },
+            )?;
+            let verification = if verify {
+                let was_attached = existing_task.as_ref().is_some_and(|task| {
+                    task.labels
+                        .iter()
+                        .any(|label| label.id == result.semantics.label_id)
+                });
+                Some(
+                    match verify_label_bootstrap_suggestion(
+                        db_path,
+                        board,
+                        &args.task_ref,
+                        &result.semantics.label_id,
+                        &result.semantics.label_name,
+                        args.min_verify_score,
+                        args.vector_config.as_deref(),
+                    ) {
+                        Ok(verification) => verification,
+                        Err(error) => {
+                            if !was_attached
+                                && let Err(cleanup_error) = remove_task_label(
+                                    db_path,
+                                    board,
+                                    actor,
+                                    &args.task_ref,
+                                    &result.semantics.label_id,
+                                )
+                            {
+                                bail!(
+                                    "{error}; additionally failed to remove unverified task label binding: {cleanup_error}"
+                                );
+                            }
+                            return Err(error);
+                        }
+                    },
+                )
+            } else {
+                None
+            };
+            let output = LabelBootstrapCommandOutput {
+                task: result.task,
+                semantics: result.semantics,
+                verification,
+            };
+            print_or_json(json, &output, || label_bootstrap_lines(&output))?;
         }
         LabelCommand::Add(args) => {
             let task = add_task_labels(db_path, board, actor, &args.task_ref, &args.labels)?;
@@ -321,6 +396,13 @@ fn validate_label_suggest_bounds(
     Ok(())
 }
 
+fn validate_label_bootstrap_verification_score(min_score: f32) -> Result<()> {
+    if !(0.0..=1.0).contains(&min_score) {
+        bail!("min_verify_score must be between 0 and 1");
+    }
+    Ok(())
+}
+
 fn label_semantics_lines(records: &[kanban_sqlite::LabelSemanticsRecord]) -> String {
     if records.is_empty() {
         return "No label semantics.".to_owned();
@@ -345,6 +427,42 @@ fn label_semantics_line(record: &kanban_sqlite::LabelSemanticsRecord) -> String 
     )
 }
 
+#[derive(Debug, Serialize)]
+struct LabelBootstrapCommandOutput {
+    task: kanban_sqlite::TaskRecord,
+    semantics: kanban_sqlite::LabelSemanticsRecord,
+    verification: Option<LabelBootstrapVerification>,
+}
+
+#[derive(Debug, Serialize)]
+struct LabelBootstrapVerification {
+    label_name: String,
+    score: f32,
+    source: String,
+    min_score: f32,
+    degraded: bool,
+    diagnostics: Vec<String>,
+}
+
+fn label_bootstrap_lines(result: &LabelBootstrapCommandOutput) -> String {
+    let mut lines = format!(
+        "{}\n{}",
+        label_semantics_line(&result.semantics),
+        crate::output::task_line(&result.task)
+    );
+    if let Some(verification) = &result.verification {
+        lines.push('\n');
+        lines.push_str(&format!(
+            "verification label={} score={:.3} min_score={:.3} source={}",
+            verification.label_name,
+            verification.score,
+            verification.min_score,
+            verification.source
+        ));
+    }
+    lines
+}
+
 fn label_atom_index_status_optional_config(
     db_path: &PathBuf,
     board: &str,
@@ -366,15 +484,99 @@ fn rebuild_configured_label_atom_index(
     board: &str,
     vector_config_path: &std::path::Path,
 ) -> Result<kanban_vector::VectorStoreStatus> {
+    rebuild_configured_label_atom_index_optional(db_path, board, Some(vector_config_path))
+}
+
+fn rebuild_configured_label_atom_index_optional(
+    db_path: &PathBuf,
+    board: &str,
+    vector_config_path: Option<&std::path::Path>,
+) -> Result<kanban_vector::VectorStoreStatus> {
     #[cfg(feature = "vector-lancedb")]
     {
-        if let Some(store) = configured_lancedb_store(db_path, Some(vector_config_path))? {
+        if let Some(store) = configured_lancedb_store(db_path, vector_config_path)? {
             return rebuild_label_atom_index_with(db_path, board, &store).map_err(Into::into);
         }
     }
     #[cfg(not(feature = "vector-lancedb"))]
     let _ = (db_path, board, vector_config_path);
     bail!("label atom index rebuild requires a configured label atom vector store")
+}
+
+fn ensure_label_bootstrap_verification_available(
+    db_path: &PathBuf,
+    vector_config_path: Option<&std::path::Path>,
+) -> Result<()> {
+    #[cfg(feature = "vector-lancedb")]
+    {
+        if configured_lancedb_store(db_path, vector_config_path)?.is_some() {
+            return Ok(());
+        }
+    }
+    #[cfg(not(feature = "vector-lancedb"))]
+    let _ = (db_path, vector_config_path);
+    bail!(
+        "label bootstrap verification requires a configured label atom vector store; pass --vector-config <path> or omit --verify"
+    )
+}
+
+fn verify_label_bootstrap_suggestion(
+    db_path: &PathBuf,
+    board: &str,
+    task_ref: &str,
+    label_id: &str,
+    label_name: &str,
+    min_score: f32,
+    vector_config_path: Option<&std::path::Path>,
+) -> Result<LabelBootstrapVerification> {
+    rebuild_configured_label_atom_index_optional(db_path, board, vector_config_path)?;
+    let suggestions = suggest_with_optional_vector_config(
+        db_path,
+        board,
+        task_ref,
+        LabelSuggestionOptions {
+            output_limit: MAX_TASK_LIST_LIMIT,
+            candidate_limit: kanban_sqlite::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT,
+            atom_limit: kanban_sqlite::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT,
+            max_selected_labels: kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS,
+            min_score: 0.0,
+        },
+        vector_config_path,
+    )?;
+    if suggestions.degraded {
+        bail!(
+            "label bootstrap verification failed: label suggest degraded ({})",
+            suggestions.diagnostics.join(",")
+        );
+    }
+    let selected = suggestions
+        .selected_labels
+        .iter()
+        .find(|label| label.label_id == label_id)
+        .map(|label| (label.score, "selected_labels"));
+    let candidate = suggestions
+        .candidates
+        .iter()
+        .find(|label| label.label_id == label_id)
+        .map(|label| (label.score, "candidates"));
+    let Some((score, source)) = selected.or(candidate) else {
+        bail!(
+            "label bootstrap verification failed: label {label_name} was not returned by label suggest"
+        );
+    };
+    if score < min_score {
+        bail!(
+            "label bootstrap verification failed: label {label_name} score {score:.3} is below min_verify_score {min_score:.3}"
+        );
+    }
+    Ok(LabelBootstrapVerification {
+        label_name: label_name.to_owned(),
+        score,
+        source: source.to_owned(),
+        min_score,
+        degraded: false,
+        diagnostics: suggestions.diagnostics,
+    })
 }
 
 fn query_configured_label_atom_index(

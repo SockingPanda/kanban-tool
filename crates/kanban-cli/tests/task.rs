@@ -328,6 +328,114 @@ dimensions = 3
 }
 
 #[test]
+fn label_bootstrap_command_attaches_task_and_returns_semantics() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_command_attaches_task_and_returns_semantics")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "bootstrap cli task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+
+    let bootstrapped = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "bootstrap",
+            task_id,
+            "database",
+            "--description",
+            "Database persistence work",
+            "--applies-when",
+            "touches SQLite migrations",
+            "--positive-example",
+            "new table migration",
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(bootstrapped["data"]["task"]["id"], task_id);
+    assert_eq!(
+        bootstrapped["data"]["verification"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        bootstrapped["data"]["task"]["labels"][0]["name"],
+        "database"
+    );
+    assert_eq!(bootstrapped["data"]["semantics"]["label_name"], "database");
+    assert_eq!(
+        bootstrapped["data"]["semantics"]["description"],
+        "Database persistence work"
+    );
+    assert!(
+        bootstrapped["data"]["semantics"]["atoms"]
+            .as_array()
+            .context("atoms")?
+            .iter()
+            .any(|atom| atom["kind"] == "applies_when")
+    );
+    Ok(())
+}
+
+#[test]
+fn label_bootstrap_verify_requires_vector_provider_before_mutating() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_verify_requires_vector_provider_before_mutating")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "bootstrap verify cli task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "bootstrap",
+            task_id,
+            "database",
+            "--description",
+            "Database persistence work",
+            "--applies-when",
+            "touches SQLite migrations",
+            "--positive-example",
+            "new table migration",
+            "--verify",
+        ],
+    )?
+    .failure_containing(
+        "label bootstrap verification requires a configured label atom vector store",
+    )?;
+
+    let shown = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
+    assert!(
+        shown["data"]["labels"]
+            .as_array()
+            .context("labels")?
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[test]
 fn label_propose_without_provider_returns_degraded_without_polluting_labels() -> anyhow::Result<()>
 {
     let temp =

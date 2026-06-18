@@ -483,6 +483,7 @@ Human output for add/remove is Chinese-first:
 ```bash
 kanban label list
 kanban label create <name> [--color <color>]
+kanban label bootstrap <task_ref> <label> [--description <text>] [--applies-when <text>]... [--excludes-when <text>]... [--positive-example <text>]... [--negative-example <text>]... [--verify] [--min-verify-score 0.50] [--vector-config <toml>] [--json]
 kanban label add <task_ref> <label>...
 kanban label remove <task_ref> <label>
 kanban label semantics list [--json]
@@ -513,10 +514,26 @@ Label 变更对 task-label 关联保持幂等。只有关联实际变化时，�
 canonical label，也不会留下部分 task-label 绑定。缺失 canonical label 的创建规则
 与单 label add 相同，但不会自动生成 `label_semantics` 或 `label_atoms`。
 
+`label bootstrap` 是一次性 new-label adoption 流程：在同一 transaction 内创建或复用
+当前 task 所属 board 上的 canonical label，写入/覆盖该 label 的
+`label_semantics`，同步重建 SQLite `label_atoms`，标脏派生的 label atom vector
+index，并把该 label 绑定到 task。`<label>` 按名称解析；空白名称会被拒绝。语义输入
+会 trim 并丢弃空白值，且必须至少提供 `description` 或一个非空语义数组值。重复执行
+同一 task/label 不会重复写 `task_labels`，但会按最新输入 upsert semantics。JSON
+返回 `{ "task": <TaskRecord>, "semantics": <LabelSemanticsRecord>, "verification": null|<Verification> }`。
+
+传入 `--verify` 或 `--vector-config <toml>` 时，CLI 会在写入后重建 label atom
+vector index，随后对来源 task 执行非 degraded `label suggest`，并要求新 label 出现在
+`selected_labels` 或 `candidates`，且 score 至少达到 `--min-verify-score`（默认
+`0.50`）。无可用 vector provider 时，验证会在写入前失败；不需要本地 vector 验证时省略
+`--verify` 和 `--vector-config`。
+
 示例：
 
 ```bash
 kanban label create backend --color blue
+kanban label bootstrap default#12 database --description "Database persistence work" --applies-when "touches SQLite migrations" --positive-example "new table migration" --json
+kanban label bootstrap default#12 database --description "Database persistence work" --applies-when "touches SQLite migrations" --positive-example "new table migration" --vector-config .kb/vector.toml --min-verify-score 0.50 --json
 kanban label add default#12 backend
 kanban label add default#12 backend api sqlite
 kanban label remove t_01HX... backend

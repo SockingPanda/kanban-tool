@@ -5,7 +5,7 @@ use super::label_suggestions::{
 };
 use super::{
     LabelProposalAttempt, LabelProposalCandidate, LabelProposalListOptions, LabelProposalStatus,
-    LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult, SqlWhere, all,
+    LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult, SqlFilter, all,
     all_values, board_id, exec, get_task_by_id, insert_event, mark_label_atom_store_dirty, one,
     resolve_task, upsert_label_semantics_candidate_in_tx, with_immediate_tx,
 };
@@ -509,20 +509,20 @@ pub fn list_label_proposals(
         Some(task_ref) => Some(resolve_task(&conn, &board_id, &task_ref)?.id),
         None => None,
     };
-    let mut where_clause = SqlWhere::new("WHERE board_id=?");
-    where_clause.push_value(board_id);
+    let mut filter = SqlFilter::new();
+    filter.and("board_id=?", board_id)?;
     if let Some(task_id) = task_id {
-        where_clause.push("AND task_id=?", task_id);
+        filter.and("task_id=?", task_id)?;
     }
     if let Some(status) = options.status {
-        where_clause.push("AND status=?", status.to_string());
+        filter.and("status=?", status.to_string())?;
     }
     let sql = format!(
         "SELECT id,board_id,task_id,status,name,description,applies_when,excludes_when,positive_examples,negative_examples,heuristic_coverage,heuristic_coverage_cosine,heuristic_residual_norm,top1_existing_label_id,top1_existing_label_name,diagnostics_json,created_by,decision_reason,resolved_label_id,created_at,updated_at,decided_at \
          FROM label_semantic_proposals {} ORDER BY created_at DESC, id ASC",
-        where_clause.sql()
+        filter.where_sql()
     );
-    all_values(&conn, &sql, where_clause.params(), proposal_from_row)
+    all_values(&conn, &sql, filter.params(), proposal_from_row)
 }
 
 pub fn get_label_proposal(

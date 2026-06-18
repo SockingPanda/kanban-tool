@@ -1,6 +1,6 @@
 use crate::connect_file;
 
-use super::{MAX_TASK_LIST_LIMIT, SqlWhere, all, all_values, one, validate_page_bounds};
+use super::{MAX_TASK_LIST_LIMIT, SqlFilter, all, all_values, one, validate_page_bounds};
 
 use std::path::Path;
 
@@ -107,23 +107,23 @@ pub fn list_entities(
 ) -> Result<Vec<EntityRecord>> {
     validate_page_bounds(options.limit, MAX_TASK_LIST_LIMIT, 0)?;
     let conn = connect_file(path.as_ref())?;
-    let mut where_clause = SqlWhere::new("");
+    let mut filter = SqlFilter::new();
     if let Some(kind) = options
         .kind
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty())
     {
-        where_clause.push("WHERE kind=?", kind);
+        filter.and("kind=?", kind)?;
     }
-    let mut params = where_clause.params().to_vec();
+    let mut params = filter.params().to_vec();
     params.push(Value::Integer(
         options.limit.try_into().expect("validated limit"),
     ));
     let sql = format!(
         "SELECT uri,kind,source_table,source_id,board_id,task_id,title,summary,content_hash,created_at,updated_at,archived_at \
          FROM entities {} ORDER BY updated_at DESC, uri ASC LIMIT ?",
-        where_clause.sql()
+        filter.where_sql()
     );
     all_values(&conn, &sql, &params, entity_from_row)
 }
@@ -146,23 +146,23 @@ pub fn list_outbox(
 ) -> Result<Vec<IndexOutboxRecord>> {
     validate_page_bounds(options.limit, MAX_TASK_LIST_LIMIT, 0)?;
     let conn = connect_file(path.as_ref())?;
-    let mut where_clause = SqlWhere::new("");
+    let mut filter = SqlFilter::new();
     if let Some(status) = options
         .status
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty())
     {
-        where_clause.push("WHERE status=?", status);
+        filter.and("status=?", status)?;
     }
-    let mut params = where_clause.params().to_vec();
+    let mut params = filter.params().to_vec();
     params.push(Value::Integer(
         options.limit.try_into().expect("validated limit"),
     ));
     let sql = format!(
         "SELECT id,source_event_id,target,entity_uri,action,payload_json,status,attempts,last_error,created_at,updated_at \
          FROM index_outbox {} ORDER BY id ASC LIMIT ?",
-        where_clause.sql()
+        filter.where_sql()
     );
     all_values(&conn, &sql, &params, outbox_from_row)
 }

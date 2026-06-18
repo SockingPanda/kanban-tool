@@ -259,6 +259,9 @@ pub fn create_label_ontology_action(
                     "signal cannot supersede itself".into(),
                 ));
             }
+            if matches!(input.action_type, LabelOntologyActionType::Supersede) {
+                ensure_no_supersede_cycle(&conn, &board_id, &signal_ids, replacement_id)?;
+            }
         }
 
         let target_label_id = input
@@ -811,6 +814,43 @@ fn ensure_passed_validation_evidence(
         }
     }
     Ok(())
+}
+
+fn ensure_no_supersede_cycle(
+    conn: &Connection,
+    board_id: &str,
+    source_signal_ids: &[String],
+    replacement_signal_id: &str,
+) -> Result<()> {
+    let mut visited = Vec::new();
+    let mut current_id = replacement_signal_id.to_owned();
+    loop {
+        if source_signal_ids
+            .iter()
+            .any(|source_id| source_id == &current_id)
+        {
+            return Err(KanbanError::InvalidInput(format!(
+                "supersede cycle detected: replacement {replacement_signal_id} reaches source signal {current_id}"
+            )));
+        }
+        if visited.iter().any(|seen| seen == &current_id) {
+            return Err(KanbanError::InvalidInput(format!(
+                "supersede cycle detected in replacement chain from {replacement_signal_id} at signal {current_id}"
+            )));
+        }
+        visited.push(current_id.clone());
+        let current = signal_by_id(conn, &current_id)?;
+        if current.board_id != board_id {
+            return Err(KanbanError::InvalidInput(format!(
+                "supersede replacement chain signal {} belongs to a different board",
+                current.id
+            )));
+        }
+        let Some(next_id) = current.superseded_by_signal_id else {
+            return Ok(());
+        };
+        current_id = next_id;
+    }
 }
 
 fn insert_signal(

@@ -752,7 +752,8 @@ Lifecycle commands 写入 action 并同步更新 signal status：
 
 - `confirm`：`open` signal 进入 `confirmed`。
 - `reject`：把 signal 标记为 `rejected`。
-- `supersede --by`：把重复或过时 signal 标记为 `superseded`。
+- `supersede --by`：把重复或过时 signal 标记为 `superseded`；写入前会沿
+  replacement `superseded_by_signal_id` 链检查，拒绝会回到任一 source signal 的环。
 - `resolve --no-change`：记录无需 ontology 修改的 resolution。
 
 这些 lifecycle commands 只记录 review/status 变化，不接受 canonical mutation

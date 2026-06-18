@@ -275,6 +275,88 @@ fn label_ontology_lifecycle_actions_update_status_and_link_actions() -> anyhow::
 }
 
 #[test]
+fn label_ontology_supersede_rejects_cycles() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_supersede_rejects_cycles")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Add ontology supersede cycle guard"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![
+            sample_signal_input("cycle-a"),
+            sample_signal_input("cycle-b"),
+            sample_signal_input("cycle-c"),
+            sample_signal_input("cycle-d"),
+        ]),
+    )?;
+    let signal_a = observation.signals[0].id.clone();
+    let signal_b = observation.signals[1].id.clone();
+    let signal_c = observation.signals[2].id.clone();
+    let signal_d = observation.signals[3].id.clone();
+
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        supersede_input(vec![signal_a.clone()], &signal_b, "A is replaced by B."),
+    )?;
+
+    let two_node_cycle = result_err(create_label_ontology_action(
+        &temp.path,
+        "default",
+        supersede_input(
+            vec![signal_b.clone()],
+            &signal_a,
+            "B cannot be replaced by A because A already points at B.",
+        ),
+    ))?;
+    assert!(two_node_cycle.to_string().contains("supersede cycle"));
+
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        supersede_input(vec![signal_b.clone()], &signal_c, "B is replaced by C."),
+    )?;
+
+    let longer_cycle = result_err(create_label_ontology_action(
+        &temp.path,
+        "default",
+        supersede_input(
+            vec![signal_c.clone()],
+            &signal_a,
+            "C cannot be replaced by A because A points through B back to C.",
+        ),
+    ))?;
+    assert!(longer_cycle.to_string().contains("supersede cycle"));
+
+    let batch_cycle = result_err(create_label_ontology_action(
+        &temp.path,
+        "default",
+        supersede_input(
+            vec![signal_c.clone(), signal_d],
+            &signal_a,
+            "Batch supersede cannot include a signal already in the replacement chain.",
+        ),
+    ))?;
+    assert!(batch_cycle.to_string().contains("supersede cycle"));
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_generic_action_rejects_canonical_mutation_types() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_generic_action_rejects_canonical_mutation_types")?;
     init_database(&temp.path, "tester")?;
@@ -1046,6 +1128,16 @@ fn validation_actor() -> LabelOntologyActor {
         actor_type: "agent".to_owned(),
         agent_type: Some("local".to_owned()),
     }
+}
+
+fn supersede_input(
+    signal_ids: Vec<String>,
+    replacement_signal_id: &str,
+    reason: &str,
+) -> LabelOntologyActionInput {
+    let mut input = action_input(LabelOntologyActionType::Supersede, signal_ids, reason);
+    input.superseded_by_signal_id = Some(replacement_signal_id.to_owned());
+    input
 }
 
 fn action_input(

@@ -1300,7 +1300,9 @@ Observation response 返回 created observation，并展开 child `signals`。
 `invalid_input`。`add_positive_atom`、`add_negative_atom`、`bootstrap_label`、
 `validate` 等 mutation/validation action types 不允许通过该 generic endpoint 写入；
 canonical mutation provenance 必须由 apply/proposal accept/validate 等专用 route 在
-同一 transaction 内写入。
+同一 transaction 内写入。`supersede` 写入时会沿 replacement
+`superseded_by_signal_id` 链检查，若链路回到任一 source signal 或 replacement chain
+自身已有环，则返回 `invalid_input`，不会写入新的 supersede action。
 
 `POST /api/v1/boards/{board}/label-ontology/apply/atom` 对已有 label 执行
 read-modify-upsert semantics，并写入 atom provenance action：

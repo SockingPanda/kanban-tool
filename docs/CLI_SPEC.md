@@ -493,8 +493,8 @@ kanban label atoms list [--json]
 kanban label atom-index status [--vector-config <toml>] [--json]
 kanban label atom-index rebuild --vector-config <toml> [--json]
 kanban label atom-index query <text> [--polarity positive|negative] [--limit 24] --vector-config <toml> [--json]
-kanban label suggest <task_ref> [--limit 5] [--atom-limit 24] [--min-score 0.15] [--vector-config <toml>] [--json]
-kanban label propose <task_ref> [--proposal-json <path>] [--limit 5] [--atom-limit 24] [--min-score 0.15] [--vector-config <toml>] [--json]
+kanban label suggest <task_ref> [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
+kanban label propose <task_ref> [--proposal-json <path>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]
 kanban label proposals show <proposal_id> [--json]
 kanban label proposals accept <proposal_id> [--reason <text>] [--json]
@@ -534,15 +534,21 @@ default#12 t_01HX... [ready] 修复 API 回归 [backend,p1]
 description embedding 作为 query，使用 `lancedb_label_atoms` 按残差多轮检索正向
 label atoms，并用原始 query 检索负向 atoms 做 penalty / suppression。solver 在
 label group 层执行 Group OMP 选择，再用选中 label 的 top positive atom vectors 做
-non-negative refit；`coverage` / `residual_norm` 来自该 atom-level fitted vector。
+non-negative refit；`coverage` / `residual_norm` 来自该 atom-level fitted vector，
+`coverage_cosine` 是原始 query 与 fitted vector 的 cosine similarity。
+候选 label 只有在 tentative refit 后带来足够 residual norm 降幅才会进入结果；
+coverage 或 residual norm 达到停止阈值后，solver 会提前停止而不是凑满
+`--max-selected-labels`。candidate group 与已选 label 语义向量过度相似时会被跳过，
+以减少重复语义 label 同时出现在 selected labels；这不会合并或删除 canonical
+labels。
 它不会自动创建新 label，也不会写入 new-label proposal。应用建议时仍使用现有
 `label add <task_ref> <label>` / API attach 流程。
 
 默认未配置 vector provider 或二进制未启用 `vector-lancedb` 时，命令成功返回
 degraded 结果而不是失败；无 provider 时 `needs_new_label=false`。`--vector-config`
-使用与 `kanban vector configure/status` 相同的 TOML 解析规则。`LabelAtomHit.score`
-来自 LanceDB `_distance`，CLI/API suggestion 分数会先转换为
-`1 / (1 + max(distance, 0))` similarity 再聚合。
+使用与 `kanban vector configure/status` 相同的 TOML 解析规则。`LabelAtomHit.distance`
+保留 LanceDB `_distance` 的原始语义；suggestion / proposal 的 score 只根据返回
+atom vector 与当前 query/residual 在本地计算 cosine similarity，不从 distance 推导。
 
 JSON 输出：
 
@@ -554,6 +560,7 @@ JSON 输出：
     "selected_labels": [],
     "candidates": [],
     "coverage": 0.0,
+    "coverage_cosine": 0.0,
     "residual_norm": 1.0,
     "needs_new_label": false,
     "degraded": true,
@@ -565,32 +572,54 @@ JSON 输出：
 Human output 简洁列出建议 label、score、weight、already_applied；degraded 时追加
 diagnostics 行。
 
+`--limit` 只控制最终输出中 `selected_labels` / `candidates` 的最大条数，不会收窄
+solver 内部搜索能力。内部能力由 `--candidate-limit`、`--atom-limit` 和
+`--max-selected-labels` 分别控制：候选 label group 数、每轮 atom vector 检索上限、
+以及最多进入 non-negative refit 的 label 数。所有 limit 参数都必须是
+`1..=1000`；`--min-score` 必须在 `0..=1`。
+
 `label semantics` 管理当前 board 上已有 label 的语义字典。`<label>` 接受 label
 name 或 `l_...` id；`upsert` 会写入 `label_semantics` 并同步重建该 label 的
 `label_atoms`，随后标脏派生的 label atom vector index。数组参数可重复；空白值会被
-trim 后丢弃。`delete` 删除该 label 的 semantics 与 atoms，但不删除 canonical label
-或 task-label 绑定，并返回 `{ "data": { "deleted": true } }`。
+trim 后丢弃。生成 atoms 时，有 description 的 label 会生成一个 canonical
+`description` atom：`label: {name}\ndescription: {description}`；没有 description 时
+才使用 `name` fallback atom。atom text 会进一步规范化 whitespace：每个非空行内部
+collapse，canonical 行分隔保留。同一 label 下相同
+`polarity + kind + normalized_text` 的 atom 会去重并保留首次 ordinal，`id` /
+`content_hash` 不包含 ordinal，因此只调整数组顺序不会改变同一文本 atom identity。
+`delete` 删除该 label 的 semantics 与 atoms，但不删除 canonical label 或 task-label
+绑定，并返回 `{ "data": { "deleted": true } }`。
 
 `label atoms list` 读取 SQLite truth 中的 `label_atoms`。这些 atoms 来自
 `label semantics upsert` 或接受 label proposal 后生成的 semantics；它们是
 `lancedb_label_atoms` 派生索引的输入，不是派生索引本身。
 
 `label atom-index status` 返回 label atom vector index 的状态。未配置 provider 或未
-启用 `vector-lancedb` 时仍成功返回 disabled/degraded 状态。`rebuild` 与 `query`
-需要 `--vector-config <toml>` 和可用的 vector store；无可用 provider/feature 时命令失败，
-不会修改 SQLite truth。`query` 的 `--polarity` 只接受 `positive` 或 `negative`。
+启用 `vector-lancedb` 时仍成功返回 disabled/degraded 状态。JSON 保留兼容字段
+`message`，并返回结构化 `diagnostics: string[]`、`dirty: boolean | null`、
+`board_dirty: boolean | null`；调用方应使用结构化字段判断 dirty/error，而不要解析
+`message` 文案。`rebuild` 与 `query` 需要 `--vector-config <toml>` 和可用的 vector
+store；无可用 provider/feature 时命令失败，不会修改 SQLite truth。`query` 的
+`--polarity` 只接受 `positive` 或 `negative`；human 输出和 JSON hit 都把 LanceDB
+`_distance` 暴露为 `distance`。
 
 `label propose` 是独立的新 label semantics 提案流程，不复用或改变 `label suggest`。
-它先读取当前 task-level label suggestions 的 `coverage` / `residual_norm` /
+它先读取当前 task-level label suggestions 的 `coverage` / `coverage_cosine` / `residual_norm` /
 top1 existing label。没有 `--proposal-json` 时默认 provider 不可用，命令成功返回
 degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms` 或
 `task_labels`。日常 label suggestion 不依赖该 proposal provider。
-`--limit`、`--atom-limit`、`--min-score` 会在 proposal 持久化前调节底层 label
-suggestion solver，用于计算 coverage、residual_norm 和 top1 existing label。
+`--limit` 只截断 proposal attempt 中复用的 suggestion 输出；`--candidate-limit`、
+`--atom-limit`、`--max-selected-labels`、`--min-score` 会在 proposal 持久化前调节底层
+label suggestion solver，用于计算 coverage、coverage_cosine、residual_norm 和 top1 existing label。
 `--vector-config` 使用与 `label suggest` 相同的 TOML 解析规则；配置可用时，
 proposal attempt 会用同一套 LanceDB label atom store 做 suggestion 与后续残差
 校验。未配置或 feature/provider 不可用时保持 degraded fallback，不写入普通 label
 或 task-label 关联。
+
+Provider boundary：CLI 当前只使用 disabled provider 或 `--proposal-json` 显式传入的
+本地/offline candidate。真实 LLM provider 不属于 `kanban-sqlite`；未来若接入本机
+AI/runtime，应在 CLI/local runtime 或独立 AI crate 中实现 `LabelProposalProvider`
+adapter，再把 candidate 交给 SQLite service 做 deterministic validation 和 persistence。
 
 `--proposal-json` 提供本地/offline provider 输出：
 
@@ -611,8 +640,9 @@ label 发生 normalized-name 冲突的候选会写成 `rejected` proposal，并�
 中返回 `near_duplicate_label_conflict`；该 normalized-name 检查忽略大小写、空白
 和标点，是 deterministic near-duplicate heuristic。
 coverage 不足的候选还会执行残差 top1+margin 校验：候选语义的 residual score
-必须超过现有 label top1，且超过幅度达到固定 margin。校验失败时 attempt 仍会把
-候选持久化为 `rejected` proposal，diagnostics 包含
+和现有 label top1 都按返回 atom vector 在本地计算 cosine similarity，不从
+LanceDB distance 推导；候选必须超过现有 label top1，且超过幅度达到固定 margin。
+校验失败时 attempt 仍会把候选持久化为 `rejected` proposal，diagnostics 包含
 `label_proposal_residual_top1_failed` 或
 `label_proposal_residual_margin_insufficient`，用于审计为什么没有进入可接受状态。
 如果 residual validation 不可用或 degraded，且没有明确通过 top1+margin 校验，
@@ -636,6 +666,7 @@ label、`label_semantics` 与 `label_atoms`，并标脏 label atom index；它�
     "degraded": true,
     "diagnostics": ["label_proposal_provider_unavailable", "vector_store_disabled"],
     "heuristic_coverage": 0.0,
+    "heuristic_coverage_cosine": 0.0,
     "heuristic_residual_norm": 1.0,
     "top1_existing_label_id": null,
     "top1_existing_label_name": null
@@ -1090,6 +1121,9 @@ kanban context build t_... [--lexical-limit 5] [--vector-config <toml>]
 `kanban import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kanban import --replace` 是 offline-only 操作；运行前必须停止 `kanban serve` 和常驻 `kanban dispatch`，如果检测到 active runtime lock 会直接拒绝。
 `kanban entity`、`kanban outbox`、`kanban derived` 是 Knowledge Substrate 的只读维护入口。SQLite 仍是事实源；这些命令只报告统一 entity registry、派生索引 outbox 和 derived store 状态，不改变 task 状态或 claim。
 `kanban graph` 和 `kanban vector` 是 feature-gated 派生层入口：未启用 `graph-oxigraph` / `vector-lancedb` 或缺少 embedding provider 时返回 disabled/degraded status；启用后仍只作为可重建 relation/vector store，不参与 task 状态事务。
+`kanban vector status --json` 保留 `message` 兼容字段，同时返回结构化
+`diagnostics`、`dirty`、`board_dirty` 字段；dirty/error 判断应使用这些字段，不解析
+`message` 文案。
 `kanban vector configure` 默认写入全局 config：`$XDG_CONFIG_HOME/kb/config.toml`（平台默认通常为 `~/.config/kb/config.toml`），并默认配置本机 Ollama embedding provider。传 `--vector-config <toml>`（别名 `--config`）时写入指定 TOML。configure 默认调用 `/api/embed` 做短文本维度校验；校验失败时不写配置；`--skip-check` 只跳过这次连通性/维度检查。配置格式：
 
 ```toml

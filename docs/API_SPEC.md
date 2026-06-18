@@ -892,7 +892,13 @@ semantics；`{label_id}` 只接受 canonical `l_...` label id。Label name 允�
 }
 ```
 
-数组字段可缺省为空数组；服务会 trim 并丢弃空白值。响应使用 Envelope：
+数组字段可缺省为空数组；服务会 trim 并丢弃空白值。生成 atoms 时，有 description
+的 label 会生成一个 canonical `description` atom：
+`label: {name}\ndescription: {description}`；没有 description 时才使用 `name`
+fallback atom。atom text 会进一步规范化 whitespace：每个非空行内部 collapse，
+canonical 行分隔保留。同一 label 下相同 `polarity + kind + normalized_text` 的 atom
+会去重并保留首次 ordinal，`id` / `content_hash` 不包含 ordinal，因此只调整数组顺序
+不会改变同一文本 atom identity。响应使用 Envelope：
 
 ```json
 {
@@ -938,30 +944,46 @@ semantics；`{label_id}` 只接受 canonical `l_...` label id。Label name 允�
 
 `GET /api/v1/boards/{board}/labels/atom-index/status` 返回 label atom vector index
 状态。无 vector provider 或未启用 `vector-lancedb` feature 时仍返回 `200` disabled
-状态，并包含 dirty / last_error 诊断信息。
+状态。JSON 保留兼容字段 `message`，并额外返回结构化
+`diagnostics: string[]`、`dirty: boolean | null`、`board_dirty: boolean | null`；
+调用方应使用结构化字段判断 dirty/error，而不要解析 `message` 文案。
+同一 `VectorStoreStatus` shape 也用于 `/api/v1/vector/status`。
 
 `POST /api/v1/boards/{board}/labels/atom-index/rebuild` 用已配置 vector store 重建
 派生的 `lancedb_label_atoms`。`GET /api/v1/boards/{board}/labels/atom-index/query`
 查询该派生索引，`q` 必填，`polarity` 可选且只接受 `positive` / `negative`，
-`limit` 默认 24。未配置 provider、feature 不可用或 vector store 不可用时，
-rebuild/query 返回显式 API error，不修改 SQLite truth。
+`limit` 默认 24；hit 中的 `distance` 是 LanceDB `_distance`，不是 solver
+similarity score。未配置 provider、feature 不可用或 vector store 不可用时，rebuild/query
+返回显式 API error，不修改 SQLite truth。
 
 ### 12.2 Task label suggestions
 
 ```http
-GET /api/v1/tasks/{task_id}/labels/suggestions?limit=5&atom_limit=24&min_score=0.15
+GET /api/v1/tasks/{task_id}/labels/suggestions?limit=5&candidate_limit=32&atom_limit=80&max_selected_labels=4&min_score=0.15
 ```
 
 返回 task-level label suggestions。当前使用 task title + description embedding
 查询 `lancedb_label_atoms`：正向 atoms 按 residual 多轮检索，负向 atoms 固定用原始
 query 检索并做 penalty / suppression。solver 在 label group 层执行 Group OMP 选择，
 再把选中 label 的 top positive atom vectors 作为 basis 做 non-negative refit；
-`coverage` / `residual_norm` 来自 atom-level fitted vector。接口不会创建新 label，
-也不会写入 `label_semantics` / `label_atoms`。
+`coverage` / `residual_norm` 来自 atom-level fitted vector；`coverage_cosine`
+是原始 query 与 fitted vector 的 cosine similarity。候选 label 只有在
+tentative refit 后带来足够 residual norm 降幅才会进入结果；coverage 或
+residual norm 达到停止阈值后，solver 会提前停止而不是凑满
+`max_selected_labels`。candidate group 与已选 label 语义向量过度相似时会被跳过，
+以减少重复语义 label 同时出现在 `selected_labels`；这不会合并或删除 canonical
+labels。接口不会创建新 label，也不会写入 `label_semantics` / `label_atoms`。
+
+`limit` 只控制 response 中 `selected_labels` / `candidates` 的最大条数，不会收窄
+solver 内部搜索能力。内部能力由 `candidate_limit`、`atom_limit` 和
+`max_selected_labels` 分别控制：候选 label group 数、每轮 atom vector 检索上限、
+以及最多进入 non-negative refit 的 label 数。所有 limit 参数都必须是
+`1..=1000`；`min_score` 必须在 `0..=1`。
 
 未配置 provider、未启用 `vector-lancedb` feature、LanceDB 表缺失、索引为空或索引
 dirty 时，接口仍返回 `200` 和结构化 degraded JSON；普通 label CRUD、task
-list/search/filter 与状态转移不受影响。无 provider 时 `needs_new_label=false`，
+list/search/filter 与状态转移不受影响。Dirty 判断来自结构化 status/SQLite dirty
+字段，不依赖 `message` 文案。无 provider 时 `needs_new_label=false`，
 避免把 #105 的新 label 创建流程误触发。
 
 Response：
@@ -994,6 +1016,7 @@ Response：
     ],
     "candidates": [],
     "coverage": 0.82,
+    "coverage_cosine": 0.91,
     "residual_norm": 0.18,
     "needs_new_label": false,
     "degraded": true,
@@ -1013,7 +1036,7 @@ Response：
 ### 12.3 Label semantic proposals
 
 ```http
-POST /api/v1/tasks/{task_id}/label-proposals
+POST /api/v1/tasks/{task_id}/label-proposals?limit=5&candidate_limit=32&atom_limit=80&max_selected_labels=4&min_score=0.15
 GET /api/v1/tasks/{task_id}/label-proposals
 GET /api/v1/label-proposals/{proposal_id}
 POST /api/v1/label-proposals/{proposal_id}/accept
@@ -1024,6 +1047,12 @@ POST /api/v1/label-proposals/{proposal_id}/reject
 请求 body 可为空或仅包含 `actor`；此时默认 provider 不可用，接口返回 `200`
 degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms` 或
 `task_labels`。
+
+Provider boundary：API 当前只支持空/default provider 或请求 body 中显式传入的
+本地/offline candidate。真实 LLM provider 不在 `kanban-sqlite` 中实现；如果未来
+server 支持本机 AI/runtime，它必须在 server/local/独立 AI crate 层实现
+`LabelProposalProvider` adapter，并把 candidate 交给 SQLite service 做 deterministic
+validation 和 persistence。
 
 带本地/offline provider 输出时：
 
@@ -1042,16 +1071,21 @@ degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms`
 ```
 
 数组字段缺省时按空数组处理。服务先读取当前 label suggestion 的启发式
-`coverage` / `residual_norm` / top1 existing label。coverage 充足时不写 proposal；
+`coverage` / `coverage_cosine` / `residual_norm` / top1 existing label。coverage 充足时不写 proposal；
 coverage 不足且候选语义有效，并且残差 top1+margin 校验明确通过时，返回 `201` 并持久化
 `proposed` proposal。与现有 label 发生 normalized-name 冲突的候选持久化为 `rejected`，diagnostics 包含
 `near_duplicate_label_conflict`。Normalized-name conflict 忽略大小写、空白和标点，
 是 deterministic near-duplicate heuristic。
 
+POST proposal route 接受与 label suggestion 相同的 query 参数。`limit` 只截断
+suggestion 输出；`candidate_limit`、`atom_limit`、`max_selected_labels` 和 `min_score`
+调节用于 heuristic coverage / residual validation 的底层 solver。
+
 当 server 配置了可用 vector provider 时，proposal attempt 与 label suggestion
 使用同一套 LanceDB label atom store。coverage 不足的候选会在持久化前执行残差
-top1+margin 校验：候选语义的 residual score 必须超过现有 label top1，且超过幅度
-达到固定 margin。校验失败时候选仍会以 `rejected` proposal 持久化，diagnostics
+top1+margin 校验：候选语义的 residual score 和现有 label top1 都按返回 atom
+vector 在本地计算 cosine similarity，不从 LanceDB distance 推导；候选必须超过现有
+label top1，且超过幅度达到固定 margin。校验失败时候选仍会以 `rejected` proposal 持久化，diagnostics
 包含 `label_proposal_residual_top1_failed` 或
 `label_proposal_residual_margin_insufficient`。未配置 provider、feature 不可用或
 vector 检索失败时返回 degraded attempt，不创建 canonical label、`label_semantics`、
@@ -1070,6 +1104,7 @@ Attempt response：
     "degraded": true,
     "diagnostics": ["label_proposal_provider_unavailable", "vector_store_disabled"],
     "heuristic_coverage": 0.0,
+    "heuristic_coverage_cosine": 0.0,
     "heuristic_residual_norm": 1.0,
     "top1_existing_label_id": null,
     "top1_existing_label_name": null

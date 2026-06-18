@@ -80,10 +80,17 @@ pub(crate) fn handle_label(
             handle_label_atom_index(command, db_path, board, json)?
         }
         LabelCommand::Suggest(args) => {
-            validate_label_suggest_bounds(args.limit, args.atom_limit)?;
+            validate_label_suggest_bounds(
+                args.limit,
+                args.candidate_limit,
+                args.atom_limit,
+                args.max_selected_labels,
+            )?;
             let options = LabelSuggestionOptions {
-                limit: args.limit,
+                output_limit: args.limit,
+                candidate_limit: args.candidate_limit,
                 atom_limit: args.atom_limit,
+                max_selected_labels: args.max_selected_labels,
                 min_score: args.min_score,
             };
             let suggestions = suggest_with_optional_vector_config(
@@ -96,10 +103,17 @@ pub(crate) fn handle_label(
             print_or_json(json, &suggestions, || label_suggestion_lines(&suggestions))?;
         }
         LabelCommand::Propose(args) => {
-            validate_label_suggest_bounds(args.limit, args.atom_limit)?;
+            validate_label_suggest_bounds(
+                args.limit,
+                args.candidate_limit,
+                args.atom_limit,
+                args.max_selected_labels,
+            )?;
             let options = LabelSuggestionOptions {
-                limit: args.limit,
+                output_limit: args.limit,
+                candidate_limit: args.candidate_limit,
                 atom_limit: args.atom_limit,
+                max_selected_labels: args.max_selected_labels,
                 min_score: args.min_score,
             };
             let attempt = if let Some(path) = args.proposal_json {
@@ -128,11 +142,12 @@ pub(crate) fn handle_label(
             print_or_json(json, &attempt, || {
                 if let Some(proposal) = &attempt.proposal {
                     format!(
-                        "{} {} [{}] coverage={:.3} residual_norm={:.3}",
+                        "{} {} [{}] coverage={:.3} coverage_cosine={:.3} residual_norm={:.3}",
                         proposal.id,
                         proposal.name,
                         proposal.status,
                         attempt.heuristic_coverage,
+                        attempt.heuristic_coverage_cosine,
                         attempt.heuristic_residual_norm
                     )
                 } else {
@@ -268,8 +283,8 @@ fn handle_label_atom_index(
                     hits.iter()
                         .map(|hit| {
                             format!(
-                                "{} {} {} score={:.3} {}",
-                                hit.label_name, hit.polarity, hit.kind, hit.score, hit.text
+                                "{} {} {} distance={:.3} {}",
+                                hit.label_name, hit.polarity, hit.kind, hit.distance, hit.text
                             )
                         })
                         .collect::<Vec<_>>()
@@ -281,15 +296,28 @@ fn handle_label_atom_index(
     Ok(())
 }
 
-fn validate_label_suggest_bounds(limit: usize, atom_limit: usize) -> Result<()> {
+fn validate_label_suggest_bounds(
+    limit: usize,
+    candidate_limit: usize,
+    atom_limit: usize,
+    max_selected_labels: usize,
+) -> Result<()> {
     if limit == 0 {
         bail!("limit must be >= 1");
+    }
+    if candidate_limit == 0 {
+        bail!("candidate_limit must be >= 1");
     }
     if atom_limit == 0 {
         bail!("atom_limit must be >= 1");
     }
+    if max_selected_labels == 0 {
+        bail!("max_selected_labels must be >= 1");
+    }
     validate_page_bounds(limit, MAX_TASK_LIST_LIMIT, 0)?;
+    validate_page_bounds(candidate_limit, MAX_TASK_LIST_LIMIT, 0)?;
     validate_page_bounds(atom_limit, MAX_TASK_LIST_LIMIT, 0)?;
+    validate_page_bounds(max_selected_labels, MAX_TASK_LIST_LIMIT, 0)?;
     Ok(())
 }
 
@@ -409,8 +437,8 @@ fn label_suggestion_lines(result: &LabelSuggestionResult) -> String {
         lines.push(format!("degraded: {}", result.diagnostics.join(",")));
     }
     lines.push(format!(
-        "coverage={:.3} residual_norm={:.3} needs_new_label={}",
-        result.coverage, result.residual_norm, result.needs_new_label
+        "coverage={:.3} coverage_cosine={:.3} residual_norm={:.3} needs_new_label={}",
+        result.coverage, result.coverage_cosine, result.residual_norm, result.needs_new_label
     ));
     lines.join("\n")
 }
@@ -438,12 +466,13 @@ fn proposal_line(proposal: &LabelSemanticProposalRecord) -> String {
         .map(|id| format!(" resolved_label_id={id}"))
         .unwrap_or_default();
     format!(
-        "{} {} [{}] task={} coverage={:.3} residual_norm={:.3}{}",
+        "{} {} [{}] task={} coverage={:.3} coverage_cosine={:.3} residual_norm={:.3}{}",
         proposal.id,
         proposal.name,
         proposal.status,
         proposal.task_id,
         proposal.heuristic_coverage,
+        proposal.heuristic_coverage_cosine,
         proposal.heuristic_residual_norm,
         resolved
     )

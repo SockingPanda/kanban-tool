@@ -14,9 +14,10 @@ use lancedb::query::{ExecutableQuery, QueryBase, Select};
 use tokio::runtime::Runtime;
 
 use crate::{
-    EmbeddingChunk, EmbeddingProvider, LabelAtomHit, LabelAtomQuery, LabelAtomVector,
-    LabelAtomVectorHit, LabelAtomVectorQuery, LanceDbConfig, VectorError, VectorHit, VectorQuery,
-    VectorStore, VectorStoreStatus, ensure_dimensions,
+    ChunkVectorStore, EmbeddingChunk, EmbeddingProvider, LabelAtomHit, LabelAtomQuery,
+    LabelAtomVector, LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore, LanceDbConfig,
+    QueryEmbeddingProvider, VectorError, VectorHit, VectorQuery, VectorStoreBackend,
+    VectorStoreStatus, ensure_dimensions,
 };
 
 const VECTOR_COLUMN: &str = "vector";
@@ -82,8 +83,8 @@ impl LanceDbStore {
     }
 }
 
-impl VectorStore for LanceDbStore {
-    fn chunk_embedding_model(&self) -> &str {
+impl VectorStoreBackend for LanceDbStore {
+    fn embedding_model(&self) -> &str {
         self.provider
             .as_ref()
             .map(|provider| provider.embedding_model())
@@ -92,25 +93,25 @@ impl VectorStore for LanceDbStore {
 
     fn status(&self) -> VectorStoreStatus {
         match self.provider.as_ref() {
-            Some(provider) => VectorStoreStatus {
-                backend: "lancedb".to_owned(),
-                enabled: true,
-                message: format!(
+            Some(provider) => VectorStoreStatus::new(
+                "lancedb",
+                true,
+                format!(
                     "LanceDB vector store enabled for model {} ({} dimensions)",
                     provider.embedding_model(),
                     provider.dimensions()
                 ),
-            },
-            None => VectorStoreStatus {
-                backend: "lancedb".to_owned(),
-                enabled: false,
-                message:
-                    "LanceDB configured without an embedding provider; vector retrieval degraded"
-                        .to_owned(),
-            },
+            ),
+            None => VectorStoreStatus::new(
+                "lancedb",
+                false,
+                "LanceDB configured without an embedding provider; vector retrieval degraded",
+            ),
         }
     }
+}
 
+impl ChunkVectorStore for LanceDbStore {
     fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
         let provider = self.provider()?;
         if chunks.is_empty() {
@@ -234,14 +235,18 @@ impl VectorStore for LanceDbStore {
             batches_to_hits(&batches)
         })
     }
+}
 
+impl QueryEmbeddingProvider for LanceDbStore {
     fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, VectorError> {
         let provider = self.provider()?;
         let embedding = provider.embed(text)?;
         ensure_dimensions(&embedding, provider.dimensions())?;
         Ok(embedding)
     }
+}
 
+impl LabelAtomVectorStore for LanceDbStore {
     fn delete_label_atoms_for_board(&self, board_id: &str) -> Result<(), VectorError> {
         let provider = self.provider()?;
         let embedding_model = provider.embedding_model().to_owned();
@@ -307,7 +312,10 @@ impl VectorStore for LanceDbStore {
             .as_deref()
             .unwrap_or(provider.embedding_model());
         if embedding_model != provider.embedding_model() {
-            return Ok(Vec::new());
+            return Err(VectorError::EmbeddingModelMismatch {
+                expected: provider.embedding_model().to_owned(),
+                actual: embedding_model.to_owned(),
+            });
         }
 
         let embedding = provider.embed(&query.text)?;
@@ -377,7 +385,10 @@ impl VectorStore for LanceDbStore {
             .as_deref()
             .unwrap_or(provider.embedding_model());
         if embedding_model != provider.embedding_model() {
-            return Ok(Vec::new());
+            return Err(VectorError::EmbeddingModelMismatch {
+                expected: provider.embedding_model().to_owned(),
+                actual: embedding_model.to_owned(),
+            });
         }
 
         ensure_dimensions(&query.vector, provider.dimensions())?;
@@ -830,7 +841,7 @@ fn batches_to_label_atom_hits(batches: &[RecordBatch]) -> Result<Vec<LabelAtomHi
                 ordinal: ordinal.value(row),
                 content_hash: content_hash.value(row).to_owned(),
                 embedding_model: embedding_model.value(row).to_owned(),
-                score: distance.value(row),
+                distance: distance.value(row),
             });
         }
     }
@@ -871,7 +882,7 @@ fn batches_to_label_atom_vector_hits(
                     ordinal: ordinal.value(row),
                     content_hash: content_hash.value(row).to_owned(),
                     embedding_model: embedding_model.value(row).to_owned(),
-                    score: distance.value(row),
+                    distance: distance.value(row),
                 },
                 vector: vectors
                     .as_ref()
@@ -944,8 +955,9 @@ mod tests {
     use std::sync::Arc;
 
     use crate::{
-        ChunkBuilder, EmbeddingProvider, LabelAtomQuery, LabelAtomVector, LabelAtomVectorQuery,
-        LanceDbConfig, LanceDbStore, TaskChunkSource, VectorError, VectorQuery, VectorStore,
+        ChunkBuilder, ChunkVectorStore, EmbeddingProvider, LabelAtomQuery, LabelAtomVector,
+        LabelAtomVectorQuery, LabelAtomVectorStore, LanceDbConfig, LanceDbStore, TaskChunkSource,
+        VectorError, VectorQuery, VectorStoreBackend,
     };
 
     struct StaticProvider;
@@ -1239,18 +1251,19 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].atom_id, "la_alpha");
 
-        assert!(
-            static_store
-                .query_label_atoms(&LabelAtomQuery {
-                    text: "alpha".to_owned(),
-                    limit: 10,
-                    board_id: Some("b_1".to_owned()),
-                    embedding_model: Some("other-test".to_owned()),
-                    polarity: None,
-                })
-                .unwrap()
-                .is_empty()
-        );
+        assert!(matches!(
+            static_store.query_label_atoms(&LabelAtomQuery {
+                text: "alpha".to_owned(),
+                limit: 10,
+                board_id: Some("b_1".to_owned()),
+                embedding_model: Some("other-test".to_owned()),
+                polarity: None,
+            }),
+            Err(VectorError::EmbeddingModelMismatch {
+                expected,
+                actual
+            }) if expected == "static-test" && actual == "other-test"
+        ));
         assert!(
             static_store
                 .query(&VectorQuery {
@@ -1425,20 +1438,34 @@ mod tests {
             "text label atom query behavior should remain available"
         );
 
-        assert!(
-            static_store
-                .query_label_atoms_by_vector(&LabelAtomVectorQuery {
-                    vector: vec![1.0, 0.0, 0.0],
-                    limit: 10,
-                    board_id: Some("b_1".to_owned()),
-                    embedding_model: Some("other-test".to_owned()),
-                    polarity: None,
-                    include_vector: false,
-                })
-                .unwrap()
-                .is_empty(),
-            "mismatched embedding model is an empty same-store result"
-        );
+        assert!(matches!(
+            static_store.query_label_atoms(&LabelAtomQuery {
+                text: "alpha".to_owned(),
+                limit: 10,
+                board_id: Some("b_1".to_owned()),
+                embedding_model: Some("other-test".to_owned()),
+                polarity: None,
+            }),
+            Err(VectorError::EmbeddingModelMismatch {
+                expected,
+                actual
+            }) if expected == "static-test" && actual == "other-test"
+        ));
+
+        assert!(matches!(
+            static_store.query_label_atoms_by_vector(&LabelAtomVectorQuery {
+                vector: vec![1.0, 0.0, 0.0],
+                limit: 10,
+                board_id: Some("b_1".to_owned()),
+                embedding_model: Some("other-test".to_owned()),
+                polarity: None,
+                include_vector: false,
+            }),
+            Err(VectorError::EmbeddingModelMismatch {
+                expected,
+                actual
+            }) if expected == "static-test" && actual == "other-test"
+        ));
 
         assert!(matches!(
             static_store.query_label_atoms_by_vector(&LabelAtomVectorQuery {

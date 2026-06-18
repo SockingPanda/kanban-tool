@@ -22,20 +22,27 @@ pub struct LabelDefinition {
 impl LabelDefinition {
     pub fn atom_sources(&self) -> Vec<LabelAtomSource> {
         let mut sources = Vec::new();
-        push_atom_source(
-            &mut sources,
-            self,
-            LabelAtomPolarity::Positive,
-            LabelAtomKind::Name,
-            &self.name,
-        );
-        if let Some(description) = &self.description {
+        if let Some(description) = self
+            .description
+            .as_deref()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+        {
+            let canonical = format!("label: {}\ndescription: {}", self.name.trim(), description);
             push_atom_source(
                 &mut sources,
                 self,
                 LabelAtomPolarity::Positive,
                 LabelAtomKind::Description,
-                description,
+                &canonical,
+            );
+        } else {
+            push_atom_source(
+                &mut sources,
+                self,
+                LabelAtomPolarity::Positive,
+                LabelAtomKind::Name,
+                &self.name,
             );
         }
         for text in &self.applies_when {
@@ -201,6 +208,10 @@ pub struct LabelSolverConfig {
     pub negative_suppression_factor: f32,
     pub min_coverage: f32,
     pub max_residual_norm: f32,
+    pub min_refit_gain: f32,
+    pub coverage_stop: f32,
+    pub residual_norm_stop: f32,
+    pub max_redundancy: f32,
     pub refit_iterations: usize,
     pub max_positive_atoms_per_label: usize,
 }
@@ -216,6 +227,10 @@ impl Default for LabelSolverConfig {
             negative_suppression_factor: 0.8,
             min_coverage: 0.55,
             max_residual_norm: 0.75,
+            min_refit_gain: 0.025,
+            coverage_stop: 0.85,
+            residual_norm_stop: 0.30,
+            max_redundancy: 0.92,
             refit_iterations: 40,
             max_positive_atoms_per_label: 3,
         }
@@ -227,6 +242,7 @@ pub struct LabelSolverResult {
     pub candidates: Vec<LabelGroupCandidate>,
     pub selected_labels: Vec<SelectedLabel>,
     pub coverage: f32,
+    pub coverage_cosine: f32,
     pub residual_norm: f32,
     pub needs_new_label: bool,
     #[serde(skip)]
@@ -242,7 +258,7 @@ pub struct RetrievedLabelAtom {
     pub kind: LabelAtomKind,
     pub text: String,
     pub vector: Vec<f32>,
-    pub score: f32,
+    pub similarity: Option<f32>,
 }
 
 pub fn retrieve_label_groups(
@@ -342,6 +358,7 @@ pub fn resolve_label_groups(
     config: &LabelSolverConfig,
 ) -> Result<LabelSolverResult, LabelSolverError> {
     validate_solver_inputs(query_embedding, labels)?;
+    validate_selection_config(config)?;
     let candidates = retrieve_label_groups(query_embedding, labels, config)?;
     let query_norm = l2_norm(query_embedding);
 
@@ -352,6 +369,7 @@ pub fn resolve_label_groups(
             candidates,
             selected_labels: Vec::new(),
             coverage: coverage_from_residual(residual_norm),
+            coverage_cosine: 0.0,
             residual_norm,
             needs_new_label: true,
             residual: normalize_for_fit(query_embedding),
@@ -360,11 +378,17 @@ pub fn resolve_label_groups(
 
     let mut selected_indices = Vec::new();
     let mut selected_vectors: Vec<Vec<f32>> = Vec::new();
+    let mut selected_group_vectors: Vec<Vec<f32>> = Vec::new();
     let mut selected_candidate_indices = Vec::new();
     let mut residual = normalize_for_fit(query_embedding);
 
     while selected_indices.len() < config.max_selected_labels {
-        let next = candidates
+        let residual_norm = l2_norm(&residual);
+        if selection_stop_reached(residual_norm, config) {
+            break;
+        }
+
+        let mut ranked = candidates
             .iter()
             .enumerate()
             .filter(|(candidate_index, _)| !selected_candidate_indices.contains(candidate_index))
@@ -376,16 +400,41 @@ pub fn resolve_label_groups(
                 let gain = dot(&residual, &vector).max(0.0) * candidate.score.max(0.0);
                 (gain > 0.0).then_some((candidate_index, label_index, vector, gain))
             })
-            .max_by(|left, right| left.3.total_cmp(&right.3));
+            .collect::<Vec<_>>();
+        ranked.sort_by(|left, right| {
+            right.3.total_cmp(&left.3).then_with(|| {
+                candidates[left.0]
+                    .label_name
+                    .cmp(&candidates[right.0].label_name)
+            })
+        });
 
-        let Some((candidate_index, label_index, vector, _gain)) = next else {
+        let mut accepted = false;
+        for (candidate_index, label_index, vector, _gain) in ranked {
+            if redundancy_exceeds(&vector, &selected_group_vectors, config) {
+                continue;
+            }
+            let mut tentative_vectors = selected_vectors.clone();
+            tentative_vectors.push(vector.clone());
+            let weights =
+                fit_non_negative(&tentative_vectors, query_embedding, config.refit_iterations);
+            let fitted = fitted_vector(&tentative_vectors, &weights);
+            let new_residual_norm = normalized_residual_norm(query_embedding, &fitted);
+            let gain = refit_gain(residual_norm, new_residual_norm);
+            if !refit_gain_is_sufficient(gain, config) {
+                continue;
+            }
+            selected_candidate_indices.push(candidate_index);
+            selected_indices.push(label_index);
+            selected_vectors = tentative_vectors;
+            selected_group_vectors.push(vector);
+            residual = fit_residual(query_embedding, &selected_vectors, &weights, query_norm);
+            accepted = true;
             break;
-        };
-        selected_candidate_indices.push(candidate_index);
-        selected_indices.push(label_index);
-        selected_vectors.push(vector);
-        let weights = fit_non_negative(&selected_vectors, query_embedding, config.refit_iterations);
-        residual = fit_residual(query_embedding, &selected_vectors, &weights, query_norm);
+        }
+        if !accepted {
+            break;
+        }
     }
 
     let weights = fit_non_negative(&selected_vectors, query_embedding, config.refit_iterations);
@@ -393,6 +442,7 @@ pub fn resolve_label_groups(
     let residual = fit_residual(query_embedding, &selected_vectors, &weights, query_norm);
     let residual_norm = normalized_residual_norm(query_embedding, &fitted);
     let coverage = coverage_from_residual(residual_norm);
+    let coverage_cosine = coverage_cosine(query_embedding, &fitted);
 
     let selected_labels = selected_indices
         .into_iter()
@@ -417,6 +467,7 @@ pub fn resolve_label_groups(
         candidates,
         selected_labels,
         coverage,
+        coverage_cosine,
         residual_norm,
         needs_new_label: coverage < config.min_coverage || residual_norm > config.max_residual_norm,
         residual,
@@ -437,6 +488,7 @@ where
     let mut residual = normalize_for_fit(query_embedding);
     let mut selected_label_ids = HashSet::new();
     let mut selected_vectors = Vec::new();
+    let mut selected_group_vectors: Vec<Vec<f32>> = Vec::new();
     let mut selected_basis = Vec::new();
     let mut candidates_by_label: HashMap<String, LabelGroupCandidate> = HashMap::new();
     let retrieval_limit = config
@@ -446,7 +498,16 @@ where
         .max(1);
 
     while selected_label_ids.len() < config.max_selected_labels {
-        let positive_hits = retrieve(&residual, LabelAtomPolarity::Positive, retrieval_limit)?;
+        let residual_norm = l2_norm(&residual);
+        if residual_norm <= f32::EPSILON || selection_stop_reached(residual_norm, config) {
+            break;
+        }
+        let residual_query = normalize_for_fit(&residual);
+        let positive_hits = retrieve(
+            &residual_query,
+            LabelAtomPolarity::Positive,
+            retrieval_limit,
+        )?;
         let negative_hits = retrieve(
             &normalized_query,
             LabelAtomPolarity::Negative,
@@ -471,7 +532,7 @@ where
                 .or_insert_with(|| candidate.clone());
         }
 
-        let next = groups
+        let mut ranked = groups
             .into_iter()
             .filter(|candidate| candidate.score >= config.min_candidate_score)
             .filter_map(|candidate| {
@@ -479,32 +540,55 @@ where
                 let gain = dot(&residual, &vector).max(0.0) * candidate.score.max(0.0);
                 (gain > 0.0).then_some((candidate, vector, gain))
             })
-            .max_by(|left, right| {
-                left.2
-                    .total_cmp(&right.2)
-                    .then_with(|| right.0.label_name.cmp(&left.0.label_name))
-            });
+            .collect::<Vec<_>>();
+        ranked.sort_by(|left, right| {
+            right
+                .2
+                .total_cmp(&left.2)
+                .then_with(|| left.0.label_name.cmp(&right.0.label_name))
+        });
 
-        let Some((candidate, _vector, _gain)) = next else {
-            break;
-        };
-        let basis_atoms = candidate_basis_atoms(&candidate);
-        if basis_atoms.is_empty() {
+        let mut accepted = false;
+        for (candidate, vector, _gain) in ranked {
+            if redundancy_exceeds(&vector, &selected_group_vectors, config) {
+                continue;
+            }
+            let basis_atoms = candidate_basis_atoms(&candidate);
+            if basis_atoms.is_empty() {
+                continue;
+            }
+            let mut tentative_vectors = selected_vectors.clone();
+            for (_evidence, atom_vector) in &basis_atoms {
+                tentative_vectors.push(atom_vector.clone());
+            }
+            let weights =
+                fit_non_negative(&tentative_vectors, query_embedding, config.refit_iterations);
+            let fitted = fitted_vector(&tentative_vectors, &weights);
+            let new_residual_norm = normalized_residual_norm(query_embedding, &fitted);
+            let gain = refit_gain(residual_norm, new_residual_norm);
+            if !refit_gain_is_sufficient(gain, config) {
+                continue;
+            }
+
+            selected_label_ids.insert(candidate.label_id.clone());
+            selected_vectors = tentative_vectors;
+            selected_group_vectors.push(vector);
+            for (evidence, _atom_vector) in basis_atoms {
+                selected_basis.push(SelectedBasisAtom {
+                    label_id: candidate.label_id.clone(),
+                    label_name: candidate.label_name.clone(),
+                    score: candidate.score,
+                    evidence,
+                    negative_evidence_atoms: candidate.negative_evidence_atoms.clone(),
+                });
+            }
+            residual = fit_residual(query_embedding, &selected_vectors, &weights, query_norm);
+            accepted = true;
             break;
         }
-        selected_label_ids.insert(candidate.label_id.clone());
-        for (evidence, atom_vector) in basis_atoms {
-            selected_vectors.push(atom_vector);
-            selected_basis.push(SelectedBasisAtom {
-                label_id: candidate.label_id.clone(),
-                label_name: candidate.label_name.clone(),
-                score: candidate.score,
-                evidence,
-                negative_evidence_atoms: candidate.negative_evidence_atoms.clone(),
-            });
+        if !accepted {
+            break;
         }
-        let weights = fit_non_negative(&selected_vectors, query_embedding, config.refit_iterations);
-        residual = fit_residual(query_embedding, &selected_vectors, &weights, query_norm);
     }
 
     let weights = fit_non_negative(&selected_vectors, query_embedding, config.refit_iterations);
@@ -512,6 +596,7 @@ where
     let residual = fit_residual(query_embedding, &selected_vectors, &weights, query_norm);
     let residual_norm = normalized_residual_norm(query_embedding, &fitted);
     let coverage = coverage_from_residual(residual_norm);
+    let coverage_cosine = coverage_cosine(query_embedding, &fitted);
     let selected_labels = selected_labels_from_basis(&selected_basis, &weights);
     let mut candidates = candidates_by_label.into_values().collect::<Vec<_>>();
     candidates.sort_by(|left, right| {
@@ -525,6 +610,7 @@ where
         candidates,
         selected_labels,
         coverage,
+        coverage_cosine,
         residual_norm,
         needs_new_label: coverage < config.min_coverage || residual_norm > config.max_residual_norm,
         residual,
@@ -535,12 +621,37 @@ fn validate_residual_inputs(
     query_embedding: &[f32],
     config: &LabelSolverConfig,
 ) -> Result<(), LabelSolverError> {
+    validate_selection_config(config)?;
     if l2_norm(query_embedding) == 0.0 {
         return Err(LabelSolverError::ZeroQueryEmbedding);
     }
     if config.max_positive_atoms_per_label == 0 {
         return Err(LabelSolverError::InvalidConfig(
             "max_positive_atoms_per_label must be >= 1".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_selection_config(config: &LabelSolverConfig) -> Result<(), LabelSolverError> {
+    if config.min_refit_gain < 0.0 {
+        return Err(LabelSolverError::InvalidConfig(
+            "min_refit_gain must be >= 0".to_owned(),
+        ));
+    }
+    if !(0.0..=1.0).contains(&config.coverage_stop) {
+        return Err(LabelSolverError::InvalidConfig(
+            "coverage_stop must be between 0 and 1".to_owned(),
+        ));
+    }
+    if config.residual_norm_stop < 0.0 {
+        return Err(LabelSolverError::InvalidConfig(
+            "residual_norm_stop must be >= 0".to_owned(),
+        ));
+    }
+    if !(0.0..=1.0).contains(&config.max_redundancy) {
+        return Err(LabelSolverError::InvalidConfig(
+            "max_redundancy must be between 0 and 1".to_owned(),
         ));
     }
     Ok(())
@@ -576,9 +687,8 @@ fn residual_candidates(
     let mut candidates = Vec::new();
     for (label_id, mut positives) in positives_by_label {
         positives.sort_by(|left, right| {
-            right
-                .score
-                .total_cmp(&left.score)
+            retrieved_similarity(positive_query, right)
+                .total_cmp(&retrieved_similarity(positive_query, left))
                 .then_with(|| left.atom_id.cmp(&right.atom_id))
         });
         positives.truncate(config.max_positive_atoms_per_label);
@@ -724,9 +834,7 @@ fn validate_retrieved_atom(
 }
 
 fn atom_evidence(atom: &RetrievedLabelAtom, residual: &[f32]) -> LabelAtomEvidence {
-    let similarity = cosine_similarity(residual, &atom.vector)
-        .max(atom.score)
-        .max(0.0);
+    let similarity = retrieved_similarity(residual, atom);
     LabelAtomEvidence {
         atom_id: Some(atom.atom_id.clone()),
         source: LabelAtomSource {
@@ -740,6 +848,12 @@ fn atom_evidence(atom: &RetrievedLabelAtom, residual: &[f32]) -> LabelAtomEviden
         contribution: similarity,
         vector: Some(atom.vector.clone()),
     }
+}
+
+fn retrieved_similarity(query: &[f32], atom: &RetrievedLabelAtom) -> f32 {
+    // Retrieved vectors are authoritative for solver math. External store
+    // scores/distances are optional diagnostics and must not inflate evidence.
+    cosine_similarity(query, &atom.vector).max(0.0)
 }
 
 fn candidate_group_vector(candidate: &LabelGroupCandidate) -> Option<Vec<f32>> {
@@ -968,6 +1082,37 @@ fn coverage_from_residual(residual_norm: f32) -> f32 {
     (1.0 - residual_norm).clamp(0.0, 1.0)
 }
 
+fn coverage_cosine(query_embedding: &[f32], fitted: &[f32]) -> f32 {
+    cosine_similarity(query_embedding, fitted)
+        .max(0.0)
+        .clamp(0.0, 1.0)
+}
+
+fn selection_stop_reached(residual_norm: f32, config: &LabelSolverConfig) -> bool {
+    residual_norm <= config.residual_norm_stop
+        || coverage_from_residual(residual_norm) >= config.coverage_stop
+}
+
+fn refit_gain(old_residual_norm: f32, new_residual_norm: f32) -> f32 {
+    (old_residual_norm - new_residual_norm).max(0.0)
+}
+
+fn refit_gain_is_sufficient(gain: f32, config: &LabelSolverConfig) -> bool {
+    gain + f32::EPSILON >= config.min_refit_gain
+}
+
+fn redundancy_exceeds(
+    vector: &[f32],
+    selected_group_vectors: &[Vec<f32>],
+    config: &LabelSolverConfig,
+) -> bool {
+    selected_group_vectors
+        .iter()
+        .map(|selected| cosine_similarity(vector, selected))
+        .fold(0.0_f32, f32::max)
+        > config.max_redundancy
+}
+
 fn normalize_for_fit(vector: &[f32]) -> Vec<f32> {
     let mut normalized = vector.to_vec();
     normalize_in_place(&mut normalized);
@@ -1058,7 +1203,7 @@ mod tests {
         label_name: &str,
         polarity: LabelAtomPolarity,
         vector: Vec<f32>,
-        score: f32,
+        similarity: f32,
         ordinal: usize,
     ) -> RetrievedLabelAtom {
         RetrievedLabelAtom {
@@ -1072,7 +1217,7 @@ mod tests {
             },
             text: format!("{label_name} {ordinal}"),
             vector,
-            score,
+            similarity: Some(similarity),
         }
     }
 
@@ -1080,13 +1225,21 @@ mod tests {
     fn atom_source_generation_trims_and_skips_empty_text() {
         let sources = definition("l_backend", "Backend").atom_sources();
 
-        assert_eq!(sources.len(), 6);
+        assert_eq!(sources.len(), 5);
         assert!(sources.iter().all(|source| !source.text.is_empty()));
+        let canonical = sources
+            .iter()
+            .find(|source| source.kind == LabelAtomKind::Description)
+            .unwrap();
+        assert_eq!(
+            canonical.text,
+            "label: Backend\ndescription: Core Rust work"
+        );
         assert!(
             sources
                 .iter()
-                .any(|source| source.kind == LabelAtomKind::Description
-                    && source.text == "Core Rust work")
+                .filter(|source| source.polarity == LabelAtomPolarity::Positive)
+                .all(|source| source.kind != LabelAtomKind::Name)
         );
         assert_eq!(
             sources
@@ -1094,6 +1247,24 @@ mod tests {
                 .filter(|source| source.polarity == LabelAtomPolarity::Negative)
                 .count(),
             2
+        );
+    }
+
+    #[test]
+    fn atom_source_generation_falls_back_to_name_without_description() {
+        let mut definition = definition("l_backend", "Backend");
+        definition.description = None;
+        let sources = definition.atom_sources();
+
+        assert!(
+            sources
+                .iter()
+                .any(|source| source.kind == LabelAtomKind::Name && source.text == "Backend")
+        );
+        assert!(
+            sources
+                .iter()
+                .all(|source| source.kind != LabelAtomKind::Description)
         );
     }
 
@@ -1152,7 +1323,33 @@ mod tests {
                 .all(|label| label.weight >= 0.0)
         );
         assert!(result.coverage > 0.9);
+        assert!(result.coverage_cosine > 0.9);
         assert!(!result.needs_new_label);
+    }
+
+    #[test]
+    fn coverage_cosine_reports_query_to_fitted_alignment() {
+        let labels = vec![embedded_label(
+            "l_backend",
+            "Backend",
+            vec![vec![1.0, 0.0, 0.0]],
+            vec![],
+        )];
+        let config = LabelSolverConfig {
+            max_selected_labels: 1,
+            coverage_stop: 1.0,
+            residual_norm_stop: 0.0,
+            ..LabelSolverConfig::default()
+        };
+
+        let result = resolve_label_groups(&[1.0, 1.0, 0.0], &labels, &config).unwrap();
+
+        assert_eq!(result.selected_labels.len(), 1);
+        assert!((result.coverage_cosine - std::f32::consts::FRAC_1_SQRT_2).abs() < 0.0001);
+        assert!(
+            result.coverage_cosine > result.coverage,
+            "cosine coverage should expose fitted alignment separately from residual heuristic"
+        );
     }
 
     #[test]
@@ -1205,6 +1402,11 @@ mod tests {
             vec!["backend", "docs", "tests"]
         );
         assert!(positive_queries.len() >= 3);
+        assert!(
+            positive_queries
+                .iter()
+                .all(|query| (l2_norm(query) - 1.0).abs() < 0.0001)
+        );
         assert!(result.coverage > 0.99);
         assert!(result.residual_norm < 0.01);
     }
@@ -1246,6 +1448,7 @@ mod tests {
         assert_eq!(result.candidates[0].score, 0.0);
         assert!(result.selected_labels.is_empty());
         assert_eq!(result.coverage, 0.0);
+        assert_eq!(result.coverage_cosine, 0.0);
         assert_eq!(result.residual_norm, 1.0);
     }
 
@@ -1372,6 +1575,437 @@ mod tests {
         assert!((selected.weight - std::f32::consts::SQRT_2).abs() < 0.0001);
         assert!(result.coverage > 0.99);
         assert!(result.residual_norm < 0.01);
+    }
+
+    #[test]
+    fn residual_solver_does_not_promote_retrieved_score_over_local_cosine() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 1,
+            min_candidate_score: 0.05,
+            ..LabelSolverConfig::default()
+        };
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 0.0, 0.0],
+            &config,
+            |_query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => Ok(vec![retrieved_atom(
+                    "l_unrelated",
+                    "unrelated",
+                    LabelAtomPolarity::Positive,
+                    vec![0.0, 1.0, 0.0],
+                    0.99,
+                    1,
+                )]),
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap();
+
+        assert!(result.candidates.is_empty());
+        assert!(result.selected_labels.is_empty());
+        assert_eq!(result.coverage, 0.0);
+        assert_eq!(result.residual_norm, 1.0);
+    }
+
+    #[test]
+    fn residual_solver_stops_before_retrieving_zero_residual() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 2,
+            min_candidate_score: 0.01,
+            ..LabelSolverConfig::default()
+        };
+        let mut positive_queries = Vec::new();
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 0.0, 0.0],
+            &config,
+            |query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => {
+                    positive_queries.push(query.to_vec());
+                    Ok(vec![retrieved_atom(
+                        "l_backend",
+                        "backend",
+                        LabelAtomPolarity::Positive,
+                        vec![1.0, 0.0, 0.0],
+                        1.0,
+                        positive_queries.len(),
+                    )])
+                }
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(positive_queries.len(), 1);
+        assert!((l2_norm(&positive_queries[0]) - 1.0).abs() < 0.0001);
+        assert_eq!(result.selected_labels.len(), 1);
+        assert!(result.coverage > 0.99);
+        assert!(result.residual_norm < 0.01);
+    }
+
+    #[test]
+    fn residual_solver_rolls_back_label_when_refit_gain_is_too_small() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 2,
+            min_candidate_score: 0.01,
+            min_refit_gain: 0.25,
+            coverage_stop: 1.0,
+            residual_norm_stop: 0.0,
+            ..LabelSolverConfig::default()
+        };
+        let mut positive_queries = Vec::new();
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 0.2, 0.0],
+            &config,
+            |query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => {
+                    positive_queries.push(query.to_vec());
+                    if positive_queries.len() == 1 {
+                        Ok(vec![
+                            retrieved_atom(
+                                "l_primary",
+                                "primary",
+                                LabelAtomPolarity::Positive,
+                                vec![1.0, 0.0, 0.0],
+                                1.0,
+                                1,
+                            ),
+                            retrieved_atom(
+                                "l_tail",
+                                "tail",
+                                LabelAtomPolarity::Positive,
+                                vec![0.0, 1.0, 0.0],
+                                1.0,
+                                2,
+                            ),
+                        ])
+                    } else {
+                        Ok(vec![retrieved_atom(
+                            "l_tail",
+                            "tail",
+                            LabelAtomPolarity::Positive,
+                            vec![0.0, 1.0, 0.0],
+                            1.0,
+                            3,
+                        )])
+                    }
+                }
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            result
+                .selected_labels
+                .iter()
+                .map(|label| label.label_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["primary"]
+        );
+        assert!(positive_queries.len() >= 2);
+        assert!(
+            result.residual_norm > 0.15,
+            "tail label should be rolled back instead of fully fitting the residual"
+        );
+    }
+
+    #[test]
+    fn residual_solver_accepts_label_when_refit_gain_is_large_enough() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 2,
+            min_candidate_score: 0.01,
+            min_refit_gain: 0.25,
+            coverage_stop: 1.0,
+            residual_norm_stop: 0.0,
+            ..LabelSolverConfig::default()
+        };
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 1.0, 0.0],
+            &config,
+            |query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => {
+                    if query[0] > 0.4 {
+                        Ok(vec![
+                            retrieved_atom(
+                                "l_primary",
+                                "primary",
+                                LabelAtomPolarity::Positive,
+                                vec![1.0, 0.0, 0.0],
+                                1.0,
+                                1,
+                            ),
+                            retrieved_atom(
+                                "l_tail",
+                                "tail",
+                                LabelAtomPolarity::Positive,
+                                vec![0.0, 1.0, 0.0],
+                                1.0,
+                                2,
+                            ),
+                        ])
+                    } else {
+                        Ok(vec![retrieved_atom(
+                            "l_tail",
+                            "tail",
+                            LabelAtomPolarity::Positive,
+                            vec![0.0, 1.0, 0.0],
+                            1.0,
+                            3,
+                        )])
+                    }
+                }
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            result
+                .selected_labels
+                .iter()
+                .map(|label| label.label_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["primary", "tail"]
+        );
+        assert!(result.coverage > 0.99);
+        assert!(result.residual_norm < 0.01);
+    }
+
+    #[test]
+    fn residual_solver_skips_high_redundancy_label_groups() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 2,
+            min_candidate_score: 0.01,
+            min_refit_gain: 0.0,
+            coverage_stop: 1.0,
+            residual_norm_stop: 0.0,
+            max_redundancy: 0.92,
+            ..LabelSolverConfig::default()
+        };
+        let mut positive_queries = Vec::new();
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 0.2, 0.0],
+            &config,
+            |query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => {
+                    positive_queries.push(query.to_vec());
+                    if positive_queries.len() == 1 {
+                        Ok(vec![retrieved_atom(
+                            "l_backend",
+                            "backend",
+                            LabelAtomPolarity::Positive,
+                            vec![1.0, 0.0, 0.0],
+                            1.0,
+                            1,
+                        )])
+                    } else {
+                        Ok(vec![retrieved_atom(
+                            "l_service",
+                            "service",
+                            LabelAtomPolarity::Positive,
+                            vec![0.95, 0.31, 0.0],
+                            1.0,
+                            2,
+                        )])
+                    }
+                }
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            result
+                .selected_labels
+                .iter()
+                .map(|label| label.label_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["backend"]
+        );
+        assert!(positive_queries.len() >= 2);
+        assert!(
+            result
+                .candidates
+                .iter()
+                .any(|candidate| candidate.label_name == "service")
+        );
+    }
+
+    #[test]
+    fn residual_solver_allows_low_redundancy_label_groups() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 2,
+            min_candidate_score: 0.01,
+            min_refit_gain: 0.0,
+            coverage_stop: 1.0,
+            residual_norm_stop: 0.0,
+            max_redundancy: 0.92,
+            ..LabelSolverConfig::default()
+        };
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 1.0, 0.0],
+            &config,
+            |query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => {
+                    if query[0] > 0.4 {
+                        Ok(vec![retrieved_atom(
+                            "l_backend",
+                            "backend",
+                            LabelAtomPolarity::Positive,
+                            vec![1.0, 0.0, 0.0],
+                            1.0,
+                            1,
+                        )])
+                    } else {
+                        Ok(vec![retrieved_atom(
+                            "l_docs",
+                            "docs",
+                            LabelAtomPolarity::Positive,
+                            vec![0.0, 1.0, 0.0],
+                            1.0,
+                            2,
+                        )])
+                    }
+                }
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            result
+                .selected_labels
+                .iter()
+                .map(|label| label.label_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["backend", "docs"]
+        );
+        assert!(result.coverage > 0.99);
+        assert!(result.residual_norm < 0.01);
+    }
+
+    #[test]
+    fn residual_solver_stops_when_residual_norm_threshold_is_reached() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 2,
+            min_candidate_score: 0.01,
+            min_refit_gain: 0.0,
+            coverage_stop: 1.0,
+            residual_norm_stop: 0.30,
+            ..LabelSolverConfig::default()
+        };
+        let mut positive_queries = Vec::new();
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 0.2, 0.0],
+            &config,
+            |query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => {
+                    positive_queries.push(query.to_vec());
+                    if positive_queries.len() == 1 {
+                        Ok(vec![
+                            retrieved_atom(
+                                "l_primary",
+                                "primary",
+                                LabelAtomPolarity::Positive,
+                                vec![1.0, 0.0, 0.0],
+                                1.0,
+                                1,
+                            ),
+                            retrieved_atom(
+                                "l_tail",
+                                "tail",
+                                LabelAtomPolarity::Positive,
+                                vec![0.0, 1.0, 0.0],
+                                1.0,
+                                2,
+                            ),
+                        ])
+                    } else {
+                        Ok(vec![retrieved_atom(
+                            "l_tail",
+                            "tail",
+                            LabelAtomPolarity::Positive,
+                            vec![0.0, 1.0, 0.0],
+                            1.0,
+                            3,
+                        )])
+                    }
+                }
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(positive_queries.len(), 1);
+        assert_eq!(result.selected_labels.len(), 1);
+        assert_eq!(result.selected_labels[0].label_name, "primary");
+        assert!(result.residual_norm < 0.30);
+    }
+
+    #[test]
+    fn residual_solver_stops_when_coverage_threshold_is_reached() {
+        let config = LabelSolverConfig {
+            max_selected_labels: 2,
+            min_candidate_score: 0.01,
+            min_refit_gain: 0.0,
+            coverage_stop: 0.75,
+            residual_norm_stop: 0.0,
+            ..LabelSolverConfig::default()
+        };
+        let mut positive_queries = Vec::new();
+
+        let result = resolve_label_groups_by_residual(
+            &[1.0, 0.2, 0.0],
+            &config,
+            |query, polarity, _limit| match polarity {
+                LabelAtomPolarity::Positive => {
+                    positive_queries.push(query.to_vec());
+                    if positive_queries.len() == 1 {
+                        Ok(vec![
+                            retrieved_atom(
+                                "l_primary",
+                                "primary",
+                                LabelAtomPolarity::Positive,
+                                vec![1.0, 0.0, 0.0],
+                                1.0,
+                                1,
+                            ),
+                            retrieved_atom(
+                                "l_tail",
+                                "tail",
+                                LabelAtomPolarity::Positive,
+                                vec![0.0, 1.0, 0.0],
+                                1.0,
+                                2,
+                            ),
+                        ])
+                    } else {
+                        Ok(vec![retrieved_atom(
+                            "l_tail",
+                            "tail",
+                            LabelAtomPolarity::Positive,
+                            vec![0.0, 1.0, 0.0],
+                            1.0,
+                            3,
+                        )])
+                    }
+                }
+                LabelAtomPolarity::Negative => Ok(Vec::new()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(positive_queries.len(), 1);
+        assert_eq!(result.selected_labels.len(), 1);
+        assert_eq!(result.selected_labels[0].label_name, "primary");
+        assert!(result.coverage >= 0.75);
     }
 
     #[test]
@@ -1504,6 +2138,7 @@ mod tests {
         assert!(result.needs_new_label);
         assert!(result.candidates.is_empty());
         assert_eq!(result.coverage, 0.0);
+        assert_eq!(result.coverage_cosine, 0.0);
         assert_eq!(result.residual_norm, 1.0);
     }
 

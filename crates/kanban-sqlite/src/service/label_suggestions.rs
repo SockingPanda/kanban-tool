@@ -15,8 +15,8 @@ use kanban_labels::{
     resolve_label_groups_by_residual,
 };
 use kanban_vector::{
-    DisabledVectorStore, LabelAtomVectorHit, LabelAtomVectorQuery, VectorError, VectorStore,
-    VectorStoreStatus,
+    DisabledVectorStore, LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore,
+    VectorError, VectorStoreStatus,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -36,7 +36,7 @@ pub fn suggest_task_labels_with(
     path: impl AsRef<Path>,
     board: &str,
     task_ref: &str,
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl LabelAtomVectorStore + ?Sized),
     options: LabelSuggestionOptions,
 ) -> Result<LabelSuggestionResult> {
     Ok(compute_task_label_suggestions_with(path, board, task_ref, store, options)?.result)
@@ -52,7 +52,7 @@ pub(crate) fn compute_task_label_suggestions_with(
     path: impl AsRef<Path>,
     board: &str,
     task_ref: &str,
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl LabelAtomVectorStore + ?Sized),
     options: LabelSuggestionOptions,
 ) -> Result<LabelSuggestionComputation> {
     validate_options(options)?;
@@ -97,13 +97,13 @@ pub(crate) fn compute_task_label_suggestions_with(
         .map(|label| label.id.as_str())
         .collect::<std::collections::HashSet<_>>();
     let solver_config = LabelSolverConfig {
-        max_candidates: options.limit.max(1),
-        max_selected_labels: options.limit.max(1),
+        max_candidates: options.candidate_limit.max(1),
+        max_selected_labels: options.max_selected_labels.max(1),
         min_candidate_score: options.min_score,
         ..LabelSolverConfig::default()
     };
     let board_id_for_query = task.board_id.clone();
-    let embedding_model = store.chunk_embedding_model().to_owned();
+    let embedding_model = store.embedding_model().to_owned();
     let solver_result = match resolve_label_groups_by_residual(
         &query_vector,
         &solver_config,
@@ -156,9 +156,9 @@ pub(crate) fn compute_task_label_suggestions_with(
                 .collect(),
         })
         .collect::<Vec<_>>();
-    candidates.truncate(options.limit);
+    candidates.truncate(options.output_limit);
 
-    let selected_labels = solver_result
+    let mut selected_labels = solver_result
         .selected_labels
         .iter()
         .map(|selected| SelectedLabelSuggestion {
@@ -179,6 +179,7 @@ pub(crate) fn compute_task_label_suggestions_with(
                 .collect(),
         })
         .collect::<Vec<_>>();
+    selected_labels.truncate(options.output_limit);
     let coverage = solver_result.coverage;
     let degraded = !diagnostics.is_empty();
     let needs_new_label = selected_labels.is_empty()
@@ -191,6 +192,7 @@ pub(crate) fn compute_task_label_suggestions_with(
             selected_labels,
             candidates,
             coverage,
+            coverage_cosine: solver_result.coverage_cosine,
             residual_norm: solver_result.residual_norm,
             needs_new_label,
             degraded,
@@ -202,12 +204,22 @@ pub(crate) fn compute_task_label_suggestions_with(
 }
 
 fn validate_options(options: LabelSuggestionOptions) -> Result<()> {
-    if options.limit == 0 {
+    if options.output_limit == 0 {
         return Err(KanbanError::InvalidInput("limit must be >= 1".to_owned()));
+    }
+    if options.candidate_limit == 0 {
+        return Err(KanbanError::InvalidInput(
+            "candidate_limit must be >= 1".to_owned(),
+        ));
     }
     if options.atom_limit == 0 {
         return Err(KanbanError::InvalidInput(
             "atom_limit must be >= 1".to_owned(),
+        ));
+    }
+    if options.max_selected_labels == 0 {
+        return Err(KanbanError::InvalidInput(
+            "max_selected_labels must be >= 1".to_owned(),
         ));
     }
     if !(0.0..=1.0).contains(&options.min_score) {
@@ -219,7 +231,7 @@ fn validate_options(options: LabelSuggestionOptions) -> Result<()> {
 }
 
 pub(crate) fn retrieve_residual_atoms(
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl LabelAtomVectorStore + ?Sized),
     residual: &[f32],
     polarity: LabelAtomPolarity,
     limit: usize,
@@ -267,7 +279,7 @@ fn retrieved_atom_from_hit(
         kind: kind_from_str(&hit.hit.kind)?,
         text: hit.hit.text,
         vector,
-        score: distance_to_similarity(hit.hit.score),
+        similarity: None,
     })
 }
 
@@ -328,33 +340,46 @@ fn push_label_atom_index_diagnostics(
     status: &VectorStoreStatus,
     diagnostics: &mut Vec<String>,
 ) -> Result<()> {
-    if status.message.contains("dirty=true") || status.message.contains("board_dirty=true") {
+    let state = derived_status_by_name(conn, LANCEDB_LABEL_ATOMS_STORE)?;
+    let board_status = conn
+        .query_row(
+            "SELECT dirty,last_error FROM label_atom_index_boards WHERE store_name=?1 AND board_id=?2",
+            params![LANCEDB_LABEL_ATOMS_STORE, board_id],
+            |row| {
+                Ok((
+                    row.get::<_, bool>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(storage)?;
+    let board_dirty = board_status
+        .as_ref()
+        .map(|(dirty, _error)| *dirty)
+        .unwrap_or(false);
+    if state.dirty
+        || board_dirty
+        || status.dirty.unwrap_or(false)
+        || status.board_dirty.unwrap_or(false)
+        || status
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_atom_index_dirty")
+    {
         diagnostics.push("label_atom_index_dirty".to_owned());
     }
-    if let Some(error) = derived_status_by_name(conn, LANCEDB_LABEL_ATOMS_STORE)?.last_error {
+    if let Some(error) = state.last_error {
         diagnostics.push("label_atom_index_error".to_owned());
         diagnostics.push(bounded_diagnostic_message(&error));
     }
-    let board_error = conn
-        .query_row(
-            "SELECT last_error FROM label_atom_index_boards WHERE store_name=?1 AND board_id=?2",
-            params![LANCEDB_LABEL_ATOMS_STORE, board_id],
-            |row| row.get::<_, Option<String>>(0),
-        )
-        .optional()
-        .map_err(storage)?
-        .flatten();
-    if let Some(error) = board_error {
+    if let Some(error) = board_status.and_then(|(_dirty, error)| error) {
         diagnostics.push("label_atom_index_error".to_owned());
         diagnostics.push(bounded_diagnostic_message(&error));
     }
     diagnostics.sort();
     diagnostics.dedup();
     Ok(())
-}
-
-fn distance_to_similarity(distance: f32) -> f32 {
-    1.0 / (1.0 + distance.max(0.0))
 }
 
 fn task_query_text(title: &str, description: Option<&str>) -> String {
@@ -379,6 +404,7 @@ fn empty_result(
         selected_labels: Vec::new(),
         candidates: Vec::new(),
         coverage: 0.0,
+        coverage_cosine: 0.0,
         residual_norm: 1.0,
         needs_new_label,
         degraded,

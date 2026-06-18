@@ -31,8 +31,9 @@ pub use kanban_sqlite::{
 };
 #[cfg(feature = "vector-lancedb")]
 pub use kanban_vector::{
-    EmbeddingChunk, LabelAtomHit, LabelAtomQuery, LabelAtomVector, LabelAtomVectorHit,
-    LabelAtomVectorQuery, VectorError, VectorHit, VectorQuery, VectorStore, VectorStoreStatus,
+    ChunkVectorStore, EmbeddingChunk, LabelAtomHit, LabelAtomQuery, LabelAtomVector,
+    LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore, QueryEmbeddingProvider,
+    VectorError, VectorHit, VectorQuery, VectorStoreBackend, VectorStoreStatus,
 };
 pub use rusqlite::{Connection, params};
 
@@ -186,19 +187,25 @@ impl RecordingVectorStore {
 }
 
 #[cfg(feature = "vector-lancedb")]
-impl VectorStore for RecordingVectorStore {
-    fn chunk_embedding_model(&self) -> &str {
+impl VectorStoreBackend for RecordingVectorStore {
+    fn embedding_model(&self) -> &str {
         self.expected_model()
     }
 
     fn status(&self) -> VectorStoreStatus {
-        VectorStoreStatus {
-            backend: "test-vector".to_owned(),
-            enabled: true,
-            message: "test vector store".to_owned(),
-        }
+        VectorStoreStatus::new("test-vector", true, "test vector store")
     }
+}
 
+#[cfg(feature = "vector-lancedb")]
+impl QueryEmbeddingProvider for RecordingVectorStore {
+    fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
+        Ok(vec![1.0, 1.0, 1.0])
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl ChunkVectorStore for RecordingVectorStore {
     fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
         if let Some(chunk) = chunks
             .iter()
@@ -263,11 +270,10 @@ impl VectorStore for RecordingVectorStore {
     fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
         Ok(Vec::new())
     }
+}
 
-    fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
-        Ok(vec![1.0, 1.0, 1.0])
-    }
-
+#[cfg(feature = "vector-lancedb")]
+impl LabelAtomVectorStore for RecordingVectorStore {
     fn delete_label_atoms_for_board(&self, board_id: &str) -> Result<(), VectorError> {
         self.live_label_atoms
             .lock()
@@ -337,7 +343,7 @@ impl VectorStore for RecordingVectorStore {
                 ordinal: atom.ordinal,
                 content_hash: atom.content_hash,
                 embedding_model: atom.embedding_model,
-                score: 1.0,
+                distance: 1.0,
             })
             .collect())
     }
@@ -388,7 +394,7 @@ impl VectorStore for RecordingVectorStore {
                         ordinal: atom.ordinal,
                         content_hash: atom.content_hash,
                         embedding_model: atom.embedding_model,
-                        score: 1.0,
+                        distance: 1.0,
                     },
                     vector,
                 }
@@ -401,15 +407,17 @@ impl VectorStore for RecordingVectorStore {
 pub struct FailingVectorStore;
 
 #[cfg(feature = "vector-lancedb")]
-impl VectorStore for FailingVectorStore {
+impl VectorStoreBackend for FailingVectorStore {
     fn status(&self) -> VectorStoreStatus {
-        VectorStoreStatus {
-            backend: "test-vector".to_owned(),
-            enabled: true,
-            message: "test vector store".to_owned(),
-        }
+        VectorStoreStatus::new("test-vector", true, "test vector store")
     }
+}
 
+#[cfg(feature = "vector-lancedb")]
+impl QueryEmbeddingProvider for FailingVectorStore {}
+
+#[cfg(feature = "vector-lancedb")]
+impl ChunkVectorStore for FailingVectorStore {
     fn upsert(&self, _chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
         Err(VectorError::DimensionMismatch {
             expected: 3,
@@ -428,7 +436,10 @@ impl VectorStore for FailingVectorStore {
     fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
         Ok(Vec::new())
     }
+}
 
+#[cfg(feature = "vector-lancedb")]
+impl LabelAtomVectorStore for FailingVectorStore {
     fn delete_label_atoms_for_board(&self, _board_id: &str) -> Result<(), VectorError> {
         Ok(())
     }
@@ -445,15 +456,21 @@ impl VectorStore for FailingVectorStore {
 pub struct QueryFailingVectorStore;
 
 #[cfg(feature = "vector-lancedb")]
-impl VectorStore for QueryFailingVectorStore {
+impl VectorStoreBackend for QueryFailingVectorStore {
     fn status(&self) -> VectorStoreStatus {
-        VectorStoreStatus {
-            backend: "test-vector".to_owned(),
-            enabled: true,
-            message: "test vector store".to_owned(),
-        }
+        VectorStoreStatus::new("test-vector", true, "test vector store")
     }
+}
 
+#[cfg(feature = "vector-lancedb")]
+impl QueryEmbeddingProvider for QueryFailingVectorStore {
+    fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
+        Ok(vec![1.0, 0.0, 0.0])
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl ChunkVectorStore for QueryFailingVectorStore {
     fn upsert(&self, _chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
         Ok(())
     }
@@ -469,11 +486,10 @@ impl VectorStore for QueryFailingVectorStore {
     fn query(&self, _query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
         Err(VectorError::Store("query exploded".to_owned()))
     }
+}
 
-    fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
-        Ok(vec![1.0, 0.0, 0.0])
-    }
-
+#[cfg(feature = "vector-lancedb")]
+impl LabelAtomVectorStore for QueryFailingVectorStore {
     fn query_label_atoms_by_vector(
         &self,
         _query: &LabelAtomVectorQuery,

@@ -436,19 +436,21 @@ LanceDB atom retrieval 使用。
 | `id` | 稳定 `la_...` atom id。 |
 | `label_id` / `board_id` | 关联 canonical label 与 board。 |
 | `polarity` | `positive` / `negative`。 |
-| `kind` | `name`、`description`、`applies_when`、`positive_example`、`excludes_when`、`negative_example`。 |
-| `text` | trim 后的 atom 文本，空文本不入库。 |
-| `ordinal` | 同一 label 展开后的稳定顺序。 |
-| `content_hash` | atom 内容 hash，用于派生层判断变化。 |
+| `kind` | `name`、`description`、`applies_when`、`positive_example`、`excludes_when`、`negative_example`；有 description 时，`description` atom 是 `label: {name}\ndescription: {description}` canonical atom，无 description 时才使用 `name` fallback atom。 |
+| `text` | trim 且规范化 whitespace 后的 atom 文本；每个非空行内部 whitespace collapse，canonical 行分隔保留，空文本不入库。 |
+| `ordinal` | 同一 label 展开后的顺序；同语义重复 atom 去重时保留首次出现的 ordinal。 |
+| `content_hash` | atom 语义内容 hash，用于派生层判断变化；输入为 `label_id + polarity + kind + normalized_text`，不包含 `ordinal`。 |
 | `created_at` / `updated_at` | atom truth 时间。 |
 
 派生向量表：`kb_label_atoms`
 
 `kb_label_atoms` 是 LanceDB 中的可重建 label atom 向量表，独立于 task chunk 表
 `kb_chunks`。它按 `board_id`、`embedding_model`、`polarity` 查询 atom evidence，
-返回 `label_id`、atom id、`polarity`、`kind`、`text` 和 score 等字段，用于构造
-语义 label 候选。派生表损坏或缺少 provider 时只让 label atom index degraded，
-不影响普通 label CRUD、`task_labels` 绑定或 task 状态机。
+返回 `label_id`、atom id、`polarity`、`kind`、`text` 和 LanceDB `_distance` 原始
+distance 等字段。语义 label 候选会用返回的 atom vector 在本地重新计算
+query/residual cosine similarity，不把 distance 当作 solver score。派生表损坏或缺少
+provider 时只让 label atom index degraded，不影响普通 label CRUD、`task_labels` 绑定
+或 task 状态机。
 
 ---
 
@@ -566,7 +568,7 @@ label truth。它只记录“现有 label atom suggestion 覆盖不足时，外�
 | `board_id` / `task_id` | 提案来源 task。 |
 | `status` | `proposed` / `accepted` / `rejected`。provider 不可用不写成 status，而是返回 degraded attempt。 |
 | `name` / `description` / `applies_when` / `excludes_when` / `positive_examples` / `negative_examples` | 候选 label semantics。数组字段为 JSON string array。 |
-| `heuristic_coverage` / `heuristic_residual_norm` | 来自当前 residual label suggestion solver 的覆盖/残差元数据，用于记录 proposal 创建时现有 label atoms 的覆盖程度。 |
+| `heuristic_coverage` / `heuristic_coverage_cosine` / `heuristic_residual_norm` | 来自当前 residual label suggestion solver 的覆盖/残差元数据，用于记录 proposal 创建时现有 label atoms 的覆盖程度；`heuristic_coverage_cosine` 是 query 与 fitted vector 的 cosine similarity。 |
 | `top1_existing_label_id` / `top1_existing_label_name` | 当前启发式 top1 existing label。 |
 | `diagnostics_json` | JSON string array，包含 degraded、冲突或 validation 诊断。 |
 | `decision_reason` / `resolved_label_id` / `decided_at` | accept/reject 决策信息；accept 后 `resolved_label_id` 指向新建 canonical label。 |

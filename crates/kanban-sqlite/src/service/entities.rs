@@ -1,12 +1,12 @@
 use crate::connect_file;
 
-use super::{MAX_TASK_LIST_LIMIT, storage, validate_page_bounds};
+use super::{MAX_TASK_LIST_LIMIT, SqlWhere, all, all_values, one, validate_page_bounds};
 
 use std::path::Path;
 
 use kanban_core::{KanbanError, Result};
 
-use rusqlite::{Connection, OptionalExtension, Row, params_from_iter, types::Value};
+use rusqlite::{Connection, Row, types::Value};
 
 use serde::{Deserialize, Serialize};
 
@@ -107,44 +107,37 @@ pub fn list_entities(
 ) -> Result<Vec<EntityRecord>> {
     validate_page_bounds(options.limit, MAX_TASK_LIST_LIMIT, 0)?;
     let conn = connect_file(path.as_ref())?;
-    let mut params = Vec::new();
-    let where_sql = if let Some(kind) = options
+    let mut where_clause = SqlWhere::new("");
+    if let Some(kind) = options
         .kind
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty())
     {
-        params.push(Value::Text(kind.to_owned()));
-        "WHERE kind=?1"
-    } else {
-        ""
-    };
+        where_clause.push("WHERE kind=?", kind);
+    }
+    let mut params = where_clause.params().to_vec();
     params.push(Value::Integer(
         options.limit.try_into().expect("validated limit"),
     ));
     let sql = format!(
         "SELECT uri,kind,source_table,source_id,board_id,task_id,title,summary,content_hash,created_at,updated_at,archived_at \
-         FROM entities {where_sql} ORDER BY updated_at DESC, uri ASC LIMIT ?"
+         FROM entities {} ORDER BY updated_at DESC, uri ASC LIMIT ?",
+        where_clause.sql()
     );
-    let mut stmt = conn.prepare(&sql).map_err(storage)?;
-    let rows = stmt
-        .query_map(params_from_iter(params.iter()), entity_from_row)
-        .map_err(storage)?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)
+    all_values(&conn, &sql, &params, entity_from_row)
 }
 
 pub fn get_entity(path: impl AsRef<Path>, uri: &str) -> Result<EntityRecord> {
     let conn = connect_file(path.as_ref())?;
-    conn.query_row(
+    one(
+        &conn,
         "SELECT uri,kind,source_table,source_id,board_id,task_id,title,summary,content_hash,created_at,updated_at,archived_at \
          FROM entities WHERE uri=?1",
         [uri],
         entity_from_row,
+        || KanbanError::NotFound(format!("entity {uri}")),
     )
-    .optional()
-    .map_err(storage)?
-    .ok_or_else(|| KanbanError::NotFound(format!("entity {uri}")))
 }
 
 pub fn list_outbox(
@@ -153,31 +146,25 @@ pub fn list_outbox(
 ) -> Result<Vec<IndexOutboxRecord>> {
     validate_page_bounds(options.limit, MAX_TASK_LIST_LIMIT, 0)?;
     let conn = connect_file(path.as_ref())?;
-    let mut params = Vec::new();
-    let where_sql = if let Some(status) = options
+    let mut where_clause = SqlWhere::new("");
+    if let Some(status) = options
         .status
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty())
     {
-        params.push(Value::Text(status.to_owned()));
-        "WHERE status=?1"
-    } else {
-        ""
-    };
+        where_clause.push("WHERE status=?", status);
+    }
+    let mut params = where_clause.params().to_vec();
     params.push(Value::Integer(
         options.limit.try_into().expect("validated limit"),
     ));
     let sql = format!(
         "SELECT id,source_event_id,target,entity_uri,action,payload_json,status,attempts,last_error,created_at,updated_at \
-         FROM index_outbox {where_sql} ORDER BY id ASC LIMIT ?"
+         FROM index_outbox {} ORDER BY id ASC LIMIT ?",
+        where_clause.sql()
     );
-    let mut stmt = conn.prepare(&sql).map_err(storage)?;
-    let rows = stmt
-        .query_map(params_from_iter(params.iter()), outbox_from_row)
-        .map_err(storage)?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)
+    all_values(&conn, &sql, &params, outbox_from_row)
 }
 
 pub fn derived_store_statuses(path: impl AsRef<Path>) -> Result<Vec<DerivedStoreStatusRecord>> {
@@ -188,17 +175,13 @@ pub fn derived_store_statuses(path: impl AsRef<Path>) -> Result<Vec<DerivedStore
 pub(crate) fn derived_store_statuses_conn(
     conn: &Connection,
 ) -> Result<Vec<DerivedStoreStatusRecord>> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT store_name,schema_version,last_event_id,dirty,last_rebuild_at,last_sync_at,last_error,updated_at \
-             FROM derived_store_state ORDER BY store_name ASC",
-        )
-        .map_err(storage)?;
-    let rows = stmt
-        .query_map([], derived_store_status_from_row)
-        .map_err(storage)?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)
+    all(
+        conn,
+        "SELECT store_name,schema_version,last_event_id,dirty,last_rebuild_at,last_sync_at,last_error,updated_at \
+         FROM derived_store_state ORDER BY store_name ASC",
+        [],
+        derived_store_status_from_row,
+    )
 }
 
 fn entity_from_row(row: &Row<'_>) -> rusqlite::Result<EntityRecord> {

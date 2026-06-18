@@ -1,15 +1,15 @@
 use crate::connect_file;
 
 use super::{
-    BoardColumnRecord, BoardListOptions, BoardRecord, CreateBoard, insert_event, storage,
-    with_immediate_tx,
+    BoardColumnRecord, BoardListOptions, BoardRecord, CreateBoard, all, exec, exec_one, exists,
+    insert_event, one, with_immediate_tx,
 };
 
 use std::path::Path;
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock, TaskStatus, new_typed_id};
 
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use rusqlite::{Connection, Row, params};
 
 use serde_json::json;
 
@@ -20,15 +20,15 @@ pub fn list_boards(path: impl AsRef<Path>, options: BoardListOptions) -> Result<
     } else {
         "WHERE archived_at IS NULL"
     };
-    let mut stmt = conn
-        .prepare(&format!(
+    all(
+        &conn,
+        &format!(
             "SELECT id,slug,name,description,created_at,updated_at,archived_at \
              FROM boards {archived_filter} ORDER BY created_at ASC, slug ASC",
-        ))
-        .map_err(storage)?;
-    let rows = stmt.query_map([], board_from_row).map_err(storage)?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)
+        ),
+        [],
+        board_from_row,
+    )
 }
 
 pub fn create_board(
@@ -50,21 +50,17 @@ pub fn create_board(
         .filter(|description| !description.is_empty());
     let id = new_typed_id("b");
     with_immediate_tx(&conn, || {
-        let slug_exists = conn
-            .query_row("SELECT 1 FROM boards WHERE slug=?1", [&slug], |_row| Ok(()))
-            .optional()
-            .map_err(storage)?
-            .is_some();
+        let slug_exists = exists(&conn, "SELECT 1 FROM boards WHERE slug=?1", [&slug])?;
         if slug_exists {
             return Err(KanbanError::InvalidInput(format!(
                 "board slug already exists: {slug}"
             )));
         }
-        conn.execute(
+        exec(
+            &conn,
             "INSERT INTO boards(id, slug, name, description, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
             params![id, slug, name, description, now],
-        )
-        .map_err(storage)?;
+        )?;
         ensure_default_columns_conn(&conn, &id, now)?;
         insert_event(
             &conn,
@@ -85,31 +81,22 @@ pub fn archive_board(path: impl AsRef<Path>, slug_or_id: &str, actor: &str) -> R
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
         let board = get_board_conn(&conn, slug_or_id)?;
-        let has_running_work = conn
-            .query_row(
-                "SELECT 1 WHERE EXISTS (SELECT 1 FROM tasks WHERE board_id=?1 AND status='running') OR EXISTS (SELECT 1 FROM task_runs WHERE board_id=?1 AND status='running')",
-                [&board.id],
-                |_row| Ok(()),
-            )
-            .optional()
-            .map_err(storage)?
-            .is_some();
+        let has_running_work = exists(
+            &conn,
+            "SELECT 1 WHERE EXISTS (SELECT 1 FROM tasks WHERE board_id=?1 AND status='running') OR EXISTS (SELECT 1 FROM task_runs WHERE board_id=?1 AND status='running')",
+            [&board.id],
+        )?;
         if has_running_work {
             return Err(KanbanError::InvalidTransition(
                 "cannot archive board with running work".into(),
             ));
         }
-        let changed = conn
-            .execute(
-                "UPDATE boards SET archived_at=?1, updated_at=?1 WHERE id=?2 AND archived_at IS NULL",
-                params![now, board.id],
-            )
-            .map_err(storage)?;
-        if changed != 1 {
-            return Err(KanbanError::InvalidTransition(
-                "cannot archive board".into(),
-            ));
-        }
+        exec_one(
+            &conn,
+            "UPDATE boards SET archived_at=?1, updated_at=?1 WHERE id=?2 AND archived_at IS NULL",
+            params![now, board.id],
+            || KanbanError::InvalidTransition("cannot archive board".into()),
+        )?;
         insert_event(
             &conn,
             &board.id,
@@ -143,17 +130,13 @@ pub fn list_board_columns(
 ) -> Result<Vec<BoardColumnRecord>> {
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board_slug_or_id)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT id,board_id,status,title,position,hidden,wip_limit,created_at,updated_at \
-             FROM board_columns WHERE board_id=?1 ORDER BY position ASC",
-        )
-        .map_err(storage)?;
-    let rows = stmt
-        .query_map([board_id], board_column_from_row)
-        .map_err(storage)?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)
+    all(
+        &conn,
+        "SELECT id,board_id,status,title,position,hidden,wip_limit,created_at,updated_at \
+         FROM board_columns WHERE board_id=?1 ORDER BY position ASC",
+        [board_id],
+        board_column_from_row,
+    )
 }
 
 pub(crate) fn get_board_conn(conn: &Connection, slug_or_id: &str) -> Result<BoardRecord> {
@@ -162,10 +145,9 @@ pub(crate) fn get_board_conn(conn: &Connection, slug_or_id: &str) -> Result<Boar
     } else {
         "SELECT id,slug,name,description,created_at,updated_at,archived_at FROM boards WHERE slug=?1 AND archived_at IS NULL"
     };
-    conn.query_row(sql, [slug_or_id], board_from_row)
-        .optional()
-        .map_err(storage)?
-        .ok_or_else(|| KanbanError::NotFound(format!("board {slug_or_id}")))
+    one(conn, sql, [slug_or_id], board_from_row, || {
+        KanbanError::NotFound(format!("board {slug_or_id}"))
+    })
 }
 
 pub(crate) fn get_board_conn_any(conn: &Connection, slug_or_id: &str) -> Result<BoardRecord> {
@@ -174,10 +156,9 @@ pub(crate) fn get_board_conn_any(conn: &Connection, slug_or_id: &str) -> Result<
     } else {
         "SELECT id,slug,name,description,created_at,updated_at,archived_at FROM boards WHERE slug=?1"
     };
-    conn.query_row(sql, [slug_or_id], board_from_row)
-        .optional()
-        .map_err(storage)?
-        .ok_or_else(|| KanbanError::NotFound(format!("board {slug_or_id}")))
+    one(conn, sql, [slug_or_id], board_from_row, || {
+        KanbanError::NotFound(format!("board {slug_or_id}"))
+    })
 }
 
 pub(crate) fn board_from_row(row: &Row<'_>) -> rusqlite::Result<BoardRecord> {
@@ -215,10 +196,13 @@ pub(crate) fn board_id(conn: &Connection, slug_or_id: &str) -> Result<String> {
     } else {
         "SELECT id FROM boards WHERE slug=?1 AND archived_at IS NULL"
     };
-    conn.query_row(sql, [slug_or_id], |r| r.get(0))
-        .optional()
-        .map_err(storage)?
-        .ok_or_else(|| KanbanError::NotFound(format!("board {slug_or_id}")))
+    one(
+        conn,
+        sql,
+        [slug_or_id],
+        |r| r.get(0),
+        || KanbanError::NotFound(format!("board {slug_or_id}")),
+    )
 }
 
 pub(crate) fn board_id_any(conn: &Connection, slug_or_id: &str) -> Result<String> {
@@ -227,22 +211,21 @@ pub(crate) fn board_id_any(conn: &Connection, slug_or_id: &str) -> Result<String
     } else {
         "SELECT id FROM boards WHERE slug=?1"
     };
-    conn.query_row(sql, [slug_or_id], |r| r.get(0))
-        .optional()
-        .map_err(storage)?
-        .ok_or_else(|| KanbanError::NotFound(format!("board {slug_or_id}")))
+    one(
+        conn,
+        sql,
+        [slug_or_id],
+        |r| r.get(0),
+        || KanbanError::NotFound(format!("board {slug_or_id}")),
+    )
 }
 
 pub(crate) fn ensure_board_active(conn: &Connection, board_id: &str) -> Result<()> {
-    let active = conn
-        .query_row(
-            "SELECT 1 FROM boards WHERE id=?1 AND archived_at IS NULL",
-            [board_id],
-            |_row| Ok(()),
-        )
-        .optional()
-        .map_err(storage)?
-        .is_some();
+    let active = exists(
+        conn,
+        "SELECT 1 FROM boards WHERE id=?1 AND archived_at IS NULL",
+        [board_id],
+    )?;
     if active {
         Ok(())
     } else {
@@ -268,11 +251,11 @@ pub(crate) fn ensure_default_columns_conn(
     ];
     for (status, title, position, hidden) in defaults {
         let id = format!("col_{}_{}", board_id.trim_start_matches("b_"), status);
-        conn.execute(
+        exec(
+            conn,
             "INSERT OR IGNORE INTO board_columns(id, board_id, status, title, position, hidden, wip_limit, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?7)",
             params![id, board_id, status, title, position, hidden, now_ms],
-        )
-        .map_err(storage)?;
+        )?;
     }
     Ok(())
 }

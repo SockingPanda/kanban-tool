@@ -1733,6 +1733,60 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
 }
 
 #[tokio::test]
+async fn label_atom_explain_route_returns_legacy_untracked_for_unprovenanced_atom()
+-> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let app = test.router();
+
+    let label = kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "team/backend".to_owned(),
+            color: None,
+        },
+    )?;
+    kanban_sqlite::upsert_label_semantics_by_id(
+        &db_path,
+        "default",
+        &label.id,
+        kanban_sqlite::UpsertLabelSemantics {
+            label_ref: label.id.clone(),
+            description: Some("Backend service work".to_owned()),
+            applies_when: vec!["touches Rust service code".to_owned()],
+            excludes_when: vec![],
+            positive_examples: vec!["add API handler".to_owned()],
+            negative_examples: vec![],
+        },
+    )?;
+    let atom = kanban_sqlite::list_label_atoms(&db_path, "default")?
+        .into_iter()
+        .find(|atom| atom.kind == "positive_example")
+        .context("positive atom")?;
+
+    let (status, json) = get_json(
+        app,
+        &format!("/api/v1/boards/default/labels/atoms/{}/explain", atom.id),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["query"], atom.id);
+    assert_eq!(json["data"]["atom"]["id"], atom.id);
+    assert_eq!(json["data"]["current_semantics"]["label_id"], label.id);
+    assert_eq!(json["data"]["legacy_untracked"], true);
+    assert_eq!(json["data"]["provenance_actions"], json!([]));
+    assert!(
+        json["data"]["legacy_reason"]
+            .as_str()
+            .context("legacy reason")?
+            .contains("no ontology provenance action")
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn board_label_semantics_paths_resolve_exact_label_ids_only() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();

@@ -2,7 +2,12 @@ mod common;
 
 use anyhow::Context;
 use common::{TempDb, kanban};
-use kanban_sqlite::LabelProposalCandidate;
+use kanban_sqlite::{
+    CreateLabel, CreateTask, LabelOntologyActionInput, LabelOntologyActionType, LabelOntologyActor,
+    LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput, LabelOntologyProposedAction,
+    LabelOntologyRecordInput, LabelOntologySignalInput, LabelOntologySignalKind,
+    LabelOntologySuggestState, LabelProposalCandidate,
+};
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::{fs, path::Path};
@@ -1234,6 +1239,138 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
             .any(|action| action["action_type"] == "bootstrap_label")
     );
 
+    Ok(())
+}
+
+#[test]
+fn label_atom_explain_cli_json_round_trip() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_atom_explain_cli_json_round_trip")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let label = kanban_sqlite::create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = kanban_sqlite::create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("explain atom CLI provenance"),
+    )?;
+    let observation = kanban_sqlite::record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        LabelOntologyRecordInput {
+            actor: LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: json!([{"label": "cli", "confidence": 0.92}]).to_string(),
+            suggestion_snapshot_json: json!({"selected_labels": []}).to_string(),
+            final_decision_json: json!({"accepted_labels": ["cli"]}).to_string(),
+            suggest_coverage: Some(0.61),
+            suggest_coverage_cosine: Some(0.74),
+            suggest_residual_norm: Some(0.39),
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: json!([]).to_string(),
+            capture_fingerprint: Some("cli-atom-explain-round-trip".to_owned()),
+            signals: vec![LabelOntologySignalInput {
+                kind: LabelOntologySignalKind::FalseNegative,
+                target_label_ref: Some("cli".to_owned()),
+                related_labels_json: json!([]).to_string(),
+                proposed_action: LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(LabelOntologyCandidateAtomInput {
+                    polarity: "positive".to_owned(),
+                    kind: "applies_when".to_owned(),
+                    text: "extends CLI subcommands, arguments, help output, or JSON behavior"
+                        .to_owned(),
+                }),
+                proposed_label_name: None,
+                proposal_json: json!({}).to_string(),
+                agent_selected: true,
+                suggest_state: Some(LabelOntologySuggestState::Candidate),
+                suggest_score: Some(0.08),
+                suggest_rank: Some(4),
+                final_selected: true,
+                rationale: "The task expands the CLI surface although suggest scored cli weakly."
+                    .to_owned(),
+                confidence: Some(0.91),
+                signal_key: Some("cli-atom-explain".to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    kanban_sqlite::create_label_ontology_action(
+        &temp.path,
+        "default",
+        LabelOntologyActionInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            action_type: LabelOntologyActionType::Confirm,
+            signal_ids: vec![signal_id.clone()],
+            reason: "Confirmed by reviewer.".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: None,
+            validation_status: None,
+            validation_json: None,
+        },
+    )?;
+    let applied = kanban_sqlite::apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id.clone()],
+            label_ref: label.id.clone(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed false-negative support for CLI surface changes.".to_owned(),
+        },
+    )?;
+    let atom_id = applied
+        .result_atom_id
+        .as_deref()
+        .context("result atom id")?;
+
+    let explained =
+        kanban(&temp.path, &["--json", "label", "atom", "explain", atom_id])?.success_json()?;
+
+    assert_eq!(explained["data"]["atom"]["id"], atom_id);
+    assert_eq!(explained["data"]["atom"]["label_id"], label.id);
+    assert_eq!(
+        explained["data"]["provenance_actions"][0]["action"]["id"],
+        applied.id
+    );
+    assert_eq!(
+        explained["data"]["supporting_signals"][0]["source_task"]["id"],
+        task.id
+    );
+    assert_eq!(explained["data"]["legacy_untracked"], false);
+
+    let human = kanban(&temp.path, &["label", "atom", "explain", atom_id])?.success_stdout()?;
+    assert!(human.contains(atom_id), "{human}");
+    assert!(human.contains("provenance"), "{human}");
     Ok(())
 }
 

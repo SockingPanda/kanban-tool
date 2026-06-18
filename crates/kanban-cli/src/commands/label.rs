@@ -12,11 +12,11 @@ use kanban_sqlite::{
     MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
     accept_label_proposal_with_options, add_task_labels, apply_label_ontology_atom,
     bootstrap_task_label, create_label, create_label_ontology_action, delete_label,
-    delete_label_semantics, get_label_ontology_signal, get_label_proposal, get_label_semantics,
-    get_task, label_atom_index_status, list_label_atoms, list_label_ontology_signals,
-    list_label_proposals, list_label_semantics, list_labels, propose_task_label_with,
-    record_label_ontology_observation, reject_label_proposal, remove_task_label,
-    suggest_task_labels, upsert_label_semantics, validate_label_ontology_action,
+    delete_label_semantics, explain_label_atom, get_label_ontology_signal, get_label_proposal,
+    get_label_semantics, get_task, label_atom_index_status, list_label_atoms,
+    list_label_ontology_signals, list_label_proposals, list_label_semantics, list_labels,
+    propose_task_label_with, record_label_ontology_observation, reject_label_proposal,
+    remove_task_label, suggest_task_labels, upsert_label_semantics, validate_label_ontology_action,
 };
 #[cfg(feature = "vector-lancedb")]
 use kanban_sqlite::{
@@ -168,6 +168,10 @@ pub(crate) fn handle_label(
                         .collect::<Vec<_>>()
                         .join("\n")
                 })?;
+            }
+            crate::args::LabelAtomsCommand::Explain { atom_ref } => {
+                let explain = explain_label_atom(db_path, board, &atom_ref)?;
+                print_or_json(json, &explain, || label_atom_explain_lines(&explain))?;
             }
         },
         LabelCommand::AtomIndex { command } => {
@@ -719,6 +723,57 @@ fn label_ontology_action_line(action: &LabelOntologyActionRecord) -> String {
         result_atom,
         action.reason
     )
+}
+
+fn label_atom_explain_lines(explain: &kanban_sqlite::LabelAtomExplainRecord) -> String {
+    let mut lines = Vec::new();
+    if let Some(atom) = &explain.atom {
+        lines.push(format!(
+            "{} {} {} [{}] content_hash={} text={}",
+            atom.label_name, atom.polarity, atom.kind, atom.id, atom.content_hash, atom.text
+        ));
+    } else {
+        lines.push(format!("No current atom for {}", explain.query));
+    }
+    if let Some(semantics) = &explain.current_semantics {
+        lines.push(format!(
+            "semantics label={} atoms={}",
+            semantics.label_name,
+            semantics.atoms.len()
+        ));
+    }
+    if explain.legacy_untracked {
+        lines.push(format!(
+            "legacy_untracked: {}",
+            explain.legacy_reason.as_deref().unwrap_or("unknown")
+        ));
+    }
+    for provenance in &explain.provenance_actions {
+        lines.push(format!(
+            "provenance {} {} matched_by={} validation={}",
+            provenance.action.id,
+            provenance.action.action_type,
+            provenance.matched_by,
+            provenance.action.validation_status
+        ));
+    }
+    for source in &explain.supporting_signals {
+        lines.push(format!(
+            "signal {} {} task={} stale={} degraded={}",
+            source.signal.id,
+            source.signal.kind,
+            source.task_ref_snapshot,
+            source.suggest_input_stale,
+            source.suggest_degraded
+        ));
+    }
+    for validation in &explain.validation_history {
+        lines.push(format!(
+            "validation {} status={} parent={}",
+            validation.action.id, validation.validation_status, validation.parent_action_id
+        ));
+    }
+    lines.join("\n")
 }
 
 fn validate_label_suggest_bounds(

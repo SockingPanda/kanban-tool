@@ -515,6 +515,16 @@ pub(crate) async fn list_label_atoms(
     }))
 }
 
+pub(crate) async fn explain_label_atom(
+    State(state): State<AppState>,
+    Path((board, atom_ref)): Path<(String, String)>,
+) -> Result<Json<Envelope<kanban_sqlite::LabelAtomExplainRecord>>, ApiError> {
+    Ok(Json(Envelope {
+        data: kanban_sqlite::explain_label_atom(state.db_path(), &board, &atom_ref)?,
+        meta: None,
+    }))
+}
+
 pub(crate) async fn label_atom_index_status(
     State(state): State<AppState>,
     Path(board): Path<String>,

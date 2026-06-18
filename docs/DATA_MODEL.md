@@ -533,6 +533,10 @@ Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、�
 
 `result_atom_id` 故意不是强 FK。`label_atoms` 会随 semantics rebuild delete/insert；
 历史 action 依赖 `result_atom_content_hash` 和 `change_json` 中的 atom snapshot 保持可解释。
+Atom explain 查询会优先解析当前 `label_atoms.id`，也允许用
+`result_atom_content_hash` / `label_atoms.content_hash` 作为软引用恢复 rebuild 后的历史
+provenance。已有 atom 如果来自旧 semantics 写入而没有任何 ontology action 引用，
+查询结果只标记 `legacy_untracked=true`，不会伪造 provenance。
 
 表：`label_ontology_action_signals`
 

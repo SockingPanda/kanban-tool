@@ -819,6 +819,7 @@ GET /api/v1/boards/{board}/labels/{label_id}/semantics
 PUT /api/v1/boards/{board}/labels/{label_id}/semantics
 DELETE /api/v1/boards/{board}/labels/{label_id}/semantics
 GET /api/v1/boards/{board}/labels/atoms
+GET /api/v1/boards/{board}/labels/atoms/{atom_ref}/explain
 GET /api/v1/boards/{board}/labels/atom-index/status
 POST /api/v1/boards/{board}/labels/atom-index/rebuild
 GET /api/v1/boards/{board}/labels/atom-index/query?q=<text>&polarity=positive&limit=24
@@ -1006,6 +1007,13 @@ canonical 行分隔保留。同一 label 下相同 `polarity + kind + normalized
 
 `GET /api/v1/boards/{board}/labels/atoms` 返回 SQLite truth 中的 `label_atoms`。
 这些 atoms 是 `lancedb_label_atoms` 派生索引的输入。
+
+`GET /api/v1/boards/{board}/labels/atoms/{atom_ref}/explain` 按当前 atom id 或稳定
+`content_hash` 解析 atom，并返回 `LabelAtomExplainRecord`：`query`、`atom`、
+`current_semantics`、`provenance_actions`、`supporting_signals`、
+`validation_history`、`legacy_untracked` 和 `legacy_reason`。当前 atom 存在但没有
+ontology provenance action 引用其 id 或 content hash 时返回 `200` 且
+`legacy_untracked=true`；未知 id/hash 返回 not found。
 
 `GET /api/v1/boards/{board}/labels/atom-index/status` 返回 label atom vector index
 状态。无 vector provider 或未启用 `vector-lancedb` feature 时仍返回 `200` disabled

@@ -473,6 +473,7 @@ Label ontology ledger 记录 task 标注过程里的证据、分歧 signal、rev
 | `board_id` / `task_id` | 来源 board 与 task。 |
 | `task_ref_snapshot` | 捕获时的人类 ref，例如 `default#42`。 |
 | `task_snapshot_json` | 捕获时的 task title、description、labels、version/hash 等快照。 |
+| `suggest_input_hash` | 可空。按 label suggest 输入（normalized title + description）计算的窄 hash，用于 validation comparability；旧 observation 缺失时按 legacy incomparable 处理，不能静默 passed。 |
 | `agent_candidates_json` | agent 原始候选 labels、置信度和理由。 |
 | `suggestion_snapshot_json` | 完整 suggestion 输出、参数、模型和 index 状态快照。 |
 | `final_decision_json` | 最终接受、拒绝和未采用 labels 的判断。 |

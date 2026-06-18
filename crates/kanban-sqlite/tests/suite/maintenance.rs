@@ -151,8 +151,8 @@ fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() -> anyhow::Resu
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(12));
-        assert_eq!(report.user_version, 12);
+        assert_eq!(report.migration_version, Some(13));
+        assert_eq!(report.user_version, 13);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())

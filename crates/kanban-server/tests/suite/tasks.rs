@@ -924,6 +924,10 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(json["data"]["task_id"], task.id);
     assert_eq!(json["data"]["created_by"], "label-agent");
+    let suggest_input_hash = json["data"]["suggest_input_hash"]
+        .as_str()
+        .context("suggest_input_hash")?;
+    assert_eq!(suggest_input_hash.len(), 16);
     let signal_id = json["data"]["signals"][0]["id"]
         .as_str()
         .context("signal id")?
@@ -961,6 +965,10 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["signal"]["id"], signal_id);
     assert_eq!(json["data"]["observation"]["task_id"], task.id);
+    assert_eq!(
+        json["data"]["observation"]["suggest_input_hash"],
+        suggest_input_hash
+    );
     assert!(
         json["data"]["actions"]
             .as_array()

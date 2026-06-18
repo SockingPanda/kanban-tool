@@ -705,8 +705,9 @@ board 上的 `confirmed` signals。`label proposals reject` 标记 proposal 为
 `label ontology record` 接受 service-shaped JSON 或 stdin，记录一次 label 判断
 observation 并写入其中的 child signals。Service 会读取当前 task snapshot、解析
 target label ref、计算 normalized proposed label name、signal key 和 candidate atom
-content hash；它只写 ledger，不修改 `task_labels`、`label_semantics`、`label_atoms`
-或 proposal。
+content hash；observation 同时保存完整审计用 `task_snapshot_json.content_hash`
+和只基于 label suggest 输入（normalized title + description）的 `suggest_input_hash`。
+它只写 ledger，不修改 `task_labels`、`label_semantics`、`label_atoms` 或 proposal。
 
 Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
 `applies_when` / `positive_example` 只能使用 `positive` polarity，
@@ -783,12 +784,17 @@ suggest 验证仍是第二阶段。
 
 `label ontology validate` 为一个 mutation action 追加 `validate` action。CLI 读取
 `--input` 中的 validation JSON，并由 service 包装 manual payload、source signal
-case 摘要、task snapshot hash 对比和 parent action 结果引用。Parent action 必须是
+case 摘要、task snapshot/suggest input hash 对比和 parent action 结果引用。Parent action 必须是
 同一 board 上 `validation_status=pending` 的 canonical mutation action，并携带
 canonical result evidence（例如 atom/result label/proposal 引用、canonical hash 和
 非空 change snapshot）。`--status passed` 的 input 必须包含结构化 `cases[]`，
 覆盖每个 linked source signal 并标明该 signal case 已通过；空 `{}` 或无类型
-evidence 会被拒绝。当前实现只是最低限度 evidence gate，完整 typed
+evidence 会被拒绝。Validation comparability 默认使用 observation 的
+`suggest_input_hash`；status、`updated_at`、`lock_version` 或 task label binding
+只改变完整 snapshot 时写入 `task_metadata_drift` / `label_binding_drift` warning，
+不会让 passed validation stale。title/description 变化会写入 `suggest_input_drift`
+并使 case incomparable；旧 observation 缺少 `suggest_input_hash` 时写入
+`legacy_suggest_input_hash_missing`，不能静默 passed。当前实现只是最低限度 evidence gate，完整 typed
 score/rank/coverage/residual policy 由后续任务补齐。`--status passed` 会把 linked
 source signals 转为 `resolved`；`failed` / `partial` 保留历史和 evidence，source
 signals 继续等待后续修正或人工处理。

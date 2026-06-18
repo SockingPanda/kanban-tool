@@ -7,9 +7,8 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use kanban_core::TaskStatus;
-use serde::Deserialize;
-use serde::Serialize;
-use serde_json::json;
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::{Value as JsonValue, json};
 use std::str::FromStr;
 
 use crate::dto::{Envelope, LabelDto, TaskDto};
@@ -122,6 +121,52 @@ fn default_label_suggestion_max_selected_labels() -> usize {
 
 fn default_label_suggestion_min_score() -> f32 {
     kanban_sqlite::LabelSuggestionOptions::default().min_score
+}
+
+#[derive(Debug, Default)]
+enum JsonBodyField {
+    #[default]
+    Missing,
+    Present(JsonValue),
+}
+
+impl JsonBodyField {
+    fn is_present(&self) -> bool {
+        matches!(self, JsonBodyField::Present(_))
+    }
+
+    fn into_value(self) -> Option<JsonValue> {
+        match self {
+            JsonBodyField::Missing => None,
+            JsonBodyField::Present(value) => Some(value),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for JsonBodyField {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(JsonBodyField::Present(JsonValue::deserialize(
+            deserializer,
+        )?))
+    }
+}
+
+#[derive(Clone, Copy)]
+enum JsonBodyShape {
+    Array,
+    Object,
+}
+
+impl JsonBodyShape {
+    fn name(self) -> &'static str {
+        match self {
+            JsonBodyShape::Array => "array",
+            JsonBodyShape::Object => "object",
+        }
+    }
 }
 
 fn default_label_atom_query_limit() -> usize {
@@ -237,11 +282,15 @@ pub(crate) struct LabelOntologyCandidateAtomBody {
 pub(crate) struct LabelOntologySignalBody {
     kind: kanban_sqlite::LabelOntologySignalKind,
     target_label_ref: Option<String>,
-    related_labels_json: String,
+    #[serde(default)]
+    related_labels: JsonBodyField,
+    related_labels_json: Option<String>,
     proposed_action: kanban_sqlite::LabelOntologyProposedAction,
     candidate_atom: Option<LabelOntologyCandidateAtomBody>,
     proposed_label_name: Option<String>,
-    proposal_json: String,
+    #[serde(default)]
+    proposal: JsonBodyField,
+    proposal_json: Option<String>,
     agent_selected: bool,
     suggest_state: Option<kanban_sqlite::LabelOntologySuggestState>,
     suggest_score: Option<f64>,
@@ -256,15 +305,23 @@ pub(crate) struct LabelOntologySignalBody {
 #[serde(deny_unknown_fields)]
 pub(crate) struct LabelOntologyObservationBody {
     actor: LabelOntologyActorBody,
-    agent_candidates_json: String,
-    suggestion_snapshot_json: String,
-    final_decision_json: String,
+    #[serde(default)]
+    agent_candidates: JsonBodyField,
+    agent_candidates_json: Option<String>,
+    #[serde(default)]
+    suggestion_snapshot: JsonBodyField,
+    suggestion_snapshot_json: Option<String>,
+    #[serde(default)]
+    final_decision: JsonBodyField,
+    final_decision_json: Option<String>,
     suggest_coverage: Option<f64>,
     suggest_coverage_cosine: Option<f64>,
     suggest_residual_norm: Option<f64>,
-    suggest_needs_new_label: bool,
-    suggest_degraded: bool,
-    diagnostics_json: String,
+    suggest_needs_new_label: Option<bool>,
+    suggest_degraded: Option<bool>,
+    #[serde(default)]
+    diagnostics: JsonBodyField,
+    diagnostics_json: Option<String>,
     capture_fingerprint: Option<String>,
     signals: Vec<LabelOntologySignalBody>,
 }
@@ -285,8 +342,12 @@ pub(crate) struct LabelOntologyActionBody {
     result_proposal_id: Option<String>,
     canonical_before_hash: Option<String>,
     canonical_after_hash: Option<String>,
+    #[serde(default)]
+    change: JsonBodyField,
     change_json: Option<String>,
     validation_status: Option<kanban_sqlite::LabelOntologyValidationStatus>,
+    #[serde(default)]
+    validation: JsonBodyField,
     validation_json: Option<String>,
 }
 
@@ -310,7 +371,9 @@ pub(crate) struct LabelOntologyValidationBody {
     signal_ids: Vec<String>,
     reason: String,
     validation_status: kanban_sqlite::LabelOntologyValidationStatus,
-    validation_json: String,
+    #[serde(default)]
+    validation: JsonBodyField,
+    validation_json: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -843,7 +906,7 @@ pub(crate) async fn record_label_ontology_observation(
         state.db_path(),
         &task.board_slug,
         &task.id,
-        label_ontology_observation_input(body),
+        label_ontology_observation_input(body)?,
     )?;
     Ok((
         StatusCode::CREATED,
@@ -933,7 +996,7 @@ pub(crate) async fn create_label_ontology_action(
     let action = kanban_sqlite::create_label_ontology_action(
         state.db_path(),
         &board,
-        label_ontology_action_input(body),
+        label_ontology_action_input(body)?,
     )?;
     Ok((
         StatusCode::CREATED,
@@ -985,7 +1048,7 @@ pub(crate) async fn validate_label_ontology_action(
     let action = kanban_sqlite::validate_label_ontology_action(
         state.db_path(),
         &board,
-        label_ontology_validation_input(body),
+        label_ontology_validation_input(body)?,
     )?;
     Ok((
         StatusCode::CREATED,
@@ -1068,38 +1131,110 @@ fn optional_decision_body(
 
 fn label_ontology_observation_input(
     body: LabelOntologyObservationBody,
-) -> kanban_sqlite::LabelOntologyRecordInput {
-    kanban_sqlite::LabelOntologyRecordInput {
+) -> Result<kanban_sqlite::LabelOntologyRecordInput, ApiError> {
+    let (agent_candidates_json, _) = coalesce_json_body_field(
+        "agent_candidates",
+        body.agent_candidates,
+        "agent_candidates_json",
+        body.agent_candidates_json,
+        JsonBodyShape::Array,
+        empty_json_array(),
+    )?;
+    let (suggestion_snapshot_json, suggestion_snapshot) = coalesce_json_body_field(
+        "suggestion_snapshot",
+        body.suggestion_snapshot,
+        "suggestion_snapshot_json",
+        body.suggestion_snapshot_json,
+        JsonBodyShape::Object,
+        empty_json_object(),
+    )?;
+    let (final_decision_json, _) = coalesce_json_body_field(
+        "final_decision",
+        body.final_decision,
+        "final_decision_json",
+        body.final_decision_json,
+        JsonBodyShape::Object,
+        empty_json_object(),
+    )?;
+    let diagnostics_json = derive_diagnostics_json(
+        body.diagnostics,
+        body.diagnostics_json,
+        &suggestion_snapshot,
+    )?;
+    Ok(kanban_sqlite::LabelOntologyRecordInput {
         actor: kanban_sqlite::LabelOntologyActor {
             name: body.actor.name,
             actor_type: body.actor.actor_type,
             agent_type: body.actor.agent_type,
         },
-        agent_candidates_json: body.agent_candidates_json,
-        suggestion_snapshot_json: body.suggestion_snapshot_json,
-        final_decision_json: body.final_decision_json,
-        suggest_coverage: body.suggest_coverage,
-        suggest_coverage_cosine: body.suggest_coverage_cosine,
-        suggest_residual_norm: body.suggest_residual_norm,
-        suggest_needs_new_label: body.suggest_needs_new_label,
-        suggest_degraded: body.suggest_degraded,
-        diagnostics_json: body.diagnostics_json,
+        agent_candidates_json,
+        suggestion_snapshot_json,
+        final_decision_json,
+        suggest_coverage: derive_snapshot_f64(
+            body.suggest_coverage,
+            &suggestion_snapshot,
+            "coverage",
+            "suggest_coverage",
+        )?,
+        suggest_coverage_cosine: derive_snapshot_f64(
+            body.suggest_coverage_cosine,
+            &suggestion_snapshot,
+            "coverage_cosine",
+            "suggest_coverage_cosine",
+        )?,
+        suggest_residual_norm: derive_snapshot_f64(
+            body.suggest_residual_norm,
+            &suggestion_snapshot,
+            "residual_norm",
+            "suggest_residual_norm",
+        )?,
+        suggest_needs_new_label: derive_snapshot_bool(
+            body.suggest_needs_new_label,
+            &suggestion_snapshot,
+            "needs_new_label",
+            "suggest_needs_new_label",
+        )?
+        .unwrap_or(false),
+        suggest_degraded: derive_snapshot_bool(
+            body.suggest_degraded,
+            &suggestion_snapshot,
+            "degraded",
+            "suggest_degraded",
+        )?
+        .unwrap_or(false),
+        diagnostics_json,
         capture_fingerprint: body.capture_fingerprint,
         signals: body
             .signals
             .into_iter()
             .map(label_ontology_signal_input)
-            .collect(),
-    }
+            .collect::<Result<Vec<_>, _>>()?,
+    })
 }
 
 fn label_ontology_signal_input(
     body: LabelOntologySignalBody,
-) -> kanban_sqlite::LabelOntologySignalInput {
-    kanban_sqlite::LabelOntologySignalInput {
+) -> Result<kanban_sqlite::LabelOntologySignalInput, ApiError> {
+    let (related_labels_json, _) = coalesce_json_body_field(
+        "related_labels",
+        body.related_labels,
+        "related_labels_json",
+        body.related_labels_json,
+        JsonBodyShape::Array,
+        empty_json_array(),
+    )?;
+    let (proposal_json, _) = coalesce_json_body_field(
+        "proposal",
+        body.proposal,
+        "proposal_json",
+        body.proposal_json,
+        JsonBodyShape::Object,
+        empty_json_object(),
+    )?;
+    Ok(kanban_sqlite::LabelOntologySignalInput {
         kind: body.kind,
         target_label_ref: body.target_label_ref,
-        related_labels_json: body.related_labels_json,
+        related_labels_json,
         proposed_action: body.proposed_action,
         candidate_atom: body.candidate_atom.map(|candidate| {
             kanban_sqlite::LabelOntologyCandidateAtomInput {
@@ -1109,7 +1244,7 @@ fn label_ontology_signal_input(
             }
         }),
         proposed_label_name: body.proposed_label_name,
-        proposal_json: body.proposal_json,
+        proposal_json,
         agent_selected: body.agent_selected,
         suggest_state: body.suggest_state,
         suggest_score: body.suggest_score,
@@ -1118,7 +1253,7 @@ fn label_ontology_signal_input(
         rationale: body.rationale,
         confidence: body.confidence,
         signal_key: body.signal_key,
-    }
+    })
 }
 
 fn label_ontology_actor_input(body: LabelOntologyActorBody) -> kanban_sqlite::LabelOntologyActor {
@@ -1131,8 +1266,8 @@ fn label_ontology_actor_input(body: LabelOntologyActorBody) -> kanban_sqlite::La
 
 fn label_ontology_action_input(
     body: LabelOntologyActionBody,
-) -> kanban_sqlite::LabelOntologyActionInput {
-    kanban_sqlite::LabelOntologyActionInput {
+) -> Result<kanban_sqlite::LabelOntologyActionInput, ApiError> {
+    Ok(kanban_sqlite::LabelOntologyActionInput {
         actor: label_ontology_actor_input(body.actor),
         action_type: body.action_type,
         signal_ids: body.signal_ids,
@@ -1146,10 +1281,22 @@ fn label_ontology_action_input(
         result_proposal_id: body.result_proposal_id,
         canonical_before_hash: body.canonical_before_hash,
         canonical_after_hash: body.canonical_after_hash,
-        change_json: body.change_json,
+        change_json: coalesce_optional_json_body_field(
+            "change",
+            body.change,
+            "change_json",
+            body.change_json,
+            JsonBodyShape::Object,
+        )?,
         validation_status: body.validation_status,
-        validation_json: body.validation_json,
-    }
+        validation_json: coalesce_optional_json_body_field(
+            "validation",
+            body.validation,
+            "validation_json",
+            body.validation_json,
+            JsonBodyShape::Object,
+        )?,
+    })
 }
 
 fn label_ontology_atom_apply_input(
@@ -1167,15 +1314,217 @@ fn label_ontology_atom_apply_input(
 
 fn label_ontology_validation_input(
     body: LabelOntologyValidationBody,
-) -> kanban_sqlite::LabelOntologyValidationInput {
-    kanban_sqlite::LabelOntologyValidationInput {
+) -> Result<kanban_sqlite::LabelOntologyValidationInput, ApiError> {
+    Ok(kanban_sqlite::LabelOntologyValidationInput {
         actor: label_ontology_actor_input(body.actor),
         parent_action_id: body.parent_action_id,
         signal_ids: body.signal_ids,
         reason: body.reason,
         validation_status: body.validation_status,
-        validation_json: body.validation_json,
+        validation_json: coalesce_required_json_body_field(
+            "validation",
+            body.validation,
+            "validation_json",
+            body.validation_json,
+            JsonBodyShape::Object,
+        )?,
+    })
+}
+
+fn coalesce_json_body_field(
+    new_name: &str,
+    new_value: JsonBodyField,
+    legacy_name: &str,
+    legacy_value: Option<String>,
+    shape: JsonBodyShape,
+    default_value: JsonValue,
+) -> Result<(String, JsonValue), ApiError> {
+    let value =
+        coalesce_optional_json_body_value(new_name, new_value, legacy_name, legacy_value, shape)?
+            .unwrap_or(default_value);
+    let text = json_body_to_string(&value)?;
+    Ok((text, value))
+}
+
+fn coalesce_optional_json_body_field(
+    new_name: &str,
+    new_value: JsonBodyField,
+    legacy_name: &str,
+    legacy_value: Option<String>,
+    shape: JsonBodyShape,
+) -> Result<Option<String>, ApiError> {
+    coalesce_optional_json_body_value(new_name, new_value, legacy_name, legacy_value, shape)?
+        .map(|value| json_body_to_string(&value))
+        .transpose()
+}
+
+fn coalesce_required_json_body_field(
+    new_name: &str,
+    new_value: JsonBodyField,
+    legacy_name: &str,
+    legacy_value: Option<String>,
+    shape: JsonBodyShape,
+) -> Result<String, ApiError> {
+    coalesce_optional_json_body_field(new_name, new_value, legacy_name, legacy_value, shape)?
+        .ok_or_else(|| invalid_input(format!("{new_name} is required")))
+}
+
+fn coalesce_optional_json_body_value(
+    new_name: &str,
+    new_value: JsonBodyField,
+    legacy_name: &str,
+    legacy_value: Option<String>,
+    shape: JsonBodyShape,
+) -> Result<Option<JsonValue>, ApiError> {
+    if new_value.is_present() && legacy_value.is_some() {
+        return Err(invalid_input(format!(
+            "{new_name} and {legacy_name} cannot both be supplied"
+        )));
     }
+    if let Some(value) = new_value.into_value() {
+        return ensure_json_body_shape(value, new_name, shape).map(Some);
+    }
+    if let Some(raw) = legacy_value {
+        let value = serde_json::from_str::<JsonValue>(&raw).map_err(|error| {
+            invalid_input(format!("{legacy_name} must contain valid JSON: {error}"))
+        })?;
+        return ensure_json_body_shape(value, legacy_name, shape).map(Some);
+    }
+    Ok(None)
+}
+
+fn ensure_json_body_shape(
+    value: JsonValue,
+    field_name: &str,
+    shape: JsonBodyShape,
+) -> Result<JsonValue, ApiError> {
+    let ok = match shape {
+        JsonBodyShape::Array => value.is_array(),
+        JsonBodyShape::Object => value.is_object(),
+    };
+    if ok {
+        Ok(value)
+    } else {
+        Err(invalid_input(format!(
+            "{field_name} must be a JSON {}",
+            shape.name()
+        )))
+    }
+}
+
+fn derive_snapshot_f64(
+    supplied: Option<f64>,
+    snapshot: &JsonValue,
+    snapshot_field: &str,
+    supplied_field: &str,
+) -> Result<Option<f64>, ApiError> {
+    let derived = optional_snapshot_f64(snapshot, snapshot_field)?;
+    if let (Some(supplied), Some(derived)) = (supplied, derived)
+        && (supplied - derived).abs() > f64::EPSILON
+    {
+        return Err(invalid_input(format!(
+            "{supplied_field} conflicts with suggestion_snapshot.{snapshot_field}"
+        )));
+    }
+    Ok(supplied.or(derived))
+}
+
+fn derive_snapshot_bool(
+    supplied: Option<bool>,
+    snapshot: &JsonValue,
+    snapshot_field: &str,
+    supplied_field: &str,
+) -> Result<Option<bool>, ApiError> {
+    let derived = optional_snapshot_bool(snapshot, snapshot_field)?;
+    if let (Some(supplied), Some(derived)) = (supplied, derived)
+        && supplied != derived
+    {
+        return Err(invalid_input(format!(
+            "{supplied_field} conflicts with suggestion_snapshot.{snapshot_field}"
+        )));
+    }
+    Ok(supplied.or(derived))
+}
+
+fn derive_diagnostics_json(
+    diagnostics: JsonBodyField,
+    diagnostics_json: Option<String>,
+    snapshot: &JsonValue,
+) -> Result<String, ApiError> {
+    let supplied = coalesce_optional_json_body_value(
+        "diagnostics",
+        diagnostics,
+        "diagnostics_json",
+        diagnostics_json,
+        JsonBodyShape::Array,
+    )?;
+    let derived = optional_snapshot_array(snapshot, "diagnostics")?;
+    if let (Some(supplied), Some(derived)) = (&supplied, &derived)
+        && supplied != derived
+    {
+        return Err(invalid_input(
+            "diagnostics conflicts with suggestion_snapshot.diagnostics",
+        ));
+    }
+    let value = supplied.or(derived).unwrap_or_else(empty_json_array);
+    json_body_to_string(&value)
+}
+
+fn optional_snapshot_f64(snapshot: &JsonValue, field: &str) -> Result<Option<f64>, ApiError> {
+    let Some(value) = snapshot.get(field) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    value
+        .as_f64()
+        .map(Some)
+        .ok_or_else(|| invalid_input(format!("suggestion_snapshot.{field} must be a JSON number")))
+}
+
+fn optional_snapshot_bool(snapshot: &JsonValue, field: &str) -> Result<Option<bool>, ApiError> {
+    let Some(value) = snapshot.get(field) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    value.as_bool().map(Some).ok_or_else(|| {
+        invalid_input(format!(
+            "suggestion_snapshot.{field} must be a JSON boolean"
+        ))
+    })
+}
+
+fn optional_snapshot_array(
+    snapshot: &JsonValue,
+    field: &str,
+) -> Result<Option<JsonValue>, ApiError> {
+    let Some(value) = snapshot.get(field) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    ensure_json_body_shape(
+        value.clone(),
+        &format!("suggestion_snapshot.{field}"),
+        JsonBodyShape::Array,
+    )
+    .map(Some)
+}
+
+fn json_body_to_string(value: &JsonValue) -> Result<String, ApiError> {
+    serde_json::to_string(value).map_err(|error| invalid_input(error.to_string()))
+}
+
+fn empty_json_array() -> JsonValue {
+    JsonValue::Array(Vec::new())
+}
+
+fn empty_json_object() -> JsonValue {
+    JsonValue::Object(serde_json::Map::new())
 }
 
 fn parse_label_ontology_status_filters(

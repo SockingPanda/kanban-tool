@@ -505,7 +505,7 @@ kanban label atom-index status [--vector-config <toml>] [--json]
 kanban label atom-index rebuild --vector-config <toml> [--json]
 kanban label atom-index query <text> [--polarity positive|negative] [--limit 24] --vector-config <toml> [--json]
 kanban label suggest <task_ref> [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
-kanban label propose <task_ref> [--proposal-json <path>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
+kanban label propose <task_ref> [--proposal-json <path>] [--source-signal <signal_id>]... [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]
 kanban label proposals show <proposal_id> [--json]
 kanban label proposals accept <proposal_id> [--reason <text>] [--source-signal <signal_id>]... [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--json]
@@ -712,6 +712,17 @@ LanceDB distance 推导；候选必须超过现有 label top1，且超过幅度�
 attempt 返回 `degraded=true`、`proposal=null`，不新增 proposal row，也不创建
 canonical label、`label_semantics`、`label_atoms` 或 `task_labels`；diagnostics 包含
 `label_proposal_residual_validation_unavailable` 和具体原因。
+传入 `--source-signal <los_...>` 时，proposal 创建成功后会在同一 transaction 写入
+`create_label_proposal` ontology action，并通过 action-signal links 记录该 proposal
+由哪些 confirmed vocabulary-gap signals 支持；proposal row 与 provenance action
+要么同时写入，要么一起回滚。Source signals 默认必须是同一 board 上 `confirmed`
+的 `vocabulary_gap` + `bootstrap_label` signals，且 normalized `proposed_label_name`
+必须等于 proposal name。`--actor-type` / `--agent-type` 控制该
+`create_label_proposal` action 的 actor provenance；actor name 仍来自全局 `--actor`。
+确实需要把 confirmed same-board source signal retarget 到该 proposal 时，必须同时传
+`--allow-retarget` 和非空 `--retarget-reason <text>`；reason 和 source signal 原始
+target/proposed label 会写入 `change_json.retarget_override`。Override 不放宽
+board/status 要求。
 
 `label proposals accept` 只接受 `proposed` proposal。accept 会创建 canonical
 label、`label_semantics` 与 `label_atoms`，并标脏 label atom index；它不会自动
@@ -723,6 +734,9 @@ board 上的 `confirmed` signals。`--actor-type` / `--agent-type` 控制该
 默认是 `user`。`--actor-type agent` 必须提供非空 `--agent-type`；`user` 不能提供
 `--agent-type`。Source signals 默认还必须是 `vocabulary_gap` +
 `bootstrap_label`，且 normalized `proposed_label_name` 必须等于 proposal name。
+如果 proposal 已有 `create_label_proposal` action，accept 产生的 `bootstrap_label`
+action 会把 `parent_action_id` 指向该 creation action，形成 proposal creation ->
+bootstrap acceptance 链路。
 确实需要把 confirmed same-board source signal retarget 到该 proposal 时，必须同时传
 `--allow-retarget` 和非空 `--retarget-reason <text>`；该 reason、source signal 原始
 target/proposed label 和最终 proposal/result label 会写入 bootstrap action

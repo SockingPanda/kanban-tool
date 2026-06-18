@@ -738,6 +738,7 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
     let after_hash = semantics_hash(&label, &after)?;
     let reason = normalize_optional_text(reason)?
         .unwrap_or_else(|| "accepted label proposal from ontology signals".to_owned());
+    let parent_action_id = proposal_creation_action_id(conn, &proposal.board_id, &proposal.id)?;
     let change_json = serde_json::to_string(&json!({
         "proposal": {
             "id": &proposal.id,
@@ -759,7 +760,7 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
             action_type: LabelOntologyActionType::BootstrapLabel,
             reason,
             actor,
-            parent_action_id: None,
+            parent_action_id,
             target_label_id: None,
             result_label_id: Some(result_label_id.to_owned()),
             result_atom_id: None,
@@ -777,9 +778,91 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
     Ok(Some(action_id))
 }
 
+pub(crate) fn record_label_ontology_proposal_create_in_tx(
+    conn: &Connection,
+    proposal: &LabelSemanticProposalRecord,
+    options: LabelOntologyProposalCreateOptions,
+    now: i64,
+) -> Result<Option<String>> {
+    let LabelOntologyProposalCreateOptions {
+        actor,
+        source_signal_ids,
+        allow_retarget,
+        retarget_reason,
+    } = options;
+    if source_signal_ids.is_empty() {
+        if allow_retarget || retarget_reason.as_deref().is_some() {
+            return Err(KanbanError::InvalidInput(
+                "proposal create retarget options require source_signal_ids".into(),
+            ));
+        }
+        return Ok(None);
+    }
+    let actor = normalize_actor(actor)?;
+    let signal_ids = normalize_signal_ids(source_signal_ids)?;
+    let signals = signal_ids
+        .iter()
+        .map(|signal_id| signal_by_id(conn, signal_id))
+        .collect::<Result<Vec<_>>>()?;
+    ensure_signals_on_board_and_status(
+        &signals,
+        &proposal.board_id,
+        &[LabelOntologySignalStatus::Confirmed],
+    )?;
+    let retarget_reason =
+        normalize_retarget_reason(allow_retarget, retarget_reason, "proposal create")?;
+    let retarget_override =
+        proposal_create_retarget_override(&signals, proposal, retarget_reason.as_deref())?;
+    let change_json = serde_json::to_string(&json!({
+        "proposal": {
+            "id": &proposal.id,
+            "task_id": &proposal.task_id,
+            "status": &proposal.status,
+            "name": &proposal.name,
+            "description": &proposal.description,
+            "applies_when": &proposal.applies_when,
+            "excludes_when": &proposal.excludes_when,
+            "positive_examples": &proposal.positive_examples,
+            "negative_examples": &proposal.negative_examples,
+        },
+        "retarget_override": retarget_override,
+    }))
+    .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
+    let action_id = insert_ontology_action(
+        conn,
+        &proposal.board_id,
+        InsertOntologyAction {
+            action_type: LabelOntologyActionType::CreateLabelProposal,
+            reason: "created label proposal from ontology signals".to_owned(),
+            actor,
+            parent_action_id: None,
+            target_label_id: None,
+            result_label_id: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: Some(proposal.id.clone()),
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json,
+            validation_status: LabelOntologyValidationStatus::NotRequired,
+            validation_json: "{}".to_owned(),
+        },
+        now,
+    )?;
+    link_action_signals(conn, &proposal.board_id, &action_id, &signal_ids, now)?;
+    Ok(Some(action_id))
+}
+
 pub(crate) struct LabelOntologyProposalBootstrapOptions {
     pub actor: LabelOntologyActor,
     pub reason: Option<String>,
+    pub source_signal_ids: Vec<String>,
+    pub allow_retarget: bool,
+    pub retarget_reason: Option<String>,
+}
+
+pub(crate) struct LabelOntologyProposalCreateOptions {
+    pub actor: LabelOntologyActor,
     pub source_signal_ids: Vec<String>,
     pub allow_retarget: bool,
     pub retarget_reason: Option<String>,
@@ -2548,6 +2631,21 @@ fn action_by_id_with_links(
     Ok(action)
 }
 
+fn proposal_creation_action_id(
+    conn: &Connection,
+    board_id: &str,
+    proposal_id: &str,
+) -> Result<Option<String>> {
+    optional(
+        conn,
+        "SELECT id FROM label_ontology_actions \
+         WHERE board_id=?1 AND result_proposal_id=?2 AND action_type='create_label_proposal' \
+         ORDER BY created_at ASC, id ASC LIMIT 1",
+        params![board_id, proposal_id],
+        |row| row.get(0),
+    )
+}
+
 fn ensure_action_on_board(conn: &Connection, board_id: &str, action_id: &str) -> Result<()> {
     let action_board_id: String = required_row(
         conn,
@@ -2771,6 +2869,46 @@ fn proposal_bootstrap_retarget_override(
             "result_label": {
                 "id": result_label_id,
                 "name": &proposal.name,
+            },
+        }));
+    }
+    Ok(JsonValue::Null)
+}
+
+fn proposal_create_retarget_override(
+    signals: &[LabelOntologySignalRecord],
+    proposal: &LabelSemanticProposalRecord,
+    retarget_reason: Option<&str>,
+) -> Result<JsonValue> {
+    let proposal_name_normalized = normalize_label_name(&proposal.name)?;
+    let mismatched = signals
+        .iter()
+        .filter(|signal| {
+            signal.kind != LabelOntologySignalKind::VocabularyGap
+                || signal.proposed_action != LabelOntologyProposedAction::BootstrapLabel
+                || signal.proposed_label_name_normalized.as_deref()
+                    != Some(proposal_name_normalized.as_str())
+        })
+        .collect::<Vec<_>>();
+    if retarget_reason.is_none() && !mismatched.is_empty() {
+        let ids = mismatched
+            .iter()
+            .map(|signal| signal.id.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        return Err(KanbanError::InvalidInput(format!(
+            "source signals do not match proposal proposed label {}: {ids}",
+            proposal.name
+        )));
+    }
+    if let Some(reason) = retarget_reason {
+        return Ok(json!({
+            "reason": reason,
+            "signals": signals.iter().map(source_signal_retarget_json).collect::<Vec<_>>(),
+            "proposal": {
+                "id": &proposal.id,
+                "name": &proposal.name,
+                "name_normalized": proposal_name_normalized,
             },
         }));
     }

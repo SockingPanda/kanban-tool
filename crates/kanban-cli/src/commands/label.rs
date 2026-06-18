@@ -8,17 +8,17 @@ use kanban_sqlite::{
     LabelOntologyActionType, LabelOntologyActor, LabelOntologyAtomApplyInput,
     LabelOntologyRetargetOptions, LabelOntologyReviewGroupBy, LabelOntologyReviewOptions,
     LabelOntologyValidationInput, LabelOntologyValidationStatus, LabelProposalCandidate,
-    LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalStatus,
-    LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult,
-    MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
+    LabelProposalCreateOptions, LabelProposalDecisionOptions, LabelProposalListOptions,
+    LabelProposalStatus, LabelSemanticProposalRecord, LabelSuggestionOptions,
+    LabelSuggestionResult, MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
     accept_label_proposal_with_options, add_task_labels, apply_label_ontology_atom_with_options,
     bootstrap_task_label, create_label, create_label_ontology_action, delete_label,
     delete_label_semantics, explain_label_atom, get_label_ontology_signal, get_label_proposal,
     get_label_semantics, get_task, label_atom_index_status, list_label_atoms,
     list_label_ontology_signals, list_label_proposals, list_label_semantics, list_labels,
-    propose_task_label_with, record_label_ontology_observation, reject_label_proposal,
-    remove_task_label, review_label_ontology, suggest_task_labels, upsert_label_semantics,
-    validate_label_ontology_action,
+    propose_task_label_with_create_options, record_label_ontology_observation,
+    reject_label_proposal, remove_task_label, review_label_ontology, suggest_task_labels,
+    upsert_label_semantics, validate_label_ontology_action,
 };
 #[cfg(feature = "vector-lancedb")]
 use kanban_sqlite::{
@@ -217,6 +217,16 @@ pub(crate) fn handle_label(
                 max_selected_labels: args.max_selected_labels,
                 min_score: args.min_score,
             };
+            let create_options = LabelProposalCreateOptions {
+                source_signal_ids: args.source_signal_ids,
+                ontology_actor: Some(label_ontology_cli_actor(actor, &args.ontology_actor)),
+                allow_retarget: args.allow_retarget,
+                retarget_reason: args.retarget_reason,
+            };
+            let propose_options = kanban_sqlite::LabelProposalProposeOptions {
+                suggestion: options,
+                create: create_options,
+            };
             let attempt = if let Some(path) = args.proposal_json {
                 let candidate = read_proposal_candidate(&path)?;
                 let provider = ManualLabelProposalProvider::new(candidate);
@@ -226,7 +236,7 @@ pub(crate) fn handle_label(
                     actor,
                     &args.task_ref,
                     &provider,
-                    options,
+                    propose_options,
                     args.vector_config.as_deref(),
                 )?
             } else {
@@ -236,7 +246,7 @@ pub(crate) fn handle_label(
                     actor,
                     &args.task_ref,
                     &kanban_sqlite::DisabledLabelProposalProvider,
-                    options,
+                    propose_options,
                     args.vector_config.as_deref(),
                 )?
             };
@@ -1180,7 +1190,7 @@ fn propose_with_optional_vector_config(
     actor: &str,
     task_ref: &str,
     provider: &dyn kanban_sqlite::LabelProposalProvider,
-    options: LabelSuggestionOptions,
+    propose_options: kanban_sqlite::LabelProposalProposeOptions,
     vector_config_path: Option<&std::path::Path>,
 ) -> Result<kanban_sqlite::LabelProposalAttempt> {
     #[cfg(not(feature = "vector-lancedb"))]
@@ -1188,13 +1198,23 @@ fn propose_with_optional_vector_config(
     #[cfg(feature = "vector-lancedb")]
     {
         if let Some(store) = configured_lancedb_store(db_path, vector_config_path)? {
-            return propose_task_label_with_store(
-                db_path, board, actor, task_ref, provider, &store, options,
+            return kanban_sqlite::propose_task_label_with_store_and_create_options(
+                db_path,
+                board,
+                actor,
+                task_ref,
+                provider,
+                &store,
+                propose_options,
             )
             .map_err(Into::into);
         }
     }
-    propose_task_label_with(db_path, board, actor, task_ref, provider, options).map_err(Into::into)
+    let kanban_sqlite::LabelProposalProposeOptions { suggestion, create } = propose_options;
+    propose_task_label_with_create_options(
+        db_path, board, actor, task_ref, provider, suggestion, create,
+    )
+    .map_err(Into::into)
 }
 
 #[cfg(feature = "vector-lancedb")]

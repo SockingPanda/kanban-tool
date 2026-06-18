@@ -249,6 +249,12 @@ impl AddTaskLabelBody {
 pub(crate) struct LabelProposalBody {
     proposal: Option<kanban_sqlite::LabelProposalCandidate>,
     actor: Option<String>,
+    #[serde(default)]
+    source_signal_ids: Vec<String>,
+    ontology_actor: Option<LabelOntologyActorBody>,
+    #[serde(default)]
+    allow_retarget: bool,
+    retarget_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -815,10 +821,20 @@ pub(crate) async fn propose_task_label(
         Err(JsonRejection::MissingJsonContentType(_)) => LabelProposalBody {
             proposal: None,
             actor: None,
+            source_signal_ids: Vec::new(),
+            ontology_actor: None,
+            allow_retarget: false,
+            retarget_reason: None,
         },
         Err(error) => return Err(extractor_error(error)),
     };
     let actor = actor(body.actor.as_deref(), &headers, &state);
+    let create_options = kanban_sqlite::LabelProposalCreateOptions {
+        source_signal_ids: body.source_signal_ids,
+        ontology_actor: body.ontology_actor.map(label_ontology_actor_input),
+        allow_retarget: body.allow_retarget,
+        retarget_reason: body.retarget_reason,
+    };
     let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
     let label_state = state.clone();
     let label_board = task.board_slug;
@@ -833,6 +849,7 @@ pub(crate) async fn propose_task_label(
             &label_task_id,
             label_candidate,
             options,
+            create_options,
         )
     })
     .await
@@ -1625,6 +1642,7 @@ fn propose_task_label_for_state(
     task_id: &str,
     candidate: Option<kanban_sqlite::LabelProposalCandidate>,
     options: kanban_sqlite::LabelSuggestionOptions,
+    create_options: kanban_sqlite::LabelProposalCreateOptions,
 ) -> Result<kanban_sqlite::LabelProposalAttempt, ApiError> {
     #[cfg(feature = "vector-lancedb")]
     {
@@ -1632,24 +1650,30 @@ fn propose_task_label_for_state(
             return match candidate {
                 Some(candidate) => {
                     let provider = kanban_sqlite::ManualLabelProposalProvider::new(candidate);
-                    kanban_sqlite::propose_task_label_with_store(
+                    kanban_sqlite::propose_task_label_with_store_and_create_options(
                         state.db_path(),
                         board,
                         actor,
                         task_id,
                         &provider,
                         &store,
-                        options,
+                        kanban_sqlite::LabelProposalProposeOptions {
+                            suggestion: options,
+                            create: create_options,
+                        },
                     )
                 }
-                None => kanban_sqlite::propose_task_label_with_store(
+                None => kanban_sqlite::propose_task_label_with_store_and_create_options(
                     state.db_path(),
                     board,
                     actor,
                     task_id,
                     &kanban_sqlite::DisabledLabelProposalProvider,
                     &store,
-                    options,
+                    kanban_sqlite::LabelProposalProposeOptions {
+                        suggestion: options,
+                        create: create_options,
+                    },
                 ),
             }
             .map_err(ApiError::from);
@@ -1658,22 +1682,24 @@ fn propose_task_label_for_state(
     match candidate {
         Some(candidate) => {
             let provider = kanban_sqlite::ManualLabelProposalProvider::new(candidate);
-            kanban_sqlite::propose_task_label_with(
+            kanban_sqlite::propose_task_label_with_create_options(
                 state.db_path(),
                 board,
                 actor,
                 task_id,
                 &provider,
                 options,
+                create_options,
             )
         }
-        None => kanban_sqlite::propose_task_label_with(
+        None => kanban_sqlite::propose_task_label_with_create_options(
             state.db_path(),
             board,
             actor,
             task_id,
             &kanban_sqlite::DisabledLabelProposalProvider,
             options,
+            create_options,
         ),
     }
     .map_err(ApiError::from)

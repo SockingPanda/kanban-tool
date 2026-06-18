@@ -1489,7 +1489,15 @@ If background sync is disabled, delayed, or fails, search keeps returning curren
 POST /api/v1/maintenance/doctor
 ```
 
-Response includes SQLite integrity, migration/user version, expired running tasks, orphan run checks, dependency cycle count, archived dependency edge count, missing and suspicious run log counts, executable status invariant counts for dependency/spec/schedule violations, and Knowledge Substrate diagnostics. Archived parent -> active child edges are allowed historical dependency edges; archived child edges from active parents are counted.
+Response includes SQLite integrity, migration/user version, expired running tasks, orphan run checks, dependency cycle count, archived dependency edge count, missing and suspicious run log counts, executable status invariant counts for dependency/spec/schedule violations, label ontology ledger diagnostics, and Knowledge Substrate diagnostics. Archived parent -> active child edges are allowed historical dependency edges; archived child edges from active parents are counted.
+
+Ontology ledger diagnostics are read-only:
+
+- `ontology_ledger_errors` / `ontology_ledger_warnings` summarize hard errors and warnings.
+- `ontology_ledger_issues[]` reports structured findings with `severity`, `code`, `message`, and `record_ids`.
+- v12+ databases require `label_ontology_observations`, `label_ontology_signals`, `label_ontology_actions`, and `label_ontology_action_signals`.
+- Hard errors include cross-board ontology links, orphan action-signal links, missing parent/supersede references, label/proposal/task board mismatches, signal supersede cycles, and action parent cycles. Nonzero errors make `ok=false`.
+- Warnings are reserved for rebuildable or historically explainable soft references, such as an action `result_atom_id` whose current `label_atoms` row was rebuilt away.
 
 Derived-layer diagnostics are read-only:
 

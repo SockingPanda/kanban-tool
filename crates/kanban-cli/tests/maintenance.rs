@@ -34,8 +34,8 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     let doctor = kanban(&temp.path, &["--json", "doctor"])?.success_json()?;
 
     assert_eq!(doctor["data"]["integrity_check"], "ok");
-    assert_eq!(doctor["data"]["migration_version"], 12);
-    assert_eq!(doctor["data"]["user_version"], 12);
+    assert_eq!(doctor["data"]["migration_version"], 13);
+    assert_eq!(doctor["data"]["user_version"], 13);
     assert_eq!(doctor["data"]["expired_running_tasks"], 1);
     assert_eq!(doctor["data"]["dependency_cycles"], 0);
     assert_eq!(doctor["data"]["archived_dependency_edges"], 0);
@@ -48,6 +48,15 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     assert_eq!(doctor["data"]["outbox_failed"], 0);
     assert_eq!(doctor["data"]["derived_dirty_stores"], 3);
     assert_eq!(doctor["data"]["derived_error_stores"], 0);
+    assert_eq!(doctor["data"]["ontology_ledger_errors"], 0);
+    assert_eq!(doctor["data"]["ontology_ledger_warnings"], 0);
+    assert_eq!(
+        doctor["data"]["ontology_ledger_issues"]
+            .as_array()
+            .context("expected JSON array")?
+            .len(),
+        0
+    );
     assert_eq!(
         doctor["data"]["derived_stores"]
             .as_array()

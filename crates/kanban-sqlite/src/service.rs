@@ -41,9 +41,9 @@ pub use dag::*;
 pub use dependencies::*;
 pub use dispatch::*;
 pub use entities::{
-    DerivedStoreStatusRecord, DoctorDerivedStoreReport, DoctorReport, EntityListOptions,
-    EntityRecord, IndexOutboxRecord, OutboxListOptions, derived_store_statuses, get_entity,
-    list_entities, list_outbox,
+    DerivedStoreStatusRecord, DoctorDerivedStoreReport, DoctorIssue, DoctorReport,
+    EntityListOptions, EntityRecord, IndexOutboxRecord, OutboxListOptions, derived_store_statuses,
+    get_entity, list_entities, list_outbox,
 };
 pub use events::*;
 pub use graph::*;

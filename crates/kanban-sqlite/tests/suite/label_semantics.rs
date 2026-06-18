@@ -23,6 +23,7 @@ fn task_label_suggestions_degrade_when_vector_store_disabled() -> anyhow::Result
     assert!(result.degraded);
     assert!(result.selected_labels.is_empty());
     assert_eq!(result.coverage, 0.0);
+    assert_eq!(result.coverage_cosine, 0.0);
     assert_eq!(result.residual_norm, 1.0);
     assert!(!result.needs_new_label);
     assert!(
@@ -40,7 +41,7 @@ fn label_proposal_migration_and_provider_unavailable_are_non_polluting() -> anyh
     init_database(&temp.path, "tester")?;
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 9);
+    assert_eq!(user_version, 11);
     let has_table: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_semantic_proposals'",
         [],
@@ -194,9 +195,10 @@ fn label_proposal_residual_validation_passes_and_accept_keeps_task_unbound() -> 
         &provider,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 1,
+            output_limit: 1,
             atom_limit: 10,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -338,15 +340,18 @@ fn label_proposal_residual_validation_rejects_when_existing_wins() -> anyhow::Re
         &provider,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 1,
+            output_limit: 1,
             atom_limit: 10,
+            max_selected_labels: 1,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?
     .proposal
     .context("proposal")?;
 
     assert_eq!(proposal.status, LabelProposalStatus::Rejected);
+    assert!(proposal.heuristic_coverage_cosine > 0.8);
     assert_eq!(proposal.top1_existing_label_name.as_deref(), Some("docs"));
     assert!(
         proposal
@@ -422,9 +427,11 @@ fn label_proposal_residual_validation_rejects_when_margin_is_insufficient() -> a
         &provider,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 1,
+            output_limit: 1,
             atom_limit: 10,
+            max_selected_labels: 1,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?
     .proposal
@@ -487,9 +494,10 @@ fn label_proposal_residual_validation_uses_solver_negative_suppression() -> anyh
         &provider,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 1,
+            output_limit: 1,
             atom_limit: 10,
             min_score: 0.99,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?
     .proposal
@@ -546,14 +554,16 @@ fn label_proposal_coverage_sufficient_does_not_call_provider_or_persist_candidat
         &provider,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 3,
+            output_limit: 3,
             atom_limit: 10,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?;
 
     assert!(attempt.proposal.is_none());
     assert_eq!(provider.calls()?, 0);
+    assert!(attempt.heuristic_coverage_cosine > 0.99);
     let proposals =
         list_label_proposals(&temp.path, "default", LabelProposalListOptions::default())?;
     assert!(proposals.is_empty());
@@ -595,7 +605,8 @@ fn label_proposal_coverage_sufficient_preserves_degraded_diagnostics() -> anyhow
         ("Backend API route", vec![1.0, 0.0, 0.0]),
         ("backend", vec![1.0, 0.0, 0.0]),
     ])
-    .with_status_message("test vector store; dirty=true last_error=none; board_dirty=true")
+    .with_status_message("test vector store; status copy changed")
+    .with_status_dirty(true, true)
     .with_atoms(vec![(
         atom_hit(&backend, "positive", "applies_when", "backend", 0.0),
         vec![1.0, 0.0, 0.0],
@@ -610,9 +621,10 @@ fn label_proposal_coverage_sufficient_preserves_degraded_diagnostics() -> anyhow
         &provider,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 3,
+            output_limit: 3,
             atom_limit: 10,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -834,6 +846,10 @@ fn label_proposal_jsonl_export_import_round_trips() -> anyhow::Result<()> {
     let imported = get_label_proposal(&target.path, &proposal.id)?;
     assert_eq!(imported.name, "release");
     assert_eq!(imported.status, LabelProposalStatus::Proposed);
+    assert_eq!(
+        imported.heuristic_coverage_cosine,
+        proposal.heuristic_coverage_cosine
+    );
     Ok(())
 }
 
@@ -892,9 +908,10 @@ fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> an
         &labeled.id,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 5,
+            output_limit: 5,
             atom_limit: 10,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -904,6 +921,7 @@ fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> an
     assert_eq!(result.selected_labels.len(), 1);
     assert_eq!(result.selected_labels[0].label_name, "backend");
     assert!(result.coverage > 0.99);
+    assert!(result.coverage_cosine > 0.99);
     assert!(result.residual_norm < 0.01);
     assert!(!result.needs_new_label);
     Ok(())
@@ -934,6 +952,7 @@ fn task_label_suggestions_signal_new_label_when_enabled_index_has_no_selected_la
 
     assert!(result.needs_new_label);
     assert_eq!(result.coverage, 0.0);
+    assert_eq!(result.coverage_cosine, 0.0);
     assert!(
         result
             .diagnostics
@@ -955,6 +974,8 @@ fn task_label_suggestions_degrade_on_label_atom_vector_query_error() -> anyhow::
     )?;
     let store = DiagnosticLabelAtomStore {
         status_message: "test vector store; dirty=false last_error=none; board_dirty=false",
+        dirty: false,
+        board_dirty: false,
         query_error: Some("label atom vector query failed"),
     };
 
@@ -969,6 +990,7 @@ fn task_label_suggestions_degrade_on_label_atom_vector_query_error() -> anyhow::
     assert!(result.degraded);
     assert!(result.selected_labels.is_empty());
     assert_eq!(result.coverage, 0.0);
+    assert_eq!(result.coverage_cosine, 0.0);
     assert_eq!(result.residual_norm, 1.0);
     assert!(!result.needs_new_label);
     assert!(
@@ -1011,7 +1033,9 @@ fn task_label_suggestions_report_label_atom_index_dirty_and_errors() -> anyhow::
         [board.id],
     )?;
     let store = DiagnosticLabelAtomStore {
-        status_message: "test vector store; dirty=true last_error=none; board_dirty=true",
+        status_message: "test vector store; status copy changed",
+        dirty: true,
+        board_dirty: true,
         query_error: None,
     };
 
@@ -1110,9 +1134,10 @@ fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::R
         &task.id,
         &store,
         kanban_sqlite::LabelSuggestionOptions {
-            limit: 3,
+            output_limit: 3,
             atom_limit: 12,
             min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -1139,11 +1164,102 @@ fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::R
     assert!(queries.iter().all(
         |query| query.include_vector && query.embedding_model.as_deref() == Some("test-model")
     ));
+    assert!(
+        queries
+            .iter()
+            .filter(|query| query.polarity.as_deref() == Some("positive"))
+            .all(|query| (vector_norm(&query.vector) - 1.0).abs() < 0.0001)
+    );
+    Ok(())
+}
+
+#[test]
+fn task_label_suggestions_limit_truncates_output_without_narrowing_solver() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("task_label_suggestions_limit_truncates_output_without_narrowing_solver")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let docs = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "docs".to_owned(),
+            color: None,
+        },
+    )?;
+    let frontend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "frontend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("API docs update"),
+    )?;
+    let store = ResidualRecordingLabelAtomStore::new(vec![
+        (
+            atom_hit(&backend, "positive", "applies_when", "server handlers", 0.0),
+            vec![1.0, 0.0, 0.0],
+        ),
+        (
+            atom_hit(&docs, "positive", "applies_when", "documentation", 0.0),
+            vec![0.0, 1.0, 0.0],
+        ),
+        (
+            atom_hit(&frontend, "positive", "name", "frontend", 0.0),
+            vec![0.0, 0.0, 1.0],
+        ),
+    ]);
+
+    let result = kanban_sqlite::suggest_task_labels_with(
+        &temp.path,
+        "default",
+        &task.id,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            output_limit: 1,
+            atom_limit: 12,
+            min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
+        },
+    )?;
+
+    assert_eq!(result.selected_labels.len(), 1);
+    assert_eq!(result.candidates.len(), 1);
+    assert!(
+        result.coverage > 0.99,
+        "output limit must not reduce internal refit coverage: {result:?}"
+    );
+    assert!(result.coverage_cosine > 0.99);
+    assert!(result.residual_norm < 0.01);
+    let positive_queries = store
+        .queries()?
+        .into_iter()
+        .filter(|query| query.polarity.as_deref() == Some("positive"))
+        .collect::<Vec<_>>();
+    assert!(
+        positive_queries.len() >= 2,
+        "solver should still make residual follow-up queries: {positive_queries:?}"
+    );
     Ok(())
 }
 
 struct DiagnosticLabelAtomStore {
     status_message: &'static str,
+    dirty: bool,
+    board_dirty: bool,
     query_error: Option<&'static str>,
 }
 
@@ -1188,6 +1304,8 @@ struct ProposalValidationStore {
     embeddings: Vec<(String, Vec<f32>)>,
     atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>,
     status_message: &'static str,
+    dirty: bool,
+    board_dirty: bool,
 }
 
 impl ProposalValidationStore {
@@ -1199,6 +1317,8 @@ impl ProposalValidationStore {
                 .collect(),
             atoms: Vec::new(),
             status_message: "test vector store; dirty=false last_error=none; board_dirty=false",
+            dirty: false,
+            board_dirty: false,
         }
     }
 
@@ -1209,6 +1329,12 @@ impl ProposalValidationStore {
 
     fn with_status_message(mut self, status_message: &'static str) -> Self {
         self.status_message = status_message;
+        self
+    }
+
+    fn with_status_dirty(mut self, dirty: bool, board_dirty: bool) -> Self {
+        self.dirty = dirty;
+        self.board_dirty = board_dirty;
         self
     }
 
@@ -1249,41 +1375,21 @@ impl ResidualValidationUnavailableStore {
     }
 }
 
-impl kanban_vector::VectorStore for ResidualValidationUnavailableStore {
-    fn chunk_embedding_model(&self) -> &str {
+impl kanban_vector::VectorStoreBackend for ResidualValidationUnavailableStore {
+    fn embedding_model(&self) -> &str {
         "test-model"
     }
 
     fn status(&self) -> kanban_vector::VectorStoreStatus {
-        kanban_vector::VectorStoreStatus {
-            backend: "test-vector".to_owned(),
-            enabled: true,
-            message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
-        }
+        kanban_vector::VectorStoreStatus::new(
+            "test-vector",
+            true,
+            "test vector store; dirty=false last_error=none; board_dirty=false",
+        )
     }
+}
 
-    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn upsert(
-        &self,
-        _chunks: &[kanban_vector::EmbeddingChunk],
-    ) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn query(
-        &self,
-        _query: &kanban_vector::VectorQuery,
-    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
-        Ok(Vec::new())
-    }
-
+impl kanban_vector::QueryEmbeddingProvider for ResidualValidationUnavailableStore {
     fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
         self.mark_validation_started(text)?;
         if text.contains("residual validation candidate") {
@@ -1292,7 +1398,9 @@ impl kanban_vector::VectorStore for ResidualValidationUnavailableStore {
             Ok(vec![1.0, 0.0, 0.0])
         }
     }
+}
 
+impl kanban_vector::LabelAtomVectorStore for ResidualValidationUnavailableStore {
     fn query_label_atoms_by_vector(
         &self,
         _query: &kanban_vector::LabelAtomVectorQuery,
@@ -1308,8 +1416,8 @@ impl kanban_vector::VectorStore for ResidualValidationUnavailableStore {
     }
 }
 
-impl kanban_vector::VectorStore for ProposalValidationStore {
-    fn chunk_embedding_model(&self) -> &str {
+impl kanban_vector::VectorStoreBackend for ProposalValidationStore {
+    fn embedding_model(&self) -> &str {
         "test-model"
     }
 
@@ -1318,35 +1426,20 @@ impl kanban_vector::VectorStore for ProposalValidationStore {
             backend: "test-vector".to_owned(),
             enabled: true,
             message: self.status_message.to_owned(),
+            diagnostics: Vec::new(),
+            dirty: Some(self.dirty),
+            board_dirty: Some(self.board_dirty),
         }
     }
+}
 
-    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn upsert(
-        &self,
-        _chunks: &[kanban_vector::EmbeddingChunk],
-    ) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn query(
-        &self,
-        _query: &kanban_vector::VectorQuery,
-    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
-        Ok(Vec::new())
-    }
-
+impl kanban_vector::QueryEmbeddingProvider for ProposalValidationStore {
     fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
         Ok(self.embedding_for(text))
     }
+}
 
+impl kanban_vector::LabelAtomVectorStore for ProposalValidationStore {
     fn query_label_atoms_by_vector(
         &self,
         query: &kanban_vector::LabelAtomVectorQuery,
@@ -1378,7 +1471,7 @@ impl kanban_vector::VectorStore for ProposalValidationStore {
             .into_iter()
             .take(query.limit)
             .map(|(similarity, mut hit, vector)| {
-                hit.score = (1.0 / similarity.max(0.0001)) - 1.0;
+                hit.distance = (1.0 / similarity.max(0.0001)) - 1.0;
                 kanban_vector::LabelAtomVectorHit {
                     hit,
                     vector: query.include_vector.then_some(vector),
@@ -1388,8 +1481,8 @@ impl kanban_vector::VectorStore for ProposalValidationStore {
     }
 }
 
-impl kanban_vector::VectorStore for DiagnosticLabelAtomStore {
-    fn chunk_embedding_model(&self) -> &str {
+impl kanban_vector::VectorStoreBackend for DiagnosticLabelAtomStore {
+    fn embedding_model(&self) -> &str {
         "test-model"
     }
 
@@ -1398,35 +1491,20 @@ impl kanban_vector::VectorStore for DiagnosticLabelAtomStore {
             backend: "test-vector".to_owned(),
             enabled: true,
             message: self.status_message.to_owned(),
+            diagnostics: Vec::new(),
+            dirty: Some(self.dirty),
+            board_dirty: Some(self.board_dirty),
         }
     }
+}
 
-    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn upsert(
-        &self,
-        _chunks: &[kanban_vector::EmbeddingChunk],
-    ) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn query(
-        &self,
-        _query: &kanban_vector::VectorQuery,
-    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
-        Ok(Vec::new())
-    }
-
+impl kanban_vector::QueryEmbeddingProvider for DiagnosticLabelAtomStore {
     fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
         Ok(vec![1.0, 0.0, 0.0])
     }
+}
 
+impl kanban_vector::LabelAtomVectorStore for DiagnosticLabelAtomStore {
     fn query_label_atoms_by_vector(
         &self,
         _query: &kanban_vector::LabelAtomVectorQuery,
@@ -1460,45 +1538,27 @@ impl ResidualRecordingLabelAtomStore {
     }
 }
 
-impl kanban_vector::VectorStore for ResidualRecordingLabelAtomStore {
-    fn chunk_embedding_model(&self) -> &str {
+impl kanban_vector::VectorStoreBackend for ResidualRecordingLabelAtomStore {
+    fn embedding_model(&self) -> &str {
         "test-model"
     }
 
     fn status(&self) -> kanban_vector::VectorStoreStatus {
-        kanban_vector::VectorStoreStatus {
-            backend: "test-vector".to_owned(),
-            enabled: true,
-            message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
-        }
+        kanban_vector::VectorStoreStatus::new(
+            "test-vector",
+            true,
+            "test vector store; dirty=false last_error=none; board_dirty=false",
+        )
     }
+}
 
-    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn upsert(
-        &self,
-        _chunks: &[kanban_vector::EmbeddingChunk],
-    ) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn query(
-        &self,
-        _query: &kanban_vector::VectorQuery,
-    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
-        Ok(Vec::new())
-    }
-
+impl kanban_vector::QueryEmbeddingProvider for ResidualRecordingLabelAtomStore {
     fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
         Ok(vec![1.0, 1.0, 0.0])
     }
+}
 
+impl kanban_vector::LabelAtomVectorStore for ResidualRecordingLabelAtomStore {
     fn query_label_atoms_by_vector(
         &self,
         query: &kanban_vector::LabelAtomVectorQuery,
@@ -1537,7 +1597,7 @@ impl kanban_vector::VectorStore for ResidualRecordingLabelAtomStore {
             .into_iter()
             .take(query.limit)
             .map(|(similarity, mut hit, vector)| {
-                hit.score = (1.0 / similarity.max(0.0001)) - 1.0;
+                hit.distance = (1.0 / similarity.max(0.0001)) - 1.0;
                 kanban_vector::LabelAtomVectorHit {
                     hit,
                     vector: query.include_vector.then_some(vector),
@@ -1562,49 +1622,35 @@ fn cosine(left: &[f32], right: &[f32]) -> f32 {
     }
 }
 
+fn vector_norm(vector: &[f32]) -> f32 {
+    vector.iter().map(|value| value * value).sum::<f32>().sqrt()
+}
+
 struct StaticLabelAtomStore {
     hits: Vec<kanban_vector::LabelAtomHit>,
 }
 
-impl kanban_vector::VectorStore for StaticLabelAtomStore {
-    fn chunk_embedding_model(&self) -> &str {
+impl kanban_vector::VectorStoreBackend for StaticLabelAtomStore {
+    fn embedding_model(&self) -> &str {
         "test-model"
     }
 
     fn status(&self) -> kanban_vector::VectorStoreStatus {
-        kanban_vector::VectorStoreStatus {
-            backend: "test-vector".to_owned(),
-            enabled: true,
-            message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
-        }
+        kanban_vector::VectorStoreStatus::new(
+            "test-vector",
+            true,
+            "test vector store; dirty=false last_error=none; board_dirty=false",
+        )
     }
+}
 
-    fn delete_board(&self, _board_id: &str) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn upsert(
-        &self,
-        _chunks: &[kanban_vector::EmbeddingChunk],
-    ) -> Result<(), kanban_vector::VectorError> {
-        Ok(())
-    }
-
-    fn query(
-        &self,
-        _query: &kanban_vector::VectorQuery,
-    ) -> Result<Vec<kanban_vector::VectorHit>, kanban_vector::VectorError> {
-        Ok(Vec::new())
-    }
-
+impl kanban_vector::QueryEmbeddingProvider for StaticLabelAtomStore {
     fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
         Ok(vec![1.0, 0.0, 0.0])
     }
+}
 
+impl kanban_vector::LabelAtomVectorStore for StaticLabelAtomStore {
     fn query_label_atoms_by_vector(
         &self,
         query: &kanban_vector::LabelAtomVectorQuery,
@@ -1661,7 +1707,7 @@ fn atom_hit(
         ordinal: 0,
         content_hash: "hash".to_owned(),
         embedding_model: "test-model".to_owned(),
-        score: distance,
+        distance,
     }
 }
 
@@ -1698,9 +1744,12 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
 
     assert_eq!(semantics.label_id, label.id);
     assert_eq!(semantics.applies_when, vec!["touches server code"]);
-    assert_eq!(semantics.atoms.len(), 6);
-    assert_eq!(semantics.atoms[0].kind, "name");
-    assert_eq!(semantics.atoms[0].text, "backend");
+    assert_eq!(semantics.atoms.len(), 5);
+    assert_eq!(semantics.atoms[0].kind, "description");
+    assert_eq!(
+        semantics.atoms[0].text,
+        "label: backend\ndescription: Backend implementation work"
+    );
     assert!(
         semantics
             .atoms
@@ -1735,6 +1784,382 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
     );
     assert!(list_label_atoms(&temp.path, "default")?.is_empty());
     assert_eq!(get_task(&temp.path, "default", &task.id)?.labels.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn label_atom_hashes_are_stable_across_reordered_sources_and_mark_index_dirty() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_atom_hashes_are_stable_across_reordered_sources_and_mark_index_dirty")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            applies_when: vec![
+                "touches Rust service code".to_owned(),
+                "updates SQLite repository".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let first_atoms = list_label_atoms(&temp.path, "default")?;
+    let first_identity_by_text = first_atoms
+        .iter()
+        .filter(|atom| atom.kind == "applies_when")
+        .map(|atom| {
+            (
+                atom.text.clone(),
+                (atom.id.clone(), atom.content_hash.clone()),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    let board = get_board(&temp.path, "default")?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "UPDATE derived_store_state SET dirty=0 WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE label_atom_index_boards SET dirty=0 \
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [&board.id],
+    )?;
+
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            applies_when: vec![
+                "updates SQLite repository".to_owned(),
+                "touches Rust service code".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let reordered_atoms = list_label_atoms(&temp.path, "default")?;
+    let reordered_identity_by_text = reordered_atoms
+        .iter()
+        .filter(|atom| atom.kind == "applies_when")
+        .map(|atom| {
+            (
+                atom.text.clone(),
+                (atom.id.clone(), atom.content_hash.clone()),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    assert_eq!(reordered_identity_by_text, first_identity_by_text);
+    assert!(label_atom_store_dirty(&temp.path)?);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+    Ok(())
+}
+
+#[test]
+fn label_atom_rebuild_deduplicates_normalized_text_and_keeps_first_ordinal() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_atom_rebuild_deduplicates_normalized_text_and_keeps_first_ordinal")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            applies_when: vec![
+                "touches   server code".to_owned(),
+                " touches server code ".to_owned(),
+                "touches server code".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    let atoms = list_label_atoms(&temp.path, "default")?;
+    let applies = atoms
+        .iter()
+        .filter(|atom| atom.kind == "applies_when")
+        .collect::<Vec<_>>();
+    assert_eq!(applies.len(), 1);
+    assert_eq!(applies[0].text, "touches server code");
+    assert_eq!(applies[0].ordinal, 1);
+    Ok(())
+}
+
+#[test]
+fn init_v10_backfills_stable_label_atom_hashes_and_marks_index_dirty() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_v10_backfills_stable_label_atom_hashes_and_marks_index_dirty")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let semantics = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            applies_when: vec![
+                "touches   server code".to_owned(),
+                "touches server code".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+        (&semantics.board_id, &semantics.label_id),
+    )?;
+    for (id, text, ordinal, content_hash) in [
+        ("la_old_name", "backend", 0_i64, "old_name"),
+        (
+            "la_old_applies_1",
+            "touches   server code",
+            1_i64,
+            "old_applies_1",
+        ),
+        (
+            "la_old_applies_2",
+            "touches server code",
+            2_i64,
+            "old_applies_2",
+        ),
+    ] {
+        conn.execute(
+            "INSERT INTO label_atoms(id,label_id,board_id,polarity,kind,text,ordinal,content_hash,created_at,updated_at) \
+             VALUES (?1,?2,?3,'positive',?4,?5,?6,?7,1,1)",
+            (
+                id,
+                &semantics.label_id,
+                &semantics.board_id,
+                if ordinal == 0 { "name" } else { "applies_when" },
+                text,
+                ordinal,
+                content_hash,
+            ),
+        )?;
+    }
+    conn.execute(
+        "UPDATE derived_store_state SET dirty=0 WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE label_atom_index_boards SET dirty=0 \
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [&semantics.board_id],
+    )?;
+    conn.execute("DELETE FROM schema_migrations WHERE version=10", [])?;
+    conn.pragma_update(None, "user_version", 9)?;
+    drop(conn);
+
+    init_database(&temp.path, "tester")?;
+
+    let atoms = list_label_atoms(&temp.path, "default")?;
+    assert!(atoms.iter().all(|atom| !atom.id.starts_with("la_old_")));
+    let applies = atoms
+        .iter()
+        .filter(|atom| atom.kind == "applies_when")
+        .collect::<Vec<_>>();
+    assert_eq!(applies.len(), 1);
+    assert_eq!(applies[0].text, "touches server code");
+    assert_eq!(applies[0].ordinal, 1);
+    assert!(label_atom_store_dirty(&temp.path)?);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+    let user_version: i64 =
+        connect_file(&temp.path)?.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    assert_eq!(user_version, 11);
+    Ok(())
+}
+
+#[test]
+fn init_retries_v10_label_atom_hash_backfill_after_recorded_migration() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_retries_v10_label_atom_hash_backfill_after_recorded_migration")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let semantics = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            applies_when: vec![
+                "touches   server code".to_owned(),
+                "touches server code".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+        (&semantics.board_id, &semantics.label_id),
+    )?;
+    for (id, text, ordinal, content_hash) in [
+        ("la_old_name", "backend", 0_i64, "old_name"),
+        (
+            "la_old_applies_1",
+            "touches   server code",
+            1_i64,
+            "old_applies_1",
+        ),
+        (
+            "la_old_applies_2",
+            "touches server code",
+            2_i64,
+            "old_applies_2",
+        ),
+    ] {
+        conn.execute(
+            "INSERT INTO label_atoms(id,label_id,board_id,polarity,kind,text,ordinal,content_hash,created_at,updated_at) \
+             VALUES (?1,?2,?3,'positive',?4,?5,?6,?7,1,1)",
+            (
+                id,
+                &semantics.label_id,
+                &semantics.board_id,
+                if ordinal == 0 { "name" } else { "applies_when" },
+                text,
+                ordinal,
+                content_hash,
+            ),
+        )?;
+    }
+    conn.execute(
+        "UPDATE derived_store_state SET dirty=0 WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE label_atom_index_boards SET dirty=0 \
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [&semantics.board_id],
+    )?;
+    let v10_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM schema_migrations WHERE version=10",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(v10_count, 1);
+    drop(conn);
+
+    init_database(&temp.path, "tester")?;
+
+    let atoms = list_label_atoms(&temp.path, "default")?;
+    assert!(atoms.iter().all(|atom| !atom.id.starts_with("la_old_")));
+    let applies = atoms
+        .iter()
+        .filter(|atom| atom.kind == "applies_when")
+        .collect::<Vec<_>>();
+    assert_eq!(applies.len(), 1);
+    assert_eq!(applies[0].text, "touches server code");
+    assert_eq!(applies[0].ordinal, 1);
+    assert!(label_atom_store_dirty(&temp.path)?);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+    Ok(())
+}
+
+#[test]
+fn init_v10_label_atom_hash_backfill_rolls_back_when_dirty_mark_fails() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_v10_label_atom_hash_backfill_rolls_back_when_dirty_mark_fails")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let semantics = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            applies_when: vec!["touches server code".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+        (&semantics.board_id, &semantics.label_id),
+    )?;
+    conn.execute(
+        "INSERT INTO label_atoms(id,label_id,board_id,polarity,kind,text,ordinal,content_hash,created_at,updated_at) \
+         VALUES ('la_old_name',?1,?2,'positive','name','backend',0,'old_name',1,1)",
+        (&semantics.label_id, &semantics.board_id),
+    )?;
+    conn.execute(
+        "UPDATE derived_store_state SET dirty=0 WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE label_atom_index_boards SET dirty=0 \
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [&semantics.board_id],
+    )?;
+    conn.execute_batch(
+        "CREATE TRIGGER fail_label_atom_dirty_mark \
+         BEFORE UPDATE ON derived_store_state \
+         WHEN NEW.store_name='lancedb_label_atoms' \
+         BEGIN \
+           SELECT RAISE(ABORT, 'forced label atom dirty failure'); \
+         END;",
+    )?;
+    drop(conn);
+
+    let err = result_err(init_database(&temp.path, "tester"))?;
+    assert!(
+        err.to_string().contains("forced label atom dirty failure"),
+        "err: {err}"
+    );
+    let atoms = list_label_atoms(&temp.path, "default")?;
+    assert!(
+        atoms.iter().any(|atom| atom.id == "la_old_name"),
+        "failed dirty mark must roll back atom rewrite: {atoms:?}"
+    );
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+
+    connect_file(&temp.path)?.execute("DROP TRIGGER fail_label_atom_dirty_mark", [])?;
+    init_database(&temp.path, "tester")?;
+    let repaired = list_label_atoms(&temp.path, "default")?;
+    assert!(repaired.iter().all(|atom| !atom.id.starts_with("la_old_")));
+    assert!(label_atom_store_dirty(&temp.path)?);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
     Ok(())
 }
 
@@ -1902,8 +2327,8 @@ fn doctor_reports_missing_label_semantics_tables_unhealthy() -> anyhow::Result<(
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(9));
-        assert_eq!(report.user_version, 9);
+        assert_eq!(report.migration_version, Some(11));
+        assert_eq!(report.user_version, 11);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())
@@ -1974,8 +2399,8 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
 
     let store = RecordingVectorStore::with_embedding_model("static-test");
     let status = rebuild_label_atom_index_with(&temp.path, "default", &store)?;
-    assert!(status.message.contains("rebuilt 3 label atom(s)"));
-    assert_eq!(store.upserted_label_atoms()?.len(), 3);
+    assert!(status.message.contains("rebuilt 2 label atom(s)"));
+    assert_eq!(store.upserted_label_atoms()?.len(), 2);
     let hits = query_label_atom_index_with(
         &temp.path,
         "default",
@@ -1988,7 +2413,7 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
             polarity: Some("positive".to_owned()),
         },
     )?;
-    assert_eq!(hits.len(), 2);
+    assert_eq!(hits.len(), 1);
     assert!(hits.iter().all(|hit| hit.polarity == "positive"));
 
     let vector_hits = query_label_atom_index_by_vector_with(
@@ -2004,7 +2429,7 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
             include_vector: true,
         },
     )?;
-    assert_eq!(vector_hits.len(), 2);
+    assert_eq!(vector_hits.len(), 1);
     assert!(
         vector_hits
             .iter()
@@ -2058,7 +2483,20 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
     ))?;
     assert!(failure.to_string().contains("dimension mismatch"));
     let status = label_atom_index_status_with(&temp.path, "default", &store)?;
-    assert!(status.message.contains("dirty=true"));
+    assert_eq!(status.dirty, Some(true));
+    assert_eq!(status.board_dirty, Some(true));
+    assert!(
+        status
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_atom_index_dirty")
+    );
+    assert!(
+        status
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_atom_index_error")
+    );
     assert!(status.message.contains("dimension mismatch"));
     Ok(())
 }
@@ -2186,8 +2624,14 @@ fn label_semantics_jsonl_import_marks_label_atom_boards_dirty_and_rebuild_clears
         "default",
         &RecordingVectorStore::with_embedding_model("static-test"),
     )?;
-    assert!(status.message.contains("dirty=true"));
-    assert!(status.message.contains("board_dirty=true"));
+    assert_eq!(status.dirty, Some(true));
+    assert_eq!(status.board_dirty, Some(true));
+    assert!(
+        status
+            .diagnostics
+            .iter()
+            .any(|code| code == "label_atom_index_dirty")
+    );
 
     let store = RecordingVectorStore::with_embedding_model("static-test");
     rebuild_label_atom_index_with(&target.path, "default", &store)?;

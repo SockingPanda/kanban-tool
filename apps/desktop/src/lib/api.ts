@@ -101,6 +101,7 @@ export type LabelSuggestionResult = {
   selected_labels: SelectedLabelSuggestion[]
   candidates: LabelSuggestionCandidate[]
   coverage: number
+  coverage_cosine: number
   residual_norm: number
   needs_new_label: boolean
   degraded: boolean
@@ -547,11 +548,35 @@ export class KanbanApi {
     })
   }
 
-  async suggestTaskLabels(taskId: string, options: RequestOptions & { limit?: number } = {}) {
+  async suggestTaskLabels(
+    taskId: string,
+    options: RequestOptions & {
+      limit?: number
+      candidateLimit?: number
+      atomLimit?: number
+      maxSelectedLabels?: number
+      minScore?: number
+    } = {},
+  ) {
     const params = new URLSearchParams({ limit: String(options.limit ?? 5) })
-    return this.request<LabelSuggestionResult>(`/api/v1/tasks/${taskId}/labels/suggestions?${params.toString()}`, {
-      signal: options.signal,
-    })
+    if (typeof options.candidateLimit === "number") {
+      params.set("candidate_limit", String(options.candidateLimit))
+    }
+    if (typeof options.atomLimit === "number") {
+      params.set("atom_limit", String(options.atomLimit))
+    }
+    if (typeof options.maxSelectedLabels === "number") {
+      params.set("max_selected_labels", String(options.maxSelectedLabels))
+    }
+    if (typeof options.minScore === "number") {
+      params.set("min_score", String(options.minScore))
+    }
+    return this.request<LabelSuggestionResult>(
+      `/api/v1/tasks/${taskId}/labels/suggestions?${params.toString()}`,
+      {
+        signal: options.signal,
+      },
+    )
   }
 
   async removeTaskLabel(taskId: string, labelId: string, options: RequestOptions = {}) {

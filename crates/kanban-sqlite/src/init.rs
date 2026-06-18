@@ -25,7 +25,11 @@ const LABEL_ATOM_INDEX_BOARDS_MIGRATION: &str =
     include_str!("../../../migrations/008_label_atom_index_boards.sql");
 const LABEL_SEMANTIC_PROPOSALS_MIGRATION: &str =
     include_str!("../../../migrations/009_label_semantic_proposals.sql");
-const LATEST_MIGRATION_VERSION: i64 = 9;
+const STABLE_LABEL_ATOM_HASHES_MIGRATION: &str =
+    include_str!("../../../migrations/010_stable_label_atom_hashes.sql");
+const LABEL_PROPOSAL_COSINE_COVERAGE_MIGRATION: &str =
+    include_str!("../../../migrations/011_label_proposal_cosine_coverage.sql");
+const LATEST_MIGRATION_VERSION: i64 = 11;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] =
     &["fnv64:0ca871be950fc8a6", "fnv64:3b08da4e2b6041f5"];
 
@@ -81,6 +85,16 @@ const MIGRATIONS: &[Migration] = &[
         name: "009_label_semantic_proposals",
         sql: LABEL_SEMANTIC_PROPOSALS_MIGRATION,
     },
+    Migration {
+        version: 10,
+        name: "010_stable_label_atom_hashes",
+        sql: STABLE_LABEL_ATOM_HASHES_MIGRATION,
+    },
+    Migration {
+        version: 11,
+        name: "011_label_proposal_cosine_coverage",
+        sql: LABEL_PROPOSAL_COSINE_COVERAGE_MIGRATION,
+    },
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -112,13 +126,16 @@ fn apply_migrations(conn: &Connection) -> Result<()> {
     for migration in MIGRATIONS {
         validate_or_apply_migration(conn, migration)?;
     }
+    if crate::service::stable_label_atom_hash_backfill_needed(conn)? {
+        crate::service::rebuild_label_atoms_for_stable_hash_migration(conn, SystemClock.now_ms())?;
+    }
     validate_schema_shape(conn)?;
     conn.pragma_update(None, "user_version", LATEST_MIGRATION_VERSION)
         .map_err(|err| KanbanError::Storage(err.to_string()))?;
     Ok(())
 }
 
-fn validate_or_apply_migration(conn: &Connection, migration: &Migration) -> Result<()> {
+fn validate_or_apply_migration(conn: &Connection, migration: &Migration) -> Result<bool> {
     let checksum = migration_checksum(migration.sql);
     let row: Option<(String, String)> = conn
         .query_row(
@@ -129,29 +146,28 @@ fn validate_or_apply_migration(conn: &Connection, migration: &Migration) -> Resu
         .optional()
         .map_err(|err| KanbanError::Storage(err.to_string()))?;
     match row {
-        Some((name, _stored)) if name != migration.name => {
-            return Err(KanbanError::Storage(format!(
-                "migration name mismatch for version {}: expected {}, found {name}",
-                migration.version, migration.name
-            )));
-        }
+        Some((name, _stored)) if name != migration.name => Err(KanbanError::Storage(format!(
+            "migration name mismatch for version {}: expected {}, found {name}",
+            migration.version, migration.name
+        ))),
         Some((_name, stored)) if stored.is_empty() => {
             conn.execute(
                 "UPDATE schema_migrations SET checksum=?1 WHERE version=?2",
                 params![checksum, migration.version],
             )
             .map_err(|err| KanbanError::Storage(err.to_string()))?;
+            Ok(false)
         }
         Some((_name, stored)) if stored != checksum => {
             if is_allowed_legacy_migration_checksum(migration, &stored) {
-                return Ok(());
+                return Ok(false);
             }
-            return Err(KanbanError::Storage(format!(
+            Err(KanbanError::Storage(format!(
                 "migration checksum mismatch for {}: expected {checksum}, found {stored}",
                 migration.name
-            )));
+            )))
         }
-        Some((_name, _stored)) => {}
+        Some((_name, _stored)) => Ok(false),
         None => {
             conn.execute_batch(migration.sql)
                 .map_err(|err| KanbanError::Storage(err.to_string()))?;
@@ -166,9 +182,9 @@ fn validate_or_apply_migration(conn: &Connection, migration: &Migration) -> Resu
                 ],
             )
             .map_err(|err| KanbanError::Storage(err.to_string()))?;
+            Ok(true)
         }
     }
-    Ok(())
 }
 
 fn is_allowed_legacy_migration_checksum(migration: &Migration, stored: &str) -> bool {

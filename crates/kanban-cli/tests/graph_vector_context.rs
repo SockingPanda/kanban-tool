@@ -315,11 +315,14 @@ mod vector_lancedb {
                 .context("expected JSON string")?
                 .contains("without an embedding provider")
         );
+        assert_eq!(status["data"]["dirty"], true);
+        assert_eq!(status["data"]["board_dirty"], true);
         assert!(
-            status["data"]["message"]
-                .as_str()
-                .context("expected JSON string")?
-                .contains("dirty=true")
+            status["data"]["diagnostics"]
+                .as_array()
+                .context("expected diagnostics array")?
+                .iter()
+                .any(|code| code == "vector_dirty")
         );
         Ok(())
     }

@@ -31,6 +31,7 @@ describe("task detail loading", () => {
       selected_labels: [],
       candidates: [],
       coverage: 0,
+      coverage_cosine: 0,
       residual_norm: 1,
       needs_new_label: false,
       degraded: true,

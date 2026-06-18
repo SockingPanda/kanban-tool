@@ -235,11 +235,7 @@ mod tests {
                 enabled,
                 message: String::new(),
             },
-            VectorStoreStatus {
-                backend: backend.to_owned(),
-                enabled,
-                message: String::new(),
-            },
+            VectorStoreStatus::new(backend, enabled, String::new()),
         )
     }
 

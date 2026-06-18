@@ -164,6 +164,7 @@ pub struct LabelSemanticProposalRecord {
     pub positive_examples: Vec<String>,
     pub negative_examples: Vec<String>,
     pub heuristic_coverage: f32,
+    pub heuristic_coverage_cosine: f32,
     pub heuristic_residual_norm: f32,
     pub top1_existing_label_id: Option<String>,
     pub top1_existing_label_name: Option<String>,
@@ -184,6 +185,7 @@ pub struct LabelProposalAttempt {
     pub degraded: bool,
     pub diagnostics: Vec<String>,
     pub heuristic_coverage: f32,
+    pub heuristic_coverage_cosine: f32,
     pub heuristic_residual_norm: f32,
     pub top1_existing_label_id: Option<String>,
     pub top1_existing_label_name: Option<String>,
@@ -314,19 +316,29 @@ pub struct UpsertLabelSemantics {
     pub negative_examples: Vec<String>,
 }
 
+pub const DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT: usize = 5;
+pub const DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT: usize = 32;
+pub const DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT: usize = 80;
+pub const DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS: usize = 4;
+pub const DEFAULT_LABEL_SUGGESTION_MIN_SCORE: f32 = 0.15;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LabelSuggestionOptions {
-    pub limit: usize,
+    pub output_limit: usize,
+    pub candidate_limit: usize,
     pub atom_limit: usize,
+    pub max_selected_labels: usize,
     pub min_score: f32,
 }
 
 impl Default for LabelSuggestionOptions {
     fn default() -> Self {
         Self {
-            limit: 5,
-            atom_limit: 24,
-            min_score: 0.15,
+            output_limit: DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT,
+            candidate_limit: DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT,
+            atom_limit: DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT,
+            max_selected_labels: DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS,
+            min_score: DEFAULT_LABEL_SUGGESTION_MIN_SCORE,
         }
     }
 }
@@ -338,6 +350,7 @@ pub struct LabelSuggestionResult {
     pub selected_labels: Vec<SelectedLabelSuggestion>,
     pub candidates: Vec<LabelSuggestionCandidate>,
     pub coverage: f32,
+    pub coverage_cosine: f32,
     pub residual_norm: f32,
     pub needs_new_label: bool,
     pub degraded: bool,

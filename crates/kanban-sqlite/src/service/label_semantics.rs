@@ -12,7 +12,7 @@ use kanban_indexer::{DERIVED_STORE_SCHEMA_VERSION, LANCEDB_LABEL_ATOMS_STORE};
 use kanban_labels::{LabelAtomKind, LabelAtomPolarity, LabelDefinition};
 use kanban_vector::{
     LabelAtomHit, LabelAtomQuery, LabelAtomVector, LabelAtomVectorHit, LabelAtomVectorQuery,
-    VectorStore, VectorStoreStatus,
+    LabelAtomVectorStore, VectorStoreBackend, VectorStoreStatus,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
@@ -225,18 +225,18 @@ pub fn label_atom_index_status(path: impl AsRef<Path>, board: &str) -> Result<Ve
     label_atom_index_status_from_base(
         &conn,
         &board_id,
-        VectorStoreStatus {
-            backend: "disabled".to_owned(),
-            enabled: false,
-            message: "Label atom vector store is disabled or has no provider".to_owned(),
-        },
+        VectorStoreStatus::new(
+            "disabled",
+            false,
+            "Label atom vector store is disabled or has no provider",
+        ),
     )
 }
 
 pub fn label_atom_index_status_with(
     path: impl AsRef<Path>,
     board: &str,
-    store: &(impl VectorStore + ?Sized),
+    store: &(impl VectorStoreBackend + ?Sized),
 ) -> Result<VectorStoreStatus> {
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
@@ -246,11 +246,11 @@ pub fn label_atom_index_status_with(
 pub fn rebuild_label_atom_index_with(
     path: impl AsRef<Path>,
     board: &str,
-    store: &impl VectorStore,
+    store: &impl LabelAtomVectorStore,
 ) -> Result<VectorStoreStatus> {
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
-    let atoms = label_atom_vectors_for_board(&conn, &board_id, store.chunk_embedding_model())?;
+    let atoms = label_atom_vectors_for_board(&conn, &board_id, store.embedding_model())?;
     match store
         .delete_label_atoms_for_board(&board_id)
         .and_then(|()| store.upsert_label_atoms(&atoms))
@@ -284,7 +284,7 @@ pub fn rebuild_label_atom_index_with(
 pub fn query_label_atom_index_with(
     path: impl AsRef<Path>,
     board: &str,
-    store: &impl VectorStore,
+    store: &impl LabelAtomVectorStore,
     mut query: LabelAtomQuery,
 ) -> Result<Vec<LabelAtomHit>> {
     let conn = connect_file(path.as_ref())?;
@@ -296,7 +296,7 @@ pub fn query_label_atom_index_with(
 pub fn query_label_atom_index_by_vector_with(
     path: impl AsRef<Path>,
     board: &str,
-    store: &impl VectorStore,
+    store: &impl LabelAtomVectorStore,
     mut query: LabelAtomVectorQuery,
 ) -> Result<Vec<LabelAtomVectorHit>> {
     let conn = connect_file(path.as_ref())?;
@@ -347,6 +347,139 @@ fn label_semantics_from_row(row: &Row<'_>) -> rusqlite::Result<LabelSemanticsRec
     })
 }
 
+struct LabelSemanticDefinitionRow {
+    board_id: String,
+    definition: LabelDefinition,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StableLabelAtomKey {
+    id: String,
+    label_id: String,
+    board_id: String,
+    polarity: String,
+    kind: String,
+    text: String,
+    ordinal: i64,
+    content_hash: String,
+}
+
+fn label_semantic_definition_rows(conn: &Connection) -> Result<Vec<LabelSemanticDefinitionRow>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT s.label_id,s.board_id,l.name,s.description,s.applies_when,s.excludes_when,s.positive_examples,s.negative_examples \
+             FROM label_semantics s JOIN labels l ON l.id=s.label_id AND l.board_id=s.board_id \
+             ORDER BY s.board_id ASC, s.label_id ASC",
+        )
+        .map_err(storage)?;
+    stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, Option<String>>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, String>(5)?,
+            row.get::<_, String>(6)?,
+            row.get::<_, String>(7)?,
+        ))
+    })
+    .map_err(storage)?
+    .map(|row| {
+        let (
+            label_id,
+            board_id,
+            name,
+            description,
+            applies_when,
+            excludes_when,
+            positive_examples,
+            negative_examples,
+        ) = row.map_err(storage)?;
+        Ok(LabelSemanticDefinitionRow {
+            board_id,
+            definition: LabelDefinition {
+                id: label_id,
+                name,
+                description,
+                applies_when: json_vec(applies_when)?,
+                excludes_when: json_vec(excludes_when)?,
+                positive_examples: json_vec(positive_examples)?,
+                negative_examples: json_vec(negative_examples)?,
+            },
+        })
+    })
+    .collect()
+}
+
+fn stable_label_atom_keys(definition: &LabelDefinition, board_id: &str) -> Vec<StableLabelAtomKey> {
+    let mut atoms = Vec::new();
+    let mut seen_semantic_keys = std::collections::HashSet::new();
+    for (ordinal, source) in definition.atom_sources().into_iter().enumerate() {
+        let polarity = polarity_to_str(source.polarity).to_owned();
+        let kind = kind_to_str(source.kind).to_owned();
+        let text = normalize_atom_text(&source.text);
+        if text.is_empty() {
+            continue;
+        }
+        let semantic_key = format!("{}\n{}\n{}\n{}", definition.id, polarity, kind, text);
+        if !seen_semantic_keys.insert(semantic_key.clone()) {
+            continue;
+        }
+        let content_hash = stable_hash(&semantic_key);
+        atoms.push(StableLabelAtomKey {
+            id: format!("la_{content_hash}"),
+            label_id: source.label_id,
+            board_id: board_id.to_owned(),
+            polarity,
+            kind,
+            text,
+            ordinal: ordinal as i64,
+            content_hash,
+        });
+    }
+    atoms
+}
+
+fn current_label_atom_keys(
+    conn: &Connection,
+    board_id: &str,
+    label_id: &str,
+) -> Result<Vec<StableLabelAtomKey>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id,label_id,board_id,polarity,kind,text,ordinal,content_hash \
+             FROM label_atoms WHERE board_id=?1 AND label_id=?2 ORDER BY ordinal ASC, id ASC",
+        )
+        .map_err(storage)?;
+    stmt.query_map(params![board_id, label_id], |row| {
+        Ok(StableLabelAtomKey {
+            id: row.get(0)?,
+            label_id: row.get(1)?,
+            board_id: row.get(2)?,
+            polarity: row.get(3)?,
+            kind: row.get(4)?,
+            text: row.get(5)?,
+            ordinal: row.get(6)?,
+            content_hash: row.get(7)?,
+        })
+    })
+    .map_err(storage)?
+    .collect::<std::result::Result<Vec<_>, _>>()
+    .map_err(storage)
+}
+
+pub(crate) fn stable_label_atom_hash_backfill_needed(conn: &Connection) -> Result<bool> {
+    for row in label_semantic_definition_rows(conn)? {
+        let expected = stable_label_atom_keys(&row.definition, &row.board_id);
+        let actual = current_label_atom_keys(conn, &row.board_id, &row.definition.id)?;
+        if actual != expected {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn rebuild_atoms_for_label(
     conn: &Connection,
     definition: &LabelDefinition,
@@ -359,32 +492,43 @@ fn rebuild_atoms_for_label(
     )
     .map_err(storage)?;
 
-    for (ordinal, source) in definition.atom_sources().into_iter().enumerate() {
-        let polarity = polarity_to_str(source.polarity);
-        let kind = kind_to_str(source.kind);
-        let content_hash = stable_hash(&format!(
-            "{}\n{}\n{}\n{}\n{}",
-            definition.id, polarity, kind, ordinal, source.text
-        ));
-        let id = format!("la_{content_hash}");
+    for atom in stable_label_atom_keys(definition, board_id) {
         conn.execute(
             "INSERT INTO label_atoms(id, label_id, board_id, polarity, kind, text, ordinal, content_hash, created_at, updated_at) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)",
             params![
-                id,
-                source.label_id,
-                board_id,
-                polarity,
-                kind,
-                source.text,
-                ordinal as i64,
-                content_hash,
+                atom.id,
+                atom.label_id,
+                atom.board_id,
+                atom.polarity,
+                atom.kind,
+                atom.text,
+                atom.ordinal,
+                atom.content_hash,
                 now
             ],
         )
         .map_err(storage)?;
     }
     Ok(())
+}
+
+pub(crate) fn rebuild_label_atoms_for_stable_hash_migration(
+    conn: &Connection,
+    now: i64,
+) -> Result<()> {
+    with_immediate_tx(conn, || {
+        let mut dirty_boards = std::collections::BTreeSet::new();
+        for row in label_semantic_definition_rows(conn)? {
+            rebuild_atoms_for_label(conn, &row.definition, &row.board_id, now)?;
+            dirty_boards.insert(row.board_id);
+        }
+
+        for board_id in dirty_boards {
+            mark_label_atom_store_dirty(conn, &board_id, now)?;
+        }
+        Ok(())
+    })
 }
 
 fn label_atoms_for_board(conn: &Connection, board_id: &str) -> Result<Vec<LabelAtomRecord>> {
@@ -543,6 +687,17 @@ fn label_atom_index_status_from_base(
 ) -> Result<VectorStoreStatus> {
     let state = derived_status_by_name(conn, LANCEDB_LABEL_ATOMS_STORE)?;
     let board = label_atom_index_board_status(conn, board_id)?;
+    status.dirty = Some(state.dirty);
+    status.board_dirty = Some(board.dirty);
+    if !status.enabled {
+        push_status_diagnostic(&mut status.diagnostics, "label_atom_index_disabled");
+    }
+    if state.dirty || board.dirty {
+        push_status_diagnostic(&mut status.diagnostics, "label_atom_index_dirty");
+    }
+    if state.last_error.is_some() || board.last_error.is_some() {
+        push_status_diagnostic(&mut status.diagnostics, "label_atom_index_error");
+    }
     status.message = format!(
         "{}; dirty={} last_error={}; board_dirty={} board_last_rebuild_at={} board_last_error={}",
         status.message,
@@ -556,6 +711,12 @@ fn label_atom_index_status_from_base(
         board.last_error.as_deref().unwrap_or("none")
     );
     Ok(status)
+}
+
+fn push_status_diagnostic(diagnostics: &mut Vec<String>, code: &str) {
+    if !diagnostics.iter().any(|diagnostic| diagnostic == code) {
+        diagnostics.push(code.to_owned());
+    }
 }
 
 pub(crate) fn mark_label_atom_store_dirty(
@@ -712,6 +873,14 @@ fn kind_to_str(kind: LabelAtomKind) -> &'static str {
         LabelAtomKind::ExcludesWhen => "excludes_when",
         LabelAtomKind::NegativeExample => "negative_example",
     }
+}
+
+fn normalize_atom_text(text: &str) -> String {
+    text.lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn stable_hash(text: &str) -> String {

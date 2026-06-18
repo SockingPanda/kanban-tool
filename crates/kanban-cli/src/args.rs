@@ -289,11 +289,15 @@ pub(crate) enum LabelAtomPolarityArg {
 #[derive(Debug, Args)]
 pub(crate) struct LabelSuggestArgs {
     pub(crate) task_ref: String,
-    #[arg(long, default_value_t = 5)]
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
     pub(crate) limit: usize,
-    #[arg(long, default_value_t = 24)]
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
+    pub(crate) candidate_limit: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT)]
     pub(crate) atom_limit: usize,
-    #[arg(long, default_value_t = 0.15)]
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS)]
+    pub(crate) max_selected_labels: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MIN_SCORE)]
     pub(crate) min_score: f32,
     #[arg(long = "vector-config", alias = "config")]
     pub(crate) vector_config: Option<std::path::PathBuf>,
@@ -304,11 +308,15 @@ pub(crate) struct LabelProposeArgs {
     pub(crate) task_ref: String,
     #[arg(long = "proposal-json")]
     pub(crate) proposal_json: Option<std::path::PathBuf>,
-    #[arg(long, default_value_t = 5)]
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
     pub(crate) limit: usize,
-    #[arg(long, default_value_t = 24)]
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
+    pub(crate) candidate_limit: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT)]
     pub(crate) atom_limit: usize,
-    #[arg(long, default_value_t = 0.15)]
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS)]
+    pub(crate) max_selected_labels: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MIN_SCORE)]
     pub(crate) min_score: f32,
     #[arg(long = "vector-config", alias = "config")]
     pub(crate) vector_config: Option<std::path::PathBuf>,

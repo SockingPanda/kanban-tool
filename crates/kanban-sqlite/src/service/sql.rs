@@ -95,7 +95,13 @@ pub(crate) fn ensure_changed_one<E>(changed: usize, err: E) -> Result<()>
 where
     E: FnOnce() -> KanbanError,
 {
-    if changed == 1 { Ok(()) } else { Err(err()) }
+    match changed {
+        1 => Ok(()),
+        0 => Err(err()),
+        n => Err(KanbanError::Storage(format!(
+            "expected exactly one affected row, got {n}"
+        ))),
+    }
 }
 
 pub(crate) fn exec_one<P, E>(conn: &Connection, sql: &str, params: P, err: E) -> Result<()>
@@ -288,6 +294,8 @@ mod tests {
         .unwrap();
         conn.execute("INSERT INTO items(id, name) VALUES (1, 'one')", [])
             .unwrap();
+        conn.execute("INSERT INTO items(id, name) VALUES (2, 'two')", [])
+            .unwrap();
 
         exec_one(
             &conn,
@@ -305,6 +313,15 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.to_string().contains("expected one row"));
+
+        let err = exec_one(&conn, "UPDATE items SET name=?1", ["changed"], || {
+            kanban_core::KanbanError::InvalidTransition("expected one row".into())
+        })
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("expected exactly one affected row, got 2")
+        );
     }
 
     #[test]

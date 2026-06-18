@@ -187,6 +187,7 @@ pub(crate) enum LabelCommand {
     List,
     Create(LabelCreateArgs),
     Bootstrap(LabelBootstrapArgs),
+    Delete(LabelDeleteArgs),
     Add(LabelAddTaskArgs),
     Remove(LabelTaskArgs),
     Semantics {
@@ -215,6 +216,13 @@ pub(crate) struct LabelCreateArgs {
     pub(crate) name: String,
     #[arg(long)]
     pub(crate) color: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelDeleteArgs {
+    pub(crate) label: String,
+    #[arg(long)]
+    pub(crate) force: bool,
 }
 
 #[derive(Debug, Args)]

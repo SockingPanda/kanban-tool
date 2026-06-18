@@ -708,6 +708,19 @@ target label ref、计算 normalized proposed label name、signal key 和 candid
 content hash；它只写 ledger，不修改 `task_labels`、`label_semantics`、`label_atoms`
 或 proposal。
 
+Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
+`applies_when` / `positive_example` 只能使用 `positive` polarity，
+`excludes_when` / `negative_example` 只能使用 `negative` polarity。
+`add_positive_atom` 必须提供 target label 和 positive candidate atom；
+`add_negative_atom` 必须提供 target label 和 negative candidate atom；
+`update_semantics` 必须提供 target label；`bootstrap_label` 必须提供
+`proposed_label_name`；`rename_label` 必须提供 target label 和
+`proposed_label_name`；`split_label` / `merge_labels` 必须提供 target label 和非空
+`related_labels_json`。Observation metric `suggest_coverage`、
+`suggest_coverage_cosine`、`suggest_residual_norm` 以及 signal metric
+`suggest_score` / `confidence` 必须是 finite `0.0..=1.0`；`suggest_rank` 必须为
+`null` 或 `>= 1`。
+
 最小输入形状：
 
 ```json

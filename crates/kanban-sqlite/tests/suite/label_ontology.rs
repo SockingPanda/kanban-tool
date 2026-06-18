@@ -175,6 +175,183 @@ fn label_ontology_records_observation_signals_and_preserves_board_scope() -> any
 }
 
 #[test]
+fn label_ontology_signal_input_rejects_atom_polarity_kind_mismatches() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_signal_input_rejects_atom_polarity_kind_mismatches")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject mismatched ontology candidate atoms"),
+    )?;
+
+    let mut negative_applies_when = sample_signal_input("negative-applies-when");
+    negative_applies_when.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+        polarity: "negative".to_owned(),
+        kind: "applies_when".to_owned(),
+        text: "does not touch CLI behavior".to_owned(),
+    });
+    let error = result_err(record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![negative_applies_when]),
+    ))?;
+    assert!(error.to_string().contains("candidate atom polarity"));
+
+    let mut positive_excludes_when = sample_signal_input("positive-excludes-when");
+    positive_excludes_when.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+        polarity: "positive".to_owned(),
+        kind: "excludes_when".to_owned(),
+        text: "UI-only polish".to_owned(),
+    });
+    let error = result_err(record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![positive_excludes_when]),
+    ))?;
+    assert!(error.to_string().contains("candidate atom polarity"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_signal_input_enforces_proposed_action_requirements() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_signal_input_enforces_proposed_action_requirements")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject incomplete ontology proposed actions"),
+    )?;
+
+    let mut missing_candidate = sample_signal_input("missing-positive-atom-candidate");
+    missing_candidate.candidate_atom = None;
+    let error = result_err(record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![missing_candidate]),
+    ))?;
+    assert!(error.to_string().contains("add_positive_atom"));
+
+    let mut wrong_negative_atom = sample_signal_input("wrong-negative-atom-candidate");
+    wrong_negative_atom.proposed_action = LabelOntologyProposedAction::AddNegativeAtom;
+    wrong_negative_atom.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+        polarity: "positive".to_owned(),
+        kind: "positive_example".to_owned(),
+        text: "adds CLI JSON behavior".to_owned(),
+    });
+    let error = result_err(record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![wrong_negative_atom]),
+    ))?;
+    assert!(error.to_string().contains("add_negative_atom"));
+
+    let mut missing_label_name = sample_signal_input("missing-bootstrap-label-name");
+    missing_label_name.kind = LabelOntologySignalKind::VocabularyGap;
+    missing_label_name.target_label_ref = None;
+    missing_label_name.proposed_action = LabelOntologyProposedAction::BootstrapLabel;
+    missing_label_name.candidate_atom = None;
+    missing_label_name.proposed_label_name = None;
+    missing_label_name.proposal_json = json!({"description": "Ontology ledger work"}).to_string();
+    let error = result_err(record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![missing_label_name]),
+    ))?;
+    assert!(error.to_string().contains("bootstrap_label"));
+
+    let mut merge_without_related = sample_signal_input("merge-without-related-labels");
+    merge_without_related.proposed_action = LabelOntologyProposedAction::MergeLabels;
+    merge_without_related.candidate_atom = None;
+    merge_without_related.related_labels_json = "[]".to_owned();
+    let error = result_err(record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![merge_without_related]),
+    ))?;
+    assert!(error.to_string().contains("merge_labels"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_signal_input_rejects_invalid_metrics() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_signal_input_rejects_invalid_metrics")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject invalid ontology signal metrics"),
+    )?;
+
+    let mut bad_coverage =
+        sample_record_input(vec![sample_signal_input("bad-observation-coverage")]);
+    bad_coverage.suggest_coverage = Some(1.25);
+    let error = result_err(record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        bad_coverage,
+    ))?;
+    assert!(error.to_string().contains("suggest_coverage"));
+
+    let mut bad_rank = sample_signal_input("bad-suggest-rank");
+    bad_rank.suggest_rank = Some(0);
+    let error = result_err(record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![bad_rank]),
+    ))?;
+    assert!(error.to_string().contains("suggest_rank"));
+
+    let mut bad_score = sample_signal_input("bad-suggest-score");
+    bad_score.suggest_score = Some(f64::INFINITY);
+    let error = result_err(record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![bad_score]),
+    ))?;
+    assert!(error.to_string().contains("suggest_score"));
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_lifecycle_actions_update_status_and_link_actions() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_lifecycle_actions_update_status_and_link_actions")?;
     init_database(&temp.path, "tester")?;

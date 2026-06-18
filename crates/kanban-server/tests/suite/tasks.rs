@@ -1105,11 +1105,37 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
                 "type": "user",
                 "agent_type": null
             },
+            "parent_action_id": apply_action_id.clone(),
+            "signal_ids": [],
+            "reason": "empty evidence cannot pass validation",
+            "validation_status": "passed",
+            "validation_json": "{}"
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
+    assert_eq!(json["error"]["code"], "invalid_input");
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/validate",
+        json!({
+            "actor": {
+                "name": "reviewer",
+                "type": "user",
+                "agent_type": null
+            },
             "parent_action_id": apply_action_id,
             "signal_ids": [],
             "reason": "atom improves suggestion behavior",
             "validation_status": "passed",
-            "validation_json": json!({"checked": true}).to_string()
+            "validation_json": json!({
+                "cases": [{
+                    "signal_id": signal_id.clone(),
+                    "passed": true,
+                    "after": {"state": "selected"}
+                }]
+            }).to_string()
         }),
     )
     .await?;

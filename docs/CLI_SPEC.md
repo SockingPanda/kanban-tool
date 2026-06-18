@@ -769,9 +769,15 @@ suggest 验证仍是第二阶段。
 
 `label ontology validate` 为一个 mutation action 追加 `validate` action。CLI 读取
 `--input` 中的 validation JSON，并由 service 包装 manual payload、source signal
-case 摘要、task snapshot hash 对比和 parent action 结果引用。`--status passed` 会把
-linked source signals 转为 `resolved`；`failed` / `partial` 保留历史和 evidence，
-source signals 继续等待后续修正或人工处理。
+case 摘要、task snapshot hash 对比和 parent action 结果引用。Parent action 必须是
+同一 board 上 `validation_status=pending` 的 canonical mutation action，并携带
+canonical result evidence（例如 atom/result label/proposal 引用、canonical hash 和
+非空 change snapshot）。`--status passed` 的 input 必须包含结构化 `cases[]`，
+覆盖每个 linked source signal 并标明该 signal case 已通过；空 `{}` 或无类型
+evidence 会被拒绝。当前实现只是最低限度 evidence gate，完整 typed
+score/rank/coverage/residual policy 由后续任务补齐。`--status passed` 会把 linked
+source signals 转为 `resolved`；`failed` / `partial` 保留历史和 evidence，source
+signals 继续等待后续修正或人工处理。
 
 `label propose --json` 返回结构化 attempt：
 

@@ -1338,7 +1338,13 @@ content hash、before/after canonical hash 和 diff，并把 validation status �
 
 Service 会把 supplied `validation_json` 包进 validation envelope，附上 source signal
 cases、observation task snapshot hash 与当前 task hash 对比、parent action result
-引用和 summary。`passed` 会把 linked source signals 转为 `resolved`；`failed` 与
+引用和 summary。`parent_action_id` 必须指向同一 board 上 `validation_status=pending`
+的 canonical mutation action，且 parent action 必须带有 canonical result evidence
+（例如 atom/result label/proposal 引用、canonical hash 和非空 change snapshot）。
+`passed` 还必须提供结构化 `validation_json.cases[]`，覆盖每个 linked source signal
+并标明该 signal case 已通过；空 `{}` 或无类型 evidence 会返回 `invalid_input`。
+当前实现只是最低限度 evidence gate，完整 typed score/rank/coverage/residual policy
+由后续版本补齐。`passed` 会把 linked source signals 转为 `resolved`；`failed` 与
 `partial` 保留 signals 供后续修正或人工处理。
 
 ---

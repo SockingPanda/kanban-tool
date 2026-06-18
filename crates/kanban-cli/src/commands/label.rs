@@ -22,8 +22,8 @@ use kanban_sqlite::{
 };
 #[cfg(feature = "vector-lancedb")]
 use kanban_sqlite::{
-    label_atom_index_status_with, propose_task_label_with_store, query_label_atom_index_with,
-    rebuild_label_atom_index_with, suggest_task_labels_with,
+    label_atom_index_status_with, query_label_atom_index_with, rebuild_label_atom_index_with,
+    suggest_task_labels_with,
 };
 use serde::Serialize;
 use std::{fs, io::Read, str::FromStr};

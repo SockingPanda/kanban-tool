@@ -249,6 +249,136 @@ fn label_bootstrap_rejects_empty_semantics_without_partial_writes() -> anyhow::R
 }
 
 #[test]
+fn canonical_label_delete_rejects_bound_label_without_force() -> anyhow::Result<()> {
+    let temp = TempDb::new("canonical_label_delete_rejects_bound_label_without_force")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("delete label guarded target"),
+    )?;
+    bootstrap_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        BootstrapTaskLabel {
+            name: "database".to_owned(),
+            description: Some("Database persistence work".to_owned()),
+            positive_examples: vec!["new table migration".to_owned()],
+            ..BootstrapTaskLabel::default()
+        },
+    )?;
+
+    let error = result_err(delete_label(
+        &temp.path, "default", "tester", "database", false,
+    ))?;
+
+    assert!(error.to_string().contains("attached to 1 task(s)"));
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "labels")?, 1);
+    assert_eq!(table_count(&conn, "task_labels")?, 1);
+    assert_eq!(table_count(&conn, "label_semantics")?, 1);
+    assert!(table_count(&conn, "label_atoms")? > 0);
+    assert_eq!(
+        get_task(&temp.path, "default", &task.id)?.labels[0].name,
+        "database"
+    );
+    Ok(())
+}
+
+#[test]
+fn canonical_label_delete_removes_unbound_label_without_force() -> anyhow::Result<()> {
+    let temp = TempDb::new("canonical_label_delete_removes_unbound_label_without_force")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "retired".to_owned(),
+            color: None,
+        },
+    )?;
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "retired".to_owned(),
+            description: Some("Retired label vocabulary".to_owned()),
+            positive_examples: vec!["cleanup old label".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    let deleted = delete_label(&temp.path, "default", "tester", "retired", false)?;
+
+    assert!(!deleted.forced);
+    assert_eq!(deleted.label.name, "retired");
+    assert_eq!(deleted.removed_task_bindings, 0);
+    assert!(deleted.removed_semantics);
+    assert!(deleted.removed_atoms > 0);
+    assert!(list_labels(&temp.path, "default")?.is_empty());
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "labels")?, 0);
+    assert_eq!(table_count(&conn, "task_labels")?, 0);
+    assert_eq!(table_count(&conn, "label_semantics")?, 0);
+    assert_eq!(table_count(&conn, "label_atoms")?, 0);
+    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    assert_eq!(status.board_dirty, Some(true));
+    Ok(())
+}
+
+#[test]
+fn canonical_label_delete_force_cleans_truth_and_marks_index_dirty() -> anyhow::Result<()> {
+    let temp = TempDb::new("canonical_label_delete_force_cleans_truth_and_marks_index_dirty")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("delete label force target"),
+    )?;
+    bootstrap_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        BootstrapTaskLabel {
+            name: "database".to_owned(),
+            description: Some("Database persistence work".to_owned()),
+            applies_when: vec!["touches SQLite migrations".to_owned()],
+            positive_examples: vec!["new table migration".to_owned()],
+            ..BootstrapTaskLabel::default()
+        },
+    )?;
+
+    let deleted = delete_label(&temp.path, "default", "tester", "database", true)?;
+
+    assert!(deleted.forced);
+    assert_eq!(deleted.label.name, "database");
+    assert_eq!(deleted.removed_task_bindings, 1);
+    assert!(deleted.removed_semantics);
+    assert!(deleted.removed_atoms > 0);
+    assert!(list_labels(&temp.path, "default")?.is_empty());
+    assert!(get_task(&temp.path, "default", &task.id)?.labels.is_empty());
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "labels")?, 0);
+    assert_eq!(table_count(&conn, "task_labels")?, 0);
+    assert_eq!(table_count(&conn, "label_semantics")?, 0);
+    assert_eq!(table_count(&conn, "label_atoms")?, 0);
+    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    assert_eq!(status.board_dirty, Some(true));
+    let deleted_events = list_events(&temp.path, "default", None)?
+        .into_iter()
+        .filter(|event| event.kind == "label.deleted")
+        .collect::<Vec<_>>();
+    assert_eq!(deleted_events.len(), 1);
+    assert!(deleted_events[0].payload_json.contains("\"forced\":true"));
+    Ok(())
+}
+
+#[test]
 fn label_proposal_residual_validation_passes_and_accept_keeps_task_unbound() -> anyhow::Result<()> {
     let temp =
         TempDb::new("label_proposal_residual_validation_passes_and_accept_keeps_task_unbound")?;

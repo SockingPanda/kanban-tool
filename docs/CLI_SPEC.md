@@ -1218,7 +1218,7 @@ calls `sync_search_index` every `--search-sync-interval-ms` milliseconds
 kanban search <query> [--status ready] [--status review] [--assignee worker-a] [--label backend] [--include-archived] [--limit 20] [--offset 0] [--json]
 ```
 
-默认实现使用 SQLite fallback，不依赖外部/派生索引。启用 `tantivy-backend` feature 且 `index/v1/tasks/` 存在可读 Tantivy 索引时，`kanban search` 使用 Tantivy；缺失或损坏时回落 SQLite，并在 meta 中标记 stale。搜索匹配 task title、description、comments、run summary/error、event kind/payload。
+默认 CLI build 启用 `tantivy-backend`。当 `index/v1/tasks/` 存在可读 Tantivy 索引时，`kanban search` 使用 Tantivy；缺失、损坏、过期或二进制显式以 `--no-default-features` 构建时回落 SQLite，并在 meta 中标记 stale。搜索匹配 task title、description、comments、run summary/error、event kind/payload。
 
 `--label <name-or-id>` 可重复；多个 label 使用 AND 语义，并在 search
 分页前过滤 task。带 label 过滤的 Tantivy search 会回落到 SQLite fallback，
@@ -1274,7 +1274,7 @@ kanban index rebuild
 kanban index sync
 ```
 
-默认 backend 是 SQLite fallback。启用 `tantivy-backend` feature 时，Tantivy index 是可重建 derived cache：
+默认 CLI build 启用 `tantivy-backend`，Tantivy index 是可重建 derived cache；显式以 `--no-default-features` 构建时保留 SQLite fallback：
 
 - `status` returns backend/meta.
 - `doctor` returns the same fallback health meta for scripts.
@@ -1336,7 +1336,7 @@ kanban context build t_... [--lexical-limit 5] [--vector-config <toml>]
 `kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kanban backup`。JSONL export 包含 label ontology ledger 四张表，record types 为 `label_ontology_observation`、`label_ontology_signal`、`label_ontology_action`、`label_ontology_action_signal`；因此 portable JSONL 与 SQLite backup 都会保留 ontology observation/signal/action provenance。
 `kanban import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kanban import --replace` 是 offline-only 操作；运行前必须停止 `kanban serve` 和常驻 `kanban dispatch`，如果检测到 active runtime lock 会直接拒绝。Ontology import 会延迟回填 `label_ontology_signals.superseded_by_signal_id` 与 `label_ontology_actions.parent_action_id`，因此不依赖 JSONL 中同表自引用 rows 的偶然顺序；导入后会拒绝跨 board ontology links、orphan action-signal links、supersede cycles 和 action parent cycles。
 `kanban entity`、`kanban outbox`、`kanban derived` 是 Knowledge Substrate 的只读维护入口。SQLite 仍是事实源；这些命令只报告统一 entity registry、派生索引 outbox 和 derived store 状态，不改变 task 状态或 claim。
-`kanban graph` 和 `kanban vector` 是 feature-gated 派生层入口：未启用 `graph-oxigraph` / `vector-lancedb` 或缺少 embedding provider 时返回 disabled/degraded status；启用后仍只作为可重建 relation/vector store，不参与 task 状态事务。
+`kanban graph` 和 `kanban vector` 是 feature-gated 派生层入口。默认 CLI build 启用 `graph-oxigraph` 和 `vector-lancedb`；显式以 `--no-default-features` 构建或缺少 embedding provider 时返回 disabled/degraded status。启用后仍只作为可重建 relation/vector store，不参与 task 状态事务。
 `kanban vector status --json` 保留 `message` 兼容字段，同时返回结构化
 `diagnostics`、`dirty`、`board_dirty` 字段；dirty/error 判断应使用这些字段，不解析
 `message` 文案。
@@ -1352,7 +1352,7 @@ model = "qwen3-embedding:0.6b"
 dimensions = 1024
 ```
 
-项目级 `.kb/config.toml` 可以覆盖全局 `[vector]`；命令行 `--vector-config <toml>` 优先级最高。解析顺序是：显式 `--vector-config`、最近的项目 `.kb/config.toml`、全局 config。`kanban board use <board>` 更新项目配置文件的 `board` 字段时必须保留该文件内已有 `[vector]` 配置。配置有效且启用 `vector-lancedb` 时，`kanban vector status/rebuild/sync` 和 `kanban context build` 使用该 provider；未配置时保持 disabled/degraded fallback。
+项目级 `.kb/config.toml` 可以覆盖全局 `[vector]`；命令行 `--vector-config <toml>` 优先级最高。解析顺序是：显式 `--vector-config`、最近的项目 `.kb/config.toml`、全局 config。`kanban board use <board>` 更新项目配置文件的 `board` 字段时必须保留该文件内已有 `[vector]` 配置。默认 CLI build 启用 `vector-lancedb`；配置有效时 `kanban vector status/rebuild/sync` 和 `kanban context build` 使用该 provider，未配置或二进制显式以 `--no-default-features` 构建时保持 disabled/degraded fallback。
 `kanban context build` 通过 SQLite hydrate canonical task，并合并 lexical、graph、vector hits。graph/vector 不可用或失败时返回 degraded markers；失败原因通过有界 diagnostics 暴露，context pack 本身仍可用。
 
 `kanban derived status` 中的 `last_event_id` 是 store 级成功处理水位，不是当前 board 的局部水位。`dirty=true` 表示该 store 仍有任意 board 的 pending/running/failed outbox，或最近一次派生更新失败；board-scoped `kanban index sync`、`kanban graph sync`、`kanban vector sync` 只清理当前 board 的 job，不能因为本 board clean 就强制清掉全局 dirty。

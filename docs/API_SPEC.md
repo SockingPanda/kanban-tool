@@ -1235,28 +1235,30 @@ observation 和 child signals。请求 body：
 ```json
 {
   "actor": {"name": "label-agent", "type": "agent", "agent_type": "local"},
-  "agent_candidates_json": "[]",
-  "suggestion_snapshot_json": "{}",
-  "final_decision_json": "{}",
-  "suggest_coverage": 0.61,
-  "suggest_coverage_cosine": 0.74,
-  "suggest_residual_norm": 0.39,
-  "suggest_needs_new_label": false,
-  "suggest_degraded": false,
-  "diagnostics_json": "[]",
+  "agent_candidates": [],
+  "suggestion_snapshot": {
+    "selected_labels": [],
+    "coverage": 0.61,
+    "coverage_cosine": 0.74,
+    "residual_norm": 0.39,
+    "needs_new_label": false,
+    "degraded": false,
+    "diagnostics": []
+  },
+  "final_decision": {},
   "capture_fingerprint": "optional-stable-key",
   "signals": [
     {
       "kind": "false_negative",
       "target_label_ref": "cli",
-      "related_labels_json": "[]",
+      "related_labels": [],
       "proposed_action": "add_positive_atom",
       "candidate_atom": {
         "polarity": "positive",
         "kind": "applies_when",
         "text": "extends CLI subcommands, command arguments, help output, or machine-readable JSON behavior"
       },
-      "proposal_json": "{}",
+      "proposal": {},
       "agent_selected": true,
       "suggest_state": "candidate",
       "suggest_score": 0.08,
@@ -1268,6 +1270,20 @@ observation 和 child signals。请求 body：
   ]
 }
 ```
+
+HTTP ontology DTOs use natural JSON fields for new clients:
+`agent_candidates`, `suggestion_snapshot`, `final_decision`, `diagnostics`,
+signal `related_labels` / `proposal`, action `change` / `validation`, and
+validate `validation`. Legacy escaped-string fields (`agent_candidates_json`,
+`suggestion_snapshot_json`, `final_decision_json`, `diagnostics_json`,
+`related_labels_json`, `proposal_json`, `change_json`, `validation_json`) are
+accepted for one compatibility window, but a request must not supply both the
+natural field and its legacy `*_json` sibling. When `suggestion_snapshot`
+contains `coverage`, `coverage_cosine`, `residual_norm`, `needs_new_label`,
+`degraded`, or `diagnostics`, the server derives the stored observation metrics
+from that snapshot. If the request also supplies the matching top-level
+`suggest_*` field or `diagnostics` and the values conflict, the request returns
+`400 invalid_input`.
 
 Service 会读取当前 task snapshot、解析 `target_label_ref`、计算 normalized proposed
 label name、signal key 和 candidate atom content hash。`capture_fingerprint` 为空时
@@ -1285,7 +1301,7 @@ Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
 `update_semantics` 必须提供 target label；`bootstrap_label` 必须提供
 `proposed_label_name`；`rename_label` 必须提供 target label 和
 `proposed_label_name`；`split_label` / `merge_labels` 必须提供 target label 和非空
-`related_labels_json`。Observation metric `suggest_coverage`、
+`related_labels` / `related_labels_json`。Observation metric `suggest_coverage`、
 `suggest_coverage_cosine`、`suggest_residual_norm` 以及 signal metric
 `suggest_score` / `confidence` 必须是 finite `0.0..=1.0`；`suggest_rank` 必须为
 `null` 或 `>= 1`。违反这些契约的 request 返回 `400 invalid_input`，不会写入
@@ -1374,16 +1390,15 @@ Groups sort by distinct `task_count` desc, then `confirmed_count` desc,
   "result_proposal_id": null,
   "canonical_before_hash": null,
   "canonical_after_hash": null,
-  "change_json": null,
-  "validation_status": null,
-  "validation_json": null
+  "validation_status": null
 }
 ```
 
 该公共 action endpoint 只接受 lifecycle action types：`confirm`、`reject`、
 `supersede` 和 `resolve_no_change`，并会同步更新 source signal status。请求中的
-`parent_action_id`、`target_label_ref`、result 字段、canonical hash、`change_json`、
-`validation_status` 和 `validation_json` 必须为 `null`/缺省；否则返回
+`parent_action_id`、`target_label_ref`、result 字段、canonical hash、`change` /
+`change_json`、`validation_status` 和 `validation` / `validation_json` 必须为
+`null`/缺省；否则返回
 `invalid_input`。`add_positive_atom`、`add_negative_atom`、`bootstrap_label`、
 `validate` 等 mutation/validation action types 不允许通过该 generic endpoint 写入；
 canonical mutation provenance 必须由 apply/proposal accept/validate 等专用 route 在
@@ -1421,11 +1436,35 @@ content hash、before/after canonical hash 和 diff，并把 validation status �
   "signal_ids": ["los_1", "los_2"],
   "reason": "Source tasks now select the target label after atom rebuild",
   "validation_status": "passed",
-  "validation_json": "{\"evidence_type\":\"automated\",\"embedding_model\":\"local-embeddings-v1\",\"solver_options\":{\"candidate_limit\":24,\"atom_limit\":64},\"index\":{\"status\":\"ready\",\"dirty\":false,\"generation\":42},\"cases\":[{\"signal_id\":\"los_1\",\"case_type\":\"positive_atom\",\"passed\":true,\"before\":{\"target\":{\"label_id\":\"l_cli\",\"selected\":false,\"score\":0.12},\"coverage\":0.61},\"after\":{\"degraded\":false,\"target\":{\"label_id\":\"l_cli\",\"selected\":true,\"score\":0.72},\"coverage\":0.78,\"evidence_atoms\":[{\"id\":\"la_...\",\"content_hash\":\"...\",\"label_id\":\"l_cli\"}]}}]}"
+  "validation": {
+    "evidence_type": "automated",
+    "embedding_model": "local-embeddings-v1",
+    "solver_options": {"candidate_limit": 24, "atom_limit": 64},
+    "index": {"status": "ready", "dirty": false, "generation": 42},
+    "cases": [
+      {
+        "signal_id": "los_1",
+        "case_type": "positive_atom",
+        "passed": true,
+        "before": {
+          "target": {"label_id": "l_cli", "selected": false, "score": 0.12},
+          "coverage": 0.61
+        },
+        "after": {
+          "degraded": false,
+          "target": {"label_id": "l_cli", "selected": true, "score": 0.72},
+          "coverage": 0.78,
+          "evidence_atoms": [
+            {"id": "la_...", "content_hash": "...", "label_id": "l_cli"}
+          ]
+        }
+      }
+    ]
+  }
 }
 ```
 
-Service 会把 supplied `validation_json` 包进 validation envelope，附上 source signal
+Service 会把 supplied `validation` / `validation_json` 包进 validation envelope，附上 source signal
 cases、observation task snapshot / suggest input hash 与当前 task hash 对比、parent
 action result 引用和 summary。`parent_action_id` 必须指向同一 board 上 `validation_status=pending`
 的 canonical mutation action，且 parent action 必须带有 canonical result evidence

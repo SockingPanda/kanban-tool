@@ -7,7 +7,7 @@ use kanban_sqlite::{
     CreateLabel, LabelProposalCandidate, LabelProposalListOptions, LabelProposalStatus,
     LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult,
     MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics, accept_label_proposal,
-    add_task_label, create_label, delete_label_semantics, get_label_proposal, get_label_semantics,
+    add_task_labels, create_label, delete_label_semantics, get_label_proposal, get_label_semantics,
     label_atom_index_status, list_label_atoms, list_label_proposals, list_label_semantics,
     list_labels, propose_task_label_with, reject_label_proposal, remove_task_label,
     suggest_task_labels, upsert_label_semantics,
@@ -49,7 +49,7 @@ pub(crate) fn handle_label(
             print_or_json(json, &label, || label_line(&label))?;
         }
         LabelCommand::Add(args) => {
-            let task = add_task_label(db_path, board, actor, &args.task_ref, &args.label)?;
+            let task = add_task_labels(db_path, board, actor, &args.task_ref, &args.labels)?;
             print_task(json, &task)?;
         }
         LabelCommand::Remove(args) => {

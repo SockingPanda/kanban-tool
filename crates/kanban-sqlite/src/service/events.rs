@@ -1,15 +1,16 @@
 use crate::connect_file;
 
 use super::{
-    EventListOptions, EventRecord, board_id_any, enqueue_index_outbox, resolve_task_any, storage,
-    upsert_board_entity, upsert_event_entity, upsert_run_entity, upsert_task_entity,
+    EventListOptions, EventRecord, SqlFilter, all_values, board_id_any, enqueue_index_outbox,
+    exec_named, resolve_task_any, scalar, upsert_board_entity, upsert_event_entity,
+    upsert_run_entity, upsert_task_entity,
 };
 
 use std::path::Path;
 
 use kanban_core::{Result, new_event_id};
 
-use rusqlite::{Connection, Row, params, params_from_iter, types::Value};
+use rusqlite::{Connection, Row, named_params, params, types::Value};
 
 pub fn list_events(
     path: impl AsRef<Path>,
@@ -21,29 +22,16 @@ pub fn list_events(
     let task_id = task_ref
         .map(|r| resolve_task_any(&conn, &board_id, r).map(|t| t.id))
         .transpose()?;
-    let sql = if task_id.is_some() {
-        "SELECT id,event_id,task_id,run_id,kind,actor,payload_json,created_at FROM task_events WHERE board_id=?1 AND task_id=?2 ORDER BY id ASC"
-    } else {
-        "SELECT id,event_id,task_id,run_id,kind,actor,payload_json,created_at FROM task_events WHERE board_id=?1 ORDER BY id ASC"
-    };
-    let mut stmt = conn.prepare(sql).map_err(storage)?;
-    let mut out = Vec::new();
+    let mut filter = SqlFilter::new();
+    filter.and("board_id=?", board_id)?;
     if let Some(task_id) = task_id {
-        let rows = stmt
-            .query_map(params![board_id, task_id], event_from_row)
-            .map_err(storage)?;
-        for row in rows {
-            out.push(row.map_err(storage)?);
-        }
-    } else {
-        let rows = stmt
-            .query_map(params![board_id], event_from_row)
-            .map_err(storage)?;
-        for row in rows {
-            out.push(row.map_err(storage)?);
-        }
+        filter.and("task_id=?", task_id)?;
     }
-    Ok(out)
+    let sql = format!(
+        "SELECT id,event_id,task_id,run_id,kind,actor,payload_json,created_at FROM task_events {} ORDER BY id ASC",
+        filter.where_sql()
+    );
+    all_values(&conn, &sql, filter.params(), event_from_row)
 }
 
 pub fn list_events_after(
@@ -58,31 +46,28 @@ pub fn list_events_after(
         .as_deref()
         .map(|r| resolve_task_any(&conn, &board_id, r).map(|t| t.id))
         .transpose()?;
-    let mut params = vec![Value::Text(board_id), Value::Integer(options.after)];
-    let mut where_sql = "WHERE board_id=? AND id>?".to_owned();
+    let mut filter = SqlFilter::new();
+    filter.and("board_id=?", board_id)?;
+    filter.and("id>?", options.after)?;
     if let Some(task_id) = task_id {
-        where_sql.push_str(" AND task_id=?");
-        params.push(Value::Text(task_id));
+        filter.and("task_id=?", task_id)?;
     }
+    let mut params = filter.params().to_vec();
     params.push(Value::Integer(options.limit as i64));
     let sql = format!(
-        "SELECT id,event_id,task_id,run_id,kind,actor,payload_json,created_at FROM task_events {where_sql} ORDER BY id ASC LIMIT ?"
+        "SELECT id,event_id,task_id,run_id,kind,actor,payload_json,created_at FROM task_events {} ORDER BY id ASC LIMIT ?",
+        filter.where_sql()
     );
-    let mut stmt = conn.prepare(&sql).map_err(storage)?;
-    let rows = stmt
-        .query_map(params_from_iter(params.iter()), event_from_row)
-        .map_err(storage)?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)
+    all_values(&conn, &sql, &params, event_from_row)
 }
 
 pub(crate) fn current_last_event_id(conn: &Connection, board_id: &str) -> Result<Option<i64>> {
-    conn.query_row(
+    scalar(
+        conn,
         "SELECT MAX(id) FROM task_events WHERE board_id=?1",
         params![board_id],
         |row| row.get(0),
     )
-    .map_err(storage)
 }
 
 pub(crate) fn search_lag(
@@ -121,7 +106,20 @@ pub(crate) fn insert_event(
     now: i64,
 ) -> Result<()> {
     let event_id = new_event_id();
-    conn.execute("INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)", params![event_id, board_id, task_id, run_id, kind, actor, payload, now]).map_err(storage)?;
+    exec_named(
+        conn,
+        "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, :run_id, :kind, :actor, :payload_json, :created_at)",
+        named_params! {
+            ":event_id": event_id,
+            ":board_id": board_id,
+            ":task_id": task_id,
+            ":run_id": run_id,
+            ":kind": kind,
+            ":actor": actor,
+            ":payload_json": payload,
+            ":created_at": now,
+        },
+    )?;
     let source_event_id = conn.last_insert_rowid();
     upsert_board_entity(conn, board_id)?;
     upsert_event_entity(conn, &event_id, board_id, task_id, kind, payload, now)?;

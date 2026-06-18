@@ -1,8 +1,9 @@
 use crate::connect_file;
 
 use super::{
-    ClaimResult, TaskRecord, board_id, ensure_board_active, get_task_by_id, insert_event,
-    json_valid, query_tasks, resolve_task, storage, with_immediate_tx,
+    ClaimResult, TaskRecord, board_id, ensure_board_active, ensure_changed_one, exec_named,
+    get_task_by_id, insert_event, json_valid, query_tasks, resolve_task, storage,
+    with_immediate_tx,
 };
 
 use std::path::Path;
@@ -14,7 +15,7 @@ use kanban_core::{
     running_claim_is_present,
 };
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, named_params, params};
 
 use serde_json::json;
 
@@ -795,29 +796,62 @@ pub(crate) fn reclaim_running_task(
         ));
     }
     if let (Some(run_id), Some(token)) = (&task.current_run_id, &task.claim_token) {
-        let changed = conn
-            .execute(
-                "UPDATE task_runs SET status=?1, finished_at=?2, error=?3 WHERE id=?4 AND board_id=?5 AND task_id=?6 AND status='running' AND claim_token=?7",
-                params![run_status, now, reason, run_id, board_id, task.id, token],
-            )
-            .map_err(storage)?;
-        if changed != 1 {
-            return Err(KanbanError::InvalidTransition(
-                "reclaim requires matching running run".into(),
-            ));
-        }
+        let changed = exec_named(
+            conn,
+            "UPDATE task_runs
+             SET status=:status, finished_at=:finished_at, error=:error
+             WHERE id=:run_id
+               AND board_id=:board_id
+               AND task_id=:task_id
+               AND status='running'
+               AND claim_token=:claim_token",
+            named_params! {
+                ":status": run_status,
+                ":finished_at": now,
+                ":error": reason,
+                ":run_id": run_id,
+                ":board_id": board_id,
+                ":task_id": task.id,
+                ":claim_token": token,
+            },
+        )?;
+        ensure_changed_one(changed, || {
+            KanbanError::InvalidTransition("reclaim requires matching running run".into())
+        })?;
     }
-    let changed = conn
-        .execute(
-            "UPDATE tasks SET status=?1, status_reason=?2, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, retry_count=retry_count+1, updated_at=?3, lock_version=lock_version+1 WHERE id=?4 AND board_id=?5 AND status='running' AND claim_token=?6 AND current_run_id=?7 AND (?8 IS NULL OR claim_expires_at <= ?8)",
-            params![target.as_str(), (target == TaskStatus::Blocked).then_some(reason), now, task.id, board_id, task.claim_token, task.current_run_id, expiry_guard],
-        )
-        .map_err(storage)?;
-    if changed != 1 {
-        return Err(KanbanError::InvalidTransition(
-            "reclaim requires matching running claim".into(),
-        ));
-    }
+    let status_reason = (target == TaskStatus::Blocked).then_some(reason);
+    let changed = exec_named(
+        conn,
+        "UPDATE tasks
+         SET status=:status,
+             status_reason=:status_reason,
+             claim_token=NULL,
+             claim_owner=NULL,
+             claim_expires_at=NULL,
+             last_heartbeat_at=NULL,
+             retry_count=retry_count+1,
+             updated_at=:now,
+             lock_version=lock_version+1
+         WHERE id=:task_id
+           AND board_id=:board_id
+           AND status='running'
+           AND claim_token=:claim_token
+           AND current_run_id=:current_run_id
+           AND (:expiry_guard IS NULL OR claim_expires_at <= :expiry_guard)",
+        named_params! {
+            ":status": target.as_str(),
+            ":status_reason": status_reason,
+            ":now": now,
+            ":task_id": task.id,
+            ":board_id": board_id,
+            ":claim_token": task.claim_token,
+            ":current_run_id": task.current_run_id,
+            ":expiry_guard": expiry_guard,
+        },
+    )?;
+    ensure_changed_one(changed, || {
+        KanbanError::InvalidTransition("reclaim requires matching running claim".into())
+    })?;
     let payload = json!({
         "retry_count": task.retry_count + 1,
         "max_retries": task.max_retries,
@@ -860,29 +894,64 @@ pub(crate) fn retry_running_task(
     }
     let decision = retry_decision(task.retry_count, task.max_retries, TaskStatus::Ready);
     if let (Some(run_id), Some(token)) = (&task.current_run_id, &task.claim_token) {
-        let changed = conn
-            .execute(
-                "UPDATE task_runs SET status=?1, finished_at=?2, exit_code=?3, error=?4 WHERE id=?5 AND board_id=?6 AND task_id=?7 AND status='running' AND claim_token=?8",
-                params![run_status, now, exit_code, reason, run_id, board_id, task.id, token],
-            )
-            .map_err(storage)?;
-        if changed != 1 {
-            return Err(KanbanError::InvalidTransition(
-                "retry requires matching running run".into(),
-            ));
-        }
+        let changed = exec_named(
+            conn,
+            "UPDATE task_runs
+             SET status=:status, finished_at=:finished_at, exit_code=:exit_code, error=:error
+             WHERE id=:run_id
+               AND board_id=:board_id
+               AND task_id=:task_id
+               AND status='running'
+               AND claim_token=:claim_token",
+            named_params! {
+                ":status": run_status,
+                ":finished_at": now,
+                ":exit_code": exit_code,
+                ":error": reason,
+                ":run_id": run_id,
+                ":board_id": board_id,
+                ":task_id": task.id,
+                ":claim_token": token,
+            },
+        )?;
+        ensure_changed_one(changed, || {
+            KanbanError::InvalidTransition("retry requires matching running run".into())
+        })?;
     }
-    let changed = conn
-        .execute(
-            "UPDATE tasks SET status=?1, status_reason=?2, claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, retry_count=?3, updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='running' AND claim_token=?7 AND current_run_id=?8 AND (?9 IS NULL OR claim_expires_at <= ?9)",
-            params![decision.status.as_str(), if decision.max_retries_reached { Some(reason) } else { None }, decision.retry_count, now, task.id, board_id, task.claim_token, task.current_run_id, expiry_guard],
-        )
-        .map_err(storage)?;
-    if changed != 1 {
-        return Err(KanbanError::InvalidTransition(
-            "retry requires matching running claim".into(),
-        ));
-    }
+    let status_reason = decision.max_retries_reached.then_some(reason);
+    let changed = exec_named(
+        conn,
+        "UPDATE tasks
+         SET status=:status,
+             status_reason=:status_reason,
+             claim_token=NULL,
+             claim_owner=NULL,
+             claim_expires_at=NULL,
+             last_heartbeat_at=NULL,
+             retry_count=:retry_count,
+             updated_at=:now,
+             lock_version=lock_version+1
+         WHERE id=:task_id
+           AND board_id=:board_id
+           AND status='running'
+           AND claim_token=:claim_token
+           AND current_run_id=:current_run_id
+           AND (:expiry_guard IS NULL OR claim_expires_at <= :expiry_guard)",
+        named_params! {
+            ":status": decision.status.as_str(),
+            ":status_reason": status_reason,
+            ":retry_count": decision.retry_count,
+            ":now": now,
+            ":task_id": task.id,
+            ":board_id": board_id,
+            ":claim_token": task.claim_token,
+            ":current_run_id": task.current_run_id,
+            ":expiry_guard": expiry_guard,
+        },
+    )?;
+    ensure_changed_one(changed, || {
+        KanbanError::InvalidTransition("retry requires matching running claim".into())
+    })?;
     let payload = json!({
         "retry_count": decision.retry_count,
         "max_retries": task.max_retries,
@@ -949,31 +1018,104 @@ pub(crate) fn finish_running(
                 "finish requires matching running claim".into(),
             ));
         }
-        conn.execute(
-            "UPDATE tasks SET status=?1, status_reason=?2, completed_at=?3, result_summary=COALESCE(?4, result_summary), result_json=COALESCE(?5, result_json), claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?6, lock_version=lock_version+1 WHERE id=?7 AND board_id=?8 AND status='running' AND claim_token=?9 AND current_run_id=?10",
-            params![target.as_str(), reason, completed, summary, result_json, now, task.id, board_id, task.claim_token, task.current_run_id],
+        exec_named(
+            conn,
+            "UPDATE tasks
+             SET status=:status,
+                 status_reason=:status_reason,
+                 completed_at=:completed_at,
+                 result_summary=COALESCE(:result_summary, result_summary),
+                 result_json=COALESCE(:result_json, result_json),
+                 claim_token=NULL,
+                 claim_owner=NULL,
+                 claim_expires_at=NULL,
+                 last_heartbeat_at=NULL,
+                 updated_at=:now,
+                 lock_version=lock_version+1
+             WHERE id=:task_id
+               AND board_id=:board_id
+               AND status='running'
+               AND claim_token=:claim_token
+               AND current_run_id=:current_run_id",
+            named_params! {
+                ":status": target.as_str(),
+                ":status_reason": reason,
+                ":completed_at": completed,
+                ":result_summary": summary,
+                ":result_json": result_json,
+                ":now": now,
+                ":task_id": task.id,
+                ":board_id": board_id,
+                ":claim_token": task.claim_token,
+                ":current_run_id": task.current_run_id,
+            },
         )
     } else {
-        conn.execute(
-            "UPDATE tasks SET status=?1, status_reason=?2, completed_at=?3, result_summary=COALESCE(?4, result_summary), result_json=COALESCE(?5, result_json), claim_token=NULL, claim_owner=NULL, claim_expires_at=NULL, last_heartbeat_at=NULL, updated_at=?6, lock_version=lock_version+1 WHERE id=?7 AND board_id=?8 AND status='review'",
-            params![target.as_str(), reason, completed, summary, result_json, now, task.id, board_id],
+        exec_named(
+            conn,
+            "UPDATE tasks
+             SET status=:status,
+                 status_reason=:status_reason,
+                 completed_at=:completed_at,
+                 result_summary=COALESCE(:result_summary, result_summary),
+                 result_json=COALESCE(:result_json, result_json),
+                 claim_token=NULL,
+                 claim_owner=NULL,
+                 claim_expires_at=NULL,
+                 last_heartbeat_at=NULL,
+                 updated_at=:now,
+                 lock_version=lock_version+1
+             WHERE id=:task_id
+               AND board_id=:board_id
+               AND status='review'",
+            named_params! {
+                ":status": target.as_str(),
+                ":status_reason": reason,
+                ":completed_at": completed,
+                ":result_summary": summary,
+                ":result_json": result_json,
+                ":now": now,
+                ":task_id": task.id,
+                ":board_id": board_id,
+            },
         )
-    }
-    .map_err(storage)?;
-    if changed != 1 {
-        return Err(KanbanError::InvalidTransition(
-            "finish requires matching running claim".into(),
-        ));
-    }
+    }?;
+    ensure_changed_one(changed, || {
+        KanbanError::InvalidTransition("finish requires matching running claim".into())
+    })?;
     let event_payload = json!({
         "result": result_json.and_then(|value| serde_json::from_str::<serde_json::Value>(value).ok()),
     })
     .to_string();
     if let Some(run_id) = &task.current_run_id {
-        let changed = conn.execute(
-            "UPDATE task_runs SET status=?1, finished_at=?2, exit_code=?3, error=?4, log_path=COALESCE(?5, log_path), summary=COALESCE(?6, summary) WHERE id=?7 AND board_id=?8 AND task_id=?9 AND status='running' AND claim_token IS ?10",
-            params![run_status, now, exit_code, reason, log_path.map(|p| p.to_string_lossy().to_string()), summary, run_id, board_id, task.id, task.claim_token],
-        ).map_err(storage)?;
+        let log_path = log_path.map(|path| path.to_string_lossy().to_string());
+        let changed = exec_named(
+            conn,
+            "UPDATE task_runs
+             SET status=:status,
+                 finished_at=:finished_at,
+                 exit_code=:exit_code,
+                 error=:error,
+                 log_path=COALESCE(:log_path, log_path),
+                 summary=COALESCE(:summary, summary)
+             WHERE id=:run_id
+               AND board_id=:board_id
+               AND task_id=:task_id
+               AND status='running'
+               AND claim_token IS :claim_token",
+            named_params! {
+                ":status": run_status,
+                ":finished_at": now,
+                ":exit_code": exit_code,
+                ":error": reason,
+                ":log_path": log_path,
+                ":summary": summary,
+                ":run_id": run_id,
+                ":board_id": board_id,
+                ":task_id": task.id,
+                ":claim_token": task.claim_token,
+            },
+        )?;
         if task.status == TaskStatus::Running && changed != 1 {
             return Err(KanbanError::InvalidTransition(
                 "finish requires matching running run".into(),

@@ -1,12 +1,12 @@
 use crate::connect_file;
 
-use super::{RunRecord, board_id_any, resolve_task_any, storage};
+use super::{RunRecord, all, board_id_any, required_row, resolve_task_any};
 
 use std::path::Path;
 
 use kanban_core::{KanbanError, Result};
 
-use rusqlite::{OptionalExtension, Row, params};
+use rusqlite::{Row, params};
 
 pub fn list_runs(
     path: impl AsRef<Path>,
@@ -23,36 +23,22 @@ pub fn list_runs(
     } else {
         "SELECT id,task_id,status,worker_profile,worker_pid,claim_token,claim_owner,started_at,finished_at,exit_code,summary,error,log_path,metadata_json FROM task_runs WHERE board_id=?1 ORDER BY started_at DESC"
     };
-    let mut stmt = conn.prepare(sql).map_err(storage)?;
-    let mut out = Vec::new();
     if let Some(task_id) = task_id {
-        let rows = stmt
-            .query_map(params![board_id, task_id], run_from_row)
-            .map_err(storage)?;
-        for row in rows {
-            out.push(row.map_err(storage)?);
-        }
+        all(&conn, sql, params![board_id, task_id], run_from_row)
     } else {
-        let rows = stmt
-            .query_map(params![board_id], run_from_row)
-            .map_err(storage)?;
-        for row in rows {
-            out.push(row.map_err(storage)?);
-        }
+        all(&conn, sql, params![board_id], run_from_row)
     }
-    Ok(out)
 }
 
 pub fn get_run_by_id_global(path: impl AsRef<Path>, run_id: &str) -> Result<RunRecord> {
     let conn = connect_file(path.as_ref())?;
-    conn.query_row(
+    required_row(
+        &conn,
         "SELECT id,task_id,status,worker_profile,worker_pid,claim_token,claim_owner,started_at,finished_at,exit_code,summary,error,log_path,metadata_json FROM task_runs WHERE id=?1",
         [run_id],
         run_from_row,
+        || KanbanError::NotFound(format!("run {run_id}")),
     )
-    .optional()
-    .map_err(storage)?
-    .ok_or_else(|| KanbanError::NotFound(format!("run {run_id}")))
 }
 
 pub(crate) fn run_from_row(row: &Row<'_>) -> rusqlite::Result<RunRecord> {

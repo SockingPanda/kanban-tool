@@ -33,7 +33,9 @@ const LABEL_ONTOLOGY_LEDGER_MIGRATION: &str =
     include_str!("../../../migrations/012_label_ontology_ledger.sql");
 const LABEL_ONTOLOGY_SUGGEST_INPUT_HASH_MIGRATION: &str =
     include_str!("../../../migrations/013_label_ontology_suggest_input_hash.sql");
-const LATEST_MIGRATION_VERSION: i64 = 13;
+const UNIQUE_LABEL_PROPOSAL_CREATE_ACTION_MIGRATION: &str =
+    include_str!("../../../migrations/014_unique_label_proposal_create_action.sql");
+const LATEST_MIGRATION_VERSION: i64 = 14;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] =
     &["fnv64:0ca871be950fc8a6", "fnv64:3b08da4e2b6041f5"];
 
@@ -108,6 +110,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 13,
         name: "013_label_ontology_suggest_input_hash",
         sql: LABEL_ONTOLOGY_SUGGEST_INPUT_HASH_MIGRATION,
+    },
+    Migration {
+        version: 14,
+        name: "014_unique_label_proposal_create_action",
+        sql: UNIQUE_LABEL_PROPOSAL_CREATE_ACTION_MIGRATION,
     },
 ];
 

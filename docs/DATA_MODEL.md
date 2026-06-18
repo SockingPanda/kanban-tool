@@ -538,6 +538,10 @@ Atom explain 查询会优先解析当前 `label_atoms.id`，也允许用
 provenance。已有 atom 如果来自旧 semantics 写入而没有任何 ontology action 引用，
 查询结果只标记 `legacy_untracked=true`，不会伪造 provenance。
 
+`create_label_proposal` action 对同一 `(board_id, result_proposal_id)` 唯一；proposal
+accept 生成的 `bootstrap_label` action 通过 `parent_action_id` 指向这条 creation
+action，从而让 proposal creation -> bootstrap acceptance provenance 链路保持无歧义。
+
 表：`label_ontology_action_signals`
 
 多对多连接 action 与 signals。多个 signals 可以支持一次 atom 修改；同一个 signal

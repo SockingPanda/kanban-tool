@@ -10,7 +10,7 @@ fn label_ontology_migration_creates_ledger_tables_and_json_constraints() -> anyh
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 13);
+    assert_eq!(user_version, 14);
     for table in [
         "label_ontology_observations",
         "label_ontology_signals",
@@ -24,6 +24,12 @@ fn label_ontology_migration_creates_ledger_tables_and_json_constraints() -> anyh
         )?;
         assert_eq!(count, 1, "missing table {table}");
     }
+    let unique_create_proposal_index: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_label_ontology_actions_unique_create_proposal'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(unique_create_proposal_index, 1);
 
     let task = create_task(
         &temp.path,

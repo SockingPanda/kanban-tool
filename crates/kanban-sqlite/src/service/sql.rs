@@ -189,12 +189,6 @@ impl IntoSqlValue for i64 {
     }
 }
 
-impl IntoSqlValue for usize {
-    fn into_sql_value(self) -> Value {
-        Value::Integer(self.try_into().expect("usize SQL value overflows i64"))
-    }
-}
-
 impl IntoSqlValue for Option<i64> {
     fn into_sql_value(self) -> Value {
         self.map_or(Value::Null, Value::Integer)

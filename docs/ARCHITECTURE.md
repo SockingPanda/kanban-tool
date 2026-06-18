@@ -46,26 +46,32 @@
 
 ## 2. Crate 结构
 
-推荐仓库结构：
+当前主要仓库结构（省略 tests、scripts、生成文件和部分支持文件）：
 
 ```text
 crates/
   kanban-core/
     src/
       domain/
-      commands/
       state_machine.rs
-      errors.rs
+      error.rs
       clock.rs
       id.rs
 
   kanban-sqlite/
     src/
       db.rs
-      migrations.rs
-      repositories.rs
-      transactions.rs
-      queries.rs
+      init.rs
+      service.rs
+      service/
+        sql.rs
+        transaction.rs
+        boards.rs
+        tasks.rs
+        transitions.rs
+        dispatch.rs
+        search.rs
+        ...
 
   kanban-cli/
     src/
@@ -75,17 +81,22 @@ crates/
 
   kanban-server/
     src/
-      main.rs
-      routes/
       dto.rs
-      sse.rs
+      handlers/
+      router.rs
+      state.rs
 
-  kanban-dispatcher/
-    src/
-      loop.rs
-      worker.rs
-      reclaim.rs
-      profiles.rs
+  kanban-context/
+  kanban-entity/
+  kanban-graph/
+  kanban-indexer/
+  kanban-labels/
+  kanban-local/
+  kanban-search/
+  kanban-vector/
+
+apps/
+  desktop/
 ```
 
 ### 2.1 `kanban-core`
@@ -177,7 +188,7 @@ CLI 可以直接打开 SQLite DB 调用 service，不需要 server 常驻。
 127.0.0.1:8721
 ```
 
-### 2.5 `kanban-dispatcher`
+### 2.5 Dispatcher path
 
 职责：
 
@@ -187,7 +198,11 @@ CLI 可以直接打开 SQLite DB 调用 service，不需要 server 常驻。
 - worker profile 执行。
 - run result 写回。
 
-Dispatcher 可以嵌入 server，也可以由 CLI 单独运行：
+当前没有独立 `kanban-dispatcher` crate。Dispatcher 入口由 CLI 提供，
+执行路径复用同一套 SQLite service / command service 语义；`kanban serve`
+不启动 dispatcher，server 同进程运行 dispatcher 仍是后续扩展。
+
+CLI 入口：
 
 ```bash
 kanban dispatch

@@ -1293,9 +1293,14 @@ Observation response 返回 created observation，并展开 child `signals`。
 }
 ```
 
-Lifecycle action types `confirm`、`reject`、`supersede` 和 `resolve_no_change` 会同步
-更新 source signal status。其它 action types 可用于记录外部 mutation provenance；
-canonical mutation 的首选入口是 apply/proposal accept 专用 route。
+该公共 action endpoint 只接受 lifecycle action types：`confirm`、`reject`、
+`supersede` 和 `resolve_no_change`，并会同步更新 source signal status。请求中的
+`parent_action_id`、`target_label_ref`、result 字段、canonical hash、`change_json`、
+`validation_status` 和 `validation_json` 必须为 `null`/缺省；否则返回
+`invalid_input`。`add_positive_atom`、`add_negative_atom`、`bootstrap_label`、
+`validate` 等 mutation/validation action types 不允许通过该 generic endpoint 写入；
+canonical mutation provenance 必须由 apply/proposal accept/validate 等专用 route 在
+同一 transaction 内写入。
 
 `POST /api/v1/boards/{board}/label-ontology/apply/atom` 对已有 label 执行
 read-modify-upsert semantics，并写入 atom provenance action：

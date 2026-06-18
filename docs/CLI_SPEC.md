@@ -755,6 +755,11 @@ Lifecycle commands 写入 action 并同步更新 signal status：
 - `supersede --by`：把重复或过时 signal 标记为 `superseded`。
 - `resolve --no-change`：记录无需 ontology 修改的 resolution。
 
+这些 lifecycle commands 只记录 review/status 变化，不接受 canonical mutation
+provenance 字段。`add_positive_atom`、`add_negative_atom`、`bootstrap_label` 和
+`validate` 等 action rows 只能由 `label ontology apply atom`、proposal accept、
+`label ontology validate` 等专用命令/服务路径在同一 transaction 中写入。
+
 `label ontology apply atom` 只接受 `confirmed` source signals。它会读取目标 label
 当前 semantics，把泛化文本加入对应数组，走现有 semantics upsert/rebuild atoms 路径，
 写入 `add_positive_atom` 或 `add_negative_atom` action，记录生成 atom 的软引用、

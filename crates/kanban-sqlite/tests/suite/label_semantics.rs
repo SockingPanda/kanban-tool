@@ -2091,6 +2091,79 @@ fn init_retries_v10_label_atom_hash_backfill_after_recorded_migration() -> anyho
 }
 
 #[test]
+fn init_v10_label_atom_hash_backfill_rolls_back_when_dirty_mark_fails() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_v10_label_atom_hash_backfill_rolls_back_when_dirty_mark_fails")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let semantics = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            applies_when: vec!["touches server code".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+        (&semantics.board_id, &semantics.label_id),
+    )?;
+    conn.execute(
+        "INSERT INTO label_atoms(id,label_id,board_id,polarity,kind,text,ordinal,content_hash,created_at,updated_at) \
+         VALUES ('la_old_name',?1,?2,'positive','name','backend',0,'old_name',1,1)",
+        (&semantics.label_id, &semantics.board_id),
+    )?;
+    conn.execute(
+        "UPDATE derived_store_state SET dirty=0 WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE label_atom_index_boards SET dirty=0 \
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [&semantics.board_id],
+    )?;
+    conn.execute_batch(
+        "CREATE TRIGGER fail_label_atom_dirty_mark \
+         BEFORE UPDATE ON derived_store_state \
+         WHEN NEW.store_name='lancedb_label_atoms' \
+         BEGIN \
+           SELECT RAISE(ABORT, 'forced label atom dirty failure'); \
+         END;",
+    )?;
+    drop(conn);
+
+    let err = result_err(init_database(&temp.path, "tester"))?;
+    assert!(
+        err.to_string().contains("forced label atom dirty failure"),
+        "err: {err}"
+    );
+    let atoms = list_label_atoms(&temp.path, "default")?;
+    assert!(
+        atoms.iter().any(|atom| atom.id == "la_old_name"),
+        "failed dirty mark must roll back atom rewrite: {atoms:?}"
+    );
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+
+    connect_file(&temp.path)?.execute("DROP TRIGGER fail_label_atom_dirty_mark", [])?;
+    init_database(&temp.path, "tester")?;
+    let repaired = list_label_atoms(&temp.path, "default")?;
+    assert!(repaired.iter().all(|atom| !atom.id.starts_with("la_old_")));
+    assert!(label_atom_store_dirty(&temp.path)?);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+    Ok(())
+}
+
+#[test]
 fn label_semantics_resolves_l_prefixed_label_name_before_id_fallback() -> anyhow::Result<()> {
     let temp = TempDb::new("label_semantics_resolves_l_prefixed_label_name_before_id_fallback")?;
     init_database(&temp.path, "tester")?;

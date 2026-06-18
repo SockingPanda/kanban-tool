@@ -6,8 +6,9 @@ use super::label_suggestions::{
 use super::{
     LabelProposalAttempt, LabelProposalCandidate, LabelProposalListOptions, LabelProposalStatus,
     LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult, SqlFilter, all,
-    all_values, board_id, exec, get_task_by_id, insert_event, mark_label_atom_store_dirty,
-    required_row, resolve_task, upsert_label_semantics_candidate_in_tx, with_immediate_tx,
+    all_values, board_id, exec, exec_named, get_task_by_id, insert_event,
+    mark_label_atom_store_dirty, required_row, resolve_task,
+    upsert_label_semantics_candidate_in_tx, with_immediate_tx,
 };
 
 use std::{collections::HashMap, path::Path, str::FromStr};
@@ -608,7 +609,7 @@ fn decide_label_proposal(
         }
         let decision_status = decision.to_string();
         let decision_reason = normalize_optional(reason);
-        exec(
+        exec_named(
             &conn,
             "UPDATE label_semantic_proposals
              SET status=:status,
@@ -684,7 +685,7 @@ fn insert_proposal_in_tx(
     } else {
         None
     };
-    exec(
+    exec_named(
         conn,
         "INSERT INTO label_semantic_proposals(
              id, board_id, task_id, status, name, description, applies_when, excludes_when,

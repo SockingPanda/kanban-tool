@@ -3,8 +3,8 @@ use crate::connect_file;
 use super::{
     CreateLabel, CreateTask, LabelRecord, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage,
     TaskListSort, TaskPatch, TaskRecord, add_dependency_in_current_tx, all, all_values, board_id,
-    board_id_any, ensure_changed_one, exec, exec_one, insert_event, json_valid, optional,
-    recompute_ready_status, required_row, scalar, validate_priority, with_immediate_tx,
+    board_id_any, ensure_changed_one, exec, exec_named, exec_one_named, insert_event, json_valid,
+    optional, recompute_ready_status, required_row, scalar, validate_priority, with_immediate_tx,
 };
 
 use std::path::Path;
@@ -88,7 +88,7 @@ pub fn create_task_with_labels_and_dependencies(
             named_params! { ":board_id": board_id },
             |r| r.get(0),
         )?;
-        exec(
+        exec_named(
             &conn,
             "INSERT INTO tasks(id, board_id, seq, title, description, status, assignee, priority, position, scheduled_at, due_at, created_by, created_at, updated_at, metadata_json) \
              VALUES (:id, :board_id, :seq, :title, :description, :status, :assignee, :priority, :seq * 1024, :scheduled_at, :due_at, :created_by, :now, :now, :metadata_json)",
@@ -300,7 +300,7 @@ pub fn update_task(
         if recompute_needed && is_active_recomputable_status(task.status) {
             task.status = recompute_ready_status(&conn, &task, now)?;
         }
-        exec_one(
+        exec_one_named(
             &conn,
             "UPDATE tasks
              SET title=:title,

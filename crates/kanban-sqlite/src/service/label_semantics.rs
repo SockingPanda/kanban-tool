@@ -517,16 +517,18 @@ pub(crate) fn rebuild_label_atoms_for_stable_hash_migration(
     conn: &Connection,
     now: i64,
 ) -> Result<()> {
-    let mut dirty_boards = std::collections::BTreeSet::new();
-    for row in label_semantic_definition_rows(conn)? {
-        rebuild_atoms_for_label(conn, &row.definition, &row.board_id, now)?;
-        dirty_boards.insert(row.board_id);
-    }
+    with_immediate_tx(conn, || {
+        let mut dirty_boards = std::collections::BTreeSet::new();
+        for row in label_semantic_definition_rows(conn)? {
+            rebuild_atoms_for_label(conn, &row.definition, &row.board_id, now)?;
+            dirty_boards.insert(row.board_id);
+        }
 
-    for board_id in dirty_boards {
-        mark_label_atom_store_dirty(conn, &board_id, now)?;
-    }
-    Ok(())
+        for board_id in dirty_boards {
+            mark_label_atom_store_dirty(conn, &board_id, now)?;
+        }
+        Ok(())
+    })
 }
 
 fn label_atoms_for_board(conn: &Connection, board_id: &str) -> Result<Vec<LabelAtomRecord>> {

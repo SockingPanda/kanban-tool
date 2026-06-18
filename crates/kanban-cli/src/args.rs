@@ -186,7 +186,9 @@ pub(crate) enum CommentCommand {
 pub(crate) enum LabelCommand {
     List,
     Create(LabelCreateArgs),
-    Add(LabelTaskArgs),
+    Bootstrap(LabelBootstrapArgs),
+    Delete(LabelDeleteArgs),
+    Add(LabelAddTaskArgs),
     Remove(LabelTaskArgs),
     Semantics {
         #[command(subcommand)]
@@ -221,9 +223,45 @@ pub(crate) struct LabelCreateArgs {
 }
 
 #[derive(Debug, Args)]
+pub(crate) struct LabelDeleteArgs {
+    pub(crate) label: String,
+    #[arg(long)]
+    pub(crate) force: bool,
+}
+
+#[derive(Debug, Args)]
 pub(crate) struct LabelTaskArgs {
     pub(crate) task_ref: String,
     pub(crate) label: String,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelAddTaskArgs {
+    pub(crate) task_ref: String,
+    #[arg(required = true)]
+    pub(crate) labels: Vec<String>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelBootstrapArgs {
+    pub(crate) task_ref: String,
+    pub(crate) label: String,
+    #[arg(long)]
+    pub(crate) description: Option<String>,
+    #[arg(long = "applies-when")]
+    pub(crate) applies_when: Vec<String>,
+    #[arg(long = "excludes-when")]
+    pub(crate) excludes_when: Vec<String>,
+    #[arg(long = "positive-example")]
+    pub(crate) positive_examples: Vec<String>,
+    #[arg(long = "negative-example")]
+    pub(crate) negative_examples: Vec<String>,
+    #[arg(long)]
+    pub(crate) verify: bool,
+    #[arg(long = "min-verify-score", default_value_t = 0.50)]
+    pub(crate) min_verify_score: f32,
+    #[arg(long = "vector-config", alias = "config")]
+    pub(crate) vector_config: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]

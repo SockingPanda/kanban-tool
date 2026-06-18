@@ -222,6 +222,55 @@ async fn tasks_create_accepts_labels_and_exposes_task_label_dto() -> anyhow::Res
 }
 
 #[tokio::test]
+async fn tasks_label_bootstrap_returns_task_and_semantics() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("bootstrap API task"),
+    )
+    .context("task")?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels/bootstrap", task.id),
+        json!({
+            "name": "database",
+            "description": "Database persistence work",
+            "applies_when": ["touches SQLite migrations"],
+            "positive_examples": ["new table migration"],
+            "actor": "api-body"
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(json["data"]["task"]["id"], task.id);
+    assert_eq!(json["data"]["task"]["labels"][0]["name"], "database");
+    assert_eq!(json["data"]["semantics"]["label_name"], "database");
+    assert_eq!(
+        json["data"]["semantics"]["description"],
+        "Database persistence work"
+    );
+    assert!(
+        json["data"]["semantics"]["atoms"]
+            .as_array()
+            .context("atoms")?
+            .iter()
+            .any(|atom| atom["kind"] == "applies_when")
+    );
+    assert_task_dto_exposes_ui_fields_without_claim_token(&json["data"]["task"]);
+
+    let (status, labels) = get_json(app, &format!("/api/v1/tasks/{}/labels", task.id)).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(labels["data"][0]["name"], "database");
+    Ok(())
+}
+
+#[tokio::test]
 async fn tasks_lists_non_archived_by_default_and_includes_archived_on_query() -> anyhow::Result<()>
 {
     let test = TestApp::new()?;
@@ -492,20 +541,54 @@ async fn labels_routes_create_list_add_and_remove_task_labels() -> anyhow::Resul
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(json["data"]["labels"][0]["id"], label_id);
 
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels", task.id),
+        json!({ "names": ["frontend", "api", "frontend"], "actor": "api-labeler" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    let label_names: Vec<_> = json["data"]["labels"]
+        .as_array()
+        .context("task labels")?
+        .iter()
+        .map(|label| label["name"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(label_names, ["api", "backend", "frontend"]);
+
     let (status, json) =
         get_json(app.clone(), &format!("/api/v1/tasks/{}/labels", task.id)).await?;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["data"][0]["name"], "backend");
+    assert_eq!(json["data"].as_array().context("task labels")?.len(), 3);
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels", task.id),
+        json!({ "name": "backend", "names": ["frontend"] }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels", task.id),
+        json!({ "names": [] }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
 
     let (status, json) =
         delete_json(app, &format!("/api/v1/tasks/{}/labels/{label_id}", task.id)).await?;
     assert_eq!(status, StatusCode::OK);
-    assert!(
-        json["data"]["labels"]
-            .as_array()
-            .context("task labels")?
-            .is_empty()
-    );
+    let remaining_label_names: Vec<_> = json["data"]["labels"]
+        .as_array()
+        .context("task labels")?
+        .iter()
+        .map(|label| label["name"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(remaining_label_names, ["api", "frontend"]);
     Ok(())
 }
 

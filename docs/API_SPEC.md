@@ -824,6 +824,7 @@ POST /api/v1/boards/{board}/labels/atom-index/rebuild
 GET /api/v1/boards/{board}/labels/atom-index/query?q=<text>&polarity=positive&limit=24
 GET /api/v1/tasks/{task_id}/labels
 POST /api/v1/tasks/{task_id}/labels
+POST /api/v1/tasks/{task_id}/labels/bootstrap
 DELETE /api/v1/tasks/{task_id}/labels/{label_id}
 POST /api/v1/tasks/{task_id}/label-ontology/observations
 GET /api/v1/boards/{board}/label-ontology/signals
@@ -867,9 +868,67 @@ Task 标签添加请求：
 }
 ```
 
-`POST /api/v1/tasks/{task_id}/labels` 会把指定 name 的 label 绑定到 task。如果
-该 task 所属 board 上还不存在该 label，会先创建 label。重复绑定已有 task-label
-关系不会重复写入。成功响应返回更新后的 task，包含当前 `labels` 列表。
+或批量添加：
+
+```json
+{
+  "names": ["core", "api"]
+}
+```
+
+`POST /api/v1/tasks/{task_id}/labels` 会把指定 name 或 names 的 label 绑定到 task。
+`name` 与 `names` 互斥；二者都缺失、二者同时出现或 `names` 为空数组都会返回
+invalid input。批量添加在同一 transaction 内执行，并先验证所有 label 名称；如果
+任一 label 为空白或非法，不会创建 canonical label，也不会留下部分 task-label 绑定。
+如果该 task 所属 board 上还不存在指定 name 的 label，会先创建 label。重复绑定已有
+task-label 关系不会重复写入。成功响应返回更新后的 task，包含当前 `labels` 列表。
+
+Task label bootstrap 请求：
+
+```json
+{
+  "name": "database",
+  "description": "Database persistence work",
+  "applies_when": ["touches SQLite migrations"],
+  "excludes_when": ["UI-only polish"],
+  "positive_examples": ["new table migration"],
+  "negative_examples": ["CSS-only tweak"],
+  "actor": "alice"
+}
+```
+
+`POST /api/v1/tasks/{task_id}/labels/bootstrap` 是一次性 new-label adoption API：
+在同一 transaction 内创建或复用 task 所属 board 上的 canonical label，写入/覆盖
+该 label 的 `label_semantics`，同步重建 SQLite `label_atoms`，标脏派生的 label
+atom vector index，并把该 label 绑定到 task。`name` 按 label 名称解析；空白名称会
+被拒绝。语义输入会 trim 并丢弃空白值，且必须至少提供 `description` 或一个非空语义
+数组值。重复调用同一 task/label 不会重复写 `task_labels`，但会按最新输入 upsert
+semantics。成功响应状态为 `201 Created`：
+
+```json
+{
+  "data": {
+    "task": {
+      "id": "t_01HX...",
+      "ref": "default#12",
+      "labels": [
+        {"id": "l_01HX...", "board_id": "b_01HX...", "name": "database", "color": null}
+      ]
+    },
+    "semantics": {
+      "label_id": "l_01HX...",
+      "board_id": "b_01HX...",
+      "label_name": "database",
+      "description": "Database persistence work",
+      "applies_when": ["touches SQLite migrations"],
+      "excludes_when": ["UI-only polish"],
+      "positive_examples": ["new table migration"],
+      "negative_examples": ["CSS-only tweak"],
+      "atoms": []
+    }
+  }
+}
+```
 
 `DELETE /api/v1/tasks/{task_id}/labels/{label_id}` 会移除 task 上的指定 label，
 `{label_id}` 接受 label id 或 label 名称。成功响应同样返回更新后的 task，包含

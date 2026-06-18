@@ -120,9 +120,13 @@ ${KANBAN_CARGO_TARGET_ROOT:-$HOME/.cache/kanban-tool/cargo-target}/release/bundl
 Feature flags can be passed through to the cargo build:
 
 ```bash
-./scripts/package-cli-linux.sh --format deb --features tantivy-backend
+./scripts/package-cli-linux.sh --format deb --no-default-features
 ./scripts/package-cli-linux.sh --format deb --all-features
 ```
+
+The default CLI build includes the Tantivy search, Oxigraph graph, and LanceDB
+vector backends. Use `--no-default-features` only when a minimal fallback binary
+is desired.
 
 ### Install the CLI directly with cargo
 

@@ -1026,7 +1026,7 @@ ontology provenance action 引用其 id 或 content hash 时返回 `200` 且
 `legacy_untracked=true`；未知 id/hash 返回 not found。
 
 `GET /api/v1/boards/{board}/labels/atom-index/status` 返回 label atom vector index
-状态。无 vector provider 或未启用 `vector-lancedb` feature 时仍返回 `200` disabled
+状态。默认 CLI/server build 启用 `vector-lancedb`；无 vector provider 或二进制显式以 `--no-default-features` 构建时仍返回 `200` disabled
 状态。JSON 保留兼容字段 `message`，并额外返回结构化
 `diagnostics: string[]`、`dirty: boolean | null`、`board_dirty: boolean | null`；
 调用方应使用结构化字段判断 dirty/error，而不要解析 `message` 文案。
@@ -1063,7 +1063,7 @@ solver 内部搜索能力。内部能力由 `candidate_limit`、`atom_limit` 和
 以及最多进入 non-negative refit 的 label 数。所有 limit 参数都必须是
 `1..=1000`；`min_score` 必须在 `0..=1`。
 
-未配置 provider、未启用 `vector-lancedb` feature、LanceDB 表缺失、索引为空或索引
+未配置 provider、二进制未启用 `vector-lancedb` feature、LanceDB 表缺失、索引为空或索引
 dirty 时，接口仍返回 `200` 和结构化 degraded JSON；普通 label CRUD、task
 list/search/filter 与状态转移不受影响。Dirty 判断来自结构化 status/SQLite dirty
 字段，不依赖 `message` 文案。无 provider 时 `needs_new_label=false`，
@@ -1548,7 +1548,7 @@ observation 缺少 `suggest_input_hash` 时写入 `legacy_suggest_input_hash_mis
 GET /api/v1/search/tasks?board=default&q=needle&status=ready&label=backend&assignee=worker-a&include_archived=false&limit=20&offset=0
 ```
 
-默认后端是 SQLite fallback。二进制启用 `tantivy-backend` 且 SQLite DB 旁存在 `index/v1/tasks/` 时，search 使用 Tantivy task index。Tantivy index 缺失、损坏或过期时会回落到 SQLite，并带上 stale metadata。搜索匹配 task title、description、comments、run summary/error 和 event kind/payload。
+默认 CLI/server build 启用 `tantivy-backend`。SQLite DB 旁存在 `index/v1/tasks/` 时，search 使用 Tantivy task index。Tantivy index 缺失、损坏、过期或二进制显式以 `--no-default-features` 构建时会回落到 SQLite，并带上 stale metadata。搜索匹配 task title、description、comments、run summary/error 和 event kind/payload。
 
 `label` 按 label 名称或 id 过滤，可重复，并在评分和分页前使用 AND 语义。
 带 label 过滤的 search 即使存在可用 Tantivy index，也会使用 SQLite fallback，

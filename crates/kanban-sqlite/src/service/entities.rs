@@ -1,6 +1,6 @@
 use crate::connect_file;
 
-use super::{MAX_TASK_LIST_LIMIT, SqlFilter, all, all_values, one, validate_page_bounds};
+use super::{MAX_TASK_LIST_LIMIT, SqlFilter, all, all_values, required_row, validate_page_bounds};
 
 use std::path::Path;
 
@@ -130,7 +130,7 @@ pub fn list_entities(
 
 pub fn get_entity(path: impl AsRef<Path>, uri: &str) -> Result<EntityRecord> {
     let conn = connect_file(path.as_ref())?;
-    one(
+    required_row(
         &conn,
         "SELECT uri,kind,source_table,source_id,board_id,task_id,title,summary,content_hash,created_at,updated_at,archived_at \
          FROM entities WHERE uri=?1",

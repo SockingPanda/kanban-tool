@@ -2,13 +2,13 @@ use crate::connect_file;
 
 use super::{
     EventListOptions, EventRecord, SqlFilter, all_values, board_id_any, enqueue_index_outbox, exec,
-    one, resolve_task_any, upsert_board_entity, upsert_event_entity, upsert_run_entity,
+    resolve_task_any, scalar, upsert_board_entity, upsert_event_entity, upsert_run_entity,
     upsert_task_entity,
 };
 
 use std::path::Path;
 
-use kanban_core::{KanbanError, Result, new_event_id};
+use kanban_core::{Result, new_event_id};
 
 use rusqlite::{Connection, Row, named_params, params, types::Value};
 
@@ -62,12 +62,11 @@ pub fn list_events_after(
 }
 
 pub(crate) fn current_last_event_id(conn: &Connection, board_id: &str) -> Result<Option<i64>> {
-    one(
+    scalar(
         conn,
         "SELECT MAX(id) FROM task_events WHERE board_id=?1",
         params![board_id],
         |row| row.get(0),
-        || KanbanError::Storage("missing task_events aggregate row".into()),
     )
 }
 

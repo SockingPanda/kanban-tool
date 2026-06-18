@@ -72,8 +72,22 @@ pub(crate) struct LabelOntologySignalQuery {
     proposed_label_name: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct LabelOntologyReviewQuery {
+    #[serde(default = "default_label_ontology_review_group_by")]
+    group_by: String,
+    #[serde(default)]
+    include_all: bool,
+    #[serde(default = "default_limit")]
+    limit: usize,
+}
+
 fn default_limit() -> usize {
     100
+}
+
+fn default_label_ontology_review_group_by() -> String {
+    "label".to_owned()
 }
 
 fn default_label_suggestion_limit() -> usize {
@@ -850,6 +864,33 @@ pub(crate) async fn list_label_ontology_signals(
     Ok(Json(Envelope {
         data: signals,
         meta: Some(json!({ "limit": query.limit })),
+    }))
+}
+
+pub(crate) async fn review_label_ontology(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+    query: Result<Query<LabelOntologyReviewQuery>, QueryRejection>,
+) -> Result<Json<Envelope<Vec<kanban_sqlite::LabelOntologyReviewGroup>>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
+    let group_by = kanban_sqlite::LabelOntologyReviewGroupBy::from_str(&query.group_by)?;
+    let groups = kanban_sqlite::review_label_ontology(
+        state.db_path(),
+        &board,
+        kanban_sqlite::LabelOntologyReviewOptions {
+            group_by,
+            include_all: query.include_all,
+            limit: query.limit,
+        },
+    )?;
+    Ok(Json(Envelope {
+        data: groups,
+        meta: Some(json!({
+            "group_by": group_by,
+            "include_all": query.include_all,
+            "limit": query.limit
+        })),
     }))
 }
 

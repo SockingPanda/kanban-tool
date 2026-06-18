@@ -244,6 +244,150 @@ fn label_ontology_signal_input_rejects_atom_polarity_kind_mismatches() -> anyhow
 }
 
 #[test]
+fn label_ontology_review_groups_by_label_with_distinct_task_sorting() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_review_groups_by_label_with_distinct_task_sorting")?;
+    let fixture = seed_label_ontology_review_fixture(&temp)?;
+
+    let groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::Label,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+
+    assert_eq!(groups.len(), 3);
+    let cli = &groups[0];
+    assert_eq!(cli.group_by, LabelOntologyReviewGroupBy::Label);
+    assert_eq!(cli.label_name.as_deref(), Some("cli"));
+    assert_eq!(cli.task_count, 2);
+    assert_eq!(cli.signal_count, 2);
+    assert_eq!(cli.open_count, 1);
+    assert_eq!(cli.confirmed_count, 1);
+    assert_eq!(cli.degraded_count, 1);
+    assert_eq!(cli.action_count, 1);
+    assert!(cli.action_ids.contains(&fixture.confirm_action_id));
+    assert_eq!(cli.sample_task_refs.len(), 2);
+    assert_eq!(cli.candidate_atom_variants.len(), 1);
+    assert_score_near(cli.average_score, 0.3);
+    assert_score_near(cli.median_score, 0.3);
+
+    let docs = groups
+        .iter()
+        .find(|group| group.label_name.as_deref() == Some("docs"))
+        .context("docs group")?;
+    assert_eq!(docs.label_name.as_deref(), Some("docs"));
+    assert_eq!(docs.task_count, 1);
+    assert_eq!(docs.signal_count, 2);
+    assert!(
+        docs.signal_count > cli.signal_count - 1,
+        "raw signal count alone must not outrank distinct task count"
+    );
+    Ok(())
+}
+
+#[test]
+fn label_ontology_review_groups_by_candidate_atom() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_review_groups_by_candidate_atom")?;
+    let fixture = seed_label_ontology_review_fixture(&temp)?;
+
+    let groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::CandidateAtom,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+
+    let cli_atom = groups
+        .iter()
+        .find(|group| group.candidate_text.as_deref() == Some("adds CLI commands"))
+        .context("cli candidate atom group")?;
+    assert_eq!(cli_atom.task_count, 2);
+    assert_eq!(cli_atom.signal_count, 2);
+    assert_eq!(cli_atom.labels.len(), 1);
+    assert_eq!(cli_atom.labels[0].name.as_deref(), Some("cli"));
+    assert!(cli_atom.signal_ids.contains(&fixture.cli_open_signal_id));
+    assert!(
+        cli_atom
+            .signal_ids
+            .contains(&fixture.cli_confirmed_signal_id)
+    );
+    assert!(cli_atom.action_ids.contains(&fixture.confirm_action_id));
+    Ok(())
+}
+
+#[test]
+fn label_ontology_review_groups_by_proposed_label_and_include_all() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_review_groups_by_proposed_label_and_include_all")?;
+    let fixture = seed_label_ontology_review_fixture(&temp)?;
+
+    let default_groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::ProposedLabel,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+    assert!(
+        default_groups
+            .iter()
+            .all(|group| !group.signal_ids.contains(&fixture.rejected_gap_signal_id))
+    );
+
+    let groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::ProposedLabel,
+            include_all: true,
+            limit: 10,
+        },
+    )?;
+
+    let proposed = groups
+        .iter()
+        .find(|group| group.proposed_label_name_normalized.as_deref() == Some("ontology ledger"))
+        .context("proposed label group")?;
+    assert_eq!(proposed.task_count, 2);
+    assert_eq!(proposed.signal_count, 2);
+    assert_eq!(proposed.open_count, 1);
+    assert_eq!(proposed.rejected_count, 1);
+    assert!(proposed.signal_ids.contains(&fixture.open_gap_signal_id));
+    assert!(
+        proposed
+            .signal_ids
+            .contains(&fixture.rejected_gap_signal_id)
+    );
+    Ok(())
+}
+
+#[test]
+fn label_ontology_review_returns_empty_groups() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_review_returns_empty_groups")?;
+    init_database(&temp.path, "tester")?;
+
+    let groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::Label,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+
+    assert!(groups.is_empty());
+    Ok(())
+}
+
+#[test]
 fn label_ontology_signal_input_enforces_proposed_action_requirements() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_signal_input_enforces_proposed_action_requirements")?;
     init_database(&temp.path, "tester")?;
@@ -2110,6 +2254,14 @@ fn assert_json_array_contains(value: &serde_json::Value, expected: &str) {
     );
 }
 
+fn assert_score_near(actual: Option<f64>, expected: f64) {
+    let actual = actual.unwrap_or_else(|| panic!("expected score near {expected}"));
+    assert!(
+        (actual - expected).abs() < 0.000_001,
+        "expected score near {expected}, got {actual}"
+    );
+}
+
 fn sample_record_input(signals: Vec<LabelOntologySignalInput>) -> LabelOntologyRecordInput {
     LabelOntologyRecordInput {
         actor: LabelOntologyActor {
@@ -2135,6 +2287,189 @@ fn sample_record_input(signals: Vec<LabelOntologySignalInput>) -> LabelOntologyR
         capture_fingerprint: None,
         signals,
     }
+}
+
+struct LabelOntologyReviewFixture {
+    cli_open_signal_id: String,
+    cli_confirmed_signal_id: String,
+    open_gap_signal_id: String,
+    rejected_gap_signal_id: String,
+    confirm_action_id: String,
+}
+
+fn seed_label_ontology_review_fixture(temp: &TempDb) -> anyhow::Result<LabelOntologyReviewFixture> {
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "docs".to_owned(),
+            color: None,
+        },
+    )?;
+    let cli_task_a = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI review source A"),
+    )?;
+    let cli_task_b = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI review source B"),
+    )?;
+    let docs_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Docs review source"),
+    )?;
+    let gap_task_a = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Ontology gap source A"),
+    )?;
+    let gap_task_b = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Ontology gap source B"),
+    )?;
+
+    let cli_open_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_task_a.id,
+        review_record_input(vec![review_label_signal(
+            "cli-open",
+            "cli",
+            "adds CLI commands",
+            0.2,
+        )]),
+    )?;
+    let mut degraded_cli_record = review_record_input(vec![review_label_signal(
+        "cli-confirmed",
+        "cli",
+        "adds CLI commands",
+        0.4,
+    )]);
+    degraded_cli_record.suggest_degraded = true;
+    let cli_confirmed_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_task_b.id,
+        degraded_cli_record,
+    )?;
+    let docs_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &docs_task.id,
+        review_record_input(vec![
+            review_label_signal("docs-a", "docs", "updates docs", 0.9),
+            review_label_signal("docs-b", "docs", "documents behavior", 0.8),
+        ]),
+    )?;
+    assert_eq!(docs_observation.signals.len(), 2);
+    let open_gap_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &gap_task_a.id,
+        review_record_input(vec![review_gap_signal("gap-open", "Ontology Ledger", 0.1)]),
+    )?;
+    let rejected_gap_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &gap_task_b.id,
+        review_record_input(vec![review_gap_signal(
+            "gap-rejected",
+            "Ontology Ledger",
+            0.12,
+        )]),
+    )?;
+
+    let cli_open_signal_id = cli_open_observation.signals[0].id.clone();
+    let cli_confirmed_signal_id = cli_confirmed_observation.signals[0].id.clone();
+    let open_gap_signal_id = open_gap_observation.signals[0].id.clone();
+    let rejected_gap_signal_id = rejected_gap_observation.signals[0].id.clone();
+    let confirm_action = create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![cli_confirmed_signal_id.clone()],
+            "confirm CLI review group signal",
+        ),
+    )?;
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Reject,
+            vec![rejected_gap_signal_id.clone()],
+            "reject weak proposed label signal",
+        ),
+    )?;
+
+    Ok(LabelOntologyReviewFixture {
+        cli_open_signal_id,
+        cli_confirmed_signal_id,
+        open_gap_signal_id,
+        rejected_gap_signal_id,
+        confirm_action_id: confirm_action.id,
+    })
+}
+
+fn review_record_input(signals: Vec<LabelOntologySignalInput>) -> LabelOntologyRecordInput {
+    let mut input = sample_record_input(signals);
+    input.capture_fingerprint = None;
+    input
+}
+
+fn review_label_signal(
+    signal_key: &str,
+    label: &str,
+    candidate_text: &str,
+    score: f64,
+) -> LabelOntologySignalInput {
+    let mut signal = sample_signal_input(signal_key);
+    signal.target_label_ref = Some(label.to_owned());
+    signal.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+        polarity: "positive".to_owned(),
+        kind: "applies_when".to_owned(),
+        text: candidate_text.to_owned(),
+    });
+    signal.suggest_score = Some(score);
+    signal
+}
+
+fn review_gap_signal(
+    signal_key: &str,
+    proposed_label_name: &str,
+    score: f64,
+) -> LabelOntologySignalInput {
+    let mut signal = sample_signal_input(signal_key);
+    signal.kind = LabelOntologySignalKind::VocabularyGap;
+    signal.target_label_ref = None;
+    signal.proposed_action = LabelOntologyProposedAction::BootstrapLabel;
+    signal.candidate_atom = None;
+    signal.proposed_label_name = Some(proposed_label_name.to_owned());
+    signal.proposal_json = json!({
+        "name": proposed_label_name,
+        "description": "Label ontology ledger work"
+    })
+    .to_string();
+    signal.suggest_score = Some(score);
+    signal
 }
 
 fn seed_label_semantic_proposal(

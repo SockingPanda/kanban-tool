@@ -912,10 +912,44 @@ fn label_ontology_cli_record_list_show_review_round_trip() -> anyhow::Result<()>
     assert_eq!(shown["data"]["signal"]["id"], signal_id);
     assert_eq!(shown["data"]["observation"]["task_id"], task_id);
 
-    let review = kanban(&temp.path, &["label", "ontology", "review"])?.success_stdout()?;
+    let review = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "review",
+            "--group-by",
+            "label",
+        ],
+    )?
+    .success_json()?;
+    let groups = review["data"].as_array().context("review groups")?;
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0]["group_by"], "label");
+    assert_eq!(groups[0]["label_name"], "cli");
+    assert_eq!(groups[0]["task_count"], 1);
+    assert_eq!(groups[0]["signal_count"], 1);
+    assert_eq!(groups[0]["open_count"], 1);
+    assert_eq!(groups[0]["signal_ids"][0], signal_id);
+
+    let review = kanban(
+        &temp.path,
+        &[
+            "label",
+            "ontology",
+            "review",
+            "--group-by",
+            "candidate-atom",
+        ],
+    )?
+    .success_stdout()?;
+    assert!(review.contains("candidate_atom"), "{review}");
     assert!(review.contains(signal_id), "{review}");
-    assert!(review.contains("false_negative"), "{review}");
-    assert!(review.contains("add_positive_atom"), "{review}");
+    assert!(
+        review.contains("extends CLI subcommands, arguments, help output, or JSON behavior"),
+        "{review}"
+    );
 
     Ok(())
 }
@@ -1066,15 +1100,51 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
     assert_eq!(applied["data"]["action_type"], "add_positive_atom");
     assert_eq!(applied["data"]["validation_status"], "pending");
     let apply_action_id = applied["data"]["id"].as_str().context("apply action id")?;
+    let target_label_id = applied["data"]["target_label_id"]
+        .as_str()
+        .context("target label id")?;
+    let result_atom_id = applied["data"]["result_atom_id"]
+        .as_str()
+        .context("result atom id")?;
+    let result_atom_content_hash = applied["data"]["result_atom_content_hash"]
+        .as_str()
+        .context("result atom content hash")?;
 
     let validation_path = temp.dir.join("ontology-validation.json");
     fs::write(
         &validation_path,
         json!({
+            "evidence_type": "automated",
+            "embedding_model": "test-embedding-v1",
+            "solver_options": {"candidate_limit": 24, "atom_limit": 64},
+            "index": {"status": "ready", "dirty": false, "generation": 7},
             "cases": [{
                 "signal_id": primary,
+                "case_type": "positive_atom",
                 "passed": true,
-                "after": {"state": "selected"}
+                "target_label_id": target_label_id,
+                "before": {
+                    "target": {
+                        "label_id": target_label_id,
+                        "selected": false,
+                        "score": 0.08
+                    },
+                    "coverage": 0.61
+                },
+                "after": {
+                    "degraded": false,
+                    "target": {
+                        "label_id": target_label_id,
+                        "selected": true,
+                        "score": 0.74
+                    },
+                    "coverage": 0.79,
+                    "evidence_atoms": [{
+                        "id": result_atom_id,
+                        "content_hash": result_atom_content_hash,
+                        "label_id": target_label_id
+                    }]
+                }
             }]
         })
         .to_string(),

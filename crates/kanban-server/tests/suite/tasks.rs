@@ -960,6 +960,38 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
     assert_eq!(signals.len(), 1);
     assert_eq!(signals[0]["id"], signal_id);
 
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/review?group_by=label&limit=10",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    assert_eq!(json["meta"]["group_by"], "label");
+    assert_eq!(json["meta"]["include_all"], false);
+    let groups = json["data"].as_array().context("review groups")?;
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0]["group_by"], "label");
+    assert_eq!(groups[0]["label_id"], label.id);
+    assert_eq!(groups[0]["label_name"], "cli");
+    assert_eq!(groups[0]["task_count"], 1);
+    assert_eq!(groups[0]["signal_count"], 1);
+    assert_eq!(groups[0]["signal_ids"][0], signal_id);
+
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/review?group_by=candidate-atom&limit=10",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    let groups = json["data"].as_array().context("candidate atom groups")?;
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0]["group_by"], "candidate_atom");
+    assert_eq!(
+        groups[0]["candidate_text"],
+        "extends CLI subcommands, arguments, help output, or JSON behavior"
+    );
+    assert_eq!(groups[0]["labels"][0]["id"], label.id);
+
     let (status, json) =
         get_json(app, &format!("/api/v1/label-ontology/signals/{signal_id}")).await?;
     assert_eq!(status, StatusCode::OK);

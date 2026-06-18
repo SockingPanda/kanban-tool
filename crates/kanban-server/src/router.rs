@@ -83,6 +83,10 @@ pub fn build_router(state: AppState) -> Router {
             get(list_label_ontology_signals),
         )
         .route(
+            "/api/v1/boards/:board/label-ontology/review",
+            get(review_label_ontology),
+        )
+        .route(
             "/api/v1/boards/:board/label-ontology/actions",
             post(create_label_ontology_action),
         )

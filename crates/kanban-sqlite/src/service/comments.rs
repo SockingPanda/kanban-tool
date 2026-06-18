@@ -1,10 +1,10 @@
 use crate::connect_file;
 
 use super::{
-    CommentRecord, CreateComment, active_board_id_for_task,
+    CommentRecord, CreateComment, active_board_id_for_task, all,
     comment_identity::{normalize_comment_agent_type, normalize_comment_author_type},
     comment_metadata::normalize_comment_metadata_json,
-    insert_event, resolve_task, resolve_task_without_active_board, storage, with_immediate_tx,
+    exec, insert_event, resolve_task, resolve_task_without_active_board, with_immediate_tx,
 };
 
 use std::path::Path;
@@ -64,11 +64,22 @@ pub fn create_comment_with_options(
         let agent_type = normalize_comment_agent_type(input.agent_type.as_deref(), author_type)?;
         let metadata_json = normalize_comment_metadata_json(kind, input.metadata_json.as_deref())?;
         let id = new_typed_id("c");
-        conn.execute(
+        exec(
+            &conn,
             "INSERT INTO task_comments(id, board_id, task_id, author, author_type, agent_type, body, kind, metadata_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![id, board_id, task.id, author, author_type, agent_type, body, kind, metadata_json, now],
-        )
-        .map_err(storage)?;
+            params![
+                id,
+                board_id,
+                task.id,
+                author,
+                author_type,
+                agent_type,
+                body,
+                kind,
+                metadata_json,
+                now
+            ],
+        )?;
         insert_event(
             &conn,
             &board_id,
@@ -98,17 +109,13 @@ pub fn list_comments(path: impl AsRef<Path>, task_ref: &str) -> Result<Vec<Comme
     let conn = connect_file(path.as_ref())?;
     let task = resolve_task_without_active_board(&conn, task_ref)?;
     let board_id = task.board_id.clone();
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, board_id, task_id, author, author_type, agent_type, body, kind, metadata_json, created_at \
-             FROM task_comments WHERE board_id=?1 AND task_id=?2 ORDER BY created_at ASC, id ASC",
-        )
-        .map_err(storage)?;
-    let rows = stmt
-        .query_map(params![board_id, task.id], comment_from_row)
-        .map_err(storage)?;
-    rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(storage)
+    all(
+        &conn,
+        "SELECT id, board_id, task_id, author, author_type, agent_type, body, kind, metadata_json, created_at \
+         FROM task_comments WHERE board_id=?1 AND task_id=?2 ORDER BY created_at ASC, id ASC",
+        params![board_id, task.id],
+        comment_from_row,
+    )
 }
 
 pub(crate) fn comment_from_row(row: &Row<'_>) -> rusqlite::Result<CommentRecord> {

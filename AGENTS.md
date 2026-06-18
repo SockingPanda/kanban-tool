@@ -80,12 +80,14 @@
 
 ## Rust workspace 约定
 
-推荐 crate：
+当前主要 crate：
 
 - `kanban-core`：领域类型、状态机、command service 接口；不依赖 SQLite/HTTP/CLI。
-- `kanban-sqlite`：SQLite 连接、migration、repository、transaction、query。
-- `kanban-cli`：`kb` CLI。
-- 后续：`kanban-server`、`kanban-dispatcher`、`web/`。
+- `kanban-sqlite`：SQLite 连接、migration/init、service、transaction、query helper。
+- `kanban-cli`：`kanban` CLI。
+- `kanban-server`：localhost HTTP API / SSE。
+- `kanban-context`、`kanban-entity`、`kanban-graph`、`kanban-indexer`、`kanban-labels`、`kanban-local`、`kanban-search`、`kanban-vector`：本地派生层、索引、graph、context、label 和 vector 支持 crate。
+- `apps/desktop`：Tauri desktop operator console。
 
 ## 本地文档经验
 

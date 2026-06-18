@@ -53,18 +53,26 @@ Board/project 使用同一个 SQLite DB。CLI 通过 `--board`、`KB_BOARD` 或�
 | [`docs/V0.6.md`](docs/V0.6.md) | V0.6 invariant hardening：reclaim、migration、query、doctor |
 | [`migrations/001_initial.sql`](migrations/001_initial.sql) | SQLite 初始 schema |
 
-## 推荐仓库结构
+## 当前仓库结构
 
 ```text
 kanban-tool/
   Cargo.toml
   crates/
-    kanban-core/
-    kanban-sqlite/
     kanban-cli/
+    kanban-context/
+    kanban-core/
+    kanban-entity/
+    kanban-graph/
+    kanban-indexer/
+    kanban-labels/
+    kanban-local/
+    kanban-search/
     kanban-server/
-    kanban-dispatcher/
-  web/
+    kanban-sqlite/
+    kanban-vector/
+  apps/
+    desktop/
   docs/
   migrations/
 ```

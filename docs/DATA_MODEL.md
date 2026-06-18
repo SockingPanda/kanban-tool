@@ -745,12 +745,13 @@ LIMIT ?;
 
 ---
 
-## 15. Export Format
+## 15. Export / Import Format
 
-建议支持 JSONL export：
+JSONL export/import 是 portable board snapshot 格式：
 
 ```bash
-kanban export --board default --format jsonl > board.jsonl
+kanban export --board default --format jsonl --out board.jsonl
+kanban import --input board.jsonl --replace
 ```
 
 每行：
@@ -762,4 +763,18 @@ kanban export --board default --format jsonl > board.jsonl
 {"type":"dependency","data":{...}}
 ```
 
-MVP 可先只 export，不做 import。
+Label ontology ledger 使用稳定 record types：
+
+```json
+{"type":"label_ontology_observation","data":{...}}
+{"type":"label_ontology_signal","data":{...}}
+{"type":"label_ontology_action","data":{...}}
+{"type":"label_ontology_action_signal","data":{...}}
+```
+
+导入时会在同一 transaction 中先插入 ontology rows，再延迟回填
+`label_ontology_signals.superseded_by_signal_id` 与
+`label_ontology_actions.parent_action_id`，避免依赖同表自引用 rows 的文件顺序。导入完成前会校验 ontology ledger board isolation：observation/signal board、action
+parent board、action-signal link board、label/proposal soft reference board 必须一致；
+orphan action-signal links、supersede cycles 和 action parent cycles 会导致 import
+失败。

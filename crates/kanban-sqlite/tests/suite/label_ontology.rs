@@ -1638,6 +1638,165 @@ fn label_ontology_typed_validation_rejects_dirty_atom_index() -> anyhow::Result<
 }
 
 #[test]
+fn label_ontology_atom_apply_rejects_mismatched_target_signal() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_atom_apply_rejects_mismatched_target_signal")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject unrelated ontology source signal"),
+    )?;
+    let mut backend_signal = sample_signal_input("backend-target-mismatch");
+    backend_signal.target_label_ref = Some("backend".to_owned());
+    backend_signal.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+        polarity: "positive".to_owned(),
+        kind: "applies_when".to_owned(),
+        text: "extends backend persistence or service APIs".to_owned(),
+    });
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![backend_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer confirmed backend signal.",
+        ),
+    )?;
+
+    let error = result_err(apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "This should not use a backend source signal.".to_owned(),
+        },
+    ))?;
+    assert!(error.to_string().contains(&signal_id), "{error}");
+    assert!(error.to_string().contains("target label"), "{error}");
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_atom_apply_retarget_override_records_reason() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_atom_apply_retarget_override_records_reason")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Retarget ontology source signal with audit reason"),
+    )?;
+    let mut backend_signal = sample_signal_input("backend-retarget-override");
+    backend_signal.target_label_ref = Some("backend".to_owned());
+    backend_signal.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+        polarity: "positive".to_owned(),
+        kind: "applies_when".to_owned(),
+        text: "extends backend persistence or service APIs".to_owned(),
+    });
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![backend_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer confirmed backend signal.",
+        ),
+    )?;
+
+    let action = apply_label_ontology_atom_with_options(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Retarget source signal after reviewer boundary decision.".to_owned(),
+        },
+        LabelOntologyRetargetOptions {
+            allow_retarget: true,
+            retarget_reason: Some(
+                "Backend signal actually describes CLI boundary work.".to_owned(),
+            ),
+        },
+    )?;
+
+    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
+    assert_eq!(
+        change["retarget_override"]["reason"],
+        "Backend signal actually describes CLI boundary work."
+    );
+    assert_eq!(
+        change["retarget_override"]["signals"][0]["target_label_id"],
+        backend.id
+    );
+    assert_eq!(change["retarget_override"]["target_label"]["name"], "cli");
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_typed_validation_positive_atom_requires_result_atom_evidence()
 -> anyhow::Result<()> {
     let temp =
@@ -1752,6 +1911,8 @@ fn label_ontology_typed_validation_bootstrap_enforces_score_threshold() -> anyho
         LabelProposalDecisionOptions {
             source_signal_ids: vec![signal_id.clone()],
             ontology_actor: None,
+            allow_retarget: false,
+            retarget_reason: None,
         },
     )?;
     let result_label_id = accepted
@@ -1952,6 +2113,8 @@ fn label_ontology_proposal_accept_records_bootstrap_provenance() -> anyhow::Resu
                 actor_type: "agent".to_owned(),
                 agent_type: Some("codex".to_owned()),
             }),
+            allow_retarget: false,
+            retarget_reason: None,
         },
     )?;
 
@@ -1983,6 +2146,165 @@ fn label_ontology_proposal_accept_records_bootstrap_provenance() -> anyhow::Resu
     assert!(bootstrap.change_json.contains("ontology-ledger"));
     let semantics = get_label_semantics(&temp.path, "default", result_label_id)?;
     assert_eq!(semantics.label_name, "ontology-ledger");
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_proposal_accept_rejects_unrelated_source_signal() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_proposal_accept_rejects_unrelated_source_signal")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject unrelated proposal source signal"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        LabelOntologyRecordInput {
+            signals: vec![LabelOntologySignalInput {
+                kind: LabelOntologySignalKind::VocabularyGap,
+                target_label_ref: None,
+                related_labels_json: "[]".to_owned(),
+                proposed_action: LabelOntologyProposedAction::BootstrapLabel,
+                candidate_atom: None,
+                proposed_label_name: Some("backend-ledger".to_owned()),
+                proposal_json: json!({
+                    "name": "backend-ledger",
+                    "description": "Backend ledger work"
+                })
+                .to_string(),
+                agent_selected: true,
+                suggest_state: Some(LabelOntologySuggestState::Absent),
+                suggest_score: None,
+                suggest_rank: None,
+                final_selected: true,
+                rationale: "Existing labels do not express backend ledger storage.".to_owned(),
+                confidence: Some(0.86),
+                signal_key: Some("backend-ledger-gap".to_owned()),
+            }],
+            ..sample_record_input(Vec::new())
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer agrees this vocabulary gap is real.",
+        ),
+    )?;
+    let proposal_id =
+        seed_label_semantic_proposal(&temp.path, &task.board_id, &task.id, "ontology-ledger")?;
+
+    let error = result_err(accept_label_proposal_with_options(
+        &temp.path,
+        "reviewer",
+        &proposal_id,
+        Some("Attempt unrelated bootstrap source signal.".to_owned()),
+        LabelProposalDecisionOptions {
+            source_signal_ids: vec![signal_id.clone()],
+            ontology_actor: None,
+            allow_retarget: false,
+            retarget_reason: None,
+        },
+    ))?;
+    assert!(error.to_string().contains(&signal_id), "{error}");
+    assert!(error.to_string().contains("proposed label"), "{error}");
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_proposal_accept_retarget_override_records_reason() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_proposal_accept_retarget_override_records_reason")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Accept proposal source signal with explicit retarget override"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        LabelOntologyRecordInput {
+            signals: vec![LabelOntologySignalInput {
+                kind: LabelOntologySignalKind::VocabularyGap,
+                target_label_ref: None,
+                related_labels_json: "[]".to_owned(),
+                proposed_action: LabelOntologyProposedAction::BootstrapLabel,
+                candidate_atom: None,
+                proposed_label_name: Some("backend-ledger".to_owned()),
+                proposal_json: json!({
+                    "name": "backend-ledger",
+                    "description": "Backend ledger work"
+                })
+                .to_string(),
+                agent_selected: true,
+                suggest_state: Some(LabelOntologySuggestState::Absent),
+                suggest_score: None,
+                suggest_rank: None,
+                final_selected: true,
+                rationale: "Existing labels do not express backend ledger storage.".to_owned(),
+                confidence: Some(0.86),
+                signal_key: Some("backend-ledger-retarget-gap".to_owned()),
+            }],
+            ..sample_record_input(Vec::new())
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer agrees this vocabulary gap is real.",
+        ),
+    )?;
+    let proposal_id =
+        seed_label_semantic_proposal(&temp.path, &task.board_id, &task.id, "ontology-ledger")?;
+
+    accept_label_proposal_with_options(
+        &temp.path,
+        "reviewer",
+        &proposal_id,
+        Some("Accept with audited retarget.".to_owned()),
+        LabelProposalDecisionOptions {
+            source_signal_ids: vec![signal_id.clone()],
+            ontology_actor: None,
+            allow_retarget: true,
+            retarget_reason: Some(
+                "Backend-ledger signal was reclassified as ontology-ledger vocabulary.".to_owned(),
+            ),
+        },
+    )?;
+    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
+    let bootstrap = detail
+        .actions
+        .iter()
+        .find(|action| action.action_type == LabelOntologyActionType::BootstrapLabel)
+        .context("bootstrap action")?;
+    let change: serde_json::Value = serde_json::from_str(&bootstrap.change_json)?;
+    assert_eq!(
+        change["retarget_override"]["reason"],
+        "Backend-ledger signal was reclassified as ontology-ledger vocabulary."
+    );
+    assert_eq!(
+        change["retarget_override"]["signals"][0]["proposed_label_name"],
+        "backend-ledger"
+    );
+    assert_eq!(
+        change["retarget_override"]["proposal"]["name"],
+        "ontology-ledger"
+    );
 
     Ok(())
 }

@@ -4,14 +4,15 @@ use super::{
     LabelOntologyActionInput, LabelOntologyActionRecord, LabelOntologyActionType,
     LabelOntologyActor, LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput,
     LabelOntologyObservationRecord, LabelOntologyProposedAction, LabelOntologyRecordInput,
-    LabelOntologyReviewAtomVariant, LabelOntologyReviewGroup, LabelOntologyReviewGroupBy,
-    LabelOntologyReviewLabelRef, LabelOntologyReviewOptions, LabelOntologySignalDetail,
-    LabelOntologySignalInput, LabelOntologySignalKind, LabelOntologySignalListOptions,
-    LabelOntologySignalRecord, LabelOntologySignalStatus, LabelOntologyValidationInput,
-    LabelOntologyValidationStatus, LabelSemanticProposalRecord, TaskOntologySignalSummary,
-    TaskOntologySummary, TaskRecord, all_values, board_id, exec, get_task_by_id,
-    get_task_by_id_global_conn, mark_label_atom_store_dirty, optional, required_row, resolve_task,
-    storage, upsert_label_semantics_in_tx, with_immediate_tx, with_read_tx,
+    LabelOntologyRetargetOptions, LabelOntologyReviewAtomVariant, LabelOntologyReviewGroup,
+    LabelOntologyReviewGroupBy, LabelOntologyReviewLabelRef, LabelOntologyReviewOptions,
+    LabelOntologySignalDetail, LabelOntologySignalInput, LabelOntologySignalKind,
+    LabelOntologySignalListOptions, LabelOntologySignalRecord, LabelOntologySignalStatus,
+    LabelOntologyValidationInput, LabelOntologyValidationStatus, LabelSemanticProposalRecord,
+    TaskOntologySignalSummary, TaskOntologySummary, TaskRecord, all_values, board_id, exec,
+    get_task_by_id, get_task_by_id_global_conn, mark_label_atom_store_dirty, optional,
+    required_row, resolve_task, storage, upsert_label_semantics_in_tx, with_immediate_tx,
+    with_read_tx,
 };
 
 use std::{
@@ -464,6 +465,20 @@ pub fn apply_label_ontology_atom(
     board: &str,
     input: LabelOntologyAtomApplyInput,
 ) -> Result<LabelOntologyActionRecord> {
+    apply_label_ontology_atom_with_options(
+        path,
+        board,
+        input,
+        LabelOntologyRetargetOptions::default(),
+    )
+}
+
+pub fn apply_label_ontology_atom_with_options(
+    path: impl AsRef<Path>,
+    board: &str,
+    input: LabelOntologyAtomApplyInput,
+    options: LabelOntologyRetargetOptions,
+) -> Result<LabelOntologyActionRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
@@ -481,6 +496,13 @@ pub fn apply_label_ontology_atom(
             &[LabelOntologySignalStatus::Confirmed],
         )?;
         let label = resolve_label(&conn, &board_id, &input.label_ref)?;
+        let retarget_reason = normalize_retarget_reason(
+            options.allow_retarget,
+            options.retarget_reason,
+            "apply atom",
+        )?;
+        let retarget_override =
+            atom_apply_retarget_override(&signals, &label, retarget_reason.as_deref())?;
         let atom = normalize_candidate_atom(&LabelOntologyCandidateAtomInput {
             polarity: polarity_for_atom_kind(&input.kind)?.to_owned(),
             kind: input.kind,
@@ -541,6 +563,7 @@ pub fn apply_label_ontology_atom(
             "changed": before_hash != after_hash,
             "before": semantics_json(&label, &before),
             "after": semantics_json(&label, &after),
+            "retarget_override": retarget_override,
         }))
         .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
 
@@ -671,12 +694,22 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
     conn: &Connection,
     proposal: &LabelSemanticProposalRecord,
     result_label_id: &str,
-    actor: LabelOntologyActor,
-    reason: Option<&str>,
-    source_signal_ids: Vec<String>,
+    options: LabelOntologyProposalBootstrapOptions,
     now: i64,
 ) -> Result<Option<String>> {
+    let LabelOntologyProposalBootstrapOptions {
+        actor,
+        reason,
+        source_signal_ids,
+        allow_retarget,
+        retarget_reason,
+    } = options;
     if source_signal_ids.is_empty() {
+        if allow_retarget || retarget_reason.as_deref().is_some() {
+            return Err(KanbanError::InvalidInput(
+                "proposal accept retarget options require source_signal_ids".into(),
+            ));
+        }
         return Ok(None);
     }
     let signal_ids = normalize_signal_ids(source_signal_ids)?;
@@ -689,13 +722,21 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
         &proposal.board_id,
         &[LabelOntologySignalStatus::Confirmed],
     )?;
+    let retarget_reason =
+        normalize_retarget_reason(allow_retarget, retarget_reason, "proposal accept")?;
+    let retarget_override = proposal_bootstrap_retarget_override(
+        &signals,
+        proposal,
+        result_label_id,
+        retarget_reason.as_deref(),
+    )?;
     let label = LabelSnapshot {
         id: result_label_id.to_owned(),
         name: proposal.name.clone(),
     };
     let after = load_semantics_parts(conn, &proposal.board_id, result_label_id)?;
     let after_hash = semantics_hash(&label, &after)?;
-    let reason = normalize_optional_text(reason.map(ToOwned::to_owned))?
+    let reason = normalize_optional_text(reason)?
         .unwrap_or_else(|| "accepted label proposal from ontology signals".to_owned());
     let change_json = serde_json::to_string(&json!({
         "proposal": {
@@ -708,6 +749,7 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
             "name": &proposal.name,
         },
         "semantics": semantics_json(&label, &after),
+        "retarget_override": retarget_override,
     }))
     .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
     let action_id = insert_ontology_action(
@@ -733,6 +775,14 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
     )?;
     link_action_signals(conn, &proposal.board_id, &action_id, &signal_ids, now)?;
     Ok(Some(action_id))
+}
+
+pub(crate) struct LabelOntologyProposalBootstrapOptions {
+    pub actor: LabelOntologyActor,
+    pub reason: Option<String>,
+    pub source_signal_ids: Vec<String>,
+    pub allow_retarget: bool,
+    pub retarget_reason: Option<String>,
 }
 
 fn build_validation_json(
@@ -2624,6 +2674,119 @@ fn ensure_signals_on_board_and_status(
         }
     }
     Ok(())
+}
+
+fn normalize_retarget_reason(
+    allow_retarget: bool,
+    reason: Option<String>,
+    context: &str,
+) -> Result<Option<String>> {
+    let reason = normalize_optional_text(reason)?;
+    match (allow_retarget, reason) {
+        (true, Some(reason)) => Ok(Some(reason)),
+        (true, None) => Err(KanbanError::InvalidInput(format!(
+            "{context} retarget override requires retarget_reason"
+        ))),
+        (false, Some(_)) => Err(KanbanError::InvalidInput(format!(
+            "{context} retarget_reason requires allow_retarget"
+        ))),
+        (false, None) => Ok(None),
+    }
+}
+
+fn atom_apply_retarget_override(
+    signals: &[LabelOntologySignalRecord],
+    label: &LabelSnapshot,
+    retarget_reason: Option<&str>,
+) -> Result<JsonValue> {
+    let mismatched = signals
+        .iter()
+        .filter(|signal| {
+            signal
+                .target_label_id
+                .as_deref()
+                .is_some_and(|target_label_id| target_label_id != label.id)
+        })
+        .collect::<Vec<_>>();
+    if retarget_reason.is_none() && !mismatched.is_empty() {
+        let ids = mismatched
+            .iter()
+            .map(|signal| signal.id.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        return Err(KanbanError::InvalidInput(format!(
+            "source signals do not target label {}: {ids}",
+            label.name
+        )));
+    }
+    if let Some(reason) = retarget_reason {
+        return Ok(json!({
+            "reason": reason,
+            "signals": signals.iter().map(source_signal_retarget_json).collect::<Vec<_>>(),
+            "target_label": {
+                "id": &label.id,
+                "name": &label.name,
+            },
+        }));
+    }
+    Ok(JsonValue::Null)
+}
+
+fn proposal_bootstrap_retarget_override(
+    signals: &[LabelOntologySignalRecord],
+    proposal: &LabelSemanticProposalRecord,
+    result_label_id: &str,
+    retarget_reason: Option<&str>,
+) -> Result<JsonValue> {
+    let proposal_name_normalized = normalize_label_name(&proposal.name)?;
+    let mismatched = signals
+        .iter()
+        .filter(|signal| {
+            signal.kind != LabelOntologySignalKind::VocabularyGap
+                || signal.proposed_action != LabelOntologyProposedAction::BootstrapLabel
+                || signal.proposed_label_name_normalized.as_deref()
+                    != Some(proposal_name_normalized.as_str())
+        })
+        .collect::<Vec<_>>();
+    if retarget_reason.is_none() && !mismatched.is_empty() {
+        let ids = mismatched
+            .iter()
+            .map(|signal| signal.id.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        return Err(KanbanError::InvalidInput(format!(
+            "source signals do not match proposal proposed label {}: {ids}",
+            proposal.name
+        )));
+    }
+    if let Some(reason) = retarget_reason {
+        return Ok(json!({
+            "reason": reason,
+            "signals": signals.iter().map(source_signal_retarget_json).collect::<Vec<_>>(),
+            "proposal": {
+                "id": &proposal.id,
+                "name": &proposal.name,
+                "name_normalized": proposal_name_normalized,
+            },
+            "result_label": {
+                "id": result_label_id,
+                "name": &proposal.name,
+            },
+        }));
+    }
+    Ok(JsonValue::Null)
+}
+
+fn source_signal_retarget_json(signal: &LabelOntologySignalRecord) -> JsonValue {
+    json!({
+        "id": &signal.id,
+        "kind": signal.kind.to_string(),
+        "proposed_action": signal.proposed_action.to_string(),
+        "target_label_id": &signal.target_label_id,
+        "target_label_name_snapshot": &signal.target_label_name_snapshot,
+        "proposed_label_name": &signal.proposed_label_name,
+        "proposed_label_name_normalized": &signal.proposed_label_name_normalized,
+    })
 }
 
 fn validate_status_transition(

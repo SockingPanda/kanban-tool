@@ -259,6 +259,9 @@ pub(crate) struct LabelProposalDecisionBody {
     #[serde(default)]
     source_signal_ids: Vec<String>,
     ontology_actor: Option<LabelOntologyActorBody>,
+    #[serde(default)]
+    allow_retarget: bool,
+    retarget_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -361,6 +364,9 @@ pub(crate) struct LabelOntologyAtomApplyBody {
     kind: String,
     text: String,
     reason: String,
+    #[serde(default)]
+    allow_retarget: bool,
+    retarget_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1020,10 +1026,16 @@ pub(crate) async fn apply_label_ontology_atom(
     ApiError,
 > {
     let Json(body) = body.map_err(extractor_error)?;
-    let action = kanban_sqlite::apply_label_ontology_atom(
+    let allow_retarget = body.allow_retarget;
+    let retarget_reason = body.retarget_reason.clone();
+    let action = kanban_sqlite::apply_label_ontology_atom_with_options(
         state.db_path(),
         &board,
         label_ontology_atom_apply_input(body),
+        kanban_sqlite::LabelOntologyRetargetOptions {
+            allow_retarget,
+            retarget_reason,
+        },
     )?;
     Ok((
         StatusCode::CREATED,
@@ -1088,6 +1100,8 @@ pub(crate) async fn accept_label_proposal(
             kanban_sqlite::LabelProposalDecisionOptions {
                 source_signal_ids: body.source_signal_ids,
                 ontology_actor,
+                allow_retarget: body.allow_retarget,
+                retarget_reason: body.retarget_reason,
             },
         )?,
         meta: None,
@@ -1109,6 +1123,11 @@ pub(crate) async fn reject_label_proposal(
     if body.ontology_actor.is_some() {
         return Err(invalid_input(
             "ontology_actor is only supported when accepting label proposals",
+        ));
+    }
+    if body.allow_retarget || body.retarget_reason.is_some() {
+        return Err(invalid_input(
+            "retarget options are only supported when accepting label proposals",
         ));
     }
     let actor = actor(body.actor.as_deref(), &headers, &state);
@@ -1133,6 +1152,8 @@ fn optional_decision_body(
             actor: None,
             source_signal_ids: Vec::new(),
             ontology_actor: None,
+            allow_retarget: false,
+            retarget_reason: None,
         }),
         Err(error) => Err(extractor_error(error)),
     }

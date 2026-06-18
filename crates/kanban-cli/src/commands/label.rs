@@ -6,18 +6,19 @@ use anyhow::{Result, bail};
 use kanban_sqlite::{
     BootstrapTaskLabel, CreateLabel, LabelOntologyActionInput, LabelOntologyActionRecord,
     LabelOntologyActionType, LabelOntologyActor, LabelOntologyAtomApplyInput,
-    LabelOntologyReviewGroupBy, LabelOntologyReviewOptions, LabelOntologyValidationInput,
-    LabelOntologyValidationStatus, LabelProposalCandidate, LabelProposalDecisionOptions,
-    LabelProposalListOptions, LabelProposalStatus, LabelSemanticProposalRecord,
-    LabelSuggestionOptions, LabelSuggestionResult, MAX_TASK_LIST_LIMIT,
-    ManualLabelProposalProvider, UpsertLabelSemantics, accept_label_proposal_with_options,
-    add_task_labels, apply_label_ontology_atom, bootstrap_task_label, create_label,
-    create_label_ontology_action, delete_label, delete_label_semantics, explain_label_atom,
-    get_label_ontology_signal, get_label_proposal, get_label_semantics, get_task,
-    label_atom_index_status, list_label_atoms, list_label_ontology_signals, list_label_proposals,
-    list_label_semantics, list_labels, propose_task_label_with, record_label_ontology_observation,
-    reject_label_proposal, remove_task_label, review_label_ontology, suggest_task_labels,
-    upsert_label_semantics, validate_label_ontology_action,
+    LabelOntologyRetargetOptions, LabelOntologyReviewGroupBy, LabelOntologyReviewOptions,
+    LabelOntologyValidationInput, LabelOntologyValidationStatus, LabelProposalCandidate,
+    LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalStatus,
+    LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult,
+    MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
+    accept_label_proposal_with_options, add_task_labels, apply_label_ontology_atom_with_options,
+    bootstrap_task_label, create_label, create_label_ontology_action, delete_label,
+    delete_label_semantics, explain_label_atom, get_label_ontology_signal, get_label_proposal,
+    get_label_semantics, get_task, label_atom_index_status, list_label_atoms,
+    list_label_ontology_signals, list_label_proposals, list_label_semantics, list_labels,
+    propose_task_label_with, record_label_ontology_observation, reject_label_proposal,
+    remove_task_label, review_label_ontology, suggest_task_labels, upsert_label_semantics,
+    validate_label_ontology_action,
 };
 #[cfg(feature = "vector-lancedb")]
 use kanban_sqlite::{
@@ -289,6 +290,8 @@ pub(crate) fn handle_label(
                     LabelProposalDecisionOptions {
                         source_signal_ids: args.source_signal_ids,
                         ontology_actor: Some(label_ontology_cli_actor(actor, &args.ontology_actor)),
+                        allow_retarget: args.allow_retarget,
+                        retarget_reason: args.retarget_reason,
                     },
                 )?;
                 print_or_json(json, &proposal, || proposal_line(&proposal))?;
@@ -530,7 +533,7 @@ fn handle_label_ontology(
         }
         crate::args::LabelOntologyCommand::Apply { command } => match command {
             crate::args::LabelOntologyApplyCommand::Atom(args) => {
-                let action = apply_label_ontology_atom(
+                let action = apply_label_ontology_atom_with_options(
                     db_path,
                     board,
                     LabelOntologyAtomApplyInput {
@@ -540,6 +543,10 @@ fn handle_label_ontology(
                         kind: label_ontology_atom_kind_value(args.kind).to_owned(),
                         text: args.text,
                         reason: args.reason,
+                    },
+                    LabelOntologyRetargetOptions {
+                        allow_retarget: args.allow_retarget,
+                        retarget_reason: args.retarget_reason,
                     },
                 )?;
                 print_or_json(json, &action, || label_ontology_action_line(&action))?;

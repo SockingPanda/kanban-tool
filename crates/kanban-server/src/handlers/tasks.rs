@@ -8,6 +8,7 @@ use axum::{
 };
 use kanban_core::TaskStatus;
 use serde::Deserialize;
+use serde::Serialize;
 use serde_json::json;
 use std::str::FromStr;
 
@@ -129,8 +130,45 @@ pub(crate) struct CreateLabelBody {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct AddTaskLabelBody {
-    name: String,
+    name: Option<String>,
+    names: Option<Vec<String>>,
     actor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct BootstrapTaskLabelBody {
+    name: String,
+    description: Option<String>,
+    #[serde(default)]
+    applies_when: Vec<String>,
+    #[serde(default)]
+    excludes_when: Vec<String>,
+    #[serde(default)]
+    positive_examples: Vec<String>,
+    #[serde(default)]
+    negative_examples: Vec<String>,
+    actor: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct BootstrapTaskLabelDto {
+    task: TaskDto,
+    semantics: kanban_sqlite::LabelSemanticsRecord,
+}
+
+impl AddTaskLabelBody {
+    fn label_names(&self) -> Result<Vec<String>, ApiError> {
+        match (&self.name, &self.names) {
+            (Some(_), Some(_)) => Err(invalid_input("provide either name or names, not both")),
+            (Some(name), None) => Ok(vec![name.clone()]),
+            (None, Some(names)) if names.is_empty() => {
+                Err(invalid_input("names must contain at least one label"))
+            }
+            (None, Some(names)) => Ok(names.clone()),
+            (None, None) => Err(invalid_input("name or names is required")),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -604,11 +642,46 @@ pub(crate) async fn add_task_label(
 ) -> Result<(StatusCode, Json<Envelope<TaskDto>>), ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let task = kanban_sqlite::add_task_label_by_id(state.db_path(), &actor, &task_id, &body.name)?;
+    let label_names = body.label_names()?;
+    let task =
+        kanban_sqlite::add_task_labels_by_id(state.db_path(), &actor, &task_id, &label_names)?;
     Ok((
         StatusCode::CREATED,
         Json(Envelope {
             data: TaskDto::from(task),
+            meta: None,
+        }),
+    ))
+}
+
+pub(crate) async fn bootstrap_task_label(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    headers: HeaderMap,
+    body: Result<Json<BootstrapTaskLabelBody>, JsonRejection>,
+) -> Result<(StatusCode, Json<Envelope<BootstrapTaskLabelDto>>), ApiError> {
+    let Json(body) = body.map_err(extractor_error)?;
+    let actor = actor(body.actor.as_deref(), &headers, &state);
+    let result = kanban_sqlite::bootstrap_task_label_by_id(
+        state.db_path(),
+        &actor,
+        &task_id,
+        kanban_sqlite::BootstrapTaskLabel {
+            name: body.name,
+            description: body.description,
+            applies_when: body.applies_when,
+            excludes_when: body.excludes_when,
+            positive_examples: body.positive_examples,
+            negative_examples: body.negative_examples,
+        },
+    )?;
+    Ok((
+        StatusCode::CREATED,
+        Json(Envelope {
+            data: BootstrapTaskLabelDto {
+                task: TaskDto::from(result.task),
+                semantics: result.semantics,
+            },
             meta: None,
         }),
     ))

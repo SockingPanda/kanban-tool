@@ -73,6 +73,15 @@ pub struct LabelRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeleteLabelResult {
+    pub label: LabelRecord,
+    pub forced: bool,
+    pub removed_task_bindings: i64,
+    pub removed_semantics: bool,
+    pub removed_atoms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LabelSemanticsRecord {
     pub label_id: String,
     pub board_id: String,
@@ -85,6 +94,22 @@ pub struct LabelSemanticsRecord {
     pub created_at: i64,
     pub updated_at: i64,
     pub atoms: Vec<LabelAtomRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BootstrapTaskLabel {
+    pub name: String,
+    pub description: Option<String>,
+    pub applies_when: Vec<String>,
+    pub excludes_when: Vec<String>,
+    pub positive_examples: Vec<String>,
+    pub negative_examples: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BootstrapTaskLabelResult {
+    pub task: TaskRecord,
+    pub semantics: LabelSemanticsRecord,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

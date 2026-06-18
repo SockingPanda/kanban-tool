@@ -59,6 +59,10 @@ pub fn build_router(state: AppState) -> Router {
             get(list_task_labels).post(add_task_label),
         )
         .route(
+            "/api/v1/tasks/:task_id/labels/bootstrap",
+            post(bootstrap_task_label),
+        )
+        .route(
             "/api/v1/tasks/:task_id/labels/suggestions",
             get(suggest_task_labels),
         )

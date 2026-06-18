@@ -1,10 +1,12 @@
 use crate::connect_file;
 
 use super::{
-    CreateLabel, CreateTask, LabelRecord, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage,
-    TaskListSort, TaskPatch, TaskRecord, add_dependency_in_current_tx, all, all_values, board_id,
-    board_id_any, ensure_changed_one, exec, exec_named, exec_one_named, insert_event, json_valid,
-    optional, recompute_ready_status, required_row, scalar, validate_priority, with_immediate_tx,
+    BootstrapTaskLabel, BootstrapTaskLabelResult, CreateLabel, CreateTask, DeleteLabelResult,
+    LabelRecord, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage, TaskListSort, TaskPatch,
+    TaskRecord, add_dependency_in_current_tx, all, all_values, board_id, board_id_any,
+    ensure_changed_one, exec, exec_named, exec_one_named, insert_event, json_valid,
+    mark_label_atom_store_dirty, optional, recompute_ready_status, required_row, scalar,
+    upsert_label_semantics_candidate_in_tx, validate_priority, with_immediate_tx,
 };
 
 use std::path::Path;
@@ -172,6 +174,74 @@ pub fn list_task_labels(
     task_labels_conn(&conn, &board_id, &task.id)
 }
 
+pub fn delete_label(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    label_ref: &str,
+    force: bool,
+) -> Result<DeleteLabelResult> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
+        let label = resolve_label(&conn, &board_id, label_ref)?;
+        let removed_task_bindings = count_task_label_bindings(&conn, &board_id, &label.id)?;
+        if removed_task_bindings > 0 && !force {
+            return Err(KanbanError::InvalidInput(format!(
+                "label {} is attached to {} task(s); pass --force to delete it",
+                label.name, removed_task_bindings
+            )));
+        }
+        let removed_semantics = count_label_semantics(&conn, &board_id, &label.id)? > 0;
+        let removed_atoms = count_label_atoms(&conn, &board_id, &label.id)?;
+        exec(
+            &conn,
+            "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+            params![board_id, label.id],
+        )?;
+        exec(
+            &conn,
+            "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
+            params![board_id, label.id],
+        )?;
+        let changed = exec(
+            &conn,
+            "DELETE FROM labels WHERE board_id=?1 AND id=?2",
+            params![board_id, label.id],
+        )?;
+        ensure_changed_one(changed, || {
+            KanbanError::NotFound(format!("label {}", label.id))
+        })?;
+        mark_label_atom_store_dirty(&conn, &board_id, now)?;
+        insert_event(
+            &conn,
+            &board_id,
+            None,
+            None,
+            "label.deleted",
+            actor,
+            &json!({
+                "label_id": label.id,
+                "label": label.name,
+                "forced": force,
+                "removed_task_bindings": removed_task_bindings,
+                "removed_semantics": removed_semantics,
+                "removed_atoms": removed_atoms
+            })
+            .to_string(),
+            now,
+        )?;
+        Ok(DeleteLabelResult {
+            label,
+            forced: force,
+            removed_task_bindings,
+            removed_semantics,
+            removed_atoms,
+        })
+    })
+}
+
 pub fn add_task_label(
     path: impl AsRef<Path>,
     board: &str,
@@ -179,14 +249,30 @@ pub fn add_task_label(
     task_ref: &str,
     label_name: &str,
 ) -> Result<TaskRecord> {
+    add_task_labels(path, board, actor, task_ref, &[label_name.to_owned()])
+}
+
+pub fn add_task_labels(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    label_names: &[String],
+) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
+    let label_names = normalize_label_names(label_names)?;
+    if label_names.is_empty() {
+        return Err(KanbanError::InvalidInput("label name is required".into()));
+    }
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
         ensure_task_allows_label_mutation(&conn, &task.id)?;
-        let label = ensure_label_in_current_tx(&conn, &task.board_id, label_name, None, now)?;
-        attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        for label_name in &label_names {
+            let label = ensure_label_in_current_tx(&conn, &task.board_id, label_name, None, now)?;
+            attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        }
         get_task_by_id(&conn, &task.board_id, &task.id)
     })
 }
@@ -197,14 +283,99 @@ pub fn add_task_label_by_id(
     task_id: &str,
     label_name: &str,
 ) -> Result<TaskRecord> {
+    add_task_labels_by_id(path, actor, task_id, &[label_name.to_owned()])
+}
+
+pub fn add_task_labels_by_id(
+    path: impl AsRef<Path>,
+    actor: &str,
+    task_id: &str,
+    label_names: &[String],
+) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
+    let label_names = normalize_label_names(label_names)?;
+    if label_names.is_empty() {
+        return Err(KanbanError::InvalidInput("label name is required".into()));
+    }
     with_immediate_tx(&conn, || {
         let board_id = active_board_id_for_label_mutation(&conn, task_id)?;
         let task = get_task_by_id(&conn, &board_id, task_id)?;
-        let label = ensure_label_in_current_tx(&conn, &task.board_id, label_name, None, now)?;
-        attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        for label_name in &label_names {
+            let label = ensure_label_in_current_tx(&conn, &task.board_id, label_name, None, now)?;
+            attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        }
         get_task_by_id(&conn, &task.board_id, &task.id)
+    })
+}
+
+pub fn bootstrap_task_label(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    input: BootstrapTaskLabel,
+) -> Result<BootstrapTaskLabelResult> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    let candidate = bootstrap_label_candidate(input)?;
+    with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
+        let task = resolve_task(&conn, &board_id, task_ref)?;
+        ensure_task_allows_label_mutation(&conn, &task.id)?;
+        let label = ensure_label_in_current_tx(&conn, &task.board_id, &candidate.name, None, now)?;
+        upsert_label_semantics_candidate_in_tx(
+            &conn,
+            &task.board_id,
+            &label.id,
+            &label.name,
+            &candidate,
+            now,
+        )?;
+        mark_label_atom_store_dirty(&conn, &task.board_id, now)?;
+        attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        Ok(BootstrapTaskLabelResult {
+            task: get_task_by_id(&conn, &task.board_id, &task.id)?,
+            semantics: super::label_semantics::get_label_semantics_conn(
+                &conn,
+                &task.board_id,
+                &label.id,
+            )?,
+        })
+    })
+}
+
+pub fn bootstrap_task_label_by_id(
+    path: impl AsRef<Path>,
+    actor: &str,
+    task_id: &str,
+    input: BootstrapTaskLabel,
+) -> Result<BootstrapTaskLabelResult> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    let candidate = bootstrap_label_candidate(input)?;
+    with_immediate_tx(&conn, || {
+        let board_id = active_board_id_for_label_mutation(&conn, task_id)?;
+        let task = get_task_by_id(&conn, &board_id, task_id)?;
+        let label = ensure_label_in_current_tx(&conn, &task.board_id, &candidate.name, None, now)?;
+        upsert_label_semantics_candidate_in_tx(
+            &conn,
+            &task.board_id,
+            &label.id,
+            &label.name,
+            &candidate,
+            now,
+        )?;
+        mark_label_atom_store_dirty(&conn, &task.board_id, now)?;
+        attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        Ok(BootstrapTaskLabelResult {
+            task: get_task_by_id(&conn, &task.board_id, &task.id)?,
+            semantics: super::label_semantics::get_label_semantics_conn(
+                &conn,
+                &task.board_id,
+                &label.id,
+            )?,
+        })
     })
 }
 
@@ -891,9 +1062,53 @@ pub(crate) fn task_from_row(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
 }
 
 fn normalize_label_names(labels: &[String]) -> Result<Vec<String>> {
-    labels
-        .iter()
-        .map(|label| normalize_label_name(label))
+    let mut normalized = Vec::with_capacity(labels.len());
+    for label in labels {
+        let label = normalize_label_name(label)?;
+        if !normalized.contains(&label) {
+            normalized.push(label);
+        }
+    }
+    Ok(normalized)
+}
+
+fn bootstrap_label_candidate(input: BootstrapTaskLabel) -> Result<super::LabelProposalCandidate> {
+    let name = normalize_label_name(&input.name)?;
+    let description = normalize_optional_label_semantic(input.description);
+    let applies_when = normalize_label_semantic_list(input.applies_when);
+    let excludes_when = normalize_label_semantic_list(input.excludes_when);
+    let positive_examples = normalize_label_semantic_list(input.positive_examples);
+    let negative_examples = normalize_label_semantic_list(input.negative_examples);
+    if description.is_none()
+        && applies_when.is_empty()
+        && excludes_when.is_empty()
+        && positive_examples.is_empty()
+        && negative_examples.is_empty()
+    {
+        return Err(KanbanError::InvalidInput(
+            "label bootstrap requires description or semantic examples".into(),
+        ));
+    }
+    Ok(super::LabelProposalCandidate {
+        name,
+        description,
+        applies_when,
+        excludes_when,
+        positive_examples,
+        negative_examples,
+    })
+}
+
+fn normalize_optional_label_semantic(text: Option<String>) -> Option<String> {
+    text.map(|text| text.trim().to_owned())
+        .filter(|text| !text.is_empty())
+}
+
+fn normalize_label_semantic_list(items: Vec<String>) -> Vec<String> {
+    items
+        .into_iter()
+        .map(|item| item.trim().to_owned())
+        .filter(|item| !item.is_empty())
         .collect()
 }
 
@@ -970,6 +1185,33 @@ fn task_labels_conn(conn: &Connection, board_id: &str, task_id: &str) -> Result<
         "SELECT l.id, l.board_id, l.name, l.color, l.created_at, l.updated_at FROM task_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.board_id=?1 AND tl.task_id=?2 ORDER BY l.name ASC",
         params![board_id, task_id],
         label_from_row,
+    )
+}
+
+fn count_task_label_bindings(conn: &Connection, board_id: &str, label_id: &str) -> Result<i64> {
+    scalar(
+        conn,
+        "SELECT COUNT(*) FROM task_labels WHERE board_id=?1 AND label_id=?2",
+        params![board_id, label_id],
+        |row| row.get(0),
+    )
+}
+
+fn count_label_semantics(conn: &Connection, board_id: &str, label_id: &str) -> Result<i64> {
+    scalar(
+        conn,
+        "SELECT COUNT(*) FROM label_semantics WHERE board_id=?1 AND label_id=?2",
+        params![board_id, label_id],
+        |row| row.get(0),
+    )
+}
+
+fn count_label_atoms(conn: &Connection, board_id: &str, label_id: &str) -> Result<i64> {
+    scalar(
+        conn,
+        "SELECT COUNT(*) FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+        params![board_id, label_id],
+        |row| row.get(0),
     )
 }
 

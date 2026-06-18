@@ -121,11 +121,16 @@ fn task_create_and_label_commands_round_trip_labels() -> anyhow::Result<()> {
     .success_json()?;
     assert_eq!(label["data"]["name"], "frontend");
 
-    let added =
-        kanban(&temp.path, &["--json", "label", "add", task_id, "frontend"])?.success_json()?;
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json", "label", "add", task_id, "frontend", "api", "frontend",
+        ],
+    )?
+    .success_json()?;
     assert_eq!(
         added["data"]["labels"].as_array().context("labels")?.len(),
-        2
+        3
     );
 
     let listed = kanban(&temp.path, &["--json", "label", "list"])?.success_json()?;
@@ -137,7 +142,11 @@ fn task_create_and_label_commands_round_trip_labels() -> anyhow::Result<()> {
         .collect();
     assert_eq!(
         names,
-        [serde_json::json!("backend"), serde_json::json!("frontend")]
+        [
+            serde_json::json!("api"),
+            serde_json::json!("backend"),
+            serde_json::json!("frontend")
+        ]
     );
     let listed_human = kanban(&temp.path, &["label", "list"])?.success_stdout()?;
     assert!(listed_human.contains("backend "), "{listed_human}");
@@ -146,14 +155,15 @@ fn task_create_and_label_commands_round_trip_labels() -> anyhow::Result<()> {
     assert!(listed_human.contains(" color=#4477aa"), "{listed_human}");
 
     let human = kanban(&temp.path, &["task", "show", task_id])?.success_stdout()?;
-    assert!(human.contains("[backend,frontend]"), "{human}");
+    assert!(human.contains("[api,backend,frontend]"), "{human}");
 
     let removed = kanban(
         &temp.path,
         &["--json", "label", "remove", task_id, "frontend"],
     )?
     .success_json()?;
-    assert_eq!(removed["data"]["labels"][0]["name"], "backend");
+    assert_eq!(removed["data"]["labels"][0]["name"], "api");
+    assert_eq!(removed["data"]["labels"][1]["name"], "backend");
     Ok(())
 }
 
@@ -314,6 +324,178 @@ dimensions = 3
     assert_eq!(deleted["data"]["deleted"], true);
     let atoms_after = kanban(&temp.path, &["--json", "label", "atoms", "list"])?.success_json()?;
     assert!(atoms_after["data"].as_array().context("atoms")?.is_empty());
+    Ok(())
+}
+
+#[test]
+fn label_bootstrap_command_attaches_task_and_returns_semantics() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_command_attaches_task_and_returns_semantics")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "bootstrap cli task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+
+    let bootstrapped = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "bootstrap",
+            task_id,
+            "database",
+            "--description",
+            "Database persistence work",
+            "--applies-when",
+            "touches SQLite migrations",
+            "--positive-example",
+            "new table migration",
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(bootstrapped["data"]["task"]["id"], task_id);
+    assert_eq!(
+        bootstrapped["data"]["verification"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        bootstrapped["data"]["task"]["labels"][0]["name"],
+        "database"
+    );
+    assert_eq!(bootstrapped["data"]["semantics"]["label_name"], "database");
+    assert_eq!(
+        bootstrapped["data"]["semantics"]["description"],
+        "Database persistence work"
+    );
+    assert!(
+        bootstrapped["data"]["semantics"]["atoms"]
+            .as_array()
+            .context("atoms")?
+            .iter()
+            .any(|atom| atom["kind"] == "applies_when")
+    );
+    Ok(())
+}
+
+#[test]
+fn label_bootstrap_verify_requires_vector_provider_before_mutating() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_verify_requires_vector_provider_before_mutating")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "bootstrap verify cli task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "bootstrap",
+            task_id,
+            "database",
+            "--description",
+            "Database persistence work",
+            "--applies-when",
+            "touches SQLite migrations",
+            "--positive-example",
+            "new table migration",
+            "--verify",
+        ],
+    )?
+    .failure_containing(
+        "label bootstrap verification requires a configured label atom vector store",
+    )?;
+
+    let shown = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
+    assert!(
+        shown["data"]["labels"]
+            .as_array()
+            .context("labels")?
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[test]
+fn label_delete_force_removes_canonical_label_and_task_bindings() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_delete_force_removes_canonical_label_and_task_bindings")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "delete label cli task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+    kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "bootstrap",
+            task_id,
+            "database",
+            "--description",
+            "Database persistence work",
+            "--positive-example",
+            "new table migration",
+        ],
+    )?
+    .success_json()?;
+
+    kanban(&temp.path, &["label", "delete", "database"])?
+        .failure_containing("attached to 1 task(s)")?;
+
+    let deleted = kanban(
+        &temp.path,
+        &["--json", "label", "delete", "database", "--force"],
+    )?
+    .success_json()?;
+    assert_eq!(deleted["data"]["label"]["name"], "database");
+    assert_eq!(deleted["data"]["forced"], true);
+    assert_eq!(deleted["data"]["removed_task_bindings"], 1);
+    assert_eq!(deleted["data"]["removed_semantics"], true);
+    assert!(
+        deleted["data"]["removed_atoms"]
+            .as_i64()
+            .context("removed atoms")?
+            > 0
+    );
+
+    let labels = kanban(&temp.path, &["--json", "label", "list"])?.success_json()?;
+    assert!(labels["data"].as_array().context("labels")?.is_empty());
+    let shown = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
+    assert!(
+        shown["data"]["labels"]
+            .as_array()
+            .context("task labels")?
+            .is_empty()
+    );
     Ok(())
 }
 

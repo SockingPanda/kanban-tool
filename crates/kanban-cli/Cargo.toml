@@ -10,7 +10,7 @@ name = "kanban"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["tantivy-backend", "graph-oxigraph", "vector-lancedb"]
 tantivy-backend = [
   "kanban-search/tantivy-backend",
   "kanban-sqlite/tantivy-backend",

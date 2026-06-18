@@ -825,6 +825,12 @@ GET /api/v1/boards/{board}/labels/atom-index/query?q=<text>&polarity=positive&li
 GET /api/v1/tasks/{task_id}/labels
 POST /api/v1/tasks/{task_id}/labels
 DELETE /api/v1/tasks/{task_id}/labels/{label_id}
+POST /api/v1/tasks/{task_id}/label-ontology/observations
+GET /api/v1/boards/{board}/label-ontology/signals
+GET /api/v1/label-ontology/signals/{signal_id}
+POST /api/v1/boards/{board}/label-ontology/actions
+POST /api/v1/boards/{board}/label-ontology/apply/atom
+POST /api/v1/boards/{board}/label-ontology/validate
 ```
 
 Board 级标签创建请求：
@@ -1117,14 +1123,159 @@ Accept/reject body：
 ```json
 {
   "reason": "coverage 不足，接受新 label",
-  "actor": "alice"
+  "actor": "alice",
+  "source_signal_ids": ["los_..."]
 }
 ```
 
 Accept 只允许 `proposed` proposal。成功后会创建 canonical `labels` 行与对应
 `label_semantics` / `label_atoms`，并标脏 label atom index；不会自动写
-`task_labels`。Reject 标记为 `rejected`。accepted/rejected proposal 再次决策返回
-普通 `400 invalid_input` error envelope。
+`task_labels`。`source_signal_ids` 可选；传入时，accept 会在同一 transaction 内写入
+`bootstrap_label` ontology action，并通过 action-signal links 记录 new-label
+bootstrap provenance。Source signals 必须属于同一 board 且处于 `confirmed`。
+Reject 标记为 `rejected`，不接受 `source_signal_ids`。accepted/rejected proposal
+再次决策返回普通 `400 invalid_input` error envelope。
+
+### 12.4 Label ontology ledger
+
+Label ontology ledger API 记录 task 标注过程、review queue、ontology mutation
+provenance 和 validation history。Ledger 不会自动修改 task labels；canonical
+binding 仍通过 task label API 或 CLI 完成。
+
+```http
+POST /api/v1/tasks/{task_id}/label-ontology/observations
+GET /api/v1/boards/{board}/label-ontology/signals?status=open&kind=false_negative&task=default%2312&label=cli&proposed_label=database&include_all=false&limit=100
+GET /api/v1/label-ontology/signals/{signal_id}
+POST /api/v1/boards/{board}/label-ontology/actions
+POST /api/v1/boards/{board}/label-ontology/apply/atom
+POST /api/v1/boards/{board}/label-ontology/validate
+```
+
+`POST /api/v1/tasks/{task_id}/label-ontology/observations` 在一个 transaction 中写入
+observation 和 child signals。请求 body：
+
+```json
+{
+  "actor": {"name": "label-agent", "type": "agent", "agent_type": "local"},
+  "agent_candidates_json": "[]",
+  "suggestion_snapshot_json": "{}",
+  "final_decision_json": "{}",
+  "suggest_coverage": 0.61,
+  "suggest_coverage_cosine": 0.74,
+  "suggest_residual_norm": 0.39,
+  "suggest_needs_new_label": false,
+  "suggest_degraded": false,
+  "diagnostics_json": "[]",
+  "capture_fingerprint": "optional-stable-key",
+  "signals": [
+    {
+      "kind": "false_negative",
+      "target_label_ref": "cli",
+      "related_labels_json": "[]",
+      "proposed_action": "add_positive_atom",
+      "candidate_atom": {
+        "polarity": "positive",
+        "kind": "applies_when",
+        "text": "extends CLI subcommands, command arguments, help output, or machine-readable JSON behavior"
+      },
+      "proposal_json": "{}",
+      "agent_selected": true,
+      "suggest_state": "candidate",
+      "suggest_score": 0.08,
+      "suggest_rank": 6,
+      "final_selected": true,
+      "rationale": "The task expands the CLI surface.",
+      "confidence": 0.9
+    }
+  ]
+}
+```
+
+Service 会读取当前 task snapshot、解析 `target_label_ref`、计算 normalized proposed
+label name、signal key 和 candidate atom content hash。`capture_fingerprint` 为空时
+按 task、snapshots 和 signals 派生；同一 board 重复 fingerprint 会被唯一约束拒绝。
+Observation response 返回 created observation，并展开 child `signals`。
+
+`GET /api/v1/boards/{board}/label-ontology/signals` 默认只返回 `open` 和
+`confirmed`。可重复传 `status` 和 `kind`，并按 `task`、`label`、
+`proposed_label`、`include_all`、`limit` 过滤。`GET /api/v1/label-ontology/signals/{signal_id}`
+返回：
+
+```json
+{
+  "data": {
+    "signal": {},
+    "observation": {},
+    "actions": []
+  }
+}
+```
+
+`POST /api/v1/boards/{board}/label-ontology/actions` 写 review/lifecycle action：
+
+```json
+{
+  "actor": {"name": "alice", "type": "user", "agent_type": null},
+  "action_type": "confirm",
+  "signal_ids": ["los_..."],
+  "reason": "Observed across independent CLI tasks",
+  "superseded_by_signal_id": null,
+  "parent_action_id": null,
+  "target_label_ref": null,
+  "result_label_ref": null,
+  "result_atom_id": null,
+  "result_atom_content_hash": null,
+  "result_proposal_id": null,
+  "canonical_before_hash": null,
+  "canonical_after_hash": null,
+  "change_json": null,
+  "validation_status": null,
+  "validation_json": null
+}
+```
+
+Lifecycle action types `confirm`、`reject`、`supersede` 和 `resolve_no_change` 会同步
+更新 source signal status。其它 action types 可用于记录外部 mutation provenance；
+canonical mutation 的首选入口是 apply/proposal accept 专用 route。
+
+`POST /api/v1/boards/{board}/label-ontology/apply/atom` 对已有 label 执行
+read-modify-upsert semantics，并写入 atom provenance action：
+
+```json
+{
+  "actor": {"name": "codex", "type": "agent", "agent_type": "codex"},
+  "signal_ids": ["los_1", "los_2"],
+  "label_ref": "cli",
+  "kind": "applies_when",
+  "text": "extends CLI subcommands, command arguments, help output, or machine-readable JSON behavior",
+  "reason": "Repeated false-negative signal across CLI surface tasks"
+}
+```
+
+Source signals 必须属于同一 board 且已 `confirmed`。`kind` 只接受
+`applies_when`、`positive_example`、`excludes_when`、`negative_example`。成功后返回
+`add_positive_atom` 或 `add_negative_atom` action，记录 result atom soft reference、
+content hash、before/after canonical hash 和 diff，并把 validation status 置为
+`pending`。该 route 会标脏 label atom index；vector rebuild 和 suggest validation
+在 transaction 外执行。
+
+`POST /api/v1/boards/{board}/label-ontology/validate` 追加 validation action：
+
+```json
+{
+  "actor": {"name": "codex", "type": "agent", "agent_type": "codex"},
+  "parent_action_id": "loa_...",
+  "signal_ids": ["los_1", "los_2"],
+  "reason": "Source tasks now select the target label after atom rebuild",
+  "validation_status": "passed",
+  "validation_json": "{\"cases\":[]}"
+}
+```
+
+Service 会把 supplied `validation_json` 包进 validation envelope，附上 source signal
+cases、observation task snapshot hash 与当前 task hash 对比、parent action result
+引用和 summary。`passed` 会把 linked source signals 转为 `resolved`；`failed` 与
+`partial` 保留 signals 供后续修正或人工处理。
 
 ---
 

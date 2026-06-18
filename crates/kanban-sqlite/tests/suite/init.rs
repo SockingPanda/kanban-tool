@@ -60,7 +60,7 @@ fn init_records_and_enforces_migration_checksum() -> anyhow::Result<()> {
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    assert_eq!(user_version, 11);
+    assert_eq!(user_version, 12);
     assert_eq!(name, "001_initial");
     assert!(checksum.starts_with("fnv64:"), "checksum: {checksum}");
 
@@ -86,7 +86,7 @@ fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 11);
+    assert_eq!(user_version, 12);
     for table in [
         "entities",
         "relation_predicates",
@@ -97,6 +97,10 @@ fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
         "label_atoms",
         "label_atom_index_boards",
         "label_semantic_proposals",
+        "label_ontology_observations",
+        "label_ontology_signals",
+        "label_ontology_actions",
+        "label_ontology_action_signals",
     ] {
         let count: i64 = conn.query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
@@ -148,7 +152,7 @@ fn init_upgrades_v1_database_and_backfills_task_entities() -> anyhow::Result<()>
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 11);
+    assert_eq!(user_version, 12);
     let task_entity_title: String = conn.query_row(
         "SELECT title FROM entities WHERE uri='kb://task/t_test'",
         [],

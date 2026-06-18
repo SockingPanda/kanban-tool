@@ -67,6 +67,30 @@ pub fn build_router(state: AppState) -> Router {
             get(list_task_label_proposals).post(propose_task_label),
         )
         .route(
+            "/api/v1/tasks/:task_id/label-ontology/observations",
+            post(record_label_ontology_observation),
+        )
+        .route(
+            "/api/v1/boards/:board/label-ontology/signals",
+            get(list_label_ontology_signals),
+        )
+        .route(
+            "/api/v1/boards/:board/label-ontology/actions",
+            post(create_label_ontology_action),
+        )
+        .route(
+            "/api/v1/boards/:board/label-ontology/apply/atom",
+            post(apply_label_ontology_atom),
+        )
+        .route(
+            "/api/v1/boards/:board/label-ontology/validate",
+            post(validate_label_ontology_action),
+        )
+        .route(
+            "/api/v1/label-ontology/signals/:signal_id",
+            get(get_label_ontology_signal),
+        )
+        .route(
             "/api/v1/label-proposals/:proposal_id",
             get(get_label_proposal),
         )

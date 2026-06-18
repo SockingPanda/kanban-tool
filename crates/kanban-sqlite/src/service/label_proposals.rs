@@ -4,10 +4,11 @@ use super::label_suggestions::{
     bounded_diagnostic_message, compute_task_label_suggestions_with, retrieve_residual_atoms,
 };
 use super::{
-    LabelProposalAttempt, LabelProposalCandidate, LabelProposalListOptions, LabelProposalStatus,
-    LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult, SqlFilter, all,
-    all_values, board_id, exec, exec_named, get_task_by_id, insert_event,
-    mark_label_atom_store_dirty, required_row, resolve_task,
+    LabelProposalAttempt, LabelProposalCandidate, LabelProposalDecisionOptions,
+    LabelProposalListOptions, LabelProposalStatus, LabelSemanticProposalRecord,
+    LabelSuggestionOptions, LabelSuggestionResult, SqlFilter, all, all_values, board_id, exec,
+    exec_named, get_task_by_id, insert_event, mark_label_atom_store_dirty,
+    record_label_ontology_proposal_bootstrap_in_tx, required_row, resolve_task,
     upsert_label_semantics_candidate_in_tx, with_immediate_tx,
 };
 
@@ -540,12 +541,29 @@ pub fn accept_label_proposal(
     proposal_id: &str,
     reason: Option<String>,
 ) -> Result<LabelSemanticProposalRecord> {
+    accept_label_proposal_with_options(
+        path,
+        actor,
+        proposal_id,
+        reason,
+        LabelProposalDecisionOptions::default(),
+    )
+}
+
+pub fn accept_label_proposal_with_options(
+    path: impl AsRef<Path>,
+    actor: &str,
+    proposal_id: &str,
+    reason: Option<String>,
+    options: LabelProposalDecisionOptions,
+) -> Result<LabelSemanticProposalRecord> {
     decide_label_proposal(
         path,
         actor,
         proposal_id,
         LabelProposalStatus::Accepted,
         reason,
+        options,
     )
 }
 
@@ -561,6 +579,7 @@ pub fn reject_label_proposal(
         proposal_id,
         LabelProposalStatus::Rejected,
         reason,
+        LabelProposalDecisionOptions::default(),
     )
 }
 
@@ -570,10 +589,16 @@ fn decide_label_proposal(
     proposal_id: &str,
     decision: LabelProposalStatus,
     reason: Option<String>,
+    options: LabelProposalDecisionOptions,
 ) -> Result<LabelSemanticProposalRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
+        if decision != LabelProposalStatus::Accepted && !options.source_signal_ids.is_empty() {
+            return Err(KanbanError::InvalidInput(
+                "source_signal_ids are only supported when accepting label proposals".into(),
+            ));
+        }
         let proposal = get_label_proposal_conn(&conn, proposal_id)?;
         if proposal.status != LabelProposalStatus::Proposed {
             return Err(KanbanError::InvalidInput(format!(
@@ -641,6 +666,19 @@ fn decide_label_proposal(
                 .to_string(),
             now,
         )?;
+        if decision == LabelProposalStatus::Accepted
+            && let Some(label_id) = resolved_label_id.as_deref()
+        {
+            record_label_ontology_proposal_bootstrap_in_tx(
+                &conn,
+                &proposal,
+                label_id,
+                actor,
+                decision_reason.as_deref(),
+                options.source_signal_ids,
+                now,
+            )?;
+        }
         get_label_proposal_conn(&conn, proposal_id)
     })
 }

@@ -5,7 +5,7 @@ use common::{TempDb, kanban};
 use kanban_sqlite::LabelProposalCandidate;
 use pretty_assertions::assert_eq;
 use serde_json::json;
-use std::path::Path;
+use std::{fs, path::Path};
 
 #[test]
 fn task_show_defaults_to_one_line_summary() -> anyhow::Result<()> {
@@ -592,6 +592,527 @@ fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<(
     .success_json()?;
     assert_eq!(rejected["data"]["status"], "rejected");
     Ok(())
+}
+
+#[test]
+fn label_ontology_cli_record_list_show_review_round_trip() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_record_list_show_review_round_trip")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology cli task",
+            "--description",
+            "ready spec for ontology CLI capture",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"]
+        .as_str()
+        .context("expected JSON string")?;
+
+    let input_path = temp.dir.join("ontology-record.json");
+    let agent_candidates_json = json!([
+        {"label": "cli", "confidence": 0.92}
+    ])
+    .to_string();
+    let suggestion_snapshot_json = json!({
+        "selected_labels": []
+    })
+    .to_string();
+    let final_decision_json = json!({
+        "accepted_labels": ["cli"]
+    })
+    .to_string();
+    let diagnostics_json = json!([]).to_string();
+    let related_labels_json = json!([]).to_string();
+    let proposal_json = json!({}).to_string();
+    fs::write(
+        &input_path,
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": agent_candidates_json,
+            "suggestion_snapshot_json": suggestion_snapshot_json,
+            "final_decision_json": final_decision_json,
+            "suggest_coverage": 0.61,
+            "suggest_coverage_cosine": 0.74,
+            "suggest_residual_norm": 0.39,
+            "suggest_needs_new_label": false,
+            "suggest_degraded": false,
+            "diagnostics_json": diagnostics_json,
+            "capture_fingerprint": "cli-ontology-round-trip",
+            "signals": [{
+                "kind": "false_negative",
+                "target_label_ref": "cli",
+                "related_labels_json": related_labels_json,
+                "proposed_action": "add_positive_atom",
+                "candidate_atom": {
+                    "polarity": "positive",
+                    "kind": "applies_when",
+                    "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
+                },
+                "proposed_label_name": null,
+                "proposal_json": proposal_json,
+                "agent_selected": true,
+                "suggest_state": "candidate",
+                "suggest_score": 0.08,
+                "suggest_rank": 4,
+                "final_selected": true,
+                "rationale": "The task expands the CLI surface although suggest scored cli weakly.",
+                "confidence": 0.91,
+                "signal_key": "cli-false-negative"
+            }]
+        })
+        .to_string(),
+    )?;
+    let input_path = input_path
+        .to_str()
+        .context("temp path should be valid UTF-8")?;
+
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json", "label", "ontology", "record", task_id, "--input", input_path,
+        ],
+    )?
+    .success_json()?;
+    assert!(
+        observation["data"]["id"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("lor_")
+    );
+    assert_eq!(observation["data"]["signals"][0]["kind"], "false_negative");
+    let signal_id = observation["data"]["signals"][0]["id"]
+        .as_str()
+        .context("expected signal id")?;
+
+    let listed = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "list",
+            "--status",
+            "open",
+            "--kind",
+            "false_negative",
+            "--task",
+            task_id,
+            "--label",
+            "cli",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(listed["data"].as_array().context("signals")?.len(), 1);
+    assert_eq!(listed["data"][0]["id"], signal_id);
+    assert_eq!(listed["data"][0]["target_label_name_snapshot"], "cli");
+
+    let shown = kanban(
+        &temp.path,
+        &["--json", "label", "ontology", "show", signal_id],
+    )?
+    .success_json()?;
+    assert_eq!(shown["data"]["signal"]["id"], signal_id);
+    assert_eq!(shown["data"]["observation"]["task_id"], task_id);
+
+    let review = kanban(&temp.path, &["label", "ontology", "review"])?.success_stdout()?;
+    assert!(review.contains(signal_id), "{review}");
+    assert!(review.contains("false_negative"), "{review}");
+    assert!(review.contains("add_positive_atom"), "{review}");
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_lifecycle_apply_and_validate_round_trip")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology cli lifecycle task",
+            "--description",
+            "ready spec for ontology CLI lifecycle actions",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    let input_path = write_cli_ontology_record_input(
+        &temp,
+        "ontology-lifecycle-record.json",
+        &[
+            ("cli-lifecycle-primary", "adds CLI lifecycle commands"),
+            (
+                "cli-lifecycle-duplicate",
+                "duplicates CLI lifecycle commands",
+            ),
+            ("cli-lifecycle-reject", "low confidence duplicate"),
+            (
+                "cli-lifecycle-no-change",
+                "already covered by existing docs",
+            ),
+        ],
+    )?;
+
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            &input_path,
+        ],
+    )?
+    .success_json()?;
+    let signals = observation["data"]["signals"]
+        .as_array()
+        .context("signals")?;
+    let primary = signals[0]["id"].as_str().context("primary signal")?;
+    let duplicate = signals[1]["id"].as_str().context("duplicate signal")?;
+    let rejected_signal = signals[2]["id"].as_str().context("rejected signal")?;
+    let no_change_signal = signals[3]["id"].as_str().context("no-change signal")?;
+
+    let confirmed = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "confirm",
+            primary,
+            "--reason",
+            "Reviewer confirmed the false negative.",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(confirmed["data"]["action_type"], "confirm");
+    assert_eq!(confirmed["data"]["signal_ids"][0], primary);
+
+    let rejected = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "reject",
+            rejected_signal,
+            "--reason",
+            "Reviewer rejected the weak signal.",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(rejected["data"]["action_type"], "reject");
+
+    let superseded = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "supersede",
+            duplicate,
+            "--by",
+            primary,
+            "--reason",
+            "Duplicate of the confirmed signal.",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(superseded["data"]["action_type"], "supersede");
+
+    let resolved_no_change = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "resolve",
+            no_change_signal,
+            "--no-change",
+            "--reason",
+            "Existing ontology already covers this signal.",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(
+        resolved_no_change["data"]["action_type"],
+        "resolve_no_change"
+    );
+
+    let applied = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "apply",
+            "atom",
+            primary,
+            "--label",
+            "cli",
+            "--kind",
+            "applies-when",
+            "--text",
+            "extends CLI subcommands, arguments, help output, or JSON behavior",
+            "--reason",
+            "Confirmed false-negative support for CLI surface changes.",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(applied["data"]["action_type"], "add_positive_atom");
+    assert_eq!(applied["data"]["validation_status"], "pending");
+    let apply_action_id = applied["data"]["id"].as_str().context("apply action id")?;
+
+    let validation_path = temp.dir.join("ontology-validation.json");
+    fs::write(
+        &validation_path,
+        json!({
+            "cases": [{
+                "signal_id": primary,
+                "passed": true,
+                "after": {"state": "selected"}
+            }]
+        })
+        .to_string(),
+    )?;
+    let validation_path = validation_path
+        .to_str()
+        .context("temp path should be valid UTF-8")?;
+    let validated = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "validate",
+            apply_action_id,
+            "--status",
+            "passed",
+            "--reason",
+            "The source task now selects cli with the new atom as evidence.",
+            "--input",
+            validation_path,
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(validated["data"]["action_type"], "validate");
+    assert_eq!(validated["data"]["validation_status"], "passed");
+
+    let primary_detail = kanban(
+        &temp.path,
+        &["--json", "label", "ontology", "show", primary],
+    )?
+    .success_json()?;
+    assert_eq!(primary_detail["data"]["signal"]["status"], "resolved");
+    assert_eq!(
+        primary_detail["data"]["actions"]
+            .as_array()
+            .context("primary actions")?
+            .len(),
+        3
+    );
+    let duplicate_detail = kanban(
+        &temp.path,
+        &["--json", "label", "ontology", "show", duplicate],
+    )?
+    .success_json()?;
+    assert_eq!(duplicate_detail["data"]["signal"]["status"], "superseded");
+    assert_eq!(
+        duplicate_detail["data"]["signal"]["superseded_by_signal_id"],
+        primary
+    );
+
+    let gap_input_path = temp.dir.join("ontology-proposal-gap.json");
+    fs::write(
+        &gap_input_path,
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": "[]",
+            "suggestion_snapshot_json": "{}",
+            "final_decision_json": "{}",
+            "suggest_coverage": 0.2,
+            "suggest_coverage_cosine": 0.3,
+            "suggest_residual_norm": 0.8,
+            "suggest_needs_new_label": true,
+            "suggest_degraded": false,
+            "diagnostics_json": "[]",
+            "capture_fingerprint": "cli-proposal-gap",
+            "signals": [{
+                "kind": "vocabulary_gap",
+                "target_label_ref": null,
+                "related_labels_json": "[]",
+                "proposed_action": "bootstrap_label",
+                "candidate_atom": null,
+                "proposed_label_name": "ontology-ledger",
+                "proposal_json": "{\"name\":\"ontology-ledger\"}",
+                "agent_selected": true,
+                "suggest_state": "absent",
+                "suggest_score": null,
+                "suggest_rank": null,
+                "final_selected": true,
+                "rationale": "Existing labels do not express ontology ledger storage.",
+                "confidence": 0.86,
+                "signal_key": "cli-proposal-gap"
+            }]
+        })
+        .to_string(),
+    )?;
+    let gap_input_path = gap_input_path
+        .to_str()
+        .context("temp path should be valid UTF-8")?;
+    let gap_observation = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            gap_input_path,
+        ],
+    )?
+    .success_json()?;
+    let gap_signal = gap_observation["data"]["signals"][0]["id"]
+        .as_str()
+        .context("gap signal")?;
+    kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "confirm",
+            gap_signal,
+            "--reason",
+            "Reviewer confirmed the vocabulary gap.",
+        ],
+    )?
+    .success_json()?;
+    let proposal_id = seed_proposed_label_proposal(
+        &temp.path,
+        task_id,
+        LabelProposalCandidate {
+            name: "ontology-ledger".to_owned(),
+            description: Some("Label ontology ledger work".to_owned()),
+            applies_when: vec!["records ontology observations and signals".to_owned()],
+            positive_examples: vec!["creates label ontology ledger tables".to_owned()],
+            ..LabelProposalCandidate::default()
+        },
+    )?;
+    let accepted = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "proposals",
+            "accept",
+            &proposal_id,
+            "--reason",
+            "Bootstrap from confirmed vocabulary-gap signal.",
+            "--source-signal",
+            gap_signal,
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(accepted["data"]["status"], "accepted");
+    assert!(accepted["data"]["resolved_label_id"].as_str().is_some());
+    let gap_detail = kanban(
+        &temp.path,
+        &["--json", "label", "ontology", "show", gap_signal],
+    )?
+    .success_json()?;
+    assert_eq!(gap_detail["data"]["signal"]["status"], "confirmed");
+    assert!(
+        gap_detail["data"]["actions"]
+            .as_array()
+            .context("gap actions")?
+            .iter()
+            .any(|action| action["action_type"] == "bootstrap_label")
+    );
+
+    Ok(())
+}
+
+fn write_cli_ontology_record_input(
+    temp: &TempDb,
+    filename: &str,
+    signal_specs: &[(&str, &str)],
+) -> anyhow::Result<String> {
+    let signals = signal_specs
+        .iter()
+        .map(|(signal_key, rationale)| {
+            json!({
+                "kind": "false_negative",
+                "target_label_ref": "cli",
+                "related_labels_json": "[]",
+                "proposed_action": "add_positive_atom",
+                "candidate_atom": {
+                    "polarity": "positive",
+                    "kind": "applies_when",
+                    "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
+                },
+                "proposed_label_name": null,
+                "proposal_json": "{}",
+                "agent_selected": true,
+                "suggest_state": "candidate",
+                "suggest_score": 0.08,
+                "suggest_rank": 4,
+                "final_selected": true,
+                "rationale": rationale,
+                "confidence": 0.91,
+                "signal_key": signal_key
+            })
+        })
+        .collect::<Vec<_>>();
+    let path = temp.dir.join(filename);
+    fs::write(
+        &path,
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": "[{\"label\":\"cli\",\"confidence\":0.92}]",
+            "suggestion_snapshot_json": "{\"selected_labels\":[]}",
+            "final_decision_json": "{\"accepted_labels\":[\"cli\"]}",
+            "suggest_coverage": 0.61,
+            "suggest_coverage_cosine": 0.74,
+            "suggest_residual_norm": 0.39,
+            "suggest_needs_new_label": false,
+            "suggest_degraded": false,
+            "diagnostics_json": "[]",
+            "capture_fingerprint": filename,
+            "signals": signals
+        })
+        .to_string(),
+    )?;
+    Ok(path
+        .to_str()
+        .context("temp path should be valid UTF-8")?
+        .to_owned())
 }
 
 fn seed_proposed_label_proposal(

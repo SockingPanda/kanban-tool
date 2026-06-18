@@ -1,3 +1,6 @@
+// Keep this module as a thin rusqlite convenience layer. SQL shape and domain
+// semantics stay in the service modules; helpers here only centralize repeated
+// binding, row-cardinality, and error-handling plumbing.
 use super::storage;
 
 use kanban_core::{KanbanError, Result};

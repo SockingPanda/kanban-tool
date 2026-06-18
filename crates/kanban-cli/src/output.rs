@@ -3,17 +3,32 @@ use anyhow::Result;
 use crate::args::SearchOutputHit;
 
 pub(crate) fn print_task(json: bool, task: &kanban_sqlite::TaskRecord) -> Result<()> {
-    print_task_with_details(json, false, task)
+    print_task_with_details(json, false, task, None)
 }
 
 pub(crate) fn print_task_with_details(
     json: bool,
     details: bool,
     task: &kanban_sqlite::TaskRecord,
+    ontology_summary: Option<&kanban_sqlite::TaskOntologySummary>,
 ) -> Result<()> {
+    if json && details {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "data": task,
+                "meta": {
+                    "details": {
+                        "ontology_summary": ontology_summary,
+                    }
+                }
+            }))?
+        );
+        return Ok(());
+    }
     print_or_json(json, task, || {
         if details {
-            task_details(task)
+            task_details(task, ontology_summary)
         } else {
             task_line(task)
         }
@@ -48,7 +63,10 @@ pub(crate) fn task_line(task: &kanban_sqlite::TaskRecord) -> String {
     )
 }
 
-pub(crate) fn task_details(task: &kanban_sqlite::TaskRecord) -> String {
+pub(crate) fn task_details(
+    task: &kanban_sqlite::TaskRecord,
+    ontology_summary: Option<&kanban_sqlite::TaskOntologySummary>,
+) -> String {
     let mut lines = vec![
         format!("ref: {}", task.task_ref),
         format!("id: {}", task.id),
@@ -114,6 +132,9 @@ pub(crate) fn task_details(task: &kanban_sqlite::TaskRecord) -> String {
         format!("metadata_json: {}", task.metadata_json),
         format!("lock_version: {}", task.lock_version),
     ]);
+    if let Some(summary) = ontology_summary {
+        push_task_ontology_summary(&mut lines, summary);
+    }
     lines.join("\n")
 }
 
@@ -154,6 +175,52 @@ fn push_multiline_field(lines: &mut Vec<String>, label: &str, value: Option<&str
             lines.extend(value.lines().map(|line| format!("  {line}")));
         }
         _ => lines.push(format!("{label}: -")),
+    }
+}
+
+fn push_task_ontology_summary(
+    lines: &mut Vec<String>,
+    summary: &kanban_sqlite::TaskOntologySummary,
+) {
+    lines.extend([
+        "ontology_summary:".to_owned(),
+        format!(
+            "  signals: total={} open={} confirmed={} resolved={} rejected={} superseded={} degraded={} stale={} incomparable={} actions={}",
+            summary.signal_count,
+            summary.open_count,
+            summary.confirmed_count,
+            summary.resolved_count,
+            summary.rejected_count,
+            summary.superseded_count,
+            summary.degraded_count,
+            summary.stale_count,
+            summary.incomparable_count,
+            summary.action_count
+        ),
+        format!(
+            "  oldest_open_confirmed_signal_at: {}",
+            option_i64(summary.oldest_open_confirmed_signal_at)
+        ),
+        format!(
+            "  latest_signal_at: {}",
+            option_i64(summary.latest_signal_at)
+        ),
+        format!(
+            "  latest_action_at: {}",
+            option_i64(summary.latest_action_at)
+        ),
+    ]);
+    for signal in &summary.sample_signals {
+        lines.push(format!(
+            "  signal {} kind={} status={} action={} degraded={} stale={} actions={}",
+            signal.id,
+            signal.kind,
+            signal.status,
+            signal.proposed_action,
+            signal.degraded,
+            signal.stale,
+            signal.action_count
+        ));
     }
 }
 

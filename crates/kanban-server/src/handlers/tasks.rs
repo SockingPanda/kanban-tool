@@ -37,6 +37,11 @@ pub(crate) struct TaskListQuery {
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct TaskGetQuery {
+    include: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct LabelSuggestionQuery {
     #[serde(default = "default_label_suggestion_limit")]
     limit: usize,
@@ -88,6 +93,15 @@ fn default_limit() -> usize {
 
 fn default_label_ontology_review_group_by() -> String {
     "label".to_owned()
+}
+
+fn task_get_includes_ontology(include: Option<&str>) -> bool {
+    include.is_some_and(|include| {
+        include
+            .split(',')
+            .map(str::trim)
+            .any(|item| item == "ontology")
+    })
 }
 
 fn default_label_suggestion_limit() -> usize {
@@ -1377,13 +1391,26 @@ pub(crate) async fn remove_task_label(
 pub(crate) async fn get_task(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
+    query: Result<Query<TaskGetQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<TaskDto>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    let include_ontology = task_get_includes_ontology(query.include.as_deref());
+    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let meta = if include_ontology {
+        Some(json!({
+            "details": {
+                "ontology_summary": kanban_sqlite::task_ontology_summary_by_id_global(
+                    state.db_path(),
+                    &task_id,
+                )?
+            }
+        }))
+    } else {
+        None
+    };
     Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::get_task_by_id_global(
-            state.db_path(),
-            &task_id,
-        )?),
-        meta: None,
+        data: TaskDto::from(task),
+        meta,
     }))
 }
 

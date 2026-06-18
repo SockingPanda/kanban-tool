@@ -4,7 +4,8 @@ use anyhow::Result;
 use kanban_sqlite::{
     CreateTask, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListSort, TaskPatch, archive_task,
     block_task, claim_task, complete_task, get_task, heartbeat_task, list_tasks, list_tasks_page,
-    promote_task, reclaim_expired, submit_review_task, unblock_task, update_task,
+    promote_task, reclaim_expired, submit_review_task, task_ontology_summary, unblock_task,
+    update_task,
 };
 
 use crate::args::TaskCommand;
@@ -88,7 +89,13 @@ pub(crate) fn handle_task(
             })?;
         }
         TaskCommand::Show { task_ref, details } => {
-            print_task_with_details(json, details, &get_task(db_path, board, &task_ref)?)?
+            let task = get_task(db_path, board, &task_ref)?;
+            let ontology_summary = if details {
+                task_ontology_summary(db_path, board, &task_ref)?
+            } else {
+                None
+            };
+            print_task_with_details(json, details, &task, ontology_summary.as_ref())?
         }
         TaskCommand::Update(args) => {
             let task = update_task(

@@ -2189,6 +2189,84 @@ async fn tasks_gets_task_by_id() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn tasks_gets_ontology_summary_only_when_included() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("ontology summary via api"),
+    )
+    .context("task")?;
+    let app = test.router();
+
+    let (status, observation) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/label-ontology/observations", task.id),
+        json!({
+            "actor": {"name": "label-agent", "type": "agent", "agent_type": "local"},
+            "agent_candidates_json": "[]",
+            "suggestion_snapshot_json": "{}",
+            "final_decision_json": "{}",
+            "suggest_needs_new_label": false,
+            "suggest_degraded": false,
+            "diagnostics_json": "[]",
+            "capture_fingerprint": "api-task-ontology-summary",
+            "signals": [{
+                "kind": "false_negative",
+                "target_label_ref": "cli",
+                "related_labels_json": "[]",
+                "proposed_action": "add_positive_atom",
+                "candidate_atom": {
+                    "polarity": "positive",
+                    "kind": "applies_when",
+                    "text": "changes task detail ontology summary"
+                },
+                "proposal_json": "{}",
+                "agent_selected": true,
+                "suggest_state": "candidate",
+                "suggest_score": 0.22,
+                "suggest_rank": 2,
+                "final_selected": true,
+                "rationale": "Task detail should expose ontology summary.",
+                "signal_key": "api-task-ontology-summary"
+            }]
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED, "{observation}");
+    let signal_id = observation["data"]["signals"][0]["id"]
+        .as_str()
+        .context("signal id")?;
+
+    let (status, json) = get_json(app.clone(), &format!("/api/v1/tasks/{}", task.id)).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert!(json.get("meta").is_none());
+
+    let (status, json) =
+        get_json(app, &format!("/api/v1/tasks/{}?include=ontology", task.id)).await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    let summary = &json["meta"]["details"]["ontology_summary"];
+    assert_eq!(summary["signal_count"], 1);
+    assert_eq!(summary["open_count"], 1);
+    assert_eq!(summary["sample_signals"][0]["id"], signal_id);
+    assert_eq!(
+        summary["sample_signals"][0]["proposed_action"],
+        "add_positive_atom"
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn tasks_returns_error_envelope_for_json_and_query_extractor_errors() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let app = test.router();

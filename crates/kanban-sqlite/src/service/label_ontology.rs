@@ -6,11 +6,12 @@ use super::{
     LabelOntologyObservationRecord, LabelOntologyProposedAction, LabelOntologyRecordInput,
     LabelOntologyReviewAtomVariant, LabelOntologyReviewGroup, LabelOntologyReviewGroupBy,
     LabelOntologyReviewLabelRef, LabelOntologyReviewOptions, LabelOntologySignalDetail,
-    LabelOntologySignalInput, LabelOntologySignalListOptions, LabelOntologySignalRecord,
-    LabelOntologySignalStatus, LabelOntologyValidationInput, LabelOntologyValidationStatus,
-    LabelSemanticProposalRecord, all_values, board_id, exec, get_task_by_id,
-    mark_label_atom_store_dirty, optional, required_row, resolve_task, storage,
-    upsert_label_semantics_in_tx, with_immediate_tx, with_read_tx,
+    LabelOntologySignalInput, LabelOntologySignalKind, LabelOntologySignalListOptions,
+    LabelOntologySignalRecord, LabelOntologySignalStatus, LabelOntologyValidationInput,
+    LabelOntologyValidationStatus, LabelSemanticProposalRecord, TaskOntologySignalSummary,
+    TaskOntologySummary, TaskRecord, all_values, board_id, exec, get_task_by_id,
+    get_task_by_id_global_conn, mark_label_atom_store_dirty, optional, required_row, resolve_task,
+    storage, upsert_label_semantics_in_tx, with_immediate_tx, with_read_tx,
 };
 
 use std::{
@@ -276,6 +277,26 @@ pub fn review_label_ontology(
         groups.truncate(limit);
         Ok(groups)
     })
+}
+
+pub fn task_ontology_summary(
+    path: impl AsRef<Path>,
+    board: &str,
+    task_ref: &str,
+) -> Result<Option<TaskOntologySummary>> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    let task = resolve_task(&conn, &board_id, task_ref)?;
+    task_ontology_summary_for_task(&conn, &task)
+}
+
+pub fn task_ontology_summary_by_id_global(
+    path: impl AsRef<Path>,
+    task_id: &str,
+) -> Result<Option<TaskOntologySummary>> {
+    let conn = connect_file(path.as_ref())?;
+    let task = get_task_by_id_global_conn(&conn, task_id)?;
+    task_ontology_summary_for_task(&conn, &task)
 }
 
 pub fn get_label_ontology_signal(
@@ -2114,6 +2135,271 @@ fn median_score(scores: &[f64]) -> Option<f64> {
         len if len % 2 == 1 => Some(scores[len / 2]),
         len => Some((scores[(len / 2) - 1] + scores[len / 2]) / 2.0),
     }
+}
+
+#[derive(Clone, Default)]
+struct SignalActionStats {
+    action_count: i64,
+    latest_action_at: Option<i64>,
+}
+
+struct TaskOntologySignalRow {
+    observation_id: String,
+    signal_id: String,
+    kind: LabelOntologySignalKind,
+    status: LabelOntologySignalStatus,
+    proposed_action: LabelOntologyProposedAction,
+    target_label_id: Option<String>,
+    target_label_name_snapshot: Option<String>,
+    candidate_atom_polarity: Option<String>,
+    candidate_atom_kind: Option<String>,
+    candidate_text: Option<String>,
+    candidate_content_hash: Option<String>,
+    proposed_label_name: Option<String>,
+    proposed_label_name_normalized: Option<String>,
+    suggest_score: Option<f64>,
+    suggest_rank: Option<i64>,
+    suggest_degraded: bool,
+    suggest_input_hash: Option<String>,
+    created_at: i64,
+    updated_at: i64,
+}
+
+fn task_ontology_summary_for_task(
+    conn: &Connection,
+    task: &TaskRecord,
+) -> Result<Option<TaskOntologySummary>> {
+    let sql = "SELECT o.id, s.id, s.kind, s.status, s.proposed_action, \
+               s.target_label_id, s.target_label_name_snapshot, s.candidate_atom_polarity, \
+               s.candidate_atom_kind, s.candidate_text, s.candidate_content_hash, \
+               s.proposed_label_name, s.proposed_label_name_normalized, s.suggest_score, \
+               s.suggest_rank, o.suggest_degraded, o.suggest_input_hash, s.created_at, s.updated_at \
+               FROM label_ontology_observations o \
+               JOIN label_ontology_signals s ON s.observation_id=o.id \
+               WHERE o.board_id=? AND o.task_id=? \
+               ORDER BY s.created_at ASC, s.id ASC";
+    let mut rows = all_values(
+        conn,
+        sql,
+        &[
+            Value::Text(task.board_id.clone()),
+            Value::Text(task.id.clone()),
+        ],
+        task_ontology_signal_row_from_row,
+    )?;
+    if rows.is_empty() {
+        return Ok(None);
+    }
+
+    let signal_ids = rows
+        .iter()
+        .map(|row| row.signal_id.clone())
+        .collect::<Vec<_>>();
+    let signal_count = signal_ids.len() as i64;
+    let action_stats = task_ontology_action_stats_for_signals(conn, &signal_ids)?;
+    let current_suggest_input_hash = suggest_input_hash_for_task(task);
+    let now = SystemClock.now_ms();
+    let mut observation_ids = BTreeSet::new();
+    let mut open_count = 0;
+    let mut confirmed_count = 0;
+    let mut resolved_count = 0;
+    let mut rejected_count = 0;
+    let mut superseded_count = 0;
+    let mut degraded_count = 0;
+    let mut stale_count = 0;
+    let mut suggest_input_drift_count = 0;
+    let mut legacy_incomparable_count = 0;
+    let mut action_count = 0;
+    let mut oldest_open_confirmed_signal_at: Option<i64> = None;
+    let mut latest_signal_at: Option<i64> = None;
+    let mut latest_action_at: Option<i64> = None;
+    let mut sample_signals = Vec::with_capacity(rows.len());
+
+    for row in rows.drain(..) {
+        observation_ids.insert(row.observation_id.clone());
+        match row.status {
+            LabelOntologySignalStatus::Open => open_count += 1,
+            LabelOntologySignalStatus::Confirmed => confirmed_count += 1,
+            LabelOntologySignalStatus::Resolved => resolved_count += 1,
+            LabelOntologySignalStatus::Rejected => rejected_count += 1,
+            LabelOntologySignalStatus::Superseded => superseded_count += 1,
+        }
+        if matches!(
+            row.status,
+            LabelOntologySignalStatus::Open | LabelOntologySignalStatus::Confirmed
+        ) {
+            oldest_open_confirmed_signal_at = Some(match oldest_open_confirmed_signal_at {
+                Some(existing) => existing.min(row.created_at),
+                None => row.created_at,
+            });
+        }
+        latest_signal_at = Some(match latest_signal_at {
+            Some(existing) => existing.max(row.created_at),
+            None => row.created_at,
+        });
+        if row.suggest_degraded {
+            degraded_count += 1;
+        }
+        let legacy_incomparable = row.suggest_input_hash.is_none();
+        let suggest_input_drift = row
+            .suggest_input_hash
+            .as_deref()
+            .is_some_and(|hash| hash != current_suggest_input_hash);
+        let stale = legacy_incomparable || suggest_input_drift;
+        if stale {
+            stale_count += 1;
+        }
+        if suggest_input_drift {
+            suggest_input_drift_count += 1;
+        }
+        if legacy_incomparable {
+            legacy_incomparable_count += 1;
+        }
+        let stats = action_stats
+            .get(&row.signal_id)
+            .cloned()
+            .unwrap_or_default();
+        action_count += stats.action_count;
+        if let Some(action_at) = stats.latest_action_at {
+            latest_action_at = Some(match latest_action_at {
+                Some(existing) => existing.max(action_at),
+                None => action_at,
+            });
+        }
+        sample_signals.push(TaskOntologySignalSummary {
+            id: row.signal_id,
+            kind: row.kind,
+            status: row.status,
+            proposed_action: row.proposed_action,
+            target_label_id: row.target_label_id,
+            target_label_name: row.target_label_name_snapshot,
+            candidate_atom_polarity: row.candidate_atom_polarity,
+            candidate_atom_kind: row.candidate_atom_kind,
+            candidate_text: row.candidate_text,
+            candidate_content_hash: row.candidate_content_hash,
+            proposed_label_name: row.proposed_label_name,
+            proposed_label_name_normalized: row.proposed_label_name_normalized,
+            suggest_score: row.suggest_score,
+            suggest_rank: row.suggest_rank,
+            degraded: row.suggest_degraded,
+            stale,
+            legacy_incomparable,
+            suggest_input_drift,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            latest_action_at: stats.latest_action_at,
+            action_count: stats.action_count,
+        });
+    }
+
+    sample_signals.sort_by(|left, right| {
+        task_ontology_signal_priority(left)
+            .cmp(&task_ontology_signal_priority(right))
+            .then_with(|| right.created_at.cmp(&left.created_at))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    sample_signals.truncate(5);
+    let oldest_open_confirmed_signal_age_ms =
+        oldest_open_confirmed_signal_at.map(|value| (now - value).max(0));
+    Ok(Some(TaskOntologySummary {
+        task_id: task.id.clone(),
+        observation_count: observation_ids.len() as i64,
+        signal_count,
+        open_count,
+        confirmed_count,
+        resolved_count,
+        rejected_count,
+        superseded_count,
+        degraded_count,
+        stale_count,
+        suggest_input_drift_count,
+        legacy_incomparable_count,
+        incomparable_count: stale_count + degraded_count,
+        action_count,
+        oldest_open_confirmed_signal_at,
+        oldest_open_confirmed_signal_age_ms,
+        latest_signal_at,
+        latest_action_at,
+        current_suggest_input_hash,
+        sample_signals,
+    }))
+}
+
+fn task_ontology_signal_priority(signal: &TaskOntologySignalSummary) -> u8 {
+    match signal.status {
+        LabelOntologySignalStatus::Open => 0,
+        LabelOntologySignalStatus::Confirmed => 1,
+        LabelOntologySignalStatus::Resolved => 2,
+        LabelOntologySignalStatus::Rejected => 3,
+        LabelOntologySignalStatus::Superseded => 4,
+    }
+}
+
+fn task_ontology_signal_row_from_row(row: &Row<'_>) -> rusqlite::Result<TaskOntologySignalRow> {
+    let kind: String = row.get(2)?;
+    let status: String = row.get(3)?;
+    let proposed_action: String = row.get(4)?;
+    Ok(TaskOntologySignalRow {
+        observation_id: row.get(0)?,
+        signal_id: row.get(1)?,
+        kind: parse_row_enum(&kind)?,
+        status: parse_row_enum(&status)?,
+        proposed_action: parse_row_enum(&proposed_action)?,
+        target_label_id: row.get(5)?,
+        target_label_name_snapshot: row.get(6)?,
+        candidate_atom_polarity: row.get(7)?,
+        candidate_atom_kind: row.get(8)?,
+        candidate_text: row.get(9)?,
+        candidate_content_hash: row.get(10)?,
+        proposed_label_name: row.get(11)?,
+        proposed_label_name_normalized: row.get(12)?,
+        suggest_score: row.get(13)?,
+        suggest_rank: row.get(14)?,
+        suggest_degraded: int_bool(row.get(15)?),
+        suggest_input_hash: row.get(16)?,
+        created_at: row.get(17)?,
+        updated_at: row.get(18)?,
+    })
+}
+
+fn task_ontology_action_stats_for_signals(
+    conn: &Connection,
+    signal_ids: &[String],
+) -> Result<BTreeMap<String, SignalActionStats>> {
+    if signal_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let placeholders = vec!["?"; signal_ids.len()].join(",");
+    let sql = format!(
+        "SELECT x.signal_id, COUNT(a.id), MAX(a.created_at) \
+         FROM label_ontology_action_signals x \
+         JOIN label_ontology_actions a ON a.id=x.action_id \
+         WHERE x.signal_id IN ({placeholders}) \
+         GROUP BY x.signal_id"
+    );
+    let values = signal_ids
+        .iter()
+        .cloned()
+        .map(Value::Text)
+        .collect::<Vec<_>>();
+    let mut stmt = conn.prepare(&sql).map_err(storage)?;
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(values.iter()), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                SignalActionStats {
+                    action_count: row.get(1)?,
+                    latest_action_at: row.get(2)?,
+                },
+            ))
+        })
+        .map_err(storage)?;
+    let mut stats = BTreeMap::new();
+    for row in rows {
+        let (signal_id, signal_stats) = row.map_err(storage)?;
+        stats.insert(signal_id, signal_stats);
+    }
+    Ok(stats)
 }
 
 fn observation_by_id(

@@ -1725,9 +1725,77 @@ fn task_show_details_does_not_change_json_output() -> anyhow::Result<()> {
     )?
     .success_json()?;
 
-    assert_eq!(details_json, default_json);
+    assert!(default_json.get("meta").is_none());
+    assert_eq!(details_json["data"], default_json["data"]);
     assert_eq!(details_json["data"]["title"], "json stable title");
     assert_eq!(details_json["data"]["description"], "json stable spec");
+    assert!(details_json["meta"]["details"]["ontology_summary"].is_null());
+    Ok(())
+}
+
+#[test]
+fn task_show_details_json_includes_ontology_summary() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_show_details_json_includes_ontology_summary")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology summary task",
+            "--description",
+            "ready spec for task ontology summary",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    let input_path = write_cli_ontology_record_input(
+        &temp,
+        "task-show-ontology-summary.json",
+        &[(
+            "task-show-summary",
+            "task show should expose ontology summary",
+        )],
+    )?;
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            &input_path,
+        ],
+    )?
+    .success_json()?;
+    let signal_id = observation["data"]["signals"][0]["id"]
+        .as_str()
+        .context("signal id")?;
+
+    let default_json = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
+    assert!(default_json.get("meta").is_none());
+    let details_json = kanban(
+        &temp.path,
+        &["--json", "task", "show", task_id, "--details"],
+    )?
+    .success_json()?;
+    let summary = &details_json["meta"]["details"]["ontology_summary"];
+    assert_eq!(summary["signal_count"], 1);
+    assert_eq!(summary["open_count"], 1);
+    assert_eq!(summary["confirmed_count"], 0);
+    assert_eq!(summary["sample_signals"][0]["id"], signal_id);
+    assert_eq!(
+        summary["sample_signals"][0]["proposed_action"],
+        "add_positive_atom"
+    );
+
+    let human = kanban(&temp.path, &["task", "show", task_id, "--details"])?.success_stdout()?;
+    assert!(human.contains("ontology_summary:"), "{human}");
+    assert!(human.contains(signal_id), "{human}");
     Ok(())
 }
 

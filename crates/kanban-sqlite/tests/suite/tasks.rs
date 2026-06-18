@@ -422,6 +422,87 @@ fn labels_create_attach_filter_and_remove_without_status_side_effects() -> anyho
 }
 
 #[test]
+fn task_label_batch_add_normalizes_dedups_and_events_new_bindings_only() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_label_batch_add_normalizes_dedups_and_events_new_bindings_only")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Batch label target"),
+    )?;
+
+    let first = kanban_sqlite::add_task_labels(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &["backend".into(), " frontend ".into(), "backend".into()],
+    )?;
+    assert_eq!(
+        first
+            .labels
+            .iter()
+            .map(|label| label.name.as_str())
+            .collect::<Vec<_>>(),
+        ["backend", "frontend"]
+    );
+    let added_events = list_events(&temp.path, "default", Some(&task.id))?
+        .into_iter()
+        .filter(|event| event.kind == "task.label.added")
+        .collect::<Vec<_>>();
+    assert_eq!(added_events.len(), 2);
+
+    let second = kanban_sqlite::add_task_labels(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &["frontend".into(), "api".into()],
+    )?;
+    assert_eq!(
+        second
+            .labels
+            .iter()
+            .map(|label| label.name.as_str())
+            .collect::<Vec<_>>(),
+        ["api", "backend", "frontend"]
+    );
+    let added_events = list_events(&temp.path, "default", Some(&task.id))?
+        .into_iter()
+        .filter(|event| event.kind == "task.label.added")
+        .collect::<Vec<_>>();
+    assert_eq!(added_events.len(), 3);
+
+    Ok(())
+}
+
+#[test]
+fn task_label_batch_add_validates_before_mutating() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_label_batch_add_validates_before_mutating")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Invalid batch label target"),
+    )?;
+
+    let error = result_err(kanban_sqlite::add_task_labels(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &["backend".into(), " ".into()],
+    ))?;
+    assert!(error.to_string().contains("label name is required"));
+    assert!(get_task(&temp.path, "default", &task.id)?.labels.is_empty());
+    assert!(kanban_sqlite::list_labels(&temp.path, "default")?.is_empty());
+
+    Ok(())
+}
+
+#[test]
 fn task_label_mutations_by_id_use_task_board_and_reject_archived_targets() -> anyhow::Result<()> {
     let temp =
         TempDb::new("task_label_mutations_by_id_use_task_board_and_reject_archived_targets")?;

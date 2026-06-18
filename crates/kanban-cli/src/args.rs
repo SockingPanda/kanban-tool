@@ -186,7 +186,7 @@ pub(crate) enum CommentCommand {
 pub(crate) enum LabelCommand {
     List,
     Create(LabelCreateArgs),
-    Add(LabelTaskArgs),
+    Add(LabelAddTaskArgs),
     Remove(LabelTaskArgs),
     Semantics {
         #[command(subcommand)]
@@ -220,6 +220,13 @@ pub(crate) struct LabelCreateArgs {
 pub(crate) struct LabelTaskArgs {
     pub(crate) task_ref: String,
     pub(crate) label: String,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelAddTaskArgs {
+    pub(crate) task_ref: String,
+    #[arg(required = true)]
+    pub(crate) labels: Vec<String>,
 }
 
 #[derive(Debug, Subcommand)]

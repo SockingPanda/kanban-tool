@@ -19,6 +19,7 @@ use rusqlite::{Connection, Row, params, types::Value};
 use serde_json::{Value as JsonValue, json};
 
 const LABEL_ONTOLOGY_LIST_LIMIT_MAX: usize = 1000;
+const LABEL_ONTOLOGY_VALIDATION_SCORE_THRESHOLD: f64 = 0.50;
 
 pub fn record_label_ontology_observation(
     path: impl AsRef<Path>,
@@ -637,7 +638,7 @@ fn build_validation_json(
     status: LabelOntologyValidationStatus,
 ) -> Result<String> {
     let manual = parse_json_field(supplied_json, "validation_json", JsonShape::Object)?;
-    ensure_passed_validation_evidence(&manual, signals, status)?;
+    ensure_passed_validation_evidence(&manual, parent_action, signals, status)?;
     let mut cases = Vec::with_capacity(signals.len());
     let mut stale_count = 0usize;
     let mut degraded_count = 0usize;
@@ -835,6 +836,7 @@ fn ensure_validatable_parent_action(action: &LabelOntologyActionRecord) -> Resul
 
 fn ensure_passed_validation_evidence(
     manual: &JsonValue,
+    parent_action: &LabelOntologyActionRecord,
     signals: &[LabelOntologySignalRecord],
     status: LabelOntologyValidationStatus,
 ) -> Result<()> {
@@ -851,6 +853,7 @@ fn ensure_passed_validation_evidence(
                     .into(),
             )
         })?;
+    ensure_typed_validation_context(manual)?;
     for signal in signals {
         let Some(case) = cases.iter().find(|case| {
             case.get("signal_id").and_then(JsonValue::as_str) == Some(signal.id.as_str())
@@ -865,8 +868,328 @@ fn ensure_passed_validation_evidence(
                 "passed validation requires each linked signal case to pass".into(),
             ));
         }
+        ensure_case_type(parent_action.action_type, case)?;
+        ensure_case_objects(case)?;
+        match parent_action.action_type {
+            LabelOntologyActionType::AddPositiveAtom => {
+                ensure_positive_atom_validation_case(parent_action, case)?;
+            }
+            LabelOntologyActionType::AddNegativeAtom => {
+                ensure_negative_atom_validation_case(parent_action, case)?;
+            }
+            LabelOntologyActionType::BootstrapLabel => {
+                ensure_bootstrap_label_validation_case(parent_action, case)?;
+            }
+            LabelOntologyActionType::UpdateSemantics
+            | LabelOntologyActionType::RenameLabel
+            | LabelOntologyActionType::SplitLabel
+            | LabelOntologyActionType::MergeLabels => {}
+            _ => {
+                return Err(KanbanError::InvalidInput(
+                    "passed validation parent action must be a canonical mutation action".into(),
+                ));
+            }
+        }
     }
     Ok(())
+}
+
+fn ensure_typed_validation_context(manual: &JsonValue) -> Result<()> {
+    let evidence_type = required_string_field(manual, "evidence_type", "passed validation")?;
+    if evidence_type != "automated" {
+        return Err(KanbanError::InvalidInput(
+            "passed validation requires automated typed evidence; reviewer attestation cannot pass hard validation".into(),
+        ));
+    }
+    required_string_field(manual, "embedding_model", "passed validation")?;
+    required_object_field(manual, "solver_options", "passed validation")?;
+    let index = required_object_field(manual, "index", "passed validation")?;
+    let index_status = required_string_field(index, "status", "passed validation index")?;
+    if matches!(index_status, "dirty" | "error") {
+        return Err(KanbanError::InvalidInput(
+            "passed validation requires a clean, non-dirty atom index".into(),
+        ));
+    }
+    if index.get("dirty").and_then(JsonValue::as_bool) == Some(true) {
+        return Err(KanbanError::InvalidInput(
+            "passed validation requires a clean, non-dirty atom index".into(),
+        ));
+    }
+    let valid_generation = index.get("generation").is_some_and(|generation| {
+        generation.is_number()
+            || generation
+                .as_str()
+                .is_some_and(|text| !text.trim().is_empty())
+    });
+    if !valid_generation {
+        return Err(KanbanError::InvalidInput(
+            "passed validation requires atom index generation evidence".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_case_type(
+    action_type: LabelOntologyActionType,
+    validation_case: &JsonValue,
+) -> Result<()> {
+    let case_type = required_string_field(validation_case, "case_type", "validation case")?;
+    let expected = match action_type {
+        LabelOntologyActionType::AddPositiveAtom => "positive_atom",
+        LabelOntologyActionType::AddNegativeAtom => "negative_atom",
+        LabelOntologyActionType::BootstrapLabel => "bootstrap_label",
+        LabelOntologyActionType::UpdateSemantics => "update_semantics",
+        LabelOntologyActionType::RenameLabel => "rename_label",
+        LabelOntologyActionType::SplitLabel => "split_label",
+        LabelOntologyActionType::MergeLabels => "merge_labels",
+        _ => "unsupported",
+    };
+    if case_type != expected {
+        return Err(KanbanError::InvalidInput(format!(
+            "validation case type {case_type} does not match parent action {expected}"
+        )));
+    }
+    Ok(())
+}
+
+fn ensure_case_objects(validation_case: &JsonValue) -> Result<()> {
+    required_object_field(validation_case, "before", "validation case")?;
+    let after = required_object_field(validation_case, "after", "validation case")?;
+    if after.get("degraded").and_then(JsonValue::as_bool) != Some(false) {
+        return Err(KanbanError::InvalidInput(
+            "passed validation requires non-degraded after evidence".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_positive_atom_validation_case(
+    parent_action: &LabelOntologyActionRecord,
+    validation_case: &JsonValue,
+) -> Result<()> {
+    let target_label_id = required_parent_field(
+        parent_action.target_label_id.as_deref(),
+        "positive atom validation requires a target label",
+    )?;
+    ensure_target_label_matches(validation_case, "before", target_label_id, "positive atom")?;
+    let after_target =
+        ensure_target_label_matches(validation_case, "after", target_label_id, "positive atom")?;
+    if after_target.selected != Some(true)
+        && !after_target
+            .score
+            .is_some_and(|score| score >= LABEL_ONTOLOGY_VALIDATION_SCORE_THRESHOLD)
+    {
+        return Err(KanbanError::InvalidInput(
+            "positive atom validation requires target label selected or score >= 0.50".into(),
+        ));
+    }
+    ensure_score_and_coverage_not_worse(validation_case, "positive atom")?;
+    ensure_result_atom_evidence(parent_action, validation_case, "positive atom")?;
+    Ok(())
+}
+
+fn ensure_negative_atom_validation_case(
+    parent_action: &LabelOntologyActionRecord,
+    validation_case: &JsonValue,
+) -> Result<()> {
+    let target_label_id = required_parent_field(
+        parent_action.target_label_id.as_deref(),
+        "negative atom validation requires a target label",
+    )?;
+    let before_target =
+        ensure_target_label_matches(validation_case, "before", target_label_id, "negative atom")?;
+    let after_target =
+        ensure_target_label_matches(validation_case, "after", target_label_id, "negative atom")?;
+    let score_dropped = before_target
+        .score
+        .zip(after_target.score)
+        .is_some_and(|(before, after)| after < before);
+    if after_target.selected == Some(true) && !score_dropped {
+        return Err(KanbanError::InvalidInput(
+            "negative atom validation requires false-positive target score to drop or no longer be selected".into(),
+        ));
+    }
+    ensure_result_atom_evidence(parent_action, validation_case, "negative atom")?;
+    ensure_positive_controls(validation_case)?;
+    Ok(())
+}
+
+fn ensure_bootstrap_label_validation_case(
+    parent_action: &LabelOntologyActionRecord,
+    validation_case: &JsonValue,
+) -> Result<()> {
+    let result_label_id = required_parent_field(
+        parent_action.result_label_id.as_deref(),
+        "bootstrap label validation requires a result label",
+    )?;
+    let after_target =
+        ensure_target_label_matches(validation_case, "after", result_label_id, "bootstrap label")?;
+    if after_target.selected != Some(true)
+        && !after_target
+            .score
+            .is_some_and(|score| score >= LABEL_ONTOLOGY_VALIDATION_SCORE_THRESHOLD)
+    {
+        return Err(KanbanError::InvalidInput(
+            "bootstrap label validation requires new label selected or score >= 0.50".into(),
+        ));
+    }
+    if !after_evidence_atoms(validation_case)
+        .iter()
+        .any(|atom| atom.get("label_id").and_then(JsonValue::as_str) == Some(result_label_id))
+    {
+        return Err(KanbanError::InvalidInput(
+            "bootstrap label validation requires evidence from new label atoms".into(),
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TargetEvidence {
+    selected: Option<bool>,
+    score: Option<f64>,
+}
+
+fn ensure_target_label_matches(
+    validation_case: &JsonValue,
+    phase: &str,
+    label_id: &str,
+    context: &str,
+) -> Result<TargetEvidence> {
+    let phase_object = required_object_field(validation_case, phase, "validation case")?;
+    let target = required_object_field(phase_object, "target", context)?;
+    let case_label_id = target
+        .get("label_id")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| {
+            KanbanError::InvalidInput(format!("{context} validation requires target label id"))
+        })?;
+    if case_label_id != label_id {
+        return Err(KanbanError::InvalidInput(format!(
+            "{context} validation target label does not match parent action"
+        )));
+    }
+    Ok(TargetEvidence {
+        selected: target.get("selected").and_then(JsonValue::as_bool),
+        score: target.get("score").and_then(JsonValue::as_f64),
+    })
+}
+
+fn ensure_score_and_coverage_not_worse(validation_case: &JsonValue, context: &str) -> Result<()> {
+    let before = required_object_field(validation_case, "before", "validation case")?;
+    let after = required_object_field(validation_case, "after", "validation case")?;
+    let before_score = before
+        .get("target")
+        .and_then(|target| target.get("score"))
+        .and_then(JsonValue::as_f64);
+    let after_score = after
+        .get("target")
+        .and_then(|target| target.get("score"))
+        .and_then(JsonValue::as_f64);
+    if before_score
+        .zip(after_score)
+        .is_some_and(|(before, after)| after < before)
+    {
+        return Err(KanbanError::InvalidInput(format!(
+            "{context} validation target score regressed"
+        )));
+    }
+    let before_coverage = before.get("coverage").and_then(JsonValue::as_f64);
+    let after_coverage = after.get("coverage").and_then(JsonValue::as_f64);
+    if before_coverage
+        .zip(after_coverage)
+        .is_some_and(|(before, after)| after < before)
+    {
+        return Err(KanbanError::InvalidInput(format!(
+            "{context} validation coverage regressed"
+        )));
+    }
+    Ok(())
+}
+
+fn ensure_result_atom_evidence(
+    parent_action: &LabelOntologyActionRecord,
+    validation_case: &JsonValue,
+    context: &str,
+) -> Result<()> {
+    let result_atom_id = required_parent_field(
+        parent_action.result_atom_id.as_deref(),
+        "atom validation requires a result atom id",
+    )?;
+    let result_atom_content_hash = required_parent_field(
+        parent_action.result_atom_content_hash.as_deref(),
+        "atom validation requires a result atom content hash",
+    )?;
+    if !after_evidence_atoms(validation_case).iter().any(|atom| {
+        atom.get("id").and_then(JsonValue::as_str) == Some(result_atom_id)
+            || atom.get("content_hash").and_then(JsonValue::as_str)
+                == Some(result_atom_content_hash)
+    }) {
+        return Err(KanbanError::InvalidInput(format!(
+            "{context} validation requires result atom evidence"
+        )));
+    }
+    Ok(())
+}
+
+fn ensure_positive_controls(validation_case: &JsonValue) -> Result<()> {
+    let after = required_object_field(validation_case, "after", "validation case")?;
+    let Some(controls) = after.get("positive_controls") else {
+        return Ok(());
+    };
+    let controls = controls.as_array().ok_or_else(|| {
+        KanbanError::InvalidInput(
+            "negative atom validation positive controls must be an array".into(),
+        )
+    })?;
+    for control in controls {
+        if control.get("passed").and_then(JsonValue::as_bool) != Some(true)
+            || control.get("regressed").and_then(JsonValue::as_bool) == Some(true)
+        {
+            return Err(KanbanError::InvalidInput(
+                "negative atom validation requires every positive control to pass without regression"
+                    .into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn after_evidence_atoms(validation_case: &JsonValue) -> Vec<&JsonValue> {
+    validation_case
+        .get("after")
+        .and_then(|after| after.get("evidence_atoms"))
+        .and_then(JsonValue::as_array)
+        .map(|atoms| atoms.iter().collect())
+        .unwrap_or_default()
+}
+
+fn required_parent_field<'a>(value: Option<&'a str>, message: &str) -> Result<&'a str> {
+    value.ok_or_else(|| KanbanError::InvalidInput(message.into()))
+}
+
+fn required_object_field<'a>(
+    value: &'a JsonValue,
+    field: &str,
+    context: &str,
+) -> Result<&'a JsonValue> {
+    value
+        .get(field)
+        .filter(|child| child.is_object())
+        .ok_or_else(|| {
+            KanbanError::InvalidInput(format!("{context} requires object field {field}"))
+        })
+}
+
+fn required_string_field<'a>(value: &'a JsonValue, field: &str, context: &str) -> Result<&'a str> {
+    value
+        .get(field)
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .ok_or_else(|| {
+            KanbanError::InvalidInput(format!("{context} requires string field {field}"))
+        })
 }
 
 fn ensure_no_supersede_cycle(

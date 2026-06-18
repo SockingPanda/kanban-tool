@@ -1028,6 +1028,174 @@ fn label_ontology_atom_apply_records_provenance_and_validation_resolves_signal()
 }
 
 #[test]
+fn label_ontology_jsonl_export_import_round_trips_ledger_and_self_refs() -> anyhow::Result<()> {
+    let source =
+        TempDb::new("label_ontology_jsonl_export_import_round_trips_ledger_and_self_refs_source")?;
+    let fixture = seed_portable_ontology_ledger(&source)?;
+    let export_path = source.dir.join("ontology.jsonl");
+    export_jsonl(&source.path, "default", &export_path)?;
+    let export = std::fs::read_to_string(&export_path)?;
+    for record_type in [
+        "label_ontology_observation",
+        "label_ontology_signal",
+        "label_ontology_action",
+        "label_ontology_action_signal",
+    ] {
+        assert!(
+            export.contains(&format!("\"type\":\"{record_type}\"")),
+            "missing {record_type} in export:\n{export}"
+        );
+    }
+
+    let reordered_path = source.dir.join("ontology-reordered.jsonl");
+    write_reordered_ontology_export(&export_path, &reordered_path)?;
+
+    let target =
+        TempDb::new("label_ontology_jsonl_export_import_round_trips_ledger_and_self_refs_target")?;
+    init_database(&target.path, "tester")?;
+    import_jsonl(&target.path, &reordered_path, true)?;
+
+    let conn = connect_file(&target.path)?;
+    let observation_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM label_ontology_observations",
+        [],
+        |row| row.get(0),
+    )?;
+    let signal_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM label_ontology_signals", [], |row| {
+            row.get(0)
+        })?;
+    let action_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM label_ontology_actions", [], |row| {
+            row.get(0)
+        })?;
+    let link_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM label_ontology_action_signals",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(observation_count, 1);
+    assert_eq!(signal_count, 2);
+    assert_eq!(action_count, 4);
+    assert_eq!(link_count, 4);
+
+    let duplicate = get_label_ontology_signal(&target.path, &fixture.duplicate_signal_id)?;
+    assert_eq!(
+        duplicate.signal.superseded_by_signal_id.as_deref(),
+        Some(fixture.source_signal_id.as_str())
+    );
+    assert_eq!(
+        duplicate.signal.status,
+        LabelOntologySignalStatus::Superseded
+    );
+    let validation_parent: Option<String> = conn.query_row(
+        "SELECT parent_action_id FROM label_ontology_actions WHERE id=?1",
+        [&fixture.validation_action_id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        validation_parent.as_deref(),
+        Some(fixture.apply_action_id.as_str())
+    );
+    let validation_json: String = conn.query_row(
+        "SELECT validation_json FROM label_ontology_actions WHERE id=?1",
+        [&fixture.validation_action_id],
+        |row| row.get(0),
+    )?;
+    let validation: serde_json::Value = serde_json::from_str(&validation_json)?;
+    assert_eq!(validation["summary"]["status"], "passed");
+    assert_eq!(
+        validation["cases"][0]["signal_id"],
+        fixture.source_signal_id
+    );
+
+    let observation_candidates: String = conn.query_row(
+        "SELECT agent_candidates_json FROM label_ontology_observations WHERE id=?1",
+        [&fixture.observation_id],
+        |row| row.get(0),
+    )?;
+    assert!(observation_candidates.contains("adds CLI command surface"));
+    Ok(())
+}
+
+#[test]
+fn label_ontology_jsonl_import_rejects_cross_board_action_signal_link() -> anyhow::Result<()> {
+    let source =
+        TempDb::new("label_ontology_jsonl_import_rejects_cross_board_action_signal_link_source")?;
+    let fixture = seed_portable_ontology_ledger(&source)?;
+    let other_board = create_board(
+        &source.path,
+        "tester",
+        CreateBoard {
+            slug: "other".to_owned(),
+            name: "Other".to_owned(),
+            description: None,
+        },
+    )?;
+    create_task(
+        &source.path,
+        "other",
+        "tester",
+        CreateTask::ready("other board export parent"),
+    )?;
+    let default_export = source.dir.join("default-ontology.jsonl");
+    let other_export = source.dir.join("other-board.jsonl");
+    let invalid_export = source.dir.join("cross-board-action-signal.jsonl");
+    export_jsonl(&source.path, "default", &default_export)?;
+    export_jsonl(&source.path, "other", &other_export)?;
+    let invalid = replace_action_signal_board_id(
+        &std::fs::read_to_string(&default_export)?,
+        &fixture.apply_action_id,
+        &fixture.source_signal_id,
+        &other_board.id,
+    )?;
+    std::fs::write(
+        &invalid_export,
+        format!("{}{}", std::fs::read_to_string(&other_export)?, invalid),
+    )?;
+
+    let target =
+        TempDb::new("label_ontology_jsonl_import_rejects_cross_board_action_signal_link_target")?;
+    init_database(&target.path, "tester")?;
+    let error = result_err(import_jsonl(&target.path, &invalid_export, true))?;
+
+    assert!(
+        error
+            .to_string()
+            .contains("label ontology action-signal board mismatch"),
+        "error: {error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn label_ontology_jsonl_import_rejects_supersede_cycle() -> anyhow::Result<()> {
+    let source = TempDb::new("label_ontology_jsonl_import_rejects_supersede_cycle_source")?;
+    let fixture = seed_portable_ontology_ledger(&source)?;
+    let export_path = source.dir.join("ontology.jsonl");
+    let invalid_export = source.dir.join("supersede-cycle.jsonl");
+    export_jsonl(&source.path, "default", &export_path)?;
+    let invalid = replace_signal_superseded_by(
+        &std::fs::read_to_string(&export_path)?,
+        &fixture.source_signal_id,
+        &fixture.duplicate_signal_id,
+    )?;
+    std::fs::write(&invalid_export, invalid)?;
+
+    let target = TempDb::new("label_ontology_jsonl_import_rejects_supersede_cycle_target")?;
+    init_database(&target.path, "tester")?;
+    let error = result_err(import_jsonl(&target.path, &invalid_export, true))?;
+
+    assert!(
+        error
+            .to_string()
+            .contains("label ontology signal supersede cycle"),
+        "error: {error}"
+    );
+    Ok(())
+}
+
+#[test]
 fn label_ontology_validation_allows_status_only_task_drift_with_warning() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_validation_allows_status_only_task_drift_with_warning")?;
     init_database(&temp.path, "tester")?;
@@ -1484,6 +1652,14 @@ struct OntologyValidationFixture {
     result_atom_content_hash: String,
 }
 
+struct PortableOntologyLedgerFixture {
+    observation_id: String,
+    source_signal_id: String,
+    duplicate_signal_id: String,
+    apply_action_id: String,
+    validation_action_id: String,
+}
+
 fn seed_validation_fixture(
     temp: &TempDb,
     title: &str,
@@ -1541,6 +1717,185 @@ fn seed_validation_fixture(
             .result_atom_content_hash
             .context("result atom hash")?,
     })
+}
+
+fn seed_portable_ontology_ledger(temp: &TempDb) -> anyhow::Result<PortableOntologyLedgerFixture> {
+    init_database(&temp.path, "tester")?;
+    let label = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Export portable ontology ledger"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![
+            sample_signal_input("portable-source"),
+            sample_signal_input("portable-duplicate"),
+        ]),
+    )?;
+    let source_signal_id = observation.signals[0].id.clone();
+    let duplicate_signal_id = observation.signals[1].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![source_signal_id.clone()],
+            "Confirmed portable ontology source signal.",
+        ),
+    )?;
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        supersede_input(
+            vec![duplicate_signal_id.clone()],
+            &source_signal_id,
+            "Duplicate of the source signal.",
+        ),
+    )?;
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![source_signal_id.clone()],
+            label_ref: label.id.clone(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed portable ontology atom support.".to_owned(),
+        },
+    )?;
+    let validation = validate_label_ontology_action(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: validation_actor(),
+            parent_action_id: apply_action.id.clone(),
+            signal_ids: Vec::new(),
+            reason: "Portable ontology validation passed.".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            validation_json: typed_positive_validation_json(
+                &source_signal_id,
+                &label.id,
+                apply_action
+                    .result_atom_id
+                    .as_deref()
+                    .context("result atom id")?,
+                apply_action
+                    .result_atom_content_hash
+                    .as_deref()
+                    .context("result atom hash")?,
+            )
+            .to_string(),
+        },
+    )?;
+    Ok(PortableOntologyLedgerFixture {
+        observation_id: observation.id,
+        source_signal_id,
+        duplicate_signal_id,
+        apply_action_id: apply_action.id,
+        validation_action_id: validation.id,
+    })
+}
+
+fn write_reordered_ontology_export(input_path: &Path, output_path: &Path) -> anyhow::Result<()> {
+    let mut non_ontology = Vec::new();
+    let mut observations = Vec::new();
+    let mut signals = Vec::new();
+    let mut actions = Vec::new();
+    let mut links = Vec::new();
+    for line in std::fs::read_to_string(input_path)?.lines() {
+        let value: serde_json::Value = serde_json::from_str(line)?;
+        match value["type"].as_str() {
+            Some("label_ontology_observation") => observations.push(line.to_owned()),
+            Some("label_ontology_signal") => signals.push(line.to_owned()),
+            Some("label_ontology_action") => actions.push(line.to_owned()),
+            Some("label_ontology_action_signal") => links.push(line.to_owned()),
+            _ => non_ontology.push(line.to_owned()),
+        }
+    }
+    signals.sort_by_key(|line| {
+        let value: serde_json::Value = serde_json::from_str(line).expect("valid JSONL test line");
+        value["data"]["superseded_by_signal_id"].is_null()
+    });
+    actions.sort_by_key(|line| {
+        let value: serde_json::Value = serde_json::from_str(line).expect("valid JSONL test line");
+        value["data"]["parent_action_id"].is_null()
+    });
+    let mut reordered = non_ontology;
+    reordered.extend(observations);
+    reordered.extend(signals);
+    reordered.extend(actions);
+    reordered.extend(links);
+    std::fs::write(output_path, format!("{}\n", reordered.join("\n")))?;
+    Ok(())
+}
+
+fn replace_action_signal_board_id(
+    export: &str,
+    action_id: &str,
+    signal_id: &str,
+    board_id: &str,
+) -> anyhow::Result<String> {
+    let mut replaced = false;
+    let mut lines = Vec::new();
+    for line in export.lines() {
+        let mut value: serde_json::Value = serde_json::from_str(line)?;
+        if value["type"].as_str() == Some("label_ontology_action_signal")
+            && value["data"]["action_id"].as_str() == Some(action_id)
+            && value["data"]["signal_id"].as_str() == Some(signal_id)
+        {
+            value["data"]["board_id"] = json!(board_id);
+            replaced = true;
+            lines.push(serde_json::to_string(&value)?);
+        } else {
+            lines.push(line.to_owned());
+        }
+    }
+    if !replaced {
+        return Err(test_error("missing action-signal link to mutate"));
+    }
+    Ok(format!("{}\n", lines.join("\n")))
+}
+
+fn replace_signal_superseded_by(
+    export: &str,
+    signal_id: &str,
+    replacement_signal_id: &str,
+) -> anyhow::Result<String> {
+    let mut replaced = false;
+    let mut lines = Vec::new();
+    for line in export.lines() {
+        let mut value: serde_json::Value = serde_json::from_str(line)?;
+        if value["type"].as_str() == Some("label_ontology_signal")
+            && value["data"]["id"].as_str() == Some(signal_id)
+        {
+            value["data"]["superseded_by_signal_id"] = json!(replacement_signal_id);
+            replaced = true;
+            lines.push(serde_json::to_string(&value)?);
+        } else {
+            lines.push(line.to_owned());
+        }
+    }
+    if !replaced {
+        return Err(test_error("missing signal to mutate"));
+    }
+    Ok(format!("{}\n", lines.join("\n")))
 }
 
 fn seed_negative_validation_fixture(

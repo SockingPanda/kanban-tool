@@ -276,10 +276,18 @@ kanban task show <task_ref> --details
 agent-work#12 t_01HX... [ready] 实现状态机
 ```
 
-`--details` 只改变人类可读输出，显示为易读字段列表。可用时包含 task
+`--details` 改变人类可读输出，显示为易读字段列表。可用时包含 task
 ref/id/status/title、完整多行 description、assignee、priority、labels、
 scheduled_at、due_at、created_at、updated_at，以及其他 task snapshot 字段。
-`--json task show` 无论是否带 `--details`，都返回相同的 `TaskRecord` envelope。
+如果该 task 有 label ontology signals，details 输出还会追加紧凑的
+`ontology_summary`，列出 signal/status/degraded/stale/action counts、aging 时间和
+少量 sample signal ids。
+
+`task show <task_ref> --json` 默认只返回 `{"data": TaskRecord}`。带 `--details`
+时，`data` 仍是相同的 `TaskRecord`，但 envelope 会包含
+`meta.details.ontology_summary`；没有 ontology signals 时该字段为 `null`。该 summary
+只读，不改变 task、labels 或 ontology signal 状态。需要完整 review queue 时继续使用
+`label ontology list/show/review`。
 
 `task_ref` 支持：
 

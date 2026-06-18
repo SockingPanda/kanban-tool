@@ -295,7 +295,16 @@ Query params：
 
 | Param | 说明 |
 |---|---|
-| `include` | `comments,runs,events,dependencies,labels`。 |
+| `include` | 可选。当前识别 `ontology`；可用逗号分隔，其他 include 值暂时保持兼容性忽略。 |
+
+默认响应只包含 `data: TaskDto`，不返回 `meta`。传 `include=ontology` 时，`data`
+保持同一 `TaskDto`，并在 `meta.details.ontology_summary` 返回该 task 的 label
+ontology signal 摘要；没有 ontology signals 时为 `null`。Summary 是只读 task-level
+工作流提示，包含 signal/status/degraded/stale/action counts、oldest open/confirmed
+signal time/age、latest signal/action time、当前 `suggest_input_hash` 和最多 5 条
+sample signals（id/kind/status/proposed_action/score/stale/degraded/action count）。完整
+queue/review 仍使用 `/label-ontology/signals`、`/label-ontology/review` 和
+`/label-ontology/signals/{signal_id}`。
 
 ### 4.4 Update task fields
 

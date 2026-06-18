@@ -62,6 +62,56 @@ pub struct TaskRecord {
     pub labels: Vec<LabelRecord>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TaskOntologySummary {
+    pub task_id: String,
+    pub observation_count: i64,
+    pub signal_count: i64,
+    pub open_count: i64,
+    pub confirmed_count: i64,
+    pub resolved_count: i64,
+    pub rejected_count: i64,
+    pub superseded_count: i64,
+    pub degraded_count: i64,
+    pub stale_count: i64,
+    pub suggest_input_drift_count: i64,
+    pub legacy_incomparable_count: i64,
+    pub incomparable_count: i64,
+    pub action_count: i64,
+    pub oldest_open_confirmed_signal_at: Option<i64>,
+    pub oldest_open_confirmed_signal_age_ms: Option<i64>,
+    pub latest_signal_at: Option<i64>,
+    pub latest_action_at: Option<i64>,
+    pub current_suggest_input_hash: String,
+    pub sample_signals: Vec<TaskOntologySignalSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TaskOntologySignalSummary {
+    pub id: String,
+    pub kind: LabelOntologySignalKind,
+    pub status: LabelOntologySignalStatus,
+    pub proposed_action: LabelOntologyProposedAction,
+    pub target_label_id: Option<String>,
+    pub target_label_name: Option<String>,
+    pub candidate_atom_polarity: Option<String>,
+    pub candidate_atom_kind: Option<String>,
+    pub candidate_text: Option<String>,
+    pub candidate_content_hash: Option<String>,
+    pub proposed_label_name: Option<String>,
+    pub proposed_label_name_normalized: Option<String>,
+    pub suggest_score: Option<f64>,
+    pub suggest_rank: Option<i64>,
+    pub degraded: bool,
+    pub stale: bool,
+    pub legacy_incomparable: bool,
+    pub suggest_input_drift: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub latest_action_at: Option<i64>,
+    pub action_count: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LabelRecord {
     pub id: String,

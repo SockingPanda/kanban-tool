@@ -388,6 +388,198 @@ fn label_ontology_review_returns_empty_groups() -> anyhow::Result<()> {
 }
 
 #[test]
+fn task_ontology_summary_counts_statuses_stale_degraded_and_actions() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_ontology_summary_counts_statuses_stale_degraded_and_actions")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Ontology summary source"),
+    )?;
+    let stale_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        review_record_input(vec![review_label_signal(
+            "summary-stale-open",
+            "cli",
+            "old task wording should be stale",
+            0.2,
+        )]),
+    )?;
+    update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        TaskPatch {
+            title: Some("Ontology summary source after edit".to_owned()),
+            description: None,
+            assignee: None,
+            priority: None,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: None,
+            metadata_json: None,
+            expected_lock_version: None,
+        },
+    )?;
+    let open_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        review_record_input(vec![review_label_signal(
+            "summary-open",
+            "cli",
+            "current open task wording",
+            0.3,
+        )]),
+    )?;
+    let mut degraded_record = review_record_input(vec![review_label_signal(
+        "summary-confirmed",
+        "cli",
+        "degraded confirmation",
+        0.4,
+    )]);
+    degraded_record.suggest_degraded = true;
+    let confirmed_observation =
+        record_label_ontology_observation(&temp.path, "default", &task.id, degraded_record)?;
+    let rejected_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        review_record_input(vec![review_label_signal(
+            "summary-rejected",
+            "cli",
+            "rejected signal",
+            0.5,
+        )]),
+    )?;
+    let superseded_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        review_record_input(vec![review_label_signal(
+            "summary-superseded",
+            "cli",
+            "superseded signal",
+            0.6,
+        )]),
+    )?;
+    let resolved_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        review_record_input(vec![review_label_signal(
+            "summary-resolved",
+            "cli",
+            "resolved signal",
+            0.7,
+        )]),
+    )?;
+
+    let stale_signal = stale_observation.signals[0].id.clone();
+    let open_signal = open_observation.signals[0].id.clone();
+    let confirmed_signal = confirmed_observation.signals[0].id.clone();
+    let rejected_signal = rejected_observation.signals[0].id.clone();
+    let superseded_signal = superseded_observation.signals[0].id.clone();
+    let resolved_signal = resolved_observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![confirmed_signal.clone()],
+            "confirm degraded signal",
+        ),
+    )?;
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Reject,
+            vec![rejected_signal.clone()],
+            "reject weak signal",
+        ),
+    )?;
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        supersede_input(
+            vec![superseded_signal.clone()],
+            &open_signal,
+            "supersede duplicate signal",
+        ),
+    )?;
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::ResolveNoChange,
+            vec![resolved_signal.clone()],
+            "resolve without ontology change",
+        ),
+    )?;
+
+    let summary =
+        task_ontology_summary(&temp.path, "default", &task.id)?.context("ontology summary")?;
+
+    assert_eq!(summary.signal_count, 6);
+    assert_eq!(summary.open_count, 2);
+    assert_eq!(summary.confirmed_count, 1);
+    assert_eq!(summary.resolved_count, 1);
+    assert_eq!(summary.rejected_count, 1);
+    assert_eq!(summary.superseded_count, 1);
+    assert_eq!(summary.degraded_count, 1);
+    assert_eq!(summary.stale_count, 1);
+    assert_eq!(summary.legacy_incomparable_count, 0);
+    assert_eq!(summary.incomparable_count, 2);
+    assert_eq!(summary.action_count, 4);
+    assert!(summary.oldest_open_confirmed_signal_at.is_some());
+    assert!(summary.oldest_open_confirmed_signal_age_ms.is_some());
+    assert!(summary.latest_signal_at.is_some());
+    assert!(summary.latest_action_at.is_some());
+    assert!(summary.sample_signals.len() <= 5);
+    assert!(
+        summary
+            .sample_signals
+            .iter()
+            .any(|signal| signal.id == stale_signal && signal.stale)
+    );
+    assert!(
+        summary
+            .sample_signals
+            .iter()
+            .any(|signal| signal.id == confirmed_signal && signal.degraded)
+    );
+    Ok(())
+}
+
+#[test]
+fn task_ontology_summary_returns_none_without_signals() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_ontology_summary_returns_none_without_signals")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Task without ontology"),
+    )?;
+
+    assert!(task_ontology_summary(&temp.path, "default", &task.id)?.is_none());
+    Ok(())
+}
+
+#[test]
 fn label_ontology_signal_input_enforces_proposed_action_requirements() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_signal_input_enforces_proposed_action_requirements")?;
     init_database(&temp.path, "tester")?;

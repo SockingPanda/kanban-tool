@@ -312,7 +312,10 @@ impl LabelAtomVectorStore for LanceDbStore {
             .as_deref()
             .unwrap_or(provider.embedding_model());
         if embedding_model != provider.embedding_model() {
-            return Ok(Vec::new());
+            return Err(VectorError::EmbeddingModelMismatch {
+                expected: provider.embedding_model().to_owned(),
+                actual: embedding_model.to_owned(),
+            });
         }
 
         let embedding = provider.embed(&query.text)?;
@@ -382,7 +385,10 @@ impl LabelAtomVectorStore for LanceDbStore {
             .as_deref()
             .unwrap_or(provider.embedding_model());
         if embedding_model != provider.embedding_model() {
-            return Ok(Vec::new());
+            return Err(VectorError::EmbeddingModelMismatch {
+                expected: provider.embedding_model().to_owned(),
+                actual: embedding_model.to_owned(),
+            });
         }
 
         ensure_dimensions(&query.vector, provider.dimensions())?;
@@ -1245,18 +1251,19 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].atom_id, "la_alpha");
 
-        assert!(
-            static_store
-                .query_label_atoms(&LabelAtomQuery {
-                    text: "alpha".to_owned(),
-                    limit: 10,
-                    board_id: Some("b_1".to_owned()),
-                    embedding_model: Some("other-test".to_owned()),
-                    polarity: None,
-                })
-                .unwrap()
-                .is_empty()
-        );
+        assert!(matches!(
+            static_store.query_label_atoms(&LabelAtomQuery {
+                text: "alpha".to_owned(),
+                limit: 10,
+                board_id: Some("b_1".to_owned()),
+                embedding_model: Some("other-test".to_owned()),
+                polarity: None,
+            }),
+            Err(VectorError::EmbeddingModelMismatch {
+                expected,
+                actual
+            }) if expected == "static-test" && actual == "other-test"
+        ));
         assert!(
             static_store
                 .query(&VectorQuery {
@@ -1431,20 +1438,34 @@ mod tests {
             "text label atom query behavior should remain available"
         );
 
-        assert!(
-            static_store
-                .query_label_atoms_by_vector(&LabelAtomVectorQuery {
-                    vector: vec![1.0, 0.0, 0.0],
-                    limit: 10,
-                    board_id: Some("b_1".to_owned()),
-                    embedding_model: Some("other-test".to_owned()),
-                    polarity: None,
-                    include_vector: false,
-                })
-                .unwrap()
-                .is_empty(),
-            "mismatched embedding model is an empty same-store result"
-        );
+        assert!(matches!(
+            static_store.query_label_atoms(&LabelAtomQuery {
+                text: "alpha".to_owned(),
+                limit: 10,
+                board_id: Some("b_1".to_owned()),
+                embedding_model: Some("other-test".to_owned()),
+                polarity: None,
+            }),
+            Err(VectorError::EmbeddingModelMismatch {
+                expected,
+                actual
+            }) if expected == "static-test" && actual == "other-test"
+        ));
+
+        assert!(matches!(
+            static_store.query_label_atoms_by_vector(&LabelAtomVectorQuery {
+                vector: vec![1.0, 0.0, 0.0],
+                limit: 10,
+                board_id: Some("b_1".to_owned()),
+                embedding_model: Some("other-test".to_owned()),
+                polarity: None,
+                include_vector: false,
+            }),
+            Err(VectorError::EmbeddingModelMismatch {
+                expected,
+                actual
+            }) if expected == "static-test" && actual == "other-test"
+        ));
 
         assert!(matches!(
             static_store.query_label_atoms_by_vector(&LabelAtomVectorQuery {

@@ -2636,14 +2636,27 @@ fn proposal_creation_action_id(
     board_id: &str,
     proposal_id: &str,
 ) -> Result<Option<String>> {
-    optional(
-        conn,
-        "SELECT id FROM label_ontology_actions \
-         WHERE board_id=?1 AND result_proposal_id=?2 AND action_type='create_label_proposal' \
-         ORDER BY created_at ASC, id ASC LIMIT 1",
-        params![board_id, proposal_id],
-        |row| row.get(0),
-    )
+    let mut stmt = conn
+        .prepare(
+            "SELECT id FROM label_ontology_actions \
+             WHERE board_id=?1 AND result_proposal_id=?2 AND action_type='create_label_proposal' \
+             ORDER BY created_at ASC, id ASC LIMIT 2",
+        )
+        .map_err(storage)?;
+    let ids = stmt
+        .query_map(params![board_id, proposal_id], |row| {
+            row.get::<_, String>(0)
+        })
+        .map_err(storage)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)?;
+    match ids.as_slice() {
+        [] => Ok(None),
+        [id] => Ok(Some(id.clone())),
+        _ => Err(KanbanError::InvalidInput(format!(
+            "multiple create_label_proposal actions found for proposal {proposal_id}"
+        ))),
+    }
 }
 
 fn ensure_action_on_board(conn: &Connection, board_id: &str, action_id: &str) -> Result<()> {
@@ -2837,17 +2850,32 @@ fn proposal_bootstrap_retarget_override(
     retarget_reason: Option<&str>,
 ) -> Result<JsonValue> {
     let proposal_name_normalized = normalize_label_name(&proposal.name)?;
-    let mismatched = signals
+    let invalid_sources = signals
         .iter()
         .filter(|signal| {
             signal.kind != LabelOntologySignalKind::VocabularyGap
                 || signal.proposed_action != LabelOntologyProposedAction::BootstrapLabel
-                || signal.proposed_label_name_normalized.as_deref()
-                    != Some(proposal_name_normalized.as_str())
         })
         .collect::<Vec<_>>();
-    if retarget_reason.is_none() && !mismatched.is_empty() {
-        let ids = mismatched
+    if !invalid_sources.is_empty() {
+        let ids = invalid_sources
+            .iter()
+            .map(|signal| signal.id.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        return Err(KanbanError::InvalidInput(format!(
+            "proposal source signals must be confirmed vocabulary_gap/bootstrap_label signals: {ids}"
+        )));
+    }
+    let mismatched_label = signals
+        .iter()
+        .filter(|signal| {
+            signal.proposed_label_name_normalized.as_deref()
+                != Some(proposal_name_normalized.as_str())
+        })
+        .collect::<Vec<_>>();
+    if retarget_reason.is_none() && !mismatched_label.is_empty() {
+        let ids = mismatched_label
             .iter()
             .map(|signal| signal.id.as_str())
             .collect::<Vec<_>>()
@@ -2881,17 +2909,32 @@ fn proposal_create_retarget_override(
     retarget_reason: Option<&str>,
 ) -> Result<JsonValue> {
     let proposal_name_normalized = normalize_label_name(&proposal.name)?;
-    let mismatched = signals
+    let invalid_sources = signals
         .iter()
         .filter(|signal| {
             signal.kind != LabelOntologySignalKind::VocabularyGap
                 || signal.proposed_action != LabelOntologyProposedAction::BootstrapLabel
-                || signal.proposed_label_name_normalized.as_deref()
-                    != Some(proposal_name_normalized.as_str())
         })
         .collect::<Vec<_>>();
-    if retarget_reason.is_none() && !mismatched.is_empty() {
-        let ids = mismatched
+    if !invalid_sources.is_empty() {
+        let ids = invalid_sources
+            .iter()
+            .map(|signal| signal.id.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        return Err(KanbanError::InvalidInput(format!(
+            "proposal source signals must be confirmed vocabulary_gap/bootstrap_label signals: {ids}"
+        )));
+    }
+    let mismatched_label = signals
+        .iter()
+        .filter(|signal| {
+            signal.proposed_label_name_normalized.as_deref()
+                != Some(proposal_name_normalized.as_str())
+        })
+        .collect::<Vec<_>>();
+    if retarget_reason.is_none() && !mismatched_label.is_empty() {
+        let ids = mismatched_label
             .iter()
             .map(|signal| signal.id.as_str())
             .collect::<Vec<_>>()

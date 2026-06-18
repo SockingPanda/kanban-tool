@@ -42,7 +42,7 @@ fn label_proposal_migration_and_provider_unavailable_are_non_polluting() -> anyh
     init_database(&temp.path, "tester")?;
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 13);
+    assert_eq!(user_version, 14);
     let has_table: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_semantic_proposals'",
         [],
@@ -252,6 +252,48 @@ fn label_proposal_create_rejects_unrelated_source_signal() -> anyhow::Result<()>
 }
 
 #[test]
+fn label_proposal_create_rejects_non_bootstrap_signal_even_with_retarget() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_proposal_create_rejects_non_bootstrap_signal_even_with_retarget")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject non bootstrap proposal creation source signal"),
+    )?;
+    let signal_id = record_confirmed_atom_source_signal(&temp, &task.id, "database")?;
+    let provider = ontology_proposal_provider("ontology-ledger");
+    let store = ontology_proposal_store(&task.title, "ontology-ledger");
+
+    let error = result_err(propose_task_label_with_store_and_create_options(
+        &temp.path,
+        "default",
+        "reviewer",
+        &task.id,
+        &provider,
+        &store,
+        LabelProposalProposeOptions {
+            suggestion: kanban_sqlite::LabelSuggestionOptions::default(),
+            create: LabelProposalCreateOptions {
+                source_signal_ids: vec![signal_id.clone()],
+                ontology_actor: None,
+                allow_retarget: true,
+                retarget_reason: Some("Reviewer is testing retarget guard.".to_owned()),
+            },
+        },
+    ))?;
+    assert!(error.to_string().contains(&signal_id), "{error}");
+    assert!(error.to_string().contains("vocabulary_gap"), "{error}");
+    assert!(
+        list_label_proposals(&temp.path, "default", LabelProposalListOptions::default())?
+            .is_empty()
+    );
+
+    Ok(())
+}
+
+#[test]
 fn label_proposal_reject_keeps_create_source_signal_provenance() -> anyhow::Result<()> {
     let temp = TempDb::new("label_proposal_reject_keeps_create_source_signal_provenance")?;
     init_database(&temp.path, "tester")?;
@@ -307,6 +349,50 @@ fn label_proposal_reject_keeps_create_source_signal_provenance() -> anyhow::Resu
         create_action.result_proposal_id.as_deref(),
         Some(proposal.id.as_str())
     );
+
+    Ok(())
+}
+
+#[test]
+fn label_proposal_accept_rejects_non_bootstrap_signal_even_with_retarget() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_proposal_accept_rejects_non_bootstrap_signal_even_with_retarget")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject non bootstrap proposal accept source signal"),
+    )?;
+    let signal_id = record_confirmed_atom_source_signal(&temp, &task.id, "database")?;
+    let provider = ontology_proposal_provider("ontology-ledger");
+    let store = ontology_proposal_store(&task.title, "ontology-ledger");
+    let proposal = propose_task_label_with_store(
+        &temp.path,
+        "default",
+        "reviewer",
+        &task.id,
+        &provider,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions::default(),
+    )?
+    .proposal
+    .context("proposal")?;
+
+    let error = result_err(accept_label_proposal_with_options(
+        &temp.path,
+        "reviewer",
+        &proposal.id,
+        Some("Accept proposal after provenance review.".to_owned()),
+        LabelProposalDecisionOptions {
+            source_signal_ids: vec![signal_id.clone()],
+            ontology_actor: None,
+            allow_retarget: true,
+            retarget_reason: Some("Reviewer is testing retarget guard.".to_owned()),
+        },
+    ))?;
+    assert!(error.to_string().contains(&signal_id), "{error}");
+    assert!(error.to_string().contains("vocabulary_gap"), "{error}");
 
     Ok(())
 }
@@ -1843,6 +1929,88 @@ fn record_confirmed_proposal_source_signal(
     Ok(signal_id)
 }
 
+fn record_confirmed_atom_source_signal(
+    temp: &TempDb,
+    task_ref: &str,
+    label_name: &str,
+) -> anyhow::Result<String> {
+    let task = get_task(&temp.path, "default", task_ref)?;
+    bootstrap_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        BootstrapTaskLabel {
+            name: label_name.to_owned(),
+            description: Some("Label ontology ledger work".to_owned()),
+            applies_when: vec!["records ontology observations and signals".to_owned()],
+            positive_examples: vec!["create ontology ledger table".to_owned()],
+            ..BootstrapTaskLabel::default()
+        },
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        LabelOntologyRecordInput {
+            actor: LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: json!([
+                {"label": label_name, "confidence": 0.88, "reason": "label evidence"}
+            ])
+            .to_string(),
+            suggestion_snapshot_json: json!({
+                "result": {"selected_labels": [label_name], "candidates": []}
+            })
+            .to_string(),
+            final_decision_json: json!({"accepted_labels": [label_name]}).to_string(),
+            suggest_coverage: Some(0.62),
+            suggest_coverage_cosine: Some(0.72),
+            suggest_residual_norm: Some(0.38),
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: "[]".to_owned(),
+            capture_fingerprint: None,
+            signals: vec![LabelOntologySignalInput {
+                kind: LabelOntologySignalKind::FalsePositive,
+                target_label_ref: Some(label_name.to_owned()),
+                related_labels_json: "[]".to_owned(),
+                proposed_action: LabelOntologyProposedAction::AddNegativeAtom,
+                candidate_atom: Some(LabelOntologyCandidateAtomInput {
+                    polarity: "negative".to_owned(),
+                    kind: "excludes_when".to_owned(),
+                    text: "proposal creation provenance uses unrelated atom evidence".to_owned(),
+                }),
+                proposed_label_name: None,
+                proposal_json: "{}".to_owned(),
+                agent_selected: true,
+                suggest_state: Some(LabelOntologySuggestState::Selected),
+                suggest_score: Some(0.91),
+                suggest_rank: Some(1),
+                final_selected: false,
+                rationale: "This signal is about atom tuning, not proposal bootstrap provenance."
+                    .to_owned(),
+                confidence: Some(0.84),
+                signal_key: Some(format!("{label_name}-atom-source")),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer confirms this atom evidence is real.",
+        ),
+    )?;
+    Ok(signal_id)
+}
+
 fn action_input(
     action_type: LabelOntologyActionType,
     signal_ids: Vec<String>,
@@ -2724,7 +2892,7 @@ fn init_v10_backfills_stable_label_atom_hashes_and_marks_index_dirty() -> anyhow
     assert!(label_atom_board_dirty(&temp.path, "default")?);
     let user_version: i64 =
         connect_file(&temp.path)?.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 13);
+    assert_eq!(user_version, 14);
     Ok(())
 }
 
@@ -3057,8 +3225,8 @@ fn doctor_reports_missing_label_semantics_tables_unhealthy() -> anyhow::Result<(
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(13));
-        assert_eq!(report.user_version, 13);
+        assert_eq!(report.migration_version, Some(14));
+        assert_eq!(report.user_version, 14);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())

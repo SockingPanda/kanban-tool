@@ -470,6 +470,7 @@ pub fn validate_label_ontology_action(
                 "parent action belongs to a different board".into(),
             ));
         }
+        ensure_validatable_parent_action(&parent_action)?;
         if matches!(
             input.validation_status,
             LabelOntologyValidationStatus::Pending
@@ -629,6 +630,7 @@ fn build_validation_json(
     status: LabelOntologyValidationStatus,
 ) -> Result<String> {
     let manual = parse_json_field(supplied_json, "validation_json", JsonShape::Object)?;
+    ensure_passed_validation_evidence(&manual, signals, status)?;
     let mut cases = Vec::with_capacity(signals.len());
     let mut stale_count = 0usize;
     let mut degraded_count = 0usize;
@@ -710,6 +712,105 @@ fn build_validation_json(
         }
     }))
     .map_err(|err| KanbanError::InvalidInput(err.to_string()))
+}
+
+fn ensure_validatable_parent_action(action: &LabelOntologyActionRecord) -> Result<()> {
+    if !matches!(
+        action.action_type,
+        LabelOntologyActionType::AddPositiveAtom
+            | LabelOntologyActionType::AddNegativeAtom
+            | LabelOntologyActionType::UpdateSemantics
+            | LabelOntologyActionType::BootstrapLabel
+            | LabelOntologyActionType::RenameLabel
+            | LabelOntologyActionType::SplitLabel
+            | LabelOntologyActionType::MergeLabels
+    ) {
+        return Err(KanbanError::InvalidInput(
+            "validation parent action must be a canonical mutation action".into(),
+        ));
+    }
+    if action.validation_status != LabelOntologyValidationStatus::Pending {
+        return Err(KanbanError::InvalidInput(
+            "validation parent action must have pending validation_status".into(),
+        ));
+    }
+
+    let change = parse_json_field(
+        &action.change_json,
+        "parent action change_json",
+        JsonShape::Object,
+    )?;
+    let has_change_snapshot = change.as_object().is_some_and(|object| !object.is_empty());
+    let has_common_hash = action.canonical_after_hash.is_some();
+    let has_evidence = match action.action_type {
+        LabelOntologyActionType::AddPositiveAtom | LabelOntologyActionType::AddNegativeAtom => {
+            action.target_label_id.is_some()
+                && action.result_atom_id.is_some()
+                && action.result_atom_content_hash.is_some()
+                && action.canonical_before_hash.is_some()
+                && action.canonical_after_hash.is_some()
+                && change.get("added_atom").is_some()
+        }
+        LabelOntologyActionType::BootstrapLabel => {
+            action.result_label_id.is_some()
+                && action.result_proposal_id.is_some()
+                && action.canonical_after_hash.is_some()
+                && change.get("proposal").is_some()
+                && change.get("result_label").is_some()
+                && change.get("semantics").is_some()
+        }
+        LabelOntologyActionType::UpdateSemantics
+        | LabelOntologyActionType::RenameLabel
+        | LabelOntologyActionType::SplitLabel
+        | LabelOntologyActionType::MergeLabels => {
+            has_common_hash
+                && has_change_snapshot
+                && (action.target_label_id.is_some() || action.result_label_id.is_some())
+        }
+        _ => false,
+    };
+    if !has_evidence {
+        return Err(KanbanError::InvalidInput(
+            "validation parent action is missing canonical mutation evidence".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_passed_validation_evidence(
+    manual: &JsonValue,
+    signals: &[LabelOntologySignalRecord],
+    status: LabelOntologyValidationStatus,
+) -> Result<()> {
+    if !matches!(status, LabelOntologyValidationStatus::Passed) {
+        return Ok(());
+    }
+    let cases = manual
+        .get("cases")
+        .and_then(JsonValue::as_array)
+        .filter(|cases| !cases.is_empty())
+        .ok_or_else(|| {
+            KanbanError::InvalidInput(
+                "passed validation requires structured validation evidence cases for every linked signal"
+                    .into(),
+            )
+        })?;
+    for signal in signals {
+        let Some(case) = cases.iter().find(|case| {
+            case.get("signal_id").and_then(JsonValue::as_str) == Some(signal.id.as_str())
+        }) else {
+            return Err(KanbanError::InvalidInput(
+                "passed validation requires structured validation evidence cases for every linked signal"
+                    .into(),
+            ));
+        };
+        if case.get("passed").and_then(JsonValue::as_bool) != Some(true) {
+            return Err(KanbanError::InvalidInput(
+                "passed validation requires each linked signal case to pass".into(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn insert_signal(

@@ -383,6 +383,182 @@ fn label_ontology_generic_action_rejects_fabricated_provenance_fields() -> anyho
 }
 
 #[test]
+fn label_ontology_validation_rejects_non_mutation_parent() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_validation_rejects_non_mutation_parent")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Add ontology validation parent guard"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![sample_signal_input("cli-validation-lifecycle-parent")]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    let confirm = create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed by reviewer.",
+        ),
+    )?;
+
+    let error = result_err(validate_label_ontology_action(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: validation_actor(),
+            parent_action_id: confirm.id,
+            signal_ids: vec![signal_id],
+            reason: "Lifecycle actions cannot be validated as canonical mutations.".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Failed,
+            validation_json: "{}".to_owned(),
+        },
+    ))?;
+    assert!(error.to_string().contains("canonical mutation action"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_validation_rejects_parent_without_pending_canonical_evidence()
+-> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_validation_rejects_parent_without_pending_canonical_evidence")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Add ontology validation evidence guard"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![sample_signal_input("cli-validation-missing-evidence")]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed by reviewer.",
+        ),
+    )?;
+    let bare_parent =
+        seed_pending_mutation_action_without_evidence(&temp.path, &task.board_id, &signal_id)?;
+
+    let error = result_err(validate_label_ontology_action(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: validation_actor(),
+            parent_action_id: bare_parent,
+            signal_ids: vec![signal_id],
+            reason: "Pending mutation without canonical evidence cannot be validated.".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Failed,
+            validation_json: "{}".to_owned(),
+        },
+    ))?;
+    assert!(error.to_string().contains("canonical mutation evidence"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_passed_validation_rejects_empty_or_untyped_evidence() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_passed_validation_rejects_empty_or_untyped_evidence")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Add ontology validation evidence policy"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![sample_signal_input("cli-validation-empty-evidence")]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed by reviewer.",
+        ),
+    )?;
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed false-negative support for CLI surface changes.".to_owned(),
+        },
+    )?;
+
+    let error = result_err(validate_label_ontology_action(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: validation_actor(),
+            parent_action_id: apply_action.id,
+            signal_ids: Vec::new(),
+            reason: "Passed validation must provide typed evidence.".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            validation_json: "{}".to_owned(),
+        },
+    ))?;
+    assert!(error.to_string().contains("structured validation evidence"));
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_atom_apply_records_provenance_and_validation_resolves_signal()
 -> anyhow::Result<()> {
     let temp =
@@ -648,7 +824,14 @@ fn label_ontology_validation_treats_label_binding_changes_as_stale() -> anyhow::
             signal_ids: Vec::new(),
             reason: "Validation must reject stale task-label snapshot.".to_owned(),
             validation_status: LabelOntologyValidationStatus::Passed,
-            validation_json: json!({"cases": []}).to_string(),
+            validation_json: json!({
+                "cases": [{
+                    "signal_id": signal_id,
+                    "passed": true,
+                    "after": {"state": "selected"}
+                }]
+            })
+            .to_string(),
         },
     ))?;
     assert!(
@@ -806,6 +989,32 @@ fn seed_label_semantic_proposal(
     Ok(id)
 }
 
+fn seed_pending_mutation_action_without_evidence(
+    path: &Path,
+    board_id: &str,
+    signal_id: &str,
+) -> anyhow::Result<String> {
+    let conn = connect_file(path)?;
+    let id = "loa_missing_evidence".to_owned();
+    conn.execute(
+        "INSERT INTO label_ontology_actions(
+         id, board_id, parent_action_id, action_type, reason, target_label_id, result_label_id,
+         result_atom_id, result_atom_content_hash, result_proposal_id, canonical_before_hash,
+         canonical_after_hash, change_json, validation_status, validation_json, created_by,
+         created_by_type, agent_type, created_at)
+         VALUES (?1, ?2, NULL, 'add_positive_atom', 'missing canonical evidence',
+         NULL, NULL, NULL, NULL, NULL, NULL, NULL, '{}', 'pending', '{}', 'tester', 'user',
+         NULL, 1)",
+        params![id, board_id],
+    )?;
+    conn.execute(
+        "INSERT INTO label_ontology_action_signals(board_id, action_id, signal_id, created_at)
+         VALUES (?1, ?2, ?3, 1)",
+        params![board_id, id, signal_id],
+    )?;
+    Ok(id)
+}
+
 fn sample_signal_input(signal_key: &str) -> LabelOntologySignalInput {
     LabelOntologySignalInput {
         kind: LabelOntologySignalKind::FalseNegative,
@@ -828,6 +1037,14 @@ fn sample_signal_input(signal_key: &str) -> LabelOntologySignalInput {
             .to_owned(),
         confidence: Some(0.91),
         signal_key: Some(signal_key.to_owned()),
+    }
+}
+
+fn validation_actor() -> LabelOntologyActor {
+    LabelOntologyActor {
+        name: "validator".to_owned(),
+        actor_type: "agent".to_owned(),
+        agent_type: Some("local".to_owned()),
     }
 }
 

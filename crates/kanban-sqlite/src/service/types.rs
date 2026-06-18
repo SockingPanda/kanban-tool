@@ -315,6 +315,7 @@ pub struct LabelProposalListOptions {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LabelProposalDecisionOptions {
     pub source_signal_ids: Vec<String>,
+    pub ontology_actor: Option<LabelOntologyActor>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

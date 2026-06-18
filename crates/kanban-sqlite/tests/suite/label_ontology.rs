@@ -1751,6 +1751,7 @@ fn label_ontology_typed_validation_bootstrap_enforces_score_threshold() -> anyho
         Some("Bootstrap label from confirmed ontology signal.".to_owned()),
         LabelProposalDecisionOptions {
             source_signal_ids: vec![signal_id.clone()],
+            ontology_actor: None,
         },
     )?;
     let result_label_id = accepted
@@ -1946,6 +1947,11 @@ fn label_ontology_proposal_accept_records_bootstrap_provenance() -> anyhow::Resu
         Some("Bootstrap label from confirmed ontology signal.".to_owned()),
         LabelProposalDecisionOptions {
             source_signal_ids: vec![signal_id.clone()],
+            ontology_actor: Some(LabelOntologyActor {
+                name: "ontology-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("codex".to_owned()),
+            }),
         },
     )?;
 
@@ -1961,6 +1967,9 @@ fn label_ontology_proposal_accept_records_bootstrap_provenance() -> anyhow::Resu
         .find(|action| action.action_type == LabelOntologyActionType::BootstrapLabel)
         .context("bootstrap action")?;
     assert_eq!(bootstrap.signal_ids, vec![signal_id.clone()]);
+    assert_eq!(bootstrap.created_by, "ontology-agent");
+    assert_eq!(bootstrap.created_by_type, "agent");
+    assert_eq!(bootstrap.agent_type.as_deref(), Some("codex"));
     assert_eq!(bootstrap.result_label_id.as_deref(), Some(result_label_id));
     assert_eq!(
         bootstrap.result_proposal_id.as_deref(),
@@ -1974,6 +1983,79 @@ fn label_ontology_proposal_accept_records_bootstrap_provenance() -> anyhow::Resu
     assert!(bootstrap.change_json.contains("ontology-ledger"));
     let semantics = get_label_semantics(&temp.path, "default", result_label_id)?;
     assert_eq!(semantics.label_name, "ontology-ledger");
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_actor_contract_rejects_invalid_agent_metadata() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_actor_contract_rejects_invalid_agent_metadata")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Review ontology actor provenance"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        LabelOntologyRecordInput {
+            signals: vec![sample_signal_input("actor-contract")],
+            ..sample_record_input(Vec::new())
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+
+    let mut user_with_agent_type = action_input(
+        LabelOntologyActionType::Confirm,
+        vec![signal_id.clone()],
+        "User actors cannot carry agent type.",
+    );
+    user_with_agent_type.actor.agent_type = Some("codex".to_owned());
+    let error = result_err(create_label_ontology_action(
+        &temp.path,
+        "default",
+        user_with_agent_type,
+    ))?;
+    assert!(error.to_string().contains("agent_type"));
+
+    let mut agent_without_agent_type = action_input(
+        LabelOntologyActionType::Confirm,
+        vec![signal_id.clone()],
+        "Agent actors must carry agent type.",
+    );
+    agent_without_agent_type.actor.actor_type = "agent".to_owned();
+    let error = result_err(create_label_ontology_action(
+        &temp.path,
+        "default",
+        agent_without_agent_type,
+    ))?;
+    assert!(error.to_string().contains("agent_type"));
+
+    let mut agent_action = action_input(
+        LabelOntologyActionType::Confirm,
+        vec![signal_id.clone()],
+        "Agent actor provenance is complete.",
+    );
+    agent_action.actor = LabelOntologyActor {
+        name: "codex".to_owned(),
+        actor_type: "agent".to_owned(),
+        agent_type: Some("codex".to_owned()),
+    };
+    let action = create_label_ontology_action(&temp.path, "default", agent_action)?;
+    assert_eq!(action.created_by, "codex");
+    assert_eq!(action.created_by_type, "agent");
+    assert_eq!(action.agent_type.as_deref(), Some("codex"));
 
     Ok(())
 }

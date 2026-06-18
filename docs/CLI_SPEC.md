@@ -508,18 +508,18 @@ kanban label suggest <task_ref> [--limit 5] [--candidate-limit 32] [--atom-limit
 kanban label propose <task_ref> [--proposal-json <path>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]
 kanban label proposals show <proposal_id> [--json]
-kanban label proposals accept <proposal_id> [--reason <text>] [--source-signal <signal_id>]... [--json]
+kanban label proposals accept <proposal_id> [--reason <text>] [--source-signal <signal_id>]... [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label proposals reject <proposal_id> [--reason <text>] [--json]
 kanban label ontology record <task_ref> --input <path|-> [--json]
 kanban label ontology list [--status open|confirmed|resolved|rejected|superseded]... [--kind false_negative|false_positive|vocabulary_gap|name_issue|boundary_issue|structure_issue]... [--task <task_ref>] [--label <label>] [--proposed-label <name>] [--include-all] [--limit 100] [--json]
 kanban label ontology show <signal_id> [--json]
 kanban label ontology review [--group-by label|candidate-atom|proposed-label] [--include-all] [--limit 100] [--json]
-kanban label ontology confirm <signal_id>... --reason <text> [--json]
-kanban label ontology reject <signal_id>... --reason <text> [--json]
-kanban label ontology supersede <signal_id>... --by <signal_id> --reason <text> [--json]
-kanban label ontology resolve <signal_id>... --no-change --reason <text> [--json]
-kanban label ontology apply atom <signal_id>... --label <label> --kind applies-when|positive-example|excludes-when|negative-example --text <text> --reason <text> [--json]
-kanban label ontology validate <action_id> --status passed|failed|partial --reason <text> --input <path|-> [signal_id]... [--json]
+kanban label ontology confirm <signal_id>... --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology reject <signal_id>... --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology supersede <signal_id>... --by <signal_id> --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology resolve <signal_id>... --no-change --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology apply atom <signal_id>... --label <label> --kind applies-when|positive-example|excludes-when|negative-example --text <text> --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology validate <action_id> --status passed|failed|partial --reason <text> --input <path|-> [signal_id]... [--actor-type user|agent] [--agent-type <type>] [--json]
 ```
 
 `label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
@@ -718,7 +718,10 @@ label、`label_semantics` 与 `label_atoms`，并标脏 label atom index；它�
 给来源 task 写入 `task_labels`。传入 `--source-signal <los_...>` 时，accept 会在同一
 transaction 中写入 `bootstrap_label` ontology action，并通过 action-signal links
 记录该 new-label bootstrap 的 signal provenance；这些 source signals 必须是同一
-board 上的 `confirmed` signals。`label proposals reject` 标记 proposal 为
+board 上的 `confirmed` signals。`--actor-type` / `--agent-type` 控制该
+`bootstrap_label` action 的 actor provenance；actor name 仍来自全局 `--actor`。
+默认是 `user`。`--actor-type agent` 必须提供非空 `--agent-type`；`user` 不能提供
+`--agent-type`。`label proposals reject` 标记 proposal 为
 `rejected`，不接受 `--source-signal`。accepted/rejected proposal 不能再次决策。
 
 `label ontology record` 接受 service-shaped JSON 或 stdin，记录一次 label 判断
@@ -799,6 +802,11 @@ Lifecycle commands 写入 action 并同步更新 signal status：
 provenance 字段。`add_positive_atom`、`add_negative_atom`、`bootstrap_label` 和
 `validate` 等 action rows 只能由 `label ontology apply atom`、proposal accept、
 `label ontology validate` 等专用命令/服务路径在同一 transaction 中写入。
+Lifecycle、apply atom、validate 和带 `--source-signal` 的 proposal accept 都支持
+`--actor-type user|agent` 与 `--agent-type <type>`。这些 flag 只控制 ontology action
+row 的 `created_by_type` / `agent_type`；action name 仍来自全局 `--actor`。默认
+`--actor-type user` 且不写 `agent_type`。`agent` actor 必须提供非空 `--agent-type`，
+`user` actor 带 `--agent-type` 会被拒绝。
 
 `label ontology apply atom` 只接受 `confirmed` source signals。它会读取目标 label
 当前 semantics，把泛化文本加入对应数组，走现有 semantics upsert/rebuild atoms 路径，

@@ -1201,7 +1201,8 @@ Accept/reject body：
 {
   "reason": "coverage 不足，接受新 label",
   "actor": "alice",
-  "source_signal_ids": ["los_..."]
+  "source_signal_ids": ["los_..."],
+  "ontology_actor": {"name": "codex", "type": "agent", "agent_type": "codex"}
 }
 ```
 
@@ -1210,14 +1211,22 @@ Accept 只允许 `proposed` proposal。成功后会创建 canonical `labels` 行
 `task_labels`。`source_signal_ids` 可选；传入时，accept 会在同一 transaction 内写入
 `bootstrap_label` ontology action，并通过 action-signal links 记录 new-label
 bootstrap provenance。Source signals 必须属于同一 board 且处于 `confirmed`。
-Reject 标记为 `rejected`，不接受 `source_signal_ids`。accepted/rejected proposal
-再次决策返回普通 `400 invalid_input` error envelope。
+`actor` 字符串仍用于 proposal decision event；`ontology_actor` 只控制 accept 产生的
+`bootstrap_label` ontology action provenance。省略 `ontology_actor` 时，bootstrap
+action 使用 `actor` 字符串作为 `type=user` actor。`type=agent` 必须提供非空
+`agent_type`；`type=user` 不能提供 `agent_type`。Reject 标记为 `rejected`，不接受
+`source_signal_ids` 或 `ontology_actor`。accepted/rejected proposal 再次决策返回普通
+`400 invalid_input` error envelope。
 
 ### 12.4 Label ontology ledger
 
 Label ontology ledger API 记录 task 标注过程、review queue、ontology mutation
 provenance 和 validation history。Ledger 不会自动修改 task labels；canonical
 binding 仍通过 task label API 或 CLI 完成。
+
+所有 ontology actor object 使用 `{ "name": string, "type": "user"|"agent",
+"agent_type": string|null }`。`type=agent` 必须提供非空 `agent_type`；
+`type=user` 必须省略或传 `null`。
 
 ```http
 POST /api/v1/tasks/{task_id}/label-ontology/observations

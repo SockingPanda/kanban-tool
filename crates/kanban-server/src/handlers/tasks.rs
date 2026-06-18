@@ -258,6 +258,7 @@ pub(crate) struct LabelProposalDecisionBody {
     actor: Option<String>,
     #[serde(default)]
     source_signal_ids: Vec<String>,
+    ontology_actor: Option<LabelOntologyActorBody>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1077,6 +1078,7 @@ pub(crate) async fn accept_label_proposal(
 ) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticProposalRecord>>, ApiError> {
     let body = optional_decision_body(body)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
+    let ontology_actor = body.ontology_actor.map(label_ontology_actor_input);
     Ok(Json(Envelope {
         data: kanban_sqlite::accept_label_proposal_with_options(
             state.db_path(),
@@ -1085,6 +1087,7 @@ pub(crate) async fn accept_label_proposal(
             body.reason,
             kanban_sqlite::LabelProposalDecisionOptions {
                 source_signal_ids: body.source_signal_ids,
+                ontology_actor,
             },
         )?,
         meta: None,
@@ -1101,6 +1104,11 @@ pub(crate) async fn reject_label_proposal(
     if !body.source_signal_ids.is_empty() {
         return Err(invalid_input(
             "source_signal_ids are only supported when accepting label proposals",
+        ));
+    }
+    if body.ontology_actor.is_some() {
+        return Err(invalid_input(
+            "ontology_actor is only supported when accepting label proposals",
         ));
     }
     let actor = actor(body.actor.as_deref(), &headers, &state);
@@ -1124,6 +1132,7 @@ fn optional_decision_body(
             reason: None,
             actor: None,
             source_signal_ids: Vec::new(),
+            ontology_actor: None,
         }),
         Err(error) => Err(extractor_error(error)),
     }

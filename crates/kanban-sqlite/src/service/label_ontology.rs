@@ -671,7 +671,7 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
     conn: &Connection,
     proposal: &LabelSemanticProposalRecord,
     result_label_id: &str,
-    actor: &str,
+    actor: LabelOntologyActor,
     reason: Option<&str>,
     source_signal_ids: Vec<String>,
     now: i64,
@@ -716,11 +716,7 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
         InsertOntologyAction {
             action_type: LabelOntologyActionType::BootstrapLabel,
             reason,
-            actor: LabelOntologyActor {
-                name: normalize_required_text(actor)?,
-                actor_type: "user".to_owned(),
-                agent_type: None,
-            },
+            actor,
             parent_action_id: None,
             target_label_id: None,
             result_label_id: Some(result_label_id.to_owned()),
@@ -1476,6 +1472,16 @@ fn normalize_actor(actor: LabelOntologyActor) -> Result<LabelOntologyActor> {
         .as_deref()
         .map(normalize_required_text)
         .transpose()?;
+    if actor_type == "user" && agent_type.is_some() {
+        return Err(KanbanError::InvalidInput(
+            "ontology agent_type is only allowed when actor type is agent".into(),
+        ));
+    }
+    if actor_type == "agent" && agent_type.is_none() {
+        return Err(KanbanError::InvalidInput(
+            "ontology agent_type is required when actor type is agent".into(),
+        ));
+    }
     Ok(LabelOntologyActor {
         name,
         actor_type,

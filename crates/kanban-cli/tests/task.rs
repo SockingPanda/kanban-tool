@@ -1081,6 +1081,8 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
         &temp.path,
         &[
             "--json",
+            "--actor",
+            "apply-agent",
             "label",
             "ontology",
             "apply",
@@ -1094,11 +1096,18 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
             "extends CLI subcommands, arguments, help output, or JSON behavior",
             "--reason",
             "Confirmed false-negative support for CLI surface changes.",
+            "--actor-type",
+            "agent",
+            "--agent-type",
+            "codex",
         ],
     )?
     .success_json()?;
     assert_eq!(applied["data"]["action_type"], "add_positive_atom");
     assert_eq!(applied["data"]["validation_status"], "pending");
+    assert_eq!(applied["data"]["created_by"], "apply-agent");
+    assert_eq!(applied["data"]["created_by_type"], "agent");
+    assert_eq!(applied["data"]["agent_type"], "codex");
     let apply_action_id = applied["data"]["id"].as_str().context("apply action id")?;
     let target_label_id = applied["data"]["target_label_id"]
         .as_str()
@@ -1156,6 +1165,8 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
         &temp.path,
         &[
             "--json",
+            "--actor",
+            "validate-agent",
             "label",
             "ontology",
             "validate",
@@ -1166,11 +1177,18 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
             "The source task now selects cli with the new atom as evidence.",
             "--input",
             validation_path,
+            "--actor-type",
+            "agent",
+            "--agent-type",
+            "codex",
         ],
     )?
     .success_json()?;
     assert_eq!(validated["data"]["action_type"], "validate");
     assert_eq!(validated["data"]["validation_status"], "passed");
+    assert_eq!(validated["data"]["created_by"], "validate-agent");
+    assert_eq!(validated["data"]["created_by_type"], "agent");
+    assert_eq!(validated["data"]["agent_type"], "codex");
 
     let primary_detail = kanban(
         &temp.path,
@@ -1254,19 +1272,28 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
     let gap_signal = gap_observation["data"]["signals"][0]["id"]
         .as_str()
         .context("gap signal")?;
-    kanban(
+    let confirmed = kanban(
         &temp.path,
         &[
             "--json",
+            "--actor",
+            "codex",
             "label",
             "ontology",
             "confirm",
             gap_signal,
             "--reason",
             "Reviewer confirmed the vocabulary gap.",
+            "--actor-type",
+            "agent",
+            "--agent-type",
+            "codex",
         ],
     )?
     .success_json()?;
+    assert_eq!(confirmed["data"]["created_by"], "codex");
+    assert_eq!(confirmed["data"]["created_by_type"], "agent");
+    assert_eq!(confirmed["data"]["agent_type"], "codex");
     let proposal_id = seed_proposed_label_proposal(
         &temp.path,
         task_id,
@@ -1282,6 +1309,8 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
         &temp.path,
         &[
             "--json",
+            "--actor",
+            "ontology-agent",
             "label",
             "proposals",
             "accept",
@@ -1290,6 +1319,10 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
             "Bootstrap from confirmed vocabulary-gap signal.",
             "--source-signal",
             gap_signal,
+            "--actor-type",
+            "agent",
+            "--agent-type",
+            "codex",
         ],
     )?
     .success_json()?;
@@ -1301,13 +1334,15 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
     )?
     .success_json()?;
     assert_eq!(gap_detail["data"]["signal"]["status"], "confirmed");
-    assert!(
-        gap_detail["data"]["actions"]
-            .as_array()
-            .context("gap actions")?
-            .iter()
-            .any(|action| action["action_type"] == "bootstrap_label")
-    );
+    let bootstrap = gap_detail["data"]["actions"]
+        .as_array()
+        .context("gap actions")?
+        .iter()
+        .find(|action| action["action_type"] == "bootstrap_label")
+        .context("bootstrap action")?;
+    assert_eq!(bootstrap["created_by"], "ontology-agent");
+    assert_eq!(bootstrap["created_by_type"], "agent");
+    assert_eq!(bootstrap["agent_type"], "codex");
 
     Ok(())
 }

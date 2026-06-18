@@ -28,8 +28,8 @@ use serde::Serialize;
 use std::{fs, io::Read, str::FromStr};
 
 use crate::args::{
-    LabelAtomPolarityArg, LabelCommand, LabelOntologyAtomKindArg, LabelOntologyReviewGroupByArg,
-    LabelOntologyValidationStatusArg,
+    LabelAtomPolarityArg, LabelCommand, LabelOntologyActorArgs, LabelOntologyActorTypeArg,
+    LabelOntologyAtomKindArg, LabelOntologyReviewGroupByArg, LabelOntologyValidationStatusArg,
 };
 use crate::commands::common::validate_page_bounds;
 use crate::output::{label_line, print_or_json, print_task};
@@ -288,6 +288,7 @@ pub(crate) fn handle_label(
                     args.reason,
                     LabelProposalDecisionOptions {
                         source_signal_ids: args.source_signal_ids,
+                        ontology_actor: Some(label_ontology_cli_actor(actor, &args.ontology_actor)),
                     },
                 )?;
                 print_or_json(json, &proposal, || proposal_line(&proposal))?;
@@ -465,11 +466,12 @@ fn handle_label_ontology(
             print_or_json(json, &groups, || label_ontology_review_group_lines(&groups))?;
         }
         crate::args::LabelOntologyCommand::Confirm(args) => {
+            let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
             let action = create_label_ontology_action(
                 db_path,
                 board,
                 label_ontology_action_input(
-                    actor,
+                    ontology_actor,
                     LabelOntologyActionType::Confirm,
                     args.signal_ids,
                     args.reason,
@@ -479,11 +481,12 @@ fn handle_label_ontology(
             print_or_json(json, &action, || label_ontology_action_line(&action))?;
         }
         crate::args::LabelOntologyCommand::Reject(args) => {
+            let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
             let action = create_label_ontology_action(
                 db_path,
                 board,
                 label_ontology_action_input(
-                    actor,
+                    ontology_actor,
                     LabelOntologyActionType::Reject,
                     args.signal_ids,
                     args.reason,
@@ -493,11 +496,12 @@ fn handle_label_ontology(
             print_or_json(json, &action, || label_ontology_action_line(&action))?;
         }
         crate::args::LabelOntologyCommand::Supersede(args) => {
+            let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
             let action = create_label_ontology_action(
                 db_path,
                 board,
                 label_ontology_action_input(
-                    actor,
+                    ontology_actor,
                     LabelOntologyActionType::Supersede,
                     args.signal_ids,
                     args.reason,
@@ -510,11 +514,12 @@ fn handle_label_ontology(
             if !args.no_change {
                 bail!("resolve currently requires --no-change");
             }
+            let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
             let action = create_label_ontology_action(
                 db_path,
                 board,
                 label_ontology_action_input(
-                    actor,
+                    ontology_actor,
                     LabelOntologyActionType::ResolveNoChange,
                     args.signal_ids,
                     args.reason,
@@ -529,7 +534,7 @@ fn handle_label_ontology(
                     db_path,
                     board,
                     LabelOntologyAtomApplyInput {
-                        actor: label_ontology_cli_actor(actor),
+                        actor: label_ontology_cli_actor(actor, &args.actor),
                         signal_ids: args.signal_ids,
                         label_ref: args.label,
                         kind: label_ontology_atom_kind_value(args.kind).to_owned(),
@@ -546,7 +551,7 @@ fn handle_label_ontology(
                 db_path,
                 board,
                 LabelOntologyValidationInput {
-                    actor: label_ontology_cli_actor(actor),
+                    actor: label_ontology_cli_actor(actor, &args.actor),
                     parent_action_id: args.action_id,
                     signal_ids: args.signal_ids,
                     reason: args.reason,
@@ -601,23 +606,27 @@ fn read_json_input_string(path: &str) -> Result<String> {
     }
 }
 
-fn label_ontology_cli_actor(actor: &str) -> LabelOntologyActor {
+fn label_ontology_cli_actor(actor: &str, args: &LabelOntologyActorArgs) -> LabelOntologyActor {
     LabelOntologyActor {
         name: actor.to_owned(),
-        actor_type: "user".to_owned(),
-        agent_type: None,
+        actor_type: match args.actor_type {
+            LabelOntologyActorTypeArg::User => "user",
+            LabelOntologyActorTypeArg::Agent => "agent",
+        }
+        .to_owned(),
+        agent_type: args.agent_type.clone(),
     }
 }
 
 fn label_ontology_action_input(
-    actor: &str,
+    actor: LabelOntologyActor,
     action_type: LabelOntologyActionType,
     signal_ids: Vec<String>,
     reason: String,
     superseded_by_signal_id: Option<String>,
 ) -> LabelOntologyActionInput {
     LabelOntologyActionInput {
-        actor: label_ontology_cli_actor(actor),
+        actor,
         action_type,
         signal_ids,
         reason,

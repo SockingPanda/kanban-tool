@@ -483,6 +483,7 @@ Human output for add/remove is Chinese-first:
 ```bash
 kanban label list
 kanban label create <name> [--color <color>]
+kanban label delete <label> [--force] [--json]
 kanban label bootstrap <task_ref> <label> [--description <text>] [--applies-when <text>]... [--excludes-when <text>]... [--positive-example <text>]... [--negative-example <text>]... [--verify] [--min-verify-score 0.50] [--vector-config <toml>] [--json]
 kanban label add <task_ref> <label>...
 kanban label remove <task_ref> <label>
@@ -508,6 +509,15 @@ label，返回已有 label。`label add` 接受 task ref 和一个或多个 labe
 指定的 label 不存在，会先在该 task 所属 board 创建 label，再绑定到 task。
 `label remove` 接受 task ref 和 label 名称或 id。空白 label 名称会被拒绝。
 
+`label delete <label>` 删除当前 board 上的 canonical label，区别于
+`label remove <task_ref> <label>` 的 task-level 解绑。默认情况下，如果 label 仍绑定
+任何 task，会拒绝删除并报告绑定数量；显式传 `--force` 时会删除 canonical label，并移除
+相关 `task_labels`、`label_semantics` 和 `label_atoms`，同时标脏 label atom index。
+JSON 返回 `{ "label": <LabelRecord>, "forced": bool, "removed_task_bindings": n,
+"removed_semantics": bool, "removed_atoms": n }`。删除 canonical label 不改变 task
+status；被删除 label 会从 `label list`、`task show/list` 的 labels 和后续 suggest truth
+中消失。
+
 Label 变更对 task-label 关联保持幂等。只有关联实际变化时，才追加
 `task.label.added` / `task.label.removed` event；该操作不改变 task status。
 批量 `label add` 会先验证所有 label 名称；如果任一 label 为空白或非法，不会创建
@@ -532,6 +542,8 @@ vector index，随后对来源 task 执行非 degraded `label suggest`，并要�
 
 ```bash
 kanban label create backend --color blue
+kanban label delete old-label --json
+kanban label delete old-label --force --json
 kanban label bootstrap default#12 database --description "Database persistence work" --applies-when "touches SQLite migrations" --positive-example "new table migration" --json
 kanban label bootstrap default#12 database --description "Database persistence work" --applies-when "touches SQLite migrations" --positive-example "new table migration" --vector-config .kb/vector.toml --min-verify-score 0.50 --json
 kanban label add default#12 backend

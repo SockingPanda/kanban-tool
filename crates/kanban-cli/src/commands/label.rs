@@ -7,7 +7,7 @@ use kanban_sqlite::{
     BootstrapTaskLabel, CreateLabel, LabelProposalCandidate, LabelProposalListOptions,
     LabelProposalStatus, LabelSemanticProposalRecord, LabelSuggestionOptions,
     LabelSuggestionResult, MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
-    accept_label_proposal, add_task_labels, bootstrap_task_label, create_label,
+    accept_label_proposal, add_task_labels, bootstrap_task_label, create_label, delete_label,
     delete_label_semantics, get_label_proposal, get_label_semantics, get_task,
     label_atom_index_status, list_label_atoms, list_label_proposals, list_label_semantics,
     list_labels, propose_task_label_with, reject_label_proposal, remove_task_label,
@@ -49,6 +49,18 @@ pub(crate) fn handle_label(
                 },
             )?;
             print_or_json(json, &label, || label_line(&label))?;
+        }
+        LabelCommand::Delete(args) => {
+            let result = delete_label(db_path, board, actor, &args.label, args.force)?;
+            print_or_json(json, &result, || {
+                format!(
+                    "Deleted label {} removed_task_bindings={} removed_semantics={} removed_atoms={}",
+                    result.label.name,
+                    result.removed_task_bindings,
+                    result.removed_semantics,
+                    result.removed_atoms
+                )
+            })?;
         }
         LabelCommand::Bootstrap(args) => {
             let verify = args.verify || args.vector_config.is_some();

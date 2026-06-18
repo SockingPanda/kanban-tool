@@ -1,12 +1,12 @@
 use crate::connect_file;
 
 use super::{
-    BootstrapTaskLabel, BootstrapTaskLabelResult, CreateLabel, CreateTask, LabelRecord,
-    MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage, TaskListSort, TaskPatch, TaskRecord,
-    add_dependency_in_current_tx, all, all_values, board_id, board_id_any, ensure_changed_one,
-    exec, exec_named, exec_one_named, insert_event, json_valid, mark_label_atom_store_dirty,
-    optional, recompute_ready_status, required_row, scalar, upsert_label_semantics_candidate_in_tx,
-    validate_priority, with_immediate_tx,
+    BootstrapTaskLabel, BootstrapTaskLabelResult, CreateLabel, CreateTask, DeleteLabelResult,
+    LabelRecord, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage, TaskListSort, TaskPatch,
+    TaskRecord, add_dependency_in_current_tx, all, all_values, board_id, board_id_any,
+    ensure_changed_one, exec, exec_named, exec_one_named, insert_event, json_valid,
+    mark_label_atom_store_dirty, optional, recompute_ready_status, required_row, scalar,
+    upsert_label_semantics_candidate_in_tx, validate_priority, with_immediate_tx,
 };
 
 use std::path::Path;
@@ -172,6 +172,74 @@ pub fn list_task_labels(
     let board_id = board_id(&conn, board)?;
     let task = resolve_task(&conn, &board_id, task_ref)?;
     task_labels_conn(&conn, &board_id, &task.id)
+}
+
+pub fn delete_label(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    label_ref: &str,
+    force: bool,
+) -> Result<DeleteLabelResult> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
+        let label = resolve_label(&conn, &board_id, label_ref)?;
+        let removed_task_bindings = count_task_label_bindings(&conn, &board_id, &label.id)?;
+        if removed_task_bindings > 0 && !force {
+            return Err(KanbanError::InvalidInput(format!(
+                "label {} is attached to {} task(s); pass --force to delete it",
+                label.name, removed_task_bindings
+            )));
+        }
+        let removed_semantics = count_label_semantics(&conn, &board_id, &label.id)? > 0;
+        let removed_atoms = count_label_atoms(&conn, &board_id, &label.id)?;
+        exec(
+            &conn,
+            "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+            params![board_id, label.id],
+        )?;
+        exec(
+            &conn,
+            "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
+            params![board_id, label.id],
+        )?;
+        let changed = exec(
+            &conn,
+            "DELETE FROM labels WHERE board_id=?1 AND id=?2",
+            params![board_id, label.id],
+        )?;
+        ensure_changed_one(changed, || {
+            KanbanError::NotFound(format!("label {}", label.id))
+        })?;
+        mark_label_atom_store_dirty(&conn, &board_id, now)?;
+        insert_event(
+            &conn,
+            &board_id,
+            None,
+            None,
+            "label.deleted",
+            actor,
+            &json!({
+                "label_id": label.id,
+                "label": label.name,
+                "forced": force,
+                "removed_task_bindings": removed_task_bindings,
+                "removed_semantics": removed_semantics,
+                "removed_atoms": removed_atoms
+            })
+            .to_string(),
+            now,
+        )?;
+        Ok(DeleteLabelResult {
+            label,
+            forced: force,
+            removed_task_bindings,
+            removed_semantics,
+            removed_atoms,
+        })
+    })
 }
 
 pub fn add_task_label(
@@ -1117,6 +1185,33 @@ fn task_labels_conn(conn: &Connection, board_id: &str, task_id: &str) -> Result<
         "SELECT l.id, l.board_id, l.name, l.color, l.created_at, l.updated_at FROM task_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.board_id=?1 AND tl.task_id=?2 ORDER BY l.name ASC",
         params![board_id, task_id],
         label_from_row,
+    )
+}
+
+fn count_task_label_bindings(conn: &Connection, board_id: &str, label_id: &str) -> Result<i64> {
+    scalar(
+        conn,
+        "SELECT COUNT(*) FROM task_labels WHERE board_id=?1 AND label_id=?2",
+        params![board_id, label_id],
+        |row| row.get(0),
+    )
+}
+
+fn count_label_semantics(conn: &Connection, board_id: &str, label_id: &str) -> Result<i64> {
+    scalar(
+        conn,
+        "SELECT COUNT(*) FROM label_semantics WHERE board_id=?1 AND label_id=?2",
+        params![board_id, label_id],
+        |row| row.get(0),
+    )
+}
+
+fn count_label_atoms(conn: &Connection, board_id: &str, label_id: &str) -> Result<i64> {
+    scalar(
+        conn,
+        "SELECT COUNT(*) FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+        params![board_id, label_id],
+        |row| row.get(0),
     )
 }
 

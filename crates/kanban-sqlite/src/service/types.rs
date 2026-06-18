@@ -73,6 +73,15 @@ pub struct LabelRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeleteLabelResult {
+    pub label: LabelRecord,
+    pub forced: bool,
+    pub removed_task_bindings: i64,
+    pub removed_semantics: bool,
+    pub removed_atoms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LabelSemanticsRecord {
     pub label_id: String,
     pub board_id: String,

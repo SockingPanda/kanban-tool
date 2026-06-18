@@ -1255,6 +1255,20 @@ label name、signal key 和 candidate atom content hash。`capture_fingerprint` 
 按 task、snapshots 和 signals 派生；同一 board 重复 fingerprint 会被唯一约束拒绝。
 Observation response 返回 created observation，并展开 child `signals`。
 
+Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
+`applies_when` / `positive_example` 只能使用 `positive` polarity，
+`excludes_when` / `negative_example` 只能使用 `negative` polarity。
+`add_positive_atom` 必须提供 target label 和 positive candidate atom；
+`add_negative_atom` 必须提供 target label 和 negative candidate atom；
+`update_semantics` 必须提供 target label；`bootstrap_label` 必须提供
+`proposed_label_name`；`rename_label` 必须提供 target label 和
+`proposed_label_name`；`split_label` / `merge_labels` 必须提供 target label 和非空
+`related_labels_json`。Observation metric `suggest_coverage`、
+`suggest_coverage_cosine`、`suggest_residual_norm` 以及 signal metric
+`suggest_score` / `confidence` 必须是 finite `0.0..=1.0`；`suggest_rank` 必须为
+`null` 或 `>= 1`。违反这些契约的 request 返回 `400 invalid_input`，不会写入
+observation 或 signals。
+
 `GET /api/v1/boards/{board}/label-ontology/signals` 默认只返回 `open` 和
 `confirmed`。可重复传 `status` 和 `kind`，并按 `task`、`label`、
 `proposed_label`、`include_all`、`limit` 过滤。`GET /api/v1/label-ontology/signals/{signal_id}`

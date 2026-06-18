@@ -3,11 +3,11 @@ use crate::connect_file;
 use super::{
     LabelOntologyActionInput, LabelOntologyActionRecord, LabelOntologyActionType,
     LabelOntologyActor, LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput,
-    LabelOntologyObservationRecord, LabelOntologyRecordInput, LabelOntologySignalDetail,
-    LabelOntologySignalInput, LabelOntologySignalListOptions, LabelOntologySignalRecord,
-    LabelOntologySignalStatus, LabelOntologyValidationInput, LabelOntologyValidationStatus,
-    LabelSemanticProposalRecord, all_values, board_id, exec, get_task_by_id,
-    mark_label_atom_store_dirty, optional, required_row, resolve_task, storage,
+    LabelOntologyObservationRecord, LabelOntologyProposedAction, LabelOntologyRecordInput,
+    LabelOntologySignalDetail, LabelOntologySignalInput, LabelOntologySignalListOptions,
+    LabelOntologySignalRecord, LabelOntologySignalStatus, LabelOntologyValidationInput,
+    LabelOntologyValidationStatus, LabelSemanticProposalRecord, all_values, board_id, exec,
+    get_task_by_id, mark_label_atom_store_dirty, optional, required_row, resolve_task, storage,
     upsert_label_semantics_in_tx, with_immediate_tx, with_read_tx,
 };
 
@@ -41,6 +41,8 @@ pub fn record_label_ontology_observation(
                 "at least one ontology signal is required".into(),
             ));
         }
+        ensure_observation_metric_contract(&input)?;
+        ensure_raw_signal_metric_contract(&input.signals)?;
 
         let actor = normalize_actor(input.actor)?;
         let agent_candidates_json = normalize_json_field(
@@ -865,13 +867,16 @@ fn insert_signal(
         .as_deref()
         .map(|label_ref| resolve_label(conn, board_id, label_ref))
         .transpose()?;
-    let related_labels_json = normalize_json_field(
+    let related_labels = parse_json_field(
         &input.related_labels_json,
         "related_labels_json",
         JsonShape::Array,
     )?;
-    let proposal_json =
-        normalize_json_field(&input.proposal_json, "proposal_json", JsonShape::Object)?;
+    let related_labels_json = serde_json::to_string(&related_labels)
+        .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
+    let proposal = parse_json_field(&input.proposal_json, "proposal_json", JsonShape::Object)?;
+    let proposal_json = serde_json::to_string(&proposal)
+        .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
     let proposed_label_name = input
         .proposed_label_name
         .as_deref()
@@ -886,6 +891,13 @@ fn insert_signal(
         .as_ref()
         .map(normalize_candidate_atom)
         .transpose()?;
+    ensure_signal_action_contract(
+        input.proposed_action,
+        target_label.as_ref(),
+        candidate_atom.as_ref(),
+        proposed_label_name.as_deref(),
+        &related_labels,
+    )?;
     let candidate_content_hash = candidate_atom.as_ref().and_then(|candidate| {
         target_label.as_ref().map(|label| {
             stable_hash(&format!(
@@ -917,13 +929,6 @@ fn insert_signal(
             ))
         });
     let rationale = normalize_required_text(&input.rationale)?;
-    if let Some(confidence) = input.confidence
-        && !(0.0..=1.0).contains(&confidence)
-    {
-        return Err(KanbanError::InvalidInput(
-            "signal confidence must be between 0.0 and 1.0".into(),
-        ));
-    }
 
     let signal_id = new_typed_id("los");
     let candidate_polarity = candidate_atom
@@ -995,6 +1000,153 @@ fn normalize_actor(actor: LabelOntologyActor) -> Result<LabelOntologyActor> {
     })
 }
 
+fn ensure_observation_metric_contract(input: &LabelOntologyRecordInput) -> Result<()> {
+    ensure_unit_metric(input.suggest_coverage, "suggest_coverage")?;
+    ensure_unit_metric(input.suggest_coverage_cosine, "suggest_coverage_cosine")?;
+    ensure_unit_metric(input.suggest_residual_norm, "suggest_residual_norm")?;
+    Ok(())
+}
+
+fn ensure_raw_signal_metric_contract(signals: &[LabelOntologySignalInput]) -> Result<()> {
+    for signal in signals {
+        ensure_unit_metric(signal.suggest_score, "suggest_score")?;
+        ensure_unit_metric(signal.confidence, "signal confidence")?;
+        if let Some(rank) = signal.suggest_rank
+            && rank < 1
+        {
+            return Err(KanbanError::InvalidInput(
+                "suggest_rank must be null or >= 1".into(),
+            ));
+        }
+        if let Some(candidate_atom) = signal.candidate_atom.as_ref() {
+            normalize_candidate_atom(candidate_atom)?;
+        }
+    }
+    Ok(())
+}
+
+fn ensure_unit_metric(value: Option<f64>, field: &str) -> Result<()> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    if !value.is_finite() {
+        return Err(KanbanError::InvalidInput(format!("{field} must be finite")));
+    }
+    if !(0.0..=1.0).contains(&value) {
+        return Err(KanbanError::InvalidInput(format!(
+            "{field} must be between 0.0 and 1.0"
+        )));
+    }
+    Ok(())
+}
+
+fn ensure_signal_action_contract(
+    proposed_action: LabelOntologyProposedAction,
+    target_label: Option<&LabelSnapshot>,
+    candidate_atom: Option<&LabelOntologyCandidateAtomInput>,
+    proposed_label_name: Option<&str>,
+    related_labels: &JsonValue,
+) -> Result<()> {
+    match proposed_action {
+        LabelOntologyProposedAction::Observe => {}
+        LabelOntologyProposedAction::AddPositiveAtom => {
+            if target_label.is_none() {
+                return Err(KanbanError::InvalidInput(
+                    "add_positive_atom requires target_label_ref".into(),
+                ));
+            }
+            match candidate_atom {
+                Some(atom) if atom.polarity == "positive" => {}
+                Some(_) => {
+                    return Err(KanbanError::InvalidInput(
+                        "add_positive_atom requires positive candidate_atom".into(),
+                    ));
+                }
+                None => {
+                    return Err(KanbanError::InvalidInput(
+                        "add_positive_atom requires candidate_atom".into(),
+                    ));
+                }
+            }
+        }
+        LabelOntologyProposedAction::AddNegativeAtom => {
+            if target_label.is_none() {
+                return Err(KanbanError::InvalidInput(
+                    "add_negative_atom requires target_label_ref".into(),
+                ));
+            }
+            match candidate_atom {
+                Some(atom) if atom.polarity == "negative" => {}
+                Some(_) => {
+                    return Err(KanbanError::InvalidInput(
+                        "add_negative_atom requires negative candidate_atom".into(),
+                    ));
+                }
+                None => {
+                    return Err(KanbanError::InvalidInput(
+                        "add_negative_atom requires candidate_atom".into(),
+                    ));
+                }
+            }
+        }
+        LabelOntologyProposedAction::UpdateSemantics => {
+            if target_label.is_none() {
+                return Err(KanbanError::InvalidInput(
+                    "update_semantics requires target_label_ref".into(),
+                ));
+            }
+        }
+        LabelOntologyProposedAction::BootstrapLabel => {
+            if proposed_label_name.is_none() {
+                return Err(KanbanError::InvalidInput(
+                    "bootstrap_label requires proposed_label_name".into(),
+                ));
+            }
+        }
+        LabelOntologyProposedAction::RenameLabel => {
+            if target_label.is_none() {
+                return Err(KanbanError::InvalidInput(
+                    "rename_label requires target_label_ref".into(),
+                ));
+            }
+            if proposed_label_name.is_none() {
+                return Err(KanbanError::InvalidInput(
+                    "rename_label requires proposed_label_name".into(),
+                ));
+            }
+        }
+        LabelOntologyProposedAction::SplitLabel => {
+            if target_label.is_none() {
+                return Err(KanbanError::InvalidInput(
+                    "split_label requires target_label_ref".into(),
+                ));
+            }
+            if !json_array_is_non_empty(related_labels) {
+                return Err(KanbanError::InvalidInput(
+                    "split_label requires non-empty related_labels_json".into(),
+                ));
+            }
+        }
+        LabelOntologyProposedAction::MergeLabels => {
+            if target_label.is_none() {
+                return Err(KanbanError::InvalidInput(
+                    "merge_labels requires target_label_ref".into(),
+                ));
+            }
+            if !json_array_is_non_empty(related_labels) {
+                return Err(KanbanError::InvalidInput(
+                    "merge_labels requires non-empty related_labels_json".into(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn json_array_is_non_empty(value: &JsonValue) -> bool {
+    value.as_array().is_some_and(|items| !items.is_empty())
+}
+
 fn normalize_candidate_atom(
     input: &LabelOntologyCandidateAtomInput,
 ) -> Result<LabelOntologyCandidateAtomInput> {
@@ -1012,6 +1164,12 @@ fn normalize_candidate_atom(
         return Err(KanbanError::InvalidInput(
             "candidate atom kind is invalid".into(),
         ));
+    }
+    let expected_polarity = polarity_for_atom_kind(&kind)?;
+    if polarity != expected_polarity {
+        return Err(KanbanError::InvalidInput(format!(
+            "candidate atom polarity {polarity} does not match kind {kind}; {kind} requires {expected_polarity} polarity"
+        )));
     }
     let text = normalize_atom_text(&input.text);
     if text.is_empty() {

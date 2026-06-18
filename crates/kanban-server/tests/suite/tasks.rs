@@ -971,6 +971,88 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
 }
 
 #[tokio::test]
+async fn label_ontology_observation_route_rejects_invalid_signal_contract() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("ontology API invalid signal target"),
+    )?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app,
+        &format!("/api/v1/tasks/{}/label-ontology/observations", task.id),
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": "[]",
+            "suggestion_snapshot_json": "{}",
+            "final_decision_json": "{}",
+            "suggest_coverage": 0.61,
+            "suggest_coverage_cosine": 0.74,
+            "suggest_residual_norm": 0.39,
+            "suggest_needs_new_label": false,
+            "suggest_degraded": false,
+            "diagnostics_json": "[]",
+            "capture_fingerprint": "api-invalid-signal-contract",
+            "signals": [{
+                "kind": "false_negative",
+                "target_label_ref": "cli",
+                "related_labels_json": "[]",
+                "proposed_action": "add_positive_atom",
+                "candidate_atom": {
+                    "polarity": "negative",
+                    "kind": "applies_when",
+                    "text": "does not touch CLI behavior"
+                },
+                "proposed_label_name": null,
+                "proposal_json": "{}",
+                "agent_selected": true,
+                "suggest_state": "candidate",
+                "suggest_score": 0.08,
+                "suggest_rank": 4,
+                "final_selected": true,
+                "rationale": "The atom contract is inconsistent.",
+                "confidence": 0.91,
+                "signal_key": "api-invalid-signal-contract"
+            }]
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .context("error message")?
+            .contains("candidate atom polarity")
+    );
+    let conn = kanban_sqlite::connect_file(&db_path)?;
+    let observation_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM label_ontology_observations",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(observation_count, 0);
+    Ok(())
+}
+
+#[tokio::test]
 async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();

@@ -1618,7 +1618,12 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
         json!({
             "reason": "Bootstrap from confirmed vocabulary-gap signal.",
             "actor": "api-reviewer",
-            "source_signal_ids": [gap_signal_id]
+            "source_signal_ids": [gap_signal_id],
+            "ontology_actor": {
+                "name": "ontology-agent",
+                "type": "agent",
+                "agent_type": "codex"
+            }
         }),
     )
     .await?;
@@ -1632,13 +1637,15 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
     .await?;
     assert_eq!(status, StatusCode::OK, "{json}");
     assert_eq!(json["data"]["signal"]["status"], "confirmed");
-    assert!(
-        json["data"]["actions"]
-            .as_array()
-            .context("gap actions")?
-            .iter()
-            .any(|action| action["action_type"] == "bootstrap_label")
-    );
+    let bootstrap = json["data"]["actions"]
+        .as_array()
+        .context("gap actions")?
+        .iter()
+        .find(|action| action["action_type"] == "bootstrap_label")
+        .context("bootstrap action")?;
+    assert_eq!(bootstrap["created_by"], "ontology-agent");
+    assert_eq!(bootstrap["created_by_type"], "agent");
+    assert_eq!(bootstrap["agent_type"], "codex");
     Ok(())
 }
 

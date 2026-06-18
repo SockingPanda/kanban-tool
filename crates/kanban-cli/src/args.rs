@@ -396,6 +396,8 @@ pub(crate) struct LabelProposalAcceptArgs {
     pub(crate) reason: Option<String>,
     #[arg(long = "source-signal")]
     pub(crate) source_signal_ids: Vec<String>,
+    #[command(flatten)]
+    pub(crate) ontology_actor: LabelOntologyActorArgs,
 }
 
 #[derive(Debug, Subcommand)]
@@ -467,6 +469,8 @@ pub(crate) struct LabelOntologyActionArgs {
     pub(crate) signal_ids: Vec<String>,
     #[arg(long)]
     pub(crate) reason: String,
+    #[command(flatten)]
+    pub(crate) actor: LabelOntologyActorArgs,
 }
 
 #[derive(Debug, Args)]
@@ -477,6 +481,8 @@ pub(crate) struct LabelOntologySupersedeArgs {
     pub(crate) superseded_by_signal_id: String,
     #[arg(long)]
     pub(crate) reason: String,
+    #[command(flatten)]
+    pub(crate) actor: LabelOntologyActorArgs,
 }
 
 #[derive(Debug, Args)]
@@ -487,6 +493,8 @@ pub(crate) struct LabelOntologyResolveArgs {
     pub(crate) no_change: bool,
     #[arg(long)]
     pub(crate) reason: String,
+    #[command(flatten)]
+    pub(crate) actor: LabelOntologyActorArgs,
 }
 
 #[derive(Debug, Subcommand)]
@@ -506,6 +514,22 @@ pub(crate) struct LabelOntologyApplyAtomArgs {
     pub(crate) text: String,
     #[arg(long)]
     pub(crate) reason: String,
+    #[command(flatten)]
+    pub(crate) actor: LabelOntologyActorArgs,
+}
+
+#[derive(Debug, Clone, Args)]
+pub(crate) struct LabelOntologyActorArgs {
+    #[arg(long = "actor-type", value_enum, default_value = "user")]
+    pub(crate) actor_type: LabelOntologyActorTypeArg,
+    #[arg(long = "agent-type")]
+    pub(crate) agent_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum LabelOntologyActorTypeArg {
+    User,
+    Agent,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -529,6 +553,8 @@ pub(crate) struct LabelOntologyValidateArgs {
     pub(crate) reason: String,
     #[arg(long)]
     pub(crate) input: String,
+    #[command(flatten)]
+    pub(crate) actor: LabelOntologyActorArgs,
     pub(crate) signal_ids: Vec<String>,
 }
 

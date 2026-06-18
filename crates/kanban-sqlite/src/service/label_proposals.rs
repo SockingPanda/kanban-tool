@@ -4,7 +4,7 @@ use super::label_suggestions::{
     bounded_diagnostic_message, compute_task_label_suggestions_with, retrieve_residual_atoms,
 };
 use super::{
-    LabelProposalAttempt, LabelProposalCandidate, LabelProposalDecisionOptions,
+    LabelOntologyActor, LabelProposalAttempt, LabelProposalCandidate, LabelProposalDecisionOptions,
     LabelProposalListOptions, LabelProposalStatus, LabelSemanticProposalRecord,
     LabelSuggestionOptions, LabelSuggestionResult, SqlFilter, all, all_values, board_id, exec,
     exec_named, get_task_by_id, insert_event, mark_label_atom_store_dirty,
@@ -599,6 +599,11 @@ fn decide_label_proposal(
                 "source_signal_ids are only supported when accepting label proposals".into(),
             ));
         }
+        if decision != LabelProposalStatus::Accepted && options.ontology_actor.is_some() {
+            return Err(KanbanError::InvalidInput(
+                "ontology_actor is only supported when accepting label proposals".into(),
+            ));
+        }
         let proposal = get_label_proposal_conn(&conn, proposal_id)?;
         if proposal.status != LabelProposalStatus::Proposed {
             return Err(KanbanError::InvalidInput(format!(
@@ -669,11 +674,18 @@ fn decide_label_proposal(
         if decision == LabelProposalStatus::Accepted
             && let Some(label_id) = resolved_label_id.as_deref()
         {
+            let ontology_actor = options
+                .ontology_actor
+                .unwrap_or_else(|| LabelOntologyActor {
+                    name: actor.to_owned(),
+                    actor_type: "user".to_owned(),
+                    agent_type: None,
+                });
             record_label_ontology_proposal_bootstrap_in_tx(
                 &conn,
                 &proposal,
                 label_id,
-                actor,
+                ontology_actor,
                 decision_reason.as_deref(),
                 options.source_signal_ids,
                 now,

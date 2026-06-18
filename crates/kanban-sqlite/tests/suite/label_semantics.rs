@@ -144,6 +144,111 @@ fn label_proposal_manual_candidate_accepts_without_task_binding() -> anyhow::Res
 }
 
 #[test]
+fn label_bootstrap_attaches_task_and_upserts_semantics_atomically() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_attaches_task_and_upserts_semantics_atomically")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("bootstrap target"),
+    )?;
+
+    let first = bootstrap_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        BootstrapTaskLabel {
+            name: "database".to_owned(),
+            description: Some("Database persistence work".to_owned()),
+            applies_when: vec!["touches SQLite migrations".to_owned()],
+            positive_examples: vec!["new table migration".to_owned()],
+            ..BootstrapTaskLabel::default()
+        },
+    )?;
+
+    assert_eq!(first.task.labels.len(), 1);
+    assert_eq!(first.task.labels[0].name, "database");
+    assert_eq!(first.semantics.label_name, "database");
+    assert_eq!(
+        first.semantics.description.as_deref(),
+        Some("Database persistence work")
+    );
+    assert!(
+        first
+            .semantics
+            .atoms
+            .iter()
+            .any(|atom| atom.kind == "applies_when")
+    );
+    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    assert_eq!(status.board_dirty, Some(true));
+
+    let second = bootstrap_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        BootstrapTaskLabel {
+            name: "database".to_owned(),
+            description: Some("Database and migration work".to_owned()),
+            excludes_when: vec!["UI-only polish".to_owned()],
+            ..BootstrapTaskLabel::default()
+        },
+    )?;
+
+    assert_eq!(
+        second.task.labels.len(),
+        1,
+        "task-label binding is idempotent"
+    );
+    assert_eq!(
+        second.semantics.description.as_deref(),
+        Some("Database and migration work")
+    );
+    assert_eq!(table_count(&connect_file(&temp.path)?, "task_labels")?, 1);
+    Ok(())
+}
+
+#[test]
+fn label_bootstrap_rejects_empty_semantics_without_partial_writes() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_rejects_empty_semantics_without_partial_writes")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("bootstrap rollback target"),
+    )?;
+
+    let error = result_err(bootstrap_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        BootstrapTaskLabel {
+            name: "empty-semantic-label".to_owned(),
+            description: Some("   ".to_owned()),
+            applies_when: vec![" ".to_owned()],
+            ..BootstrapTaskLabel::default()
+        },
+    ))?;
+
+    assert!(
+        error
+            .to_string()
+            .contains("label bootstrap requires description or semantic examples")
+    );
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "labels")?, 0);
+    assert_eq!(table_count(&conn, "label_semantics")?, 0);
+    assert_eq!(table_count(&conn, "label_atoms")?, 0);
+    assert_eq!(table_count(&conn, "task_labels")?, 0);
+    Ok(())
+}
+
+#[test]
 fn label_proposal_residual_validation_passes_and_accept_keeps_task_unbound() -> anyhow::Result<()> {
     let temp =
         TempDb::new("label_proposal_residual_validation_passes_and_accept_keeps_task_unbound")?;

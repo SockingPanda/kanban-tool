@@ -70,7 +70,7 @@ pub(crate) use graph::{
 };
 pub(crate) use label_semantics::{
     mark_label_atom_store_dirty, rebuild_label_atoms_for_stable_hash_migration,
-    upsert_label_semantics_candidate_in_tx,
+    stable_label_atom_hash_backfill_needed, upsert_label_semantics_candidate_in_tx,
 };
 pub(crate) use projections::*;
 pub(crate) use run_logs::{

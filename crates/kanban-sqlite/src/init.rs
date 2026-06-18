@@ -123,13 +123,10 @@ fn apply_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(INITIAL_MIGRATION)
         .map_err(|err| KanbanError::Storage(err.to_string()))?;
     ensure_schema_migrations_shape(conn)?;
-    let mut applied_versions = Vec::new();
     for migration in MIGRATIONS {
-        if validate_or_apply_migration(conn, migration)? {
-            applied_versions.push(migration.version);
-        }
+        validate_or_apply_migration(conn, migration)?;
     }
-    if applied_versions.contains(&10) {
+    if crate::service::stable_label_atom_hash_backfill_needed(conn)? {
         crate::service::rebuild_label_atoms_for_stable_hash_migration(conn, SystemClock.now_ms())?;
     }
     validate_schema_shape(conn)?;

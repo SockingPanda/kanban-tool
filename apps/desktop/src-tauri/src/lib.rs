@@ -5,6 +5,8 @@ use std::{
     time::Duration,
 };
 
+#[cfg(target_os = "linux")]
+use ksni::blocking::TrayMethods;
 use serde::Serialize;
 use tauri::{
     Manager, State,
@@ -15,8 +17,11 @@ use tokio::sync::oneshot;
 
 mod tray_lifecycle;
 use tray_lifecycle::{
-    CloseRequestAction, TRAY_QUIT_ID, TRAY_SHOW_ID, TrayMenuAction, close_request_action,
-    tray_menu_action,
+    CloseRequestAction, RestoreWindowAction, SingleInstanceAction, TRAY_QUIT_ID, TRAY_SHOW_ID,
+    TrayBackendKind, TrayIconAction, TrayMenuAction, close_request_action, restore_window_action,
+    single_instance_launch_action, status_notifier_activate_action,
+    status_notifier_secondary_activate_action, tray_backend_kind, tray_icon_left_click_action,
+    tray_icon_left_double_click_action, tray_menu_action,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -90,6 +95,11 @@ fn set_runtime_board(
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            match single_instance_launch_action() {
+                SingleInstanceAction::ShowWindow => show_main_window(app),
+            }
+        }))
         .setup(|app| {
             let runtime = start_embedded_api().map_err(|error| error.to_string())?;
             app.manage(runtime);
@@ -112,6 +122,27 @@ pub fn run() {
 }
 
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        debug_assert_eq!(tray_backend_kind(), TrayBackendKind::StatusNotifierItem);
+        match setup_status_notifier_tray(app) {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                eprintln!(
+                    "kanban status notifier tray unavailable; falling back to tauri tray: {error:?}"
+                );
+            }
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        debug_assert_eq!(tray_backend_kind(), TrayBackendKind::TauriTrayIcon);
+    }
+
+    setup_tauri_tray(app)
+}
+
+fn setup_tauri_tray(app: &tauri::App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, TRAY_SHOW_ID, "显示", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "退出", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
@@ -128,13 +159,19 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         .on_tray_icon_event(|tray, event| match event {
             TrayIconEvent::Click {
                 button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
+                button_state,
                 ..
+            } if tray_icon_left_click_action(button_state == MouseButtonState::Up)
+                == TrayIconAction::ShowWindow =>
+            {
+                show_main_window(tray.app_handle())
             }
-            | TrayIconEvent::DoubleClick {
+            TrayIconEvent::DoubleClick {
                 button: MouseButton::Left,
                 ..
-            } => show_main_window(tray.app_handle()),
+            } if tray_icon_left_double_click_action() == TrayIconAction::ShowWindow => {
+                show_main_window(tray.app_handle())
+            }
             _ => {}
         });
 
@@ -146,11 +183,104 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+struct LinuxStatusNotifierTray {
+    _handle: ksni::blocking::Handle<KanbanStatusNotifierTray>,
+}
+
+#[cfg(target_os = "linux")]
+struct KanbanStatusNotifierTray {
+    app: tauri::AppHandle,
+}
+
+#[cfg(target_os = "linux")]
+impl ksni::Tray for KanbanStatusNotifierTray {
+    fn id(&self) -> String {
+        "kanban-desktop".to_owned()
+    }
+
+    fn title(&self) -> String {
+        "Kanban Tool".to_owned()
+    }
+
+    fn icon_name(&self) -> String {
+        "kanban-desktop".to_owned()
+    }
+
+    fn tool_tip(&self) -> ksni::ToolTip {
+        ksni::ToolTip {
+            title: "Kanban Tool".to_owned(),
+            description: "Kanban Tool".to_owned(),
+            ..Default::default()
+        }
+    }
+
+    fn activate(&mut self, _x: i32, _y: i32) {
+        match status_notifier_activate_action() {
+            tray_lifecycle::StatusNotifierActivationAction::ShowWindow => {
+                show_main_window(&self.app)
+            }
+        }
+    }
+
+    fn secondary_activate(&mut self, _x: i32, _y: i32) {
+        match status_notifier_secondary_activate_action() {
+            tray_lifecycle::StatusNotifierActivationAction::ShowWindow => {
+                show_main_window(&self.app)
+            }
+        }
+    }
+
+    fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
+        use ksni::menu::{MenuItem, StandardItem};
+
+        vec![
+            StandardItem {
+                label: "显示".to_owned(),
+                activate: Box::new(|tray: &mut Self| match tray_menu_action(TRAY_SHOW_ID) {
+                    TrayMenuAction::ShowWindow => show_main_window(&tray.app),
+                    TrayMenuAction::QuitApp | TrayMenuAction::Ignore => {}
+                }),
+                ..Default::default()
+            }
+            .into(),
+            MenuItem::Separator,
+            StandardItem {
+                label: "退出".to_owned(),
+                icon_name: "application-exit".to_owned(),
+                activate: Box::new(|tray: &mut Self| match tray_menu_action(TRAY_QUIT_ID) {
+                    TrayMenuAction::QuitApp => quit_app(&tray.app),
+                    TrayMenuAction::ShowWindow | TrayMenuAction::Ignore => {}
+                }),
+                ..Default::default()
+            }
+            .into(),
+        ]
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn setup_status_notifier_tray(app: &tauri::App) -> Result<(), ksni::Error> {
+    let handle = KanbanStatusNotifierTray {
+        app: app.handle().clone(),
+    }
+    .assume_sni_available(true)
+    .spawn()?;
+
+    app.manage(LinuxStatusNotifierTray { _handle: handle });
+    Ok(())
+}
+
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
+        match restore_window_action() {
+            RestoreWindowAction::ShowAndRaiseWithoutFocus => {
+                let _ = window.set_always_on_top(true);
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_always_on_top(false);
+            }
+        }
     }
 }
 

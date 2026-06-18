@@ -861,9 +861,20 @@ Task 标签添加请求：
 }
 ```
 
-`POST /api/v1/tasks/{task_id}/labels` 会把指定 name 的 label 绑定到 task。如果
-该 task 所属 board 上还不存在该 label，会先创建 label。重复绑定已有 task-label
-关系不会重复写入。成功响应返回更新后的 task，包含当前 `labels` 列表。
+或批量添加：
+
+```json
+{
+  "names": ["core", "api"]
+}
+```
+
+`POST /api/v1/tasks/{task_id}/labels` 会把指定 name 或 names 的 label 绑定到 task。
+`name` 与 `names` 互斥；二者都缺失、二者同时出现或 `names` 为空数组都会返回
+invalid input。批量添加在同一 transaction 内执行，并先验证所有 label 名称；如果
+任一 label 为空白或非法，不会创建 canonical label，也不会留下部分 task-label 绑定。
+如果该 task 所属 board 上还不存在指定 name 的 label，会先创建 label。重复绑定已有
+task-label 关系不会重复写入。成功响应返回更新后的 task，包含当前 `labels` 列表。
 
 `DELETE /api/v1/tasks/{task_id}/labels/{label_id}` 会移除 task 上的指定 label，
 `{label_id}` 接受 label id 或 label 名称。成功响应同样返回更新后的 task，包含

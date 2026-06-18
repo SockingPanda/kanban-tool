@@ -114,8 +114,23 @@ pub(crate) struct CreateLabelBody {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct AddTaskLabelBody {
-    name: String,
+    name: Option<String>,
+    names: Option<Vec<String>>,
     actor: Option<String>,
+}
+
+impl AddTaskLabelBody {
+    fn label_names(&self) -> Result<Vec<String>, ApiError> {
+        match (&self.name, &self.names) {
+            (Some(_), Some(_)) => Err(invalid_input("provide either name or names, not both")),
+            (Some(name), None) => Ok(vec![name.clone()]),
+            (None, Some(names)) if names.is_empty() => {
+                Err(invalid_input("names must contain at least one label"))
+            }
+            (None, Some(names)) => Ok(names.clone()),
+            (None, None) => Err(invalid_input("name or names is required")),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -489,7 +504,9 @@ pub(crate) async fn add_task_label(
 ) -> Result<(StatusCode, Json<Envelope<TaskDto>>), ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let task = kanban_sqlite::add_task_label_by_id(state.db_path(), &actor, &task_id, &body.name)?;
+    let label_names = body.label_names()?;
+    let task =
+        kanban_sqlite::add_task_labels_by_id(state.db_path(), &actor, &task_id, &label_names)?;
     Ok((
         StatusCode::CREATED,
         Json(Envelope {

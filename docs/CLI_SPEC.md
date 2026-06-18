@@ -483,7 +483,7 @@ Human output for add/remove is Chinese-first:
 ```bash
 kanban label list
 kanban label create <name> [--color <color>]
-kanban label add <task_ref> <label>
+kanban label add <task_ref> <label>...
 kanban label remove <task_ref> <label>
 kanban label semantics list [--json]
 kanban label semantics show <label> [--json]
@@ -502,18 +502,23 @@ kanban label proposals reject <proposal_id> [--reason <text>] [--json]
 ```
 
 `label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
-label，返回已有 label。`label add` 接受 task ref 和 label 名称或 id；如果按
-name 指定的 label 不存在，会先在该 task 所属 board 创建 label，再绑定到 task。
+label，返回已有 label。`label add` 接受 task ref 和一个或多个 label 名称或 id；
+所有 label 在同一 transaction 内 normalize、去重并绑定到 task。如果按 name
+指定的 label 不存在，会先在该 task 所属 board 创建 label，再绑定到 task。
 `label remove` 接受 task ref 和 label 名称或 id。空白 label 名称会被拒绝。
 
 Label 变更对 task-label 关联保持幂等。只有关联实际变化时，才追加
 `task.label.added` / `task.label.removed` event；该操作不改变 task status。
+批量 `label add` 会先验证所有 label 名称；如果任一 label 为空白或非法，不会创建
+canonical label，也不会留下部分 task-label 绑定。缺失 canonical label 的创建规则
+与单 label add 相同，但不会自动生成 `label_semantics` 或 `label_atoms`。
 
 示例：
 
 ```bash
 kanban label create backend --color blue
 kanban label add default#12 backend
+kanban label add default#12 backend api sqlite
 kanban label remove t_01HX... backend
 kanban label list --json
 ```
@@ -542,7 +547,7 @@ coverage 或 residual norm 达到停止阈值后，solver 会提前停止而不�
 以减少重复语义 label 同时出现在 selected labels；这不会合并或删除 canonical
 labels。
 它不会自动创建新 label，也不会写入 new-label proposal。应用建议时仍使用现有
-`label add <task_ref> <label>` / API attach 流程。
+`label add <task_ref> <label>...` / API attach 流程。
 
 默认未配置 vector provider 或二进制未启用 `vector-lancedb` 时，命令成功返回
 degraded 结果而不是失败；无 provider 时 `needs_new_label=false`。`--vector-config`

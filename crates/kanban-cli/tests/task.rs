@@ -121,11 +121,16 @@ fn task_create_and_label_commands_round_trip_labels() -> anyhow::Result<()> {
     .success_json()?;
     assert_eq!(label["data"]["name"], "frontend");
 
-    let added =
-        kanban(&temp.path, &["--json", "label", "add", task_id, "frontend"])?.success_json()?;
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json", "label", "add", task_id, "frontend", "api", "frontend",
+        ],
+    )?
+    .success_json()?;
     assert_eq!(
         added["data"]["labels"].as_array().context("labels")?.len(),
-        2
+        3
     );
 
     let listed = kanban(&temp.path, &["--json", "label", "list"])?.success_json()?;
@@ -137,7 +142,11 @@ fn task_create_and_label_commands_round_trip_labels() -> anyhow::Result<()> {
         .collect();
     assert_eq!(
         names,
-        [serde_json::json!("backend"), serde_json::json!("frontend")]
+        [
+            serde_json::json!("api"),
+            serde_json::json!("backend"),
+            serde_json::json!("frontend")
+        ]
     );
     let listed_human = kanban(&temp.path, &["label", "list"])?.success_stdout()?;
     assert!(listed_human.contains("backend "), "{listed_human}");
@@ -146,14 +155,15 @@ fn task_create_and_label_commands_round_trip_labels() -> anyhow::Result<()> {
     assert!(listed_human.contains(" color=#4477aa"), "{listed_human}");
 
     let human = kanban(&temp.path, &["task", "show", task_id])?.success_stdout()?;
-    assert!(human.contains("[backend,frontend]"), "{human}");
+    assert!(human.contains("[api,backend,frontend]"), "{human}");
 
     let removed = kanban(
         &temp.path,
         &["--json", "label", "remove", task_id, "frontend"],
     )?
     .success_json()?;
-    assert_eq!(removed["data"]["labels"][0]["name"], "backend");
+    assert_eq!(removed["data"]["labels"][0]["name"], "api");
+    assert_eq!(removed["data"]["labels"][1]["name"], "backend");
     Ok(())
 }
 

@@ -4,10 +4,13 @@ use super::label_suggestions::{
     bounded_diagnostic_message, compute_task_label_suggestions_with, retrieve_residual_atoms,
 };
 use super::{
-    LabelProposalAttempt, LabelProposalCandidate, LabelProposalListOptions, LabelProposalStatus,
-    LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult, SqlFilter, all,
-    all_values, board_id, exec, exec_named, get_task_by_id, insert_event,
-    mark_label_atom_store_dirty, required_row, resolve_task,
+    LabelOntologyActor, LabelOntologyProposalBootstrapOptions, LabelOntologyProposalCreateOptions,
+    LabelProposalAttempt, LabelProposalCandidate, LabelProposalCreateOptions,
+    LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalProposeOptions,
+    LabelProposalStatus, LabelSemanticProposalRecord, LabelSuggestionOptions,
+    LabelSuggestionResult, SqlFilter, all, all_values, board_id, exec, exec_named, get_task_by_id,
+    insert_event, mark_label_atom_store_dirty, record_label_ontology_proposal_bootstrap_in_tx,
+    record_label_ontology_proposal_create_in_tx, required_row, resolve_task,
     upsert_label_semantics_candidate_in_tx, with_immediate_tx,
 };
 
@@ -109,6 +112,30 @@ pub fn propose_task_label_with(
     propose_task_label_with_store(path, board, actor, task_ref, provider, &store, options)
 }
 
+pub fn propose_task_label_with_create_options(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    provider: &(impl LabelProposalProvider + ?Sized),
+    options: LabelSuggestionOptions,
+    create_options: LabelProposalCreateOptions,
+) -> Result<LabelProposalAttempt> {
+    let store = DisabledVectorStore;
+    propose_task_label_with_store_and_create_options(
+        path,
+        board,
+        actor,
+        task_ref,
+        provider,
+        &store,
+        LabelProposalProposeOptions {
+            suggestion: options,
+            create: create_options,
+        },
+    )
+}
+
 pub fn propose_task_label_with_store(
     path: impl AsRef<Path>,
     board: &str,
@@ -118,6 +145,33 @@ pub fn propose_task_label_with_store(
     store: &(impl LabelAtomVectorStore + ?Sized),
     options: LabelSuggestionOptions,
 ) -> Result<LabelProposalAttempt> {
+    propose_task_label_with_store_and_create_options(
+        path,
+        board,
+        actor,
+        task_ref,
+        provider,
+        store,
+        LabelProposalProposeOptions {
+            suggestion: options,
+            create: LabelProposalCreateOptions::default(),
+        },
+    )
+}
+
+pub fn propose_task_label_with_store_and_create_options(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    provider: &(impl LabelProposalProvider + ?Sized),
+    store: &(impl LabelAtomVectorStore + ?Sized),
+    options: LabelProposalProposeOptions,
+) -> Result<LabelProposalAttempt> {
+    let LabelProposalProposeOptions {
+        suggestion: suggestion_options,
+        create: create_options,
+    } = options;
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
     let task_ref = resolve_task(&conn, &board_id, task_ref)?;
@@ -127,7 +181,7 @@ pub fn propose_task_label_with_store(
         &task.board_slug,
         &task.id,
         store,
-        options,
+        suggestion_options,
     )?;
     let suggestions = computation.result;
     let top1 = suggestions.candidates.first();
@@ -235,6 +289,28 @@ pub fn propose_task_label_with_store(
             top1_existing_label_name,
             &diagnostics,
             decision_reason,
+            now,
+        )?;
+        let LabelProposalCreateOptions {
+            source_signal_ids,
+            ontology_actor,
+            allow_retarget,
+            retarget_reason,
+        } = create_options;
+        let ontology_actor = ontology_actor.unwrap_or_else(|| LabelOntologyActor {
+            name: actor.to_owned(),
+            actor_type: "user".to_owned(),
+            agent_type: None,
+        });
+        record_label_ontology_proposal_create_in_tx(
+            &conn,
+            &proposal,
+            LabelOntologyProposalCreateOptions {
+                actor: ontology_actor,
+                source_signal_ids,
+                allow_retarget,
+                retarget_reason,
+            },
             now,
         )?;
         insert_event(
@@ -540,12 +616,29 @@ pub fn accept_label_proposal(
     proposal_id: &str,
     reason: Option<String>,
 ) -> Result<LabelSemanticProposalRecord> {
+    accept_label_proposal_with_options(
+        path,
+        actor,
+        proposal_id,
+        reason,
+        LabelProposalDecisionOptions::default(),
+    )
+}
+
+pub fn accept_label_proposal_with_options(
+    path: impl AsRef<Path>,
+    actor: &str,
+    proposal_id: &str,
+    reason: Option<String>,
+    options: LabelProposalDecisionOptions,
+) -> Result<LabelSemanticProposalRecord> {
     decide_label_proposal(
         path,
         actor,
         proposal_id,
         LabelProposalStatus::Accepted,
         reason,
+        options,
     )
 }
 
@@ -561,6 +654,7 @@ pub fn reject_label_proposal(
         proposal_id,
         LabelProposalStatus::Rejected,
         reason,
+        LabelProposalDecisionOptions::default(),
     )
 }
 
@@ -570,10 +664,39 @@ fn decide_label_proposal(
     proposal_id: &str,
     decision: LabelProposalStatus,
     reason: Option<String>,
+    options: LabelProposalDecisionOptions,
 ) -> Result<LabelSemanticProposalRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
+        let LabelProposalDecisionOptions {
+            source_signal_ids,
+            ontology_actor,
+            allow_retarget,
+            retarget_reason,
+        } = options;
+        if decision != LabelProposalStatus::Accepted && !source_signal_ids.is_empty() {
+            return Err(KanbanError::InvalidInput(
+                "source_signal_ids are only supported when accepting label proposals".into(),
+            ));
+        }
+        if decision != LabelProposalStatus::Accepted && ontology_actor.is_some() {
+            return Err(KanbanError::InvalidInput(
+                "ontology_actor is only supported when accepting label proposals".into(),
+            ));
+        }
+        if decision != LabelProposalStatus::Accepted
+            && (allow_retarget || retarget_reason.is_some())
+        {
+            return Err(KanbanError::InvalidInput(
+                "retarget options are only supported when accepting label proposals".into(),
+            ));
+        }
+        if source_signal_ids.is_empty() && (allow_retarget || retarget_reason.is_some()) {
+            return Err(KanbanError::InvalidInput(
+                "proposal accept retarget options require source_signal_ids".into(),
+            ));
+        }
         let proposal = get_label_proposal_conn(&conn, proposal_id)?;
         if proposal.status != LabelProposalStatus::Proposed {
             return Err(KanbanError::InvalidInput(format!(
@@ -641,6 +764,28 @@ fn decide_label_proposal(
                 .to_string(),
             now,
         )?;
+        if decision == LabelProposalStatus::Accepted
+            && let Some(label_id) = resolved_label_id.as_deref()
+        {
+            let ontology_actor = ontology_actor.unwrap_or_else(|| LabelOntologyActor {
+                name: actor.to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            });
+            record_label_ontology_proposal_bootstrap_in_tx(
+                &conn,
+                &proposal,
+                label_id,
+                LabelOntologyProposalBootstrapOptions {
+                    actor: ontology_actor,
+                    reason: decision_reason.clone(),
+                    source_signal_ids,
+                    allow_retarget,
+                    retarget_reason,
+                },
+                now,
+            )?;
+        }
         get_label_proposal_conn(&conn, proposal_id)
     })
 }

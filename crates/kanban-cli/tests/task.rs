@@ -2,10 +2,15 @@ mod common;
 
 use anyhow::Context;
 use common::{TempDb, kanban};
-use kanban_sqlite::LabelProposalCandidate;
+use kanban_sqlite::{
+    CreateLabel, CreateTask, LabelOntologyActionInput, LabelOntologyActionType, LabelOntologyActor,
+    LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput, LabelOntologyProposedAction,
+    LabelOntologyRecordInput, LabelOntologySignalInput, LabelOntologySignalKind,
+    LabelOntologySuggestState, LabelProposalCandidate,
+};
 use pretty_assertions::assert_eq;
 use serde_json::json;
-use std::path::Path;
+use std::{fs, path::Path};
 
 #[test]
 fn task_show_defaults_to_one_line_summary() -> anyhow::Result<()> {
@@ -776,6 +781,902 @@ fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<(
     Ok(())
 }
 
+#[test]
+fn label_ontology_cli_record_list_show_review_round_trip() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_record_list_show_review_round_trip")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology cli task",
+            "--description",
+            "ready spec for ontology CLI capture",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"]
+        .as_str()
+        .context("expected JSON string")?;
+
+    let input_path = temp.dir.join("ontology-record.json");
+    let agent_candidates_json = json!([
+        {"label": "cli", "confidence": 0.92}
+    ])
+    .to_string();
+    let suggestion_snapshot_json = json!({
+        "selected_labels": []
+    })
+    .to_string();
+    let final_decision_json = json!({
+        "accepted_labels": ["cli"]
+    })
+    .to_string();
+    let diagnostics_json = json!([]).to_string();
+    let related_labels_json = json!([]).to_string();
+    let proposal_json = json!({}).to_string();
+    fs::write(
+        &input_path,
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": agent_candidates_json,
+            "suggestion_snapshot_json": suggestion_snapshot_json,
+            "final_decision_json": final_decision_json,
+            "suggest_coverage": 0.61,
+            "suggest_coverage_cosine": 0.74,
+            "suggest_residual_norm": 0.39,
+            "suggest_needs_new_label": false,
+            "suggest_degraded": false,
+            "diagnostics_json": diagnostics_json,
+            "capture_fingerprint": "cli-ontology-round-trip",
+            "signals": [{
+                "kind": "false_negative",
+                "target_label_ref": "cli",
+                "related_labels_json": related_labels_json,
+                "proposed_action": "add_positive_atom",
+                "candidate_atom": {
+                    "polarity": "positive",
+                    "kind": "applies_when",
+                    "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
+                },
+                "proposed_label_name": null,
+                "proposal_json": proposal_json,
+                "agent_selected": true,
+                "suggest_state": "candidate",
+                "suggest_score": 0.08,
+                "suggest_rank": 4,
+                "final_selected": true,
+                "rationale": "The task expands the CLI surface although suggest scored cli weakly.",
+                "confidence": 0.91,
+                "signal_key": "cli-false-negative"
+            }]
+        })
+        .to_string(),
+    )?;
+    let input_path = input_path
+        .to_str()
+        .context("temp path should be valid UTF-8")?;
+
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json", "label", "ontology", "record", task_id, "--input", input_path,
+        ],
+    )?
+    .success_json()?;
+    assert!(
+        observation["data"]["id"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("lor_")
+    );
+    assert_eq!(observation["data"]["signals"][0]["kind"], "false_negative");
+    let signal_id = observation["data"]["signals"][0]["id"]
+        .as_str()
+        .context("expected signal id")?;
+
+    let listed = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "list",
+            "--status",
+            "open",
+            "--kind",
+            "false_negative",
+            "--task",
+            task_id,
+            "--label",
+            "cli",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(listed["data"].as_array().context("signals")?.len(), 1);
+    assert_eq!(listed["data"][0]["id"], signal_id);
+    assert_eq!(listed["data"][0]["target_label_name_snapshot"], "cli");
+
+    let shown = kanban(
+        &temp.path,
+        &["--json", "label", "ontology", "show", signal_id],
+    )?
+    .success_json()?;
+    assert_eq!(shown["data"]["signal"]["id"], signal_id);
+    assert_eq!(shown["data"]["observation"]["task_id"], task_id);
+
+    let review = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "review",
+            "--group-by",
+            "label",
+        ],
+    )?
+    .success_json()?;
+    let groups = review["data"].as_array().context("review groups")?;
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0]["group_by"], "label");
+    assert_eq!(groups[0]["label_name"], "cli");
+    assert_eq!(groups[0]["task_count"], 1);
+    assert_eq!(groups[0]["signal_count"], 1);
+    assert_eq!(groups[0]["open_count"], 1);
+    assert_eq!(groups[0]["signal_ids"][0], signal_id);
+
+    let review = kanban(
+        &temp.path,
+        &[
+            "label",
+            "ontology",
+            "review",
+            "--group-by",
+            "candidate-atom",
+        ],
+    )?
+    .success_stdout()?;
+    assert!(review.contains("candidate_atom"), "{review}");
+    assert!(review.contains(signal_id), "{review}");
+    assert!(
+        review.contains("extends CLI subcommands, arguments, help output, or JSON behavior"),
+        "{review}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_lifecycle_apply_and_validate_round_trip")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology cli lifecycle task",
+            "--description",
+            "ready spec for ontology CLI lifecycle actions",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    let input_path = write_cli_ontology_record_input(
+        &temp,
+        "ontology-lifecycle-record.json",
+        &[
+            ("cli-lifecycle-primary", "adds CLI lifecycle commands"),
+            (
+                "cli-lifecycle-duplicate",
+                "duplicates CLI lifecycle commands",
+            ),
+            ("cli-lifecycle-reject", "low confidence duplicate"),
+            (
+                "cli-lifecycle-no-change",
+                "already covered by existing docs",
+            ),
+        ],
+    )?;
+
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            &input_path,
+        ],
+    )?
+    .success_json()?;
+    let signals = observation["data"]["signals"]
+        .as_array()
+        .context("signals")?;
+    let primary = signals[0]["id"].as_str().context("primary signal")?;
+    let duplicate = signals[1]["id"].as_str().context("duplicate signal")?;
+    let rejected_signal = signals[2]["id"].as_str().context("rejected signal")?;
+    let no_change_signal = signals[3]["id"].as_str().context("no-change signal")?;
+
+    let confirmed = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "confirm",
+            primary,
+            "--reason",
+            "Reviewer confirmed the false negative.",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(confirmed["data"]["action_type"], "confirm");
+    assert_eq!(confirmed["data"]["signal_ids"][0], primary);
+
+    let rejected = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "reject",
+            rejected_signal,
+            "--reason",
+            "Reviewer rejected the weak signal.",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(rejected["data"]["action_type"], "reject");
+
+    let superseded = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "supersede",
+            duplicate,
+            "--by",
+            primary,
+            "--reason",
+            "Duplicate of the confirmed signal.",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(superseded["data"]["action_type"], "supersede");
+
+    let resolved_no_change = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "resolve",
+            no_change_signal,
+            "--no-change",
+            "--reason",
+            "Existing ontology already covers this signal.",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(
+        resolved_no_change["data"]["action_type"],
+        "resolve_no_change"
+    );
+
+    let applied = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--actor",
+            "apply-agent",
+            "label",
+            "ontology",
+            "apply",
+            "atom",
+            primary,
+            "--label",
+            "cli",
+            "--kind",
+            "applies-when",
+            "--text",
+            "extends CLI subcommands, arguments, help output, or JSON behavior",
+            "--reason",
+            "Confirmed false-negative support for CLI surface changes.",
+            "--actor-type",
+            "agent",
+            "--agent-type",
+            "codex",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(applied["data"]["action_type"], "add_positive_atom");
+    assert_eq!(applied["data"]["validation_status"], "pending");
+    assert_eq!(applied["data"]["created_by"], "apply-agent");
+    assert_eq!(applied["data"]["created_by_type"], "agent");
+    assert_eq!(applied["data"]["agent_type"], "codex");
+    let apply_action_id = applied["data"]["id"].as_str().context("apply action id")?;
+    let target_label_id = applied["data"]["target_label_id"]
+        .as_str()
+        .context("target label id")?;
+    let result_atom_id = applied["data"]["result_atom_id"]
+        .as_str()
+        .context("result atom id")?;
+    let result_atom_content_hash = applied["data"]["result_atom_content_hash"]
+        .as_str()
+        .context("result atom content hash")?;
+
+    let validation_path = temp.dir.join("ontology-validation.json");
+    fs::write(
+        &validation_path,
+        json!({
+            "evidence_type": "automated",
+            "embedding_model": "test-embedding-v1",
+            "solver_options": {"candidate_limit": 24, "atom_limit": 64},
+            "index": {"status": "ready", "dirty": false, "generation": 7},
+            "cases": [{
+                "signal_id": primary,
+                "case_type": "positive_atom",
+                "passed": true,
+                "target_label_id": target_label_id,
+                "before": {
+                    "target": {
+                        "label_id": target_label_id,
+                        "selected": false,
+                        "score": 0.08
+                    },
+                    "coverage": 0.61
+                },
+                "after": {
+                    "degraded": false,
+                    "target": {
+                        "label_id": target_label_id,
+                        "selected": true,
+                        "score": 0.74
+                    },
+                    "coverage": 0.79,
+                    "evidence_atoms": [{
+                        "id": result_atom_id,
+                        "content_hash": result_atom_content_hash,
+                        "label_id": target_label_id
+                    }]
+                }
+            }]
+        })
+        .to_string(),
+    )?;
+    let validation_path = validation_path
+        .to_str()
+        .context("temp path should be valid UTF-8")?;
+    let validated = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--actor",
+            "validate-agent",
+            "label",
+            "ontology",
+            "validate",
+            apply_action_id,
+            "--status",
+            "passed",
+            "--reason",
+            "The source task now selects cli with the new atom as evidence.",
+            "--input",
+            validation_path,
+            "--actor-type",
+            "agent",
+            "--agent-type",
+            "codex",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(validated["data"]["action_type"], "validate");
+    assert_eq!(validated["data"]["validation_status"], "passed");
+    assert_eq!(validated["data"]["created_by"], "validate-agent");
+    assert_eq!(validated["data"]["created_by_type"], "agent");
+    assert_eq!(validated["data"]["agent_type"], "codex");
+
+    let primary_detail = kanban(
+        &temp.path,
+        &["--json", "label", "ontology", "show", primary],
+    )?
+    .success_json()?;
+    assert_eq!(primary_detail["data"]["signal"]["status"], "resolved");
+    assert_eq!(
+        primary_detail["data"]["actions"]
+            .as_array()
+            .context("primary actions")?
+            .len(),
+        3
+    );
+    let duplicate_detail = kanban(
+        &temp.path,
+        &["--json", "label", "ontology", "show", duplicate],
+    )?
+    .success_json()?;
+    assert_eq!(duplicate_detail["data"]["signal"]["status"], "superseded");
+    assert_eq!(
+        duplicate_detail["data"]["signal"]["superseded_by_signal_id"],
+        primary
+    );
+
+    let gap_input_path = temp.dir.join("ontology-proposal-gap.json");
+    fs::write(
+        &gap_input_path,
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": "[]",
+            "suggestion_snapshot_json": "{}",
+            "final_decision_json": "{}",
+            "suggest_coverage": 0.2,
+            "suggest_coverage_cosine": 0.3,
+            "suggest_residual_norm": 0.8,
+            "suggest_needs_new_label": true,
+            "suggest_degraded": false,
+            "diagnostics_json": "[]",
+            "capture_fingerprint": "cli-proposal-gap",
+            "signals": [{
+                "kind": "vocabulary_gap",
+                "target_label_ref": null,
+                "related_labels_json": "[]",
+                "proposed_action": "bootstrap_label",
+                "candidate_atom": null,
+                "proposed_label_name": "ontology-ledger",
+                "proposal_json": "{\"name\":\"ontology-ledger\"}",
+                "agent_selected": true,
+                "suggest_state": "absent",
+                "suggest_score": null,
+                "suggest_rank": null,
+                "final_selected": true,
+                "rationale": "Existing labels do not express ontology ledger storage.",
+                "confidence": 0.86,
+                "signal_key": "cli-proposal-gap"
+            }]
+        })
+        .to_string(),
+    )?;
+    let gap_input_path = gap_input_path
+        .to_str()
+        .context("temp path should be valid UTF-8")?;
+    let gap_observation = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            gap_input_path,
+        ],
+    )?
+    .success_json()?;
+    let gap_signal = gap_observation["data"]["signals"][0]["id"]
+        .as_str()
+        .context("gap signal")?;
+    let confirmed = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--actor",
+            "codex",
+            "label",
+            "ontology",
+            "confirm",
+            gap_signal,
+            "--reason",
+            "Reviewer confirmed the vocabulary gap.",
+            "--actor-type",
+            "agent",
+            "--agent-type",
+            "codex",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(confirmed["data"]["created_by"], "codex");
+    assert_eq!(confirmed["data"]["created_by_type"], "agent");
+    assert_eq!(confirmed["data"]["agent_type"], "codex");
+    let proposal_id = seed_proposed_label_proposal(
+        &temp.path,
+        task_id,
+        LabelProposalCandidate {
+            name: "ontology-ledger".to_owned(),
+            description: Some("Label ontology ledger work".to_owned()),
+            applies_when: vec!["records ontology observations and signals".to_owned()],
+            positive_examples: vec!["creates label ontology ledger tables".to_owned()],
+            ..LabelProposalCandidate::default()
+        },
+    )?;
+    let accepted = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--actor",
+            "ontology-agent",
+            "label",
+            "proposals",
+            "accept",
+            &proposal_id,
+            "--reason",
+            "Bootstrap from confirmed vocabulary-gap signal.",
+            "--source-signal",
+            gap_signal,
+            "--actor-type",
+            "agent",
+            "--agent-type",
+            "codex",
+            "--allow-retarget",
+            "--retarget-reason",
+            "Reviewer explicitly audited proposal source signal retarget.",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(accepted["data"]["status"], "accepted");
+    assert!(accepted["data"]["resolved_label_id"].as_str().is_some());
+    let gap_detail = kanban(
+        &temp.path,
+        &["--json", "label", "ontology", "show", gap_signal],
+    )?
+    .success_json()?;
+    assert_eq!(gap_detail["data"]["signal"]["status"], "confirmed");
+    let bootstrap = gap_detail["data"]["actions"]
+        .as_array()
+        .context("gap actions")?
+        .iter()
+        .find(|action| action["action_type"] == "bootstrap_label")
+        .context("bootstrap action")?;
+    assert_eq!(bootstrap["created_by"], "ontology-agent");
+    assert_eq!(bootstrap["created_by_type"], "agent");
+    assert_eq!(bootstrap["agent_type"], "codex");
+    let change: serde_json::Value = serde_json::from_str(
+        bootstrap["change_json"]
+            .as_str()
+            .context("bootstrap change_json")?,
+    )?;
+    assert_eq!(
+        change["retarget_override"]["reason"],
+        "Reviewer explicitly audited proposal source signal retarget."
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_apply_atom_retarget_override_records_reason() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_apply_atom_retarget_override_records_reason")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    kanban(&temp.path, &["label", "create", "backend"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology retarget override task",
+            "--description",
+            "ready spec for ontology retarget override",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    let input_path = temp.dir.join("ontology-retarget-record.json");
+    fs::write(
+        &input_path,
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": "[]",
+            "suggestion_snapshot_json": "{}",
+            "final_decision_json": "{}",
+            "suggest_coverage": 0.2,
+            "suggest_coverage_cosine": 0.3,
+            "suggest_residual_norm": 0.8,
+            "suggest_needs_new_label": false,
+            "suggest_degraded": false,
+            "diagnostics_json": "[]",
+            "capture_fingerprint": "cli-retarget-override",
+            "signals": [{
+                "kind": "false_negative",
+                "target_label_ref": "backend",
+                "related_labels_json": "[]",
+                "proposed_action": "add_positive_atom",
+                "candidate_atom": {
+                    "polarity": "positive",
+                    "kind": "applies_when",
+                    "text": "extends backend persistence or service APIs"
+                },
+                "proposed_label_name": null,
+                "proposal_json": "{}",
+                "agent_selected": true,
+                "suggest_state": "candidate",
+                "suggest_score": 0.08,
+                "suggest_rank": 4,
+                "final_selected": true,
+                "rationale": "The task was initially classified as backend work.",
+                "confidence": 0.91,
+                "signal_key": "cli-retarget-override"
+            }]
+        })
+        .to_string(),
+    )?;
+    let input_path = input_path
+        .to_str()
+        .context("temp path should be valid UTF-8")?;
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json", "label", "ontology", "record", task_id, "--input", input_path,
+        ],
+    )?
+    .success_json()?;
+    let signal_id = observation["data"]["signals"][0]["id"]
+        .as_str()
+        .context("signal id")?;
+    kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "confirm",
+            signal_id,
+            "--reason",
+            "Reviewer confirmed source signal.",
+        ],
+    )?
+    .success_json()?;
+
+    let applied = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "apply",
+            "atom",
+            signal_id,
+            "--label",
+            "cli",
+            "--kind",
+            "applies-when",
+            "--text",
+            "extends CLI subcommands, arguments, help output, or JSON behavior",
+            "--reason",
+            "Reviewer retargeted source signal to CLI.",
+            "--allow-retarget",
+            "--retarget-reason",
+            "Signal captures a CLI boundary despite backend wording.",
+        ],
+    )?
+    .success_json()?;
+    let change: serde_json::Value = serde_json::from_str(
+        applied["data"]["change_json"]
+            .as_str()
+            .context("change_json")?,
+    )?;
+    assert_eq!(
+        change["retarget_override"]["reason"],
+        "Signal captures a CLI boundary despite backend wording."
+    );
+    assert_eq!(change["retarget_override"]["target_label"]["name"], "cli");
+
+    Ok(())
+}
+
+#[test]
+fn label_atom_explain_cli_json_round_trip() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_atom_explain_cli_json_round_trip")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let label = kanban_sqlite::create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = kanban_sqlite::create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("explain atom CLI provenance"),
+    )?;
+    let observation = kanban_sqlite::record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        LabelOntologyRecordInput {
+            actor: LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: json!([{"label": "cli", "confidence": 0.92}]).to_string(),
+            suggestion_snapshot_json: json!({"selected_labels": []}).to_string(),
+            final_decision_json: json!({"accepted_labels": ["cli"]}).to_string(),
+            suggest_coverage: Some(0.61),
+            suggest_coverage_cosine: Some(0.74),
+            suggest_residual_norm: Some(0.39),
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: json!([]).to_string(),
+            capture_fingerprint: Some("cli-atom-explain-round-trip".to_owned()),
+            signals: vec![LabelOntologySignalInput {
+                kind: LabelOntologySignalKind::FalseNegative,
+                target_label_ref: Some("cli".to_owned()),
+                related_labels_json: json!([]).to_string(),
+                proposed_action: LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(LabelOntologyCandidateAtomInput {
+                    polarity: "positive".to_owned(),
+                    kind: "applies_when".to_owned(),
+                    text: "extends CLI subcommands, arguments, help output, or JSON behavior"
+                        .to_owned(),
+                }),
+                proposed_label_name: None,
+                proposal_json: json!({}).to_string(),
+                agent_selected: true,
+                suggest_state: Some(LabelOntologySuggestState::Candidate),
+                suggest_score: Some(0.08),
+                suggest_rank: Some(4),
+                final_selected: true,
+                rationale: "The task expands the CLI surface although suggest scored cli weakly."
+                    .to_owned(),
+                confidence: Some(0.91),
+                signal_key: Some("cli-atom-explain".to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    kanban_sqlite::create_label_ontology_action(
+        &temp.path,
+        "default",
+        LabelOntologyActionInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            action_type: LabelOntologyActionType::Confirm,
+            signal_ids: vec![signal_id.clone()],
+            reason: "Confirmed by reviewer.".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: None,
+            validation_status: None,
+            validation_json: None,
+        },
+    )?;
+    let applied = kanban_sqlite::apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id.clone()],
+            label_ref: label.id.clone(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed false-negative support for CLI surface changes.".to_owned(),
+        },
+    )?;
+    let atom_id = applied
+        .result_atom_id
+        .as_deref()
+        .context("result atom id")?;
+
+    let explained =
+        kanban(&temp.path, &["--json", "label", "atom", "explain", atom_id])?.success_json()?;
+
+    assert_eq!(explained["data"]["atom"]["id"], atom_id);
+    assert_eq!(explained["data"]["atom"]["label_id"], label.id);
+    assert_eq!(
+        explained["data"]["provenance_actions"][0]["action"]["id"],
+        applied.id
+    );
+    assert_eq!(
+        explained["data"]["supporting_signals"][0]["source_task"]["id"],
+        task.id
+    );
+    assert_eq!(explained["data"]["legacy_untracked"], false);
+
+    let human = kanban(&temp.path, &["label", "atom", "explain", atom_id])?.success_stdout()?;
+    assert!(human.contains(atom_id), "{human}");
+    assert!(human.contains("provenance"), "{human}");
+    Ok(())
+}
+
+fn write_cli_ontology_record_input(
+    temp: &TempDb,
+    filename: &str,
+    signal_specs: &[(&str, &str)],
+) -> anyhow::Result<String> {
+    let signals = signal_specs
+        .iter()
+        .map(|(signal_key, rationale)| {
+            json!({
+                "kind": "false_negative",
+                "target_label_ref": "cli",
+                "related_labels_json": "[]",
+                "proposed_action": "add_positive_atom",
+                "candidate_atom": {
+                    "polarity": "positive",
+                    "kind": "applies_when",
+                    "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
+                },
+                "proposed_label_name": null,
+                "proposal_json": "{}",
+                "agent_selected": true,
+                "suggest_state": "candidate",
+                "suggest_score": 0.08,
+                "suggest_rank": 4,
+                "final_selected": true,
+                "rationale": rationale,
+                "confidence": 0.91,
+                "signal_key": signal_key
+            })
+        })
+        .collect::<Vec<_>>();
+    let path = temp.dir.join(filename);
+    fs::write(
+        &path,
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": "[{\"label\":\"cli\",\"confidence\":0.92}]",
+            "suggestion_snapshot_json": "{\"selected_labels\":[]}",
+            "final_decision_json": "{\"accepted_labels\":[\"cli\"]}",
+            "suggest_coverage": 0.61,
+            "suggest_coverage_cosine": 0.74,
+            "suggest_residual_norm": 0.39,
+            "suggest_needs_new_label": false,
+            "suggest_degraded": false,
+            "diagnostics_json": "[]",
+            "capture_fingerprint": filename,
+            "signals": signals
+        })
+        .to_string(),
+    )?;
+    Ok(path
+        .to_str()
+        .context("temp path should be valid UTF-8")?
+        .to_owned())
+}
+
 fn seed_proposed_label_proposal(
     db_path: &Path,
     task_id: &str,
@@ -997,9 +1898,77 @@ fn task_show_details_does_not_change_json_output() -> anyhow::Result<()> {
     )?
     .success_json()?;
 
-    assert_eq!(details_json, default_json);
+    assert!(default_json.get("meta").is_none());
+    assert_eq!(details_json["data"], default_json["data"]);
     assert_eq!(details_json["data"]["title"], "json stable title");
     assert_eq!(details_json["data"]["description"], "json stable spec");
+    assert!(details_json["meta"]["details"]["ontology_summary"].is_null());
+    Ok(())
+}
+
+#[test]
+fn task_show_details_json_includes_ontology_summary() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_show_details_json_includes_ontology_summary")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology summary task",
+            "--description",
+            "ready spec for task ontology summary",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    let input_path = write_cli_ontology_record_input(
+        &temp,
+        "task-show-ontology-summary.json",
+        &[(
+            "task-show-summary",
+            "task show should expose ontology summary",
+        )],
+    )?;
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            &input_path,
+        ],
+    )?
+    .success_json()?;
+    let signal_id = observation["data"]["signals"][0]["id"]
+        .as_str()
+        .context("signal id")?;
+
+    let default_json = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
+    assert!(default_json.get("meta").is_none());
+    let details_json = kanban(
+        &temp.path,
+        &["--json", "task", "show", task_id, "--details"],
+    )?
+    .success_json()?;
+    let summary = &details_json["meta"]["details"]["ontology_summary"];
+    assert_eq!(summary["signal_count"], 1);
+    assert_eq!(summary["open_count"], 1);
+    assert_eq!(summary["confirmed_count"], 0);
+    assert_eq!(summary["sample_signals"][0]["id"], signal_id);
+    assert_eq!(
+        summary["sample_signals"][0]["proposed_action"],
+        "add_positive_atom"
+    );
+
+    let human = kanban(&temp.path, &["task", "show", task_id, "--details"])?.success_stdout()?;
+    assert!(human.contains("ontology_summary:"), "{human}");
+    assert!(human.contains(signal_id), "{human}");
     Ok(())
 }
 

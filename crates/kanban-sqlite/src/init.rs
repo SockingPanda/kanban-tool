@@ -29,7 +29,13 @@ const STABLE_LABEL_ATOM_HASHES_MIGRATION: &str =
     include_str!("../../../migrations/010_stable_label_atom_hashes.sql");
 const LABEL_PROPOSAL_COSINE_COVERAGE_MIGRATION: &str =
     include_str!("../../../migrations/011_label_proposal_cosine_coverage.sql");
-const LATEST_MIGRATION_VERSION: i64 = 11;
+const LABEL_ONTOLOGY_LEDGER_MIGRATION: &str =
+    include_str!("../../../migrations/012_label_ontology_ledger.sql");
+const LABEL_ONTOLOGY_SUGGEST_INPUT_HASH_MIGRATION: &str =
+    include_str!("../../../migrations/013_label_ontology_suggest_input_hash.sql");
+const UNIQUE_LABEL_PROPOSAL_CREATE_ACTION_MIGRATION: &str =
+    include_str!("../../../migrations/014_unique_label_proposal_create_action.sql");
+const LATEST_MIGRATION_VERSION: i64 = 14;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] =
     &["fnv64:0ca871be950fc8a6", "fnv64:3b08da4e2b6041f5"];
 
@@ -94,6 +100,21 @@ const MIGRATIONS: &[Migration] = &[
         version: 11,
         name: "011_label_proposal_cosine_coverage",
         sql: LABEL_PROPOSAL_COSINE_COVERAGE_MIGRATION,
+    },
+    Migration {
+        version: 12,
+        name: "012_label_ontology_ledger",
+        sql: LABEL_ONTOLOGY_LEDGER_MIGRATION,
+    },
+    Migration {
+        version: 13,
+        name: "013_label_ontology_suggest_input_hash",
+        sql: LABEL_ONTOLOGY_SUGGEST_INPUT_HASH_MIGRATION,
+    },
+    Migration {
+        version: 14,
+        name: "014_unique_label_proposal_create_action",
+        sql: UNIQUE_LABEL_PROPOSAL_CREATE_ACTION_MIGRATION,
     },
 ];
 
@@ -329,6 +350,49 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
                 "diagnostics_json",
                 "resolved_label_id",
             ][..],
+        ),
+        (
+            "label_ontology_observations",
+            &[
+                "id",
+                "board_id",
+                "task_id",
+                "task_ref_snapshot",
+                "task_snapshot_json",
+                "suggest_input_hash",
+                "agent_candidates_json",
+                "suggestion_snapshot_json",
+                "final_decision_json",
+                "capture_fingerprint",
+            ][..],
+        ),
+        (
+            "label_ontology_signals",
+            &[
+                "id",
+                "observation_id",
+                "board_id",
+                "kind",
+                "status",
+                "proposed_action",
+                "signal_key",
+            ][..],
+        ),
+        (
+            "label_ontology_actions",
+            &[
+                "id",
+                "board_id",
+                "action_type",
+                "reason",
+                "validation_status",
+                "change_json",
+                "validation_json",
+            ][..],
+        ),
+        (
+            "label_ontology_action_signals",
+            &["board_id", "action_id", "signal_id", "created_at"][..],
         ),
     ];
     for (table, columns) in required {

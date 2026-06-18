@@ -9,6 +9,7 @@ use super::{
 };
 
 use std::{
+    collections::{HashMap, HashSet},
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
@@ -16,7 +17,9 @@ use std::{
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_event_id};
 
-use rusqlite::{Connection, params_from_iter, types::Value, types::ValueRef};
+use rusqlite::{
+    Connection, OptionalExtension, params, params_from_iter, types::Value, types::ValueRef,
+};
 
 use serde_json::{Map, json};
 
@@ -110,6 +113,7 @@ pub fn import_jsonl(
             }
         }
         let mut records = 0;
+        let mut deferred_ontology_links = DeferredOntologyLinks::default();
         for line in BufReader::new(file).lines() {
             let line = line.map_err(|error| KanbanError::Storage(error.to_string()))?;
             if line.trim().is_empty() {
@@ -117,9 +121,11 @@ pub fn import_jsonl(
             }
             let value: serde_json::Value = serde_json::from_str(&line)
                 .map_err(|error| KanbanError::InvalidInput(error.to_string()))?;
-            insert_jsonl_record(&conn, &value)?;
+            insert_jsonl_record(&conn, &value, &mut deferred_ontology_links)?;
             records += 1;
         }
+        restore_deferred_ontology_links(&conn, &deferred_ontology_links)?;
+        validate_imported_ontology_ledger(&conn)?;
         reject_imported_active_claims(&conn)?;
         validate_imported_snapshot(&conn)?;
         mark_imported_label_atom_boards_dirty(&conn)?;
@@ -148,10 +154,21 @@ pub(crate) const BOARD_SCOPED_EXPORT_TABLES: &[(&str, &str)] = &[
     ("label_semantics", "label_semantics"),
     ("label_atom", "label_atoms"),
     ("label_semantic_proposal", "label_semantic_proposals"),
+    ("label_ontology_observation", "label_ontology_observations"),
+    ("label_ontology_signal", "label_ontology_signals"),
+    ("label_ontology_action", "label_ontology_actions"),
+    (
+        "label_ontology_action_signal",
+        "label_ontology_action_signals",
+    ),
     ("task_label", "task_labels"),
 ];
 
 pub(crate) const IMPORT_DELETE_ORDER: &[&str] = &[
+    "label_ontology_action_signals",
+    "label_ontology_actions",
+    "label_ontology_signals",
+    "label_ontology_observations",
     "task_labels",
     "label_semantic_proposals",
     "label_atoms",
@@ -434,6 +451,10 @@ pub(crate) fn database_has_user_records(conn: &Connection) -> Result<bool> {
         "label_semantics",
         "label_atoms",
         "label_semantic_proposals",
+        "label_ontology_observations",
+        "label_ontology_signals",
+        "label_ontology_actions",
+        "label_ontology_action_signals",
         "task_labels",
         "app_settings",
     ] {
@@ -449,7 +470,17 @@ pub(crate) fn database_has_user_records(conn: &Connection) -> Result<bool> {
     Ok(false)
 }
 
-pub(crate) fn insert_jsonl_record(conn: &Connection, record: &serde_json::Value) -> Result<()> {
+#[derive(Debug, Default)]
+pub(crate) struct DeferredOntologyLinks {
+    signal_supersedes: Vec<(String, String)>,
+    action_parents: Vec<(String, String)>,
+}
+
+pub(crate) fn insert_jsonl_record(
+    conn: &Connection,
+    record: &serde_json::Value,
+    deferred_ontology_links: &mut DeferredOntologyLinks,
+) -> Result<()> {
     let record_type = record
         .get("type")
         .and_then(|value| value.as_str())
@@ -461,6 +492,7 @@ pub(crate) fn insert_jsonl_record(conn: &Connection, record: &serde_json::Value)
         .cloned()
         .ok_or_else(|| KanbanError::InvalidInput("export record data is required".into()))?;
     normalize_import_record(record_type, &mut data)?;
+    capture_deferred_ontology_links(record_type, &mut data, deferred_ontology_links)?;
     if data.is_empty() {
         return Err(KanbanError::InvalidInput(
             "export record data cannot be empty".into(),
@@ -485,6 +517,277 @@ pub(crate) fn insert_jsonl_record(conn: &Connection, record: &serde_json::Value)
         .collect::<Result<Vec<_>>>()?;
     conn.execute(&sql, params_from_iter(values.iter()))
         .map_err(storage)?;
+    Ok(())
+}
+
+fn capture_deferred_ontology_links(
+    record_type: &str,
+    data: &mut Map<String, serde_json::Value>,
+    deferred_ontology_links: &mut DeferredOntologyLinks,
+) -> Result<()> {
+    match record_type {
+        "label_ontology_signal" => {
+            if let Some(target) = take_optional_string_field(data, "superseded_by_signal_id")? {
+                let id = required_import_id(data, "label ontology signal")?;
+                deferred_ontology_links.signal_supersedes.push((id, target));
+            }
+        }
+        "label_ontology_action" => {
+            if let Some(parent) = take_optional_string_field(data, "parent_action_id")? {
+                let id = required_import_id(data, "label ontology action")?;
+                deferred_ontology_links.action_parents.push((id, parent));
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn take_optional_string_field(
+    data: &mut Map<String, serde_json::Value>,
+    field: &str,
+) -> Result<Option<String>> {
+    let value = match data.get(field) {
+        Some(serde_json::Value::Null) | None => return Ok(None),
+        Some(serde_json::Value::String(value)) => value.trim().to_owned(),
+        Some(_) => {
+            return Err(KanbanError::InvalidInput(format!(
+                "{field} must be a string or null"
+            )));
+        }
+    };
+    if value.is_empty() {
+        return Err(KanbanError::InvalidInput(format!(
+            "{field} cannot be empty"
+        )));
+    }
+    data.insert(field.to_owned(), serde_json::Value::Null);
+    Ok(Some(value))
+}
+
+fn required_import_id(data: &Map<String, serde_json::Value>, context: &str) -> Result<String> {
+    data.get("id")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(|| KanbanError::InvalidInput(format!("{context} import record requires id")))
+}
+
+fn restore_deferred_ontology_links(
+    conn: &Connection,
+    deferred_ontology_links: &DeferredOntologyLinks,
+) -> Result<()> {
+    for (signal_id, replacement_id) in &deferred_ontology_links.signal_supersedes {
+        validate_signal_supersede_link(conn, signal_id, replacement_id)?;
+        conn.execute(
+            "UPDATE label_ontology_signals SET superseded_by_signal_id=?1 WHERE id=?2",
+            params![replacement_id, signal_id],
+        )
+        .map_err(storage)?;
+    }
+    for (action_id, parent_action_id) in &deferred_ontology_links.action_parents {
+        validate_action_parent_link(conn, action_id, parent_action_id)?;
+        conn.execute(
+            "UPDATE label_ontology_actions SET parent_action_id=?1 WHERE id=?2",
+            params![parent_action_id, action_id],
+        )
+        .map_err(storage)?;
+    }
+    Ok(())
+}
+
+fn validate_signal_supersede_link(
+    conn: &Connection,
+    signal_id: &str,
+    replacement_id: &str,
+) -> Result<()> {
+    if signal_id == replacement_id {
+        return Err(KanbanError::InvalidInput(
+            "label ontology signal supersede self-reference".into(),
+        ));
+    }
+    let boards = conn
+        .query_row(
+            "SELECT s.board_id, r.board_id \
+             FROM label_ontology_signals s \
+             JOIN label_ontology_signals r ON r.id=?2 \
+             WHERE s.id=?1",
+            params![signal_id, replacement_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(storage)?
+        .ok_or_else(|| {
+            KanbanError::InvalidInput(
+                "label ontology signal supersede link references missing signal".into(),
+            )
+        })?;
+    if boards.0 != boards.1 {
+        return Err(KanbanError::InvalidInput(
+            "label ontology signal supersede board mismatch".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_action_parent_link(
+    conn: &Connection,
+    action_id: &str,
+    parent_action_id: &str,
+) -> Result<()> {
+    if action_id == parent_action_id {
+        return Err(KanbanError::InvalidInput(
+            "label ontology action parent self-reference".into(),
+        ));
+    }
+    let boards = conn
+        .query_row(
+            "SELECT a.board_id, p.board_id \
+             FROM label_ontology_actions a \
+             JOIN label_ontology_actions p ON p.id=?2 \
+             WHERE a.id=?1",
+            params![action_id, parent_action_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(storage)?
+        .ok_or_else(|| {
+            KanbanError::InvalidInput(
+                "label ontology action parent link references missing action".into(),
+            )
+        })?;
+    if boards.0 != boards.1 {
+        return Err(KanbanError::InvalidInput(
+            "label ontology action parent board mismatch".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_imported_ontology_ledger(conn: &Connection) -> Result<()> {
+    reject_exists(
+        conn,
+        "SELECT s.id FROM label_ontology_signals s \
+         JOIN label_ontology_observations o ON o.id=s.observation_id \
+         WHERE s.board_id<>o.board_id LIMIT 1",
+        "label ontology signal observation board mismatch",
+    )?;
+    reject_exists(
+        conn,
+        "SELECT s.id FROM label_ontology_signals s \
+         JOIN labels l ON l.id=s.target_label_id \
+         WHERE s.target_label_id IS NOT NULL AND s.board_id<>l.board_id LIMIT 1",
+        "label ontology signal target label board mismatch",
+    )?;
+    reject_exists(
+        conn,
+        "SELECT s.id FROM label_ontology_signals s \
+         JOIN label_ontology_signals r ON r.id=s.superseded_by_signal_id \
+         WHERE s.superseded_by_signal_id IS NOT NULL AND s.board_id<>r.board_id LIMIT 1",
+        "label ontology signal supersede board mismatch",
+    )?;
+    reject_exists(
+        conn,
+        "SELECT a.id FROM label_ontology_actions a \
+         JOIN label_ontology_actions p ON p.id=a.parent_action_id \
+         WHERE a.parent_action_id IS NOT NULL AND a.board_id<>p.board_id LIMIT 1",
+        "label ontology action parent board mismatch",
+    )?;
+    reject_exists(
+        conn,
+        "SELECT a.id FROM label_ontology_actions a \
+         JOIN labels l ON l.id=a.target_label_id \
+         WHERE a.target_label_id IS NOT NULL AND a.board_id<>l.board_id LIMIT 1",
+        "label ontology action target label board mismatch",
+    )?;
+    reject_exists(
+        conn,
+        "SELECT a.id FROM label_ontology_actions a \
+         JOIN labels l ON l.id=a.result_label_id \
+         WHERE a.result_label_id IS NOT NULL AND a.board_id<>l.board_id LIMIT 1",
+        "label ontology action result label board mismatch",
+    )?;
+    reject_exists(
+        conn,
+        "SELECT a.id FROM label_ontology_actions a \
+         JOIN label_semantic_proposals p ON p.id=a.result_proposal_id \
+         WHERE a.result_proposal_id IS NOT NULL AND a.board_id<>p.board_id LIMIT 1",
+        "label ontology action proposal board mismatch",
+    )?;
+    reject_exists(
+        conn,
+        "SELECT x.action_id FROM label_ontology_action_signals x \
+         LEFT JOIN label_ontology_actions a ON a.id=x.action_id \
+         LEFT JOIN label_ontology_signals s ON s.id=x.signal_id \
+         WHERE a.id IS NULL OR s.id IS NULL LIMIT 1",
+        "label ontology action-signal link references missing action or signal",
+    )?;
+    reject_exists(
+        conn,
+        "SELECT x.action_id FROM label_ontology_action_signals x \
+         JOIN label_ontology_actions a ON a.id=x.action_id \
+         JOIN label_ontology_signals s ON s.id=x.signal_id \
+         WHERE x.board_id<>a.board_id OR x.board_id<>s.board_id LIMIT 1",
+        "label ontology action-signal board mismatch",
+    )?;
+    reject_signal_supersede_cycles(conn)?;
+    reject_action_parent_cycles(conn)?;
+    Ok(())
+}
+
+fn reject_exists(conn: &Connection, sql: &str, message: &str) -> Result<()> {
+    let found: Option<String> = conn
+        .query_row(sql, [], |row| row.get(0))
+        .optional()
+        .map_err(storage)?;
+    if found.is_some() {
+        Err(KanbanError::InvalidInput(message.into()))
+    } else {
+        Ok(())
+    }
+}
+
+fn reject_signal_supersede_cycles(conn: &Connection) -> Result<()> {
+    let links = string_links(
+        conn,
+        "SELECT id, superseded_by_signal_id FROM label_ontology_signals \
+         WHERE superseded_by_signal_id IS NOT NULL",
+    )?;
+    reject_link_cycles(&links, "label ontology signal supersede cycle")
+}
+
+fn reject_action_parent_cycles(conn: &Connection) -> Result<()> {
+    let links = string_links(
+        conn,
+        "SELECT id, parent_action_id FROM label_ontology_actions \
+         WHERE parent_action_id IS NOT NULL",
+    )?;
+    reject_link_cycles(&links, "label ontology action parent cycle")
+}
+
+fn string_links(conn: &Connection, sql: &str) -> Result<HashMap<String, String>> {
+    let mut stmt = conn.prepare(sql).map_err(storage)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<HashMap<_, _>, _>>()
+        .map_err(storage)
+}
+
+fn reject_link_cycles(links: &HashMap<String, String>, message: &str) -> Result<()> {
+    for start in links.keys() {
+        let mut seen = HashSet::new();
+        let mut current = start.as_str();
+        while let Some(next) = links.get(current) {
+            if !seen.insert(current.to_owned()) {
+                return Err(KanbanError::InvalidInput(format!("{message}: {start}")));
+            }
+            current = next;
+        }
+    }
     Ok(())
 }
 
@@ -572,6 +875,10 @@ pub(crate) fn import_table_for_type(record_type: &str) -> Result<&'static str> {
         "label_semantics" => Ok("label_semantics"),
         "label_atom" => Ok("label_atoms"),
         "label_semantic_proposal" => Ok("label_semantic_proposals"),
+        "label_ontology_observation" => Ok("label_ontology_observations"),
+        "label_ontology_signal" => Ok("label_ontology_signals"),
+        "label_ontology_action" => Ok("label_ontology_actions"),
+        "label_ontology_action_signal" => Ok("label_ontology_action_signals"),
         "task_label" => Ok("task_labels"),
         "setting" => Ok("app_settings"),
         _ => Err(KanbanError::InvalidInput(format!(

@@ -275,6 +275,114 @@ fn label_ontology_lifecycle_actions_update_status_and_link_actions() -> anyhow::
 }
 
 #[test]
+fn label_ontology_generic_action_rejects_canonical_mutation_types() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_generic_action_rejects_canonical_mutation_types")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Add ontology mutation guard"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![sample_signal_input("cli-generic-mutation")]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed by reviewer.",
+        ),
+    )?;
+
+    let mut mutation = action_input(
+        LabelOntologyActionType::AddPositiveAtom,
+        vec![signal_id],
+        "The generic endpoint must not record canonical mutations.",
+    );
+    mutation.target_label_ref = Some("cli".to_owned());
+    mutation.result_atom_id = Some("la_fabricated".to_owned());
+    mutation.result_atom_content_hash = Some("deadbeefdeadbeef".to_owned());
+    mutation.canonical_before_hash = Some("before".to_owned());
+    mutation.canonical_after_hash = Some("after".to_owned());
+    mutation.change_json = Some(json!({"fabricated": true}).to_string());
+    mutation.validation_status = Some(LabelOntologyValidationStatus::Pending);
+
+    let error = result_err(create_label_ontology_action(
+        &temp.path, "default", mutation,
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("dedicated canonical mutation endpoint")
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_generic_action_rejects_fabricated_provenance_fields() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_generic_action_rejects_fabricated_provenance_fields")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Add ontology provenance guard"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![sample_signal_input("cli-generic-provenance")]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+
+    let mut confirm = action_input(
+        LabelOntologyActionType::Confirm,
+        vec![signal_id],
+        "The generic endpoint must not accept fabricated provenance.",
+    );
+    confirm.result_atom_id = Some("la_fabricated".to_owned());
+    confirm.result_atom_content_hash = Some("deadbeefdeadbeef".to_owned());
+    confirm.canonical_before_hash = Some("before".to_owned());
+    confirm.canonical_after_hash = Some("after".to_owned());
+    confirm.change_json = Some(json!({"fabricated": true}).to_string());
+    confirm.validation_json = Some(json!({"fabricated": true}).to_string());
+
+    let error = result_err(create_label_ontology_action(&temp.path, "default", confirm))?;
+    assert!(
+        error
+            .to_string()
+            .contains("cannot set canonical mutation provenance")
+    );
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_atom_apply_records_provenance_and_validation_resolves_signal()
 -> anyhow::Result<()> {
     let temp =

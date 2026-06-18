@@ -211,6 +211,7 @@ pub fn create_label_ontology_action(
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
+        ensure_generic_lifecycle_action_input(&input)?;
         let board_id = board_id(&conn, board)?;
         let actor = normalize_actor(input.actor)?;
         let reason = normalize_required_text(&input.reason)?;
@@ -1270,6 +1271,41 @@ fn validate_status_transition(
             }
         }
     }
+    Ok(())
+}
+
+fn ensure_generic_lifecycle_action_input(input: &LabelOntologyActionInput) -> Result<()> {
+    if !matches!(
+        input.action_type,
+        LabelOntologyActionType::Confirm
+            | LabelOntologyActionType::Reject
+            | LabelOntologyActionType::Supersede
+            | LabelOntologyActionType::ResolveNoChange
+    ) {
+        return Err(KanbanError::InvalidInput(
+            "generic label ontology action endpoint only accepts lifecycle actions; use a dedicated canonical mutation endpoint"
+                .into(),
+        ));
+    }
+
+    if input.parent_action_id.is_some()
+        || input.target_label_ref.is_some()
+        || input.result_label_ref.is_some()
+        || input.result_atom_id.is_some()
+        || input.result_atom_content_hash.is_some()
+        || input.result_proposal_id.is_some()
+        || input.canonical_before_hash.is_some()
+        || input.canonical_after_hash.is_some()
+        || input.change_json.is_some()
+        || input.validation_status.is_some()
+        || input.validation_json.is_some()
+    {
+        return Err(KanbanError::InvalidInput(
+            "generic label ontology action endpoint cannot set canonical mutation provenance fields; use a dedicated canonical mutation endpoint"
+                .into(),
+        ));
+    }
+
     Ok(())
 }
 

@@ -1053,14 +1053,14 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
             "reason": "valid false negative",
             "superseded_by_signal_id": null,
             "parent_action_id": null,
-            "target_label_ref": "cli",
+            "target_label_ref": null,
             "result_label_ref": null,
             "result_atom_id": null,
             "result_atom_content_hash": null,
             "result_proposal_id": null,
             "canonical_before_hash": null,
             "canonical_after_hash": null,
-            "change_json": json!({"reviewed": true}).to_string(),
+            "change_json": null,
             "validation_status": null,
             "validation_json": null
         }),
@@ -1237,6 +1237,136 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
             .iter()
             .any(|action| action["action_type"] == "bootstrap_label")
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn label_ontology_action_route_rejects_generic_mutation_action_type() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("ontology API mutation guard target"),
+    )?;
+    let app = test.router();
+
+    let observation = kanban_sqlite::record_label_ontology_observation(
+        &db_path,
+        "default",
+        &task.id,
+        kanban_sqlite::LabelOntologyRecordInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: "[]".to_owned(),
+            suggestion_snapshot_json: "{}".to_owned(),
+            final_decision_json: "{}".to_owned(),
+            suggest_coverage: None,
+            suggest_coverage_cosine: None,
+            suggest_residual_norm: None,
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: "[]".to_owned(),
+            capture_fingerprint: Some("api-generic-mutation-guard".to_owned()),
+            signals: vec![kanban_sqlite::LabelOntologySignalInput {
+                kind: kanban_sqlite::LabelOntologySignalKind::FalseNegative,
+                target_label_ref: Some("cli".to_owned()),
+                related_labels_json: "[]".to_owned(),
+                proposed_action: kanban_sqlite::LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(kanban_sqlite::LabelOntologyCandidateAtomInput {
+                    polarity: "positive".to_owned(),
+                    kind: "applies_when".to_owned(),
+                    text: "changes the local CLI command surface".to_owned(),
+                }),
+                proposed_label_name: None,
+                proposal_json: "{}".to_owned(),
+                agent_selected: true,
+                suggest_state: Some(kanban_sqlite::LabelOntologySuggestState::Candidate),
+                suggest_score: Some(0.12),
+                suggest_rank: Some(2),
+                final_selected: true,
+                rationale: "The task changes CLI behavior.".to_owned(),
+                confidence: Some(0.88),
+                signal_key: Some("api-generic-mutation-guard".to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    kanban_sqlite::create_label_ontology_action(
+        &db_path,
+        "default",
+        kanban_sqlite::LabelOntologyActionInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            action_type: kanban_sqlite::LabelOntologyActionType::Confirm,
+            signal_ids: vec![signal_id.clone()],
+            reason: "valid false negative".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: None,
+            validation_status: None,
+            validation_json: None,
+        },
+    )?;
+
+    let (status, json) = post_json(
+        app,
+        "/api/v1/boards/default/label-ontology/actions",
+        json!({
+            "actor": {
+                "name": "reviewer",
+                "type": "user",
+                "agent_type": null
+            },
+            "action_type": "add_positive_atom",
+            "signal_ids": [signal_id],
+            "reason": "generic endpoint must not record canonical mutations",
+            "superseded_by_signal_id": null,
+            "parent_action_id": null,
+            "target_label_ref": "cli",
+            "result_label_ref": null,
+            "result_atom_id": "la_fabricated",
+            "result_atom_content_hash": "deadbeefdeadbeef",
+            "result_proposal_id": null,
+            "canonical_before_hash": "before",
+            "canonical_after_hash": "after",
+            "change_json": json!({"fabricated": true}).to_string(),
+            "validation_status": "pending",
+            "validation_json": null
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .context("error message")?
+            .contains("dedicated canonical mutation endpoint")
+    );
+
     Ok(())
 }
 

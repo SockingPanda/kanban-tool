@@ -66,6 +66,7 @@ pub fn record_label_ontology_observation(
             JsonShape::Array,
         )?;
         let task_snapshot_json = task_snapshot_json(&task)?;
+        let suggest_input_hash = suggest_input_hash_for_task(&task);
         let signal_fingerprint_json = serde_json::to_string(&input.signals)
             .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
         let capture_fingerprint = input
@@ -88,17 +89,18 @@ pub fn record_label_ontology_observation(
         exec(
             &conn,
             "INSERT INTO label_ontology_observations(\
-             id, board_id, task_id, task_ref_snapshot, task_snapshot_json, agent_candidates_json, \
-             suggestion_snapshot_json, final_decision_json, suggest_coverage, suggest_coverage_cosine, \
+             id, board_id, task_id, task_ref_snapshot, task_snapshot_json, suggest_input_hash, \
+             agent_candidates_json, suggestion_snapshot_json, final_decision_json, suggest_coverage, suggest_coverage_cosine, \
              suggest_residual_norm, suggest_needs_new_label, suggest_degraded, diagnostics_json, \
              capture_fingerprint, created_by, created_by_type, agent_type, created_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
             params![
                 observation_id,
                 board_id,
                 task.id,
                 task.task_ref,
                 task_snapshot_json,
+                suggest_input_hash,
                 agent_candidates_json,
                 suggestion_snapshot_json,
                 final_decision_json,
@@ -639,6 +641,10 @@ fn build_validation_json(
     let mut cases = Vec::with_capacity(signals.len());
     let mut stale_count = 0usize;
     let mut degraded_count = 0usize;
+    let mut metadata_drift_count = 0usize;
+    let mut label_binding_drift_count = 0usize;
+    let mut suggest_input_drift_count = 0usize;
+    let mut legacy_incomparable_count = 0usize;
     for signal in signals {
         let observation = observation_by_id(conn, &signal.observation_id)?;
         let captured_snapshot = parse_json_field(
@@ -651,6 +657,7 @@ fn build_validation_json(
             .and_then(JsonValue::as_str)
             .unwrap_or_default()
             .to_owned();
+        let captured_suggest_input_hash = observation.suggest_input_hash.clone();
         let current_task = get_task_by_id(conn, &observation.board_id, &observation.task_id)?;
         let current_snapshot_json = task_snapshot_json(&current_task)?;
         let current_snapshot = parse_json_field(
@@ -663,12 +670,46 @@ fn build_validation_json(
             .and_then(JsonValue::as_str)
             .unwrap_or_default()
             .to_owned();
-        let stale = captured_hash != current_hash;
+        let current_suggest_input_hash = suggest_input_hash_for_task(&current_task);
+        let legacy_incomparable = captured_suggest_input_hash.is_none();
+        let suggest_input_drift = captured_suggest_input_hash
+            .as_deref()
+            .is_some_and(|hash| hash != current_suggest_input_hash);
+        let stale = legacy_incomparable || suggest_input_drift;
         if stale {
             stale_count += 1;
         }
+        if suggest_input_drift {
+            suggest_input_drift_count += 1;
+        }
+        if legacy_incomparable {
+            legacy_incomparable_count += 1;
+        }
+        let snapshot_drift = captured_hash != current_hash;
+        let metadata_drift = snapshot_drift && !stale;
+        if metadata_drift {
+            metadata_drift_count += 1;
+        }
+        let label_binding_drift =
+            metadata_drift && snapshot_labels_changed(&captured_snapshot, &current_snapshot);
+        if label_binding_drift {
+            label_binding_drift_count += 1;
+        }
         if observation.suggest_degraded {
             degraded_count += 1;
+        }
+        let mut warnings = Vec::new();
+        if legacy_incomparable {
+            warnings.push("legacy_suggest_input_hash_missing");
+        }
+        if suggest_input_drift {
+            warnings.push("suggest_input_drift");
+        }
+        if metadata_drift {
+            warnings.push("task_metadata_drift");
+        }
+        if label_binding_drift {
+            warnings.push("label_binding_drift");
         }
         cases.push(json!({
             "signal_id": &signal.id,
@@ -681,6 +722,12 @@ fn build_validation_json(
             "result_proposal_id": &parent_action.result_proposal_id,
             "comparable": !stale,
             "stale": stale,
+            "legacy_incomparable": legacy_incomparable,
+            "warnings": warnings,
+            "task_snapshot_hash": captured_hash,
+            "current_task_snapshot_hash": current_hash,
+            "suggest_input_hash": captured_suggest_input_hash,
+            "current_suggest_input_hash": current_suggest_input_hash,
             "before": {
                 "state": &signal.suggest_state,
                 "score": signal.suggest_score,
@@ -713,6 +760,10 @@ fn build_validation_json(
             "case_count": signals.len(),
             "stale_count": stale_count,
             "degraded_count": degraded_count,
+            "metadata_drift_count": metadata_drift_count,
+            "label_binding_drift_count": label_binding_drift_count,
+            "suggest_input_drift_count": suggest_input_drift_count,
+            "legacy_incomparable_count": legacy_incomparable_count,
             "incomparable_count": stale_count + degraded_count,
         }
     }))
@@ -1304,6 +1355,24 @@ fn task_snapshot_json(task: &super::TaskRecord) -> Result<String> {
     .map_err(|err| KanbanError::InvalidInput(err.to_string()))
 }
 
+fn suggest_input_hash_for_task(task: &super::TaskRecord) -> String {
+    stable_hash(&task_suggest_input_text(
+        &task.title,
+        task.description.as_deref(),
+    ))
+}
+
+fn task_suggest_input_text(title: &str, description: Option<&str>) -> String {
+    match description.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(description) => format!("{}\n\n{}", title.trim(), description),
+        None => title.trim().to_owned(),
+    }
+}
+
+fn snapshot_labels_changed(captured: &JsonValue, current: &JsonValue) -> bool {
+    captured.get("labels") != current.get("labels")
+}
+
 fn add_in_filter(
     conditions: &mut Vec<String>,
     sql_params: &mut Vec<Value>,
@@ -1756,7 +1825,7 @@ fn json_vec(json: String) -> Result<Vec<String>> {
     serde_json::from_str(&json).map_err(|err| KanbanError::Storage(err.to_string()))
 }
 
-const OBSERVATION_COLUMNS: &str = "id,board_id,task_id,task_ref_snapshot,task_snapshot_json,agent_candidates_json,suggestion_snapshot_json,final_decision_json,suggest_coverage,suggest_coverage_cosine,suggest_residual_norm,suggest_needs_new_label,suggest_degraded,diagnostics_json,capture_fingerprint,created_by,created_by_type,agent_type,created_at";
+const OBSERVATION_COLUMNS: &str = "id,board_id,task_id,task_ref_snapshot,task_snapshot_json,suggest_input_hash,agent_candidates_json,suggestion_snapshot_json,final_decision_json,suggest_coverage,suggest_coverage_cosine,suggest_residual_norm,suggest_needs_new_label,suggest_degraded,diagnostics_json,capture_fingerprint,created_by,created_by_type,agent_type,created_at";
 
 fn observation_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologyObservationRecord> {
     Ok(LabelOntologyObservationRecord {
@@ -1765,20 +1834,21 @@ fn observation_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologyObservat
         task_id: row.get(2)?,
         task_ref_snapshot: row.get(3)?,
         task_snapshot_json: row.get(4)?,
-        agent_candidates_json: row.get(5)?,
-        suggestion_snapshot_json: row.get(6)?,
-        final_decision_json: row.get(7)?,
-        suggest_coverage: row.get(8)?,
-        suggest_coverage_cosine: row.get(9)?,
-        suggest_residual_norm: row.get(10)?,
-        suggest_needs_new_label: int_bool(row.get(11)?),
-        suggest_degraded: int_bool(row.get(12)?),
-        diagnostics_json: row.get(13)?,
-        capture_fingerprint: row.get(14)?,
-        created_by: row.get(15)?,
-        created_by_type: row.get(16)?,
-        agent_type: row.get(17)?,
-        created_at: row.get(18)?,
+        suggest_input_hash: row.get(5)?,
+        agent_candidates_json: row.get(6)?,
+        suggestion_snapshot_json: row.get(7)?,
+        final_decision_json: row.get(8)?,
+        suggest_coverage: row.get(9)?,
+        suggest_coverage_cosine: row.get(10)?,
+        suggest_residual_norm: row.get(11)?,
+        suggest_needs_new_label: int_bool(row.get(12)?),
+        suggest_degraded: int_bool(row.get(13)?),
+        diagnostics_json: row.get(14)?,
+        capture_fingerprint: row.get(15)?,
+        created_by: row.get(16)?,
+        created_by_type: row.get(17)?,
+        agent_type: row.get(18)?,
+        created_at: row.get(19)?,
         signals: Vec::new(),
     })
 }

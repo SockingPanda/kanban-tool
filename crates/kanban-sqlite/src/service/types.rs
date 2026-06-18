@@ -744,6 +744,7 @@ pub struct LabelOntologyObservationRecord {
     pub task_id: String,
     pub task_ref_snapshot: String,
     pub task_snapshot_json: String,
+    pub suggest_input_hash: Option<String>,
     pub agent_candidates_json: String,
     pub suggestion_snapshot_json: String,
     pub final_decision_json: String,

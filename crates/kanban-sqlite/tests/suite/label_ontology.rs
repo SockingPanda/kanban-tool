@@ -10,7 +10,7 @@ fn label_ontology_migration_creates_ledger_tables_and_json_constraints() -> anyh
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 12);
+    assert_eq!(user_version, 13);
     for table in [
         "label_ontology_observations",
         "label_ontology_signals",
@@ -170,6 +170,25 @@ fn label_ontology_records_observation_signals_and_preserves_board_scope() -> any
     assert_eq!(detail.signal.id, signal.id);
     assert_eq!(detail.observation.id, observation.id);
     assert!(detail.actions.is_empty());
+
+    let stored_suggest_input_hash: Option<String> = connect_file(&temp.path)?.query_row(
+        "SELECT suggest_input_hash FROM label_ontology_observations WHERE id=?1",
+        [&observation.id],
+        |row| row.get(0),
+    )?;
+    let stored_suggest_input_hash =
+        stored_suggest_input_hash.context("stored suggest_input_hash")?;
+    assert_eq!(stored_suggest_input_hash.len(), 16);
+    assert!(
+        stored_suggest_input_hash
+            .chars()
+            .all(|ch| ch.is_ascii_hexdigit())
+    );
+    let task_snapshot: serde_json::Value = serde_json::from_str(&observation.task_snapshot_json)?;
+    assert_ne!(
+        task_snapshot["content_hash"].as_str(),
+        Some(stored_suggest_input_hash.as_str())
+    );
 
     Ok(())
 }
@@ -1001,16 +1020,47 @@ fn label_ontology_atom_apply_records_provenance_and_validation_resolves_signal()
 }
 
 #[test]
-fn label_ontology_validation_treats_label_binding_changes_as_stale() -> anyhow::Result<()> {
-    let temp = TempDb::new("label_ontology_validation_treats_label_binding_changes_as_stale")?;
+fn label_ontology_validation_allows_status_only_task_drift_with_warning() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_validation_allows_status_only_task_drift_with_warning")?;
     init_database(&temp.path, "tester")?;
-    create_label(
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Add ontology validation status drift warning",
+        "cli-status-drift",
+    )?;
+    claim_task(&temp.path, "default", "worker", &fixture.task.id, 300_000)?;
+
+    let validation = validate_label_ontology_action(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
-            name: "cli".to_owned(),
-            color: None,
-        },
+        passed_validation_input(
+            &fixture.apply_action_id,
+            &fixture.signal_id,
+            "Status-only task drift must remain comparable.",
+        ),
+    )?;
+
+    let validation_json: serde_json::Value = serde_json::from_str(&validation.validation_json)?;
+    assert_eq!(validation_json["summary"]["stale_count"], 0);
+    assert_eq!(validation_json["summary"]["metadata_drift_count"], 1);
+    assert_eq!(validation_json["cases"][0]["comparable"], true);
+    assert_eq!(validation_json["cases"][0]["stale"], false);
+    assert_json_array_contains(
+        &validation_json["cases"][0]["warnings"],
+        "task_metadata_drift",
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_validation_allows_label_binding_drift_with_warning() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_validation_allows_label_binding_drift_with_warning")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Add ontology validation label drift warning",
+        "cli-label-drift",
     )?;
     create_label(
         &temp.path,
@@ -1020,83 +1070,122 @@ fn label_ontology_validation_treats_label_binding_changes_as_stale() -> anyhow::
             color: None,
         },
     )?;
-    let task = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("Add ontology validation stale-label guard"),
-    )?;
-    let observation = record_label_ontology_observation(
-        &temp.path,
-        "default",
-        &task.id,
-        sample_record_input(vec![sample_signal_input("cli-label-stale")]),
-    )?;
-    let signal_id = observation.signals[0].id.clone();
-    create_label_ontology_action(
-        &temp.path,
-        "default",
-        action_input(
-            LabelOntologyActionType::Confirm,
-            vec![signal_id.clone()],
-            "Confirmed by reviewer.",
-        ),
-    )?;
-    let apply_action = apply_label_ontology_atom(
-        &temp.path,
-        "default",
-        LabelOntologyAtomApplyInput {
-            actor: LabelOntologyActor {
-                name: "reviewer".to_owned(),
-                actor_type: "user".to_owned(),
-                agent_type: None,
-            },
-            signal_ids: vec![signal_id.clone()],
-            label_ref: "cli".to_owned(),
-            kind: "applies_when".to_owned(),
-            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
-            reason: "Confirmed false-negative support for CLI surface changes.".to_owned(),
-        },
-    )?;
-    kanban_sqlite::add_task_label(&temp.path, "default", "tester", &task.id, "backend")?;
+    kanban_sqlite::add_task_label(&temp.path, "default", "tester", &fixture.task.id, "backend")?;
     let rerecorded = record_label_ontology_observation(
         &temp.path,
         "default",
-        &task.id,
+        &fixture.task.id,
         sample_record_input(vec![sample_signal_input("cli-label-stale-rerecord")]),
     )?;
-    assert_ne!(
-        rerecorded.capture_fingerprint,
-        observation.capture_fingerprint
+    assert_ne!(rerecorded.id, fixture.observation_id);
+
+    let validation = validate_label_ontology_action(
+        &temp.path,
+        "default",
+        passed_validation_input(
+            &fixture.apply_action_id,
+            &fixture.signal_id,
+            "Label binding drift must remain comparable.",
+        ),
+    )?;
+
+    let validation_json: serde_json::Value = serde_json::from_str(&validation.validation_json)?;
+    assert_eq!(validation_json["summary"]["stale_count"], 0);
+    assert_eq!(validation_json["summary"]["metadata_drift_count"], 1);
+    assert_eq!(validation_json["summary"]["label_binding_drift_count"], 1);
+    assert_eq!(validation_json["cases"][0]["comparable"], true);
+    assert_eq!(validation_json["cases"][0]["stale"], false);
+    assert_json_array_contains(
+        &validation_json["cases"][0]["warnings"],
+        "label_binding_drift",
     );
 
-    let stale_validation = result_err(validate_label_ontology_action(
+    Ok(())
+}
+
+#[test]
+fn label_ontology_validation_marks_title_description_drift_incomparable() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_validation_marks_title_description_drift_incomparable")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Add ontology validation input drift guard",
+        "cli-input-drift",
+    )?;
+    update_task(
+        &temp.path,
+        "default",
+        "tester",
+        &fixture.task.id,
+        TaskPatch {
+            title: Some("Add ontology validation input drift guard v2".to_owned()),
+            ..TaskPatch::default()
+        },
+    )?;
+
+    let validation = validate_label_ontology_action(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
-            actor: LabelOntologyActor {
-                name: "validator".to_owned(),
-                actor_type: "agent".to_owned(),
-                agent_type: Some("local".to_owned()),
-            },
-            parent_action_id: apply_action.id,
+            actor: validation_actor(),
+            parent_action_id: fixture.apply_action_id,
             signal_ids: Vec::new(),
-            reason: "Validation must reject stale task-label snapshot.".to_owned(),
-            validation_status: LabelOntologyValidationStatus::Passed,
-            validation_json: json!({
-                "cases": [{
-                    "signal_id": signal_id,
-                    "passed": true,
-                    "after": {"state": "selected"}
-                }]
-            })
-            .to_string(),
+            reason: "Failed validation can record an incomparable title drift case.".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Failed,
+            validation_json: "{}".to_owned(),
         },
-    ))?;
-    assert!(
-        stale_validation
-            .to_string()
-            .contains("passed validation requires comparable")
+    )?;
+
+    let validation_json: serde_json::Value = serde_json::from_str(&validation.validation_json)?;
+    assert_eq!(validation_json["summary"]["stale_count"], 1);
+    assert_eq!(validation_json["summary"]["suggest_input_drift_count"], 1);
+    assert_eq!(validation_json["cases"][0]["comparable"], false);
+    assert_eq!(validation_json["cases"][0]["stale"], true);
+    assert_json_array_contains(
+        &validation_json["cases"][0]["warnings"],
+        "suggest_input_drift",
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_validation_marks_missing_legacy_suggest_hash_incomparable() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_validation_marks_missing_legacy_suggest_hash_incomparable")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Add ontology legacy validation comparability",
+        "cli-legacy-hash",
+    )?;
+    connect_file(&temp.path)?.execute(
+        "UPDATE label_ontology_observations SET suggest_input_hash=NULL WHERE id=?1",
+        [&fixture.observation_id],
+    )?;
+
+    let validation = validate_label_ontology_action(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: validation_actor(),
+            parent_action_id: fixture.apply_action_id,
+            signal_ids: Vec::new(),
+            reason: "Failed validation can record legacy missing hash incompatibility.".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Failed,
+            validation_json: "{}".to_owned(),
+        },
+    )?;
+
+    let validation_json: serde_json::Value = serde_json::from_str(&validation.validation_json)?;
+    assert_eq!(validation_json["summary"]["stale_count"], 1);
+    assert_eq!(validation_json["summary"]["legacy_incomparable_count"], 1);
+    assert_eq!(validation_json["cases"][0]["comparable"], false);
+    assert_eq!(validation_json["cases"][0]["legacy_incomparable"], true);
+    assert_json_array_contains(
+        &validation_json["cases"][0]["warnings"],
+        "legacy_suggest_input_hash_missing",
     );
 
     Ok(())
@@ -1192,6 +1281,99 @@ fn label_ontology_proposal_accept_records_bootstrap_provenance() -> anyhow::Resu
     assert_eq!(semantics.label_name, "ontology-ledger");
 
     Ok(())
+}
+
+struct OntologyValidationFixture {
+    task: TaskRecord,
+    observation_id: String,
+    signal_id: String,
+    apply_action_id: String,
+}
+
+fn seed_validation_fixture(
+    temp: &TempDb,
+    title: &str,
+    signal_key: &str,
+) -> anyhow::Result<OntologyValidationFixture> {
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(&temp.path, "default", "tester", CreateTask::ready(title))?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![sample_signal_input(signal_key)]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed by reviewer.",
+        ),
+    )?;
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed false-negative support for CLI surface changes.".to_owned(),
+        },
+    )?;
+    Ok(OntologyValidationFixture {
+        task,
+        observation_id: observation.id,
+        signal_id,
+        apply_action_id: apply_action.id,
+    })
+}
+
+fn passed_validation_input(
+    parent_action_id: &str,
+    signal_id: &str,
+    reason: &str,
+) -> LabelOntologyValidationInput {
+    LabelOntologyValidationInput {
+        actor: validation_actor(),
+        parent_action_id: parent_action_id.to_owned(),
+        signal_ids: Vec::new(),
+        reason: reason.to_owned(),
+        validation_status: LabelOntologyValidationStatus::Passed,
+        validation_json: json!({
+            "cases": [{
+                "signal_id": signal_id,
+                "passed": true,
+                "after": {"state": "selected"}
+            }]
+        })
+        .to_string(),
+    }
+}
+
+fn assert_json_array_contains(value: &serde_json::Value, expected: &str) {
+    let items = value
+        .as_array()
+        .unwrap_or_else(|| panic!("expected JSON array, got {value}"));
+    assert!(
+        items.iter().any(|item| item.as_str() == Some(expected)),
+        "expected {expected:?} in {items:?}"
+    );
 }
 
 fn sample_record_input(signals: Vec<LabelOntologySignalInput>) -> LabelOntologyRecordInput {

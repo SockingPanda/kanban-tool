@@ -1253,7 +1253,10 @@ observation 和 child signals。请求 body：
 Service 会读取当前 task snapshot、解析 `target_label_ref`、计算 normalized proposed
 label name、signal key 和 candidate atom content hash。`capture_fingerprint` 为空时
 按 task、snapshots 和 signals 派生；同一 board 重复 fingerprint 会被唯一约束拒绝。
-Observation response 返回 created observation，并展开 child `signals`。
+Observation response 返回 created observation，并展开 child `signals`。Observation
+包含完整审计用 `task_snapshot_json.content_hash`，以及只基于 label suggest 输入
+（normalized title + description）的 `suggest_input_hash`；后者用于后续 validation
+comparability。
 
 Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
 `applies_when` / `positive_example` 只能使用 `positive` polarity，
@@ -1353,13 +1356,18 @@ content hash、before/after canonical hash 和 diff，并把 validation status �
 ```
 
 Service 会把 supplied `validation_json` 包进 validation envelope，附上 source signal
-cases、observation task snapshot hash 与当前 task hash 对比、parent action result
-引用和 summary。`parent_action_id` 必须指向同一 board 上 `validation_status=pending`
+cases、observation task snapshot / suggest input hash 与当前 task hash 对比、parent
+action result 引用和 summary。`parent_action_id` 必须指向同一 board 上 `validation_status=pending`
 的 canonical mutation action，且 parent action 必须带有 canonical result evidence
 （例如 atom/result label/proposal 引用、canonical hash 和非空 change snapshot）。
 `passed` 还必须提供结构化 `validation_json.cases[]`，覆盖每个 linked source signal
 并标明该 signal case 已通过；空 `{}` 或无类型 evidence 会返回 `invalid_input`。
-当前实现只是最低限度 evidence gate，完整 typed score/rank/coverage/residual policy
+Validation comparability 默认使用 observation 的 `suggest_input_hash`；status、
+`updated_at`、`lock_version` 或 task label binding 只改变完整 snapshot 时写入
+`task_metadata_drift` / `label_binding_drift` warning，不会让 passed validation stale。
+title/description 变化会写入 `suggest_input_drift` 并使 case incomparable；旧
+observation 缺少 `suggest_input_hash` 时写入 `legacy_suggest_input_hash_missing`，
+不能静默 passed。当前实现只是最低限度 evidence gate，完整 typed score/rank/coverage/residual policy
 由后续版本补齐。`passed` 会把 linked source signals 转为 `resolved`；`failed` 与
 `partial` 保留 signals 供后续修正或人工处理。
 

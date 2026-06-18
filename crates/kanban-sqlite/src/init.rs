@@ -31,7 +31,9 @@ const LABEL_PROPOSAL_COSINE_COVERAGE_MIGRATION: &str =
     include_str!("../../../migrations/011_label_proposal_cosine_coverage.sql");
 const LABEL_ONTOLOGY_LEDGER_MIGRATION: &str =
     include_str!("../../../migrations/012_label_ontology_ledger.sql");
-const LATEST_MIGRATION_VERSION: i64 = 12;
+const LABEL_ONTOLOGY_SUGGEST_INPUT_HASH_MIGRATION: &str =
+    include_str!("../../../migrations/013_label_ontology_suggest_input_hash.sql");
+const LATEST_MIGRATION_VERSION: i64 = 13;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] =
     &["fnv64:0ca871be950fc8a6", "fnv64:3b08da4e2b6041f5"];
 
@@ -101,6 +103,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 12,
         name: "012_label_ontology_ledger",
         sql: LABEL_ONTOLOGY_LEDGER_MIGRATION,
+    },
+    Migration {
+        version: 13,
+        name: "013_label_ontology_suggest_input_hash",
+        sql: LABEL_ONTOLOGY_SUGGEST_INPUT_HASH_MIGRATION,
     },
 ];
 
@@ -345,6 +352,7 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
                 "task_id",
                 "task_ref_snapshot",
                 "task_snapshot_json",
+                "suggest_input_hash",
                 "agent_candidates_json",
                 "suggestion_snapshot_json",
                 "final_decision_json",

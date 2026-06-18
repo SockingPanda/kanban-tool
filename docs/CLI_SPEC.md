@@ -508,7 +508,7 @@ kanban label suggest <task_ref> [--limit 5] [--candidate-limit 32] [--atom-limit
 kanban label propose <task_ref> [--proposal-json <path>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]
 kanban label proposals show <proposal_id> [--json]
-kanban label proposals accept <proposal_id> [--reason <text>] [--source-signal <signal_id>]... [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label proposals accept <proposal_id> [--reason <text>] [--source-signal <signal_id>]... [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label proposals reject <proposal_id> [--reason <text>] [--json]
 kanban label ontology record <task_ref> --input <path|-> [--json]
 kanban label ontology list [--status open|confirmed|resolved|rejected|superseded]... [--kind false_negative|false_positive|vocabulary_gap|name_issue|boundary_issue|structure_issue]... [--task <task_ref>] [--label <label>] [--proposed-label <name>] [--include-all] [--limit 100] [--json]
@@ -518,7 +518,7 @@ kanban label ontology confirm <signal_id>... --reason <text> [--actor-type user|
 kanban label ontology reject <signal_id>... --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology supersede <signal_id>... --by <signal_id> --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology resolve <signal_id>... --no-change --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology apply atom <signal_id>... --label <label> --kind applies-when|positive-example|excludes-when|negative-example --text <text> --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology apply atom <signal_id>... --label <label> --kind applies-when|positive-example|excludes-when|negative-example --text <text> --reason <text> [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology validate <action_id> --status passed|failed|partial --reason <text> --input <path|-> [signal_id]... [--actor-type user|agent] [--agent-type <type>] [--json]
 ```
 
@@ -721,7 +721,12 @@ transaction 中写入 `bootstrap_label` ontology action，并通过 action-signa
 board 上的 `confirmed` signals。`--actor-type` / `--agent-type` 控制该
 `bootstrap_label` action 的 actor provenance；actor name 仍来自全局 `--actor`。
 默认是 `user`。`--actor-type agent` 必须提供非空 `--agent-type`；`user` 不能提供
-`--agent-type`。`label proposals reject` 标记 proposal 为
+`--agent-type`。Source signals 默认还必须是 `vocabulary_gap` +
+`bootstrap_label`，且 normalized `proposed_label_name` 必须等于 proposal name。
+确实需要把 confirmed same-board source signal retarget 到该 proposal 时，必须同时传
+`--allow-retarget` 和非空 `--retarget-reason <text>`；该 reason、source signal 原始
+target/proposed label 和最终 proposal/result label 会写入 bootstrap action
+`change_json.retarget_override`。Override 不放宽 board/status 要求。`label proposals reject` 标记 proposal 为
 `rejected`，不接受 `--source-signal`。accepted/rejected proposal 不能再次决策。
 
 `label ontology record` 接受 service-shaped JSON 或 stdin，记录一次 label 判断
@@ -812,6 +817,12 @@ row 的 `created_by_type` / `agent_type`；action name 仍来自全局 `--actor`
 当前 semantics，把泛化文本加入对应数组，走现有 semantics upsert/rebuild atoms 路径，
 写入 `add_positive_atom` 或 `add_negative_atom` action，记录生成 atom 的软引用、
 content hash、before/after hash 和 diff，并把 validation status 置为 `pending`。
+默认要求所有带 `target_label_id` 的 source signals 都指向被修改 label；不匹配时拒绝
+并列出 offending signal ids。Atom text 不需要逐字等于 source signal 的 candidate
+text，reviewer 可以写更泛化的 canonical atom。确实需要 retarget confirmed same-board
+signals 时，必须传 `--allow-retarget` 和非空 `--retarget-reason <text>`；action
+`change_json.retarget_override` 会记录 reason、source signal 原始 target/proposed label
+和最终 target label。Override 不放宽 board/status 要求。
 该命令只更新 SQLite truth 并标脏 label atom index；vector index rebuild 和后续
 suggest 验证仍是第二阶段。
 

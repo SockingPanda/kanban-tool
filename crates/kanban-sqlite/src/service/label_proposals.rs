@@ -4,12 +4,12 @@ use super::label_suggestions::{
     bounded_diagnostic_message, compute_task_label_suggestions_with, retrieve_residual_atoms,
 };
 use super::{
-    LabelOntologyActor, LabelProposalAttempt, LabelProposalCandidate, LabelProposalDecisionOptions,
-    LabelProposalListOptions, LabelProposalStatus, LabelSemanticProposalRecord,
-    LabelSuggestionOptions, LabelSuggestionResult, SqlFilter, all, all_values, board_id, exec,
-    exec_named, get_task_by_id, insert_event, mark_label_atom_store_dirty,
-    record_label_ontology_proposal_bootstrap_in_tx, required_row, resolve_task,
-    upsert_label_semantics_candidate_in_tx, with_immediate_tx,
+    LabelOntologyActor, LabelOntologyProposalBootstrapOptions, LabelProposalAttempt,
+    LabelProposalCandidate, LabelProposalDecisionOptions, LabelProposalListOptions,
+    LabelProposalStatus, LabelSemanticProposalRecord, LabelSuggestionOptions,
+    LabelSuggestionResult, SqlFilter, all, all_values, board_id, exec, exec_named, get_task_by_id,
+    insert_event, mark_label_atom_store_dirty, record_label_ontology_proposal_bootstrap_in_tx,
+    required_row, resolve_task, upsert_label_semantics_candidate_in_tx, with_immediate_tx,
 };
 
 use std::{collections::HashMap, path::Path, str::FromStr};
@@ -594,14 +594,32 @@ fn decide_label_proposal(
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
-        if decision != LabelProposalStatus::Accepted && !options.source_signal_ids.is_empty() {
+        let LabelProposalDecisionOptions {
+            source_signal_ids,
+            ontology_actor,
+            allow_retarget,
+            retarget_reason,
+        } = options;
+        if decision != LabelProposalStatus::Accepted && !source_signal_ids.is_empty() {
             return Err(KanbanError::InvalidInput(
                 "source_signal_ids are only supported when accepting label proposals".into(),
             ));
         }
-        if decision != LabelProposalStatus::Accepted && options.ontology_actor.is_some() {
+        if decision != LabelProposalStatus::Accepted && ontology_actor.is_some() {
             return Err(KanbanError::InvalidInput(
                 "ontology_actor is only supported when accepting label proposals".into(),
+            ));
+        }
+        if decision != LabelProposalStatus::Accepted
+            && (allow_retarget || retarget_reason.is_some())
+        {
+            return Err(KanbanError::InvalidInput(
+                "retarget options are only supported when accepting label proposals".into(),
+            ));
+        }
+        if source_signal_ids.is_empty() && (allow_retarget || retarget_reason.is_some()) {
+            return Err(KanbanError::InvalidInput(
+                "proposal accept retarget options require source_signal_ids".into(),
             ));
         }
         let proposal = get_label_proposal_conn(&conn, proposal_id)?;
@@ -674,20 +692,22 @@ fn decide_label_proposal(
         if decision == LabelProposalStatus::Accepted
             && let Some(label_id) = resolved_label_id.as_deref()
         {
-            let ontology_actor = options
-                .ontology_actor
-                .unwrap_or_else(|| LabelOntologyActor {
-                    name: actor.to_owned(),
-                    actor_type: "user".to_owned(),
-                    agent_type: None,
-                });
+            let ontology_actor = ontology_actor.unwrap_or_else(|| LabelOntologyActor {
+                name: actor.to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            });
             record_label_ontology_proposal_bootstrap_in_tx(
                 &conn,
                 &proposal,
                 label_id,
-                ontology_actor,
-                decision_reason.as_deref(),
-                options.source_signal_ids,
+                LabelOntologyProposalBootstrapOptions {
+                    actor: ontology_actor,
+                    reason: decision_reason.clone(),
+                    source_signal_ids,
+                    allow_retarget,
+                    retarget_reason,
+                },
                 now,
             )?;
         }

@@ -1323,6 +1323,9 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
             "agent",
             "--agent-type",
             "codex",
+            "--allow-retarget",
+            "--retarget-reason",
+            "Reviewer explicitly audited proposal source signal retarget.",
         ],
     )?
     .success_json()?;
@@ -1343,6 +1346,141 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
     assert_eq!(bootstrap["created_by"], "ontology-agent");
     assert_eq!(bootstrap["created_by_type"], "agent");
     assert_eq!(bootstrap["agent_type"], "codex");
+    let change: serde_json::Value = serde_json::from_str(
+        bootstrap["change_json"]
+            .as_str()
+            .context("bootstrap change_json")?,
+    )?;
+    assert_eq!(
+        change["retarget_override"]["reason"],
+        "Reviewer explicitly audited proposal source signal retarget."
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_apply_atom_retarget_override_records_reason() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_apply_atom_retarget_override_records_reason")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    kanban(&temp.path, &["label", "create", "backend"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology retarget override task",
+            "--description",
+            "ready spec for ontology retarget override",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    let input_path = temp.dir.join("ontology-retarget-record.json");
+    fs::write(
+        &input_path,
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": "[]",
+            "suggestion_snapshot_json": "{}",
+            "final_decision_json": "{}",
+            "suggest_coverage": 0.2,
+            "suggest_coverage_cosine": 0.3,
+            "suggest_residual_norm": 0.8,
+            "suggest_needs_new_label": false,
+            "suggest_degraded": false,
+            "diagnostics_json": "[]",
+            "capture_fingerprint": "cli-retarget-override",
+            "signals": [{
+                "kind": "false_negative",
+                "target_label_ref": "backend",
+                "related_labels_json": "[]",
+                "proposed_action": "add_positive_atom",
+                "candidate_atom": {
+                    "polarity": "positive",
+                    "kind": "applies_when",
+                    "text": "extends backend persistence or service APIs"
+                },
+                "proposed_label_name": null,
+                "proposal_json": "{}",
+                "agent_selected": true,
+                "suggest_state": "candidate",
+                "suggest_score": 0.08,
+                "suggest_rank": 4,
+                "final_selected": true,
+                "rationale": "The task was initially classified as backend work.",
+                "confidence": 0.91,
+                "signal_key": "cli-retarget-override"
+            }]
+        })
+        .to_string(),
+    )?;
+    let input_path = input_path
+        .to_str()
+        .context("temp path should be valid UTF-8")?;
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json", "label", "ontology", "record", task_id, "--input", input_path,
+        ],
+    )?
+    .success_json()?;
+    let signal_id = observation["data"]["signals"][0]["id"]
+        .as_str()
+        .context("signal id")?;
+    kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "confirm",
+            signal_id,
+            "--reason",
+            "Reviewer confirmed source signal.",
+        ],
+    )?
+    .success_json()?;
+
+    let applied = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "apply",
+            "atom",
+            signal_id,
+            "--label",
+            "cli",
+            "--kind",
+            "applies-when",
+            "--text",
+            "extends CLI subcommands, arguments, help output, or JSON behavior",
+            "--reason",
+            "Reviewer retargeted source signal to CLI.",
+            "--allow-retarget",
+            "--retarget-reason",
+            "Signal captures a CLI boundary despite backend wording.",
+        ],
+    )?
+    .success_json()?;
+    let change: serde_json::Value = serde_json::from_str(
+        applied["data"]["change_json"]
+            .as_str()
+            .context("change_json")?,
+    )?;
+    assert_eq!(
+        change["retarget_override"]["reason"],
+        "Signal captures a CLI boundary despite backend wording."
+    );
+    assert_eq!(change["retarget_override"]["target_label"]["name"], "cli");
 
     Ok(())
 }

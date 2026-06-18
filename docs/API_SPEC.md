@@ -1202,7 +1202,9 @@ Accept/reject body：
   "reason": "coverage 不足，接受新 label",
   "actor": "alice",
   "source_signal_ids": ["los_..."],
-  "ontology_actor": {"name": "codex", "type": "agent", "agent_type": "codex"}
+  "ontology_actor": {"name": "codex", "type": "agent", "agent_type": "codex"},
+  "allow_retarget": false,
+  "retarget_reason": null
 }
 ```
 
@@ -1214,9 +1216,14 @@ bootstrap provenance。Source signals 必须属于同一 board 且处于 `confir
 `actor` 字符串仍用于 proposal decision event；`ontology_actor` 只控制 accept 产生的
 `bootstrap_label` ontology action provenance。省略 `ontology_actor` 时，bootstrap
 action 使用 `actor` 字符串作为 `type=user` actor。`type=agent` 必须提供非空
-`agent_type`；`type=user` 不能提供 `agent_type`。Reject 标记为 `rejected`，不接受
-`source_signal_ids` 或 `ontology_actor`。accepted/rejected proposal 再次决策返回普通
-`400 invalid_input` error envelope。
+`agent_type`；`type=user` 不能提供 `agent_type`。Source signals 默认还必须是
+`vocabulary_gap` + `bootstrap_label`，且 normalized `proposed_label_name` 必须等于
+proposal name。确实需要 retarget confirmed same-board source signal 时，必须传
+`allow_retarget=true` 和非空 `retarget_reason`；bootstrap action
+`change_json.retarget_override` 会记录 reason、source signal 原始 target/proposed
+label 和最终 proposal/result label。Override 不放宽 board/status 要求。Reject 标记为
+`rejected`，不接受 `source_signal_ids`、`ontology_actor` 或 retarget options。
+accepted/rejected proposal 再次决策返回普通 `400 invalid_input` error envelope。
 
 ### 12.4 Label ontology ledger
 
@@ -1425,7 +1432,9 @@ read-modify-upsert semantics，并写入 atom provenance action：
   "label_ref": "cli",
   "kind": "applies_when",
   "text": "extends CLI subcommands, command arguments, help output, or machine-readable JSON behavior",
-  "reason": "Repeated false-negative signal across CLI surface tasks"
+  "reason": "Repeated false-negative signal across CLI surface tasks",
+  "allow_retarget": false,
+  "retarget_reason": null
 }
 ```
 
@@ -1433,7 +1442,12 @@ Source signals 必须属于同一 board 且已 `confirmed`。`kind` 只接受
 `applies_when`、`positive_example`、`excludes_when`、`negative_example`。成功后返回
 `add_positive_atom` 或 `add_negative_atom` action，记录 result atom soft reference、
 content hash、before/after canonical hash 和 diff，并把 validation status 置为
-`pending`。该 route 会标脏 label atom index；vector rebuild 和 suggest validation
+`pending`。默认要求所有带 `target_label_id` 的 source signals 都指向 `label_ref`；
+不匹配时返回 `400 invalid_input` 并列出 offending signal ids。Atom text 可由 reviewer
+泛化，不要求等于 source signal 的 candidate text。确实需要 retarget confirmed
+same-board signals 时，必须传 `allow_retarget=true` 和非空 `retarget_reason`；
+action `change_json.retarget_override` 会记录 reason、source signal 原始 target/proposed
+label 和最终 target label。Override 不放宽 board/status 要求。该 route 会标脏 label atom index；vector rebuild 和 suggest validation
 在 transaction 外执行。
 
 `POST /api/v1/boards/{board}/label-ontology/validate` 追加 validation action：

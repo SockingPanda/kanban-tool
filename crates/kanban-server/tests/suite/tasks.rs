@@ -1425,13 +1425,24 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
             "label_ref": "cli",
             "kind": "applies_when",
             "text": "changes the local CLI command surface",
-            "reason": "apply confirmed atom"
+            "reason": "apply confirmed atom",
+            "allow_retarget": true,
+            "retarget_reason": "API caller explicitly audited this source signal retarget."
         }),
     )
     .await?;
     assert_eq!(status, StatusCode::CREATED, "{json}");
     assert_eq!(json["data"]["action_type"], "add_positive_atom");
     assert_eq!(json["data"]["validation_status"], "pending");
+    let change: serde_json::Value = serde_json::from_str(
+        json["data"]["change_json"]
+            .as_str()
+            .context("change_json")?,
+    )?;
+    assert_eq!(
+        change["retarget_override"]["reason"],
+        "API caller explicitly audited this source signal retarget."
+    );
     let apply_action_id = json["data"]["id"]
         .as_str()
         .context("apply action id")?
@@ -1623,7 +1634,9 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
                 "name": "ontology-agent",
                 "type": "agent",
                 "agent_type": "codex"
-            }
+            },
+            "allow_retarget": true,
+            "retarget_reason": "API reviewer explicitly audited proposal source signal retarget."
         }),
     )
     .await?;
@@ -1646,6 +1659,12 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
     assert_eq!(bootstrap["created_by"], "ontology-agent");
     assert_eq!(bootstrap["created_by_type"], "agent");
     assert_eq!(bootstrap["agent_type"], "codex");
+    let change: serde_json::Value =
+        serde_json::from_str(bootstrap["change_json"].as_str().context("change_json")?)?;
+    assert_eq!(
+        change["retarget_override"]["reason"],
+        "API reviewer explicitly audited proposal source signal retarget."
+    );
     Ok(())
 }
 

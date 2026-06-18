@@ -316,6 +316,8 @@ pub struct LabelProposalListOptions {
 pub struct LabelProposalDecisionOptions {
     pub source_signal_ids: Vec<String>,
     pub ontology_actor: Option<LabelOntologyActor>,
+    pub allow_retarget: bool,
+    pub retarget_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -939,6 +941,12 @@ pub struct LabelOntologyAtomApplyInput {
     pub kind: String,
     pub text: String,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LabelOntologyRetargetOptions {
+    pub allow_retarget: bool,
+    pub retarget_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -396,6 +396,10 @@ pub(crate) struct LabelProposalAcceptArgs {
     pub(crate) reason: Option<String>,
     #[arg(long = "source-signal")]
     pub(crate) source_signal_ids: Vec<String>,
+    #[arg(long)]
+    pub(crate) allow_retarget: bool,
+    #[arg(long = "retarget-reason")]
+    pub(crate) retarget_reason: Option<String>,
     #[command(flatten)]
     pub(crate) ontology_actor: LabelOntologyActorArgs,
 }
@@ -516,6 +520,10 @@ pub(crate) struct LabelOntologyApplyAtomArgs {
     pub(crate) reason: String,
     #[command(flatten)]
     pub(crate) actor: LabelOntologyActorArgs,
+    #[arg(long)]
+    pub(crate) allow_retarget: bool,
+    #[arg(long = "retarget-reason")]
+    pub(crate) retarget_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Args)]

@@ -436,6 +436,70 @@ fn label_bootstrap_verify_requires_vector_provider_before_mutating() -> anyhow::
 }
 
 #[test]
+fn label_delete_force_removes_canonical_label_and_task_bindings() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_delete_force_removes_canonical_label_and_task_bindings")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "delete label cli task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+    kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "bootstrap",
+            task_id,
+            "database",
+            "--description",
+            "Database persistence work",
+            "--positive-example",
+            "new table migration",
+        ],
+    )?
+    .success_json()?;
+
+    kanban(&temp.path, &["label", "delete", "database"])?
+        .failure_containing("attached to 1 task(s)")?;
+
+    let deleted = kanban(
+        &temp.path,
+        &["--json", "label", "delete", "database", "--force"],
+    )?
+    .success_json()?;
+    assert_eq!(deleted["data"]["label"]["name"], "database");
+    assert_eq!(deleted["data"]["forced"], true);
+    assert_eq!(deleted["data"]["removed_task_bindings"], 1);
+    assert_eq!(deleted["data"]["removed_semantics"], true);
+    assert!(
+        deleted["data"]["removed_atoms"]
+            .as_i64()
+            .context("removed atoms")?
+            > 0
+    );
+
+    let labels = kanban(&temp.path, &["--json", "label", "list"])?.success_json()?;
+    assert!(labels["data"].as_array().context("labels")?.is_empty());
+    let shown = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
+    assert!(
+        shown["data"]["labels"]
+            .as_array()
+            .context("task labels")?
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[test]
 fn label_propose_without_provider_returns_degraded_without_polluting_labels() -> anyhow::Result<()>
 {
     let temp =

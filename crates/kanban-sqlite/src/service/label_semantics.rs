@@ -307,7 +307,7 @@ pub fn query_label_atom_index_by_vector_with(
         .map_err(vector_storage)
 }
 
-fn get_label_semantics_conn(
+pub(crate) fn get_label_semantics_conn(
     conn: &Connection,
     board_id: &str,
     label_id: &str,

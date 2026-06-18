@@ -8,6 +8,7 @@ use axum::{
 };
 use kanban_core::TaskStatus;
 use serde::Deserialize;
+use serde::Serialize;
 use serde_json::json;
 
 use crate::dto::{Envelope, LabelDto, TaskDto};
@@ -117,6 +118,28 @@ pub(crate) struct AddTaskLabelBody {
     name: Option<String>,
     names: Option<Vec<String>>,
     actor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct BootstrapTaskLabelBody {
+    name: String,
+    description: Option<String>,
+    #[serde(default)]
+    applies_when: Vec<String>,
+    #[serde(default)]
+    excludes_when: Vec<String>,
+    #[serde(default)]
+    positive_examples: Vec<String>,
+    #[serde(default)]
+    negative_examples: Vec<String>,
+    actor: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct BootstrapTaskLabelDto {
+    task: TaskDto,
+    semantics: kanban_sqlite::LabelSemanticsRecord,
 }
 
 impl AddTaskLabelBody {
@@ -511,6 +534,39 @@ pub(crate) async fn add_task_label(
         StatusCode::CREATED,
         Json(Envelope {
             data: TaskDto::from(task),
+            meta: None,
+        }),
+    ))
+}
+
+pub(crate) async fn bootstrap_task_label(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    headers: HeaderMap,
+    body: Result<Json<BootstrapTaskLabelBody>, JsonRejection>,
+) -> Result<(StatusCode, Json<Envelope<BootstrapTaskLabelDto>>), ApiError> {
+    let Json(body) = body.map_err(extractor_error)?;
+    let actor = actor(body.actor.as_deref(), &headers, &state);
+    let result = kanban_sqlite::bootstrap_task_label_by_id(
+        state.db_path(),
+        &actor,
+        &task_id,
+        kanban_sqlite::BootstrapTaskLabel {
+            name: body.name,
+            description: body.description,
+            applies_when: body.applies_when,
+            excludes_when: body.excludes_when,
+            positive_examples: body.positive_examples,
+            negative_examples: body.negative_examples,
+        },
+    )?;
+    Ok((
+        StatusCode::CREATED,
+        Json(Envelope {
+            data: BootstrapTaskLabelDto {
+                task: TaskDto::from(result.task),
+                semantics: result.semantics,
+            },
             meta: None,
         }),
     ))

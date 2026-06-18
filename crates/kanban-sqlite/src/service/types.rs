@@ -87,6 +87,22 @@ pub struct LabelSemanticsRecord {
     pub atoms: Vec<LabelAtomRecord>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BootstrapTaskLabel {
+    pub name: String,
+    pub description: Option<String>,
+    pub applies_when: Vec<String>,
+    pub excludes_when: Vec<String>,
+    pub positive_examples: Vec<String>,
+    pub negative_examples: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BootstrapTaskLabelResult {
+    pub task: TaskRecord,
+    pub semantics: LabelSemanticsRecord,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LabelAtomRecord {
     pub id: String,

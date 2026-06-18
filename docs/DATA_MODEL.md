@@ -452,6 +452,96 @@ query/residual cosine similarity，不把 distance 当作 solver score。派生�
 provider 时只让 label atom index degraded，不影响普通 label CRUD、`task_labels` 绑定
 或 task 状态机。
 
+### 11.2 Label ontology ledger
+
+Label ontology ledger 记录 task 标注过程里的证据、分歧 signal、review/action 历史
+和 validation 结果。它是可查询的审计账本，不替代 canonical truth：
+
+- `labels` / `task_labels` 仍决定 task 当前实际绑定哪些 label。
+- `label_semantics` / `label_atoms` 仍决定 label 的 canonical 语义和 atom truth。
+- `label_semantic_proposals` 仍负责新 label proposal lifecycle。
+
+表：`label_ontology_observations`
+
+一行表示一次完整的 task label 判断过程。它保存当时的 task 快照、agent 候选、
+`label suggest` 快照、最终选择和 solver 指标；即使 task、label 或 atoms 后续变化，
+仍能还原当时为什么产生 signal。
+
+| 字段 | 说明 |
+|---|---|
+| `id` | `lor_...` observation id。 |
+| `board_id` / `task_id` | 来源 board 与 task。 |
+| `task_ref_snapshot` | 捕获时的人类 ref，例如 `default#42`。 |
+| `task_snapshot_json` | 捕获时的 task title、description、labels、version/hash 等快照。 |
+| `agent_candidates_json` | agent 原始候选 labels、置信度和理由。 |
+| `suggestion_snapshot_json` | 完整 suggestion 输出、参数、模型和 index 状态快照。 |
+| `final_decision_json` | 最终接受、拒绝和未采用 labels 的判断。 |
+| `suggest_coverage` / `suggest_coverage_cosine` / `suggest_residual_norm` | 可查询的 solver 指标。 |
+| `suggest_needs_new_label` / `suggest_degraded` | 捕获时 suggestion 状态。 |
+| `diagnostics_json` | suggestion diagnostics 数组。 |
+| `capture_fingerprint` | 同一 board 内幂等 fingerprint。 |
+| `created_by` / `created_by_type` / `agent_type` | 捕获者身份。 |
+| `created_at` | 创建时间。 |
+
+表：`label_ontology_signals`
+
+一行只表达一个可独立 review 的 ontology 问题，例如某个已有 label 漏选、
+suggest 误选、存在 vocabulary gap 或 label 边界/名称问题。
+
+| 字段 | 说明 |
+|---|---|
+| `id` | `los_...` signal id。 |
+| `observation_id` / `board_id` | 来源 observation 与 board scope。 |
+| `kind` | `false_negative`、`false_positive`、`vocabulary_gap`、`name_issue`、`boundary_issue`、`structure_issue`。 |
+| `status` | `open`、`confirmed`、`resolved`、`rejected`、`superseded`。 |
+| `target_label_id` / `target_label_name_snapshot` | 已有 label 目标；名称快照用于历史解释。 |
+| `related_labels_json` | split/merge 等多 label 关系快照。 |
+| `proposed_action` | `observe`、`add_positive_atom`、`add_negative_atom`、`update_semantics`、`bootstrap_label`、`rename_label`、`split_label`、`merge_labels`。 |
+| `candidate_atom_polarity` / `candidate_atom_kind` / `candidate_text` | 建议 atom 的 polarity、kind 和泛化文本。 |
+| `candidate_content_hash` | 按 `label_id + polarity + kind + normalized_text` 计算的聚合键。 |
+| `proposed_label_name` / `proposed_label_name_normalized` | vocabulary gap 或 rename 候选。 |
+| `proposal_json` | 新 label 或结构变更的候选语义快照。 |
+| `agent_selected` / `suggest_state` / `suggest_score` / `suggest_rank` / `final_selected` | agent、suggest 与最终判断之间的分歧证据。 |
+| `rationale` / `confidence` | 可审查理由和可选置信度。 |
+| `signal_key` | observation 内幂等键。 |
+| `superseded_by_signal_id` / `status_reason` | 关闭或替代原因。 |
+| `created_at` / `updated_at` / `reviewed_at` / `closed_at` | 生命周期时间。 |
+
+表：`label_ontology_actions`
+
+Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、修改 ontology 或
+记录 validation 的动作。直接修改 label semantics 或接受 proposal 时，provenance
+也写成 action。
+
+| 字段 | 说明 |
+|---|---|
+| `id` | `loa_...` action id。 |
+| `board_id` | board scope。 |
+| `parent_action_id` | validation 等后续 action 指向被验证的 mutation action。 |
+| `action_type` | `confirm`、`reject`、`supersede`、`resolve_no_change`、`add_positive_atom`、`add_negative_atom`、`update_semantics`、`create_label_proposal`、`bootstrap_label`、`rename_label`、`split_label`、`merge_labels`、`validate`。 |
+| `reason` | 必填人工或 agent 理由。 |
+| `target_label_id` / `result_label_id` | 修改目标与结果 label。 |
+| `result_atom_id` / `result_atom_content_hash` | 新增或采用 atom 的软引用和稳定 hash。 |
+| `result_proposal_id` | 关联的 `label_semantic_proposals`。 |
+| `canonical_before_hash` / `canonical_after_hash` | 修改前后 canonical semantics hash。 |
+| `change_json` | before/after/diff 或其它可解释变更快照。 |
+| `validation_status` | `not_required`、`pending`、`passed`、`failed`、`partial`。 |
+| `validation_json` | validation evidence；service 会包装 supplied payload、source signal cases 和 summary。 |
+| `created_by` / `created_by_type` / `agent_type` | action actor。 |
+| `created_at` | 创建时间。 |
+
+`result_atom_id` 故意不是强 FK。`label_atoms` 会随 semantics rebuild delete/insert；
+历史 action 依赖 `result_atom_content_hash` 和 `change_json` 中的 atom snapshot 保持可解释。
+
+表：`label_ontology_action_signals`
+
+多对多连接 action 与 signals。多个 signals 可以支持一次 atom 修改；同一个 signal
+也可以先被 confirm，随后关联 mutation action 和 validation action。
+
+默认 review queue 只读取 `open` 与 `confirmed` signals；完整历史需显式 include all。
+Mutation action 写入后通常保持 source signals 为 `confirmed`，validation 通过后再
+转为 `resolved`。Validation 失败会追加 failed validation action，不删除历史。
+
 ---
 
 ## 12. Column

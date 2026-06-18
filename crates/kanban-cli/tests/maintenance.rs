@@ -34,8 +34,8 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     let doctor = kanban(&temp.path, &["--json", "doctor"])?.success_json()?;
 
     assert_eq!(doctor["data"]["integrity_check"], "ok");
-    assert_eq!(doctor["data"]["migration_version"], 11);
-    assert_eq!(doctor["data"]["user_version"], 11);
+    assert_eq!(doctor["data"]["migration_version"], 12);
+    assert_eq!(doctor["data"]["user_version"], 12);
     assert_eq!(doctor["data"]["expired_running_tasks"], 1);
     assert_eq!(doctor["data"]["dependency_cycles"], 0);
     assert_eq!(doctor["data"]["archived_dependency_edges"], 0);

@@ -4,22 +4,29 @@ use std::{path::Path, sync::Arc};
 
 use anyhow::{Result, bail};
 use kanban_sqlite::{
-    CreateLabel, LabelProposalCandidate, LabelProposalListOptions, LabelProposalStatus,
-    LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult,
-    MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics, accept_label_proposal,
-    add_task_label, create_label, delete_label_semantics, get_label_proposal, get_label_semantics,
-    label_atom_index_status, list_label_atoms, list_label_proposals, list_label_semantics,
-    list_labels, propose_task_label_with, reject_label_proposal, remove_task_label,
-    suggest_task_labels, upsert_label_semantics,
+    CreateLabel, LabelOntologyActionInput, LabelOntologyActionRecord, LabelOntologyActionType,
+    LabelOntologyActor, LabelOntologyAtomApplyInput, LabelOntologyValidationInput,
+    LabelOntologyValidationStatus, LabelProposalCandidate, LabelProposalDecisionOptions,
+    LabelProposalListOptions, LabelProposalStatus, LabelSemanticProposalRecord,
+    LabelSuggestionOptions, LabelSuggestionResult, MAX_TASK_LIST_LIMIT,
+    ManualLabelProposalProvider, UpsertLabelSemantics, accept_label_proposal_with_options,
+    add_task_label, apply_label_ontology_atom, create_label, create_label_ontology_action,
+    delete_label_semantics, get_label_ontology_signal, get_label_proposal, get_label_semantics,
+    label_atom_index_status, list_label_atoms, list_label_ontology_signals, list_label_proposals,
+    list_label_semantics, list_labels, propose_task_label_with, record_label_ontology_observation,
+    reject_label_proposal, remove_task_label, suggest_task_labels, upsert_label_semantics,
+    validate_label_ontology_action,
 };
 #[cfg(feature = "vector-lancedb")]
 use kanban_sqlite::{
     label_atom_index_status_with, propose_task_label_with_store, query_label_atom_index_with,
     rebuild_label_atom_index_with, suggest_task_labels_with,
 };
-use std::{fs, str::FromStr};
+use std::{fs, io::Read, str::FromStr};
 
-use crate::args::{LabelAtomPolarityArg, LabelCommand};
+use crate::args::{
+    LabelAtomPolarityArg, LabelCommand, LabelOntologyAtomKindArg, LabelOntologyValidationStatusArg,
+};
 use crate::commands::common::validate_page_bounds;
 use crate::output::{label_line, print_or_json, print_task};
 
@@ -181,8 +188,15 @@ pub(crate) fn handle_label(
                 print_or_json(json, &proposal, || proposal_line(&proposal))?;
             }
             crate::args::LabelProposalsCommand::Accept(args) => {
-                let proposal =
-                    accept_label_proposal(db_path, actor, &args.proposal_id, args.reason)?;
+                let proposal = accept_label_proposal_with_options(
+                    db_path,
+                    actor,
+                    &args.proposal_id,
+                    args.reason,
+                    LabelProposalDecisionOptions {
+                        source_signal_ids: args.source_signal_ids,
+                    },
+                )?;
                 print_or_json(json, &proposal, || proposal_line(&proposal))?;
             }
             crate::args::LabelProposalsCommand::Reject(args) => {
@@ -191,6 +205,9 @@ pub(crate) fn handle_label(
                 print_or_json(json, &proposal, || proposal_line(&proposal))?;
             }
         },
+        LabelCommand::Ontology { command } => {
+            handle_label_ontology(command, db_path, board, actor, json)?
+        }
     }
     Ok(())
 }
@@ -294,6 +311,327 @@ fn handle_label_atom_index(
         }
     }
     Ok(())
+}
+
+fn handle_label_ontology(
+    command: crate::args::LabelOntologyCommand,
+    db_path: &PathBuf,
+    board: &str,
+    actor: &str,
+    json: bool,
+) -> Result<()> {
+    match command {
+        crate::args::LabelOntologyCommand::Record(args) => {
+            let input = read_label_ontology_record_input(&args.input)?;
+            let observation =
+                record_label_ontology_observation(db_path, board, &args.task_ref, input)?;
+            print_or_json(json, &observation, || {
+                label_ontology_observation_line(&observation)
+            })?;
+        }
+        crate::args::LabelOntologyCommand::List(args) => {
+            validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let signals = list_label_ontology_signals(
+                db_path,
+                board,
+                label_ontology_list_options(
+                    args.status,
+                    args.kind,
+                    args.task,
+                    args.label,
+                    args.proposed_label,
+                    args.include_all,
+                    args.limit,
+                )?,
+            )?;
+            print_or_json(json, &signals, || label_ontology_signal_lines(&signals))?;
+        }
+        crate::args::LabelOntologyCommand::Show { signal_id } => {
+            let detail = get_label_ontology_signal(db_path, &signal_id)?;
+            print_or_json(json, &detail, || {
+                format!(
+                    "{}\nobservation={} task={} actions={}",
+                    label_ontology_signal_line(&detail.signal),
+                    detail.observation.id,
+                    detail.observation.task_ref_snapshot,
+                    detail.actions.len()
+                )
+            })?;
+        }
+        crate::args::LabelOntologyCommand::Review(args) => {
+            validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let signals = list_label_ontology_signals(
+                db_path,
+                board,
+                kanban_sqlite::LabelOntologySignalListOptions {
+                    limit: args.limit,
+                    ..kanban_sqlite::LabelOntologySignalListOptions::default()
+                },
+            )?;
+            print_or_json(json, &signals, || {
+                if signals.is_empty() {
+                    "No label ontology signals to review.".to_owned()
+                } else {
+                    label_ontology_signal_lines(&signals)
+                }
+            })?;
+        }
+        crate::args::LabelOntologyCommand::Confirm(args) => {
+            let action = create_label_ontology_action(
+                db_path,
+                board,
+                label_ontology_action_input(
+                    actor,
+                    LabelOntologyActionType::Confirm,
+                    args.signal_ids,
+                    args.reason,
+                    None,
+                ),
+            )?;
+            print_or_json(json, &action, || label_ontology_action_line(&action))?;
+        }
+        crate::args::LabelOntologyCommand::Reject(args) => {
+            let action = create_label_ontology_action(
+                db_path,
+                board,
+                label_ontology_action_input(
+                    actor,
+                    LabelOntologyActionType::Reject,
+                    args.signal_ids,
+                    args.reason,
+                    None,
+                ),
+            )?;
+            print_or_json(json, &action, || label_ontology_action_line(&action))?;
+        }
+        crate::args::LabelOntologyCommand::Supersede(args) => {
+            let action = create_label_ontology_action(
+                db_path,
+                board,
+                label_ontology_action_input(
+                    actor,
+                    LabelOntologyActionType::Supersede,
+                    args.signal_ids,
+                    args.reason,
+                    Some(args.superseded_by_signal_id),
+                ),
+            )?;
+            print_or_json(json, &action, || label_ontology_action_line(&action))?;
+        }
+        crate::args::LabelOntologyCommand::Resolve(args) => {
+            if !args.no_change {
+                bail!("resolve currently requires --no-change");
+            }
+            let action = create_label_ontology_action(
+                db_path,
+                board,
+                label_ontology_action_input(
+                    actor,
+                    LabelOntologyActionType::ResolveNoChange,
+                    args.signal_ids,
+                    args.reason,
+                    None,
+                ),
+            )?;
+            print_or_json(json, &action, || label_ontology_action_line(&action))?;
+        }
+        crate::args::LabelOntologyCommand::Apply { command } => match command {
+            crate::args::LabelOntologyApplyCommand::Atom(args) => {
+                let action = apply_label_ontology_atom(
+                    db_path,
+                    board,
+                    LabelOntologyAtomApplyInput {
+                        actor: label_ontology_cli_actor(actor),
+                        signal_ids: args.signal_ids,
+                        label_ref: args.label,
+                        kind: label_ontology_atom_kind_value(args.kind).to_owned(),
+                        text: args.text,
+                        reason: args.reason,
+                    },
+                )?;
+                print_or_json(json, &action, || label_ontology_action_line(&action))?;
+            }
+        },
+        crate::args::LabelOntologyCommand::Validate(args) => {
+            let validation_json = read_json_input_string(&args.input)?;
+            let action = validate_label_ontology_action(
+                db_path,
+                board,
+                LabelOntologyValidationInput {
+                    actor: label_ontology_cli_actor(actor),
+                    parent_action_id: args.action_id,
+                    signal_ids: args.signal_ids,
+                    reason: args.reason,
+                    validation_status: label_ontology_validation_status(args.status),
+                    validation_json,
+                },
+            )?;
+            print_or_json(json, &action, || label_ontology_action_line(&action))?;
+        }
+    }
+    Ok(())
+}
+
+fn label_ontology_list_options(
+    statuses: Vec<String>,
+    kinds: Vec<String>,
+    task_ref: Option<String>,
+    target_label_ref: Option<String>,
+    proposed_label_name: Option<String>,
+    include_all: bool,
+    limit: usize,
+) -> Result<kanban_sqlite::LabelOntologySignalListOptions> {
+    Ok(kanban_sqlite::LabelOntologySignalListOptions {
+        statuses: statuses
+            .iter()
+            .map(|status| kanban_sqlite::LabelOntologySignalStatus::from_str(status))
+            .collect::<kanban_core::Result<Vec<_>>>()?,
+        kinds: kinds
+            .iter()
+            .map(|kind| kanban_sqlite::LabelOntologySignalKind::from_str(kind))
+            .collect::<kanban_core::Result<Vec<_>>>()?,
+        task_ref,
+        target_label_ref,
+        proposed_label_name,
+        include_all,
+        limit,
+    })
+}
+
+fn read_label_ontology_record_input(path: &str) -> Result<kanban_sqlite::LabelOntologyRecordInput> {
+    let raw = read_json_input_string(path)?;
+    serde_json::from_str(&raw).map_err(Into::into)
+}
+
+fn read_json_input_string(path: &str) -> Result<String> {
+    if path == "-" {
+        let mut raw = String::new();
+        std::io::stdin().read_to_string(&mut raw)?;
+        Ok(raw)
+    } else {
+        fs::read_to_string(path).map_err(Into::into)
+    }
+}
+
+fn label_ontology_cli_actor(actor: &str) -> LabelOntologyActor {
+    LabelOntologyActor {
+        name: actor.to_owned(),
+        actor_type: "user".to_owned(),
+        agent_type: None,
+    }
+}
+
+fn label_ontology_action_input(
+    actor: &str,
+    action_type: LabelOntologyActionType,
+    signal_ids: Vec<String>,
+    reason: String,
+    superseded_by_signal_id: Option<String>,
+) -> LabelOntologyActionInput {
+    LabelOntologyActionInput {
+        actor: label_ontology_cli_actor(actor),
+        action_type,
+        signal_ids,
+        reason,
+        superseded_by_signal_id,
+        parent_action_id: None,
+        target_label_ref: None,
+        result_label_ref: None,
+        result_atom_id: None,
+        result_atom_content_hash: None,
+        result_proposal_id: None,
+        canonical_before_hash: None,
+        canonical_after_hash: None,
+        change_json: None,
+        validation_status: None,
+        validation_json: None,
+    }
+}
+
+fn label_ontology_atom_kind_value(kind: LabelOntologyAtomKindArg) -> &'static str {
+    match kind {
+        LabelOntologyAtomKindArg::AppliesWhen => "applies_when",
+        LabelOntologyAtomKindArg::PositiveExample => "positive_example",
+        LabelOntologyAtomKindArg::ExcludesWhen => "excludes_when",
+        LabelOntologyAtomKindArg::NegativeExample => "negative_example",
+    }
+}
+
+fn label_ontology_validation_status(
+    status: LabelOntologyValidationStatusArg,
+) -> LabelOntologyValidationStatus {
+    match status {
+        LabelOntologyValidationStatusArg::Passed => LabelOntologyValidationStatus::Passed,
+        LabelOntologyValidationStatusArg::Failed => LabelOntologyValidationStatus::Failed,
+        LabelOntologyValidationStatusArg::Partial => LabelOntologyValidationStatus::Partial,
+    }
+}
+
+fn label_ontology_observation_line(
+    observation: &kanban_sqlite::LabelOntologyObservationRecord,
+) -> String {
+    format!(
+        "{} task={} signals={} fingerprint={}",
+        observation.id,
+        observation.task_ref_snapshot,
+        observation.signals.len(),
+        observation.capture_fingerprint
+    )
+}
+
+fn label_ontology_signal_lines(signals: &[kanban_sqlite::LabelOntologySignalRecord]) -> String {
+    if signals.is_empty() {
+        return "No label ontology signals.".to_owned();
+    }
+    signals
+        .iter()
+        .map(label_ontology_signal_line)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn label_ontology_signal_line(signal: &kanban_sqlite::LabelOntologySignalRecord) -> String {
+    let target = signal
+        .target_label_name_snapshot
+        .as_deref()
+        .or(signal.proposed_label_name.as_deref())
+        .unwrap_or("-");
+    let confidence = signal
+        .confidence
+        .map(|value| format!("{value:.3}"))
+        .unwrap_or_else(|| "-".to_owned());
+    format!(
+        "{} {} [{}] action={} target={} confidence={} rationale={}",
+        signal.id,
+        signal.kind,
+        signal.status,
+        signal.proposed_action,
+        target,
+        confidence,
+        signal.rationale
+    )
+}
+
+fn label_ontology_action_line(action: &LabelOntologyActionRecord) -> String {
+    let signals = if action.signal_ids.is_empty() {
+        "-".to_owned()
+    } else {
+        action.signal_ids.join(",")
+    };
+    let result_atom = action
+        .result_atom_id
+        .as_deref()
+        .map(|id| format!(" result_atom={id}"))
+        .unwrap_or_default();
+    format!(
+        "{} {} signals={} validation={}{} reason={}",
+        action.id,
+        action.action_type,
+        signals,
+        action.validation_status,
+        result_atom,
+        action.reason
+    )
 }
 
 fn validate_label_suggest_bounds(

@@ -497,8 +497,18 @@ kanban label suggest <task_ref> [--limit 5] [--candidate-limit 32] [--atom-limit
 kanban label propose <task_ref> [--proposal-json <path>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]
 kanban label proposals show <proposal_id> [--json]
-kanban label proposals accept <proposal_id> [--reason <text>] [--json]
+kanban label proposals accept <proposal_id> [--reason <text>] [--source-signal <signal_id>]... [--json]
 kanban label proposals reject <proposal_id> [--reason <text>] [--json]
+kanban label ontology record <task_ref> --input <path|-> [--json]
+kanban label ontology list [--status open|confirmed|resolved|rejected|superseded]... [--kind false_negative|false_positive|vocabulary_gap|name_issue|boundary_issue|structure_issue]... [--task <task_ref>] [--label <label>] [--proposed-label <name>] [--include-all] [--limit 100] [--json]
+kanban label ontology show <signal_id> [--json]
+kanban label ontology review [--limit 100] [--json]
+kanban label ontology confirm <signal_id>... --reason <text> [--json]
+kanban label ontology reject <signal_id>... --reason <text> [--json]
+kanban label ontology supersede <signal_id>... --by <signal_id> --reason <text> [--json]
+kanban label ontology resolve <signal_id>... --no-change --reason <text> [--json]
+kanban label ontology apply atom <signal_id>... --label <label> --kind applies-when|positive-example|excludes-when|negative-example --text <text> --reason <text> [--json]
+kanban label ontology validate <action_id> --status passed|failed|partial --reason <text> --input <path|-> [signal_id]... [--json]
 ```
 
 `label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
@@ -652,8 +662,77 @@ canonical label、`label_semantics`、`label_atoms` 或 `task_labels`；diagnost
 
 `label proposals accept` 只接受 `proposed` proposal。accept 会创建 canonical
 label、`label_semantics` 与 `label_atoms`，并标脏 label atom index；它不会自动
-给来源 task 写入 `task_labels`。`label proposals reject` 标记 proposal 为
-`rejected`。accepted/rejected proposal 不能再次决策。
+给来源 task 写入 `task_labels`。传入 `--source-signal <los_...>` 时，accept 会在同一
+transaction 中写入 `bootstrap_label` ontology action，并通过 action-signal links
+记录该 new-label bootstrap 的 signal provenance；这些 source signals 必须是同一
+board 上的 `confirmed` signals。`label proposals reject` 标记 proposal 为
+`rejected`，不接受 `--source-signal`。accepted/rejected proposal 不能再次决策。
+
+`label ontology record` 接受 service-shaped JSON 或 stdin，记录一次 label 判断
+observation 并写入其中的 child signals。Service 会读取当前 task snapshot、解析
+target label ref、计算 normalized proposed label name、signal key 和 candidate atom
+content hash；它只写 ledger，不修改 `task_labels`、`label_semantics`、`label_atoms`
+或 proposal。
+
+最小输入形状：
+
+```json
+{
+  "actor": {"name": "label-agent", "type": "agent", "agent_type": "local"},
+  "agent_candidates_json": "[]",
+  "suggestion_snapshot_json": "{}",
+  "final_decision_json": "{}",
+  "suggest_needs_new_label": false,
+  "suggest_degraded": false,
+  "diagnostics_json": "[]",
+  "signals": [
+    {
+      "kind": "false_negative",
+      "target_label_ref": "cli",
+      "related_labels_json": "[]",
+      "proposed_action": "add_positive_atom",
+      "candidate_atom": {
+        "polarity": "positive",
+        "kind": "applies_when",
+        "text": "extends CLI subcommands, command arguments, help output, or machine-readable JSON behavior"
+      },
+      "proposal_json": "{}",
+      "agent_selected": true,
+      "suggest_state": "candidate",
+      "suggest_score": 0.08,
+      "suggest_rank": 6,
+      "final_selected": true,
+      "rationale": "The task expands the CLI surface."
+    }
+  ]
+}
+```
+
+`label ontology list` 默认只返回 `open` 和 `confirmed` signals。`--include-all`
+返回完整历史；`--status`、`--kind` 可重复过滤，`--task`、`--label` 和
+`--proposed-label` 用于按来源 task、目标 label 或候选新 label 查询。
+`label ontology show` 返回 signal、observation 和关联 actions。`label ontology review`
+是只读 review queue 视图，当前实现按 unresolved signals 列表输出。
+
+Lifecycle commands 写入 action 并同步更新 signal status：
+
+- `confirm`：`open` signal 进入 `confirmed`。
+- `reject`：把 signal 标记为 `rejected`。
+- `supersede --by`：把重复或过时 signal 标记为 `superseded`。
+- `resolve --no-change`：记录无需 ontology 修改的 resolution。
+
+`label ontology apply atom` 只接受 `confirmed` source signals。它会读取目标 label
+当前 semantics，把泛化文本加入对应数组，走现有 semantics upsert/rebuild atoms 路径，
+写入 `add_positive_atom` 或 `add_negative_atom` action，记录生成 atom 的软引用、
+content hash、before/after hash 和 diff，并把 validation status 置为 `pending`。
+该命令只更新 SQLite truth 并标脏 label atom index；vector index rebuild 和后续
+suggest 验证仍是第二阶段。
+
+`label ontology validate` 为一个 mutation action 追加 `validate` action。CLI 读取
+`--input` 中的 validation JSON，并由 service 包装 manual payload、source signal
+case 摘要、task snapshot hash 对比和 parent action 结果引用。`--status passed` 会把
+linked source signals 转为 `resolved`；`failed` / `partial` 保留历史和 evidence，
+source signals 继续等待后续修正或人工处理。
 
 `label propose --json` 返回结构化 attempt：
 

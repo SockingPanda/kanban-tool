@@ -769,6 +769,442 @@ async fn task_label_proposal_route_accepts_and_rejects_without_task_binding() ->
     Ok(())
 }
 
+#[tokio::test]
+async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let label = kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("ontology API route target"),
+    )?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/label-ontology/observations", task.id),
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": json!([
+                {"label": "cli", "confidence": 0.92}
+            ]).to_string(),
+            "suggestion_snapshot_json": json!({
+                "selected_labels": [],
+                "candidates": []
+            }).to_string(),
+            "final_decision_json": json!({"accepted_labels": ["cli"]}).to_string(),
+            "suggest_coverage": 0.61,
+            "suggest_coverage_cosine": 0.74,
+            "suggest_residual_norm": 0.39,
+            "suggest_needs_new_label": false,
+            "suggest_degraded": false,
+            "diagnostics_json": "[]",
+            "capture_fingerprint": "api-ontology-run",
+            "signals": [{
+                "kind": "false_negative",
+                "target_label_ref": "cli",
+                "related_labels_json": "[]",
+                "proposed_action": "add_positive_atom",
+                "candidate_atom": {
+                    "polarity": "positive",
+                    "kind": "applies_when",
+                    "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
+                },
+                "proposed_label_name": null,
+                "proposal_json": "{}",
+                "agent_selected": true,
+                "suggest_state": "candidate",
+                "suggest_score": 0.08,
+                "suggest_rank": 4,
+                "final_selected": true,
+                "rationale": "The task expands the CLI surface although suggest scored cli weakly.",
+                "confidence": 0.91,
+                "signal_key": "cli-false-negative-api"
+            }]
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(json["data"]["task_id"], task.id);
+    assert_eq!(json["data"]["created_by"], "label-agent");
+    let signal_id = json["data"]["signals"][0]["id"]
+        .as_str()
+        .context("signal id")?
+        .to_owned();
+    assert_eq!(json["data"]["signals"][0]["target_label_id"], label.id);
+
+    let (status, json) = get_json(
+        app.clone(),
+        &format!(
+            "/api/v1/boards/default/label-ontology/signals?status=open&kind=false_negative&task_ref={}&target_label_ref=cli&limit=10",
+            task.id
+        ),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    let signals = json["data"].as_array().context("signals")?;
+    assert_eq!(signals.len(), 1);
+    assert_eq!(signals[0]["id"], signal_id);
+
+    let (status, json) = get_json(
+        app.clone(),
+        &format!(
+            "/api/v1/boards/default/label-ontology/signals?status=open&kind=false_negative&task={}&label=cli&limit=10",
+            task.id
+        ),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    let signals = json["data"].as_array().context("signals")?;
+    assert_eq!(signals.len(), 1);
+    assert_eq!(signals[0]["id"], signal_id);
+
+    let (status, json) =
+        get_json(app, &format!("/api/v1/label-ontology/signals/{signal_id}")).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["signal"]["id"], signal_id);
+    assert_eq!(json["data"]["observation"]["task_id"], task.id);
+    assert!(
+        json["data"]["actions"]
+            .as_array()
+            .context("actions")?
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("ontology API action route target"),
+    )?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/label-ontology/observations", task.id),
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": "[]",
+            "suggestion_snapshot_json": "{}",
+            "final_decision_json": "{}",
+            "suggest_coverage": null,
+            "suggest_coverage_cosine": null,
+            "suggest_residual_norm": null,
+            "suggest_needs_new_label": false,
+            "suggest_degraded": false,
+            "diagnostics_json": "[]",
+            "capture_fingerprint": "api-ontology-action-run",
+            "signals": [{
+                "kind": "false_negative",
+                "target_label_ref": "cli",
+                "related_labels_json": "[]",
+                "proposed_action": "add_positive_atom",
+                "candidate_atom": {
+                    "polarity": "positive",
+                    "kind": "applies_when",
+                    "text": "changes the local CLI command surface"
+                },
+                "proposed_label_name": null,
+                "proposal_json": "{}",
+                "agent_selected": true,
+                "suggest_state": "candidate",
+                "suggest_score": 0.12,
+                "suggest_rank": 2,
+                "final_selected": true,
+                "rationale": "The task changes CLI behavior.",
+                "confidence": 0.88,
+                "signal_key": "cli-action-api"
+            }]
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    let signal_id = json["data"]["signals"][0]["id"]
+        .as_str()
+        .context("signal id")?
+        .to_owned();
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/actions",
+        json!({
+            "actor": {
+                "name": "reviewer",
+                "type": "user",
+                "agent_type": null
+            },
+            "action_type": "confirm",
+            "signal_ids": [signal_id],
+            "reason": "valid false negative",
+            "superseded_by_signal_id": null,
+            "parent_action_id": null,
+            "target_label_ref": "cli",
+            "result_label_ref": null,
+            "result_atom_id": null,
+            "result_atom_content_hash": null,
+            "result_proposal_id": null,
+            "canonical_before_hash": null,
+            "canonical_after_hash": null,
+            "change_json": json!({"reviewed": true}).to_string(),
+            "validation_status": null,
+            "validation_json": null
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED, "{json}");
+    assert_eq!(json["data"]["action_type"], "confirm");
+    assert_eq!(json["data"]["signal_ids"], json!([signal_id]));
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/apply/atom",
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "signal_ids": [signal_id],
+            "label_ref": "cli",
+            "kind": "applies_when",
+            "text": "changes the local CLI command surface",
+            "reason": "apply confirmed atom"
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED, "{json}");
+    assert_eq!(json["data"]["action_type"], "add_positive_atom");
+    assert_eq!(json["data"]["validation_status"], "pending");
+    let apply_action_id = json["data"]["id"]
+        .as_str()
+        .context("apply action id")?
+        .to_owned();
+    assert!(json["data"]["result_atom_id"].as_str().is_some());
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/validate",
+        json!({
+            "actor": {
+                "name": "reviewer",
+                "type": "user",
+                "agent_type": null
+            },
+            "parent_action_id": apply_action_id,
+            "signal_ids": [],
+            "reason": "atom improves suggestion behavior",
+            "validation_status": "passed",
+            "validation_json": json!({"checked": true}).to_string()
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED, "{json}");
+    assert_eq!(json["data"]["action_type"], "validate");
+    assert_eq!(json["data"]["validation_status"], "passed");
+
+    let (status, json) = get_json(
+        app.clone(),
+        &format!("/api/v1/label-ontology/signals/{signal_id}"),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["signal"]["status"], "resolved");
+    assert_eq!(
+        json["data"]["actions"].as_array().context("actions")?.len(),
+        3
+    );
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/label-ontology/observations", task.id),
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": "[]",
+            "suggestion_snapshot_json": "{}",
+            "final_decision_json": "{}",
+            "suggest_coverage": 0.2,
+            "suggest_coverage_cosine": 0.3,
+            "suggest_residual_norm": 0.8,
+            "suggest_needs_new_label": true,
+            "suggest_degraded": false,
+            "diagnostics_json": "[]",
+            "capture_fingerprint": "api-proposal-gap",
+            "signals": [{
+                "kind": "vocabulary_gap",
+                "target_label_ref": null,
+                "related_labels_json": "[]",
+                "proposed_action": "bootstrap_label",
+                "candidate_atom": null,
+                "proposed_label_name": "ontology-ledger",
+                "proposal_json": "{\"name\":\"ontology-ledger\"}",
+                "agent_selected": true,
+                "suggest_state": "absent",
+                "suggest_score": null,
+                "suggest_rank": null,
+                "final_selected": true,
+                "rationale": "Existing labels do not express ontology ledger storage.",
+                "confidence": 0.86,
+                "signal_key": "api-proposal-gap"
+            }]
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED, "{json}");
+    let gap_signal_id = json["data"]["signals"][0]["id"]
+        .as_str()
+        .context("gap signal id")?
+        .to_owned();
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/signals?proposed_label=ontology-ledger&limit=10",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    let proposed_label_signals = json["data"].as_array().context("proposed label signals")?;
+    assert_eq!(proposed_label_signals.len(), 1);
+    assert_eq!(proposed_label_signals[0]["id"], gap_signal_id);
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/actions",
+        json!({
+            "actor": {
+                "name": "reviewer",
+                "type": "user",
+                "agent_type": null
+            },
+            "action_type": "confirm",
+            "signal_ids": [gap_signal_id],
+            "reason": "valid vocabulary gap"
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED, "{json}");
+    let proposal_id = seed_proposed_label_proposal(
+        &db_path,
+        &task.id,
+        LabelProposalCandidate {
+            name: "ontology-ledger".to_owned(),
+            description: Some("Label ontology ledger work".to_owned()),
+            applies_when: vec!["records ontology observations and signals".to_owned()],
+            positive_examples: vec!["creates label ontology ledger tables".to_owned()],
+            ..LabelProposalCandidate::default()
+        },
+    )?;
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/label-proposals/{proposal_id}/accept"),
+        json!({
+            "reason": "Bootstrap from confirmed vocabulary-gap signal.",
+            "actor": "api-reviewer",
+            "source_signal_ids": [gap_signal_id]
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    assert_eq!(json["data"]["status"], "accepted");
+    assert!(json["data"]["resolved_label_id"].as_str().is_some());
+    let (status, json) = get_json(
+        app,
+        &format!("/api/v1/label-ontology/signals/{gap_signal_id}"),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    assert_eq!(json["data"]["signal"]["status"], "confirmed");
+    assert!(
+        json["data"]["actions"]
+            .as_array()
+            .context("gap actions")?
+            .iter()
+            .any(|action| action["action_type"] == "bootstrap_label")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn label_ontology_action_routes_reject_unknown_json_fields() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let app = test.router();
+
+    for (path, body) in [
+        (
+            "/api/v1/boards/default/label-ontology/actions",
+            json!({
+                "actor": {"name": "reviewer", "type": "user", "agent_type": null},
+                "action_type": "confirm",
+                "signal_ids": ["los_missing"],
+                "reason": "reviewed",
+                "unexpected": true
+            }),
+        ),
+        (
+            "/api/v1/boards/default/label-ontology/apply/atom",
+            json!({
+                "actor": {"name": "reviewer", "type": "user", "agent_type": null},
+                "signal_ids": ["los_missing"],
+                "label_ref": "cli",
+                "kind": "applies_when",
+                "text": "CLI work",
+                "reason": "apply",
+                "unexpected": true
+            }),
+        ),
+        (
+            "/api/v1/boards/default/label-ontology/validate",
+            json!({
+                "actor": {"name": "reviewer", "type": "user", "agent_type": null},
+                "parent_action_id": "loa_missing",
+                "signal_ids": [],
+                "reason": "validated",
+                "validation_status": "passed",
+                "validation_json": "{}",
+                "unexpected": true
+            }),
+        ),
+    ] {
+        let (status, json) = post_json(app.clone(), path, body).await?;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{path}: {json}");
+        assert_eq!(json["error"]["code"], "invalid_input");
+    }
+    Ok(())
+}
+
 fn seed_proposed_label_proposal(
     db_path: &std::path::Path,
     task_id: &str,

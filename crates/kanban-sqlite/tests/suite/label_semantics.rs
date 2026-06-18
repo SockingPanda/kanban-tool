@@ -1,5 +1,6 @@
 use crate::common::*;
 use rusqlite::OptionalExtension;
+use serde_json::json;
 
 #[test]
 fn task_label_suggestions_degrade_when_vector_store_disabled() -> anyhow::Result<()> {
@@ -2143,6 +2144,140 @@ fn label_atom_rebuild_deduplicates_normalized_text_and_keeps_first_ordinal() -> 
 }
 
 #[test]
+fn label_atom_explain_hydrates_provenance_signals_and_validation() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_atom_explain_hydrates_provenance_signals_and_validation")?;
+    let fixture = seed_label_atom_explain_fixture(&temp, "Explain CLI atom provenance")?;
+    validate_label_ontology_action(
+        &temp.path,
+        "default",
+        passed_explain_validation_input(&fixture),
+    )?;
+
+    let explain = explain_label_atom(&temp.path, "default", &fixture.result_atom_id)?;
+
+    assert_eq!(explain.query, fixture.result_atom_id);
+    let atom = explain.atom.as_ref().context("current atom")?;
+    assert_eq!(atom.id, fixture.result_atom_id);
+    assert_eq!(atom.content_hash, fixture.result_atom_content_hash);
+    assert_eq!(
+        explain
+            .current_semantics
+            .as_ref()
+            .context("current semantics")?
+            .label_id,
+        fixture.target_label_id
+    );
+    assert!(!explain.legacy_untracked);
+    assert_eq!(explain.legacy_reason, None);
+    assert_eq!(explain.provenance_actions.len(), 1);
+    assert_eq!(explain.provenance_actions[0].matched_by, "atom_id");
+    assert_eq!(
+        explain.provenance_actions[0].action.id,
+        fixture.apply_action_id
+    );
+    assert_eq!(explain.supporting_signals.len(), 1);
+    let source = &explain.supporting_signals[0];
+    assert_eq!(source.signal.id, fixture.signal_id);
+    assert_eq!(source.observation.id, fixture.observation_id);
+    assert_eq!(source.source_task.id, fixture.task.id);
+    assert_eq!(source.task_ref_snapshot, fixture.task.task_ref);
+    assert!(!source.suggest_input_stale);
+    assert!(!source.suggest_degraded);
+    assert!(source.warnings.is_empty());
+    assert_eq!(explain.validation_history.len(), 1);
+    let validation = &explain.validation_history[0];
+    assert_eq!(validation.parent_action_id, fixture.apply_action_id);
+    assert_eq!(
+        validation.validation_status,
+        LabelOntologyValidationStatus::Passed
+    );
+    assert_eq!(validation.summary["status"], "passed");
+    assert_eq!(validation.cases.as_array().context("cases")?.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn label_atom_explain_resolves_rebuilt_atom_by_content_hash() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_atom_explain_resolves_rebuilt_atom_by_content_hash")?;
+    let fixture = seed_label_atom_explain_fixture(&temp, "Explain rebuilt CLI atom")?;
+    let rebuilt_atom_id = "la_rebuilt_explain_atom";
+    connect_file(&temp.path)?.execute(
+        "UPDATE label_atoms SET id=?1 WHERE id=?2",
+        params![rebuilt_atom_id, fixture.result_atom_id],
+    )?;
+
+    let explain = explain_label_atom(&temp.path, "default", &fixture.result_atom_content_hash)?;
+
+    let atom = explain.atom.as_ref().context("current atom")?;
+    assert_eq!(atom.id, rebuilt_atom_id);
+    assert_eq!(atom.content_hash, fixture.result_atom_content_hash);
+    assert_eq!(explain.provenance_actions.len(), 1);
+    assert_eq!(explain.provenance_actions[0].matched_by, "content_hash");
+    assert_eq!(
+        explain.provenance_actions[0].action.id,
+        fixture.apply_action_id
+    );
+    Ok(())
+}
+
+#[test]
+fn label_atom_explain_marks_existing_atom_without_provenance_as_legacy_untracked()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_atom_explain_marks_existing_atom_without_provenance_as_legacy_untracked",
+    )?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "legacy".to_owned(),
+            color: None,
+        },
+    )?;
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "legacy".to_owned(),
+            applies_when: vec!["legacy atom without ontology action".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let atom = list_label_atoms(&temp.path, "default")?
+        .into_iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("applies_when atom")?;
+
+    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
+
+    assert_eq!(explain.atom.as_ref().context("current atom")?.id, atom.id);
+    assert!(explain.provenance_actions.is_empty());
+    assert!(explain.supporting_signals.is_empty());
+    assert!(explain.validation_history.is_empty());
+    assert!(explain.legacy_untracked);
+    assert!(
+        explain
+            .legacy_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("no ontology provenance")
+    );
+    Ok(())
+}
+
+#[test]
+fn label_atom_explain_rejects_unknown_atom_ref() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_atom_explain_rejects_unknown_atom_ref")?;
+    init_database(&temp.path, "tester")?;
+
+    let error = result_err(explain_label_atom(&temp.path, "default", "la_missing"))?;
+
+    assert!(error.to_string().contains("label atom la_missing"));
+    Ok(())
+}
+
+#[test]
 fn init_v10_backfills_stable_label_atom_hashes_and_marks_index_dirty() -> anyhow::Result<()> {
     let temp = TempDb::new("init_v10_backfills_stable_label_atom_hashes_and_marks_index_dirty")?;
     init_database(&temp.path, "tester")?;
@@ -2887,6 +3022,188 @@ fn label_semantics_jsonl_import_marks_label_atom_boards_dirty_and_rebuild_clears
     assert!(!label_atom_board_dirty(&target.path, "second")?);
     assert!(!label_atom_store_dirty(&target.path)?);
     Ok(())
+}
+
+struct LabelAtomExplainFixture {
+    task: TaskRecord,
+    observation_id: String,
+    signal_id: String,
+    apply_action_id: String,
+    target_label_id: String,
+    result_atom_id: String,
+    result_atom_content_hash: String,
+}
+
+fn seed_label_atom_explain_fixture(
+    temp: &TempDb,
+    title: &str,
+) -> anyhow::Result<LabelAtomExplainFixture> {
+    init_database(&temp.path, "tester")?;
+    let label = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(&temp.path, "default", "tester", CreateTask::ready(title))?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        LabelOntologyRecordInput {
+            actor: LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: json!([
+                {"label": "cli", "confidence": 0.92, "reason": "adds CLI command surface"}
+            ])
+            .to_string(),
+            suggestion_snapshot_json: json!({
+                "result": {"selected_labels": [], "candidates": []}
+            })
+            .to_string(),
+            final_decision_json: json!({"accepted_labels": ["cli"]}).to_string(),
+            suggest_coverage: Some(0.61),
+            suggest_coverage_cosine: Some(0.74),
+            suggest_residual_norm: Some(0.39),
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: "[]".to_owned(),
+            capture_fingerprint: None,
+            signals: vec![LabelOntologySignalInput {
+                kind: LabelOntologySignalKind::FalseNegative,
+                target_label_ref: Some("cli".to_owned()),
+                related_labels_json: "[]".to_owned(),
+                proposed_action: LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(LabelOntologyCandidateAtomInput {
+                    polarity: "positive".to_owned(),
+                    kind: "applies_when".to_owned(),
+                    text: "extends CLI subcommands, arguments, help output, or JSON behavior"
+                        .to_owned(),
+                }),
+                proposed_label_name: None,
+                proposal_json: "{}".to_owned(),
+                agent_selected: true,
+                suggest_state: Some(LabelOntologySuggestState::Candidate),
+                suggest_score: Some(0.08),
+                suggest_rank: Some(4),
+                final_selected: true,
+                rationale: "The task expands the CLI surface although suggest scored cli weakly."
+                    .to_owned(),
+                confidence: Some(0.91),
+                signal_key: Some("cli-explain-false-negative".to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        LabelOntologyActionInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            action_type: LabelOntologyActionType::Confirm,
+            signal_ids: vec![signal_id.clone()],
+            reason: "Confirmed by reviewer.".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: None,
+            validation_status: None,
+            validation_json: None,
+        },
+    )?;
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed false-negative support for CLI surface changes.".to_owned(),
+        },
+    )?;
+    Ok(LabelAtomExplainFixture {
+        task,
+        observation_id: observation.id,
+        signal_id,
+        apply_action_id: apply_action.id,
+        target_label_id: label.id,
+        result_atom_id: apply_action.result_atom_id.context("result atom id")?,
+        result_atom_content_hash: apply_action
+            .result_atom_content_hash
+            .context("result atom hash")?,
+    })
+}
+
+fn passed_explain_validation_input(
+    fixture: &LabelAtomExplainFixture,
+) -> LabelOntologyValidationInput {
+    LabelOntologyValidationInput {
+        actor: LabelOntologyActor {
+            name: "validator".to_owned(),
+            actor_type: "agent".to_owned(),
+            agent_type: Some("local".to_owned()),
+        },
+        parent_action_id: fixture.apply_action_id.clone(),
+        signal_ids: Vec::new(),
+        reason: "Source task now selects the target label after atom rebuild.".to_owned(),
+        validation_status: LabelOntologyValidationStatus::Passed,
+        validation_json: json!({
+            "evidence_type": "automated",
+            "embedding_model": "test-embedding-v1",
+            "solver_options": {"candidate_limit": 24, "atom_limit": 64},
+            "index": {"status": "ready", "dirty": false, "generation": 7},
+            "cases": [{
+                "signal_id": fixture.signal_id,
+                "case_type": "positive_atom",
+                "passed": true,
+                "target_label_id": fixture.target_label_id,
+                "before": {
+                    "target": {
+                        "label_id": fixture.target_label_id,
+                        "selected": false,
+                        "score": 0.08
+                    },
+                    "coverage": 0.61
+                },
+                "after": {
+                    "degraded": false,
+                    "target": {
+                        "label_id": fixture.target_label_id,
+                        "selected": true,
+                        "score": 0.74
+                    },
+                    "coverage": 0.79,
+                    "evidence_atoms": [{
+                        "id": fixture.result_atom_id,
+                        "content_hash": fixture.result_atom_content_hash,
+                        "label_id": fixture.target_label_id
+                    }]
+                }
+            }]
+        })
+        .to_string(),
+    }
 }
 
 fn label_atom_store_dirty(path: &Path) -> anyhow::Result<bool> {

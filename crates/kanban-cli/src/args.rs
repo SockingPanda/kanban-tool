@@ -194,6 +194,7 @@ pub(crate) enum LabelCommand {
         #[command(subcommand)]
         command: LabelSemanticsCommand,
     },
+    #[command(alias = "atom")]
     Atoms {
         #[command(subcommand)]
         command: LabelAtomsCommand,
@@ -290,6 +291,7 @@ pub(crate) struct LabelSemanticsUpsertArgs {
 #[derive(Debug, Subcommand)]
 pub(crate) enum LabelAtomsCommand {
     List,
+    Explain { atom_ref: String },
 }
 
 #[derive(Debug, Subcommand)]

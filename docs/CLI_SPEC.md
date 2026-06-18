@@ -492,6 +492,7 @@ kanban label semantics show <label> [--json]
 kanban label semantics upsert <label> [--description <text>] [--applies-when <text>]... [--excludes-when <text>]... [--positive-example <text>]... [--negative-example <text>]... [--json]
 kanban label semantics delete <label> [--json]
 kanban label atoms list [--json]
+kanban label atom explain <atom-id-or-content-hash> [--json]
 kanban label atom-index status [--vector-config <toml>] [--json]
 kanban label atom-index rebuild --vector-config <toml> [--json]
 kanban label atom-index query <text> [--polarity positive|negative] [--limit 24] --vector-config <toml> [--json]
@@ -637,6 +638,16 @@ collapse，canonical 行分隔保留。同一 label 下相同
 `label atoms list` 读取 SQLite truth 中的 `label_atoms`。这些 atoms 来自
 `label semantics upsert` 或接受 label proposal 后生成的 semantics；它们是
 `lancedb_label_atoms` 派生索引的输入，不是派生索引本身。
+
+`label atom explain <atom-id-or-content-hash>` 是 `label atoms explain` 的单数别名，
+按当前 board 的 atom id 或稳定 `content_hash` 解析现有 atom，并返回当前 atom、
+canonical semantics、provenance actions、supporting signals/source tasks 和
+validation history。当前 atom 存在但没有 ontology provenance action 引用其 id 或
+content hash 时命令成功返回 `legacy_untracked=true` 和 `legacy_reason`；未知 id/hash
+返回 not found。JSON 输出是 `LabelAtomExplainRecord`，包含 `query`、`atom`、
+`current_semantics`、`provenance_actions`、`supporting_signals`、
+`validation_history`、`legacy_untracked` 和 `legacy_reason`。由于 content hash 不含
+ordinal，semantics rebuild 后同语义 atom 的 id 改变时仍可用 content hash 解释历史。
 
 `label atom-index status` 返回 label atom vector index 的状态。未配置 provider 或未
 启用 `vector-lancedb` 时仍成功返回 disabled/degraded 状态。JSON 保留兼容字段

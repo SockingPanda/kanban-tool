@@ -127,6 +127,46 @@ pub struct LabelAtomRecord {
     pub updated_at: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelAtomExplainRecord {
+    pub query: String,
+    pub atom: Option<LabelAtomRecord>,
+    pub current_semantics: Option<LabelSemanticsRecord>,
+    pub provenance_actions: Vec<LabelAtomExplainAction>,
+    pub supporting_signals: Vec<LabelAtomExplainSignal>,
+    pub validation_history: Vec<LabelAtomExplainValidation>,
+    pub legacy_untracked: bool,
+    pub legacy_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelAtomExplainAction {
+    pub action: LabelOntologyActionRecord,
+    pub matched_by: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelAtomExplainSignal {
+    pub signal: LabelOntologySignalRecord,
+    pub observation: LabelOntologyObservationRecord,
+    pub source_task: TaskRecord,
+    pub task_ref_snapshot: String,
+    pub suggest_input_stale: bool,
+    pub suggest_degraded: bool,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelAtomExplainValidation {
+    pub action: LabelOntologyActionRecord,
+    pub parent_action_id: String,
+    pub validation_status: LabelOntologyValidationStatus,
+    pub manual: serde_json::Value,
+    pub summary: serde_json::Value,
+    pub cases: serde_json::Value,
+    pub warnings: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LabelProposalStatus {

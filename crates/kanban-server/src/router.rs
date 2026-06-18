@@ -38,6 +38,10 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/boards/:board/labels/atoms", get(list_label_atoms))
         .route(
+            "/api/v1/boards/:board/labels/atoms/:atom_ref/explain",
+            get(explain_label_atom),
+        )
+        .route(
             "/api/v1/boards/:board/labels/atom-index/status",
             get(label_atom_index_status),
         )

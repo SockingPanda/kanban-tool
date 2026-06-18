@@ -4,14 +4,20 @@ use super::{
     LabelOntologyActionInput, LabelOntologyActionRecord, LabelOntologyActionType,
     LabelOntologyActor, LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput,
     LabelOntologyObservationRecord, LabelOntologyProposedAction, LabelOntologyRecordInput,
-    LabelOntologySignalDetail, LabelOntologySignalInput, LabelOntologySignalListOptions,
-    LabelOntologySignalRecord, LabelOntologySignalStatus, LabelOntologyValidationInput,
-    LabelOntologyValidationStatus, LabelSemanticProposalRecord, all_values, board_id, exec,
-    get_task_by_id, mark_label_atom_store_dirty, optional, required_row, resolve_task, storage,
+    LabelOntologyReviewAtomVariant, LabelOntologyReviewGroup, LabelOntologyReviewGroupBy,
+    LabelOntologyReviewLabelRef, LabelOntologyReviewOptions, LabelOntologySignalDetail,
+    LabelOntologySignalInput, LabelOntologySignalListOptions, LabelOntologySignalRecord,
+    LabelOntologySignalStatus, LabelOntologyValidationInput, LabelOntologyValidationStatus,
+    LabelSemanticProposalRecord, all_values, board_id, exec, get_task_by_id,
+    mark_label_atom_store_dirty, optional, required_row, resolve_task, storage,
     upsert_label_semantics_in_tx, with_immediate_tx, with_read_tx,
 };
 
-use std::{path::Path, str::FromStr};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+    str::FromStr,
+};
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_typed_id};
 use kanban_labels::LabelDefinition;
@@ -187,6 +193,88 @@ pub fn list_label_ontology_signals(
             SIGNAL_COLUMNS
         );
         all_values(&conn, &sql, &sql_params, signal_from_row)
+    })
+}
+
+pub fn review_label_ontology(
+    path: impl AsRef<Path>,
+    board: &str,
+    options: LabelOntologyReviewOptions,
+) -> Result<Vec<LabelOntologyReviewGroup>> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    with_read_tx(&conn, || {
+        let mut conditions = vec!["s.board_id=?".to_owned()];
+        let mut sql_params = vec![Value::Text(board_id)];
+        if !options.include_all {
+            add_in_filter(
+                &mut conditions,
+                &mut sql_params,
+                "s.status",
+                [
+                    LabelOntologySignalStatus::Open,
+                    LabelOntologySignalStatus::Confirmed,
+                ]
+                .into_iter()
+                .map(|status| status.to_string()),
+            );
+        }
+
+        let where_sql = conditions.join(" AND ");
+        let sql = format!(
+            "SELECT s.id, o.task_id, o.task_ref_snapshot, o.suggest_degraded, s.status, \
+             s.target_label_id, s.target_label_name_snapshot, s.candidate_atom_polarity, \
+             s.candidate_atom_kind, s.candidate_text, s.candidate_content_hash, \
+             s.proposed_label_name, s.proposed_label_name_normalized, s.suggest_score, \
+             s.created_at \
+             FROM label_ontology_signals s \
+             JOIN label_ontology_observations o ON o.id=s.observation_id \
+             WHERE {where_sql} ORDER BY s.created_at ASC, s.id ASC"
+        );
+        let mut stmt = conn.prepare(&sql).map_err(storage)?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(sql_params.iter()), |row| {
+                review_signal_row_from_row(row)
+            })
+            .map_err(storage)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(storage)?;
+        if rows.is_empty() {
+            return Ok(Vec::new());
+        }
+        let signal_ids = rows
+            .iter()
+            .map(|row| row.signal_id.clone())
+            .collect::<Vec<_>>();
+        let action_links = review_action_links_for_signals(&conn, &signal_ids)?;
+        let mut groups = BTreeMap::<String, ReviewGroupAccumulator>::new();
+        for row in rows {
+            let links = action_links
+                .get(&row.signal_id)
+                .cloned()
+                .unwrap_or_default();
+            let key = review_group_key(options.group_by, &row);
+            groups
+                .entry(key.clone())
+                .or_insert_with(|| ReviewGroupAccumulator::new(options.group_by, key))
+                .add(row, &links);
+        }
+
+        let limit = options.limit.clamp(1, LABEL_ONTOLOGY_LIST_LIMIT_MAX);
+        let mut groups = groups
+            .into_values()
+            .map(ReviewGroupAccumulator::finish)
+            .collect::<Vec<_>>();
+        groups.sort_by(|left, right| {
+            right
+                .task_count
+                .cmp(&left.task_count)
+                .then_with(|| right.confirmed_count.cmp(&left.confirmed_count))
+                .then_with(|| right.latest_signal_at.cmp(&left.latest_signal_at))
+                .then_with(|| left.key.cmp(&right.key))
+        });
+        groups.truncate(limit);
+        Ok(groups)
     })
 }
 
@@ -1709,6 +1797,323 @@ fn add_in_filter(
     let placeholders = vec!["?"; values.len()].join(",");
     conditions.push(format!("{column} IN ({placeholders})"));
     sql_params.extend(values.into_iter().map(Value::Text));
+}
+
+#[derive(Clone)]
+struct ReviewActionLink {
+    action_id: String,
+    result_proposal_id: Option<String>,
+}
+
+struct ReviewSignalRow {
+    signal_id: String,
+    task_id: String,
+    task_ref_snapshot: String,
+    suggest_degraded: bool,
+    status: LabelOntologySignalStatus,
+    target_label_id: Option<String>,
+    target_label_name_snapshot: Option<String>,
+    candidate_atom_polarity: Option<String>,
+    candidate_atom_kind: Option<String>,
+    candidate_text: Option<String>,
+    candidate_content_hash: Option<String>,
+    proposed_label_name: Option<String>,
+    proposed_label_name_normalized: Option<String>,
+    suggest_score: Option<f64>,
+    created_at: i64,
+}
+
+fn review_signal_row_from_row(row: &Row<'_>) -> rusqlite::Result<ReviewSignalRow> {
+    let status: String = row.get(4)?;
+    Ok(ReviewSignalRow {
+        signal_id: row.get(0)?,
+        task_id: row.get(1)?,
+        task_ref_snapshot: row.get(2)?,
+        suggest_degraded: int_bool(row.get(3)?),
+        status: parse_row_enum(&status)?,
+        target_label_id: row.get(5)?,
+        target_label_name_snapshot: row.get(6)?,
+        candidate_atom_polarity: row.get(7)?,
+        candidate_atom_kind: row.get(8)?,
+        candidate_text: row.get(9)?,
+        candidate_content_hash: row.get(10)?,
+        proposed_label_name: row.get(11)?,
+        proposed_label_name_normalized: row.get(12)?,
+        suggest_score: row.get(13)?,
+        created_at: row.get(14)?,
+    })
+}
+
+fn review_group_key(group_by: LabelOntologyReviewGroupBy, row: &ReviewSignalRow) -> String {
+    match group_by {
+        LabelOntologyReviewGroupBy::Label => row
+            .target_label_id
+            .clone()
+            .unwrap_or_else(|| "no-target-label".to_owned()),
+        LabelOntologyReviewGroupBy::CandidateAtom => row
+            .candidate_content_hash
+            .clone()
+            .unwrap_or_else(|| "no-candidate-atom".to_owned()),
+        LabelOntologyReviewGroupBy::ProposedLabel => row
+            .proposed_label_name_normalized
+            .clone()
+            .unwrap_or_else(|| "no-proposed-label".to_owned()),
+    }
+}
+
+fn review_action_links_for_signals(
+    conn: &Connection,
+    signal_ids: &[String],
+) -> Result<BTreeMap<String, Vec<ReviewActionLink>>> {
+    if signal_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let placeholders = vec!["?"; signal_ids.len()].join(",");
+    let sql = format!(
+        "SELECT x.signal_id, a.id, a.result_proposal_id \
+         FROM label_ontology_action_signals x \
+         JOIN label_ontology_actions a ON a.id=x.action_id \
+         WHERE x.signal_id IN ({placeholders}) \
+         ORDER BY a.created_at ASC, a.id ASC"
+    );
+    let values = signal_ids
+        .iter()
+        .cloned()
+        .map(Value::Text)
+        .collect::<Vec<_>>();
+    let mut stmt = conn.prepare(&sql).map_err(storage)?;
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(values.iter()), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                ReviewActionLink {
+                    action_id: row.get(1)?,
+                    result_proposal_id: row.get(2)?,
+                },
+            ))
+        })
+        .map_err(storage)?;
+    let mut links = BTreeMap::<String, Vec<ReviewActionLink>>::new();
+    for row in rows {
+        let (signal_id, link) = row.map_err(storage)?;
+        links.entry(signal_id).or_default().push(link);
+    }
+    Ok(links)
+}
+
+struct ReviewAtomVariantAccumulator {
+    content_hash: String,
+    polarity: Option<String>,
+    kind: Option<String>,
+    text: Option<String>,
+    signal_count: i64,
+}
+
+struct ReviewGroupAccumulator {
+    group_by: LabelOntologyReviewGroupBy,
+    key: String,
+    label_id: Option<String>,
+    label_name: Option<String>,
+    candidate_atom_polarity: Option<String>,
+    candidate_atom_kind: Option<String>,
+    candidate_text: Option<String>,
+    candidate_content_hash: Option<String>,
+    proposed_label_name: Option<String>,
+    proposed_label_name_normalized: Option<String>,
+    task_ids: BTreeSet<String>,
+    signal_count: i64,
+    open_count: i64,
+    confirmed_count: i64,
+    resolved_count: i64,
+    rejected_count: i64,
+    superseded_count: i64,
+    degraded_count: i64,
+    scores: Vec<f64>,
+    oldest_signal_at: Option<i64>,
+    latest_signal_at: Option<i64>,
+    sample_task_refs: Vec<String>,
+    signal_ids: Vec<String>,
+    action_ids: BTreeSet<String>,
+    proposal_ids: BTreeSet<String>,
+    labels: BTreeMap<String, Option<String>>,
+    candidate_atom_variants: BTreeMap<String, ReviewAtomVariantAccumulator>,
+}
+
+impl ReviewGroupAccumulator {
+    fn new(group_by: LabelOntologyReviewGroupBy, key: String) -> Self {
+        Self {
+            group_by,
+            key,
+            label_id: None,
+            label_name: None,
+            candidate_atom_polarity: None,
+            candidate_atom_kind: None,
+            candidate_text: None,
+            candidate_content_hash: None,
+            proposed_label_name: None,
+            proposed_label_name_normalized: None,
+            task_ids: BTreeSet::new(),
+            signal_count: 0,
+            open_count: 0,
+            confirmed_count: 0,
+            resolved_count: 0,
+            rejected_count: 0,
+            superseded_count: 0,
+            degraded_count: 0,
+            scores: Vec::new(),
+            oldest_signal_at: None,
+            latest_signal_at: None,
+            sample_task_refs: Vec::new(),
+            signal_ids: Vec::new(),
+            action_ids: BTreeSet::new(),
+            proposal_ids: BTreeSet::new(),
+            labels: BTreeMap::new(),
+            candidate_atom_variants: BTreeMap::new(),
+        }
+    }
+
+    fn add(&mut self, row: ReviewSignalRow, action_links: &[ReviewActionLink]) {
+        self.signal_count += 1;
+        match row.status {
+            LabelOntologySignalStatus::Open => self.open_count += 1,
+            LabelOntologySignalStatus::Confirmed => self.confirmed_count += 1,
+            LabelOntologySignalStatus::Resolved => self.resolved_count += 1,
+            LabelOntologySignalStatus::Rejected => self.rejected_count += 1,
+            LabelOntologySignalStatus::Superseded => self.superseded_count += 1,
+        }
+        if row.suggest_degraded {
+            self.degraded_count += 1;
+        }
+        if self.task_ids.insert(row.task_id.clone()) && self.sample_task_refs.len() < 5 {
+            self.sample_task_refs.push(row.task_ref_snapshot.clone());
+        }
+        if let Some(score) = row.suggest_score {
+            self.scores.push(score);
+        }
+        self.oldest_signal_at = Some(match self.oldest_signal_at {
+            Some(existing) => existing.min(row.created_at),
+            None => row.created_at,
+        });
+        self.latest_signal_at = Some(match self.latest_signal_at {
+            Some(existing) => existing.max(row.created_at),
+            None => row.created_at,
+        });
+        self.signal_ids.push(row.signal_id);
+        if self.label_id.is_none() {
+            self.label_id = row.target_label_id.clone();
+            self.label_name = row.target_label_name_snapshot.clone();
+        }
+        if self.candidate_content_hash.is_none() {
+            self.candidate_atom_polarity = row.candidate_atom_polarity.clone();
+            self.candidate_atom_kind = row.candidate_atom_kind.clone();
+            self.candidate_text = row.candidate_text.clone();
+            self.candidate_content_hash = row.candidate_content_hash.clone();
+        }
+        if self.proposed_label_name_normalized.is_none() {
+            self.proposed_label_name = row.proposed_label_name.clone();
+            self.proposed_label_name_normalized = row.proposed_label_name_normalized.clone();
+        }
+        if let Some(label_id) = row.target_label_id {
+            self.labels
+                .entry(label_id)
+                .or_insert(row.target_label_name_snapshot);
+        }
+        if let Some(content_hash) = row.candidate_content_hash {
+            let entry = self
+                .candidate_atom_variants
+                .entry(content_hash.clone())
+                .or_insert(ReviewAtomVariantAccumulator {
+                    content_hash,
+                    polarity: row.candidate_atom_polarity,
+                    kind: row.candidate_atom_kind,
+                    text: row.candidate_text,
+                    signal_count: 0,
+                });
+            entry.signal_count += 1;
+        }
+        self.add_action_links(action_links);
+    }
+
+    fn add_action_links(&mut self, action_links: &[ReviewActionLink]) {
+        for link in action_links {
+            self.action_ids.insert(link.action_id.clone());
+            if let Some(proposal_id) = link.result_proposal_id.as_deref() {
+                self.proposal_ids.insert(proposal_id.to_owned());
+            }
+        }
+    }
+
+    fn finish(mut self) -> LabelOntologyReviewGroup {
+        self.scores.sort_by(f64::total_cmp);
+        let average_score = if self.scores.is_empty() {
+            None
+        } else {
+            Some(self.scores.iter().sum::<f64>() / self.scores.len() as f64)
+        };
+        let median_score = median_score(&self.scores);
+        let mut labels = self
+            .labels
+            .into_iter()
+            .map(|(id, name)| LabelOntologyReviewLabelRef { id, name })
+            .collect::<Vec<_>>();
+        labels.sort_by(|left, right| left.id.cmp(&right.id));
+        let mut variants = self
+            .candidate_atom_variants
+            .into_values()
+            .map(|variant| LabelOntologyReviewAtomVariant {
+                content_hash: variant.content_hash,
+                polarity: variant.polarity,
+                kind: variant.kind,
+                text: variant.text,
+                signal_count: variant.signal_count,
+            })
+            .collect::<Vec<_>>();
+        variants.sort_by(|left, right| {
+            right
+                .signal_count
+                .cmp(&left.signal_count)
+                .then_with(|| left.content_hash.cmp(&right.content_hash))
+        });
+        LabelOntologyReviewGroup {
+            group_by: self.group_by,
+            key: self.key,
+            label_id: self.label_id,
+            label_name: self.label_name,
+            candidate_atom_polarity: self.candidate_atom_polarity,
+            candidate_atom_kind: self.candidate_atom_kind,
+            candidate_text: self.candidate_text,
+            candidate_content_hash: self.candidate_content_hash,
+            proposed_label_name: self.proposed_label_name,
+            proposed_label_name_normalized: self.proposed_label_name_normalized,
+            task_count: self.task_ids.len() as i64,
+            signal_count: self.signal_count,
+            open_count: self.open_count,
+            confirmed_count: self.confirmed_count,
+            resolved_count: self.resolved_count,
+            rejected_count: self.rejected_count,
+            superseded_count: self.superseded_count,
+            degraded_count: self.degraded_count,
+            average_score,
+            median_score,
+            oldest_signal_at: self.oldest_signal_at.unwrap_or_default(),
+            latest_signal_at: self.latest_signal_at.unwrap_or_default(),
+            sample_task_refs: self.sample_task_refs,
+            signal_ids: self.signal_ids,
+            action_count: self.action_ids.len() as i64,
+            action_ids: self.action_ids.into_iter().collect(),
+            proposal_ids: self.proposal_ids.into_iter().collect(),
+            labels,
+            candidate_atom_variants: variants,
+        }
+    }
+}
+
+fn median_score(scores: &[f64]) -> Option<f64> {
+    match scores.len() {
+        0 => None,
+        len if len % 2 == 1 => Some(scores[len / 2]),
+        len => Some((scores[(len / 2) - 1] + scores[len / 2]) / 2.0),
+    }
 }
 
 fn observation_by_id(

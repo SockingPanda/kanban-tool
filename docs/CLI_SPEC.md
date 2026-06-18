@@ -505,7 +505,7 @@ kanban label proposals reject <proposal_id> [--reason <text>] [--json]
 kanban label ontology record <task_ref> --input <path|-> [--json]
 kanban label ontology list [--status open|confirmed|resolved|rejected|superseded]... [--kind false_negative|false_positive|vocabulary_gap|name_issue|boundary_issue|structure_issue]... [--task <task_ref>] [--label <label>] [--proposed-label <name>] [--include-all] [--limit 100] [--json]
 kanban label ontology show <signal_id> [--json]
-kanban label ontology review [--limit 100] [--json]
+kanban label ontology review [--group-by label|candidate-atom|proposed-label] [--include-all] [--limit 100] [--json]
 kanban label ontology confirm <signal_id>... --reason <text> [--json]
 kanban label ontology reject <signal_id>... --reason <text> [--json]
 kanban label ontology supersede <signal_id>... --by <signal_id> --reason <text> [--json]
@@ -771,7 +771,13 @@ Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
 返回完整历史；`--status`、`--kind` 可重复过滤，`--task`、`--label` 和
 `--proposed-label` 用于按来源 task、目标 label 或候选新 label 查询。
 `label ontology show` 返回 signal、observation 和关联 actions。`label ontology review`
-是只读 review queue 视图，当前实现按 unresolved signals 列表输出。
+是只读聚合 review queue 视图，默认只聚合 `open` 和 `confirmed` signals；传
+`--include-all` 时包含 resolved/rejected/superseded 历史。`--group-by` 支持按
+`label`、`candidate-atom` 或 `proposed-label` 聚合，`--limit` 限制返回 group
+数量。`--json` 每个 group 返回聚合维度、key、相关 label / candidate atom /
+proposed label、distinct task count、signal/status/degraded/action counts、score
+summary、sample task refs、signal ids、action ids 和 proposal ids。排序优先使用
+distinct task count，其次 confirmed count、latest signal time 和 key。
 
 Lifecycle commands 写入 action 并同步更新 signal status：
 

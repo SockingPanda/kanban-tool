@@ -907,6 +907,104 @@ pub struct LabelOntologySignalDetail {
     pub actions: Vec<LabelOntologyActionRecord>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelOntologyReviewGroupBy {
+    Label,
+    CandidateAtom,
+    ProposedLabel,
+}
+
+impl std::fmt::Display for LabelOntologyReviewGroupBy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Label => "label",
+            Self::CandidateAtom => "candidate_atom",
+            Self::ProposedLabel => "proposed_label",
+        })
+    }
+}
+
+impl std::str::FromStr for LabelOntologyReviewGroupBy {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "label" => Ok(Self::Label),
+            "candidate_atom" | "candidate-atom" => Ok(Self::CandidateAtom),
+            "proposed_label" | "proposed-label" => Ok(Self::ProposedLabel),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid label ontology review group: {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelOntologyReviewOptions {
+    pub group_by: LabelOntologyReviewGroupBy,
+    pub include_all: bool,
+    pub limit: usize,
+}
+
+impl Default for LabelOntologyReviewOptions {
+    fn default() -> Self {
+        Self {
+            group_by: LabelOntologyReviewGroupBy::Label,
+            include_all: false,
+            limit: 100,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelOntologyReviewLabelRef {
+    pub id: String,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelOntologyReviewAtomVariant {
+    pub content_hash: String,
+    pub polarity: Option<String>,
+    pub kind: Option<String>,
+    pub text: Option<String>,
+    pub signal_count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyReviewGroup {
+    pub group_by: LabelOntologyReviewGroupBy,
+    pub key: String,
+    pub label_id: Option<String>,
+    pub label_name: Option<String>,
+    pub candidate_atom_polarity: Option<String>,
+    pub candidate_atom_kind: Option<String>,
+    pub candidate_text: Option<String>,
+    pub candidate_content_hash: Option<String>,
+    pub proposed_label_name: Option<String>,
+    pub proposed_label_name_normalized: Option<String>,
+    pub task_count: i64,
+    pub signal_count: i64,
+    pub open_count: i64,
+    pub confirmed_count: i64,
+    pub resolved_count: i64,
+    pub rejected_count: i64,
+    pub superseded_count: i64,
+    pub degraded_count: i64,
+    pub average_score: Option<f64>,
+    pub median_score: Option<f64>,
+    pub oldest_signal_at: i64,
+    pub latest_signal_at: i64,
+    pub sample_task_refs: Vec<String>,
+    pub signal_ids: Vec<String>,
+    pub action_count: i64,
+    pub action_ids: Vec<String>,
+    pub proposal_ids: Vec<String>,
+    pub labels: Vec<LabelOntologyReviewLabelRef>,
+    pub candidate_atom_variants: Vec<LabelOntologyReviewAtomVariant>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LabelOntologySignalListOptions {
     pub statuses: Vec<LabelOntologySignalStatus>,

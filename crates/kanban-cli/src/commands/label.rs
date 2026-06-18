@@ -6,17 +6,18 @@ use anyhow::{Result, bail};
 use kanban_sqlite::{
     BootstrapTaskLabel, CreateLabel, LabelOntologyActionInput, LabelOntologyActionRecord,
     LabelOntologyActionType, LabelOntologyActor, LabelOntologyAtomApplyInput,
-    LabelOntologyValidationInput, LabelOntologyValidationStatus, LabelProposalCandidate,
-    LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalStatus,
-    LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult,
-    MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
-    accept_label_proposal_with_options, add_task_labels, apply_label_ontology_atom,
-    bootstrap_task_label, create_label, create_label_ontology_action, delete_label,
-    delete_label_semantics, explain_label_atom, get_label_ontology_signal, get_label_proposal,
-    get_label_semantics, get_task, label_atom_index_status, list_label_atoms,
-    list_label_ontology_signals, list_label_proposals, list_label_semantics, list_labels,
-    propose_task_label_with, record_label_ontology_observation, reject_label_proposal,
-    remove_task_label, suggest_task_labels, upsert_label_semantics, validate_label_ontology_action,
+    LabelOntologyReviewGroupBy, LabelOntologyReviewOptions, LabelOntologyValidationInput,
+    LabelOntologyValidationStatus, LabelProposalCandidate, LabelProposalDecisionOptions,
+    LabelProposalListOptions, LabelProposalStatus, LabelSemanticProposalRecord,
+    LabelSuggestionOptions, LabelSuggestionResult, MAX_TASK_LIST_LIMIT,
+    ManualLabelProposalProvider, UpsertLabelSemantics, accept_label_proposal_with_options,
+    add_task_labels, apply_label_ontology_atom, bootstrap_task_label, create_label,
+    create_label_ontology_action, delete_label, delete_label_semantics, explain_label_atom,
+    get_label_ontology_signal, get_label_proposal, get_label_semantics, get_task,
+    label_atom_index_status, list_label_atoms, list_label_ontology_signals, list_label_proposals,
+    list_label_semantics, list_labels, propose_task_label_with, record_label_ontology_observation,
+    reject_label_proposal, remove_task_label, review_label_ontology, suggest_task_labels,
+    upsert_label_semantics, validate_label_ontology_action,
 };
 #[cfg(feature = "vector-lancedb")]
 use kanban_sqlite::{
@@ -27,7 +28,8 @@ use serde::Serialize;
 use std::{fs, io::Read, str::FromStr};
 
 use crate::args::{
-    LabelAtomPolarityArg, LabelCommand, LabelOntologyAtomKindArg, LabelOntologyValidationStatusArg,
+    LabelAtomPolarityArg, LabelCommand, LabelOntologyAtomKindArg, LabelOntologyReviewGroupByArg,
+    LabelOntologyValidationStatusArg,
 };
 use crate::commands::common::validate_page_bounds;
 use crate::output::{label_line, print_or_json, print_task};
@@ -451,21 +453,16 @@ fn handle_label_ontology(
         }
         crate::args::LabelOntologyCommand::Review(args) => {
             validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
-            let signals = list_label_ontology_signals(
+            let groups = review_label_ontology(
                 db_path,
                 board,
-                kanban_sqlite::LabelOntologySignalListOptions {
+                LabelOntologyReviewOptions {
+                    group_by: label_ontology_review_group_by_value(args.group_by),
+                    include_all: args.include_all,
                     limit: args.limit,
-                    ..kanban_sqlite::LabelOntologySignalListOptions::default()
                 },
             )?;
-            print_or_json(json, &signals, || {
-                if signals.is_empty() {
-                    "No label ontology signals to review.".to_owned()
-                } else {
-                    label_ontology_signal_lines(&signals)
-                }
-            })?;
+            print_or_json(json, &groups, || label_ontology_review_group_lines(&groups))?;
         }
         crate::args::LabelOntologyCommand::Confirm(args) => {
             let action = create_label_ontology_action(
@@ -679,6 +676,63 @@ fn label_ontology_signal_lines(signals: &[kanban_sqlite::LabelOntologySignalReco
         .map(label_ontology_signal_line)
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn label_ontology_review_group_by_value(
+    value: LabelOntologyReviewGroupByArg,
+) -> LabelOntologyReviewGroupBy {
+    match value {
+        LabelOntologyReviewGroupByArg::Label => LabelOntologyReviewGroupBy::Label,
+        LabelOntologyReviewGroupByArg::CandidateAtom => LabelOntologyReviewGroupBy::CandidateAtom,
+        LabelOntologyReviewGroupByArg::ProposedLabel => LabelOntologyReviewGroupBy::ProposedLabel,
+    }
+}
+
+fn label_ontology_review_group_lines(groups: &[kanban_sqlite::LabelOntologyReviewGroup]) -> String {
+    if groups.is_empty() {
+        return "No label ontology review groups.".to_owned();
+    }
+    groups
+        .iter()
+        .map(label_ontology_review_group_line)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn label_ontology_review_group_line(group: &kanban_sqlite::LabelOntologyReviewGroup) -> String {
+    let title = match group.group_by {
+        LabelOntologyReviewGroupBy::Label => group.label_name.as_deref(),
+        LabelOntologyReviewGroupBy::CandidateAtom => group.candidate_text.as_deref(),
+        LabelOntologyReviewGroupBy::ProposedLabel => group.proposed_label_name.as_deref(),
+    }
+    .or(group.label_name.as_deref())
+    .or(group.proposed_label_name.as_deref())
+    .or(group.candidate_text.as_deref())
+    .unwrap_or(group.key.as_str());
+    let avg = group
+        .average_score
+        .map(|value| format!("{value:.3}"))
+        .unwrap_or_else(|| "-".to_owned());
+    let median = group
+        .median_score
+        .map(|value| format!("{value:.3}"))
+        .unwrap_or_else(|| "-".to_owned());
+    format!(
+        "{} key={} title={} tasks={} signals={} open={} confirmed={} degraded={} avg_score={} median_score={} samples=[{}] signals=[{}] actions=[{}]",
+        group.group_by,
+        group.key,
+        title,
+        group.task_count,
+        group.signal_count,
+        group.open_count,
+        group.confirmed_count,
+        group.degraded_count,
+        avg,
+        median,
+        group.sample_task_refs.join(","),
+        group.signal_ids.join(","),
+        group.action_ids.join(",")
+    )
 }
 
 fn label_ontology_signal_line(signal: &kanban_sqlite::LabelOntologySignalRecord) -> String {

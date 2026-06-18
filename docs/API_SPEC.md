@@ -829,6 +829,7 @@ POST /api/v1/tasks/{task_id}/labels/bootstrap
 DELETE /api/v1/tasks/{task_id}/labels/{label_id}
 POST /api/v1/tasks/{task_id}/label-ontology/observations
 GET /api/v1/boards/{board}/label-ontology/signals
+GET /api/v1/boards/{board}/label-ontology/review
 GET /api/v1/label-ontology/signals/{signal_id}
 POST /api/v1/boards/{board}/label-ontology/actions
 POST /api/v1/boards/{board}/label-ontology/apply/atom
@@ -1212,6 +1213,7 @@ binding 仍通过 task label API 或 CLI 完成。
 ```http
 POST /api/v1/tasks/{task_id}/label-ontology/observations
 GET /api/v1/boards/{board}/label-ontology/signals?status=open&kind=false_negative&task=default%2312&label=cli&proposed_label=database&include_all=false&limit=100
+GET /api/v1/boards/{board}/label-ontology/review?group_by=label&include_all=false&limit=100
 GET /api/v1/label-ontology/signals/{signal_id}
 POST /api/v1/boards/{board}/label-ontology/actions
 POST /api/v1/boards/{board}/label-ontology/apply/atom
@@ -1282,7 +1284,58 @@ observation 或 signals。
 
 `GET /api/v1/boards/{board}/label-ontology/signals` 默认只返回 `open` 和
 `confirmed`。可重复传 `status` 和 `kind`，并按 `task`、`label`、
-`proposed_label`、`include_all`、`limit` 过滤。`GET /api/v1/label-ontology/signals/{signal_id}`
+`proposed_label`、`include_all`、`limit` 过滤。
+
+`GET /api/v1/boards/{board}/label-ontology/review` 返回只读聚合 review queue。
+`group_by` 支持 `label`、`candidate-atom` / `candidate_atom`、`proposed-label` /
+`proposed_label`，默认 `label`；`include_all=false` 默认只聚合 `open` 和
+`confirmed` signals，`true` 时包含完整历史；`limit` 限制 group 数量。响应
+`meta` 回显 `group_by`、`include_all` 和 `limit`。每个 group 包含：
+
+```json
+{
+  "group_by": "label",
+  "key": "lab_...",
+  "label_id": "lab_...",
+  "label_name": "cli",
+  "candidate_atom_polarity": "positive",
+  "candidate_atom_kind": "applies_when",
+  "candidate_text": "extends CLI subcommands",
+  "candidate_content_hash": "14ada47e4b0566c5",
+  "proposed_label_name": null,
+  "proposed_label_name_normalized": null,
+  "task_count": 2,
+  "signal_count": 3,
+  "open_count": 2,
+  "confirmed_count": 1,
+  "resolved_count": 0,
+  "rejected_count": 0,
+  "superseded_count": 0,
+  "degraded_count": 1,
+  "average_score": 0.31,
+  "median_score": 0.28,
+  "oldest_signal_at": 1781780000000,
+  "latest_signal_at": 1781780100000,
+  "sample_task_refs": ["default#12"],
+  "signal_ids": ["los_..."],
+  "action_count": 1,
+  "action_ids": ["loa_..."],
+  "proposal_ids": [],
+  "labels": [{"id": "lab_...", "name": "cli"}],
+  "candidate_atom_variants": [
+    {
+      "content_hash": "14ada47e4b0566c5",
+      "polarity": "positive",
+      "kind": "applies_when",
+      "text": "extends CLI subcommands",
+      "signal_count": 2
+    }
+  ]
+}
+```
+
+Groups sort by distinct `task_count` desc, then `confirmed_count` desc,
+`latest_signal_at` desc, and `key` asc。`GET /api/v1/label-ontology/signals/{signal_id}`
 返回：
 
 ```json

@@ -444,8 +444,21 @@ pub(crate) struct LabelOntologyListArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct LabelOntologyReviewArgs {
+    #[arg(long, value_enum, default_value = "label")]
+    pub(crate) group_by: LabelOntologyReviewGroupByArg,
+    #[arg(long)]
+    pub(crate) include_all: bool,
     #[arg(long, default_value_t = 100)]
     pub(crate) limit: usize,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum LabelOntologyReviewGroupByArg {
+    Label,
+    #[value(name = "candidate-atom")]
+    CandidateAtom,
+    #[value(name = "proposed-label")]
+    ProposedLabel,
 }
 
 #[derive(Debug, Args)]

@@ -1,7 +1,7 @@
 use crate::connect_file;
 
 use super::{
-    ClaimResult, TaskRecord, board_id, ensure_board_active, ensure_changed_one, exec,
+    ClaimResult, TaskRecord, board_id, ensure_board_active, ensure_changed_one, exec_named,
     get_task_by_id, insert_event, json_valid, query_tasks, resolve_task, storage,
     with_immediate_tx,
 };
@@ -796,7 +796,7 @@ pub(crate) fn reclaim_running_task(
         ));
     }
     if let (Some(run_id), Some(token)) = (&task.current_run_id, &task.claim_token) {
-        let changed = exec(
+        let changed = exec_named(
             conn,
             "UPDATE task_runs
              SET status=:status, finished_at=:finished_at, error=:error
@@ -820,7 +820,7 @@ pub(crate) fn reclaim_running_task(
         })?;
     }
     let status_reason = (target == TaskStatus::Blocked).then_some(reason);
-    let changed = exec(
+    let changed = exec_named(
         conn,
         "UPDATE tasks
          SET status=:status,
@@ -894,7 +894,7 @@ pub(crate) fn retry_running_task(
     }
     let decision = retry_decision(task.retry_count, task.max_retries, TaskStatus::Ready);
     if let (Some(run_id), Some(token)) = (&task.current_run_id, &task.claim_token) {
-        let changed = exec(
+        let changed = exec_named(
             conn,
             "UPDATE task_runs
              SET status=:status, finished_at=:finished_at, exit_code=:exit_code, error=:error
@@ -919,7 +919,7 @@ pub(crate) fn retry_running_task(
         })?;
     }
     let status_reason = decision.max_retries_reached.then_some(reason);
-    let changed = exec(
+    let changed = exec_named(
         conn,
         "UPDATE tasks
          SET status=:status,
@@ -1018,7 +1018,7 @@ pub(crate) fn finish_running(
                 "finish requires matching running claim".into(),
             ));
         }
-        exec(
+        exec_named(
             conn,
             "UPDATE tasks
              SET status=:status,
@@ -1051,7 +1051,7 @@ pub(crate) fn finish_running(
             },
         )
     } else {
-        exec(
+        exec_named(
             conn,
             "UPDATE tasks
              SET status=:status,
@@ -1089,7 +1089,7 @@ pub(crate) fn finish_running(
     .to_string();
     if let Some(run_id) = &task.current_run_id {
         let log_path = log_path.map(|path| path.to_string_lossy().to_string());
-        let changed = exec(
+        let changed = exec_named(
             conn,
             "UPDATE task_runs
              SET status=:status,

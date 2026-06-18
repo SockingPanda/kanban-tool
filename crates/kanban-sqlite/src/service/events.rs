@@ -1,9 +1,9 @@
 use crate::connect_file;
 
 use super::{
-    EventListOptions, EventRecord, SqlFilter, all_values, board_id_any, enqueue_index_outbox, exec,
-    resolve_task_any, scalar, upsert_board_entity, upsert_event_entity, upsert_run_entity,
-    upsert_task_entity,
+    EventListOptions, EventRecord, SqlFilter, all_values, board_id_any, enqueue_index_outbox,
+    exec_named, resolve_task_any, scalar, upsert_board_entity, upsert_event_entity,
+    upsert_run_entity, upsert_task_entity,
 };
 
 use std::path::Path;
@@ -106,7 +106,7 @@ pub(crate) fn insert_event(
     now: i64,
 ) -> Result<()> {
     let event_id = new_event_id();
-    exec(
+    exec_named(
         conn,
         "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, :run_id, :kind, :actor, :payload_json, :created_at)",
         named_params! {

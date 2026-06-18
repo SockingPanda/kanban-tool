@@ -2,7 +2,11 @@ use super::storage;
 
 use kanban_core::{KanbanError, Result};
 
-use rusqlite::{Connection, OptionalExtension, Params, Row, params_from_iter, types::Value};
+use std::collections::BTreeSet;
+
+use rusqlite::{
+    Connection, OptionalExtension, Params, Row, Statement, ToSql, params_from_iter, types::Value,
+};
 
 pub(crate) fn all<T, P, F>(conn: &Connection, sql: &str, params: P, mapper: F) -> Result<Vec<T>>
 where
@@ -91,6 +95,48 @@ where
     conn.execute(sql, params).map_err(storage)
 }
 
+pub(crate) type NamedParams<'a> = &'a [(&'a str, &'a dyn ToSql)];
+
+pub(crate) fn exec_named(conn: &Connection, sql: &str, params: NamedParams<'_>) -> Result<usize> {
+    let mut stmt = conn.prepare(sql).map_err(storage)?;
+    check_named_params(&stmt, params)?;
+    stmt.execute(params).map_err(storage)
+}
+
+fn check_named_params(stmt: &Statement<'_>, params: NamedParams<'_>) -> Result<()> {
+    let provided = params
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<BTreeSet<_>>();
+    let mut required = BTreeSet::new();
+    for index in 1..=stmt.parameter_count() {
+        let Some(name) = stmt
+            .parameter_name(index)
+            .filter(|name| is_named_parameter(name))
+        else {
+            return Err(KanbanError::Storage(format!(
+                "expected named SQL parameter at index {index}"
+            )));
+        };
+        required.insert(name);
+    }
+    if let Some(name) = required.difference(&provided).next() {
+        return Err(KanbanError::Storage(format!(
+            "missing SQL parameter binding: {name}"
+        )));
+    }
+    if let Some(name) = provided.difference(&required).next() {
+        return Err(KanbanError::Storage(format!(
+            "unused SQL parameter binding: {name}"
+        )));
+    }
+    Ok(())
+}
+
+fn is_named_parameter(name: &str) -> bool {
+    matches!(name.as_bytes().first(), Some(b':' | b'@' | b'$'))
+}
+
 pub(crate) fn ensure_changed_one<E>(changed: usize, err: E) -> Result<()>
 where
     E: FnOnce() -> KanbanError,
@@ -110,6 +156,18 @@ where
     E: FnOnce() -> KanbanError,
 {
     ensure_changed_one(exec(conn, sql, params)?, err)
+}
+
+pub(crate) fn exec_one_named<E>(
+    conn: &Connection,
+    sql: &str,
+    params: NamedParams<'_>,
+    err: E,
+) -> Result<()>
+where
+    E: FnOnce() -> KanbanError,
+{
+    ensure_changed_one(exec_named(conn, sql, params)?, err)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -223,7 +281,7 @@ impl IntoSqlValue for Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use rusqlite::Connection;
+    use rusqlite::{Connection, named_params};
 
     use super::*;
 
@@ -403,5 +461,68 @@ mod tests {
                 .to_string()
                 .contains("expected 1 SQL parameters, got 2")
         );
+    }
+
+    #[test]
+    fn exec_named_checks_missing_unused_and_positional_parameters() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "CREATE TABLE items(id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+
+        let id = 1_i64;
+        let missing_name = exec_named(
+            &conn,
+            "INSERT INTO items(id, name) VALUES (:id, :name)",
+            &[(":id", &id as &dyn rusqlite::ToSql)],
+        )
+        .unwrap_err();
+        assert!(
+            missing_name
+                .to_string()
+                .contains("missing SQL parameter binding: :name")
+        );
+
+        let unused = exec_named(
+            &conn,
+            "INSERT INTO items(id, name) VALUES (:id, :name)",
+            named_params! {
+                ":id": 1_i64,
+                ":name": "one",
+                ":unused": "ignored",
+            },
+        )
+        .unwrap_err();
+        assert!(
+            unused
+                .to_string()
+                .contains("unused SQL parameter binding: :unused")
+        );
+
+        let positional = exec_named(
+            &conn,
+            "INSERT INTO items(id, name) VALUES (?1, :name)",
+            named_params! {
+                ":name": "one",
+            },
+        )
+        .unwrap_err();
+        assert!(
+            positional
+                .to_string()
+                .contains("expected named SQL parameter at index 1")
+        );
+
+        exec_named(
+            &conn,
+            "INSERT INTO items(id, name) VALUES (:id, :name)",
+            named_params! {
+                ":id": 1_i64,
+                ":name": "one",
+            },
+        )
+        .unwrap();
     }
 }

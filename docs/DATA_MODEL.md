@@ -778,3 +778,11 @@ Label ontology ledger 使用稳定 record types：
 parent board、action-signal link board、label/proposal soft reference board 必须一致；
 orphan action-signal links、supersede cycles 和 action parent cycles 会导致 import
 失败。
+
+`kanban doctor --json` 对同一组 ontology ledger consistency 规则做只读巡检，并额外返回
+`ontology_ledger_errors`、`ontology_ledger_warnings`、`ontology_ledger_issues[]`。Issue
+包含 `severity`、`code`、`message`、`record_ids`，用于定位损坏 row。Hard error 覆盖
+missing v12 ontology table、跨 board link、orphan action-signal link、parent/supersede
+异常、label/proposal/task board mismatch、supersede cycle 和 action parent cycle；非零 error
+让 `ok=false`。Warning 保留给仍可解释或可重建的软引用，例如历史 action 的
+`result_atom_id` 已被当前 `label_atoms` rebuild 删除。

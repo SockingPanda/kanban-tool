@@ -5,12 +5,13 @@ use crate::{
 
 use super::{
     BackupResult, BlockedReasonCount, CheckpointResult, DatabaseReplaceGuard, DatabaseRuntimeGuard,
-    DoctorDerivedStoreReport, DoctorReport, MaintenanceResult, QueueStats, RunLogPathStatus,
-    StaleClaimRecord, StatusCount, board_id, count_dependency_cycles, derived_store_statuses_conn,
-    run_log_path_status_for_db_dir, storage,
+    DoctorDerivedStoreReport, DoctorIssue, DoctorReport, MaintenanceResult, QueueStats,
+    RunLogPathStatus, StaleClaimRecord, StatusCount, board_id, count_dependency_cycles,
+    derived_store_statuses_conn, run_log_path_status_for_db_dir, storage,
 };
 
 use std::{
+    collections::{HashMap, HashSet},
     fs::{self, OpenOptions},
     io::Write,
     path::Path,
@@ -22,6 +23,13 @@ use kanban_core::{Clock, KanbanError, Result, SystemClock};
 use kanban_indexer::{OUTBOX_DERIVED_STORE_SEEDS, OutboxTarget, derived_store_for_name};
 
 use rusqlite::{Connection, OptionalExtension, params};
+
+const LABEL_ONTOLOGY_LEDGER_TABLES: [&str; 4] = [
+    "label_ontology_observations",
+    "label_ontology_signals",
+    "label_ontology_actions",
+    "label_ontology_action_signals",
+];
 
 pub fn queue_stats(path: impl AsRef<Path>, board: &str) -> Result<QueueStats> {
     let conn = connect_file(path.as_ref())?;
@@ -120,9 +128,11 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
     let user_version: i64 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(storage)?;
-    if migration_version != Some(user_version)
-        || !doctor_tables_present(conn, migration_version, user_version)?
-    {
+    let missing_tables = doctor_missing_required_tables(conn, migration_version, user_version)?;
+    let ontology_ledger_issues = doctor_missing_ontology_table_issues(&missing_tables);
+    let (ontology_ledger_errors, ontology_ledger_warnings) =
+        doctor_issue_counts(&ontology_ledger_issues);
+    if migration_version != Some(user_version) || !missing_tables.is_empty() {
         return Ok(DoctorReport {
             ok: false,
             integrity_check,
@@ -144,6 +154,9 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
             derived_dirty_stores: 0,
             derived_error_stores: 0,
             derived_stores: Vec::new(),
+            ontology_ledger_errors,
+            ontology_ledger_warnings,
+            ontology_ledger_issues,
         });
     }
     let expired_running_tasks: i64 = conn
@@ -191,6 +204,9 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
         .iter()
         .filter(|store| store.last_error.is_some() || store.failed_outbox > 0)
         .count() as i64;
+    let ontology_ledger_issues = doctor_ontology_ledger_issues(conn)?;
+    let (ontology_ledger_errors, ontology_ledger_warnings) =
+        doctor_issue_counts(&ontology_ledger_issues);
     let ok = integrity_check == "ok"
         && migration_version == Some(user_version)
         && expired_running_tasks == 0
@@ -204,7 +220,8 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
         && executable_spec_violations == 0
         && executable_schedule_violations == 0
         && outbox_failed == 0
-        && derived_error_stores == 0;
+        && derived_error_stores == 0
+        && ontology_ledger_errors == 0;
     Ok(DoctorReport {
         ok,
         integrity_check,
@@ -226,6 +243,9 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
         derived_dirty_stores,
         derived_error_stores,
         derived_stores,
+        ontology_ledger_errors,
+        ontology_ledger_warnings,
+        ontology_ledger_issues,
     })
 }
 
@@ -577,11 +597,11 @@ pub(crate) fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
     .map_err(storage)
 }
 
-pub(crate) fn doctor_tables_present(
+fn doctor_missing_required_tables(
     conn: &Connection,
     migration_version: Option<i64>,
     user_version: i64,
-) -> Result<bool> {
+) -> Result<Vec<&'static str>> {
     let mut required_tables = vec!["tasks", "task_dependencies", "task_runs"];
     if migration_version.unwrap_or(0) >= 2 || user_version >= 2 {
         required_tables.extend([
@@ -601,10 +621,495 @@ pub(crate) fn doctor_tables_present(
     if migration_version.unwrap_or(0) >= 9 || user_version >= 9 {
         required_tables.push("label_semantic_proposals");
     }
+    if migration_version.unwrap_or(0) >= 12 || user_version >= 12 {
+        required_tables.extend(LABEL_ONTOLOGY_LEDGER_TABLES);
+    }
+    let mut missing = Vec::new();
     for table in required_tables {
         if !table_exists(conn, table)? {
-            return Ok(false);
+            missing.push(table);
         }
     }
-    Ok(true)
+    Ok(missing)
+}
+
+fn doctor_missing_ontology_table_issues(missing_tables: &[&'static str]) -> Vec<DoctorIssue> {
+    missing_tables
+        .iter()
+        .filter(|table| LABEL_ONTOLOGY_LEDGER_TABLES.contains(table))
+        .map(|table| {
+            doctor_issue(
+                "error",
+                "label_ontology_missing_table",
+                format!("required label ontology ledger table is missing: {table}"),
+                vec![(*table).to_owned()],
+            )
+        })
+        .collect()
+}
+
+fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> {
+    let mut issues = Vec::new();
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT o.id, o.task_id \
+         FROM label_ontology_observations o \
+         LEFT JOIN tasks t ON t.id=o.task_id \
+         WHERE t.id IS NULL",
+        |row| {
+            let observation_id: String = row.get(0)?;
+            let task_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_observation_task_missing",
+                format!(
+                    "label ontology observation {observation_id} references missing task {task_id}"
+                ),
+                vec![observation_id, task_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT o.id, o.task_id \
+         FROM label_ontology_observations o \
+         JOIN tasks t ON t.id=o.task_id \
+         WHERE o.board_id<>t.board_id",
+        |row| {
+            let observation_id: String = row.get(0)?;
+            let task_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_observation_task_board_mismatch",
+                format!(
+                    "label ontology observation {observation_id} board does not match task {task_id}"
+                ),
+                vec![observation_id, task_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT s.id, s.observation_id \
+         FROM label_ontology_signals s \
+         LEFT JOIN label_ontology_observations o ON o.id=s.observation_id \
+         WHERE o.id IS NULL",
+        |row| {
+            let signal_id: String = row.get(0)?;
+            let observation_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_signal_observation_missing",
+                format!(
+                    "label ontology signal {signal_id} references missing observation {observation_id}"
+                ),
+                vec![signal_id, observation_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT s.id, s.observation_id \
+         FROM label_ontology_signals s \
+         JOIN label_ontology_observations o ON o.id=s.observation_id \
+         WHERE s.board_id<>o.board_id",
+        |row| {
+            let signal_id: String = row.get(0)?;
+            let observation_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_signal_observation_board_mismatch",
+                format!(
+                    "label ontology signal {signal_id} board does not match observation {observation_id}"
+                ),
+                vec![signal_id, observation_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT s.id, s.target_label_id \
+         FROM label_ontology_signals s \
+         LEFT JOIN labels l ON l.id=s.target_label_id \
+         WHERE s.target_label_id IS NOT NULL AND l.id IS NULL",
+        |row| {
+            let signal_id: String = row.get(0)?;
+            let label_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_signal_target_label_missing",
+                format!(
+                    "label ontology signal {signal_id} references missing target label {label_id}"
+                ),
+                vec![signal_id, label_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT s.id, s.target_label_id \
+         FROM label_ontology_signals s \
+         JOIN labels l ON l.id=s.target_label_id \
+         WHERE s.target_label_id IS NOT NULL AND s.board_id<>l.board_id",
+        |row| {
+            let signal_id: String = row.get(0)?;
+            let label_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_signal_target_label_board_mismatch",
+                format!(
+                    "label ontology signal {signal_id} board does not match target label {label_id}"
+                ),
+                vec![signal_id, label_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT s.id, s.superseded_by_signal_id \
+         FROM label_ontology_signals s \
+         LEFT JOIN label_ontology_signals r ON r.id=s.superseded_by_signal_id \
+         WHERE s.superseded_by_signal_id IS NOT NULL AND r.id IS NULL",
+        |row| {
+            let signal_id: String = row.get(0)?;
+            let superseding_signal_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_signal_supersede_missing",
+                format!(
+                    "label ontology signal {signal_id} references missing superseding signal {superseding_signal_id}"
+                ),
+                vec![signal_id, superseding_signal_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT s.id, s.superseded_by_signal_id \
+         FROM label_ontology_signals s \
+         JOIN label_ontology_signals r ON r.id=s.superseded_by_signal_id \
+         WHERE s.superseded_by_signal_id IS NOT NULL AND s.board_id<>r.board_id",
+        |row| {
+            let signal_id: String = row.get(0)?;
+            let superseding_signal_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_signal_supersede_board_mismatch",
+                format!(
+                    "label ontology signal {signal_id} board does not match superseding signal {superseding_signal_id}"
+                ),
+                vec![signal_id, superseding_signal_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT a.id, a.parent_action_id \
+         FROM label_ontology_actions a \
+         LEFT JOIN label_ontology_actions p ON p.id=a.parent_action_id \
+         WHERE a.parent_action_id IS NOT NULL AND p.id IS NULL",
+        |row| {
+            let action_id: String = row.get(0)?;
+            let parent_action_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_action_parent_missing",
+                format!(
+                    "label ontology action {action_id} references missing parent action {parent_action_id}"
+                ),
+                vec![action_id, parent_action_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT a.id, a.parent_action_id \
+         FROM label_ontology_actions a \
+         JOIN label_ontology_actions p ON p.id=a.parent_action_id \
+         WHERE a.parent_action_id IS NOT NULL AND a.board_id<>p.board_id",
+        |row| {
+            let action_id: String = row.get(0)?;
+            let parent_action_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_action_parent_board_mismatch",
+                format!(
+                    "label ontology action {action_id} board does not match parent action {parent_action_id}"
+                ),
+                vec![action_id, parent_action_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT a.id, a.target_label_id \
+         FROM label_ontology_actions a \
+         LEFT JOIN labels l ON l.id=a.target_label_id \
+         WHERE a.target_label_id IS NOT NULL AND l.id IS NULL",
+        |row| {
+            let action_id: String = row.get(0)?;
+            let label_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_action_target_label_missing",
+                format!(
+                    "label ontology action {action_id} references missing target label {label_id}"
+                ),
+                vec![action_id, label_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT a.id, a.target_label_id \
+         FROM label_ontology_actions a \
+         JOIN labels l ON l.id=a.target_label_id \
+         WHERE a.target_label_id IS NOT NULL AND a.board_id<>l.board_id",
+        |row| {
+            let action_id: String = row.get(0)?;
+            let label_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_action_target_label_board_mismatch",
+                format!(
+                    "label ontology action {action_id} board does not match target label {label_id}"
+                ),
+                vec![action_id, label_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT a.id, a.result_label_id \
+         FROM label_ontology_actions a \
+         LEFT JOIN labels l ON l.id=a.result_label_id \
+         WHERE a.result_label_id IS NOT NULL AND l.id IS NULL",
+        |row| {
+            let action_id: String = row.get(0)?;
+            let label_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_action_result_label_missing",
+                format!(
+                    "label ontology action {action_id} references missing result label {label_id}"
+                ),
+                vec![action_id, label_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT a.id, a.result_label_id \
+         FROM label_ontology_actions a \
+         JOIN labels l ON l.id=a.result_label_id \
+         WHERE a.result_label_id IS NOT NULL AND a.board_id<>l.board_id",
+        |row| {
+            let action_id: String = row.get(0)?;
+            let label_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_action_result_label_board_mismatch",
+                format!(
+                    "label ontology action {action_id} board does not match result label {label_id}"
+                ),
+                vec![action_id, label_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT a.id, a.result_proposal_id \
+         FROM label_ontology_actions a \
+         LEFT JOIN label_semantic_proposals p ON p.id=a.result_proposal_id \
+         WHERE a.result_proposal_id IS NOT NULL AND p.id IS NULL",
+        |row| {
+            let action_id: String = row.get(0)?;
+            let proposal_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_action_proposal_missing",
+                format!(
+                    "label ontology action {action_id} references missing proposal {proposal_id}"
+                ),
+                vec![action_id, proposal_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT a.id, a.result_proposal_id \
+         FROM label_ontology_actions a \
+         JOIN label_semantic_proposals p ON p.id=a.result_proposal_id \
+         WHERE a.result_proposal_id IS NOT NULL AND a.board_id<>p.board_id",
+        |row| {
+            let action_id: String = row.get(0)?;
+            let proposal_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_action_proposal_board_mismatch",
+                format!(
+                    "label ontology action {action_id} board does not match proposal {proposal_id}"
+                ),
+                vec![action_id, proposal_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT a.id, a.result_atom_id \
+         FROM label_ontology_actions a \
+         LEFT JOIN label_atoms atom ON atom.id=a.result_atom_id \
+         WHERE a.result_atom_id IS NOT NULL AND atom.id IS NULL",
+        |row| {
+            let action_id: String = row.get(0)?;
+            let atom_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "warning",
+                "label_ontology_action_result_atom_missing",
+                format!(
+                    "label ontology action {action_id} references missing rebuildable atom {atom_id}"
+                ),
+                vec![action_id, atom_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT x.action_id, x.signal_id \
+         FROM label_ontology_action_signals x \
+         LEFT JOIN label_ontology_actions a ON a.id=x.action_id \
+         LEFT JOIN label_ontology_signals s ON s.id=x.signal_id \
+         WHERE a.id IS NULL OR s.id IS NULL",
+        |row| {
+            let action_id: String = row.get(0)?;
+            let signal_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_action_signal_orphan",
+                format!(
+                    "label ontology action-signal link references missing action {action_id} or signal {signal_id}"
+                ),
+                vec![action_id, signal_id],
+            ))
+        },
+    )?);
+    issues.extend(query_ontology_issue_rows(
+        conn,
+        "SELECT x.action_id, x.signal_id \
+         FROM label_ontology_action_signals x \
+         JOIN label_ontology_actions a ON a.id=x.action_id \
+         JOIN label_ontology_signals s ON s.id=x.signal_id \
+         WHERE x.board_id<>a.board_id OR x.board_id<>s.board_id",
+        |row| {
+            let action_id: String = row.get(0)?;
+            let signal_id: String = row.get(1)?;
+            Ok(doctor_issue(
+                "error",
+                "label_ontology_action_signal_board_mismatch",
+                format!(
+                    "label ontology action-signal link board does not match action {action_id} or signal {signal_id}"
+                ),
+                vec![action_id, signal_id],
+            ))
+        },
+    )?);
+    issues.extend(doctor_link_cycle_issues(
+        conn,
+        "SELECT id, superseded_by_signal_id FROM label_ontology_signals \
+         WHERE superseded_by_signal_id IS NOT NULL",
+        "label_ontology_signal_supersede_cycle",
+        "label ontology signal supersede cycle",
+    )?);
+    issues.extend(doctor_link_cycle_issues(
+        conn,
+        "SELECT id, parent_action_id FROM label_ontology_actions \
+         WHERE parent_action_id IS NOT NULL",
+        "label_ontology_action_parent_cycle",
+        "label ontology action parent cycle",
+    )?);
+    Ok(issues)
+}
+
+fn query_ontology_issue_rows<F>(
+    conn: &Connection,
+    sql: &str,
+    mut mapper: F,
+) -> Result<Vec<DoctorIssue>>
+where
+    F: FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<DoctorIssue>,
+{
+    let mut stmt = conn.prepare(sql).map_err(storage)?;
+    let rows = stmt.query_map([], |row| mapper(row)).map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
+fn doctor_link_cycle_issues(
+    conn: &Connection,
+    sql: &str,
+    code: &str,
+    message: &str,
+) -> Result<Vec<DoctorIssue>> {
+    let mut stmt = conn.prepare(sql).map_err(storage)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(storage)?;
+    let links = rows
+        .collect::<std::result::Result<HashMap<_, _>, _>>()
+        .map_err(storage)?;
+    let mut issues = Vec::new();
+    let mut emitted = HashSet::new();
+    for start in links.keys() {
+        let mut path = Vec::new();
+        let mut path_index = HashMap::new();
+        let mut current = start.as_str();
+        while let Some(next) = links.get(current) {
+            if let Some(cycle_start) = path_index.get(current).copied() {
+                let cycle = path[cycle_start..].to_vec();
+                let mut dedup_key = cycle.clone();
+                dedup_key.sort();
+                if emitted.insert(dedup_key.join("\0")) {
+                    issues.push(doctor_issue(
+                        "error",
+                        code,
+                        format!("{message}: {}", cycle.join(" -> ")),
+                        cycle,
+                    ));
+                }
+                break;
+            }
+            path_index.insert(current.to_owned(), path.len());
+            path.push(current.to_owned());
+            current = next;
+        }
+    }
+    Ok(issues)
+}
+
+fn doctor_issue(
+    severity: &str,
+    code: &str,
+    message: impl Into<String>,
+    record_ids: Vec<String>,
+) -> DoctorIssue {
+    DoctorIssue {
+        severity: severity.to_owned(),
+        code: code.to_owned(),
+        message: message.into(),
+        record_ids,
+    }
+}
+
+fn doctor_issue_counts(issues: &[DoctorIssue]) -> (i64, i64) {
+    let errors = issues
+        .iter()
+        .filter(|issue| issue.severity == "error")
+        .count() as i64;
+    let warnings = issues
+        .iter()
+        .filter(|issue| issue.severity == "warning")
+        .count() as i64;
+    (errors, warnings)
 }

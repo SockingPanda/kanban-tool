@@ -1336,6 +1336,7 @@ semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
 - `ready/running` task 带有未来 `scheduled_at`。
 - `index_outbox` backlog：`outbox_pending`、`outbox_running`、`outbox_failed`。
 - derived store health：`derived_dirty_stores`、`derived_error_stores`、`derived_stores[]`，每个 store 包含 `dirty`、`last_error` 和按 store target 聚合的 pending/running/failed outbox 计数。
+- label ontology ledger health：v12+ 数据库必须存在 `label_ontology_observations`、`label_ontology_signals`、`label_ontology_actions`、`label_ontology_action_signals`；doctor 会报告 observation/signal/action/action-signal 的跨 board link、orphan link、parent action 异常、supersede cycle 和可检查 soft reference 不一致。人类输出包含 `ontology_ledger_errors` / `ontology_ledger_warnings` 计数；`--json` 额外返回 `ontology_ledger_issues[]`，每条 issue 包含 `severity`、`code`、`message`、`record_ids`。非零 `ontology_ledger_errors` 会让 `ok=false`；warning 用于 rebuildable 或可解释的软引用异常，不单独让 doctor unhealthy。
 
 `dirty` / pending outbox 表示派生层需要 sync/rebuild，不会改变 SQLite task truth；failed outbox 或 `last_error` 用于 operator 判断是否需要 `kanban index sync`、`kanban graph sync/rebuild` 或 `kanban vector sync/rebuild`。`derived_stores[].last_event_id` 表示对应 store 已成功提交的全局 event watermark；当 `dirty=true` 时，它仍然只是“已成功处理到哪里”的摘要，不代表所有 board 都已经干净。
 

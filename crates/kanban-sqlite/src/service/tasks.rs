@@ -179,14 +179,30 @@ pub fn add_task_label(
     task_ref: &str,
     label_name: &str,
 ) -> Result<TaskRecord> {
+    add_task_labels(path, board, actor, task_ref, &[label_name.to_owned()])
+}
+
+pub fn add_task_labels(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    label_names: &[String],
+) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
+    let label_names = normalize_label_names(label_names)?;
+    if label_names.is_empty() {
+        return Err(KanbanError::InvalidInput("label name is required".into()));
+    }
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
         ensure_task_allows_label_mutation(&conn, &task.id)?;
-        let label = ensure_label_in_current_tx(&conn, &task.board_id, label_name, None, now)?;
-        attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        for label_name in &label_names {
+            let label = ensure_label_in_current_tx(&conn, &task.board_id, label_name, None, now)?;
+            attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        }
         get_task_by_id(&conn, &task.board_id, &task.id)
     })
 }
@@ -197,13 +213,28 @@ pub fn add_task_label_by_id(
     task_id: &str,
     label_name: &str,
 ) -> Result<TaskRecord> {
+    add_task_labels_by_id(path, actor, task_id, &[label_name.to_owned()])
+}
+
+pub fn add_task_labels_by_id(
+    path: impl AsRef<Path>,
+    actor: &str,
+    task_id: &str,
+    label_names: &[String],
+) -> Result<TaskRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
+    let label_names = normalize_label_names(label_names)?;
+    if label_names.is_empty() {
+        return Err(KanbanError::InvalidInput("label name is required".into()));
+    }
     with_immediate_tx(&conn, || {
         let board_id = active_board_id_for_label_mutation(&conn, task_id)?;
         let task = get_task_by_id(&conn, &board_id, task_id)?;
-        let label = ensure_label_in_current_tx(&conn, &task.board_id, label_name, None, now)?;
-        attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        for label_name in &label_names {
+            let label = ensure_label_in_current_tx(&conn, &task.board_id, label_name, None, now)?;
+            attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
+        }
         get_task_by_id(&conn, &task.board_id, &task.id)
     })
 }
@@ -891,10 +922,14 @@ pub(crate) fn task_from_row(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
 }
 
 fn normalize_label_names(labels: &[String]) -> Result<Vec<String>> {
-    labels
-        .iter()
-        .map(|label| normalize_label_name(label))
-        .collect()
+    let mut normalized = Vec::with_capacity(labels.len());
+    for label in labels {
+        let label = normalize_label_name(label)?;
+        if !normalized.contains(&label) {
+            normalized.push(label);
+        }
+    }
+    Ok(normalized)
 }
 
 fn normalize_label_name(label: &str) -> Result<String> {

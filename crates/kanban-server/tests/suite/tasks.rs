@@ -492,20 +492,54 @@ async fn labels_routes_create_list_add_and_remove_task_labels() -> anyhow::Resul
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(json["data"]["labels"][0]["id"], label_id);
 
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels", task.id),
+        json!({ "names": ["frontend", "api", "frontend"], "actor": "api-labeler" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    let label_names: Vec<_> = json["data"]["labels"]
+        .as_array()
+        .context("task labels")?
+        .iter()
+        .map(|label| label["name"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(label_names, ["api", "backend", "frontend"]);
+
     let (status, json) =
         get_json(app.clone(), &format!("/api/v1/tasks/{}/labels", task.id)).await?;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["data"][0]["name"], "backend");
+    assert_eq!(json["data"].as_array().context("task labels")?.len(), 3);
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels", task.id),
+        json!({ "name": "backend", "names": ["frontend"] }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels", task.id),
+        json!({ "names": [] }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
 
     let (status, json) =
         delete_json(app, &format!("/api/v1/tasks/{}/labels/{label_id}", task.id)).await?;
     assert_eq!(status, StatusCode::OK);
-    assert!(
-        json["data"]["labels"]
-            .as_array()
-            .context("task labels")?
-            .is_empty()
-    );
+    let remaining_label_names: Vec<_> = json["data"]["labels"]
+        .as_array()
+        .context("task labels")?
+        .iter()
+        .map(|label| label["name"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(remaining_label_names, ["api", "frontend"]);
     Ok(())
 }
 

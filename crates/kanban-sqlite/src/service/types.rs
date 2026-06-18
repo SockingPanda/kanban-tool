@@ -62,6 +62,56 @@ pub struct TaskRecord {
     pub labels: Vec<LabelRecord>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TaskOntologySummary {
+    pub task_id: String,
+    pub observation_count: i64,
+    pub signal_count: i64,
+    pub open_count: i64,
+    pub confirmed_count: i64,
+    pub resolved_count: i64,
+    pub rejected_count: i64,
+    pub superseded_count: i64,
+    pub degraded_count: i64,
+    pub stale_count: i64,
+    pub suggest_input_drift_count: i64,
+    pub legacy_incomparable_count: i64,
+    pub incomparable_count: i64,
+    pub action_count: i64,
+    pub oldest_open_confirmed_signal_at: Option<i64>,
+    pub oldest_open_confirmed_signal_age_ms: Option<i64>,
+    pub latest_signal_at: Option<i64>,
+    pub latest_action_at: Option<i64>,
+    pub current_suggest_input_hash: String,
+    pub sample_signals: Vec<TaskOntologySignalSummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TaskOntologySignalSummary {
+    pub id: String,
+    pub kind: LabelOntologySignalKind,
+    pub status: LabelOntologySignalStatus,
+    pub proposed_action: LabelOntologyProposedAction,
+    pub target_label_id: Option<String>,
+    pub target_label_name: Option<String>,
+    pub candidate_atom_polarity: Option<String>,
+    pub candidate_atom_kind: Option<String>,
+    pub candidate_text: Option<String>,
+    pub candidate_content_hash: Option<String>,
+    pub proposed_label_name: Option<String>,
+    pub proposed_label_name_normalized: Option<String>,
+    pub suggest_score: Option<f64>,
+    pub suggest_rank: Option<i64>,
+    pub degraded: bool,
+    pub stale: bool,
+    pub legacy_incomparable: bool,
+    pub suggest_input_drift: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub latest_action_at: Option<i64>,
+    pub action_count: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LabelRecord {
     pub id: String,
@@ -125,6 +175,46 @@ pub struct LabelAtomRecord {
     pub content_hash: String,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelAtomExplainRecord {
+    pub query: String,
+    pub atom: Option<LabelAtomRecord>,
+    pub current_semantics: Option<LabelSemanticsRecord>,
+    pub provenance_actions: Vec<LabelAtomExplainAction>,
+    pub supporting_signals: Vec<LabelAtomExplainSignal>,
+    pub validation_history: Vec<LabelAtomExplainValidation>,
+    pub legacy_untracked: bool,
+    pub legacy_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelAtomExplainAction {
+    pub action: LabelOntologyActionRecord,
+    pub matched_by: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelAtomExplainSignal {
+    pub signal: LabelOntologySignalRecord,
+    pub observation: LabelOntologyObservationRecord,
+    pub source_task: TaskRecord,
+    pub task_ref_snapshot: String,
+    pub suggest_input_stale: bool,
+    pub suggest_degraded: bool,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelAtomExplainValidation {
+    pub action: LabelOntologyActionRecord,
+    pub parent_action_id: String,
+    pub validation_status: LabelOntologyValidationStatus,
+    pub manual: serde_json::Value,
+    pub summary: serde_json::Value,
+    pub cases: serde_json::Value,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -220,6 +310,28 @@ pub struct LabelProposalAttempt {
 pub struct LabelProposalListOptions {
     pub task_ref: Option<String>,
     pub status: Option<LabelProposalStatus>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LabelProposalCreateOptions {
+    pub source_signal_ids: Vec<String>,
+    pub ontology_actor: Option<LabelOntologyActor>,
+    pub allow_retarget: bool,
+    pub retarget_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct LabelProposalProposeOptions {
+    pub suggestion: LabelSuggestionOptions,
+    pub create: LabelProposalCreateOptions,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LabelProposalDecisionOptions {
+    pub source_signal_ids: Vec<String>,
+    pub ontology_actor: Option<LabelOntologyActor>,
+    pub allow_retarget: bool,
+    pub retarget_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -413,6 +525,582 @@ pub struct LabelSuggestionEvidenceAtom {
     pub kind: String,
     pub text: String,
     pub score: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelOntologySignalKind {
+    FalseNegative,
+    FalsePositive,
+    VocabularyGap,
+    NameIssue,
+    BoundaryIssue,
+    StructureIssue,
+}
+
+impl std::fmt::Display for LabelOntologySignalKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::FalseNegative => "false_negative",
+            Self::FalsePositive => "false_positive",
+            Self::VocabularyGap => "vocabulary_gap",
+            Self::NameIssue => "name_issue",
+            Self::BoundaryIssue => "boundary_issue",
+            Self::StructureIssue => "structure_issue",
+        })
+    }
+}
+
+impl std::str::FromStr for LabelOntologySignalKind {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "false_negative" => Ok(Self::FalseNegative),
+            "false_positive" => Ok(Self::FalsePositive),
+            "vocabulary_gap" => Ok(Self::VocabularyGap),
+            "name_issue" => Ok(Self::NameIssue),
+            "boundary_issue" => Ok(Self::BoundaryIssue),
+            "structure_issue" => Ok(Self::StructureIssue),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid label ontology signal kind: {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelOntologySignalStatus {
+    Open,
+    Confirmed,
+    Resolved,
+    Rejected,
+    Superseded,
+}
+
+impl std::fmt::Display for LabelOntologySignalStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Open => "open",
+            Self::Confirmed => "confirmed",
+            Self::Resolved => "resolved",
+            Self::Rejected => "rejected",
+            Self::Superseded => "superseded",
+        })
+    }
+}
+
+impl std::str::FromStr for LabelOntologySignalStatus {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "open" => Ok(Self::Open),
+            "confirmed" => Ok(Self::Confirmed),
+            "resolved" => Ok(Self::Resolved),
+            "rejected" => Ok(Self::Rejected),
+            "superseded" => Ok(Self::Superseded),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid label ontology signal status: {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelOntologyProposedAction {
+    Observe,
+    AddPositiveAtom,
+    AddNegativeAtom,
+    UpdateSemantics,
+    BootstrapLabel,
+    RenameLabel,
+    SplitLabel,
+    MergeLabels,
+}
+
+impl std::fmt::Display for LabelOntologyProposedAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Observe => "observe",
+            Self::AddPositiveAtom => "add_positive_atom",
+            Self::AddNegativeAtom => "add_negative_atom",
+            Self::UpdateSemantics => "update_semantics",
+            Self::BootstrapLabel => "bootstrap_label",
+            Self::RenameLabel => "rename_label",
+            Self::SplitLabel => "split_label",
+            Self::MergeLabels => "merge_labels",
+        })
+    }
+}
+
+impl std::str::FromStr for LabelOntologyProposedAction {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "observe" => Ok(Self::Observe),
+            "add_positive_atom" => Ok(Self::AddPositiveAtom),
+            "add_negative_atom" => Ok(Self::AddNegativeAtom),
+            "update_semantics" => Ok(Self::UpdateSemantics),
+            "bootstrap_label" => Ok(Self::BootstrapLabel),
+            "rename_label" => Ok(Self::RenameLabel),
+            "split_label" => Ok(Self::SplitLabel),
+            "merge_labels" => Ok(Self::MergeLabels),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid label ontology proposed action: {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelOntologySuggestState {
+    Selected,
+    Candidate,
+    Absent,
+    Unavailable,
+}
+
+impl std::fmt::Display for LabelOntologySuggestState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Selected => "selected",
+            Self::Candidate => "candidate",
+            Self::Absent => "absent",
+            Self::Unavailable => "unavailable",
+        })
+    }
+}
+
+impl std::str::FromStr for LabelOntologySuggestState {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "selected" => Ok(Self::Selected),
+            "candidate" => Ok(Self::Candidate),
+            "absent" => Ok(Self::Absent),
+            "unavailable" => Ok(Self::Unavailable),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid label ontology suggest state: {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelOntologyActionType {
+    Confirm,
+    Reject,
+    Supersede,
+    ResolveNoChange,
+    AddPositiveAtom,
+    AddNegativeAtom,
+    UpdateSemantics,
+    CreateLabelProposal,
+    BootstrapLabel,
+    RenameLabel,
+    SplitLabel,
+    MergeLabels,
+    Validate,
+}
+
+impl std::fmt::Display for LabelOntologyActionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Confirm => "confirm",
+            Self::Reject => "reject",
+            Self::Supersede => "supersede",
+            Self::ResolveNoChange => "resolve_no_change",
+            Self::AddPositiveAtom => "add_positive_atom",
+            Self::AddNegativeAtom => "add_negative_atom",
+            Self::UpdateSemantics => "update_semantics",
+            Self::CreateLabelProposal => "create_label_proposal",
+            Self::BootstrapLabel => "bootstrap_label",
+            Self::RenameLabel => "rename_label",
+            Self::SplitLabel => "split_label",
+            Self::MergeLabels => "merge_labels",
+            Self::Validate => "validate",
+        })
+    }
+}
+
+impl std::str::FromStr for LabelOntologyActionType {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "confirm" => Ok(Self::Confirm),
+            "reject" => Ok(Self::Reject),
+            "supersede" => Ok(Self::Supersede),
+            "resolve_no_change" => Ok(Self::ResolveNoChange),
+            "add_positive_atom" => Ok(Self::AddPositiveAtom),
+            "add_negative_atom" => Ok(Self::AddNegativeAtom),
+            "update_semantics" => Ok(Self::UpdateSemantics),
+            "create_label_proposal" => Ok(Self::CreateLabelProposal),
+            "bootstrap_label" => Ok(Self::BootstrapLabel),
+            "rename_label" => Ok(Self::RenameLabel),
+            "split_label" => Ok(Self::SplitLabel),
+            "merge_labels" => Ok(Self::MergeLabels),
+            "validate" => Ok(Self::Validate),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid label ontology action type: {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelOntologyValidationStatus {
+    NotRequired,
+    Pending,
+    Passed,
+    Failed,
+    Partial,
+}
+
+impl std::fmt::Display for LabelOntologyValidationStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::NotRequired => "not_required",
+            Self::Pending => "pending",
+            Self::Passed => "passed",
+            Self::Failed => "failed",
+            Self::Partial => "partial",
+        })
+    }
+}
+
+impl std::str::FromStr for LabelOntologyValidationStatus {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "not_required" => Ok(Self::NotRequired),
+            "pending" => Ok(Self::Pending),
+            "passed" => Ok(Self::Passed),
+            "failed" => Ok(Self::Failed),
+            "partial" => Ok(Self::Partial),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid label ontology validation status: {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelOntologyActor {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub actor_type: String,
+    pub agent_type: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelOntologyCandidateAtomInput {
+    pub polarity: String,
+    pub kind: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologySignalInput {
+    pub kind: LabelOntologySignalKind,
+    pub target_label_ref: Option<String>,
+    pub related_labels_json: String,
+    pub proposed_action: LabelOntologyProposedAction,
+    pub candidate_atom: Option<LabelOntologyCandidateAtomInput>,
+    pub proposed_label_name: Option<String>,
+    pub proposal_json: String,
+    pub agent_selected: bool,
+    pub suggest_state: Option<LabelOntologySuggestState>,
+    pub suggest_score: Option<f64>,
+    pub suggest_rank: Option<i64>,
+    pub final_selected: bool,
+    pub rationale: String,
+    pub confidence: Option<f64>,
+    pub signal_key: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyRecordInput {
+    pub actor: LabelOntologyActor,
+    pub agent_candidates_json: String,
+    pub suggestion_snapshot_json: String,
+    pub final_decision_json: String,
+    pub suggest_coverage: Option<f64>,
+    pub suggest_coverage_cosine: Option<f64>,
+    pub suggest_residual_norm: Option<f64>,
+    pub suggest_needs_new_label: bool,
+    pub suggest_degraded: bool,
+    pub diagnostics_json: String,
+    pub capture_fingerprint: Option<String>,
+    pub signals: Vec<LabelOntologySignalInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyObservationRecord {
+    pub id: String,
+    pub board_id: String,
+    pub task_id: String,
+    pub task_ref_snapshot: String,
+    pub task_snapshot_json: String,
+    pub suggest_input_hash: Option<String>,
+    pub agent_candidates_json: String,
+    pub suggestion_snapshot_json: String,
+    pub final_decision_json: String,
+    pub suggest_coverage: Option<f64>,
+    pub suggest_coverage_cosine: Option<f64>,
+    pub suggest_residual_norm: Option<f64>,
+    pub suggest_needs_new_label: bool,
+    pub suggest_degraded: bool,
+    pub diagnostics_json: String,
+    pub capture_fingerprint: String,
+    pub created_by: String,
+    pub created_by_type: String,
+    pub agent_type: Option<String>,
+    pub created_at: i64,
+    pub signals: Vec<LabelOntologySignalRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologySignalRecord {
+    pub id: String,
+    pub observation_id: String,
+    pub board_id: String,
+    pub kind: LabelOntologySignalKind,
+    pub status: LabelOntologySignalStatus,
+    pub target_label_id: Option<String>,
+    pub target_label_name_snapshot: Option<String>,
+    pub related_labels_json: String,
+    pub proposed_action: LabelOntologyProposedAction,
+    pub candidate_atom_polarity: Option<String>,
+    pub candidate_atom_kind: Option<String>,
+    pub candidate_text: Option<String>,
+    pub candidate_content_hash: Option<String>,
+    pub proposed_label_name: Option<String>,
+    pub proposed_label_name_normalized: Option<String>,
+    pub proposal_json: String,
+    pub agent_selected: bool,
+    pub suggest_state: Option<LabelOntologySuggestState>,
+    pub suggest_score: Option<f64>,
+    pub suggest_rank: Option<i64>,
+    pub final_selected: bool,
+    pub rationale: String,
+    pub confidence: Option<f64>,
+    pub signal_key: String,
+    pub superseded_by_signal_id: Option<String>,
+    pub status_reason: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub reviewed_at: Option<i64>,
+    pub closed_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyActionRecord {
+    pub id: String,
+    pub board_id: String,
+    pub parent_action_id: Option<String>,
+    pub action_type: LabelOntologyActionType,
+    pub reason: String,
+    pub target_label_id: Option<String>,
+    pub result_label_id: Option<String>,
+    pub result_atom_id: Option<String>,
+    pub result_atom_content_hash: Option<String>,
+    pub result_proposal_id: Option<String>,
+    pub canonical_before_hash: Option<String>,
+    pub canonical_after_hash: Option<String>,
+    pub change_json: String,
+    pub validation_status: LabelOntologyValidationStatus,
+    pub validation_json: String,
+    pub created_by: String,
+    pub created_by_type: String,
+    pub agent_type: Option<String>,
+    pub created_at: i64,
+    pub signal_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyActionInput {
+    pub actor: LabelOntologyActor,
+    pub action_type: LabelOntologyActionType,
+    pub signal_ids: Vec<String>,
+    pub reason: String,
+    pub superseded_by_signal_id: Option<String>,
+    pub parent_action_id: Option<String>,
+    pub target_label_ref: Option<String>,
+    pub result_label_ref: Option<String>,
+    pub result_atom_id: Option<String>,
+    pub result_atom_content_hash: Option<String>,
+    pub result_proposal_id: Option<String>,
+    pub canonical_before_hash: Option<String>,
+    pub canonical_after_hash: Option<String>,
+    pub change_json: Option<String>,
+    pub validation_status: Option<LabelOntologyValidationStatus>,
+    pub validation_json: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyAtomApplyInput {
+    pub actor: LabelOntologyActor,
+    pub signal_ids: Vec<String>,
+    pub label_ref: String,
+    pub kind: String,
+    pub text: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LabelOntologyRetargetOptions {
+    pub allow_retarget: bool,
+    pub retarget_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyValidationInput {
+    pub actor: LabelOntologyActor,
+    pub parent_action_id: String,
+    pub signal_ids: Vec<String>,
+    pub reason: String,
+    pub validation_status: LabelOntologyValidationStatus,
+    pub validation_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologySignalDetail {
+    pub signal: LabelOntologySignalRecord,
+    pub observation: LabelOntologyObservationRecord,
+    pub actions: Vec<LabelOntologyActionRecord>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelOntologyReviewGroupBy {
+    Label,
+    CandidateAtom,
+    ProposedLabel,
+}
+
+impl std::fmt::Display for LabelOntologyReviewGroupBy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Label => "label",
+            Self::CandidateAtom => "candidate_atom",
+            Self::ProposedLabel => "proposed_label",
+        })
+    }
+}
+
+impl std::str::FromStr for LabelOntologyReviewGroupBy {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "label" => Ok(Self::Label),
+            "candidate_atom" | "candidate-atom" => Ok(Self::CandidateAtom),
+            "proposed_label" | "proposed-label" => Ok(Self::ProposedLabel),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid label ontology review group: {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelOntologyReviewOptions {
+    pub group_by: LabelOntologyReviewGroupBy,
+    pub include_all: bool,
+    pub limit: usize,
+}
+
+impl Default for LabelOntologyReviewOptions {
+    fn default() -> Self {
+        Self {
+            group_by: LabelOntologyReviewGroupBy::Label,
+            include_all: false,
+            limit: 100,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelOntologyReviewLabelRef {
+    pub id: String,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelOntologyReviewAtomVariant {
+    pub content_hash: String,
+    pub polarity: Option<String>,
+    pub kind: Option<String>,
+    pub text: Option<String>,
+    pub signal_count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyReviewGroup {
+    pub group_by: LabelOntologyReviewGroupBy,
+    pub key: String,
+    pub label_id: Option<String>,
+    pub label_name: Option<String>,
+    pub candidate_atom_polarity: Option<String>,
+    pub candidate_atom_kind: Option<String>,
+    pub candidate_text: Option<String>,
+    pub candidate_content_hash: Option<String>,
+    pub proposed_label_name: Option<String>,
+    pub proposed_label_name_normalized: Option<String>,
+    pub task_count: i64,
+    pub signal_count: i64,
+    pub open_count: i64,
+    pub confirmed_count: i64,
+    pub resolved_count: i64,
+    pub rejected_count: i64,
+    pub superseded_count: i64,
+    pub degraded_count: i64,
+    pub average_score: Option<f64>,
+    pub median_score: Option<f64>,
+    pub oldest_signal_at: i64,
+    pub latest_signal_at: i64,
+    pub sample_task_refs: Vec<String>,
+    pub signal_ids: Vec<String>,
+    pub action_count: i64,
+    pub action_ids: Vec<String>,
+    pub proposal_ids: Vec<String>,
+    pub labels: Vec<LabelOntologyReviewLabelRef>,
+    pub candidate_atom_variants: Vec<LabelOntologyReviewAtomVariant>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelOntologySignalListOptions {
+    pub statuses: Vec<LabelOntologySignalStatus>,
+    pub kinds: Vec<LabelOntologySignalKind>,
+    pub task_ref: Option<String>,
+    pub target_label_ref: Option<String>,
+    pub proposed_label_name: Option<String>,
+    pub include_all: bool,
+    pub limit: usize,
+}
+
+impl Default for LabelOntologySignalListOptions {
+    fn default() -> Self {
+        Self {
+            statuses: Vec::new(),
+            kinds: Vec::new(),
+            task_ref: None,
+            target_label_ref: None,
+            proposed_label_name: None,
+            include_all: false,
+            limit: 100,
+        }
+    }
 }
 
 impl CreateTask {

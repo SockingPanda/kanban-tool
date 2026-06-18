@@ -194,6 +194,7 @@ pub(crate) enum LabelCommand {
         #[command(subcommand)]
         command: LabelSemanticsCommand,
     },
+    #[command(alias = "atom")]
     Atoms {
         #[command(subcommand)]
         command: LabelAtomsCommand,
@@ -208,6 +209,10 @@ pub(crate) enum LabelCommand {
     Proposals {
         #[command(subcommand)]
         command: LabelProposalsCommand,
+    },
+    Ontology {
+        #[command(subcommand)]
+        command: LabelOntologyCommand,
     },
 }
 
@@ -286,6 +291,7 @@ pub(crate) struct LabelSemanticsUpsertArgs {
 #[derive(Debug, Subcommand)]
 pub(crate) enum LabelAtomsCommand {
     List,
+    Explain { atom_ref: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -346,6 +352,14 @@ pub(crate) struct LabelProposeArgs {
     pub(crate) task_ref: String,
     #[arg(long = "proposal-json")]
     pub(crate) proposal_json: Option<std::path::PathBuf>,
+    #[arg(long = "source-signal")]
+    pub(crate) source_signal_ids: Vec<String>,
+    #[arg(long)]
+    pub(crate) allow_retarget: bool,
+    #[arg(long = "retarget-reason")]
+    pub(crate) retarget_reason: Option<String>,
+    #[command(flatten)]
+    pub(crate) ontology_actor: LabelOntologyActorArgs,
     #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
     pub(crate) limit: usize,
     #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
@@ -364,7 +378,7 @@ pub(crate) struct LabelProposeArgs {
 pub(crate) enum LabelProposalsCommand {
     List(LabelProposalsListArgs),
     Show { proposal_id: String },
-    Accept(LabelProposalDecisionArgs),
+    Accept(LabelProposalAcceptArgs),
     Reject(LabelProposalDecisionArgs),
 }
 
@@ -381,6 +395,190 @@ pub(crate) struct LabelProposalDecisionArgs {
     pub(crate) proposal_id: String,
     #[arg(long)]
     pub(crate) reason: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelProposalAcceptArgs {
+    pub(crate) proposal_id: String,
+    #[arg(long)]
+    pub(crate) reason: Option<String>,
+    #[arg(long = "source-signal")]
+    pub(crate) source_signal_ids: Vec<String>,
+    #[arg(long)]
+    pub(crate) allow_retarget: bool,
+    #[arg(long = "retarget-reason")]
+    pub(crate) retarget_reason: Option<String>,
+    #[command(flatten)]
+    pub(crate) ontology_actor: LabelOntologyActorArgs,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum LabelOntologyCommand {
+    Record(LabelOntologyRecordArgs),
+    List(LabelOntologyListArgs),
+    Show {
+        signal_id: String,
+    },
+    Review(LabelOntologyReviewArgs),
+    Confirm(LabelOntologyActionArgs),
+    Reject(LabelOntologyActionArgs),
+    Supersede(LabelOntologySupersedeArgs),
+    Resolve(LabelOntologyResolveArgs),
+    Apply {
+        #[command(subcommand)]
+        command: LabelOntologyApplyCommand,
+    },
+    Validate(LabelOntologyValidateArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelOntologyRecordArgs {
+    pub(crate) task_ref: String,
+    #[arg(long)]
+    pub(crate) input: String,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelOntologyListArgs {
+    #[arg(long)]
+    pub(crate) status: Vec<String>,
+    #[arg(long)]
+    pub(crate) kind: Vec<String>,
+    #[arg(long)]
+    pub(crate) task: Option<String>,
+    #[arg(long)]
+    pub(crate) label: Option<String>,
+    #[arg(long = "proposed-label")]
+    pub(crate) proposed_label: Option<String>,
+    #[arg(long)]
+    pub(crate) include_all: bool,
+    #[arg(long, default_value_t = 100)]
+    pub(crate) limit: usize,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelOntologyReviewArgs {
+    #[arg(long, value_enum, default_value = "label")]
+    pub(crate) group_by: LabelOntologyReviewGroupByArg,
+    #[arg(long)]
+    pub(crate) include_all: bool,
+    #[arg(long, default_value_t = 100)]
+    pub(crate) limit: usize,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum LabelOntologyReviewGroupByArg {
+    Label,
+    #[value(name = "candidate-atom")]
+    CandidateAtom,
+    #[value(name = "proposed-label")]
+    ProposedLabel,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelOntologyActionArgs {
+    #[arg(required = true)]
+    pub(crate) signal_ids: Vec<String>,
+    #[arg(long)]
+    pub(crate) reason: String,
+    #[command(flatten)]
+    pub(crate) actor: LabelOntologyActorArgs,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelOntologySupersedeArgs {
+    #[arg(required = true)]
+    pub(crate) signal_ids: Vec<String>,
+    #[arg(long = "by")]
+    pub(crate) superseded_by_signal_id: String,
+    #[arg(long)]
+    pub(crate) reason: String,
+    #[command(flatten)]
+    pub(crate) actor: LabelOntologyActorArgs,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelOntologyResolveArgs {
+    #[arg(required = true)]
+    pub(crate) signal_ids: Vec<String>,
+    #[arg(long = "no-change")]
+    pub(crate) no_change: bool,
+    #[arg(long)]
+    pub(crate) reason: String,
+    #[command(flatten)]
+    pub(crate) actor: LabelOntologyActorArgs,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum LabelOntologyApplyCommand {
+    Atom(LabelOntologyApplyAtomArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelOntologyApplyAtomArgs {
+    #[arg(required = true)]
+    pub(crate) signal_ids: Vec<String>,
+    #[arg(long)]
+    pub(crate) label: String,
+    #[arg(long)]
+    pub(crate) kind: LabelOntologyAtomKindArg,
+    #[arg(long)]
+    pub(crate) text: String,
+    #[arg(long)]
+    pub(crate) reason: String,
+    #[command(flatten)]
+    pub(crate) actor: LabelOntologyActorArgs,
+    #[arg(long)]
+    pub(crate) allow_retarget: bool,
+    #[arg(long = "retarget-reason")]
+    pub(crate) retarget_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub(crate) struct LabelOntologyActorArgs {
+    #[arg(long = "actor-type", value_enum, default_value = "user")]
+    pub(crate) actor_type: LabelOntologyActorTypeArg,
+    #[arg(long = "agent-type")]
+    pub(crate) agent_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum LabelOntologyActorTypeArg {
+    User,
+    Agent,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum LabelOntologyAtomKindArg {
+    #[value(name = "applies-when")]
+    AppliesWhen,
+    #[value(name = "positive-example")]
+    PositiveExample,
+    #[value(name = "excludes-when")]
+    ExcludesWhen,
+    #[value(name = "negative-example")]
+    NegativeExample,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelOntologyValidateArgs {
+    pub(crate) action_id: String,
+    #[arg(long)]
+    pub(crate) status: LabelOntologyValidationStatusArg,
+    #[arg(long)]
+    pub(crate) reason: String,
+    #[arg(long)]
+    pub(crate) input: String,
+    #[command(flatten)]
+    pub(crate) actor: LabelOntologyActorArgs,
+    pub(crate) signal_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum LabelOntologyValidationStatusArg {
+    Passed,
+    Failed,
+    Partial,
 }
 
 #[derive(Debug, Args)]

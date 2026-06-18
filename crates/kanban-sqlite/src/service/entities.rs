@@ -78,6 +78,14 @@ pub struct DoctorDerivedStoreReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DoctorIssue {
+    pub severity: String,
+    pub code: String,
+    pub message: String,
+    pub record_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DoctorReport {
     pub ok: bool,
     pub integrity_check: String,
@@ -99,6 +107,9 @@ pub struct DoctorReport {
     pub derived_dirty_stores: i64,
     pub derived_error_stores: i64,
     pub derived_stores: Vec<DoctorDerivedStoreReport>,
+    pub ontology_ledger_errors: i64,
+    pub ontology_ledger_warnings: i64,
+    pub ontology_ledger_issues: Vec<DoctorIssue>,
 }
 
 pub fn list_entities(

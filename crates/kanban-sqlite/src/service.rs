@@ -17,6 +17,7 @@ mod events;
 mod graph;
 mod graph_api;
 mod import_export;
+mod label_ontology;
 mod label_proposals;
 mod label_semantics;
 mod label_suggestions;
@@ -40,14 +41,15 @@ pub use dag::*;
 pub use dependencies::*;
 pub use dispatch::*;
 pub use entities::{
-    DerivedStoreStatusRecord, DoctorDerivedStoreReport, DoctorReport, EntityListOptions,
-    EntityRecord, IndexOutboxRecord, OutboxListOptions, derived_store_statuses, get_entity,
-    list_entities, list_outbox,
+    DerivedStoreStatusRecord, DoctorDerivedStoreReport, DoctorIssue, DoctorReport,
+    EntityListOptions, EntityRecord, IndexOutboxRecord, OutboxListOptions, derived_store_statuses,
+    get_entity, list_entities, list_outbox,
 };
 pub use events::*;
 pub use graph::*;
 pub use graph_api::*;
 pub use import_export::*;
+pub use label_ontology::*;
 pub use label_proposals::*;
 pub use label_semantics::*;
 pub use label_suggestions::*;

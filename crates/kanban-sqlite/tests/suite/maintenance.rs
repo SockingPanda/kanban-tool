@@ -151,10 +151,125 @@ fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() -> anyhow::Resu
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(11));
-        assert_eq!(report.user_version, 11);
+        assert_eq!(report.migration_version, Some(14));
+        assert_eq!(report.user_version, 14);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
+    Ok(())
+}
+
+#[test]
+fn doctor_ontology_reports_missing_v12_tables_unhealthy() -> anyhow::Result<()> {
+    for table in [
+        "label_ontology_observations",
+        "label_ontology_signals",
+        "label_ontology_actions",
+        "label_ontology_action_signals",
+    ] {
+        let temp = TempDb::new(&format!(
+            "doctor_ontology_reports_missing_v12_tables_unhealthy_{table}"
+        ))?;
+        init_database(&temp.path, "tester")?;
+        connect_file(&temp.path)?.execute_batch(&format!("DROP TABLE {table};"))?;
+
+        let report = doctor_database(&temp.path)?;
+
+        assert_eq!(report.migration_version, Some(14));
+        assert_eq!(report.user_version, 14);
+        assert!(!report.ok, "{table} missing should make doctor unhealthy");
+        assert_eq!(report.ontology_ledger_errors, 1);
+        assert!(report.ontology_ledger_issues.iter().any(|issue| {
+            issue.code == "label_ontology_missing_table"
+                && issue.record_ids == vec![table.to_owned()]
+        }));
+    }
+    Ok(())
+}
+
+#[test]
+fn doctor_ontology_detects_cross_board_signal_rows() -> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_ontology_detects_cross_board_signal_rows")?;
+    let fixture = seed_doctor_ontology_ledger(&temp)?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+    conn.execute(
+        "UPDATE label_ontology_signals SET board_id=?1 WHERE id=?2",
+        params![fixture.other_board_id, fixture.signal_id],
+    )?;
+    conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+
+    let report = doctor_database(&temp.path)?;
+
+    assert!(!report.ok);
+    assert!(report.ontology_ledger_errors >= 1);
+    assert!(report.ontology_ledger_issues.iter().any(|issue| {
+        issue.code == "label_ontology_signal_observation_board_mismatch"
+            && issue.record_ids.contains(&fixture.signal_id)
+            && issue.record_ids.contains(&fixture.observation_id)
+    }));
+    Ok(())
+}
+
+#[test]
+fn doctor_ontology_detects_orphan_action_signal_link() -> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_ontology_detects_orphan_action_signal_link")?;
+    let fixture = seed_doctor_ontology_ledger(&temp)?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+    conn.execute(
+        "UPDATE label_ontology_action_signals SET action_id='loa_missing' WHERE action_id=?1",
+        [&fixture.action_id],
+    )?;
+    conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+
+    let report = doctor_database(&temp.path)?;
+
+    assert!(!report.ok);
+    assert!(report.ontology_ledger_errors >= 1);
+    assert!(report.ontology_ledger_issues.iter().any(|issue| {
+        issue.code == "label_ontology_action_signal_orphan"
+            && issue.record_ids.contains(&"loa_missing".to_owned())
+            && issue.record_ids.contains(&fixture.signal_id)
+    }));
+    Ok(())
+}
+
+#[test]
+fn doctor_ontology_detects_supersede_cycle() -> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_ontology_detects_supersede_cycle")?;
+    let fixture = seed_doctor_ontology_ledger(&temp)?;
+    let second_signal_id = "los_doctor_b";
+    let conn = connect_file(&temp.path)?;
+    insert_doctor_ontology_signal(
+        &conn,
+        second_signal_id,
+        &fixture.observation_id,
+        &fixture.board_id,
+        "doctor-cycle-b",
+        None,
+    )?;
+    conn.execute(
+        "UPDATE label_ontology_signals \
+         SET status='superseded', superseded_by_signal_id=?1, updated_at=2 \
+         WHERE id=?2",
+        params![second_signal_id, fixture.signal_id],
+    )?;
+    conn.execute(
+        "UPDATE label_ontology_signals \
+         SET status='superseded', superseded_by_signal_id=?1, updated_at=2 \
+         WHERE id=?2",
+        params![fixture.signal_id, second_signal_id],
+    )?;
+
+    let report = doctor_database(&temp.path)?;
+
+    assert!(!report.ok);
+    assert!(report.ontology_ledger_errors >= 1);
+    assert!(report.ontology_ledger_issues.iter().any(|issue| {
+        issue.code == "label_ontology_signal_supersede_cycle"
+            && issue.record_ids.contains(&fixture.signal_id)
+            && issue.record_ids.contains(&second_signal_id.to_owned())
+    }));
     Ok(())
 }
 
@@ -253,6 +368,108 @@ fn doctor_counts_each_dependency_cycle_once() -> anyhow::Result<()> {
 
     assert!(!report.ok);
     assert_eq!(report.dependency_cycles, 1);
+    Ok(())
+}
+
+struct DoctorOntologyLedgerFixture {
+    board_id: String,
+    other_board_id: String,
+    observation_id: String,
+    signal_id: String,
+    action_id: String,
+}
+
+fn seed_doctor_ontology_ledger(temp: &TempDb) -> anyhow::Result<DoctorOntologyLedgerFixture> {
+    init_database(&temp.path, "tester")?;
+    let other_board = create_board(
+        &temp.path,
+        "tester",
+        CreateBoard {
+            slug: "other".to_owned(),
+            name: "Other".to_owned(),
+            description: None,
+        },
+    )?;
+    let label = create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "doctor-label".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("doctor ontology ledger source task"),
+    )?;
+    let conn = connect_file(&temp.path)?;
+    let observation_id = "lor_doctor".to_owned();
+    let signal_id = "los_doctor".to_owned();
+    let action_id = "loa_doctor".to_owned();
+    conn.execute(
+        "INSERT INTO label_ontology_observations(\
+         id, board_id, task_id, task_ref_snapshot, task_snapshot_json, suggest_input_hash, \
+         agent_candidates_json, suggestion_snapshot_json, final_decision_json, diagnostics_json, \
+         capture_fingerprint, created_by, created_by_type, created_at) \
+         VALUES (?1, ?2, ?3, ?4, '{}', 'abcdef0123456789', '[]', '{}', '{}', '[]', \
+         'doctor-fixture', 'tester', 'user', 1)",
+        params![observation_id, task.board_id, task.id, task.task_ref],
+    )?;
+    insert_doctor_ontology_signal(
+        &conn,
+        &signal_id,
+        &observation_id,
+        &task.board_id,
+        "doctor-signal",
+        Some(&label.id),
+    )?;
+    conn.execute(
+        "INSERT INTO label_ontology_actions(\
+         id, board_id, action_type, reason, change_json, validation_status, validation_json, \
+         created_by, created_by_type, created_at) \
+         VALUES (?1, ?2, 'confirm', 'confirmed by doctor fixture', '{}', 'not_required', '{}', \
+         'tester', 'user', 1)",
+        params![action_id, task.board_id],
+    )?;
+    conn.execute(
+        "INSERT INTO label_ontology_action_signals(board_id, action_id, signal_id, created_at) \
+         VALUES (?1, ?2, ?3, 1)",
+        params![task.board_id, action_id, signal_id],
+    )?;
+    Ok(DoctorOntologyLedgerFixture {
+        board_id: task.board_id,
+        other_board_id: other_board.id,
+        observation_id,
+        signal_id,
+        action_id,
+    })
+}
+
+fn insert_doctor_ontology_signal(
+    conn: &Connection,
+    signal_id: &str,
+    observation_id: &str,
+    board_id: &str,
+    signal_key: &str,
+    target_label_id: Option<&str>,
+) -> anyhow::Result<()> {
+    conn.execute(
+        "INSERT INTO label_ontology_signals(\
+         id, observation_id, board_id, kind, status, target_label_id, related_labels_json, \
+         proposed_action, proposal_json, agent_selected, final_selected, rationale, signal_key, \
+         created_at, updated_at) \
+         VALUES (?1, ?2, ?3, 'false_negative', 'open', ?4, '[]', 'add_positive_atom', '{}', 1, 1, \
+         'doctor fixture signal', ?5, 1, 1)",
+        params![
+            signal_id,
+            observation_id,
+            board_id,
+            target_label_id,
+            signal_key
+        ],
+    )?;
     Ok(())
 }
 

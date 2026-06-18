@@ -276,10 +276,18 @@ kanban task show <task_ref> --details
 agent-work#12 t_01HX... [ready] 实现状态机
 ```
 
-`--details` 只改变人类可读输出，显示为易读字段列表。可用时包含 task
+`--details` 改变人类可读输出，显示为易读字段列表。可用时包含 task
 ref/id/status/title、完整多行 description、assignee、priority、labels、
 scheduled_at、due_at、created_at、updated_at，以及其他 task snapshot 字段。
-`--json task show` 无论是否带 `--details`，都返回相同的 `TaskRecord` envelope。
+如果该 task 有 label ontology signals，details 输出还会追加紧凑的
+`ontology_summary`，列出 signal/status/degraded/stale/action counts、aging 时间和
+少量 sample signal ids。
+
+`task show <task_ref> --json` 默认只返回 `{"data": TaskRecord}`。带 `--details`
+时，`data` 仍是相同的 `TaskRecord`，但 envelope 会包含
+`meta.details.ontology_summary`；没有 ontology signals 时该字段为 `null`。该 summary
+只读，不改变 task、labels 或 ontology signal 状态。需要完整 review queue 时继续使用
+`label ontology list/show/review`。
 
 `task_ref` 支持：
 
@@ -492,15 +500,26 @@ kanban label semantics show <label> [--json]
 kanban label semantics upsert <label> [--description <text>] [--applies-when <text>]... [--excludes-when <text>]... [--positive-example <text>]... [--negative-example <text>]... [--json]
 kanban label semantics delete <label> [--json]
 kanban label atoms list [--json]
+kanban label atom explain <atom-id-or-content-hash> [--json]
 kanban label atom-index status [--vector-config <toml>] [--json]
 kanban label atom-index rebuild --vector-config <toml> [--json]
 kanban label atom-index query <text> [--polarity positive|negative] [--limit 24] --vector-config <toml> [--json]
 kanban label suggest <task_ref> [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
-kanban label propose <task_ref> [--proposal-json <path>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
+kanban label propose <task_ref> [--proposal-json <path>] [--source-signal <signal_id>]... [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]
 kanban label proposals show <proposal_id> [--json]
-kanban label proposals accept <proposal_id> [--reason <text>] [--json]
+kanban label proposals accept <proposal_id> [--reason <text>] [--source-signal <signal_id>]... [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label proposals reject <proposal_id> [--reason <text>] [--json]
+kanban label ontology record <task_ref> --input <path|-> [--json]
+kanban label ontology list [--status open|confirmed|resolved|rejected|superseded]... [--kind false_negative|false_positive|vocabulary_gap|name_issue|boundary_issue|structure_issue]... [--task <task_ref>] [--label <label>] [--proposed-label <name>] [--include-all] [--limit 100] [--json]
+kanban label ontology show <signal_id> [--json]
+kanban label ontology review [--group-by label|candidate-atom|proposed-label] [--include-all] [--limit 100] [--json]
+kanban label ontology confirm <signal_id>... --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology reject <signal_id>... --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology supersede <signal_id>... --by <signal_id> --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology resolve <signal_id>... --no-change --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology apply atom <signal_id>... --label <label> --kind applies-when|positive-example|excludes-when|negative-example --text <text> --reason <text> [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology validate <action_id> --status passed|failed|partial --reason <text> --input <path|-> [signal_id]... [--actor-type user|agent] [--agent-type <type>] [--json]
 ```
 
 `label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
@@ -628,6 +647,16 @@ collapse，canonical 行分隔保留。同一 label 下相同
 `label semantics upsert` 或接受 label proposal 后生成的 semantics；它们是
 `lancedb_label_atoms` 派生索引的输入，不是派生索引本身。
 
+`label atom explain <atom-id-or-content-hash>` 是 `label atoms explain` 的单数别名，
+按当前 board 的 atom id 或稳定 `content_hash` 解析现有 atom，并返回当前 atom、
+canonical semantics、provenance actions、supporting signals/source tasks 和
+validation history。当前 atom 存在但没有 ontology provenance action 引用其 id 或
+content hash 时命令成功返回 `legacy_untracked=true` 和 `legacy_reason`；未知 id/hash
+返回 not found。JSON 输出是 `LabelAtomExplainRecord`，包含 `query`、`atom`、
+`current_semantics`、`provenance_actions`、`supporting_signals`、
+`validation_history`、`legacy_untracked` 和 `legacy_reason`。由于 content hash 不含
+ordinal，semantics rebuild 后同语义 atom 的 id 改变时仍可用 content hash 解释历史。
+
 `label atom-index status` 返回 label atom vector index 的状态。未配置 provider 或未
 启用 `vector-lancedb` 时仍成功返回 disabled/degraded 状态。JSON 保留兼容字段
 `message`，并返回结构化 `diagnostics: string[]`、`dirty: boolean | null`、
@@ -683,11 +712,164 @@ LanceDB distance 推导；候选必须超过现有 label top1，且超过幅度�
 attempt 返回 `degraded=true`、`proposal=null`，不新增 proposal row，也不创建
 canonical label、`label_semantics`、`label_atoms` 或 `task_labels`；diagnostics 包含
 `label_proposal_residual_validation_unavailable` 和具体原因。
+传入 `--source-signal <los_...>` 时，proposal 创建成功后会在同一 transaction 写入
+`create_label_proposal` ontology action，并通过 action-signal links 记录该 proposal
+由哪些 confirmed vocabulary-gap signals 支持；proposal row 与 provenance action
+要么同时写入，要么一起回滚。Source signals 默认必须是同一 board 上 `confirmed`
+的 `vocabulary_gap` + `bootstrap_label` signals，且 normalized `proposed_label_name`
+必须等于 proposal name。`--actor-type` / `--agent-type` 控制该
+`create_label_proposal` action 的 actor provenance；actor name 仍来自全局 `--actor`。
+确实需要把 confirmed same-board source signal retarget 到该 proposal 时，必须同时传
+`--allow-retarget` 和非空 `--retarget-reason <text>`；reason 和 source signal 原始
+target/proposed label 会写入 `change_json.retarget_override`。Override 不放宽
+board/status 要求。
 
 `label proposals accept` 只接受 `proposed` proposal。accept 会创建 canonical
 label、`label_semantics` 与 `label_atoms`，并标脏 label atom index；它不会自动
-给来源 task 写入 `task_labels`。`label proposals reject` 标记 proposal 为
-`rejected`。accepted/rejected proposal 不能再次决策。
+给来源 task 写入 `task_labels`。传入 `--source-signal <los_...>` 时，accept 会在同一
+transaction 中写入 `bootstrap_label` ontology action，并通过 action-signal links
+记录该 new-label bootstrap 的 signal provenance；这些 source signals 必须是同一
+board 上的 `confirmed` signals。`--actor-type` / `--agent-type` 控制该
+`bootstrap_label` action 的 actor provenance；actor name 仍来自全局 `--actor`。
+默认是 `user`。`--actor-type agent` 必须提供非空 `--agent-type`；`user` 不能提供
+`--agent-type`。Source signals 默认还必须是 `vocabulary_gap` +
+`bootstrap_label`，且 normalized `proposed_label_name` 必须等于 proposal name。
+如果 proposal 已有 `create_label_proposal` action，accept 产生的 `bootstrap_label`
+action 会把 `parent_action_id` 指向该 creation action，形成 proposal creation ->
+bootstrap acceptance 链路。
+确实需要把 confirmed same-board source signal retarget 到该 proposal 时，必须同时传
+`--allow-retarget` 和非空 `--retarget-reason <text>`；该 reason、source signal 原始
+target/proposed label 和最终 proposal/result label 会写入 bootstrap action
+`change_json.retarget_override`。Override 不放宽 board/status 要求。`label proposals reject` 标记 proposal 为
+`rejected`，不接受 `--source-signal`。accepted/rejected proposal 不能再次决策。
+
+`label ontology record` 接受 service-shaped JSON 或 stdin，记录一次 label 判断
+observation 并写入其中的 child signals。Service 会读取当前 task snapshot、解析
+target label ref、计算 normalized proposed label name、signal key 和 candidate atom
+content hash；observation 同时保存完整审计用 `task_snapshot_json.content_hash`
+和只基于 label suggest 输入（normalized title + description）的 `suggest_input_hash`。
+它只写 ledger，不修改 `task_labels`、`label_semantics`、`label_atoms` 或 proposal。
+
+Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
+`applies_when` / `positive_example` 只能使用 `positive` polarity，
+`excludes_when` / `negative_example` 只能使用 `negative` polarity。
+`add_positive_atom` 必须提供 target label 和 positive candidate atom；
+`add_negative_atom` 必须提供 target label 和 negative candidate atom；
+`update_semantics` 必须提供 target label；`bootstrap_label` 必须提供
+`proposed_label_name`；`rename_label` 必须提供 target label 和
+`proposed_label_name`；`split_label` / `merge_labels` 必须提供 target label 和非空
+`related_labels_json`。Observation metric `suggest_coverage`、
+`suggest_coverage_cosine`、`suggest_residual_norm` 以及 signal metric
+`suggest_score` / `confidence` 必须是 finite `0.0..=1.0`；`suggest_rank` 必须为
+`null` 或 `>= 1`。
+
+最小输入形状：
+
+```json
+{
+  "actor": {"name": "label-agent", "type": "agent", "agent_type": "local"},
+  "agent_candidates_json": "[]",
+  "suggestion_snapshot_json": "{}",
+  "final_decision_json": "{}",
+  "suggest_needs_new_label": false,
+  "suggest_degraded": false,
+  "diagnostics_json": "[]",
+  "signals": [
+    {
+      "kind": "false_negative",
+      "target_label_ref": "cli",
+      "related_labels_json": "[]",
+      "proposed_action": "add_positive_atom",
+      "candidate_atom": {
+        "polarity": "positive",
+        "kind": "applies_when",
+        "text": "extends CLI subcommands, command arguments, help output, or machine-readable JSON behavior"
+      },
+      "proposal_json": "{}",
+      "agent_selected": true,
+      "suggest_state": "candidate",
+      "suggest_score": 0.08,
+      "suggest_rank": 6,
+      "final_selected": true,
+      "rationale": "The task expands the CLI surface."
+    }
+  ]
+}
+```
+
+`label ontology list` 默认只返回 `open` 和 `confirmed` signals。`--include-all`
+返回完整历史；`--status`、`--kind` 可重复过滤，`--task`、`--label` 和
+`--proposed-label` 用于按来源 task、目标 label 或候选新 label 查询。
+`label ontology show` 返回 signal、observation 和关联 actions。`label ontology review`
+是只读聚合 review queue 视图，默认只聚合 `open` 和 `confirmed` signals；传
+`--include-all` 时包含 resolved/rejected/superseded 历史。`--group-by` 支持按
+`label`、`candidate-atom` 或 `proposed-label` 聚合，`--limit` 限制返回 group
+数量。`--json` 每个 group 返回聚合维度、key、相关 label / candidate atom /
+proposed label、distinct task count、signal/status/degraded/action counts、score
+summary、sample task refs、signal ids、action ids 和 proposal ids。排序优先使用
+distinct task count，其次 confirmed count、latest signal time 和 key。
+
+Lifecycle commands 写入 action 并同步更新 signal status：
+
+- `confirm`：`open` signal 进入 `confirmed`。
+- `reject`：把 signal 标记为 `rejected`。
+- `supersede --by`：把重复或过时 signal 标记为 `superseded`；写入前会沿
+  replacement `superseded_by_signal_id` 链检查，拒绝会回到任一 source signal 的环。
+- `resolve --no-change`：记录无需 ontology 修改的 resolution。
+
+这些 lifecycle commands 只记录 review/status 变化，不接受 canonical mutation
+provenance 字段。`add_positive_atom`、`add_negative_atom`、`bootstrap_label` 和
+`validate` 等 action rows 只能由 `label ontology apply atom`、proposal accept、
+`label ontology validate` 等专用命令/服务路径在同一 transaction 中写入。
+Lifecycle、apply atom、validate 和带 `--source-signal` 的 proposal accept 都支持
+`--actor-type user|agent` 与 `--agent-type <type>`。这些 flag 只控制 ontology action
+row 的 `created_by_type` / `agent_type`；action name 仍来自全局 `--actor`。默认
+`--actor-type user` 且不写 `agent_type`。`agent` actor 必须提供非空 `--agent-type`，
+`user` actor 带 `--agent-type` 会被拒绝。
+
+`label ontology apply atom` 只接受 `confirmed` source signals。它会读取目标 label
+当前 semantics，把泛化文本加入对应数组，走现有 semantics upsert/rebuild atoms 路径，
+写入 `add_positive_atom` 或 `add_negative_atom` action，记录生成 atom 的软引用、
+content hash、before/after hash 和 diff，并把 validation status 置为 `pending`。
+默认要求所有带 `target_label_id` 的 source signals 都指向被修改 label；不匹配时拒绝
+并列出 offending signal ids。Atom text 不需要逐字等于 source signal 的 candidate
+text，reviewer 可以写更泛化的 canonical atom。确实需要 retarget confirmed same-board
+signals 时，必须传 `--allow-retarget` 和非空 `--retarget-reason <text>`；action
+`change_json.retarget_override` 会记录 reason、source signal 原始 target/proposed label
+和最终 target label。Override 不放宽 board/status 要求。
+该命令只更新 SQLite truth 并标脏 label atom index；vector index rebuild 和后续
+suggest 验证仍是第二阶段。
+
+`label ontology validate` 为一个 mutation action 追加 `validate` action。CLI 读取
+`--input` 中的 validation JSON，并由 service 包装 manual payload、source signal
+case 摘要、task snapshot/suggest input hash 对比和 parent action 结果引用。Parent action 必须是
+同一 board 上 `validation_status=pending` 的 canonical mutation action，并携带
+canonical result evidence（例如 atom/result label/proposal 引用、canonical hash 和
+非空 change snapshot）。`--status passed` 的 input 必须包含 automated typed
+evidence：`evidence_type="automated"`、非空 `embedding_model`、object
+`solver_options`、clean `index.status`、`index.generation`，以及覆盖每个 linked
+source signal 的 `cases[]`；空 `{}`、dirty/error atom index、reviewer attestation
+或无类型 evidence 会被拒绝。调用方应在 SQLite mutation transaction 外重建 atom index
+并收集 before/after suggest evidence；service 在短 transaction 内重新核验 parent action
+和 supplied evidence 后写 validation action。
+
+`cases[]` 的 `case_type` 必须匹配 parent action：`positive_atom`、`negative_atom`
+或 `bootstrap_label`。Positive atom validation 要求 `after.degraded=false`、
+result atom id/content hash 出现在 `after.evidence_atoms[]`、target label selected
+或 score >= 0.50，且 score/coverage 不恶化。Negative atom validation 要求 result
+atom evidence、false-positive task 上 target label score 下降或不再 selected，并且
+提供的 `after.positive_controls[]` 全部 passed 且未 regressed。Bootstrap label
+validation 要求所有 linked source signals 都有 passed case，new/result label selected
+或 score >= 0.50，且 evidence atoms 来自 result label。
+
+Validation comparability 默认使用 observation 的
+`suggest_input_hash`；status、`updated_at`、`lock_version` 或 task label binding
+只改变完整 snapshot 时写入 `task_metadata_drift` / `label_binding_drift` warning，
+不会让 passed validation stale。title/description 变化会写入 `suggest_input_drift`
+并使 case incomparable；旧 observation 缺少 `suggest_input_hash` 时写入
+`legacy_suggest_input_hash_missing`，不能静默 passed。`--status passed` 会把 linked
+source signals 转为 `resolved`；`failed` / `partial` 保留历史和 evidence，source
+signals 继续等待后续修正或人工处理。
 
 `label propose --json` 返回结构化 attempt：
 
@@ -1151,8 +1333,8 @@ kanban context build t_... [--lexical-limit 5] [--vector-config <toml>]
 `kanban stats --json` 返回 status counts、过期 running claim 列表和 blocked reason 聚合，用于本地 operator recovery。
 
 `kanban backup` 使用 SQLite `VACUUM INTO` 创建一致备份；目标文件已存在时失败，避免覆盖。
-`kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kanban backup`。
-`kanban import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kanban import --replace` 是 offline-only 操作；运行前必须停止 `kanban serve` 和常驻 `kanban dispatch`，如果检测到 active runtime lock 会直接拒绝。
+`kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kanban backup`。JSONL export 包含 label ontology ledger 四张表，record types 为 `label_ontology_observation`、`label_ontology_signal`、`label_ontology_action`、`label_ontology_action_signal`；因此 portable JSONL 与 SQLite backup 都会保留 ontology observation/signal/action provenance。
+`kanban import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kanban import --replace` 是 offline-only 操作；运行前必须停止 `kanban serve` 和常驻 `kanban dispatch`，如果检测到 active runtime lock 会直接拒绝。Ontology import 会延迟回填 `label_ontology_signals.superseded_by_signal_id` 与 `label_ontology_actions.parent_action_id`，因此不依赖 JSONL 中同表自引用 rows 的偶然顺序；导入后会拒绝跨 board ontology links、orphan action-signal links、supersede cycles 和 action parent cycles。
 `kanban entity`、`kanban outbox`、`kanban derived` 是 Knowledge Substrate 的只读维护入口。SQLite 仍是事实源；这些命令只报告统一 entity registry、派生索引 outbox 和 derived store 状态，不改变 task 状态或 claim。
 `kanban graph` 和 `kanban vector` 是 feature-gated 派生层入口：未启用 `graph-oxigraph` / `vector-lancedb` 或缺少 embedding provider 时返回 disabled/degraded status；启用后仍只作为可重建 relation/vector store，不参与 task 状态事务。
 `kanban vector status --json` 保留 `message` 兼容字段，同时返回结构化
@@ -1201,6 +1383,7 @@ semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
 - `ready/running` task 带有未来 `scheduled_at`。
 - `index_outbox` backlog：`outbox_pending`、`outbox_running`、`outbox_failed`。
 - derived store health：`derived_dirty_stores`、`derived_error_stores`、`derived_stores[]`，每个 store 包含 `dirty`、`last_error` 和按 store target 聚合的 pending/running/failed outbox 计数。
+- label ontology ledger health：v12+ 数据库必须存在 `label_ontology_observations`、`label_ontology_signals`、`label_ontology_actions`、`label_ontology_action_signals`；doctor 会报告 observation/signal/action/action-signal 的跨 board link、orphan link、parent action 异常、supersede cycle 和可检查 soft reference 不一致。人类输出包含 `ontology_ledger_errors` / `ontology_ledger_warnings` 计数；`--json` 额外返回 `ontology_ledger_issues[]`，每条 issue 包含 `severity`、`code`、`message`、`record_ids`。非零 `ontology_ledger_errors` 会让 `ok=false`；warning 用于 rebuildable 或可解释的软引用异常，不单独让 doctor unhealthy。
 
 `dirty` / pending outbox 表示派生层需要 sync/rebuild，不会改变 SQLite task truth；failed outbox 或 `last_error` 用于 operator 判断是否需要 `kanban index sync`、`kanban graph sync/rebuild` 或 `kanban vector sync/rebuild`。`derived_stores[].last_event_id` 表示对应 store 已成功提交的全局 event watermark；当 `dirty=true` 时，它仍然只是“已成功处理到哪里”的摘要，不代表所有 board 都已经干净。
 

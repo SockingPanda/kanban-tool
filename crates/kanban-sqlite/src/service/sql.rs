@@ -54,7 +54,7 @@ where
         .map_err(storage)
 }
 
-pub(crate) fn one<T, P, F, E>(
+pub(crate) fn required_row<T, P, F, E>(
     conn: &Connection,
     sql: &str,
     params: P,
@@ -67,6 +67,14 @@ where
     E: FnOnce() -> KanbanError,
 {
     optional(conn, sql, params, mapper)?.ok_or_else(missing)
+}
+
+pub(crate) fn scalar<T, P, F>(conn: &Connection, sql: &str, params: P, mapper: F) -> Result<T>
+where
+    P: Params,
+    F: FnOnce(&Row<'_>) -> rusqlite::Result<T>,
+{
+    conn.query_row(sql, params, mapper).map_err(storage)
 }
 
 pub(crate) fn exists<P>(conn: &Connection, sql: &str, params: P) -> Result<bool>
@@ -253,7 +261,7 @@ mod tests {
         .unwrap();
         assert!(missing.is_none());
 
-        let one_name = one(
+        let required_name = required_row(
             &conn,
             "SELECT name FROM items WHERE id=?1",
             [2],
@@ -261,7 +269,10 @@ mod tests {
             || kanban_core::KanbanError::NotFound("item".into()),
         )
         .unwrap();
-        assert_eq!(one_name, "two");
+        assert_eq!(required_name, "two");
+
+        let count: i64 = scalar(&conn, "SELECT COUNT(*) FROM items", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 2);
 
         assert!(exists(&conn, "SELECT 1 FROM items WHERE id=?1", [1]).unwrap());
         assert!(!exists(&conn, "SELECT 1 FROM items WHERE id=?1", [99]).unwrap());

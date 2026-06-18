@@ -1,6 +1,6 @@
 use crate::connect_file;
 
-use super::{RunRecord, all, board_id_any, one, resolve_task_any};
+use super::{RunRecord, all, board_id_any, required_row, resolve_task_any};
 
 use std::path::Path;
 
@@ -32,7 +32,7 @@ pub fn list_runs(
 
 pub fn get_run_by_id_global(path: impl AsRef<Path>, run_id: &str) -> Result<RunRecord> {
     let conn = connect_file(path.as_ref())?;
-    one(
+    required_row(
         &conn,
         "SELECT id,task_id,status,worker_profile,worker_pid,claim_token,claim_owner,started_at,finished_at,exit_code,summary,error,log_path,metadata_json FROM task_runs WHERE id=?1",
         [run_id],

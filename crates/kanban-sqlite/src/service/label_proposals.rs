@@ -6,8 +6,8 @@ use super::label_suggestions::{
 use super::{
     LabelProposalAttempt, LabelProposalCandidate, LabelProposalListOptions, LabelProposalStatus,
     LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult, SqlFilter, all,
-    all_values, board_id, exec, get_task_by_id, insert_event, mark_label_atom_store_dirty, one,
-    resolve_task, upsert_label_semantics_candidate_in_tx, with_immediate_tx,
+    all_values, board_id, exec, get_task_by_id, insert_event, mark_label_atom_store_dirty,
+    required_row, resolve_task, upsert_label_semantics_candidate_in_tx, with_immediate_tx,
 };
 
 use std::{collections::HashMap, path::Path, str::FromStr};
@@ -730,7 +730,7 @@ fn get_label_proposal_conn(
     conn: &Connection,
     proposal_id: &str,
 ) -> Result<LabelSemanticProposalRecord> {
-    one(
+    required_row(
         conn,
         "SELECT id,board_id,task_id,status,name,description,applies_when,excludes_when,positive_examples,negative_examples,heuristic_coverage,heuristic_coverage_cosine,heuristic_residual_norm,top1_existing_label_id,top1_existing_label_name,diagnostics_json,created_by,decision_reason,resolved_label_id,created_at,updated_at,decided_at FROM label_semantic_proposals WHERE id=?1",
         [proposal_id],

@@ -3,8 +3,8 @@ use crate::connect_file;
 use super::{
     CreateLabel, CreateTask, LabelRecord, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage,
     TaskListSort, TaskPatch, TaskRecord, add_dependency_in_current_tx, all, all_values, board_id,
-    board_id_any, ensure_changed_one, exec, exec_one, insert_event, json_valid, one, optional,
-    recompute_ready_status, validate_priority, with_immediate_tx,
+    board_id_any, ensure_changed_one, exec, exec_one, insert_event, json_valid, optional,
+    recompute_ready_status, required_row, scalar, validate_priority, with_immediate_tx,
 };
 
 use std::path::Path;
@@ -82,12 +82,11 @@ pub fn create_task_with_labels_and_dependencies(
     let id = new_task_id();
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
-        let seq: i64 = one(
+        let seq: i64 = scalar(
             &conn,
             "SELECT COALESCE(MAX(seq), 0) + 1 FROM tasks WHERE board_id=:board_id",
             named_params! { ":board_id": board_id },
             |r| r.get(0),
-            || KanbanError::Storage("missing task sequence aggregate row".into()),
         )?;
         exec(
             &conn,
@@ -431,12 +430,11 @@ pub fn list_tasks_page(
     let board_id = board_id(&conn, board)?;
     let (where_sql, params) = task_query_where(&board_id, &options);
     let total_sql = format!("SELECT COUNT(*) FROM tasks {where_sql}");
-    let total: i64 = one(
+    let total: i64 = scalar(
         &conn,
         &total_sql,
         rusqlite::params_from_iter(params.iter()),
         |row| row.get(0),
-        || KanbanError::Storage("missing task count aggregate row".into()),
     )?;
 
     let mut page_params = params;
@@ -750,7 +748,7 @@ pub(crate) fn get_task_by_id(
     board_id: &str,
     task_id: &str,
 ) -> Result<TaskRecord> {
-    one(
+    required_row(
         conn,
         &format!("SELECT {TASK_COLUMNS} FROM tasks WHERE board_id=?1 AND id=?2"),
         params![board_id, task_id],
@@ -760,7 +758,7 @@ pub(crate) fn get_task_by_id(
 }
 
 pub(crate) fn get_task_by_id_global_conn(conn: &Connection, task_id: &str) -> Result<TaskRecord> {
-    one(
+    required_row(
         conn,
         &format!("SELECT {TASK_COLUMNS} FROM tasks WHERE id=?1"),
         [task_id],
@@ -839,7 +837,7 @@ pub(crate) fn get_task_by_seq(
     seq: i64,
     display_ref: &str,
 ) -> Result<TaskRecord> {
-    one(
+    required_row(
         conn,
         &format!("SELECT {TASK_COLUMNS} FROM tasks WHERE board_id=?1 AND seq=?2"),
         params![board_id, seq],
@@ -1027,7 +1025,7 @@ pub(crate) fn active_board_id_for_task(conn: &Connection, task_id: &str) -> Resu
 }
 
 fn active_board_id_for_label_mutation(conn: &Connection, task_id: &str) -> Result<String> {
-    one(
+    required_row(
         conn,
         "SELECT tasks.board_id FROM tasks JOIN boards ON boards.id=tasks.board_id WHERE tasks.id=?1 AND boards.archived_at IS NULL AND tasks.status != 'archived'",
         [task_id],

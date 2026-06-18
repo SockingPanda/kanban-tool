@@ -2,7 +2,7 @@ use crate::connect_file;
 
 use super::{
     BoardColumnRecord, BoardListOptions, BoardRecord, CreateBoard, all, exec, exec_one, exists,
-    insert_event, one, with_immediate_tx,
+    insert_event, required_row, with_immediate_tx,
 };
 
 use std::path::Path;
@@ -145,7 +145,7 @@ pub(crate) fn get_board_conn(conn: &Connection, slug_or_id: &str) -> Result<Boar
     } else {
         "SELECT id,slug,name,description,created_at,updated_at,archived_at FROM boards WHERE slug=?1 AND archived_at IS NULL"
     };
-    one(conn, sql, [slug_or_id], board_from_row, || {
+    required_row(conn, sql, [slug_or_id], board_from_row, || {
         KanbanError::NotFound(format!("board {slug_or_id}"))
     })
 }
@@ -156,7 +156,7 @@ pub(crate) fn get_board_conn_any(conn: &Connection, slug_or_id: &str) -> Result<
     } else {
         "SELECT id,slug,name,description,created_at,updated_at,archived_at FROM boards WHERE slug=?1"
     };
-    one(conn, sql, [slug_or_id], board_from_row, || {
+    required_row(conn, sql, [slug_or_id], board_from_row, || {
         KanbanError::NotFound(format!("board {slug_or_id}"))
     })
 }
@@ -196,7 +196,7 @@ pub(crate) fn board_id(conn: &Connection, slug_or_id: &str) -> Result<String> {
     } else {
         "SELECT id FROM boards WHERE slug=?1 AND archived_at IS NULL"
     };
-    one(
+    required_row(
         conn,
         sql,
         [slug_or_id],
@@ -211,7 +211,7 @@ pub(crate) fn board_id_any(conn: &Connection, slug_or_id: &str) -> Result<String
     } else {
         "SELECT id FROM boards WHERE slug=?1"
     };
-    one(
+    required_row(
         conn,
         sql,
         [slug_or_id],

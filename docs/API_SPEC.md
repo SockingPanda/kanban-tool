@@ -1149,7 +1149,11 @@ validation 和 persistence。
     "positive_examples": ["new table migration"],
     "negative_examples": ["CSS-only tweak"]
   },
-  "actor": "alice"
+  "actor": "alice",
+  "source_signal_ids": ["los_..."],
+  "ontology_actor": {"name": "codex", "type": "agent", "agent_type": "codex"},
+  "allow_retarget": false,
+  "retarget_reason": null
 }
 ```
 
@@ -1159,6 +1163,17 @@ coverage 不足且候选语义有效，并且残差 top1+margin 校验明确通�
 `proposed` proposal。与现有 label 发生 normalized-name 冲突的候选持久化为 `rejected`，diagnostics 包含
 `near_duplicate_label_conflict`。Normalized-name conflict 忽略大小写、空白和标点，
 是 deterministic near-duplicate heuristic。
+`source_signal_ids` 可选；传入时，proposal 创建成功后会在同一 transaction 写入
+`create_label_proposal` ontology action，并通过 action-signal links 记录该 proposal
+由哪些 confirmed vocabulary-gap signals 支持。Proposal row 与 provenance action
+要么同时写入，要么一起回滚。Source signals 默认必须属于同一 board、状态为
+`confirmed`、kind 为 `vocabulary_gap`、`proposed_action` 为 `bootstrap_label`，且
+normalized `proposed_label_name` 等于 proposal name。`ontology_actor` 只控制
+`create_label_proposal` action provenance；省略时使用 `actor` 字符串作为
+`type=user` actor。确需 retarget confirmed same-board source signal 时，必须传
+`allow_retarget=true` 和非空 `retarget_reason`；reason 和 source signal 原始
+target/proposed label 会写入 `change_json.retarget_override`。Override 不放宽
+board/status 要求。
 
 POST proposal route 接受与 label suggestion 相同的 query 参数。`limit` 只截断
 suggestion 输出；`candidate_limit`、`atom_limit`、`max_selected_labels` 和 `min_score`
@@ -1221,7 +1236,9 @@ action 使用 `actor` 字符串作为 `type=user` actor。`type=agent` 必须提
 proposal name。确实需要 retarget confirmed same-board source signal 时，必须传
 `allow_retarget=true` 和非空 `retarget_reason`；bootstrap action
 `change_json.retarget_override` 会记录 reason、source signal 原始 target/proposed
-label 和最终 proposal/result label。Override 不放宽 board/status 要求。Reject 标记为
+label 和最终 proposal/result label。如果 proposal 已有 `create_label_proposal`
+action，accept 产生的 `bootstrap_label` action 会把 `parent_action_id` 指向该
+creation action。Override 不放宽 board/status 要求。Reject 标记为
 `rejected`，不接受 `source_signal_ids`、`ontology_actor` 或 retarget options。
 accepted/rejected proposal 再次决策返回普通 `400 invalid_input` error envelope。
 

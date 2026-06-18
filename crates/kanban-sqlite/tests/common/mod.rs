@@ -15,8 +15,9 @@ pub use kanban_sqlite::{
     LabelOntologyReviewGroupBy, LabelOntologyReviewOptions, LabelOntologySignalInput,
     LabelOntologySignalKind, LabelOntologySignalListOptions, LabelOntologySignalStatus,
     LabelOntologySuggestState, LabelOntologyValidationInput, LabelOntologyValidationStatus,
-    LabelProposalCandidate, LabelProposalDecisionOptions, LabelProposalListOptions,
-    LabelProposalStatus, ManualLabelProposalProvider, TaskPatch, TaskRecord, UpsertLabelSemantics,
+    LabelProposalCandidate, LabelProposalCreateOptions, LabelProposalDecisionOptions,
+    LabelProposalListOptions, LabelProposalProposeOptions, LabelProposalStatus,
+    ManualLabelProposalProvider, TaskPatch, TaskRecord, UpsertLabelSemantics,
     accept_label_proposal, accept_label_proposal_with_options, add_dependency,
     apply_label_ontology_atom, apply_label_ontology_atom_with_options, archive_board, archive_task,
     begin_database_replace, begin_database_runtime, block_task, bootstrap_task_label,
@@ -28,10 +29,10 @@ pub use kanban_sqlite::{
     list_board_columns, list_boards, list_comments, list_dependencies, list_events,
     list_label_atoms, list_label_ontology_signals, list_label_proposals, list_labels, list_outbox,
     list_runs, list_tasks, promote_task, propose_task_label, propose_task_label_with,
-    propose_task_label_with_store, record_label_ontology_observation, reject_label_proposal,
-    review_label_ontology, search_tasks, set_task_retry_policy_by_id, specify_task,
-    submit_review_task, task_ontology_summary, unblock_task, update_task, upsert_label_semantics,
-    validate_label_ontology_action,
+    propose_task_label_with_store, propose_task_label_with_store_and_create_options,
+    record_label_ontology_observation, reject_label_proposal, review_label_ontology, search_tasks,
+    set_task_retry_policy_by_id, specify_task, submit_review_task, task_ontology_summary,
+    unblock_task, update_task, upsert_label_semantics, validate_label_ontology_action,
 };
 #[cfg(feature = "vector-lancedb")]
 pub use kanban_sqlite::{

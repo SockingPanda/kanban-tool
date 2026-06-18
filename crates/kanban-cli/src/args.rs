@@ -352,6 +352,14 @@ pub(crate) struct LabelProposeArgs {
     pub(crate) task_ref: String,
     #[arg(long = "proposal-json")]
     pub(crate) proposal_json: Option<std::path::PathBuf>,
+    #[arg(long = "source-signal")]
+    pub(crate) source_signal_ids: Vec<String>,
+    #[arg(long)]
+    pub(crate) allow_retarget: bool,
+    #[arg(long = "retarget-reason")]
+    pub(crate) retarget_reason: Option<String>,
+    #[command(flatten)]
+    pub(crate) ontology_actor: LabelOntologyActorArgs,
     #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
     pub(crate) limit: usize,
     #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]

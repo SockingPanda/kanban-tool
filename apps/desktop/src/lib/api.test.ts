@@ -252,6 +252,56 @@ describe("KanbanApi task search", () => {
     expect(url.searchParams.get("min_score")).toBe("0.15")
   })
 
+  it("uses existing ontology HTTP routes for review workbench data and lifecycle actions", async () => {
+    const signal = labelOntologySignal({ id: "los_1", target_label_name_snapshot: "cli" })
+    const fetchMock = mockFetchSequence([
+      { data: [signal] },
+      { data: [labelOntologyReviewGroup({ key: "cli", label_name: "cli", signal_ids: ["los_1"] })] },
+      { data: { signal, observation: labelOntologyObservation({ signals: [signal] }), actions: [] } },
+      { data: labelOntologyAction({ id: "loa_confirm", action_type: "confirm", signal_ids: ["los_1"] }) },
+      { data: labelAtomExplain({ query: "hash_1" }) },
+    ])
+    const api = new KanbanApi(runtimeConfig)
+
+    await expect(
+      api.listLabelOntologySignals({
+        statuses: ["open", "confirmed"],
+        kinds: ["false_negative"],
+        includeAll: false,
+        limit: 25,
+      }),
+    ).resolves.toEqual([signal])
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).pathname).toBe("/api/v1/boards/default/label-ontology/signals")
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.getAll("status")).toEqual(["open", "confirmed"])
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.getAll("kind")).toEqual(["false_negative"])
+
+    await api.reviewLabelOntology({ groupBy: "candidate_atom", includeAll: true, limit: 10 })
+    expect(new URL(String(fetchMock.mock.calls[1]?.[0])).pathname).toBe("/api/v1/boards/default/label-ontology/review")
+    expect(new URL(String(fetchMock.mock.calls[1]?.[0])).searchParams.get("group_by")).toBe("candidate_atom")
+    expect(new URL(String(fetchMock.mock.calls[1]?.[0])).searchParams.get("include_all")).toBe("true")
+
+    await api.getLabelOntologySignal("los_1")
+    expect(new URL(String(fetchMock.mock.calls[2]?.[0])).pathname).toBe("/api/v1/label-ontology/signals/los_1")
+
+    await api.createLabelOntologyAction({
+      actionType: "confirm",
+      signalIds: ["los_1"],
+      reason: "Reviewed from Desktop",
+    })
+    expect(new URL(String(fetchMock.mock.calls[3]?.[0])).pathname).toBe("/api/v1/boards/default/label-ontology/actions")
+    expect(fetchMock.mock.calls[3]?.[1]?.method).toBe("POST")
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body))).toEqual({
+      actor: { name: "desktop-test", type: "user", agent_type: null },
+      action_type: "confirm",
+      signal_ids: ["los_1"],
+      reason: "Reviewed from Desktop",
+      superseded_by_signal_id: null,
+    })
+
+    await api.explainLabelAtom("hash_1")
+    expect(new URL(String(fetchMock.mock.calls[4]?.[0])).pathname).toBe("/api/v1/boards/default/labels/atoms/hash_1/explain")
+  })
+
   it("lists active boards through the boards endpoint", async () => {
     const boards = [
       board({ id: "b_default", slug: "default", name: "Default" }),
@@ -534,6 +584,150 @@ function task(overrides: Partial<Task> = {}): Task {
     dependency_blocked: false,
     unfinished_parent_count: 0,
     labels: [],
+    ...overrides,
+  }
+}
+
+function labelOntologySignal(overrides: Partial<import("./api").LabelOntologySignalRecord> = {}): import("./api").LabelOntologySignalRecord {
+  return {
+    id: "los_1",
+    observation_id: "loo_1",
+    board_id: "b_1",
+    kind: "false_negative",
+    status: "open",
+    target_label_id: "lab_cli",
+    target_label_name_snapshot: "cli",
+    related_labels_json: "[]",
+    proposed_action: "add_positive_atom",
+    candidate_atom_polarity: "positive",
+    candidate_atom_kind: "applies_when",
+    candidate_text: "touches CLI behavior",
+    candidate_content_hash: "hash_1",
+    proposed_label_name: null,
+    proposed_label_name_normalized: null,
+    proposal_json: "{}",
+    agent_selected: true,
+    suggest_state: "absent",
+    suggest_score: 0.12,
+    suggest_rank: 4,
+    final_selected: true,
+    rationale: "Review rationale",
+    confidence: 0.9,
+    signal_key: "signal-key",
+    superseded_by_signal_id: null,
+    status_reason: null,
+    created_at: 1,
+    updated_at: 1,
+    reviewed_at: null,
+    closed_at: null,
+    ...overrides,
+  }
+}
+
+function labelOntologyObservation(
+  overrides: Partial<import("./api").LabelOntologyObservationRecord> = {},
+): import("./api").LabelOntologyObservationRecord {
+  return {
+    id: "loo_1",
+    board_id: "b_1",
+    task_id: "t_1",
+    task_ref_snapshot: "default#1",
+    task_snapshot_json: "{}",
+    suggest_input_hash: "input-hash",
+    agent_candidates_json: "[]",
+    suggestion_snapshot_json: "{}",
+    final_decision_json: "{}",
+    suggest_coverage: 0.6,
+    suggest_coverage_cosine: 0.7,
+    suggest_residual_norm: 0.4,
+    suggest_needs_new_label: false,
+    suggest_degraded: false,
+    diagnostics_json: "[]",
+    capture_fingerprint: "fingerprint",
+    created_by: "desktop-test",
+    created_by_type: "user",
+    agent_type: null,
+    created_at: 1,
+    signals: [],
+    ...overrides,
+  }
+}
+
+function labelOntologyAction(
+  overrides: Partial<import("./api").LabelOntologyActionRecord> = {},
+): import("./api").LabelOntologyActionRecord {
+  return {
+    id: "loa_1",
+    board_id: "b_1",
+    parent_action_id: null,
+    action_type: "confirm",
+    reason: "Reviewed",
+    target_label_id: null,
+    result_label_id: null,
+    result_atom_id: null,
+    result_atom_content_hash: null,
+    result_proposal_id: null,
+    canonical_before_hash: null,
+    canonical_after_hash: null,
+    change_json: "{}",
+    validation_status: "not_required",
+    validation_json: "{}",
+    created_by: "desktop-test",
+    created_by_type: "user",
+    agent_type: null,
+    created_at: 1,
+    signal_ids: [],
+    ...overrides,
+  }
+}
+
+function labelOntologyReviewGroup(
+  overrides: Partial<import("./api").LabelOntologyReviewGroup> = {},
+): import("./api").LabelOntologyReviewGroup {
+  return {
+    group_by: "label",
+    key: "lab_cli",
+    label_id: "lab_cli",
+    label_name: "cli",
+    candidate_atom_polarity: "positive",
+    candidate_atom_kind: "applies_when",
+    candidate_text: "touches CLI behavior",
+    candidate_content_hash: "hash_1",
+    proposed_label_name: null,
+    proposed_label_name_normalized: null,
+    task_count: 1,
+    signal_count: 1,
+    open_count: 1,
+    confirmed_count: 0,
+    resolved_count: 0,
+    rejected_count: 0,
+    superseded_count: 0,
+    degraded_count: 0,
+    average_score: 0.12,
+    median_score: 0.12,
+    oldest_signal_at: 1,
+    latest_signal_at: 1,
+    sample_task_refs: ["default#1"],
+    signal_ids: ["los_1"],
+    action_count: 0,
+    action_ids: [],
+    proposal_ids: [],
+    labels: [{ id: "lab_cli", name: "cli" }],
+    candidate_atom_variants: [],
+    ...overrides,
+  }
+}
+
+function labelAtomExplain(overrides: Partial<import("./api").LabelAtomExplainRecord> = {}): import("./api").LabelAtomExplainRecord {
+  return {
+    query: "hash_1",
+    atom: null,
+    current_semantics: null,
+    provenance_actions: [],
+    supporting_signals: [],
+    validation_history: [],
+    legacy_untracked: false,
+    legacy_reason: null,
     ...overrides,
   }
 }

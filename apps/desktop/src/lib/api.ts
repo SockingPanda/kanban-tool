@@ -109,6 +109,230 @@ export type LabelSuggestionResult = {
   diagnostics: string[]
 }
 
+export type LabelOntologySignalKind =
+  | "false_negative"
+  | "false_positive"
+  | "vocabulary_gap"
+  | "name_issue"
+  | "boundary_issue"
+  | "structure_issue"
+
+export type LabelOntologySignalStatus = "open" | "confirmed" | "resolved" | "rejected" | "superseded"
+
+export type LabelOntologyProposedAction =
+  | "observe"
+  | "add_positive_atom"
+  | "add_negative_atom"
+  | "update_semantics"
+  | "bootstrap_label"
+  | "rename_label"
+  | "split_label"
+  | "merge_labels"
+
+export type LabelOntologyActionType =
+  | "confirm"
+  | "reject"
+  | "supersede"
+  | "resolve_no_change"
+  | "add_positive_atom"
+  | "add_negative_atom"
+  | "adopt_existing_atom"
+  | "update_semantics"
+  | "create_label_proposal"
+  | "bootstrap_label"
+  | "rename_label"
+  | "split_label"
+  | "merge_labels"
+  | "revert_ontology_mutation"
+  | "validate"
+
+export type LabelOntologyValidationStatus = "not_required" | "pending" | "passed" | "failed" | "partial"
+
+export type LabelOntologySuggestState = "selected" | "candidate" | "absent" | "unavailable"
+
+export type LabelOntologyReviewGroupBy = "label" | "candidate_atom" | "proposed_label"
+
+export type LabelAtomRecord = {
+  id: string
+  label_id: string
+  board_id: string
+  label_name: string
+  polarity: string
+  kind: string
+  text: string
+  ordinal: number
+  content_hash: string
+  created_at: number
+  updated_at: number
+}
+
+export type LabelOntologyObservationRecord = {
+  id: string
+  board_id: string
+  task_id: string
+  task_ref_snapshot: string
+  task_snapshot_json: string
+  suggest_input_hash: string | null
+  agent_candidates_json: string
+  suggestion_snapshot_json: string
+  final_decision_json: string
+  suggest_coverage: number | null
+  suggest_coverage_cosine: number | null
+  suggest_residual_norm: number | null
+  suggest_needs_new_label: boolean
+  suggest_degraded: boolean
+  diagnostics_json: string
+  capture_fingerprint: string
+  created_by: string
+  created_by_type: string
+  agent_type: string | null
+  created_at: number
+  signals: LabelOntologySignalRecord[]
+}
+
+export type LabelOntologySignalRecord = {
+  id: string
+  observation_id: string
+  board_id: string
+  kind: LabelOntologySignalKind
+  status: LabelOntologySignalStatus
+  target_label_id: string | null
+  target_label_name_snapshot: string | null
+  related_labels_json: string
+  proposed_action: LabelOntologyProposedAction
+  candidate_atom_polarity: string | null
+  candidate_atom_kind: string | null
+  candidate_text: string | null
+  candidate_content_hash: string | null
+  proposed_label_name: string | null
+  proposed_label_name_normalized: string | null
+  proposal_json: string
+  agent_selected: boolean
+  suggest_state: LabelOntologySuggestState | null
+  suggest_score: number | null
+  suggest_rank: number | null
+  final_selected: boolean
+  rationale: string
+  confidence: number | null
+  signal_key: string
+  superseded_by_signal_id: string | null
+  status_reason: string | null
+  created_at: number
+  updated_at: number
+  reviewed_at: number | null
+  closed_at: number | null
+}
+
+export type LabelOntologyActionRecord = {
+  id: string
+  board_id: string
+  parent_action_id: string | null
+  action_type: LabelOntologyActionType
+  reason: string
+  target_label_id: string | null
+  result_label_id: string | null
+  result_atom_id: string | null
+  result_atom_content_hash: string | null
+  result_proposal_id: string | null
+  canonical_before_hash: string | null
+  canonical_after_hash: string | null
+  change_json: string
+  validation_status: LabelOntologyValidationStatus
+  validation_json: string
+  created_by: string
+  created_by_type: string
+  agent_type: string | null
+  created_at: number
+  signal_ids: string[]
+}
+
+export type LabelOntologySignalDetail = {
+  signal: LabelOntologySignalRecord
+  observation: LabelOntologyObservationRecord
+  actions: LabelOntologyActionRecord[]
+}
+
+export type LabelOntologyReviewLabelRef = {
+  id: string
+  name: string | null
+}
+
+export type LabelOntologyReviewAtomVariant = {
+  content_hash: string
+  polarity: string | null
+  kind: string | null
+  text: string | null
+  signal_count: number
+}
+
+export type LabelOntologyReviewGroup = {
+  group_by: LabelOntologyReviewGroupBy
+  key: string
+  label_id: string | null
+  label_name: string | null
+  candidate_atom_polarity: string | null
+  candidate_atom_kind: string | null
+  candidate_text: string | null
+  candidate_content_hash: string | null
+  proposed_label_name: string | null
+  proposed_label_name_normalized: string | null
+  task_count: number
+  signal_count: number
+  open_count: number
+  confirmed_count: number
+  resolved_count: number
+  rejected_count: number
+  superseded_count: number
+  degraded_count: number
+  average_score: number | null
+  median_score: number | null
+  oldest_signal_at: number
+  latest_signal_at: number
+  sample_task_refs: string[]
+  signal_ids: string[]
+  action_count: number
+  action_ids: string[]
+  proposal_ids: string[]
+  labels: LabelOntologyReviewLabelRef[]
+  candidate_atom_variants: LabelOntologyReviewAtomVariant[]
+}
+
+export type LabelAtomExplainAction = {
+  action: LabelOntologyActionRecord
+  matched_by: string
+}
+
+export type LabelAtomExplainSignal = {
+  signal: LabelOntologySignalRecord
+  observation: LabelOntologyObservationRecord
+  source_task: Task
+  task_ref_snapshot: string
+  suggest_input_stale: boolean
+  suggest_degraded: boolean
+  warnings: string[]
+}
+
+export type LabelAtomExplainValidation = {
+  action: LabelOntologyActionRecord
+  parent_action_id: string
+  validation_status: LabelOntologyValidationStatus
+  manual: unknown
+  summary: unknown
+  cases: unknown
+  warnings: string[]
+}
+
+export type LabelAtomExplainRecord = {
+  query: string
+  atom: LabelAtomRecord | null
+  current_semantics: unknown | null
+  provenance_actions: LabelAtomExplainAction[]
+  supporting_signals: LabelAtomExplainSignal[]
+  validation_history: LabelAtomExplainValidation[]
+  legacy_untracked: boolean
+  legacy_reason: string | null
+}
+
 export type Run = {
   id: string
   task_id: string
@@ -600,6 +824,64 @@ export class KanbanApi {
     })
   }
 
+  async listLabelOntologySignals(options: LabelOntologySignalListOptions = {}) {
+    const params = new URLSearchParams({
+      include_all: String(options.includeAll ?? false),
+      limit: String(options.limit ?? 100),
+    })
+    for (const status of options.statuses ?? []) params.append("status", status)
+    for (const kind of options.kinds ?? []) params.append("kind", kind)
+    if (options.task?.trim()) params.set("task", options.task.trim())
+    if (options.label?.trim()) params.set("label", options.label.trim())
+    if (options.proposedLabel?.trim()) params.set("proposed_label", options.proposedLabel.trim())
+    const signals = await this.request<LabelOntologySignalRecord[]>(
+      `/api/v1/boards/${this.board}/label-ontology/signals?${params.toString()}`,
+      { signal: options.signal },
+    )
+    return expectArray<LabelOntologySignalRecord>(signals, "label ontology signals response data")
+  }
+
+  async reviewLabelOntology(options: LabelOntologyReviewOptions = {}) {
+    const params = new URLSearchParams({
+      group_by: options.groupBy ?? "label",
+      include_all: String(options.includeAll ?? false),
+      limit: String(options.limit ?? 100),
+    })
+    const groups = await this.request<LabelOntologyReviewGroup[]>(
+      `/api/v1/boards/${this.board}/label-ontology/review?${params.toString()}`,
+      { signal: options.signal },
+    )
+    return expectArray<LabelOntologyReviewGroup>(groups, "label ontology review response data")
+  }
+
+  async getLabelOntologySignal(signalId: string, options: RequestOptions = {}) {
+    return this.request<LabelOntologySignalDetail>(
+      `/api/v1/label-ontology/signals/${encodeURIComponent(signalId)}`,
+      options,
+    )
+  }
+
+  async createLabelOntologyAction(input: LabelOntologyActionCreateInput, options: RequestOptions = {}) {
+    return this.request<LabelOntologyActionRecord>(`/api/v1/boards/${this.board}/label-ontology/actions`, {
+      method: "POST",
+      body: {
+        actor: { name: this.actor, type: "user", agent_type: null },
+        action_type: input.actionType,
+        signal_ids: input.signalIds,
+        reason: input.reason,
+        superseded_by_signal_id: input.supersededBySignalId ?? null,
+      },
+      signal: options.signal,
+    })
+  }
+
+  async explainLabelAtom(atomRef: string, options: RequestOptions = {}) {
+    return this.request<LabelAtomExplainRecord>(
+      `/api/v1/boards/${this.board}/labels/atoms/${encodeURIComponent(atomRef)}/explain`,
+      options,
+    )
+  }
+
   async listEvents(taskId: string, options: RequestOptions = {}) {
     const params = new URLSearchParams({ board: this.board, task_id: taskId, limit: "50" })
     const envelope = await this.requestEnvelope<EventRecord[], EventMeta>(
@@ -689,6 +971,31 @@ type BoardListOptions = {
 
 type SearchTaskOptions = TaskListOptions & {
   query: string
+}
+
+type LabelOntologySignalListOptions = {
+  statuses?: LabelOntologySignalStatus[]
+  kinds?: LabelOntologySignalKind[]
+  task?: string
+  label?: string
+  proposedLabel?: string
+  includeAll?: boolean
+  limit?: number
+  signal?: AbortSignal
+}
+
+type LabelOntologyReviewOptions = {
+  groupBy?: LabelOntologyReviewGroupBy
+  includeAll?: boolean
+  limit?: number
+  signal?: AbortSignal
+}
+
+type LabelOntologyActionCreateInput = {
+  actionType: Extract<LabelOntologyActionType, "confirm" | "reject" | "supersede" | "resolve_no_change">
+  signalIds: string[]
+  reason: string
+  supersededBySignalId?: string | null
 }
 
 type PageEnvelopeMeta = Partial<PageMeta>

@@ -6,7 +6,8 @@ use kanban_sqlite::{
     CreateLabel, CreateTask, LabelOntologyActionInput, LabelOntologyActionType, LabelOntologyActor,
     LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput, LabelOntologyProposedAction,
     LabelOntologyRecordInput, LabelOntologySignalInput, LabelOntologySignalKind,
-    LabelOntologySuggestState, LabelProposalCandidate, get_task, list_label_atoms, list_labels,
+    LabelOntologySuggestState, LabelProposalCandidate, UpsertLabelSemantics, get_task,
+    list_label_atoms, list_labels,
 };
 use pretty_assertions::assert_eq;
 use serde_json::json;
@@ -1705,6 +1706,130 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
 }
 
 #[test]
+fn label_ontology_cli_apply_existing_atom_uses_adopt_existing_action() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_apply_existing_atom_uses_adopt_existing_action")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    kanban_sqlite::upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            applies_when: vec![
+                "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+    let existing_atom = atoms_before
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("existing applies_when atom")?;
+    clear_label_atom_dirty_flags(&temp.path, "default")?;
+    let add_action_count_before = add_atom_action_count(&temp.path)?;
+
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "existing atom adoption CLI task",
+            "--description",
+            "ready spec for existing atom adoption",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    let input_path = write_cli_ontology_record_input(
+        &temp,
+        "ontology-existing-atom-record.json",
+        &[(
+            "cli-existing-atom",
+            "links a confirmed signal to an existing CLI atom",
+        )],
+    )?;
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            &input_path,
+        ],
+    )?
+    .success_json()?;
+    let signal_id = observation["data"]["signals"][0]["id"]
+        .as_str()
+        .context("signal id")?;
+    kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "confirm",
+            signal_id,
+            "--reason",
+            "Reviewer confirmed existing atom signal.",
+        ],
+    )?
+    .success_json()?;
+
+    let applied = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "apply",
+            "atom",
+            signal_id,
+            "--label",
+            "cli",
+            "--kind",
+            "applies-when",
+            "--text",
+            "extends CLI subcommands, arguments, help output, or JSON behavior",
+            "--reason",
+            "Link confirmed signal to existing CLI atom.",
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(applied["data"]["action_type"], "adopt_existing_atom");
+    assert_eq!(applied["data"]["validation_status"], "not_required");
+    assert_eq!(applied["data"]["result_atom_id"], existing_atom.id);
+    assert_eq!(
+        applied["data"]["result_atom_content_hash"],
+        existing_atom.content_hash
+    );
+    assert_eq!(
+        applied["data"]["canonical_before_hash"],
+        applied["data"]["canonical_after_hash"]
+    );
+    let change: serde_json::Value = serde_json::from_str(
+        applied["data"]["change_json"]
+            .as_str()
+            .context("change_json")?,
+    )?;
+    assert_eq!(change["canonical_changed"], false);
+    assert_eq!(change["provenance_only"], true);
+    assert_eq!(change["requested_action_type"], "add_positive_atom");
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
+    assert_eq!(add_atom_action_count(&temp.path)?, add_action_count_before);
+    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    assert_eq!(status.dirty, Some(false));
+    assert_eq!(status.board_dirty, Some(false));
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_cli_apply_atom_retarget_override_records_reason() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_cli_apply_atom_retarget_override_records_reason")?;
     kanban(&temp.path, &["init"])?.success()?;
@@ -1960,6 +2085,31 @@ fn label_atom_explain_cli_json_round_trip() -> anyhow::Result<()> {
     assert!(human.contains(atom_id), "{human}");
     assert!(human.contains("provenance"), "{human}");
     Ok(())
+}
+
+fn clear_label_atom_dirty_flags(path: &Path, board: &str) -> anyhow::Result<()> {
+    let board = kanban_sqlite::get_board(path, board)?;
+    let conn = kanban_sqlite::connect_file(path)?;
+    conn.execute(
+        "UPDATE derived_store_state SET dirty=0, last_error=NULL \
+         WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE label_atom_index_boards SET dirty=0, last_error=NULL \
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [board.id],
+    )?;
+    Ok(())
+}
+
+fn add_atom_action_count(path: &Path) -> anyhow::Result<i64> {
+    Ok(kanban_sqlite::connect_file(path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_actions \
+         WHERE action_type IN ('add_positive_atom','add_negative_atom')",
+        [],
+        |row| row.get(0),
+    )?)
 }
 
 fn write_cli_ontology_record_input(

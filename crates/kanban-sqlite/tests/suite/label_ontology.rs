@@ -1352,6 +1352,181 @@ fn label_ontology_generic_action_rejects_canonical_mutation_types() -> anyhow::R
 }
 
 #[test]
+fn label_ontology_structure_plan_records_change_set_without_canonical_mutation()
+-> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_structure_plan_records_change_set_without_canonical_mutation")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Rename CLI ontology boundary"),
+    )?;
+    kanban_sqlite::add_task_labels_with_options(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &["cli".to_owned()],
+        false,
+    )?;
+    let mut rename_signal = sample_signal_input("rename-cli-to-command-surface");
+    rename_signal.proposed_action = LabelOntologyProposedAction::RenameLabel;
+    rename_signal.candidate_atom = None;
+    rename_signal.proposed_label_name = Some("command surface".to_owned());
+    rename_signal.proposal_json = json!({
+        "from": "cli",
+        "to": "command surface",
+        "reason": "CLI now covers command surfaces beyond command-line only."
+    })
+    .to_string();
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![rename_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer agrees this structure signal is real.",
+        ),
+    )?;
+
+    let before_label_names: Vec<String> = connect_file(&temp.path)?
+        .prepare("SELECT name FROM labels ORDER BY name")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    let before_binding_count: i64 =
+        connect_file(&temp.path)?
+            .query_row("SELECT COUNT(*) FROM task_labels", [], |row| row.get(0))?;
+
+    let action = plan_label_ontology_structure_change(
+        &temp.path,
+        "default",
+        LabelOntologyStructurePlanInput {
+            actor: validation_actor(),
+            signal_ids: vec![signal_id.clone()],
+            action_type: LabelOntologyActionType::RenameLabel,
+            target_label_ref: "cli".to_owned(),
+            proposed_label_name: Some("command surface".to_owned()),
+            related_label_refs: Vec::new(),
+            task_binding_policy: None,
+            validation_policy_json: None,
+            reason: "Plan rename before any canonical label identity rewrite.".to_owned(),
+        },
+    )?;
+
+    assert_eq!(action.action_type, LabelOntologyActionType::RenameLabel);
+    assert_eq!(
+        action.validation_status,
+        LabelOntologyValidationStatus::Pending
+    );
+    assert_eq!(action.signal_ids, vec![signal_id]);
+    assert!(action.result_label_id.is_none());
+    assert!(action.result_atom_id.is_none());
+    assert!(action.canonical_before_hash.is_some());
+    assert!(action.canonical_after_hash.is_some());
+    assert_ne!(action.canonical_before_hash, action.canonical_after_hash);
+    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
+    assert_eq!(change["phase"], "planned_structure_change");
+    assert_eq!(change["canonical_mutation_applied"], false);
+    assert_eq!(change["change_type"], "rename_label");
+    assert_eq!(change["target_label"]["name"], "cli");
+    assert_eq!(change["after"]["proposed_label_name"], "command surface");
+    assert_eq!(
+        change["task_binding_migration_plan"]["policy"],
+        "preserve_bindings"
+    );
+    assert_eq!(change["validation_policy"]["required"], true);
+    assert_eq!(
+        change["validation_policy"]["trusted_validation_required_before_apply"],
+        true
+    );
+    let validation: serde_json::Value = serde_json::from_str(&action.validation_json)?;
+    assert_eq!(validation["state"], "pending_structure_change_plan");
+
+    let after_label_names: Vec<String> = connect_file(&temp.path)?
+        .prepare("SELECT name FROM labels ORDER BY name")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    let after_binding_count: i64 =
+        connect_file(&temp.path)?
+            .query_row("SELECT COUNT(*) FROM task_labels", [], |row| row.get(0))?;
+    assert_eq!(after_label_names, before_label_names);
+    assert_eq!(after_binding_count, before_binding_count);
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_structure_plan_requires_confirmed_source_signal() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_structure_plan_requires_confirmed_source_signal")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Plan CLI split ontology boundary"),
+    )?;
+    let mut split_signal = sample_signal_input("split-cli-surface");
+    split_signal.proposed_action = LabelOntologyProposedAction::SplitLabel;
+    split_signal.candidate_atom = None;
+    split_signal.related_labels_json = json!(["command-surface"]).to_string();
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![split_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+
+    let error = result_err(plan_label_ontology_structure_change(
+        &temp.path,
+        "default",
+        LabelOntologyStructurePlanInput {
+            actor: validation_actor(),
+            signal_ids: vec![signal_id],
+            action_type: LabelOntologyActionType::SplitLabel,
+            target_label_ref: "cli".to_owned(),
+            proposed_label_name: None,
+            related_label_refs: vec!["command-surface".to_owned()],
+            task_binding_policy: Some("manual_map_required".to_owned()),
+            validation_policy_json: None,
+            reason: "Unconfirmed signals cannot drive structure plans.".to_owned(),
+        },
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("must be one of [Confirmed], found open")
+    );
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_generic_action_rejects_fabricated_provenance_fields() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_generic_action_rejects_fabricated_provenance_fields")?;
     init_database(&temp.path, "tester")?;

@@ -8,8 +8,8 @@ use kanban_sqlite::{
     LabelOntologyActionType, LabelOntologyActor, LabelOntologyAtomApplyInput,
     LabelOntologyCandidateAtomInput, LabelOntologyProposedAction, LabelOntologyRecordInput,
     LabelOntologyRetargetOptions, LabelOntologyReviewGroupBy, LabelOntologyReviewOptions,
-    LabelOntologySignalInput, LabelOntologySignalKind, LabelOntologySuggestState,
-    LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
+    LabelOntologySignalInput, LabelOntologySignalKind, LabelOntologyStructurePlanInput,
+    LabelOntologySuggestState, LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
     LabelOntologyValidationStatus, LabelProposalCandidate, LabelProposalCreateOptions,
     LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalStatus,
     LabelSemanticProposalRecord, LabelSemanticsMutationOptions, LabelSuggestionOptions,
@@ -19,10 +19,10 @@ use kanban_sqlite::{
     create_label_ontology_action, delete_label, delete_label_semantics, explain_label_atom,
     get_label_ontology_signal, get_label_proposal, get_label_semantics, label_atom_index_status,
     list_label_atoms, list_label_ontology_signals, list_label_proposals, list_label_semantics,
-    list_labels, propose_task_label_with_create_options, record_label_ontology_observation,
-    reject_label_proposal, remove_task_label, restore_bootstrap_task_label_state,
-    review_label_ontology, snapshot_bootstrap_task_label_state, suggest_task_labels,
-    upsert_label_semantics_with_options, validate_label_ontology_action,
+    list_labels, plan_label_ontology_structure_change, propose_task_label_with_create_options,
+    record_label_ontology_observation, reject_label_proposal, remove_task_label,
+    restore_bootstrap_task_label_state, review_label_ontology, snapshot_bootstrap_task_label_state,
+    suggest_task_labels, upsert_label_semantics_with_options, validate_label_ontology_action,
     validate_label_ontology_action_with_trusted_suggestions,
 };
 #[cfg(feature = "vector-lancedb")]
@@ -36,7 +36,8 @@ use std::{fs, io::Read, str::FromStr};
 
 use crate::args::{
     LabelAtomPolarityArg, LabelCommand, LabelOntologyActorArgs, LabelOntologyActorTypeArg,
-    LabelOntologyAtomKindArg, LabelOntologyReviewGroupByArg, LabelOntologyValidationStatusArg,
+    LabelOntologyAtomKindArg, LabelOntologyReviewGroupByArg, LabelOntologyStructureChangeArg,
+    LabelOntologyValidationStatusArg,
 };
 use crate::commands::common::validate_page_bounds;
 use crate::output::{label_line, print_or_json, print_task};
@@ -592,6 +593,31 @@ fn handle_label_ontology(
                 print_or_json(json, &action, || label_ontology_action_line(&action))?;
             }
         },
+        crate::args::LabelOntologyCommand::Structure { command } => match command {
+            crate::args::LabelOntologyStructureCommand::Plan(args) => {
+                let validation_policy_json = args
+                    .validation_policy_json
+                    .as_deref()
+                    .map(read_json_input_string)
+                    .transpose()?;
+                let action = plan_label_ontology_structure_change(
+                    db_path,
+                    board,
+                    LabelOntologyStructurePlanInput {
+                        actor: label_ontology_cli_actor(actor, &args.actor),
+                        signal_ids: args.signal_ids,
+                        action_type: label_ontology_structure_change_type(args.change_type),
+                        target_label_ref: args.target_label,
+                        proposed_label_name: args.proposed_label,
+                        related_label_refs: args.related_labels,
+                        task_binding_policy: args.task_binding_policy,
+                        validation_policy_json,
+                        reason: args.reason,
+                    },
+                )?;
+                print_or_json(json, &action, || label_ontology_action_line(&action))?;
+            }
+        },
         crate::args::LabelOntologyCommand::Validate(args) => {
             let validation_status = label_ontology_validation_status(args.status);
             let action = if args.trusted {
@@ -999,6 +1025,16 @@ fn label_ontology_atom_kind_value(kind: LabelOntologyAtomKindArg) -> &'static st
         LabelOntologyAtomKindArg::PositiveExample => "positive_example",
         LabelOntologyAtomKindArg::ExcludesWhen => "excludes_when",
         LabelOntologyAtomKindArg::NegativeExample => "negative_example",
+    }
+}
+
+fn label_ontology_structure_change_type(
+    change_type: LabelOntologyStructureChangeArg,
+) -> LabelOntologyActionType {
+    match change_type {
+        LabelOntologyStructureChangeArg::RenameLabel => LabelOntologyActionType::RenameLabel,
+        LabelOntologyStructureChangeArg::SplitLabel => LabelOntologyActionType::SplitLabel,
+        LabelOntologyStructureChangeArg::MergeLabels => LabelOntologyActionType::MergeLabels,
     }
 }
 

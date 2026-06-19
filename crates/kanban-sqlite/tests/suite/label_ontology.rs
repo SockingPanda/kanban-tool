@@ -2321,7 +2321,10 @@ fn label_ontology_typed_validation_bootstrap_enforces_score_threshold() -> anyho
     let bootstrap = detail
         .actions
         .iter()
-        .find(|action| action.action_type == LabelOntologyActionType::BootstrapLabel)
+        .find(|action| {
+            action.action_type == LabelOntologyActionType::BootstrapLabel
+                && action.result_atom_id.is_none()
+        })
         .context("bootstrap action")?;
 
     let error = result_err(validate_label_ontology_action_with_trusted_evidence(
@@ -2525,7 +2528,10 @@ fn label_ontology_proposal_accept_records_bootstrap_provenance() -> anyhow::Resu
     let bootstrap = detail
         .actions
         .iter()
-        .find(|action| action.action_type == LabelOntologyActionType::BootstrapLabel)
+        .find(|action| {
+            action.action_type == LabelOntologyActionType::BootstrapLabel
+                && action.result_atom_id.is_none()
+        })
         .context("bootstrap action")?;
     assert_eq!(bootstrap.signal_ids, vec![signal_id.clone()]);
     assert_eq!(bootstrap.created_by, "ontology-agent");
@@ -2544,6 +2550,28 @@ fn label_ontology_proposal_accept_records_bootstrap_provenance() -> anyhow::Resu
     assert!(bootstrap.change_json.contains("ontology-ledger"));
     let semantics = get_label_semantics(&temp.path, "default", result_label_id)?;
     assert_eq!(semantics.label_name, "ontology-ledger");
+    let atom = semantics
+        .atoms
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("applies_when atom")?;
+    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
+    assert!(!explain.legacy_untracked);
+    let atom_provenance = explain
+        .provenance_actions
+        .iter()
+        .find(|action| {
+            action.action.action_type == LabelOntologyActionType::BootstrapLabel
+                && action.action.result_atom_id.as_deref() == Some(atom.id.as_str())
+                && action.action.result_proposal_id.as_deref() == Some(proposal_id.as_str())
+        })
+        .context("proposal atom provenance action")?;
+    assert_eq!(atom_provenance.action.signal_ids, vec![signal_id.clone()]);
+    assert_eq!(atom_provenance.action.created_by, "ontology-agent");
+    assert_eq!(
+        atom_provenance.action.parent_action_id.as_deref(),
+        Some(bootstrap.id.as_str())
+    );
 
     Ok(())
 }

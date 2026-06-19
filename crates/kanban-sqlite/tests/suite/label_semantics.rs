@@ -453,7 +453,10 @@ fn label_proposal_accept_links_creation_and_bootstrap_history() -> anyhow::Resul
     let bootstrap = detail
         .actions
         .iter()
-        .find(|action| action.action_type == LabelOntologyActionType::BootstrapLabel)
+        .find(|action| {
+            action.action_type == LabelOntologyActionType::BootstrapLabel
+                && action.result_atom_id.is_none()
+        })
         .context("bootstrap action")?;
     assert_eq!(
         bootstrap.parent_action_id.as_deref(),
@@ -2904,6 +2907,124 @@ fn label_atom_rebuild_deduplicates_normalized_text_and_keeps_first_ordinal() -> 
 }
 
 #[test]
+fn direct_label_semantics_upsert_records_update_semantics_provenance() -> anyhow::Result<()> {
+    let temp = TempDb::new("direct_label_semantics_upsert_records_update_semantics_provenance")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+
+    let semantics = kanban_sqlite::upsert_label_semantics_with_options(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            applies_when: vec!["touches Rust service code".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+        kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("ontology-editor"),
+    )?;
+    let atom = semantics
+        .atoms
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("applies_when atom")?;
+
+    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
+
+    assert!(!explain.legacy_untracked);
+    assert_eq!(explain.provenance_actions.len(), 1);
+    let provenance = &explain.provenance_actions[0];
+    assert_eq!(provenance.matched_by, "atom_id");
+    assert_eq!(
+        provenance.action.action_type,
+        LabelOntologyActionType::UpdateSemantics
+    );
+    assert_eq!(
+        provenance.action.target_label_id.as_deref(),
+        Some(semantics.label_id.as_str())
+    );
+    assert_eq!(
+        provenance.action.result_atom_id.as_deref(),
+        Some(atom.id.as_str())
+    );
+    assert_eq!(
+        provenance.action.result_atom_content_hash.as_deref(),
+        Some(atom.content_hash.as_str())
+    );
+    assert_eq!(provenance.action.created_by, "ontology-editor");
+    assert_eq!(
+        provenance.action.validation_status,
+        LabelOntologyValidationStatus::Pending
+    );
+    assert!(provenance.action.canonical_before_hash.is_some());
+    assert!(provenance.action.canonical_after_hash.is_some());
+    Ok(())
+}
+
+#[test]
+fn direct_label_bootstrap_records_bootstrap_provenance_for_atoms() -> anyhow::Result<()> {
+    let temp = TempDb::new("direct_label_bootstrap_records_bootstrap_provenance_for_atoms")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("bootstrap ontology provenance target"),
+    )?;
+
+    let result = bootstrap_task_label(
+        &temp.path,
+        "default",
+        "bootstrapper",
+        &task.id,
+        BootstrapTaskLabel {
+            name: "ontology".to_owned(),
+            description: Some("Ontology provenance work".to_owned()),
+            applies_when: vec!["records semantics mutations in the ledger".to_owned()],
+            ..BootstrapTaskLabel::default()
+        },
+    )?;
+    let atom = result
+        .semantics
+        .atoms
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("applies_when atom")?;
+
+    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
+
+    assert!(!explain.legacy_untracked);
+    assert_eq!(explain.provenance_actions.len(), 1);
+    let provenance = &explain.provenance_actions[0];
+    assert_eq!(
+        provenance.action.action_type,
+        LabelOntologyActionType::BootstrapLabel
+    );
+    assert_eq!(
+        provenance.action.result_label_id.as_deref(),
+        Some(result.semantics.label_id.as_str())
+    );
+    assert_eq!(
+        provenance.action.result_atom_id.as_deref(),
+        Some(atom.id.as_str())
+    );
+    assert_eq!(provenance.action.created_by, "bootstrapper");
+    assert_eq!(
+        provenance.action.validation_status,
+        LabelOntologyValidationStatus::Pending
+    );
+    assert!(provenance.action.canonical_before_hash.is_some());
+    assert!(provenance.action.canonical_after_hash.is_some());
+    Ok(())
+}
+
+#[test]
 fn label_atom_explain_hydrates_provenance_signals_and_validation() -> anyhow::Result<()> {
     let temp = TempDb::new("label_atom_explain_hydrates_provenance_signals_and_validation")?;
     let fixture = seed_label_atom_explain_fixture(&temp, "Explain CLI atom provenance")?;
@@ -3004,6 +3125,7 @@ fn label_atom_explain_marks_existing_atom_without_provenance_as_legacy_untracked
             ..UpsertLabelSemantics::default()
         },
     )?;
+    connect_file(&temp.path)?.execute("DELETE FROM label_ontology_actions", [])?;
     let atom = list_label_atoms(&temp.path, "default")?
         .into_iter()
         .find(|atom| atom.kind == "applies_when")

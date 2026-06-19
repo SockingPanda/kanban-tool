@@ -394,6 +394,7 @@ pub(crate) struct LabelOntologyValidationBody {
 #[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct UpsertLabelSemanticsBody {
+    actor: Option<String>,
     description: Option<String>,
     #[serde(default)]
     applies_when: Vec<String>,
@@ -568,12 +569,14 @@ pub(crate) async fn get_label_semantics(
 pub(crate) async fn upsert_label_semantics(
     State(state): State<AppState>,
     Path((board, label_id)): Path<(String, String)>,
+    headers: HeaderMap,
     body: Result<Json<UpsertLabelSemanticsBody>, JsonRejection>,
 ) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticsRecord>>, ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let label_id = require_label_id_path(label_id)?;
+    let actor = actor(body.actor.as_deref(), &headers, &state);
     Ok(Json(Envelope {
-        data: kanban_sqlite::upsert_label_semantics_by_id(
+        data: kanban_sqlite::upsert_label_semantics_by_id_with_options(
             state.db_path(),
             &board,
             &label_id,
@@ -585,6 +588,7 @@ pub(crate) async fn upsert_label_semantics(
                 positive_examples: body.positive_examples,
                 negative_examples: body.negative_examples,
             },
+            kanban_sqlite::LabelSemanticsMutationOptions::manual_actor(actor),
         )?,
         meta: None,
     }))

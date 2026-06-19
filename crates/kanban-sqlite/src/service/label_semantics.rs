@@ -3,9 +3,11 @@ use crate::connect_file;
 use super::{
     LabelAtomExplainAction, LabelAtomExplainRecord, LabelAtomExplainSignal,
     LabelAtomExplainValidation, LabelAtomRecord, LabelOntologyActionRecord,
-    LabelOntologyObservationRecord, LabelOntologySignalRecord, LabelProposalCandidate,
+    LabelOntologyActionType, LabelOntologyObservationRecord, LabelOntologySemanticsMutationInput,
+    LabelOntologySignalRecord, LabelProposalCandidate, LabelSemanticsMutationOptions,
     LabelSemanticsRecord, TaskRecord, UpsertLabelSemantics, board_id, derived_status_by_name,
-    get_task_by_id, storage, vector_storage, with_immediate_tx,
+    get_task_by_id, label_ontology_semantics_snapshot_in_tx,
+    record_label_ontology_semantics_mutation_in_tx, storage, vector_storage, with_immediate_tx,
 };
 
 use std::{collections::BTreeSet, path::Path, str::FromStr};
@@ -25,11 +27,31 @@ pub fn upsert_label_semantics(
     board: &str,
     input: UpsertLabelSemantics,
 ) -> Result<LabelSemanticsRecord> {
+    upsert_label_semantics_with_options(
+        path,
+        board,
+        input,
+        LabelSemanticsMutationOptions::manual_actor("system"),
+    )
+}
+
+pub fn upsert_label_semantics_with_options(
+    path: impl AsRef<Path>,
+    board: &str,
+    input: UpsertLabelSemantics,
+    options: LabelSemanticsMutationOptions,
+) -> Result<LabelSemanticsRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let label = resolve_label(&conn, &board_id, &input.label_ref)?;
+        let before = label_ontology_semantics_snapshot_in_tx(
+            &conn,
+            &label.board_id,
+            &label.id,
+            &label.name,
+        )?;
         let description = normalize_optional_text(input.description);
         let applies_when = normalize_text_list(input.applies_when);
         let excludes_when = normalize_text_list(input.excludes_when);
@@ -47,6 +69,18 @@ pub fn upsert_label_semantics(
         };
         upsert_label_semantics_in_tx(&conn, &label.board_id, &definition, now)?;
         mark_label_atom_store_dirty(&conn, &label.board_id, now)?;
+        record_label_ontology_semantics_mutation_in_tx(
+            &conn,
+            LabelOntologySemanticsMutationInput {
+                board_id: &label.board_id,
+                label_id: &label.id,
+                label_name: &label.name,
+                action_type: LabelOntologyActionType::UpdateSemantics,
+                before,
+                options,
+            },
+            now,
+        )?;
         get_label_semantics_conn(&conn, &label.board_id, &label.id)
     })
 }
@@ -57,11 +91,33 @@ pub fn upsert_label_semantics_by_id(
     label_id: &str,
     input: UpsertLabelSemantics,
 ) -> Result<LabelSemanticsRecord> {
+    upsert_label_semantics_by_id_with_options(
+        path,
+        board,
+        label_id,
+        input,
+        LabelSemanticsMutationOptions::manual_actor("system"),
+    )
+}
+
+pub fn upsert_label_semantics_by_id_with_options(
+    path: impl AsRef<Path>,
+    board: &str,
+    label_id: &str,
+    input: UpsertLabelSemantics,
+    options: LabelSemanticsMutationOptions,
+) -> Result<LabelSemanticsRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let label = resolve_label_by_id_exact(&conn, &board_id, label_id)?;
+        let before = label_ontology_semantics_snapshot_in_tx(
+            &conn,
+            &label.board_id,
+            &label.id,
+            &label.name,
+        )?;
         let description = normalize_optional_text(input.description);
         let applies_when = normalize_text_list(input.applies_when);
         let excludes_when = normalize_text_list(input.excludes_when);
@@ -79,6 +135,18 @@ pub fn upsert_label_semantics_by_id(
         };
         upsert_label_semantics_in_tx(&conn, &label.board_id, &definition, now)?;
         mark_label_atom_store_dirty(&conn, &label.board_id, now)?;
+        record_label_ontology_semantics_mutation_in_tx(
+            &conn,
+            LabelOntologySemanticsMutationInput {
+                board_id: &label.board_id,
+                label_id: &label.id,
+                label_name: &label.name,
+                action_type: LabelOntologyActionType::UpdateSemantics,
+                before,
+                options,
+            },
+            now,
+        )?;
         get_label_semantics_conn(&conn, &label.board_id, &label.id)
     })
 }
@@ -700,7 +768,7 @@ fn label_atom_provenance_actions(
         .prepare(&format!(
             "SELECT {ONTOLOGY_ACTION_COLUMNS} FROM label_ontology_actions a \
              WHERE a.board_id=?1 \
-               AND a.action_type IN ('add_positive_atom','add_negative_atom','bootstrap_label') \
+               AND a.action_type IN ('add_positive_atom','add_negative_atom','update_semantics','bootstrap_label') \
                AND (a.result_atom_id=?2 OR a.result_atom_id=?3 OR a.result_atom_content_hash=?2 OR a.result_atom_content_hash=?4) \
              ORDER BY a.created_at ASC, a.id ASC"
         ))

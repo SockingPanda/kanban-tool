@@ -497,8 +497,8 @@ Label ontology ledger 记录 task 标注过程里的证据、分歧 signal、rev
 | `agent_candidates_json` | agent 原始候选 labels、置信度和理由。 |
 | `suggestion_snapshot_json` | 完整 suggestion 输出、参数、模型和 index 状态快照。 |
 | `final_decision_json` | 最终接受、拒绝和未采用 labels 的判断。 |
-| `suggest_coverage` / `suggest_coverage_cosine` / `suggest_residual_norm` | 可查询的 solver 指标。 |
-| `suggest_needs_new_label` / `suggest_degraded` | 捕获时 suggestion 状态。 |
+| `suggest_coverage` / `suggest_coverage_cosine` / `suggest_residual_norm` | 可查询的 solver 指标。`suggest_coverage = clamp(1 - suggest_residual_norm, 0.0, 1.0)`，二者不是独立证据；`suggest_coverage_cosine` 是 query 与 fitted vector 的 cosine similarity，可作为补充指标。 |
+| `suggest_needs_new_label` / `suggest_degraded` | 捕获时 suggestion 状态。`suggest_needs_new_label` 是 coverage review 兼容字段，不等于自动 vocabulary gap；判断新 label 需要结合 reason codes、evidence、diagnostics 和人工语义判断。 |
 | `diagnostics_json` | suggestion diagnostics 数组。 |
 | `capture_fingerprint` | 同一 board 内幂等 fingerprint。 |
 | `created_by` / `created_by_type` / `agent_type` | 捕获者身份。 |
@@ -712,7 +712,7 @@ label truth。它只记录“现有 label atom suggestion 覆盖不足时，外�
 | `board_id` / `task_id` | 提案来源 task。 |
 | `status` | `proposed` / `accepted` / `rejected`。provider 不可用不写成 status，而是返回 degraded attempt。 |
 | `name` / `description` / `applies_when` / `excludes_when` / `positive_examples` / `negative_examples` | 候选 label semantics。数组字段为 JSON string array。 |
-| `heuristic_coverage` / `heuristic_coverage_cosine` / `heuristic_residual_norm` | 来自当前 residual label suggestion solver 的覆盖/残差元数据，用于记录 proposal 创建时现有 label atoms 的覆盖程度；`heuristic_coverage_cosine` 是 query 与 fitted vector 的 cosine similarity。 |
+| `heuristic_coverage` / `heuristic_coverage_cosine` / `heuristic_residual_norm` | 来自当前 residual label suggestion solver 的覆盖/残差元数据，用于记录 proposal 创建时现有 label atoms 的覆盖程度；`heuristic_coverage = clamp(1 - heuristic_residual_norm, 0.0, 1.0)`，二者不是独立证据；`heuristic_coverage_cosine` 是 query 与 fitted vector 的 cosine similarity。 |
 | `top1_existing_label_id` / `top1_existing_label_name` | 当前启发式 top1 existing label。 |
 | `diagnostics_json` | JSON string array，包含 degraded、冲突或 validation 诊断。 |
 | `decision_reason` / `resolved_label_id` / `decided_at` | accept/reject 决策信息；accept 后 `resolved_label_id` 指向新建 canonical label。 |

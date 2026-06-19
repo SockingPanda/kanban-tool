@@ -1091,13 +1091,18 @@ GET /api/v1/tasks/{task_id}/labels/suggestions?limit=5&candidate_limit=32&atom_l
 查询 `lancedb_label_atoms`：正向 atoms 按 residual 多轮检索，负向 atoms 固定用原始
 query 检索并做 penalty / suppression。solver 在 label group 层执行 Group OMP 选择，
 再把选中 label 的 top positive atom vectors 作为 basis 做 non-negative refit；
-`coverage` / `residual_norm` 来自 atom-level fitted vector；`coverage_cosine`
-是原始 query 与 fitted vector 的 cosine similarity。候选 label 只有在
+`coverage` / `residual_norm` 来自 atom-level fitted vector，其中
+`coverage = clamp(1 - residual_norm, 0.0, 1.0)`，因此二者不是两份独立证据；
+`coverage_cosine` 是原始 query 与 fitted vector 的 cosine similarity，可作为
+独立补充指标。候选 label 只有在
 tentative refit 后带来足够 residual norm 降幅才会进入结果；coverage 或
 residual norm 达到停止阈值后，solver 会提前停止而不是凑满
 `max_selected_labels`。candidate group 与已选 label 语义向量过度相似时会被跳过，
 以减少重复语义 label 同时出现在 `selected_labels`；这不会合并或删除 canonical
-labels。接口不会创建新 label，也不会写入 `label_semantics` / `label_atoms`。
+labels。`needs_new_label` 是兼容字段，只表示存在需要人工 review 的 label
+coverage 诊断；具体原因必须读取 `reason_codes`，并结合 evidence atoms、
+diagnostics 与人工语义判断，不应仅凭该布尔值创建 vocabulary。接口不会创建新
+label，也不会写入 `label_semantics` / `label_atoms`。
 
 `limit` 只控制 response 中 `selected_labels` / `candidates` 的最大条数，不会收窄
 solver 内部搜索能力。内部能力由 `candidate_limit`、`atom_limit` 和
@@ -1144,6 +1149,7 @@ Response：
     "coverage_cosine": 0.91,
     "residual_norm": 0.18,
     "needs_new_label": false,
+    "reason_codes": ["degraded_result", "label_atom_index_dirty"],
     "degraded": true,
     "diagnostics": ["label_atom_index_dirty"]
   }
@@ -1157,6 +1163,13 @@ Response：
 - `label_atom_index_empty`
 - `label_atom_index_error`
 - `vector_query_error`
+
+非 degraded coverage review 的稳定 `reason_codes` 包括：
+
+- `no_selected_labels`
+- `coverage_below_threshold`
+- `residual_above_threshold`
+- `unexplained_residual`
 
 ### 12.3 Label semantic proposals
 

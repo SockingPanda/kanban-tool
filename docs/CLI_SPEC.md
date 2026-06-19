@@ -608,12 +608,20 @@ description embedding 作为 query，使用 `lancedb_label_atoms` 按残差多�
 label atoms，并用原始 query 检索负向 atoms 做 penalty / suppression。solver 在
 label group 层执行 Group OMP 选择，再用选中 label 的 top positive atom vectors 做
 non-negative refit；`coverage` / `residual_norm` 来自该 atom-level fitted vector，
-`coverage_cosine` 是原始 query 与 fitted vector 的 cosine similarity。
+其中 `coverage = clamp(1 - residual_norm, 0.0, 1.0)`，因此二者不是两份独立
+证据；`coverage_cosine` 是原始 query 与 fitted vector 的 cosine similarity，
+可作为独立补充指标。
 候选 label 只有在 tentative refit 后带来足够 residual norm 降幅才会进入结果；
 coverage 或 residual norm 达到停止阈值后，solver 会提前停止而不是凑满
 `--max-selected-labels`。candidate group 与已选 label 语义向量过度相似时会被跳过，
 以减少重复语义 label 同时出现在 selected labels；这不会合并或删除 canonical
 labels。
+`needs_new_label` 是兼容字段，只表示存在需要人工 review 的 label coverage
+诊断；具体原因必须读取 `reason_codes`，例如 `no_selected_labels`、
+`coverage_below_threshold`、`residual_above_threshold`、`unexplained_residual`，
+或 degraded 相关原因。不要把 `coverage` 与 `residual_norm` 重复计票，也不要仅凭
+`needs_new_label=true` 创建 vocabulary；必须结合 `reason_codes`、evidence atoms、
+diagnostics 和人工语义判断。
 它不会自动创建新 label，也不会写入 new-label proposal。应用建议时仍使用现有
 `label add <task_ref> <label>...` / API attach 流程。
 
@@ -636,6 +644,7 @@ JSON 输出：
     "coverage_cosine": 0.0,
     "residual_norm": 1.0,
     "needs_new_label": false,
+    "reason_codes": ["degraded_result", "vector_store_disabled"],
     "degraded": true,
     "diagnostics": ["vector_store_disabled"]
   }

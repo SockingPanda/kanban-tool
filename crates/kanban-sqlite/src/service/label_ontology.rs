@@ -237,10 +237,10 @@ pub fn review_label_ontology(
         let where_sql = conditions.join(" AND ");
         let sql = format!(
             "SELECT s.id, o.task_id, o.task_ref_snapshot, o.suggest_degraded, s.status, \
-             s.target_label_id, s.target_label_name_snapshot, s.candidate_atom_polarity, \
-             s.candidate_atom_kind, s.candidate_text, s.candidate_content_hash, \
-             s.proposed_label_name, s.proposed_label_name_normalized, s.suggest_score, \
-             s.created_at \
+             s.kind, s.proposed_action, s.target_label_id, s.target_label_name_snapshot, \
+             s.candidate_atom_polarity, s.candidate_atom_kind, s.candidate_text, \
+             s.candidate_content_hash, s.proposed_label_name, s.proposed_label_name_normalized, \
+             s.suggest_score, s.created_at \
              FROM label_ontology_signals s \
              JOIN label_ontology_observations o ON o.id=s.observation_id \
              WHERE {where_sql} ORDER BY s.created_at ASC, s.id ASC"
@@ -2915,6 +2915,8 @@ struct ReviewSignalRow {
     task_ref_snapshot: String,
     suggest_degraded: bool,
     status: LabelOntologySignalStatus,
+    signal_kind: LabelOntologySignalKind,
+    proposed_action: LabelOntologyProposedAction,
     target_label_id: Option<String>,
     target_label_name_snapshot: Option<String>,
     candidate_atom_polarity: Option<String>,
@@ -2929,22 +2931,26 @@ struct ReviewSignalRow {
 
 fn review_signal_row_from_row(row: &Row<'_>) -> rusqlite::Result<ReviewSignalRow> {
     let status: String = row.get(4)?;
+    let signal_kind: String = row.get(5)?;
+    let proposed_action: String = row.get(6)?;
     Ok(ReviewSignalRow {
         signal_id: row.get(0)?,
         task_id: row.get(1)?,
         task_ref_snapshot: row.get(2)?,
         suggest_degraded: int_bool(row.get(3)?),
         status: parse_row_enum(&status)?,
-        target_label_id: row.get(5)?,
-        target_label_name_snapshot: row.get(6)?,
-        candidate_atom_polarity: row.get(7)?,
-        candidate_atom_kind: row.get(8)?,
-        candidate_text: row.get(9)?,
-        candidate_content_hash: row.get(10)?,
-        proposed_label_name: row.get(11)?,
-        proposed_label_name_normalized: row.get(12)?,
-        suggest_score: row.get(13)?,
-        created_at: row.get(14)?,
+        signal_kind: parse_row_enum(&signal_kind)?,
+        proposed_action: parse_row_enum(&proposed_action)?,
+        target_label_id: row.get(7)?,
+        target_label_name_snapshot: row.get(8)?,
+        candidate_atom_polarity: row.get(9)?,
+        candidate_atom_kind: row.get(10)?,
+        candidate_text: row.get(11)?,
+        candidate_content_hash: row.get(12)?,
+        proposed_label_name: row.get(13)?,
+        proposed_label_name_normalized: row.get(14)?,
+        suggest_score: row.get(15)?,
+        created_at: row.get(16)?,
     })
 }
 
@@ -2957,12 +2963,34 @@ fn review_group_key(group_by: LabelOntologyReviewGroupBy, row: &ReviewSignalRow)
         LabelOntologyReviewGroupBy::CandidateAtom => row
             .candidate_content_hash
             .clone()
-            .unwrap_or_else(|| "no-candidate-atom".to_owned()),
+            .unwrap_or_else(|| review_empty_candidate_group_key(row)),
         LabelOntologyReviewGroupBy::ProposedLabel => row
             .proposed_label_name_normalized
             .clone()
             .unwrap_or_else(|| "no-proposed-label".to_owned()),
     }
+}
+
+fn review_empty_candidate_group_key(row: &ReviewSignalRow) -> String {
+    let target = row
+        .target_label_id
+        .as_deref()
+        .map(|label| format!("target:{label}"))
+        .or_else(|| {
+            row.target_label_name_snapshot
+                .as_deref()
+                .map(|label| format!("target-name:{label}"))
+        })
+        .or_else(|| {
+            row.proposed_label_name_normalized
+                .as_deref()
+                .map(|label| format!("proposed:{label}"))
+        })
+        .unwrap_or_else(|| "no-target-or-proposed-label".to_owned());
+    format!(
+        "no-candidate-atom|kind:{}|{}|action:{}",
+        row.signal_kind, target, row.proposed_action
+    )
 }
 
 fn review_action_links_for_signals(

@@ -1726,6 +1726,191 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
 }
 
 #[tokio::test]
+async fn label_ontology_revert_route_round_trip() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    kanban_sqlite::upsert_label_semantics(
+        &db_path,
+        "default",
+        kanban_sqlite::UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            description: Some("Command-line interface behavior".to_owned()),
+            ..kanban_sqlite::UpsertLabelSemantics::default()
+        },
+    )?;
+    let before_semantics = kanban_sqlite::get_label_semantics(&db_path, "default", "cli")?;
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("ontology API revert route target"),
+    )?;
+    let observation = kanban_sqlite::record_label_ontology_observation(
+        &db_path,
+        "default",
+        &task.id,
+        kanban_sqlite::LabelOntologyRecordInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: "[]".to_owned(),
+            suggestion_snapshot_json: "{}".to_owned(),
+            final_decision_json: "{}".to_owned(),
+            suggest_coverage: None,
+            suggest_coverage_cosine: None,
+            suggest_residual_norm: None,
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: "[]".to_owned(),
+            capture_fingerprint: Some("api-ontology-revert-route".to_owned()),
+            signals: vec![kanban_sqlite::LabelOntologySignalInput {
+                kind: kanban_sqlite::LabelOntologySignalKind::FalseNegative,
+                target_label_ref: Some("cli".to_owned()),
+                related_labels_json: "[]".to_owned(),
+                proposed_action: kanban_sqlite::LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(kanban_sqlite::LabelOntologyCandidateAtomInput {
+                    polarity: "positive".to_owned(),
+                    kind: "applies_when".to_owned(),
+                    text: "changes the local CLI command surface".to_owned(),
+                }),
+                proposed_label_name: None,
+                proposal_json: "{}".to_owned(),
+                agent_selected: true,
+                suggest_state: Some(kanban_sqlite::LabelOntologySuggestState::Candidate),
+                suggest_score: Some(0.12),
+                suggest_rank: Some(2),
+                final_selected: true,
+                rationale: "The task changes CLI behavior.".to_owned(),
+                confidence: Some(0.88),
+                signal_key: Some("api-ontology-revert".to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    kanban_sqlite::create_label_ontology_action(
+        &db_path,
+        "default",
+        kanban_sqlite::LabelOntologyActionInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            action_type: kanban_sqlite::LabelOntologyActionType::Confirm,
+            signal_ids: vec![signal_id.clone()],
+            reason: "valid false negative".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: None,
+            validation_status: None,
+            validation_json: None,
+        },
+    )?;
+    let applied = kanban_sqlite::apply_label_ontology_atom(
+        &db_path,
+        "default",
+        kanban_sqlite::LabelOntologyAtomApplyInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "changes the local CLI command surface".to_owned(),
+            reason: "apply confirmed atom".to_owned(),
+        },
+    )?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/revert",
+        json!({
+            "actor": {
+                "name": "reviewer",
+                "type": "user",
+                "agent_type": null
+            },
+            "target_action_id": applied.id.clone(),
+            "expected_current_hash": applied.canonical_after_hash.clone(),
+            "reason": "Revert the test ontology mutation."
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED, "{json}");
+    assert_eq!(json["data"]["action_type"], "revert_ontology_mutation");
+    assert_eq!(json["data"]["parent_action_id"], applied.id);
+    assert_eq!(json["data"]["signal_ids"], json!([signal_id]));
+    let restored_semantics = kanban_sqlite::get_label_semantics(&db_path, "default", "cli")?;
+    assert_eq!(
+        restored_semantics.semantics_hash,
+        before_semantics.semantics_hash
+    );
+    assert_eq!(restored_semantics.description, before_semantics.description);
+    assert_eq!(
+        restored_semantics.applies_when,
+        before_semantics.applies_when
+    );
+    assert_eq!(
+        restored_semantics.excludes_when,
+        before_semantics.excludes_when
+    );
+    assert_eq!(
+        restored_semantics.positive_examples,
+        before_semantics.positive_examples
+    );
+    assert_eq!(
+        restored_semantics.negative_examples,
+        before_semantics.negative_examples
+    );
+    assert_eq!(
+        restored_semantics
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>(),
+        before_semantics
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn label_ontology_structure_plan_route_round_trip() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();

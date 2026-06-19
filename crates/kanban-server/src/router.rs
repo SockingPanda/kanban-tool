@@ -99,6 +99,10 @@ pub fn build_router(state: AppState) -> Router {
             post(plan_label_ontology_structure_change),
         )
         .route(
+            "/api/v1/boards/:board/label-ontology/revert",
+            post(revert_label_ontology_mutation),
+        )
+        .route(
             "/api/v1/boards/:board/label-ontology/validate",
             post(validate_label_ontology_action),
         )

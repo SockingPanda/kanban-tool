@@ -205,6 +205,8 @@ pub(crate) struct CreateLabelBody {
 pub(crate) struct AddTaskLabelBody {
     name: Option<String>,
     names: Option<Vec<String>>,
+    #[serde(default)]
+    create_missing: bool,
     actor: Option<String>,
 }
 
@@ -757,13 +759,28 @@ pub(crate) async fn add_task_label(
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
     let label_names = body.label_names()?;
-    let task =
-        kanban_sqlite::add_task_labels_by_id(state.db_path(), &actor, &task_id, &label_names)?;
+    let result = kanban_sqlite::add_task_labels_by_id_with_options(
+        state.db_path(),
+        &actor,
+        &task_id,
+        &label_names,
+        body.create_missing,
+    )?;
+    let created_labels = result
+        .created_labels
+        .into_iter()
+        .map(LabelDto::from)
+        .collect::<Vec<_>>();
+    let meta = if created_labels.is_empty() {
+        None
+    } else {
+        Some(json!({ "created_labels": created_labels }))
+    };
     Ok((
         StatusCode::CREATED,
         Json(Envelope {
-            data: TaskDto::from(task),
-            meta: None,
+            data: TaskDto::from(result.task),
+            meta,
         }),
     ))
 }

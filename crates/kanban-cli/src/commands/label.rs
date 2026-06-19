@@ -12,12 +12,12 @@ use kanban_sqlite::{
     LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalStatus,
     LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult,
     MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
-    accept_label_proposal_with_options, add_task_labels, apply_label_ontology_atom_with_options,
-    bootstrap_task_label, create_label, create_label_ontology_action, delete_label,
-    delete_label_semantics, explain_label_atom, get_label_ontology_signal, get_label_proposal,
-    get_label_semantics, label_atom_index_status, list_label_atoms, list_label_ontology_signals,
-    list_label_proposals, list_label_semantics, list_labels,
-    propose_task_label_with_create_options, record_label_ontology_observation,
+    accept_label_proposal_with_options, add_task_labels_with_options,
+    apply_label_ontology_atom_with_options, bootstrap_task_label, create_label,
+    create_label_ontology_action, delete_label, delete_label_semantics, explain_label_atom,
+    get_label_ontology_signal, get_label_proposal, get_label_semantics, label_atom_index_status,
+    list_label_atoms, list_label_ontology_signals, list_label_proposals, list_label_semantics,
+    list_labels, propose_task_label_with_create_options, record_label_ontology_observation,
     reject_label_proposal, remove_task_label, restore_bootstrap_task_label_state,
     review_label_ontology, snapshot_bootstrap_task_label_state, suggest_task_labels,
     upsert_label_semantics, validate_label_ontology_action,
@@ -143,8 +143,23 @@ pub(crate) fn handle_label(
             print_or_json(json, &output, || label_bootstrap_lines(&output))?;
         }
         LabelCommand::Add(args) => {
-            let task = add_task_labels(db_path, board, actor, &args.task_ref, &args.labels)?;
-            print_task(json, &task)?;
+            let result = add_task_labels_with_options(
+                db_path,
+                board,
+                actor,
+                &args.task_ref,
+                &args.labels,
+                args.create_missing,
+            )?;
+            if args.create_missing {
+                let output = LabelAddCommandOutput {
+                    task: result.task,
+                    created_labels: result.created_labels,
+                };
+                print_or_json(json, &output, || label_add_lines(&output))?;
+            } else {
+                print_task(json, &result.task)?;
+            }
         }
         LabelCommand::Remove(args) => {
             let task = remove_task_label(db_path, board, actor, &args.task_ref, &args.label)?;
@@ -944,6 +959,27 @@ fn label_semantics_line(record: &kanban_sqlite::LabelSemanticsRecord) -> String 
         record.negative_examples.len(),
         record.atoms.len()
     )
+}
+
+#[derive(Debug, Serialize)]
+struct LabelAddCommandOutput {
+    task: kanban_sqlite::TaskRecord,
+    created_labels: Vec<kanban_sqlite::LabelRecord>,
+}
+
+fn label_add_lines(result: &LabelAddCommandOutput) -> String {
+    let mut lines = crate::output::task_line(&result.task);
+    if !result.created_labels.is_empty() {
+        let labels = result
+            .created_labels
+            .iter()
+            .map(label_line)
+            .collect::<Vec<_>>()
+            .join(", ");
+        lines.push('\n');
+        lines.push_str(&format!("created_labels: {labels}"));
+    }
+    lines
 }
 
 #[derive(Debug, Serialize)]

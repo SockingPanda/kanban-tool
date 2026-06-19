@@ -2709,6 +2709,14 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
         "tester",
         CreateTask::ready("label target"),
     )?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "backend".into(),
+            color: None,
+        },
+    )?;
     let labeled =
         kanban_sqlite::add_task_label(&temp.path, "default", "tester", &task.id, "backend")?;
     let label = labeled

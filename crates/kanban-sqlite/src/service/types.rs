@@ -123,6 +123,12 @@ pub struct LabelRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddTaskLabelsResult {
+    pub task: TaskRecord,
+    pub created_labels: Vec<LabelRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeleteLabelResult {
     pub label: LabelRecord,
     pub forced: bool,

@@ -887,12 +887,25 @@ Task 标签添加请求：
 }
 ```
 
+如果需要在绑定时显式创建缺失 label identity：
+
+```json
+{
+  "names": ["scratch-label"],
+  "create_missing": true
+}
+```
+
 `POST /api/v1/tasks/{task_id}/labels` 会把指定 name 或 names 的 label 绑定到 task。
 `name` 与 `names` 互斥；二者都缺失、二者同时出现或 `names` 为空数组都会返回
 invalid input。批量添加在同一 transaction 内执行，并先验证所有 label 名称；如果
 任一 label 为空白或非法，不会创建 canonical label，也不会留下部分 task-label 绑定。
-如果该 task 所属 board 上还不存在指定 name 的 label，会先创建 label。重复绑定已有
-task-label 关系不会重复写入。成功响应返回更新后的 task，包含当前 `labels` 列表。
+默认情况下，如果该 task 所属 board 上还不存在指定 name 的 label，请求会返回
+invalid input，且不会增加 `labels` 或 `task_labels` 记录。传入
+`"create_missing": true` 时，API 会只创建缺失的 canonical label identity，并绑定到
+task；不会生成 `label_semantics` 或 `label_atoms`。重复绑定已有 task-label 关系不会
+重复写入。成功响应返回更新后的 task，包含当前 `labels` 列表；显式创建模式下如果
+本次创建了 label，响应 `meta.created_labels` 会列出新建 labels。
 
 Task label bootstrap 请求：
 

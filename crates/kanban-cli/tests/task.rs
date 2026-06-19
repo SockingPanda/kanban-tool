@@ -126,15 +126,46 @@ fn task_create_and_label_commands_round_trip_labels() -> anyhow::Result<()> {
     .success_json()?;
     assert_eq!(label["data"]["name"], "frontend");
 
+    let added_existing =
+        kanban(&temp.path, &["--json", "label", "add", task_id, "frontend"])?.success_json()?;
+    assert_eq!(
+        added_existing["data"]["labels"]
+            .as_array()
+            .context("labels")?
+            .len(),
+        2
+    );
+
+    kanban(&temp.path, &["label", "add", task_id, "api"])?
+        .failure_containing("label api does not exist")?;
+    let listed_before_create = kanban(&temp.path, &["--json", "label", "list"])?.success_json()?;
+    assert_eq!(
+        listed_before_create["data"]
+            .as_array()
+            .context("labels before create")?
+            .len(),
+        2
+    );
+
     let added = kanban(
         &temp.path,
         &[
-            "--json", "label", "add", task_id, "frontend", "api", "frontend",
+            "--json",
+            "label",
+            "add",
+            "--create-missing",
+            task_id,
+            "api",
+            "frontend",
         ],
     )?
     .success_json()?;
+    assert_eq!(added["data"]["created_labels"][0]["name"], "api");
     assert_eq!(
-        added["data"]["labels"].as_array().context("labels")?.len(),
+        added["data"]["task"]["labels"]
+            .as_array()
+            .context("labels")?
+            .len(),
         3
     );
 

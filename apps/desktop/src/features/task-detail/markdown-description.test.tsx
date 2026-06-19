@@ -361,7 +361,8 @@ describe("MarkdownDescription", () => {
             coverage: 0.82,
             coverage_cosine: 0.91,
             residual_norm: 0.18,
-            needs_new_label: true,
+            needs_new_label: false,
+            reason_codes: ["degraded_result", "label_atom_index_dirty"],
             degraded: true,
             diagnostics: ["label_atom_index_dirty"],
           }}
@@ -396,7 +397,7 @@ describe("MarkdownDescription", () => {
     expect(html).toContain("coverage 82%")
     expect(html).toContain("cosine 91%")
     expect(html).toContain("residual 0.180")
-    expect(html).toContain("new label may be needed")
+    expect(html).not.toContain("new label may be needed")
     expect(html).toContain("touches Rust service code")
     expect(html).toContain("add API handler")
     expect(html).toContain("negative evidence 1")

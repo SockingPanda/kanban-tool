@@ -543,6 +543,7 @@ pub struct LabelSuggestionResult {
     pub coverage_cosine: f32,
     pub residual_norm: f32,
     pub needs_new_label: bool,
+    pub reason_codes: Vec<String>,
     pub degraded: bool,
     pub diagnostics: Vec<String>,
 }

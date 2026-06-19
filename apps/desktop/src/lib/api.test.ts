@@ -227,6 +227,7 @@ describe("KanbanApi task search", () => {
       coverage_cosine: 0,
       residual_norm: 1,
       needs_new_label: false,
+      reason_codes: ["degraded_result", "vector_store_disabled"],
       degraded: true,
       diagnostics: ["vector_store_disabled"],
     }

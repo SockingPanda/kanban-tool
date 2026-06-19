@@ -166,7 +166,8 @@ const longSuggestionResult: LabelSuggestionResult = {
   coverage: 0.91,
   coverage_cosine: 0.88,
   residual_norm: 0.12,
-  needs_new_label: true,
+  needs_new_label: false,
+  reason_codes: ["degraded_result"],
   degraded: true,
   diagnostics: ["longunbrokendiagnosticmessagethatmustwrapinplace"],
 }

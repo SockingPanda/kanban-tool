@@ -27,6 +27,10 @@ fn task_label_suggestions_degrade_when_vector_store_disabled() -> anyhow::Result
     assert_eq!(result.coverage_cosine, 0.0);
     assert_eq!(result.residual_norm, 1.0);
     assert!(!result.needs_new_label);
+    assert_eq!(
+        result.reason_codes,
+        vec!["degraded_result", "vector_store_disabled"]
+    );
     assert!(
         result
             .diagnostics
@@ -1748,11 +1752,8 @@ fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> an
 }
 
 #[test]
-fn task_label_suggestions_signal_new_label_when_enabled_index_has_no_selected_labels()
--> anyhow::Result<()> {
-    let temp = TempDb::new(
-        "task_label_suggestions_signal_new_label_when_enabled_index_has_no_selected_labels",
-    )?;
+fn task_label_suggestions_report_empty_index_as_degraded_reason() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_label_suggestions_report_empty_index_as_degraded_reason")?;
     init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
@@ -1770,7 +1771,12 @@ fn task_label_suggestions_signal_new_label_when_enabled_index_has_no_selected_la
         kanban_sqlite::LabelSuggestionOptions::default(),
     )?;
 
-    assert!(result.needs_new_label);
+    assert!(result.degraded);
+    assert!(!result.needs_new_label);
+    assert_eq!(
+        result.reason_codes,
+        vec!["degraded_result", "label_atom_index_empty"]
+    );
     assert_eq!(result.coverage, 0.0);
     assert_eq!(result.coverage_cosine, 0.0);
     assert!(
@@ -1813,6 +1819,10 @@ fn task_label_suggestions_degrade_on_label_atom_vector_query_error() -> anyhow::
     assert_eq!(result.coverage_cosine, 0.0);
     assert_eq!(result.residual_norm, 1.0);
     assert!(!result.needs_new_label);
+    assert_eq!(
+        result.reason_codes,
+        vec!["degraded_result", "vector_query_error"]
+    );
     assert!(
         result
             .diagnostics
@@ -1868,6 +1878,16 @@ fn task_label_suggestions_report_label_atom_index_dirty_and_errors() -> anyhow::
     )?;
 
     assert!(result.degraded);
+    assert!(!result.needs_new_label);
+    assert_eq!(
+        result.reason_codes,
+        vec![
+            "degraded_result",
+            "label_atom_index_dirty",
+            "label_atom_index_empty",
+            "label_atom_index_error"
+        ]
+    );
     assert!(
         result
             .diagnostics

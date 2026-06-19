@@ -9,12 +9,13 @@ use super::{
     LabelOntologySignalDetail, LabelOntologySignalInput, LabelOntologySignalKind,
     LabelOntologySignalListOptions, LabelOntologySignalRecord, LabelOntologySignalStatus,
     LabelOntologySuggestState, LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
-    LabelOntologyValidationStatus, LabelSemanticProposalRecord, LabelSuggestionEvidenceAtom,
-    LabelSuggestionOptions, LabelSuggestionResult, TaskOntologySignalSummary, TaskOntologySummary,
-    TaskRecord, all_values, board_id, derived_status_by_name, exec, get_task_by_id,
-    get_task_by_id_global_conn, label_atom_index_status_with, mark_label_atom_store_dirty,
-    optional, required_row, resolve_task, storage, suggest_task_labels_with,
-    upsert_label_semantics_in_tx, with_immediate_tx, with_read_tx,
+    LabelOntologyValidationStatus, LabelSemanticProposalRecord, LabelSemanticsMutationOptions,
+    LabelSuggestionEvidenceAtom, LabelSuggestionOptions, LabelSuggestionResult,
+    TaskOntologySignalSummary, TaskOntologySummary, TaskRecord, all_values, board_id,
+    derived_status_by_name, exec, get_task_by_id, get_task_by_id_global_conn,
+    label_atom_index_status_with, mark_label_atom_store_dirty, optional, required_row,
+    resolve_task, storage, suggest_task_labels_with, upsert_label_semantics_in_tx,
+    with_immediate_tx, with_read_tx,
 };
 
 use std::{
@@ -793,8 +794,13 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
         id: result_label_id.to_owned(),
         name: proposal.name.clone(),
     };
+    let before = SemanticsParts::empty();
+    let before_hash = semantics_hash(&label, &before)?;
+    let before_json = semantics_json(&label, &before);
     let after = load_semantics_parts(conn, &proposal.board_id, result_label_id)?;
     let after_hash = semantics_hash(&label, &after)?;
+    let after_json = semantics_json(&label, &after);
+    let atoms = label_ontology_mutation_atoms(conn, &proposal.board_id, result_label_id)?;
     let reason = normalize_optional_text(reason)?
         .unwrap_or_else(|| "accepted label proposal from ontology signals".to_owned());
     let parent_action_id = proposal_creation_action_id(conn, &proposal.board_id, &proposal.id)?;
@@ -808,8 +814,8 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
             "id": result_label_id,
             "name": &proposal.name,
         },
-        "semantics": semantics_json(&label, &after),
-        "retarget_override": retarget_override,
+        "semantics": &after_json,
+        "retarget_override": &retarget_override,
     }))
     .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
     let action_id = insert_ontology_action(
@@ -817,8 +823,8 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
         &proposal.board_id,
         InsertOntologyAction {
             action_type: LabelOntologyActionType::BootstrapLabel,
-            reason,
-            actor,
+            reason: reason.clone(),
+            actor: actor.clone(),
             parent_action_id,
             target_label_id: None,
             result_label_id: Some(result_label_id.to_owned()),
@@ -826,7 +832,7 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
             result_atom_content_hash: None,
             result_proposal_id: Some(proposal.id.clone()),
             canonical_before_hash: None,
-            canonical_after_hash: Some(after_hash),
+            canonical_after_hash: Some(after_hash.clone()),
             change_json,
             validation_status: LabelOntologyValidationStatus::Pending,
             validation_json: "{}".to_owned(),
@@ -834,7 +840,245 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
         now,
     )?;
     link_action_signals(conn, &proposal.board_id, &action_id, &signal_ids, now)?;
+    for atom in atoms {
+        let atom_change_json = serde_json::to_string(&json!({
+            "proposal": {
+                "id": &proposal.id,
+                "task_id": &proposal.task_id,
+                "name": &proposal.name,
+            },
+            "result_label": {
+                "id": result_label_id,
+                "name": &proposal.name,
+            },
+            "changed": true,
+            "before": &before_json,
+            "after": &after_json,
+            "atom": label_ontology_mutation_atom_json(&atom),
+            "retarget_override": &retarget_override,
+        }))
+        .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
+        let atom_action_id = insert_ontology_action(
+            conn,
+            &proposal.board_id,
+            InsertOntologyAction {
+                action_type: LabelOntologyActionType::BootstrapLabel,
+                reason: reason.clone(),
+                actor: actor.clone(),
+                parent_action_id: Some(action_id.clone()),
+                target_label_id: None,
+                result_label_id: Some(result_label_id.to_owned()),
+                result_atom_id: Some(atom.id),
+                result_atom_content_hash: Some(atom.content_hash),
+                result_proposal_id: Some(proposal.id.clone()),
+                canonical_before_hash: Some(before_hash.clone()),
+                canonical_after_hash: Some(after_hash.clone()),
+                change_json: atom_change_json,
+                validation_status: LabelOntologyValidationStatus::Pending,
+                validation_json: "{}".to_owned(),
+            },
+            now,
+        )?;
+        link_action_signals(conn, &proposal.board_id, &atom_action_id, &signal_ids, now)?;
+    }
     Ok(Some(action_id))
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct LabelOntologySemanticsSnapshot {
+    hash: String,
+    json: JsonValue,
+}
+
+pub(crate) struct LabelOntologySemanticsMutationInput<'a> {
+    pub(crate) board_id: &'a str,
+    pub(crate) label_id: &'a str,
+    pub(crate) label_name: &'a str,
+    pub(crate) action_type: LabelOntologyActionType,
+    pub(crate) before: LabelOntologySemanticsSnapshot,
+    pub(crate) options: LabelSemanticsMutationOptions,
+}
+
+#[derive(Debug, Clone)]
+struct LabelOntologyMutationAtom {
+    id: String,
+    content_hash: String,
+    polarity: String,
+    kind: String,
+    text: String,
+    ordinal: i64,
+}
+
+pub(crate) fn label_ontology_semantics_snapshot_in_tx(
+    conn: &Connection,
+    board_id: &str,
+    label_id: &str,
+    label_name: &str,
+) -> Result<LabelOntologySemanticsSnapshot> {
+    let label = LabelSnapshot {
+        id: label_id.to_owned(),
+        name: label_name.to_owned(),
+    };
+    let parts = load_semantics_parts(conn, board_id, label_id)?;
+    Ok(LabelOntologySemanticsSnapshot {
+        hash: semantics_hash(&label, &parts)?,
+        json: semantics_json(&label, &parts),
+    })
+}
+
+pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
+    conn: &Connection,
+    input: LabelOntologySemanticsMutationInput<'_>,
+    now: i64,
+) -> Result<Vec<String>> {
+    let LabelOntologySemanticsMutationInput {
+        board_id,
+        label_id,
+        label_name,
+        action_type,
+        before,
+        options,
+    } = input;
+    let (target_label_id, result_label_id, default_reason) = match action_type {
+        LabelOntologyActionType::UpdateSemantics => (
+            Some(label_id.to_owned()),
+            None,
+            "manual label semantics update",
+        ),
+        LabelOntologyActionType::BootstrapLabel => {
+            (None, Some(label_id.to_owned()), "direct label bootstrap")
+        }
+        _ => {
+            return Err(KanbanError::InvalidInput(format!(
+                "action type {action_type} cannot record semantics mutation provenance"
+            )));
+        }
+    };
+    let actor = normalize_actor(options.actor)?;
+    let reason = normalize_optional_text(options.reason)?.unwrap_or_else(|| default_reason.into());
+    let signal_ids = if options.source_signal_ids.is_empty() {
+        Vec::new()
+    } else {
+        normalize_signal_ids(options.source_signal_ids)?
+    };
+    if !signal_ids.is_empty() {
+        let signals = signal_ids
+            .iter()
+            .map(|signal_id| signal_by_id(conn, signal_id))
+            .collect::<Result<Vec<_>>>()?;
+        ensure_signals_on_board_and_status(
+            &signals,
+            board_id,
+            &[LabelOntologySignalStatus::Confirmed],
+        )?;
+    }
+
+    let after = label_ontology_semantics_snapshot_in_tx(conn, board_id, label_id, label_name)?;
+    let atoms = label_ontology_mutation_atoms(conn, board_id, label_id)?;
+    let changed = before.hash != after.hash;
+    let change_json = serde_json::to_string(&json!({
+        "label": {
+            "id": label_id,
+            "name": label_name,
+        },
+        "changed": changed,
+        "before": before.json,
+        "after": after.json,
+        "atoms": atoms.iter().map(label_ontology_mutation_atom_json).collect::<Vec<_>>(),
+    }))
+    .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
+
+    let mut action_ids = Vec::new();
+    if atoms.is_empty() {
+        let action_id = insert_ontology_action(
+            conn,
+            board_id,
+            InsertOntologyAction {
+                action_type,
+                reason: reason.clone(),
+                actor: actor.clone(),
+                parent_action_id: None,
+                target_label_id: target_label_id.clone(),
+                result_label_id: result_label_id.clone(),
+                result_atom_id: None,
+                result_atom_content_hash: None,
+                result_proposal_id: None,
+                canonical_before_hash: Some(before.hash.clone()),
+                canonical_after_hash: Some(after.hash.clone()),
+                change_json: change_json.clone(),
+                validation_status: LabelOntologyValidationStatus::Pending,
+                validation_json: "{}".to_owned(),
+            },
+            now,
+        )?;
+        link_action_signals(conn, board_id, &action_id, &signal_ids, now)?;
+        action_ids.push(action_id);
+        return Ok(action_ids);
+    }
+
+    for atom in atoms {
+        let action_id = insert_ontology_action(
+            conn,
+            board_id,
+            InsertOntologyAction {
+                action_type,
+                reason: reason.clone(),
+                actor: actor.clone(),
+                parent_action_id: None,
+                target_label_id: target_label_id.clone(),
+                result_label_id: result_label_id.clone(),
+                result_atom_id: Some(atom.id),
+                result_atom_content_hash: Some(atom.content_hash),
+                result_proposal_id: None,
+                canonical_before_hash: Some(before.hash.clone()),
+                canonical_after_hash: Some(after.hash.clone()),
+                change_json: change_json.clone(),
+                validation_status: LabelOntologyValidationStatus::Pending,
+                validation_json: "{}".to_owned(),
+            },
+            now,
+        )?;
+        link_action_signals(conn, board_id, &action_id, &signal_ids, now)?;
+        action_ids.push(action_id);
+    }
+    Ok(action_ids)
+}
+
+fn label_ontology_mutation_atoms(
+    conn: &Connection,
+    board_id: &str,
+    label_id: &str,
+) -> Result<Vec<LabelOntologyMutationAtom>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id,content_hash,polarity,kind,text,ordinal \
+             FROM label_atoms WHERE board_id=?1 AND label_id=?2 ORDER BY ordinal ASC, id ASC",
+        )
+        .map_err(storage)?;
+    stmt.query_map(params![board_id, label_id], |row| {
+        Ok(LabelOntologyMutationAtom {
+            id: row.get(0)?,
+            content_hash: row.get(1)?,
+            polarity: row.get(2)?,
+            kind: row.get(3)?,
+            text: row.get(4)?,
+            ordinal: row.get(5)?,
+        })
+    })
+    .map_err(storage)?
+    .collect::<std::result::Result<Vec<_>, _>>()
+    .map_err(storage)
+}
+
+fn label_ontology_mutation_atom_json(atom: &LabelOntologyMutationAtom) -> JsonValue {
+    json!({
+        "id": &atom.id,
+        "content_hash": &atom.content_hash,
+        "polarity": &atom.polarity,
+        "kind": &atom.kind,
+        "text": &atom.text,
+        "ordinal": atom.ordinal,
+    })
 }
 
 pub(crate) fn record_label_ontology_proposal_create_in_tx(

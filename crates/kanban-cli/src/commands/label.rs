@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 #[cfg(feature = "vector-lancedb")]
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{Result, bail};
 use kanban_sqlite::{
@@ -10,8 +10,8 @@ use kanban_sqlite::{
     LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
     LabelOntologyValidationStatus, LabelProposalCandidate, LabelProposalCreateOptions,
     LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalStatus,
-    LabelSemanticProposalRecord, LabelSuggestionOptions, LabelSuggestionResult,
-    MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
+    LabelSemanticProposalRecord, LabelSemanticsMutationOptions, LabelSuggestionOptions,
+    LabelSuggestionResult, MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
     accept_label_proposal_with_options, add_task_labels_with_options,
     apply_label_ontology_atom_with_options, bootstrap_task_label, create_label,
     create_label_ontology_action, delete_label, delete_label_semantics, explain_label_atom,
@@ -20,7 +20,7 @@ use kanban_sqlite::{
     list_labels, propose_task_label_with_create_options, record_label_ontology_observation,
     reject_label_proposal, remove_task_label, restore_bootstrap_task_label_state,
     review_label_ontology, snapshot_bootstrap_task_label_state, suggest_task_labels,
-    upsert_label_semantics, validate_label_ontology_action,
+    upsert_label_semantics_with_options, validate_label_ontology_action,
     validate_label_ontology_action_with_trusted_suggestions,
 };
 #[cfg(feature = "vector-lancedb")]
@@ -166,7 +166,7 @@ pub(crate) fn handle_label(
             print_task(json, &task)?;
         }
         LabelCommand::Semantics { command } => {
-            handle_label_semantics(command, db_path, board, json)?
+            handle_label_semantics(command, db_path, board, actor, json)?
         }
         LabelCommand::Atoms { command } => match command {
             crate::args::LabelAtomsCommand::List => {
@@ -335,6 +335,7 @@ fn handle_label_semantics(
     command: crate::args::LabelSemanticsCommand,
     db_path: &PathBuf,
     board: &str,
+    actor: &str,
     json: bool,
 ) -> Result<()> {
     match command {
@@ -347,7 +348,7 @@ fn handle_label_semantics(
             print_or_json(json, &semantics, || label_semantics_line(&semantics))?;
         }
         crate::args::LabelSemanticsCommand::Upsert(args) => {
-            let semantics = upsert_label_semantics(
+            let semantics = upsert_label_semantics_with_options(
                 db_path,
                 board,
                 UpsertLabelSemantics {
@@ -358,6 +359,7 @@ fn handle_label_semantics(
                     positive_examples: args.positive_examples,
                     negative_examples: args.negative_examples,
                 },
+                LabelSemanticsMutationOptions::manual_actor(actor),
             )?;
             print_or_json(json, &semantics, || label_semantics_line(&semantics))?;
         }
@@ -1052,7 +1054,7 @@ fn validate_label_ontology_action_with_trusted_cli_evidence(
             );
         };
         rebuild_label_atom_index_with(db_path, board, &store)?;
-        return validate_label_ontology_action_with_trusted_suggestions(
+        validate_label_ontology_action_with_trusted_suggestions(
             db_path,
             board,
             LabelOntologyTrustedValidationInput {
@@ -1065,7 +1067,7 @@ fn validate_label_ontology_action_with_trusted_cli_evidence(
             &store,
             options,
         )
-        .map_err(Into::into);
+        .map_err(Into::into)
     }
     #[cfg(not(feature = "vector-lancedb"))]
     {
@@ -1126,8 +1128,8 @@ fn rebuild_configured_label_atom_index_optional(
 }
 
 fn ensure_label_bootstrap_verification_available(
-    db_path: &PathBuf,
-    vector_config_path: Option<&std::path::Path>,
+    db_path: &Path,
+    vector_config_path: Option<&Path>,
 ) -> Result<()> {
     #[cfg(feature = "vector-lancedb")]
     {

@@ -3,12 +3,13 @@ use crate::connect_file;
 use super::{
     AddTaskLabelsResult, BootstrapTaskLabel, BootstrapTaskLabelRestoreResult,
     BootstrapTaskLabelResult, BootstrapTaskLabelSnapshot, CreateLabel, CreateTask,
-    DeleteLabelResult, LabelRecord, LabelSemanticsRecord, MAX_TASK_LIST_LIMIT, TaskListOptions,
+    DeleteLabelResult, LabelOntologyActionType, LabelOntologySemanticsMutationInput, LabelRecord,
+    LabelSemanticsMutationOptions, LabelSemanticsRecord, MAX_TASK_LIST_LIMIT, TaskListOptions,
     TaskListPage, TaskListSort, TaskPatch, TaskRecord, add_dependency_in_current_tx, all,
     all_values, board_id, board_id_any, ensure_changed_one, exec, exec_named, exec_one_named,
-    insert_event, json_valid, mark_label_atom_store_dirty, optional, recompute_ready_status,
-    required_row, scalar, upsert_label_semantics_candidate_in_tx, validate_priority,
-    with_immediate_tx,
+    insert_event, json_valid, label_ontology_semantics_snapshot_in_tx, mark_label_atom_store_dirty,
+    optional, recompute_ready_status, record_label_ontology_semantics_mutation_in_tx, required_row,
+    scalar, upsert_label_semantics_candidate_in_tx, validate_priority, with_immediate_tx,
 };
 
 use std::path::Path;
@@ -382,6 +383,8 @@ pub fn bootstrap_task_label(
             &candidate.name,
             now,
         )?;
+        let before =
+            label_ontology_semantics_snapshot_in_tx(&conn, &task.board_id, &label.id, &label.name)?;
         upsert_label_semantics_candidate_in_tx(
             &conn,
             &task.board_id,
@@ -391,6 +394,18 @@ pub fn bootstrap_task_label(
             now,
         )?;
         mark_label_atom_store_dirty(&conn, &task.board_id, now)?;
+        record_label_ontology_semantics_mutation_in_tx(
+            &conn,
+            LabelOntologySemanticsMutationInput {
+                board_id: &task.board_id,
+                label_id: &label.id,
+                label_name: &label.name,
+                action_type: LabelOntologyActionType::BootstrapLabel,
+                before,
+                options: LabelSemanticsMutationOptions::manual_actor(actor),
+            },
+            now,
+        )?;
         attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
         Ok(BootstrapTaskLabelResult {
             task: get_task_by_id(&conn, &task.board_id, &task.id)?,
@@ -421,6 +436,8 @@ pub fn bootstrap_task_label_by_id(
             &candidate.name,
             now,
         )?;
+        let before =
+            label_ontology_semantics_snapshot_in_tx(&conn, &task.board_id, &label.id, &label.name)?;
         upsert_label_semantics_candidate_in_tx(
             &conn,
             &task.board_id,
@@ -430,6 +447,18 @@ pub fn bootstrap_task_label_by_id(
             now,
         )?;
         mark_label_atom_store_dirty(&conn, &task.board_id, now)?;
+        record_label_ontology_semantics_mutation_in_tx(
+            &conn,
+            LabelOntologySemanticsMutationInput {
+                board_id: &task.board_id,
+                label_id: &label.id,
+                label_name: &label.name,
+                action_type: LabelOntologyActionType::BootstrapLabel,
+                before,
+                options: LabelSemanticsMutationOptions::manual_actor(actor),
+            },
+            now,
+        )?;
         attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
         Ok(BootstrapTaskLabelResult {
             task: get_task_by_id(&conn, &task.board_id, &task.id)?,

@@ -478,6 +478,27 @@ pub struct UpsertLabelSemantics {
     pub negative_examples: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelSemanticsMutationOptions {
+    pub actor: LabelOntologyActor,
+    pub reason: Option<String>,
+    pub source_signal_ids: Vec<String>,
+}
+
+impl LabelSemanticsMutationOptions {
+    pub fn manual_actor(actor: impl Into<String>) -> Self {
+        Self {
+            actor: LabelOntologyActor {
+                name: actor.into(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            reason: None,
+            source_signal_ids: Vec::new(),
+        }
+    }
+}
+
 pub const DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT: usize = 5;
 pub const DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT: usize = 32;
 pub const DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT: usize = 80;

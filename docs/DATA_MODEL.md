@@ -542,6 +542,29 @@ provenance。已有 atom 如果来自旧 semantics 写入而没有任何 ontolog
 accept 生成的 `bootstrap_label` action 通过 `parent_action_id` 指向这条 creation
 action，从而让 proposal creation -> bootstrap acceptance provenance 链路保持无歧义。
 
+当前 constructive ontology mutation path 的责任边界如下：
+
+- `label_semantics` / `label_atoms` 是 canonical ontology truth；`label_ontology_actions`
+  是 append-only provenance，不是第二份 truth。
+- `update_semantics`、`add_positive_atom`、`add_negative_atom`、`create_label_proposal`
+  和 `bootstrap_label` action 只能由专用 service path 写入，并与对应 canonical
+  write 位于同一 SQLite transaction。
+- Manual mutation 可以没有 source signals，但仍必须记录 actor、reason、before/after
+  hash 和 change snapshot。Signal-driven mutation 会额外写入
+  `label_ontology_action_signals` links。
+- `label semantics upsert` 默认是 patch/CAS path：`expected_semantics_hash` 防止
+  lost update；缺省字段不清空旧 semantics；`replace=true` 才执行完整替换，并将缺省
+  arrays 解释为空集合。
+- Direct task-label bootstrap 与 proposal accept 共用 adoption primitive。Task-label
+  bootstrap 可创建或复用无 semantics 的同名 canonical label；proposal accept 当前会先拒绝
+  任何 existing normalized-name conflict，因此成功路径创建新 canonical label。二者都会写
+  semantics/atoms、标脏 label atom index，并写 `bootstrap_label` action；proposal accept
+  不写 `task_labels`，task-label bootstrap 会绑定来源 task。失败时 canonical writes 与
+  provenance action 一起回滚。
+- `legacy_untracked=true` 只表示当前 atom 没有可匹配的 ontology action，例如旧数据或
+  destructive cleanup 后的历史缺口；新 constructive mutation 不应依赖这种兼容路径来解释
+  provenance。
+
 表：`label_ontology_action_signals`
 
 多对多连接 action 与 signals。多个 signals 可以支持一次 atom 修改；同一个 signal
@@ -674,9 +697,12 @@ label truth。它只记录“现有 label atom suggestion 覆盖不足时，外�
 | `diagnostics_json` | JSON string array，包含 degraded、冲突或 validation 诊断。 |
 | `decision_reason` / `resolved_label_id` / `decided_at` | accept/reject 决策信息；accept 后 `resolved_label_id` 指向新建 canonical label。 |
 
-Accept 只允许 `proposed` proposal。accept 创建同 board 的 canonical `labels` 行，
-并写入对应 `label_semantics` / `label_atoms`，同时标脏 `lancedb_label_atoms`
-派生 store；它不写入 `task_labels`，不会把新 label 自动绑定到来源 task。
+Accept 只允许 `proposed` proposal。accept 通过共享 adoption primitive 创建同 board 的
+canonical `labels` 行，并写入对应 `label_semantics` / `label_atoms`，同时标脏
+`lancedb_label_atoms` 派生 store，写入 `bootstrap_label` provenance action，并把
+`resolved_label_id` 指向 result label；proposal status、canonical writes 与 action
+provenance 同 transaction 提交。它不写入 `task_labels`，不会把新 label 自动绑定到来源
+task。
 
 Reject 将 proposal 标记为 `rejected`。与现有 label 发生 normalized-name 冲突的
 候选会持久化为 `rejected`，diagnostics 包含 `near_duplicate_label_conflict`。

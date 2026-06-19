@@ -984,15 +984,31 @@ semantics；`{label_id}` 只接受 canonical `l_...` label id。Label name 允�
 
 ```json
 {
+  "actor": "alice",
+  "expected_semantics_hash": "optional-current-hash",
+  "replace": false,
+  "reason": "Add a repeated boundary observed during label review",
+  "source_signal_ids": ["los_..."],
   "description": "Backend service work",
   "applies_when": ["touches Rust service code"],
   "excludes_when": ["CSS-only"],
   "positive_examples": ["add API handler"],
-  "negative_examples": ["adjust spacing"]
+  "negative_examples": ["adjust spacing"],
+  "remove_applies_when": [],
+  "remove_excludes_when": [],
+  "remove_positive_examples": [],
+  "remove_negative_examples": []
 }
 ```
 
-数组字段可缺省为空数组；服务会 trim 并丢弃空白值。生成 atoms 时，有 description
+默认 `replace=false`，请求按 patch 语义处理：`description` 只在提供非空值时覆盖当前
+description，数组字段会追加到对应集合，`remove_*` 数组删除匹配文本；缺省字段不会清空
+已有 semantics。传 `replace=true` 时才完整替换五个语义字段，此时缺省数组视为空数组，
+并且不能同时传任何 `remove_*` 字段。`expected_semantics_hash` 是 CAS guard；如果与
+当前 `semantics_hash` 不一致，请求返回 conflict 且不写入。服务会 trim 并丢弃空白值。
+每次 constructive semantics write 都会在同一 SQLite transaction 写入
+`update_semantics` ontology action，记录 actor、reason、source signal links（如有）、
+before/after hash 和 change snapshot。生成 atoms 时，有 description
 的 label 会生成一个 canonical `description` atom：
 `label: {name}\ndescription: {description}`；没有 description 时才使用 `name`
 fallback atom。atom text 会进一步规范化 whitespace：每个非空行内部 collapse，
@@ -1032,8 +1048,10 @@ canonical 行分隔保留。同一 label 下相同 `polarity + kind + normalized
 }
 ```
 
-`DELETE /api/v1/boards/{board}/labels/{label_id}/semantics` 删除该 label 的 semantics
-与 SQLite atoms，但不删除 canonical label 或 task-label 绑定。成功返回：
+`DELETE /api/v1/boards/{board}/labels/{label_id}/semantics` 是 destructive cleanup：
+删除该 label 的 semantics 与 SQLite atoms，但不删除 canonical label 或 task-label
+绑定。它不应被描述为 provenance-preserving ontology growth；需要可解释演化时使用
+semantics patch/replace、`apply atom`、bootstrap 或 proposal accept。成功返回：
 
 ```json
 { "data": { "deleted": true } }
@@ -1247,10 +1265,12 @@ Accept/reject body：
 }
 ```
 
-Accept 只允许 `proposed` proposal。成功后会创建 canonical `labels` 行与对应
-`label_semantics` / `label_atoms`，并标脏 label atom index；不会自动写
-`task_labels`。`source_signal_ids` 可选；传入时，accept 会在同一 transaction 内写入
-`bootstrap_label` ontology action，并通过 action-signal links 记录 new-label
+Accept 只允许 `proposed` proposal。成功后会通过与 task-label bootstrap 相同的 adoption
+primitive 创建 canonical `labels` 行与对应 `label_semantics` / `label_atoms`，
+标脏 label atom index，并在同一 transaction 写入 `bootstrap_label` ontology action；
+proposal status、canonical writes 和 provenance action 要么一起成功，要么一起回滚。
+它不会自动写 `task_labels`。`source_signal_ids` 可选；省略时仍记录 bootstrap action，
+但没有 action-signal links。传入时，accept 会通过 action-signal links 记录 new-label
 bootstrap provenance。Source signals 必须属于同一 board 且处于 `confirmed`。
 `actor` 字符串仍用于 proposal decision event；`ontology_actor` 只控制 accept 产生的
 `bootstrap_label` ontology action provenance。省略 `ontology_actor` 时，bootstrap
@@ -1456,10 +1476,11 @@ Groups sort by distinct `task_count` desc, then `confirmed_count` desc,
 `parent_action_id`、`target_label_ref`、result 字段、canonical hash、`change` /
 `change_json`、`validation_status` 和 `validation` / `validation_json` 必须为
 `null`/缺省；否则返回
-`invalid_input`。`add_positive_atom`、`add_negative_atom`、`bootstrap_label`、
-`validate` 等 mutation/validation action types 不允许通过该 generic endpoint 写入；
-canonical mutation provenance 必须由 apply/proposal accept/validate 等专用 route 在
-同一 transaction 内写入。`supersede` 写入时会沿 replacement
+`invalid_input`。`add_positive_atom`、`add_negative_atom`、`update_semantics`、
+`create_label_proposal`、`bootstrap_label`、`validate` 等 mutation/validation action
+types 不允许通过该 generic endpoint 写入；canonical mutation provenance 必须由
+semantics PUT、apply atom、proposal create/accept、task-label bootstrap 或 validate 等
+专用 route 在同一 transaction 内写入。`supersede` 写入时会沿 replacement
 `superseded_by_signal_id` 链检查，若链路回到任一 source signal 或 replacement chain
 自身已有环，则返回 `invalid_input`，不会写入新的 supersede action。
 

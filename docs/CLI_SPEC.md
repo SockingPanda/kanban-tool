@@ -497,7 +497,7 @@ kanban label add [--create-missing] <task_ref> <label>...
 kanban label remove <task_ref> <label>
 kanban label semantics list [--json]
 kanban label semantics show <label> [--json]
-kanban label semantics upsert <label> [--description <text>] [--applies-when <text>]... [--excludes-when <text>]... [--positive-example <text>]... [--negative-example <text>]... [--json]
+kanban label semantics upsert <label> [--expected-semantics-hash <hash>] [--replace] [--reason <text>] [--source-signal <signal_id>]... [--description <text>] [--applies-when <text>]... [--excludes-when <text>]... [--positive-example <text>]... [--negative-example <text>]... [--remove-applies-when <text>]... [--remove-excludes-when <text>]... [--remove-positive-example <text>]... [--remove-negative-example <text>]... [--json]
 kanban label semantics delete <label> [--json]
 kanban label atoms list [--json]
 kanban label atom explain <atom-id-or-content-hash> [--json]
@@ -652,20 +652,29 @@ solver 内部搜索能力。内部能力由 `--candidate-limit`、`--atom-limit`
 `1..=1000`；`--min-score` 必须在 `0..=1`。
 
 `label semantics` 管理当前 board 上已有 label 的语义字典。`<label>` 接受 label
-name 或 `l_...` id；`upsert` 会写入 `label_semantics` 并同步重建该 label 的
-`label_atoms`，随后标脏派生的 label atom vector index。数组参数可重复；空白值会被
+name 或 `l_...` id。`upsert` 默认是 patch：`--description` 只在提供非空值时覆盖当前
+description，数组参数会追加到对应集合，`--remove-*` 只删除匹配的既有文本；未提供的
+字段不会被解释为清空。传 `--replace` 时才执行完整替换，此时未提供的数组会成为空
+数组，并且不能同时传 `--remove-*`。`--expected-semantics-hash <hash>` 是
+compare-and-swap guard：hash 不等于当前 semantics hash 时返回 conflict 且不写入。
+`--reason` 和 `--source-signal` 会进入 `update_semantics` ontology action；即使没有
+source signal，constructive semantics mutation 也会在同一 transaction 写入 before/after
+hash、change snapshot 和 actor provenance。`upsert` 会写入 `label_semantics` 并同步重建
+该 label 的 `label_atoms`，随后标脏派生的 label atom vector index。数组参数可重复；空白值会被
 trim 后丢弃。生成 atoms 时，有 description 的 label 会生成一个 canonical
 `description` atom：`label: {name}\ndescription: {description}`；没有 description 时
 才使用 `name` fallback atom。atom text 会进一步规范化 whitespace：每个非空行内部
 collapse，canonical 行分隔保留。同一 label 下相同
 `polarity + kind + normalized_text` 的 atom 会去重并保留首次 ordinal，`id` /
 `content_hash` 不包含 ordinal，因此只调整数组顺序不会改变同一文本 atom identity。
-`delete` 删除该 label 的 semantics 与 atoms，但不删除 canonical label 或 task-label
-绑定，并返回 `{ "data": { "deleted": true } }`。
+`delete` 是 destructive cleanup：删除该 label 的 semantics 与 atoms，但不删除
+canonical label 或 task-label 绑定，并返回 `{ "data": { "deleted": true } }`。它不应被
+当作 provenance-preserving ontology growth；需要可解释演化时使用 patch/replace、
+`apply atom`、bootstrap 或 proposal accept 等会写 action 的路径。
 
 `label atoms list` 读取 SQLite truth 中的 `label_atoms`。这些 atoms 来自
-`label semantics upsert` 或接受 label proposal 后生成的 semantics；它们是
-`lancedb_label_atoms` 派生索引的输入，不是派生索引本身。
+`label semantics upsert`、`label bootstrap`、`label ontology apply atom` 或接受 label
+proposal 后生成的 semantics；它们是 `lancedb_label_atoms` 派生索引的输入，不是派生索引本身。
 
 `label atom explain <atom-id-or-content-hash>` 是 `label atoms explain` 的单数别名，
 按当前 board 的 atom id 或稳定 `content_hash` 解析现有 atom，并返回当前 atom、
@@ -744,12 +753,14 @@ canonical label、`label_semantics`、`label_atoms` 或 `task_labels`；diagnost
 target/proposed label 会写入 `change_json.retarget_override`。Override 不放宽
 board/status 要求。
 
-`label proposals accept` 只接受 `proposed` proposal。accept 会创建 canonical
-label、`label_semantics` 与 `label_atoms`，并标脏 label atom index；它不会自动
-给来源 task 写入 `task_labels`。传入 `--source-signal <los_...>` 时，accept 会在同一
-transaction 中写入 `bootstrap_label` ontology action，并通过 action-signal links
-记录该 new-label bootstrap 的 signal provenance；这些 source signals 必须是同一
-board 上的 `confirmed` signals。`--actor-type` / `--agent-type` 控制该
+`label proposals accept` 只接受 `proposed` proposal。accept 与单 task bootstrap 共用
+同一个 adoption primitive：创建 canonical label、`label_semantics` 与 `label_atoms`，
+标脏 label atom index，并写入 `bootstrap_label` ontology action；proposal row、
+canonical writes 和 action provenance 要么同一 transaction 成功，要么一起回滚。它不会自动
+给来源 task 写入 `task_labels`。未传 `--source-signal` 时仍会记录 bootstrap action，
+只是没有 action-signal links；传入 `--source-signal <los_...>` 时会通过 links 记录该
+new-label bootstrap 的 signal provenance，且这些 source signals 必须是同一 board 上的
+`confirmed` signals。`--actor-type` / `--agent-type` 控制该
 `bootstrap_label` action 的 actor provenance；actor name 仍来自全局 `--actor`。
 默认是 `user`。`--actor-type agent` 必须提供非空 `--agent-type`；`user` 不能提供
 `--agent-type`。Source signals 默认还必须是 `vocabulary_gap` +
@@ -760,8 +771,8 @@ bootstrap acceptance 链路。
 确实需要把 confirmed same-board source signal retarget 到该 proposal 时，必须同时传
 `--allow-retarget` 和非空 `--retarget-reason <text>`；该 reason、source signal 原始
 target/proposed label 和最终 proposal/result label 会写入 bootstrap action
-`change_json.retarget_override`。Override 不放宽 board/status 要求。`label proposals reject` 标记 proposal 为
-`rejected`，不接受 `--source-signal`。accepted/rejected proposal 不能再次决策。
+`change_json.retarget_override`。Override 不放宽 board/status 要求。`label proposals reject`
+标记 proposal 为 `rejected`，不接受 `--source-signal`。accepted/rejected proposal 不能再次决策。
 
 `label ontology record` 接受 service-shaped JSON 或 stdin，记录一次 label 判断
 observation 并写入其中的 child signals。Service 会读取当前 task snapshot、解析
@@ -838,9 +849,12 @@ Lifecycle commands 写入 action 并同步更新 signal status：
 - `resolve --no-change`：记录无需 ontology 修改的 resolution。
 
 这些 lifecycle commands 只记录 review/status 变化，不接受 canonical mutation
-provenance 字段。`add_positive_atom`、`add_negative_atom`、`bootstrap_label` 和
-`validate` 等 action rows 只能由 `label ontology apply atom`、proposal accept、
-`label ontology validate` 等专用命令/服务路径在同一 transaction 中写入。
+provenance 字段。`add_positive_atom`、`add_negative_atom`、`update_semantics`、
+`create_label_proposal`、`bootstrap_label` 和 `validate` 等 action rows 只能由
+`label semantics upsert`、`label ontology apply atom`、`label propose`、
+proposal accept、`label bootstrap`、`label ontology validate` 等专用命令/服务路径在同一
+transaction 中写入。通用 action command 不能伪造 canonical before/after hash、
+result atom/result label/result proposal 或 validation payload。
 Lifecycle、apply atom、validate 和带 `--source-signal` 的 proposal accept 都支持
 `--actor-type user|agent` 与 `--agent-type <type>`。这些 flag 只控制 ontology action
 row 的 `created_by_type` / `agent_type`；action name 仍来自全局 `--actor`。默认

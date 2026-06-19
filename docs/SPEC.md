@@ -54,6 +54,8 @@
 | Run | 一次执行 attempt。只有 claim/start 后才产生。 |
 | Attachment | 附件元数据，blob 存文件系统。 |
 | Label | 本地标签。 |
+| Label Semantics / Atoms | Label 的 canonical ontology truth，用于本地 suggest 与 review。 |
+| Label Proposal / Ontology Ledger | 新 label 候选 lifecycle 与 append-only provenance；它们解释 ontology 演化，但不替代当前 label truth。 |
 | Column | UI 展示配置，映射到 status。 |
 
 ---
@@ -147,6 +149,29 @@ tasks 当前快照 + task_events append-only 事件流
 - 快照与事件必须在同一 transaction 内更新。
 
 初始 schema 见 [`../migrations/001_initial.sql`](../migrations/001_initial.sql)。
+
+### 5.4 Label ontology truth 与 provenance
+
+Label 系统保持四类角色分离：
+
+1. `labels` / `task_labels` 是任务当前绑定事实。
+2. `label_semantics` / `label_atoms` 是 label 的 canonical ontology truth。
+3. `lancedb_label_atoms` 等向量索引是可删除重建的派生检索层。
+4. `label_semantic_proposals` 与 `label_ontology_*` ledger 记录候选、分歧、review、
+   mutation provenance 和 validation history。
+
+Constructive ontology mutation 必须通过专用 service path：semantics patch/replace、
+atom apply、task-label bootstrap、proposal create/accept 和 validation 都要在同一 SQLite
+transaction 中写入对应 canonical row 与 provenance action，或一起回滚。通用
+ontology action endpoint 只允许 lifecycle review action，不能伪造 canonical before/after
+hash、result atom/result label/result proposal 或 validation evidence。
+
+Semantics upsert 默认是 patch，不是 full replace：缺省字段保留当前值，数组字段追加或按
+`remove_*` 删除；只有显式 replace 才把缺省数组解释为空。`expected_semantics_hash`
+用于防止 lost update。Proposal accept 与单 task bootstrap 共用 new-label adoption
+primitive；proposal accept 不自动写 `task_labels`，bootstrap 会绑定来源 task。旧数据或
+cleanup 路径中缺少 action provenance 的 atom 只能通过 `legacy_untracked=true` 标记，不应
+被当作新的 ontology growth 方式。
 
 ---
 
@@ -248,6 +273,8 @@ Dispatcher 见 [`DISPATCHER_SPEC.md`](DISPATCHER_SPEC.md)。
 10. Board archive 不会改变 task 状态；如果 board 上仍有 `running` task/run，必须拒绝 archive。
 11. 每次状态变化必须写 `task_events`。
 12. task snapshot 与对应 event 必须同 transaction 提交。
+13. `tasks.status`、label binding truth、label semantics truth、ontology ledger 和派生检索层各自有明确写权限；derived stores 不拥有 canonical write path。
+14. 新的 constructive ontology mutation 不通过 generic lifecycle action endpoint；必须由专用 command/API/service 路径同时写 canonical state 与 provenance action。
 
 ---
 

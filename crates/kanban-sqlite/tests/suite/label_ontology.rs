@@ -2507,6 +2507,31 @@ fn label_ontology_revert_positive_atom_restores_before_hash_and_records_action()
         original_action.action_type,
         LabelOntologyActionType::AddPositiveAtom
     );
+    let atom_explain = explain_label_atom(&temp.path, "default", reverted_atom_id)?;
+    assert!(
+        atom_explain.atom.is_none(),
+        "reverted atom should no longer be canonical"
+    );
+    let explain_action_types = atom_explain
+        .provenance_actions
+        .iter()
+        .map(|provenance| provenance.action.action_type)
+        .collect::<Vec<_>>();
+    assert!(
+        explain_action_types.contains(&LabelOntologyActionType::AddPositiveAtom),
+        "{explain_action_types:?}"
+    );
+    assert!(
+        explain_action_types.contains(&LabelOntologyActionType::RevertOntologyMutation),
+        "{explain_action_types:?}"
+    );
+    assert!(
+        atom_explain.supporting_signals.iter().any(|support| {
+            support.signal.id == signal_id
+                && support.signal.status == LabelOntologySignalStatus::Confirmed
+        }),
+        "atom explain should keep the source signal history"
+    );
 
     let validation_action = validate_label_ontology_action(
         &temp.path,
@@ -2542,6 +2567,351 @@ fn label_ontology_revert_positive_atom_restores_before_hash_and_records_action()
             .signal
             .status,
         LabelOntologySignalStatus::Confirmed
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_revert_negative_atom_restores_before_hash_and_explain_chain() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_revert_negative_atom_restores_before_hash_and_explain_chain")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            description: Some("Command-line interface behavior".to_owned()),
+            applies_when: vec!["changes CLI user-visible behavior".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let before_semantics = get_label_semantics(&temp.path, "default", "cli")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject docs-only task as CLI label match"),
+    )?;
+    let mut negative_signal = sample_signal_input("cli-revert-negative-atom");
+    negative_signal.kind = LabelOntologySignalKind::FalsePositive;
+    negative_signal.proposed_action = LabelOntologyProposedAction::AddNegativeAtom;
+    negative_signal.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+        polarity: "negative".to_owned(),
+        kind: "excludes_when".to_owned(),
+        text: "only changes release notes or prose without touching CLI behavior".to_owned(),
+    });
+    negative_signal.rationale =
+        "The source task was a false positive for cli and needs suppressing evidence.".to_owned();
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![negative_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed false-positive suppressing evidence.",
+        ),
+    )?;
+
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "excludes_when".to_owned(),
+            text: "only changes release notes or prose without touching CLI behavior".to_owned(),
+            reason: "Confirmed negative boundary for CLI label.".to_owned(),
+        },
+    )?;
+    assert_eq!(
+        apply_action.action_type,
+        LabelOntologyActionType::AddNegativeAtom
+    );
+    let applied_atom_id = apply_action
+        .result_atom_id
+        .as_deref()
+        .context("negative atom id")?;
+
+    let revert_action = revert_label_ontology_mutation(
+        &temp.path,
+        "default",
+        LabelOntologyRevertInput {
+            actor: reviewer_actor(),
+            target_action_id: apply_action.id.clone(),
+            expected_current_hash: apply_action.canonical_after_hash.clone(),
+            reason: "Revert negative boundary test mutation.".to_owned(),
+        },
+    )?;
+
+    assert_eq!(
+        revert_action.action_type,
+        LabelOntologyActionType::RevertOntologyMutation
+    );
+    assert_eq!(
+        revert_action.parent_action_id.as_deref(),
+        Some(apply_action.id.as_str())
+    );
+    assert_eq!(
+        revert_action.canonical_after_hash,
+        apply_action.canonical_before_hash
+    );
+    assert_eq!(revert_action.signal_ids, vec![signal_id.clone()]);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+    let restored_semantics = get_label_semantics(&temp.path, "default", "cli")?;
+    assert_semantics_content_eq(&restored_semantics, &before_semantics);
+    assert!(
+        !list_label_atoms(&temp.path, "default")?
+            .iter()
+            .any(|atom| atom.id == applied_atom_id)
+    );
+
+    let atom_explain = explain_label_atom(&temp.path, "default", applied_atom_id)?;
+    let explain_action_types = atom_explain
+        .provenance_actions
+        .iter()
+        .map(|provenance| provenance.action.action_type)
+        .collect::<Vec<_>>();
+    assert!(
+        explain_action_types.contains(&LabelOntologyActionType::AddNegativeAtom),
+        "{explain_action_types:?}"
+    );
+    assert!(
+        explain_action_types.contains(&LabelOntologyActionType::RevertOntologyMutation),
+        "{explain_action_types:?}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_revert_update_semantics_restores_before_hash_and_keeps_atom_history()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_revert_update_semantics_restores_before_hash_and_keeps_atom_history",
+    )?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed_semantics = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            description: Some("Command-line interface behavior".to_owned()),
+            applies_when: vec!["changes CLI user-visible behavior".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let stable_atom = seed_semantics
+        .atoms
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("stable applies_when atom")?
+        .clone();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Update CLI semantics description"),
+    )?;
+    let update_signal = review_empty_target_signal(
+        "cli-revert-update-semantics",
+        "cli",
+        LabelOntologySignalKind::BoundaryIssue,
+        LabelOntologyProposedAction::UpdateSemantics,
+        0.42,
+    );
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![update_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed semantics description adjustment.",
+        ),
+    )?;
+
+    let changed_semantics = kanban_sqlite::upsert_label_semantics_with_options(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            expected_semantics_hash: Some(seed_semantics.semantics_hash.clone()),
+            description: Some("Command-line interface and CLI JSON behavior".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+        kanban_sqlite::LabelSemanticsMutationOptions {
+            actor: reviewer_actor(),
+            reason: Some("Clarify CLI semantics description.".to_owned()),
+            source_signal_ids: vec![signal_id.clone()],
+        },
+    )?;
+    assert_ne!(
+        changed_semantics.semantics_hash,
+        seed_semantics.semantics_hash
+    );
+    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
+    let update_action = detail
+        .actions
+        .iter()
+        .find(|action| action.action_type == LabelOntologyActionType::UpdateSemantics)
+        .context("update_semantics action")?
+        .clone();
+    assert_eq!(
+        update_action.result_atom_content_hash.as_deref(),
+        Some(stable_atom.content_hash.as_str())
+    );
+
+    let revert_action = revert_label_ontology_mutation(
+        &temp.path,
+        "default",
+        LabelOntologyRevertInput {
+            actor: reviewer_actor(),
+            target_action_id: update_action.id.clone(),
+            expected_current_hash: update_action.canonical_after_hash.clone(),
+            reason: "Revert semantics description adjustment.".to_owned(),
+        },
+    )?;
+
+    assert_eq!(
+        revert_action.action_type,
+        LabelOntologyActionType::RevertOntologyMutation
+    );
+    assert_eq!(
+        revert_action.parent_action_id.as_deref(),
+        Some(update_action.id.as_str())
+    );
+    assert_eq!(
+        revert_action.canonical_after_hash,
+        update_action.canonical_before_hash
+    );
+    assert_semantics_content_eq(
+        &get_label_semantics(&temp.path, "default", "cli")?,
+        &seed_semantics,
+    );
+
+    let atom_explain = explain_label_atom(&temp.path, "default", &stable_atom.content_hash)?;
+    let explain_action_types = atom_explain
+        .provenance_actions
+        .iter()
+        .map(|provenance| provenance.action.action_type)
+        .collect::<Vec<_>>();
+    assert!(
+        explain_action_types.contains(&LabelOntologyActionType::UpdateSemantics),
+        "{explain_action_types:?}"
+    );
+    assert!(
+        explain_action_types.contains(&LabelOntologyActionType::RevertOntologyMutation),
+        "{explain_action_types:?}"
+    );
+    assert!(atom_explain.current_semantics.is_some());
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_revert_rejects_expected_hash_mismatch_without_new_action() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_revert_rejects_expected_hash_mismatch_without_new_action")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Revert expected hash mismatch source"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![sample_signal_input("cli-revert-wrong-expected-hash")]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed expected hash mismatch fixture.",
+        ),
+    )?;
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![signal_id],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed atom for expected hash mismatch test.".to_owned(),
+        },
+    )?;
+    let action_count_before = ontology_action_count(&temp.path)?;
+    let current_semantics = get_label_semantics(&temp.path, "default", "cli")?;
+
+    let error = result_err(revert_label_ontology_mutation(
+        &temp.path,
+        "default",
+        LabelOntologyRevertInput {
+            actor: reviewer_actor(),
+            target_action_id: apply_action.id,
+            expected_current_hash: Some("definitely-not-the-current-hash".to_owned()),
+            reason: "Wrong expected hash should reject before writing action.".to_owned(),
+        },
+    ))?;
+
+    assert!(
+        error
+            .to_string()
+            .contains("expected_current_hash does not match"),
+        "{error}"
+    );
+    assert_eq!(ontology_action_count(&temp.path)?, action_count_before);
+    assert_semantics_content_eq(
+        &get_label_semantics(&temp.path, "default", "cli")?,
+        &current_semantics,
     );
 
     Ok(())
@@ -5203,6 +5573,42 @@ fn add_atom_action_count(path: &Path) -> anyhow::Result<i64> {
         [],
         |row| row.get(0),
     )?)
+}
+
+fn assert_semantics_content_eq(
+    actual: &kanban_sqlite::LabelSemanticsRecord,
+    expected: &kanban_sqlite::LabelSemanticsRecord,
+) {
+    assert_eq!(actual.semantics_hash, expected.semantics_hash);
+    assert_eq!(actual.description, expected.description);
+    assert_eq!(actual.applies_when, expected.applies_when);
+    assert_eq!(actual.excludes_when, expected.excludes_when);
+    assert_eq!(actual.positive_examples, expected.positive_examples);
+    assert_eq!(actual.negative_examples, expected.negative_examples);
+    assert_eq!(
+        actual
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>(),
+        expected
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>()
+    );
 }
 
 fn ontology_action_count(path: &Path) -> anyhow::Result<i64> {

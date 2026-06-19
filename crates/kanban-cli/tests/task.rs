@@ -1959,6 +1959,37 @@ fn label_ontology_cli_revert_action_round_trip() -> anyhow::Result<()> {
             reason: "Confirmed false-negative support for CLI surface changes.".to_owned(),
         },
     )?;
+    let action_count_before_failed_revert = ontology_action_count(&temp.path)?;
+
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "ontology",
+            "revert",
+            &applied.id,
+            "--expected-current-hash",
+            "not-the-current-semantics-hash",
+            "--reason",
+            "This revert should fail before writing a new action.",
+        ],
+    )?
+    .failure_containing("expected_current_hash does not match")?;
+    assert_eq!(
+        ontology_action_count(&temp.path)?,
+        action_count_before_failed_revert
+    );
+    let after_failed_revert = get_label_semantics(&temp.path, "default", "cli")?;
+    assert_ne!(
+        after_failed_revert.semantics_hash,
+        before_semantics.semantics_hash
+    );
+    assert!(
+        after_failed_revert
+            .atoms
+            .iter()
+            .any(|atom| applied.result_atom_id.as_deref() == Some(atom.id.as_str()))
+    );
 
     let reverted = kanban(
         &temp.path,
@@ -2557,6 +2588,14 @@ fn add_atom_action_count(path: &Path) -> anyhow::Result<i64> {
     Ok(kanban_sqlite::connect_file(path)?.query_row(
         "SELECT COUNT(*) FROM label_ontology_actions \
          WHERE action_type IN ('add_positive_atom','add_negative_atom')",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+fn ontology_action_count(path: &Path) -> anyhow::Result<i64> {
+    Ok(kanban_sqlite::connect_file(path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_actions",
         [],
         |row| row.get(0),
     )?)

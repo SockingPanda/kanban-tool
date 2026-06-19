@@ -104,6 +104,7 @@ export type LabelSuggestionResult = {
   coverage_cosine: number
   residual_norm: number
   needs_new_label: boolean
+  reason_codes: string[]
   degraded: boolean
   diagnostics: string[]
 }

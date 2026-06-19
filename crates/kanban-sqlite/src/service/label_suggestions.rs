@@ -182,9 +182,19 @@ pub(crate) fn compute_task_label_suggestions_with(
     selected_labels.truncate(options.output_limit);
     let coverage = solver_result.coverage;
     let degraded = !diagnostics.is_empty();
-    let needs_new_label = selected_labels.is_empty()
-        || coverage < NEW_LABEL_COVERAGE_THRESHOLD
-        || solver_result.needs_new_label;
+    let reason_codes = label_suggestion_reason_codes(
+        selected_labels.is_empty(),
+        coverage,
+        solver_result.residual_norm,
+        solver_result.needs_new_label,
+        degraded,
+        &diagnostics,
+        &solver_config,
+    );
+    let needs_new_label = !degraded
+        && reason_codes
+            .iter()
+            .any(|code| is_label_coverage_review_reason(code));
     Ok(LabelSuggestionComputation {
         result: LabelSuggestionResult {
             task_id: task.id,
@@ -195,6 +205,7 @@ pub(crate) fn compute_task_label_suggestions_with(
             coverage_cosine: solver_result.coverage_cosine,
             residual_norm: solver_result.residual_norm,
             needs_new_label,
+            reason_codes,
             degraded,
             diagnostics,
         },
@@ -398,6 +409,7 @@ fn empty_result(
 ) -> LabelSuggestionResult {
     diagnostics.sort();
     diagnostics.dedup();
+    let needs_new_label = !degraded && needs_new_label;
     LabelSuggestionResult {
         task_id,
         board_id,
@@ -407,6 +419,7 @@ fn empty_result(
         coverage_cosine: 0.0,
         residual_norm: 1.0,
         needs_new_label,
+        reason_codes: empty_label_suggestion_reason_codes(degraded, needs_new_label, &diagnostics),
         degraded,
         diagnostics,
     }
@@ -439,6 +452,87 @@ pub(crate) fn bounded_diagnostic_message(error: &impl std::fmt::Display) -> Stri
     } else {
         message
     }
+}
+
+fn label_suggestion_reason_codes(
+    no_selected_labels: bool,
+    coverage: f32,
+    residual_norm: f32,
+    solver_needs_new_label: bool,
+    degraded: bool,
+    diagnostics: &[String],
+    solver_config: &LabelSolverConfig,
+) -> Vec<String> {
+    let mut reason_codes = Vec::new();
+    if degraded {
+        reason_codes.push("degraded_result".to_owned());
+        reason_codes.extend(
+            diagnostics
+                .iter()
+                .filter(|diagnostic| is_stable_label_suggestion_diagnostic(diagnostic))
+                .cloned(),
+        );
+    } else {
+        if no_selected_labels {
+            reason_codes.push("no_selected_labels".to_owned());
+        }
+        if coverage < NEW_LABEL_COVERAGE_THRESHOLD {
+            reason_codes.push("coverage_below_threshold".to_owned());
+        }
+        if residual_norm > solver_config.max_residual_norm {
+            reason_codes.push("residual_above_threshold".to_owned());
+        }
+        if solver_needs_new_label && reason_codes.is_empty() {
+            reason_codes.push("unexplained_residual".to_owned());
+        }
+    }
+    reason_codes.sort();
+    reason_codes.dedup();
+    reason_codes
+}
+
+fn empty_label_suggestion_reason_codes(
+    degraded: bool,
+    needs_new_label: bool,
+    diagnostics: &[String],
+) -> Vec<String> {
+    if degraded {
+        let mut reason_codes = vec!["degraded_result".to_owned()];
+        reason_codes.extend(
+            diagnostics
+                .iter()
+                .filter(|diagnostic| is_stable_label_suggestion_diagnostic(diagnostic))
+                .cloned(),
+        );
+        reason_codes.sort();
+        reason_codes.dedup();
+        return reason_codes;
+    }
+    if needs_new_label {
+        return vec!["no_selected_labels".to_owned()];
+    }
+    Vec::new()
+}
+
+fn is_label_coverage_review_reason(code: &str) -> bool {
+    matches!(
+        code,
+        "no_selected_labels"
+            | "coverage_below_threshold"
+            | "residual_above_threshold"
+            | "unexplained_residual"
+    )
+}
+
+fn is_stable_label_suggestion_diagnostic(diagnostic: &str) -> bool {
+    matches!(
+        diagnostic,
+        "vector_store_disabled"
+            | "vector_query_error"
+            | "label_atom_index_dirty"
+            | "label_atom_index_error"
+            | "label_atom_index_empty"
+    )
 }
 
 #[cfg(test)]

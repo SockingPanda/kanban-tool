@@ -1272,9 +1272,14 @@ fn label_suggestion_lines(result: &LabelSuggestionResult) -> String {
     if result.degraded {
         lines.push(format!("degraded: {}", result.diagnostics.join(",")));
     }
+    let reason_codes = if result.reason_codes.is_empty() {
+        "none".to_owned()
+    } else {
+        result.reason_codes.join(",")
+    };
     lines.push(format!(
-        "coverage={:.3} coverage_cosine={:.3} residual_norm={:.3} needs_new_label={}",
-        result.coverage, result.coverage_cosine, result.residual_norm, result.needs_new_label
+        "coverage={:.3} coverage_cosine={:.3} residual_norm={:.3} label_coverage_review={} reason_codes={}",
+        result.coverage, result.coverage_cosine, result.residual_norm, result.needs_new_label, reason_codes
     ));
     lines.join("\n")
 }

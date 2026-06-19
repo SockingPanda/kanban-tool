@@ -534,6 +534,21 @@ suggest 误选、存在 vocabulary gap 或 label 边界/名称问题。
 | `superseded_by_signal_id` / `status_reason` | 关闭或替代原因。 |
 | `created_at` / `updated_at` / `reviewed_at` / `closed_at` | 生命周期时间。 |
 
+`label ontology review` 是基于 signals 的只读聚合投影，不是新的 canonical truth。
+group key 来自调用方选择的维度：`label` 使用目标 label，`proposed-label` 使用 normalized
+proposed label name，`candidate-atom` 优先使用 `candidate_content_hash`。没有 candidate
+atom 的 signals 不会进入一个全局空值 bucket；fallback key 会带上 signal kind、target
+label 或 proposed label、以及 proposed action，例如
+`no-candidate-atom|kind:vocabulary_gap|proposed:ontology ledger|action:bootstrap_label`。
+因此一个 group 的含义是“这些 signals 共享同一个 review key”，不是“这些 signals 已被证明
+来自同一个根因”。
+
+Review queue 的默认排序使用 distinct source task count（`task_count`）作为主要热度指标，
+再按 confirmed count、latest signal time 和 key 排序。`signal_count` 只是 group 内原始
+signal 行数；同一 task 可以贡献多条 signals，所以它不能单独代表模型错误率、precision、
+recall 或 label suggest 质量。需要质量指标时必须另有 denominator，例如 agreement cohort
+或固定评估集。
+
 表：`label_ontology_actions`
 
 Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、修改 ontology 或

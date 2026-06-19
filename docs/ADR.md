@@ -109,7 +109,7 @@ tasks snapshot + task_events append-only
 
 ---
 
-## ADR-0004：CLI 可以直接访问 SQLite，但必须走 Core Service
+## ADR-0004：CLI 可以直接访问 SQLite，但必须走统一 service path
 
 ### Status
 
@@ -121,7 +121,9 @@ Accepted
 
 ### Decision
 
-CLI 可以直接打开 SQLite DB，但只能调用 `kanban-core` service / `kanban-sqlite` repository，不允许绕过状态机执行裸 SQL 修改状态。
+CLI 可以直接打开 SQLite DB，但只能调用统一 Rust service path；当前实现主要是
+`kanban-sqlite::service` use-case 函数，并复用 `kanban-core` 的纯状态机 helper。
+CLI 不允许绕过状态机执行裸 SQL 修改状态。
 
 ### Consequences
 
@@ -134,7 +136,8 @@ CLI 可以直接打开 SQLite DB，但只能调用 `kanban-core` service / `kanb
 代价：
 
 - 需要处理 CLI/server/dispatcher 同机并发。
-- 所有状态逻辑必须集中在 core。
+- 所有状态逻辑必须集中在共享 service/state-machine path，避免 CLI、server 或
+  dispatcher 各自实现一套状态转换。
 
 ---
 

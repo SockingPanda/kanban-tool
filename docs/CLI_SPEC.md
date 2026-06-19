@@ -2,7 +2,8 @@
 
 默认 binary 名称：`kanban`
 
-CLI 是一等入口；它与 Web 使用同一套 command service 和 SQLite schema。
+CLI 是一等入口；它与 Web 使用同一套 `kanban-sqlite::service` backed service path
+和 SQLite schema。
 
 ---
 
@@ -318,7 +319,7 @@ kanban task update <task_ref> [OPTIONS]
 - metadata
 
 不允许通过 update 修改 status；status 必须通过 transition command。允许字段仍由
-command service 处理，因此修改 description、scheduled_at 等会影响 spec 或
+shared service path 处理，因此修改 description、scheduled_at 等会影响 spec 或
 schedule 的字段后，服务会根据 spec、schedule 和当前 dependencies 重新计算
 active task 的目标状态并写入对应事件。Dependency edge 通过 `kanban dep`
 命令修改；`max_retries` 只更新 retry policy，不是 status recompute 触发器。

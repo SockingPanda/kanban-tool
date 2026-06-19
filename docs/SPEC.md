@@ -15,7 +15,9 @@
 1. **持久化**：任务、状态、依赖、评论、事件、运行历史必须落盘。
 2. **可恢复**：本地进程崩溃后，任务可以通过 claim TTL / heartbeat / reclaim 恢复。
 3. **可审计**：每次关键变化写入 `task_events`。
-4. **多入口一致**：Web、CLI、dispatcher 必须走同一套 Rust command service，不允许绕过状态机直接写状态。
+4. **多入口一致**：Web、CLI、dispatcher 必须走同一套 Rust use-case/service path
+   （当前主要在 `kanban-sqlite::service`，并复用 `kanban-core` 状态机 helper），
+   不允许绕过状态机直接写状态。
 5. **SQLite-only**：第一版只支持 SQLite，不设计 PostgreSQL/MongoDB backend。
 6. **单用户本地语义**：actor 是操作来源字符串，用于审计，不用于鉴权。
 

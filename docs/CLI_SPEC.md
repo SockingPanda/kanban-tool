@@ -881,6 +881,24 @@ proposed label、distinct task count、signal/status/degraded/action counts、sc
 summary、sample task refs、signal ids、action ids 和 proposal ids。排序优先使用
 distinct task count，其次 confirmed count、latest signal time 和 key。
 
+Review group 只表示一组 signals 共享同一个聚合键，不证明它们一定来自同一个根因。
+`--group-by label` 使用 `target_label_id` 作为 key，缺失目标 label 时使用
+`no-target-label`。`--group-by proposed-label` 使用 normalized proposed label name，
+缺失候选新 label 时使用 `no-proposed-label`。`--group-by candidate-atom` 优先使用
+`candidate_content_hash`；如果 signal 没有 candidate atom，则 key 会包含 signal kind、
+target label 或 proposed label、以及 proposed action，例如
+`no-candidate-atom|kind:vocabulary_gap|proposed:ontology ledger|action:bootstrap_label`。
+这个 fallback 避免把不同 kind、不同 label 或不同 proposed action 的空 candidate
+signals 合并到一个全局 bucket。
+
+`task_count` 是 group 内 distinct source task 数，也是默认热度排序的第一依据；同一 task
+上的多条 signals 仍只贡献一个 distinct task。`signal_count` 是原始 signal 行数，
+用于判断一组里有多少审查项；它没有 denominator，不能解释为模型错误率、precision
+或 recall。`degraded_count`、status counts、score summary 和 sample task refs 只是
+reviewer 的排查线索。排序为 `task_count` desc、`confirmed_count` desc、
+`latest_signal_at` desc、`key` asc；需要判断是否同一问题时，应继续查看 group 的
+sample tasks、signal ids 和 `label ontology show` 详情。
+
 Lifecycle commands 写入 action 并同步更新 signal status：
 
 - `confirm`：`open` signal 进入 `confirmed`。

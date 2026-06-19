@@ -200,6 +200,162 @@ fn label_ontology_records_observation_signals_and_preserves_board_scope() -> any
 }
 
 #[test]
+fn label_ontology_record_derives_metrics_from_snapshot_and_preserves_canonical_state()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_record_derives_metrics_from_snapshot_and_preserves_canonical_state",
+    )?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Capture ontology record metrics from suggest snapshot"),
+    )?;
+
+    let labels_before = list_labels(&temp.path, "default")?;
+    let task_labels_before = get_task(&temp.path, "default", &task.id)?.labels;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+    let mut input = sample_record_input(vec![sample_signal_input("snapshot-derived")]);
+    input.suggestion_snapshot_json = json!({
+        "selected_labels": [],
+        "candidates": [],
+        "coverage": 0.42,
+        "coverage_cosine": 0.37,
+        "residual_norm": 0.58,
+        "needs_new_label": true,
+        "degraded": true,
+        "diagnostics": ["vector_store_disabled"]
+    })
+    .to_string();
+    input.suggest_coverage = None;
+    input.suggest_coverage_cosine = None;
+    input.suggest_residual_norm = None;
+    input.suggest_needs_new_label = false;
+    input.suggest_degraded = false;
+    input.diagnostics_json = json!([]).to_string();
+    input.capture_fingerprint = Some("snapshot-derived-capture".to_owned());
+
+    let observation =
+        record_label_ontology_observation(&temp.path, "default", &task.id, input.clone())?;
+
+    assert_score_near(observation.suggest_coverage, 0.42);
+    assert_score_near(observation.suggest_coverage_cosine, 0.37);
+    assert_score_near(observation.suggest_residual_norm, 0.58);
+    assert!(observation.suggest_needs_new_label);
+    assert!(observation.suggest_degraded);
+    let diagnostics: serde_json::Value = serde_json::from_str(&observation.diagnostics_json)?;
+    assert_eq!(diagnostics, json!(["vector_store_disabled"]));
+    assert_eq!(observation.capture_fingerprint, "snapshot-derived-capture");
+
+    assert_eq!(list_labels(&temp.path, "default")?, labels_before);
+    assert_eq!(
+        get_task(&temp.path, "default", &task.id)?.labels,
+        task_labels_before
+    );
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
+
+    let duplicate_error = result_err(record_label_ontology_observation(
+        &temp.path, "default", &task.id, input,
+    ))?;
+    assert!(
+        duplicate_error.to_string().contains("capture_fingerprint")
+            || duplicate_error.to_string().contains("UNIQUE"),
+        "error: {duplicate_error}"
+    );
+    let signals = list_label_ontology_signals(
+        &temp.path,
+        "default",
+        LabelOntologySignalListOptions::default(),
+    )?;
+    assert_eq!(signals.len(), 1);
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_record_rejects_conflicting_snapshot_metrics() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_record_rejects_conflicting_snapshot_metrics")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject contradictory ontology record metrics"),
+    )?;
+    let snapshot = json!({
+        "coverage": 0.42,
+        "coverage_cosine": 0.37,
+        "residual_norm": 0.58,
+        "diagnostics": ["derived-diagnostic"]
+    })
+    .to_string();
+
+    let mut coverage_conflict = sample_record_input(vec![sample_signal_input("coverage-conflict")]);
+    coverage_conflict.suggestion_snapshot_json = snapshot.clone();
+    coverage_conflict.suggest_coverage = Some(0.99);
+    let error = result_err(record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        coverage_conflict,
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("suggest_coverage conflicts with suggestion_snapshot_json.coverage"),
+        "error: {error}"
+    );
+
+    let mut diagnostics_conflict =
+        sample_record_input(vec![sample_signal_input("diagnostics-conflict")]);
+    diagnostics_conflict.suggestion_snapshot_json = snapshot;
+    diagnostics_conflict.suggest_coverage = None;
+    diagnostics_conflict.suggest_coverage_cosine = None;
+    diagnostics_conflict.suggest_residual_norm = None;
+    diagnostics_conflict.diagnostics_json = json!(["manual-diagnostic"]).to_string();
+    let error = result_err(record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        diagnostics_conflict,
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("diagnostics_json conflicts with suggestion_snapshot_json.diagnostics"),
+        "error: {error}"
+    );
+
+    assert!(
+        list_label_ontology_signals(
+            &temp.path,
+            "default",
+            LabelOntologySignalListOptions::default(),
+        )?
+        .is_empty()
+    );
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_signal_input_rejects_atom_polarity_kind_mismatches() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_signal_input_rejects_atom_polarity_kind_mismatches")?;
     init_database(&temp.path, "tester")?;

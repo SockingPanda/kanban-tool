@@ -2448,20 +2448,9 @@ fn derive_record_metrics_from_snapshot(
         "residual_norm",
         "suggest_residual_norm",
     )?;
-    input.suggest_needs_new_label = derive_snapshot_bool(
-        Some(input.suggest_needs_new_label),
-        &snapshot,
-        "needs_new_label",
-        "suggest_needs_new_label",
-    )?
-    .unwrap_or(false);
-    input.suggest_degraded = derive_snapshot_bool(
-        Some(input.suggest_degraded),
-        &snapshot,
-        "degraded",
-        "suggest_degraded",
-    )?
-    .unwrap_or(false);
+    input.suggest_needs_new_label =
+        derive_snapshot_bool(input.suggest_needs_new_label, &snapshot, "needs_new_label")?;
+    input.suggest_degraded = derive_snapshot_bool(input.suggest_degraded, &snapshot, "degraded")?;
     input.diagnostics_json = derive_diagnostics_json(&input.diagnostics_json, &snapshot)?;
     Ok(input)
 }
@@ -2484,27 +2473,19 @@ fn derive_snapshot_f64(
 }
 
 fn derive_snapshot_bool(
-    supplied: Option<bool>,
+    supplied: bool,
     snapshot: &JsonValue,
     snapshot_field: &str,
-    supplied_field: &str,
-) -> Result<Option<bool>> {
+) -> Result<bool> {
     let derived = optional_snapshot_bool(snapshot, snapshot_field)?;
-    if let (Some(supplied), Some(derived)) = (supplied, derived)
-        && supplied != derived
-    {
-        return Err(KanbanError::InvalidInput(format!(
-            "{supplied_field} conflicts with suggestion_snapshot_json.{snapshot_field}"
-        )));
-    }
-    Ok(supplied.or(derived))
+    Ok(derived.unwrap_or(supplied))
 }
 
 fn derive_diagnostics_json(input: &str, snapshot: &JsonValue) -> Result<String> {
     let supplied = parse_json_field(input, "diagnostics_json", JsonShape::Array)?;
     let derived = optional_snapshot_array(snapshot, "diagnostics")?;
     if let Some(derived) = derived {
-        if supplied != derived {
+        if supplied != serde_json::json!([]) && supplied != derived {
             return Err(KanbanError::InvalidInput(
                 "diagnostics_json conflicts with suggestion_snapshot_json.diagnostics".into(),
             ));

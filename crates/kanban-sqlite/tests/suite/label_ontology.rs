@@ -484,6 +484,94 @@ fn label_ontology_review_groups_by_candidate_atom() -> anyhow::Result<()> {
 }
 
 #[test]
+fn label_ontology_review_candidate_atom_fallback_separates_empty_candidates() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_review_candidate_atom_fallback_separates_empty_candidates")?;
+    let fixture = seed_label_ontology_review_fixture(&temp)?;
+    let gap_task_same = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Ontology gap source C"),
+    )?;
+    let gap_task_other = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Decision comment gap source"),
+    )?;
+
+    let same_gap_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &gap_task_same.id,
+        review_record_input(vec![review_gap_signal(
+            "gap-open-same",
+            "Ontology Ledger",
+            0.11,
+        )]),
+    )?;
+    let other_gap_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &gap_task_other.id,
+        review_record_input(vec![review_gap_signal(
+            "gap-open-other",
+            "Decision Comments",
+            0.13,
+        )]),
+    )?;
+
+    let groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::CandidateAtom,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+
+    let ontology_gap = groups
+        .iter()
+        .find(|group| group.signal_ids.contains(&fixture.open_gap_signal_id))
+        .context("ontology ledger empty-candidate group")?;
+    assert!(ontology_gap.key.contains("no-candidate-atom"));
+    assert!(ontology_gap.key.contains("vocabulary_gap"));
+    assert!(ontology_gap.key.contains("bootstrap_label"));
+    assert!(ontology_gap.key.contains("ontology ledger"));
+    assert_eq!(ontology_gap.task_count, 2);
+    assert_eq!(ontology_gap.signal_count, 2);
+    assert!(
+        ontology_gap
+            .signal_ids
+            .contains(&same_gap_observation.signals[0].id)
+    );
+
+    let other_gap = groups
+        .iter()
+        .find(|group| {
+            group
+                .signal_ids
+                .contains(&other_gap_observation.signals[0].id)
+        })
+        .context("decision comments empty-candidate group")?;
+    assert!(other_gap.key.contains("decision comments"));
+    assert_eq!(other_gap.task_count, 1);
+    assert_eq!(other_gap.signal_count, 1);
+    assert_ne!(ontology_gap.key, other_gap.key);
+
+    let cli_atom = groups
+        .iter()
+        .find(|group| group.candidate_text.as_deref() == Some("adds CLI commands"))
+        .context("cli candidate atom group")?;
+    assert_eq!(cli_atom.task_count, 2);
+    assert_eq!(cli_atom.signal_count, 2);
+    Ok(())
+}
+
+#[test]
 fn label_ontology_review_groups_by_proposed_label_and_include_all() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_review_groups_by_proposed_label_and_include_all")?;
     let fixture = seed_label_ontology_review_fixture(&temp)?;

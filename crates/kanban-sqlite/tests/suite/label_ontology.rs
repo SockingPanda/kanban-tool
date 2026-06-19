@@ -1577,6 +1577,173 @@ fn label_ontology_atom_apply_records_provenance_and_validation_resolves_signal()
 }
 
 #[test]
+fn label_ontology_apply_existing_positive_atom_records_provenance_only_action() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_apply_existing_positive_atom_records_provenance_only_action")?;
+    let fixture = seed_existing_atom_apply_fixture(
+        &temp,
+        ExistingAtomApplyKind::Positive,
+        vec!["existing-positive-atom"],
+    )?;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+    let semantics_before = get_label_semantics(&temp.path, "default", "cli")?;
+    clear_label_atom_dirty_flags(&temp.path, "default")?;
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+    let add_action_count_before = add_atom_action_count(&temp.path)?;
+
+    let action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![fixture.signal_ids[0].clone()],
+            label_ref: "cli".to_owned(),
+            kind: fixture.atom_kind.clone(),
+            text: fixture.atom_text.clone(),
+            reason: "Link confirmed signal to existing positive atom.".to_owned(),
+        },
+    )?;
+
+    assert_existing_atom_adoption_action(&action, &fixture, "add_positive_atom")?;
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
+    assert_eq!(
+        get_label_semantics(&temp.path, "default", "cli")?,
+        semantics_before
+    );
+    assert_eq!(add_atom_action_count(&temp.path)?, add_action_count_before);
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+
+    let explain = explain_label_atom(&temp.path, "default", &fixture.atom_id)?;
+    assert!(!explain.legacy_untracked);
+    assert!(explain.provenance_actions.iter().any(|provenance| {
+        provenance.action.id == action.id
+            && provenance.action.action_type == LabelOntologyActionType::AdoptExistingAtom
+            && provenance.matched_by == "atom_id"
+    }));
+    assert!(
+        explain
+            .supporting_signals
+            .iter()
+            .any(|support| support.signal.id == fixture.signal_ids[0])
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_apply_existing_negative_atom_records_provenance_only_action() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_apply_existing_negative_atom_records_provenance_only_action")?;
+    let fixture = seed_existing_atom_apply_fixture(
+        &temp,
+        ExistingAtomApplyKind::Negative,
+        vec!["existing-negative-atom"],
+    )?;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+    clear_label_atom_dirty_flags(&temp.path, "default")?;
+    let add_action_count_before = add_atom_action_count(&temp.path)?;
+
+    let action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![fixture.signal_ids[0].clone()],
+            label_ref: "cli".to_owned(),
+            kind: fixture.atom_kind.clone(),
+            text: fixture.atom_text.clone(),
+            reason: "Link confirmed signal to existing negative atom.".to_owned(),
+        },
+    )?;
+
+    assert_existing_atom_adoption_action(&action, &fixture, "add_negative_atom")?;
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
+    assert_eq!(add_atom_action_count(&temp.path)?, add_action_count_before);
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_apply_existing_atom_repeatedly_keeps_canonical_state_clean() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_apply_existing_atom_repeatedly_keeps_canonical_state_clean")?;
+    let fixture = seed_existing_atom_apply_fixture(
+        &temp,
+        ExistingAtomApplyKind::Positive,
+        vec!["existing-atom-first", "existing-atom-second"],
+    )?;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+    let semantics_before = get_label_semantics(&temp.path, "default", "cli")?;
+    clear_label_atom_dirty_flags(&temp.path, "default")?;
+    let add_action_count_before = add_atom_action_count(&temp.path)?;
+
+    let first_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![fixture.signal_ids[0].clone()],
+            label_ref: "cli".to_owned(),
+            kind: fixture.atom_kind.clone(),
+            text: fixture.atom_text.clone(),
+            reason: "Link first signal to existing atom.".to_owned(),
+        },
+    )?;
+    let second_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![fixture.signal_ids[1].clone()],
+            label_ref: "cli".to_owned(),
+            kind: fixture.atom_kind.clone(),
+            text: fixture.atom_text.clone(),
+            reason: "Link second signal to existing atom.".to_owned(),
+        },
+    )?;
+
+    assert_ne!(first_action.id, second_action.id);
+    assert_existing_atom_adoption_action(&first_action, &fixture, "add_positive_atom")?;
+    assert_existing_atom_adoption_action(&second_action, &fixture, "add_positive_atom")?;
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
+    assert_eq!(
+        get_label_semantics(&temp.path, "default", "cli")?,
+        semantics_before
+    );
+    assert_eq!(add_atom_action_count(&temp.path)?, add_action_count_before);
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+
+    let explain = explain_label_atom(&temp.path, "default", &fixture.atom_id)?;
+    let adoption_action_ids = explain
+        .provenance_actions
+        .iter()
+        .filter(|provenance| {
+            provenance.action.action_type == LabelOntologyActionType::AdoptExistingAtom
+        })
+        .map(|provenance| provenance.action.id.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(adoption_action_ids.contains(first_action.id.as_str()));
+    assert!(adoption_action_ids.contains(second_action.id.as_str()));
+    let support_signal_ids = explain
+        .supporting_signals
+        .iter()
+        .map(|support| support.signal.id.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(support_signal_ids.contains(fixture.signal_ids[0].as_str()));
+    assert!(support_signal_ids.contains(fixture.signal_ids[1].as_str()));
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_validation_serialization_grows_linearly_with_signal_cases() -> anyhow::Result<()>
 {
     let size_1 = validated_payload_size_for_signal_count(1)?;
@@ -3797,6 +3964,211 @@ fn sample_record_input(signals: Vec<LabelOntologySignalInput>) -> LabelOntologyR
         capture_fingerprint: None,
         signals,
     }
+}
+
+enum ExistingAtomApplyKind {
+    Positive,
+    Negative,
+}
+
+struct ExistingAtomApplyFixture {
+    signal_ids: Vec<String>,
+    target_label_id: String,
+    atom_id: String,
+    atom_content_hash: String,
+    atom_kind: String,
+    atom_text: String,
+}
+
+fn seed_existing_atom_apply_fixture(
+    temp: &TempDb,
+    kind: ExistingAtomApplyKind,
+    signal_keys: Vec<&str>,
+) -> anyhow::Result<ExistingAtomApplyFixture> {
+    init_database(&temp.path, "tester")?;
+    let label = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let (atom_kind, atom_text, semantics_input, signals) = match kind {
+        ExistingAtomApplyKind::Positive => {
+            let atom_kind = "applies_when".to_owned();
+            let atom_text =
+                "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned();
+            let semantics_input = UpsertLabelSemantics {
+                label_ref: "cli".to_owned(),
+                applies_when: vec![atom_text.clone()],
+                ..UpsertLabelSemantics::default()
+            };
+            let signals = signal_keys
+                .into_iter()
+                .map(sample_signal_input)
+                .collect::<Vec<_>>();
+            (atom_kind, atom_text, semantics_input, signals)
+        }
+        ExistingAtomApplyKind::Negative => {
+            let atom_kind = "excludes_when".to_owned();
+            let atom_text =
+                "only changes unrelated release notes without touching CLI behavior".to_owned();
+            let semantics_input = UpsertLabelSemantics {
+                label_ref: "cli".to_owned(),
+                excludes_when: vec![atom_text.clone()],
+                ..UpsertLabelSemantics::default()
+            };
+            let signals = signal_keys
+                .into_iter()
+                .map(|signal_key| {
+                    let mut signal = sample_signal_input(signal_key);
+                    signal.proposed_action = LabelOntologyProposedAction::AddNegativeAtom;
+                    signal.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+                        polarity: "negative".to_owned(),
+                        kind: atom_kind.clone(),
+                        text: atom_text.clone(),
+                    });
+                    signal.rationale =
+                        "The task was a false positive for cli and needs negative evidence."
+                            .to_owned();
+                    signal
+                })
+                .collect::<Vec<_>>();
+            (atom_kind, atom_text, semantics_input, signals)
+        }
+    };
+    upsert_label_semantics(&temp.path, "default", semantics_input)?;
+    let atom = list_label_atoms(&temp.path, "default")?
+        .into_iter()
+        .find(|atom| atom.kind == atom_kind && atom.text == atom_text)
+        .context("seeded atom")?;
+    let signal_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Existing ontology atom provenance source"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &signal_task.id,
+        sample_record_input(signals),
+    )?;
+    let signal_ids = observation
+        .signals
+        .iter()
+        .map(|signal| signal.id.clone())
+        .collect::<Vec<_>>();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            signal_ids.clone(),
+            "Confirmed existing atom provenance signal.",
+        ),
+    )?;
+    Ok(ExistingAtomApplyFixture {
+        signal_ids,
+        target_label_id: label.id,
+        atom_id: atom.id,
+        atom_content_hash: atom.content_hash,
+        atom_kind,
+        atom_text,
+    })
+}
+
+fn assert_existing_atom_adoption_action(
+    action: &kanban_sqlite::LabelOntologyActionRecord,
+    fixture: &ExistingAtomApplyFixture,
+    requested_action_type: &str,
+) -> anyhow::Result<()> {
+    assert_eq!(
+        action.action_type,
+        LabelOntologyActionType::AdoptExistingAtom
+    );
+    assert_eq!(
+        action.validation_status,
+        LabelOntologyValidationStatus::NotRequired
+    );
+    assert_eq!(
+        action.target_label_id.as_deref(),
+        Some(fixture.target_label_id.as_str())
+    );
+    assert_eq!(
+        action.result_atom_id.as_deref(),
+        Some(fixture.atom_id.as_str())
+    );
+    assert_eq!(
+        action.result_atom_content_hash.as_deref(),
+        Some(fixture.atom_content_hash.as_str())
+    );
+    assert_eq!(action.canonical_before_hash, action.canonical_after_hash);
+    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
+    assert_eq!(change["canonical_changed"], false);
+    assert_eq!(change["provenance_only"], true);
+    assert_eq!(change["requested_action_type"], requested_action_type);
+    assert_eq!(change["added_atom"]["id"], fixture.atom_id);
+    assert_eq!(
+        change["added_atom"]["content_hash"],
+        fixture.atom_content_hash
+    );
+    assert_eq!(change["before"], change["after"]);
+    Ok(())
+}
+
+fn reviewer_actor() -> LabelOntologyActor {
+    LabelOntologyActor {
+        name: "reviewer".to_owned(),
+        actor_type: "user".to_owned(),
+        agent_type: None,
+    }
+}
+
+fn clear_label_atom_dirty_flags(path: &Path, board: &str) -> anyhow::Result<()> {
+    let board = get_board(path, board)?;
+    let conn = connect_file(path)?;
+    conn.execute(
+        "UPDATE derived_store_state SET dirty=0, last_error=NULL \
+         WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE label_atom_index_boards SET dirty=0, last_error=NULL \
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [board.id],
+    )?;
+    Ok(())
+}
+
+fn add_atom_action_count(path: &Path) -> anyhow::Result<i64> {
+    Ok(connect_file(path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_actions \
+         WHERE action_type IN ('add_positive_atom','add_negative_atom')",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+fn label_atom_store_dirty(path: &Path) -> anyhow::Result<bool> {
+    let stores = derived_store_statuses(path)?;
+    Ok(stores
+        .iter()
+        .find(|store| store.store_name == "lancedb_label_atoms")
+        .ok_or_else(|| test_error("missing lancedb_label_atoms"))?
+        .dirty)
+}
+
+fn label_atom_board_dirty(path: &Path, board: &str) -> anyhow::Result<bool> {
+    let board = get_board(path, board)?;
+    let count: i64 = connect_file(path)?.query_row(
+        "SELECT COUNT(*) FROM label_atom_index_boards \
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1 AND dirty<>0",
+        [board.id],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
 }
 
 struct LabelOntologyReviewFixture {

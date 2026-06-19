@@ -6,7 +6,9 @@ use anyhow::{Result, bail};
 use kanban_sqlite::{
     BootstrapTaskLabel, CreateLabel, LabelOntologyActionInput, LabelOntologyActionRecord,
     LabelOntologyActionType, LabelOntologyActor, LabelOntologyAtomApplyInput,
+    LabelOntologyCandidateAtomInput, LabelOntologyProposedAction, LabelOntologyRecordInput,
     LabelOntologyRetargetOptions, LabelOntologyReviewGroupBy, LabelOntologyReviewOptions,
+    LabelOntologySignalInput, LabelOntologySignalKind, LabelOntologySuggestState,
     LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
     LabelOntologyValidationStatus, LabelProposalCandidate, LabelProposalCreateOptions,
     LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalStatus,
@@ -28,7 +30,8 @@ use kanban_sqlite::{
     label_atom_index_status_with, query_label_atom_index_with, rebuild_label_atom_index_with,
     suggest_task_labels_with,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use std::{fs, io::Read, str::FromStr};
 
 use crate::args::{
@@ -453,7 +456,10 @@ fn handle_label_ontology(
 ) -> Result<()> {
     match command {
         crate::args::LabelOntologyCommand::Record(args) => {
-            let input = read_label_ontology_record_input(&args.input)?;
+            if args.capture_suggest && args.suggestion_snapshot.is_some() {
+                bail!("--capture-suggest cannot be used with --suggestion-snapshot");
+            }
+            let input = read_label_ontology_record_input(db_path, board, &args)?;
             let observation =
                 record_label_ontology_observation(db_path, board, &args.task_ref, input)?;
             print_or_json(json, &observation, || {
@@ -669,9 +675,273 @@ fn label_ontology_list_options(
     })
 }
 
-fn read_label_ontology_record_input(path: &str) -> Result<kanban_sqlite::LabelOntologyRecordInput> {
+fn read_label_ontology_record_input(
+    db_path: &PathBuf,
+    board: &str,
+    args: &crate::args::LabelOntologyRecordArgs,
+) -> Result<LabelOntologyRecordInput> {
+    let raw = read_json_input_string(&args.input)?;
+    if !args.capture_suggest
+        && args.suggestion_snapshot.is_none()
+        && let Ok(input) = serde_json::from_str::<LabelOntologyRecordInput>(&raw)
+    {
+        return Ok(input);
+    }
+
+    let capture = serde_json::from_str::<LabelOntologyRecordCaptureInput>(&raw)?;
+    capture.into_record_input(captured_or_supplied_suggestion_snapshot(
+        db_path, board, args,
+    )?)
+}
+
+#[derive(Debug, Deserialize)]
+struct LabelOntologyRecordCaptureInput {
+    actor: LabelOntologyActor,
+    #[serde(default)]
+    agent_candidates: Option<JsonValue>,
+    #[serde(default)]
+    agent_candidates_json: Option<String>,
+    #[serde(default)]
+    suggestion_snapshot: Option<JsonValue>,
+    #[serde(default)]
+    suggestion_snapshot_json: Option<String>,
+    #[serde(default)]
+    final_decision: Option<JsonValue>,
+    #[serde(default)]
+    final_decision_json: Option<String>,
+    #[serde(default)]
+    diagnostics: Option<JsonValue>,
+    #[serde(default)]
+    diagnostics_json: Option<String>,
+    #[serde(default)]
+    capture_fingerprint: Option<String>,
+    #[serde(default)]
+    signals: Vec<LabelOntologyCaptureSignalInput>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LabelOntologyCaptureSignalInput {
+    kind: LabelOntologySignalKind,
+    #[serde(default)]
+    target_label_ref: Option<String>,
+    #[serde(default)]
+    related_labels: Option<JsonValue>,
+    #[serde(default)]
+    related_labels_json: Option<String>,
+    proposed_action: LabelOntologyProposedAction,
+    #[serde(default)]
+    candidate_atom: Option<LabelOntologyCandidateAtomInput>,
+    #[serde(default)]
+    proposed_label_name: Option<String>,
+    #[serde(default)]
+    proposal: Option<JsonValue>,
+    #[serde(default)]
+    proposal_json: Option<String>,
+    #[serde(default)]
+    agent_selected: Option<bool>,
+    #[serde(default)]
+    suggest_state: Option<LabelOntologySuggestState>,
+    #[serde(default)]
+    suggest_score: Option<f64>,
+    #[serde(default)]
+    suggest_rank: Option<i64>,
+    #[serde(default)]
+    final_selected: Option<bool>,
+    rationale: String,
+    #[serde(default)]
+    confidence: Option<f64>,
+    #[serde(default)]
+    signal_key: Option<String>,
+}
+
+impl LabelOntologyRecordCaptureInput {
+    fn into_record_input(
+        self,
+        supplied_snapshot: Option<JsonValue>,
+    ) -> Result<LabelOntologyRecordInput> {
+        let input_snapshot = coalesce_json_value(
+            "suggestion_snapshot",
+            self.suggestion_snapshot,
+            "suggestion_snapshot_json",
+            self.suggestion_snapshot_json,
+            None,
+        )?;
+        let suggestion_snapshot = match (input_snapshot, supplied_snapshot) {
+            (Some(input), Some(supplied)) if input != supplied => {
+                bail!(
+                    "--suggestion-snapshot/--capture-suggest conflicts with input suggestion_snapshot"
+                )
+            }
+            (Some(input), _) => input,
+            (_, Some(supplied)) => supplied,
+            (None, None) => {
+                bail!(
+                    "simplified ontology record input requires suggestion_snapshot, --suggestion-snapshot, or --capture-suggest"
+                )
+            }
+        };
+        let diagnostics = coalesce_json_value(
+            "diagnostics",
+            self.diagnostics,
+            "diagnostics_json",
+            self.diagnostics_json,
+            suggestion_snapshot
+                .get("diagnostics")
+                .cloned()
+                .or_else(|| Some(serde_json::json!([]))),
+        )?
+        .unwrap_or_else(|| serde_json::json!([]));
+        Ok(LabelOntologyRecordInput {
+            actor: self.actor,
+            agent_candidates_json: json_value_to_string(
+                coalesce_json_value(
+                    "agent_candidates",
+                    self.agent_candidates,
+                    "agent_candidates_json",
+                    self.agent_candidates_json,
+                    Some(serde_json::json!([])),
+                )?
+                .unwrap_or_else(|| serde_json::json!([])),
+            )?,
+            suggestion_snapshot_json: json_value_to_string(suggestion_snapshot.clone())?,
+            final_decision_json: json_value_to_string(
+                coalesce_json_value(
+                    "final_decision",
+                    self.final_decision,
+                    "final_decision_json",
+                    self.final_decision_json,
+                    Some(serde_json::json!({})),
+                )?
+                .unwrap_or_else(|| serde_json::json!({})),
+            )?,
+            suggest_coverage: None,
+            suggest_coverage_cosine: None,
+            suggest_residual_norm: None,
+            suggest_needs_new_label: suggestion_snapshot
+                .get("needs_new_label")
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(false),
+            suggest_degraded: suggestion_snapshot
+                .get("degraded")
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(false),
+            diagnostics_json: json_value_to_string(diagnostics)?,
+            capture_fingerprint: self.capture_fingerprint,
+            signals: self
+                .signals
+                .into_iter()
+                .map(LabelOntologyCaptureSignalInput::into_signal_input)
+                .collect::<Result<Vec<_>>>()?,
+        })
+    }
+}
+
+impl LabelOntologyCaptureSignalInput {
+    fn into_signal_input(self) -> Result<LabelOntologySignalInput> {
+        Ok(LabelOntologySignalInput {
+            kind: self.kind,
+            target_label_ref: self.target_label_ref,
+            related_labels_json: json_value_to_string(
+                coalesce_json_value(
+                    "related_labels",
+                    self.related_labels,
+                    "related_labels_json",
+                    self.related_labels_json,
+                    Some(serde_json::json!([])),
+                )?
+                .unwrap_or_else(|| serde_json::json!([])),
+            )?,
+            proposed_action: self.proposed_action,
+            candidate_atom: self.candidate_atom,
+            proposed_label_name: self.proposed_label_name,
+            proposal_json: json_value_to_string(
+                coalesce_json_value(
+                    "proposal",
+                    self.proposal,
+                    "proposal_json",
+                    self.proposal_json,
+                    Some(serde_json::json!({})),
+                )?
+                .unwrap_or_else(|| serde_json::json!({})),
+            )?,
+            agent_selected: self.agent_selected.unwrap_or(false),
+            suggest_state: self.suggest_state,
+            suggest_score: self.suggest_score,
+            suggest_rank: self.suggest_rank,
+            final_selected: self.final_selected.unwrap_or(false),
+            rationale: self.rationale,
+            confidence: self.confidence,
+            signal_key: self.signal_key,
+        })
+    }
+}
+
+fn captured_or_supplied_suggestion_snapshot(
+    db_path: &PathBuf,
+    board: &str,
+    args: &crate::args::LabelOntologyRecordArgs,
+) -> Result<Option<JsonValue>> {
+    if args.capture_suggest {
+        let options = LabelSuggestionOptions {
+            output_limit: args.limit,
+            candidate_limit: args.candidate_limit,
+            atom_limit: args.atom_limit,
+            max_selected_labels: args.max_selected_labels,
+            min_score: args.min_score,
+        };
+        let suggestions = suggest_with_optional_vector_config(
+            db_path,
+            board,
+            &args.task_ref,
+            options,
+            args.vector_config.as_deref(),
+        )?;
+        return Ok(Some(serde_json::to_value(suggestions)?));
+    }
+    args.suggestion_snapshot
+        .as_deref()
+        .map(read_suggestion_snapshot_value)
+        .transpose()
+}
+
+fn read_suggestion_snapshot_value(path: &str) -> Result<JsonValue> {
     let raw = read_json_input_string(path)?;
-    serde_json::from_str(&raw).map_err(Into::into)
+    normalize_suggestion_snapshot_value(serde_json::from_str(&raw)?)
+}
+
+fn normalize_suggestion_snapshot_value(value: JsonValue) -> Result<JsonValue> {
+    if let Some(data) = value.get("data")
+        && data.is_object()
+    {
+        return Ok(data.clone());
+    }
+    if value.is_object() {
+        Ok(value)
+    } else {
+        bail!("suggestion snapshot must be a JSON object or an envelope with object data")
+    }
+}
+
+fn coalesce_json_value(
+    natural_field: &str,
+    natural: Option<JsonValue>,
+    legacy_field: &str,
+    legacy_json: Option<String>,
+    default: Option<JsonValue>,
+) -> Result<Option<JsonValue>> {
+    let legacy = legacy_json
+        .map(|raw| serde_json::from_str::<JsonValue>(&raw))
+        .transpose()?;
+    if let (Some(natural), Some(legacy)) = (&natural, &legacy)
+        && natural != legacy
+    {
+        bail!("{natural_field} conflicts with {legacy_field}");
+    }
+    Ok(natural.or(legacy).or(default))
+}
+
+fn json_value_to_string(value: JsonValue) -> Result<String> {
+    serde_json::to_string(&value).map_err(Into::into)
 }
 
 fn read_json_input_string(path: &str) -> Result<String> {

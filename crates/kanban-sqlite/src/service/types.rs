@@ -1014,6 +1014,19 @@ pub struct LabelOntologyAtomApplyInput {
     pub reason: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyStructurePlanInput {
+    pub actor: LabelOntologyActor,
+    pub signal_ids: Vec<String>,
+    pub action_type: LabelOntologyActionType,
+    pub target_label_ref: String,
+    pub proposed_label_name: Option<String>,
+    pub related_label_refs: Vec<String>,
+    pub task_binding_policy: Option<String>,
+    pub validation_policy_json: Option<String>,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LabelOntologyRetargetOptions {
     pub allow_retarget: bool,

@@ -379,6 +379,23 @@ pub(crate) struct LabelOntologyAtomApplyBody {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct LabelOntologyStructurePlanBody {
+    actor: LabelOntologyActorBody,
+    signal_ids: Vec<String>,
+    action_type: kanban_sqlite::LabelOntologyActionType,
+    target_label_ref: String,
+    proposed_label_name: Option<String>,
+    #[serde(default)]
+    related_label_refs: Vec<String>,
+    task_binding_policy: Option<String>,
+    #[serde(default)]
+    validation_policy: JsonBodyField,
+    validation_policy_json: Option<String>,
+    reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct LabelOntologyValidationBody {
     actor: LabelOntologyActorBody,
     parent_action_id: String,
@@ -1103,6 +1120,32 @@ pub(crate) async fn apply_label_ontology_atom(
     ))
 }
 
+pub(crate) async fn plan_label_ontology_structure_change(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+    body: Result<Json<LabelOntologyStructurePlanBody>, JsonRejection>,
+) -> Result<
+    (
+        StatusCode,
+        Json<Envelope<kanban_sqlite::LabelOntologyActionRecord>>,
+    ),
+    ApiError,
+> {
+    let Json(body) = body.map_err(extractor_error)?;
+    let action = kanban_sqlite::plan_label_ontology_structure_change(
+        state.db_path(),
+        &board,
+        label_ontology_structure_plan_input(body)?,
+    )?;
+    Ok((
+        StatusCode::CREATED,
+        Json(Envelope {
+            data: action,
+            meta: None,
+        }),
+    ))
+}
+
 pub(crate) async fn validate_label_ontology_action(
     State(state): State<AppState>,
     Path(board): Path<String>,
@@ -1397,6 +1440,28 @@ fn label_ontology_atom_apply_input(
         text: body.text,
         reason: body.reason,
     }
+}
+
+fn label_ontology_structure_plan_input(
+    body: LabelOntologyStructurePlanBody,
+) -> Result<kanban_sqlite::LabelOntologyStructurePlanInput, ApiError> {
+    Ok(kanban_sqlite::LabelOntologyStructurePlanInput {
+        actor: label_ontology_actor_input(body.actor),
+        signal_ids: body.signal_ids,
+        action_type: body.action_type,
+        target_label_ref: body.target_label_ref,
+        proposed_label_name: body.proposed_label_name,
+        related_label_refs: body.related_label_refs,
+        task_binding_policy: body.task_binding_policy,
+        validation_policy_json: coalesce_optional_json_body_field(
+            "validation_policy",
+            body.validation_policy,
+            "validation_policy_json",
+            body.validation_policy_json,
+            JsonBodyShape::Object,
+        )?,
+        reason: body.reason,
+    })
 }
 
 fn label_ontology_validation_input(

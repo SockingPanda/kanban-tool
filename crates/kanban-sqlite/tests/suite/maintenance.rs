@@ -426,7 +426,7 @@ fn jsonl_import_accepts_legal_foundation_relationship_round_trip() -> anyhow::Re
     assert_eq!(report.consistency_errors, 0);
     assert_eq!(list_tasks(&target.path, "default", &[], true)?.len(), 3);
     assert_eq!(list_runs(&target.path, "default", None)?.len(), 1);
-    assert!(list_events(&target.path, "default", None)?.len() >= 1);
+    assert!(!list_events(&target.path, "default", None)?.is_empty());
     assert_eq!(list_labels(&target.path, "default")?.len(), 1);
 
     let conn = connect_file(&target.path)?;

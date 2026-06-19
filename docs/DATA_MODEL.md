@@ -98,6 +98,26 @@ Board slug 由 service 层校验：必须唯一、非空、不超过 64 bytes，
 
 Archived board 默认不出现在 board list，也不接受普通 task/comment/dispatcher 写入。归档只设置 board 的 `archived_at` 并写入 `board.archived` event，不改变 task 状态；如果 board 上仍有 `running` task 或 `running` run，归档会被拒绝。Events、runs、comments 等只读历史仍可通过显式 task/board identity 查询，用于审计。
 
+### 4.1 Board isolation 责任边界
+
+SQLite 是 canonical truth，但当前 board isolation 由三层共同保证：
+
+1. DB constraint：所有 board-scoped rows 都有 `board_id` 并引用 `boards(id)`；
+   referenced task / label / run id 也各自有 FK，确保引用对象存在。较新的 label
+   semantics / atoms 表还使用 `(id, board_id)` 复合 FK 保证 label board 一致。
+2. Service guard：CLI、HTTP、desktop 和 dispatcher 的正常写路径必须先在同一 board
+   scope 内 resolve task、label、run 等对象，再写关系 row；例如 task label binding、
+   dependency、comment、event、run 和 attachment 都不应跨 board 组合。
+3. Doctor/import check：`kanban doctor` 和 JSONL import final gate 会只读检查基础关系表
+   中 `row.board_id` 与 referenced task / label / run 的 board 是否一致。
+
+需要特别注意：部分 v1 基础关系表仍使用独立 FK，而不是 schema-level composite FK：
+`task_labels`、`task_dependencies`、`task_runs`、`task_comments`、`task_events`、
+`task_attachments`。因此 raw SQL、损坏导入或维护脚本理论上可以写出
+`row.board_id != referenced.board_id` 的数据；这种数据会被 doctor/import 报告为
+hard error，但当前不是全部由 SQLite FK 直接阻止。通过 table rebuild 增加这些表的
+composite FK 是后续 hardening 工作，不属于当前已实现保证。
+
 ---
 
 ## 5. Task
@@ -804,17 +824,25 @@ Label ontology ledger 使用稳定 record types：
 {"type":"label_ontology_action_signal","data":{...}}
 ```
 
-导入时会在同一 transaction 中先插入 ontology rows，再延迟回填
+导入时会在同一 transaction 中先插入 rows，再运行 final consistency gate。基础关系表
+会检查 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、
+`task_events`、`task_attachments` 的 row board 与 referenced task / label / run board
+是否一致；失败时整个 `--replace` import transaction 回滚，不提交部分数据。
+
+Ontology rows 也在同一 transaction 中插入，并延迟回填
 `label_ontology_signals.superseded_by_signal_id` 与
 `label_ontology_actions.parent_action_id`，避免依赖同表自引用 rows 的文件顺序。导入完成前会校验 ontology ledger board isolation：observation/signal board、action
 parent board、action-signal link board、label/proposal soft reference board 必须一致；
 orphan action-signal links、supersede cycles 和 action parent cycles 会导致 import
 失败。
 
-`kanban doctor --json` 对同一组 ontology ledger consistency 规则做只读巡检，并额外返回
-`ontology_ledger_errors`、`ontology_ledger_warnings`、`ontology_ledger_issues[]`。Issue
-包含 `severity`、`code`、`message`、`record_ids`，用于定位损坏 row。Hard error 覆盖
+`kanban doctor --json` 对上述基础关系表和 ontology ledger consistency 规则做只读巡检。
+基础关系表问题返回 `consistency_errors`、`consistency_warnings`、
+`consistency_issues[]`；ontology ledger 问题返回 `ontology_ledger_errors`、
+`ontology_ledger_warnings`、`ontology_ledger_issues[]`。Issue 包含 `severity`、
+`code`、`message`、`record_ids`，用于定位损坏 row；基础关系表 message 包含
+`table`、`row`、`row_board` 和 `referenced_board`。Hard error 覆盖 row board mismatch、
 missing v12 ontology table、跨 board link、orphan action-signal link、parent/supersede
-异常、label/proposal/task board mismatch、supersede cycle 和 action parent cycle；非零 error
-让 `ok=false`。Warning 保留给仍可解释或可重建的软引用，例如历史 action 的
+异常、label/proposal/task board mismatch、supersede cycle 和 action parent cycle；非零
+error 让 `ok=false`。Warning 保留给仍可解释或可重建的软引用，例如历史 action 的
 `result_atom_id` 已被当前 `label_atoms` rebuild 删除。

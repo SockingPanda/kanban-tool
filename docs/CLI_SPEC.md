@@ -1381,7 +1381,7 @@ kanban context build t_... [--lexical-limit 5] [--vector-config <toml>]
 
 `kanban backup` 使用 SQLite `VACUUM INTO` 创建一致备份；目标文件已存在时失败，避免覆盖。
 `kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kanban backup`。JSONL export 包含 label ontology ledger 四张表，record types 为 `label_ontology_observation`、`label_ontology_signal`、`label_ontology_action`、`label_ontology_action_signal`；因此 portable JSONL 与 SQLite backup 都会保留 ontology observation/signal/action provenance。
-`kanban import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kanban import --replace` 是 offline-only 操作；运行前必须停止 `kanban serve` 和常驻 `kanban dispatch`，如果检测到 active runtime lock 会直接拒绝。Ontology import 会延迟回填 `label_ontology_signals.superseded_by_signal_id` 与 `label_ontology_actions.parent_action_id`，因此不依赖 JSONL 中同表自引用 rows 的偶然顺序；导入后会拒绝跨 board ontology links、orphan action-signal links、supersede cycles 和 action parent cycles。
+`kanban import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kanban import --replace` 是 offline-only 操作；运行前必须停止 `kanban serve` 和常驻 `kanban dispatch`，如果检测到 active runtime lock 会直接拒绝。Import 在同一 SQLite transaction 内执行插入与 final doctor gate：基础关系表会校验 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、`task_events`、`task_attachments` 的 row board 与 referenced task / label / run board 一致；失败时整个 replace transaction 回滚，不提交部分数据。Ontology import 会延迟回填 `label_ontology_signals.superseded_by_signal_id` 与 `label_ontology_actions.parent_action_id`，因此不依赖 JSONL 中同表自引用 rows 的偶然顺序；导入后会拒绝跨 board ontology links、orphan action-signal links、supersede cycles 和 action parent cycles。
 `kanban entity`、`kanban outbox`、`kanban derived` 是 Knowledge Substrate 的只读维护入口。SQLite 仍是事实源；这些命令只报告统一 entity registry、派生索引 outbox 和 derived store 状态，不改变 task 状态或 claim。
 `kanban graph` 和 `kanban vector` 是 feature-gated 派生层入口。默认 CLI build 启用 `graph-oxigraph` 和 `vector-lancedb`；显式以 `--no-default-features` 构建或缺少 embedding provider 时返回 disabled/degraded status。启用后仍只作为可重建 relation/vector store，不参与 task 状态事务。
 `kanban vector status --json` 保留 `message` 兼容字段，同时返回结构化
@@ -1428,8 +1428,18 @@ semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
 - `ready/running` task 带有未完成 parent dependency。
 - `ready/running` task 缺少可执行 spec。
 - `ready/running` task 带有未来 `scheduled_at`。
+- 基础关系表 board consistency：`task_labels`、`task_dependencies`、`task_runs`、
+  `task_comments`、`task_events`、`task_attachments` 的 row board 必须和 referenced
+  task / label / run board 一致。当前这些 v1 表的 SQLite schema 主要是独立 FK，
+  因此 doctor/import 是 raw SQL 或损坏 JSONL 的 hard-error 检测层；未来 composite FK
+  table rebuild 是单独 hardening 工作。
 - `index_outbox` backlog：`outbox_pending`、`outbox_running`、`outbox_failed`。
 - derived store health：`derived_dirty_stores`、`derived_error_stores`、`derived_stores[]`，每个 store 包含 `dirty`、`last_error` 和按 store target 聚合的 pending/running/failed outbox 计数。
+- foundation relationship consistency：人类输出包含 `consistency_errors` /
+  `consistency_warnings` 计数；`--json` 额外返回 `consistency_issues[]`，每条 issue
+  包含 `severity`、`code`、`message`、`record_ids`。Message 包含 `table`、`row`、
+  `row_board`、`referenced` 和 `referenced_board`。非零 `consistency_errors` 会让
+  `ok=false`。
 - label ontology ledger health：v12+ 数据库必须存在 `label_ontology_observations`、`label_ontology_signals`、`label_ontology_actions`、`label_ontology_action_signals`；doctor 会报告 observation/signal/action/action-signal 的跨 board link、orphan link、parent action 异常、supersede cycle 和可检查 soft reference 不一致。人类输出包含 `ontology_ledger_errors` / `ontology_ledger_warnings` 计数；`--json` 额外返回 `ontology_ledger_issues[]`，每条 issue 包含 `severity`、`code`、`message`、`record_ids`。非零 `ontology_ledger_errors` 会让 `ok=false`；warning 用于 rebuildable 或可解释的软引用异常，不单独让 doctor unhealthy。
 
 `dirty` / pending outbox 表示派生层需要 sync/rebuild，不会改变 SQLite task truth；failed outbox 或 `last_error` 用于 operator 判断是否需要 `kanban index sync`、`kanban graph sync/rebuild` 或 `kanban vector sync/rebuild`。`derived_stores[].last_event_id` 表示对应 store 已成功提交的全局 event watermark；当 `dirty=true` 时，它仍然只是“已成功处理到哪里”的摘要，不代表所有 board 都已经干净。

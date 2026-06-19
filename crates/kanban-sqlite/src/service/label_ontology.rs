@@ -1608,7 +1608,7 @@ fn build_validation_json(
             },
             "after": {
                 "validation_status": status,
-                "manual": &manual,
+                "manual_case_ref": validation_manual_case_ref(&manual, &signal.id),
             },
             "passed": matches!(status, LabelOntologyValidationStatus::Passed) && !stale && !observation.suggest_degraded,
         }));
@@ -1636,6 +1636,27 @@ fn build_validation_json(
         }
     }))
     .map_err(|err| KanbanError::InvalidInput(err.to_string()))
+}
+
+fn validation_manual_case_ref(manual: &JsonValue, signal_id: &str) -> JsonValue {
+    let Some(cases) = manual.get("cases").and_then(JsonValue::as_array) else {
+        return JsonValue::Null;
+    };
+    let Some((index, case)) = cases
+        .iter()
+        .enumerate()
+        .find(|(_, case)| case.get("signal_id").and_then(JsonValue::as_str) == Some(signal_id))
+    else {
+        return JsonValue::Null;
+    };
+    json!({
+        "source": "manual.cases",
+        "index": index,
+        "signal_id": case
+            .get("signal_id")
+            .and_then(JsonValue::as_str)
+            .unwrap_or(signal_id),
+    })
 }
 
 fn ensure_validatable_parent_action(action: &LabelOntologyActionRecord) -> Result<()> {

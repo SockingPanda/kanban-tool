@@ -553,7 +553,7 @@ Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、�
 | `canonical_before_hash` / `canonical_after_hash` | 修改前后 canonical semantics hash。 |
 | `change_json` | before/after/diff 或其它可解释变更快照。 |
 | `validation_status` | `not_required`、`pending`、`passed`、`failed`、`partial`。 |
-| `validation_json` | validation evidence envelope；service 会包装 supplied/collected payload、source signal cases、task snapshot comparability、parent action result 引用和 summary。`failed` / `partial` 可保存 external/manual attestation 诊断。`passed` action 只能来自工具采集的 `trusted_automated` evidence（collector source、embedding model、solver options、clean atom index status/generation、per-signal before/after cases），并按 parent action 校验 positive atom、negative atom 或 bootstrap label policy；调用方手写 JSON 或自称 `automated` 不构成可信来源。 |
+| `validation_json` | validation evidence envelope；service 会包装 supplied/collected payload、source signal cases、task snapshot comparability、parent action result 引用和 summary。公共 supplied/collected payload 只保存在 top-level `manual`；generated `cases[]` 用 `after.manual_case_ref` 指向 `manual.cases[]` 中对应 signal 的 evidence，避免把同一 payload 复制到每个 case。`failed` / `partial` 可保存 external/manual attestation 诊断。`passed` action 只能来自工具采集的 `trusted_automated` evidence（collector source、embedding model、solver options、clean atom index status/generation、per-signal before/after cases），并按 parent action 校验 positive atom、negative atom 或 bootstrap label policy；调用方手写 JSON 或自称 `automated` 不构成可信来源。 |
 | `created_by` / `created_by_type` / `agent_type` | action actor。 |
 | `created_at` | 创建时间。 |
 

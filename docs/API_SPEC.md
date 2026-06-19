@@ -1568,7 +1568,10 @@ trusted automated `passed`。需要 trusted automated validation 时使用 CLI
 
 Service 会把 supplied `validation` / `validation_json` 包进 validation envelope，附上
 source signal cases、observation task snapshot / suggest input hash 与当前 task hash
-对比、parent action result 引用和 summary。`parent_action_id` 必须指向同一 board 上
+对比、parent action result 引用和 summary。公共 supplied/collected payload 只保存在
+top-level `manual`；generated `cases[]` 通过 `after.manual_case_ref` 指向
+`manual.cases[]` 中对应 signal 的原始 evidence，避免多 signal validation 把同一 payload
+重复存入每个 case。`parent_action_id` 必须指向同一 board 上
 `validation_status=pending` 的 canonical mutation action，且 parent action 必须带有
 canonical result evidence（例如 atom/result label/proposal 引用、canonical hash 和
 非空 change snapshot）。HTTP supplied JSON 是 external attestation；它可保存

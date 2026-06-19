@@ -389,6 +389,11 @@ fn label_proposal_accept_rejects_non_bootstrap_signal_even_with_retarget() -> an
     )?
     .proposal
     .context("proposal")?;
+    let labels_before = list_labels(&temp.path, "default")?;
+    let semantics_before = get_label_semantics(&temp.path, "default", "database")?;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+    let conn = connect_file(&temp.path)?;
+    let task_labels_before = table_count(&conn, "task_labels")?;
 
     let error = result_err(accept_label_proposal_with_options(
         &temp.path,
@@ -404,6 +409,23 @@ fn label_proposal_accept_rejects_non_bootstrap_signal_even_with_retarget() -> an
     ))?;
     assert!(error.to_string().contains(&signal_id), "{error}");
     assert!(error.to_string().contains("vocabulary_gap"), "{error}");
+    let proposal_after = get_label_proposal(&temp.path, &proposal.id)?;
+    assert_eq!(proposal_after.status, LabelProposalStatus::Proposed);
+    assert!(proposal_after.resolved_label_id.is_none());
+    assert!(
+        list_labels(&temp.path, "default")?
+            .iter()
+            .all(|label| label.name != proposal.name),
+        "failed proposal adoption must not leave the proposal label"
+    );
+    assert_eq!(list_labels(&temp.path, "default")?, labels_before);
+    assert_eq!(
+        get_label_semantics(&temp.path, "default", "database")?,
+        semantics_before
+    );
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "task_labels")?, task_labels_before);
 
     Ok(())
 }

@@ -775,11 +775,13 @@ fn label_bootstrap_snapshot_restore_restores_existing_semantics_and_atoms_exactl
         "default",
         UpsertLabelSemantics {
             label_ref: "database".to_owned(),
+            replace: true,
             description: Some("Changed database semantics".to_owned()),
             applies_when: vec!["changed applies".to_owned()],
             excludes_when: vec!["changed excludes".to_owned()],
             positive_examples: vec!["changed positive".to_owned()],
             negative_examples: vec!["changed negative".to_owned()],
+            ..UpsertLabelSemantics::default()
         },
     )?;
     assert_ne!(
@@ -2738,6 +2740,7 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
             positive_examples: vec!["API handlers".to_owned()],
             excludes_when: vec!["frontend only".to_owned()],
             negative_examples: vec!["CSS polish".to_owned()],
+            ..UpsertLabelSemantics::default()
         },
     )?;
 
@@ -2964,6 +2967,252 @@ fn direct_label_semantics_upsert_records_update_semantics_provenance() -> anyhow
     );
     assert!(provenance.action.canonical_before_hash.is_some());
     assert!(provenance.action.canonical_after_hash.is_some());
+    Ok(())
+}
+
+#[test]
+fn label_semantics_patch_preserves_missing_fields_and_records_reason() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_semantics_patch_preserves_missing_fields_and_records_reason")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("Backend service work".to_owned()),
+            applies_when: vec!["touches Rust service code".to_owned()],
+            excludes_when: vec!["CSS-only polish".to_owned()],
+            positive_examples: vec!["add API handler".to_owned()],
+            negative_examples: vec!["adjust spacing".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let mut options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("editor");
+    options.reason = Some("Add a CLI-facing backend boundary.".to_owned());
+
+    let patched = kanban_sqlite::upsert_label_semantics_with_options(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash.clone()),
+            applies_when: vec!["exposes CLI JSON output".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+        options,
+    )?;
+
+    assert_eq!(patched.description.as_deref(), Some("Backend service work"));
+    assert_eq!(
+        patched.applies_when,
+        vec!["touches Rust service code", "exposes CLI JSON output"]
+    );
+    assert_eq!(patched.excludes_when, vec!["CSS-only polish"]);
+    assert_eq!(patched.positive_examples, vec!["add API handler"]);
+    assert_eq!(patched.negative_examples, vec!["adjust spacing"]);
+    assert_ne!(patched.semantics_hash, seed.semantics_hash);
+    let atom = patched
+        .atoms
+        .iter()
+        .find(|atom| atom.text == "exposes CLI JSON output")
+        .context("new applies_when atom")?;
+    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
+    assert!(
+        explain
+            .provenance_actions
+            .iter()
+            .any(|action| action.action.reason == "Add a CLI-facing backend boundary.")
+    );
+    Ok(())
+}
+
+#[test]
+fn label_semantics_patch_remove_atom_only_changes_target_collection() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_semantics_patch_remove_atom_only_changes_target_collection")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("Backend service work".to_owned()),
+            applies_when: vec![
+                "touches Rust service code".to_owned(),
+                "updates API handlers".to_owned(),
+            ],
+            excludes_when: vec!["CSS-only polish".to_owned()],
+            positive_examples: vec!["add API handler".to_owned()],
+            negative_examples: vec!["adjust spacing".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    let patched = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash.clone()),
+            remove_applies_when: vec![" touches Rust service code ".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    assert_eq!(patched.applies_when, vec!["updates API handlers"]);
+    assert_eq!(patched.excludes_when, vec!["CSS-only polish"]);
+    assert_eq!(patched.positive_examples, vec!["add API handler"]);
+    assert_eq!(patched.negative_examples, vec!["adjust spacing"]);
+    assert!(
+        patched.atoms.iter().all(|atom| {
+            atom.kind != "applies_when" || atom.text != "touches Rust service code"
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn label_semantics_replace_intent_required_to_clear_omitted_fields() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_semantics_replace_intent_required_to_clear_omitted_fields")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("Backend service work".to_owned()),
+            applies_when: vec!["touches Rust service code".to_owned()],
+            excludes_when: vec!["CSS-only polish".to_owned()],
+            positive_examples: vec!["add API handler".to_owned()],
+            negative_examples: vec!["adjust spacing".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    let patched = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash.clone()),
+            description: Some("Backend service ownership".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(
+        patched.description.as_deref(),
+        Some("Backend service ownership")
+    );
+    assert_eq!(patched.applies_when, seed.applies_when);
+    assert_eq!(patched.excludes_when, seed.excludes_when);
+    assert_eq!(patched.positive_examples, seed.positive_examples);
+    assert_eq!(patched.negative_examples, seed.negative_examples);
+
+    let replaced = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(patched.semantics_hash.clone()),
+            replace: true,
+            description: Some("Only the replacement description remains".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(
+        replaced.description.as_deref(),
+        Some("Only the replacement description remains")
+    );
+    assert!(replaced.applies_when.is_empty());
+    assert!(replaced.excludes_when.is_empty());
+    assert!(replaced.positive_examples.is_empty());
+    assert!(replaced.negative_examples.is_empty());
+    assert_eq!(replaced.atoms.len(), 1);
+    assert_eq!(replaced.atoms[0].kind, "description");
+    Ok(())
+}
+
+#[test]
+fn label_semantics_upsert_rejects_stale_expected_hash_without_mutating() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_semantics_upsert_rejects_stale_expected_hash_without_mutating")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("Backend service work".to_owned()),
+            applies_when: vec!["touches Rust service code".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let changed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash.clone()),
+            applies_when: vec!["updates API handlers".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let conn = connect_file(&temp.path)?;
+    let action_count = table_count(&conn, "label_ontology_actions")?;
+
+    let error = result_err(upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash),
+            applies_when: vec!["stale writer addition".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    ))?;
+
+    assert!(matches!(error, KanbanError::Conflict(_)));
+    assert!(error.to_string().contains("hash mismatch"));
+    let after = get_label_semantics(&temp.path, "default", "backend")?;
+    assert_eq!(after.semantics_hash, changed.semantics_hash);
+    assert_eq!(after.applies_when, changed.applies_when);
+    assert!(
+        !after
+            .applies_when
+            .iter()
+            .any(|item| item == "stale writer addition")
+    );
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, action_count);
     Ok(())
 }
 
@@ -3470,6 +3719,7 @@ fn label_semantics_jsonl_export_import_round_trips_truth_and_atoms() -> anyhow::
             positive_examples: vec!["SQLite repository change".to_owned()],
             excludes_when: vec!["UI-only polish".to_owned()],
             negative_examples: vec!["CSS-only tweak".to_owned()],
+            ..UpsertLabelSemantics::default()
         },
     )?;
     let source_atoms = semantics

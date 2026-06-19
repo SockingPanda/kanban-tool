@@ -886,8 +886,8 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
 
 #[derive(Debug, Clone)]
 pub(crate) struct LabelOntologySemanticsSnapshot {
-    hash: String,
-    json: JsonValue,
+    pub(crate) hash: String,
+    pub(crate) json: JsonValue,
 }
 
 pub(crate) struct LabelOntologySemanticsMutationInput<'a> {

@@ -300,6 +300,87 @@ fn label_semantics_and_atoms_commands_round_trip_json() -> anyhow::Result<()> {
     )?
     .success_json()?;
     assert_eq!(shown["data"]["label_name"], "backend");
+    let seed_hash = shown["data"]["semantics_hash"]
+        .as_str()
+        .context("semantics hash")?
+        .to_owned();
+
+    let patched = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "semantics",
+            "upsert",
+            "backend",
+            "--expected-semantics-hash",
+            &seed_hash,
+            "--applies-when",
+            "emits machine-readable CLI output",
+            "--remove-excludes-when",
+            "CSS-only",
+            "--reason",
+            "CLI patch guardrail test",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(
+        patched["data"]["applies_when"],
+        json!([
+            "touches Rust service code",
+            "emits machine-readable CLI output"
+        ])
+    );
+    assert_eq!(patched["data"]["excludes_when"], json!([]));
+    assert_eq!(
+        patched["data"]["positive_examples"],
+        json!(["add API handler"])
+    );
+    assert_eq!(
+        patched["data"]["negative_examples"],
+        json!(["adjust spacing"])
+    );
+    let patched_hash = patched["data"]["semantics_hash"]
+        .as_str()
+        .context("patched semantics hash")?
+        .to_owned();
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "semantics",
+            "upsert",
+            "backend",
+            "--expected-semantics-hash",
+            &seed_hash,
+            "--applies-when",
+            "stale writer addition",
+        ],
+    )?
+    .failure_containing("hash mismatch")?;
+
+    let replaced = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "semantics",
+            "upsert",
+            "backend",
+            "--expected-semantics-hash",
+            &patched_hash,
+            "--replace",
+            "--description",
+            "Backend replacement semantics",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(
+        replaced["data"]["description"],
+        "Backend replacement semantics"
+    );
+    assert_eq!(replaced["data"]["applies_when"], json!([]));
+    assert_eq!(replaced["data"]["positive_examples"], json!([]));
 
     let atoms = kanban(&temp.path, &["--json", "label", "atoms", "list"])?.success_json()?;
     assert!(
@@ -307,7 +388,10 @@ fn label_semantics_and_atoms_commands_round_trip_json() -> anyhow::Result<()> {
             .as_array()
             .context("atoms")?
             .iter()
-            .any(|atom| atom["kind"] == "positive_example" && atom["text"] == "add API handler")
+            .any(|atom| atom["kind"] == "description"
+                && atom["text"]
+                    .as_str()
+                    .is_some_and(|text| text.contains("Backend replacement semantics")))
     );
 
     let status =

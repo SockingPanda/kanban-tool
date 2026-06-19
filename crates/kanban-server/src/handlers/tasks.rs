@@ -395,15 +395,25 @@ pub(crate) struct LabelOntologyValidationBody {
 #[serde(deny_unknown_fields)]
 pub(crate) struct UpsertLabelSemanticsBody {
     actor: Option<String>,
+    expected_semantics_hash: Option<String>,
+    #[serde(default)]
+    replace: bool,
+    reason: Option<String>,
+    #[serde(default)]
+    source_signal_ids: Vec<String>,
     description: Option<String>,
+    applies_when: Option<Vec<String>>,
+    excludes_when: Option<Vec<String>>,
+    positive_examples: Option<Vec<String>>,
+    negative_examples: Option<Vec<String>>,
     #[serde(default)]
-    applies_when: Vec<String>,
+    remove_applies_when: Vec<String>,
     #[serde(default)]
-    excludes_when: Vec<String>,
+    remove_excludes_when: Vec<String>,
     #[serde(default)]
-    positive_examples: Vec<String>,
+    remove_positive_examples: Vec<String>,
     #[serde(default)]
-    negative_examples: Vec<String>,
+    remove_negative_examples: Vec<String>,
 }
 
 pub(crate) async fn list_tasks(
@@ -575,6 +585,9 @@ pub(crate) async fn upsert_label_semantics(
     let Json(body) = body.map_err(extractor_error)?;
     let label_id = require_label_id_path(label_id)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
+    let mut options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor(actor);
+    options.reason = body.reason;
+    options.source_signal_ids = body.source_signal_ids;
     Ok(Json(Envelope {
         data: kanban_sqlite::upsert_label_semantics_by_id_with_options(
             state.db_path(),
@@ -582,13 +595,19 @@ pub(crate) async fn upsert_label_semantics(
             &label_id,
             kanban_sqlite::UpsertLabelSemantics {
                 label_ref: label_id.clone(),
+                expected_semantics_hash: body.expected_semantics_hash,
+                replace: body.replace,
                 description: body.description,
-                applies_when: body.applies_when,
-                excludes_when: body.excludes_when,
-                positive_examples: body.positive_examples,
-                negative_examples: body.negative_examples,
+                applies_when: body.applies_when.unwrap_or_default(),
+                excludes_when: body.excludes_when.unwrap_or_default(),
+                positive_examples: body.positive_examples.unwrap_or_default(),
+                negative_examples: body.negative_examples.unwrap_or_default(),
+                remove_applies_when: body.remove_applies_when,
+                remove_excludes_when: body.remove_excludes_when,
+                remove_positive_examples: body.remove_positive_examples,
+                remove_negative_examples: body.remove_negative_examples,
             },
-            kanban_sqlite::LabelSemanticsMutationOptions::manual_actor(actor),
+            options,
         )?,
         meta: None,
     }))

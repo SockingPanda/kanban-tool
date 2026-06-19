@@ -1965,6 +1965,69 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
     .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["label_name"], "team/backend");
+    let seed_hash = json["data"]["semantics_hash"]
+        .as_str()
+        .context("semantics hash")?
+        .to_owned();
+
+    let (status, json) = request_json(
+        app.clone(),
+        "PUT",
+        &format!("/api/v1/boards/default/labels/{label_id}/semantics"),
+        Some(json!({
+            "expected_semantics_hash": seed_hash,
+            "applies_when": ["serves kanban API routes"],
+            "remove_excludes_when": ["CSS-only"],
+            "reason": "HTTP patch guardrail test"
+        })),
+        None,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        json["data"]["applies_when"],
+        json!(["touches Rust service code", "serves kanban API routes"])
+    );
+    assert_eq!(json["data"]["excludes_when"], json!([]));
+    assert_eq!(
+        json["data"]["positive_examples"],
+        json!(["add API handler"])
+    );
+    assert_eq!(json["data"]["negative_examples"], json!(["adjust spacing"]));
+    let patched_hash = json["data"]["semantics_hash"]
+        .as_str()
+        .context("patched semantics hash")?
+        .to_owned();
+    let (status, json) = request_json(
+        app.clone(),
+        "PUT",
+        &format!("/api/v1/boards/default/labels/{label_id}/semantics"),
+        Some(json!({
+            "expected_semantics_hash": seed_hash,
+            "applies_when": ["stale writer addition"]
+        })),
+        None,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json["error"]["code"], "conflict");
+
+    let (status, json) = request_json(
+        app.clone(),
+        "PUT",
+        &format!("/api/v1/boards/default/labels/{label_id}/semantics"),
+        Some(json!({
+            "expected_semantics_hash": patched_hash,
+            "replace": true,
+            "description": "Backend replacement semantics"
+        })),
+        None,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["description"], "Backend replacement semantics");
+    assert_eq!(json["data"]["applies_when"], json!([]));
+    assert_eq!(json["data"]["positive_examples"], json!([]));
 
     let (status, json) = get_json(
         app.clone(),
@@ -1991,7 +2054,10 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
             .as_array()
             .context("atoms")?
             .iter()
-            .any(|atom| atom["kind"] == "positive_example" && atom["text"] == "add API handler")
+            .any(|atom| atom["kind"] == "description"
+                && atom["text"]
+                    .as_str()
+                    .is_some_and(|text| text.contains("Backend replacement semantics")))
     );
 
     let (status, json) = get_json(
@@ -2062,6 +2128,7 @@ async fn label_atom_explain_route_returns_legacy_untracked_for_unprovenanced_ato
             excludes_when: vec![],
             positive_examples: vec!["add API handler".to_owned()],
             negative_examples: vec![],
+            ..kanban_sqlite::UpsertLabelSemantics::default()
         },
     )?;
     let atom = kanban_sqlite::list_label_atoms(&db_path, "default")?

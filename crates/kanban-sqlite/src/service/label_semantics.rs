@@ -46,42 +46,7 @@ pub fn upsert_label_semantics_with_options(
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let label = resolve_label(&conn, &board_id, &input.label_ref)?;
-        let before = label_ontology_semantics_snapshot_in_tx(
-            &conn,
-            &label.board_id,
-            &label.id,
-            &label.name,
-        )?;
-        let description = normalize_optional_text(input.description);
-        let applies_when = normalize_text_list(input.applies_when);
-        let excludes_when = normalize_text_list(input.excludes_when);
-        let positive_examples = normalize_text_list(input.positive_examples);
-        let negative_examples = normalize_text_list(input.negative_examples);
-
-        let definition = LabelDefinition {
-            id: label.id.clone(),
-            name: label.name.clone(),
-            description,
-            applies_when,
-            positive_examples,
-            excludes_when,
-            negative_examples,
-        };
-        upsert_label_semantics_in_tx(&conn, &label.board_id, &definition, now)?;
-        mark_label_atom_store_dirty(&conn, &label.board_id, now)?;
-        record_label_ontology_semantics_mutation_in_tx(
-            &conn,
-            LabelOntologySemanticsMutationInput {
-                board_id: &label.board_id,
-                label_id: &label.id,
-                label_name: &label.name,
-                action_type: LabelOntologyActionType::UpdateSemantics,
-                before,
-                options,
-            },
-            now,
-        )?;
-        get_label_semantics_conn(&conn, &label.board_id, &label.id)
+        upsert_label_semantics_resolved_in_tx(&conn, &label, input, options, now)
     })
 }
 
@@ -112,42 +77,107 @@ pub fn upsert_label_semantics_by_id_with_options(
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let label = resolve_label_by_id_exact(&conn, &board_id, label_id)?;
-        let before = label_ontology_semantics_snapshot_in_tx(
-            &conn,
-            &label.board_id,
-            &label.id,
-            &label.name,
-        )?;
-        let description = normalize_optional_text(input.description);
-        let applies_when = normalize_text_list(input.applies_when);
-        let excludes_when = normalize_text_list(input.excludes_when);
-        let positive_examples = normalize_text_list(input.positive_examples);
-        let negative_examples = normalize_text_list(input.negative_examples);
+        upsert_label_semantics_resolved_in_tx(&conn, &label, input, options, now)
+    })
+}
 
-        let definition = LabelDefinition {
+fn upsert_label_semantics_resolved_in_tx(
+    conn: &Connection,
+    label: &ResolvedLabel,
+    input: UpsertLabelSemantics,
+    options: LabelSemanticsMutationOptions,
+    now: i64,
+) -> Result<LabelSemanticsRecord> {
+    let before =
+        label_ontology_semantics_snapshot_in_tx(conn, &label.board_id, &label.id, &label.name)?;
+    if let Some(expected) = normalize_optional_text(input.expected_semantics_hash.clone())
+        && expected != before.hash
+    {
+        return Err(KanbanError::Conflict(format!(
+            "label semantics hash mismatch for {}: expected {expected}, current {}",
+            label.name, before.hash
+        )));
+    }
+    let current = get_label_semantics_conn_optional(conn, &label.board_id, &label.id)?;
+    let definition = label_definition_for_semantics_mutation(label, current.as_ref(), input)?;
+    upsert_label_semantics_in_tx(conn, &label.board_id, &definition, now)?;
+    mark_label_atom_store_dirty(conn, &label.board_id, now)?;
+    record_label_ontology_semantics_mutation_in_tx(
+        conn,
+        LabelOntologySemanticsMutationInput {
+            board_id: &label.board_id,
+            label_id: &label.id,
+            label_name: &label.name,
+            action_type: LabelOntologyActionType::UpdateSemantics,
+            before,
+            options,
+        },
+        now,
+    )?;
+    get_label_semantics_conn(conn, &label.board_id, &label.id)
+}
+
+fn label_definition_for_semantics_mutation(
+    label: &ResolvedLabel,
+    current: Option<&LabelSemanticsRecord>,
+    input: UpsertLabelSemantics,
+) -> Result<LabelDefinition> {
+    if input.replace {
+        if !input.remove_applies_when.is_empty()
+            || !input.remove_excludes_when.is_empty()
+            || !input.remove_positive_examples.is_empty()
+            || !input.remove_negative_examples.is_empty()
+        {
+            return Err(KanbanError::InvalidInput(
+                "remove_* fields cannot be combined with replace semantics".into(),
+            ));
+        }
+        return Ok(LabelDefinition {
             id: label.id.clone(),
             name: label.name.clone(),
-            description,
-            applies_when,
-            positive_examples,
-            excludes_when,
-            negative_examples,
-        };
-        upsert_label_semantics_in_tx(&conn, &label.board_id, &definition, now)?;
-        mark_label_atom_store_dirty(&conn, &label.board_id, now)?;
-        record_label_ontology_semantics_mutation_in_tx(
-            &conn,
-            LabelOntologySemanticsMutationInput {
-                board_id: &label.board_id,
-                label_id: &label.id,
-                label_name: &label.name,
-                action_type: LabelOntologyActionType::UpdateSemantics,
-                before,
-                options,
-            },
-            now,
-        )?;
-        get_label_semantics_conn(&conn, &label.board_id, &label.id)
+            description: normalize_optional_text(input.description),
+            applies_when: normalize_text_list(input.applies_when),
+            positive_examples: normalize_text_list(input.positive_examples),
+            excludes_when: normalize_text_list(input.excludes_when),
+            negative_examples: normalize_text_list(input.negative_examples),
+        });
+    }
+
+    let mut description = current.and_then(|record| record.description.clone());
+    if let Some(next_description) = normalize_optional_text(input.description) {
+        description = Some(next_description);
+    }
+
+    let mut applies_when = current
+        .map(|record| record.applies_when.clone())
+        .unwrap_or_default();
+    let mut excludes_when = current
+        .map(|record| record.excludes_when.clone())
+        .unwrap_or_default();
+    let mut positive_examples = current
+        .map(|record| record.positive_examples.clone())
+        .unwrap_or_default();
+    let mut negative_examples = current
+        .map(|record| record.negative_examples.clone())
+        .unwrap_or_default();
+
+    remove_semantics_items(&mut applies_when, input.remove_applies_when);
+    remove_semantics_items(&mut excludes_when, input.remove_excludes_when);
+    remove_semantics_items(&mut positive_examples, input.remove_positive_examples);
+    remove_semantics_items(&mut negative_examples, input.remove_negative_examples);
+    append_semantics_items(&mut applies_when, input.applies_when);
+    append_semantics_items(&mut excludes_when, input.excludes_when);
+    append_semantics_items(&mut positive_examples, input.positive_examples);
+    append_semantics_items(&mut negative_examples, input.negative_examples);
+
+    Ok(LabelDefinition {
+        id: label.id.clone(),
+        name: label.name.clone(),
+        description,
+        applies_when,
+        positive_examples,
+        excludes_when,
+        negative_examples,
     })
 }
 
@@ -440,6 +470,15 @@ pub(crate) fn get_label_semantics_conn(
     board_id: &str,
     label_id: &str,
 ) -> Result<LabelSemanticsRecord> {
+    get_label_semantics_conn_optional(conn, board_id, label_id)?
+        .ok_or_else(|| KanbanError::NotFound(format!("label semantics {label_id}")))
+}
+
+fn get_label_semantics_conn_optional(
+    conn: &Connection,
+    board_id: &str,
+    label_id: &str,
+) -> Result<Option<LabelSemanticsRecord>> {
     let mut record = conn
         .query_row(
             "SELECT s.label_id,s.board_id,l.name,s.description,s.applies_when,s.excludes_when,s.positive_examples,s.negative_examples,s.created_at,s.updated_at \
@@ -449,9 +488,11 @@ pub(crate) fn get_label_semantics_conn(
             label_semantics_from_row,
         )
         .optional()
-        .map_err(storage)?
-        .ok_or_else(|| KanbanError::NotFound(format!("label semantics {label_id}")))?;
-    record.atoms = label_atoms_for_label(conn, board_id, label_id)?;
+        .map_err(storage)?;
+    if let Some(record) = record.as_mut() {
+        record.semantics_hash = label_semantics_record_hash(record)?;
+        record.atoms = label_atoms_for_label(conn, board_id, label_id)?;
+    }
     Ok(record)
 }
 
@@ -460,6 +501,7 @@ fn label_semantics_from_row(row: &Row<'_>) -> rusqlite::Result<LabelSemanticsRec
         label_id: row.get(0)?,
         board_id: row.get(1)?,
         label_name: row.get(2)?,
+        semantics_hash: String::new(),
         description: row.get(3)?,
         applies_when: json_vec(row.get::<_, String>(4)?)
             .map_err(|err| rusqlite::Error::InvalidParameterName(err.to_string()))?,
@@ -1321,6 +1363,42 @@ fn normalize_text_list(items: Vec<String>) -> Vec<String> {
         .map(|item| item.trim().to_owned())
         .filter(|item| !item.is_empty())
         .collect()
+}
+
+fn remove_semantics_items(target: &mut Vec<String>, removals: Vec<String>) {
+    let removals = normalize_text_list(removals)
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    if removals.is_empty() {
+        return;
+    }
+    target.retain(|item| !removals.contains(item.trim()));
+}
+
+fn append_semantics_items(target: &mut Vec<String>, additions: Vec<String>) {
+    let mut existing = target
+        .iter()
+        .map(|item| item.trim().to_owned())
+        .collect::<BTreeSet<_>>();
+    for item in normalize_text_list(additions) {
+        if existing.insert(item.clone()) {
+            target.push(item);
+        }
+    }
+}
+
+fn label_semantics_record_hash(record: &LabelSemanticsRecord) -> Result<String> {
+    let snapshot = serde_json::to_string(&serde_json::json!({
+        "label_id": &record.label_id,
+        "label_name": &record.label_name,
+        "description": &record.description,
+        "applies_when": &record.applies_when,
+        "excludes_when": &record.excludes_when,
+        "positive_examples": &record.positive_examples,
+        "negative_examples": &record.negative_examples,
+    }))
+    .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
+    Ok(stable_hash(&snapshot))
 }
 
 fn json_array(items: &[String]) -> Result<String> {

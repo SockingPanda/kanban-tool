@@ -142,6 +142,7 @@ pub struct LabelSemanticsRecord {
     pub label_id: String,
     pub board_id: String,
     pub label_name: String,
+    pub semantics_hash: String,
     pub description: Option<String>,
     pub applies_when: Vec<String>,
     pub excludes_when: Vec<String>,
@@ -471,11 +472,17 @@ pub struct CreateLabel {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct UpsertLabelSemantics {
     pub label_ref: String,
+    pub expected_semantics_hash: Option<String>,
+    pub replace: bool,
     pub description: Option<String>,
     pub applies_when: Vec<String>,
     pub excludes_when: Vec<String>,
     pub positive_examples: Vec<String>,
     pub negative_examples: Vec<String>,
+    pub remove_applies_when: Vec<String>,
+    pub remove_excludes_when: Vec<String>,
+    pub remove_positive_examples: Vec<String>,
+    pub remove_negative_examples: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -271,13 +271,21 @@ pub(crate) struct LabelBootstrapArgs {
 pub(crate) enum LabelSemanticsCommand {
     List,
     Show { label: String },
-    Upsert(LabelSemanticsUpsertArgs),
+    Upsert(Box<LabelSemanticsUpsertArgs>),
     Delete { label: String },
 }
 
 #[derive(Debug, Args)]
 pub(crate) struct LabelSemanticsUpsertArgs {
     pub(crate) label: String,
+    #[arg(long = "expected-semantics-hash")]
+    pub(crate) expected_semantics_hash: Option<String>,
+    #[arg(long)]
+    pub(crate) replace: bool,
+    #[arg(long)]
+    pub(crate) reason: Option<String>,
+    #[arg(long = "source-signal")]
+    pub(crate) source_signal_ids: Vec<String>,
     #[arg(long)]
     pub(crate) description: Option<String>,
     #[arg(long = "applies-when")]
@@ -288,6 +296,14 @@ pub(crate) struct LabelSemanticsUpsertArgs {
     pub(crate) positive_examples: Vec<String>,
     #[arg(long = "negative-example")]
     pub(crate) negative_examples: Vec<String>,
+    #[arg(long = "remove-applies-when")]
+    pub(crate) remove_applies_when: Vec<String>,
+    #[arg(long = "remove-excludes-when")]
+    pub(crate) remove_excludes_when: Vec<String>,
+    #[arg(long = "remove-positive-example")]
+    pub(crate) remove_positive_examples: Vec<String>,
+    #[arg(long = "remove-negative-example")]
+    pub(crate) remove_negative_examples: Vec<String>,
 }
 
 #[derive(Debug, Subcommand)]

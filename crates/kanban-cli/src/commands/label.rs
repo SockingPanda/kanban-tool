@@ -348,18 +348,28 @@ fn handle_label_semantics(
             print_or_json(json, &semantics, || label_semantics_line(&semantics))?;
         }
         crate::args::LabelSemanticsCommand::Upsert(args) => {
+            let args = *args;
+            let mut options = LabelSemanticsMutationOptions::manual_actor(actor);
+            options.reason = args.reason;
+            options.source_signal_ids = args.source_signal_ids;
             let semantics = upsert_label_semantics_with_options(
                 db_path,
                 board,
                 UpsertLabelSemantics {
                     label_ref: args.label,
+                    expected_semantics_hash: args.expected_semantics_hash,
+                    replace: args.replace,
                     description: args.description,
                     applies_when: args.applies_when,
                     excludes_when: args.excludes_when,
                     positive_examples: args.positive_examples,
                     negative_examples: args.negative_examples,
+                    remove_applies_when: args.remove_applies_when,
+                    remove_excludes_when: args.remove_excludes_when,
+                    remove_positive_examples: args.remove_positive_examples,
+                    remove_negative_examples: args.remove_negative_examples,
                 },
-                LabelSemanticsMutationOptions::manual_actor(actor),
+                options,
             )?;
             print_or_json(json, &semantics, || label_semantics_line(&semantics))?;
         }

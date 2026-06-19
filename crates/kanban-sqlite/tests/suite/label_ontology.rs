@@ -1531,6 +1531,22 @@ fn label_ontology_atom_apply_records_provenance_and_validation_resolves_signal()
     assert_eq!(validation_json["cases"][0]["comparable"], true);
     assert_eq!(validation_json["cases"][0]["before"]["score"], 0.08);
     assert_eq!(validation_json["manual"]["cases"][0]["passed"], true);
+    assert_eq!(
+        validation_json["cases"][0]["after"]["manual_case_ref"]["source"],
+        "manual.cases"
+    );
+    assert_eq!(
+        validation_json["cases"][0]["after"]["manual_case_ref"]["index"],
+        0
+    );
+    assert_eq!(
+        validation_json["cases"][0]["after"]["manual_case_ref"]["signal_id"],
+        signal_id
+    );
+    assert!(
+        validation_json["cases"][0]["after"].get("manual").is_none(),
+        "generated validation case must reference top-level manual payload instead of duplicating it"
+    );
     let resolved = get_label_ontology_signal(&temp.path, &signal_id)?;
     assert_eq!(resolved.signal.status, LabelOntologySignalStatus::Resolved);
     assert_eq!(resolved.actions.len(), 3);

@@ -922,8 +922,10 @@ canonical result evidence（例如 atom/result label/proposal 引用、canonical
 
 普通 `--input` 路径是 external attestation：CLI 读取调用方提供的 JSON，service 只把
 supplied payload、source signal case 摘要、task snapshot/suggest input hash 对比和
-parent action 结果引用包装进 validation envelope。该路径可记录 `failed` / `partial`
-诊断，但不能把 `passed` 写成 trusted proof；即使 JSON 自称
+parent action 结果引用包装进 validation envelope。公共 supplied/collected payload
+只保存一次在 top-level `manual`；generated `cases[]` 使用 `after.manual_case_ref`
+引用 `manual.cases[]` 中对应 signal 的 evidence，不在每个 case 中重复整份 payload。
+该路径可记录 `failed` / `partial` 诊断，但不能把 `passed` 写成 trusted proof；即使 JSON 自称
 `evidence_type="automated"`，`--status passed` 也会被拒绝，linked signals 不会被
 关闭。
 

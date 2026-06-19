@@ -890,8 +890,8 @@ Lifecycle commands 写入 action 并同步更新 signal status：
 - `resolve --no-change`：记录无需 ontology 修改的 resolution。
 
 这些 lifecycle commands 只记录 review/status 变化，不接受 canonical mutation
-provenance 字段。`add_positive_atom`、`add_negative_atom`、`update_semantics`、
-`create_label_proposal`、`bootstrap_label` 和 `validate` 等 action rows 只能由
+provenance 字段。`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、
+`update_semantics`、`create_label_proposal`、`bootstrap_label` 和 `validate` 等 action rows 只能由
 `label semantics upsert`、`label ontology apply atom`、`label propose`、
 proposal accept、`label bootstrap`、`label ontology validate` 等专用命令/服务路径在同一
 transaction 中写入。通用 action command 不能伪造 canonical before/after hash、
@@ -903,17 +903,21 @@ row 的 `created_by_type` / `agent_type`；action name 仍来自全局 `--actor`
 `user` actor 带 `--agent-type` 会被拒绝。
 
 `label ontology apply atom` 只接受 `confirmed` source signals。它会读取目标 label
-当前 semantics，把泛化文本加入对应数组，走现有 semantics upsert/rebuild atoms 路径，
-写入 `add_positive_atom` 或 `add_negative_atom` action，记录生成 atom 的软引用、
-content hash、before/after hash 和 diff，并把 validation status 置为 `pending`。
+当前 semantics，把泛化文本加入对应数组，走现有 semantics upsert/rebuild atoms 路径。
+如果 canonical 内容实际新增 atom，会写入 `add_positive_atom` 或 `add_negative_atom`
+action，记录生成 atom 的软引用、content hash、before/after hash 和 diff，并把
+validation status 置为 `pending`。如果同内容 atom 已经存在，则写入
+`adopt_existing_atom` provenance-only action，记录 existing atom 软引用、before/after
+hash（相同）和 source signal links；该 action 不修改 semantics/atoms、不标脏 atom
+index，validation status 为 `not_required`。
 默认要求所有带 `target_label_id` 的 source signals 都指向被修改 label；不匹配时拒绝
 并列出 offending signal ids。Atom text 不需要逐字等于 source signal 的 candidate
 text，reviewer 可以写更泛化的 canonical atom。确实需要 retarget confirmed same-board
 signals 时，必须传 `--allow-retarget` 和非空 `--retarget-reason <text>`；action
 `change_json.retarget_override` 会记录 reason、source signal 原始 target/proposed label
 和最终 target label。Override 不放宽 board/status 要求。
-该命令只更新 SQLite truth 并标脏 label atom index；vector index rebuild 和后续
-suggest 验证仍是第二阶段。
+该命令只有在 canonical atom 实际新增时才标脏 label atom index；vector index rebuild
+和后续 suggest 验证仍是第二阶段。
 
 `label ontology validate` 为一个 mutation action 追加 `validate` action。Parent action
 必须是同一 board 上 `validation_status=pending` 的 canonical mutation action，并携带

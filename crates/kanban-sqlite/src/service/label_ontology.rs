@@ -520,7 +520,7 @@ pub fn apply_label_ontology_atom_with_options(
             kind: input.kind,
             text: input.text,
         })?;
-        let action_type = match atom.polarity.as_str() {
+        let canonical_add_action_type = match atom.polarity.as_str() {
             "positive" => LabelOntologyActionType::AddPositiveAtom,
             "negative" => LabelOntologyActionType::AddNegativeAtom,
             _ => {
@@ -535,7 +535,13 @@ pub fn apply_label_ontology_atom_with_options(
         let mut after = before.clone();
         after.push_atom(&atom.kind, &atom.text);
         let after_hash = semantics_hash(&label, &after)?;
-        if after_hash != before_hash {
+        let canonical_changed = after_hash != before_hash;
+        let action_type = if canonical_changed {
+            canonical_add_action_type
+        } else {
+            LabelOntologyActionType::AdoptExistingAtom
+        };
+        if canonical_changed {
             let definition = LabelDefinition {
                 id: label.id.clone(),
                 name: label.name.clone(),
@@ -572,7 +578,10 @@ pub fn apply_label_ontology_atom_with_options(
                 "content_hash": &result_atom_content_hash,
                 "id": &result_atom_id,
             },
-            "changed": before_hash != after_hash,
+            "changed": canonical_changed,
+            "canonical_changed": canonical_changed,
+            "provenance_only": !canonical_changed,
+            "requested_action_type": canonical_add_action_type.to_string(),
             "before": semantics_json(&label, &before),
             "after": semantics_json(&label, &after),
             "retarget_override": retarget_override,
@@ -595,7 +604,11 @@ pub fn apply_label_ontology_atom_with_options(
                 canonical_before_hash: Some(before_hash),
                 canonical_after_hash: Some(after_hash),
                 change_json,
-                validation_status: LabelOntologyValidationStatus::Pending,
+                validation_status: if canonical_changed {
+                    LabelOntologyValidationStatus::Pending
+                } else {
+                    LabelOntologyValidationStatus::NotRequired
+                },
                 validation_json: "{}".to_owned(),
             },
             now,
@@ -3917,6 +3930,7 @@ fn validate_status_transition(
         ),
         LabelOntologyActionType::AddPositiveAtom
         | LabelOntologyActionType::AddNegativeAtom
+        | LabelOntologyActionType::AdoptExistingAtom
         | LabelOntologyActionType::UpdateSemantics
         | LabelOntologyActionType::CreateLabelProposal
         | LabelOntologyActionType::BootstrapLabel => {

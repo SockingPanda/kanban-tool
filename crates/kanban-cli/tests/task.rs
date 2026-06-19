@@ -1182,6 +1182,151 @@ fn label_ontology_cli_record_list_show_review_round_trip() -> anyhow::Result<()>
 }
 
 #[test]
+fn label_ontology_cli_review_candidate_atom_empty_candidate_fallback() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_review_candidate_atom_empty_candidate_fallback")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task_a = kanban_sqlite::create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Ontology ledger gap A"),
+    )?;
+    let task_b = kanban_sqlite::create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Ontology ledger gap B"),
+    )?;
+    let task_c = kanban_sqlite::create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Decision comments gap"),
+    )?;
+    for (task_id, signal_key, proposed_label_name, score) in [
+        (&task_a.id, "cli-gap-a", "Ontology Ledger", 0.1),
+        (&task_b.id, "cli-gap-b", "Ontology Ledger", 0.12),
+        (&task_c.id, "cli-gap-c", "Decision Comments", 0.14),
+    ] {
+        kanban_sqlite::record_label_ontology_observation(
+            &temp.path,
+            "default",
+            task_id,
+            LabelOntologyRecordInput {
+                actor: LabelOntologyActor {
+                    name: "label-agent".to_owned(),
+                    actor_type: "agent".to_owned(),
+                    agent_type: Some("local".to_owned()),
+                },
+                agent_candidates_json: json!([]).to_string(),
+                suggestion_snapshot_json: json!({"selected_labels": []}).to_string(),
+                final_decision_json: json!({"accepted_labels": []}).to_string(),
+                suggest_coverage: Some(0.2),
+                suggest_coverage_cosine: Some(0.3),
+                suggest_residual_norm: Some(0.8),
+                suggest_needs_new_label: true,
+                suggest_degraded: false,
+                diagnostics_json: json!([]).to_string(),
+                capture_fingerprint: None,
+                signals: vec![LabelOntologySignalInput {
+                    kind: LabelOntologySignalKind::VocabularyGap,
+                    target_label_ref: None,
+                    related_labels_json: json!([]).to_string(),
+                    proposed_action: LabelOntologyProposedAction::BootstrapLabel,
+                    candidate_atom: None,
+                    proposed_label_name: Some(proposed_label_name.to_owned()),
+                    proposal_json: json!({
+                        "name": proposed_label_name,
+                        "description": "review grouping candidate"
+                    })
+                    .to_string(),
+                    agent_selected: false,
+                    suggest_state: Some(LabelOntologySuggestState::Absent),
+                    suggest_score: Some(score),
+                    suggest_rank: None,
+                    final_selected: false,
+                    rationale: "Existing label vocabulary did not explain this task.".to_owned(),
+                    confidence: Some(0.7),
+                    signal_key: Some(signal_key.to_owned()),
+                }],
+            },
+        )?;
+    }
+
+    let review = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "review",
+            "--group-by",
+            "candidate-atom",
+        ],
+    )?
+    .success_json()?;
+    let groups = review["data"].as_array().context("review groups")?;
+    let ontology_gap = groups
+        .iter()
+        .find(|group| {
+            group["key"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("proposed:ontology ledger")
+        })
+        .context("ontology ledger group")?;
+    assert_eq!(ontology_gap["group_by"], "candidate_atom");
+    assert_eq!(ontology_gap["proposed_label_name"], "Ontology Ledger");
+    assert_eq!(ontology_gap["task_count"], 2);
+    assert_eq!(ontology_gap["signal_count"], 2);
+    assert!(
+        ontology_gap["key"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("vocabulary_gap")
+    );
+    assert!(
+        ontology_gap["key"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("bootstrap_label")
+    );
+
+    let other_gap = groups
+        .iter()
+        .find(|group| {
+            group["key"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("proposed:decision comments")
+        })
+        .context("decision comments group")?;
+    assert_eq!(other_gap["task_count"], 1);
+    assert_ne!(ontology_gap["key"], other_gap["key"]);
+
+    let human = kanban(
+        &temp.path,
+        &[
+            "label",
+            "ontology",
+            "review",
+            "--group-by",
+            "candidate-atom",
+        ],
+    )?
+    .success_stdout()?;
+    assert!(
+        human.contains(
+            "key=no-candidate-atom|kind:vocabulary_gap|proposed:ontology ledger|action:bootstrap_label"
+        ),
+        "{human}"
+    );
+    assert!(human.contains("title=Ontology Ledger"), "{human}");
+    assert!(human.contains("tasks=2"), "{human}");
+    Ok(())
+}
+
+#[test]
 fn label_ontology_cli_record_accepts_simplified_snapshot_capture_input() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_cli_record_accepts_simplified_snapshot_capture_input")?;
     kanban(&temp.path, &["init"])?.success()?;

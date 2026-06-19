@@ -174,6 +174,9 @@ Semantics upsert 默认是 patch，不是 full replace：缺省字段保留当�
 primitive；proposal accept 不自动写 `task_labels`，bootstrap 会绑定来源 task。旧数据或
 cleanup 路径中缺少 action provenance 的 atom 只能通过 `legacy_untracked=true` 标记，不应
 被当作新的 ontology growth 方式。
+当 apply atom 发现同内容 atom 已存在时，只写 `adopt_existing_atom` provenance-only action；
+它连接新的 source signals 到 existing atom，不修改 canonical semantics/atoms，也不触发
+derived atom index dirty。
 
 ---
 
@@ -276,7 +279,7 @@ Dispatcher 见 [`DISPATCHER_SPEC.md`](DISPATCHER_SPEC.md)。
 11. 每次状态变化必须写 `task_events`。
 12. task snapshot 与对应 event 必须同 transaction 提交。
 13. `tasks.status`、label binding truth、label semantics truth、ontology ledger 和派生检索层各自有明确写权限；derived stores 不拥有 canonical write path。
-14. 新的 constructive ontology mutation 不通过 generic lifecycle action endpoint；必须由专用 command/API/service 路径同时写 canonical state 与 provenance action。
+14. 新的 constructive ontology mutation 不通过 generic lifecycle action endpoint；必须由专用 command/API/service 路径同时写 canonical state 与 provenance action；采用已存在 atom 只写 `adopt_existing_atom` provenance action，不伪装成新增 atom。
 
 ---
 

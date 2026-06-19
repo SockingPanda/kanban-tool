@@ -545,7 +545,7 @@ Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、�
 | `id` | `loa_...` action id。 |
 | `board_id` | board scope。 |
 | `parent_action_id` | validation 等后续 action 指向被验证的 mutation action。 |
-| `action_type` | `confirm`、`reject`、`supersede`、`resolve_no_change`、`add_positive_atom`、`add_negative_atom`、`update_semantics`、`create_label_proposal`、`bootstrap_label`、`rename_label`、`split_label`、`merge_labels`、`validate`。 |
+| `action_type` | `confirm`、`reject`、`supersede`、`resolve_no_change`、`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、`update_semantics`、`create_label_proposal`、`bootstrap_label`、`rename_label`、`split_label`、`merge_labels`、`validate`。 |
 | `reason` | 必填人工或 agent 理由。 |
 | `target_label_id` / `result_label_id` | 修改目标与结果 label。 |
 | `result_atom_id` / `result_atom_content_hash` | 新增或采用 atom 的软引用和稳定 hash。 |
@@ -561,7 +561,8 @@ Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、�
 历史 action 依赖 `result_atom_content_hash` 和 `change_json` 中的 atom snapshot 保持可解释。
 Atom explain 查询会优先解析当前 `label_atoms.id`，也允许用
 `result_atom_content_hash` / `label_atoms.content_hash` 作为软引用恢复 rebuild 后的历史
-provenance。已有 atom 如果来自旧 semantics 写入而没有任何 ontology action 引用，
+provenance。`adopt_existing_atom` 表示新的 source signal 采用了当前已存在 atom，
+不代表 canonical 内容新增。已有 atom 如果来自旧 semantics 写入而没有任何 ontology action 引用，
 查询结果只标记 `legacy_untracked=true`，不会伪造 provenance。
 
 `create_label_proposal` action 对同一 `(board_id, result_proposal_id)` 唯一；proposal
@@ -572,9 +573,11 @@ action，从而让 proposal creation -> bootstrap acceptance provenance 链路�
 
 - `label_semantics` / `label_atoms` 是 canonical ontology truth；`label_ontology_actions`
   是 append-only provenance，不是第二份 truth。
-- `update_semantics`、`add_positive_atom`、`add_negative_atom`、`create_label_proposal`
-  和 `bootstrap_label` action 只能由专用 service path 写入，并与对应 canonical
-  write 位于同一 SQLite transaction。
+- `update_semantics`、`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、
+  `create_label_proposal` 和 `bootstrap_label` action 只能由专用 service path 写入。
+  `adopt_existing_atom` 是 provenance-only path，before/after hash 相同，只连接新的
+  source signals 到 existing atom，不修改 canonical semantics/atoms，也不标脏 atom
+  index；其它 constructive mutation 与对应 canonical write 位于同一 SQLite transaction。
 - Manual mutation 可以没有 source signals，但仍必须记录 actor、reason、before/after
   hash 和 change snapshot。Signal-driven mutation 会额外写入
   `label_ontology_action_signals` links。

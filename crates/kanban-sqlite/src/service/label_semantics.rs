@@ -810,7 +810,7 @@ fn label_atom_provenance_actions(
         .prepare(&format!(
             "SELECT {ONTOLOGY_ACTION_COLUMNS} FROM label_ontology_actions a \
              WHERE a.board_id=?1 \
-               AND a.action_type IN ('add_positive_atom','add_negative_atom','update_semantics','bootstrap_label') \
+               AND a.action_type IN ('add_positive_atom','add_negative_atom','adopt_existing_atom','update_semantics','bootstrap_label') \
                AND (a.result_atom_id=?2 OR a.result_atom_id=?3 OR a.result_atom_content_hash=?2 OR a.result_atom_content_hash=?4) \
              ORDER BY a.created_at ASC, a.id ASC"
         ))

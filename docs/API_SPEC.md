@@ -1493,8 +1493,8 @@ Groups sort by distinct `task_count` desc, then `confirmed_count` desc,
 `parent_action_id`、`target_label_ref`、result 字段、canonical hash、`change` /
 `change_json`、`validation_status` 和 `validation` / `validation_json` 必须为
 `null`/缺省；否则返回
-`invalid_input`。`add_positive_atom`、`add_negative_atom`、`update_semantics`、
-`create_label_proposal`、`bootstrap_label`、`validate` 等 mutation/validation action
+`invalid_input`。`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、
+`update_semantics`、`create_label_proposal`、`bootstrap_label`、`validate` 等 mutation/validation action
 types 不允许通过该 generic endpoint 写入；canonical mutation provenance 必须由
 semantics PUT、apply atom、proposal create/accept、task-label bootstrap 或 validate 等
 专用 route 在同一 transaction 内写入。`supersede` 写入时会沿 replacement
@@ -1518,15 +1518,19 @@ read-modify-upsert semantics，并写入 atom provenance action：
 ```
 
 Source signals 必须属于同一 board 且已 `confirmed`。`kind` 只接受
-`applies_when`、`positive_example`、`excludes_when`、`negative_example`。成功后返回
-`add_positive_atom` 或 `add_negative_atom` action，记录 result atom soft reference、
-content hash、before/after canonical hash 和 diff，并把 validation status 置为
-`pending`。默认要求所有带 `target_label_id` 的 source signals 都指向 `label_ref`；
+`applies_when`、`positive_example`、`excludes_when`、`negative_example`。如果 canonical
+内容实际新增 atom，成功后返回 `add_positive_atom` 或 `add_negative_atom` action，
+记录 result atom soft reference、content hash、before/after canonical hash 和 diff，
+并把 validation status 置为 `pending`。如果同内容 atom 已经存在，成功后返回
+`adopt_existing_atom` provenance-only action，记录 existing atom soft reference、相同的
+before/after canonical hash 和 source signal links；该 action 不修改 semantics/atoms、
+不标脏 atom index，validation status 为 `not_required`。默认要求所有带 `target_label_id` 的 source signals 都指向 `label_ref`；
 不匹配时返回 `400 invalid_input` 并列出 offending signal ids。Atom text 可由 reviewer
 泛化，不要求等于 source signal 的 candidate text。确实需要 retarget confirmed
 same-board signals 时，必须传 `allow_retarget=true` 和非空 `retarget_reason`；
 action `change_json.retarget_override` 会记录 reason、source signal 原始 target/proposed
-label 和最终 target label。Override 不放宽 board/status 要求。该 route 会标脏 label atom index；vector rebuild 和 suggest validation
+label 和最终 target label。Override 不放宽 board/status 要求。该 route 只有在
+canonical atom 实际新增时才标脏 label atom index；vector rebuild 和 suggest validation
 在 transaction 外执行。
 
 `POST /api/v1/boards/{board}/label-ontology/validate` 追加 external attestation

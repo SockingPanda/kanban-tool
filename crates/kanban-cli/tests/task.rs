@@ -232,6 +232,10 @@ fn label_suggest_returns_degraded_json_without_vector_provider() -> anyhow::Resu
     assert_eq!(suggestions["data"]["task_id"], task_id);
     assert_eq!(suggestions["data"]["degraded"], true);
     assert_eq!(suggestions["data"]["needs_new_label"], false);
+    assert_eq!(
+        suggestions["data"]["reason_codes"],
+        json!(["degraded_result", "vector_store_disabled"])
+    );
     assert!(
         suggestions["data"]["selected_labels"]
             .as_array()

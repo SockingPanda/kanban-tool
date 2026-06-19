@@ -645,6 +645,10 @@ async fn task_label_suggestions_route_returns_degraded_json_without_provider() -
     assert_eq!(json["data"]["task_id"], task.id);
     assert_eq!(json["data"]["degraded"], true);
     assert_eq!(json["data"]["needs_new_label"], false);
+    assert_eq!(
+        json["data"]["reason_codes"],
+        json!(["degraded_result", "vector_store_disabled"])
+    );
     assert!(
         json["data"]["selected_labels"]
             .as_array()

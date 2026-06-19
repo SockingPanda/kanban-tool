@@ -30,15 +30,18 @@ pub use kanban_sqlite::{
     list_label_atoms, list_label_ontology_signals, list_label_proposals, list_labels, list_outbox,
     list_runs, list_tasks, promote_task, propose_task_label, propose_task_label_with,
     propose_task_label_with_store, propose_task_label_with_store_and_create_options,
-    record_label_ontology_observation, reject_label_proposal, review_label_ontology, search_tasks,
-    set_task_retry_policy_by_id, specify_task, submit_review_task, task_ontology_summary,
+    record_label_ontology_observation, reject_label_proposal, restore_bootstrap_task_label_state,
+    review_label_ontology, search_tasks, set_task_retry_policy_by_id,
+    snapshot_bootstrap_task_label_state, specify_task, submit_review_task, task_ontology_summary,
     unblock_task, update_task, upsert_label_semantics, validate_label_ontology_action,
+    validate_label_ontology_action_with_trusted_evidence,
 };
 #[cfg(feature = "vector-lancedb")]
 pub use kanban_sqlite::{
-    label_atom_index_status_with, query_label_atom_index_by_vector_with,
-    query_label_atom_index_with, rebuild_label_atom_index_with, rebuild_vector_store_with,
-    sync_vector_store_with,
+    LabelOntologyTrustedValidationInput, LabelSuggestionOptions, label_atom_index_status_with,
+    query_label_atom_index_by_vector_with, query_label_atom_index_with,
+    rebuild_label_atom_index_with, rebuild_vector_store_with, sync_vector_store_with,
+    validate_label_ontology_action_with_trusted_suggestions,
 };
 #[cfg(feature = "vector-lancedb")]
 pub use kanban_vector::{

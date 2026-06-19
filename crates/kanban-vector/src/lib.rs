@@ -26,6 +26,8 @@ pub struct VectorStoreStatus {
     pub dirty: Option<bool>,
     #[serde(default)]
     pub board_dirty: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation: Option<i64>,
 }
 
 impl VectorStoreStatus {
@@ -37,6 +39,7 @@ impl VectorStoreStatus {
             diagnostics: Vec::new(),
             dirty: None,
             board_dirty: None,
+            generation: None,
         }
     }
 }

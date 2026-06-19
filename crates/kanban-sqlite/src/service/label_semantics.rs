@@ -1094,6 +1094,7 @@ fn label_atom_index_status_from_base(
     let board = label_atom_index_board_status(conn, board_id)?;
     status.dirty = Some(state.dirty);
     status.board_dirty = Some(board.dirty);
+    status.generation = board.last_rebuild_at;
     if !status.enabled {
         push_status_diagnostic(&mut status.diagnostics, "label_atom_index_disabled");
     }

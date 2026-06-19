@@ -520,6 +520,7 @@ kanban label ontology supersede <signal_id>... --by <signal_id> --reason <text> 
 kanban label ontology resolve <signal_id>... --no-change --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology apply atom <signal_id>... --label <label> --kind applies-when|positive-example|excludes-when|negative-example --text <text> --reason <text> [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology validate <action_id> --status passed|failed|partial --reason <text> --input <path|-> [signal_id]... [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology validate <action_id> --trusted --status passed|failed|partial --reason <text> [signal_id]... [--vector-config <toml>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--actor-type user|agent] [--agent-type <type>] [--json]
 ```
 
 `label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
@@ -543,19 +544,32 @@ Label 变更对 task-label 关联保持幂等。只有关联实际变化时，�
 canonical label，也不会留下部分 task-label 绑定。缺失 canonical label 的创建规则
 与单 label add 相同，但不会自动生成 `label_semantics` 或 `label_atoms`。
 
-`label bootstrap` 是一次性 new-label adoption 流程：在同一 transaction 内创建或复用
-当前 task 所属 board 上的 canonical label，写入/覆盖该 label 的
-`label_semantics`，同步重建 SQLite `label_atoms`，标脏派生的 label atom vector
-index，并把该 label 绑定到 task。`<label>` 按名称解析；空白名称会被拒绝。语义输入
-会 trim 并丢弃空白值，且必须至少提供 `description` 或一个非空语义数组值。重复执行
-同一 task/label 不会重复写 `task_labels`，但会按最新输入 upsert semantics。JSON
+`label bootstrap` 是一次性 new-label adoption helper：在同一 transaction 内创建
+当前 task 所属 board 上缺失的 canonical label，或复用没有既有 semantics 的同名
+label，写入该 label 的 `label_semantics`，同步重建 SQLite `label_atoms`，标脏派生
+的 label atom vector index，并把该 label 绑定到 task。`<label>` 按名称解析；空白
+名称会被拒绝。语义输入会 trim 并丢弃空白值，且必须至少提供 `description` 或一个非空
+语义数组值。
+
+Bootstrap 默认不会覆盖已有 `label_semantics`。如果同名 label 已经有 semantics，
+命令会失败，并要求改用专用 semantics mutation 或 proposal/adoption 路径；重复执行
+同一 task/label 只在目标 label 仍无 semantics 时保持 task-label 绑定幂等。JSON
 返回 `{ "task": <TaskRecord>, "semantics": <LabelSemanticsRecord>, "verification": null|<Verification> }`。
 
-传入 `--verify` 或 `--vector-config <toml>` 时，CLI 会在写入后重建 label atom
-vector index，随后对来源 task 执行非 degraded `label suggest`，并要求新 label 出现在
-`selected_labels` 或 `candidates`，且 score 至少达到 `--min-verify-score`（默认
-`0.50`）。无可用 vector provider 时，验证会在写入前失败；不需要本地 vector 验证时省略
-`--verify` 和 `--vector-config`。
+传入 `--verify` 或 `--vector-config <toml>` 时，CLI 会先检查验证所需 vector store
+是否可用，然后保存 bootstrap 前的 canonical snapshot。随后 bootstrap 仍会先写入
+SQLite truth，再重建 label atom vector index，对来源 task 执行非 degraded
+`label suggest`，并要求新 label 出现在 `selected_labels` 或 `candidates`，且 score
+至少达到 `--min-verify-score`（默认 `0.50`）。这不是 staged transaction，也不是验证前
+零写入流程。
+
+如果 rebuild、suggest 或分数门槛失败，CLI 会按 snapshot 补偿 canonical state：新建
+label 会在没有其它引用时删除 label identity、`label_semantics`、`label_atoms` 和新
+task-label binding；复用的 label 会恢复原有 semantics/atoms，或移除本次创建的
+semantics/atoms，并恢复调用前的 task-label binding 状态。补偿后会标脏 label atom
+index，错误信息会说明验证失败和补偿是否已恢复 canonical state。无可用 vector
+provider 时，验证会在写入前失败；不需要本地 vector 验证时省略 `--verify` 和
+`--vector-config`。
 
 示例：
 
@@ -840,27 +854,40 @@ signals 时，必须传 `--allow-retarget` 和非空 `--retarget-reason <text>`�
 该命令只更新 SQLite truth 并标脏 label atom index；vector index rebuild 和后续
 suggest 验证仍是第二阶段。
 
-`label ontology validate` 为一个 mutation action 追加 `validate` action。CLI 读取
-`--input` 中的 validation JSON，并由 service 包装 manual payload、source signal
-case 摘要、task snapshot/suggest input hash 对比和 parent action 结果引用。Parent action 必须是
-同一 board 上 `validation_status=pending` 的 canonical mutation action，并携带
+`label ontology validate` 为一个 mutation action 追加 `validate` action。Parent action
+必须是同一 board 上 `validation_status=pending` 的 canonical mutation action，并携带
 canonical result evidence（例如 atom/result label/proposal 引用、canonical hash 和
-非空 change snapshot）。`--status passed` 的 input 必须包含 automated typed
-evidence：`evidence_type="automated"`、非空 `embedding_model`、object
-`solver_options`、clean `index.status`、`index.generation`，以及覆盖每个 linked
-source signal 的 `cases[]`；空 `{}`、dirty/error atom index、reviewer attestation
-或无类型 evidence 会被拒绝。调用方应在 SQLite mutation transaction 外重建 atom index
-并收集 before/after suggest evidence；service 在短 transaction 内重新核验 parent action
-和 supplied evidence 后写 validation action。
+非空 change snapshot）。
+
+普通 `--input` 路径是 external attestation：CLI 读取调用方提供的 JSON，service 只把
+supplied payload、source signal case 摘要、task snapshot/suggest input hash 对比和
+parent action 结果引用包装进 validation envelope。该路径可记录 `failed` / `partial`
+诊断，但不能把 `passed` 写成 trusted proof；即使 JSON 自称
+`evidence_type="automated"`，`--status passed` 也会被拒绝，linked signals 不会被
+关闭。
+
+`--trusted` 路径才是 trusted automated validation。它不接受 `--input`；CLI 必须有
+可用 label atom vector store（`vector-lancedb` build 且可解析 `--vector-config` 或默认
+config），先在 SQLite transaction 外 rebuild atom index，再用同一
+`--limit` / `--candidate-limit` / `--atom-limit` / `--max-selected-labels` /
+`--min-score` options 对 linked source signals 重新运行 `label suggest`，由工具生成
+`evidence_type="trusted_automated"`、`collector.source="label_ontology_validate_trusted"`、
+`embedding_model`、`solver_options`、clean `index.status` / `index.generation` 和
+per-signal `cases[]`。写 action 时 service 会在短 transaction 内重新核验 parent action、
+source signals、canonical after hash、atom index dirty/error 状态和 generation，防止
+查询后 canonical 或 derived state 已变化。dirty/error/disabled index、缺失 generation
+或 stale generation 都不能产生 trusted passed。
 
 `cases[]` 的 `case_type` 必须匹配 parent action：`positive_atom`、`negative_atom`
 或 `bootstrap_label`。Positive atom validation 要求 `after.degraded=false`、
 result atom id/content hash 出现在 `after.evidence_atoms[]`、target label selected
 或 score >= 0.50，且 score/coverage 不恶化。Negative atom validation 要求 result
-atom evidence、false-positive task 上 target label score 下降或不再 selected，并且
-提供的 `after.positive_controls[]` 全部 passed 且未 regressed。Bootstrap label
-validation 要求所有 linked source signals 都有 passed case，new/result label selected
-或 score >= 0.50，且 evidence atoms 来自 result label。
+atom id/content hash 出现在 `after.negative_evidence_atoms[]`；false-positive task 上
+必须证明 `after.target.selected=false`，或 before/after score 都存在且 after score
+低于 before score；并且必须提供至少一个 `after.positive_controls[]` 且全部 passed
+未 regressed，或提供带非空 reason 的 `after.positive_control_waiver`。Bootstrap
+label validation 要求所有 linked source signals 都有 passed case，new/result label
+selected 或 score >= 0.50，且 evidence atoms 来自 result label。
 
 Validation comparability 默认使用 observation 的
 `suggest_input_hash`；status、`updated_at`、`lock_version` 或 task label binding

@@ -909,12 +909,16 @@ Task label bootstrap 请求：
 ```
 
 `POST /api/v1/tasks/{task_id}/labels/bootstrap` 是一次性 new-label adoption API：
-在同一 transaction 内创建或复用 task 所属 board 上的 canonical label，写入/覆盖
-该 label 的 `label_semantics`，同步重建 SQLite `label_atoms`，标脏派生的 label
-atom vector index，并把该 label 绑定到 task。`name` 按 label 名称解析；空白名称会
-被拒绝。语义输入会 trim 并丢弃空白值，且必须至少提供 `description` 或一个非空语义
-数组值。重复调用同一 task/label 不会重复写 `task_labels`，但会按最新输入 upsert
-semantics。成功响应状态为 `201 Created`：
+在同一 transaction 内创建 task 所属 board 上缺失的 canonical label，或复用没有既有
+semantics 的同名 label，写入该 label 的 `label_semantics`，同步重建 SQLite
+`label_atoms`，标脏派生的 label atom vector index，并把该 label 绑定到 task。
+`name` 按 label 名称解析；空白名称会被拒绝。语义输入会 trim 并丢弃空白值，且必须至少
+提供 `description` 或一个非空语义数组值。
+
+Bootstrap API 默认不会覆盖已有 `label_semantics`。如果同名 label 已经有
+semantics，请求会失败，并要求调用方改用专用 semantics mutation 或
+proposal/adoption 路径；重复调用同一 task/label 只在目标 label 仍无 semantics 时保持
+task-label 绑定幂等。成功响应状态为 `201 Created`：
 
 ```json
 {
@@ -940,6 +944,13 @@ semantics。成功响应状态为 `201 Created`：
   }
 }
 ```
+
+HTTP bootstrap 不包含 CLI `--verify` 的 orchestration：请求体没有 vector config、
+minimum score 或 verify flag，响应也没有 `verification` 字段。该 endpoint 不会替调用方
+重建 label atom vector index、运行 `label suggest`、检查分数门槛，也不会提供 CLI
+verify 失败时的 snapshot compensation 流程；需要写入后验证与补偿语义时使用 CLI
+`label bootstrap --verify`，或在调用 API 后显式执行 index rebuild / suggest / review
+流程。
 
 `DELETE /api/v1/tasks/{task_id}/labels/{label_id}` 会移除 task 上的指定 label，
 `{label_id}` 接受 label id 或 label 名称。成功响应同样返回更新后的 task，包含
@@ -1467,36 +1478,36 @@ action `change_json.retarget_override` 会记录 reason、source signal 原始 t
 label 和最终 target label。Override 不放宽 board/status 要求。该 route 会标脏 label atom index；vector rebuild 和 suggest validation
 在 transaction 外执行。
 
-`POST /api/v1/boards/{board}/label-ontology/validate` 追加 validation action：
+`POST /api/v1/boards/{board}/label-ontology/validate` 追加 external attestation
+validation action。HTTP route 接收调用方提交的 `validation` / `validation_json`，
+但当前不运行 vector rebuild、index query 或 `label suggest`，因此它不能产生
+trusted automated `passed`。需要 trusted automated validation 时使用 CLI
+`label ontology validate --trusted`，由工具采集 index/suggest evidence 后写入。
 
 ```json
 {
   "actor": {"name": "codex", "type": "agent", "agent_type": "codex"},
   "parent_action_id": "loa_...",
   "signal_ids": ["los_1", "los_2"],
-  "reason": "Source tasks now select the target label after atom rebuild",
-  "validation_status": "passed",
+  "reason": "Source task still does not select the target label after atom rebuild",
+  "validation_status": "failed",
   "validation": {
-    "evidence_type": "automated",
-    "embedding_model": "local-embeddings-v1",
-    "solver_options": {"candidate_limit": 24, "atom_limit": 64},
-    "index": {"status": "ready", "dirty": false, "generation": 42},
+    "evidence_type": "external_attestation",
+    "reviewer": "codex",
     "cases": [
       {
         "signal_id": "los_1",
         "case_type": "positive_atom",
-        "passed": true,
+        "passed": false,
         "before": {
           "target": {"label_id": "l_cli", "selected": false, "score": 0.12},
           "coverage": 0.61
         },
         "after": {
           "degraded": false,
-          "target": {"label_id": "l_cli", "selected": true, "score": 0.72},
-          "coverage": 0.78,
-          "evidence_atoms": [
-            {"id": "la_...", "content_hash": "...", "label_id": "l_cli"}
-          ]
+          "target": {"label_id": "l_cli", "selected": false, "score": 0.14},
+          "coverage": 0.60,
+          "notes": "Manual review of stored suggest output did not meet pass criteria"
         }
       }
     ]
@@ -1504,18 +1515,23 @@ label 和最终 target label。Override 不放宽 board/status 要求。该 rout
 }
 ```
 
-Service 会把 supplied `validation` / `validation_json` 包进 validation envelope，附上 source signal
-cases、observation task snapshot / suggest input hash 与当前 task hash 对比、parent
-action result 引用和 summary。`parent_action_id` 必须指向同一 board 上 `validation_status=pending`
-的 canonical mutation action，且 parent action 必须带有 canonical result evidence
-（例如 atom/result label/proposal 引用、canonical hash 和非空 change snapshot）。
-`passed` 还必须提供 automated typed evidence：top-level `evidence_type="automated"`、
-非空 `embedding_model`、object `solver_options`、`index.status` / `index.generation`
-和覆盖每个 linked source signal 的 `cases[]`；dirty/error atom index、
-空 `{}`、reviewer attestation 或无类型 evidence 会返回 `invalid_input`。Service 不在
-长 SQLite mutation transaction 内执行 embedding/index 查询；调用方在 transaction 外收集
-before/after suggest evidence，service 在短 transaction 中核验 parent action、index
-状态和 evidence contract 后写 validation action。
+Service 会把 supplied `validation` / `validation_json` 包进 validation envelope，附上
+source signal cases、observation task snapshot / suggest input hash 与当前 task hash
+对比、parent action result 引用和 summary。`parent_action_id` 必须指向同一 board 上
+`validation_status=pending` 的 canonical mutation action，且 parent action 必须带有
+canonical result evidence（例如 atom/result label/proposal 引用、canonical hash 和
+非空 change snapshot）。HTTP supplied JSON 是 external attestation；它可保存
+`failed` / `partial` 诊断，但 `validation_status="passed"` 会返回 `invalid_input`，
+因为 passed validation 需要工具采集的 `trusted_automated` evidence。结构化字段或
+字符串 `"automated"` 本身不构成可信来源。
+
+Trusted automated validation 的 persisted payload 由 CLI collector 生成，而不是由 HTTP
+caller 手写：top-level `evidence_type="trusted_automated"`、`collector.source`、
+非空 `embedding_model`、object `solver_options`、clean `index.status`、
+`index.generation` 和覆盖每个 linked source signal 的 `cases[]`。CLI collector 在长
+SQLite transaction 外 rebuild atom index 并运行 suggest；写 action 时 service 在短
+transaction 中重新核验 parent action、source signals、canonical after hash、index
+dirty/error 状态和 generation。
 
 Typed policy 按 parent action 检查：
 
@@ -1524,8 +1540,12 @@ Typed policy 按 parent action 检查：
   `result_atom_content_hash`；target label 必须 selected 或 score >= 0.50；
   score/coverage 不能比 before 恶化。
 - `add_negative_atom`：`case_type="negative_atom"`，`after.evidence_atoms[]`
-  必须包含 parent result atom；false-positive task 上 target label score 必须下降或
-  不再 selected；若提供 `after.positive_controls[]`，每个 control 必须 passed 且未 regressed。
+  不用于 result negative atom 校验；parent result atom 必须出现在
+  `after.negative_evidence_atoms[]`。false-positive task 上必须证明
+  `after.target.selected=false`，或 before/after score 都存在且 after score 低于
+  before score。必须提供至少一个 `after.positive_controls[]` 且每个 control
+  passed 且未 regressed；若没有 positive control，必须提供带非空 reason 的
+  `after.positive_control_waiver`。
 - `bootstrap_label`：`case_type="bootstrap_label"`，所有 linked source signals
   都必须有 passed case；new/result label 必须 selected 或 score >= 0.50；
   evidence atoms 必须来自 result label。

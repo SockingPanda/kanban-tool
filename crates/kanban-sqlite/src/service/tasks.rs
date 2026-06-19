@@ -1,9 +1,10 @@
 use crate::connect_file;
 
 use super::{
-    BootstrapTaskLabel, BootstrapTaskLabelResult, CreateLabel, CreateTask, DeleteLabelResult,
-    LabelRecord, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage, TaskListSort, TaskPatch,
-    TaskRecord, add_dependency_in_current_tx, all, all_values, board_id, board_id_any,
+    BootstrapTaskLabel, BootstrapTaskLabelRestoreResult, BootstrapTaskLabelResult,
+    BootstrapTaskLabelSnapshot, CreateLabel, CreateTask, DeleteLabelResult, LabelRecord,
+    LabelSemanticsRecord, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage, TaskListSort,
+    TaskPatch, TaskRecord, add_dependency_in_current_tx, all, all_values, board_id, board_id_any,
     ensure_changed_one, exec, exec_named, exec_one_named, insert_event, json_valid,
     mark_label_atom_store_dirty, optional, recompute_ready_status, required_row, scalar,
     upsert_label_semantics_candidate_in_tx, validate_priority, with_immediate_tx,
@@ -323,7 +324,12 @@ pub fn bootstrap_task_label(
         let board_id = board_id(&conn, board)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
         ensure_task_allows_label_mutation(&conn, &task.id)?;
-        let label = ensure_label_in_current_tx(&conn, &task.board_id, &candidate.name, None, now)?;
+        let label = ensure_bootstrap_label_writable_in_current_tx(
+            &conn,
+            &task.board_id,
+            &candidate.name,
+            now,
+        )?;
         upsert_label_semantics_candidate_in_tx(
             &conn,
             &task.board_id,
@@ -357,7 +363,12 @@ pub fn bootstrap_task_label_by_id(
     with_immediate_tx(&conn, || {
         let board_id = active_board_id_for_label_mutation(&conn, task_id)?;
         let task = get_task_by_id(&conn, &board_id, task_id)?;
-        let label = ensure_label_in_current_tx(&conn, &task.board_id, &candidate.name, None, now)?;
+        let label = ensure_bootstrap_label_writable_in_current_tx(
+            &conn,
+            &task.board_id,
+            &candidate.name,
+            now,
+        )?;
         upsert_label_semantics_candidate_in_tx(
             &conn,
             &task.board_id,
@@ -375,6 +386,162 @@ pub fn bootstrap_task_label_by_id(
                 &task.board_id,
                 &label.id,
             )?,
+        })
+    })
+}
+
+pub fn snapshot_bootstrap_task_label_state(
+    path: impl AsRef<Path>,
+    board: &str,
+    task_ref: &str,
+    label_name: &str,
+) -> Result<BootstrapTaskLabelSnapshot> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    let task = resolve_task(&conn, &board_id, task_ref)?;
+    ensure_task_allows_label_mutation(&conn, &task.id)?;
+    let label_name = normalize_label_name(label_name)?;
+    let label = label_by_name(&conn, &board_id, &label_name)?;
+    let (task_label_existed, semantics) = if let Some(label) = &label {
+        (
+            task_label_binding_exists(&conn, &board_id, &task.id, &label.id)?,
+            optional_label_semantics_conn(&conn, &board_id, &label.id)?,
+        )
+    } else {
+        (false, None)
+    };
+    Ok(BootstrapTaskLabelSnapshot {
+        board_id,
+        task_id: task.id,
+        label_name,
+        label,
+        task_label_existed,
+        semantics,
+    })
+}
+
+pub fn restore_bootstrap_task_label_state(
+    path: impl AsRef<Path>,
+    actor: &str,
+    snapshot: &BootstrapTaskLabelSnapshot,
+) -> Result<BootstrapTaskLabelRestoreResult> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        let mut label_deleted = false;
+        let mut label_restored = false;
+        let mut task_binding_restored = false;
+        let mut semantics_restored = false;
+        let mut index_marked_dirty = false;
+
+        let mut label = label_by_name(&conn, &snapshot.board_id, &snapshot.label_name)?;
+        if label.is_none()
+            && let Some(before) = &snapshot.label
+        {
+            restore_label_record_in_current_tx(&conn, before)?;
+            label = Some(before.clone());
+            label_restored = true;
+        }
+
+        if let Some(label) = label {
+            let attached =
+                task_label_binding_exists(&conn, &snapshot.board_id, &snapshot.task_id, &label.id)?;
+            if snapshot.task_label_existed && !attached {
+                attach_label_in_current_tx(
+                    &conn,
+                    &snapshot.board_id,
+                    actor,
+                    &snapshot.task_id,
+                    &label.id,
+                    now,
+                )?;
+                task_binding_restored = true;
+            } else if !snapshot.task_label_existed && attached {
+                remove_task_label_in_current_tx(
+                    &conn,
+                    &snapshot.board_id,
+                    actor,
+                    &snapshot.task_id,
+                    &label.id,
+                    now,
+                )?;
+                task_binding_restored = true;
+            }
+
+            if snapshot.label.is_none() {
+                let remaining_bindings =
+                    count_task_label_bindings(&conn, &snapshot.board_id, &label.id)?;
+                if remaining_bindings > 0 {
+                    return Err(KanbanError::InvalidInput(format!(
+                        "cannot delete unverified bootstrap label {} because it is still attached to {} task(s)",
+                        label.name, remaining_bindings
+                    )));
+                }
+                let removed_semantics =
+                    count_label_semantics(&conn, &snapshot.board_id, &label.id)? > 0;
+                let removed_atoms = count_label_atoms(&conn, &snapshot.board_id, &label.id)?;
+                exec(
+                    &conn,
+                    "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+                    params![snapshot.board_id, label.id],
+                )?;
+                exec(
+                    &conn,
+                    "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
+                    params![snapshot.board_id, label.id],
+                )?;
+                exec(
+                    &conn,
+                    "DELETE FROM labels WHERE board_id=?1 AND id=?2",
+                    params![snapshot.board_id, label.id],
+                )?;
+                insert_event(
+                    &conn,
+                    &snapshot.board_id,
+                    None,
+                    None,
+                    "label.deleted",
+                    actor,
+                    &json!({
+                        "label_id": label.id,
+                        "label": label.name,
+                        "forced": false,
+                        "removed_task_bindings": 0,
+                        "removed_semantics": removed_semantics,
+                        "removed_atoms": removed_atoms,
+                        "reason": "bootstrap verification compensation"
+                    })
+                    .to_string(),
+                    now,
+                )?;
+                label_deleted = true;
+            } else if let Some(semantics) = &snapshot.semantics {
+                restore_label_semantics_record_in_current_tx(&conn, semantics)?;
+                semantics_restored = true;
+            } else {
+                exec(
+                    &conn,
+                    "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+                    params![snapshot.board_id, label.id],
+                )?;
+                exec(
+                    &conn,
+                    "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
+                    params![snapshot.board_id, label.id],
+                )?;
+                semantics_restored = true;
+            }
+
+            mark_label_atom_store_dirty(&conn, &snapshot.board_id, now)?;
+            index_marked_dirty = true;
+        }
+
+        Ok(BootstrapTaskLabelRestoreResult {
+            label_deleted,
+            label_restored,
+            task_binding_restored,
+            semantics_restored,
+            index_marked_dirty,
         })
     })
 }
@@ -1118,6 +1285,121 @@ fn normalize_label_name(label: &str) -> Result<String> {
         return Err(KanbanError::InvalidInput("label name is required".into()));
     }
     Ok(label.to_owned())
+}
+
+fn ensure_bootstrap_label_writable_in_current_tx(
+    conn: &Connection,
+    board_id: &str,
+    name: &str,
+    now: i64,
+) -> Result<LabelRecord> {
+    let name = normalize_label_name(name)?;
+    if let Some(existing) = label_by_name(conn, board_id, &name)? {
+        if count_label_semantics(conn, board_id, &existing.id)? > 0 {
+            return Err(KanbanError::InvalidInput(format!(
+                "label bootstrap would replace existing semantics for label {}; use a dedicated semantics mutation or proposal adoption path",
+                existing.name
+            )));
+        }
+        return Ok(existing);
+    }
+    ensure_label_in_current_tx(conn, board_id, &name, None, now)
+}
+
+fn optional_label_semantics_conn(
+    conn: &Connection,
+    board_id: &str,
+    label_id: &str,
+) -> Result<Option<LabelSemanticsRecord>> {
+    match super::label_semantics::get_label_semantics_conn(conn, board_id, label_id) {
+        Ok(record) => Ok(Some(record)),
+        Err(KanbanError::NotFound(_)) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+fn task_label_binding_exists(
+    conn: &Connection,
+    board_id: &str,
+    task_id: &str,
+    label_id: &str,
+) -> Result<bool> {
+    scalar(
+        conn,
+        "SELECT EXISTS(SELECT 1 FROM task_labels WHERE board_id=?1 AND task_id=?2 AND label_id=?3)",
+        params![board_id, task_id, label_id],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|exists| exists != 0)
+}
+
+fn restore_label_record_in_current_tx(conn: &Connection, label: &LabelRecord) -> Result<()> {
+    exec(
+        conn,
+        "INSERT OR IGNORE INTO labels(id, board_id, name, color, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            label.id,
+            label.board_id,
+            label.name,
+            label.color,
+            label.created_at,
+            label.updated_at
+        ],
+    )?;
+    Ok(())
+}
+
+fn restore_label_semantics_record_in_current_tx(
+    conn: &Connection,
+    semantics: &LabelSemanticsRecord,
+) -> Result<()> {
+    exec(
+        conn,
+        "INSERT INTO label_semantics(label_id, board_id, description, applies_when, excludes_when, positive_examples, negative_examples, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) \
+         ON CONFLICT(label_id) DO UPDATE SET board_id=excluded.board_id, description=excluded.description, applies_when=excluded.applies_when, excludes_when=excluded.excludes_when, positive_examples=excluded.positive_examples, negative_examples=excluded.negative_examples, created_at=excluded.created_at, updated_at=excluded.updated_at",
+        params![
+            semantics.label_id,
+            semantics.board_id,
+            semantics.description,
+            json_string_array(&semantics.applies_when)?,
+            json_string_array(&semantics.excludes_when)?,
+            json_string_array(&semantics.positive_examples)?,
+            json_string_array(&semantics.negative_examples)?,
+            semantics.created_at,
+            semantics.updated_at
+        ],
+    )?;
+    exec(
+        conn,
+        "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+        params![semantics.board_id, semantics.label_id],
+    )?;
+    for atom in &semantics.atoms {
+        exec(
+            conn,
+            "INSERT INTO label_atoms(id, label_id, board_id, polarity, kind, text, ordinal, content_hash, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                atom.id,
+                atom.label_id,
+                atom.board_id,
+                atom.polarity,
+                atom.kind,
+                atom.text,
+                atom.ordinal,
+                atom.content_hash,
+                atom.created_at,
+                atom.updated_at
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+fn json_string_array(items: &[String]) -> Result<String> {
+    serde_json::to_string(items)
+        .map_err(|err| KanbanError::InvalidInput(format!("invalid semantic array: {err}")))
 }
 
 fn ensure_label_in_current_tx(

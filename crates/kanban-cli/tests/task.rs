@@ -949,6 +949,32 @@ fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<(
             .is_empty(),
         "accept must not auto-bind task labels"
     );
+    let label_id = accepted["data"]["resolved_label_id"]
+        .as_str()
+        .context("resolved label id")?;
+    let semantics = kanban_sqlite::get_label_semantics(&temp.path, "default", label_id)?;
+    let atom = semantics
+        .atoms
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("applies_when atom")?;
+    let explained = kanban(
+        &temp.path,
+        &["--json", "label", "atom", "explain", &atom.id],
+    )?
+    .success_json()?;
+    assert_eq!(explained["data"]["legacy_untracked"], false);
+    assert!(
+        explained["data"]["provenance_actions"]
+            .as_array()
+            .context("provenance actions")?
+            .iter()
+            .any(
+                |provenance| provenance["action"]["action_type"] == "bootstrap_label"
+                    && provenance["action"]["result_proposal_id"] == proposal_id
+            ),
+        "{explained}"
+    );
 
     let reject_id = seed_proposed_label_proposal(
         &temp.path,

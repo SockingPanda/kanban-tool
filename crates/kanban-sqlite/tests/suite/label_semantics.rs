@@ -1748,6 +1748,113 @@ fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> an
     assert!(result.coverage_cosine > 0.99);
     assert!(result.residual_norm < 0.01);
     assert!(!result.needs_new_label);
+    assert!(result.reason_codes.is_empty());
+    Ok(())
+}
+
+#[test]
+fn task_label_suggestions_reason_codes_for_selected_coverage_gap() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_label_suggestions_reason_codes_for_selected_coverage_gap")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("API docs update"),
+    )?;
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    let store = ResidualRecordingLabelAtomStore::new(vec![(
+        atom_hit(&backend, "positive", "applies_when", "server handlers", 0.0),
+        vec![1.0, 0.0, 0.0],
+    )]);
+
+    let result = kanban_sqlite::suggest_task_labels_with(
+        &temp.path,
+        "default",
+        &task.id,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            output_limit: 3,
+            atom_limit: 12,
+            min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
+        },
+    )?;
+
+    assert!(!result.degraded);
+    assert_eq!(result.selected_labels.len(), 1);
+    assert_eq!(result.selected_labels[0].label_name, "backend");
+    assert!(result.coverage < 0.55);
+    assert!(result.residual_norm <= 0.75);
+    assert!(result.needs_new_label);
+    assert_eq!(result.reason_codes, vec!["coverage_below_threshold"]);
+    Ok(())
+}
+
+#[test]
+fn task_label_suggestions_reason_codes_for_empty_selection_and_residual_gap() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("task_label_suggestions_reason_codes_for_empty_selection_and_residual_gap")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("API docs update"),
+    )?;
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    let store = ResidualRecordingLabelAtomStore::with_query_vector(
+        vec![(
+            atom_hit(&backend, "positive", "applies_when", "server handlers", 0.0),
+            vec![1.0, 0.0, 0.0],
+        )],
+        vec![0.01, 1.0, 0.0],
+    );
+
+    let result = kanban_sqlite::suggest_task_labels_with(
+        &temp.path,
+        "default",
+        &task.id,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            output_limit: 3,
+            atom_limit: 12,
+            min_score: 0.001,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
+        },
+    )?;
+
+    assert!(!result.degraded);
+    assert!(result.selected_labels.is_empty());
+    assert!(!result.candidates.is_empty());
+    assert_eq!(result.coverage, 0.0);
+    assert_eq!(result.residual_norm, 1.0);
+    assert!(result.needs_new_label);
+    assert_eq!(
+        result.reason_codes,
+        vec![
+            "coverage_below_threshold",
+            "no_selected_labels",
+            "residual_above_threshold"
+        ]
+    );
     Ok(())
 }
 
@@ -2564,13 +2671,22 @@ impl kanban_vector::LabelAtomVectorStore for DiagnosticLabelAtomStore {
 
 struct ResidualRecordingLabelAtomStore {
     atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>,
+    query_vector: Vec<f32>,
     queries: std::sync::Mutex<Vec<kanban_vector::LabelAtomVectorQuery>>,
 }
 
 impl ResidualRecordingLabelAtomStore {
     fn new(atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>) -> Self {
+        Self::with_query_vector(atoms, vec![1.0, 1.0, 0.0])
+    }
+
+    fn with_query_vector(
+        atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>,
+        query_vector: Vec<f32>,
+    ) -> Self {
         Self {
             atoms,
+            query_vector,
             queries: std::sync::Mutex::new(Vec::new()),
         }
     }
@@ -2600,7 +2716,7 @@ impl kanban_vector::VectorStoreBackend for ResidualRecordingLabelAtomStore {
 
 impl kanban_vector::QueryEmbeddingProvider for ResidualRecordingLabelAtomStore {
     fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
-        Ok(vec![1.0, 1.0, 0.0])
+        Ok(self.query_vector.clone())
     }
 }
 
@@ -2670,6 +2786,23 @@ fn cosine(left: &[f32], right: &[f32]) -> f32 {
 
 fn vector_norm(vector: &[f32]) -> f32 {
     vector.iter().map(|value| value * value).sum::<f32>().sqrt()
+}
+
+fn mark_label_atom_index_clean_for_default_board(path: &std::path::Path) -> anyhow::Result<()> {
+    let board = get_board(path, "default")?;
+    let conn = connect_file(path)?;
+    conn.execute(
+        "UPDATE derived_store_state SET dirty=0,last_error=NULL WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "INSERT INTO label_atom_index_boards(\
+             store_name,board_id,dirty,last_rebuild_at,last_error,updated_at\
+         ) VALUES ('lancedb_label_atoms',?1,0,1,NULL,1) \
+         ON CONFLICT(store_name,board_id) DO UPDATE SET dirty=0,last_error=NULL,updated_at=excluded.updated_at",
+        [&board.id],
+    )?;
+    Ok(())
 }
 
 struct StaticLabelAtomStore {

@@ -1577,6 +1577,98 @@ fn label_ontology_atom_apply_records_provenance_and_validation_resolves_signal()
 }
 
 #[test]
+fn label_ontology_validation_serialization_grows_linearly_with_signal_cases() -> anyhow::Result<()>
+{
+    let size_1 = validated_payload_size_for_signal_count(1)?;
+    let size_10 = validated_payload_size_for_signal_count(10)?;
+    let size_100 = validated_payload_size_for_signal_count(100)?;
+
+    assert!(
+        size_10 < size_1 * 15,
+        "10-case validation payload should stay close to linear growth: size_1={size_1}, size_10={size_10}"
+    );
+    assert!(
+        size_100 < size_10 * 15,
+        "100-case validation payload should stay close to linear growth: size_10={size_10}, size_100={size_100}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_validation_show_preserves_new_and_legacy_payload_shapes() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_validation_show_preserves_new_and_legacy_payload_shapes")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_multi_validation_fixture(&temp, 2)?;
+    let validation_json = typed_positive_multi_validation_json(&fixture);
+
+    let validation = validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: validation_actor(),
+            parent_action_id: fixture.apply_action_id.clone(),
+            signal_ids: Vec::new(),
+            reason: "Multi-signal validation should store compact case references.".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            validation_json: validation_json.to_string(),
+        },
+    )?;
+    let compact_payload: serde_json::Value = serde_json::from_str(&validation.validation_json)?;
+    assert_eq!(compact_payload["summary"]["case_count"], 2);
+    assert_eq!(
+        compact_payload["manual"]["cases"][1]["signal_id"],
+        fixture.signal_ids[1]
+    );
+    let compact_case = compact_payload["cases"]
+        .as_array()
+        .context("compact cases")?
+        .iter()
+        .find(|case| case["signal_id"] == fixture.signal_ids[1])
+        .context("compact case for second signal")?;
+    assert_eq!(
+        compact_case["after"]["manual_case_ref"]["index"],
+        manual_case_index_for_signal(&fixture, &fixture.signal_ids[1])?
+    );
+    assert!(
+        compact_payload["cases"][1]["after"].get("manual").is_none(),
+        "new persisted cases must not duplicate top-level manual payload"
+    );
+    let compact_detail = get_label_ontology_signal(&temp.path, &fixture.signal_ids[0])?;
+    let compact_action = compact_detail
+        .actions
+        .iter()
+        .find(|action| action.id == validation.id)
+        .context("compact validation action should be visible from signal show")?;
+    let compact_show_payload: serde_json::Value =
+        serde_json::from_str(&compact_action.validation_json)?;
+    assert_eq!(
+        compact_show_payload["cases"][0]["after"]["manual_case_ref"]["signal_id"],
+        fixture.signal_ids[0]
+    );
+
+    let legacy_action_id = seed_legacy_validation_action(&temp, &fixture)?;
+    let legacy_detail = get_label_ontology_signal(&temp.path, &fixture.signal_ids[0])?;
+    let legacy_action = legacy_detail
+        .actions
+        .iter()
+        .find(|action| action.id == legacy_action_id)
+        .context("legacy validation action should be visible from signal show")?;
+    let legacy_payload: serde_json::Value = serde_json::from_str(&legacy_action.validation_json)?;
+    assert_eq!(
+        legacy_payload["cases"][0]["signal_id"],
+        fixture.signal_ids[0]
+    );
+    assert_eq!(
+        legacy_payload["cases"][0]["after"]["manual"]["cases"][0]["signal_id"],
+        fixture.signal_ids[0]
+    );
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_jsonl_export_import_round_trips_ledger_and_self_refs() -> anyhow::Result<()> {
     let source =
         TempDb::new("label_ontology_jsonl_export_import_round_trips_ledger_and_self_refs_source")?;
@@ -2990,6 +3082,15 @@ struct OntologyValidationFixture {
     result_atom_content_hash: String,
 }
 
+struct MultiOntologyValidationFixture {
+    board_id: String,
+    signal_ids: Vec<String>,
+    apply_action_id: String,
+    target_label_id: String,
+    result_atom_id: String,
+    result_atom_content_hash: String,
+}
+
 struct PortableOntologyLedgerFixture {
     observation_id: String,
     source_signal_id: String,
@@ -3055,6 +3156,175 @@ fn seed_validation_fixture(
             .result_atom_content_hash
             .context("result atom hash")?,
     })
+}
+
+fn seed_multi_validation_fixture(
+    temp: &TempDb,
+    signal_count: usize,
+) -> anyhow::Result<MultiOntologyValidationFixture> {
+    let label = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Validate ontology serialization with many source signals"),
+    )?;
+    let signals = (0..signal_count)
+        .map(|index| {
+            sample_signal_input(&format!("validation-serialization-{signal_count}-{index}"))
+        })
+        .collect::<Vec<_>>();
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(signals),
+    )?;
+    let signal_ids = observation
+        .signals
+        .iter()
+        .map(|signal| signal.id.clone())
+        .collect::<Vec<_>>();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            signal_ids.clone(),
+            "Confirmed all serialization fixture signals.",
+        ),
+    )?;
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: signal_ids.clone(),
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed false-negative support from multiple source signals.".to_owned(),
+        },
+    )?;
+    Ok(MultiOntologyValidationFixture {
+        board_id: task.board_id,
+        signal_ids,
+        apply_action_id: apply_action.id,
+        target_label_id: label.id,
+        result_atom_id: apply_action.result_atom_id.context("result atom id")?,
+        result_atom_content_hash: apply_action
+            .result_atom_content_hash
+            .context("result atom hash")?,
+    })
+}
+
+fn validated_payload_size_for_signal_count(signal_count: usize) -> anyhow::Result<usize> {
+    let temp_name = format!("label_ontology_validation_payload_linear_{signal_count}");
+    let temp = TempDb::new(&temp_name)?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_multi_validation_fixture(&temp, signal_count)?;
+    let validation = validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: validation_actor(),
+            parent_action_id: fixture.apply_action_id.clone(),
+            signal_ids: Vec::new(),
+            reason: format!("Validate compact serialization for {signal_count} signals."),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            validation_json: typed_positive_multi_validation_json(&fixture).to_string(),
+        },
+    )?;
+    let payload: serde_json::Value = serde_json::from_str(&validation.validation_json)?;
+    assert_eq!(payload["summary"]["case_count"], signal_count);
+    let cases = payload["cases"].as_array().context("generated cases")?;
+    for (index, case) in cases.iter().enumerate() {
+        assert!(
+            case["after"].get("manual").is_none(),
+            "case {index} unexpectedly duplicated the top-level manual payload"
+        );
+        let signal_id = case["signal_id"]
+            .as_str()
+            .context("generated case signal id")?;
+        assert_eq!(
+            case["after"]["manual_case_ref"]["index"],
+            manual_case_index_for_signal(&fixture, signal_id)?
+        );
+        assert_eq!(case["after"]["manual_case_ref"]["signal_id"], signal_id);
+    }
+    Ok(validation.validation_json.len())
+}
+
+fn manual_case_index_for_signal(
+    fixture: &MultiOntologyValidationFixture,
+    signal_id: &str,
+) -> anyhow::Result<usize> {
+    fixture
+        .signal_ids
+        .iter()
+        .position(|fixture_signal_id| fixture_signal_id == signal_id)
+        .ok_or_else(|| test_error(format!("missing fixture signal {signal_id}")))
+}
+
+fn seed_legacy_validation_action(
+    temp: &TempDb,
+    fixture: &MultiOntologyValidationFixture,
+) -> anyhow::Result<String> {
+    let legacy_action_id = "loa_legacy_validation_payload_shape".to_owned();
+    let manual = typed_positive_multi_validation_json(fixture);
+    let legacy_payload = json!({
+        "manual": manual.clone(),
+        "cases": [{
+            "signal_id": fixture.signal_ids[0],
+            "task_id": "legacy-task",
+            "after": {
+                "validation_status": "passed",
+                "manual": manual,
+            },
+            "passed": true
+        }],
+        "summary": {
+            "status": "passed",
+            "case_count": 1,
+            "stale_count": 0,
+            "degraded_count": 0,
+            "incomparable_count": 0
+        }
+    });
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "INSERT INTO label_ontology_actions(
+         id, board_id, parent_action_id, action_type, reason, target_label_id, result_label_id,
+         result_atom_id, result_atom_content_hash, result_proposal_id, canonical_before_hash,
+         canonical_after_hash, change_json, validation_status, validation_json, created_by,
+         created_by_type, agent_type, created_at)
+         VALUES (?1, ?2, ?3, 'validate', 'legacy validation payload shape',
+         NULL, NULL, NULL, NULL, NULL, NULL, NULL, '{}', 'passed', ?4, 'legacy-fixture',
+         'agent', 'codex', 123456)",
+        params![
+            legacy_action_id,
+            fixture.board_id,
+            fixture.apply_action_id,
+            legacy_payload.to_string(),
+        ],
+    )?;
+    conn.execute(
+        "INSERT INTO label_ontology_action_signals(board_id, action_id, signal_id, created_at)
+         VALUES (?1, ?2, ?3, 123456)",
+        params![fixture.board_id, legacy_action_id, fixture.signal_ids[0]],
+    )?;
+    Ok(legacy_action_id)
 }
 
 fn seed_portable_ontology_ledger(temp: &TempDb) -> anyhow::Result<PortableOntologyLedgerFixture> {
@@ -3392,6 +3662,52 @@ fn typed_positive_validation_json(
                 }]
             }
         }]
+    })
+}
+
+fn typed_positive_multi_validation_json(
+    fixture: &MultiOntologyValidationFixture,
+) -> serde_json::Value {
+    let cases = fixture
+        .signal_ids
+        .iter()
+        .map(|signal_id| {
+            json!({
+                "signal_id": signal_id,
+                "case_type": "positive_atom",
+                "passed": true,
+                "target_label_id": fixture.target_label_id,
+                "before": {
+                    "target": {
+                        "label_id": fixture.target_label_id,
+                        "selected": false,
+                        "score": 0.08
+                    },
+                    "coverage": 0.61
+                },
+                "after": {
+                    "degraded": false,
+                    "target": {
+                        "label_id": fixture.target_label_id,
+                        "selected": true,
+                        "score": 0.74
+                    },
+                    "coverage": 0.79,
+                    "evidence_atoms": [{
+                        "id": fixture.result_atom_id,
+                        "content_hash": fixture.result_atom_content_hash,
+                        "label_id": fixture.target_label_id
+                    }]
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "evidence_type": "trusted_automated",
+        "embedding_model": "test-embedding-v1",
+        "solver_options": {"candidate_limit": 24, "atom_limit": 64},
+        "index": {"status": "ready", "dirty": false, "generation": 7},
+        "cases": cases
     })
 }
 

@@ -6,7 +6,7 @@ use kanban_sqlite::{
     CreateLabel, CreateTask, LabelOntologyActionInput, LabelOntologyActionType, LabelOntologyActor,
     LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput, LabelOntologyProposedAction,
     LabelOntologyRecordInput, LabelOntologySignalInput, LabelOntologySignalKind,
-    LabelOntologySuggestState, LabelProposalCandidate,
+    LabelOntologySuggestState, LabelProposalCandidate, get_task, list_label_atoms, list_labels,
 };
 use pretty_assertions::assert_eq;
 use serde_json::json;
@@ -1176,6 +1176,130 @@ fn label_ontology_cli_record_list_show_review_round_trip() -> anyhow::Result<()>
         review.contains("extends CLI subcommands, arguments, help output, or JSON behavior"),
         "{review}"
     );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_record_accepts_simplified_snapshot_capture_input() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_record_accepts_simplified_snapshot_capture_input")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology simplified capture task",
+            "--description",
+            "ready spec for simplified ontology CLI capture",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    let labels_before = list_labels(&temp.path, "default")?;
+    let task_labels_before = get_task(&temp.path, "default", task_id)?.labels;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+
+    let snapshot_path = temp.dir.join("ontology-suggestion-envelope.json");
+    fs::write(
+        &snapshot_path,
+        json!({
+            "data": {
+                "selected_labels": [],
+                "candidates": [],
+                "coverage": 0.42,
+                "coverage_cosine": 0.37,
+                "residual_norm": 0.58,
+                "needs_new_label": true,
+                "degraded": true,
+                "diagnostics": ["vector_store_disabled"]
+            }
+        })
+        .to_string(),
+    )?;
+    let input_path = temp.dir.join("ontology-simplified-record.json");
+    fs::write(
+        &input_path,
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates": [
+                {"label": "cli", "confidence": 0.92}
+            ],
+            "final_decision": {
+                "accepted_labels": ["cli"]
+            },
+            "capture_fingerprint": "cli-simplified-capture",
+            "signals": [{
+                "kind": "false_negative",
+                "target_label_ref": "cli",
+                "related_labels": [],
+                "proposed_action": "add_positive_atom",
+                "candidate_atom": {
+                    "polarity": "positive",
+                    "kind": "applies_when",
+                    "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
+                },
+                "agent_selected": true,
+                "suggest_state": "absent",
+                "final_selected": true,
+                "rationale": "The task expands the CLI surface although suggest selected nothing.",
+                "confidence": 0.91,
+                "signal_key": "cli-simplified-false-negative"
+            }]
+        })
+        .to_string(),
+    )?;
+    let input_path = input_path
+        .to_str()
+        .context("temp input path should be valid UTF-8")?;
+    let snapshot_path = snapshot_path
+        .to_str()
+        .context("temp snapshot path should be valid UTF-8")?;
+
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            input_path,
+            "--suggestion-snapshot",
+            snapshot_path,
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(observation["data"]["suggest_coverage"], 0.42);
+    assert_eq!(observation["data"]["suggest_coverage_cosine"], 0.37);
+    assert_eq!(observation["data"]["suggest_residual_norm"], 0.58);
+    assert_eq!(observation["data"]["suggest_needs_new_label"], true);
+    assert_eq!(observation["data"]["suggest_degraded"], true);
+    let diagnostics: serde_json::Value = serde_json::from_str(
+        observation["data"]["diagnostics_json"]
+            .as_str()
+            .context("diagnostics_json")?,
+    )?;
+    assert_eq!(diagnostics, json!(["vector_store_disabled"]));
+    assert_eq!(
+        observation["data"]["signals"][0]["signal_key"],
+        "cli-simplified-false-negative"
+    );
+
+    assert_eq!(list_labels(&temp.path, "default")?, labels_before);
+    assert_eq!(
+        get_task(&temp.path, "default", task_id)?.labels,
+        task_labels_before
+    );
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
 
     Ok(())
 }

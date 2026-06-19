@@ -572,6 +572,159 @@ fn label_ontology_review_candidate_atom_fallback_separates_empty_candidates() ->
 }
 
 #[test]
+fn label_ontology_review_candidate_atom_fallback_separates_target_kind_and_action()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_review_candidate_atom_fallback_separates_target_kind_and_action",
+    )?;
+    seed_label_ontology_review_fixture(&temp)?;
+    let cli_update_a = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI empty candidate update source A"),
+    )?;
+    let cli_update_b = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI empty candidate update source B"),
+    )?;
+    let docs_update = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Docs empty candidate update source"),
+    )?;
+    let cli_observe = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI empty candidate observe source"),
+    )?;
+
+    let cli_update_a_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_update_a.id,
+        review_record_input(vec![review_empty_target_signal(
+            "empty-cli-update-a",
+            "cli",
+            LabelOntologySignalKind::BoundaryIssue,
+            LabelOntologyProposedAction::UpdateSemantics,
+            0.31,
+        )]),
+    )?;
+    let cli_update_b_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_update_b.id,
+        review_record_input(vec![review_empty_target_signal(
+            "empty-cli-update-b",
+            "cli",
+            LabelOntologySignalKind::BoundaryIssue,
+            LabelOntologyProposedAction::UpdateSemantics,
+            0.33,
+        )]),
+    )?;
+    let docs_update_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &docs_update.id,
+        review_record_input(vec![review_empty_target_signal(
+            "empty-docs-update",
+            "docs",
+            LabelOntologySignalKind::BoundaryIssue,
+            LabelOntologyProposedAction::UpdateSemantics,
+            0.8,
+        )]),
+    )?;
+    let cli_observe_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_observe.id,
+        review_record_input(vec![review_empty_target_signal(
+            "empty-cli-observe",
+            "cli",
+            LabelOntologySignalKind::NameIssue,
+            LabelOntologyProposedAction::Observe,
+            0.41,
+        )]),
+    )?;
+    let cli_update_b_signal_id = cli_update_b_observation.signals[0].id.clone();
+    let confirm_action = create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![cli_update_b_signal_id.clone()],
+            "confirm empty candidate update group",
+        ),
+    )?;
+
+    let groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::CandidateAtom,
+            include_all: false,
+            limit: 20,
+        },
+    )?;
+
+    let cli_update_group = groups
+        .iter()
+        .find(|group| {
+            group
+                .signal_ids
+                .contains(&cli_update_a_observation.signals[0].id)
+        })
+        .context("cli update empty-candidate group")?;
+    assert!(cli_update_group.key.contains("boundary_issue"));
+    assert!(cli_update_group.key.contains("update_semantics"));
+    assert_eq!(cli_update_group.labels.len(), 1);
+    assert_eq!(cli_update_group.labels[0].name.as_deref(), Some("cli"));
+    assert_eq!(cli_update_group.task_count, 2);
+    assert_eq!(cli_update_group.signal_count, 2);
+    assert_eq!(cli_update_group.open_count, 1);
+    assert_eq!(cli_update_group.confirmed_count, 1);
+    assert_eq!(cli_update_group.action_count, 1);
+    assert!(cli_update_group.action_ids.contains(&confirm_action.id));
+    assert!(cli_update_group.candidate_atom_variants.is_empty());
+
+    let docs_update_group = groups
+        .iter()
+        .find(|group| {
+            group
+                .signal_ids
+                .contains(&docs_update_observation.signals[0].id)
+        })
+        .context("docs update empty-candidate group")?;
+    assert_eq!(docs_update_group.labels[0].name.as_deref(), Some("docs"));
+    assert_eq!(docs_update_group.task_count, 1);
+    assert_eq!(docs_update_group.signal_count, 1);
+    assert_ne!(cli_update_group.key, docs_update_group.key);
+
+    let cli_observe_group = groups
+        .iter()
+        .find(|group| {
+            group
+                .signal_ids
+                .contains(&cli_observe_observation.signals[0].id)
+        })
+        .context("cli observe empty-candidate group")?;
+    assert!(cli_observe_group.key.contains("name_issue"));
+    assert!(cli_observe_group.key.contains("observe"));
+    assert_eq!(cli_observe_group.labels[0].name.as_deref(), Some("cli"));
+    assert_eq!(cli_observe_group.task_count, 1);
+    assert_eq!(cli_observe_group.signal_count, 1);
+    assert_ne!(cli_update_group.key, cli_observe_group.key);
+    assert_ne!(docs_update_group.key, cli_observe_group.key);
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_review_groups_by_proposed_label_and_include_all() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_review_groups_by_proposed_label_and_include_all")?;
     let fixture = seed_label_ontology_review_fixture(&temp)?;
@@ -4439,6 +4592,26 @@ fn review_gap_signal(
     })
     .to_string();
     signal.suggest_score = Some(score);
+    signal
+}
+
+fn review_empty_target_signal(
+    signal_key: &str,
+    label: &str,
+    kind: LabelOntologySignalKind,
+    proposed_action: LabelOntologyProposedAction,
+    score: f64,
+) -> LabelOntologySignalInput {
+    let mut signal = sample_signal_input(signal_key);
+    signal.kind = kind;
+    signal.target_label_ref = Some(label.to_owned());
+    signal.related_labels_json = "[]".to_owned();
+    signal.proposed_action = proposed_action;
+    signal.candidate_atom = None;
+    signal.proposed_label_name = None;
+    signal.proposal_json = "{}".to_owned();
+    signal.suggest_score = Some(score);
+    signal.rationale = "Empty candidate signal used to review grouping boundaries.".to_owned();
     signal
 }
 

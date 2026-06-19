@@ -10,6 +10,8 @@ pub enum KanbanError {
     InvalidTransition(String),
     #[error("invalid input: {0}")]
     InvalidInput(String),
+    #[error("conflict: {0}")]
+    Conflict(String),
     #[error("not found: {0}")]
     NotFound(String),
     #[error("storage error: {0}")]

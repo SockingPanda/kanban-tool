@@ -61,6 +61,7 @@ pub fn record_label_ontology_observation(
                 "at least one ontology signal is required".into(),
             ));
         }
+        let input = derive_record_metrics_from_snapshot(input)?;
         ensure_observation_metric_contract(&input)?;
         ensure_raw_signal_metric_contract(&input.signals)?;
 
@@ -2419,6 +2420,142 @@ fn ensure_observation_metric_contract(input: &LabelOntologyRecordInput) -> Resul
     ensure_unit_metric(input.suggest_coverage_cosine, "suggest_coverage_cosine")?;
     ensure_unit_metric(input.suggest_residual_norm, "suggest_residual_norm")?;
     Ok(())
+}
+
+fn derive_record_metrics_from_snapshot(
+    mut input: LabelOntologyRecordInput,
+) -> Result<LabelOntologyRecordInput> {
+    let snapshot = parse_json_field(
+        &input.suggestion_snapshot_json,
+        "suggestion_snapshot_json",
+        JsonShape::Object,
+    )?;
+    input.suggest_coverage = derive_snapshot_f64(
+        input.suggest_coverage,
+        &snapshot,
+        "coverage",
+        "suggest_coverage",
+    )?;
+    input.suggest_coverage_cosine = derive_snapshot_f64(
+        input.suggest_coverage_cosine,
+        &snapshot,
+        "coverage_cosine",
+        "suggest_coverage_cosine",
+    )?;
+    input.suggest_residual_norm = derive_snapshot_f64(
+        input.suggest_residual_norm,
+        &snapshot,
+        "residual_norm",
+        "suggest_residual_norm",
+    )?;
+    input.suggest_needs_new_label = derive_snapshot_bool(
+        Some(input.suggest_needs_new_label),
+        &snapshot,
+        "needs_new_label",
+        "suggest_needs_new_label",
+    )?
+    .unwrap_or(false);
+    input.suggest_degraded = derive_snapshot_bool(
+        Some(input.suggest_degraded),
+        &snapshot,
+        "degraded",
+        "suggest_degraded",
+    )?
+    .unwrap_or(false);
+    input.diagnostics_json = derive_diagnostics_json(&input.diagnostics_json, &snapshot)?;
+    Ok(input)
+}
+
+fn derive_snapshot_f64(
+    supplied: Option<f64>,
+    snapshot: &JsonValue,
+    snapshot_field: &str,
+    supplied_field: &str,
+) -> Result<Option<f64>> {
+    let derived = optional_snapshot_f64(snapshot, snapshot_field)?;
+    if let (Some(supplied), Some(derived)) = (supplied, derived)
+        && (supplied - derived).abs() > f64::EPSILON
+    {
+        return Err(KanbanError::InvalidInput(format!(
+            "{supplied_field} conflicts with suggestion_snapshot_json.{snapshot_field}"
+        )));
+    }
+    Ok(supplied.or(derived))
+}
+
+fn derive_snapshot_bool(
+    supplied: Option<bool>,
+    snapshot: &JsonValue,
+    snapshot_field: &str,
+    supplied_field: &str,
+) -> Result<Option<bool>> {
+    let derived = optional_snapshot_bool(snapshot, snapshot_field)?;
+    if let (Some(supplied), Some(derived)) = (supplied, derived)
+        && supplied != derived
+    {
+        return Err(KanbanError::InvalidInput(format!(
+            "{supplied_field} conflicts with suggestion_snapshot_json.{snapshot_field}"
+        )));
+    }
+    Ok(supplied.or(derived))
+}
+
+fn derive_diagnostics_json(input: &str, snapshot: &JsonValue) -> Result<String> {
+    let supplied = parse_json_field(input, "diagnostics_json", JsonShape::Array)?;
+    let derived = optional_snapshot_array(snapshot, "diagnostics")?;
+    if let Some(derived) = derived {
+        if supplied != derived {
+            return Err(KanbanError::InvalidInput(
+                "diagnostics_json conflicts with suggestion_snapshot_json.diagnostics".into(),
+            ));
+        }
+        serde_json::to_string(&derived).map_err(|err| KanbanError::InvalidInput(err.to_string()))
+    } else {
+        serde_json::to_string(&supplied).map_err(|err| KanbanError::InvalidInput(err.to_string()))
+    }
+}
+
+fn optional_snapshot_f64(snapshot: &JsonValue, field: &str) -> Result<Option<f64>> {
+    let Some(value) = snapshot.get(field) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    value.as_f64().map(Some).ok_or_else(|| {
+        KanbanError::InvalidInput(format!(
+            "suggestion_snapshot_json.{field} must be a JSON number"
+        ))
+    })
+}
+
+fn optional_snapshot_bool(snapshot: &JsonValue, field: &str) -> Result<Option<bool>> {
+    let Some(value) = snapshot.get(field) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    value.as_bool().map(Some).ok_or_else(|| {
+        KanbanError::InvalidInput(format!(
+            "suggestion_snapshot_json.{field} must be a JSON boolean"
+        ))
+    })
+}
+
+fn optional_snapshot_array(snapshot: &JsonValue, field: &str) -> Result<Option<JsonValue>> {
+    let Some(value) = snapshot.get(field) else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    if !value.is_array() {
+        return Err(KanbanError::InvalidInput(format!(
+            "suggestion_snapshot_json.{field} must be a JSON array"
+        )));
+    }
+    Ok(Some(value.clone()))
 }
 
 fn ensure_raw_signal_metric_contract(signals: &[LabelOntologySignalInput]) -> Result<()> {

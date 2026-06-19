@@ -481,6 +481,10 @@ Label ontology ledger 记录 task 标注过程里的证据、分歧 signal、rev
 - `label_semantics` / `label_atoms` 仍决定 label 的 canonical 语义和 atom truth。
 - `label_semantic_proposals` 仍负责新 label proposal lifecycle。
 
+这些表是 label 系统中的不同角色，不是六个严格独立的存储层。`label suggest` 是计算结果，
+`kb_label_atoms` 是可重建检索投影，proposal 和 ledger 是需要持久审计的 SQLite records；
+它们都不能直接替代 `task_labels` 的当前绑定事实。
+
 表：`label_ontology_observations`
 
 一行表示一次完整的 task label 判断过程。它保存当时的 task 快照、agent 候选、

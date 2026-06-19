@@ -341,7 +341,7 @@ PATCH /api/v1/tasks/{task_id}
 - `completed_at`
 
 `PATCH` 不能直接设置 canonical `status`；状态必须通过 transition endpoint 修改。
-不过允许字段仍会走 command service。更新 `description`、`scheduled_at`
+不过允许字段仍会走 shared service path。更新 `description`、`scheduled_at`
 等影响 spec 或 schedule 的字段后，服务端可以根据 spec、schedule 和
 当前 dependencies 重新计算 active task 的目标状态，并写入对应事件。
 Dependency edge 必须通过 dependency endpoints 修改；`max_retries` 只更新

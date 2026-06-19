@@ -510,7 +510,7 @@ kanban label proposals list [--task <task_ref>] [--status proposed|accepted|reje
 kanban label proposals show <proposal_id> [--json]
 kanban label proposals accept <proposal_id> [--reason <text>] [--source-signal <signal_id>]... [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label proposals reject <proposal_id> [--reason <text>] [--json]
-kanban label ontology record <task_ref> --input <path|-> [--json]
+kanban label ontology record <task_ref> --input <path|-> [--suggestion-snapshot <path|-> | --capture-suggest] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label ontology list [--status open|confirmed|resolved|rejected|superseded]... [--kind false_negative|false_positive|vocabulary_gap|name_issue|boundary_issue|structure_issue]... [--task <task_ref>] [--label <label>] [--proposed-label <name>] [--include-all] [--limit 100] [--json]
 kanban label ontology show <signal_id> [--json]
 kanban label ontology review [--group-by label|candidate-atom|proposed-label] [--include-all] [--limit 100] [--json]
@@ -783,12 +783,22 @@ target/proposed label 和最终 proposal/result label 会写入 bootstrap action
 `change_json.retarget_override`。Override 不放宽 board/status 要求。`label proposals reject`
 标记 proposal 为 `rejected`，不接受 `--source-signal`。accepted/rejected proposal 不能再次决策。
 
-`label ontology record` 接受 service-shaped JSON 或 stdin，记录一次 label 判断
-observation 并写入其中的 child signals。Service 会读取当前 task snapshot、解析
-target label ref、计算 normalized proposed label name、signal key 和 candidate atom
-content hash；observation 同时保存完整审计用 `task_snapshot_json.content_hash`
-和只基于 label suggest 输入（normalized title + description）的 `suggest_input_hash`。
-它只写 ledger，不修改 `task_labels`、`label_semantics`、`label_atoms` 或 proposal。
+`label ontology record` 记录一次 label 判断 observation 并写入其中的 child signals。
+推荐输入边界是：工具采集或接收未改写的 `label suggest` snapshot，service 从 snapshot
+派生 coverage、residual、degraded、diagnostics 等 observation metrics；agent 只提交
+候选、最终判断、signals、candidate atom 和 rationale。CLI 可以用
+`--capture-suggest` 在 record 前用同一组 suggest options 运行一次真实 `label suggest`，
+也可以用 `--suggestion-snapshot <path|->` 读取已保存的原始 suggest JSON。snapshot
+可以是直接的 suggest response，也可以是带 `data` wrapper 的 JSON response。
+
+旧的 service-shaped `--input` 仍作为兼容入口保留；新调用方不应重复手写
+`suggest_coverage`、`suggest_residual_norm` 或 `diagnostics_json`。如果 snapshot 中已有
+这些字段而输入又提供冲突的标量或 diagnostics，命令会失败。Service 会读取当前 task
+snapshot、解析 target label ref、计算 normalized proposed label name、signal key 和
+candidate atom content hash；observation 同时保存完整审计用
+`task_snapshot_json.content_hash` 和只基于 label suggest 输入（normalized title +
+description）的 `suggest_input_hash`。它只写 ledger，不修改 `task_labels`、
+`label_semantics`、`label_atoms`、label atom index 或 proposal。
 
 Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
 `applies_when` / `positive_example` 只能使用 `positive` polarity，
@@ -803,29 +813,30 @@ Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
 `suggest_score` / `confidence` 必须是 finite `0.0..=1.0`；`suggest_rank` 必须为
 `null` 或 `>= 1`。
 
-最小输入形状：
+使用已保存 suggest snapshot 的推荐输入形状：
 
 ```json
 {
   "actor": {"name": "label-agent", "type": "agent", "agent_type": "local"},
-  "agent_candidates_json": "[]",
-  "suggestion_snapshot_json": "{}",
-  "final_decision_json": "{}",
-  "suggest_needs_new_label": false,
-  "suggest_degraded": false,
-  "diagnostics_json": "[]",
+  "agent_candidates": [
+    {"label": "cli", "reason": "The task changes CLI behavior."}
+  ],
+  "final_decision": {
+    "selected": ["cli"],
+    "rejected": []
+  },
   "signals": [
     {
       "kind": "false_negative",
       "target_label_ref": "cli",
-      "related_labels_json": "[]",
+      "related_labels": [],
       "proposed_action": "add_positive_atom",
       "candidate_atom": {
         "polarity": "positive",
         "kind": "applies_when",
         "text": "extends CLI subcommands, command arguments, help output, or machine-readable JSON behavior"
       },
-      "proposal_json": "{}",
+      "proposal": {},
       "agent_selected": true,
       "suggest_state": "candidate",
       "suggest_score": 0.08,
@@ -835,6 +846,26 @@ Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
     }
   ]
 }
+```
+
+调用示例：
+
+```bash
+kanban label suggest default#42 --json > /tmp/default-42-suggest.json
+kanban label ontology record default#42 \
+  --input /tmp/default-42-record.json \
+  --suggestion-snapshot /tmp/default-42-suggest.json \
+  --json
+```
+
+或者让 CLI 在记录前采集 snapshot：
+
+```bash
+kanban label ontology record default#42 \
+  --input /tmp/default-42-record.json \
+  --capture-suggest \
+  --vector-config ./vector.toml \
+  --json
 ```
 
 `label ontology list` 默认只返回 `open` 和 `confirmed` signals。`--include-all`

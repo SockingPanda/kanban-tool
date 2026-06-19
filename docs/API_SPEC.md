@@ -1320,7 +1320,10 @@ POST /api/v1/boards/{board}/label-ontology/validate
 ```
 
 `POST /api/v1/tasks/{task_id}/label-ontology/observations` 在一个 transaction 中写入
-observation 和 child signals。请求 body：
+observation 和 child signals。HTTP endpoint 不自行运行 `label suggest`；调用方必须传入
+由工具采集且未改写的 `suggestion_snapshot`，或在没有 suggest 证据时显式传空 snapshot。
+服务端会从 snapshot 派生 observation metrics，agent/reviewer 只提交候选、最终判断、
+signals、candidate atom 和 rationale。请求 body：
 
 ```json
 {
@@ -1373,7 +1376,8 @@ contains `coverage`, `coverage_cosine`, `residual_norm`, `needs_new_label`,
 `degraded`, or `diagnostics`, the server derives the stored observation metrics
 from that snapshot. If the request also supplies the matching top-level
 `suggest_*` field or `diagnostics` and the values conflict, the request returns
-`400 invalid_input`.
+`400 invalid_input`. New clients should not repeat snapshot facts as top-level
+scalars; those fields remain for compatibility with older service-shaped callers.
 
 Service 会读取当前 task snapshot、解析 `target_label_ref`、计算 normalized proposed
 label name、signal key 和 candidate atom content hash。`capture_fingerprint` 为空时

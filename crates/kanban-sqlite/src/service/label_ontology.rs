@@ -764,26 +764,37 @@ pub(crate) fn record_label_ontology_proposal_bootstrap_in_tx(
         allow_retarget,
         retarget_reason,
     } = options;
-    if source_signal_ids.is_empty() {
-        if allow_retarget || retarget_reason.as_deref().is_some() {
-            return Err(KanbanError::InvalidInput(
-                "proposal accept retarget options require source_signal_ids".into(),
-            ));
-        }
-        return Ok(None);
+    if source_signal_ids.is_empty() && (allow_retarget || retarget_reason.as_deref().is_some()) {
+        return Err(KanbanError::InvalidInput(
+            "proposal accept retarget options require source_signal_ids".into(),
+        ));
     }
-    let signal_ids = normalize_signal_ids(source_signal_ids)?;
-    let signals = signal_ids
-        .iter()
-        .map(|signal_id| signal_by_id(conn, signal_id))
-        .collect::<Result<Vec<_>>>()?;
-    ensure_signals_on_board_and_status(
-        &signals,
-        &proposal.board_id,
-        &[LabelOntologySignalStatus::Confirmed],
-    )?;
-    let retarget_reason =
-        normalize_retarget_reason(allow_retarget, retarget_reason, "proposal accept")?;
+    let actor = normalize_actor(actor)?;
+    let signal_ids = if source_signal_ids.is_empty() {
+        Vec::new()
+    } else {
+        normalize_signal_ids(source_signal_ids)?
+    };
+    let signals = if signal_ids.is_empty() {
+        Vec::new()
+    } else {
+        signal_ids
+            .iter()
+            .map(|signal_id| signal_by_id(conn, signal_id))
+            .collect::<Result<Vec<_>>>()?
+    };
+    if !signals.is_empty() {
+        ensure_signals_on_board_and_status(
+            &signals,
+            &proposal.board_id,
+            &[LabelOntologySignalStatus::Confirmed],
+        )?;
+    }
+    let retarget_reason = if signal_ids.is_empty() {
+        None
+    } else {
+        normalize_retarget_reason(allow_retarget, retarget_reason, "proposal accept")?
+    };
     let retarget_override = proposal_bootstrap_retarget_override(
         &signals,
         proposal,

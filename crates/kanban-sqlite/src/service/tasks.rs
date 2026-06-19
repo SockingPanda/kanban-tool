@@ -3,13 +3,15 @@ use crate::connect_file;
 use super::{
     AddTaskLabelsResult, BootstrapTaskLabel, BootstrapTaskLabelRestoreResult,
     BootstrapTaskLabelResult, BootstrapTaskLabelSnapshot, CreateLabel, CreateTask,
-    DeleteLabelResult, LabelOntologyActionType, LabelOntologySemanticsMutationInput, LabelRecord,
+    DeleteLabelResult, LabelOntologyActionType, LabelOntologyProposalBootstrapOptions,
+    LabelOntologySemanticsMutationInput, LabelRecord, LabelSemanticProposalRecord,
     LabelSemanticsMutationOptions, LabelSemanticsRecord, MAX_TASK_LIST_LIMIT, TaskListOptions,
     TaskListPage, TaskListSort, TaskPatch, TaskRecord, add_dependency_in_current_tx, all,
     all_values, board_id, board_id_any, ensure_changed_one, exec, exec_named, exec_one_named,
     insert_event, json_valid, label_ontology_semantics_snapshot_in_tx, mark_label_atom_store_dirty,
-    optional, recompute_ready_status, record_label_ontology_semantics_mutation_in_tx, required_row,
-    scalar, upsert_label_semantics_candidate_in_tx, validate_priority, with_immediate_tx,
+    optional, recompute_ready_status, record_label_ontology_proposal_bootstrap_in_tx,
+    record_label_ontology_semantics_mutation_in_tx, required_row, scalar,
+    upsert_label_semantics_candidate_in_tx, validate_priority, with_immediate_tx,
 };
 
 use std::path::Path;
@@ -377,43 +379,24 @@ pub fn bootstrap_task_label(
         let board_id = board_id(&conn, board)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
         ensure_task_allows_label_mutation(&conn, &task.id)?;
-        let label = ensure_bootstrap_label_writable_in_current_tx(
+        let adoption = adopt_label_semantics_candidate_in_current_tx(
             &conn,
             &task.board_id,
-            &candidate.name,
-            now,
-        )?;
-        let before =
-            label_ontology_semantics_snapshot_in_tx(&conn, &task.board_id, &label.id, &label.name)?;
-        upsert_label_semantics_candidate_in_tx(
-            &conn,
-            &task.board_id,
-            &label.id,
-            &label.name,
             &candidate,
+            LabelAdoptionProvenance::DirectBootstrap { actor },
             now,
         )?;
-        mark_label_atom_store_dirty(&conn, &task.board_id, now)?;
-        record_label_ontology_semantics_mutation_in_tx(
+        attach_label_in_current_tx(
             &conn,
-            LabelOntologySemanticsMutationInput {
-                board_id: &task.board_id,
-                label_id: &label.id,
-                label_name: &label.name,
-                action_type: LabelOntologyActionType::BootstrapLabel,
-                before,
-                options: LabelSemanticsMutationOptions::manual_actor(actor),
-            },
+            &task.board_id,
+            actor,
+            &task.id,
+            &adoption.label.id,
             now,
         )?;
-        attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
         Ok(BootstrapTaskLabelResult {
             task: get_task_by_id(&conn, &task.board_id, &task.id)?,
-            semantics: super::label_semantics::get_label_semantics_conn(
-                &conn,
-                &task.board_id,
-                &label.id,
-            )?,
+            semantics: adoption.semantics,
         })
     })
 }
@@ -430,43 +413,24 @@ pub fn bootstrap_task_label_by_id(
     with_immediate_tx(&conn, || {
         let board_id = active_board_id_for_label_mutation(&conn, task_id)?;
         let task = get_task_by_id(&conn, &board_id, task_id)?;
-        let label = ensure_bootstrap_label_writable_in_current_tx(
+        let adoption = adopt_label_semantics_candidate_in_current_tx(
             &conn,
             &task.board_id,
-            &candidate.name,
-            now,
-        )?;
-        let before =
-            label_ontology_semantics_snapshot_in_tx(&conn, &task.board_id, &label.id, &label.name)?;
-        upsert_label_semantics_candidate_in_tx(
-            &conn,
-            &task.board_id,
-            &label.id,
-            &label.name,
             &candidate,
+            LabelAdoptionProvenance::DirectBootstrap { actor },
             now,
         )?;
-        mark_label_atom_store_dirty(&conn, &task.board_id, now)?;
-        record_label_ontology_semantics_mutation_in_tx(
+        attach_label_in_current_tx(
             &conn,
-            LabelOntologySemanticsMutationInput {
-                board_id: &task.board_id,
-                label_id: &label.id,
-                label_name: &label.name,
-                action_type: LabelOntologyActionType::BootstrapLabel,
-                before,
-                options: LabelSemanticsMutationOptions::manual_actor(actor),
-            },
+            &task.board_id,
+            actor,
+            &task.id,
+            &adoption.label.id,
             now,
         )?;
-        attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
         Ok(BootstrapTaskLabelResult {
             task: get_task_by_id(&conn, &task.board_id, &task.id)?,
-            semantics: super::label_semantics::get_label_semantics_conn(
-                &conn,
-                &task.board_id,
-                &label.id,
-            )?,
+            semantics: adoption.semantics,
         })
     })
 }
@@ -1345,6 +1309,58 @@ fn bootstrap_label_candidate(input: BootstrapTaskLabel) -> Result<super::LabelPr
         positive_examples,
         negative_examples,
     })
+}
+
+pub(crate) enum LabelAdoptionProvenance<'a> {
+    DirectBootstrap {
+        actor: &'a str,
+    },
+    ProposalBootstrap {
+        proposal: &'a LabelSemanticProposalRecord,
+        options: LabelOntologyProposalBootstrapOptions,
+    },
+}
+
+pub(crate) struct LabelAdoptionResult {
+    pub(crate) label: LabelRecord,
+    pub(crate) semantics: LabelSemanticsRecord,
+}
+
+pub(crate) fn adopt_label_semantics_candidate_in_current_tx(
+    conn: &Connection,
+    board_id: &str,
+    candidate: &super::LabelProposalCandidate,
+    provenance: LabelAdoptionProvenance<'_>,
+    now: i64,
+) -> Result<LabelAdoptionResult> {
+    let label =
+        ensure_bootstrap_label_writable_in_current_tx(conn, board_id, &candidate.name, now)?;
+    let before = label_ontology_semantics_snapshot_in_tx(conn, board_id, &label.id, &label.name)?;
+    upsert_label_semantics_candidate_in_tx(conn, board_id, &label.id, &label.name, candidate, now)?;
+    mark_label_atom_store_dirty(conn, board_id, now)?;
+    match provenance {
+        LabelAdoptionProvenance::DirectBootstrap { actor } => {
+            record_label_ontology_semantics_mutation_in_tx(
+                conn,
+                LabelOntologySemanticsMutationInput {
+                    board_id,
+                    label_id: &label.id,
+                    label_name: &label.name,
+                    action_type: LabelOntologyActionType::BootstrapLabel,
+                    before,
+                    options: LabelSemanticsMutationOptions::manual_actor(actor),
+                },
+                now,
+            )?;
+        }
+        LabelAdoptionProvenance::ProposalBootstrap { proposal, options } => {
+            record_label_ontology_proposal_bootstrap_in_tx(
+                conn, proposal, &label.id, options, now,
+            )?;
+        }
+    }
+    let semantics = super::label_semantics::get_label_semantics_conn(conn, board_id, &label.id)?;
+    Ok(LabelAdoptionResult { label, semantics })
 }
 
 fn normalize_optional_label_semantic(text: Option<String>) -> Option<String> {

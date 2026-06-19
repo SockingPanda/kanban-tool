@@ -135,6 +135,17 @@ fn label_proposal_manual_candidate_accepts_without_task_binding() -> anyhow::Res
             .iter()
             .any(|atom| atom.kind == "applies_when")
     );
+    let atom = semantics
+        .atoms
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("applies_when atom")?;
+    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
+    assert!(!explain.legacy_untracked);
+    assert!(explain.provenance_actions.iter().any(|provenance| {
+        provenance.action.action_type == LabelOntologyActionType::BootstrapLabel
+            && provenance.action.result_proposal_id.as_deref() == Some(proposal.id.as_str())
+    }));
     assert!(
         get_task(&temp.path, "default", &task.id)?.labels.is_empty(),
         "accept must not attach task_labels"

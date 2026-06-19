@@ -3,20 +3,20 @@ use crate::connect_file;
 use super::label_suggestions::{
     bounded_diagnostic_message, compute_task_label_suggestions_with, retrieve_residual_atoms,
 };
+use super::tasks::{LabelAdoptionProvenance, adopt_label_semantics_candidate_in_current_tx};
 use super::{
     LabelOntologyActor, LabelOntologyProposalBootstrapOptions, LabelOntologyProposalCreateOptions,
     LabelProposalAttempt, LabelProposalCandidate, LabelProposalCreateOptions,
     LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalProposeOptions,
     LabelProposalStatus, LabelSemanticProposalRecord, LabelSuggestionOptions,
-    LabelSuggestionResult, SqlFilter, all, all_values, board_id, exec, exec_named, get_task_by_id,
-    insert_event, mark_label_atom_store_dirty, record_label_ontology_proposal_bootstrap_in_tx,
-    record_label_ontology_proposal_create_in_tx, required_row, resolve_task,
-    upsert_label_semantics_candidate_in_tx, with_immediate_tx,
+    LabelSuggestionResult, SqlFilter, all, all_values, board_id, exec_named, get_task_by_id,
+    insert_event, record_label_ontology_proposal_create_in_tx, required_row, resolve_task,
+    with_immediate_tx,
 };
 
 use std::{collections::HashMap, path::Path, str::FromStr};
 
-use kanban_core::{Clock, KanbanError, Result, SystemClock, new_label_id, new_typed_id};
+use kanban_core::{Clock, KanbanError, Result, SystemClock, new_typed_id};
 use kanban_labels::{LabelAtomPolarity, LabelDefinition};
 use kanban_vector::{DisabledVectorStore, LabelAtomVectorStore};
 use rusqlite::{Connection, Row, named_params};
@@ -713,22 +713,28 @@ fn decide_label_proposal(
                     "label proposal conflicts with existing label {existing}"
                 )));
             }
-            let label_id = new_label_id();
-            exec(
-                &conn,
-                "INSERT INTO labels(id, board_id, name, color, created_at, updated_at) VALUES (?1, ?2, ?3, NULL, ?4, ?4)",
-                (&label_id, &proposal.board_id, &proposal.name, now),
-            )?;
-            upsert_label_semantics_candidate_in_tx(
+            let ontology_actor = ontology_actor.unwrap_or_else(|| LabelOntologyActor {
+                name: actor.to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            });
+            let adoption = adopt_label_semantics_candidate_in_current_tx(
                 &conn,
                 &proposal.board_id,
-                &label_id,
-                &proposal.name,
                 &proposal.candidate(),
+                LabelAdoptionProvenance::ProposalBootstrap {
+                    proposal: &proposal,
+                    options: LabelOntologyProposalBootstrapOptions {
+                        actor: ontology_actor,
+                        reason: normalize_optional(reason.clone()),
+                        source_signal_ids,
+                        allow_retarget,
+                        retarget_reason,
+                    },
+                },
                 now,
             )?;
-            mark_label_atom_store_dirty(&conn, &proposal.board_id, now)?;
-            resolved_label_id = Some(label_id);
+            resolved_label_id = Some(adoption.label.id);
         }
         let decision_status = decision.to_string();
         let decision_reason = normalize_optional(reason);
@@ -764,28 +770,6 @@ fn decide_label_proposal(
                 .to_string(),
             now,
         )?;
-        if decision == LabelProposalStatus::Accepted
-            && let Some(label_id) = resolved_label_id.as_deref()
-        {
-            let ontology_actor = ontology_actor.unwrap_or_else(|| LabelOntologyActor {
-                name: actor.to_owned(),
-                actor_type: "user".to_owned(),
-                agent_type: None,
-            });
-            record_label_ontology_proposal_bootstrap_in_tx(
-                &conn,
-                &proposal,
-                label_id,
-                LabelOntologyProposalBootstrapOptions {
-                    actor: ontology_actor,
-                    reason: decision_reason.clone(),
-                    source_signal_ids,
-                    allow_retarget,
-                    retarget_reason,
-                },
-                now,
-            )?;
-        }
         get_label_proposal_conn(&conn, proposal_id)
     })
 }

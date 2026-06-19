@@ -216,6 +216,13 @@ export type DoctorDerivedStore = {
   failed_outbox: number
 }
 
+export type DoctorIssue = {
+  severity: string
+  code: string
+  message: string
+  record_ids: string[]
+}
+
 export type DoctorReport = {
   ok: boolean
   integrity_check: string
@@ -237,6 +244,12 @@ export type DoctorReport = {
   derived_dirty_stores: number
   derived_error_stores: number
   derived_stores: DoctorDerivedStore[]
+  consistency_errors: number
+  consistency_warnings: number
+  consistency_issues: DoctorIssue[]
+  ontology_ledger_errors: number
+  ontology_ledger_warnings: number
+  ontology_ledger_issues: DoctorIssue[]
 }
 
 export type CheckpointReport = {

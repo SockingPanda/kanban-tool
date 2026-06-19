@@ -1,7 +1,7 @@
 use crate::connect_file;
 
 use super::{
-    DEFAULT_PRIORITY, ExportResult, ImportResult, board_id,
+    DEFAULT_PRIORITY, DoctorReport, ExportResult, ImportResult, board_id,
     comment_identity::infer_comment_author_type,
     comment_metadata::normalize_imported_comment_metadata_json, connect_existing_database,
     doctor_report_conn, mark_label_atom_store_dirty, normalize_legacy_priority, storage,
@@ -131,9 +131,9 @@ pub fn import_jsonl(
         mark_imported_label_atom_boards_dirty(&conn)?;
         let report = doctor_report_conn(&conn, db_path.parent())?;
         if !report.ok {
-            return Err(KanbanError::InvalidInput(
-                "imported data failed doctor checks".into(),
-            ));
+            return Err(KanbanError::InvalidInput(import_doctor_failure_message(
+                &report,
+            )));
         }
         Ok(ImportResult {
             input_path: input_path.to_path_buf(),
@@ -349,6 +349,16 @@ pub(crate) fn validate_imported_snapshot(conn: &Connection) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+fn import_doctor_failure_message(report: &DoctorReport) -> String {
+    report
+        .consistency_issues
+        .iter()
+        .chain(report.ontology_ledger_issues.iter())
+        .find(|issue| issue.severity == "error")
+        .map(|issue| format!("imported data failed doctor checks: {}", issue.message))
+        .unwrap_or_else(|| "imported data failed doctor checks".to_owned())
 }
 
 fn mark_imported_label_atom_boards_dirty(conn: &Connection) -> Result<()> {

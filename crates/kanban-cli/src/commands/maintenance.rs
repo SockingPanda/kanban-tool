@@ -120,7 +120,7 @@ pub(crate) fn handle_doctor(db_path: &PathBuf, json: bool) -> Result<()> {
     let report = kanban_sqlite::doctor_database(db_path)?;
     print_or_json(json, &report, || {
         format!(
-            "ok={} integrity={} migration={:?} user_version={} expired_running={} running_without_run={} orphan_running_runs={} dependency_cycles={} archived_dependency_edges={} missing_run_logs={} suspicious_run_log_paths={} executable_dependency_violations={} executable_spec_violations={} executable_schedule_violations={} outbox_pending={} outbox_running={} outbox_failed={} derived_dirty_stores={} derived_error_stores={} ontology_ledger_errors={} ontology_ledger_warnings={}",
+            "ok={} integrity={} migration={:?} user_version={} expired_running={} running_without_run={} orphan_running_runs={} dependency_cycles={} archived_dependency_edges={} missing_run_logs={} suspicious_run_log_paths={} executable_dependency_violations={} executable_spec_violations={} executable_schedule_violations={} outbox_pending={} outbox_running={} outbox_failed={} derived_dirty_stores={} derived_error_stores={} consistency_errors={} consistency_warnings={} ontology_ledger_errors={} ontology_ledger_warnings={}",
             report.ok,
             report.integrity_check,
             report.migration_version,
@@ -140,6 +140,8 @@ pub(crate) fn handle_doctor(db_path: &PathBuf, json: bool) -> Result<()> {
             report.outbox_failed,
             report.derived_dirty_stores,
             report.derived_error_stores,
+            report.consistency_errors,
+            report.consistency_warnings,
             report.ontology_ledger_errors,
             report.ontology_ledger_warnings
         )

@@ -462,7 +462,30 @@ SQLite WAL 和 busy timeout 负责排队。业务层仍需保证 transaction 短
 - server 输出结构化日志。
 - dispatcher 对每次 run 写入 `task_runs`。
 - worker stdout/stderr 可写入本地 log 文件，DB 只存路径和摘要。
-- `kanban doctor` 检查 DB、WAL、schema、integrity、orphan run，并报告 Knowledge Substrate 的 `index_outbox` backlog、derived store dirty/error 状态和 per-store last_error。派生层异常不改变 SQLite task truth；operator 通过 sync/rebuild 恢复 Tantivy/Oxigraph/LanceDB。
+- `kanban doctor` 检查 DB、WAL、schema、integrity、orphan run、基础关系表
+  board consistency、label ontology ledger consistency，并报告 Knowledge Substrate 的
+  `index_outbox` backlog、derived store dirty/error 状态和 per-store last_error。派生层
+  异常不改变 SQLite task truth；operator 通过 sync/rebuild 恢复 Tantivy/Oxigraph/LanceDB。
+
+### 8.1 Board scope 与 schema/service/doctor 分工
+
+Board 是本地 project/board，不是 tenant。正常写路径的隔离边界在 service 层：
+CLI、HTTP、desktop 和 dispatcher 通过 `kanban-sqlite::service` resolve board/task/label/run，
+再在同一 transaction 中写 canonical SQLite truth。Derived stores 只消费 SQLite/outbox
+投影，不拥有 canonical write 权限。
+
+当前基础关系表的 schema 并不全部使用包含 `board_id` 的 composite FK。
+`task_labels`、`task_dependencies`、`task_runs`、`task_comments`、`task_events`、
+`task_attachments` 使用独立 FK 保证 row board、task、label 或 run 各自存在，但不能仅靠
+SQLite constraint 证明 `row.board_id == referenced.board_id`。因此：
+
+- service guard 是普通 CLI/API/Desktop/dispatcher 写入的主防线；
+- `kanban doctor` 是现有 DB 的只读巡检层，发现 cross-board relationship rows 时让
+  `ok=false`；
+- JSONL import 在 replace transaction 提交前运行同类 consistency gate，失败会回滚整个
+  import；
+- 为这些 v1 基础表增加 composite FK 需要 table rebuild migration，属于后续 schema
+  hardening，不是当前架构已经具备的 DB-level invariant。
 
 ---
 

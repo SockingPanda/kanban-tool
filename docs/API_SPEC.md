@@ -1684,7 +1684,16 @@ If background sync is disabled, delayed, or fails, search keeps returning curren
 POST /api/v1/maintenance/doctor
 ```
 
-Response includes SQLite integrity, migration/user version, expired running tasks, orphan run checks, dependency cycle count, archived dependency edge count, missing and suspicious run log counts, executable status invariant counts for dependency/spec/schedule violations, label ontology ledger diagnostics, and Knowledge Substrate diagnostics. Archived parent -> active child edges are allowed historical dependency edges; archived child edges from active parents are counted.
+Response includes SQLite integrity, migration/user version, expired running tasks, orphan run checks, dependency cycle count, archived dependency edge count, missing and suspicious run log counts, executable status invariant counts for dependency/spec/schedule violations, foundation relationship consistency diagnostics, label ontology ledger diagnostics, and Knowledge Substrate diagnostics. Archived parent -> active child edges are allowed historical dependency edges; archived child edges from active parents are counted.
+
+Foundation relationship diagnostics are read-only:
+
+- `consistency_errors` / `consistency_warnings` summarize board consistency findings for base relationship rows.
+- `consistency_issues[]` reports structured findings with `severity`, `code`, `message`, and `record_ids`.
+- Covered tables: `task_labels`, `task_dependencies`, `task_runs`, `task_comments`, `task_events`, and `task_attachments`.
+- Hard errors mean a row's `board_id` differs from a referenced task / label / run board. The message includes `table`, `row`, `row_board`, `referenced`, and `referenced_board`.
+- These checks complement service-layer board-scoped writes. Some foundational tables still use independent SQLite FKs rather than composite FKs, so doctor/import report raw-SQL or JSONL corruption until a later table-rebuild hardening adds schema-level composite constraints.
+- Nonzero `consistency_errors` make `ok=false`.
 
 Ontology ledger diagnostics are read-only:
 

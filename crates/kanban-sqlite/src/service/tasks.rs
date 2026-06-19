@@ -1,13 +1,14 @@
 use crate::connect_file;
 
 use super::{
-    BootstrapTaskLabel, BootstrapTaskLabelRestoreResult, BootstrapTaskLabelResult,
-    BootstrapTaskLabelSnapshot, CreateLabel, CreateTask, DeleteLabelResult, LabelRecord,
-    LabelSemanticsRecord, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListPage, TaskListSort,
-    TaskPatch, TaskRecord, add_dependency_in_current_tx, all, all_values, board_id, board_id_any,
-    ensure_changed_one, exec, exec_named, exec_one_named, insert_event, json_valid,
-    mark_label_atom_store_dirty, optional, recompute_ready_status, required_row, scalar,
-    upsert_label_semantics_candidate_in_tx, validate_priority, with_immediate_tx,
+    AddTaskLabelsResult, BootstrapTaskLabel, BootstrapTaskLabelRestoreResult,
+    BootstrapTaskLabelResult, BootstrapTaskLabelSnapshot, CreateLabel, CreateTask,
+    DeleteLabelResult, LabelRecord, LabelSemanticsRecord, MAX_TASK_LIST_LIMIT, TaskListOptions,
+    TaskListPage, TaskListSort, TaskPatch, TaskRecord, add_dependency_in_current_tx, all,
+    all_values, board_id, board_id_any, ensure_changed_one, exec, exec_named, exec_one_named,
+    insert_event, json_valid, mark_label_atom_store_dirty, optional, recompute_ready_status,
+    required_row, scalar, upsert_label_semantics_candidate_in_tx, validate_priority,
+    with_immediate_tx,
 };
 
 use std::path::Path;
@@ -260,6 +261,18 @@ pub fn add_task_labels(
     task_ref: &str,
     label_names: &[String],
 ) -> Result<TaskRecord> {
+    add_task_labels_with_options(path, board, actor, task_ref, label_names, false)
+        .map(|result| result.task)
+}
+
+pub fn add_task_labels_with_options(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    label_names: &[String],
+    create_missing: bool,
+) -> Result<AddTaskLabelsResult> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let label_names = normalize_label_names(label_names)?;
@@ -270,11 +283,25 @@ pub fn add_task_labels(
         let board_id = board_id(&conn, board)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
         ensure_task_allows_label_mutation(&conn, &task.id)?;
+        let mut created_labels = Vec::new();
         for label_name in &label_names {
-            let label = ensure_label_in_current_tx(&conn, &task.board_id, label_name, None, now)?;
+            let (label, created) = label_for_task_binding_in_current_tx(
+                &conn,
+                &task.board_id,
+                label_name,
+                create_missing,
+                now,
+            )?;
+            if created {
+                created_labels.push(label.clone());
+            }
             attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
         }
-        get_task_by_id(&conn, &task.board_id, &task.id)
+        let task = get_task_by_id(&conn, &task.board_id, &task.id)?;
+        Ok(AddTaskLabelsResult {
+            task,
+            created_labels,
+        })
     })
 }
 
@@ -293,6 +320,17 @@ pub fn add_task_labels_by_id(
     task_id: &str,
     label_names: &[String],
 ) -> Result<TaskRecord> {
+    add_task_labels_by_id_with_options(path, actor, task_id, label_names, false)
+        .map(|result| result.task)
+}
+
+pub fn add_task_labels_by_id_with_options(
+    path: impl AsRef<Path>,
+    actor: &str,
+    task_id: &str,
+    label_names: &[String],
+    create_missing: bool,
+) -> Result<AddTaskLabelsResult> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let label_names = normalize_label_names(label_names)?;
@@ -302,11 +340,25 @@ pub fn add_task_labels_by_id(
     with_immediate_tx(&conn, || {
         let board_id = active_board_id_for_label_mutation(&conn, task_id)?;
         let task = get_task_by_id(&conn, &board_id, task_id)?;
+        let mut created_labels = Vec::new();
         for label_name in &label_names {
-            let label = ensure_label_in_current_tx(&conn, &task.board_id, label_name, None, now)?;
+            let (label, created) = label_for_task_binding_in_current_tx(
+                &conn,
+                &task.board_id,
+                label_name,
+                create_missing,
+                now,
+            )?;
+            if created {
+                created_labels.push(label.clone());
+            }
             attach_label_in_current_tx(&conn, &task.board_id, actor, &task.id, &label.id, now)?;
         }
-        get_task_by_id(&conn, &task.board_id, &task.id)
+        let task = get_task_by_id(&conn, &task.board_id, &task.id)?;
+        Ok(AddTaskLabelsResult {
+            task,
+            created_labels,
+        })
     })
 }
 
@@ -1304,6 +1356,25 @@ fn ensure_bootstrap_label_writable_in_current_tx(
         return Ok(existing);
     }
     ensure_label_in_current_tx(conn, board_id, &name, None, now)
+}
+
+fn label_for_task_binding_in_current_tx(
+    conn: &Connection,
+    board_id: &str,
+    name: &str,
+    create_missing: bool,
+    now: i64,
+) -> Result<(LabelRecord, bool)> {
+    let name = normalize_label_name(name)?;
+    if let Some(existing) = label_by_name(conn, board_id, &name)? {
+        return Ok((existing, false));
+    }
+    if !create_missing {
+        return Err(KanbanError::InvalidInput(format!(
+            "label {name} does not exist; create it first with label create/bootstrap/proposal, or pass --create-missing for an explicit canonical identity"
+        )));
+    }
+    ensure_label_in_current_tx(conn, board_id, &name, None, now).map(|label| (label, true))
 }
 
 fn optional_label_semantics_conn(

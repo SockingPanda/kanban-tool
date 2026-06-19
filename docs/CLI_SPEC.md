@@ -493,7 +493,7 @@ kanban label list
 kanban label create <name> [--color <color>]
 kanban label delete <label> [--force] [--json]
 kanban label bootstrap <task_ref> <label> [--description <text>] [--applies-when <text>]... [--excludes-when <text>]... [--positive-example <text>]... [--negative-example <text>]... [--verify] [--min-verify-score 0.50] [--vector-config <toml>] [--json]
-kanban label add <task_ref> <label>...
+kanban label add [--create-missing] <task_ref> <label>...
 kanban label remove <task_ref> <label>
 kanban label semantics list [--json]
 kanban label semantics show <label> [--json]
@@ -524,9 +524,12 @@ kanban label ontology validate <action_id> --trusted --status passed|failed|part
 ```
 
 `label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
-label，返回已有 label。`label add` 接受 task ref 和一个或多个 label 名称或 id；
-所有 label 在同一 transaction 内 normalize、去重并绑定到 task。如果按 name
-指定的 label 不存在，会先在该 task 所属 board 创建 label，再绑定到 task。
+label，返回已有 label。`label add` 接受 task ref 和一个或多个 label 名称；默认
+只绑定 task 所属 board 上已经存在的 canonical label。缺失 label 会返回
+invalid input，并提示先用 `label create`、`label bootstrap`、proposal/adoption
+路径创建，或在明确接受只创建 canonical identity 的情况下传 `--create-missing`。
+`--create-missing` 只创建 `labels` identity 并绑定 task，不生成 `label_semantics`
+或 `label_atoms`；JSON 输出改为 `{ "task": <TaskRecord>, "created_labels": [...] }`。
 `label remove` 接受 task ref 和 label 名称或 id。空白 label 名称会被拒绝。
 
 `label delete <label>` 删除当前 board 上的 canonical label，区别于
@@ -540,9 +543,10 @@ status；被删除 label 会从 `label list`、`task show/list` 的 labels 和�
 
 Label 变更对 task-label 关联保持幂等。只有关联实际变化时，才追加
 `task.label.added` / `task.label.removed` event；该操作不改变 task status。
-批量 `label add` 会先验证所有 label 名称；如果任一 label 为空白或非法，不会创建
-canonical label，也不会留下部分 task-label 绑定。缺失 canonical label 的创建规则
-与单 label add 相同，但不会自动生成 `label_semantics` 或 `label_atoms`。
+批量 `label add` 会先验证所有 label 名称；如果任一 label 为空白、非法或缺失且未传
+`--create-missing`，不会创建 canonical label，也不会留下部分 task-label 绑定。
+显式创建模式与单 label add 相同，只创建缺失的 canonical identity，并在输出中列出
+本次新建的 labels。
 
 `label bootstrap` 是一次性 new-label adoption helper：在同一 transaction 内创建
 当前 task 所属 board 上缺失的 canonical label，或复用没有既有 semantics 的同名
@@ -580,7 +584,9 @@ kanban label delete old-label --force --json
 kanban label bootstrap default#12 database --description "Database persistence work" --applies-when "touches SQLite migrations" --positive-example "new table migration" --json
 kanban label bootstrap default#12 database --description "Database persistence work" --applies-when "touches SQLite migrations" --positive-example "new table migration" --vector-config .kb/vector.toml --min-verify-score 0.50 --json
 kanban label add default#12 backend
-kanban label add default#12 backend api sqlite
+kanban label create api
+kanban label add default#12 backend api
+kanban label add --create-missing default#12 scratch-label --json
 kanban label remove t_01HX... backend
 kanban label list --json
 ```

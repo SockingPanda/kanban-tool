@@ -389,10 +389,18 @@ fn labels_create_attach_filter_and_remove_without_status_side_effects() -> anyho
         kanban_sqlite::add_task_label(&temp.path, "default", "tester", &ready.id, "backend")?;
     assert_eq!(duplicate.labels.len(), 1);
 
-    let created_from_add =
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "frontend".into(),
+            color: None,
+        },
+    )?;
+    let labeled_todo =
         kanban_sqlite::add_task_label(&temp.path, "default", "tester", &todo.id, "frontend")?;
-    assert_eq!(created_from_add.status, TaskStatus::Todo);
-    assert_eq!(created_from_add.labels[0].name, "frontend");
+    assert_eq!(labeled_todo.status, TaskStatus::Todo);
+    assert_eq!(labeled_todo.labels[0].name, "frontend");
 
     let page = kanban_sqlite::list_tasks_page(
         &temp.path,
@@ -431,6 +439,16 @@ fn task_label_batch_add_normalizes_dedups_and_events_new_bindings_only() -> anyh
         "tester",
         CreateTask::ready("Batch label target"),
     )?;
+    for name in ["backend", "frontend", "api"] {
+        create_label(
+            &temp.path,
+            "default",
+            CreateLabel {
+                name: name.to_owned(),
+                color: None,
+            },
+        )?;
+    }
 
     let first = kanban_sqlite::add_task_labels(
         &temp.path,
@@ -473,6 +491,59 @@ fn task_label_batch_add_normalizes_dedups_and_events_new_bindings_only() -> anyh
         .filter(|event| event.kind == "task.label.added")
         .collect::<Vec<_>>();
     assert_eq!(added_events.len(), 3);
+
+    Ok(())
+}
+
+#[test]
+fn task_label_add_requires_existing_label_unless_create_missing() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_label_add_requires_existing_label_unless_create_missing")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Vocabulary guard target"),
+    )?;
+
+    let error = result_err(kanban_sqlite::add_task_labels(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &["backend-typo".into()],
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("label backend-typo does not exist")
+    );
+    assert!(get_task(&temp.path, "default", &task.id)?.labels.is_empty());
+    assert!(kanban_sqlite::list_labels(&temp.path, "default")?.is_empty());
+
+    let created = kanban_sqlite::add_task_labels_with_options(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &["backend-typo".into()],
+        true,
+    )?;
+    assert_eq!(created.created_labels.len(), 1);
+    assert_eq!(created.created_labels[0].name, "backend-typo");
+    assert_eq!(created.task.labels[0].name, "backend-typo");
+    assert_eq!(kanban_sqlite::list_labels(&temp.path, "default")?.len(), 1);
+
+    let repeated = kanban_sqlite::add_task_labels_with_options(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &["backend-typo".into()],
+        true,
+    )?;
+    assert!(repeated.created_labels.is_empty());
+    assert_eq!(repeated.task.labels.len(), 1);
 
     Ok(())
 }
@@ -523,6 +594,14 @@ fn task_label_mutations_by_id_use_task_board_and_reject_archived_targets() -> an
         "tester",
         CreateTask::ready("Other board label target"),
     )?;
+    create_label(
+        &temp.path,
+        "other",
+        CreateLabel {
+            name: "backend".into(),
+            color: None,
+        },
+    )?;
     let labeled =
         kanban_sqlite::add_task_label_by_id(&temp.path, "tester", &other_task.id, "backend")?;
     assert_eq!(labeled.board_slug, "other");
@@ -568,6 +647,14 @@ fn task_label_mutations_by_id_use_task_board_and_reject_archived_targets() -> an
 fn task_label_mutations_by_ref_reject_archived_tasks() -> anyhow::Result<()> {
     let temp = TempDb::new("task_label_mutations_by_ref_reject_archived_tasks")?;
     init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "backend".into(),
+            color: None,
+        },
+    )?;
 
     let add_target = create_task(
         &temp.path,
@@ -620,6 +707,14 @@ fn label_ref_resolution_prefers_exact_l_prefixed_name_before_id() -> anyhow::Res
         "default",
         "tester",
         CreateTask::ready("Reserved-looking label target"),
+    )?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "l_bug".into(),
+            color: None,
+        },
     )?;
 
     let labeled =

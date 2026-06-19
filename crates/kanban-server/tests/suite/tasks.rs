@@ -544,10 +544,37 @@ async fn labels_routes_create_list_add_and_remove_task_labels() -> anyhow::Resul
     let (status, json) = post_json(
         app.clone(),
         &format!("/api/v1/tasks/{}/labels", task.id),
-        json!({ "names": ["frontend", "api", "frontend"], "actor": "api-labeler" }),
+        json!({ "name": "frontend", "actor": "api-labeler" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("label frontend does not exist")
+    );
+    assert_eq!(kanban_sqlite::list_labels(&db_path, "default")?.len(), 1);
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels", task.id),
+        json!({
+            "names": ["frontend", "api", "frontend"],
+            "create_missing": true,
+            "actor": "api-labeler"
+        }),
     )
     .await?;
     assert_eq!(status, StatusCode::CREATED);
+    let created_label_names: Vec<_> = json["meta"]["created_labels"]
+        .as_array()
+        .context("created labels")?
+        .iter()
+        .map(|label| label["name"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(created_label_names, ["frontend", "api"]);
     let label_names: Vec<_> = json["data"]["labels"]
         .as_array()
         .context("task labels")?
@@ -2158,12 +2185,13 @@ async fn task_label_routes_use_task_board_and_reject_archived_targets() -> anyho
     let (status, json) = post_json(
         app.clone(),
         &format!("/api/v1/tasks/{}/labels", other_task.id),
-        json!({ "name": "backend", "actor": "api-labeler" }),
+        json!({ "name": "backend", "create_missing": true, "actor": "api-labeler" }),
     )
     .await?;
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(json["data"]["board_slug"], "other");
     assert_eq!(json["data"]["labels"][0]["name"], "backend");
+    assert_eq!(json["meta"]["created_labels"][0]["name"], "backend");
     assert!(kanban_sqlite::list_labels(&db_path, "default")?.is_empty());
     let other_labels = kanban_sqlite::list_labels(&db_path, "other")?;
     assert_eq!(other_labels[0].name, "backend");

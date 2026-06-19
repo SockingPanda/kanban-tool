@@ -238,6 +238,8 @@ pub(crate) struct LabelTaskArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct LabelAddTaskArgs {
+    #[arg(long)]
+    pub(crate) create_missing: bool,
     pub(crate) task_ref: String,
     #[arg(required = true)]
     pub(crate) labels: Vec<String>,

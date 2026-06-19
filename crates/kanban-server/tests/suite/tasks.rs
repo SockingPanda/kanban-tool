@@ -1726,6 +1726,197 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
 }
 
 #[tokio::test]
+async fn label_ontology_structure_plan_route_round_trip() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "command-surface".to_owned(),
+            color: None,
+        },
+    )?;
+    let target_task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("ontology API structure target"),
+    )?;
+    let related_task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("ontology API structure related"),
+    )?;
+    kanban_sqlite::add_task_labels_with_options(
+        &db_path,
+        "default",
+        "seed",
+        &target_task.id,
+        &["cli".to_owned()],
+        false,
+    )?;
+    kanban_sqlite::add_task_labels_with_options(
+        &db_path,
+        "default",
+        "seed",
+        &related_task.id,
+        &["command-surface".to_owned()],
+        false,
+    )?;
+    let labels_before = kanban_sqlite::list_labels(&db_path, "default")?;
+    let target_labels_before =
+        kanban_sqlite::get_task(&db_path, "default", &target_task.id)?.labels;
+    let related_labels_before =
+        kanban_sqlite::get_task(&db_path, "default", &related_task.id)?.labels;
+    let observation = kanban_sqlite::record_label_ontology_observation(
+        &db_path,
+        "default",
+        &target_task.id,
+        kanban_sqlite::LabelOntologyRecordInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: "[]".to_owned(),
+            suggestion_snapshot_json: "{}".to_owned(),
+            final_decision_json: "{}".to_owned(),
+            suggest_coverage: None,
+            suggest_coverage_cosine: None,
+            suggest_residual_norm: None,
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: "[]".to_owned(),
+            capture_fingerprint: Some("api-structure-plan".to_owned()),
+            signals: vec![kanban_sqlite::LabelOntologySignalInput {
+                kind: kanban_sqlite::LabelOntologySignalKind::FalseNegative,
+                target_label_ref: Some("cli".to_owned()),
+                related_labels_json: json!(["command-surface"]).to_string(),
+                proposed_action: kanban_sqlite::LabelOntologyProposedAction::MergeLabels,
+                candidate_atom: None,
+                proposed_label_name: None,
+                proposal_json: "{}".to_owned(),
+                agent_selected: true,
+                suggest_state: Some(kanban_sqlite::LabelOntologySuggestState::Candidate),
+                suggest_score: Some(0.12),
+                suggest_rank: Some(2),
+                final_selected: true,
+                rationale: "The task exposes a label structure merge boundary.".to_owned(),
+                confidence: Some(0.88),
+                signal_key: Some("api-structure-merge".to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    kanban_sqlite::create_label_ontology_action(
+        &db_path,
+        "default",
+        kanban_sqlite::LabelOntologyActionInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            action_type: kanban_sqlite::LabelOntologyActionType::Confirm,
+            signal_ids: vec![signal_id.clone()],
+            reason: "valid merge structure signal".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: None,
+            validation_status: None,
+            validation_json: None,
+        },
+    )?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/structure-plan",
+        json!({
+            "actor": {
+                "name": "structure-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "signal_ids": [signal_id],
+            "action_type": "merge_labels",
+            "target_label_ref": "cli",
+            "proposed_label_name": null,
+            "related_label_refs": ["command-surface"],
+            "task_binding_policy": null,
+            "validation_policy": {
+                "required": true,
+                "policy": "manual_merge_review",
+                "trusted_validation_required_before_apply": true
+            },
+            "validation_policy_json": null,
+            "reason": "Plan merge without moving existing task bindings yet."
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED, "{json}");
+    assert_eq!(json["data"]["action_type"], "merge_labels");
+    assert_eq!(json["data"]["validation_status"], "pending");
+    assert_eq!(json["data"]["created_by"], "structure-agent");
+    assert_eq!(json["data"]["created_by_type"], "agent");
+    assert_eq!(json["data"]["agent_type"], "local");
+    let action_id = json["data"]["id"].as_str().context("action id")?;
+    let change: serde_json::Value = serde_json::from_str(
+        json["data"]["change_json"]
+            .as_str()
+            .context("change_json")?,
+    )?;
+    assert_eq!(change["canonical_mutation_applied"], false);
+    assert_eq!(change["change_type"], "merge_labels");
+    assert_eq!(
+        change["task_binding_migration_plan"]["policy"],
+        "move_related_to_target"
+    );
+    assert_eq!(change["validation_policy"]["policy"], "manual_merge_review");
+
+    let (status, json) =
+        get_json(app, &format!("/api/v1/label-ontology/signals/{signal_id}")).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        json["data"]["actions"]
+            .as_array()
+            .context("actions")?
+            .iter()
+            .any(|action| action["id"] == action_id)
+    );
+    assert_eq!(
+        kanban_sqlite::list_labels(&db_path, "default")?,
+        labels_before
+    );
+    assert_eq!(
+        kanban_sqlite::get_task(&db_path, "default", &target_task.id)?.labels,
+        target_labels_before
+    );
+    assert_eq!(
+        kanban_sqlite::get_task(&db_path, "default", &related_task.id)?.labels,
+        related_labels_before
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn label_ontology_action_route_rejects_generic_mutation_action_type() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();

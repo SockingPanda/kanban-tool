@@ -1851,6 +1851,129 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
 }
 
 #[test]
+fn label_ontology_cli_structure_plan_round_trip() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_structure_plan_round_trip")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology CLI structure plan task",
+            "--description",
+            "ready spec for ontology structure planning",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    kanban(&temp.path, &["label", "add", task_id, "cli"])?.success()?;
+    let labels_before = list_labels(&temp.path, "default")?;
+    let task_labels_before = get_task(&temp.path, "default", task_id)?.labels;
+    let input_path = write_cli_ontology_structure_record_input(
+        &temp,
+        "ontology-structure-plan-record.json",
+        "rename-cli-to-command-surface",
+        "rename_label",
+        json!([]),
+        Some("command surface"),
+    )?;
+
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            &input_path,
+        ],
+    )?
+    .success_json()?;
+    let signal_id = observation["data"]["signals"][0]["id"]
+        .as_str()
+        .context("signal id")?;
+    kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "confirm",
+            signal_id,
+            "--reason",
+            "Reviewer confirmed the rename structure signal.",
+        ],
+    )?
+    .success_json()?;
+
+    let planned = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "structure",
+            "plan",
+            "rename-label",
+            signal_id,
+            "--target-label",
+            "cli",
+            "--proposed-label",
+            "command surface",
+            "--reason",
+            "Plan rename before any canonical identity rewrite.",
+            "--actor-type",
+            "agent",
+            "--agent-type",
+            "local",
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(planned["data"]["action_type"], "rename_label");
+    assert_eq!(planned["data"]["validation_status"], "pending");
+    assert_eq!(planned["data"]["signal_ids"], json!([signal_id]));
+    let action_id = planned["data"]["id"].as_str().context("action id")?;
+    let change: serde_json::Value = serde_json::from_str(
+        planned["data"]["change_json"]
+            .as_str()
+            .context("change_json")?,
+    )?;
+    assert_eq!(change["phase"], "planned_structure_change");
+    assert_eq!(change["canonical_mutation_applied"], false);
+    assert_eq!(change["change_type"], "rename_label");
+    assert_eq!(change["after"]["proposed_label_name"], "command surface");
+    assert_eq!(
+        change["task_binding_migration_plan"]["policy"],
+        "preserve_bindings"
+    );
+
+    let shown = kanban(
+        &temp.path,
+        &["--json", "label", "ontology", "show", signal_id],
+    )?
+    .success_json()?;
+    assert!(
+        shown["data"]["actions"]
+            .as_array()
+            .context("actions")?
+            .iter()
+            .any(|action| action["id"] == action_id)
+    );
+    assert_eq!(list_labels(&temp.path, "default")?, labels_before);
+    assert_eq!(
+        get_task(&temp.path, "default", task_id)?.labels,
+        task_labels_before
+    );
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_cli_apply_existing_atom_uses_adopt_existing_action() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_cli_apply_existing_atom_uses_adopt_existing_action")?;
     kanban(&temp.path, &["init"])?.success()?;
@@ -2308,6 +2431,59 @@ fn write_cli_ontology_record_input(
             "diagnostics_json": "[]",
             "capture_fingerprint": filename,
             "signals": signals
+        })
+        .to_string(),
+    )?;
+    Ok(path
+        .to_str()
+        .context("temp path should be valid UTF-8")?
+        .to_owned())
+}
+
+fn write_cli_ontology_structure_record_input(
+    temp: &TempDb,
+    filename: &str,
+    signal_key: &str,
+    proposed_action: &str,
+    related_labels: serde_json::Value,
+    proposed_label_name: Option<&str>,
+) -> anyhow::Result<String> {
+    let path = temp.dir.join(filename);
+    fs::write(
+        &path,
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": "[]",
+            "suggestion_snapshot_json": "{}",
+            "final_decision_json": "{}",
+            "suggest_coverage": 0.61,
+            "suggest_coverage_cosine": 0.74,
+            "suggest_residual_norm": 0.39,
+            "suggest_needs_new_label": false,
+            "suggest_degraded": false,
+            "diagnostics_json": "[]",
+            "capture_fingerprint": filename,
+            "signals": [{
+                "kind": "false_negative",
+                "target_label_ref": "cli",
+                "related_labels_json": related_labels.to_string(),
+                "proposed_action": proposed_action,
+                "candidate_atom": null,
+                "proposed_label_name": proposed_label_name,
+                "proposal_json": "{}",
+                "agent_selected": true,
+                "suggest_state": "candidate",
+                "suggest_score": 0.08,
+                "suggest_rank": 4,
+                "final_selected": true,
+                "rationale": "The task exposes a structure-level label boundary issue.",
+                "confidence": 0.91,
+                "signal_key": signal_key
+            }]
         })
         .to_string(),
     )?;

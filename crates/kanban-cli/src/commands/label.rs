@@ -7,9 +7,10 @@ use kanban_sqlite::{
     BootstrapTaskLabel, CreateLabel, LabelOntologyActionInput, LabelOntologyActionRecord,
     LabelOntologyActionType, LabelOntologyActor, LabelOntologyAtomApplyInput,
     LabelOntologyCandidateAtomInput, LabelOntologyProposedAction, LabelOntologyRecordInput,
-    LabelOntologyRetargetOptions, LabelOntologyReviewGroupBy, LabelOntologyReviewOptions,
-    LabelOntologySignalInput, LabelOntologySignalKind, LabelOntologyStructurePlanInput,
-    LabelOntologySuggestState, LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
+    LabelOntologyRetargetOptions, LabelOntologyRevertInput, LabelOntologyReviewGroupBy,
+    LabelOntologyReviewOptions, LabelOntologySignalInput, LabelOntologySignalKind,
+    LabelOntologyStructurePlanInput, LabelOntologySuggestState,
+    LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
     LabelOntologyValidationStatus, LabelProposalCandidate, LabelProposalCreateOptions,
     LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalStatus,
     LabelSemanticProposalRecord, LabelSemanticsMutationOptions, LabelSuggestionOptions,
@@ -21,9 +22,9 @@ use kanban_sqlite::{
     list_label_atoms, list_label_ontology_signals, list_label_proposals, list_label_semantics,
     list_labels, plan_label_ontology_structure_change, propose_task_label_with_create_options,
     record_label_ontology_observation, reject_label_proposal, remove_task_label,
-    restore_bootstrap_task_label_state, review_label_ontology, snapshot_bootstrap_task_label_state,
-    suggest_task_labels, upsert_label_semantics_with_options, validate_label_ontology_action,
-    validate_label_ontology_action_with_trusted_suggestions,
+    restore_bootstrap_task_label_state, revert_label_ontology_mutation, review_label_ontology,
+    snapshot_bootstrap_task_label_state, suggest_task_labels, upsert_label_semantics_with_options,
+    validate_label_ontology_action, validate_label_ontology_action_with_trusted_suggestions,
 };
 #[cfg(feature = "vector-lancedb")]
 use kanban_sqlite::{
@@ -618,6 +619,19 @@ fn handle_label_ontology(
                 print_or_json(json, &action, || label_ontology_action_line(&action))?;
             }
         },
+        crate::args::LabelOntologyCommand::Revert(args) => {
+            let action = revert_label_ontology_mutation(
+                db_path,
+                board,
+                LabelOntologyRevertInput {
+                    actor: label_ontology_cli_actor(actor, &args.actor),
+                    target_action_id: args.action_id,
+                    expected_current_hash: args.expected_current_hash,
+                    reason: args.reason,
+                },
+            )?;
+            print_or_json(json, &action, || label_ontology_action_line(&action))?;
+        }
         crate::args::LabelOntologyCommand::Validate(args) => {
             let validation_status = label_ontology_validation_status(args.status);
             let action = if args.trusted {

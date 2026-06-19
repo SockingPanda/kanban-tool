@@ -404,7 +404,7 @@ fn migration_narrows_comment_kind_and_adds_metadata_to_existing_v5_database() ->
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 15);
+    assert_eq!(user_version, 16);
     let comments = list_comments(&temp.path, "t_test")?;
     assert_eq!(comments.len(), 2);
     assert!(comments.iter().all(|comment| comment.kind == "note"));

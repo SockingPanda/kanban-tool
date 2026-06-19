@@ -396,6 +396,15 @@ pub(crate) struct LabelOntologyStructurePlanBody {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct LabelOntologyRevertBody {
+    actor: LabelOntologyActorBody,
+    target_action_id: String,
+    expected_current_hash: Option<String>,
+    reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct LabelOntologyValidationBody {
     actor: LabelOntologyActorBody,
     parent_action_id: String,
@@ -1146,6 +1155,32 @@ pub(crate) async fn plan_label_ontology_structure_change(
     ))
 }
 
+pub(crate) async fn revert_label_ontology_mutation(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+    body: Result<Json<LabelOntologyRevertBody>, JsonRejection>,
+) -> Result<
+    (
+        StatusCode,
+        Json<Envelope<kanban_sqlite::LabelOntologyActionRecord>>,
+    ),
+    ApiError,
+> {
+    let Json(body) = body.map_err(extractor_error)?;
+    let action = kanban_sqlite::revert_label_ontology_mutation(
+        state.db_path(),
+        &board,
+        label_ontology_revert_input(body),
+    )?;
+    Ok((
+        StatusCode::CREATED,
+        Json(Envelope {
+            data: action,
+            meta: None,
+        }),
+    ))
+}
+
 pub(crate) async fn validate_label_ontology_action(
     State(state): State<AppState>,
     Path(board): Path<String>,
@@ -1462,6 +1497,17 @@ fn label_ontology_structure_plan_input(
         )?,
         reason: body.reason,
     })
+}
+
+fn label_ontology_revert_input(
+    body: LabelOntologyRevertBody,
+) -> kanban_sqlite::LabelOntologyRevertInput {
+    kanban_sqlite::LabelOntologyRevertInput {
+        actor: label_ontology_actor_input(body.actor),
+        target_action_id: body.target_action_id,
+        expected_current_hash: body.expected_current_hash,
+        reason: body.reason,
+    }
 }
 
 fn label_ontology_validation_input(

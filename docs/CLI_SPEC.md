@@ -520,6 +520,7 @@ kanban label ontology reject <signal_id>... --reason <text> [--actor-type user|a
 kanban label ontology supersede <signal_id>... --by <signal_id> --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology resolve <signal_id>... --no-change --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology apply atom <signal_id>... --label <label> --kind applies-when|positive-example|excludes-when|negative-example --text <text> --reason <text> [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology revert <action_id> --reason <text> [--expected-current-hash <hash>] [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology validate <action_id> --status passed|failed|partial --reason <text> --input <path|-> [signal_id]... [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology validate <action_id> --trusted --status passed|failed|partial --reason <text> [signal_id]... [--vector-config <toml>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--actor-type user|agent] [--agent-type <type>] [--json]
 ```
@@ -909,9 +910,9 @@ Lifecycle commands 写入 action 并同步更新 signal status：
 
 这些 lifecycle commands 只记录 review/status 变化，不接受 canonical mutation
 provenance 字段。`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、
-`update_semantics`、`create_label_proposal`、`bootstrap_label` 和 `validate` 等 action rows 只能由
+`update_semantics`、`create_label_proposal`、`bootstrap_label`、`revert_ontology_mutation` 和 `validate` 等 action rows 只能由
 `label semantics upsert`、`label ontology apply atom`、`label propose`、
-proposal accept、`label bootstrap`、`label ontology validate` 等专用命令/服务路径在同一
+proposal accept、`label bootstrap`、`label ontology revert`、`label ontology validate` 等专用命令/服务路径在同一
 transaction 中写入。通用 action command 不能伪造 canonical before/after hash、
 result atom/result label/result proposal 或 validation payload。
 Lifecycle、apply atom、validate 和带 `--source-signal` 的 proposal accept 都支持
@@ -936,6 +937,18 @@ signals 时，必须传 `--allow-retarget` 和非空 `--retarget-reason <text>`�
 和最终 target label。Override 不放宽 board/status 要求。
 该命令只有在 canonical atom 实际新增时才标脏 label atom index；vector index rebuild
 和后续 suggest 验证仍是第二阶段。
+
+`label ontology revert <action_id>` 为已提交的 label-scoped canonical ontology mutation
+追加 `revert_ontology_mutation` action，并把目标 label semantics 恢复到被撤销 action
+的 `canonical_before_hash` / `change_json.before` snapshot。当前只支持
+`add_positive_atom`、`add_negative_atom` 和 `update_semantics`；不处理 bootstrap 的
+label identity 或 task binding 回滚。为避免覆盖后续修改，命令要求当前 canonical
+semantics hash 仍等于目标 action 的 `canonical_after_hash`；传
+`--expected-current-hash <hash>` 时还会先做调用方持有快照的 CAS 检查。成功后会写入
+append-only revert action，`parent_action_id` 指向被撤销 action，复制原 action 的
+source signal links，记录 before/after revert snapshot，标脏 label atom index，并把
+validation status 置为 `pending`，等待后续 rebuild/suggest validation。原 mutation
+action 不会被修改或删除。
 
 `label ontology validate` 为一个 mutation action 追加 `validate` action。Parent action
 必须是同一 board 上 `validation_status=pending` 的 canonical mutation action，并携带

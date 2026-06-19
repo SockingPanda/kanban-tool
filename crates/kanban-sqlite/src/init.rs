@@ -37,7 +37,9 @@ const UNIQUE_LABEL_PROPOSAL_CREATE_ACTION_MIGRATION: &str =
     include_str!("../../../migrations/014_unique_label_proposal_create_action.sql");
 const ADOPT_EXISTING_ATOM_ACTION_MIGRATION: &str =
     include_str!("../../../migrations/015_adopt_existing_atom_action.sql");
-const LATEST_MIGRATION_VERSION: i64 = 15;
+const REVERT_ONTOLOGY_MUTATION_ACTION_MIGRATION: &str =
+    include_str!("../../../migrations/016_revert_ontology_mutation_action.sql");
+const LATEST_MIGRATION_VERSION: i64 = 16;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] =
     &["fnv64:0ca871be950fc8a6", "fnv64:3b08da4e2b6041f5"];
 
@@ -122,6 +124,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 15,
         name: "015_adopt_existing_atom_action",
         sql: ADOPT_EXISTING_ATOM_ACTION_MIGRATION,
+    },
+    Migration {
+        version: 16,
+        name: "016_revert_ontology_mutation_action",
+        sql: REVERT_ONTOLOGY_MUTATION_ACTION_MIGRATION,
     },
 ];
 

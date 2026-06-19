@@ -560,7 +560,7 @@ Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、�
 | `id` | `loa_...` action id。 |
 | `board_id` | board scope。 |
 | `parent_action_id` | validation 等后续 action 指向被验证的 mutation action。 |
-| `action_type` | `confirm`、`reject`、`supersede`、`resolve_no_change`、`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、`update_semantics`、`create_label_proposal`、`bootstrap_label`、`rename_label`、`split_label`、`merge_labels`、`validate`。 |
+| `action_type` | `confirm`、`reject`、`supersede`、`resolve_no_change`、`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、`update_semantics`、`create_label_proposal`、`bootstrap_label`、`rename_label`、`split_label`、`merge_labels`、`validate`、`revert_ontology_mutation`。 |
 | `reason` | 必填人工或 agent 理由。 |
 | `target_label_id` / `result_label_id` | 修改目标与结果 label。 |
 | `result_atom_id` / `result_atom_content_hash` | 新增或采用 atom 的软引用和稳定 hash。 |
@@ -583,6 +583,13 @@ provenance。`adopt_existing_atom` 表示新的 source signal 采用了当前已
 `create_label_proposal` action 对同一 `(board_id, result_proposal_id)` 唯一；proposal
 accept 生成的 `bootstrap_label` action 通过 `parent_action_id` 指向这条 creation
 action，从而让 proposal creation -> bootstrap acceptance provenance 链路保持无歧义。
+
+`revert_ontology_mutation` 是 append-only rollback history：它不会修改或删除原 mutation
+action，而是用 `parent_action_id` 指向被撤销 action，并把 canonical semantics 恢复到该
+action 的 `change_json.before` / `canonical_before_hash` snapshot。当前实现只覆盖
+label-scoped semantics/atom mutations（`add_positive_atom`、`add_negative_atom`、
+`update_semantics`），成功后标脏 label atom index 并保持 validation pending；bootstrap
+的 label identity / task binding rollback 不由该 action 类型表达。
 
 当前 constructive ontology mutation path 的责任边界如下：
 

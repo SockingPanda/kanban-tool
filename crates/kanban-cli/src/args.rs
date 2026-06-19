@@ -450,6 +450,7 @@ pub(crate) enum LabelOntologyCommand {
         #[command(subcommand)]
         command: LabelOntologyStructureCommand,
     },
+    Revert(LabelOntologyRevertArgs),
     Validate(LabelOntologyValidateArgs),
 }
 
@@ -593,6 +594,17 @@ pub(crate) struct LabelOntologyStructurePlanArgs {
     pub(crate) task_binding_policy: Option<String>,
     #[arg(long = "validation-policy-json")]
     pub(crate) validation_policy_json: Option<String>,
+    #[arg(long)]
+    pub(crate) reason: String,
+    #[command(flatten)]
+    pub(crate) actor: LabelOntologyActorArgs,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelOntologyRevertArgs {
+    pub(crate) action_id: String,
+    #[arg(long = "expected-current-hash")]
+    pub(crate) expected_current_hash: Option<String>,
     #[arg(long)]
     pub(crate) reason: String,
     #[command(flatten)]

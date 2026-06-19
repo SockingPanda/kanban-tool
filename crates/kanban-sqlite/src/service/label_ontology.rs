@@ -4,11 +4,11 @@ use super::{
     LabelOntologyActionInput, LabelOntologyActionRecord, LabelOntologyActionType,
     LabelOntologyActor, LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput,
     LabelOntologyObservationRecord, LabelOntologyProposedAction, LabelOntologyRecordInput,
-    LabelOntologyRetargetOptions, LabelOntologyReviewAtomVariant, LabelOntologyReviewGroup,
-    LabelOntologyReviewGroupBy, LabelOntologyReviewLabelRef, LabelOntologyReviewOptions,
-    LabelOntologySignalDetail, LabelOntologySignalInput, LabelOntologySignalKind,
-    LabelOntologySignalListOptions, LabelOntologySignalRecord, LabelOntologySignalStatus,
-    LabelOntologyStructurePlanInput, LabelOntologySuggestState,
+    LabelOntologyRetargetOptions, LabelOntologyRevertInput, LabelOntologyReviewAtomVariant,
+    LabelOntologyReviewGroup, LabelOntologyReviewGroupBy, LabelOntologyReviewLabelRef,
+    LabelOntologyReviewOptions, LabelOntologySignalDetail, LabelOntologySignalInput,
+    LabelOntologySignalKind, LabelOntologySignalListOptions, LabelOntologySignalRecord,
+    LabelOntologySignalStatus, LabelOntologyStructurePlanInput, LabelOntologySuggestState,
     LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
     LabelOntologyValidationStatus, LabelSemanticProposalRecord, LabelSemanticsMutationOptions,
     LabelSuggestionEvidenceAtom, LabelSuggestionOptions, LabelSuggestionResult,
@@ -761,6 +761,150 @@ pub fn apply_label_ontology_atom_with_options(
     })
 }
 
+pub fn revert_label_ontology_mutation(
+    path: impl AsRef<Path>,
+    board: &str,
+    input: LabelOntologyRevertInput,
+) -> Result<LabelOntologyActionRecord> {
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
+        let actor = normalize_actor(input.actor)?;
+        let reason = normalize_required_text(&input.reason)?;
+        let target_action_id = normalize_required_text(&input.target_action_id)?;
+        let expected_current_hash = input
+            .expected_current_hash
+            .as_deref()
+            .map(normalize_required_text)
+            .transpose()?;
+        ensure_action_on_board(&conn, &board_id, &target_action_id)?;
+        let target_action = action_by_id_with_links(&conn, &target_action_id)?;
+        ensure_revertable_action_type(target_action.action_type)?;
+        let target_label_id = target_action.target_label_id.as_deref().ok_or_else(|| {
+            KanbanError::InvalidInput(format!(
+                "ontology action {} has no target label to revert",
+                target_action.id
+            ))
+        })?;
+        let target_label = resolve_label(&conn, &board_id, target_label_id)?;
+        let current_parts = load_semantics_parts(&conn, &board_id, &target_label.id)?;
+        let current_hash = semantics_hash(&target_label, &current_parts)?;
+        if let Some(expected) = expected_current_hash.as_deref()
+            && current_hash != expected
+        {
+            return Err(KanbanError::InvalidInput(
+                "expected_current_hash does not match current canonical ontology state".into(),
+            ));
+        }
+        let target_after_hash = target_action
+            .canonical_after_hash
+            .as_deref()
+            .ok_or_else(|| {
+                KanbanError::InvalidInput(format!(
+                    "ontology action {} has no canonical_after_hash to revert from",
+                    target_action.id
+                ))
+            })?;
+        if current_hash != target_after_hash {
+            return Err(KanbanError::InvalidInput(
+                "cannot revert ontology action because canonical ontology state changed after the target action".into(),
+            ));
+        }
+        let target_before_hash =
+            target_action
+                .canonical_before_hash
+                .as_deref()
+                .ok_or_else(|| {
+                    KanbanError::InvalidInput(format!(
+                        "ontology action {} has no canonical_before_hash to restore",
+                        target_action.id
+                    ))
+                })?;
+        let change = parse_action_change_json(&target_action)?;
+        let before_value = change.get("before").ok_or_else(|| {
+            KanbanError::InvalidInput(format!(
+                "ontology action {} change_json has no before snapshot",
+                target_action.id
+            ))
+        })?;
+        let restore_parts = semantics_parts_from_json(
+            before_value,
+            &format!("action {} before", target_action.id),
+        )?;
+        let restore_hash = semantics_hash(&target_label, &restore_parts)?;
+        if restore_hash != target_before_hash {
+            return Err(KanbanError::InvalidInput(format!(
+                "target action {} before snapshot hash does not match canonical_before_hash",
+                target_action.id
+            )));
+        }
+        let definition = LabelDefinition {
+            id: target_label.id.clone(),
+            name: target_label.name.clone(),
+            description: restore_parts.description.clone(),
+            applies_when: restore_parts.applies_when.clone(),
+            positive_examples: restore_parts.positive_examples.clone(),
+            excludes_when: restore_parts.excludes_when.clone(),
+            negative_examples: restore_parts.negative_examples.clone(),
+        };
+        upsert_label_semantics_in_tx(&conn, &board_id, &definition, now)?;
+        mark_label_atom_store_dirty(&conn, &board_id, now)?;
+        let restored = load_semantics_parts(&conn, &board_id, &target_label.id)?;
+        let restored_hash = semantics_hash(&target_label, &restored)?;
+        if restored_hash != target_before_hash {
+            return Err(KanbanError::InvalidInput(format!(
+                "reverted canonical hash {} does not match target before hash {}",
+                restored_hash, target_before_hash
+            )));
+        }
+        let change_json = serde_json::to_string(&json!({
+            "reverted_action_id": &target_action.id,
+            "reverted_action_type": target_action.action_type.to_string(),
+            "label": {
+                "id": &target_label.id,
+                "name": &target_label.name,
+            },
+            "expected_current_hash": expected_current_hash,
+            "reverted_canonical_before_hash": &target_action.canonical_before_hash,
+            "reverted_canonical_after_hash": &target_action.canonical_after_hash,
+            "before_revert": semantics_json(&target_label, &current_parts),
+            "after_revert": semantics_json(&target_label, &restored),
+            "index_dirty": true,
+        }))
+        .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
+        let validation_json = serde_json::to_string(&json!({
+            "state": "pending_revert_validation",
+            "reverted_action_id": &target_action.id,
+            "reverted_action_type": target_action.action_type.to_string(),
+        }))
+        .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
+        let action_id = insert_ontology_action(
+            &conn,
+            &board_id,
+            InsertOntologyAction {
+                action_type: LabelOntologyActionType::RevertOntologyMutation,
+                reason,
+                actor,
+                parent_action_id: Some(target_action.id.clone()),
+                target_label_id: Some(target_label.id),
+                result_label_id: None,
+                result_atom_id: target_action.result_atom_id.clone(),
+                result_atom_content_hash: target_action.result_atom_content_hash.clone(),
+                result_proposal_id: None,
+                canonical_before_hash: Some(current_hash),
+                canonical_after_hash: Some(restored_hash),
+                change_json,
+                validation_status: LabelOntologyValidationStatus::Pending,
+                validation_json,
+            },
+            now,
+        )?;
+        link_action_signals(&conn, &board_id, &action_id, &target_action.signal_ids, now)?;
+        action_by_id_with_links(&conn, &action_id)
+    })
+}
+
 pub fn validate_label_ontology_action(
     path: impl AsRef<Path>,
     board: &str,
@@ -1504,6 +1648,7 @@ fn validation_case_type(action_type: LabelOntologyActionType) -> Result<&'static
         LabelOntologyActionType::AddNegativeAtom => Ok("negative_atom"),
         LabelOntologyActionType::BootstrapLabel => Ok("bootstrap_label"),
         LabelOntologyActionType::UpdateSemantics => Ok("update_semantics"),
+        LabelOntologyActionType::RevertOntologyMutation => Ok("revert_ontology_mutation"),
         LabelOntologyActionType::RenameLabel => Ok("rename_label"),
         LabelOntologyActionType::SplitLabel => Ok("split_label"),
         LabelOntologyActionType::MergeLabels => Ok("merge_labels"),
@@ -1526,6 +1671,7 @@ fn validation_target_label_id(action: &LabelOntologyActionRecord) -> Result<Opti
             "bootstrap label validation requires a result label",
         )?)),
         LabelOntologyActionType::UpdateSemantics
+        | LabelOntologyActionType::RevertOntologyMutation
         | LabelOntologyActionType::RenameLabel
         | LabelOntologyActionType::SplitLabel
         | LabelOntologyActionType::MergeLabels => Ok(action
@@ -1821,6 +1967,7 @@ fn ensure_validatable_parent_action(action: &LabelOntologyActionRecord) -> Resul
         LabelOntologyActionType::AddPositiveAtom
             | LabelOntologyActionType::AddNegativeAtom
             | LabelOntologyActionType::UpdateSemantics
+            | LabelOntologyActionType::RevertOntologyMutation
             | LabelOntologyActionType::BootstrapLabel
             | LabelOntologyActionType::RenameLabel
             | LabelOntologyActionType::SplitLabel
@@ -1861,6 +2008,7 @@ fn ensure_validatable_parent_action(action: &LabelOntologyActionRecord) -> Resul
                 && change.get("semantics").is_some()
         }
         LabelOntologyActionType::UpdateSemantics
+        | LabelOntologyActionType::RevertOntologyMutation
         | LabelOntologyActionType::RenameLabel
         | LabelOntologyActionType::SplitLabel
         | LabelOntologyActionType::MergeLabels => {
@@ -1934,6 +2082,7 @@ fn ensure_passed_validation_evidence(
                 ensure_bootstrap_label_validation_case(parent_action, case)?;
             }
             LabelOntologyActionType::UpdateSemantics
+            | LabelOntologyActionType::RevertOntologyMutation
             | LabelOntologyActionType::RenameLabel
             | LabelOntologyActionType::SplitLabel
             | LabelOntologyActionType::MergeLabels => {}
@@ -2091,6 +2240,7 @@ fn ensure_case_type(
         LabelOntologyActionType::AddNegativeAtom => "negative_atom",
         LabelOntologyActionType::BootstrapLabel => "bootstrap_label",
         LabelOntologyActionType::UpdateSemantics => "update_semantics",
+        LabelOntologyActionType::RevertOntologyMutation => "revert_ontology_mutation",
         LabelOntologyActionType::RenameLabel => "rename_label",
         LabelOntologyActionType::SplitLabel => "split_label",
         LabelOntologyActionType::MergeLabels => "merge_labels",
@@ -3806,6 +3956,33 @@ fn ensure_proposal_on_board(conn: &Connection, board_id: &str, proposal_id: &str
     Ok(())
 }
 
+fn ensure_revertable_action_type(action_type: LabelOntologyActionType) -> Result<()> {
+    if matches!(
+        action_type,
+        LabelOntologyActionType::AddPositiveAtom
+            | LabelOntologyActionType::AddNegativeAtom
+            | LabelOntologyActionType::UpdateSemantics
+    ) {
+        Ok(())
+    } else {
+        Err(KanbanError::InvalidInput(format!(
+            "ontology action type {action_type} cannot be reverted by label-scoped semantics revert"
+        )))
+    }
+}
+
+fn parse_action_change_json(action: &LabelOntologyActionRecord) -> Result<JsonValue> {
+    let value: JsonValue = serde_json::from_str(&action.change_json)
+        .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
+    if !value.is_object() {
+        return Err(KanbanError::InvalidInput(format!(
+            "ontology action {} change_json must be an object",
+            action.id
+        )));
+    }
+    Ok(value)
+}
+
 struct InsertOntologyAction {
     action_type: LabelOntologyActionType,
     reason: String,
@@ -4432,6 +4609,41 @@ fn load_semantics_parts(
         },
     )
     .unwrap_or_else(|| Ok(SemanticsParts::empty()))
+}
+
+fn semantics_parts_from_json(value: &JsonValue, context: &str) -> Result<SemanticsParts> {
+    let object = value.as_object().ok_or_else(|| {
+        KanbanError::InvalidInput(format!("{context} semantics snapshot must be an object"))
+    })?;
+    let description = match object.get("description") {
+        Some(JsonValue::Null) | None => None,
+        Some(JsonValue::String(value)) => Some(value.clone()),
+        Some(_) => {
+            return Err(KanbanError::InvalidInput(format!(
+                "{context} description must be a string or null"
+            )));
+        }
+    };
+    Ok(SemanticsParts {
+        description,
+        applies_when: required_string_array_field(object, "applies_when", context)?,
+        excludes_when: required_string_array_field(object, "excludes_when", context)?,
+        positive_examples: required_string_array_field(object, "positive_examples", context)?,
+        negative_examples: required_string_array_field(object, "negative_examples", context)?,
+    })
+}
+
+fn required_string_array_field(
+    object: &serde_json::Map<String, JsonValue>,
+    field: &str,
+    context: &str,
+) -> Result<Vec<String>> {
+    let value = object.get(field).ok_or_else(|| {
+        KanbanError::InvalidInput(format!("{context} semantics snapshot missing {field}"))
+    })?;
+    serde_json::from_value(value.clone()).map_err(|err| {
+        KanbanError::InvalidInput(format!("{context} {field} must be a string array: {err}"))
+    })
 }
 
 fn semantics_json(label: &LabelSnapshot, parts: &SemanticsParts) -> JsonValue {

@@ -168,6 +168,11 @@ transaction 中写入对应 canonical row 与 provenance action，或一起回�
 ontology action endpoint 只允许 lifecycle review action，不能伪造 canonical before/after
 hash、result atom/result label/result proposal 或 validation evidence。
 
+已提交的 label-scoped semantics/atom mutation 可以通过专用 revert path 追加
+`revert_ontology_mutation` action：它要求当前 canonical hash 仍等于被撤销 action 的
+after hash，将 semantics 恢复到 before snapshot，标脏 atom index，并保留原 action
+history。该 path 不承担 bootstrap label identity 或 task binding 回滚。
+
 Semantics upsert 默认是 patch，不是 full replace：缺省字段保留当前值，数组字段追加或按
 `remove_*` 删除；只有显式 replace 才把缺省数组解释为空。`expected_semantics_hash`
 用于防止 lost update。Proposal accept 与单 task bootstrap 共用 new-label adoption

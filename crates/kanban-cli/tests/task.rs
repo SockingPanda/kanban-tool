@@ -6,8 +6,8 @@ use kanban_sqlite::{
     CreateLabel, CreateTask, LabelOntologyActionInput, LabelOntologyActionType, LabelOntologyActor,
     LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput, LabelOntologyProposedAction,
     LabelOntologyRecordInput, LabelOntologySignalInput, LabelOntologySignalKind,
-    LabelOntologySuggestState, LabelProposalCandidate, UpsertLabelSemantics, get_task,
-    list_label_atoms, list_labels,
+    LabelOntologySuggestState, LabelProposalCandidate, UpsertLabelSemantics, get_label_semantics,
+    get_task, list_label_atoms, list_labels,
 };
 use pretty_assertions::assert_eq;
 use serde_json::json;
@@ -1845,6 +1845,188 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
     assert_eq!(
         change["retarget_override"]["reason"],
         "Reviewer explicitly audited proposal source signal retarget."
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_revert_action_round_trip() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_revert_action_round_trip")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    kanban_sqlite::upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            description: Some("Command-line interface behavior".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let before_semantics = get_label_semantics(&temp.path, "default", "cli")?;
+    let task = kanban_sqlite::create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("ontology CLI revert task"),
+    )?;
+    let observation = kanban_sqlite::record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        LabelOntologyRecordInput {
+            actor: LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: json!([{"label": "cli", "confidence": 0.92}]).to_string(),
+            suggestion_snapshot_json: json!({"selected_labels": []}).to_string(),
+            final_decision_json: json!({"accepted_labels": ["cli"]}).to_string(),
+            suggest_coverage: Some(0.61),
+            suggest_coverage_cosine: Some(0.74),
+            suggest_residual_norm: Some(0.39),
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: json!([]).to_string(),
+            capture_fingerprint: Some("cli-revert-action-round-trip".to_owned()),
+            signals: vec![LabelOntologySignalInput {
+                kind: LabelOntologySignalKind::FalseNegative,
+                target_label_ref: Some("cli".to_owned()),
+                related_labels_json: json!([]).to_string(),
+                proposed_action: LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(LabelOntologyCandidateAtomInput {
+                    polarity: "positive".to_owned(),
+                    kind: "applies_when".to_owned(),
+                    text: "extends CLI subcommands, arguments, help output, or JSON behavior"
+                        .to_owned(),
+                }),
+                proposed_label_name: None,
+                proposal_json: json!({}).to_string(),
+                agent_selected: true,
+                suggest_state: Some(LabelOntologySuggestState::Candidate),
+                suggest_score: Some(0.08),
+                suggest_rank: Some(4),
+                final_selected: true,
+                rationale: "The task expands the CLI surface although suggest scored cli weakly."
+                    .to_owned(),
+                confidence: Some(0.91),
+                signal_key: Some("cli-revert-action".to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    kanban_sqlite::create_label_ontology_action(
+        &temp.path,
+        "default",
+        LabelOntologyActionInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            action_type: LabelOntologyActionType::Confirm,
+            signal_ids: vec![signal_id.clone()],
+            reason: "Confirmed by reviewer.".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: None,
+            validation_status: None,
+            validation_json: None,
+        },
+    )?;
+    let applied = kanban_sqlite::apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed false-negative support for CLI surface changes.".to_owned(),
+        },
+    )?;
+
+    let reverted = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "revert",
+            &applied.id,
+            "--expected-current-hash",
+            applied
+                .canonical_after_hash
+                .as_deref()
+                .context("canonical after hash")?,
+            "--reason",
+            "Revert the test ontology mutation.",
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(reverted["data"]["action_type"], "revert_ontology_mutation");
+    assert_eq!(reverted["data"]["parent_action_id"], applied.id);
+    assert_eq!(reverted["data"]["signal_ids"], json!([signal_id]));
+    let restored_semantics = get_label_semantics(&temp.path, "default", "cli")?;
+    assert_eq!(
+        restored_semantics.semantics_hash,
+        before_semantics.semantics_hash
+    );
+    assert_eq!(restored_semantics.description, before_semantics.description);
+    assert_eq!(
+        restored_semantics.applies_when,
+        before_semantics.applies_when
+    );
+    assert_eq!(
+        restored_semantics.excludes_when,
+        before_semantics.excludes_when
+    );
+    assert_eq!(
+        restored_semantics.positive_examples,
+        before_semantics.positive_examples
+    );
+    assert_eq!(
+        restored_semantics.negative_examples,
+        before_semantics.negative_examples
+    );
+    assert_eq!(
+        restored_semantics
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>(),
+        before_semantics
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>()
     );
 
     Ok(())

@@ -762,6 +762,7 @@ pub enum LabelOntologyActionType {
     RenameLabel,
     SplitLabel,
     MergeLabels,
+    RevertOntologyMutation,
     Validate,
 }
 
@@ -781,6 +782,7 @@ impl std::fmt::Display for LabelOntologyActionType {
             Self::RenameLabel => "rename_label",
             Self::SplitLabel => "split_label",
             Self::MergeLabels => "merge_labels",
+            Self::RevertOntologyMutation => "revert_ontology_mutation",
             Self::Validate => "validate",
         })
     }
@@ -804,6 +806,7 @@ impl std::str::FromStr for LabelOntologyActionType {
             "rename_label" => Ok(Self::RenameLabel),
             "split_label" => Ok(Self::SplitLabel),
             "merge_labels" => Ok(Self::MergeLabels),
+            "revert_ontology_mutation" => Ok(Self::RevertOntologyMutation),
             "validate" => Ok(Self::Validate),
             _ => Err(kanban_core::KanbanError::InvalidInput(format!(
                 "invalid label ontology action type: {value}"
@@ -1024,6 +1027,14 @@ pub struct LabelOntologyStructurePlanInput {
     pub related_label_refs: Vec<String>,
     pub task_binding_policy: Option<String>,
     pub validation_policy_json: Option<String>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyRevertInput {
+    pub actor: LabelOntologyActor,
+    pub target_action_id: String,
+    pub expected_current_hash: Option<String>,
     pub reason: String,
 }
 

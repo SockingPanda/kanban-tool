@@ -842,6 +842,7 @@ GET /api/v1/boards/{board}/label-ontology/review
 GET /api/v1/label-ontology/signals/{signal_id}
 POST /api/v1/boards/{board}/label-ontology/actions
 POST /api/v1/boards/{board}/label-ontology/apply/atom
+POST /api/v1/boards/{board}/label-ontology/revert
 POST /api/v1/boards/{board}/label-ontology/validate
 ```
 
@@ -1316,6 +1317,7 @@ GET /api/v1/boards/{board}/label-ontology/review?group_by=label&include_all=fals
 GET /api/v1/label-ontology/signals/{signal_id}
 POST /api/v1/boards/{board}/label-ontology/actions
 POST /api/v1/boards/{board}/label-ontology/apply/atom
+POST /api/v1/boards/{board}/label-ontology/revert
 POST /api/v1/boards/{board}/label-ontology/validate
 ```
 
@@ -1494,7 +1496,7 @@ Groups sort by distinct `task_count` desc, then `confirmed_count` desc,
 `change_json`、`validation_status` 和 `validation` / `validation_json` 必须为
 `null`/缺省；否则返回
 `invalid_input`。`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、
-`update_semantics`、`create_label_proposal`、`bootstrap_label`、`validate` 等 mutation/validation action
+`update_semantics`、`create_label_proposal`、`bootstrap_label`、`revert_ontology_mutation`、`validate` 等 mutation/validation action
 types 不允许通过该 generic endpoint 写入；canonical mutation provenance 必须由
 semantics PUT、apply atom、proposal create/accept、task-label bootstrap 或 validate 等
 专用 route 在同一 transaction 内写入。`supersede` 写入时会沿 replacement
@@ -1532,6 +1534,27 @@ action `change_json.retarget_override` 会记录 reason、source signal 原始 t
 label 和最终 target label。Override 不放宽 board/status 要求。该 route 只有在
 canonical atom 实际新增时才标脏 label atom index；vector rebuild 和 suggest validation
 在 transaction 外执行。
+
+`POST /api/v1/boards/{board}/label-ontology/revert` 追加可追溯 rollback action，并把
+目标 label semantics 恢复为被撤销 mutation action 的 before snapshot：
+
+```json
+{
+  "actor": {"name": "reviewer", "type": "user", "agent_type": null},
+  "target_action_id": "loa_...",
+  "expected_current_hash": "optional-current-semantics-hash",
+  "reason": "Rollback test-only atom mutation"
+}
+```
+
+当前只支持 `add_positive_atom`、`add_negative_atom` 和 `update_semantics`。Route 要求
+当前 canonical semantics hash 仍等于 `target_action_id` 的 `canonical_after_hash`；
+`expected_current_hash` 非空时还必须等于当前 hash。成功后返回
+`revert_ontology_mutation` action：`parent_action_id` 指向被撤销 action，source signal
+links 从目标 action 复制，`change` 记录被撤销 action、before/after revert snapshot 和
+`index_dirty=true`，并标脏 label atom index。该 route 不删除或修改原 action，也不处理
+bootstrap label identity / task binding rollback；bootstrap 失败补偿由 bootstrap
+orchestration 负责。
 
 `POST /api/v1/boards/{board}/label-ontology/validate` 追加 external attestation
 validation action。HTTP route 接收调用方提交的 `validation` / `validation_json`，

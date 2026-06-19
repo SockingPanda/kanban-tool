@@ -48,6 +48,15 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     assert_eq!(doctor["data"]["outbox_failed"], 0);
     assert_eq!(doctor["data"]["derived_dirty_stores"], 3);
     assert_eq!(doctor["data"]["derived_error_stores"], 0);
+    assert_eq!(doctor["data"]["consistency_errors"], 0);
+    assert_eq!(doctor["data"]["consistency_warnings"], 0);
+    assert_eq!(
+        doctor["data"]["consistency_issues"]
+            .as_array()
+            .context("expected JSON array")?
+            .len(),
+        0
+    );
     assert_eq!(doctor["data"]["ontology_ledger_errors"], 0);
     assert_eq!(doctor["data"]["ontology_ledger_warnings"], 0);
     assert_eq!(

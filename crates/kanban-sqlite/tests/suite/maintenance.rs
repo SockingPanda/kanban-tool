@@ -274,6 +274,171 @@ fn doctor_ontology_detects_supersede_cycle() -> anyhow::Result<()> {
 }
 
 #[test]
+fn doctor_detects_cross_board_foundation_relationship_rows() -> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_detects_cross_board_foundation_relationship_rows")?;
+    init_database(&temp.path, "tester")?;
+    let other_board = create_board(
+        &temp.path,
+        "tester",
+        CreateBoard {
+            slug: "other".to_owned(),
+            name: "Other".to_owned(),
+            description: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("relationship row source task"),
+    )?;
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("relationship parent task"),
+    )?;
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("relationship child task"),
+    )?;
+    let label = create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "relationship-label".to_owned(),
+            color: None,
+        },
+    )?;
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+    create_comment(&temp.path, &task.id, "tester", "relationship note", None)?;
+
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "INSERT INTO task_labels(board_id, task_id, label_id, created_at) VALUES (?1, ?2, ?3, 1)",
+        params![other_board.id, task.id, label.id],
+    )?;
+    conn.execute(
+        "UPDATE task_dependencies SET board_id=?1 WHERE parent_task_id=?2 AND child_task_id=?3",
+        params![other_board.id, parent.id, child.id],
+    )?;
+    conn.execute(
+        "INSERT INTO task_runs(id, board_id, task_id, status, claim_token, claim_owner, claim_expires_at, started_at, metadata_json) \
+         VALUES ('r_cross_board', ?1, ?2, 'failed', 'token', 'tester', 1, 1, '{}')",
+        params![other_board.id, task.id],
+    )?;
+    conn.execute(
+        "UPDATE task_comments SET board_id=?1 WHERE task_id=?2",
+        params![other_board.id, task.id],
+    )?;
+    conn.execute(
+        "INSERT INTO task_events(event_id, board_id, task_id, kind, payload_json, created_at) \
+         VALUES ('e_cross_board', ?1, ?2, 'test.cross_board', '{}', 1)",
+        params![other_board.id, task.id],
+    )?;
+    conn.execute(
+        "INSERT INTO task_attachments(id, board_id, task_id, filename, rel_path, size_bytes, created_by, created_at) \
+         VALUES ('a_cross_board', ?1, ?2, 'artifact.txt', 'attachments/artifact.txt', 0, 'tester', 1)",
+        params![other_board.id, task.id],
+    )?;
+
+    let report = doctor_database(&temp.path)?;
+
+    assert!(!report.ok);
+    assert!(report.consistency_errors >= 6);
+    for code in [
+        "task_label_task_board_mismatch",
+        "task_dependency_parent_board_mismatch",
+        "task_run_task_board_mismatch",
+        "task_comment_task_board_mismatch",
+        "task_event_task_board_mismatch",
+        "task_attachment_task_board_mismatch",
+    ] {
+        assert!(
+            report
+                .consistency_issues
+                .iter()
+                .any(|issue| issue.code == code
+                    && issue.message.contains("table=")
+                    && issue.message.contains("row=")
+                    && issue.message.contains("row_board=")
+                    && issue.message.contains("referenced_board=")),
+            "missing consistency issue {code}: {:#?}",
+            report.consistency_issues
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn jsonl_import_rejects_cross_board_foundation_relationship_rows() -> anyhow::Result<()> {
+    let source = TempDb::new("jsonl_import_rejects_cross_board_foundation_source")?;
+    init_database(&source.path, "tester")?;
+    let other_board = create_board(
+        &source.path,
+        "tester",
+        CreateBoard {
+            slug: "other".to_owned(),
+            name: "Other".to_owned(),
+            description: None,
+        },
+    )?;
+    let task = create_task(
+        &source.path,
+        "default",
+        "tester",
+        CreateTask::ready("portable task label"),
+    )?;
+    let label = create_label(
+        &source.path,
+        "default",
+        CreateLabel {
+            name: "portable-label".to_owned(),
+            color: None,
+        },
+    )?;
+    connect_file(&source.path)?.execute(
+        "INSERT INTO task_labels(board_id, task_id, label_id, created_at) VALUES (?1, ?2, ?3, 1)",
+        params![task.board_id, task.id, label.id],
+    )?;
+
+    let default_export = source.dir.join("default.jsonl");
+    let other_export = source.dir.join("other.jsonl");
+    let invalid_export = source.dir.join("cross-board-task-label.jsonl");
+    export_jsonl(&source.path, "default", &default_export)?;
+    export_jsonl(&source.path, "other", &other_export)?;
+    let invalid_default = replace_jsonl_record_board_id(
+        &std::fs::read_to_string(&default_export)?,
+        "task_label",
+        &other_board.id,
+    )?;
+    std::fs::write(
+        &invalid_export,
+        format!(
+            "{}{}",
+            std::fs::read_to_string(&other_export)?,
+            invalid_default
+        ),
+    )?;
+
+    let target = TempDb::new("jsonl_import_rejects_cross_board_foundation_target")?;
+    init_database(&target.path, "tester")?;
+    let error = result_err(import_jsonl(&target.path, &invalid_export, true))?;
+
+    let message = error.to_string();
+    assert!(
+        message.contains("imported data failed doctor checks"),
+        "{message}"
+    );
+    assert!(message.contains("table=task_labels"), "{message}");
+    assert!(message.contains("row_board="), "{message}");
+    assert!(message.contains("referenced_board="), "{message}");
+    Ok(())
+}
+
+#[test]
 fn doctor_reports_executable_status_invariant_violations() -> anyhow::Result<()> {
     let temp = TempDb::new("doctor_reports_executable_status_invariant_violations")?;
     init_database(&temp.path, "tester")?;
@@ -471,6 +636,29 @@ fn insert_doctor_ontology_signal(
         ],
     )?;
     Ok(())
+}
+
+fn replace_jsonl_record_board_id(
+    input: &str,
+    record_type: &str,
+    board_id: &str,
+) -> anyhow::Result<String> {
+    let mut changed = false;
+    let mut output = String::new();
+    for line in input.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let mut value: serde_json::Value = serde_json::from_str(line)?;
+        if value["type"] == record_type {
+            value["data"]["board_id"] = serde_json::Value::String(board_id.to_owned());
+            changed = true;
+        }
+        output.push_str(&value.to_string());
+        output.push('\n');
+    }
+    assert!(changed, "expected {record_type} record in JSONL");
+    Ok(output)
 }
 
 #[test]

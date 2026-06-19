@@ -342,6 +342,12 @@ describe("KanbanApi task search", () => {
           derived_dirty_stores: 0,
           derived_error_stores: 0,
           derived_stores: [],
+          consistency_errors: 0,
+          consistency_warnings: 0,
+          consistency_issues: [],
+          ontology_ledger_errors: 0,
+          ontology_ledger_warnings: 0,
+          ontology_ledger_issues: [],
         },
       },
       {

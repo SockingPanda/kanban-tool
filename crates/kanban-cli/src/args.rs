@@ -568,7 +568,21 @@ pub(crate) struct LabelOntologyValidateArgs {
     #[arg(long)]
     pub(crate) reason: String,
     #[arg(long)]
-    pub(crate) input: String,
+    pub(crate) input: Option<String>,
+    #[arg(long)]
+    pub(crate) trusted: bool,
+    #[arg(long = "vector-config", alias = "config")]
+    pub(crate) vector_config: Option<std::path::PathBuf>,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
+    pub(crate) limit: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
+    pub(crate) candidate_limit: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT)]
+    pub(crate) atom_limit: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS)]
+    pub(crate) max_selected_labels: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MIN_SCORE)]
+    pub(crate) min_score: f32,
     #[command(flatten)]
     pub(crate) actor: LabelOntologyActorArgs,
     pub(crate) signal_ids: Vec<String>,

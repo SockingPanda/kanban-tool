@@ -440,6 +440,87 @@ fn label_bootstrap_verify_requires_vector_provider_before_mutating() -> anyhow::
     Ok(())
 }
 
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn label_bootstrap_verify_rebuild_failure_restores_canonical_state() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_verify_rebuild_failure_restores_canonical_state")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "bootstrap verify rebuild failure cli task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+    let vector_config = temp.dir.join("vector.toml");
+    fs::write(
+        &vector_config,
+        r#"[vector]
+provider = "ollama"
+endpoint = "http://127.0.0.1:1"
+model = "offline-cli-test-model"
+dimensions = 3
+"#,
+    )?;
+
+    let attempt = kanban(
+        &temp.path,
+        &[
+            "label",
+            "bootstrap",
+            task_id,
+            "database",
+            "--description",
+            "Database persistence work",
+            "--applies-when",
+            "touches SQLite migrations",
+            "--positive-example",
+            "new table migration",
+            "--verify",
+            "--vector-config",
+            vector_config.to_str().context("vector config path")?,
+        ],
+    )?;
+
+    assert!(!attempt.output.status.success());
+    let stderr = String::from_utf8_lossy(&attempt.output.stderr);
+    assert!(stderr.contains("Ollama embed request failed"), "{stderr}");
+    assert!(
+        stderr.contains("bootstrap verification compensation restored canonical state"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("label_deleted=true"), "{stderr}");
+    let shown = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
+    assert!(
+        shown["data"]["labels"]
+            .as_array()
+            .context("labels")?
+            .is_empty()
+    );
+    assert!(
+        kanban(&temp.path, &["--json", "label", "list"])?.success_json()?["data"]
+            .as_array()
+            .context("labels")?
+            .is_empty()
+    );
+    let conn = kanban_sqlite::connect_file(&temp.path)?;
+    let labels: i64 = conn.query_row("SELECT COUNT(*) FROM labels", [], |row| row.get(0))?;
+    let semantics: i64 =
+        conn.query_row("SELECT COUNT(*) FROM label_semantics", [], |row| row.get(0))?;
+    let atoms: i64 = conn.query_row("SELECT COUNT(*) FROM label_atoms", [], |row| row.get(0))?;
+    let bindings: i64 = conn.query_row("SELECT COUNT(*) FROM task_labels", [], |row| row.get(0))?;
+    assert_eq!((labels, semantics, atoms, bindings), (0, 0, 0, 0));
+    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    assert_eq!(status.board_dirty, Some(true));
+    Ok(())
+}
+
 #[test]
 fn label_delete_force_removes_canonical_label_and_task_bindings() -> anyhow::Result<()> {
     let temp = TempDb::new("label_delete_force_removes_canonical_label_and_task_bindings")?;
@@ -1161,7 +1242,7 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
     let validation_path = validation_path
         .to_str()
         .context("temp path should be valid UTF-8")?;
-    let validated = kanban(
+    kanban(
         &temp.path,
         &[
             "--json",
@@ -1183,25 +1264,20 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
             "codex",
         ],
     )?
-    .success_json()?;
-    assert_eq!(validated["data"]["action_type"], "validate");
-    assert_eq!(validated["data"]["validation_status"], "passed");
-    assert_eq!(validated["data"]["created_by"], "validate-agent");
-    assert_eq!(validated["data"]["created_by_type"], "agent");
-    assert_eq!(validated["data"]["agent_type"], "codex");
+    .failure_containing("trusted evidence collected by the kanban tool")?;
 
     let primary_detail = kanban(
         &temp.path,
         &["--json", "label", "ontology", "show", primary],
     )?
     .success_json()?;
-    assert_eq!(primary_detail["data"]["signal"]["status"], "resolved");
+    assert_eq!(primary_detail["data"]["signal"]["status"], "confirmed");
     assert_eq!(
         primary_detail["data"]["actions"]
             .as_array()
             .context("primary actions")?
             .len(),
-        3
+        2
     );
     let duplicate_detail = kanban(
         &temp.path,

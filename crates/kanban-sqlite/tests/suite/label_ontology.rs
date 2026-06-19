@@ -1037,7 +1037,7 @@ fn label_ontology_validation_rejects_non_mutation_parent() -> anyhow::Result<()>
         ),
     )?;
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -1093,7 +1093,7 @@ fn label_ontology_validation_rejects_parent_without_pending_canonical_evidence()
     let bare_parent =
         seed_pending_mutation_action_without_evidence(&temp.path, &task.board_id, &signal_id)?;
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -1161,7 +1161,7 @@ fn label_ontology_passed_validation_rejects_empty_or_untyped_evidence() -> anyho
         },
     )?;
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -1174,6 +1174,41 @@ fn label_ontology_passed_validation_rejects_empty_or_untyped_evidence() -> anyho
         },
     ))?;
     assert!(error.to_string().contains("structured validation evidence"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_external_validation_rejects_fake_automated_passed_evidence() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_external_validation_rejects_fake_automated_passed_evidence")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Reject fake automated ontology validation",
+        "cli-fake-automated-validation",
+    )?;
+    let mut fake_json = typed_positive_fixture_json(&fixture);
+    fake_json["evidence_type"] = json!("automated");
+
+    let error = result_err(validate_label_ontology_action(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            fake_json,
+            "Hand-written automated evidence must not close ontology signals.",
+        ),
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("trusted evidence collected by the kanban tool"),
+        "{error}"
+    );
+    let detail = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    assert_eq!(detail.signal.status, LabelOntologySignalStatus::Confirmed);
 
     Ok(())
 }
@@ -1296,7 +1331,7 @@ fn label_ontology_atom_apply_records_provenance_and_validation_resolves_signal()
             .contains("is not linked to parent action")
     );
 
-    let validation = validate_label_ontology_action(
+    let validation = validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -1548,7 +1583,7 @@ fn label_ontology_validation_allows_status_only_task_drift_with_warning() -> any
     )?;
     claim_task(&temp.path, "default", "worker", &fixture.task.id, 300_000)?;
 
-    let validation = validate_label_ontology_action(
+    let validation = validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         passed_validation_input(&fixture, "Status-only task drift must remain comparable."),
@@ -1593,7 +1628,7 @@ fn label_ontology_validation_allows_label_binding_drift_with_warning() -> anyhow
     )?;
     assert_ne!(rerecorded.id, fixture.observation_id);
 
-    let validation = validate_label_ontology_action(
+    let validation = validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         passed_validation_input(&fixture, "Label binding drift must remain comparable."),
@@ -1629,7 +1664,7 @@ fn label_ontology_typed_validation_rejects_dirty_atom_index() -> anyhow::Result<
         "generation": 9
     });
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         validation_input_from_json(
@@ -1639,6 +1674,132 @@ fn label_ontology_typed_validation_rejects_dirty_atom_index() -> anyhow::Result<
         ),
     ))?;
     assert!(error.to_string().contains("dirty atom index"));
+
+    Ok(())
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn label_ontology_trusted_collector_runs_suggest_and_resolves_signal() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_trusted_collector_runs_suggest_and_resolves_signal")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Add ontology validation trusted collector success",
+        "cli-trusted-collector-success",
+    )?;
+    connect_file(&temp.path)?.execute(
+        "UPDATE label_ontology_observations \
+         SET suggest_coverage=0.0,suggest_residual_norm=1.0 \
+         WHERE id=?1",
+        [&fixture.observation_id],
+    )?;
+    let store = RecordingVectorStore::with_embedding_model("trusted-test-model");
+    rebuild_label_atom_index_with(&temp.path, "default", &store)?;
+    let status = label_atom_index_status_with(&temp.path, "default", &store)?;
+    let generation = status.generation.context("label atom index generation")?;
+
+    let validation = validate_label_ontology_action_with_trusted_suggestions(
+        &temp.path,
+        "default",
+        LabelOntologyTrustedValidationInput {
+            actor: validation_actor(),
+            parent_action_id: fixture.apply_action_id.clone(),
+            signal_ids: Vec::new(),
+            reason: "Trusted collector should close the signal from real suggest evidence."
+                .to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+        },
+        &store,
+        LabelSuggestionOptions {
+            output_limit: 5,
+            candidate_limit: 5,
+            atom_limit: 5,
+            max_selected_labels: 1,
+            min_score: 0.0,
+        },
+    )?;
+
+    assert_eq!(
+        validation.validation_status,
+        LabelOntologyValidationStatus::Passed
+    );
+    let validation_json: serde_json::Value = serde_json::from_str(&validation.validation_json)?;
+    assert_eq!(validation_json["summary"]["case_count"], 1);
+    assert_eq!(
+        validation_json["manual"]["evidence_type"],
+        "trusted_automated"
+    );
+    assert_eq!(
+        validation_json["manual"]["collector"]["source"],
+        "label_ontology_validate_trusted"
+    );
+    assert_eq!(
+        validation_json["manual"]["embedding_model"],
+        "trusted-test-model"
+    );
+    assert_eq!(
+        validation_json["manual"]["solver_options"]["candidate_limit"],
+        5
+    );
+    assert_eq!(validation_json["manual"]["index"]["generation"], generation);
+    let evidence_atoms = validation_json["manual"]["cases"][0]["after"]["evidence_atoms"]
+        .as_array()
+        .context("trusted evidence atoms")?;
+    assert!(
+        evidence_atoms
+            .iter()
+            .any(|atom| atom["atom_id"] == fixture.result_atom_id),
+        "trusted evidence atoms: {evidence_atoms:?}"
+    );
+    assert!(
+        validation_json["manual"]["cases"][0]["suggestion"]["candidates"]
+            .as_array()
+            .context("trusted suggestion candidates")?
+            .iter()
+            .any(|candidate| candidate["label_id"] == fixture.target_label_id)
+    );
+    let resolved = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    assert_eq!(resolved.signal.status, LabelOntologySignalStatus::Resolved);
+
+    Ok(())
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn label_ontology_trusted_collector_rechecks_index_generation() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_trusted_collector_rechecks_index_generation")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Add ontology validation trusted generation guard",
+        "cli-trusted-generation-guard",
+    )?;
+    let store = RecordingVectorStore::with_embedding_model("trusted-test-model");
+    rebuild_label_atom_index_with(&temp.path, "default", &store)?;
+    let status = label_atom_index_status_with(&temp.path, "default", &store)?;
+    let generation = status.generation.context("label atom index generation")?;
+    let mut validation_json = typed_positive_fixture_json(&fixture);
+    validation_json["collector"] = json!({
+        "tool": "kanban",
+        "source": "label_ontology_validate_trusted",
+        "collected_at": 123
+    });
+    validation_json["embedding_model"] = json!("trusted-test-model");
+    validation_json["index"]["generation"] = json!(generation - 1);
+
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Tool-collected validation must reject stale generation evidence.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("generation changed"));
+    let signal = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    assert_eq!(signal.signal.status, LabelOntologySignalStatus::Confirmed);
 
     Ok(())
 }
@@ -1816,7 +1977,7 @@ fn label_ontology_typed_validation_positive_atom_requires_result_atom_evidence()
     let mut validation_json = typed_positive_fixture_json(&fixture);
     validation_json["cases"][0]["after"]["evidence_atoms"] = json!([]);
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         validation_input_from_json(
@@ -1826,6 +1987,203 @@ fn label_ontology_typed_validation_positive_atom_requires_result_atom_evidence()
         ),
     ))?;
     assert!(error.to_string().contains("result atom"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_accepts_negative_evidence_atoms()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_typed_validation_negative_atom_accepts_negative_evidence_atoms",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom evidence",
+        "cli-negative-evidence-success",
+    )?;
+    let validation_json = typed_negative_fixture_json(&fixture, true);
+
+    let validation = validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Negative atom validation should accept true negative evidence.",
+        ),
+    )?;
+
+    assert_eq!(
+        validation.validation_status,
+        LabelOntologyValidationStatus::Passed
+    );
+    let resolved = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    assert_eq!(resolved.signal.status, LabelOntologySignalStatus::Resolved);
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_rejects_positive_evidence_slot()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_typed_validation_negative_atom_rejects_positive_evidence_slot",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom evidence slot",
+        "cli-negative-evidence-slot",
+    )?;
+    let mut validation_json = typed_negative_fixture_json(&fixture, true);
+    validation_json["cases"][0]["after"]["evidence_atoms"] =
+        validation_json["cases"][0]["after"]["negative_evidence_atoms"].take();
+
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Negative atom validation must cite negative evidence atoms.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("negative_evidence_atoms"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_requires_suppression_proof() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_typed_validation_negative_atom_requires_suppression_proof")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom suppression",
+        "cli-negative-suppression",
+    )?;
+    let mut validation_json = typed_negative_fixture_json(&fixture, true);
+    validation_json["cases"][0]["after"]["target"]["selected"] = json!(true);
+    validation_json["cases"][0]["after"]["target"]["score"] = json!(0.82);
+
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Negative atom validation must prove target suppression.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("selected=false"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_rejects_missing_controls_without_waiver()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_typed_validation_negative_atom_rejects_missing_controls_without_waiver",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom control requirement",
+        "cli-negative-missing-control",
+    )?;
+    let mut validation_json = typed_negative_fixture_json(&fixture, true);
+    let after = validation_json["cases"][0]["after"]
+        .as_object_mut()
+        .context("negative validation after object")?;
+    after.remove("positive_controls");
+
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Negative atom validation must include controls or waiver.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("positive control"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_accepts_waiver_reason() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_typed_validation_negative_atom_accepts_waiver_reason")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom waiver",
+        "cli-negative-waiver",
+    )?;
+    let mut validation_json = typed_negative_fixture_json(&fixture, true);
+    let after = validation_json["cases"][0]["after"]
+        .as_object_mut()
+        .context("negative validation after object")?;
+    after.remove("positive_controls");
+    after.insert(
+        "positive_control_waiver".to_owned(),
+        json!({"reason": "No stable positive control task exists in this disposable fixture."}),
+    );
+
+    let validation = validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Negative atom validation should accept explicit positive-control waiver.",
+        ),
+    )?;
+
+    assert_eq!(
+        validation.validation_status,
+        LabelOntologyValidationStatus::Passed
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_rejects_empty_waiver_reason() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_typed_validation_negative_atom_rejects_empty_waiver_reason")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom empty waiver",
+        "cli-negative-empty-waiver",
+    )?;
+    let mut validation_json = typed_negative_fixture_json(&fixture, true);
+    let after = validation_json["cases"][0]["after"]
+        .as_object_mut()
+        .context("negative validation after object")?;
+    after.remove("positive_controls");
+    after.insert(
+        "positive_control_waiver".to_owned(),
+        json!({"reason": "  "}),
+    );
+
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Negative atom validation must require a non-empty waiver reason.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("non-empty reason"));
 
     Ok(())
 }
@@ -1843,7 +2201,7 @@ fn label_ontology_typed_validation_negative_atom_protects_positive_controls() ->
     )?;
     let validation_json = typed_negative_fixture_json(&fixture, false);
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         validation_input_from_json(
@@ -1853,6 +2211,40 @@ fn label_ontology_typed_validation_negative_atom_protects_positive_controls() ->
         ),
     ))?;
     assert!(error.to_string().contains("positive control"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_records_control_regression_as_failed()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_typed_validation_negative_atom_records_control_regression_as_failed",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom failed control",
+        "cli-negative-control-failed",
+    )?;
+    let mut validation_json = typed_negative_fixture_json(&fixture, false);
+    validation_json["cases"][0]["passed"] = json!(false);
+
+    let mut input = validation_input_from_json(
+        &fixture.apply_action_id,
+        validation_json,
+        "Negative atom validation records positive control regression as failed.",
+    );
+    input.validation_status = LabelOntologyValidationStatus::Failed;
+    let validation =
+        validate_label_ontology_action_with_trusted_evidence(&temp.path, "default", input)?;
+
+    assert_eq!(
+        validation.validation_status,
+        LabelOntologyValidationStatus::Failed
+    );
+    let signal = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    assert_eq!(signal.signal.status, LabelOntologySignalStatus::Confirmed);
 
     Ok(())
 }
@@ -1932,13 +2324,13 @@ fn label_ontology_typed_validation_bootstrap_enforces_score_threshold() -> anyho
         .find(|action| action.action_type == LabelOntologyActionType::BootstrapLabel)
         .context("bootstrap action")?;
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         validation_input_from_json(
             &bootstrap.id,
             json!({
-                "evidence_type": "automated",
+                "evidence_type": "trusted_automated",
                 "embedding_model": "test-embedding-v1",
                 "solver_options": {"candidate_limit": 24, "atom_limit": 64},
                 "index": {"status": "ready", "dirty": false, "generation": 7},
@@ -1986,7 +2378,7 @@ fn label_ontology_validation_marks_title_description_drift_incomparable() -> any
         },
     )?;
 
-    let validation = validate_label_ontology_action(
+    let validation = validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -2028,7 +2420,7 @@ fn label_ontology_validation_marks_missing_legacy_suggest_hash_incomparable() ->
         [&fixture.observation_id],
     )?;
 
-    let validation = validate_label_ontology_action(
+    let validation = validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -2526,7 +2918,7 @@ fn seed_portable_ontology_ledger(temp: &TempDb) -> anyhow::Result<PortableOntolo
             reason: "Confirmed portable ontology atom support.".to_owned(),
         },
     )?;
-    let validation = validate_label_ontology_action(
+    let validation = validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -2768,7 +3160,7 @@ fn typed_positive_validation_json(
     result_atom_content_hash: &str,
 ) -> serde_json::Value {
     json!({
-        "evidence_type": "automated",
+        "evidence_type": "trusted_automated",
         "embedding_model": "test-embedding-v1",
         "solver_options": {"candidate_limit": 24, "atom_limit": 64},
         "index": {"status": "ready", "dirty": false, "generation": 7},
@@ -2808,7 +3200,7 @@ fn typed_negative_fixture_json(
     positive_control_passed: bool,
 ) -> serde_json::Value {
     json!({
-        "evidence_type": "automated",
+        "evidence_type": "trusted_automated",
         "embedding_model": "test-embedding-v1",
         "solver_options": {"candidate_limit": 24, "atom_limit": 64},
         "index": {"status": "ready", "dirty": false, "generation": 7},
@@ -2831,7 +3223,7 @@ fn typed_negative_fixture_json(
                     "selected": false,
                     "score": 0.18
                 },
-                "evidence_atoms": [{
+                "negative_evidence_atoms": [{
                     "id": fixture.result_atom_id,
                     "content_hash": fixture.result_atom_content_hash,
                     "label_id": fixture.target_label_id

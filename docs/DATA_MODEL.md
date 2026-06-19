@@ -527,7 +527,7 @@ Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、�
 | `canonical_before_hash` / `canonical_after_hash` | 修改前后 canonical semantics hash。 |
 | `change_json` | before/after/diff 或其它可解释变更快照。 |
 | `validation_status` | `not_required`、`pending`、`passed`、`failed`、`partial`。 |
-| `validation_json` | validation evidence；service 会包装 supplied payload、source signal cases 和 summary。`passed` action 需要 automated typed evidence（embedding model、solver options、clean atom index generation、per-signal before/after cases），并按 parent action 校验 positive atom、negative atom 或 bootstrap label policy；`failed` / `partial` 可保存诊断 payload。 |
+| `validation_json` | validation evidence envelope；service 会包装 supplied/collected payload、source signal cases、task snapshot comparability、parent action result 引用和 summary。`failed` / `partial` 可保存 external/manual attestation 诊断。`passed` action 只能来自工具采集的 `trusted_automated` evidence（collector source、embedding model、solver options、clean atom index status/generation、per-signal before/after cases），并按 parent action 校验 positive atom、negative atom 或 bootstrap label policy；调用方手写 JSON 或自称 `automated` 不构成可信来源。 |
 | `created_by` / `created_by_type` / `agent_type` | action actor。 |
 | `created_at` | 创建时间。 |
 
@@ -548,8 +548,10 @@ action，从而让 proposal creation -> bootstrap acceptance provenance 链路�
 也可以先被 confirm，随后关联 mutation action 和 validation action。
 
 默认 review queue 只读取 `open` 与 `confirmed` signals；完整历史需显式 include all。
-Mutation action 写入后通常保持 source signals 为 `confirmed`，validation 通过后再
-转为 `resolved`。Validation 失败会追加 failed validation action，不删除历史。
+Mutation action 写入后通常保持 source signals 为 `confirmed`。只有 trusted automated
+`passed` validation 会把 linked source signals 转为 `resolved`；external/manual
+attestation、`failed` 或 `partial` validation 只追加历史，不删除 signals，也不把问题
+伪装成已验证关闭。
 
 ---
 

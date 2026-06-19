@@ -1526,9 +1526,8 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
         }),
     )
     .await?;
-    assert_eq!(status, StatusCode::CREATED, "{json}");
-    assert_eq!(json["data"]["action_type"], "validate");
-    assert_eq!(json["data"]["validation_status"], "passed");
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
+    assert_eq!(json["error"]["code"], "invalid_input");
 
     let (status, json) = get_json(
         app.clone(),
@@ -1536,10 +1535,10 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
     )
     .await?;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["data"]["signal"]["status"], "resolved");
+    assert_eq!(json["data"]["signal"]["status"], "confirmed");
     assert_eq!(
         json["data"]["actions"].as_array().context("actions")?.len(),
-        3
+        2
     );
 
     let (status, json) = post_json(

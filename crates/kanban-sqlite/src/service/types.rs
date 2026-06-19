@@ -163,6 +163,25 @@ pub struct BootstrapTaskLabelResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BootstrapTaskLabelSnapshot {
+    pub board_id: String,
+    pub task_id: String,
+    pub label_name: String,
+    pub label: Option<LabelRecord>,
+    pub task_label_existed: bool,
+    pub semantics: Option<LabelSemanticsRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BootstrapTaskLabelRestoreResult {
+    pub label_deleted: bool,
+    pub label_restored: bool,
+    pub task_binding_restored: bool,
+    pub semantics_restored: bool,
+    pub index_marked_dirty: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LabelAtomRecord {
     pub id: String,
     pub label_id: String,
@@ -971,6 +990,15 @@ pub struct LabelOntologyValidationInput {
     pub reason: String,
     pub validation_status: LabelOntologyValidationStatus,
     pub validation_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyTrustedValidationInput {
+    pub actor: LabelOntologyActor,
+    pub parent_action_id: String,
+    pub signal_ids: Vec<String>,
+    pub reason: String,
+    pub validation_status: LabelOntologyValidationStatus,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

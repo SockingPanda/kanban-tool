@@ -503,18 +503,22 @@ CLI、HTTP、desktop 和 dispatcher 通过 `kanban-sqlite::service` resolve boar
 再在同一 transaction 中写 canonical SQLite truth。Derived stores 只消费 SQLite/outbox
 投影，不拥有 canonical write 权限。
 
-当前基础关系表的 schema 并不全部使用包含 `board_id` 的 composite FK。
-`task_labels`、`task_dependencies`、`task_runs`、`task_comments`、`task_events`、
-`task_attachments` 使用独立 FK 保证 row board、task、label 或 run 各自存在，但不能仅靠
-SQLite constraint 证明 `row.board_id == referenced.board_id`。因此：
+关键关系表已经开始使用包含 `board_id` 的 composite FK。`task_labels`、
+`task_dependencies`、`task_runs` 在 SQLite 层直接保证 row board 与 referenced
+task/label board 一致；旧数据库升级到该 schema 前会先运行 preflight，若发现 existing
+cross-board rows，会报告具体表和 row key 并拒绝 migration。
+
+仍需注意：`task_comments`、`task_events`、`task_attachments` 等历史/审计表使用独立 FK
+保证 row board、task 或 run 各自存在，但还不能仅靠 SQLite constraint 证明
+`row.board_id == referenced.board_id`。因此：
 
 - service guard 是普通 CLI/API/Desktop/dispatcher 写入的主防线；
 - `kanban doctor` 是现有 DB 的只读巡检层，发现 cross-board relationship rows 时让
   `ok=false`；
 - JSONL import 在 replace transaction 提交前运行同类 consistency gate，失败会回滚整个
   import；
-- 为这些 v1 基础表增加 composite FK 需要 table rebuild migration，属于后续 schema
-  hardening，不是当前架构已经具备的 DB-level invariant。
+- 如要继续 hardening 历史/审计表，需要针对 nullable task/run references 与
+  `ON DELETE SET NULL` 语义单独设计 table rebuild migration。
 
 ---
 

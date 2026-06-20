@@ -1,21 +1,22 @@
 use crate::connect_file;
 
 use super::{
-    LabelOntologyActionInput, LabelOntologyActionRecord, LabelOntologyActionType,
-    LabelOntologyActor, LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput,
-    LabelOntologyObservationRecord, LabelOntologyPrecisionRecallAvailability,
-    LabelOntologyProposedAction, LabelOntologyQualityDenominator, LabelOntologyQualityDisagreement,
-    LabelOntologyQualityOptions, LabelOntologyQualityRates, LabelOntologyQualityReport,
-    LabelOntologyRecordInput, LabelOntologyRetargetOptions, LabelOntologyRevertInput,
-    LabelOntologyReviewAtomVariant, LabelOntologyReviewGroup, LabelOntologyReviewGroupBy,
-    LabelOntologyReviewLabelRef, LabelOntologyReviewOptions, LabelOntologySignalDetail,
-    LabelOntologySignalInput, LabelOntologySignalKind, LabelOntologySignalListOptions,
-    LabelOntologySignalRecord, LabelOntologySignalStatus, LabelOntologyStructurePlanInput,
-    LabelOntologySuggestState, LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
-    LabelOntologyValidationStatus, LabelSemanticProposalRecord, LabelSemanticsMutationOptions,
-    LabelSuggestionEvidenceAtom, LabelSuggestionOptions, LabelSuggestionResult,
-    TaskOntologySignalSummary, TaskOntologySummary, TaskRecord, all_values, board_id,
-    derived_status_by_name, exec, get_task_by_id, get_task_by_id_global_conn,
+    LabelOntologyActionAtomEffectRecord, LabelOntologyActionInput, LabelOntologyActionRecord,
+    LabelOntologyActionType, LabelOntologyActor, LabelOntologyAtomApplyInput,
+    LabelOntologyCandidateAtomInput, LabelOntologyObservationRecord,
+    LabelOntologyPrecisionRecallAvailability, LabelOntologyProposedAction,
+    LabelOntologyQualityDenominator, LabelOntologyQualityDisagreement, LabelOntologyQualityOptions,
+    LabelOntologyQualityRates, LabelOntologyQualityReport, LabelOntologyRecordInput,
+    LabelOntologyRetargetOptions, LabelOntologyRevertInput, LabelOntologyReviewAtomVariant,
+    LabelOntologyReviewGroup, LabelOntologyReviewGroupBy, LabelOntologyReviewLabelRef,
+    LabelOntologyReviewOptions, LabelOntologySignalDetail, LabelOntologySignalInput,
+    LabelOntologySignalKind, LabelOntologySignalListOptions, LabelOntologySignalRecord,
+    LabelOntologySignalStatus, LabelOntologySuggestState, LabelOntologyTrustedValidationInput,
+    LabelOntologyValidationEffectiveOutcome, LabelOntologyValidationInput,
+    LabelOntologyValidationRequirement, LabelOntologyValidationStatus, LabelSemanticProposalRecord,
+    LabelSemanticsMutationOptions, LabelSuggestionEvidenceAtom, LabelSuggestionOptions,
+    LabelSuggestionResult, TaskOntologySignalSummary, TaskOntologySummary, TaskRecord, all_values,
+    board_id, derived_status_by_name, exec, get_task_by_id, get_task_by_id_global_conn,
     label_atom_index_status_with, mark_label_atom_store_dirty, optional, required_row,
     resolve_task, storage, suggest_task_labels_with, upsert_label_semantics_in_tx,
     with_immediate_tx, with_read_tx,
@@ -30,7 +31,10 @@ use std::{
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_typed_id};
 use kanban_indexer::LANCEDB_LABEL_ATOMS_STORE;
 use kanban_labels::LabelDefinition;
-use kanban_vector::{LabelAtomVectorStore, VectorStoreStatus};
+use kanban_vector::{
+    LabelAtomHit, LabelAtomQuery, LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore,
+    QueryEmbeddingProvider, VectorError, VectorStoreBackend, VectorStoreStatus,
+};
 use rusqlite::{Connection, OptionalExtension, Row, params, types::Value};
 use serde_json::{Value as JsonValue, json};
 
@@ -542,6 +546,8 @@ pub fn create_label_ontology_action(
         let validation_status = input
             .validation_status
             .unwrap_or(LabelOntologyValidationStatus::NotRequired);
+        let validation_requirement =
+            validation_requirement_for_action(input.action_type, validation_status);
 
         validate_status_transition(input.action_type, &signals)?;
 
@@ -551,9 +557,9 @@ pub fn create_label_ontology_action(
             "INSERT INTO label_ontology_actions(\
              id, board_id, parent_action_id, action_type, reason, target_label_id, result_label_id, \
              result_atom_id, result_atom_content_hash, result_proposal_id, canonical_before_hash, \
-             canonical_after_hash, change_json, validation_status, validation_json, created_by, \
-             created_by_type, agent_type, created_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+             canonical_after_hash, change_json, validation_requirement, validation_status, \
+             validation_json, created_by, created_by_type, agent_type, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
             params![
                 action_id,
                 board_id,
@@ -568,6 +574,7 @@ pub fn create_label_ontology_action(
                 normalize_optional_text(input.canonical_before_hash)?,
                 normalize_optional_text(input.canonical_after_hash)?,
                 change_json,
+                validation_requirement.to_string(),
                 validation_status.to_string(),
                 validation_json,
                 actor.name,
@@ -591,148 +598,6 @@ pub fn create_label_ontology_action(
             &reason,
             now,
         )?;
-        action_by_id_with_links(&conn, &action_id)
-    })
-}
-
-pub fn plan_label_ontology_structure_change(
-    path: impl AsRef<Path>,
-    board: &str,
-    input: LabelOntologyStructurePlanInput,
-) -> Result<LabelOntologyActionRecord> {
-    let conn = connect_file(path.as_ref())?;
-    let now = SystemClock.now_ms();
-    with_immediate_tx(&conn, || {
-        ensure_structure_plan_action_type(input.action_type)?;
-        let board_id = board_id(&conn, board)?;
-        let actor = normalize_actor(input.actor)?;
-        let reason = normalize_required_text(&input.reason)?;
-        let signal_ids = normalize_signal_ids(input.signal_ids)?;
-        let signals = signal_ids
-            .iter()
-            .map(|signal_id| signal_by_id(&conn, signal_id))
-            .collect::<Result<Vec<_>>>()?;
-        ensure_signals_on_board_and_status(
-            &signals,
-            &board_id,
-            &[LabelOntologySignalStatus::Confirmed],
-        )?;
-
-        let target_label = resolve_label(&conn, &board_id, &input.target_label_ref)?;
-        let proposed_label_name = input
-            .proposed_label_name
-            .as_deref()
-            .map(normalize_required_text)
-            .transpose()?;
-        let proposed_label_name_normalized = proposed_label_name
-            .as_deref()
-            .map(normalize_label_name)
-            .transpose()?;
-        let related_labels =
-            resolve_structure_related_labels(&conn, &board_id, input.related_label_refs)?;
-        ensure_structure_plan_contract(
-            input.action_type,
-            &target_label,
-            proposed_label_name_normalized.as_deref(),
-            &related_labels,
-            &signals,
-        )?;
-
-        let target_snapshot = structure_label_snapshot_json(&conn, &board_id, &target_label)?;
-        let related_snapshots = related_labels
-            .iter()
-            .map(|label| structure_label_snapshot_json(&conn, &board_id, label))
-            .collect::<Result<Vec<_>>>()?;
-        let before = json!({
-            "labels": std::iter::once(target_snapshot.clone())
-                .chain(related_snapshots.iter().cloned())
-                .collect::<Vec<_>>(),
-        });
-        let task_binding_policy = input
-            .task_binding_policy
-            .as_deref()
-            .map(normalize_required_text)
-            .transpose()?
-            .unwrap_or_else(|| default_structure_task_binding_policy(input.action_type).to_owned());
-        let validation_policy = input
-            .validation_policy_json
-            .as_deref()
-            .map(|json| parse_json_field(json, "validation_policy_json", JsonShape::Object))
-            .transpose()?
-            .unwrap_or_else(default_structure_validation_policy_json);
-        let after = json!({
-            "change_type": input.action_type.to_string(),
-            "target_label": {
-                "id": &target_label.id,
-                "name": &target_label.name,
-            },
-            "proposed_label_name": &proposed_label_name,
-            "proposed_label_name_normalized": &proposed_label_name_normalized,
-            "related_labels": related_labels.iter().map(|label| {
-                json!({
-                    "id": &label.id,
-                    "name": &label.name,
-                })
-            }).collect::<Vec<_>>(),
-            "task_binding_migration_plan": {
-                "policy": &task_binding_policy,
-                "status": "planned",
-            },
-            "validation_policy": &validation_policy,
-        });
-        let before_hash = stable_hash(
-            &serde_json::to_string(&before)
-                .map_err(|err| KanbanError::InvalidInput(err.to_string()))?,
-        );
-        let after_hash = stable_hash(
-            &serde_json::to_string(&after)
-                .map_err(|err| KanbanError::InvalidInput(err.to_string()))?,
-        );
-        let change_json = serde_json::to_string(&json!({
-            "phase": "planned_structure_change",
-            "canonical_mutation_applied": false,
-            "change_type": input.action_type.to_string(),
-            "before": &before,
-            "after": &after,
-            "target_label": &target_snapshot,
-            "related_labels": &related_snapshots,
-            "source_signals": signals.iter().map(structure_source_signal_json).collect::<Vec<_>>(),
-            "task_binding_migration_plan": {
-                "policy": &task_binding_policy,
-                "status": "planned",
-            },
-            "validation_policy": &validation_policy,
-            "after_hash_kind": "planned_change_hash",
-        }))
-        .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
-        let validation_json = serde_json::to_string(&json!({
-            "state": "pending_structure_change_plan",
-            "trusted_validation_required_before_apply": true,
-        }))
-        .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
-
-        let action_id = insert_ontology_action(
-            &conn,
-            &board_id,
-            InsertOntologyAction {
-                action_type: input.action_type,
-                reason,
-                actor,
-                parent_action_id: None,
-                target_label_id: Some(target_label.id),
-                result_label_id: None,
-                result_atom_id: None,
-                result_atom_content_hash: None,
-                result_proposal_id: None,
-                canonical_before_hash: Some(before_hash),
-                canonical_after_hash: Some(after_hash),
-                change_json,
-                validation_status: LabelOntologyValidationStatus::Pending,
-                validation_json,
-            },
-            now,
-        )?;
-        link_action_signals(&conn, &board_id, &action_id, &signal_ids, now)?;
         action_by_id_with_links(&conn, &action_id)
     })
 }
@@ -1124,6 +989,16 @@ pub fn validate_label_ontology_action_with_trusted_suggestions(
         &input.parent_action_id,
         input.signal_ids.clone(),
     )?;
+    let positive_controls = collect_trusted_positive_controls(TrustedPositiveControlCollection {
+        path,
+        board,
+        context: &context,
+        actor: &input.actor,
+        control_task_refs: input.positive_control_task_refs.clone(),
+        waiver_reason: input.positive_control_waiver_reason.clone(),
+        store,
+        options,
+    })?;
     let mut collected_cases = Vec::with_capacity(context.signals.len());
     for signal in &context.signals {
         let observation = observation_for_collection(path, &signal.observation_id)?;
@@ -1142,6 +1017,7 @@ pub fn validate_label_ontology_action_with_trusted_suggestions(
         &index_status,
         store.embedding_model(),
         options,
+        &positive_controls,
     )?;
     validate_label_ontology_action_with_trusted_evidence(
         path,
@@ -1177,6 +1053,11 @@ fn validate_label_ontology_action_inner(
         }
         let context =
             resolve_validation_context(&conn, board, &input.parent_action_id, input.signal_ids)?;
+        ensure_validation_attempt_allowed(
+            &context.parent_action,
+            input.validation_status,
+            evidence_source,
+        )?;
         let validation_json = build_validation_json(
             &conn,
             &context.parent_action,
@@ -1216,7 +1097,10 @@ fn validate_label_ontology_action_inner(
         if matches!(
             input.validation_status,
             LabelOntologyValidationStatus::Passed
-        ) {
+        ) && context.parent_action.validation_requirement
+            == LabelOntologyValidationRequirement::Required
+            && evidence_source == LabelOntologyValidationEvidenceSource::TrustedCollector
+        {
             apply_status_transition(
                 &conn,
                 LabelOntologyActionType::ResolveNoChange,
@@ -1508,7 +1392,12 @@ pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
     let change_json =
         serde_json::to_string(&change).map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
 
-    let action_id = insert_ontology_action(
+    let validation_requirement = if signal_ids.is_empty() {
+        LabelOntologyValidationRequirement::None
+    } else {
+        validation_requirement_for_action(action_type, LabelOntologyValidationStatus::Pending)
+    };
+    let action_id = insert_ontology_action_with_validation_requirement(
         conn,
         board_id,
         InsertOntologyAction {
@@ -1528,6 +1417,7 @@ pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
             validation_json: "{}".to_owned(),
         },
         now,
+        validation_requirement,
     )?;
     link_action_signals(conn, board_id, &action_id, &signal_ids, now)?;
     for atom in added_atoms {
@@ -1790,6 +1680,81 @@ struct TrustedValidationCase {
     suggestion: LabelSuggestionResult,
 }
 
+enum TrustedPositiveControlEvidence {
+    None,
+    Controls(Vec<JsonValue>),
+    Waiver(String),
+}
+
+struct TrustedBeforeActionStore<'a, S: LabelAtomVectorStore + ?Sized> {
+    source: &'a S,
+    excluded_atom_ids: BTreeSet<String>,
+    excluded_atom_hashes: BTreeSet<String>,
+}
+
+impl<'a, S: LabelAtomVectorStore + ?Sized> TrustedBeforeActionStore<'a, S> {
+    fn new(source: &'a S, excluded_effects: Vec<LabelOntologyActionAtomEffectRecord>) -> Self {
+        Self {
+            source,
+            excluded_atom_ids: excluded_effects
+                .iter()
+                .map(|effect| effect.atom_id_snapshot.clone())
+                .collect(),
+            excluded_atom_hashes: excluded_effects
+                .into_iter()
+                .map(|effect| effect.atom_content_hash)
+                .collect(),
+        }
+    }
+
+    fn keep_hit(&self, atom_id: &str, content_hash: &str) -> bool {
+        !self.excluded_atom_ids.contains(atom_id)
+            && !self.excluded_atom_hashes.contains(content_hash)
+    }
+}
+
+impl<S: LabelAtomVectorStore + ?Sized> VectorStoreBackend for TrustedBeforeActionStore<'_, S> {
+    fn embedding_model(&self) -> &str {
+        self.source.embedding_model()
+    }
+
+    fn status(&self) -> VectorStoreStatus {
+        self.source.status()
+    }
+}
+
+impl<S: LabelAtomVectorStore + ?Sized> QueryEmbeddingProvider for TrustedBeforeActionStore<'_, S> {
+    fn embed_query_text(&self, text: &str) -> std::result::Result<Vec<f32>, VectorError> {
+        self.source.embed_query_text(text)
+    }
+}
+
+impl<S: LabelAtomVectorStore + ?Sized> LabelAtomVectorStore for TrustedBeforeActionStore<'_, S> {
+    fn query_label_atoms(
+        &self,
+        query: &LabelAtomQuery,
+    ) -> std::result::Result<Vec<LabelAtomHit>, VectorError> {
+        Ok(self
+            .source
+            .query_label_atoms(query)?
+            .into_iter()
+            .filter(|hit| self.keep_hit(&hit.atom_id, &hit.content_hash))
+            .collect())
+    }
+
+    fn query_label_atoms_by_vector(
+        &self,
+        query: &LabelAtomVectorQuery,
+    ) -> std::result::Result<Vec<LabelAtomVectorHit>, VectorError> {
+        Ok(self
+            .source
+            .query_label_atoms_by_vector(query)?
+            .into_iter()
+            .filter(|hit| self.keep_hit(&hit.hit.atom_id, &hit.hit.content_hash))
+            .collect())
+    }
+}
+
 fn validation_collection_context(
     path: impl AsRef<Path>,
     board: &str,
@@ -1808,6 +1773,219 @@ fn observation_for_collection(
 ) -> Result<LabelOntologyObservationRecord> {
     let conn = connect_file(path.as_ref())?;
     with_read_tx(&conn, || observation_by_id(&conn, observation_id))
+}
+
+struct TrustedPositiveControlCollection<'a, S: LabelAtomVectorStore + ?Sized> {
+    path: &'a Path,
+    board: &'a str,
+    context: &'a ValidationContext,
+    actor: &'a LabelOntologyActor,
+    control_task_refs: Vec<String>,
+    waiver_reason: Option<String>,
+    store: &'a S,
+    options: LabelSuggestionOptions,
+}
+
+fn collect_trusted_positive_controls<S: LabelAtomVectorStore + ?Sized>(
+    args: TrustedPositiveControlCollection<'_, S>,
+) -> Result<TrustedPositiveControlEvidence> {
+    let TrustedPositiveControlCollection {
+        path,
+        board,
+        context,
+        actor,
+        control_task_refs,
+        waiver_reason,
+        store,
+        options,
+    } = args;
+    let control_task_refs = normalize_positive_control_task_refs(control_task_refs)?;
+    let waiver_reason = normalize_optional_waiver_reason(waiver_reason)?;
+    if context.parent_action.action_type != LabelOntologyActionType::AddNegativeAtom {
+        if !control_task_refs.is_empty() || waiver_reason.is_some() {
+            return Err(KanbanError::InvalidInput(
+                "positive controls and waivers are only accepted for negative atom validation"
+                    .into(),
+            ));
+        }
+        return Ok(TrustedPositiveControlEvidence::None);
+    }
+    if !control_task_refs.is_empty() && waiver_reason.is_some() {
+        return Err(KanbanError::InvalidInput(
+            "negative atom trusted validation accepts positive controls or a waiver, not both"
+                .into(),
+        ));
+    }
+    if let Some(reason) = waiver_reason {
+        let actor = normalize_actor(actor.clone())?;
+        if actor.actor_type != "user" {
+            return Err(KanbanError::InvalidInput(
+                "negative atom positive-control waiver requires actor_type=user".into(),
+            ));
+        }
+        return Ok(TrustedPositiveControlEvidence::Waiver(reason));
+    }
+    if control_task_refs.is_empty() {
+        return Err(KanbanError::InvalidInput(
+            "negative atom trusted validation requires at least one positive control or a user waiver"
+                .into(),
+        ));
+    }
+    let target_label_id = required_parent_field(
+        context.parent_action.target_label_id.as_deref(),
+        "negative atom validation requires a target label",
+    )?;
+    let excluded_effects =
+        trusted_before_added_atom_effects(path, &context.board_id, &context.parent_action)?;
+    let before_store = TrustedBeforeActionStore::new(store, excluded_effects);
+    let mut controls = Vec::with_capacity(control_task_refs.len());
+    for task_ref in control_task_refs {
+        let before = suggest_task_labels_with(path, board, &task_ref, &before_store, options)?;
+        let after = suggest_task_labels_with(path, board, &task_ref, store, options)?;
+        controls.push(trusted_positive_control_json(
+            &task_ref,
+            target_label_id,
+            &before,
+            &after,
+        )?);
+    }
+    Ok(TrustedPositiveControlEvidence::Controls(controls))
+}
+
+fn normalize_positive_control_task_refs(task_refs: Vec<String>) -> Result<Vec<String>> {
+    let mut normalized = Vec::with_capacity(task_refs.len());
+    for task_ref in task_refs {
+        normalized.push(normalize_required_text(&task_ref)?);
+    }
+    Ok(normalized)
+}
+
+fn normalize_optional_waiver_reason(value: Option<String>) -> Result<Option<String>> {
+    match value {
+        Some(value) if value.trim().is_empty() => Err(KanbanError::InvalidInput(
+            "negative atom positive-control waiver requires a non-empty reason".into(),
+        )),
+        Some(value) => Ok(Some(value)),
+        None => Ok(None),
+    }
+}
+
+fn trusted_before_added_atom_effects(
+    path: &Path,
+    board_id: &str,
+    parent_action: &LabelOntologyActionRecord,
+) -> Result<Vec<LabelOntologyActionAtomEffectRecord>> {
+    let conn = connect_file(path)?;
+    with_read_tx(&conn, || {
+        let mut stmt = conn
+            .prepare(
+            "SELECT board_id, action_id, label_id_snapshot, atom_id_snapshot, atom_content_hash, \
+             polarity, kind, text, effect, created_at \
+             FROM label_ontology_action_atom_effects \
+             WHERE board_id=?1 AND action_id=?2 AND effect='added' \
+             ORDER BY created_at, atom_id_snapshot",
+        )
+            .map_err(storage)?;
+        let mut rows = stmt
+            .query(params![board_id, parent_action.id])
+            .map_err(storage)?;
+        let mut effects = Vec::new();
+        while let Some(row) = rows.next().map_err(storage)? {
+            effects.push(LabelOntologyActionAtomEffectRecord {
+                board_id: row.get(0).map_err(storage)?,
+                action_id: row.get(1).map_err(storage)?,
+                label_id_snapshot: row.get(2).map_err(storage)?,
+                atom_id_snapshot: row.get(3).map_err(storage)?,
+                atom_content_hash: row.get(4).map_err(storage)?,
+                polarity: row.get(5).map_err(storage)?,
+                kind: row.get(6).map_err(storage)?,
+                text: row.get(7).map_err(storage)?,
+                effect: row.get(8).map_err(storage)?,
+                created_at: row.get(9).map_err(storage)?,
+            });
+        }
+        if effects.is_empty()
+            && let (Some(atom_id), Some(atom_hash), Some(label_id)) = (
+                parent_action.result_atom_id.as_ref(),
+                parent_action.result_atom_content_hash.as_ref(),
+                parent_action.target_label_id.as_ref(),
+            )
+        {
+            effects.push(LabelOntologyActionAtomEffectRecord {
+                board_id: board_id.to_owned(),
+                action_id: parent_action.id.clone(),
+                label_id_snapshot: label_id.clone(),
+                atom_id_snapshot: atom_id.clone(),
+                atom_content_hash: atom_hash.clone(),
+                polarity: "negative".to_owned(),
+                kind: String::new(),
+                text: String::new(),
+                effect: "added".to_owned(),
+                created_at: parent_action.created_at,
+            });
+        }
+        Ok(effects)
+    })
+}
+
+fn trusted_positive_control_json(
+    task_ref: &str,
+    target_label_id: &str,
+    before: &LabelSuggestionResult,
+    after: &LabelSuggestionResult,
+) -> Result<JsonValue> {
+    let (before_target, _, _) = trusted_after_target(before, target_label_id)?;
+    let (after_target, _, _) = trusted_after_target(after, target_label_id)?;
+    let before_evidence = target_evidence_from_json(&before_target);
+    let after_evidence = target_evidence_from_json(&after_target);
+    let before_positive = target_is_positive_control_match(before_evidence);
+    let after_positive = target_is_positive_control_match(after_evidence);
+    let selected_regressed =
+        before_evidence.selected == Some(true) && after_evidence.selected == Some(false);
+    let score_regressed = before_evidence
+        .score
+        .zip(after_evidence.score)
+        .is_some_and(|(before, after)| after < before);
+    let degraded = before.degraded || after.degraded;
+    let regressed = selected_regressed || score_regressed || degraded;
+    let passed = before_positive && after_positive && !regressed;
+    Ok(json!({
+        "task_ref": task_ref,
+        "task_id": &after.task_id,
+        "target_label_id": target_label_id,
+        "before": {
+            "target": before_target,
+            "coverage": before.coverage,
+            "coverage_cosine": before.coverage_cosine,
+            "residual_norm": before.residual_norm,
+            "degraded": before.degraded,
+            "diagnostics": &before.diagnostics,
+        },
+        "after": {
+            "target": after_target,
+            "coverage": after.coverage,
+            "coverage_cosine": after.coverage_cosine,
+            "residual_norm": after.residual_norm,
+            "degraded": after.degraded,
+            "diagnostics": &after.diagnostics,
+        },
+        "passed": passed,
+        "regressed": regressed,
+    }))
+}
+
+fn target_evidence_from_json(target: &JsonValue) -> TargetEvidence {
+    TargetEvidence {
+        selected: target.get("selected").and_then(JsonValue::as_bool),
+        score: target.get("score").and_then(JsonValue::as_f64),
+    }
+}
+
+fn target_is_positive_control_match(target: TargetEvidence) -> bool {
+    target.selected == Some(true)
+        || target
+            .score
+            .is_some_and(|score| score >= LABEL_ONTOLOGY_VALIDATION_SCORE_THRESHOLD)
 }
 
 fn resolve_validation_context(
@@ -1865,11 +2043,12 @@ fn trusted_validation_json(
     index_status: &VectorStoreStatus,
     embedding_model: &str,
     options: LabelSuggestionOptions,
+    positive_controls: &TrustedPositiveControlEvidence,
 ) -> Result<String> {
     let collected_at = SystemClock.now_ms();
     let cases = cases
         .iter()
-        .map(|case| trusted_validation_case_json(parent_action, case))
+        .map(|case| trusted_validation_case_json(parent_action, case, positive_controls))
         .collect::<Result<Vec<_>>>()?;
     serde_json::to_string(&json!({
         "evidence_type": "trusted_automated",
@@ -1895,6 +2074,7 @@ fn trusted_validation_json(
 fn trusted_validation_case_json(
     parent_action: &LabelOntologyActionRecord,
     case: &TrustedValidationCase,
+    positive_controls: &TrustedPositiveControlEvidence,
 ) -> Result<JsonValue> {
     let case_type = validation_case_type(parent_action.action_type)?;
     let target_label_id = validation_target_label_id(parent_action)?;
@@ -1905,6 +2085,36 @@ fn trusted_validation_case_json(
     let before_target = target_label_id
         .map(|label_id| trusted_before_target(&case.signal, label_id))
         .unwrap_or(JsonValue::Null);
+    let mut after = json!({
+        "degraded": case.suggestion.degraded,
+        "diagnostics": &case.suggestion.diagnostics,
+        "target": after_target,
+        "coverage": case.suggestion.coverage,
+        "coverage_cosine": case.suggestion.coverage_cosine,
+        "residual_norm": case.suggestion.residual_norm,
+        "needs_new_label": case.suggestion.needs_new_label,
+        "evidence_atoms": evidence_atoms,
+        "negative_evidence_atoms": negative_evidence_atoms,
+        "selected_labels": &case.suggestion.selected_labels,
+        "candidates": &case.suggestion.candidates,
+    });
+    if parent_action.action_type == LabelOntologyActionType::AddNegativeAtom {
+        let after = after
+            .as_object_mut()
+            .expect("trusted validation after payload should be an object");
+        match positive_controls {
+            TrustedPositiveControlEvidence::Controls(controls) => {
+                after.insert("positive_controls".to_owned(), json!(controls));
+            }
+            TrustedPositiveControlEvidence::Waiver(reason) => {
+                after.insert(
+                    "positive_control_waiver".to_owned(),
+                    json!({ "reason": reason }),
+                );
+            }
+            TrustedPositiveControlEvidence::None => {}
+        }
+    }
     Ok(json!({
         "signal_id": &case.signal.id,
         "case_type": case_type,
@@ -1918,19 +2128,7 @@ fn trusted_validation_case_json(
             "degraded": case.observation.suggest_degraded,
             "diagnostics": parse_json_field(&case.observation.diagnostics_json, "diagnostics_json", JsonShape::Array)?,
         },
-        "after": {
-            "degraded": case.suggestion.degraded,
-            "diagnostics": &case.suggestion.diagnostics,
-            "target": after_target,
-            "coverage": case.suggestion.coverage,
-            "coverage_cosine": case.suggestion.coverage_cosine,
-            "residual_norm": case.suggestion.residual_norm,
-            "needs_new_label": case.suggestion.needs_new_label,
-            "evidence_atoms": evidence_atoms,
-            "negative_evidence_atoms": negative_evidence_atoms,
-            "selected_labels": &case.suggestion.selected_labels,
-            "candidates": &case.suggestion.candidates,
-        },
+        "after": after,
         "suggestion": &case.suggestion,
     }))
 }
@@ -2270,9 +2468,9 @@ fn ensure_validatable_parent_action(action: &LabelOntologyActionRecord) -> Resul
             "validation parent action must be a canonical mutation action".into(),
         ));
     }
-    if action.validation_status != LabelOntologyValidationStatus::Pending {
+    if action.validation_requirement == LabelOntologyValidationRequirement::None {
         return Err(KanbanError::InvalidInput(
-            "validation parent action must have pending validation_status".into(),
+            "validation parent action does not require validation".into(),
         ));
     }
 
@@ -2317,6 +2515,47 @@ fn ensure_validatable_parent_action(action: &LabelOntologyActionRecord) -> Resul
         ));
     }
     Ok(())
+}
+
+fn ensure_validation_attempt_allowed(
+    parent_action: &LabelOntologyActionRecord,
+    status: LabelOntologyValidationStatus,
+    evidence_source: LabelOntologyValidationEvidenceSource,
+) -> Result<()> {
+    match status {
+        LabelOntologyValidationStatus::Pending => Err(KanbanError::InvalidInput(
+            "validation action cannot record pending status".into(),
+        )),
+        LabelOntologyValidationStatus::NotRequired => Err(KanbanError::InvalidInput(
+            "validation action cannot record not_required as an attempt outcome".into(),
+        )),
+        LabelOntologyValidationStatus::Failed | LabelOntologyValidationStatus::Partial => {
+            match parent_action.validation_requirement {
+                LabelOntologyValidationRequirement::Required
+                | LabelOntologyValidationRequirement::Unsupported => Ok(()),
+                LabelOntologyValidationRequirement::None => Err(KanbanError::InvalidInput(
+                    "validation parent action does not require validation".into(),
+                )),
+            }
+        }
+        LabelOntologyValidationStatus::Passed => match parent_action.validation_requirement {
+            LabelOntologyValidationRequirement::Required => {
+                if evidence_source == LabelOntologyValidationEvidenceSource::TrustedCollector {
+                    Ok(())
+                } else {
+                    Err(KanbanError::InvalidInput(
+                        "passed validation requires trusted evidence collected by the kanban tool; external attestation cannot close ontology signals".into(),
+                    ))
+                }
+            }
+            LabelOntologyValidationRequirement::Unsupported => Err(KanbanError::InvalidInput(
+                "passed validation is unsupported until a typed validation policy exists for this mutation".into(),
+            )),
+            LabelOntologyValidationRequirement::None => Err(KanbanError::InvalidInput(
+                "validation parent action does not require validation".into(),
+            )),
+        },
+    }
 }
 
 fn ensure_passed_validation_evidence(
@@ -4297,6 +4536,7 @@ fn actions_for_signal(
         .into_iter()
         .map(|mut action| {
             action.signal_ids = action_signal_ids(conn, &action.id)?;
+            hydrate_action_validation_effective_outcome(conn, &mut action)?;
             Ok(action)
         })
         .collect()
@@ -4326,6 +4566,7 @@ fn action_by_id_with_links(
         || KanbanError::NotFound(format!("label ontology action {action_id}")),
     )?;
     action.signal_ids = action_signal_ids(conn, &action.id)?;
+    hydrate_action_validation_effective_outcome(conn, &mut action)?;
     Ok(action)
 }
 
@@ -4439,15 +4680,33 @@ fn insert_ontology_action(
     input: InsertOntologyAction,
     now: i64,
 ) -> Result<String> {
+    let validation_requirement =
+        validation_requirement_for_action(input.action_type, input.validation_status);
+    insert_ontology_action_with_validation_requirement(
+        conn,
+        board_id,
+        input,
+        now,
+        validation_requirement,
+    )
+}
+
+fn insert_ontology_action_with_validation_requirement(
+    conn: &Connection,
+    board_id: &str,
+    input: InsertOntologyAction,
+    now: i64,
+    validation_requirement: LabelOntologyValidationRequirement,
+) -> Result<String> {
     let action_id = new_typed_id("loa");
     exec(
         conn,
         "INSERT INTO label_ontology_actions(\
          id, board_id, parent_action_id, action_type, reason, target_label_id, result_label_id, \
          result_atom_id, result_atom_content_hash, result_proposal_id, canonical_before_hash, \
-         canonical_after_hash, change_json, validation_status, validation_json, created_by, \
+         canonical_after_hash, change_json, validation_requirement, validation_status, validation_json, created_by, \
          created_by_type, agent_type, created_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
         params![
             action_id,
             board_id,
@@ -4462,6 +4721,7 @@ fn insert_ontology_action(
             input.canonical_before_hash,
             input.canonical_after_hash,
             input.change_json,
+            validation_requirement.to_string(),
             input.validation_status.to_string(),
             input.validation_json,
             input.actor.name,
@@ -4510,167 +4770,6 @@ fn ensure_signals_on_board_and_status(
         }
     }
     Ok(())
-}
-
-fn ensure_structure_plan_action_type(action_type: LabelOntologyActionType) -> Result<()> {
-    if matches!(
-        action_type,
-        LabelOntologyActionType::RenameLabel
-            | LabelOntologyActionType::SplitLabel
-            | LabelOntologyActionType::MergeLabels
-    ) {
-        Ok(())
-    } else {
-        Err(KanbanError::InvalidInput(format!(
-            "structure plan action must be rename_label, split_label, or merge_labels; found {action_type}"
-        )))
-    }
-}
-
-fn resolve_structure_related_labels(
-    conn: &Connection,
-    board_id: &str,
-    label_refs: Vec<String>,
-) -> Result<Vec<LabelSnapshot>> {
-    let mut labels = Vec::new();
-    for label_ref in label_refs {
-        let label = resolve_label(conn, board_id, &label_ref)?;
-        if !labels
-            .iter()
-            .any(|existing: &LabelSnapshot| existing.id == label.id)
-        {
-            labels.push(label);
-        }
-    }
-    Ok(labels)
-}
-
-fn ensure_structure_plan_contract(
-    action_type: LabelOntologyActionType,
-    target_label: &LabelSnapshot,
-    proposed_label_name_normalized: Option<&str>,
-    related_labels: &[LabelSnapshot],
-    signals: &[LabelOntologySignalRecord],
-) -> Result<()> {
-    match action_type {
-        LabelOntologyActionType::RenameLabel => {
-            if proposed_label_name_normalized.is_none() {
-                return Err(KanbanError::InvalidInput(
-                    "rename_label structure plan requires proposed_label_name".into(),
-                ));
-            }
-            if !related_labels.is_empty() {
-                return Err(KanbanError::InvalidInput(
-                    "rename_label structure plan does not accept related labels".into(),
-                ));
-            }
-        }
-        LabelOntologyActionType::SplitLabel | LabelOntologyActionType::MergeLabels => {
-            if related_labels.is_empty() {
-                return Err(KanbanError::InvalidInput(format!(
-                    "{action_type} structure plan requires at least one related label"
-                )));
-            }
-        }
-        _ => unreachable!("validated by ensure_structure_plan_action_type"),
-    }
-
-    let proposed_action = structure_plan_proposed_action(action_type);
-    for signal in signals {
-        if signal.proposed_action != proposed_action {
-            return Err(KanbanError::InvalidInput(format!(
-                "signal {} proposed action {} does not match structure plan action {action_type}",
-                signal.id, signal.proposed_action
-            )));
-        }
-        if signal.target_label_id.as_deref() != Some(target_label.id.as_str()) {
-            return Err(KanbanError::InvalidInput(format!(
-                "signal {} does not target label {}",
-                signal.id, target_label.name
-            )));
-        }
-        if action_type == LabelOntologyActionType::RenameLabel
-            && signal.proposed_label_name_normalized.as_deref() != proposed_label_name_normalized
-        {
-            return Err(KanbanError::InvalidInput(format!(
-                "signal {} proposed label does not match structure plan proposed_label_name",
-                signal.id
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn structure_plan_proposed_action(
-    action_type: LabelOntologyActionType,
-) -> LabelOntologyProposedAction {
-    match action_type {
-        LabelOntologyActionType::RenameLabel => LabelOntologyProposedAction::RenameLabel,
-        LabelOntologyActionType::SplitLabel => LabelOntologyProposedAction::SplitLabel,
-        LabelOntologyActionType::MergeLabels => LabelOntologyProposedAction::MergeLabels,
-        _ => unreachable!("validated by ensure_structure_plan_action_type"),
-    }
-}
-
-fn default_structure_task_binding_policy(action_type: LabelOntologyActionType) -> &'static str {
-    match action_type {
-        LabelOntologyActionType::RenameLabel => "preserve_bindings",
-        LabelOntologyActionType::SplitLabel => "manual_map_required",
-        LabelOntologyActionType::MergeLabels => "move_related_to_target",
-        _ => unreachable!("validated by ensure_structure_plan_action_type"),
-    }
-}
-
-fn default_structure_validation_policy_json() -> JsonValue {
-    json!({
-        "required": true,
-        "policy": "structure_change_plan_review",
-        "trusted_validation_required_before_apply": true,
-    })
-}
-
-fn structure_label_snapshot_json(
-    conn: &Connection,
-    board_id: &str,
-    label: &LabelSnapshot,
-) -> Result<JsonValue> {
-    let parts = load_semantics_parts(conn, board_id, &label.id)?;
-    Ok(json!({
-        "id": &label.id,
-        "name": &label.name,
-        "semantics_hash": semantics_hash(label, &parts)?,
-        "semantics": semantics_json(label, &parts),
-        "task_binding_count": structure_label_task_binding_count(conn, board_id, &label.id)?,
-    }))
-}
-
-fn structure_label_task_binding_count(
-    conn: &Connection,
-    board_id: &str,
-    label_id: &str,
-) -> Result<i64> {
-    conn.query_row(
-        "SELECT COUNT(*) FROM task_labels WHERE board_id=?1 AND label_id=?2",
-        params![board_id, label_id],
-        |row| row.get(0),
-    )
-    .map_err(storage)
-}
-
-fn structure_source_signal_json(signal: &LabelOntologySignalRecord) -> JsonValue {
-    json!({
-        "id": &signal.id,
-        "kind": signal.kind.to_string(),
-        "status": signal.status.to_string(),
-        "proposed_action": signal.proposed_action.to_string(),
-        "target_label_id": &signal.target_label_id,
-        "target_label_name_snapshot": &signal.target_label_name_snapshot,
-        "related_labels": serde_json::from_str::<JsonValue>(&signal.related_labels_json)
-            .unwrap_or(JsonValue::Null),
-        "proposed_label_name": &signal.proposed_label_name,
-        "proposed_label_name_normalized": &signal.proposed_label_name_normalized,
-        "proposal": serde_json::from_str::<JsonValue>(&signal.proposal_json).unwrap_or(JsonValue::Null),
-    })
 }
 
 fn normalize_retarget_reason(
@@ -5332,16 +5431,127 @@ fn signal_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologySignalRecord>
     })
 }
 
-const ACTION_COLUMNS: &str = "a.id,a.board_id,a.parent_action_id,a.action_type,a.reason,a.target_label_id,a.result_label_id,a.result_atom_id,a.result_atom_content_hash,a.result_proposal_id,a.canonical_before_hash,a.canonical_after_hash,a.change_json,a.validation_status,a.validation_json,a.created_by,a.created_by_type,a.agent_type,a.created_at";
+const ACTION_COLUMNS: &str = "a.id,a.board_id,a.parent_action_id,a.action_type,a.reason,a.target_label_id,a.result_label_id,a.result_atom_id,a.result_atom_content_hash,a.result_proposal_id,a.canonical_before_hash,a.canonical_after_hash,a.change_json,a.validation_requirement,a.validation_status,a.validation_json,a.created_by,a.created_by_type,a.agent_type,a.created_at";
+
+fn validation_requirement_for_action(
+    action_type: LabelOntologyActionType,
+    validation_status: LabelOntologyValidationStatus,
+) -> LabelOntologyValidationRequirement {
+    if validation_status != LabelOntologyValidationStatus::Pending {
+        return LabelOntologyValidationRequirement::None;
+    }
+    match action_type {
+        LabelOntologyActionType::AddPositiveAtom
+        | LabelOntologyActionType::AddNegativeAtom
+        | LabelOntologyActionType::BootstrapLabel => LabelOntologyValidationRequirement::Required,
+        LabelOntologyActionType::UpdateSemantics
+        | LabelOntologyActionType::RevertOntologyMutation
+        | LabelOntologyActionType::RenameLabel
+        | LabelOntologyActionType::SplitLabel
+        | LabelOntologyActionType::MergeLabels => LabelOntologyValidationRequirement::Unsupported,
+        LabelOntologyActionType::Confirm
+        | LabelOntologyActionType::Reject
+        | LabelOntologyActionType::Supersede
+        | LabelOntologyActionType::ResolveNoChange
+        | LabelOntologyActionType::AdoptExistingAtom
+        | LabelOntologyActionType::CreateLabelProposal
+        | LabelOntologyActionType::Validate => LabelOntologyValidationRequirement::None,
+    }
+}
+
+fn action_base_effective_outcome(
+    action_type: LabelOntologyActionType,
+    validation_requirement: LabelOntologyValidationRequirement,
+    validation_status: LabelOntologyValidationStatus,
+) -> LabelOntologyValidationEffectiveOutcome {
+    if action_type == LabelOntologyActionType::Validate {
+        return validation_status_effective_outcome(validation_status);
+    }
+    match validation_requirement {
+        LabelOntologyValidationRequirement::None => {
+            LabelOntologyValidationEffectiveOutcome::NotRequired
+        }
+        LabelOntologyValidationRequirement::Required => {
+            LabelOntologyValidationEffectiveOutcome::Pending
+        }
+        LabelOntologyValidationRequirement::Unsupported => {
+            LabelOntologyValidationEffectiveOutcome::Unsupported
+        }
+    }
+}
+
+fn validation_status_effective_outcome(
+    validation_status: LabelOntologyValidationStatus,
+) -> LabelOntologyValidationEffectiveOutcome {
+    match validation_status {
+        LabelOntologyValidationStatus::NotRequired => {
+            LabelOntologyValidationEffectiveOutcome::NotRequired
+        }
+        LabelOntologyValidationStatus::Pending => LabelOntologyValidationEffectiveOutcome::Pending,
+        LabelOntologyValidationStatus::Passed => LabelOntologyValidationEffectiveOutcome::Passed,
+        LabelOntologyValidationStatus::Failed => LabelOntologyValidationEffectiveOutcome::Failed,
+        LabelOntologyValidationStatus::Partial => LabelOntologyValidationEffectiveOutcome::Partial,
+    }
+}
+
+fn hydrate_action_validation_effective_outcome(
+    conn: &Connection,
+    action: &mut LabelOntologyActionRecord,
+) -> Result<()> {
+    if action.action_type == LabelOntologyActionType::Validate {
+        action.validation_effective_outcome =
+            validation_status_effective_outcome(action.validation_status);
+        action.validation_latest_attempt_id = None;
+        return Ok(());
+    }
+    let Some((attempt_id, attempt_status)) = latest_validation_attempt(conn, action)? else {
+        return Ok(());
+    };
+    action.validation_latest_attempt_id = Some(attempt_id);
+    if action.validation_requirement == LabelOntologyValidationRequirement::Required {
+        action.validation_effective_outcome = validation_status_effective_outcome(attempt_status);
+    }
+    Ok(())
+}
+
+fn latest_validation_attempt(
+    conn: &Connection,
+    action: &LabelOntologyActionRecord,
+) -> Result<Option<(String, LabelOntologyValidationStatus)>> {
+    let row = conn
+        .query_row(
+            "SELECT id, validation_status FROM label_ontology_actions \
+             WHERE board_id=?1 AND parent_action_id=?2 AND action_type='validate' \
+             ORDER BY created_at DESC, id DESC LIMIT 1",
+            params![action.board_id, action.id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(storage)?;
+    row.map(|(id, status)| {
+        Ok((
+            id,
+            status
+                .parse::<LabelOntologyValidationStatus>()
+                .map_err(|err| KanbanError::InvalidInput(err.to_string()))?,
+        ))
+    })
+    .transpose()
+}
 
 fn action_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologyActionRecord> {
     let action_type: String = row.get(3)?;
-    let validation_status: String = row.get(13)?;
+    let validation_requirement: String = row.get(13)?;
+    let validation_status: String = row.get(14)?;
+    let action_type: LabelOntologyActionType = parse_row_enum(&action_type)?;
+    let validation_requirement: LabelOntologyValidationRequirement =
+        parse_row_enum(&validation_requirement)?;
+    let validation_status: LabelOntologyValidationStatus = parse_row_enum(&validation_status)?;
     Ok(LabelOntologyActionRecord {
         id: row.get(0)?,
         board_id: row.get(1)?,
         parent_action_id: row.get(2)?,
-        action_type: parse_row_enum(&action_type)?,
+        action_type,
         reason: row.get(4)?,
         target_label_id: row.get(5)?,
         result_label_id: row.get(6)?,
@@ -5351,12 +5561,19 @@ fn action_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologyActionRecord>
         canonical_before_hash: row.get(10)?,
         canonical_after_hash: row.get(11)?,
         change_json: row.get(12)?,
-        validation_status: parse_row_enum(&validation_status)?,
-        validation_json: row.get(14)?,
-        created_by: row.get(15)?,
-        created_by_type: row.get(16)?,
-        agent_type: row.get(17)?,
-        created_at: row.get(18)?,
+        validation_requirement,
+        validation_status,
+        validation_effective_outcome: action_base_effective_outcome(
+            action_type,
+            validation_requirement,
+            validation_status,
+        ),
+        validation_latest_attempt_id: None,
+        validation_json: row.get(15)?,
+        created_by: row.get(16)?,
+        created_by_type: row.get(17)?,
+        agent_type: row.get(18)?,
+        created_at: row.get(19)?,
         signal_ids: Vec::new(),
     })
 }
@@ -5453,7 +5670,10 @@ mod tests {
             canonical_before_hash: Some("before".to_owned()),
             canonical_after_hash: Some("after".to_owned()),
             change_json: "{}".to_owned(),
+            validation_requirement: LabelOntologyValidationRequirement::Required,
             validation_status: LabelOntologyValidationStatus::Pending,
+            validation_effective_outcome: LabelOntologyValidationEffectiveOutcome::Pending,
+            validation_latest_attempt_id: None,
             validation_json: "{}".to_owned(),
             created_by: "tester".to_owned(),
             created_by_type: "agent".to_owned(),

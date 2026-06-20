@@ -60,7 +60,7 @@ fn init_records_and_enforces_migration_checksum() -> anyhow::Result<()> {
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    assert_eq!(user_version, 19);
+    assert_eq!(user_version, 20);
     assert_eq!(name, "001_initial");
     assert!(checksum.starts_with("fnv64:"), "checksum: {checksum}");
 
@@ -86,7 +86,7 @@ fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 19);
+    assert_eq!(user_version, 20);
     for table in [
         "entities",
         "relation_predicates",
@@ -153,7 +153,7 @@ fn init_upgrades_v1_database_and_backfills_task_entities() -> anyhow::Result<()>
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 19);
+    assert_eq!(user_version, 20);
     let task_entity_title: String = conn.query_row(
         "SELECT title FROM entities WHERE uri='kb://task/t_test'",
         [],
@@ -170,7 +170,9 @@ fn init_v17_rebuilds_key_relationship_tables_without_losing_rows() -> anyhow::Re
 
     let conn = connect_file(&temp.path)?;
     let before_counts = v17_relationship_counts(&conn)?;
+    downgrade_task_history_to_v19_shape(&conn)?;
     conn.execute("DELETE FROM schema_migrations WHERE version=17", [])?;
+    conn.execute("DELETE FROM schema_migrations WHERE version=20", [])?;
     conn.pragma_update(None, "user_version", 16)?;
     drop(conn);
 
@@ -178,7 +180,7 @@ fn init_v17_rebuilds_key_relationship_tables_without_losing_rows() -> anyhow::Re
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 19);
+    assert_eq!(user_version, 20);
     assert_eq!(v17_relationship_counts(&conn)?, before_counts);
     assert_eq!(
         task_label_board_for(&conn, &fixture.task_id, &fixture.label_id)?,
@@ -208,7 +210,7 @@ fn init_v18_adds_root_action_atom_effects_table_to_v17_database() -> anyhow::Res
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 19);
+    assert_eq!(user_version, 20);
     let table_exists: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_ontology_action_atom_effects'",
         [],
@@ -269,7 +271,7 @@ fn init_v19_adds_validation_requirement_and_backfills_v18_actions() -> anyhow::R
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 19);
+    assert_eq!(user_version, 20);
     let column_exists: i64 = conn.query_row(
         "SELECT COUNT(*) FROM pragma_table_info('label_ontology_actions') WHERE name='validation_requirement'",
         [],
@@ -360,6 +362,143 @@ fn init_v19_adds_validation_requirement_and_backfills_v18_actions() -> anyhow::R
 }
 
 #[test]
+fn init_v20_hardens_task_history_tables_without_losing_rows() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_v20_hardens_task_history_tables_without_losing_rows")?;
+    seed_v20_task_history_fixture(&temp)?;
+
+    let conn = connect_file(&temp.path)?;
+    let before_counts = v20_task_history_counts(&conn)?;
+    downgrade_task_history_to_v19_shape(&conn)?;
+    conn.execute("DELETE FROM schema_migrations WHERE version=20", [])?;
+    conn.pragma_update(None, "user_version", 19)?;
+    drop(conn);
+
+    init_database(&temp.path, "tester")?;
+
+    let conn = connect_file(&temp.path)?;
+    let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    assert_eq!(user_version, 20);
+    assert_eq!(v20_task_history_counts(&conn)?, before_counts);
+    let fk_errors = foreign_key_check_rows(&conn)?;
+    assert!(fk_errors.is_empty(), "{fk_errors:#?}");
+    Ok(())
+}
+
+#[test]
+fn init_v20_preflight_reports_cross_board_task_history_rows() -> anyhow::Result<()> {
+    for table in ["task_comments", "task_events", "task_attachments"] {
+        let temp = TempDb::new(&format!("init_v20_preflight_{table}"))?;
+        let fixture = seed_v20_task_history_fixture(&temp)?;
+        let conn = connect_file(&temp.path)?;
+        downgrade_task_history_to_v19_shape(&conn)?;
+        conn.execute("DELETE FROM schema_migrations WHERE version=20", [])?;
+        conn.pragma_update(None, "user_version", 19)?;
+        conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+        let expected_row_key = match table {
+            "task_comments" => {
+                conn.execute(
+                    "UPDATE task_comments SET board_id=?1 WHERE id='c_v20'",
+                    [&fixture.other_board_id],
+                )?;
+                "c_v20".to_owned()
+            }
+            "task_events" => {
+                conn.execute(
+                    "UPDATE task_events SET board_id=?1 WHERE event_id='e_v20'",
+                    [&fixture.other_board_id],
+                )?;
+                "e_v20".to_owned()
+            }
+            "task_attachments" => {
+                conn.execute(
+                    "UPDATE task_attachments SET board_id=?1 WHERE id='a_v20'",
+                    [&fixture.other_board_id],
+                )?;
+                "a_v20".to_owned()
+            }
+            _ => unreachable!(),
+        };
+        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        drop(conn);
+
+        let err = result_err(init_database(&temp.path, "tester"))?;
+        let message = err.to_string();
+        assert!(
+            message.contains("cannot apply migration 020_board_isolation_task_history"),
+            "{}: {message}",
+            table
+        );
+        assert!(message.contains(table), "{}: {message}", table);
+        assert!(message.contains(&expected_row_key), "{}: {message}", table);
+    }
+    Ok(())
+}
+
+#[test]
+fn init_v20_preflight_reports_orphan_task_history_rows() -> anyhow::Result<()> {
+    for case in [
+        ("task_comments", "c_v20"),
+        ("task_events_task", "e_v20"),
+        ("task_events_run", "e_v20"),
+        ("task_attachments", "a_v20"),
+    ] {
+        let (case_name, expected_row_key) = case;
+        let temp = TempDb::new(&format!("init_v20_preflight_orphan_{case_name}"))?;
+        seed_v20_task_history_fixture(&temp)?;
+        let conn = connect_file(&temp.path)?;
+        downgrade_task_history_to_v19_shape(&conn)?;
+        conn.execute("DELETE FROM schema_migrations WHERE version=20", [])?;
+        conn.pragma_update(None, "user_version", 19)?;
+        conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+        match case_name {
+            "task_comments" => {
+                conn.execute(
+                    "UPDATE task_comments SET task_id='t_missing' WHERE id='c_v20'",
+                    [],
+                )?;
+            }
+            "task_events_task" => {
+                conn.execute(
+                    "UPDATE task_events SET task_id='t_missing' WHERE event_id='e_v20'",
+                    [],
+                )?;
+            }
+            "task_events_run" => {
+                conn.execute(
+                    "UPDATE task_events SET run_id='r_missing' WHERE event_id='e_v20'",
+                    [],
+                )?;
+            }
+            "task_attachments" => {
+                conn.execute(
+                    "UPDATE task_attachments SET task_id='t_missing' WHERE id='a_v20'",
+                    [],
+                )?;
+            }
+            _ => unreachable!(),
+        };
+        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        drop(conn);
+
+        let err = result_err(init_database(&temp.path, "tester"))?;
+        let message = err.to_string();
+        assert!(
+            message.contains("cannot apply migration 020_board_isolation_task_history"),
+            "{}: {message}",
+            case_name
+        );
+        assert!(message.contains("task_"), "{}: {message}", case_name);
+        assert!(
+            message.contains(expected_row_key),
+            "{}: {message}",
+            case_name
+        );
+        assert!(message.contains("missing"), "{}: {message}", case_name);
+    }
+    Ok(())
+}
+
+#[test]
 fn init_v17_preflight_reports_cross_board_key_relationship_rows() -> anyhow::Result<()> {
     for table in ["task_labels", "task_dependencies", "task_runs"] {
         let temp = TempDb::new(&format!("init_v17_preflight_{table}"))?;
@@ -419,6 +558,7 @@ struct V17BoardIsolationFixture {
     parent_task_id: String,
     child_task_id: String,
     label_id: String,
+    run_id: String,
 }
 
 fn seed_v17_board_isolation_fixture(temp: &TempDb) -> anyhow::Result<V17BoardIsolationFixture> {
@@ -478,6 +618,34 @@ fn seed_v17_board_isolation_fixture(temp: &TempDb) -> anyhow::Result<V17BoardIso
         parent_task_id: parent.id,
         child_task_id: child.id,
         label_id: label.id,
+        run_id: "r_v17".to_owned(),
+    })
+}
+
+struct V20TaskHistoryFixture {
+    other_board_id: String,
+}
+
+fn seed_v20_task_history_fixture(temp: &TempDb) -> anyhow::Result<V20TaskHistoryFixture> {
+    let fixture = seed_v17_board_isolation_fixture(temp)?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "INSERT INTO task_comments(id, board_id, task_id, author, author_type, body, kind, metadata_json, created_at) \
+         VALUES ('c_v20', ?1, ?2, 'tester', 'user', 'v20 task history note', 'note', '{}', 1)",
+        params![fixture.board_id, fixture.task_id],
+    )?;
+    conn.execute(
+        "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, payload_json, created_at) \
+         VALUES ('e_v20', ?1, ?2, ?3, 'test.history', '{}', 1)",
+        params![fixture.board_id, fixture.task_id, fixture.run_id],
+    )?;
+    conn.execute(
+        "INSERT INTO task_attachments(id, board_id, task_id, filename, rel_path, size_bytes, created_by, created_at) \
+         VALUES ('a_v20', ?1, ?2, 'history.txt', 'attachments/history.txt', 0, 'tester', 1)",
+        params![fixture.board_id, fixture.task_id],
+    )?;
+    Ok(V20TaskHistoryFixture {
+        other_board_id: fixture.other_board_id,
     })
 }
 
@@ -493,6 +661,25 @@ fn v17_relationship_counts(conn: &Connection) -> anyhow::Result<Vec<(&'static st
             ))
         })
         .collect()
+}
+
+fn v20_task_history_counts(conn: &Connection) -> anyhow::Result<Vec<(&'static str, i64)>> {
+    [
+        "task_runs",
+        "task_comments",
+        "task_events",
+        "task_attachments",
+    ]
+    .into_iter()
+    .map(|table| {
+        Ok((
+            table,
+            conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })?,
+        ))
+    })
+    .collect()
 }
 
 fn task_label_board_for(
@@ -596,6 +783,63 @@ fn downgrade_label_ontology_actions_to_v18_shape(conn: &Connection) -> anyhow::R
             AND result_proposal_id IS NOT NULL;
         CREATE UNIQUE INDEX IF NOT EXISTS idx_label_ontology_actions_id_board
           ON label_ontology_actions(id, board_id);
+        PRAGMA foreign_keys=ON;
+        ",
+    )?;
+    Ok(())
+}
+
+fn downgrade_task_history_to_v19_shape(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute_batch(
+        "
+        PRAGMA foreign_keys=OFF;
+        DROP TRIGGER IF EXISTS trg_task_events_board_insert;
+        DROP TRIGGER IF EXISTS trg_task_events_board_update;
+        DROP INDEX IF EXISTS idx_task_runs_id_board;
+        DROP INDEX IF EXISTS idx_comments_task_created;
+        DROP TABLE IF EXISTS task_comments_v19;
+        CREATE TABLE task_comments_v19 (
+          id TEXT PRIMARY KEY CHECK(id LIKE 'c_%'),
+          board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          author TEXT NOT NULL,
+          author_type TEXT NOT NULL DEFAULT 'user' CHECK(author_type IN ('user', 'agent')),
+          agent_type TEXT CHECK(author_type = 'agent' OR agent_type IS NULL),
+          body TEXT NOT NULL CHECK(length(trim(body)) > 0),
+          kind TEXT NOT NULL DEFAULT 'note' CHECK(kind IN ('note', 'decision')),
+          metadata_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(metadata_json) AND json_type(metadata_json) = 'object'),
+          created_at INTEGER NOT NULL
+        );
+        INSERT INTO task_comments_v19(
+          id, board_id, task_id, author, author_type, agent_type, body, kind, metadata_json, created_at
+        )
+        SELECT id, board_id, task_id, author, author_type, agent_type, body, kind, metadata_json, created_at
+        FROM task_comments;
+        DROP TABLE task_comments;
+        ALTER TABLE task_comments_v19 RENAME TO task_comments;
+        CREATE INDEX IF NOT EXISTS idx_comments_task_created
+          ON task_comments(task_id, created_at ASC);
+
+        DROP TABLE IF EXISTS task_attachments_v19;
+        CREATE TABLE task_attachments_v19 (
+          id TEXT PRIMARY KEY CHECK(id LIKE 'a_%'),
+          board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          filename TEXT NOT NULL CHECK(length(trim(filename)) > 0),
+          rel_path TEXT NOT NULL CHECK(length(trim(rel_path)) > 0),
+          content_type TEXT,
+          size_bytes INTEGER NOT NULL CHECK(size_bytes >= 0),
+          sha256 TEXT,
+          created_by TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+        INSERT INTO task_attachments_v19(
+          id, board_id, task_id, filename, rel_path, content_type, size_bytes, sha256, created_by, created_at
+        )
+        SELECT id, board_id, task_id, filename, rel_path, content_type, size_bytes, sha256, created_by, created_at
+        FROM task_attachments;
+        DROP TABLE task_attachments;
+        ALTER TABLE task_attachments_v19 RENAME TO task_attachments;
         PRAGMA foreign_keys=ON;
         ",
     )?;

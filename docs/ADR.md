@@ -832,7 +832,8 @@ Accepted
 当前 label ontology 已有 SQLite truth 与查询面：
 
 - `labels` / `task_labels` 表达当前 task label binding truth。
-- `label_semantics` / `label_atoms` 表达 canonical ontology truth。
+- `label_semantics` 表达 canonical ontology semantics；`label_atoms` 是从 semantics 与
+  label name 展开的 SQLite materialized projection。
 - `label_semantic_proposals` 表达新 label proposal lifecycle。
 - `label_ontology_observations` / `signals` / `actions` / `action_signals` 表达
   provenance、review、mutation 和 validation history。
@@ -864,7 +865,7 @@ graph 误当第二 truth 的风险。
 未来若新增 ontology graph projection，它必须满足：
 
 - SQLite `labels`、`task_labels`、`label_semantics`、`label_atoms`、proposal 和
-  `label_ontology_*` 仍是 canonical truth。
+  `label_ontology_*` 仍是事实来源；`label_atoms` 是 projection，不是独立 semantic truth。
 - projection 只能从 SQLite 快照/outbox 派生，可删除重建。
 - projection 状态通过 `index_outbox` 和 `derived_store_state` 或等价派生层控制面表达。
 - graph API 只能查询 relation/provenance，不提供 confirm/apply/validate/revert/bootstrap
@@ -894,3 +895,63 @@ graph 误当第二 truth 的风险。
 - 不把 `label_ontology_*` rows 写入 `entity_relations`。
 - 不扩展 `kanban graph` 为 ontology mutation API。
 - 不用 graph 替代 label ontology review、show、atom explain 或 validation history。
+
+---
+
+## ADR-0014：Label ontology closure contract
+
+### Status
+
+Accepted
+
+### Context
+
+Label identity CRUD、task label binding、semantics mutation、proposal accept、bootstrap、
+validation 和 review lifecycle 曾经混用 provenance 语义。最危险的问题是 routine task
+capture 可以隐式创建 vocabulary，label identity delete 可以隐式删除 semantics/atoms，
+semantics mutation 会 fan out 多条 per-atom action，trusted validation raw JSON 可能绕过
+collector，bootstrap verify 曾依赖 post-commit compensation。
+
+### Decision
+
+采用收窄后的 closure contract：
+
+- `labels` identity CRUD 是基础 vocabulary registry，不写 ontology mutation action；task
+  label binding 只绑定已存在 label，写普通 task event。
+- `label delete` 永不隐式删除 `label_semantics` / `label_atoms`；force 只允许移除 task
+  bindings 后删除空 identity。
+- `label_semantics` / `label_atoms` canonical mutation 一次 transaction 只写一条 root
+  mutation action；实际 atom delta 写入 `label_ontology_action_atom_effects` 的
+  `added` / `removed` rows。No-op 不写 action/effects，也不标脏 index。
+- Semantics clear 继续使用 `update_semantics` action type，必须有 actor、非空 reason 和
+  `expected_semantics_hash`。
+- Atom explain 优先读取 effect rows；legacy per-atom actions 只做兼容读取，不回写压缩历史。
+- Trusted automated validation 只能由 CLI collector 生成，表示 current hash/index
+  generation 和指定 cases/controls 机械通过，不表示全局语义正确。
+- CLI bootstrap verify 是 pre-commit staged verification；失败、provider unavailable 或
+  verify/commit 间 state 变化时零 canonical 写入。
+- `validation_requirement` 与 validation attempt outcome 分离；effective outcome 是查询
+  reducer 结果。Unsupported parent 可记录 external failed/partial 诊断，但不能 passed。
+- Public structure plan write 入口关闭；rename/split/merge 暂仅可作为 review signal 或
+  legacy action 读取。
+
+### Consequences
+
+优点：
+
+- Routine task capture 不能再绕过 vocabulary adoption。
+- Ledger 行数随真实 mutation 数线性增长，atom explain 粒度来自 effect rows。
+- Destructive semantics clear 有 CAS、reason 和 revertable root action。
+- Trusted/external validation 边界由 Rust visibility、collector entry 和 tests 锁住。
+
+代价：
+
+- 旧 per-atom action 保留历史噪声，需要 explain/revert 的 legacy compatibility。
+- Base label identity delete 需要用户先显式 clear semantics。
+- Structure mutation 需要未来单独 typed apply、binding migration 和 validation policy。
+
+### Non-Goals
+
+- 不新增 action type、signal type、validation status 或 graph/dashboard projection。
+- 不回写或压缩历史 per-atom actions。
+- 不实现 rename/split/merge canonical mutation。

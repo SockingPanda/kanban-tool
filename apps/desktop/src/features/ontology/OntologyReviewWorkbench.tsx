@@ -194,7 +194,7 @@ export function OntologyReviewWorkbench({ api }: { api: KanbanApi | null }) {
           <div className="min-w-0">
             <h1 className="text-base font-semibold">Ontology review</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Signal queue, grouped review, provenance, and lifecycle actions from the active API.
+              Review aid; does not modify canonical semantics. Lifecycle actions do not modify canonical label semantics.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -227,7 +227,7 @@ export function OntologyReviewWorkbench({ api }: { api: KanbanApi | null }) {
         ) : null}
 
         <div className="grid min-h-[680px] min-w-0 gap-3 xl:grid-cols-[minmax(260px,0.85fr)_minmax(340px,1fr)_minmax(380px,1.2fr)]">
-          <Panel title="Signals" meta={`${signals.length} loaded`}>
+          <Panel title="Signal rows" meta={`${signals.length} of up to ${REVIEW_LIMIT} loaded`}>
             <SignalList
               loading={signalsQuery.isLoading}
               signals={signals}
@@ -238,7 +238,7 @@ export function OntologyReviewWorkbench({ api }: { api: KanbanApi | null }) {
 
           <Panel
             title="Grouped review"
-            meta={reviewQuery.isFetching ? "refreshing" : `${groups.length} groups`}
+            meta={reviewQuery.isFetching ? "refreshing" : `${groups.length} of up to ${REVIEW_LIMIT} groups loaded`}
             controls={
               <Tabs value={groupBy} onValueChange={(value) => setGroupBy(value as LabelOntologyReviewGroupBy)}>
                 <TabsList>
@@ -329,7 +329,7 @@ export function SignalList({
   if (signals.length === 0) {
     return (
       <Empty>
-        <EmptyDescription>No ontology signals returned.</EmptyDescription>
+        <EmptyDescription>No ontology signal rows returned.</EmptyDescription>
       </Empty>
     )
   }
@@ -355,7 +355,9 @@ export function SignalList({
           <div className="mt-2 flex flex-wrap gap-1">
             <Badge variant="secondary">{signal.kind}</Badge>
             <Badge variant="secondary">{signal.proposed_action}</Badge>
-            {signal.suggest_score !== null ? <Badge variant="secondary">score {formatScore(signal.suggest_score)}</Badge> : null}
+            {signal.suggest_score !== null ? (
+              <Badge variant="secondary">recorded score {formatScore(signal.suggest_score)}</Badge>
+            ) : null}
           </div>
         </button>
       ))}
@@ -391,11 +393,11 @@ export function ReviewGroups({
                 {group.sample_task_refs.length ? group.sample_task_refs.join(", ") : group.key}
               </div>
             </div>
-            <Badge variant="review">{group.task_count} tasks</Badge>
+            <Badge variant="review">{group.task_count} source tasks</Badge>
           </div>
           {group.candidate_text ? <p className="mt-2 text-xs text-muted-foreground">{group.candidate_text}</p> : null}
           <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
-            <Metric label="signals" value={group.signal_count} />
+            <Metric label="signal rows" value={group.signal_count} />
             <Metric label="open" value={group.open_count} />
             <Metric label="confirmed" value={group.confirmed_count} />
             <Metric label="actions" value={group.action_count} />
@@ -448,18 +450,19 @@ export function SignalDetail({
         <Badge variant={signalStatusTone(signal.status)}>{signal.status}</Badge>
         <Badge variant="secondary">{signal.kind}</Badge>
         <Badge variant="secondary">{signal.proposed_action}</Badge>
+        {detail.observation.suggest_degraded ? <Badge variant="review">observation degraded</Badge> : null}
       </div>
       <div>
         <h3 className="text-sm font-semibold">{signalTitle(signal)}</h3>
         <p className="mt-1 text-muted-foreground">{signal.rationale || "No rationale recorded."}</p>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Info label="task" value={detail.observation.task_ref_snapshot} />
+        <Info label="source task" value={detail.observation.task_ref_snapshot} />
         <Info label="target" value={signal.target_label_name_snapshot ?? signal.proposed_label_name ?? "-"} />
         <Info label="suggest" value={signal.suggest_state ?? "-"} />
-        <Info label="score" value={signal.suggest_score === null ? "-" : formatScore(signal.suggest_score)} />
+        <Info label="recorded score" value={signal.suggest_score === null ? "-" : formatScore(signal.suggest_score)} />
         <Info label="rank" value={signal.suggest_rank === null ? "-" : String(signal.suggest_rank)} />
-        <Info label="confidence" value={signal.confidence === null ? "-" : formatScore(signal.confidence)} />
+        <Info label="recorded confidence" value={signal.confidence === null ? "-" : formatScore(signal.confidence)} />
       </div>
       {signal.candidate_text ? (
         <div className="rounded-md border border-border bg-card p-3">
@@ -489,7 +492,7 @@ export function SignalDetail({
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" disabled={confirmDisabled} onClick={() => onLifecycleAction("confirm")}>
             <CheckCircle2 className="h-4 w-4" />
-            Confirm
+            Confirm signal
           </Button>
           <Button type="button" variant="outline" disabled={reviewActionDisabled} onClick={() => onLifecycleAction("resolve_no_change")}>
             <CircleDashed className="h-4 w-4" />
@@ -523,7 +526,8 @@ function ActionHistory({
         <div key={action.id} className="rounded-md border border-border bg-card p-3">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{action.action_type}</Badge>
-            <Badge variant={validationTone(action.validation_status)}>{action.validation_status}</Badge>
+            <Badge variant="secondary">requires {action.validation_requirement}</Badge>
+            <Badge variant={validationTone(action.validation_effective_outcome)}>{action.validation_effective_outcome}</Badge>
             <span className="text-xs text-muted-foreground">{shortId(action.id)}</span>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">{action.reason}</p>
@@ -556,7 +560,7 @@ export function AtomExplain({ loading, explain }: { loading: boolean; explain: L
     <div className="space-y-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={explain.legacy_untracked ? "review" : "ready"}>
-          {explain.legacy_untracked ? "legacy untracked" : "provenance tracked"}
+          {explain.legacy_untracked ? "legacy untracked" : "has provenance records"}
         </Badge>
         {explain.atom ? <Badge variant="secondary">{explain.atom.label_name}</Badge> : null}
         {explain.supporting_signals.some((entry) => entry.suggest_degraded) ? (
@@ -575,7 +579,7 @@ export function AtomExplain({ loading, explain }: { loading: boolean; explain: L
       {explain.legacy_reason ? <p className="text-xs text-muted-foreground">{explain.legacy_reason}</p> : null}
       <div className="grid grid-cols-3 gap-2 text-xs">
         <Metric label="actions" value={explain.provenance_actions.length} />
-        <Metric label="signals" value={explain.supporting_signals.length} />
+        <Metric label="signal rows" value={explain.supporting_signals.length} />
         <Metric label="validations" value={explain.validation_history.length} />
       </div>
       {explain.provenance_actions.slice(0, 4).map((entry) => (

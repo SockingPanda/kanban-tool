@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { KanbanApi, loadRuntimeConfig, type ApiError, type Board, type SearchIndexStatus, type SearchTasksMeta, type Task } from "./api"
@@ -8,6 +9,8 @@ const runtimeConfig = {
   actor: "desktop-test",
   board: "default",
 }
+
+const apiSource = readFileSync(new URL("./api.ts", import.meta.url), "utf8")
 
 describe("KanbanApi task search", () => {
   afterEach(() => {
@@ -300,6 +303,16 @@ describe("KanbanApi task search", () => {
 
     await api.explainLabelAtom("hash_1")
     expect(new URL(String(fetchMock.mock.calls[4]?.[0])).pathname).toBe("/api/v1/boards/default/labels/atoms/hash_1/explain")
+  })
+
+  it("does not expose Desktop helpers for canonical ontology mutations", () => {
+    expect(apiSource).toContain("async createLabelOntologyAction")
+    expect(apiSource).not.toMatch(
+      /\b(?:applyLabelOntologyAtom|upsertLabelSemantics|deleteLabelSemantics|revertLabelOntologyMutation|validateLabelOntologyAction)\b/,
+    )
+    expect(apiSource).not.toMatch(
+      /\/api\/v1\/boards\/\$\{this\.board\}\/label-ontology\/(?:apply|semantics|revert|validate)/,
+    )
   })
 
   it("lists active boards through the boards endpoint", async () => {

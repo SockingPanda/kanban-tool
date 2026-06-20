@@ -456,10 +456,6 @@ pub(crate) enum LabelOntologyCommand {
         #[command(subcommand)]
         command: LabelOntologyApplyCommand,
     },
-    Structure {
-        #[command(subcommand)]
-        command: LabelOntologyStructureCommand,
-    },
     Revert(LabelOntologyRevertArgs),
     Validate(LabelOntologyValidateArgs),
 }
@@ -590,33 +586,6 @@ pub(crate) struct LabelOntologyApplyAtomArgs {
     pub(crate) retarget_reason: Option<String>,
 }
 
-#[derive(Debug, Subcommand)]
-pub(crate) enum LabelOntologyStructureCommand {
-    Plan(LabelOntologyStructurePlanArgs),
-}
-
-#[derive(Debug, Args)]
-pub(crate) struct LabelOntologyStructurePlanArgs {
-    #[arg(value_enum)]
-    pub(crate) change_type: LabelOntologyStructureChangeArg,
-    #[arg(required = true)]
-    pub(crate) signal_ids: Vec<String>,
-    #[arg(long = "target-label")]
-    pub(crate) target_label: String,
-    #[arg(long = "proposed-label")]
-    pub(crate) proposed_label: Option<String>,
-    #[arg(long = "related-label")]
-    pub(crate) related_labels: Vec<String>,
-    #[arg(long = "task-binding-policy")]
-    pub(crate) task_binding_policy: Option<String>,
-    #[arg(long = "validation-policy-json")]
-    pub(crate) validation_policy_json: Option<String>,
-    #[arg(long)]
-    pub(crate) reason: String,
-    #[command(flatten)]
-    pub(crate) actor: LabelOntologyActorArgs,
-}
-
 #[derive(Debug, Args)]
 pub(crate) struct LabelOntologyRevertArgs {
     pub(crate) action_id: String,
@@ -626,16 +595,6 @@ pub(crate) struct LabelOntologyRevertArgs {
     pub(crate) reason: String,
     #[command(flatten)]
     pub(crate) actor: LabelOntologyActorArgs,
-}
-
-#[derive(Debug, Clone, Copy, ValueEnum)]
-pub(crate) enum LabelOntologyStructureChangeArg {
-    #[value(name = "rename-label")]
-    RenameLabel,
-    #[value(name = "split-label")]
-    SplitLabel,
-    #[value(name = "merge-labels")]
-    MergeLabels,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -675,6 +634,10 @@ pub(crate) struct LabelOntologyValidateArgs {
     pub(crate) input: Option<String>,
     #[arg(long)]
     pub(crate) trusted: bool,
+    #[arg(long = "positive-control", conflicts_with = "positive_control_waiver")]
+    pub(crate) positive_controls: Vec<String>,
+    #[arg(long = "positive-control-waiver", conflicts_with = "positive_controls")]
+    pub(crate) positive_control_waiver: Option<String>,
     #[arg(long = "vector-config", alias = "config")]
     pub(crate) vector_config: Option<std::path::PathBuf>,
     #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]

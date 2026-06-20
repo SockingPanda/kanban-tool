@@ -210,7 +210,8 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
         .iter()
         .filter(|store| store.last_error.is_some() || store.failed_outbox > 0)
         .count() as i64;
-    let consistency_issues = doctor_consistency_issues(conn)?;
+    let mut consistency_issues = doctor_consistency_issues(conn)?;
+    consistency_issues.extend(doctor_foreign_key_issues(conn)?);
     let (consistency_errors, consistency_warnings) = doctor_issue_counts(&consistency_issues);
     let ontology_ledger_issues = doctor_ontology_ledger_issues(conn)?;
     let (ontology_ledger_errors, ontology_ledger_warnings) =
@@ -861,6 +862,31 @@ fn doctor_consistency_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> {
         },
     )?);
     Ok(issues)
+}
+
+fn doctor_foreign_key_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> {
+    let mut stmt = conn.prepare("PRAGMA foreign_key_check").map_err(storage)?;
+    let rows = stmt
+        .query_map([], |row| {
+            let table: String = row.get(0)?;
+            let rowid: Option<i64> = row.get(1)?;
+            let parent: String = row.get(2)?;
+            let fk_index: i64 = row.get(3)?;
+            let rowid = rowid
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "without-rowid".to_owned());
+            Ok(doctor_issue(
+                "error",
+                "sqlite_foreign_key_violation",
+                format!(
+                    "foreign key violation: table={table} rowid={rowid} parent={parent} fk_index={fk_index}"
+                ),
+                vec![format!("{table}:{rowid}"), parent],
+            ))
+        })
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
 }
 
 fn relationship_board_mismatch_issue(

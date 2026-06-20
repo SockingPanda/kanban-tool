@@ -10,7 +10,7 @@ fn label_ontology_migration_creates_ledger_tables_and_json_constraints() -> anyh
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 20);
+    assert_eq!(user_version, 21);
     for table in [
         "label_ontology_observations",
         "label_ontology_signals",
@@ -99,6 +99,122 @@ fn label_ontology_action_atom_effects_use_board_scoped_action_fk() -> anyhow::Re
         error.to_string().contains("FOREIGN KEY constraint failed"),
         "error: {error}"
     );
+    let fk_error_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+            row.get(0)
+        })?;
+    assert_eq!(fk_error_count, 0);
+    Ok(())
+}
+
+#[test]
+fn label_ontology_schema_rejects_cross_board_ontology_links() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_schema_rejects_cross_board_ontology_links")?;
+    let fixture = seed_ontology_link_schema_fixture(&temp)?;
+    let conn = connect_file(&temp.path)?;
+
+    for (name, result, expected) in [
+        (
+            "proposal_task_insert",
+            conn.execute(
+                "INSERT INTO label_semantic_proposals(
+                 id, board_id, task_id, status, name, applies_when, excludes_when,
+                 positive_examples, negative_examples, heuristic_coverage,
+                 heuristic_coverage_cosine, heuristic_residual_norm, diagnostics_json,
+                 created_by, created_at, updated_at)
+                 VALUES ('lp_schema_bad_task', ?1, ?2, 'proposed', 'bad-task',
+                 '[]', '[]', '[]', '[]', 0.1, 0.1, 0.9, '[]', 'tester', 1, 1)",
+                params![fixture.other_board_id, fixture.task_id],
+            ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
+            "proposal_resolved_label_update",
+            conn.execute(
+                "UPDATE label_semantic_proposals SET resolved_label_id=?1 WHERE id=?2",
+                params![fixture.other_label_id, fixture.proposal_id],
+            ),
+            "label_semantic_proposals.board_id must match resolved_label_id board_id",
+        ),
+        (
+            "signal_observation_insert",
+            conn.execute(
+                "INSERT INTO label_ontology_signals(
+                 id, observation_id, board_id, kind, status, related_labels_json,
+                 proposed_action, proposal_json, agent_selected, final_selected,
+                 rationale, signal_key, created_at, updated_at)
+                 VALUES ('los_schema_bad_observation', ?1, ?2, 'false_negative',
+                 'open', '[]', 'add_positive_atom', '{}', 1, 1,
+                 'bad observation board', 'schema-bad-observation', 1, 1)",
+                params![fixture.observation_id, fixture.other_board_id],
+            ),
+            "label_ontology_signals.board_id must match observation_id board_id",
+        ),
+        (
+            "signal_target_label_update",
+            conn.execute(
+                "UPDATE label_ontology_signals SET target_label_id=?1 WHERE id=?2",
+                params![fixture.other_label_id, fixture.signal_id],
+            ),
+            "label_ontology_signals.board_id must match target_label_id board_id",
+        ),
+        (
+            "signal_supersede_update",
+            conn.execute(
+                "UPDATE label_ontology_signals SET superseded_by_signal_id=?1 WHERE id=?2",
+                params![fixture.other_signal_id, fixture.signal_id],
+            ),
+            "label_ontology_signals.board_id must match superseded_by_signal_id board_id",
+        ),
+        (
+            "action_parent_update",
+            conn.execute(
+                "UPDATE label_ontology_actions SET parent_action_id=?1 WHERE id=?2",
+                params![fixture.other_action_id, fixture.action_id],
+            ),
+            "label_ontology_actions.board_id must match parent_action_id board_id",
+        ),
+        (
+            "action_target_label_update",
+            conn.execute(
+                "UPDATE label_ontology_actions SET target_label_id=?1 WHERE id=?2",
+                params![fixture.other_label_id, fixture.action_id],
+            ),
+            "label_ontology_actions.board_id must match target_label_id board_id",
+        ),
+        (
+            "action_result_label_update",
+            conn.execute(
+                "UPDATE label_ontology_actions SET result_label_id=?1 WHERE id=?2",
+                params![fixture.other_label_id, fixture.action_id],
+            ),
+            "label_ontology_actions.board_id must match result_label_id board_id",
+        ),
+        (
+            "action_result_proposal_update",
+            conn.execute(
+                "UPDATE label_ontology_actions SET result_proposal_id=?1 WHERE id=?2",
+                params![fixture.other_proposal_id, fixture.action_id],
+            ),
+            "label_ontology_actions.board_id must match result_proposal_id board_id",
+        ),
+        (
+            "action_signal_insert",
+            conn.execute(
+                "INSERT INTO label_ontology_action_signals(board_id, action_id, signal_id, created_at)
+                 VALUES (?1, ?2, ?3, 1)",
+                params![fixture.board_id, fixture.action_id, fixture.other_signal_id],
+            ),
+            "FOREIGN KEY constraint failed",
+        ),
+    ] {
+        let error = result_err(result)?;
+        assert!(
+            error.to_string().contains(expected),
+            "{name}: {error}"
+        );
+    }
+
     let fk_error_count: i64 =
         conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
             row.get(0)
@@ -4180,9 +4296,7 @@ fn label_ontology_jsonl_import_rejects_cross_board_action_signal_link() -> anyho
     let error = result_err(import_jsonl(&target.path, &invalid_export, true))?;
 
     assert!(
-        error
-            .to_string()
-            .contains("label ontology action-signal board mismatch"),
+        error.to_string().contains("FOREIGN KEY constraint failed"),
         "error: {error}"
     );
     Ok(())
@@ -6795,6 +6909,178 @@ fn table_count(conn: &Connection, table: &str) -> anyhow::Result<i64> {
         row.get(0)
     })
     .map_err(Into::into)
+}
+
+struct OntologyLinkSchemaFixture {
+    board_id: String,
+    other_board_id: String,
+    task_id: String,
+    observation_id: String,
+    signal_id: String,
+    other_signal_id: String,
+    action_id: String,
+    other_action_id: String,
+    proposal_id: String,
+    other_proposal_id: String,
+    other_label_id: String,
+}
+
+fn seed_ontology_link_schema_fixture(temp: &TempDb) -> anyhow::Result<OntologyLinkSchemaFixture> {
+    init_database(&temp.path, "tester")?;
+    let other_board = create_board(
+        &temp.path,
+        "tester",
+        CreateBoard {
+            slug: "other".to_owned(),
+            name: "Other".to_owned(),
+            description: None,
+        },
+    )?;
+    let label = create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "schema-default".to_owned(),
+            color: None,
+        },
+    )?;
+    let other_label = create_label(
+        &temp.path,
+        "other",
+        CreateLabel {
+            name: "schema-other".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("schema default task"),
+    )?;
+    let other_task = create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("schema other task"),
+    )?;
+    let conn = connect_file(&temp.path)?;
+    let observation_id = "lor_schema_default".to_owned();
+    let other_observation_id = "lor_schema_other".to_owned();
+    let signal_id = "los_schema_default".to_owned();
+    let other_signal_id = "los_schema_other".to_owned();
+    let action_id = "loa_schema_default".to_owned();
+    let other_action_id = "loa_schema_other".to_owned();
+    let proposal_id = "lp_schema_default".to_owned();
+    let other_proposal_id = "lp_schema_other".to_owned();
+    for (id, row_task, fingerprint) in [
+        (&observation_id, &task, "schema-default-fingerprint"),
+        (
+            &other_observation_id,
+            &other_task,
+            "schema-other-fingerprint",
+        ),
+    ] {
+        conn.execute(
+            "INSERT INTO label_ontology_observations(
+             id, board_id, task_id, task_ref_snapshot, task_snapshot_json, suggest_input_hash,
+             agent_candidates_json, suggestion_snapshot_json, final_decision_json,
+             diagnostics_json, capture_fingerprint, created_by, created_by_type, created_at)
+             VALUES (?1, ?2, ?3, ?4, '{}', 'schemahash', '[]', '{}', '{}', '[]',
+             ?5, 'tester', 'user', 1)",
+            params![
+                id,
+                row_task.board_id,
+                row_task.id,
+                row_task.task_ref,
+                fingerprint
+            ],
+        )?;
+    }
+    for (id, observation, board_id, label_id, signal_key) in [
+        (
+            &signal_id,
+            &observation_id,
+            &task.board_id,
+            Some(label.id.as_str()),
+            "schema-default-signal",
+        ),
+        (
+            &other_signal_id,
+            &other_observation_id,
+            &other_task.board_id,
+            Some(other_label.id.as_str()),
+            "schema-other-signal",
+        ),
+    ] {
+        conn.execute(
+            "INSERT INTO label_ontology_signals(
+             id, observation_id, board_id, kind, status, target_label_id, related_labels_json,
+             proposed_action, proposal_json, agent_selected, final_selected, rationale, signal_key,
+             created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'false_negative', 'open', ?4, '[]',
+             'add_positive_atom', '{}', 1, 1, 'schema fixture signal', ?5, 1, 1)",
+            params![id, observation, board_id, label_id, signal_key],
+        )?;
+    }
+    for (id, row_task, name) in [
+        (&proposal_id, &task, "schema-default-proposal"),
+        (&other_proposal_id, &other_task, "schema-other-proposal"),
+    ] {
+        conn.execute(
+            "INSERT INTO label_semantic_proposals(
+             id, board_id, task_id, status, name, applies_when, excludes_when,
+             positive_examples, negative_examples, heuristic_coverage,
+             heuristic_coverage_cosine, heuristic_residual_norm, diagnostics_json,
+             created_by, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'proposed', ?4, '[]', '[]', '[]', '[]',
+             0.1, 0.1, 0.9, '[]', 'tester', 1, 1)",
+            params![id, row_task.board_id, row_task.id, name],
+        )?;
+    }
+    for (id, board_id, label_id, proposal_id) in [
+        (
+            &action_id,
+            &task.board_id,
+            Some(label.id.as_str()),
+            Some(proposal_id.as_str()),
+        ),
+        (
+            &other_action_id,
+            &other_task.board_id,
+            Some(other_label.id.as_str()),
+            Some(other_proposal_id.as_str()),
+        ),
+    ] {
+        conn.execute(
+            "INSERT INTO label_ontology_actions(
+             id, board_id, action_type, reason, target_label_id, result_label_id,
+             result_proposal_id, change_json, validation_requirement, validation_status,
+             validation_json, created_by, created_by_type, created_at)
+             VALUES (?1, ?2, 'create_label_proposal', 'schema fixture action',
+             ?3, ?3, ?4, '{}', 'none', 'not_required', '{}', 'tester', 'user', 1)",
+            params![id, board_id, label_id, proposal_id],
+        )?;
+    }
+    conn.execute(
+        "INSERT INTO label_ontology_action_signals(board_id, action_id, signal_id, created_at)
+         VALUES (?1, ?2, ?3, 1)",
+        params![task.board_id, action_id, signal_id],
+    )?;
+
+    Ok(OntologyLinkSchemaFixture {
+        board_id: task.board_id,
+        other_board_id: other_board.id,
+        task_id: task.id,
+        observation_id,
+        signal_id,
+        other_signal_id,
+        action_id,
+        other_action_id,
+        proposal_id,
+        other_proposal_id,
+        other_label_id: other_label.id,
+    })
 }
 
 enum ExistingAtomApplyKind {

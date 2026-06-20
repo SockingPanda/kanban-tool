@@ -47,7 +47,9 @@ const LABEL_ONTOLOGY_VALIDATION_REQUIREMENT_MIGRATION: &str =
     include_str!("../../../migrations/019_label_ontology_validation_requirement.sql");
 const BOARD_ISOLATION_TASK_HISTORY_MIGRATION: &str =
     include_str!("../../../migrations/020_board_isolation_task_history.sql");
-const LATEST_MIGRATION_VERSION: i64 = 20;
+const BOARD_ISOLATION_ONTOLOGY_LINKS_MIGRATION: &str =
+    include_str!("../../../migrations/021_board_isolation_ontology_links.sql");
+const LATEST_MIGRATION_VERSION: i64 = 21;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &[
     "fnv64:0ca871be950fc8a6",
     "fnv64:3b08da4e2b6041f5",
@@ -162,6 +164,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "020_board_isolation_task_history",
         sql: BOARD_ISOLATION_TASK_HISTORY_MIGRATION,
     },
+    Migration {
+        version: 21,
+        name: "021_board_isolation_ontology_links",
+        sql: BOARD_ISOLATION_ONTOLOGY_LINKS_MIGRATION,
+    },
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -262,6 +269,9 @@ fn run_migration_preflight(conn: &Connection, migration: &Migration) -> Result<(
     if migration.version == 20 {
         ensure_no_cross_board_rows_for_task_history_migration(conn)?;
     }
+    if migration.version == 21 {
+        ensure_no_cross_board_rows_for_ontology_links_migration(conn)?;
+    }
     Ok(())
 }
 
@@ -342,6 +352,102 @@ fn ensure_no_cross_board_rows_for_task_history_migration(conn: &Connection) -> R
         if let Some(mismatch) = first_board_isolation_mismatch(conn, &check)? {
             return Err(KanbanError::Storage(format!(
                 "cannot apply migration 020_board_isolation_task_history: {} cross-board row {} has row board {}, referenced boards {}; run kanban doctor and repair before migrating",
+                check.table, mismatch.row_key, mismatch.row_board, mismatch.referenced_boards
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn ensure_no_cross_board_rows_for_ontology_links_migration(conn: &Connection) -> Result<()> {
+    for check in [
+        BoardIsolationPreflight {
+            table: "label_semantic_proposals",
+            sql: "SELECT p.id, p.board_id, COALESCE(t.board_id, 'missing task ' || p.task_id), NULL \
+                  FROM label_semantic_proposals p \
+                  LEFT JOIN tasks t ON t.id = p.task_id \
+                  WHERE t.id IS NULL OR p.board_id != t.board_id \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "label_semantic_proposals",
+            sql: "SELECT p.id, p.board_id, COALESCE(l.board_id, 'missing resolved label ' || p.resolved_label_id), NULL \
+                  FROM label_semantic_proposals p \
+                  LEFT JOIN labels l ON l.id = p.resolved_label_id \
+                  WHERE p.resolved_label_id IS NOT NULL AND (l.id IS NULL OR p.board_id != l.board_id) \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "label_ontology_signals",
+            sql: "SELECT s.id, s.board_id, COALESCE(o.board_id, 'missing observation ' || s.observation_id), NULL \
+                  FROM label_ontology_signals s \
+                  LEFT JOIN label_ontology_observations o ON o.id = s.observation_id \
+                  WHERE o.id IS NULL OR s.board_id != o.board_id \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "label_ontology_signals",
+            sql: "SELECT s.id, s.board_id, COALESCE(l.board_id, 'missing target label ' || s.target_label_id), NULL \
+                  FROM label_ontology_signals s \
+                  LEFT JOIN labels l ON l.id = s.target_label_id \
+                  WHERE s.target_label_id IS NOT NULL AND (l.id IS NULL OR s.board_id != l.board_id) \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "label_ontology_signals",
+            sql: "SELECT s.id, s.board_id, COALESCE(r.board_id, 'missing superseding signal ' || s.superseded_by_signal_id), NULL \
+                  FROM label_ontology_signals s \
+                  LEFT JOIN label_ontology_signals r ON r.id = s.superseded_by_signal_id \
+                  WHERE s.superseded_by_signal_id IS NOT NULL AND (r.id IS NULL OR s.board_id != r.board_id) \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "label_ontology_actions",
+            sql: "SELECT a.id, a.board_id, COALESCE(p.board_id, 'missing parent action ' || a.parent_action_id), NULL \
+                  FROM label_ontology_actions a \
+                  LEFT JOIN label_ontology_actions p ON p.id = a.parent_action_id \
+                  WHERE a.parent_action_id IS NOT NULL AND (p.id IS NULL OR a.board_id != p.board_id) \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "label_ontology_actions",
+            sql: "SELECT a.id, a.board_id, COALESCE(l.board_id, 'missing target label ' || a.target_label_id), NULL \
+                  FROM label_ontology_actions a \
+                  LEFT JOIN labels l ON l.id = a.target_label_id \
+                  WHERE a.target_label_id IS NOT NULL AND (l.id IS NULL OR a.board_id != l.board_id) \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "label_ontology_actions",
+            sql: "SELECT a.id, a.board_id, COALESCE(l.board_id, 'missing result label ' || a.result_label_id), NULL \
+                  FROM label_ontology_actions a \
+                  LEFT JOIN labels l ON l.id = a.result_label_id \
+                  WHERE a.result_label_id IS NOT NULL AND (l.id IS NULL OR a.board_id != l.board_id) \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "label_ontology_actions",
+            sql: "SELECT a.id, a.board_id, COALESCE(p.board_id, 'missing result proposal ' || a.result_proposal_id), NULL \
+                  FROM label_ontology_actions a \
+                  LEFT JOIN label_semantic_proposals p ON p.id = a.result_proposal_id \
+                  WHERE a.result_proposal_id IS NOT NULL AND (p.id IS NULL OR a.board_id != p.board_id) \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "label_ontology_action_signals",
+            sql: "SELECT x.action_id || ':' || x.signal_id, x.board_id, \
+                         COALESCE(a.board_id, 'missing action ' || x.action_id), \
+                         COALESCE(s.board_id, 'missing signal ' || x.signal_id) \
+                  FROM label_ontology_action_signals x \
+                  LEFT JOIN label_ontology_actions a ON a.id = x.action_id \
+                  LEFT JOIN label_ontology_signals s ON s.id = x.signal_id \
+                  WHERE a.id IS NULL OR s.id IS NULL OR x.board_id != a.board_id OR x.board_id != s.board_id \
+                  LIMIT 1",
+        },
+    ] {
+        if let Some(mismatch) = first_board_isolation_mismatch(conn, &check)? {
+            return Err(KanbanError::Storage(format!(
+                "cannot apply migration 021_board_isolation_ontology_links: {} cross-board or orphan row {} has row board {}, referenced boards {}; run kanban doctor and repair before migrating",
                 check.table, mismatch.row_key, mismatch.row_board, mismatch.referenced_boards
             )));
         }

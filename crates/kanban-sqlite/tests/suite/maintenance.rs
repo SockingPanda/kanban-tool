@@ -151,8 +151,8 @@ fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() -> anyhow::Resu
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(20));
-        assert_eq!(report.user_version, 20);
+        assert_eq!(report.migration_version, Some(21));
+        assert_eq!(report.user_version, 21);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())
@@ -175,8 +175,8 @@ fn doctor_ontology_reports_missing_v12_tables_unhealthy() -> anyhow::Result<()> 
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(20));
-        assert_eq!(report.user_version, 20);
+        assert_eq!(report.migration_version, Some(21));
+        assert_eq!(report.user_version, 21);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
         assert_eq!(report.ontology_ledger_errors, 1);
         assert!(report.ontology_ledger_issues.iter().any(|issue| {
@@ -192,7 +192,13 @@ fn doctor_ontology_detects_cross_board_signal_rows() -> anyhow::Result<()> {
     let temp = TempDb::new("doctor_ontology_detects_cross_board_signal_rows")?;
     let fixture = seed_doctor_ontology_ledger(&temp)?;
     let conn = connect_file(&temp.path)?;
-    conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+    conn.execute_batch(
+        "
+        PRAGMA foreign_keys=OFF;
+        DROP TRIGGER IF EXISTS trg_label_ontology_signals_board_insert;
+        DROP TRIGGER IF EXISTS trg_label_ontology_signals_board_update;
+        ",
+    )?;
     conn.execute(
         "UPDATE label_ontology_signals SET board_id=?1 WHERE id=?2",
         params![fixture.other_board_id, fixture.signal_id],

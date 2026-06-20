@@ -148,6 +148,13 @@ export type LabelOntologyActionType =
 
 export type LabelOntologyValidationStatus = "not_required" | "pending" | "passed" | "failed" | "partial"
 export type LabelOntologyValidationRequirement = "none" | "required" | "unsupported"
+export type LabelOntologyValidationEffectiveOutcome =
+  | "not_required"
+  | "unsupported"
+  | "pending"
+  | "passed"
+  | "failed"
+  | "partial"
 
 export type LabelOntologySuggestState = "selected" | "candidate" | "absent" | "unavailable"
 
@@ -240,6 +247,8 @@ export type LabelOntologyActionRecord = {
   change_json: string
   validation_requirement: LabelOntologyValidationRequirement
   validation_status: LabelOntologyValidationStatus
+  validation_effective_outcome: LabelOntologyValidationEffectiveOutcome
+  validation_latest_attempt_id: string | null
   validation_json: string
   created_by: string
   created_by_type: string

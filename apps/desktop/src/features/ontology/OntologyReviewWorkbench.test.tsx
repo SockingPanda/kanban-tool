@@ -255,6 +255,8 @@ function actionFixture(overrides: Partial<LabelOntologyActionRecord> = {}): Labe
     change_json: "{}",
     validation_requirement: "none",
     validation_status: "not_required",
+    validation_effective_outcome: "not_required",
+    validation_latest_attempt_id: null,
     validation_json: "{}",
     created_by: "desktop-test",
     created_by_type: "user",

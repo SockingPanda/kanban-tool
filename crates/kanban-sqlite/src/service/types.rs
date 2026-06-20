@@ -887,6 +887,48 @@ impl std::str::FromStr for LabelOntologyValidationRequirement {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelOntologyValidationEffectiveOutcome {
+    NotRequired,
+    Unsupported,
+    Pending,
+    Passed,
+    Failed,
+    Partial,
+}
+
+impl std::fmt::Display for LabelOntologyValidationEffectiveOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::NotRequired => "not_required",
+            Self::Unsupported => "unsupported",
+            Self::Pending => "pending",
+            Self::Passed => "passed",
+            Self::Failed => "failed",
+            Self::Partial => "partial",
+        })
+    }
+}
+
+impl std::str::FromStr for LabelOntologyValidationEffectiveOutcome {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "not_required" => Ok(Self::NotRequired),
+            "unsupported" => Ok(Self::Unsupported),
+            "pending" => Ok(Self::Pending),
+            "passed" => Ok(Self::Passed),
+            "failed" => Ok(Self::Failed),
+            "partial" => Ok(Self::Partial),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid label ontology validation effective outcome: {value}"
+            ))),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LabelOntologyActor {
     pub name: String,
@@ -1013,6 +1055,8 @@ pub struct LabelOntologyActionRecord {
     pub change_json: String,
     pub validation_requirement: LabelOntologyValidationRequirement,
     pub validation_status: LabelOntologyValidationStatus,
+    pub validation_effective_outcome: LabelOntologyValidationEffectiveOutcome,
+    pub validation_latest_attempt_id: Option<String>,
     pub validation_json: String,
     pub created_by: String,
     pub created_by_type: String,

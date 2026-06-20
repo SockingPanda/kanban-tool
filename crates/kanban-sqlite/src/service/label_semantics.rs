@@ -4,9 +4,10 @@ use super::{
     LabelAtomExplainAction, LabelAtomExplainRecord, LabelAtomExplainSignal,
     LabelAtomExplainValidation, LabelAtomRecord, LabelOntologyActionRecord,
     LabelOntologyActionType, LabelOntologyObservationRecord, LabelOntologySemanticsMutationInput,
-    LabelOntologySignalRecord, LabelProposalCandidate, LabelSemanticsMutationOptions,
-    LabelSemanticsRecord, TaskRecord, UpsertLabelSemantics, board_id, derived_status_by_name,
-    get_task_by_id, label_ontology_mutation_atoms,
+    LabelOntologySignalRecord, LabelOntologyValidationEffectiveOutcome,
+    LabelOntologyValidationRequirement, LabelOntologyValidationStatus, LabelProposalCandidate,
+    LabelSemanticsMutationOptions, LabelSemanticsRecord, TaskRecord, UpsertLabelSemantics,
+    board_id, derived_status_by_name, get_task_by_id, label_ontology_mutation_atoms,
     label_ontology_semantics_snapshot_for_definition, label_ontology_semantics_snapshot_in_tx,
     record_label_ontology_semantics_mutation_in_tx, storage, vector_storage, with_immediate_tx,
 };
@@ -904,6 +905,7 @@ fn label_atom_provenance_actions(
             continue;
         }
         hydrate_action_signal_ids(conn, &mut action)?;
+        hydrate_action_validation_effective_outcome(conn, &mut action)?;
         provenance_actions.push(LabelAtomExplainAction {
             action,
             matched_by: "atom_effect".to_owned(),
@@ -939,6 +941,7 @@ fn label_atom_provenance_actions(
             "legacy_result_atom_hash"
         };
         hydrate_action_signal_ids(conn, &mut action)?;
+        hydrate_action_validation_effective_outcome(conn, &mut action)?;
         provenance_actions.push(LabelAtomExplainAction {
             action,
             matched_by: matched_by.to_owned(),
@@ -1019,6 +1022,7 @@ fn label_atom_validation_history(
         for row in rows {
             let mut action = row.map_err(storage)?;
             hydrate_action_signal_ids(conn, &mut action)?;
+            hydrate_action_validation_effective_outcome(conn, &mut action)?;
             let envelope = parse_json_value(&action.validation_json)?;
             validations.push(LabelAtomExplainValidation {
                 parent_action_id: provenance.action.id.clone(),
@@ -1097,6 +1101,65 @@ fn hydrate_action_signal_ids(
     Ok(())
 }
 
+fn hydrate_action_validation_effective_outcome(
+    conn: &Connection,
+    action: &mut LabelOntologyActionRecord,
+) -> Result<()> {
+    if action.action_type == LabelOntologyActionType::Validate {
+        action.validation_effective_outcome =
+            validation_status_effective_outcome(action.validation_status);
+        action.validation_latest_attempt_id = None;
+        return Ok(());
+    }
+    let Some((attempt_id, attempt_status)) = latest_validation_attempt(conn, action)? else {
+        return Ok(());
+    };
+    action.validation_latest_attempt_id = Some(attempt_id);
+    if action.validation_requirement == LabelOntologyValidationRequirement::Required {
+        action.validation_effective_outcome = validation_status_effective_outcome(attempt_status);
+    }
+    Ok(())
+}
+
+fn latest_validation_attempt(
+    conn: &Connection,
+    action: &LabelOntologyActionRecord,
+) -> Result<Option<(String, LabelOntologyValidationStatus)>> {
+    let row = conn
+        .query_row(
+            "SELECT id, validation_status FROM label_ontology_actions \
+             WHERE board_id=?1 AND parent_action_id=?2 AND action_type='validate' \
+             ORDER BY created_at DESC, id DESC LIMIT 1",
+            params![action.board_id, action.id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(storage)?;
+    row.map(|(id, status)| {
+        Ok((
+            id,
+            status
+                .parse::<LabelOntologyValidationStatus>()
+                .map_err(|err| KanbanError::InvalidInput(err.to_string()))?,
+        ))
+    })
+    .transpose()
+}
+
+fn validation_status_effective_outcome(
+    validation_status: LabelOntologyValidationStatus,
+) -> LabelOntologyValidationEffectiveOutcome {
+    match validation_status {
+        LabelOntologyValidationStatus::NotRequired => {
+            LabelOntologyValidationEffectiveOutcome::NotRequired
+        }
+        LabelOntologyValidationStatus::Pending => LabelOntologyValidationEffectiveOutcome::Pending,
+        LabelOntologyValidationStatus::Passed => LabelOntologyValidationEffectiveOutcome::Passed,
+        LabelOntologyValidationStatus::Failed => LabelOntologyValidationEffectiveOutcome::Failed,
+        LabelOntologyValidationStatus::Partial => LabelOntologyValidationEffectiveOutcome::Partial,
+    }
+}
+
 fn ontology_observation_from_row(
     row: &Row<'_>,
 ) -> rusqlite::Result<LabelOntologyObservationRecord> {
@@ -1168,11 +1231,15 @@ fn ontology_action_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologyActi
     let action_type: String = row.get(3)?;
     let validation_requirement: String = row.get(13)?;
     let validation_status: String = row.get(14)?;
+    let action_type: LabelOntologyActionType = parse_row_enum(&action_type)?;
+    let validation_requirement: LabelOntologyValidationRequirement =
+        parse_row_enum(&validation_requirement)?;
+    let validation_status: LabelOntologyValidationStatus = parse_row_enum(&validation_status)?;
     Ok(LabelOntologyActionRecord {
         id: row.get(0)?,
         board_id: row.get(1)?,
         parent_action_id: row.get(2)?,
-        action_type: parse_row_enum(&action_type)?,
+        action_type,
         reason: row.get(4)?,
         target_label_id: row.get(5)?,
         result_label_id: row.get(6)?,
@@ -1182,8 +1249,24 @@ fn ontology_action_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologyActi
         canonical_before_hash: row.get(10)?,
         canonical_after_hash: row.get(11)?,
         change_json: row.get(12)?,
-        validation_requirement: parse_row_enum(&validation_requirement)?,
-        validation_status: parse_row_enum(&validation_status)?,
+        validation_requirement,
+        validation_status,
+        validation_effective_outcome: if action_type == LabelOntologyActionType::Validate {
+            validation_status_effective_outcome(validation_status)
+        } else {
+            match validation_requirement {
+                LabelOntologyValidationRequirement::None => {
+                    LabelOntologyValidationEffectiveOutcome::NotRequired
+                }
+                LabelOntologyValidationRequirement::Required => {
+                    LabelOntologyValidationEffectiveOutcome::Pending
+                }
+                LabelOntologyValidationRequirement::Unsupported => {
+                    LabelOntologyValidationEffectiveOutcome::Unsupported
+                }
+            }
+        },
+        validation_latest_attempt_id: None,
         validation_json: row.get(15)?,
         created_by: row.get(16)?,
         created_by_type: row.get(17)?,

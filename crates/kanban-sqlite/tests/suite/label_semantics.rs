@@ -46,7 +46,7 @@ fn label_proposal_migration_and_provider_unavailable_are_non_polluting() -> anyh
     init_database(&temp.path, "tester")?;
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 17);
+    assert_eq!(user_version, 19);
     let has_table: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_semantic_proposals'",
         [],
@@ -144,17 +144,25 @@ fn label_proposal_manual_candidate_accepts_without_task_binding() -> anyhow::Res
         .iter()
         .find(|atom| atom.kind == "applies_when")
         .context("applies_when atom")?;
-    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
-    assert!(!explain.legacy_untracked);
-    assert!(explain.provenance_actions.iter().any(|provenance| {
-        provenance.action.action_type == LabelOntologyActionType::BootstrapLabel
-            && provenance.action.result_proposal_id.as_deref() == Some(proposal.id.as_str())
-    }));
+    let conn = connect_file(&temp.path)?;
+    let bootstrap_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions \
+         WHERE action_type='bootstrap_label' AND result_proposal_id=?1",
+        [&proposal.id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        ontology_action_atom_effect_count(&conn, &bootstrap_action_id)?,
+        semantics.atoms.len() as i64
+    );
+    assert!(
+        ontology_action_atom_effect_texts(&conn, &bootstrap_action_id, "added")?
+            .contains(&atom.text)
+    );
     assert!(
         get_task(&temp.path, "default", &task.id)?.labels.is_empty(),
         "accept must not attach task_labels"
     );
-    let conn = connect_file(&temp.path)?;
     assert_eq!(table_count(&conn, "task_labels")?, 0);
     Ok(())
 }
@@ -622,20 +630,72 @@ fn label_bootstrap_rejects_empty_semantics_without_partial_writes() -> anyhow::R
     Ok(())
 }
 
+#[cfg(feature = "vector-lancedb")]
 #[test]
-fn label_bootstrap_snapshot_restore_deletes_unverified_new_label() -> anyhow::Result<()> {
-    let temp = TempDb::new("label_bootstrap_snapshot_restore_deletes_unverified_new_label")?;
+fn label_bootstrap_staged_verify_threshold_failure_leaves_canonical_state_clean()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_bootstrap_staged_verify_threshold_failure_leaves_canonical_state_clean",
+    )?;
     init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
         "default",
         "tester",
-        CreateTask::ready("bootstrap restore target"),
+        CreateTask::ready("bootstrap staged verify target"),
+    )?;
+    let conn = connect_file(&temp.path)?;
+    let before = bootstrap_canonical_counts(&conn)?;
+    let status_before = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+
+    let error = result_err(
+        kanban_sqlite::bootstrap_task_label_with_staged_verification(
+            &temp.path,
+            "default",
+            "tester",
+            &task.id,
+            BootstrapTaskLabel {
+                name: "database".to_owned(),
+                description: Some("Database persistence work".to_owned()),
+                applies_when: vec!["touches SQLite migrations".to_owned()],
+                positive_examples: vec!["new table migration".to_owned()],
+                ..BootstrapTaskLabel::default()
+            },
+            &BootstrapStagedVerificationStore::low_score(),
+            0.50,
+        ),
     )?;
 
-    let snapshot =
-        snapshot_bootstrap_task_label_state(&temp.path, "default", &task.id, "database")?;
-    bootstrap_task_label(
+    let message = error.to_string();
+    assert!(
+        message.contains("label bootstrap verification failed"),
+        "{message}"
+    );
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(bootstrap_canonical_counts(&conn)?, before);
+    let status_after = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    assert_eq!(status_after.dirty, status_before.dirty);
+    assert_eq!(status_after.board_dirty, status_before.board_dirty);
+    assert_eq!(bootstrap_compensation_event_count(&conn)?, 0);
+    Ok(())
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn label_bootstrap_staged_verify_success_writes_single_root_action() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_staged_verify_success_writes_single_root_action")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("bootstrap staged verify target"),
+    )?;
+    let conn = connect_file(&temp.path)?;
+    let action_count = table_count(&conn, "label_ontology_actions")?;
+    let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+
+    let result = kanban_sqlite::bootstrap_task_label_with_staged_verification(
         &temp.path,
         "default",
         "tester",
@@ -647,193 +707,209 @@ fn label_bootstrap_snapshot_restore_deletes_unverified_new_label() -> anyhow::Re
             positive_examples: vec!["new table migration".to_owned()],
             ..BootstrapTaskLabel::default()
         },
+        &BootstrapStagedVerificationStore::pass(),
+        0.50,
     )?;
-    assert_eq!(table_count(&connect_file(&temp.path)?, "labels")?, 1);
 
-    let restored = restore_bootstrap_task_label_state(&temp.path, "tester", &snapshot)?;
+    assert_eq!(result.semantics.label_name, "database");
+    assert_eq!(result.verification.label_name, "database");
+    assert!(result.verification.score >= 0.50);
+    assert_eq!(result.verification.source, "selected_labels");
+    assert_eq!(result.task.labels.len(), 1);
+    assert_eq!(result.task.labels[0].name, "database");
 
-    assert!(restored.label_deleted);
-    assert!(restored.task_binding_restored);
-    assert!(!restored.semantics_restored);
-    assert!(restored.index_marked_dirty);
     let conn = connect_file(&temp.path)?;
-    assert_eq!(table_count(&conn, "labels")?, 0);
-    assert_eq!(table_count(&conn, "label_semantics")?, 0);
-    assert_eq!(table_count(&conn, "label_atoms")?, 0);
-    assert_eq!(table_count(&conn, "task_labels")?, 0);
+    assert_eq!(
+        table_count(&conn, "label_ontology_actions")?,
+        action_count + 1
+    );
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count + result.semantics.atoms.len() as i64
+    );
+    assert_eq!(bootstrap_action_count(&conn)?, 1);
+    assert_eq!(bootstrap_compensation_event_count(&conn)?, 0);
     let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
     assert_eq!(status.board_dirty, Some(true));
     Ok(())
 }
 
 #[test]
-fn label_bootstrap_snapshot_restore_preserves_existing_unbound_label_without_semantics()
--> anyhow::Result<()> {
-    let temp = TempDb::new(
-        "label_bootstrap_snapshot_restore_preserves_existing_unbound_label_without_semantics",
-    )?;
+fn canonical_label_identity_create_writes_event_without_ontology_action() -> anyhow::Result<()> {
+    let temp = TempDb::new("canonical_label_identity_create_writes_event_without_ontology_action")?;
     init_database(&temp.path, "tester")?;
-    let task = create_task(
+
+    let label = kanban_sqlite::create_label_with_actor(
         &temp.path,
         "default",
         "tester",
-        CreateTask::ready("bootstrap restore existing label target"),
-    )?;
-    create_label(
-        &temp.path,
-        "default",
         CreateLabel {
-            name: "database".to_owned(),
-            color: None,
+            name: "identity-only".to_owned(),
+            color: Some("#112233".to_owned()),
         },
     )?;
 
-    let snapshot =
-        snapshot_bootstrap_task_label_state(&temp.path, "default", &task.id, "database")?;
-    bootstrap_task_label(
-        &temp.path,
-        "default",
-        "tester",
-        &task.id,
-        BootstrapTaskLabel {
-            name: "database".to_owned(),
-            description: Some("Database persistence work".to_owned()),
-            applies_when: vec!["touches SQLite migrations".to_owned()],
-            ..BootstrapTaskLabel::default()
-        },
-    )?;
-
-    let restored = restore_bootstrap_task_label_state(&temp.path, "tester", &snapshot)?;
-
-    assert!(!restored.label_deleted);
-    assert!(restored.task_binding_restored);
-    assert!(restored.semantics_restored);
-    assert!(restored.index_marked_dirty);
     let conn = connect_file(&temp.path)?;
-    assert_eq!(table_count(&conn, "labels")?, 1);
-    assert_eq!(table_count(&conn, "label_semantics")?, 0);
-    assert_eq!(table_count(&conn, "label_atoms")?, 0);
-    assert_eq!(table_count(&conn, "task_labels")?, 0);
-    let error = result_err(get_label_semantics(&temp.path, "default", "database"))?;
-    assert!(error.to_string().contains("label semantics"));
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, 0);
+    let created_events = list_events(&temp.path, "default", None)?
+        .into_iter()
+        .filter(|event| event.kind == "label.created")
+        .collect::<Vec<_>>();
+    assert_eq!(created_events.len(), 1);
+    assert_eq!(created_events[0].actor.as_deref(), Some("tester"));
+    assert_eq!(created_events[0].task_id, None);
+    assert!(created_events[0].payload_json.contains(&label.id));
+    assert!(created_events[0].payload_json.contains("identity-only"));
+    assert!(created_events[0].payload_json.contains("#112233"));
+
+    let deleted = delete_label(&temp.path, "default", "tester", "identity-only", false)?;
+    assert_eq!(deleted.label.id, label.id);
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, 0);
+    let deleted_events = list_events(&temp.path, "default", None)?
+        .into_iter()
+        .filter(|event| event.kind == "label.deleted")
+        .collect::<Vec<_>>();
+    assert_eq!(deleted_events.len(), 1);
+    assert_eq!(deleted_events[0].actor.as_deref(), Some("tester"));
     Ok(())
 }
 
 #[test]
-fn label_bootstrap_snapshot_restore_preserves_existing_bound_label_without_semantics()
--> anyhow::Result<()> {
-    let temp = TempDb::new(
-        "label_bootstrap_snapshot_restore_preserves_existing_bound_label_without_semantics",
-    )?;
+fn label_semantics_clear_requires_cas_records_root_action_effects_and_reverts() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_semantics_clear_requires_cas_records_root_action_effects_and_reverts")?;
     init_database(&temp.path, "tester")?;
-    let task = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("bootstrap restore existing bound label target"),
-    )?;
-    create_label(
+    let label = create_label(
         &temp.path,
         "default",
         CreateLabel {
-            name: "database".to_owned(),
+            name: "backend".to_owned(),
             color: None,
         },
     )?;
-    kanban_sqlite::add_task_labels(
-        &temp.path,
-        "default",
-        "tester",
-        &task.id,
-        &["database".to_owned()],
-    )?;
-
-    let snapshot =
-        snapshot_bootstrap_task_label_state(&temp.path, "default", &task.id, "database")?;
-    bootstrap_task_label(
-        &temp.path,
-        "default",
-        "tester",
-        &task.id,
-        BootstrapTaskLabel {
-            name: "database".to_owned(),
-            description: Some("Database persistence work".to_owned()),
-            applies_when: vec!["touches SQLite migrations".to_owned()],
-            ..BootstrapTaskLabel::default()
-        },
-    )?;
-
-    let restored = restore_bootstrap_task_label_state(&temp.path, "tester", &snapshot)?;
-
-    assert!(!restored.label_deleted);
-    assert!(!restored.task_binding_restored);
-    assert!(restored.semantics_restored);
-    assert_eq!(get_task(&temp.path, "default", &task.id)?.labels.len(), 1);
-    let conn = connect_file(&temp.path)?;
-    assert_eq!(table_count(&conn, "labels")?, 1);
-    assert_eq!(table_count(&conn, "label_semantics")?, 0);
-    assert_eq!(table_count(&conn, "label_atoms")?, 0);
-    assert_eq!(table_count(&conn, "task_labels")?, 1);
-    Ok(())
-}
-
-#[test]
-fn label_bootstrap_snapshot_restore_restores_existing_semantics_and_atoms_exactly()
--> anyhow::Result<()> {
-    let temp = TempDb::new(
-        "label_bootstrap_snapshot_restore_restores_existing_semantics_and_atoms_exactly",
-    )?;
-    init_database(&temp.path, "tester")?;
-    let task = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("bootstrap restore existing semantics target"),
-    )?;
-    bootstrap_task_label(
-        &temp.path,
-        "default",
-        "tester",
-        &task.id,
-        BootstrapTaskLabel {
-            name: "database".to_owned(),
-            description: Some("Database persistence work".to_owned()),
-            applies_when: vec!["touches SQLite migrations".to_owned()],
-            positive_examples: vec!["new table migration".to_owned()],
-            ..BootstrapTaskLabel::default()
-        },
-    )?;
-    let before = get_label_semantics(&temp.path, "default", "database")?;
-    let snapshot =
-        snapshot_bootstrap_task_label_state(&temp.path, "default", &task.id, "database")?;
-
-    upsert_label_semantics(
+    let seed = upsert_label_semantics(
         &temp.path,
         "default",
         UpsertLabelSemantics {
-            label_ref: "database".to_owned(),
-            replace: true,
-            description: Some("Changed database semantics".to_owned()),
-            applies_when: vec!["changed applies".to_owned()],
-            excludes_when: vec!["changed excludes".to_owned()],
-            positive_examples: vec!["changed positive".to_owned()],
-            negative_examples: vec!["changed negative".to_owned()],
+            label_ref: "backend".to_owned(),
+            description: Some("Backend service work".to_owned()),
+            applies_when: vec!["touches Rust service code".to_owned()],
+            excludes_when: vec!["CSS-only changes".to_owned()],
+            positive_examples: vec!["add HTTP route".to_owned()],
             ..UpsertLabelSemantics::default()
         },
     )?;
-    assert_ne!(
-        get_label_semantics(&temp.path, "default", "database")?,
-        before
+    let original_atom_count = seed.atoms.len() as i64;
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    let conn = connect_file(&temp.path)?;
+    let action_count = table_count(&conn, "label_ontology_actions")?;
+    let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+
+    let mut stale_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    stale_options.reason = Some("Attempt stale clear.".to_owned());
+    let stale_error = result_err(clear_label_semantics_with_options(
+        &temp.path,
+        "default",
+        "backend",
+        "not-the-current-semantics-hash".to_owned(),
+        stale_options,
+    ))?;
+    assert!(matches!(stale_error, KanbanError::Conflict(_)));
+    assert_eq!(
+        get_label_semantics(&temp.path, "default", "backend")?.semantics_hash,
+        seed.semantics_hash
     );
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, action_count);
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count
+    );
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
 
-    let restored = restore_bootstrap_task_label_state(&temp.path, "tester", &snapshot)?;
+    let mut clear_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    clear_options.reason = Some("Clear semantics with audited CAS.".to_owned());
+    clear_label_semantics_with_options(
+        &temp.path,
+        "default",
+        "backend",
+        seed.semantics_hash.clone(),
+        clear_options,
+    )?;
 
-    assert!(restored.semantics_restored);
-    let after = get_label_semantics(&temp.path, "default", "database")?;
-    assert_eq!(after, before);
-    assert_eq!(get_task(&temp.path, "default", &task.id)?.labels.len(), 1);
-    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
-    assert_eq!(status.board_dirty, Some(true));
+    assert!(
+        result_err(get_label_semantics(&temp.path, "default", "backend"))?
+            .to_string()
+            .contains("not found")
+    );
+    assert!(list_label_atoms(&temp.path, "default")?.is_empty());
+    assert_eq!(
+        table_count(&conn, "label_ontology_actions")?,
+        action_count + 1
+    );
+    let clear_action = root_mutation_action_by_before_hash(&conn, &seed.semantics_hash)?;
+    assert_eq!(
+        clear_action.action_type,
+        LabelOntologyActionType::UpdateSemantics.to_string()
+    );
+    assert_eq!(
+        clear_action.target_label_id.as_deref(),
+        Some(label.id.as_str())
+    );
+    assert_eq!(clear_action.result_label_id, None);
+    assert_eq!(clear_action.result_atom_id, None);
+    assert_eq!(clear_action.result_atom_content_hash, None);
+    assert_eq!(
+        clear_action.canonical_before_hash.as_deref(),
+        Some(seed.semantics_hash.as_str())
+    );
+    assert_eq!(
+        ontology_action_atom_effect_count(&conn, &clear_action.id)?,
+        original_atom_count
+    );
+    let mut expected_removed = seed
+        .atoms
+        .iter()
+        .map(|atom| atom.text.clone())
+        .collect::<Vec<_>>();
+    expected_removed.sort();
+    assert_eq!(
+        ontology_action_atom_effect_texts(&conn, &clear_action.id, "removed")?,
+        expected_removed
+    );
+    assert!(label_atom_store_dirty(&temp.path)?);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+
+    let revert_action = revert_label_ontology_mutation(
+        &temp.path,
+        "default",
+        LabelOntologyRevertInput {
+            actor: LabelOntologyActor {
+                name: "tester".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            target_action_id: clear_action.id.clone(),
+            expected_current_hash: clear_action.canonical_after_hash.clone(),
+            reason: "Restore cleared semantics for contract test.".to_owned(),
+        },
+    )?;
+    assert_eq!(
+        revert_action.action_type,
+        LabelOntologyActionType::RevertOntologyMutation
+    );
+    assert_eq!(
+        revert_action.parent_action_id.as_deref(),
+        Some(clear_action.id.as_str())
+    );
+    let restored = get_label_semantics(&temp.path, "default", "backend")?;
+    assert_eq!(restored.semantics_hash, seed.semantics_hash);
+    assert_eq!(restored.description, seed.description);
+    assert_eq!(restored.applies_when, seed.applies_when);
+    assert_eq!(restored.excludes_when, seed.excludes_when);
+    assert_eq!(restored.positive_examples, seed.positive_examples);
+    assert_eq!(restored.negative_examples, seed.negative_examples);
     Ok(())
 }
 
@@ -889,32 +965,20 @@ fn canonical_label_delete_removes_unbound_label_without_force() -> anyhow::Resul
             color: None,
         },
     )?;
-    upsert_label_semantics(
-        &temp.path,
-        "default",
-        UpsertLabelSemantics {
-            label_ref: "retired".to_owned(),
-            description: Some("Retired label vocabulary".to_owned()),
-            positive_examples: vec!["cleanup old label".to_owned()],
-            ..UpsertLabelSemantics::default()
-        },
-    )?;
 
     let deleted = delete_label(&temp.path, "default", "tester", "retired", false)?;
 
     assert!(!deleted.forced);
     assert_eq!(deleted.label.name, "retired");
     assert_eq!(deleted.removed_task_bindings, 0);
-    assert!(deleted.removed_semantics);
-    assert!(deleted.removed_atoms > 0);
+    assert!(!deleted.removed_semantics);
+    assert_eq!(deleted.removed_atoms, 0);
     assert!(list_labels(&temp.path, "default")?.is_empty());
     let conn = connect_file(&temp.path)?;
     assert_eq!(table_count(&conn, "labels")?, 0);
     assert_eq!(table_count(&conn, "task_labels")?, 0);
     assert_eq!(table_count(&conn, "label_semantics")?, 0);
     assert_eq!(table_count(&conn, "label_atoms")?, 0);
-    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
-    assert_eq!(status.board_dirty, Some(true));
     Ok(())
 }
 
@@ -928,7 +992,7 @@ fn canonical_label_delete_force_cleans_truth_and_marks_index_dirty() -> anyhow::
         "tester",
         CreateTask::ready("delete label force target"),
     )?;
-    bootstrap_task_label(
+    let bootstrapped = bootstrap_task_label(
         &temp.path,
         "default",
         "tester",
@@ -942,16 +1006,37 @@ fn canonical_label_delete_force_cleans_truth_and_marks_index_dirty() -> anyhow::
         },
     )?;
 
+    let force_error = result_err(delete_label(
+        &temp.path, "default", "tester", "database", true,
+    ))?;
+    assert!(
+        force_error.to_string().contains("has semantics or atoms"),
+        "{force_error}"
+    );
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "labels")?, 1);
+    assert_eq!(table_count(&conn, "task_labels")?, 1);
+    assert_eq!(table_count(&conn, "label_semantics")?, 1);
+    assert!(table_count(&conn, "label_atoms")? > 0);
+
+    let mut clear_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    clear_options.reason = Some("Clear semantics before deleting identity.".to_owned());
+    clear_label_semantics_with_options(
+        &temp.path,
+        "default",
+        "database",
+        bootstrapped.semantics.semantics_hash,
+        clear_options,
+    )?;
     let deleted = delete_label(&temp.path, "default", "tester", "database", true)?;
 
     assert!(deleted.forced);
     assert_eq!(deleted.label.name, "database");
     assert_eq!(deleted.removed_task_bindings, 1);
-    assert!(deleted.removed_semantics);
-    assert!(deleted.removed_atoms > 0);
+    assert!(!deleted.removed_semantics);
+    assert_eq!(deleted.removed_atoms, 0);
     assert!(list_labels(&temp.path, "default")?.is_empty());
     assert!(get_task(&temp.path, "default", &task.id)?.labels.is_empty());
-    let conn = connect_file(&temp.path)?;
     assert_eq!(table_count(&conn, "labels")?, 0);
     assert_eq!(table_count(&conn, "task_labels")?, 0);
     assert_eq!(table_count(&conn, "label_semantics")?, 0);
@@ -1683,6 +1768,140 @@ fn table_count(conn: &Connection, table: &str) -> anyhow::Result<i64> {
             row.get(0)
         })?,
     )
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BootstrapCanonicalCounts {
+    labels: i64,
+    label_semantics: i64,
+    label_atoms: i64,
+    task_labels: i64,
+    task_events: i64,
+    label_ontology_actions: i64,
+    label_ontology_action_atom_effects: i64,
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn bootstrap_canonical_counts(conn: &Connection) -> anyhow::Result<BootstrapCanonicalCounts> {
+    Ok(BootstrapCanonicalCounts {
+        labels: table_count(conn, "labels")?,
+        label_semantics: table_count(conn, "label_semantics")?,
+        label_atoms: table_count(conn, "label_atoms")?,
+        task_labels: table_count(conn, "task_labels")?,
+        task_events: table_count(conn, "task_events")?,
+        label_ontology_actions: table_count(conn, "label_ontology_actions")?,
+        label_ontology_action_atom_effects: table_count(
+            conn,
+            "label_ontology_action_atom_effects",
+        )?,
+    })
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn bootstrap_action_count(conn: &Connection) -> anyhow::Result<i64> {
+    Ok(conn.query_row(
+        "SELECT COUNT(*) FROM label_ontology_actions WHERE action_type='bootstrap_label'",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn bootstrap_compensation_event_count(conn: &Connection) -> anyhow::Result<i64> {
+    Ok(conn.query_row(
+        "SELECT COUNT(*) FROM task_events WHERE payload_json LIKE '%bootstrap verification compensation%'",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+struct RootMutationActionRow {
+    id: String,
+    action_type: String,
+    target_label_id: Option<String>,
+    result_label_id: Option<String>,
+    result_atom_id: Option<String>,
+    result_atom_content_hash: Option<String>,
+    canonical_before_hash: Option<String>,
+    canonical_after_hash: Option<String>,
+    change_json: String,
+    validation_status: String,
+    created_by: String,
+}
+
+fn single_root_mutation_action(conn: &Connection) -> anyhow::Result<RootMutationActionRow> {
+    Ok(conn.query_row(
+        "SELECT id,action_type,target_label_id,result_label_id,result_atom_id,\
+         result_atom_content_hash,canonical_before_hash,canonical_after_hash,change_json,\
+         validation_status,created_by FROM label_ontology_actions",
+        [],
+        |row| {
+            Ok(RootMutationActionRow {
+                id: row.get(0)?,
+                action_type: row.get(1)?,
+                target_label_id: row.get(2)?,
+                result_label_id: row.get(3)?,
+                result_atom_id: row.get(4)?,
+                result_atom_content_hash: row.get(5)?,
+                canonical_before_hash: row.get(6)?,
+                canonical_after_hash: row.get(7)?,
+                change_json: row.get(8)?,
+                validation_status: row.get(9)?,
+                created_by: row.get(10)?,
+            })
+        },
+    )?)
+}
+
+fn root_mutation_action_by_before_hash(
+    conn: &Connection,
+    canonical_before_hash: &str,
+) -> anyhow::Result<RootMutationActionRow> {
+    Ok(conn.query_row(
+        "SELECT id,action_type,target_label_id,result_label_id,result_atom_id,\
+         result_atom_content_hash,canonical_before_hash,canonical_after_hash,change_json,\
+         validation_status,created_by FROM label_ontology_actions \
+         WHERE canonical_before_hash=?1 ORDER BY created_at DESC,id DESC LIMIT 1",
+        [canonical_before_hash],
+        |row| {
+            Ok(RootMutationActionRow {
+                id: row.get(0)?,
+                action_type: row.get(1)?,
+                target_label_id: row.get(2)?,
+                result_label_id: row.get(3)?,
+                result_atom_id: row.get(4)?,
+                result_atom_content_hash: row.get(5)?,
+                canonical_before_hash: row.get(6)?,
+                canonical_after_hash: row.get(7)?,
+                change_json: row.get(8)?,
+                validation_status: row.get(9)?,
+                created_by: row.get(10)?,
+            })
+        },
+    )?)
+}
+
+fn ontology_action_atom_effect_count(conn: &Connection, action_id: &str) -> anyhow::Result<i64> {
+    Ok(conn.query_row(
+        "SELECT COUNT(*) FROM label_ontology_action_atom_effects WHERE action_id=?1",
+        [action_id],
+        |row| row.get(0),
+    )?)
+}
+
+fn ontology_action_atom_effect_texts(
+    conn: &Connection,
+    action_id: &str,
+    effect: &str,
+) -> anyhow::Result<Vec<String>> {
+    Ok(conn
+        .prepare(
+            "SELECT text FROM label_ontology_action_atom_effects \
+             WHERE action_id=?1 AND effect=?2 ORDER BY text",
+        )?
+        .query_map([action_id, effect], |row| row.get::<_, String>(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?)
 }
 
 #[test]
@@ -2805,6 +3024,62 @@ fn mark_label_atom_index_clean_for_default_board(path: &std::path::Path) -> anyh
     Ok(())
 }
 
+#[cfg(feature = "vector-lancedb")]
+#[derive(Clone, Copy)]
+struct BootstrapStagedVerificationStore {
+    low_score: bool,
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl BootstrapStagedVerificationStore {
+    fn pass() -> Self {
+        Self { low_score: false }
+    }
+
+    fn low_score() -> Self {
+        Self { low_score: true }
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl kanban_vector::VectorStoreBackend for BootstrapStagedVerificationStore {
+    fn embedding_model(&self) -> &str {
+        "bootstrap-test-model"
+    }
+
+    fn status(&self) -> kanban_vector::VectorStoreStatus {
+        kanban_vector::VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
+            diagnostics: Vec::new(),
+            dirty: Some(false),
+            board_dirty: Some(false),
+            generation: None,
+        }
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl kanban_vector::QueryEmbeddingProvider for BootstrapStagedVerificationStore {
+    fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
+        if !self.low_score || text.contains("bootstrap staged verify target") {
+            return Ok(vec![1.0, 0.0, 0.0]);
+        }
+        Ok(vec![0.0, 1.0, 0.0])
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl kanban_vector::LabelAtomVectorStore for BootstrapStagedVerificationStore {
+    fn query_label_atoms_by_vector(
+        &self,
+        _query: &kanban_vector::LabelAtomVectorQuery,
+    ) -> Result<Vec<kanban_vector::LabelAtomVectorHit>, kanban_vector::VectorError> {
+        Ok(Vec::new())
+    }
+}
+
 struct StaticLabelAtomStore {
     hits: Vec<kanban_vector::LabelAtomHit>,
 }
@@ -2964,7 +3239,15 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
     assert_eq!(fresh_task.labels.len(), 1);
     assert_eq!(fresh_task.labels[0].id, label.id);
 
-    delete_label_semantics(&temp.path, "default", "backend")?;
+    let mut clear_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    clear_options.reason = Some("Clear semantics for CRUD cleanup.".to_owned());
+    clear_label_semantics_with_options(
+        &temp.path,
+        "default",
+        "backend",
+        semantics.semantics_hash.clone(),
+        clear_options,
+    )?;
     assert!(
         result_err(get_label_semantics(&temp.path, "default", "backend"))?
             .to_string()
@@ -2976,10 +3259,10 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
 }
 
 #[test]
-fn label_atom_hashes_are_stable_across_reordered_sources_and_mark_index_dirty() -> anyhow::Result<()>
+fn label_atom_hashes_are_stable_across_reordered_sources_without_dirty_noop() -> anyhow::Result<()>
 {
     let temp =
-        TempDb::new("label_atom_hashes_are_stable_across_reordered_sources_and_mark_index_dirty")?;
+        TempDb::new("label_atom_hashes_are_stable_across_reordered_sources_without_dirty_noop")?;
     init_database(&temp.path, "tester")?;
     create_label(
         &temp.path,
@@ -3025,6 +3308,8 @@ fn label_atom_hashes_are_stable_across_reordered_sources_and_mark_index_dirty() 
          WHERE store_name='lancedb_label_atoms' AND board_id=?1",
         [&board.id],
     )?;
+    let action_count = table_count(&conn, "label_ontology_actions")?;
+    let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
 
     upsert_label_semantics(
         &temp.path,
@@ -3051,8 +3336,13 @@ fn label_atom_hashes_are_stable_across_reordered_sources_and_mark_index_dirty() 
         .collect::<std::collections::BTreeMap<_, _>>();
 
     assert_eq!(reordered_identity_by_text, first_identity_by_text);
-    assert!(label_atom_store_dirty(&temp.path)?);
-    assert!(label_atom_board_dirty(&temp.path, "default")?);
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, action_count);
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count
+    );
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
     Ok(())
 }
 
@@ -3124,35 +3414,325 @@ fn direct_label_semantics_upsert_records_update_semantics_provenance() -> anyhow
         .find(|atom| atom.kind == "applies_when")
         .context("applies_when atom")?;
 
-    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
-
-    assert!(!explain.legacy_untracked);
-    assert_eq!(explain.provenance_actions.len(), 1);
-    let provenance = &explain.provenance_actions[0];
-    assert_eq!(provenance.matched_by, "atom_id");
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, 1);
+    let action = single_root_mutation_action(&conn)?;
     assert_eq!(
-        provenance.action.action_type,
-        LabelOntologyActionType::UpdateSemantics
+        action.action_type,
+        LabelOntologyActionType::UpdateSemantics.to_string()
     );
     assert_eq!(
-        provenance.action.target_label_id.as_deref(),
+        action.target_label_id.as_deref(),
         Some(semantics.label_id.as_str())
     );
+    assert_eq!(action.result_label_id, None);
+    assert_eq!(action.result_atom_id, None);
+    assert_eq!(action.result_atom_content_hash, None);
+    assert_eq!(action.created_by, "ontology-editor");
     assert_eq!(
-        provenance.action.result_atom_id.as_deref(),
-        Some(atom.id.as_str())
+        action.validation_status,
+        LabelOntologyValidationStatus::Pending.to_string()
+    );
+    assert!(action.canonical_before_hash.is_some());
+    assert_eq!(
+        action.canonical_after_hash.as_deref(),
+        Some(semantics.semantics_hash.as_str())
+    );
+    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
+    assert!(change.get("atoms").is_none());
+    assert_eq!(
+        change["atom_effect_counts"],
+        json!({"added": 2, "removed": 0})
+    );
+    assert_eq!(ontology_action_atom_effect_count(&conn, &action.id)?, 2);
+    let added_texts = ontology_action_atom_effect_texts(&conn, &action.id, "added")?;
+    assert!(added_texts.iter().any(|text| text == "backend"));
+    assert!(added_texts.iter().any(|text| text == &atom.text));
+    Ok(())
+}
+
+#[test]
+fn label_semantics_root_actions_record_only_atom_effect_deltas() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_semantics_root_actions_record_only_atom_effect_deltas")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("Backend service work".to_owned()),
+            applies_when: vec![
+                "touches Rust service code".to_owned(),
+                "updates API handlers".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+
+    let description_patch = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash.clone()),
+            description: Some("Backend service ownership".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, 2);
+    assert_eq!(table_count(&conn, "label_ontology_action_atom_effects")?, 2);
+    let description_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&description_patch.semantics_hash],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        ontology_action_atom_effect_count(&conn, &description_action_id)?,
+        0
+    );
+    assert!(label_atom_store_dirty(&temp.path)?);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    let action_count = table_count(&conn, "label_ontology_actions")?;
+    let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+    let no_op = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(description_patch.semantics_hash.clone()),
+            description: Some("Backend service ownership".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(no_op.semantics_hash, description_patch.semantics_hash);
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, action_count);
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count
+    );
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+
+    let added = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(no_op.semantics_hash.clone()),
+            applies_when: vec!["owns scheduler transitions".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let add_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&added.semantics_hash],
+        |row| row.get(0),
+    )?;
+    assert_eq!(ontology_action_atom_effect_count(&conn, &add_action_id)?, 1);
+    assert_eq!(
+        ontology_action_atom_effect_texts(&conn, &add_action_id, "added")?,
+        vec!["owns scheduler transitions"]
+    );
+
+    let removed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(added.semantics_hash.clone()),
+            remove_applies_when: vec!["updates API handlers".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let remove_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&removed.semantics_hash],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        ontology_action_atom_effect_count(&conn, &remove_action_id)?,
+        1
     );
     assert_eq!(
-        provenance.action.result_atom_content_hash.as_deref(),
-        Some(atom.content_hash.as_str())
+        ontology_action_atom_effect_texts(&conn, &remove_action_id, "removed")?,
+        vec!["updates API handlers"]
     );
-    assert_eq!(provenance.action.created_by, "ontology-editor");
+    Ok(())
+}
+
+#[test]
+fn label_semantics_root_action_growth_is_linear_for_large_atom_sets() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_semantics_root_action_growth_is_linear_for_large_atom_sets")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let base_atoms = (0..99)
+        .map(|index| format!("large backend atom {index:03}"))
+        .collect::<Vec<_>>();
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("Large backend service work".to_owned()),
+            applies_when: base_atoms.clone(),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(seed.atoms.len(), 100);
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    let conn = connect_file(&temp.path)?;
+    let mut action_count = table_count(&conn, "label_ontology_actions")?;
+    let mut effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+
+    let description_patch = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash.clone()),
+            description: Some("Large backend service ownership".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
     assert_eq!(
-        provenance.action.validation_status,
-        LabelOntologyValidationStatus::Pending
+        table_count(&conn, "label_ontology_actions")?,
+        action_count + 1
     );
-    assert!(provenance.action.canonical_before_hash.is_some());
-    assert!(provenance.action.canonical_after_hash.is_some());
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count
+    );
+    let description_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&description_patch.semantics_hash],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        ontology_action_atom_effect_count(&conn, &description_action_id)?,
+        0
+    );
+    let (description_rows, description_payload_sum): (i64, i64) = conn.query_row(
+        "SELECT COUNT(*), COALESCE(SUM(length(change_json)), 0) \
+         FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&description_patch.semantics_hash],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let description_payload_len: i64 = conn.query_row(
+        "SELECT length(change_json) FROM label_ontology_actions WHERE id=?1",
+        [&description_action_id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(description_rows, 1);
+    assert_eq!(description_payload_sum, description_payload_len);
+    assert!(label_atom_store_dirty(&temp.path)?);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    action_count = table_count(&conn, "label_ontology_actions")?;
+    effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+    let added = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(description_patch.semantics_hash.clone()),
+            applies_when: vec!["large backend atom 100".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(
+        table_count(&conn, "label_ontology_actions")?,
+        action_count + 1
+    );
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count + 1
+    );
+    let add_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&added.semantics_hash],
+        |row| row.get(0),
+    )?;
+    assert_eq!(ontology_action_atom_effect_count(&conn, &add_action_id)?, 1);
+    assert_eq!(
+        ontology_action_atom_effect_texts(&conn, &add_action_id, "added")?,
+        vec!["large backend atom 100"]
+    );
+
+    action_count = table_count(&conn, "label_ontology_actions")?;
+    effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+    let removed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(added.semantics_hash.clone()),
+            remove_applies_when: base_atoms[0..3].to_vec(),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(
+        table_count(&conn, "label_ontology_actions")?,
+        action_count + 1
+    );
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count + 3
+    );
+    let remove_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&removed.semantics_hash],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        ontology_action_atom_effect_count(&conn, &remove_action_id)?,
+        3
+    );
+    assert_eq!(
+        ontology_action_atom_effect_texts(&conn, &remove_action_id, "removed")?,
+        base_atoms[0..3].to_vec()
+    );
+
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    action_count = table_count(&conn, "label_ontology_actions")?;
+    effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+    let no_op = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(removed.semantics_hash.clone()),
+            description: Some("Large backend service ownership".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(no_op.semantics_hash, removed.semantics_hash);
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, action_count);
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count
+    );
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
     Ok(())
 }
 
@@ -3205,17 +3785,18 @@ fn label_semantics_patch_preserves_missing_fields_and_records_reason() -> anyhow
     assert_eq!(patched.positive_examples, vec!["add API handler"]);
     assert_eq!(patched.negative_examples, vec!["adjust spacing"]);
     assert_ne!(patched.semantics_hash, seed.semantics_hash);
-    let atom = patched
-        .atoms
-        .iter()
-        .find(|atom| atom.text == "exposes CLI JSON output")
-        .context("new applies_when atom")?;
-    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
-    assert!(
-        explain
-            .provenance_actions
-            .iter()
-            .any(|action| action.action.reason == "Add a CLI-facing backend boundary.")
+    let conn = connect_file(&temp.path)?;
+    let action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1 AND reason=?2",
+        [
+            patched.semantics_hash.as_str(),
+            "Add a CLI-facing backend boundary.",
+        ],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        ontology_action_atom_effect_texts(&conn, &action_id, "added")?,
+        vec!["exposes CLI JSON output"]
     );
     Ok(())
 }
@@ -3432,30 +4013,39 @@ fn direct_label_bootstrap_records_bootstrap_provenance_for_atoms() -> anyhow::Re
         .find(|atom| atom.kind == "applies_when")
         .context("applies_when atom")?;
 
-    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
-
-    assert!(!explain.legacy_untracked);
-    assert_eq!(explain.provenance_actions.len(), 1);
-    let provenance = &explain.provenance_actions[0];
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, 1);
+    let action = single_root_mutation_action(&conn)?;
     assert_eq!(
-        provenance.action.action_type,
-        LabelOntologyActionType::BootstrapLabel
+        action.action_type,
+        LabelOntologyActionType::BootstrapLabel.to_string()
     );
     assert_eq!(
-        provenance.action.result_label_id.as_deref(),
+        action.result_label_id.as_deref(),
         Some(result.semantics.label_id.as_str())
     );
+    assert_eq!(action.target_label_id, None);
+    assert_eq!(action.result_atom_id, None);
+    assert_eq!(action.result_atom_content_hash, None);
+    assert_eq!(action.created_by, "bootstrapper");
+    assert!(action.canonical_before_hash.is_some());
     assert_eq!(
-        provenance.action.result_atom_id.as_deref(),
-        Some(atom.id.as_str())
+        action.canonical_after_hash.as_deref(),
+        Some(result.semantics.semantics_hash.as_str())
     );
-    assert_eq!(provenance.action.created_by, "bootstrapper");
+    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
     assert_eq!(
-        provenance.action.validation_status,
-        LabelOntologyValidationStatus::Pending
+        change["atom_effect_counts"],
+        json!({"added": 2, "removed": 0})
     );
-    assert!(provenance.action.canonical_before_hash.is_some());
-    assert!(provenance.action.canonical_after_hash.is_some());
+    assert_eq!(ontology_action_atom_effect_count(&conn, &action.id)?, 2);
+    assert_eq!(
+        ontology_action_atom_effect_texts(&conn, &action.id, "added")?,
+        vec![
+            "label: ontology\ndescription: Ontology provenance work".to_owned(),
+            atom.text.clone(),
+        ]
+    );
     Ok(())
 }
 
@@ -3463,11 +4053,7 @@ fn direct_label_bootstrap_records_bootstrap_provenance_for_atoms() -> anyhow::Re
 fn label_atom_explain_hydrates_provenance_signals_and_validation() -> anyhow::Result<()> {
     let temp = TempDb::new("label_atom_explain_hydrates_provenance_signals_and_validation")?;
     let fixture = seed_label_atom_explain_fixture(&temp, "Explain CLI atom provenance")?;
-    validate_label_ontology_action_with_trusted_evidence(
-        &temp.path,
-        "default",
-        passed_explain_validation_input(&fixture),
-    )?;
+    seed_passed_explain_validation_action(&temp, &fixture)?;
 
     let explain = explain_label_atom(&temp.path, "default", &fixture.result_atom_id)?;
 
@@ -3486,7 +4072,7 @@ fn label_atom_explain_hydrates_provenance_signals_and_validation() -> anyhow::Re
     assert!(!explain.legacy_untracked);
     assert_eq!(explain.legacy_reason, None);
     assert_eq!(explain.provenance_actions.len(), 1);
-    assert_eq!(explain.provenance_actions[0].matched_by, "atom_id");
+    assert_eq!(explain.provenance_actions[0].matched_by, "atom_effect");
     assert_eq!(
         explain.provenance_actions[0].action.id,
         fixture.apply_action_id
@@ -3528,9 +4114,50 @@ fn label_atom_explain_resolves_rebuilt_atom_by_content_hash() -> anyhow::Result<
     assert_eq!(atom.id, rebuilt_atom_id);
     assert_eq!(atom.content_hash, fixture.result_atom_content_hash);
     assert_eq!(explain.provenance_actions.len(), 1);
-    assert_eq!(explain.provenance_actions[0].matched_by, "content_hash");
+    assert_eq!(explain.provenance_actions[0].matched_by, "atom_effect");
     assert_eq!(
         explain.provenance_actions[0].action.id,
+        fixture.apply_action_id
+    );
+    Ok(())
+}
+
+#[test]
+fn label_atom_explain_keeps_legacy_result_atom_matches_without_effects() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_atom_explain_keeps_legacy_result_atom_matches_without_effects")?;
+    let fixture = seed_label_atom_explain_fixture(&temp, "Explain legacy atom provenance")?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "DELETE FROM label_ontology_action_atom_effects WHERE action_id=?1",
+        [&fixture.apply_action_id],
+    )?;
+
+    let by_atom_id = explain_label_atom(&temp.path, "default", &fixture.result_atom_id)?;
+
+    assert_eq!(by_atom_id.provenance_actions.len(), 1);
+    assert_eq!(
+        by_atom_id.provenance_actions[0].matched_by,
+        "legacy_result_atom_id"
+    );
+    assert_eq!(
+        by_atom_id.provenance_actions[0].action.id,
+        fixture.apply_action_id
+    );
+
+    let rebuilt_atom_id = "la_legacy_rebuilt_explain_atom";
+    conn.execute(
+        "UPDATE label_atoms SET id=?1 WHERE id=?2",
+        params![rebuilt_atom_id, fixture.result_atom_id],
+    )?;
+    let by_hash = explain_label_atom(&temp.path, "default", &fixture.result_atom_content_hash)?;
+
+    assert_eq!(by_hash.provenance_actions.len(), 1);
+    assert_eq!(
+        by_hash.provenance_actions[0].matched_by,
+        "legacy_result_atom_hash"
+    );
+    assert_eq!(
+        by_hash.provenance_actions[0].action.id,
         fixture.apply_action_id
     );
     Ok(())
@@ -3681,7 +4308,7 @@ fn init_v10_backfills_stable_label_atom_hashes_and_marks_index_dirty() -> anyhow
     assert!(label_atom_board_dirty(&temp.path, "default")?);
     let user_version: i64 =
         connect_file(&temp.path)?.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 17);
+    assert_eq!(user_version, 19);
     Ok(())
 }
 
@@ -3877,7 +4504,15 @@ fn label_semantics_resolves_l_prefixed_label_name_before_id_fallback() -> anyhow
     assert_eq!(semantics.label_name, "l_foo");
     let reread = get_label_semantics(&temp.path, "default", "l_foo")?;
     assert_eq!(reread.label_id, label.id);
-    delete_label_semantics(&temp.path, "default", "l_foo")?;
+    let mut clear_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    clear_options.reason = Some("Clear semantics for id fallback check.".to_owned());
+    clear_label_semantics_with_options(
+        &temp.path,
+        "default",
+        "l_foo",
+        semantics.semantics_hash,
+        clear_options,
+    )?;
     assert!(list_label_atoms(&temp.path, "default")?.is_empty());
     Ok(())
 }
@@ -4015,8 +4650,8 @@ fn doctor_reports_missing_label_semantics_tables_unhealthy() -> anyhow::Result<(
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(17));
-        assert_eq!(report.user_version, 17);
+        assert_eq!(report.migration_version, Some(19));
+        assert_eq!(report.user_version, 19);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())
@@ -4473,20 +5108,12 @@ fn seed_label_atom_explain_fixture(
     })
 }
 
-fn passed_explain_validation_input(
+fn seed_passed_explain_validation_action(
+    temp: &TempDb,
     fixture: &LabelAtomExplainFixture,
-) -> LabelOntologyValidationInput {
-    LabelOntologyValidationInput {
-        actor: LabelOntologyActor {
-            name: "validator".to_owned(),
-            actor_type: "agent".to_owned(),
-            agent_type: Some("local".to_owned()),
-        },
-        parent_action_id: fixture.apply_action_id.clone(),
-        signal_ids: Vec::new(),
-        reason: "Source task now selects the target label after atom rebuild.".to_owned(),
-        validation_status: LabelOntologyValidationStatus::Passed,
-        validation_json: json!({
+) -> anyhow::Result<()> {
+    let validation_json = json!({
+        "manual": {
             "evidence_type": "trusted_automated",
             "embedding_model": "test-embedding-v1",
             "solver_options": {"candidate_limit": 24, "atom_limit": 64},
@@ -4519,9 +5146,53 @@ fn passed_explain_validation_input(
                     }]
                 }
             }]
-        })
-        .to_string(),
-    }
+        },
+        "cases": [{
+            "signal_id": fixture.signal_id,
+            "task_id": fixture.task.id,
+            "after": {
+                "validation_status": "passed",
+                "manual_case_ref": {
+                    "source": "manual.cases",
+                    "index": 0,
+                    "signal_id": fixture.signal_id
+                }
+            },
+            "passed": true
+        }],
+        "summary": {
+            "status": "passed",
+            "case_count": 1,
+            "stale_count": 0,
+            "degraded_count": 0,
+            "incomparable_count": 0
+        }
+    });
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "INSERT INTO label_ontology_actions(
+         id, board_id, parent_action_id, action_type, reason, target_label_id, result_label_id,
+         result_atom_id, result_atom_content_hash, result_proposal_id, canonical_before_hash,
+         canonical_after_hash, change_json, validation_status, validation_json, created_by,
+         created_by_type, agent_type, created_at)
+         VALUES ('loa_explain_validation', ?1, ?2, 'validate',
+         'seeded atom explain validation fixture', ?3, NULL, ?4, ?5, NULL, NULL, NULL,
+         '{}', 'passed', ?6, 'test-fixture', 'agent', 'codex', 123456)",
+        params![
+            fixture.task.board_id,
+            fixture.apply_action_id,
+            fixture.target_label_id,
+            fixture.result_atom_id,
+            fixture.result_atom_content_hash,
+            validation_json.to_string(),
+        ],
+    )?;
+    conn.execute(
+        "INSERT INTO label_ontology_action_signals(board_id, action_id, signal_id, created_at)
+         VALUES (?1, 'loa_explain_validation', ?2, 123456)",
+        params![fixture.task.board_id, fixture.signal_id],
+    )?;
+    Ok(())
 }
 
 fn label_atom_store_dirty(path: &Path) -> anyhow::Result<bool> {

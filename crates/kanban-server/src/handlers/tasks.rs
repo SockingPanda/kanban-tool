@@ -379,23 +379,6 @@ pub(crate) struct LabelOntologyAtomApplyBody {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct LabelOntologyStructurePlanBody {
-    actor: LabelOntologyActorBody,
-    signal_ids: Vec<String>,
-    action_type: kanban_sqlite::LabelOntologyActionType,
-    target_label_ref: String,
-    proposed_label_name: Option<String>,
-    #[serde(default)]
-    related_label_refs: Vec<String>,
-    task_binding_policy: Option<String>,
-    #[serde(default)]
-    validation_policy: JsonBodyField,
-    validation_policy_json: Option<String>,
-    reason: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub(crate) struct LabelOntologyRevertBody {
     actor: LabelOntologyActorBody,
     target_action_id: String,
@@ -440,6 +423,13 @@ pub(crate) struct UpsertLabelSemanticsBody {
     remove_positive_examples: Vec<String>,
     #[serde(default)]
     remove_negative_examples: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DeleteLabelSemanticsQuery {
+    expected_semantics_hash: String,
+    reason: String,
 }
 
 pub(crate) async fn list_tasks(
@@ -642,9 +632,21 @@ pub(crate) async fn upsert_label_semantics(
 pub(crate) async fn delete_label_semantics(
     State(state): State<AppState>,
     Path((board, label_id)): Path<(String, String)>,
+    headers: HeaderMap,
+    query: Result<Query<DeleteLabelSemanticsQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<serde_json::Value>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
     let label_id = require_label_id_path(label_id)?;
-    kanban_sqlite::delete_label_semantics_by_id(state.db_path(), &board, &label_id)?;
+    let mut options =
+        kanban_sqlite::LabelSemanticsMutationOptions::manual_actor(actor(None, &headers, &state));
+    options.reason = Some(query.reason);
+    kanban_sqlite::clear_label_semantics_by_id_with_options(
+        state.db_path(),
+        &board,
+        &label_id,
+        query.expected_semantics_hash,
+        options,
+    )?;
     Ok(Json(Envelope {
         data: json!({ "deleted": true }),
         meta: None,
@@ -1129,32 +1131,6 @@ pub(crate) async fn apply_label_ontology_atom(
     ))
 }
 
-pub(crate) async fn plan_label_ontology_structure_change(
-    State(state): State<AppState>,
-    Path(board): Path<String>,
-    body: Result<Json<LabelOntologyStructurePlanBody>, JsonRejection>,
-) -> Result<
-    (
-        StatusCode,
-        Json<Envelope<kanban_sqlite::LabelOntologyActionRecord>>,
-    ),
-    ApiError,
-> {
-    let Json(body) = body.map_err(extractor_error)?;
-    let action = kanban_sqlite::plan_label_ontology_structure_change(
-        state.db_path(),
-        &board,
-        label_ontology_structure_plan_input(body)?,
-    )?;
-    Ok((
-        StatusCode::CREATED,
-        Json(Envelope {
-            data: action,
-            meta: None,
-        }),
-    ))
-}
-
 pub(crate) async fn revert_label_ontology_mutation(
     State(state): State<AppState>,
     Path(board): Path<String>,
@@ -1475,28 +1451,6 @@ fn label_ontology_atom_apply_input(
         text: body.text,
         reason: body.reason,
     }
-}
-
-fn label_ontology_structure_plan_input(
-    body: LabelOntologyStructurePlanBody,
-) -> Result<kanban_sqlite::LabelOntologyStructurePlanInput, ApiError> {
-    Ok(kanban_sqlite::LabelOntologyStructurePlanInput {
-        actor: label_ontology_actor_input(body.actor),
-        signal_ids: body.signal_ids,
-        action_type: body.action_type,
-        target_label_ref: body.target_label_ref,
-        proposed_label_name: body.proposed_label_name,
-        related_label_refs: body.related_label_refs,
-        task_binding_policy: body.task_binding_policy,
-        validation_policy_json: coalesce_optional_json_body_field(
-            "validation_policy",
-            body.validation_policy,
-            "validation_policy_json",
-            body.validation_policy_json,
-            JsonBodyShape::Object,
-        )?,
-        reason: body.reason,
-    })
 }
 
 fn label_ontology_revert_input(

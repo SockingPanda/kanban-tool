@@ -438,6 +438,7 @@ pub(crate) enum LabelOntologyCommand {
         signal_id: String,
     },
     Review(LabelOntologyReviewArgs),
+    Quality(LabelOntologyQualityArgs),
     Confirm(LabelOntologyActionArgs),
     Reject(LabelOntologyActionArgs),
     Supersede(LabelOntologySupersedeArgs),
@@ -503,6 +504,12 @@ pub(crate) struct LabelOntologyReviewArgs {
     pub(crate) include_all: bool,
     #[arg(long, default_value_t = 100)]
     pub(crate) limit: usize,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelOntologyQualityArgs {
+    #[arg(long, default_value_t = 20)]
+    pub(crate) sample_limit: usize,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]

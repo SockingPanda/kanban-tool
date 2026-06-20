@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use kanban_core::TaskStatus;
 use serde::{Deserialize, Serialize};
@@ -1171,6 +1171,61 @@ pub struct LabelOntologyReviewGroup {
     pub proposal_ids: Vec<String>,
     pub labels: Vec<LabelOntologyReviewLabelRef>,
     pub candidate_atom_variants: Vec<LabelOntologyReviewAtomVariant>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelOntologyQualityOptions {
+    pub sample_limit: usize,
+}
+
+impl Default for LabelOntologyQualityOptions {
+    fn default() -> Self {
+        Self { sample_limit: 20 }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyQualityReport {
+    pub board_id: String,
+    pub denominator: LabelOntologyQualityDenominator,
+    pub disagreement: LabelOntologyQualityDisagreement,
+    pub rates: LabelOntologyQualityRates,
+    pub precision_recall: LabelOntologyPrecisionRecallAvailability,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyQualityDenominator {
+    pub source: String,
+    pub description: String,
+    pub observation_count: i64,
+    pub distinct_task_count: i64,
+    pub agreement_observation_count: i64,
+    pub agreement_task_count: i64,
+    pub degraded_observation_count: i64,
+    pub first_observed_at: Option<i64>,
+    pub latest_observed_at: Option<i64>,
+    pub sample_task_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyQualityDisagreement {
+    pub signal_count: i64,
+    pub distinct_task_count: i64,
+    pub by_kind: BTreeMap<String, i64>,
+    pub by_status: BTreeMap<String, i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyQualityRates {
+    pub disagreement_task_rate: Option<f64>,
+    pub disagreement_task_rate_basis: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelOntologyPrecisionRecallAvailability {
+    pub available: bool,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

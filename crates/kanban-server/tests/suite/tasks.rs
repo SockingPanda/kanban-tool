@@ -2556,6 +2556,7 @@ async fn label_atom_explain_route_returns_legacy_untracked_for_unprovenanced_ato
             ..kanban_sqlite::UpsertLabelSemantics::default()
         },
     )?;
+    kanban_sqlite::connect_file(&db_path)?.execute("DELETE FROM label_ontology_actions", [])?;
     let atom = kanban_sqlite::list_label_atoms(&db_path, "default")?
         .into_iter()
         .find(|atom| atom.kind == "positive_example")

@@ -11,7 +11,8 @@ use super::{
     LabelOntologyReviewLabelRef, LabelOntologyReviewOptions, LabelOntologySignalDetail,
     LabelOntologySignalInput, LabelOntologySignalKind, LabelOntologySignalListOptions,
     LabelOntologySignalRecord, LabelOntologySignalStatus, LabelOntologyStructurePlanInput,
-    LabelOntologySuggestState, LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
+    LabelOntologySuggestState, LabelOntologyTrustedValidationInput,
+    LabelOntologyValidationEffectiveOutcome, LabelOntologyValidationInput,
     LabelOntologyValidationRequirement, LabelOntologyValidationStatus, LabelSemanticProposalRecord,
     LabelSemanticsMutationOptions, LabelSuggestionEvidenceAtom, LabelSuggestionOptions,
     LabelSuggestionResult, TaskOntologySignalSummary, TaskOntologySummary, TaskRecord, all_values,
@@ -1162,6 +1163,11 @@ fn validate_label_ontology_action_inner(
         }
         let context =
             resolve_validation_context(&conn, board, &input.parent_action_id, input.signal_ids)?;
+        ensure_validation_attempt_allowed(
+            &context.parent_action,
+            input.validation_status,
+            evidence_source,
+        )?;
         let validation_json = build_validation_json(
             &conn,
             &context.parent_action,
@@ -1201,7 +1207,10 @@ fn validate_label_ontology_action_inner(
         if matches!(
             input.validation_status,
             LabelOntologyValidationStatus::Passed
-        ) {
+        ) && context.parent_action.validation_requirement
+            == LabelOntologyValidationRequirement::Required
+            && evidence_source == LabelOntologyValidationEvidenceSource::TrustedCollector
+        {
             apply_status_transition(
                 &conn,
                 LabelOntologyActionType::ResolveNoChange,
@@ -1478,7 +1487,12 @@ pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
     let change_json =
         serde_json::to_string(&change).map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
 
-    let action_id = insert_ontology_action(
+    let validation_requirement = if signal_ids.is_empty() {
+        LabelOntologyValidationRequirement::None
+    } else {
+        validation_requirement_for_action(action_type, LabelOntologyValidationStatus::Pending)
+    };
+    let action_id = insert_ontology_action_with_validation_requirement(
         conn,
         board_id,
         InsertOntologyAction {
@@ -1498,6 +1512,7 @@ pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
             validation_json: "{}".to_owned(),
         },
         now,
+        validation_requirement,
     )?;
     link_action_signals(conn, board_id, &action_id, &signal_ids, now)?;
     for atom in added_atoms {
@@ -2240,9 +2255,9 @@ fn ensure_validatable_parent_action(action: &LabelOntologyActionRecord) -> Resul
             "validation parent action must be a canonical mutation action".into(),
         ));
     }
-    if action.validation_status != LabelOntologyValidationStatus::Pending {
+    if action.validation_requirement == LabelOntologyValidationRequirement::None {
         return Err(KanbanError::InvalidInput(
-            "validation parent action must have pending validation_status".into(),
+            "validation parent action does not require validation".into(),
         ));
     }
 
@@ -2287,6 +2302,47 @@ fn ensure_validatable_parent_action(action: &LabelOntologyActionRecord) -> Resul
         ));
     }
     Ok(())
+}
+
+fn ensure_validation_attempt_allowed(
+    parent_action: &LabelOntologyActionRecord,
+    status: LabelOntologyValidationStatus,
+    evidence_source: LabelOntologyValidationEvidenceSource,
+) -> Result<()> {
+    match status {
+        LabelOntologyValidationStatus::Pending => Err(KanbanError::InvalidInput(
+            "validation action cannot record pending status".into(),
+        )),
+        LabelOntologyValidationStatus::NotRequired => Err(KanbanError::InvalidInput(
+            "validation action cannot record not_required as an attempt outcome".into(),
+        )),
+        LabelOntologyValidationStatus::Failed | LabelOntologyValidationStatus::Partial => {
+            match parent_action.validation_requirement {
+                LabelOntologyValidationRequirement::Required
+                | LabelOntologyValidationRequirement::Unsupported => Ok(()),
+                LabelOntologyValidationRequirement::None => Err(KanbanError::InvalidInput(
+                    "validation parent action does not require validation".into(),
+                )),
+            }
+        }
+        LabelOntologyValidationStatus::Passed => match parent_action.validation_requirement {
+            LabelOntologyValidationRequirement::Required => {
+                if evidence_source == LabelOntologyValidationEvidenceSource::TrustedCollector {
+                    Ok(())
+                } else {
+                    Err(KanbanError::InvalidInput(
+                        "passed validation requires trusted evidence collected by the kanban tool; external attestation cannot close ontology signals".into(),
+                    ))
+                }
+            }
+            LabelOntologyValidationRequirement::Unsupported => Err(KanbanError::InvalidInput(
+                "passed validation is unsupported until a typed validation policy exists for this mutation".into(),
+            )),
+            LabelOntologyValidationRequirement::None => Err(KanbanError::InvalidInput(
+                "validation parent action does not require validation".into(),
+            )),
+        },
+    }
 }
 
 fn ensure_passed_validation_evidence(
@@ -4267,6 +4323,7 @@ fn actions_for_signal(
         .into_iter()
         .map(|mut action| {
             action.signal_ids = action_signal_ids(conn, &action.id)?;
+            hydrate_action_validation_effective_outcome(conn, &mut action)?;
             Ok(action)
         })
         .collect()
@@ -4296,6 +4353,7 @@ fn action_by_id_with_links(
         || KanbanError::NotFound(format!("label ontology action {action_id}")),
     )?;
     action.signal_ids = action_signal_ids(conn, &action.id)?;
+    hydrate_action_validation_effective_outcome(conn, &mut action)?;
     Ok(action)
 }
 
@@ -4409,6 +4467,24 @@ fn insert_ontology_action(
     input: InsertOntologyAction,
     now: i64,
 ) -> Result<String> {
+    let validation_requirement =
+        validation_requirement_for_action(input.action_type, input.validation_status);
+    insert_ontology_action_with_validation_requirement(
+        conn,
+        board_id,
+        input,
+        now,
+        validation_requirement,
+    )
+}
+
+fn insert_ontology_action_with_validation_requirement(
+    conn: &Connection,
+    board_id: &str,
+    input: InsertOntologyAction,
+    now: i64,
+    validation_requirement: LabelOntologyValidationRequirement,
+) -> Result<String> {
     let action_id = new_typed_id("loa");
     exec(
         conn,
@@ -4432,8 +4508,7 @@ fn insert_ontology_action(
             input.canonical_before_hash,
             input.canonical_after_hash,
             input.change_json,
-            validation_requirement_for_action(input.action_type, input.validation_status)
-                .to_string(),
+            validation_requirement.to_string(),
             input.validation_status.to_string(),
             input.validation_json,
             input.actor.name,
@@ -5180,15 +5255,99 @@ fn validation_requirement_for_action(
     }
 }
 
+fn action_base_effective_outcome(
+    action_type: LabelOntologyActionType,
+    validation_requirement: LabelOntologyValidationRequirement,
+    validation_status: LabelOntologyValidationStatus,
+) -> LabelOntologyValidationEffectiveOutcome {
+    if action_type == LabelOntologyActionType::Validate {
+        return validation_status_effective_outcome(validation_status);
+    }
+    match validation_requirement {
+        LabelOntologyValidationRequirement::None => {
+            LabelOntologyValidationEffectiveOutcome::NotRequired
+        }
+        LabelOntologyValidationRequirement::Required => {
+            LabelOntologyValidationEffectiveOutcome::Pending
+        }
+        LabelOntologyValidationRequirement::Unsupported => {
+            LabelOntologyValidationEffectiveOutcome::Unsupported
+        }
+    }
+}
+
+fn validation_status_effective_outcome(
+    validation_status: LabelOntologyValidationStatus,
+) -> LabelOntologyValidationEffectiveOutcome {
+    match validation_status {
+        LabelOntologyValidationStatus::NotRequired => {
+            LabelOntologyValidationEffectiveOutcome::NotRequired
+        }
+        LabelOntologyValidationStatus::Pending => LabelOntologyValidationEffectiveOutcome::Pending,
+        LabelOntologyValidationStatus::Passed => LabelOntologyValidationEffectiveOutcome::Passed,
+        LabelOntologyValidationStatus::Failed => LabelOntologyValidationEffectiveOutcome::Failed,
+        LabelOntologyValidationStatus::Partial => LabelOntologyValidationEffectiveOutcome::Partial,
+    }
+}
+
+fn hydrate_action_validation_effective_outcome(
+    conn: &Connection,
+    action: &mut LabelOntologyActionRecord,
+) -> Result<()> {
+    if action.action_type == LabelOntologyActionType::Validate {
+        action.validation_effective_outcome =
+            validation_status_effective_outcome(action.validation_status);
+        action.validation_latest_attempt_id = None;
+        return Ok(());
+    }
+    let Some((attempt_id, attempt_status)) = latest_validation_attempt(conn, action)? else {
+        return Ok(());
+    };
+    action.validation_latest_attempt_id = Some(attempt_id);
+    if action.validation_requirement == LabelOntologyValidationRequirement::Required {
+        action.validation_effective_outcome = validation_status_effective_outcome(attempt_status);
+    }
+    Ok(())
+}
+
+fn latest_validation_attempt(
+    conn: &Connection,
+    action: &LabelOntologyActionRecord,
+) -> Result<Option<(String, LabelOntologyValidationStatus)>> {
+    let row = conn
+        .query_row(
+            "SELECT id, validation_status FROM label_ontology_actions \
+             WHERE board_id=?1 AND parent_action_id=?2 AND action_type='validate' \
+             ORDER BY created_at DESC, id DESC LIMIT 1",
+            params![action.board_id, action.id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(storage)?;
+    row.map(|(id, status)| {
+        Ok((
+            id,
+            status
+                .parse::<LabelOntologyValidationStatus>()
+                .map_err(|err| KanbanError::InvalidInput(err.to_string()))?,
+        ))
+    })
+    .transpose()
+}
+
 fn action_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologyActionRecord> {
     let action_type: String = row.get(3)?;
     let validation_requirement: String = row.get(13)?;
     let validation_status: String = row.get(14)?;
+    let action_type: LabelOntologyActionType = parse_row_enum(&action_type)?;
+    let validation_requirement: LabelOntologyValidationRequirement =
+        parse_row_enum(&validation_requirement)?;
+    let validation_status: LabelOntologyValidationStatus = parse_row_enum(&validation_status)?;
     Ok(LabelOntologyActionRecord {
         id: row.get(0)?,
         board_id: row.get(1)?,
         parent_action_id: row.get(2)?,
-        action_type: parse_row_enum(&action_type)?,
+        action_type,
         reason: row.get(4)?,
         target_label_id: row.get(5)?,
         result_label_id: row.get(6)?,
@@ -5198,8 +5357,14 @@ fn action_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologyActionRecord>
         canonical_before_hash: row.get(10)?,
         canonical_after_hash: row.get(11)?,
         change_json: row.get(12)?,
-        validation_requirement: parse_row_enum(&validation_requirement)?,
-        validation_status: parse_row_enum(&validation_status)?,
+        validation_requirement,
+        validation_status,
+        validation_effective_outcome: action_base_effective_outcome(
+            action_type,
+            validation_requirement,
+            validation_status,
+        ),
+        validation_latest_attempt_id: None,
         validation_json: row.get(15)?,
         created_by: row.get(16)?,
         created_by_type: row.get(17)?,
@@ -5303,6 +5468,8 @@ mod tests {
             change_json: "{}".to_owned(),
             validation_requirement: LabelOntologyValidationRequirement::Required,
             validation_status: LabelOntologyValidationStatus::Pending,
+            validation_effective_outcome: LabelOntologyValidationEffectiveOutcome::Pending,
+            validation_latest_attempt_id: None,
             validation_json: "{}".to_owned(),
             created_by: "tester".to_owned(),
             created_by_type: "agent".to_owned(),

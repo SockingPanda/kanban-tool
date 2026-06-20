@@ -2629,7 +2629,7 @@ fn label_ontology_external_passed_validation_rejects_trusted_update_semantics_pa
     assert!(
         error
             .to_string()
-            .contains("trusted evidence collected by the kanban tool")
+            .contains("passed validation is unsupported")
     );
     let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
     assert_eq!(detail.signal.status, LabelOntologySignalStatus::Confirmed);
@@ -2955,6 +2955,225 @@ fn label_ontology_atom_apply_records_provenance_and_external_validation_diagnost
         repeated_validation
             .to_string()
             .contains("trusted evidence collected by the kanban tool")
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_validation_effective_outcome_reduces_requirement_and_latest_attempt()
+-> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_validation_effective_outcome_reduces_requirement_and_latest")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Validate ontology effective outcome reducer",
+        "cli-validation-effective-outcome",
+    )?;
+
+    let detail = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    let confirm_action = detail
+        .actions
+        .iter()
+        .find(|action| action.action_type == LabelOntologyActionType::Confirm)
+        .context("confirm action")?;
+    assert_eq!(
+        confirm_action.validation_effective_outcome,
+        LabelOntologyValidationEffectiveOutcome::NotRequired
+    );
+    assert_eq!(confirm_action.validation_latest_attempt_id, None);
+    let required_parent = detail
+        .actions
+        .iter()
+        .find(|action| action.id == fixture.apply_action_id)
+        .context("required apply action")?;
+    assert_eq!(
+        required_parent.validation_effective_outcome,
+        LabelOntologyValidationEffectiveOutcome::Pending
+    );
+    assert_eq!(required_parent.validation_latest_attempt_id, None);
+
+    let failed = validate_label_ontology_action(
+        &temp.path,
+        "default",
+        failed_validation_input(&fixture, "External failed attempt should be latest failed."),
+    )?;
+    let detail = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    let required_parent = detail
+        .actions
+        .iter()
+        .find(|action| action.id == fixture.apply_action_id)
+        .context("required apply action after failed attempt")?;
+    assert_eq!(
+        required_parent.validation_effective_outcome,
+        LabelOntologyValidationEffectiveOutcome::Failed
+    );
+    assert_eq!(
+        required_parent.validation_latest_attempt_id.as_deref(),
+        Some(failed.id.as_str())
+    );
+    assert_eq!(detail.signal.status, LabelOntologySignalStatus::Confirmed);
+
+    let mut partial_input = failed_validation_input(
+        &fixture,
+        "External partial attempt should become latest partial.",
+    );
+    partial_input.validation_status = LabelOntologyValidationStatus::Partial;
+    let partial = validate_label_ontology_action(&temp.path, "default", partial_input)?;
+    let detail = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    let required_parent = detail
+        .actions
+        .iter()
+        .find(|action| action.id == fixture.apply_action_id)
+        .context("required apply action after partial attempt")?;
+    assert_eq!(
+        required_parent.validation_effective_outcome,
+        LabelOntologyValidationEffectiveOutcome::Partial
+    );
+    assert_eq!(
+        required_parent.validation_latest_attempt_id.as_deref(),
+        Some(partial.id.as_str())
+    );
+    assert_eq!(detail.signal.status, LabelOntologySignalStatus::Confirmed);
+
+    let passed_id = seed_validation_action_at(
+        &temp,
+        "loa_effective_passed_latest",
+        &fixture.task.board_id,
+        &fixture.apply_action_id,
+        std::slice::from_ref(&fixture.signal_id),
+        LabelOntologyValidationStatus::Passed,
+        json!({
+            "manual": typed_positive_fixture_json(&fixture),
+            "cases": [{
+                "signal_id": &fixture.signal_id,
+                "passed": true
+            }],
+            "summary": {
+                "status": "passed",
+                "case_count": 1
+            }
+        }),
+        9_999_999_999_999,
+    )?;
+    let detail = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    let required_parent = detail
+        .actions
+        .iter()
+        .find(|action| action.id == fixture.apply_action_id)
+        .context("required apply action after passed attempt")?;
+    assert_eq!(
+        required_parent.validation_effective_outcome,
+        LabelOntologyValidationEffectiveOutcome::Passed
+    );
+    assert_eq!(
+        required_parent.validation_latest_attempt_id.as_deref(),
+        Some(passed_id.as_str())
+    );
+
+    let update_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Record unsupported validation outcome"),
+    )?;
+    let update_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &update_task.id,
+        sample_record_input(vec![review_empty_target_signal(
+            "cli-validation-unsupported-outcome",
+            "cli",
+            LabelOntologySignalKind::BoundaryIssue,
+            LabelOntologyProposedAction::UpdateSemantics,
+            0.44,
+        )]),
+    )?;
+    let update_signal_id = update_observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![update_signal_id.clone()],
+            "Confirmed update semantics signal.",
+        ),
+    )?;
+    let before_semantics = get_label_semantics(&temp.path, "default", "cli")?;
+    kanban_sqlite::upsert_label_semantics_with_options(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            expected_semantics_hash: Some(before_semantics.semantics_hash),
+            description: Some("Command-line interface and CLI JSON behavior".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+        kanban_sqlite::LabelSemanticsMutationOptions {
+            actor: reviewer_actor(),
+            reason: Some("Clarify CLI semantics from a confirmed source signal.".to_owned()),
+            source_signal_ids: vec![update_signal_id.clone()],
+            context_json: None,
+        },
+    )?;
+    let detail = get_label_ontology_signal(&temp.path, &update_signal_id)?;
+    let unsupported_parent = detail
+        .actions
+        .iter()
+        .find(|action| action.action_type == LabelOntologyActionType::UpdateSemantics)
+        .context("unsupported update_semantics action")?;
+    assert_eq!(
+        unsupported_parent.validation_effective_outcome,
+        LabelOntologyValidationEffectiveOutcome::Unsupported
+    );
+    assert_eq!(unsupported_parent.validation_latest_attempt_id, None);
+
+    let unsupported_partial = validate_label_ontology_action(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: validation_actor(),
+            parent_action_id: unsupported_parent.id.clone(),
+            signal_ids: Vec::new(),
+            reason: "External partial diagnostics are allowed for unsupported policies.".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Partial,
+            validation_json: json!({"cases": []}).to_string(),
+        },
+    )?;
+    let detail = get_label_ontology_signal(&temp.path, &update_signal_id)?;
+    let unsupported_parent = detail
+        .actions
+        .iter()
+        .find(|action| action.action_type == LabelOntologyActionType::UpdateSemantics)
+        .context("unsupported update_semantics action after partial attempt")?;
+    assert_eq!(
+        unsupported_parent.validation_effective_outcome,
+        LabelOntologyValidationEffectiveOutcome::Unsupported
+    );
+    assert_eq!(
+        unsupported_parent.validation_latest_attempt_id.as_deref(),
+        Some(unsupported_partial.id.as_str())
+    );
+    assert_eq!(detail.signal.status, LabelOntologySignalStatus::Confirmed);
+
+    let unsupported_passed = result_err(validate_label_ontology_action(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: validation_actor(),
+            parent_action_id: unsupported_parent.id.clone(),
+            signal_ids: Vec::new(),
+            reason: "Unsupported policy cannot be passed.".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            validation_json: typed_positive_fixture_json(&fixture).to_string(),
+        },
+    ))?;
+    assert!(
+        unsupported_passed
+            .to_string()
+            .contains("passed validation is unsupported"),
+        "{unsupported_passed}"
     );
 
     Ok(())
@@ -4189,6 +4408,34 @@ fn label_ontology_jsonl_export_import_round_trips_ledger_and_self_refs() -> anyh
             (fixture.apply_action_id.clone(), "required".to_owned()),
             (fixture.validation_action_id.clone(), "none".to_owned()),
         ]
+    );
+    let source_detail = get_label_ontology_signal(&source.path, &fixture.source_signal_id)?;
+    let source_apply = source_detail
+        .actions
+        .iter()
+        .find(|action| action.id == fixture.apply_action_id)
+        .context("source apply action")?;
+    assert_eq!(
+        source_apply.validation_effective_outcome,
+        LabelOntologyValidationEffectiveOutcome::Passed
+    );
+    assert_eq!(
+        source_apply.validation_latest_attempt_id.as_deref(),
+        Some(fixture.validation_action_id.as_str())
+    );
+    let imported_detail = get_label_ontology_signal(&target.path, &fixture.source_signal_id)?;
+    let imported_apply = imported_detail
+        .actions
+        .iter()
+        .find(|action| action.id == fixture.apply_action_id)
+        .context("imported apply action")?;
+    assert_eq!(
+        imported_apply.validation_effective_outcome,
+        source_apply.validation_effective_outcome
+    );
+    assert_eq!(
+        imported_apply.validation_latest_attempt_id,
+        source_apply.validation_latest_attempt_id
     );
 
     let observation_candidates: String = conn.query_row(
@@ -6273,6 +6520,28 @@ fn seed_validation_action(
     status: LabelOntologyValidationStatus,
     validation_json: serde_json::Value,
 ) -> anyhow::Result<String> {
+    seed_validation_action_at(
+        temp,
+        id,
+        board_id,
+        parent_action_id,
+        signal_ids,
+        status,
+        validation_json,
+        123456,
+    )
+}
+
+fn seed_validation_action_at(
+    temp: &TempDb,
+    id: &str,
+    board_id: &str,
+    parent_action_id: &str,
+    signal_ids: &[String],
+    status: LabelOntologyValidationStatus,
+    validation_json: serde_json::Value,
+    created_at: i64,
+) -> anyhow::Result<String> {
     let conn = connect_file(&temp.path)?;
     conn.execute(
         "INSERT INTO label_ontology_actions(
@@ -6282,20 +6551,21 @@ fn seed_validation_action(
          created_by_type, agent_type, created_at)
          VALUES (?1, ?2, ?3, 'validate', 'seeded validation fixture',
          NULL, NULL, NULL, NULL, NULL, NULL, NULL, '{}', ?4, ?5, 'test-fixture',
-         'agent', 'codex', 123456)",
+         'agent', 'codex', ?6)",
         params![
             id,
             board_id,
             parent_action_id,
             status.to_string(),
             validation_json.to_string(),
+            created_at,
         ],
     )?;
     for signal_id in signal_ids {
         conn.execute(
             "INSERT INTO label_ontology_action_signals(board_id, action_id, signal_id, created_at)
-             VALUES (?1, ?2, ?3, 123456)",
-            params![board_id, id, signal_id],
+             VALUES (?1, ?2, ?3, ?4)",
+            params![board_id, id, signal_id, created_at],
         )?;
     }
     Ok(id.to_owned())
@@ -7151,11 +7421,11 @@ fn seed_pending_mutation_action_without_evidence(
         "INSERT INTO label_ontology_actions(
          id, board_id, parent_action_id, action_type, reason, target_label_id, result_label_id,
          result_atom_id, result_atom_content_hash, result_proposal_id, canonical_before_hash,
-         canonical_after_hash, change_json, validation_status, validation_json, created_by,
-         created_by_type, agent_type, created_at)
+         canonical_after_hash, change_json, validation_requirement, validation_status,
+         validation_json, created_by, created_by_type, agent_type, created_at)
          VALUES (?1, ?2, NULL, 'add_positive_atom', 'missing canonical evidence',
-         NULL, NULL, NULL, NULL, NULL, NULL, NULL, '{}', 'pending', '{}', 'tester', 'user',
-         NULL, 1)",
+         NULL, NULL, NULL, NULL, NULL, NULL, NULL, '{}', 'required', 'pending', '{}',
+         'tester', 'user', NULL, 1)",
         params![id, board_id],
     )?;
     conn.execute(

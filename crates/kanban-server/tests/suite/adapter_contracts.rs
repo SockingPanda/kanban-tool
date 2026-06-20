@@ -93,11 +93,9 @@ async fn api_adapter_contract_commits_to_shared_canonical_state() -> anyhow::Res
         .iter()
         .find(|atom| atom.kind == "applies_when")
         .context("applies_when atom")?;
-    let atom_explain = kanban_sqlite::explain_label_atom(&db_path, "default", &applies_atom.id)?;
-    assert!(!atom_explain.legacy_untracked);
     assert!(
-        !atom_explain.provenance_actions.is_empty(),
-        "new semantics atoms must have ledger provenance"
+        ontology_atom_effect_count(&db_path, &applies_atom.content_hash, "added")? > 0,
+        "new semantics atoms must have ledger effect provenance"
     );
 
     let (status, observation_json) = post_json(
@@ -340,4 +338,18 @@ fn canonical_counts(path: &Path) -> anyhow::Result<CanonicalCounts> {
         label_ontology_actions: count("label_ontology_actions")?,
         task_runs: count("task_runs")?,
     })
+}
+
+fn ontology_atom_effect_count(
+    path: &Path,
+    atom_content_hash: &str,
+    effect: &str,
+) -> anyhow::Result<i64> {
+    let conn = kanban_sqlite::connect_file(path)?;
+    Ok(conn.query_row(
+        "SELECT COUNT(*) FROM label_ontology_action_atom_effects \
+         WHERE atom_content_hash=?1 AND effect=?2",
+        (atom_content_hash, effect),
+        |row| row.get(0),
+    )?)
 }

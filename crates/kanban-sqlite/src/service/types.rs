@@ -988,6 +988,20 @@ pub struct LabelOntologyActionRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyActionAtomEffectRecord {
+    pub board_id: String,
+    pub action_id: String,
+    pub label_id_snapshot: String,
+    pub atom_id_snapshot: String,
+    pub atom_content_hash: String,
+    pub polarity: String,
+    pub kind: String,
+    pub text: String,
+    pub effect: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LabelOntologyActionInput {
     pub actor: LabelOntologyActor,
     pub action_type: LabelOntologyActionType,

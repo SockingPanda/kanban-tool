@@ -2826,6 +2826,14 @@ fn label_ontology_atom_apply_records_provenance_and_external_validation_diagnost
             .len(),
         16
     );
+    assert_eq!(
+        ontology_action_atom_effect_count(&temp.path, &apply_action.id, Some("added"))?,
+        1
+    );
+    assert_eq!(
+        ontology_action_atom_effect_count(&temp.path, &apply_action.id, Some("removed"))?,
+        0
+    );
     let semantics = get_label_semantics(&temp.path, "default", "cli")?;
     assert!(
         semantics
@@ -3047,6 +3055,15 @@ fn label_ontology_revert_positive_atom_restores_before_hash_and_records_action()
         apply_action.canonical_before_hash
     );
     assert_eq!(revert_action.signal_ids, vec![signal_id.clone()]);
+    assert_eq!(
+        ontology_action_atom_effect_hashes(&temp.path, &revert_action.id, "removed")?,
+        vec![
+            apply_action
+                .result_atom_content_hash
+                .clone()
+                .context("applied atom hash")?
+        ]
+    );
     let change: serde_json::Value = serde_json::from_str(&revert_action.change_json)?;
     assert_eq!(change["reverted_action_id"], apply_action.id);
     assert_eq!(change["reverted_action_type"], "add_positive_atom");
@@ -3295,6 +3312,15 @@ fn label_ontology_revert_negative_atom_restores_before_hash_and_explain_chain() 
         apply_action.canonical_before_hash
     );
     assert_eq!(revert_action.signal_ids, vec![signal_id.clone()]);
+    assert_eq!(
+        ontology_action_atom_effect_hashes(&temp.path, &revert_action.id, "removed")?,
+        vec![
+            apply_action
+                .result_atom_content_hash
+                .clone()
+                .context("negative atom hash")?
+        ]
+    );
     assert!(label_atom_board_dirty(&temp.path, "default")?);
     let restored_semantics = get_label_semantics(&temp.path, "default", "cli")?;
     assert_semantics_content_eq(&restored_semantics, &before_semantics);
@@ -3444,6 +3470,10 @@ fn label_ontology_revert_update_semantics_restores_before_hash_and_keeps_atom_hi
     assert_eq!(
         revert_action.canonical_after_hash,
         update_action.canonical_before_hash
+    );
+    assert_eq!(
+        ontology_action_atom_effect_count(&temp.path, &revert_action.id, None)?,
+        0
     );
     assert_semantics_content_eq(
         &get_label_semantics(&temp.path, "default", "cli")?,
@@ -3654,6 +3684,10 @@ fn label_ontology_apply_existing_positive_atom_records_provenance_only_action() 
         semantics_before
     );
     assert_eq!(add_atom_action_count(&temp.path)?, add_action_count_before);
+    assert_eq!(
+        ontology_action_atom_effect_count(&temp.path, &action.id, None)?,
+        0
+    );
     assert!(!label_atom_store_dirty(&temp.path)?);
     assert!(!label_atom_board_dirty(&temp.path, "default")?);
 
@@ -3704,6 +3738,10 @@ fn label_ontology_apply_existing_negative_atom_records_provenance_only_action() 
     assert_existing_atom_adoption_action(&action, &fixture, "add_negative_atom")?;
     assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
     assert_eq!(add_atom_action_count(&temp.path)?, add_action_count_before);
+    assert_eq!(
+        ontology_action_atom_effect_count(&temp.path, &action.id, None)?,
+        0
+    );
     assert!(!label_atom_store_dirty(&temp.path)?);
     assert!(!label_atom_board_dirty(&temp.path, "default")?);
 
@@ -3759,6 +3797,14 @@ fn label_ontology_apply_existing_atom_repeatedly_keeps_canonical_state_clean() -
         semantics_before
     );
     assert_eq!(add_atom_action_count(&temp.path)?, add_action_count_before);
+    assert_eq!(
+        ontology_action_atom_effect_count(&temp.path, &first_action.id, None)?,
+        0
+    );
+    assert_eq!(
+        ontology_action_atom_effect_count(&temp.path, &second_action.id, None)?,
+        0
+    );
     assert!(!label_atom_store_dirty(&temp.path)?);
     assert!(!label_atom_board_dirty(&temp.path, "default")?);
 
@@ -5000,6 +5046,14 @@ fn label_ontology_proposal_accept_records_bootstrap_provenance() -> anyhow::Resu
     );
     assert!(bootstrap.canonical_after_hash.as_deref().is_some());
     assert!(bootstrap.change_json.contains("ontology-ledger"));
+    assert_eq!(
+        bootstrap_action_count_for_proposal(&temp.path, &proposal_id)?,
+        1
+    );
+    assert_eq!(
+        ontology_action_atom_effect_count(&temp.path, &bootstrap.id, Some("added"))?,
+        3
+    );
     let semantics = get_label_semantics(&temp.path, "default", result_label_id)?;
     assert_eq!(semantics.label_name, "ontology-ledger");
     let atom = semantics
@@ -5007,23 +5061,15 @@ fn label_ontology_proposal_accept_records_bootstrap_provenance() -> anyhow::Resu
         .iter()
         .find(|atom| atom.kind == "applies_when")
         .context("applies_when atom")?;
-    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
-    assert!(!explain.legacy_untracked);
-    let atom_provenance = explain
-        .provenance_actions
+    let effect_hashes = ontology_action_atom_effect_hashes(&temp.path, &bootstrap.id, "added")?;
+    let mut expected_hashes = semantics
+        .atoms
         .iter()
-        .find(|action| {
-            action.action.action_type == LabelOntologyActionType::BootstrapLabel
-                && action.action.result_atom_id.as_deref() == Some(atom.id.as_str())
-                && action.action.result_proposal_id.as_deref() == Some(proposal_id.as_str())
-        })
-        .context("proposal atom provenance action")?;
-    assert_eq!(atom_provenance.action.signal_ids, vec![signal_id.clone()]);
-    assert_eq!(atom_provenance.action.created_by, "ontology-agent");
-    assert_eq!(
-        atom_provenance.action.parent_action_id.as_deref(),
-        Some(bootstrap.id.as_str())
-    );
+        .map(|atom| atom.content_hash.clone())
+        .collect::<Vec<_>>();
+    expected_hashes.sort();
+    assert_eq!(effect_hashes, expected_hashes);
+    assert!(effect_hashes.contains(&atom.content_hash));
 
     Ok(())
 }
@@ -5592,20 +5638,6 @@ fn seed_portable_ontology_ledger(temp: &TempDb) -> anyhow::Result<PortableOntolo
         &result_atom_id,
         &result_atom_hash,
     );
-    connect_file(&temp.path)?.execute(
-        "INSERT INTO label_ontology_action_atom_effects(
-         board_id, action_id, label_id_snapshot, atom_id_snapshot, atom_content_hash,
-         polarity, kind, text, effect, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 'positive', 'applies_when',
-         'extends CLI subcommands, arguments, help output, or JSON behavior', 'added', 123455)",
-        params![
-            task.board_id,
-            apply_action.id,
-            label.id,
-            result_atom_id,
-            result_atom_hash
-        ],
-    )?;
     let validation_action_id = seed_validation_action(
         temp,
         "loa_portable_validation",
@@ -6350,6 +6382,53 @@ fn add_atom_action_count(path: &Path) -> anyhow::Result<i64> {
         [],
         |row| row.get(0),
     )?)
+}
+
+fn bootstrap_action_count_for_proposal(path: &Path, proposal_id: &str) -> anyhow::Result<i64> {
+    Ok(connect_file(path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_actions \
+         WHERE action_type='bootstrap_label' AND result_proposal_id=?1",
+        [proposal_id],
+        |row| row.get(0),
+    )?)
+}
+
+fn ontology_action_atom_effect_count(
+    path: &Path,
+    action_id: &str,
+    effect: Option<&str>,
+) -> anyhow::Result<i64> {
+    let conn = connect_file(path)?;
+    let count = if let Some(effect) = effect {
+        conn.query_row(
+            "SELECT COUNT(*) FROM label_ontology_action_atom_effects \
+             WHERE action_id=?1 AND effect=?2",
+            params![action_id, effect],
+            |row| row.get(0),
+        )?
+    } else {
+        conn.query_row(
+            "SELECT COUNT(*) FROM label_ontology_action_atom_effects WHERE action_id=?1",
+            [action_id],
+            |row| row.get(0),
+        )?
+    };
+    Ok(count)
+}
+
+fn ontology_action_atom_effect_hashes(
+    path: &Path,
+    action_id: &str,
+    effect: &str,
+) -> anyhow::Result<Vec<String>> {
+    connect_file(path)?
+        .prepare(
+            "SELECT atom_content_hash FROM label_ontology_action_atom_effects \
+             WHERE action_id=?1 AND effect=?2 ORDER BY created_at ASC, atom_content_hash ASC",
+        )?
+        .query_map(params![action_id, effect], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(Into::into)
 }
 
 fn assert_semantics_content_eq(

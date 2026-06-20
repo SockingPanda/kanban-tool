@@ -1,27 +1,34 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
-import { resolveBoardTaskRequest } from "./useBoardTasks"
+import type { KanbanApi, SearchTasksResult, Task, TaskPageResult, TaskStatus } from "@/lib/api"
+
+import { BOARD_COLUMN_TASK_LIMIT, loadBoardTasks, resolveBoardTaskRequest } from "./useBoardTasks"
+
+function task(id: string, status: TaskStatus) {
+  return { id, status } as Task
+}
 
 describe("resolveBoardTaskRequest", () => {
-  it("keeps board queries on the full first-page board snapshot", () => {
+  it("keeps board queries on a per-visible-status first page", () => {
     const request = resolveBoardTaskRequest({
       mode: "board",
+      boardStatuses: ["triage", "blocked", "triage"],
       search: "  blocked parent  ",
       statusFilter: "ready",
       priorityFilters: [0, 2],
       sort: "priority",
       showArchived: true,
-      limit: 25,
+      limit: BOARD_COLUMN_TASK_LIMIT,
       offset: 75,
     })
 
     expect(request).toMatchObject({
       search: "blocked parent",
       statusFilter: "all",
-      statuses: [],
+      statuses: ["triage", "blocked"],
       priorityFilters: [],
       sort: "-updated_at",
-      limit: 25,
+      limit: 50,
       offset: 0,
     })
   })
@@ -46,6 +53,85 @@ describe("resolveBoardTaskRequest", () => {
       sort: "priority",
       limit: 50,
       offset: 100,
+    })
+  })
+})
+
+describe("loadBoardTasks", () => {
+  it("loads the first page independently for each visible board status", async () => {
+    const listTasks = vi.fn(async (options: { statuses?: TaskStatus[]; limit?: number; offset?: number }) => {
+      const status = options.statuses?.[0] ?? "triage"
+      return {
+        tasks: [task(`task-${status}`, status)],
+        page: { limit: options.limit ?? 0, offset: options.offset ?? 0, total: 60 },
+      } satisfies TaskPageResult
+    })
+    const api = { board: "default", listTasks } as unknown as KanbanApi
+    const request = resolveBoardTaskRequest({
+      mode: "board",
+      boardStatuses: ["triage", "blocked"],
+      search: "",
+      statusFilter: "all",
+      showArchived: false,
+      limit: BOARD_COLUMN_TASK_LIMIT,
+      offset: 0,
+    })
+
+    const result = await loadBoardTasks(api, request)
+
+    expect(listTasks).toHaveBeenCalledTimes(2)
+    expect(listTasks).toHaveBeenNthCalledWith(1, expect.objectContaining({ statuses: ["triage"], limit: 50, offset: 0 }))
+    expect(listTasks).toHaveBeenNthCalledWith(2, expect.objectContaining({ statuses: ["blocked"], limit: 50, offset: 0 }))
+    expect(result.tasks.map((entry) => entry.status)).toEqual(["triage", "blocked"])
+    expect(result.page).toEqual({ limit: 100, offset: 0, total: 120 })
+    expect(result.searchMeta).toBeNull()
+  })
+
+  it("searches each visible board status and merges search metadata", async () => {
+    const searchTasks = vi.fn(async (options: { statuses?: TaskStatus[]; limit?: number; offset?: number }) => {
+      const status = options.statuses?.[0] ?? "triage"
+      return {
+        tasks: [task(`search-${status}`, status)],
+        page: { limit: options.limit ?? 0, offset: options.offset ?? 0, total: 2 },
+        searchMeta: {
+          backend: status === "triage" ? "tantivy" : "sqlite",
+          stale: status === "blocked",
+          index_version: "v1",
+          last_event_id: status === "triage" ? 10 : 12,
+          index_lag_events: status === "triage" ? 0 : 3,
+        },
+      } satisfies SearchTasksResult
+    })
+    const api = { board: "default", searchTasks } as unknown as KanbanApi
+    const request = resolveBoardTaskRequest({
+      mode: "board",
+      boardStatuses: ["triage", "blocked"],
+      search: "blocked parent",
+      statusFilter: "all",
+      showArchived: false,
+      limit: BOARD_COLUMN_TASK_LIMIT,
+      offset: 0,
+    })
+
+    const result = await loadBoardTasks(api, request)
+
+    expect(searchTasks).toHaveBeenCalledTimes(2)
+    expect(searchTasks).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ query: "blocked parent", statuses: ["triage"], limit: 50, offset: 0 }),
+    )
+    expect(searchTasks).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ query: "blocked parent", statuses: ["blocked"], limit: 50, offset: 0 }),
+    )
+    expect(result.tasks.map((entry) => entry.status)).toEqual(["triage", "blocked"])
+    expect(result.page).toEqual({ limit: 100, offset: 0, total: 4 })
+    expect(result.searchMeta).toEqual({
+      backend: "mixed",
+      stale: true,
+      index_version: "v1",
+      last_event_id: 12,
+      index_lag_events: 3,
     })
   })
 })

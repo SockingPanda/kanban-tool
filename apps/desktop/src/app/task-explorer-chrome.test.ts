@@ -61,12 +61,13 @@ describe("task explorer chrome", () => {
     expect(content).toContain("Next")
   })
 
-  it("keeps global search out of List reset and Board pagination sizing", () => {
+  it("keeps global search out of List reset while sizing Board by column status", () => {
     const content = source("App.tsx")
     const taskQuery = content.slice(content.indexOf("const tasksQuery = useBoardTasks"), content.indexOf("const tasks = tasksQuery.data"))
     const resetListFilters = content.slice(content.indexOf("onResetListFilters={() =>"), content.indexOf("onShowArchivedChange"))
 
-    expect(taskQuery).toContain('limit: view === "list" ? rowsPerPage : DEFAULT_PAGE_SIZE')
+    expect(taskQuery).toContain('boardStatuses: view === "list" ? [] : visibleColumns.map((column) => column.status)')
+    expect(taskQuery).toContain('limit: view === "list" ? rowsPerPage : BOARD_COLUMN_TASK_LIMIT')
     expect(taskQuery).toContain('offset: view === "list" ? pageOffset : 0')
     expect(resetListFilters).not.toContain("setSearch")
     expect(resetListFilters).toContain('setStatusFilter("all")')

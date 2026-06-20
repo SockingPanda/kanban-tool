@@ -250,15 +250,19 @@ SQLite service 不知道 credentials、HTTP transport、prompt 模板或外部 S
 
 Label 系统有六个角色，但不是六个严格独立的存储层：
 
-1. `labels` / `task_labels`：canonical label identity 与 task 当前绑定事实。
-2. `label_semantics` / `label_atoms`：canonical ontology truth。
+1. `labels` / `task_labels`：canonical label identity 与 task 当前绑定事实；base identity
+   CRUD 是 vocabulary registry，不写 ontology ledger。
+2. `label_semantics`：canonical ontology semantics；`label_atoms` 是从 semantics 与 label
+   name 展开的 SQLite materialized projection。
 3. `kb_label_atoms` / `label_atom_index_boards`：可重建 label atom derived retrieval。
 4. `label suggest`：基于当前 task、atoms 和 vector evidence 的计算/诊断，不是持久 truth。
 5. `label_semantic_proposals`：候选新 label 的 lifecycle 记录，accept 前不改变当前 task-label truth。
 6. `label_ontology_*` ledger：observation、signal、action、validation provenance。
 
 Proposal 与 ledger 是 SQLite canonical records，因为它们需要审计和可查询历史；但它们不替代
-`task_labels` 的当前绑定事实，也不替代 `label_semantics` / `label_atoms` 的 ontology truth。
+`task_labels` 的当前绑定事实，也不替代 `label_semantics` 的 ontology semantics。
+Ledger 覆盖 semantics/atom mutation provenance；`labels` identity create/delete 位于
+ledger 之外。
 正式文档使用 `canonical truth`、`derived retrieval`、`proposal workflow` 和
 `ontology provenance` 这些边界词；不要把未定义的内部简称写成架构术语。
 
@@ -273,7 +277,8 @@ review`、`label atom explain` 和 validation history。
 ontology graph store、ontology RDF schema 或后台 projection。若后续确实需要，它必须复用
 Knowledge Substrate 的派生层边界：
 
-- SQLite `labels` / `label_semantics` / `label_atoms` / `label_ontology_*` 仍是 truth。
+- SQLite `labels` / `label_semantics` / `label_atoms` / `label_ontology_*` 仍是事实来源；
+  其中 `label_atoms` 是 materialized projection，不是独立 semantic truth。
 - Graph projection 只能从 SQLite 快照和 outbox 重建，可删除重建。
 - Graph API 只能查询 relation/provenance，不提供 canonical ontology mutation path。
 - Graph 故障、dirty 或删除不会改变 task labels、semantics、atoms、signals 或 actions。
@@ -503,22 +508,19 @@ CLI、HTTP、desktop 和 dispatcher 通过 `kanban-sqlite::service` resolve boar
 再在同一 transaction 中写 canonical SQLite truth。Derived stores 只消费 SQLite/outbox
 投影，不拥有 canonical write 权限。
 
-关键关系表已经开始使用包含 `board_id` 的 composite FK。`task_labels`、
-`task_dependencies`、`task_runs` 在 SQLite 层直接保证 row board 与 referenced
-task/label board 一致；旧数据库升级到该 schema 前会先运行 preflight，若发现 existing
-cross-board rows，会报告具体表和 row key 并拒绝 migration。
-
-仍需注意：`task_comments`、`task_events`、`task_attachments` 等历史/审计表使用独立 FK
-保证 row board、task 或 run 各自存在，但还不能仅靠 SQLite constraint 证明
-`row.board_id == referenced.board_id`。因此：
+关键关系表已经使用包含 `board_id` 的 composite FK 或 trigger。`task_labels`、
+`task_dependencies`、`task_runs`、`task_comments`、`task_attachments` 在 SQLite 层直接
+保证 row board 与 referenced task/label/run board 一致；`task_events` 保留 nullable
+task/run refs 与 `ON DELETE SET NULL` 历史语义，通过 INSERT/UPDATE triggers 校验非空
+refs 的 board scope。Ontology action-signal 使用 board-scoped composite FK；nullable
+ontology refs、parent/supersede links、proposal resolved label 等用 triggers 保护；historical
+atom refs 保持 soft ref。
 
 - service guard 是普通 CLI/API/Desktop/dispatcher 写入的主防线；
-- `kanban doctor` 是现有 DB 的只读巡检层，发现 cross-board relationship rows 时让
-  `ok=false`；
-- JSONL import 在 replace transaction 提交前运行同类 consistency gate，失败会回滚整个
-  import；
-- 如要继续 hardening 历史/审计表，需要针对 nullable task/run references 与
-  `ON DELETE SET NULL` 语义单独设计 table rebuild migration。
+- `kanban doctor` 是现有 DB 的只读巡检层，发现 cross-board relationship rows 或
+  `PRAGMA foreign_key_check` violation 时让 `ok=false`；
+- JSONL import 在 replace transaction 提交前运行同类 consistency/FK gate，失败会回滚整个
+  import。
 
 ---
 

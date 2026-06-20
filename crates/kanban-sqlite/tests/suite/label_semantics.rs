@@ -3474,6 +3474,7 @@ fn label_semantics_source_signal_update_semantics_allows_true_hash_change() -> a
             },
             reason: Some("Clarify CLI semantics from confirmed source signal.".to_owned()),
             source_signal_ids: vec![signal_id],
+            context_json: None,
         },
     )?;
 
@@ -3568,6 +3569,7 @@ fn label_semantics_source_signal_atom_effect_contract_rolls_back_mixed_batch() -
                 "Mixed batch should roll back when any source signal is incompatible.".to_owned(),
             ),
             source_signal_ids: vec![positive_signal_id.clone(), negative_signal_id],
+            context_json: None,
         },
     ))?;
     assert!(
@@ -3605,6 +3607,7 @@ fn label_semantics_source_signal_atom_effect_contract_rolls_back_mixed_batch() -
             },
             reason: Some("Positive atom source signal matches the actual added effect.".to_owned()),
             source_signal_ids: vec![positive_signal_id],
+            context_json: None,
         },
     )?;
     assert!(

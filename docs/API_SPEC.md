@@ -281,7 +281,7 @@ Notes：
 - 若存在未完成 dependencies（parent 不是 `done` 或 `archived`），不能创建为 `ready`。
 - Task 响应会暴露派生 dependency 字段：`dependency_blocked` 和 `unfinished_parent_count`。它们是查询元数据，不是可写 task 字段。
 - `priority` 是整数等级 `0..3`：`0` = P0 incident/blocker/must-handle-immediately，`1` = P1 近期重点，`2` = P2 重要后续，`3` = P3 普通 backlog/低优先级/默认。创建时会拒绝非法值。
-- `labels` 可选。名称会先 trim；空白名称会被拒绝；缺失的 board label 会在绑定到 task 前创建。
+- `labels` 可选。名称会先 trim；空白名称会被拒绝；所有 label 必须已存在于当前 board。任一 label 缺失时，整个 create 返回 `400 invalid_input`，且不会写入 `tasks`、`labels`、`task_labels` 或 `task_events`。Task create 不提供 create-missing 模式。
 
 ### 4.3 Get task
 
@@ -826,7 +826,7 @@ POST /api/v1/boards/{board}/labels
 GET /api/v1/boards/{board}/labels/semantics
 GET /api/v1/boards/{board}/labels/{label_id}/semantics
 PUT /api/v1/boards/{board}/labels/{label_id}/semantics
-DELETE /api/v1/boards/{board}/labels/{label_id}/semantics
+DELETE /api/v1/boards/{board}/labels/{label_id}/semantics?expected_semantics_hash=<hash>&reason=<text>
 GET /api/v1/boards/{board}/labels/atoms
 GET /api/v1/boards/{board}/labels/atoms/{atom_ref}/explain
 GET /api/v1/boards/{board}/labels/atom-index/status
@@ -870,7 +870,9 @@ Label 响应结构，用于 board 级标签创建和 label 列表：
 
 `POST /api/v1/boards/{board}/labels` 按 board 作用域创建 label，并按 label
 名称保持幂等。如果该 board 上已存在同名 label，响应返回已有 label。空白 name
-会被拒绝。
+会被拒绝。Base label identity CRUD 属于 vocabulary registry，不属于 ontology
+ledger；创建 label identity 不写 `label_ontology_actions`，也不会创建
+`label_semantics` 或 `label_atoms`。
 
 Task 标签添加请求：
 
@@ -961,10 +963,10 @@ task-label 绑定幂等。成功响应状态为 `201 Created`：
 
 HTTP bootstrap 不包含 CLI `--verify` 的 orchestration：请求体没有 vector config、
 minimum score 或 verify flag，响应也没有 `verification` 字段。该 endpoint 不会替调用方
-重建 label atom vector index、运行 `label suggest`、检查分数门槛，也不会提供 CLI
-verify 失败时的 snapshot compensation 流程；需要写入后验证与补偿语义时使用 CLI
-`label bootstrap --verify`，或在调用 API 后显式执行 index rebuild / suggest / review
-流程。
+重建 label atom vector index、运行 `label suggest` 或检查分数门槛；需要 pre-commit
+staged verification 的零写入失败语义时使用 CLI `label bootstrap --verify`。API 调用后如需
+诊断，可显式执行 index rebuild / suggest / review 流程，但这不具备 CLI staged verifier 的
+同一事务 adoption contract。
 
 `DELETE /api/v1/tasks/{task_id}/labels/{label_id}` 会移除 task 上的指定 label，
 `{label_id}` 接受 label id 或 label 名称。成功响应同样返回更新后的 task，包含
@@ -1007,9 +1009,12 @@ description，数组字段会追加到对应集合，`remove_*` 数组删除匹�
 已有 semantics。传 `replace=true` 时才完整替换五个语义字段，此时缺省数组视为空数组，
 并且不能同时传任何 `remove_*` 字段。`expected_semantics_hash` 是 CAS guard；如果与
 当前 `semantics_hash` 不一致，请求返回 conflict 且不写入。服务会 trim 并丢弃空白值。
-每次 constructive semantics write 都会在同一 SQLite transaction 写入
-`update_semantics` ontology action，记录 actor、reason、source signal links（如有）、
-before/after hash 和 change snapshot。生成 atoms 时，有 description
+每次实际改变 canonical semantics/atoms 的 constructive semantics write 都会在同一
+SQLite transaction 写入一条 `update_semantics` root ontology action，记录 actor、reason、
+source signal links（如有）、before/after hash 和单份 change snapshot；实际 added/removed
+atoms 通过 `label_ontology_action_atom_effects` 写 `added` / `removed` rows。Description-only
+patch 会写一条 root action 和零 atom effects；no-op patch 不写 action/effects，也不标脏
+label atom index。生成 atoms 时，有 description
 的 label 会生成一个 canonical `description` atom：
 `label: {name}\ndescription: {description}`；没有 description 时才使用 `name`
 fallback atom。atom text 会进一步规范化 whitespace：每个非空行内部 collapse，
@@ -1049,17 +1054,26 @@ canonical 行分隔保留。同一 label 下相同 `polarity + kind + normalized
 }
 ```
 
-`DELETE /api/v1/boards/{board}/labels/{label_id}/semantics` 是 destructive cleanup：
-删除该 label 的 semantics 与 SQLite atoms，但不删除 canonical label 或 task-label
-绑定。它不应被描述为 provenance-preserving ontology growth；需要可解释演化时使用
-semantics patch/replace、`apply atom`、bootstrap 或 proposal accept。成功返回：
+`DELETE /api/v1/boards/{board}/labels/{label_id}/semantics?expected_semantics_hash=<hash>&reason=<text>`
+是 CAS-protected semantics clear：`expected_semantics_hash` 与非空 `reason` 都必填。
+它删除该 label 的 semantics 与 SQLite atoms，但不删除 canonical label identity 或
+task-label binding；同一 transaction 写一条 `update_semantics` root ontology action，
+after snapshot 为空，并为实际 removed atoms 写 `removed` atom effects，随后标脏 label
+atom index。Hash mismatch 时 canonical、action、effects 和 dirty state 全不变。成功返回：
+
+```http
+DELETE /api/v1/boards/default/labels/l_01HX/semantics?expected_semantics_hash=sem_abc123&reason=Retire%20obsolete%20semantics
+X-Kanban-Actor: alice
+```
 
 ```json
 { "data": { "deleted": true } }
 ```
 
-`GET /api/v1/boards/{board}/labels/atoms` 返回 SQLite truth 中的 `label_atoms`。
-这些 atoms 是 `lancedb_label_atoms` 派生索引的输入。
+`GET /api/v1/boards/{board}/labels/atoms` 返回 SQLite `label_atoms` materialized
+projection。它由 `label_semantics` 和 label name 展开、随 semantics mutation 同事务重建，
+是 `lancedb_label_atoms` 派生索引的输入；不要把它描述成独立于 semantics 的第二份
+semantic truth。
 
 `GET /api/v1/boards/{board}/labels/atoms/{atom_ref}/explain` 按当前 atom id 或稳定
 `content_hash` 解析 atom，并返回 `LabelAtomExplainRecord`：`query`、`atom`、
@@ -1281,7 +1295,8 @@ Accept/reject body：
 
 Accept 只允许 `proposed` proposal。成功后会通过与 task-label bootstrap 相同的 adoption
 primitive 创建 canonical `labels` 行与对应 `label_semantics` / `label_atoms`，
-标脏 label atom index，并在同一 transaction 写入 `bootstrap_label` ontology action；
+标脏 label atom index，并在同一 transaction 写入一条 `bootstrap_label` root ontology
+action 和对应 added atom effects；
 proposal status、canonical writes 和 provenance action 要么一起成功，要么一起回滚。
 它不会自动写 `task_labels`。`source_signal_ids` 可选；省略时仍记录 bootstrap action，
 但没有 action-signal links。传入时，accept 会通过 action-signal links 记录 new-label
@@ -1401,7 +1416,9 @@ Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
 `suggest_coverage_cosine`、`suggest_residual_norm` 以及 signal metric
 `suggest_score` / `confidence` 必须是 finite `0.0..=1.0`；`suggest_rank` 必须为
 `null` 或 `>= 1`。违反这些契约的 request 返回 `400 invalid_input`，不会写入
-observation 或 signals。
+observation 或 signals。`rename_label` / `split_label` / `merge_labels` 当前只作为
+review signal proposed_action 保存，不能通过 public HTTP route 写入 canonical structure
+mutation action；旧 structure-plan rows 只读展示为 unsupported validation requirement。
 
 `GET /api/v1/boards/{board}/label-ontology/signals` 默认只返回 `open` 和
 `confirmed`。可重复传 `status` 和 `kind`，并按 `task`、`label`、
@@ -1494,14 +1511,17 @@ proposed action、target label 和 proposed-label scope，避免跨 label/action
   "result_proposal_id": null,
   "canonical_before_hash": null,
   "canonical_after_hash": null,
-  "validation_status": null
+  "validation_requirement": null,
+  "validation_status": null,
+  "validation_effective_outcome": null
 }
 ```
 
 该公共 action endpoint 只接受 lifecycle action types：`confirm`、`reject`、
 `supersede` 和 `resolve_no_change`，并会同步更新 source signal status。请求中的
 `parent_action_id`、`target_label_ref`、result 字段、canonical hash、`change` /
-`change_json`、`validation_status` 和 `validation` / `validation_json` 必须为
+`change_json`、`validation_requirement`、`validation_status`、
+`validation_effective_outcome` 和 `validation` / `validation_json` 必须为
 `null`/缺省；否则返回
 `invalid_input`。`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、
 `update_semantics`、`create_label_proposal`、`bootstrap_label`、`revert_ontology_mutation`、`validate` 等 mutation/validation action
@@ -1530,11 +1550,13 @@ read-modify-upsert semantics，并写入 atom provenance action：
 Source signals 必须属于同一 board 且已 `confirmed`。`kind` 只接受
 `applies_when`、`positive_example`、`excludes_when`、`negative_example`。如果 canonical
 内容实际新增 atom，成功后返回 `add_positive_atom` 或 `add_negative_atom` action，
-记录 result atom soft reference、content hash、before/after canonical hash 和 diff，
-并把 validation status 置为 `pending`。如果同内容 atom 已经存在，成功后返回
+记录 result atom soft reference、content hash、before/after canonical hash、单份
+change snapshot 和一个 `added` atom effect，并把 `validation_requirement` 置为
+`required`。如果同内容 atom 已经存在，成功后返回
 `adopt_existing_atom` provenance-only action，记录 existing atom soft reference、相同的
 before/after canonical hash 和 source signal links；该 action 不修改 semantics/atoms、
-不标脏 atom index，validation status 为 `not_required`。默认要求所有带 `target_label_id` 的 source signals 都指向 `label_ref`；
+不标脏 atom index，`validation_requirement=none` 且 effective outcome 为
+`not_required`。默认要求所有带 `target_label_id` 的 source signals 都指向 `label_ref`；
 不匹配时返回 `400 invalid_input` 并列出 offending signal ids。Atom text 可由 reviewer
 泛化，不要求等于 source signal 的 candidate text。确实需要 retarget confirmed
 same-board signals 时，必须传 `allow_retarget=true` 和非空 `retarget_reason`；
@@ -1560,9 +1582,11 @@ canonical atom 实际新增时才标脏 label atom index；vector rebuild 和 su
 `expected_current_hash` 非空时还必须等于当前 hash。成功后返回
 `revert_ontology_mutation` action：`parent_action_id` 指向被撤销 action，source signal
 links 从目标 action 复制，`change` 记录被撤销 action、before/after revert snapshot 和
-`index_dirty=true`，并标脏 label atom index。该 route 不删除或修改原 action，也不处理
-bootstrap label identity / task binding rollback；bootstrap 失败补偿由 bootstrap
-orchestration 负责。
+`index_dirty=true`，并为本次 revert 实际 added/removed atoms 写 atom effects，随后标脏
+label atom index。该 action 的 `validation_requirement` 为 `unsupported`，可记录
+external failed/partial 诊断，但不会被当作可 trusted-passed 的 pending validation。该 route
+不删除或修改原 action，也不处理 bootstrap label identity / task binding rollback；CLI
+staged bootstrap verify 的失败路径在提交前零写入，不再依赖提交后的恢复流程。
 
 `POST /api/v1/boards/{board}/label-ontology/validate` 追加 external attestation
 validation action。HTTP route 接收调用方提交的 `validation` / `validation_json`，
@@ -1607,12 +1631,13 @@ source signal cases、observation task snapshot / suggest input hash 与当前 t
 top-level `manual`；generated `cases[]` 通过 `after.manual_case_ref` 指向
 `manual.cases[]` 中对应 signal 的原始 evidence，避免多 signal validation 把同一 payload
 重复存入每个 case。`parent_action_id` 必须指向同一 board 上
-`validation_status=pending` 的 canonical mutation action，且 parent action 必须带有
+`validation_requirement=required` 的 canonical mutation action，且 parent action 必须带有
 canonical result evidence（例如 atom/result label/proposal 引用、canonical hash 和
 非空 change snapshot）。HTTP supplied JSON 是 external attestation；它可保存
 `failed` / `partial` 诊断，但 `validation_status="passed"` 会返回 `invalid_input`，
-因为 passed validation 需要工具采集的 `trusted_automated` evidence。结构化字段或
-字符串 `"automated"` 本身不构成可信来源。
+因为 passed validation 需要工具采集的 `trusted_automated` evidence。`unsupported`
+parent 可以记录 external failed/partial 诊断，但不能 passed。结构化字段或字符串
+`"automated"` 本身不构成可信来源。
 
 Trusted automated validation 的 persisted payload 由 CLI collector 生成，而不是由 HTTP
 caller 手写：top-level `evidence_type="trusted_automated"`、`collector.source`、
@@ -1620,7 +1645,8 @@ caller 手写：top-level `evidence_type="trusted_automated"`、`collector.sourc
 `index.generation` 和覆盖每个 linked source signal 的 `cases[]`。CLI collector 在长
 SQLite transaction 外 rebuild atom index 并运行 suggest；写 action 时 service 在短
 transaction 中重新核验 parent action、source signals、canonical after hash、index
-dirty/error 状态和 generation。
+dirty/error 状态和 generation。Trusted 表示工具采集、current hash/index generation
+一致，并在指定 cases/controls 上机械通过；它不是全局语义正确性证明。
 
 Typed policy 按 parent action 检查：
 
@@ -1747,15 +1773,16 @@ Foundation relationship diagnostics are read-only:
 - `consistency_issues[]` reports structured findings with `severity`, `code`, `message`, and `record_ids`.
 - Covered tables: `task_labels`, `task_dependencies`, `task_runs`, `task_comments`, `task_events`, and `task_attachments`.
 - Hard errors mean a row's `board_id` differs from a referenced task / label / run board. The message includes `table`, `row`, `row_board`, `referenced`, and `referenced_board`.
-- These checks complement service-layer board-scoped writes. `task_labels`, `task_dependencies`, and `task_runs` are also protected by board-scoped composite FKs in current schema. `task_comments`, `task_events`, `task_attachments`, and corrupted JSONL/raw-SQL inputs still rely on service, doctor, and import checks; any future table-rebuild hardening applies to those remaining relationship tables.
+- These checks complement service-layer board-scoped writes. `task_labels`, `task_dependencies`, `task_runs`, `task_comments`, and `task_attachments` are protected by board-scoped composite FKs in current schema. `task_events` retains nullable task/run references and `ON DELETE SET NULL`; INSERT/UPDATE triggers enforce board scope whenever those refs are present. Corrupted JSONL/raw-SQL inputs are still checked by doctor/import as a hard-error diagnostic layer.
+- `PRAGMA foreign_key_check` results are surfaced as hard-error `consistency_issues[]` with table, rowid, parent table, and FK index. Import runs the same gate before commit and rolls back on violation.
 - Nonzero `consistency_errors` make `ok=false`.
 
 Ontology ledger diagnostics are read-only:
 
 - `ontology_ledger_errors` / `ontology_ledger_warnings` summarize hard errors and warnings.
 - `ontology_ledger_issues[]` reports structured findings with `severity`, `code`, `message`, and `record_ids`.
-- v12+ databases require `label_ontology_observations`, `label_ontology_signals`, `label_ontology_actions`, and `label_ontology_action_signals`.
-- Hard errors include cross-board ontology links, orphan action-signal links, missing parent/supersede references, label/proposal/task board mismatches, signal supersede cycles, and action parent cycles. Nonzero errors make `ok=false`.
+- v12+ databases require `label_ontology_observations`, `label_ontology_signals`, `label_ontology_actions`, `label_ontology_action_atom_effects`, and `label_ontology_action_signals`.
+- Hard errors include cross-board ontology links, orphan action-signal/action-effect links, missing parent/supersede references, label/proposal/task board mismatches, signal supersede cycles, and action parent cycles. Nonzero errors make `ok=false`.
 - Warnings are reserved for rebuildable or historically explainable soft references, such as an action `result_atom_id` whose current `label_atoms` row was rebuilt away.
 
 Derived-layer diagnostics are read-only:

@@ -60,7 +60,7 @@ fn init_records_and_enforces_migration_checksum() -> anyhow::Result<()> {
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    assert_eq!(user_version, 19);
+    assert_eq!(user_version, 21);
     assert_eq!(name, "001_initial");
     assert!(checksum.starts_with("fnv64:"), "checksum: {checksum}");
 
@@ -86,7 +86,7 @@ fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 19);
+    assert_eq!(user_version, 21);
     for table in [
         "entities",
         "relation_predicates",
@@ -153,7 +153,7 @@ fn init_upgrades_v1_database_and_backfills_task_entities() -> anyhow::Result<()>
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 19);
+    assert_eq!(user_version, 21);
     let task_entity_title: String = conn.query_row(
         "SELECT title FROM entities WHERE uri='kb://task/t_test'",
         [],
@@ -170,7 +170,9 @@ fn init_v17_rebuilds_key_relationship_tables_without_losing_rows() -> anyhow::Re
 
     let conn = connect_file(&temp.path)?;
     let before_counts = v17_relationship_counts(&conn)?;
+    downgrade_task_history_to_v19_shape(&conn)?;
     conn.execute("DELETE FROM schema_migrations WHERE version=17", [])?;
+    conn.execute("DELETE FROM schema_migrations WHERE version=20", [])?;
     conn.pragma_update(None, "user_version", 16)?;
     drop(conn);
 
@@ -178,7 +180,7 @@ fn init_v17_rebuilds_key_relationship_tables_without_losing_rows() -> anyhow::Re
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 19);
+    assert_eq!(user_version, 21);
     assert_eq!(v17_relationship_counts(&conn)?, before_counts);
     assert_eq!(
         task_label_board_for(&conn, &fixture.task_id, &fixture.label_id)?,
@@ -208,7 +210,7 @@ fn init_v18_adds_root_action_atom_effects_table_to_v17_database() -> anyhow::Res
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 19);
+    assert_eq!(user_version, 21);
     let table_exists: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_ontology_action_atom_effects'",
         [],
@@ -269,7 +271,7 @@ fn init_v19_adds_validation_requirement_and_backfills_v18_actions() -> anyhow::R
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 19);
+    assert_eq!(user_version, 21);
     let column_exists: i64 = conn.query_row(
         "SELECT COUNT(*) FROM pragma_table_info('label_ontology_actions') WHERE name='validation_requirement'",
         [],
@@ -360,6 +362,277 @@ fn init_v19_adds_validation_requirement_and_backfills_v18_actions() -> anyhow::R
 }
 
 #[test]
+fn init_v20_hardens_task_history_tables_without_losing_rows() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_v20_hardens_task_history_tables_without_losing_rows")?;
+    seed_v20_task_history_fixture(&temp)?;
+
+    let conn = connect_file(&temp.path)?;
+    let before_counts = v20_task_history_counts(&conn)?;
+    downgrade_task_history_to_v19_shape(&conn)?;
+    conn.execute("DELETE FROM schema_migrations WHERE version=20", [])?;
+    conn.pragma_update(None, "user_version", 19)?;
+    drop(conn);
+
+    init_database(&temp.path, "tester")?;
+
+    let conn = connect_file(&temp.path)?;
+    let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    assert_eq!(user_version, 21);
+    assert_eq!(v20_task_history_counts(&conn)?, before_counts);
+    let fk_errors = foreign_key_check_rows(&conn)?;
+    assert!(fk_errors.is_empty(), "{fk_errors:#?}");
+    Ok(())
+}
+
+#[test]
+fn init_v20_preflight_reports_cross_board_task_history_rows() -> anyhow::Result<()> {
+    for table in ["task_comments", "task_events", "task_attachments"] {
+        let temp = TempDb::new(&format!("init_v20_preflight_{table}"))?;
+        let fixture = seed_v20_task_history_fixture(&temp)?;
+        let conn = connect_file(&temp.path)?;
+        downgrade_task_history_to_v19_shape(&conn)?;
+        conn.execute("DELETE FROM schema_migrations WHERE version=20", [])?;
+        conn.pragma_update(None, "user_version", 19)?;
+        conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+        let expected_row_key = match table {
+            "task_comments" => {
+                conn.execute(
+                    "UPDATE task_comments SET board_id=?1 WHERE id='c_v20'",
+                    [&fixture.other_board_id],
+                )?;
+                "c_v20".to_owned()
+            }
+            "task_events" => {
+                conn.execute(
+                    "UPDATE task_events SET board_id=?1 WHERE event_id='e_v20'",
+                    [&fixture.other_board_id],
+                )?;
+                "e_v20".to_owned()
+            }
+            "task_attachments" => {
+                conn.execute(
+                    "UPDATE task_attachments SET board_id=?1 WHERE id='a_v20'",
+                    [&fixture.other_board_id],
+                )?;
+                "a_v20".to_owned()
+            }
+            _ => unreachable!(),
+        };
+        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        drop(conn);
+
+        let err = result_err(init_database(&temp.path, "tester"))?;
+        let message = err.to_string();
+        assert!(
+            message.contains("cannot apply migration 020_board_isolation_task_history"),
+            "{}: {message}",
+            table
+        );
+        assert!(message.contains(table), "{}: {message}", table);
+        assert!(message.contains(&expected_row_key), "{}: {message}", table);
+    }
+    Ok(())
+}
+
+#[test]
+fn init_v20_preflight_reports_orphan_task_history_rows() -> anyhow::Result<()> {
+    for case in [
+        ("task_comments", "c_v20"),
+        ("task_events_task", "e_v20"),
+        ("task_events_run", "e_v20"),
+        ("task_attachments", "a_v20"),
+    ] {
+        let (case_name, expected_row_key) = case;
+        let temp = TempDb::new(&format!("init_v20_preflight_orphan_{case_name}"))?;
+        seed_v20_task_history_fixture(&temp)?;
+        let conn = connect_file(&temp.path)?;
+        downgrade_task_history_to_v19_shape(&conn)?;
+        conn.execute("DELETE FROM schema_migrations WHERE version=20", [])?;
+        conn.pragma_update(None, "user_version", 19)?;
+        conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+        match case_name {
+            "task_comments" => {
+                conn.execute(
+                    "UPDATE task_comments SET task_id='t_missing' WHERE id='c_v20'",
+                    [],
+                )?;
+            }
+            "task_events_task" => {
+                conn.execute(
+                    "UPDATE task_events SET task_id='t_missing' WHERE event_id='e_v20'",
+                    [],
+                )?;
+            }
+            "task_events_run" => {
+                conn.execute(
+                    "UPDATE task_events SET run_id='r_missing' WHERE event_id='e_v20'",
+                    [],
+                )?;
+            }
+            "task_attachments" => {
+                conn.execute(
+                    "UPDATE task_attachments SET task_id='t_missing' WHERE id='a_v20'",
+                    [],
+                )?;
+            }
+            _ => unreachable!(),
+        };
+        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        drop(conn);
+
+        let err = result_err(init_database(&temp.path, "tester"))?;
+        let message = err.to_string();
+        assert!(
+            message.contains("cannot apply migration 020_board_isolation_task_history"),
+            "{}: {message}",
+            case_name
+        );
+        assert!(message.contains("task_"), "{}: {message}", case_name);
+        assert!(
+            message.contains(expected_row_key),
+            "{}: {message}",
+            case_name
+        );
+        assert!(message.contains("missing"), "{}: {message}", case_name);
+    }
+    Ok(())
+}
+
+#[test]
+fn init_v21_hardens_ontology_links_without_losing_rows() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_v21_hardens_ontology_links_without_losing_rows")?;
+    seed_v21_ontology_link_fixture(&temp)?;
+
+    let conn = connect_file(&temp.path)?;
+    let before_counts = v21_ontology_link_counts(&conn)?;
+    downgrade_ontology_links_to_v20_shape(&conn)?;
+    conn.execute("DELETE FROM schema_migrations WHERE version=21", [])?;
+    conn.pragma_update(None, "user_version", 20)?;
+    drop(conn);
+
+    init_database(&temp.path, "tester")?;
+
+    let conn = connect_file(&temp.path)?;
+    let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    assert_eq!(user_version, 21);
+    assert_eq!(v21_ontology_link_counts(&conn)?, before_counts);
+    let fk_errors = foreign_key_check_rows(&conn)?;
+    assert!(fk_errors.is_empty(), "{fk_errors:#?}");
+    Ok(())
+}
+
+#[test]
+fn init_v21_preflight_reports_cross_board_and_orphan_ontology_links() -> anyhow::Result<()> {
+    for case in [
+        (
+            "proposal_resolved_label",
+            "label_semantic_proposals",
+            "lp_v21",
+        ),
+        ("signal_observation", "label_ontology_signals", "los_v21"),
+        ("signal_target_label", "label_ontology_signals", "los_v21"),
+        ("signal_supersede", "label_ontology_signals", "los_v21"),
+        ("action_parent", "label_ontology_actions", "loa_v21"),
+        ("action_target_label", "label_ontology_actions", "loa_v21"),
+        ("action_result_label", "label_ontology_actions", "loa_v21"),
+        (
+            "action_result_proposal",
+            "label_ontology_actions",
+            "loa_v21",
+        ),
+        (
+            "action_signal_orphan",
+            "label_ontology_action_signals",
+            "loa_v21:los_missing",
+        ),
+    ] {
+        let (case_name, expected_table, expected_row_key) = case;
+        let temp = TempDb::new(&format!("init_v21_preflight_{case_name}"))?;
+        let fixture = seed_v21_ontology_link_fixture(&temp)?;
+        let conn = connect_file(&temp.path)?;
+        downgrade_ontology_links_to_v20_shape(&conn)?;
+        conn.execute("DELETE FROM schema_migrations WHERE version=21", [])?;
+        conn.pragma_update(None, "user_version", 20)?;
+        conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+        match case_name {
+            "proposal_resolved_label" => {
+                conn.execute(
+                    "UPDATE label_semantic_proposals SET resolved_label_id=?1 WHERE id='lp_v21'",
+                    [&fixture.other_label_id],
+                )?;
+            }
+            "signal_observation" => {
+                conn.execute(
+                    "UPDATE label_ontology_signals SET observation_id=?1 WHERE id='los_v21'",
+                    [&fixture.other_observation_id],
+                )?;
+            }
+            "signal_target_label" => {
+                conn.execute(
+                    "UPDATE label_ontology_signals SET target_label_id=?1 WHERE id='los_v21'",
+                    [&fixture.other_label_id],
+                )?;
+            }
+            "signal_supersede" => {
+                conn.execute(
+                    "UPDATE label_ontology_signals SET superseded_by_signal_id=?1 WHERE id='los_v21'",
+                    [&fixture.other_signal_id],
+                )?;
+            }
+            "action_parent" => {
+                conn.execute(
+                    "UPDATE label_ontology_actions SET parent_action_id=?1 WHERE id='loa_v21'",
+                    [&fixture.other_action_id],
+                )?;
+            }
+            "action_target_label" => {
+                conn.execute(
+                    "UPDATE label_ontology_actions SET target_label_id=?1 WHERE id='loa_v21'",
+                    [&fixture.other_label_id],
+                )?;
+            }
+            "action_result_label" => {
+                conn.execute(
+                    "UPDATE label_ontology_actions SET result_label_id=?1 WHERE id='loa_v21'",
+                    [&fixture.other_label_id],
+                )?;
+            }
+            "action_result_proposal" => {
+                conn.execute(
+                    "UPDATE label_ontology_actions SET result_proposal_id=?1 WHERE id='loa_v21'",
+                    [&fixture.other_proposal_id],
+                )?;
+            }
+            "action_signal_orphan" => {
+                conn.execute(
+                    "UPDATE label_ontology_action_signals SET signal_id='los_missing'
+                     WHERE action_id='loa_v21' AND signal_id='los_v21'",
+                    [],
+                )?;
+            }
+            _ => unreachable!(),
+        };
+        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        drop(conn);
+
+        let err = result_err(init_database(&temp.path, "tester"))?;
+        let message = err.to_string();
+        assert!(
+            message.contains("cannot apply migration 021_board_isolation_ontology_links"),
+            "{}: {message}",
+            case_name
+        );
+        assert!(message.contains(expected_table), "{}: {message}", case_name);
+        assert!(
+            message.contains(expected_row_key),
+            "{}: {message}",
+            case_name
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn init_v17_preflight_reports_cross_board_key_relationship_rows() -> anyhow::Result<()> {
     for table in ["task_labels", "task_dependencies", "task_runs"] {
         let temp = TempDb::new(&format!("init_v17_preflight_{table}"))?;
@@ -419,6 +692,7 @@ struct V17BoardIsolationFixture {
     parent_task_id: String,
     child_task_id: String,
     label_id: String,
+    run_id: String,
 }
 
 fn seed_v17_board_isolation_fixture(temp: &TempDb) -> anyhow::Result<V17BoardIsolationFixture> {
@@ -478,6 +752,34 @@ fn seed_v17_board_isolation_fixture(temp: &TempDb) -> anyhow::Result<V17BoardIso
         parent_task_id: parent.id,
         child_task_id: child.id,
         label_id: label.id,
+        run_id: "r_v17".to_owned(),
+    })
+}
+
+struct V20TaskHistoryFixture {
+    other_board_id: String,
+}
+
+fn seed_v20_task_history_fixture(temp: &TempDb) -> anyhow::Result<V20TaskHistoryFixture> {
+    let fixture = seed_v17_board_isolation_fixture(temp)?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "INSERT INTO task_comments(id, board_id, task_id, author, author_type, body, kind, metadata_json, created_at) \
+         VALUES ('c_v20', ?1, ?2, 'tester', 'user', 'v20 task history note', 'note', '{}', 1)",
+        params![fixture.board_id, fixture.task_id],
+    )?;
+    conn.execute(
+        "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, payload_json, created_at) \
+         VALUES ('e_v20', ?1, ?2, ?3, 'test.history', '{}', 1)",
+        params![fixture.board_id, fixture.task_id, fixture.run_id],
+    )?;
+    conn.execute(
+        "INSERT INTO task_attachments(id, board_id, task_id, filename, rel_path, size_bytes, created_by, created_at) \
+         VALUES ('a_v20', ?1, ?2, 'history.txt', 'attachments/history.txt', 0, 'tester', 1)",
+        params![fixture.board_id, fixture.task_id],
+    )?;
+    Ok(V20TaskHistoryFixture {
+        other_board_id: fixture.other_board_id,
     })
 }
 
@@ -493,6 +795,194 @@ fn v17_relationship_counts(conn: &Connection) -> anyhow::Result<Vec<(&'static st
             ))
         })
         .collect()
+}
+
+fn v20_task_history_counts(conn: &Connection) -> anyhow::Result<Vec<(&'static str, i64)>> {
+    [
+        "task_runs",
+        "task_comments",
+        "task_events",
+        "task_attachments",
+    ]
+    .into_iter()
+    .map(|table| {
+        Ok((
+            table,
+            conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })?,
+        ))
+    })
+    .collect()
+}
+
+struct V21OntologyLinkFixture {
+    other_label_id: String,
+    other_observation_id: String,
+    other_signal_id: String,
+    other_action_id: String,
+    other_proposal_id: String,
+}
+
+fn seed_v21_ontology_link_fixture(temp: &TempDb) -> anyhow::Result<V21OntologyLinkFixture> {
+    let fixture = seed_v17_board_isolation_fixture(temp)?;
+    let other_task = create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("v21 other task"),
+    )?;
+    let default_label = create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "v21-default-label".to_owned(),
+            color: None,
+        },
+    )?;
+    let other_label = create_label(
+        &temp.path,
+        "other",
+        CreateLabel {
+            name: "v21-other-label".to_owned(),
+            color: None,
+        },
+    )?;
+    let conn = connect_file(&temp.path)?;
+    for (observation_id, board_id, task_id, task_ref, fingerprint) in [
+        (
+            "lor_v21",
+            fixture.board_id.as_str(),
+            fixture.task_id.as_str(),
+            "default#fixture",
+            "v21-default-fingerprint",
+        ),
+        (
+            "lor_v21_other",
+            other_task.board_id.as_str(),
+            other_task.id.as_str(),
+            "other#fixture",
+            "v21-other-fingerprint",
+        ),
+    ] {
+        conn.execute(
+            "INSERT INTO label_ontology_observations(
+             id, board_id, task_id, task_ref_snapshot, task_snapshot_json, suggest_input_hash,
+             agent_candidates_json, suggestion_snapshot_json, final_decision_json,
+             diagnostics_json, capture_fingerprint, created_by, created_by_type, created_at)
+             VALUES (?1, ?2, ?3, ?4, '{}', 'v21hash', '[]', '{}', '{}', '[]',
+             ?5, 'tester', 'user', 1)",
+            params![observation_id, board_id, task_id, task_ref, fingerprint],
+        )?;
+    }
+    for (proposal_id, board_id, task_id, name) in [
+        (
+            "lp_v21",
+            fixture.board_id.as_str(),
+            fixture.task_id.as_str(),
+            "v21-default-proposal",
+        ),
+        (
+            "lp_v21_other",
+            other_task.board_id.as_str(),
+            other_task.id.as_str(),
+            "v21-other-proposal",
+        ),
+    ] {
+        conn.execute(
+            "INSERT INTO label_semantic_proposals(
+             id, board_id, task_id, status, name, applies_when, excludes_when,
+             positive_examples, negative_examples, heuristic_coverage,
+             heuristic_coverage_cosine, heuristic_residual_norm, diagnostics_json,
+             created_by, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'proposed', ?4, '[]', '[]', '[]', '[]',
+             0.1, 0.1, 0.9, '[]', 'tester', 1, 1)",
+            params![proposal_id, board_id, task_id, name],
+        )?;
+    }
+    for (signal_id, observation_id, board_id, label_id, signal_key) in [
+        (
+            "los_v21",
+            "lor_v21",
+            fixture.board_id.as_str(),
+            default_label.id.as_str(),
+            "v21-default-signal",
+        ),
+        (
+            "los_v21_other",
+            "lor_v21_other",
+            other_task.board_id.as_str(),
+            other_label.id.as_str(),
+            "v21-other-signal",
+        ),
+    ] {
+        conn.execute(
+            "INSERT INTO label_ontology_signals(
+             id, observation_id, board_id, kind, status, target_label_id, related_labels_json,
+             proposed_action, proposal_json, agent_selected, final_selected, rationale, signal_key,
+             created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'false_negative', 'open', ?4, '[]',
+             'add_positive_atom', '{}', 1, 1, 'v21 signal fixture', ?5, 1, 1)",
+            params![signal_id, observation_id, board_id, label_id, signal_key],
+        )?;
+    }
+    for (action_id, board_id, label_id, proposal_id) in [
+        (
+            "loa_v21",
+            fixture.board_id.as_str(),
+            default_label.id.as_str(),
+            "lp_v21",
+        ),
+        (
+            "loa_v21_other",
+            other_task.board_id.as_str(),
+            other_label.id.as_str(),
+            "lp_v21_other",
+        ),
+    ] {
+        conn.execute(
+            "INSERT INTO label_ontology_actions(
+             id, board_id, action_type, reason, target_label_id, result_label_id,
+             result_proposal_id, change_json, validation_requirement, validation_status,
+             validation_json, created_by, created_by_type, created_at)
+             VALUES (?1, ?2, 'create_label_proposal', 'v21 action fixture',
+             ?3, ?3, ?4, '{}', 'none', 'not_required', '{}', 'tester', 'user', 1)",
+            params![action_id, board_id, label_id, proposal_id],
+        )?;
+    }
+    conn.execute(
+        "INSERT INTO label_ontology_action_signals(board_id, action_id, signal_id, created_at)
+         VALUES (?1, 'loa_v21', 'los_v21', 1)",
+        [&fixture.board_id],
+    )?;
+
+    Ok(V21OntologyLinkFixture {
+        other_label_id: other_label.id,
+        other_observation_id: "lor_v21_other".to_owned(),
+        other_signal_id: "los_v21_other".to_owned(),
+        other_action_id: "loa_v21_other".to_owned(),
+        other_proposal_id: "lp_v21_other".to_owned(),
+    })
+}
+
+fn v21_ontology_link_counts(conn: &Connection) -> anyhow::Result<Vec<(&'static str, i64)>> {
+    [
+        "label_semantic_proposals",
+        "label_ontology_observations",
+        "label_ontology_signals",
+        "label_ontology_actions",
+        "label_ontology_action_signals",
+    ]
+    .into_iter()
+    .map(|table| {
+        Ok((
+            table,
+            conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })?,
+        ))
+    })
+    .collect()
 }
 
 fn task_label_board_for(
@@ -519,6 +1009,41 @@ fn foreign_key_check_rows(conn: &Connection) -> anyhow::Result<Vec<String>> {
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(rows)
+}
+
+fn downgrade_ontology_links_to_v20_shape(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute_batch(
+        "
+        PRAGMA foreign_keys=OFF;
+        DROP TRIGGER IF EXISTS trg_label_ontology_signals_board_insert;
+        DROP TRIGGER IF EXISTS trg_label_ontology_signals_board_update;
+        DROP TRIGGER IF EXISTS trg_label_ontology_actions_board_insert;
+        DROP TRIGGER IF EXISTS trg_label_ontology_actions_board_update;
+        DROP TRIGGER IF EXISTS trg_label_semantic_proposals_board_insert;
+        DROP TRIGGER IF EXISTS trg_label_semantic_proposals_board_update;
+        DROP INDEX IF EXISTS idx_label_ontology_action_signals_signal;
+        DROP TABLE IF EXISTS label_ontology_action_signals_v20;
+        CREATE TABLE label_ontology_action_signals_v20 (
+          board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+          action_id TEXT NOT NULL REFERENCES label_ontology_actions(id) ON DELETE CASCADE,
+          signal_id TEXT NOT NULL REFERENCES label_ontology_signals(id) ON DELETE CASCADE,
+          created_at INTEGER NOT NULL,
+          PRIMARY KEY(action_id, signal_id)
+        );
+        INSERT INTO label_ontology_action_signals_v20(board_id, action_id, signal_id, created_at)
+        SELECT board_id, action_id, signal_id, created_at
+        FROM label_ontology_action_signals;
+        DROP TABLE label_ontology_action_signals;
+        ALTER TABLE label_ontology_action_signals_v20 RENAME TO label_ontology_action_signals;
+        CREATE INDEX IF NOT EXISTS idx_label_ontology_action_signals_signal
+          ON label_ontology_action_signals(signal_id, action_id);
+        DROP INDEX IF EXISTS idx_label_ontology_observations_id_board;
+        DROP INDEX IF EXISTS idx_label_ontology_signals_id_board;
+        DROP INDEX IF EXISTS idx_label_semantic_proposals_id_board;
+        PRAGMA foreign_keys=ON;
+        ",
+    )?;
+    Ok(())
 }
 
 fn downgrade_label_ontology_actions_to_v18_shape(conn: &Connection) -> anyhow::Result<()> {
@@ -596,6 +1121,63 @@ fn downgrade_label_ontology_actions_to_v18_shape(conn: &Connection) -> anyhow::R
             AND result_proposal_id IS NOT NULL;
         CREATE UNIQUE INDEX IF NOT EXISTS idx_label_ontology_actions_id_board
           ON label_ontology_actions(id, board_id);
+        PRAGMA foreign_keys=ON;
+        ",
+    )?;
+    Ok(())
+}
+
+fn downgrade_task_history_to_v19_shape(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute_batch(
+        "
+        PRAGMA foreign_keys=OFF;
+        DROP TRIGGER IF EXISTS trg_task_events_board_insert;
+        DROP TRIGGER IF EXISTS trg_task_events_board_update;
+        DROP INDEX IF EXISTS idx_task_runs_id_board;
+        DROP INDEX IF EXISTS idx_comments_task_created;
+        DROP TABLE IF EXISTS task_comments_v19;
+        CREATE TABLE task_comments_v19 (
+          id TEXT PRIMARY KEY CHECK(id LIKE 'c_%'),
+          board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          author TEXT NOT NULL,
+          author_type TEXT NOT NULL DEFAULT 'user' CHECK(author_type IN ('user', 'agent')),
+          agent_type TEXT CHECK(author_type = 'agent' OR agent_type IS NULL),
+          body TEXT NOT NULL CHECK(length(trim(body)) > 0),
+          kind TEXT NOT NULL DEFAULT 'note' CHECK(kind IN ('note', 'decision')),
+          metadata_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(metadata_json) AND json_type(metadata_json) = 'object'),
+          created_at INTEGER NOT NULL
+        );
+        INSERT INTO task_comments_v19(
+          id, board_id, task_id, author, author_type, agent_type, body, kind, metadata_json, created_at
+        )
+        SELECT id, board_id, task_id, author, author_type, agent_type, body, kind, metadata_json, created_at
+        FROM task_comments;
+        DROP TABLE task_comments;
+        ALTER TABLE task_comments_v19 RENAME TO task_comments;
+        CREATE INDEX IF NOT EXISTS idx_comments_task_created
+          ON task_comments(task_id, created_at ASC);
+
+        DROP TABLE IF EXISTS task_attachments_v19;
+        CREATE TABLE task_attachments_v19 (
+          id TEXT PRIMARY KEY CHECK(id LIKE 'a_%'),
+          board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          filename TEXT NOT NULL CHECK(length(trim(filename)) > 0),
+          rel_path TEXT NOT NULL CHECK(length(trim(rel_path)) > 0),
+          content_type TEXT,
+          size_bytes INTEGER NOT NULL CHECK(size_bytes >= 0),
+          sha256 TEXT,
+          created_by TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+        INSERT INTO task_attachments_v19(
+          id, board_id, task_id, filename, rel_path, content_type, size_bytes, sha256, created_by, created_at
+        )
+        SELECT id, board_id, task_id, filename, rel_path, content_type, size_bytes, sha256, created_by, created_at
+        FROM task_attachments;
+        DROP TABLE task_attachments;
+        ALTER TABLE task_attachments_v19 RENAME TO task_attachments;
         PRAGMA foreign_keys=ON;
         ",
     )?;

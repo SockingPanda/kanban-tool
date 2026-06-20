@@ -106,6 +106,8 @@ pub fn import_jsonl(
     let input_path = input_path.as_ref();
     let file = File::open(input_path).map_err(|error| KanbanError::Storage(error.to_string()))?;
     with_immediate_tx(&conn, || {
+        conn.execute_batch("PRAGMA defer_foreign_keys = ON;")
+            .map_err(storage)?;
         if replace {
             for table in IMPORT_DELETE_ORDER {
                 conn.execute(&format!("DELETE FROM {table}"), [])

@@ -471,6 +471,41 @@ dimensions = 3
     )?
     .failure_containing(expected_index_failure)?;
 
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "semantics",
+            "delete",
+            "backend",
+            "--expected-semantics-hash",
+            replacement_hash,
+        ],
+    )?
+    .failure_containing("required")?;
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "semantics",
+            "delete",
+            "backend",
+            "--expected-semantics-hash",
+            "not-the-current-semantics-hash",
+            "--reason",
+            "Stale clear should fail",
+        ],
+    )?
+    .failure_containing("hash mismatch")?;
+    let atoms_before_delete =
+        kanban(&temp.path, &["--json", "label", "atoms", "list"])?.success_json()?;
+    assert!(
+        !atoms_before_delete["data"]
+            .as_array()
+            .context("atoms before delete")?
+            .is_empty()
+    );
+
     let deleted = kanban(
         &temp.path,
         &[

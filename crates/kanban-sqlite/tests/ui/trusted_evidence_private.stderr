@@ -1,0 +1,8 @@
+error[E0432]: unresolved import `kanban_sqlite::validate_label_ontology_action_with_trusted_evidence`
+ --> tests/ui/trusted_evidence_private.rs:1:5
+  |
+1 | use kanban_sqlite::validate_label_ontology_action_with_trusted_evidence;
+  |     ^^^^^^^^^^^^^^^----------------------------------------------------
+  |     |              |
+  |     |              help: a similar name exists in the module: `validate_label_ontology_action_with_trusted_suggestions`
+  |     no `validate_label_ontology_action_with_trusted_evidence` in the root

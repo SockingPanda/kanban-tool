@@ -16,16 +16,16 @@ use kanban_sqlite::{
     LabelSemanticProposalRecord, LabelSemanticsMutationOptions, LabelSuggestionOptions,
     LabelSuggestionResult, MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
     accept_label_proposal_with_options, add_task_labels_with_options,
-    apply_label_ontology_atom_with_options, bootstrap_task_label, create_label,
-    create_label_ontology_action, delete_label, delete_label_semantics, explain_label_atom,
-    get_label_ontology_signal, get_label_proposal, get_label_semantics, label_atom_index_status,
-    label_ontology_quality_report, list_label_atoms, list_label_ontology_signals,
-    list_label_proposals, list_label_semantics, list_labels, plan_label_ontology_structure_change,
-    propose_task_label_with_create_options, record_label_ontology_observation,
-    reject_label_proposal, remove_task_label, restore_bootstrap_task_label_state,
-    revert_label_ontology_mutation, review_label_ontology, snapshot_bootstrap_task_label_state,
-    suggest_task_labels, upsert_label_semantics_with_options, validate_label_ontology_action,
-    validate_label_ontology_action_with_trusted_suggestions,
+    apply_label_ontology_atom_with_options, bootstrap_task_label,
+    clear_label_semantics_with_options, create_label_ontology_action, delete_label,
+    explain_label_atom, get_label_ontology_signal, get_label_proposal, get_label_semantics,
+    label_atom_index_status, label_ontology_quality_report, list_label_atoms,
+    list_label_ontology_signals, list_label_proposals, list_label_semantics, list_labels,
+    plan_label_ontology_structure_change, propose_task_label_with_create_options,
+    record_label_ontology_observation, reject_label_proposal, remove_task_label,
+    restore_bootstrap_task_label_state, revert_label_ontology_mutation, review_label_ontology,
+    snapshot_bootstrap_task_label_state, suggest_task_labels, upsert_label_semantics_with_options,
+    validate_label_ontology_action, validate_label_ontology_action_with_trusted_suggestions,
 };
 #[cfg(feature = "vector-lancedb")]
 use kanban_sqlite::{
@@ -59,9 +59,10 @@ pub(crate) fn handle_label(
             })?;
         }
         LabelCommand::Create(args) => {
-            let label = create_label(
+            let label = kanban_sqlite::create_label_with_actor(
                 db_path,
                 board,
+                actor,
                 CreateLabel {
                     name: args.name,
                     color: args.color,
@@ -379,11 +380,19 @@ fn handle_label_semantics(
             )?;
             print_or_json(json, &semantics, || label_semantics_line(&semantics))?;
         }
-        crate::args::LabelSemanticsCommand::Delete { label } => {
-            delete_label_semantics(db_path, board, &label)?;
+        crate::args::LabelSemanticsCommand::Delete(args) => {
+            let mut options = LabelSemanticsMutationOptions::manual_actor(actor);
+            options.reason = Some(args.reason.clone());
+            clear_label_semantics_with_options(
+                db_path,
+                board,
+                &args.label,
+                args.expected_semantics_hash,
+                options,
+            )?;
             let deleted = serde_json::json!({ "deleted": true });
             print_or_json(json, &deleted, || {
-                format!("Deleted label semantics for {label}")
+                format!("Deleted label semantics for {}", args.label)
             })?;
         }
     }

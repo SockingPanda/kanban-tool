@@ -6,7 +6,8 @@ use super::{
     LabelOntologyActionType, LabelOntologyObservationRecord, LabelOntologySemanticsMutationInput,
     LabelOntologySignalRecord, LabelProposalCandidate, LabelSemanticsMutationOptions,
     LabelSemanticsRecord, TaskRecord, UpsertLabelSemantics, board_id, derived_status_by_name,
-    get_task_by_id, label_ontology_semantics_snapshot_in_tx,
+    get_task_by_id, label_ontology_mutation_atoms,
+    label_ontology_semantics_snapshot_for_definition, label_ontology_semantics_snapshot_in_tx,
     record_label_ontology_semantics_mutation_in_tx, storage, vector_storage, with_immediate_tx,
 };
 
@@ -100,6 +101,12 @@ fn upsert_label_semantics_resolved_in_tx(
     }
     let current = get_label_semantics_conn_optional(conn, &label.board_id, &label.id)?;
     let definition = label_definition_for_semantics_mutation(label, current.as_ref(), input)?;
+    let after =
+        label_ontology_semantics_snapshot_for_definition(&label.id, &label.name, &definition)?;
+    if current.is_some() && before.hash == after.hash {
+        return get_label_semantics_conn(conn, &label.board_id, &label.id);
+    }
+    let before_atoms = label_ontology_mutation_atoms(conn, &label.board_id, &label.id)?;
     upsert_label_semantics_in_tx(conn, &label.board_id, &definition, now)?;
     mark_label_atom_store_dirty(conn, &label.board_id, now)?;
     record_label_ontology_semantics_mutation_in_tx(
@@ -110,6 +117,8 @@ fn upsert_label_semantics_resolved_in_tx(
             label_name: &label.name,
             action_type: LabelOntologyActionType::UpdateSemantics,
             before,
+            before_atoms,
+            include_description_effects: false,
             options,
         },
         now,
@@ -269,50 +278,86 @@ pub fn list_label_semantics(
         .collect()
 }
 
-pub fn delete_label_semantics(path: impl AsRef<Path>, board: &str, label_ref: &str) -> Result<()> {
+pub fn clear_label_semantics_with_options(
+    path: impl AsRef<Path>,
+    board: &str,
+    label_ref: &str,
+    expected_semantics_hash: String,
+    options: LabelSemanticsMutationOptions,
+) -> Result<()> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let label = resolve_label(&conn, &board_id, label_ref)?;
-        conn.execute(
-            "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
-            params![board_id, label.id],
-        )
-        .map_err(storage)?;
-        conn.execute(
-            "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
-            params![board_id, label.id],
-        )
-        .map_err(storage)?;
-        mark_label_atom_store_dirty(&conn, &board_id, now)?;
-        Ok(())
+        clear_label_semantics_resolved_in_tx(&conn, &label, expected_semantics_hash, options, now)
     })
 }
 
-pub fn delete_label_semantics_by_id(
+pub fn clear_label_semantics_by_id_with_options(
     path: impl AsRef<Path>,
     board: &str,
     label_id: &str,
+    expected_semantics_hash: String,
+    options: LabelSemanticsMutationOptions,
 ) -> Result<()> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let label = resolve_label_by_id_exact(&conn, &board_id, label_id)?;
-        conn.execute(
-            "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
-            params![board_id, label.id],
-        )
-        .map_err(storage)?;
-        conn.execute(
-            "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
-            params![board_id, label.id],
-        )
-        .map_err(storage)?;
-        mark_label_atom_store_dirty(&conn, &board_id, now)?;
-        Ok(())
+        clear_label_semantics_resolved_in_tx(&conn, &label, expected_semantics_hash, options, now)
     })
+}
+
+fn clear_label_semantics_resolved_in_tx(
+    conn: &Connection,
+    label: &ResolvedLabel,
+    expected_semantics_hash: String,
+    mut options: LabelSemanticsMutationOptions,
+    now: i64,
+) -> Result<()> {
+    let expected = normalize_optional_text(Some(expected_semantics_hash))
+        .ok_or_else(|| KanbanError::InvalidInput("expected_semantics_hash is required".into()))?;
+    let reason = normalize_optional_text(options.reason.clone())
+        .ok_or_else(|| KanbanError::InvalidInput("reason is required".into()))?;
+    options.reason = Some(reason);
+    get_label_semantics_conn(conn, &label.board_id, &label.id)?;
+    let before =
+        label_ontology_semantics_snapshot_in_tx(conn, &label.board_id, &label.id, &label.name)?;
+    if expected != before.hash {
+        return Err(KanbanError::Conflict(format!(
+            "label semantics hash mismatch for {}: expected {expected}, current {}",
+            label.name, before.hash
+        )));
+    }
+    let before_atoms = label_ontology_mutation_atoms(conn, &label.board_id, &label.id)?;
+    conn.execute(
+        "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
+        params![label.board_id, label.id],
+    )
+    .map_err(storage)?;
+    conn.execute(
+        "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+        params![label.board_id, label.id],
+    )
+    .map_err(storage)?;
+    mark_label_atom_store_dirty(conn, &label.board_id, now)?;
+    record_label_ontology_semantics_mutation_in_tx(
+        conn,
+        LabelOntologySemanticsMutationInput {
+            board_id: &label.board_id,
+            label_id: &label.id,
+            label_name: &label.name,
+            action_type: LabelOntologyActionType::UpdateSemantics,
+            before,
+            before_atoms,
+            include_description_effects: true,
+            options,
+        },
+        now,
+    )?;
+    Ok(())
 }
 
 pub fn list_label_atoms(path: impl AsRef<Path>, board: &str) -> Result<Vec<LabelAtomRecord>> {
@@ -363,7 +408,8 @@ pub fn explain_label_atom(
     let validation_history = label_atom_validation_history(&conn, &provenance_actions)?;
     let legacy_untracked = atom.is_some() && provenance_actions.is_empty();
     let legacy_reason = legacy_untracked.then(|| {
-        "no ontology provenance action references this atom id or content hash".to_owned()
+        "no ontology provenance action, atom effect, or legacy result atom reference matches this atom id or content hash"
+            .to_owned()
     });
     Ok(LabelAtomExplainRecord {
         query: atom_ref.to_owned(),
@@ -806,7 +852,38 @@ fn label_atom_provenance_actions(
     current_atom_id: Option<&str>,
     content_hash: &str,
 ) -> Result<Vec<LabelAtomExplainAction>> {
-    let mut stmt = conn
+    let mut seen = BTreeSet::new();
+    let mut provenance_actions = Vec::new();
+    let atom_id_ref = current_atom_id.unwrap_or(atom_ref);
+    let mut effect_stmt = conn
+        .prepare(&format!(
+            "SELECT {ONTOLOGY_ACTION_COLUMNS} FROM label_ontology_action_atom_effects e \
+             JOIN label_ontology_actions a ON a.board_id=e.board_id AND a.id=e.action_id \
+             WHERE e.board_id=?1 \
+               AND a.action_type IN ('add_positive_atom','add_negative_atom','update_semantics','bootstrap_label','revert_ontology_mutation') \
+               AND (e.atom_id_snapshot=?2 OR e.atom_id_snapshot=?3 OR e.atom_content_hash=?2 OR e.atom_content_hash=?4) \
+             ORDER BY a.created_at ASC, a.id ASC"
+        ))
+        .map_err(storage)?;
+    let effect_rows = effect_stmt
+        .query_map(
+            params![board_id, atom_ref, atom_id_ref, content_hash],
+            ontology_action_from_row,
+        )
+        .map_err(storage)?;
+    for row in effect_rows {
+        let mut action = row.map_err(storage)?;
+        if !seen.insert(action.id.clone()) {
+            continue;
+        }
+        hydrate_action_signal_ids(conn, &mut action)?;
+        provenance_actions.push(LabelAtomExplainAction {
+            action,
+            matched_by: "atom_effect".to_owned(),
+        });
+    }
+
+    let mut legacy_stmt = conn
         .prepare(&format!(
             "SELECT {ONTOLOGY_ACTION_COLUMNS} FROM label_ontology_actions a \
              WHERE a.board_id=?1 \
@@ -815,39 +892,38 @@ fn label_atom_provenance_actions(
              ORDER BY a.created_at ASC, a.id ASC"
         ))
         .map_err(storage)?;
-    let rows = stmt
+    let legacy_rows = legacy_stmt
         .query_map(
-            params![
-                board_id,
-                atom_ref,
-                current_atom_id.unwrap_or(atom_ref),
-                content_hash
-            ],
+            params![board_id, atom_ref, atom_id_ref, content_hash],
             ontology_action_from_row,
         )
         .map_err(storage)?;
-    let mut seen = BTreeSet::new();
-    rows.map(|row| row.map_err(storage))
-        .filter_map(|result| match result {
-            Ok(mut action) if seen.insert(action.id.clone()) => {
-                Some(hydrate_action_signal_ids(conn, &mut action).map(|()| {
-                    LabelAtomExplainAction {
-                        matched_by: if action.result_atom_id.as_deref() == Some(atom_ref)
-                            || current_atom_id.is_some_and(|atom_id| {
-                                action.result_atom_id.as_deref() == Some(atom_id)
-                            }) {
-                            "atom_id".to_owned()
-                        } else {
-                            "content_hash".to_owned()
-                        },
-                        action,
-                    }
-                }))
-            }
-            Ok(_) => None,
-            Err(err) => Some(Err(err)),
-        })
-        .collect()
+    for row in legacy_rows {
+        let mut action = row.map_err(storage)?;
+        if !seen.insert(action.id.clone()) {
+            continue;
+        }
+        let matched_by = if action.result_atom_id.as_deref() == Some(atom_ref)
+            || current_atom_id
+                .is_some_and(|atom_id| action.result_atom_id.as_deref() == Some(atom_id))
+        {
+            "legacy_result_atom_id"
+        } else {
+            "legacy_result_atom_hash"
+        };
+        hydrate_action_signal_ids(conn, &mut action)?;
+        provenance_actions.push(LabelAtomExplainAction {
+            action,
+            matched_by: matched_by.to_owned(),
+        });
+    }
+    provenance_actions.sort_by(|left, right| {
+        match left.action.created_at.cmp(&right.action.created_at) {
+            std::cmp::Ordering::Equal => left.action.id.cmp(&right.action.id),
+            ordering => ordering,
+        }
+    });
+    Ok(provenance_actions)
 }
 
 fn label_atom_supporting_signals(

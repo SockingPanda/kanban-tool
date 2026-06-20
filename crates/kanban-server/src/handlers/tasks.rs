@@ -442,6 +442,13 @@ pub(crate) struct UpsertLabelSemanticsBody {
     remove_negative_examples: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DeleteLabelSemanticsQuery {
+    expected_semantics_hash: String,
+    reason: String,
+}
+
 pub(crate) async fn list_tasks(
     State(state): State<AppState>,
     Path(board): Path<String>,
@@ -642,9 +649,21 @@ pub(crate) async fn upsert_label_semantics(
 pub(crate) async fn delete_label_semantics(
     State(state): State<AppState>,
     Path((board, label_id)): Path<(String, String)>,
+    headers: HeaderMap,
+    query: Result<Query<DeleteLabelSemanticsQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<serde_json::Value>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
     let label_id = require_label_id_path(label_id)?;
-    kanban_sqlite::delete_label_semantics_by_id(state.db_path(), &board, &label_id)?;
+    let mut options =
+        kanban_sqlite::LabelSemanticsMutationOptions::manual_actor(actor(None, &headers, &state));
+    options.reason = Some(query.reason);
+    kanban_sqlite::clear_label_semantics_by_id_with_options(
+        state.db_path(),
+        &board,
+        &label_id,
+        query.expected_semantics_hash,
+        options,
+    )?;
     Ok(Json(Envelope {
         data: json!({ "deleted": true }),
         meta: None,

@@ -46,6 +46,7 @@ CREATE TABLE tasks_new (
   lock_version INTEGER NOT NULL DEFAULT 0 CHECK(lock_version >= 0),
 
   UNIQUE(board_id, seq),
+  UNIQUE(id, board_id),
   CHECK(
     (status != 'running') OR
     (claim_token IS NOT NULL AND claim_owner IS NOT NULL AND claim_expires_at IS NOT NULL)

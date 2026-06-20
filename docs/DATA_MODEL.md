@@ -100,23 +100,24 @@ Archived board 默认不出现在 board list，也不接受普通 task/comment/d
 
 ### 4.1 Board isolation 责任边界
 
-SQLite 是 canonical truth，但当前 board isolation 由三层共同保证：
+SQLite 是 canonical truth，但 board isolation 由三层共同保证：
 
 1. DB constraint：所有 board-scoped rows 都有 `board_id` 并引用 `boards(id)`；
-   referenced task / label / run id 也各自有 FK，确保引用对象存在。较新的 label
-   semantics / atoms 表还使用 `(id, board_id)` 复合 FK 保证 label board 一致。
+   referenced task / label / run id 也各自有 FK，确保引用对象存在。`task_labels`、
+   `task_dependencies`、`task_runs` 和较新的 label semantics / atoms 表使用包含
+   `board_id` 的复合 FK，直接阻止这些关键关系表出现 cross-board row。
 2. Service guard：CLI、HTTP、desktop 和 dispatcher 的正常写路径必须先在同一 board
    scope 内 resolve task、label、run 等对象，再写关系 row；例如 task label binding、
    dependency、comment、event、run 和 attachment 都不应跨 board 组合。
 3. Doctor/import check：`kanban doctor` 和 JSONL import final gate 会只读检查基础关系表
    中 `row.board_id` 与 referenced task / label / run 的 board 是否一致。
 
-需要特别注意：部分 v1 基础关系表仍使用独立 FK，而不是 schema-level composite FK：
-`task_labels`、`task_dependencies`、`task_runs`、`task_comments`、`task_events`、
-`task_attachments`。因此 raw SQL、损坏导入或维护脚本理论上可以写出
-`row.board_id != referenced.board_id` 的数据；这种数据会被 doctor/import 报告为
-hard error，但当前不是全部由 SQLite FK 直接阻止。通过 table rebuild 增加这些表的
-composite FK 是后续 hardening 工作，不属于当前已实现保证。
+需要特别注意：`task_comments`、`task_events`、`task_attachments` 等历史/审计表仍使用
+独立 FK，而不是 schema-level composite FK。因此 raw SQL、损坏导入或维护脚本理论上仍
+可能在这些表写出 `row.board_id != referenced.board_id` 的数据；这种数据会被
+doctor/import 报告为 hard error，但当前不是全部由 SQLite FK 直接阻止。后续如要继续
+hardening，需要针对这些表的 nullable history / `ON DELETE SET NULL` 语义单独设计
+table rebuild migration。
 
 ---
 
@@ -218,6 +219,10 @@ Task public identity 有两层：
 
 表：`task_dependencies`
 
+Schema-level invariant：`parent_task_id` 和 `child_task_id` 必须都属于 row
+`board_id`。旧数据库升级到 composite FK schema 前会先检查 existing cross-board rows；
+发现不一致时 migration 会失败并要求先用 doctor/repair 清理。
+
 字段：
 
 | 字段 | 说明 |
@@ -240,6 +245,9 @@ parent neither done nor archived => child cannot be ready/running
 ## 7. Run
 
 表：`task_runs`
+
+Schema-level invariant：`task_id` 必须属于 row `board_id`。这保证 run attempt
+不能在 SQLite 层跨 board 指向 task。
 
 Run 是一次 execution attempt。
 

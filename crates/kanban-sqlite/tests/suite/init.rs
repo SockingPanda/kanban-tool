@@ -60,7 +60,7 @@ fn init_records_and_enforces_migration_checksum() -> anyhow::Result<()> {
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    assert_eq!(user_version, 16);
+    assert_eq!(user_version, 17);
     assert_eq!(name, "001_initial");
     assert!(checksum.starts_with("fnv64:"), "checksum: {checksum}");
 
@@ -86,7 +86,7 @@ fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 16);
+    assert_eq!(user_version, 17);
     for table in [
         "entities",
         "relation_predicates",
@@ -152,7 +152,7 @@ fn init_upgrades_v1_database_and_backfills_task_entities() -> anyhow::Result<()>
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 16);
+    assert_eq!(user_version, 17);
     let task_entity_title: String = conn.query_row(
         "SELECT title FROM entities WHERE uri='kb://task/t_test'",
         [],
@@ -160,6 +160,194 @@ fn init_upgrades_v1_database_and_backfills_task_entities() -> anyhow::Result<()>
     )?;
     assert_eq!(task_entity_title, "Upgrade task");
     Ok(())
+}
+
+#[test]
+fn init_v17_rebuilds_key_relationship_tables_without_losing_rows() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_v17_rebuilds_key_relationship_tables_without_losing_rows")?;
+    let fixture = seed_v17_board_isolation_fixture(&temp)?;
+
+    let conn = connect_file(&temp.path)?;
+    let before_counts = v17_relationship_counts(&conn)?;
+    conn.execute("DELETE FROM schema_migrations WHERE version=17", [])?;
+    conn.pragma_update(None, "user_version", 16)?;
+    drop(conn);
+
+    init_database(&temp.path, "tester")?;
+
+    let conn = connect_file(&temp.path)?;
+    let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    assert_eq!(user_version, 17);
+    assert_eq!(v17_relationship_counts(&conn)?, before_counts);
+    assert_eq!(
+        task_label_board_for(&conn, &fixture.task_id, &fixture.label_id)?,
+        fixture.board_id
+    );
+    let fk_errors = foreign_key_check_rows(&conn)?;
+    assert!(fk_errors.is_empty(), "{fk_errors:#?}");
+    Ok(())
+}
+
+#[test]
+fn init_v17_preflight_reports_cross_board_key_relationship_rows() -> anyhow::Result<()> {
+    for table in ["task_labels", "task_dependencies", "task_runs"] {
+        let temp = TempDb::new(&format!("init_v17_preflight_{table}"))?;
+        let fixture = seed_v17_board_isolation_fixture(&temp)?;
+        let conn = connect_file(&temp.path)?;
+        conn.execute("DELETE FROM schema_migrations WHERE version=17", [])?;
+        conn.pragma_update(None, "user_version", 16)?;
+        conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+        let expected_row_key = match table {
+            "task_labels" => {
+                conn.execute(
+                    "UPDATE task_labels SET board_id=?1 WHERE task_id=?2 AND label_id=?3",
+                    params![fixture.other_board_id, fixture.task_id, fixture.label_id],
+                )?;
+                format!("{}:{}", fixture.task_id, fixture.label_id)
+            }
+            "task_dependencies" => {
+                conn.execute(
+                    "UPDATE task_dependencies SET board_id=?1 WHERE parent_task_id=?2 AND child_task_id=?3",
+                    params![
+                        fixture.other_board_id,
+                        fixture.parent_task_id,
+                        fixture.child_task_id
+                    ],
+                )?;
+                format!("{}->{}", fixture.parent_task_id, fixture.child_task_id)
+            }
+            "task_runs" => {
+                conn.execute(
+                    "UPDATE task_runs SET board_id=?1 WHERE id='r_v17'",
+                    [&fixture.other_board_id],
+                )?;
+                "r_v17".to_owned()
+            }
+            _ => unreachable!(),
+        };
+        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        drop(conn);
+
+        let err = result_err(init_database(&temp.path, "tester"))?;
+        let message = err.to_string();
+        assert!(
+            message.contains("cannot apply migration 017_board_isolation_composite_fk"),
+            "{}: {message}",
+            table
+        );
+        assert!(message.contains(table), "{}: {message}", table);
+        assert!(message.contains(&expected_row_key), "{}: {message}", table);
+    }
+    Ok(())
+}
+
+struct V17BoardIsolationFixture {
+    board_id: String,
+    other_board_id: String,
+    task_id: String,
+    parent_task_id: String,
+    child_task_id: String,
+    label_id: String,
+}
+
+fn seed_v17_board_isolation_fixture(temp: &TempDb) -> anyhow::Result<V17BoardIsolationFixture> {
+    init_database(&temp.path, "tester")?;
+    let other_board = create_board(
+        &temp.path,
+        "tester",
+        CreateBoard {
+            slug: "other".to_owned(),
+            name: "Other".to_owned(),
+            description: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("v17 task label source"),
+    )?;
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("v17 parent"),
+    )?;
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("v17 child"),
+    )?;
+    let label = create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "v17-label".to_owned(),
+            color: None,
+        },
+    )?;
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "INSERT INTO task_labels(board_id, task_id, label_id, created_at) VALUES (?1, ?2, ?3, 1)",
+        params![task.board_id, task.id, label.id],
+    )?;
+    conn.execute(
+        "INSERT INTO task_runs(id, board_id, task_id, status, claim_token, claim_owner, claim_expires_at, started_at, metadata_json) \
+         VALUES ('r_v17', ?1, ?2, 'failed', 'claim', 'tester', 1, 1, '{}')",
+        params![task.board_id, task.id],
+    )?;
+
+    Ok(V17BoardIsolationFixture {
+        board_id: task.board_id,
+        other_board_id: other_board.id,
+        task_id: task.id,
+        parent_task_id: parent.id,
+        child_task_id: child.id,
+        label_id: label.id,
+    })
+}
+
+fn v17_relationship_counts(conn: &Connection) -> anyhow::Result<Vec<(&'static str, i64)>> {
+    ["task_labels", "task_dependencies", "task_runs"]
+        .into_iter()
+        .map(|table| {
+            Ok((
+                table,
+                conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })?,
+            ))
+        })
+        .collect()
+}
+
+fn task_label_board_for(
+    conn: &Connection,
+    task_id: &str,
+    label_id: &str,
+) -> anyhow::Result<String> {
+    Ok(conn.query_row(
+        "SELECT board_id FROM task_labels WHERE task_id=?1 AND label_id=?2",
+        params![task_id, label_id],
+        |row| row.get(0),
+    )?)
+}
+
+fn foreign_key_check_rows(conn: &Connection) -> anyhow::Result<Vec<String>> {
+    let mut stmt = conn.prepare("PRAGMA foreign_key_check")?;
+    let rows = stmt
+        .query_map([], |row| {
+            let table: String = row.get(0)?;
+            let rowid: i64 = row.get(1)?;
+            let parent: String = row.get(2)?;
+            let fkid: i64 = row.get(3)?;
+            Ok(format!("{table}:{rowid}->{parent}:{fkid}"))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
 }
 
 #[test]

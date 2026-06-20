@@ -205,6 +205,8 @@ pub(crate) struct CreateLabelBody {
 pub(crate) struct AddTaskLabelBody {
     name: Option<String>,
     names: Option<Vec<String>>,
+    #[serde(default)]
+    create_missing: bool,
     actor: Option<String>,
 }
 
@@ -377,6 +379,32 @@ pub(crate) struct LabelOntologyAtomApplyBody {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub(crate) struct LabelOntologyStructurePlanBody {
+    actor: LabelOntologyActorBody,
+    signal_ids: Vec<String>,
+    action_type: kanban_sqlite::LabelOntologyActionType,
+    target_label_ref: String,
+    proposed_label_name: Option<String>,
+    #[serde(default)]
+    related_label_refs: Vec<String>,
+    task_binding_policy: Option<String>,
+    #[serde(default)]
+    validation_policy: JsonBodyField,
+    validation_policy_json: Option<String>,
+    reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct LabelOntologyRevertBody {
+    actor: LabelOntologyActorBody,
+    target_action_id: String,
+    expected_current_hash: Option<String>,
+    reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct LabelOntologyValidationBody {
     actor: LabelOntologyActorBody,
     parent_action_id: String,
@@ -392,15 +420,26 @@ pub(crate) struct LabelOntologyValidationBody {
 #[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct UpsertLabelSemanticsBody {
+    actor: Option<String>,
+    expected_semantics_hash: Option<String>,
+    #[serde(default)]
+    replace: bool,
+    reason: Option<String>,
+    #[serde(default)]
+    source_signal_ids: Vec<String>,
     description: Option<String>,
+    applies_when: Option<Vec<String>>,
+    excludes_when: Option<Vec<String>>,
+    positive_examples: Option<Vec<String>>,
+    negative_examples: Option<Vec<String>>,
     #[serde(default)]
-    applies_when: Vec<String>,
+    remove_applies_when: Vec<String>,
     #[serde(default)]
-    excludes_when: Vec<String>,
+    remove_excludes_when: Vec<String>,
     #[serde(default)]
-    positive_examples: Vec<String>,
+    remove_positive_examples: Vec<String>,
     #[serde(default)]
-    negative_examples: Vec<String>,
+    remove_negative_examples: Vec<String>,
 }
 
 pub(crate) async fn list_tasks(
@@ -566,23 +605,35 @@ pub(crate) async fn get_label_semantics(
 pub(crate) async fn upsert_label_semantics(
     State(state): State<AppState>,
     Path((board, label_id)): Path<(String, String)>,
+    headers: HeaderMap,
     body: Result<Json<UpsertLabelSemanticsBody>, JsonRejection>,
 ) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticsRecord>>, ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let label_id = require_label_id_path(label_id)?;
+    let actor = actor(body.actor.as_deref(), &headers, &state);
+    let mut options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor(actor);
+    options.reason = body.reason;
+    options.source_signal_ids = body.source_signal_ids;
     Ok(Json(Envelope {
-        data: kanban_sqlite::upsert_label_semantics_by_id(
+        data: kanban_sqlite::upsert_label_semantics_by_id_with_options(
             state.db_path(),
             &board,
             &label_id,
             kanban_sqlite::UpsertLabelSemantics {
                 label_ref: label_id.clone(),
+                expected_semantics_hash: body.expected_semantics_hash,
+                replace: body.replace,
                 description: body.description,
-                applies_when: body.applies_when,
-                excludes_when: body.excludes_when,
-                positive_examples: body.positive_examples,
-                negative_examples: body.negative_examples,
+                applies_when: body.applies_when.unwrap_or_default(),
+                excludes_when: body.excludes_when.unwrap_or_default(),
+                positive_examples: body.positive_examples.unwrap_or_default(),
+                negative_examples: body.negative_examples.unwrap_or_default(),
+                remove_applies_when: body.remove_applies_when,
+                remove_excludes_when: body.remove_excludes_when,
+                remove_positive_examples: body.remove_positive_examples,
+                remove_negative_examples: body.remove_negative_examples,
             },
+            options,
         )?,
         meta: None,
     }))
@@ -757,13 +808,28 @@ pub(crate) async fn add_task_label(
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
     let label_names = body.label_names()?;
-    let task =
-        kanban_sqlite::add_task_labels_by_id(state.db_path(), &actor, &task_id, &label_names)?;
+    let result = kanban_sqlite::add_task_labels_by_id_with_options(
+        state.db_path(),
+        &actor,
+        &task_id,
+        &label_names,
+        body.create_missing,
+    )?;
+    let created_labels = result
+        .created_labels
+        .into_iter()
+        .map(LabelDto::from)
+        .collect::<Vec<_>>();
+    let meta = if created_labels.is_empty() {
+        None
+    } else {
+        Some(json!({ "created_labels": created_labels }))
+    };
     Ok((
         StatusCode::CREATED,
         Json(Envelope {
-            data: TaskDto::from(task),
-            meta: None,
+            data: TaskDto::from(result.task),
+            meta,
         }),
     ))
 }
@@ -1053,6 +1119,58 @@ pub(crate) async fn apply_label_ontology_atom(
             allow_retarget,
             retarget_reason,
         },
+    )?;
+    Ok((
+        StatusCode::CREATED,
+        Json(Envelope {
+            data: action,
+            meta: None,
+        }),
+    ))
+}
+
+pub(crate) async fn plan_label_ontology_structure_change(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+    body: Result<Json<LabelOntologyStructurePlanBody>, JsonRejection>,
+) -> Result<
+    (
+        StatusCode,
+        Json<Envelope<kanban_sqlite::LabelOntologyActionRecord>>,
+    ),
+    ApiError,
+> {
+    let Json(body) = body.map_err(extractor_error)?;
+    let action = kanban_sqlite::plan_label_ontology_structure_change(
+        state.db_path(),
+        &board,
+        label_ontology_structure_plan_input(body)?,
+    )?;
+    Ok((
+        StatusCode::CREATED,
+        Json(Envelope {
+            data: action,
+            meta: None,
+        }),
+    ))
+}
+
+pub(crate) async fn revert_label_ontology_mutation(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+    body: Result<Json<LabelOntologyRevertBody>, JsonRejection>,
+) -> Result<
+    (
+        StatusCode,
+        Json<Envelope<kanban_sqlite::LabelOntologyActionRecord>>,
+    ),
+    ApiError,
+> {
+    let Json(body) = body.map_err(extractor_error)?;
+    let action = kanban_sqlite::revert_label_ontology_mutation(
+        state.db_path(),
+        &board,
+        label_ontology_revert_input(body),
     )?;
     Ok((
         StatusCode::CREATED,
@@ -1355,6 +1473,39 @@ fn label_ontology_atom_apply_input(
         label_ref: body.label_ref,
         kind: body.kind,
         text: body.text,
+        reason: body.reason,
+    }
+}
+
+fn label_ontology_structure_plan_input(
+    body: LabelOntologyStructurePlanBody,
+) -> Result<kanban_sqlite::LabelOntologyStructurePlanInput, ApiError> {
+    Ok(kanban_sqlite::LabelOntologyStructurePlanInput {
+        actor: label_ontology_actor_input(body.actor),
+        signal_ids: body.signal_ids,
+        action_type: body.action_type,
+        target_label_ref: body.target_label_ref,
+        proposed_label_name: body.proposed_label_name,
+        related_label_refs: body.related_label_refs,
+        task_binding_policy: body.task_binding_policy,
+        validation_policy_json: coalesce_optional_json_body_field(
+            "validation_policy",
+            body.validation_policy,
+            "validation_policy_json",
+            body.validation_policy_json,
+            JsonBodyShape::Object,
+        )?,
+        reason: body.reason,
+    })
+}
+
+fn label_ontology_revert_input(
+    body: LabelOntologyRevertBody,
+) -> kanban_sqlite::LabelOntologyRevertInput {
+    kanban_sqlite::LabelOntologyRevertInput {
+        actor: label_ontology_actor_input(body.actor),
+        target_action_id: body.target_action_id,
+        expected_current_hash: body.expected_current_hash,
         reason: body.reason,
     }
 }

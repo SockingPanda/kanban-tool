@@ -1,4 +1,4 @@
-export type OperatorView = "board" | "list" | "events" | "runs" | "maintenance" | "health" | "settings"
+export type OperatorView = "board" | "list" | "events" | "runs" | "ontology" | "maintenance" | "health" | "settings"
 
 export const primaryViews: OperatorView[] = ["board", "list", "events"]
 
@@ -7,6 +7,7 @@ export const sidebarViews: OperatorView[] = [
   "list",
   "runs",
   "events",
+  "ontology",
   "maintenance",
   "health",
   "settings",

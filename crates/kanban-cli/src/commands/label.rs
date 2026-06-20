@@ -1,36 +1,45 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 #[cfg(feature = "vector-lancedb")]
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{Result, bail};
 use kanban_sqlite::{
     BootstrapTaskLabel, CreateLabel, LabelOntologyActionInput, LabelOntologyActionRecord,
     LabelOntologyActionType, LabelOntologyActor, LabelOntologyAtomApplyInput,
-    LabelOntologyRetargetOptions, LabelOntologyReviewGroupBy, LabelOntologyReviewOptions,
-    LabelOntologyValidationInput, LabelOntologyValidationStatus, LabelProposalCandidate,
-    LabelProposalCreateOptions, LabelProposalDecisionOptions, LabelProposalListOptions,
-    LabelProposalStatus, LabelSemanticProposalRecord, LabelSuggestionOptions,
+    LabelOntologyCandidateAtomInput, LabelOntologyProposedAction, LabelOntologyQualityOptions,
+    LabelOntologyRecordInput, LabelOntologyRetargetOptions, LabelOntologyRevertInput,
+    LabelOntologyReviewGroupBy, LabelOntologyReviewOptions, LabelOntologySignalInput,
+    LabelOntologySignalKind, LabelOntologyStructurePlanInput, LabelOntologySuggestState,
+    LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
+    LabelOntologyValidationStatus, LabelProposalCandidate, LabelProposalCreateOptions,
+    LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalStatus,
+    LabelSemanticProposalRecord, LabelSemanticsMutationOptions, LabelSuggestionOptions,
     LabelSuggestionResult, MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
-    accept_label_proposal_with_options, add_task_labels, apply_label_ontology_atom_with_options,
-    bootstrap_task_label, create_label, create_label_ontology_action, delete_label,
-    delete_label_semantics, explain_label_atom, get_label_ontology_signal, get_label_proposal,
-    get_label_semantics, get_task, label_atom_index_status, list_label_atoms,
-    list_label_ontology_signals, list_label_proposals, list_label_semantics, list_labels,
+    accept_label_proposal_with_options, add_task_labels_with_options,
+    apply_label_ontology_atom_with_options, bootstrap_task_label, create_label,
+    create_label_ontology_action, delete_label, delete_label_semantics, explain_label_atom,
+    get_label_ontology_signal, get_label_proposal, get_label_semantics, label_atom_index_status,
+    label_ontology_quality_report, list_label_atoms, list_label_ontology_signals,
+    list_label_proposals, list_label_semantics, list_labels, plan_label_ontology_structure_change,
     propose_task_label_with_create_options, record_label_ontology_observation,
-    reject_label_proposal, remove_task_label, review_label_ontology, suggest_task_labels,
-    upsert_label_semantics, validate_label_ontology_action,
+    reject_label_proposal, remove_task_label, restore_bootstrap_task_label_state,
+    revert_label_ontology_mutation, review_label_ontology, snapshot_bootstrap_task_label_state,
+    suggest_task_labels, upsert_label_semantics_with_options, validate_label_ontology_action,
+    validate_label_ontology_action_with_trusted_suggestions,
 };
 #[cfg(feature = "vector-lancedb")]
 use kanban_sqlite::{
     label_atom_index_status_with, query_label_atom_index_with, rebuild_label_atom_index_with,
     suggest_task_labels_with,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use std::{fs, io::Read, str::FromStr};
 
 use crate::args::{
     LabelAtomPolarityArg, LabelCommand, LabelOntologyActorArgs, LabelOntologyActorTypeArg,
-    LabelOntologyAtomKindArg, LabelOntologyReviewGroupByArg, LabelOntologyValidationStatusArg,
+    LabelOntologyAtomKindArg, LabelOntologyReviewGroupByArg, LabelOntologyStructureChangeArg,
+    LabelOntologyValidationStatusArg,
 };
 use crate::commands::common::validate_page_bounds;
 use crate::output::{label_line, print_or_json, print_task};
@@ -81,31 +90,27 @@ pub(crate) fn handle_label(
                     args.vector_config.as_deref(),
                 )?;
             }
-            let existing_task = if verify {
-                Some(get_task(db_path, board, &args.task_ref)?)
+            let bootstrap_input = BootstrapTaskLabel {
+                name: args.label,
+                description: args.description,
+                applies_when: args.applies_when,
+                excludes_when: args.excludes_when,
+                positive_examples: args.positive_examples,
+                negative_examples: args.negative_examples,
+            };
+            let bootstrap_snapshot = if verify {
+                Some(snapshot_bootstrap_task_label_state(
+                    db_path,
+                    board,
+                    &args.task_ref,
+                    &bootstrap_input.name,
+                )?)
             } else {
                 None
             };
-            let result = bootstrap_task_label(
-                db_path,
-                board,
-                actor,
-                &args.task_ref,
-                BootstrapTaskLabel {
-                    name: args.label,
-                    description: args.description,
-                    applies_when: args.applies_when,
-                    excludes_when: args.excludes_when,
-                    positive_examples: args.positive_examples,
-                    negative_examples: args.negative_examples,
-                },
-            )?;
+            let result =
+                bootstrap_task_label(db_path, board, actor, &args.task_ref, bootstrap_input)?;
             let verification = if verify {
-                let was_attached = existing_task.as_ref().is_some_and(|task| {
-                    task.labels
-                        .iter()
-                        .any(|label| label.id == result.semantics.label_id)
-                });
                 Some(
                     match verify_label_bootstrap_suggestion(
                         db_path,
@@ -118,18 +123,16 @@ pub(crate) fn handle_label(
                     ) {
                         Ok(verification) => verification,
                         Err(error) => {
-                            if !was_attached
-                                && let Err(cleanup_error) = remove_task_label(
-                                    db_path,
-                                    board,
-                                    actor,
-                                    &args.task_ref,
-                                    &result.semantics.label_id,
-                                )
-                            {
-                                bail!(
-                                    "{error}; additionally failed to remove unverified task label binding: {cleanup_error}"
-                                );
+                            if let Some(snapshot) = &bootstrap_snapshot {
+                                match restore_bootstrap_task_label_state(db_path, actor, snapshot) {
+                                    Ok(restore) => bail!(
+                                        "{error}; bootstrap verification compensation restored canonical state ({})",
+                                        label_bootstrap_restore_summary(&restore)
+                                    ),
+                                    Err(cleanup_error) => bail!(
+                                        "{error}; additionally failed to restore bootstrap canonical state: {cleanup_error}"
+                                    ),
+                                }
                             }
                             return Err(error);
                         }
@@ -146,15 +149,30 @@ pub(crate) fn handle_label(
             print_or_json(json, &output, || label_bootstrap_lines(&output))?;
         }
         LabelCommand::Add(args) => {
-            let task = add_task_labels(db_path, board, actor, &args.task_ref, &args.labels)?;
-            print_task(json, &task)?;
+            let result = add_task_labels_with_options(
+                db_path,
+                board,
+                actor,
+                &args.task_ref,
+                &args.labels,
+                args.create_missing,
+            )?;
+            if args.create_missing {
+                let output = LabelAddCommandOutput {
+                    task: result.task,
+                    created_labels: result.created_labels,
+                };
+                print_or_json(json, &output, || label_add_lines(&output))?;
+            } else {
+                print_task(json, &result.task)?;
+            }
         }
         LabelCommand::Remove(args) => {
             let task = remove_task_label(db_path, board, actor, &args.task_ref, &args.label)?;
             print_task(json, &task)?;
         }
         LabelCommand::Semantics { command } => {
-            handle_label_semantics(command, db_path, board, json)?
+            handle_label_semantics(command, db_path, board, actor, json)?
         }
         LabelCommand::Atoms { command } => match command {
             crate::args::LabelAtomsCommand::List => {
@@ -323,6 +341,7 @@ fn handle_label_semantics(
     command: crate::args::LabelSemanticsCommand,
     db_path: &PathBuf,
     board: &str,
+    actor: &str,
     json: bool,
 ) -> Result<()> {
     match command {
@@ -335,17 +354,28 @@ fn handle_label_semantics(
             print_or_json(json, &semantics, || label_semantics_line(&semantics))?;
         }
         crate::args::LabelSemanticsCommand::Upsert(args) => {
-            let semantics = upsert_label_semantics(
+            let args = *args;
+            let mut options = LabelSemanticsMutationOptions::manual_actor(actor);
+            options.reason = args.reason;
+            options.source_signal_ids = args.source_signal_ids;
+            let semantics = upsert_label_semantics_with_options(
                 db_path,
                 board,
                 UpsertLabelSemantics {
                     label_ref: args.label,
+                    expected_semantics_hash: args.expected_semantics_hash,
+                    replace: args.replace,
                     description: args.description,
                     applies_when: args.applies_when,
                     excludes_when: args.excludes_when,
                     positive_examples: args.positive_examples,
                     negative_examples: args.negative_examples,
+                    remove_applies_when: args.remove_applies_when,
+                    remove_excludes_when: args.remove_excludes_when,
+                    remove_positive_examples: args.remove_positive_examples,
+                    remove_negative_examples: args.remove_negative_examples,
                 },
+                options,
             )?;
             print_or_json(json, &semantics, || label_semantics_line(&semantics))?;
         }
@@ -429,7 +459,10 @@ fn handle_label_ontology(
 ) -> Result<()> {
     match command {
         crate::args::LabelOntologyCommand::Record(args) => {
-            let input = read_label_ontology_record_input(&args.input)?;
+            if args.capture_suggest && args.suggestion_snapshot.is_some() {
+                bail!("--capture-suggest cannot be used with --suggestion-snapshot");
+            }
+            let input = read_label_ontology_record_input(db_path, board, &args)?;
             let observation =
                 record_label_ontology_observation(db_path, board, &args.task_ref, input)?;
             print_or_json(json, &observation, || {
@@ -477,6 +510,17 @@ fn handle_label_ontology(
                 },
             )?;
             print_or_json(json, &groups, || label_ontology_review_group_lines(&groups))?;
+        }
+        crate::args::LabelOntologyCommand::Quality(args) => {
+            validate_page_bounds(args.sample_limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let report = label_ontology_quality_report(
+                db_path,
+                board,
+                LabelOntologyQualityOptions {
+                    sample_limit: args.sample_limit,
+                },
+            )?;
+            print_or_json(json, &report, || label_ontology_quality_line(&report))?;
         }
         crate::args::LabelOntologyCommand::Confirm(args) => {
             let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
@@ -562,20 +606,95 @@ fn handle_label_ontology(
                 print_or_json(json, &action, || label_ontology_action_line(&action))?;
             }
         },
-        crate::args::LabelOntologyCommand::Validate(args) => {
-            let validation_json = read_json_input_string(&args.input)?;
-            let action = validate_label_ontology_action(
+        crate::args::LabelOntologyCommand::Structure { command } => match command {
+            crate::args::LabelOntologyStructureCommand::Plan(args) => {
+                let validation_policy_json = args
+                    .validation_policy_json
+                    .as_deref()
+                    .map(read_json_input_string)
+                    .transpose()?;
+                let action = plan_label_ontology_structure_change(
+                    db_path,
+                    board,
+                    LabelOntologyStructurePlanInput {
+                        actor: label_ontology_cli_actor(actor, &args.actor),
+                        signal_ids: args.signal_ids,
+                        action_type: label_ontology_structure_change_type(args.change_type),
+                        target_label_ref: args.target_label,
+                        proposed_label_name: args.proposed_label,
+                        related_label_refs: args.related_labels,
+                        task_binding_policy: args.task_binding_policy,
+                        validation_policy_json,
+                        reason: args.reason,
+                    },
+                )?;
+                print_or_json(json, &action, || label_ontology_action_line(&action))?;
+            }
+        },
+        crate::args::LabelOntologyCommand::Revert(args) => {
+            let action = revert_label_ontology_mutation(
                 db_path,
                 board,
-                LabelOntologyValidationInput {
+                LabelOntologyRevertInput {
                     actor: label_ontology_cli_actor(actor, &args.actor),
-                    parent_action_id: args.action_id,
-                    signal_ids: args.signal_ids,
+                    target_action_id: args.action_id,
+                    expected_current_hash: args.expected_current_hash,
                     reason: args.reason,
-                    validation_status: label_ontology_validation_status(args.status),
-                    validation_json,
                 },
             )?;
+            print_or_json(json, &action, || label_ontology_action_line(&action))?;
+        }
+        crate::args::LabelOntologyCommand::Validate(args) => {
+            let validation_status = label_ontology_validation_status(args.status);
+            let action = if args.trusted {
+                validate_label_suggest_bounds(
+                    args.limit,
+                    args.candidate_limit,
+                    args.atom_limit,
+                    args.max_selected_labels,
+                )?;
+                if args.input.is_some() {
+                    bail!(
+                        "--trusted collects validation evidence from label suggest; do not pass --input"
+                    );
+                }
+                let options = LabelSuggestionOptions {
+                    output_limit: args.limit,
+                    candidate_limit: args.candidate_limit,
+                    atom_limit: args.atom_limit,
+                    max_selected_labels: args.max_selected_labels,
+                    min_score: args.min_score,
+                };
+                validate_label_ontology_action_with_trusted_cli_evidence(
+                    db_path,
+                    board,
+                    actor,
+                    &args.actor,
+                    args.action_id,
+                    args.signal_ids,
+                    args.reason,
+                    validation_status,
+                    args.vector_config.as_deref(),
+                    options,
+                )?
+            } else {
+                let Some(input) = args.input.as_deref() else {
+                    bail!("label ontology validate requires --input unless --trusted is used");
+                };
+                let validation_json = read_json_input_string(input)?;
+                validate_label_ontology_action(
+                    db_path,
+                    board,
+                    LabelOntologyValidationInput {
+                        actor: label_ontology_cli_actor(actor, &args.actor),
+                        parent_action_id: args.action_id,
+                        signal_ids: args.signal_ids,
+                        reason: args.reason,
+                        validation_status,
+                        validation_json,
+                    },
+                )?
+            };
             print_or_json(json, &action, || label_ontology_action_line(&action))?;
         }
     }
@@ -608,9 +727,273 @@ fn label_ontology_list_options(
     })
 }
 
-fn read_label_ontology_record_input(path: &str) -> Result<kanban_sqlite::LabelOntologyRecordInput> {
+fn read_label_ontology_record_input(
+    db_path: &PathBuf,
+    board: &str,
+    args: &crate::args::LabelOntologyRecordArgs,
+) -> Result<LabelOntologyRecordInput> {
+    let raw = read_json_input_string(&args.input)?;
+    if !args.capture_suggest
+        && args.suggestion_snapshot.is_none()
+        && let Ok(input) = serde_json::from_str::<LabelOntologyRecordInput>(&raw)
+    {
+        return Ok(input);
+    }
+
+    let capture = serde_json::from_str::<LabelOntologyRecordCaptureInput>(&raw)?;
+    capture.into_record_input(captured_or_supplied_suggestion_snapshot(
+        db_path, board, args,
+    )?)
+}
+
+#[derive(Debug, Deserialize)]
+struct LabelOntologyRecordCaptureInput {
+    actor: LabelOntologyActor,
+    #[serde(default)]
+    agent_candidates: Option<JsonValue>,
+    #[serde(default)]
+    agent_candidates_json: Option<String>,
+    #[serde(default)]
+    suggestion_snapshot: Option<JsonValue>,
+    #[serde(default)]
+    suggestion_snapshot_json: Option<String>,
+    #[serde(default)]
+    final_decision: Option<JsonValue>,
+    #[serde(default)]
+    final_decision_json: Option<String>,
+    #[serde(default)]
+    diagnostics: Option<JsonValue>,
+    #[serde(default)]
+    diagnostics_json: Option<String>,
+    #[serde(default)]
+    capture_fingerprint: Option<String>,
+    #[serde(default)]
+    signals: Vec<LabelOntologyCaptureSignalInput>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LabelOntologyCaptureSignalInput {
+    kind: LabelOntologySignalKind,
+    #[serde(default)]
+    target_label_ref: Option<String>,
+    #[serde(default)]
+    related_labels: Option<JsonValue>,
+    #[serde(default)]
+    related_labels_json: Option<String>,
+    proposed_action: LabelOntologyProposedAction,
+    #[serde(default)]
+    candidate_atom: Option<LabelOntologyCandidateAtomInput>,
+    #[serde(default)]
+    proposed_label_name: Option<String>,
+    #[serde(default)]
+    proposal: Option<JsonValue>,
+    #[serde(default)]
+    proposal_json: Option<String>,
+    #[serde(default)]
+    agent_selected: Option<bool>,
+    #[serde(default)]
+    suggest_state: Option<LabelOntologySuggestState>,
+    #[serde(default)]
+    suggest_score: Option<f64>,
+    #[serde(default)]
+    suggest_rank: Option<i64>,
+    #[serde(default)]
+    final_selected: Option<bool>,
+    rationale: String,
+    #[serde(default)]
+    confidence: Option<f64>,
+    #[serde(default)]
+    signal_key: Option<String>,
+}
+
+impl LabelOntologyRecordCaptureInput {
+    fn into_record_input(
+        self,
+        supplied_snapshot: Option<JsonValue>,
+    ) -> Result<LabelOntologyRecordInput> {
+        let input_snapshot = coalesce_json_value(
+            "suggestion_snapshot",
+            self.suggestion_snapshot,
+            "suggestion_snapshot_json",
+            self.suggestion_snapshot_json,
+            None,
+        )?;
+        let suggestion_snapshot = match (input_snapshot, supplied_snapshot) {
+            (Some(input), Some(supplied)) if input != supplied => {
+                bail!(
+                    "--suggestion-snapshot/--capture-suggest conflicts with input suggestion_snapshot"
+                )
+            }
+            (Some(input), _) => input,
+            (_, Some(supplied)) => supplied,
+            (None, None) => {
+                bail!(
+                    "simplified ontology record input requires suggestion_snapshot, --suggestion-snapshot, or --capture-suggest"
+                )
+            }
+        };
+        let diagnostics = coalesce_json_value(
+            "diagnostics",
+            self.diagnostics,
+            "diagnostics_json",
+            self.diagnostics_json,
+            suggestion_snapshot
+                .get("diagnostics")
+                .cloned()
+                .or_else(|| Some(serde_json::json!([]))),
+        )?
+        .unwrap_or_else(|| serde_json::json!([]));
+        Ok(LabelOntologyRecordInput {
+            actor: self.actor,
+            agent_candidates_json: json_value_to_string(
+                coalesce_json_value(
+                    "agent_candidates",
+                    self.agent_candidates,
+                    "agent_candidates_json",
+                    self.agent_candidates_json,
+                    Some(serde_json::json!([])),
+                )?
+                .unwrap_or_else(|| serde_json::json!([])),
+            )?,
+            suggestion_snapshot_json: json_value_to_string(suggestion_snapshot.clone())?,
+            final_decision_json: json_value_to_string(
+                coalesce_json_value(
+                    "final_decision",
+                    self.final_decision,
+                    "final_decision_json",
+                    self.final_decision_json,
+                    Some(serde_json::json!({})),
+                )?
+                .unwrap_or_else(|| serde_json::json!({})),
+            )?,
+            suggest_coverage: None,
+            suggest_coverage_cosine: None,
+            suggest_residual_norm: None,
+            suggest_needs_new_label: suggestion_snapshot
+                .get("needs_new_label")
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(false),
+            suggest_degraded: suggestion_snapshot
+                .get("degraded")
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(false),
+            diagnostics_json: json_value_to_string(diagnostics)?,
+            capture_fingerprint: self.capture_fingerprint,
+            signals: self
+                .signals
+                .into_iter()
+                .map(LabelOntologyCaptureSignalInput::into_signal_input)
+                .collect::<Result<Vec<_>>>()?,
+        })
+    }
+}
+
+impl LabelOntologyCaptureSignalInput {
+    fn into_signal_input(self) -> Result<LabelOntologySignalInput> {
+        Ok(LabelOntologySignalInput {
+            kind: self.kind,
+            target_label_ref: self.target_label_ref,
+            related_labels_json: json_value_to_string(
+                coalesce_json_value(
+                    "related_labels",
+                    self.related_labels,
+                    "related_labels_json",
+                    self.related_labels_json,
+                    Some(serde_json::json!([])),
+                )?
+                .unwrap_or_else(|| serde_json::json!([])),
+            )?,
+            proposed_action: self.proposed_action,
+            candidate_atom: self.candidate_atom,
+            proposed_label_name: self.proposed_label_name,
+            proposal_json: json_value_to_string(
+                coalesce_json_value(
+                    "proposal",
+                    self.proposal,
+                    "proposal_json",
+                    self.proposal_json,
+                    Some(serde_json::json!({})),
+                )?
+                .unwrap_or_else(|| serde_json::json!({})),
+            )?,
+            agent_selected: self.agent_selected.unwrap_or(false),
+            suggest_state: self.suggest_state,
+            suggest_score: self.suggest_score,
+            suggest_rank: self.suggest_rank,
+            final_selected: self.final_selected.unwrap_or(false),
+            rationale: self.rationale,
+            confidence: self.confidence,
+            signal_key: self.signal_key,
+        })
+    }
+}
+
+fn captured_or_supplied_suggestion_snapshot(
+    db_path: &PathBuf,
+    board: &str,
+    args: &crate::args::LabelOntologyRecordArgs,
+) -> Result<Option<JsonValue>> {
+    if args.capture_suggest {
+        let options = LabelSuggestionOptions {
+            output_limit: args.limit,
+            candidate_limit: args.candidate_limit,
+            atom_limit: args.atom_limit,
+            max_selected_labels: args.max_selected_labels,
+            min_score: args.min_score,
+        };
+        let suggestions = suggest_with_optional_vector_config(
+            db_path,
+            board,
+            &args.task_ref,
+            options,
+            args.vector_config.as_deref(),
+        )?;
+        return Ok(Some(serde_json::to_value(suggestions)?));
+    }
+    args.suggestion_snapshot
+        .as_deref()
+        .map(read_suggestion_snapshot_value)
+        .transpose()
+}
+
+fn read_suggestion_snapshot_value(path: &str) -> Result<JsonValue> {
     let raw = read_json_input_string(path)?;
-    serde_json::from_str(&raw).map_err(Into::into)
+    normalize_suggestion_snapshot_value(serde_json::from_str(&raw)?)
+}
+
+fn normalize_suggestion_snapshot_value(value: JsonValue) -> Result<JsonValue> {
+    if let Some(data) = value.get("data")
+        && data.is_object()
+    {
+        return Ok(data.clone());
+    }
+    if value.is_object() {
+        Ok(value)
+    } else {
+        bail!("suggestion snapshot must be a JSON object or an envelope with object data")
+    }
+}
+
+fn coalesce_json_value(
+    natural_field: &str,
+    natural: Option<JsonValue>,
+    legacy_field: &str,
+    legacy_json: Option<String>,
+    default: Option<JsonValue>,
+) -> Result<Option<JsonValue>> {
+    let legacy = legacy_json
+        .map(|raw| serde_json::from_str::<JsonValue>(&raw))
+        .transpose()?;
+    if let (Some(natural), Some(legacy)) = (&natural, &legacy)
+        && natural != legacy
+    {
+        bail!("{natural_field} conflicts with {legacy_field}");
+    }
+    Ok(natural.or(legacy).or(default))
+}
+
+fn json_value_to_string(value: JsonValue) -> Result<String> {
+    serde_json::to_string(&value).map_err(Into::into)
 }
 
 fn read_json_input_string(path: &str) -> Result<String> {
@@ -671,6 +1054,16 @@ fn label_ontology_atom_kind_value(kind: LabelOntologyAtomKindArg) -> &'static st
     }
 }
 
+fn label_ontology_structure_change_type(
+    change_type: LabelOntologyStructureChangeArg,
+) -> LabelOntologyActionType {
+    match change_type {
+        LabelOntologyStructureChangeArg::RenameLabel => LabelOntologyActionType::RenameLabel,
+        LabelOntologyStructureChangeArg::SplitLabel => LabelOntologyActionType::SplitLabel,
+        LabelOntologyStructureChangeArg::MergeLabels => LabelOntologyActionType::MergeLabels,
+    }
+}
+
 fn label_ontology_validation_status(
     status: LabelOntologyValidationStatusArg,
 ) -> LabelOntologyValidationStatus {
@@ -711,6 +1104,7 @@ fn label_ontology_review_group_by_value(
         LabelOntologyReviewGroupByArg::Label => LabelOntologyReviewGroupBy::Label,
         LabelOntologyReviewGroupByArg::CandidateAtom => LabelOntologyReviewGroupBy::CandidateAtom,
         LabelOntologyReviewGroupByArg::ProposedLabel => LabelOntologyReviewGroupBy::ProposedLabel,
+        LabelOntologyReviewGroupByArg::Cluster => LabelOntologyReviewGroupBy::Cluster,
     }
 }
 
@@ -730,6 +1124,7 @@ fn label_ontology_review_group_line(group: &kanban_sqlite::LabelOntologyReviewGr
         LabelOntologyReviewGroupBy::Label => group.label_name.as_deref(),
         LabelOntologyReviewGroupBy::CandidateAtom => group.candidate_text.as_deref(),
         LabelOntologyReviewGroupBy::ProposedLabel => group.proposed_label_name.as_deref(),
+        LabelOntologyReviewGroupBy::Cluster => group.cluster_key.as_deref(),
     }
     .or(group.label_name.as_deref())
     .or(group.proposed_label_name.as_deref())
@@ -758,6 +1153,35 @@ fn label_ontology_review_group_line(group: &kanban_sqlite::LabelOntologyReviewGr
         group.sample_task_refs.join(","),
         group.signal_ids.join(","),
         group.action_ids.join(",")
+    )
+}
+
+fn label_ontology_quality_line(report: &kanban_sqlite::LabelOntologyQualityReport) -> String {
+    let rate = report
+        .rates
+        .disagreement_task_rate
+        .map(|value| format!("{value:.3}"))
+        .unwrap_or_else(|| "unavailable".to_owned());
+    let warnings = if report.warnings.is_empty() {
+        "-".to_owned()
+    } else {
+        report.warnings.join("; ")
+    };
+    format!(
+        "ontology quality observations={} observed_tasks={} agreement_observations={} raw_signals={} disagreement_tasks={} disagreement_task_rate={} precision_recall={} samples=[{}] warnings={}",
+        report.denominator.observation_count,
+        report.denominator.distinct_task_count,
+        report.denominator.agreement_observation_count,
+        report.disagreement.signal_count,
+        report.disagreement.distinct_task_count,
+        rate,
+        if report.precision_recall.available {
+            "available"
+        } else {
+            "unavailable"
+        },
+        report.denominator.sample_task_refs.join(","),
+        warnings
     )
 }
 
@@ -913,6 +1337,27 @@ fn label_semantics_line(record: &kanban_sqlite::LabelSemanticsRecord) -> String 
 }
 
 #[derive(Debug, Serialize)]
+struct LabelAddCommandOutput {
+    task: kanban_sqlite::TaskRecord,
+    created_labels: Vec<kanban_sqlite::LabelRecord>,
+}
+
+fn label_add_lines(result: &LabelAddCommandOutput) -> String {
+    let mut lines = crate::output::task_line(&result.task);
+    if !result.created_labels.is_empty() {
+        let labels = result
+            .created_labels
+            .iter()
+            .map(label_line)
+            .collect::<Vec<_>>()
+            .join(", ");
+        lines.push('\n');
+        lines.push_str(&format!("created_labels: {labels}"));
+    }
+    lines
+}
+
+#[derive(Debug, Serialize)]
 struct LabelBootstrapCommandOutput {
     task: kanban_sqlite::TaskRecord,
     semantics: kanban_sqlite::LabelSemanticsRecord,
@@ -946,6 +1391,73 @@ fn label_bootstrap_lines(result: &LabelBootstrapCommandOutput) -> String {
         ));
     }
     lines
+}
+
+fn label_bootstrap_restore_summary(
+    result: &kanban_sqlite::BootstrapTaskLabelRestoreResult,
+) -> String {
+    format!(
+        "label_deleted={} label_restored={} task_binding_restored={} semantics_restored={} index_marked_dirty={}",
+        result.label_deleted,
+        result.label_restored,
+        result.task_binding_restored,
+        result.semantics_restored,
+        result.index_marked_dirty
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_label_ontology_action_with_trusted_cli_evidence(
+    db_path: &PathBuf,
+    board: &str,
+    actor: &str,
+    actor_args: &LabelOntologyActorArgs,
+    parent_action_id: String,
+    signal_ids: Vec<String>,
+    reason: String,
+    validation_status: LabelOntologyValidationStatus,
+    vector_config_path: Option<&std::path::Path>,
+    options: LabelSuggestionOptions,
+) -> Result<LabelOntologyActionRecord> {
+    #[cfg(feature = "vector-lancedb")]
+    {
+        let Some(store) = configured_lancedb_store(db_path, vector_config_path)? else {
+            bail!(
+                "trusted ontology validation requires a configured label atom vector store; pass --vector-config <path>"
+            );
+        };
+        rebuild_label_atom_index_with(db_path, board, &store)?;
+        validate_label_ontology_action_with_trusted_suggestions(
+            db_path,
+            board,
+            LabelOntologyTrustedValidationInput {
+                actor: label_ontology_cli_actor(actor, actor_args),
+                parent_action_id,
+                signal_ids,
+                reason,
+                validation_status,
+            },
+            &store,
+            options,
+        )
+        .map_err(Into::into)
+    }
+    #[cfg(not(feature = "vector-lancedb"))]
+    {
+        let _ = (
+            db_path,
+            board,
+            actor,
+            actor_args,
+            parent_action_id,
+            signal_ids,
+            reason,
+            validation_status,
+            vector_config_path,
+            options,
+        );
+        bail!("trusted ontology validation requires the vector-lancedb feature")
+    }
 }
 
 fn label_atom_index_status_optional_config(
@@ -989,8 +1501,8 @@ fn rebuild_configured_label_atom_index_optional(
 }
 
 fn ensure_label_bootstrap_verification_available(
-    db_path: &PathBuf,
-    vector_config_path: Option<&std::path::Path>,
+    db_path: &Path,
+    vector_config_path: Option<&Path>,
 ) -> Result<()> {
     #[cfg(feature = "vector-lancedb")]
     {
@@ -1123,9 +1635,14 @@ fn label_suggestion_lines(result: &LabelSuggestionResult) -> String {
     if result.degraded {
         lines.push(format!("degraded: {}", result.diagnostics.join(",")));
     }
+    let reason_codes = if result.reason_codes.is_empty() {
+        "none".to_owned()
+    } else {
+        result.reason_codes.join(",")
+    };
     lines.push(format!(
-        "coverage={:.3} coverage_cosine={:.3} residual_norm={:.3} needs_new_label={}",
-        result.coverage, result.coverage_cosine, result.residual_norm, result.needs_new_label
+        "coverage={:.3} coverage_cosine={:.3} residual_norm={:.3} label_coverage_review={} reason_codes={}",
+        result.coverage, result.coverage_cosine, result.residual_norm, result.needs_new_label, reason_codes
     ));
     lines.join("\n")
 }

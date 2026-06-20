@@ -1,6 +1,7 @@
 mod common;
 
 mod suite {
+    mod adapter_contracts;
     mod boards;
     mod comments;
     mod context;

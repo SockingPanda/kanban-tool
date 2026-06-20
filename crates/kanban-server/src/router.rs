@@ -95,6 +95,14 @@ pub fn build_router(state: AppState) -> Router {
             post(apply_label_ontology_atom),
         )
         .route(
+            "/api/v1/boards/:board/label-ontology/structure-plan",
+            post(plan_label_ontology_structure_change),
+        )
+        .route(
+            "/api/v1/boards/:board/label-ontology/revert",
+            post(revert_label_ontology_mutation),
+        )
+        .route(
             "/api/v1/boards/:board/label-ontology/validate",
             post(validate_label_ontology_action),
         )
@@ -202,6 +210,7 @@ fn desktop_cors_layer() -> CorsLayer {
         .allow_methods([
             Method::GET,
             Method::POST,
+            Method::PUT,
             Method::PATCH,
             Method::DELETE,
             Method::OPTIONS,

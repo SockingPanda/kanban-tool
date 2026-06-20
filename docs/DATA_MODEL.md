@@ -98,6 +98,27 @@ Board slug 由 service 层校验：必须唯一、非空、不超过 64 bytes，
 
 Archived board 默认不出现在 board list，也不接受普通 task/comment/dispatcher 写入。归档只设置 board 的 `archived_at` 并写入 `board.archived` event，不改变 task 状态；如果 board 上仍有 `running` task 或 `running` run，归档会被拒绝。Events、runs、comments 等只读历史仍可通过显式 task/board identity 查询，用于审计。
 
+### 4.1 Board isolation 责任边界
+
+SQLite 是 canonical truth，但 board isolation 由三层共同保证：
+
+1. DB constraint：所有 board-scoped rows 都有 `board_id` 并引用 `boards(id)`；
+   referenced task / label / run id 也各自有 FK，确保引用对象存在。`task_labels`、
+   `task_dependencies`、`task_runs` 和较新的 label semantics / atoms 表使用包含
+   `board_id` 的复合 FK，直接阻止这些关键关系表出现 cross-board row。
+2. Service guard：CLI、HTTP、desktop 和 dispatcher 的正常写路径必须先在同一 board
+   scope 内 resolve task、label、run 等对象，再写关系 row；例如 task label binding、
+   dependency、comment、event、run 和 attachment 都不应跨 board 组合。
+3. Doctor/import check：`kanban doctor` 和 JSONL import final gate 会只读检查基础关系表
+   中 `row.board_id` 与 referenced task / label / run 的 board 是否一致。
+
+需要特别注意：`task_comments`、`task_events`、`task_attachments` 等历史/审计表仍使用
+独立 FK，而不是 schema-level composite FK。因此 raw SQL、损坏导入或维护脚本理论上仍
+可能在这些表写出 `row.board_id != referenced.board_id` 的数据；这种数据会被
+doctor/import 报告为 hard error，但当前不是全部由 SQLite FK 直接阻止。后续如要继续
+hardening，需要针对这些表的 nullable history / `ON DELETE SET NULL` 语义单独设计
+table rebuild migration。
+
 ---
 
 ## 5. Task
@@ -198,6 +219,10 @@ Task public identity 有两层：
 
 表：`task_dependencies`
 
+Schema-level invariant：`parent_task_id` 和 `child_task_id` 必须都属于 row
+`board_id`。旧数据库升级到 composite FK schema 前会先检查 existing cross-board rows；
+发现不一致时 migration 会失败并要求先用 doctor/repair 清理。
+
 字段：
 
 | 字段 | 说明 |
@@ -220,6 +245,9 @@ parent neither done nor archived => child cannot be ready/running
 ## 7. Run
 
 表：`task_runs`
+
+Schema-level invariant：`task_id` 必须属于 row `board_id`。这保证 run attempt
+不能在 SQLite 层跨 board 指向 task。
 
 Run 是一次 execution attempt。
 
@@ -461,11 +489,17 @@ Label ontology ledger 记录 task 标注过程里的证据、分歧 signal、rev
 - `label_semantics` / `label_atoms` 仍决定 label 的 canonical 语义和 atom truth。
 - `label_semantic_proposals` 仍负责新 label proposal lifecycle。
 
+这些表是 label 系统中的不同角色，不是六个严格独立的存储层。`label suggest` 是计算结果，
+`kb_label_atoms` 是可重建检索投影，proposal 和 ledger 是需要持久审计的 SQLite records；
+它们都不能直接替代 `task_labels` 的当前绑定事实。
+
 表：`label_ontology_observations`
 
 一行表示一次完整的 task label 判断过程。它保存当时的 task 快照、agent 候选、
-`label suggest` 快照、最终选择和 solver 指标；即使 task、label 或 atoms 后续变化，
-仍能还原当时为什么产生 signal。
+`label suggest` 快照、最终选择和由 snapshot 派生的 solver 指标；即使 task、label 或
+atoms 后续变化，仍能还原当时为什么产生 signal。Observation 是只读 provenance：
+record 写入不会修改 `task_labels`、`label_semantics`、`label_atoms`、label atom index 或
+proposal。
 
 | 字段 | 说明 |
 |---|---|
@@ -475,11 +509,11 @@ Label ontology ledger 记录 task 标注过程里的证据、分歧 signal、rev
 | `task_snapshot_json` | 捕获时的 task title、description、labels、version/hash 等快照。 |
 | `suggest_input_hash` | 可空。按 label suggest 输入（normalized title + description）计算的窄 hash，用于 validation comparability；旧 observation 缺失时按 legacy incomparable 处理，不能静默 passed。 |
 | `agent_candidates_json` | agent 原始候选 labels、置信度和理由。 |
-| `suggestion_snapshot_json` | 完整 suggestion 输出、参数、模型和 index 状态快照。 |
+| `suggestion_snapshot_json` | 完整 suggestion 输出、参数、模型和 index 状态快照；新 capture path 要保存未改写的原始 snapshot。 |
 | `final_decision_json` | 最终接受、拒绝和未采用 labels 的判断。 |
-| `suggest_coverage` / `suggest_coverage_cosine` / `suggest_residual_norm` | 可查询的 solver 指标。 |
-| `suggest_needs_new_label` / `suggest_degraded` | 捕获时 suggestion 状态。 |
-| `diagnostics_json` | suggestion diagnostics 数组。 |
+| `suggest_coverage` / `suggest_coverage_cosine` / `suggest_residual_norm` | 可查询的 solver 指标。新 capture path 从 `suggestion_snapshot_json` 派生这些值；调用方不应重复手写。`suggest_coverage = clamp(1 - suggest_residual_norm, 0.0, 1.0)`，二者不是独立证据；`suggest_coverage_cosine` 是 query 与 fitted vector 的 cosine similarity，可作为补充指标。 |
+| `suggest_needs_new_label` / `suggest_degraded` | 捕获时 suggestion 状态。新 capture path 从 `suggestion_snapshot_json` 派生这些值。`suggest_needs_new_label` 是 coverage review 兼容字段，不等于自动 vocabulary gap；判断新 label 需要结合 reason codes、evidence、diagnostics 和人工语义判断。 |
+| `diagnostics_json` | suggestion diagnostics 数组。新 capture path 从 snapshot 的 `diagnostics` 派生；冲突的重复输入会被拒绝。 |
 | `capture_fingerprint` | 同一 board 内幂等 fingerprint。 |
 | `created_by` / `created_by_type` / `agent_type` | 捕获者身份。 |
 | `created_at` | 创建时间。 |
@@ -508,6 +542,54 @@ suggest 误选、存在 vocabulary gap 或 label 边界/名称问题。
 | `superseded_by_signal_id` / `status_reason` | 关闭或替代原因。 |
 | `created_at` / `updated_at` / `reviewed_at` / `closed_at` | 生命周期时间。 |
 
+`label ontology review` 是基于 signals 的只读聚合投影，不是新的 canonical truth，也不是
+新的可持久化 derived store。group key 来自调用方选择的维度：`label` 使用目标 label，
+`proposed-label` 使用 normalized proposed label name，`candidate-atom` 优先使用
+`candidate_content_hash`。没有 candidate
+atom 的 signals 不会进入一个全局空值 bucket；fallback key 会带上 signal kind、target
+label 或 proposed label、以及 proposed action，例如
+`no-candidate-atom|kind:vocabulary_gap|proposed:ontology ledger|action:bootstrap_label`。
+因此一个 group 的含义是“这些 signals 共享同一个 review key”，不是“这些 signals 已被证明
+来自同一个根因”。
+
+`cluster` 是 opt-in duplicate-signal review-aid，不默认启用，不写 canonical atoms，不自动
+confirm/apply/validate/mutate，也不成为 SQLite truth。cluster key 每次 review 查询时从
+已有 signal 文本和 review scope 重建：key 始终包含 signal kind、proposed action、target
+label snapshot（或 id fallback）以及 proposed label scope，再附加优先级最高的
+lexical-normalized candidate text，其次 proposed label，再其次 rationale，最后退回纯
+scope 组合。这个 scope 前缀避免把相同文本但不同 label boundary/action 的 signals 强制
+合并；输出中的 `cluster_key` 和 `cluster_reason` 只解释这个辅助分组来源。
+
+Review queue 的默认排序使用 distinct source task count（`task_count`）作为主要热度指标，
+再按 confirmed count、latest signal time 和 key 排序。`signal_count` 只是 group 内原始
+signal 行数；同一 task 可以贡献多条 signals，所以它不能单独代表模型错误率、precision、
+recall 或 label suggest 质量。需要质量指标时必须另有 denominator，例如 agreement cohort
+或固定评估集。
+
+`label ontology quality` 是一个只读 analytics 投影，不新增表，也不写 canonical truth。
+它把 `label_ontology_observations` 作为 denominator 来源并在输出中记录该来源、distinct
+task 数、observation 数、agreement/degraded observation 数、时间范围和 task ref sample；
+同时把 `label_ontology_signals` 作为 raw disagreement numerator 来源，按 kind/status
+给出原始 signal counts。只有当 denominator 中存在 agreement observations 时，才会给出
+`disagreement_task_rate`；只有 signals 的数据集会明确返回 rate unavailable，避免把分歧
+记录误称为错误率。Precision/recall 仍需要带 expected labels 的独立评估 cohort，当前
+ledger signal 不能单独提供这些指标。
+
+长期 label ontology regression corpus 属于测试/评估基础设施，不是新的 SQLite truth。
+当前固定 corpus 测试使用临时 DB 和内存 label atom index 跟踪 important labels 的 known
+positive/negative-control tasks，并比较 `label suggest` 的 selected labels、score 与
+evidence atoms。Corpus run 本身应保持只读 canonical ontology；只有测试中显式模拟的
+临时 semantics/atom 变更才会用于证明 comparison 能发现回归。真实 DB 上的长期 corpus
+需要等稳定任务集积累后再扩展，不应替代 ledger signals、trusted validation 或人工 review。
+
+当前没有 label-ontology 专属 graph projection。`label_ontology_*` 表本身就是 SQLite
+provenance truth；`kanban graph` / Oxigraph 只投影 Knowledge Substrate 的
+`entity_relations`，不保存或拥有 label ontology action/signal truth。若未来出现明确的
+rename/split/merge 或 provenance relationship 查询需求，新增 projection 必须从
+`labels`、`label_semantics`、`label_atoms`、`label_semantic_proposals` 和
+`label_ontology_*` 重建，并通过 `index_outbox` / `derived_store_state` 表达 dirty、sync、
+rebuild 和 error 状态；删除或损坏 graph 不得改变 canonical label/ontology/ledger rows。
+
 表：`label_ontology_actions`
 
 Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、修改 ontology 或
@@ -519,7 +601,7 @@ Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、�
 | `id` | `loa_...` action id。 |
 | `board_id` | board scope。 |
 | `parent_action_id` | validation 等后续 action 指向被验证的 mutation action。 |
-| `action_type` | `confirm`、`reject`、`supersede`、`resolve_no_change`、`add_positive_atom`、`add_negative_atom`、`update_semantics`、`create_label_proposal`、`bootstrap_label`、`rename_label`、`split_label`、`merge_labels`、`validate`。 |
+| `action_type` | `confirm`、`reject`、`supersede`、`resolve_no_change`、`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、`update_semantics`、`create_label_proposal`、`bootstrap_label`、`rename_label`、`split_label`、`merge_labels`、`validate`、`revert_ontology_mutation`。 |
 | `reason` | 必填人工或 agent 理由。 |
 | `target_label_id` / `result_label_id` | 修改目标与结果 label。 |
 | `result_atom_id` / `result_atom_content_hash` | 新增或采用 atom 的软引用和稳定 hash。 |
@@ -527,7 +609,7 @@ Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、�
 | `canonical_before_hash` / `canonical_after_hash` | 修改前后 canonical semantics hash。 |
 | `change_json` | before/after/diff 或其它可解释变更快照。 |
 | `validation_status` | `not_required`、`pending`、`passed`、`failed`、`partial`。 |
-| `validation_json` | validation evidence；service 会包装 supplied payload、source signal cases 和 summary。`passed` action 需要 automated typed evidence（embedding model、solver options、clean atom index generation、per-signal before/after cases），并按 parent action 校验 positive atom、negative atom 或 bootstrap label policy；`failed` / `partial` 可保存诊断 payload。 |
+| `validation_json` | validation evidence envelope；service 会包装 supplied/collected payload、source signal cases、task snapshot comparability、parent action result 引用和 summary。公共 supplied/collected payload 只保存在 top-level `manual`；generated `cases[]` 用 `after.manual_case_ref` 指向 `manual.cases[]` 中对应 signal 的 evidence，避免把同一 payload 复制到每个 case。`failed` / `partial` 可保存 external/manual attestation 诊断。`passed` action 只能来自工具采集的 `trusted_automated` evidence（collector source、embedding model、solver options、clean atom index status/generation、per-signal before/after cases），并按 parent action 校验 positive atom、negative atom 或 bootstrap label policy；调用方手写 JSON 或自称 `automated` 不构成可信来源。 |
 | `created_by` / `created_by_type` / `agent_type` | action actor。 |
 | `created_at` | 创建时间。 |
 
@@ -535,12 +617,45 @@ Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、�
 历史 action 依赖 `result_atom_content_hash` 和 `change_json` 中的 atom snapshot 保持可解释。
 Atom explain 查询会优先解析当前 `label_atoms.id`，也允许用
 `result_atom_content_hash` / `label_atoms.content_hash` 作为软引用恢复 rebuild 后的历史
-provenance。已有 atom 如果来自旧 semantics 写入而没有任何 ontology action 引用，
+provenance。`adopt_existing_atom` 表示新的 source signal 采用了当前已存在 atom，
+不代表 canonical 内容新增。已有 atom 如果来自旧 semantics 写入而没有任何 ontology action 引用，
 查询结果只标记 `legacy_untracked=true`，不会伪造 provenance。
 
 `create_label_proposal` action 对同一 `(board_id, result_proposal_id)` 唯一；proposal
 accept 生成的 `bootstrap_label` action 通过 `parent_action_id` 指向这条 creation
 action，从而让 proposal creation -> bootstrap acceptance provenance 链路保持无歧义。
+
+`revert_ontology_mutation` 是 append-only rollback history：它不会修改或删除原 mutation
+action，而是用 `parent_action_id` 指向被撤销 action，并把 canonical semantics 恢复到该
+action 的 `change_json.before` / `canonical_before_hash` snapshot。当前实现只覆盖
+label-scoped semantics/atom mutations（`add_positive_atom`、`add_negative_atom`、
+`update_semantics`），成功后标脏 label atom index 并保持 validation pending；bootstrap
+的 label identity / task binding rollback 不由该 action 类型表达。
+
+当前 constructive ontology mutation path 的责任边界如下：
+
+- `label_semantics` / `label_atoms` 是 canonical ontology truth；`label_ontology_actions`
+  是 append-only provenance，不是第二份 truth。
+- `update_semantics`、`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、
+  `create_label_proposal` 和 `bootstrap_label` action 只能由专用 service path 写入。
+  `adopt_existing_atom` 是 provenance-only path，before/after hash 相同，只连接新的
+  source signals 到 existing atom，不修改 canonical semantics/atoms，也不标脏 atom
+  index；其它 constructive mutation 与对应 canonical write 位于同一 SQLite transaction。
+- Manual mutation 可以没有 source signals，但仍必须记录 actor、reason、before/after
+  hash 和 change snapshot。Signal-driven mutation 会额外写入
+  `label_ontology_action_signals` links。
+- `label semantics upsert` 默认是 patch/CAS path：`expected_semantics_hash` 防止
+  lost update；缺省字段不清空旧 semantics；`replace=true` 才执行完整替换，并将缺省
+  arrays 解释为空集合。
+- Direct task-label bootstrap 与 proposal accept 共用 adoption primitive。Task-label
+  bootstrap 可创建或复用无 semantics 的同名 canonical label；proposal accept 当前会先拒绝
+  任何 existing normalized-name conflict，因此成功路径创建新 canonical label。二者都会写
+  semantics/atoms、标脏 label atom index，并写 `bootstrap_label` action；proposal accept
+  不写 `task_labels`，task-label bootstrap 会绑定来源 task。失败时 canonical writes 与
+  provenance action 一起回滚。
+- `legacy_untracked=true` 只表示当前 atom 没有可匹配的 ontology action，例如旧数据或
+  destructive cleanup 后的历史缺口；新 constructive mutation 不应依赖这种兼容路径来解释
+  provenance。
 
 表：`label_ontology_action_signals`
 
@@ -548,8 +663,10 @@ action，从而让 proposal creation -> bootstrap acceptance provenance 链路�
 也可以先被 confirm，随后关联 mutation action 和 validation action。
 
 默认 review queue 只读取 `open` 与 `confirmed` signals；完整历史需显式 include all。
-Mutation action 写入后通常保持 source signals 为 `confirmed`，validation 通过后再
-转为 `resolved`。Validation 失败会追加 failed validation action，不删除历史。
+Mutation action 写入后通常保持 source signals 为 `confirmed`。只有 trusted automated
+`passed` validation 会把 linked source signals 转为 `resolved`；external/manual
+attestation、`failed` 或 `partial` validation 只追加历史，不删除 signals，也不把问题
+伪装成已验证关闭。
 
 ---
 
@@ -667,14 +784,17 @@ label truth。它只记录“现有 label atom suggestion 覆盖不足时，外�
 | `board_id` / `task_id` | 提案来源 task。 |
 | `status` | `proposed` / `accepted` / `rejected`。provider 不可用不写成 status，而是返回 degraded attempt。 |
 | `name` / `description` / `applies_when` / `excludes_when` / `positive_examples` / `negative_examples` | 候选 label semantics。数组字段为 JSON string array。 |
-| `heuristic_coverage` / `heuristic_coverage_cosine` / `heuristic_residual_norm` | 来自当前 residual label suggestion solver 的覆盖/残差元数据，用于记录 proposal 创建时现有 label atoms 的覆盖程度；`heuristic_coverage_cosine` 是 query 与 fitted vector 的 cosine similarity。 |
+| `heuristic_coverage` / `heuristic_coverage_cosine` / `heuristic_residual_norm` | 来自当前 residual label suggestion solver 的覆盖/残差元数据，用于记录 proposal 创建时现有 label atoms 的覆盖程度；`heuristic_coverage = clamp(1 - heuristic_residual_norm, 0.0, 1.0)`，二者不是独立证据；`heuristic_coverage_cosine` 是 query 与 fitted vector 的 cosine similarity。 |
 | `top1_existing_label_id` / `top1_existing_label_name` | 当前启发式 top1 existing label。 |
 | `diagnostics_json` | JSON string array，包含 degraded、冲突或 validation 诊断。 |
 | `decision_reason` / `resolved_label_id` / `decided_at` | accept/reject 决策信息；accept 后 `resolved_label_id` 指向新建 canonical label。 |
 
-Accept 只允许 `proposed` proposal。accept 创建同 board 的 canonical `labels` 行，
-并写入对应 `label_semantics` / `label_atoms`，同时标脏 `lancedb_label_atoms`
-派生 store；它不写入 `task_labels`，不会把新 label 自动绑定到来源 task。
+Accept 只允许 `proposed` proposal。accept 通过共享 adoption primitive 创建同 board 的
+canonical `labels` 行，并写入对应 `label_semantics` / `label_atoms`，同时标脏
+`lancedb_label_atoms` 派生 store，写入 `bootstrap_label` provenance action，并把
+`resolved_label_id` 指向 result label；proposal status、canonical writes 与 action
+provenance 同 transaction 提交。它不写入 `task_labels`，不会把新 label 自动绑定到来源
+task。
 
 Reject 将 proposal 标记为 `rejected`。与现有 label 发生 normalized-name 冲突的
 候选会持久化为 `rejected`，diagnostics 包含 `near_duplicate_label_conflict`。
@@ -776,17 +896,25 @@ Label ontology ledger 使用稳定 record types：
 {"type":"label_ontology_action_signal","data":{...}}
 ```
 
-导入时会在同一 transaction 中先插入 ontology rows，再延迟回填
+导入时会在同一 transaction 中先插入 rows，再运行 final consistency gate。基础关系表
+会检查 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、
+`task_events`、`task_attachments` 的 row board 与 referenced task / label / run board
+是否一致；失败时整个 `--replace` import transaction 回滚，不提交部分数据。
+
+Ontology rows 也在同一 transaction 中插入，并延迟回填
 `label_ontology_signals.superseded_by_signal_id` 与
 `label_ontology_actions.parent_action_id`，避免依赖同表自引用 rows 的文件顺序。导入完成前会校验 ontology ledger board isolation：observation/signal board、action
 parent board、action-signal link board、label/proposal soft reference board 必须一致；
 orphan action-signal links、supersede cycles 和 action parent cycles 会导致 import
 失败。
 
-`kanban doctor --json` 对同一组 ontology ledger consistency 规则做只读巡检，并额外返回
-`ontology_ledger_errors`、`ontology_ledger_warnings`、`ontology_ledger_issues[]`。Issue
-包含 `severity`、`code`、`message`、`record_ids`，用于定位损坏 row。Hard error 覆盖
+`kanban doctor --json` 对上述基础关系表和 ontology ledger consistency 规则做只读巡检。
+基础关系表问题返回 `consistency_errors`、`consistency_warnings`、
+`consistency_issues[]`；ontology ledger 问题返回 `ontology_ledger_errors`、
+`ontology_ledger_warnings`、`ontology_ledger_issues[]`。Issue 包含 `severity`、
+`code`、`message`、`record_ids`，用于定位损坏 row；基础关系表 message 包含
+`table`、`row`、`row_board` 和 `referenced_board`。Hard error 覆盖 row board mismatch、
 missing v12 ontology table、跨 board link、orphan action-signal link、parent/supersede
-异常、label/proposal/task board mismatch、supersede cycle 和 action parent cycle；非零 error
-让 `ok=false`。Warning 保留给仍可解释或可重建的软引用，例如历史 action 的
+异常、label/proposal/task board mismatch、supersede cycle 和 action parent cycle；非零
+error 让 `ok=false`。Warning 保留给仍可解释或可重建的软引用，例如历史 action 的
 `result_atom_id` 已被当前 `label_atoms` rebuild 删除。

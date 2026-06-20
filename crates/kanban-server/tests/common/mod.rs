@@ -179,13 +179,22 @@ pub async fn options_raw(
     uri: &str,
     origin: &str,
 ) -> Result<(StatusCode, axum::http::HeaderMap)> {
+    options_raw_for_method(app, uri, origin, "POST").await
+}
+
+pub async fn options_raw_for_method(
+    app: axum::Router,
+    uri: &str,
+    origin: &str,
+    request_method: &str,
+) -> Result<(StatusCode, axum::http::HeaderMap)> {
     let response = app
         .oneshot(
             Request::builder()
                 .method("OPTIONS")
                 .uri(uri)
                 .header(header::ORIGIN, origin)
-                .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                .header(header::ACCESS_CONTROL_REQUEST_METHOD, request_method)
                 .header(
                     header::ACCESS_CONTROL_REQUEST_HEADERS,
                     "content-type,x-kb-actor",

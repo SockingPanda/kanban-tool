@@ -7,6 +7,7 @@ import {
   HeartPulse,
   Inbox,
   Loader2,
+  Network,
   RefreshCcw,
   Search,
   Settings,
@@ -65,6 +66,7 @@ import { ListView } from "@/features/list/ListView"
 import { MaintenanceView } from "@/features/maintenance/MaintenanceView"
 import type { OperatorView } from "@/features/navigation/view-types"
 import { primaryViews, sidebarViews } from "@/features/navigation/view-types"
+import { OntologyReviewWorkbench } from "@/features/ontology/OntologyReviewWorkbench"
 import { RunsView } from "@/features/runs/RunsView"
 import { SettingsView } from "@/features/settings/SettingsView"
 import { TaskDetail } from "@/features/task-detail/TaskDetail"
@@ -98,6 +100,7 @@ const viewMetadata: Record<OperatorView, { label: string; icon: ElementType }> =
   list: { label: "List", icon: Inbox },
   events: { label: "Events", icon: Activity },
   runs: { label: "Runs", icon: TerminalSquare },
+  ontology: { label: "Review", icon: Network },
   maintenance: { label: "Maintenance", icon: DatabaseBackup },
   health: { label: "Health", icon: HeartPulse },
   settings: { label: "Settings", icon: Settings },
@@ -473,7 +476,7 @@ function ShellSidebar({
       </SidebarHeader>
       <SidebarContent>
         <SidebarNavGroup label="Task Explorer" open={contentOpen}>
-          {sidebarViews.filter((item) => ["board", "list", "runs", "events"].includes(item)).map((item) => (
+          {sidebarViews.filter((item) => ["board", "list", "runs", "events", "ontology"].includes(item)).map((item) => (
             <SidebarNavItem
               key={item}
               icon={viewIcon(item)}
@@ -900,6 +903,7 @@ function MainView({
   }
   if (view === "events") return <EventsView api={api} />
   if (view === "runs") return <RunsView selectedTask={selectedTask} detail={detail} />
+  if (view === "ontology") return <OntologyReviewWorkbench api={api} />
   if (view === "maintenance") return <MaintenanceView api={api} />
   if (view === "health") return <HealthView api={api} config={config} />
   return <SettingsView config={config} />

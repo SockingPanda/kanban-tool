@@ -6,7 +6,8 @@ use kanban_sqlite::{
     CreateLabel, CreateTask, LabelOntologyActionInput, LabelOntologyActionType, LabelOntologyActor,
     LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput, LabelOntologyProposedAction,
     LabelOntologyRecordInput, LabelOntologySignalInput, LabelOntologySignalKind,
-    LabelOntologySuggestState, LabelProposalCandidate,
+    LabelOntologySuggestState, LabelProposalCandidate, UpsertLabelSemantics, get_label_semantics,
+    get_task, list_label_atoms, list_labels,
 };
 use pretty_assertions::assert_eq;
 use serde_json::json;
@@ -126,15 +127,46 @@ fn task_create_and_label_commands_round_trip_labels() -> anyhow::Result<()> {
     .success_json()?;
     assert_eq!(label["data"]["name"], "frontend");
 
+    let added_existing =
+        kanban(&temp.path, &["--json", "label", "add", task_id, "frontend"])?.success_json()?;
+    assert_eq!(
+        added_existing["data"]["labels"]
+            .as_array()
+            .context("labels")?
+            .len(),
+        2
+    );
+
+    kanban(&temp.path, &["label", "add", task_id, "api"])?
+        .failure_containing("label api does not exist")?;
+    let listed_before_create = kanban(&temp.path, &["--json", "label", "list"])?.success_json()?;
+    assert_eq!(
+        listed_before_create["data"]
+            .as_array()
+            .context("labels before create")?
+            .len(),
+        2
+    );
+
     let added = kanban(
         &temp.path,
         &[
-            "--json", "label", "add", task_id, "frontend", "api", "frontend",
+            "--json",
+            "label",
+            "add",
+            "--create-missing",
+            task_id,
+            "api",
+            "frontend",
         ],
     )?
     .success_json()?;
+    assert_eq!(added["data"]["created_labels"][0]["name"], "api");
     assert_eq!(
-        added["data"]["labels"].as_array().context("labels")?.len(),
+        added["data"]["task"]["labels"]
+            .as_array()
+            .context("labels")?
+            .len(),
         3
     );
 
@@ -201,6 +233,10 @@ fn label_suggest_returns_degraded_json_without_vector_provider() -> anyhow::Resu
     assert_eq!(suggestions["data"]["task_id"], task_id);
     assert_eq!(suggestions["data"]["degraded"], true);
     assert_eq!(suggestions["data"]["needs_new_label"], false);
+    assert_eq!(
+        suggestions["data"]["reason_codes"],
+        json!(["degraded_result", "vector_store_disabled"])
+    );
     assert!(
         suggestions["data"]["selected_labels"]
             .as_array()
@@ -269,6 +305,87 @@ fn label_semantics_and_atoms_commands_round_trip_json() -> anyhow::Result<()> {
     )?
     .success_json()?;
     assert_eq!(shown["data"]["label_name"], "backend");
+    let seed_hash = shown["data"]["semantics_hash"]
+        .as_str()
+        .context("semantics hash")?
+        .to_owned();
+
+    let patched = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "semantics",
+            "upsert",
+            "backend",
+            "--expected-semantics-hash",
+            &seed_hash,
+            "--applies-when",
+            "emits machine-readable CLI output",
+            "--remove-excludes-when",
+            "CSS-only",
+            "--reason",
+            "CLI patch guardrail test",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(
+        patched["data"]["applies_when"],
+        json!([
+            "touches Rust service code",
+            "emits machine-readable CLI output"
+        ])
+    );
+    assert_eq!(patched["data"]["excludes_when"], json!([]));
+    assert_eq!(
+        patched["data"]["positive_examples"],
+        json!(["add API handler"])
+    );
+    assert_eq!(
+        patched["data"]["negative_examples"],
+        json!(["adjust spacing"])
+    );
+    let patched_hash = patched["data"]["semantics_hash"]
+        .as_str()
+        .context("patched semantics hash")?
+        .to_owned();
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "semantics",
+            "upsert",
+            "backend",
+            "--expected-semantics-hash",
+            &seed_hash,
+            "--applies-when",
+            "stale writer addition",
+        ],
+    )?
+    .failure_containing("hash mismatch")?;
+
+    let replaced = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "semantics",
+            "upsert",
+            "backend",
+            "--expected-semantics-hash",
+            &patched_hash,
+            "--replace",
+            "--description",
+            "Backend replacement semantics",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(
+        replaced["data"]["description"],
+        "Backend replacement semantics"
+    );
+    assert_eq!(replaced["data"]["applies_when"], json!([]));
+    assert_eq!(replaced["data"]["positive_examples"], json!([]));
 
     let atoms = kanban(&temp.path, &["--json", "label", "atoms", "list"])?.success_json()?;
     assert!(
@@ -276,7 +393,10 @@ fn label_semantics_and_atoms_commands_round_trip_json() -> anyhow::Result<()> {
             .as_array()
             .context("atoms")?
             .iter()
-            .any(|atom| atom["kind"] == "positive_example" && atom["text"] == "add API handler")
+            .any(|atom| atom["kind"] == "description"
+                && atom["text"]
+                    .as_str()
+                    .is_some_and(|text| text.contains("Backend replacement semantics")))
     );
 
     let status =
@@ -437,6 +557,87 @@ fn label_bootstrap_verify_requires_vector_provider_before_mutating() -> anyhow::
             .context("labels")?
             .is_empty()
     );
+    Ok(())
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn label_bootstrap_verify_rebuild_failure_restores_canonical_state() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_verify_rebuild_failure_restores_canonical_state")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "bootstrap verify rebuild failure cli task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+    let vector_config = temp.dir.join("vector.toml");
+    fs::write(
+        &vector_config,
+        r#"[vector]
+provider = "ollama"
+endpoint = "http://127.0.0.1:1"
+model = "offline-cli-test-model"
+dimensions = 3
+"#,
+    )?;
+
+    let attempt = kanban(
+        &temp.path,
+        &[
+            "label",
+            "bootstrap",
+            task_id,
+            "database",
+            "--description",
+            "Database persistence work",
+            "--applies-when",
+            "touches SQLite migrations",
+            "--positive-example",
+            "new table migration",
+            "--verify",
+            "--vector-config",
+            vector_config.to_str().context("vector config path")?,
+        ],
+    )?;
+
+    assert!(!attempt.output.status.success());
+    let stderr = String::from_utf8_lossy(&attempt.output.stderr);
+    assert!(stderr.contains("Ollama embed request failed"), "{stderr}");
+    assert!(
+        stderr.contains("bootstrap verification compensation restored canonical state"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("label_deleted=true"), "{stderr}");
+    let shown = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
+    assert!(
+        shown["data"]["labels"]
+            .as_array()
+            .context("labels")?
+            .is_empty()
+    );
+    assert!(
+        kanban(&temp.path, &["--json", "label", "list"])?.success_json()?["data"]
+            .as_array()
+            .context("labels")?
+            .is_empty()
+    );
+    let conn = kanban_sqlite::connect_file(&temp.path)?;
+    let labels: i64 = conn.query_row("SELECT COUNT(*) FROM labels", [], |row| row.get(0))?;
+    let semantics: i64 =
+        conn.query_row("SELECT COUNT(*) FROM label_semantics", [], |row| row.get(0))?;
+    let atoms: i64 = conn.query_row("SELECT COUNT(*) FROM label_atoms", [], |row| row.get(0))?;
+    let bindings: i64 = conn.query_row("SELECT COUNT(*) FROM task_labels", [], |row| row.get(0))?;
+    assert_eq!((labels, semantics, atoms, bindings), (0, 0, 0, 0));
+    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    assert_eq!(status.board_dirty, Some(true));
     Ok(())
 }
 
@@ -753,6 +954,32 @@ fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<(
             .is_empty(),
         "accept must not auto-bind task labels"
     );
+    let label_id = accepted["data"]["resolved_label_id"]
+        .as_str()
+        .context("resolved label id")?;
+    let semantics = kanban_sqlite::get_label_semantics(&temp.path, "default", label_id)?;
+    let atom = semantics
+        .atoms
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("applies_when atom")?;
+    let explained = kanban(
+        &temp.path,
+        &["--json", "label", "atom", "explain", &atom.id],
+    )?
+    .success_json()?;
+    assert_eq!(explained["data"]["legacy_untracked"], false);
+    assert!(
+        explained["data"]["provenance_actions"]
+            .as_array()
+            .context("provenance actions")?
+            .iter()
+            .any(
+                |provenance| provenance["action"]["action_type"] == "bootstrap_label"
+                    && provenance["action"]["result_proposal_id"] == proposal_id
+            ),
+        "{explained}"
+    );
 
     let reject_id = seed_proposed_label_proposal(
         &temp.path,
@@ -933,6 +1160,34 @@ fn label_ontology_cli_record_list_show_review_round_trip() -> anyhow::Result<()>
     assert_eq!(groups[0]["open_count"], 1);
     assert_eq!(groups[0]["signal_ids"][0], signal_id);
 
+    let cluster_review = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "review",
+            "--group-by",
+            "cluster",
+        ],
+    )?
+    .success_json()?;
+    let cluster_groups = cluster_review["data"]
+        .as_array()
+        .context("cluster groups")?;
+    assert_eq!(cluster_groups.len(), 1);
+    assert_eq!(cluster_groups[0]["group_by"], "cluster");
+    assert_eq!(
+        cluster_groups[0]["cluster_key"],
+        "candidate:kind:false_negative|action:add_positive_atom|target:cli|proposed:none|text:extends cli subcommands arguments help output or json behavior"
+    );
+    assert_eq!(
+        cluster_groups[0]["cluster_reason"],
+        "normalized_candidate_text"
+    );
+    assert_eq!(cluster_groups[0]["task_count"], 1);
+    assert_eq!(cluster_groups[0]["signal_ids"][0], signal_id);
+
     let review = kanban(
         &temp.path,
         &[
@@ -950,6 +1205,275 @@ fn label_ontology_cli_record_list_show_review_round_trip() -> anyhow::Result<()>
         review.contains("extends CLI subcommands, arguments, help output, or JSON behavior"),
         "{review}"
     );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_review_candidate_atom_empty_candidate_fallback() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_review_candidate_atom_empty_candidate_fallback")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task_a = kanban_sqlite::create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Ontology ledger gap A"),
+    )?;
+    let task_b = kanban_sqlite::create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Ontology ledger gap B"),
+    )?;
+    let task_c = kanban_sqlite::create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Decision comments gap"),
+    )?;
+    for (task_id, signal_key, proposed_label_name, score) in [
+        (&task_a.id, "cli-gap-a", "Ontology Ledger", 0.1),
+        (&task_b.id, "cli-gap-b", "Ontology Ledger", 0.12),
+        (&task_c.id, "cli-gap-c", "Decision Comments", 0.14),
+    ] {
+        kanban_sqlite::record_label_ontology_observation(
+            &temp.path,
+            "default",
+            task_id,
+            LabelOntologyRecordInput {
+                actor: LabelOntologyActor {
+                    name: "label-agent".to_owned(),
+                    actor_type: "agent".to_owned(),
+                    agent_type: Some("local".to_owned()),
+                },
+                agent_candidates_json: json!([]).to_string(),
+                suggestion_snapshot_json: json!({"selected_labels": []}).to_string(),
+                final_decision_json: json!({"accepted_labels": []}).to_string(),
+                suggest_coverage: Some(0.2),
+                suggest_coverage_cosine: Some(0.3),
+                suggest_residual_norm: Some(0.8),
+                suggest_needs_new_label: true,
+                suggest_degraded: false,
+                diagnostics_json: json!([]).to_string(),
+                capture_fingerprint: None,
+                signals: vec![LabelOntologySignalInput {
+                    kind: LabelOntologySignalKind::VocabularyGap,
+                    target_label_ref: None,
+                    related_labels_json: json!([]).to_string(),
+                    proposed_action: LabelOntologyProposedAction::BootstrapLabel,
+                    candidate_atom: None,
+                    proposed_label_name: Some(proposed_label_name.to_owned()),
+                    proposal_json: json!({
+                        "name": proposed_label_name,
+                        "description": "review grouping candidate"
+                    })
+                    .to_string(),
+                    agent_selected: false,
+                    suggest_state: Some(LabelOntologySuggestState::Absent),
+                    suggest_score: Some(score),
+                    suggest_rank: None,
+                    final_selected: false,
+                    rationale: "Existing label vocabulary did not explain this task.".to_owned(),
+                    confidence: Some(0.7),
+                    signal_key: Some(signal_key.to_owned()),
+                }],
+            },
+        )?;
+    }
+
+    let review = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "review",
+            "--group-by",
+            "candidate-atom",
+        ],
+    )?
+    .success_json()?;
+    let groups = review["data"].as_array().context("review groups")?;
+    let ontology_gap = groups
+        .iter()
+        .find(|group| {
+            group["key"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("proposed:ontology ledger")
+        })
+        .context("ontology ledger group")?;
+    assert_eq!(ontology_gap["group_by"], "candidate_atom");
+    assert_eq!(ontology_gap["proposed_label_name"], "Ontology Ledger");
+    assert_eq!(ontology_gap["task_count"], 2);
+    assert_eq!(ontology_gap["signal_count"], 2);
+    assert!(
+        ontology_gap["key"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("vocabulary_gap")
+    );
+    assert!(
+        ontology_gap["key"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("bootstrap_label")
+    );
+
+    let other_gap = groups
+        .iter()
+        .find(|group| {
+            group["key"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("proposed:decision comments")
+        })
+        .context("decision comments group")?;
+    assert_eq!(other_gap["task_count"], 1);
+    assert_ne!(ontology_gap["key"], other_gap["key"]);
+
+    let human = kanban(
+        &temp.path,
+        &[
+            "label",
+            "ontology",
+            "review",
+            "--group-by",
+            "candidate-atom",
+        ],
+    )?
+    .success_stdout()?;
+    assert!(
+        human.contains(
+            "key=no-candidate-atom|kind:vocabulary_gap|proposed:ontology ledger|action:bootstrap_label"
+        ),
+        "{human}"
+    );
+    assert!(human.contains("title=Ontology Ledger"), "{human}");
+    assert!(human.contains("tasks=2"), "{human}");
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_record_accepts_simplified_snapshot_capture_input() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_record_accepts_simplified_snapshot_capture_input")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology simplified capture task",
+            "--description",
+            "ready spec for simplified ontology CLI capture",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    let labels_before = list_labels(&temp.path, "default")?;
+    let task_labels_before = get_task(&temp.path, "default", task_id)?.labels;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+
+    let snapshot_path = temp.dir.join("ontology-suggestion-envelope.json");
+    fs::write(
+        &snapshot_path,
+        json!({
+            "data": {
+                "selected_labels": [],
+                "candidates": [],
+                "coverage": 0.42,
+                "coverage_cosine": 0.37,
+                "residual_norm": 0.58,
+                "needs_new_label": true,
+                "degraded": true,
+                "diagnostics": ["vector_store_disabled"]
+            }
+        })
+        .to_string(),
+    )?;
+    let input_path = temp.dir.join("ontology-simplified-record.json");
+    fs::write(
+        &input_path,
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates": [
+                {"label": "cli", "confidence": 0.92}
+            ],
+            "final_decision": {
+                "accepted_labels": ["cli"]
+            },
+            "capture_fingerprint": "cli-simplified-capture",
+            "signals": [{
+                "kind": "false_negative",
+                "target_label_ref": "cli",
+                "related_labels": [],
+                "proposed_action": "add_positive_atom",
+                "candidate_atom": {
+                    "polarity": "positive",
+                    "kind": "applies_when",
+                    "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
+                },
+                "agent_selected": true,
+                "suggest_state": "absent",
+                "final_selected": true,
+                "rationale": "The task expands the CLI surface although suggest selected nothing.",
+                "confidence": 0.91,
+                "signal_key": "cli-simplified-false-negative"
+            }]
+        })
+        .to_string(),
+    )?;
+    let input_path = input_path
+        .to_str()
+        .context("temp input path should be valid UTF-8")?;
+    let snapshot_path = snapshot_path
+        .to_str()
+        .context("temp snapshot path should be valid UTF-8")?;
+
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            input_path,
+            "--suggestion-snapshot",
+            snapshot_path,
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(observation["data"]["suggest_coverage"], 0.42);
+    assert_eq!(observation["data"]["suggest_coverage_cosine"], 0.37);
+    assert_eq!(observation["data"]["suggest_residual_norm"], 0.58);
+    assert_eq!(observation["data"]["suggest_needs_new_label"], true);
+    assert_eq!(observation["data"]["suggest_degraded"], true);
+    let diagnostics: serde_json::Value = serde_json::from_str(
+        observation["data"]["diagnostics_json"]
+            .as_str()
+            .context("diagnostics_json")?,
+    )?;
+    assert_eq!(diagnostics, json!(["vector_store_disabled"]));
+    assert_eq!(
+        observation["data"]["signals"][0]["signal_key"],
+        "cli-simplified-false-negative"
+    );
+
+    assert_eq!(list_labels(&temp.path, "default")?, labels_before);
+    assert_eq!(
+        get_task(&temp.path, "default", task_id)?.labels,
+        task_labels_before
+    );
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
 
     Ok(())
 }
@@ -1161,7 +1685,7 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
     let validation_path = validation_path
         .to_str()
         .context("temp path should be valid UTF-8")?;
-    let validated = kanban(
+    kanban(
         &temp.path,
         &[
             "--json",
@@ -1183,25 +1707,20 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
             "codex",
         ],
     )?
-    .success_json()?;
-    assert_eq!(validated["data"]["action_type"], "validate");
-    assert_eq!(validated["data"]["validation_status"], "passed");
-    assert_eq!(validated["data"]["created_by"], "validate-agent");
-    assert_eq!(validated["data"]["created_by_type"], "agent");
-    assert_eq!(validated["data"]["agent_type"], "codex");
+    .failure_containing("trusted evidence collected by the kanban tool")?;
 
     let primary_detail = kanban(
         &temp.path,
         &["--json", "label", "ontology", "show", primary],
     )?
     .success_json()?;
-    assert_eq!(primary_detail["data"]["signal"]["status"], "resolved");
+    assert_eq!(primary_detail["data"]["signal"]["status"], "confirmed");
     assert_eq!(
         primary_detail["data"]["actions"]
             .as_array()
             .context("primary actions")?
             .len(),
-        3
+        2
     );
     let duplicate_detail = kanban(
         &temp.path,
@@ -1355,6 +1874,466 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
         change["retarget_override"]["reason"],
         "Reviewer explicitly audited proposal source signal retarget."
     );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_revert_action_round_trip() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_revert_action_round_trip")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    kanban_sqlite::upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            description: Some("Command-line interface behavior".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let before_semantics = get_label_semantics(&temp.path, "default", "cli")?;
+    let task = kanban_sqlite::create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("ontology CLI revert task"),
+    )?;
+    let observation = kanban_sqlite::record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        LabelOntologyRecordInput {
+            actor: LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: json!([{"label": "cli", "confidence": 0.92}]).to_string(),
+            suggestion_snapshot_json: json!({"selected_labels": []}).to_string(),
+            final_decision_json: json!({"accepted_labels": ["cli"]}).to_string(),
+            suggest_coverage: Some(0.61),
+            suggest_coverage_cosine: Some(0.74),
+            suggest_residual_norm: Some(0.39),
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: json!([]).to_string(),
+            capture_fingerprint: Some("cli-revert-action-round-trip".to_owned()),
+            signals: vec![LabelOntologySignalInput {
+                kind: LabelOntologySignalKind::FalseNegative,
+                target_label_ref: Some("cli".to_owned()),
+                related_labels_json: json!([]).to_string(),
+                proposed_action: LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(LabelOntologyCandidateAtomInput {
+                    polarity: "positive".to_owned(),
+                    kind: "applies_when".to_owned(),
+                    text: "extends CLI subcommands, arguments, help output, or JSON behavior"
+                        .to_owned(),
+                }),
+                proposed_label_name: None,
+                proposal_json: json!({}).to_string(),
+                agent_selected: true,
+                suggest_state: Some(LabelOntologySuggestState::Candidate),
+                suggest_score: Some(0.08),
+                suggest_rank: Some(4),
+                final_selected: true,
+                rationale: "The task expands the CLI surface although suggest scored cli weakly."
+                    .to_owned(),
+                confidence: Some(0.91),
+                signal_key: Some("cli-revert-action".to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    kanban_sqlite::create_label_ontology_action(
+        &temp.path,
+        "default",
+        LabelOntologyActionInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            action_type: LabelOntologyActionType::Confirm,
+            signal_ids: vec![signal_id.clone()],
+            reason: "Confirmed by reviewer.".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: None,
+            validation_status: None,
+            validation_json: None,
+        },
+    )?;
+    let applied = kanban_sqlite::apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed false-negative support for CLI surface changes.".to_owned(),
+        },
+    )?;
+    let action_count_before_failed_revert = ontology_action_count(&temp.path)?;
+
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "ontology",
+            "revert",
+            &applied.id,
+            "--expected-current-hash",
+            "not-the-current-semantics-hash",
+            "--reason",
+            "This revert should fail before writing a new action.",
+        ],
+    )?
+    .failure_containing("expected_current_hash does not match")?;
+    assert_eq!(
+        ontology_action_count(&temp.path)?,
+        action_count_before_failed_revert
+    );
+    let after_failed_revert = get_label_semantics(&temp.path, "default", "cli")?;
+    assert_ne!(
+        after_failed_revert.semantics_hash,
+        before_semantics.semantics_hash
+    );
+    assert!(
+        after_failed_revert
+            .atoms
+            .iter()
+            .any(|atom| applied.result_atom_id.as_deref() == Some(atom.id.as_str()))
+    );
+
+    let reverted = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "revert",
+            &applied.id,
+            "--expected-current-hash",
+            applied
+                .canonical_after_hash
+                .as_deref()
+                .context("canonical after hash")?,
+            "--reason",
+            "Revert the test ontology mutation.",
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(reverted["data"]["action_type"], "revert_ontology_mutation");
+    assert_eq!(reverted["data"]["parent_action_id"], applied.id);
+    assert_eq!(reverted["data"]["signal_ids"], json!([signal_id]));
+    let restored_semantics = get_label_semantics(&temp.path, "default", "cli")?;
+    assert_eq!(
+        restored_semantics.semantics_hash,
+        before_semantics.semantics_hash
+    );
+    assert_eq!(restored_semantics.description, before_semantics.description);
+    assert_eq!(
+        restored_semantics.applies_when,
+        before_semantics.applies_when
+    );
+    assert_eq!(
+        restored_semantics.excludes_when,
+        before_semantics.excludes_when
+    );
+    assert_eq!(
+        restored_semantics.positive_examples,
+        before_semantics.positive_examples
+    );
+    assert_eq!(
+        restored_semantics.negative_examples,
+        before_semantics.negative_examples
+    );
+    assert_eq!(
+        restored_semantics
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>(),
+        before_semantics
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>()
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_structure_plan_round_trip() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_structure_plan_round_trip")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology CLI structure plan task",
+            "--description",
+            "ready spec for ontology structure planning",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    kanban(&temp.path, &["label", "add", task_id, "cli"])?.success()?;
+    let labels_before = list_labels(&temp.path, "default")?;
+    let task_labels_before = get_task(&temp.path, "default", task_id)?.labels;
+    let input_path = write_cli_ontology_structure_record_input(
+        &temp,
+        "ontology-structure-plan-record.json",
+        "rename-cli-to-command-surface",
+        "rename_label",
+        json!([]),
+        Some("command surface"),
+    )?;
+
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            &input_path,
+        ],
+    )?
+    .success_json()?;
+    let signal_id = observation["data"]["signals"][0]["id"]
+        .as_str()
+        .context("signal id")?;
+    kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "confirm",
+            signal_id,
+            "--reason",
+            "Reviewer confirmed the rename structure signal.",
+        ],
+    )?
+    .success_json()?;
+
+    let planned = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "structure",
+            "plan",
+            "rename-label",
+            signal_id,
+            "--target-label",
+            "cli",
+            "--proposed-label",
+            "command surface",
+            "--reason",
+            "Plan rename before any canonical identity rewrite.",
+            "--actor-type",
+            "agent",
+            "--agent-type",
+            "local",
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(planned["data"]["action_type"], "rename_label");
+    assert_eq!(planned["data"]["validation_status"], "pending");
+    assert_eq!(planned["data"]["signal_ids"], json!([signal_id]));
+    let action_id = planned["data"]["id"].as_str().context("action id")?;
+    let change: serde_json::Value = serde_json::from_str(
+        planned["data"]["change_json"]
+            .as_str()
+            .context("change_json")?,
+    )?;
+    assert_eq!(change["phase"], "planned_structure_change");
+    assert_eq!(change["canonical_mutation_applied"], false);
+    assert_eq!(change["change_type"], "rename_label");
+    assert_eq!(change["after"]["proposed_label_name"], "command surface");
+    assert_eq!(
+        change["task_binding_migration_plan"]["policy"],
+        "preserve_bindings"
+    );
+
+    let shown = kanban(
+        &temp.path,
+        &["--json", "label", "ontology", "show", signal_id],
+    )?
+    .success_json()?;
+    assert!(
+        shown["data"]["actions"]
+            .as_array()
+            .context("actions")?
+            .iter()
+            .any(|action| action["id"] == action_id)
+    );
+    assert_eq!(list_labels(&temp.path, "default")?, labels_before);
+    assert_eq!(
+        get_task(&temp.path, "default", task_id)?.labels,
+        task_labels_before
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_apply_existing_atom_uses_adopt_existing_action() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_apply_existing_atom_uses_adopt_existing_action")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    kanban_sqlite::upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            applies_when: vec![
+                "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+    let existing_atom = atoms_before
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("existing applies_when atom")?;
+    clear_label_atom_dirty_flags(&temp.path, "default")?;
+    let add_action_count_before = add_atom_action_count(&temp.path)?;
+
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "existing atom adoption CLI task",
+            "--description",
+            "ready spec for existing atom adoption",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    let input_path = write_cli_ontology_record_input(
+        &temp,
+        "ontology-existing-atom-record.json",
+        &[(
+            "cli-existing-atom",
+            "links a confirmed signal to an existing CLI atom",
+        )],
+    )?;
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            &input_path,
+        ],
+    )?
+    .success_json()?;
+    let signal_id = observation["data"]["signals"][0]["id"]
+        .as_str()
+        .context("signal id")?;
+    kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "confirm",
+            signal_id,
+            "--reason",
+            "Reviewer confirmed existing atom signal.",
+        ],
+    )?
+    .success_json()?;
+
+    let applied = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "apply",
+            "atom",
+            signal_id,
+            "--label",
+            "cli",
+            "--kind",
+            "applies-when",
+            "--text",
+            "extends CLI subcommands, arguments, help output, or JSON behavior",
+            "--reason",
+            "Link confirmed signal to existing CLI atom.",
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(applied["data"]["action_type"], "adopt_existing_atom");
+    assert_eq!(applied["data"]["validation_status"], "not_required");
+    assert_eq!(applied["data"]["result_atom_id"], existing_atom.id);
+    assert_eq!(
+        applied["data"]["result_atom_content_hash"],
+        existing_atom.content_hash
+    );
+    assert_eq!(
+        applied["data"]["canonical_before_hash"],
+        applied["data"]["canonical_after_hash"]
+    );
+    let change: serde_json::Value = serde_json::from_str(
+        applied["data"]["change_json"]
+            .as_str()
+            .context("change_json")?,
+    )?;
+    assert_eq!(change["canonical_changed"], false);
+    assert_eq!(change["provenance_only"], true);
+    assert_eq!(change["requested_action_type"], "add_positive_atom");
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
+    assert_eq!(add_atom_action_count(&temp.path)?, add_action_count_before);
+    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    assert_eq!(status.dirty, Some(false));
+    assert_eq!(status.board_dirty, Some(false));
 
     Ok(())
 }
@@ -1617,6 +2596,39 @@ fn label_atom_explain_cli_json_round_trip() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn clear_label_atom_dirty_flags(path: &Path, board: &str) -> anyhow::Result<()> {
+    let board = kanban_sqlite::get_board(path, board)?;
+    let conn = kanban_sqlite::connect_file(path)?;
+    conn.execute(
+        "UPDATE derived_store_state SET dirty=0, last_error=NULL \
+         WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE label_atom_index_boards SET dirty=0, last_error=NULL \
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [board.id],
+    )?;
+    Ok(())
+}
+
+fn add_atom_action_count(path: &Path) -> anyhow::Result<i64> {
+    Ok(kanban_sqlite::connect_file(path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_actions \
+         WHERE action_type IN ('add_positive_atom','add_negative_atom')",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+fn ontology_action_count(path: &Path) -> anyhow::Result<i64> {
+    Ok(kanban_sqlite::connect_file(path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_actions",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
 fn write_cli_ontology_record_input(
     temp: &TempDb,
     filename: &str,
@@ -1668,6 +2680,59 @@ fn write_cli_ontology_record_input(
             "diagnostics_json": "[]",
             "capture_fingerprint": filename,
             "signals": signals
+        })
+        .to_string(),
+    )?;
+    Ok(path
+        .to_str()
+        .context("temp path should be valid UTF-8")?
+        .to_owned())
+}
+
+fn write_cli_ontology_structure_record_input(
+    temp: &TempDb,
+    filename: &str,
+    signal_key: &str,
+    proposed_action: &str,
+    related_labels: serde_json::Value,
+    proposed_label_name: Option<&str>,
+) -> anyhow::Result<String> {
+    let path = temp.dir.join(filename);
+    fs::write(
+        &path,
+        json!({
+            "actor": {
+                "name": "label-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "agent_candidates_json": "[]",
+            "suggestion_snapshot_json": "{}",
+            "final_decision_json": "{}",
+            "suggest_coverage": 0.61,
+            "suggest_coverage_cosine": 0.74,
+            "suggest_residual_norm": 0.39,
+            "suggest_needs_new_label": false,
+            "suggest_degraded": false,
+            "diagnostics_json": "[]",
+            "capture_fingerprint": filename,
+            "signals": [{
+                "kind": "false_negative",
+                "target_label_ref": "cli",
+                "related_labels_json": related_labels.to_string(),
+                "proposed_action": proposed_action,
+                "candidate_atom": null,
+                "proposed_label_name": proposed_label_name,
+                "proposal_json": "{}",
+                "agent_selected": true,
+                "suggest_state": "candidate",
+                "suggest_score": 0.08,
+                "suggest_rank": 4,
+                "final_selected": true,
+                "rationale": "The task exposes a structure-level label boundary issue.",
+                "confidence": 0.91,
+                "signal_key": signal_key
+            }]
         })
         .to_string(),
     )?;

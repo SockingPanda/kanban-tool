@@ -15,7 +15,9 @@
 1. **持久化**：任务、状态、依赖、评论、事件、运行历史必须落盘。
 2. **可恢复**：本地进程崩溃后，任务可以通过 claim TTL / heartbeat / reclaim 恢复。
 3. **可审计**：每次关键变化写入 `task_events`。
-4. **多入口一致**：Web、CLI、dispatcher 必须走同一套 Rust command service，不允许绕过状态机直接写状态。
+4. **多入口一致**：Web、CLI、dispatcher 必须走同一套 Rust use-case/service path
+   （当前主要在 `kanban-sqlite::service`，并复用 `kanban-core` 状态机 helper），
+   不允许绕过状态机直接写状态。
 5. **SQLite-only**：第一版只支持 SQLite，不设计 PostgreSQL/MongoDB backend。
 6. **单用户本地语义**：actor 是操作来源字符串，用于审计，不用于鉴权。
 
@@ -54,6 +56,8 @@
 | Run | 一次执行 attempt。只有 claim/start 后才产生。 |
 | Attachment | 附件元数据，blob 存文件系统。 |
 | Label | 本地标签。 |
+| Label Semantics / Atoms | Label 的 canonical ontology truth，用于本地 suggest 与 review。 |
+| Label Proposal / Ontology Ledger | 新 label 候选 lifecycle 与 append-only provenance；它们解释 ontology 演化，但不替代当前 label truth。 |
 | Column | UI 展示配置，映射到 status。 |
 
 ---
@@ -147,6 +151,43 @@ tasks 当前快照 + task_events append-only 事件流
 - 快照与事件必须在同一 transaction 内更新。
 
 初始 schema 见 [`../migrations/001_initial.sql`](../migrations/001_initial.sql)。
+
+### 5.4 Label ontology truth 与 provenance
+
+Label 系统保持四类角色分离：
+
+1. `labels` / `task_labels` 是任务当前绑定事实。
+2. `label_semantics` / `label_atoms` 是 label 的 canonical ontology truth。
+3. `lancedb_label_atoms` 等向量索引是可删除重建的派生检索层。
+4. `label_semantic_proposals` 与 `label_ontology_*` ledger 记录候选、分歧、review、
+   mutation provenance 和 validation history。
+
+当前不引入 label-ontology 专属 graph projection。现有 `kanban graph` / Oxigraph 只消费
+Knowledge Substrate 的 `entity_relations` mirror；ontology review、atom explain、proposal
+和 validation history 直接从 SQLite truth 读取。未来若为 rename/split/merge 或 provenance
+关系查询增加 graph projection，它必须是可删除重建的 derived store，不能拥有 canonical write
+path。
+
+Constructive ontology mutation 必须通过专用 service path：semantics patch/replace、
+atom apply、task-label bootstrap、proposal create/accept 和 validation 都要在同一 SQLite
+transaction 中写入对应 canonical row 与 provenance action，或一起回滚。通用
+ontology action endpoint 只允许 lifecycle review action，不能伪造 canonical before/after
+hash、result atom/result label/result proposal 或 validation evidence。
+
+已提交的 label-scoped semantics/atom mutation 可以通过专用 revert path 追加
+`revert_ontology_mutation` action：它要求当前 canonical hash 仍等于被撤销 action 的
+after hash，将 semantics 恢复到 before snapshot，标脏 atom index，并保留原 action
+history。该 path 不承担 bootstrap label identity 或 task binding 回滚。
+
+Semantics upsert 默认是 patch，不是 full replace：缺省字段保留当前值，数组字段追加或按
+`remove_*` 删除；只有显式 replace 才把缺省数组解释为空。`expected_semantics_hash`
+用于防止 lost update。Proposal accept 与单 task bootstrap 共用 new-label adoption
+primitive；proposal accept 不自动写 `task_labels`，bootstrap 会绑定来源 task。旧数据或
+cleanup 路径中缺少 action provenance 的 atom 只能通过 `legacy_untracked=true` 标记，不应
+被当作新的 ontology growth 方式。
+当 apply atom 发现同内容 atom 已存在时，只写 `adopt_existing_atom` provenance-only action；
+它连接新的 source signals 到 existing atom，不修改 canonical semantics/atoms，也不触发
+derived atom index dirty。
 
 ---
 
@@ -248,6 +289,11 @@ Dispatcher 见 [`DISPATCHER_SPEC.md`](DISPATCHER_SPEC.md)。
 10. Board archive 不会改变 task 状态；如果 board 上仍有 `running` task/run，必须拒绝 archive。
 11. 每次状态变化必须写 `task_events`。
 12. task snapshot 与对应 event 必须同 transaction 提交。
+13. `tasks.status`、label binding truth、label semantics truth、ontology ledger 和派生检索层各自有明确写权限；derived stores 不拥有 canonical write path。
+14. 新的 constructive ontology mutation 不通过 generic lifecycle action endpoint；必须由专用 command/API/service 路径同时写 canonical state 与 provenance action；采用已存在 atom 只写 `adopt_existing_atom` provenance action，不伪装成新增 atom。
+15. label ontology graph projection 当前不存在；如未来新增，只能从 SQLite truth 派生并重建，不得成为 `labels`、`task_labels`、`label_semantics`、`label_atoms` 或 `label_ontology_*` 的写入口。
+16. label ontology longitudinal regression corpus 是测试/评估基础设施：它可比较固定 corpus 的 selected labels、score 和 evidence atoms，但 corpus run 本身不得修改 canonical label/ontology/ledger truth，也不得成为日常 task label 绑定的默认流程。
+17. label ontology quality analytics 是只读投影：denominator 来源必须可审计；raw disagreement signal count 不得被命名或解释为模型错误率、precision 或 recall。没有带 expected labels 的独立评估 cohort 时，precision/recall 必须显示为 unavailable。
 
 ---
 

@@ -544,10 +544,37 @@ async fn labels_routes_create_list_add_and_remove_task_labels() -> anyhow::Resul
     let (status, json) = post_json(
         app.clone(),
         &format!("/api/v1/tasks/{}/labels", task.id),
-        json!({ "names": ["frontend", "api", "frontend"], "actor": "api-labeler" }),
+        json!({ "name": "frontend", "actor": "api-labeler" }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("label frontend does not exist")
+    );
+    assert_eq!(kanban_sqlite::list_labels(&db_path, "default")?.len(), 1);
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels", task.id),
+        json!({
+            "names": ["frontend", "api", "frontend"],
+            "create_missing": true,
+            "actor": "api-labeler"
+        }),
     )
     .await?;
     assert_eq!(status, StatusCode::CREATED);
+    let created_label_names: Vec<_> = json["meta"]["created_labels"]
+        .as_array()
+        .context("created labels")?
+        .iter()
+        .map(|label| label["name"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(created_label_names, ["frontend", "api"]);
     let label_names: Vec<_> = json["data"]["labels"]
         .as_array()
         .context("task labels")?
@@ -618,6 +645,10 @@ async fn task_label_suggestions_route_returns_degraded_json_without_provider() -
     assert_eq!(json["data"]["task_id"], task.id);
     assert_eq!(json["data"]["degraded"], true);
     assert_eq!(json["data"]["needs_new_label"], false);
+    assert_eq!(
+        json["data"]["reason_codes"],
+        json!(["degraded_result", "vector_store_disabled"])
+    );
     assert!(
         json["data"]["selected_labels"]
             .as_array()
@@ -830,6 +861,33 @@ async fn task_label_proposal_route_accepts_and_rejects_without_task_binding() ->
             .labels
             .is_empty()
     );
+    let label_id = json["data"]["resolved_label_id"]
+        .as_str()
+        .context("resolved label id")?;
+    let semantics = kanban_sqlite::get_label_semantics(&db_path, "default", label_id)?;
+    let atom = semantics
+        .atoms
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("applies_when atom")?;
+    let (status, explained) = get_json(
+        app.clone(),
+        &format!("/api/v1/boards/default/labels/atoms/{}/explain", atom.id),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(explained["data"]["legacy_untracked"], false);
+    assert!(
+        explained["data"]["provenance_actions"]
+            .as_array()
+            .context("provenance actions")?
+            .iter()
+            .any(
+                |provenance| provenance["action"]["action_type"] == "bootstrap_label"
+                    && provenance["action"]["result_proposal_id"] == proposal_id
+            ),
+        "{explained}"
+    );
 
     let reject_id = seed_proposed_label_proposal(
         &db_path,
@@ -991,6 +1049,24 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
         "extends CLI subcommands, arguments, help output, or JSON behavior"
     );
     assert_eq!(groups[0]["labels"][0]["id"], label.id);
+
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/review?group_by=cluster&limit=10",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    assert_eq!(json["meta"]["group_by"], "cluster");
+    let groups = json["data"].as_array().context("cluster groups")?;
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0]["group_by"], "cluster");
+    assert_eq!(
+        groups[0]["cluster_key"],
+        "candidate:kind:false_negative|action:add_positive_atom|target:cli|proposed:none|text:extends cli subcommands arguments help output or json behavior"
+    );
+    assert_eq!(groups[0]["cluster_reason"], "normalized_candidate_text");
+    assert_eq!(groups[0]["task_count"], 1);
+    assert_eq!(groups[0]["signal_ids"][0], signal_id);
 
     let (status, json) =
         get_json(app, &format!("/api/v1/label-ontology/signals/{signal_id}")).await?;
@@ -1526,9 +1602,8 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
         }),
     )
     .await?;
-    assert_eq!(status, StatusCode::CREATED, "{json}");
-    assert_eq!(json["data"]["action_type"], "validate");
-    assert_eq!(json["data"]["validation_status"], "passed");
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
+    assert_eq!(json["error"]["code"], "invalid_input");
 
     let (status, json) = get_json(
         app.clone(),
@@ -1536,10 +1611,10 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
     )
     .await?;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["data"]["signal"]["status"], "resolved");
+    assert_eq!(json["data"]["signal"]["status"], "confirmed");
     assert_eq!(
         json["data"]["actions"].as_array().context("actions")?.len(),
-        3
+        2
     );
 
     let (status, json) = post_json(
@@ -1664,6 +1739,382 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
     assert_eq!(
         change["retarget_override"]["reason"],
         "API reviewer explicitly audited proposal source signal retarget."
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn label_ontology_revert_route_round_trip() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    kanban_sqlite::upsert_label_semantics(
+        &db_path,
+        "default",
+        kanban_sqlite::UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            description: Some("Command-line interface behavior".to_owned()),
+            ..kanban_sqlite::UpsertLabelSemantics::default()
+        },
+    )?;
+    let before_semantics = kanban_sqlite::get_label_semantics(&db_path, "default", "cli")?;
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("ontology API revert route target"),
+    )?;
+    let observation = kanban_sqlite::record_label_ontology_observation(
+        &db_path,
+        "default",
+        &task.id,
+        kanban_sqlite::LabelOntologyRecordInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: "[]".to_owned(),
+            suggestion_snapshot_json: "{}".to_owned(),
+            final_decision_json: "{}".to_owned(),
+            suggest_coverage: None,
+            suggest_coverage_cosine: None,
+            suggest_residual_norm: None,
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: "[]".to_owned(),
+            capture_fingerprint: Some("api-ontology-revert-route".to_owned()),
+            signals: vec![kanban_sqlite::LabelOntologySignalInput {
+                kind: kanban_sqlite::LabelOntologySignalKind::FalseNegative,
+                target_label_ref: Some("cli".to_owned()),
+                related_labels_json: "[]".to_owned(),
+                proposed_action: kanban_sqlite::LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(kanban_sqlite::LabelOntologyCandidateAtomInput {
+                    polarity: "positive".to_owned(),
+                    kind: "applies_when".to_owned(),
+                    text: "changes the local CLI command surface".to_owned(),
+                }),
+                proposed_label_name: None,
+                proposal_json: "{}".to_owned(),
+                agent_selected: true,
+                suggest_state: Some(kanban_sqlite::LabelOntologySuggestState::Candidate),
+                suggest_score: Some(0.12),
+                suggest_rank: Some(2),
+                final_selected: true,
+                rationale: "The task changes CLI behavior.".to_owned(),
+                confidence: Some(0.88),
+                signal_key: Some("api-ontology-revert".to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    kanban_sqlite::create_label_ontology_action(
+        &db_path,
+        "default",
+        kanban_sqlite::LabelOntologyActionInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            action_type: kanban_sqlite::LabelOntologyActionType::Confirm,
+            signal_ids: vec![signal_id.clone()],
+            reason: "valid false negative".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: None,
+            validation_status: None,
+            validation_json: None,
+        },
+    )?;
+    let applied = kanban_sqlite::apply_label_ontology_atom(
+        &db_path,
+        "default",
+        kanban_sqlite::LabelOntologyAtomApplyInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "changes the local CLI command surface".to_owned(),
+            reason: "apply confirmed atom".to_owned(),
+        },
+    )?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/revert",
+        json!({
+            "actor": {
+                "name": "reviewer",
+                "type": "user",
+                "agent_type": null
+            },
+            "target_action_id": applied.id.clone(),
+            "expected_current_hash": applied.canonical_after_hash.clone(),
+            "reason": "Revert the test ontology mutation."
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED, "{json}");
+    assert_eq!(json["data"]["action_type"], "revert_ontology_mutation");
+    assert_eq!(json["data"]["parent_action_id"], applied.id);
+    assert_eq!(json["data"]["signal_ids"], json!([signal_id]));
+    let restored_semantics = kanban_sqlite::get_label_semantics(&db_path, "default", "cli")?;
+    assert_eq!(
+        restored_semantics.semantics_hash,
+        before_semantics.semantics_hash
+    );
+    assert_eq!(restored_semantics.description, before_semantics.description);
+    assert_eq!(
+        restored_semantics.applies_when,
+        before_semantics.applies_when
+    );
+    assert_eq!(
+        restored_semantics.excludes_when,
+        before_semantics.excludes_when
+    );
+    assert_eq!(
+        restored_semantics.positive_examples,
+        before_semantics.positive_examples
+    );
+    assert_eq!(
+        restored_semantics.negative_examples,
+        before_semantics.negative_examples
+    );
+    assert_eq!(
+        restored_semantics
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>(),
+        before_semantics
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn label_ontology_structure_plan_route_round_trip() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "command-surface".to_owned(),
+            color: None,
+        },
+    )?;
+    let target_task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("ontology API structure target"),
+    )?;
+    let related_task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("ontology API structure related"),
+    )?;
+    kanban_sqlite::add_task_labels_with_options(
+        &db_path,
+        "default",
+        "seed",
+        &target_task.id,
+        &["cli".to_owned()],
+        false,
+    )?;
+    kanban_sqlite::add_task_labels_with_options(
+        &db_path,
+        "default",
+        "seed",
+        &related_task.id,
+        &["command-surface".to_owned()],
+        false,
+    )?;
+    let labels_before = kanban_sqlite::list_labels(&db_path, "default")?;
+    let target_labels_before =
+        kanban_sqlite::get_task(&db_path, "default", &target_task.id)?.labels;
+    let related_labels_before =
+        kanban_sqlite::get_task(&db_path, "default", &related_task.id)?.labels;
+    let observation = kanban_sqlite::record_label_ontology_observation(
+        &db_path,
+        "default",
+        &target_task.id,
+        kanban_sqlite::LabelOntologyRecordInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: "[]".to_owned(),
+            suggestion_snapshot_json: "{}".to_owned(),
+            final_decision_json: "{}".to_owned(),
+            suggest_coverage: None,
+            suggest_coverage_cosine: None,
+            suggest_residual_norm: None,
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: "[]".to_owned(),
+            capture_fingerprint: Some("api-structure-plan".to_owned()),
+            signals: vec![kanban_sqlite::LabelOntologySignalInput {
+                kind: kanban_sqlite::LabelOntologySignalKind::FalseNegative,
+                target_label_ref: Some("cli".to_owned()),
+                related_labels_json: json!(["command-surface"]).to_string(),
+                proposed_action: kanban_sqlite::LabelOntologyProposedAction::MergeLabels,
+                candidate_atom: None,
+                proposed_label_name: None,
+                proposal_json: "{}".to_owned(),
+                agent_selected: true,
+                suggest_state: Some(kanban_sqlite::LabelOntologySuggestState::Candidate),
+                suggest_score: Some(0.12),
+                suggest_rank: Some(2),
+                final_selected: true,
+                rationale: "The task exposes a label structure merge boundary.".to_owned(),
+                confidence: Some(0.88),
+                signal_key: Some("api-structure-merge".to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    kanban_sqlite::create_label_ontology_action(
+        &db_path,
+        "default",
+        kanban_sqlite::LabelOntologyActionInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            action_type: kanban_sqlite::LabelOntologyActionType::Confirm,
+            signal_ids: vec![signal_id.clone()],
+            reason: "valid merge structure signal".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: None,
+            validation_status: None,
+            validation_json: None,
+        },
+    )?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/structure-plan",
+        json!({
+            "actor": {
+                "name": "structure-agent",
+                "type": "agent",
+                "agent_type": "local"
+            },
+            "signal_ids": [signal_id],
+            "action_type": "merge_labels",
+            "target_label_ref": "cli",
+            "proposed_label_name": null,
+            "related_label_refs": ["command-surface"],
+            "task_binding_policy": null,
+            "validation_policy": {
+                "required": true,
+                "policy": "manual_merge_review",
+                "trusted_validation_required_before_apply": true
+            },
+            "validation_policy_json": null,
+            "reason": "Plan merge without moving existing task bindings yet."
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED, "{json}");
+    assert_eq!(json["data"]["action_type"], "merge_labels");
+    assert_eq!(json["data"]["validation_status"], "pending");
+    assert_eq!(json["data"]["created_by"], "structure-agent");
+    assert_eq!(json["data"]["created_by_type"], "agent");
+    assert_eq!(json["data"]["agent_type"], "local");
+    let action_id = json["data"]["id"].as_str().context("action id")?;
+    let change: serde_json::Value = serde_json::from_str(
+        json["data"]["change_json"]
+            .as_str()
+            .context("change_json")?,
+    )?;
+    assert_eq!(change["canonical_mutation_applied"], false);
+    assert_eq!(change["change_type"], "merge_labels");
+    assert_eq!(
+        change["task_binding_migration_plan"]["policy"],
+        "move_related_to_target"
+    );
+    assert_eq!(change["validation_policy"]["policy"], "manual_merge_review");
+
+    let (status, json) =
+        get_json(app, &format!("/api/v1/label-ontology/signals/{signal_id}")).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        json["data"]["actions"]
+            .as_array()
+            .context("actions")?
+            .iter()
+            .any(|action| action["id"] == action_id)
+    );
+    assert_eq!(
+        kanban_sqlite::list_labels(&db_path, "default")?,
+        labels_before
+    );
+    assert_eq!(
+        kanban_sqlite::get_task(&db_path, "default", &target_task.id)?.labels,
+        target_labels_before
+    );
+    assert_eq!(
+        kanban_sqlite::get_task(&db_path, "default", &related_task.id)?.labels,
+        related_labels_before
     );
     Ok(())
 }
@@ -1939,6 +2390,69 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
     .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["label_name"], "team/backend");
+    let seed_hash = json["data"]["semantics_hash"]
+        .as_str()
+        .context("semantics hash")?
+        .to_owned();
+
+    let (status, json) = request_json(
+        app.clone(),
+        "PUT",
+        &format!("/api/v1/boards/default/labels/{label_id}/semantics"),
+        Some(json!({
+            "expected_semantics_hash": seed_hash,
+            "applies_when": ["serves kanban API routes"],
+            "remove_excludes_when": ["CSS-only"],
+            "reason": "HTTP patch guardrail test"
+        })),
+        None,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        json["data"]["applies_when"],
+        json!(["touches Rust service code", "serves kanban API routes"])
+    );
+    assert_eq!(json["data"]["excludes_when"], json!([]));
+    assert_eq!(
+        json["data"]["positive_examples"],
+        json!(["add API handler"])
+    );
+    assert_eq!(json["data"]["negative_examples"], json!(["adjust spacing"]));
+    let patched_hash = json["data"]["semantics_hash"]
+        .as_str()
+        .context("patched semantics hash")?
+        .to_owned();
+    let (status, json) = request_json(
+        app.clone(),
+        "PUT",
+        &format!("/api/v1/boards/default/labels/{label_id}/semantics"),
+        Some(json!({
+            "expected_semantics_hash": seed_hash,
+            "applies_when": ["stale writer addition"]
+        })),
+        None,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json["error"]["code"], "conflict");
+
+    let (status, json) = request_json(
+        app.clone(),
+        "PUT",
+        &format!("/api/v1/boards/default/labels/{label_id}/semantics"),
+        Some(json!({
+            "expected_semantics_hash": patched_hash,
+            "replace": true,
+            "description": "Backend replacement semantics"
+        })),
+        None,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["description"], "Backend replacement semantics");
+    assert_eq!(json["data"]["applies_when"], json!([]));
+    assert_eq!(json["data"]["positive_examples"], json!([]));
 
     let (status, json) = get_json(
         app.clone(),
@@ -1965,7 +2479,10 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
             .as_array()
             .context("atoms")?
             .iter()
-            .any(|atom| atom["kind"] == "positive_example" && atom["text"] == "add API handler")
+            .any(|atom| atom["kind"] == "description"
+                && atom["text"]
+                    .as_str()
+                    .is_some_and(|text| text.contains("Backend replacement semantics")))
     );
 
     let (status, json) = get_json(
@@ -2036,8 +2553,10 @@ async fn label_atom_explain_route_returns_legacy_untracked_for_unprovenanced_ato
             excludes_when: vec![],
             positive_examples: vec!["add API handler".to_owned()],
             negative_examples: vec![],
+            ..kanban_sqlite::UpsertLabelSemantics::default()
         },
     )?;
+    kanban_sqlite::connect_file(&db_path)?.execute("DELETE FROM label_ontology_actions", [])?;
     let atom = kanban_sqlite::list_label_atoms(&db_path, "default")?
         .into_iter()
         .find(|atom| atom.kind == "positive_example")
@@ -2159,12 +2678,13 @@ async fn task_label_routes_use_task_board_and_reject_archived_targets() -> anyho
     let (status, json) = post_json(
         app.clone(),
         &format!("/api/v1/tasks/{}/labels", other_task.id),
-        json!({ "name": "backend", "actor": "api-labeler" }),
+        json!({ "name": "backend", "create_missing": true, "actor": "api-labeler" }),
     )
     .await?;
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(json["data"]["board_slug"], "other");
     assert_eq!(json["data"]["labels"][0]["name"], "backend");
+    assert_eq!(json["meta"]["created_labels"][0]["name"], "backend");
     assert!(kanban_sqlite::list_labels(&db_path, "default")?.is_empty());
     let other_labels = kanban_sqlite::list_labels(&db_path, "other")?;
     assert_eq!(other_labels[0].name, "backend");

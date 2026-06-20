@@ -32,45 +32,7 @@ describe("label suggestions", () => {
   })
 
   it("keeps long suggestion content constrained inside the task detail sheet", () => {
-    const html = renderToStaticMarkup(
-      createElement(
-        Sheet,
-        { open: true },
-        createElement(
-          "div",
-          {
-            "data-test-sheet": "task-detail",
-            className: `${sheetContentClassName("right")} w-[min(620px,calc(100vw-32px))] p-0`,
-          },
-          createElement(TaskDetail, {
-            api: null,
-            task,
-            detail: emptyDetail,
-            labelSuggestions: longSuggestionResult,
-            labelSuggestionsRequested: true,
-            blockReason: "",
-            setBlockReason: () => undefined,
-            dependencyInput: "",
-            setDependencyInput: () => undefined,
-            claimToken: null,
-            commentBody: "",
-            setCommentBody: () => undefined,
-            editDraft: null,
-            draftDirty: false,
-            setEditDraft: () => undefined,
-            detailLoading: false,
-            pendingAction: null,
-            onAction: async () => undefined,
-            onAddDependency: async () => undefined,
-            onRemoveDependency: async () => undefined,
-            onSelectTask: () => undefined,
-            onSaveTask: async () => true,
-            onCancelEdit: () => undefined,
-            onAddComment: async () => undefined,
-          }),
-        ),
-      ),
-    )
+    const html = renderTaskDetailWithSuggestions(longSuggestionResult)
 
     expect(classListForElementWithAttribute(html, 'data-test-sheet="task-detail"')).toEqual(
       expect.arrayContaining(["fixed", "flex", "flex-col", "w-[min(620px,calc(100vw-32px))]", "p-0"]),
@@ -87,7 +49,56 @@ describe("label suggestions", () => {
     expect(classListForText(html, longSuggestionResult.diagnostics[0])).toContain("break-words")
     expect(classListForLastTextInTag(html, "Apply", "button")).toContain("shrink-0")
   })
+
+  it("renders coverage review without making a new-label recommendation", () => {
+    const html = renderTaskDetailWithSuggestions(coverageReviewSuggestionResult)
+
+    expect(html).toContain("Existing label coverage needs review: coverage gap, no selected labels, unexplained residual")
+    expect(html).not.toContain("new label may be needed")
+  })
 })
+
+function renderTaskDetailWithSuggestions(suggestions: LabelSuggestionResult) {
+  return renderToStaticMarkup(
+    createElement(
+      Sheet,
+      { open: true },
+      createElement(
+        "div",
+        {
+          "data-test-sheet": "task-detail",
+          className: `${sheetContentClassName("right")} w-[min(620px,calc(100vw-32px))] p-0`,
+        },
+        createElement(TaskDetail, {
+          api: null,
+          task,
+          detail: emptyDetail,
+          labelSuggestions: suggestions,
+          labelSuggestionsRequested: true,
+          blockReason: "",
+          setBlockReason: () => undefined,
+          dependencyInput: "",
+          setDependencyInput: () => undefined,
+          claimToken: null,
+          commentBody: "",
+          setCommentBody: () => undefined,
+          editDraft: null,
+          draftDirty: false,
+          setEditDraft: () => undefined,
+          detailLoading: false,
+          pendingAction: null,
+          onAction: async () => undefined,
+          onAddDependency: async () => undefined,
+          onRemoveDependency: async () => undefined,
+          onSelectTask: () => undefined,
+          onSaveTask: async () => true,
+          onCancelEdit: () => undefined,
+          onAddComment: async () => undefined,
+        }),
+      ),
+    ),
+  )
+}
 
 function classListForElementWithAttribute(html: string, attribute: string) {
   const attributeIndex = html.indexOf(attribute)
@@ -166,9 +177,24 @@ const longSuggestionResult: LabelSuggestionResult = {
   coverage: 0.91,
   coverage_cosine: 0.88,
   residual_norm: 0.12,
-  needs_new_label: true,
+  needs_new_label: false,
+  reason_codes: ["degraded_result"],
   degraded: true,
   diagnostics: ["longunbrokendiagnosticmessagethatmustwrapinplace"],
+}
+
+const coverageReviewSuggestionResult: LabelSuggestionResult = {
+  task_id: "t_1",
+  board_id: "b_1",
+  selected_labels: [],
+  candidates: [],
+  coverage: 0.2,
+  coverage_cosine: 0.31,
+  residual_norm: 0.8,
+  needs_new_label: true,
+  reason_codes: ["coverage_below_threshold", "no_selected_labels", "residual_above_threshold"],
+  degraded: false,
+  diagnostics: [],
 }
 
 const task: Task = {

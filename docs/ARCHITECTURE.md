@@ -1,46 +1,47 @@
 # Architecture
 
-本架构面向本地单机运行：Rust core、SQLite-only、CLI、localhost Web server、可选 dispatcher。
+本架构面向本地单机运行：Rust workspace、SQLite-only、CLI、localhost Web server、可选 dispatcher。
 
 ---
 
 ## 1. 总体架构
 
 ```text
-             ┌───────────────┐
-             │    Web UI     │
-             └───────┬───────┘
-                     │ HTTP/SSE localhost
-             ┌───────▼───────┐
-             │ kanban-server │
-             └───────┬───────┘
-                     │ Command Service
-┌───────────────┐    │
-│  kanban-cli   ├────┤
-└───────────────┘    │
-                     ▼
-             ┌───────────────┐
-             │ kanban-core   │
-             │ state machine │
-             │ commands      │
-             └───────┬───────┘
-                     │ repository
-             ┌───────▼───────┐
-             │ kanban-sqlite │
-             └───────┬───────┘
-                     │
-             ┌───────▼───────┐
-             │   SQLite WAL  │
-             └───────────────┘
-
-             ┌───────────────┐
-             │ dispatcher    │
-             │ local worker  │
-             └───────┬───────┘
-                     │ Command Service
-                     ▼
-             same core/sqlite path
+Web UI
+  -> kanban-server handlers/DTO
+        \
+kanban-cli \
+dispatcher  -> kanban-sqlite::service use cases / transactions
+                     | uses kanban-core pure state-machine helpers
+                     v
+                canonical SQLite WAL
+                     |
+                     | task_events / index_outbox / dirty-generation markers
+                     v
+                rebuildable derived stores
+                (Tantivy / Oxigraph / LanceDB)
 ```
+
+当前实现的 application orchestration 主要位于 `kanban-sqlite::service`：CLI、HTTP
+server、desktop 和 dispatcher 都调用这组 Rust use-case 函数，在 SQLite transaction
+中执行状态机 guard、canonical writes、events、runs、outbox 和 provenance。`kanban-core`
+承载 `TaskStatus`、ID/error/clock 和纯状态机 helper，但当前不是完整的 command-service
+interface crate，也不拥有持久化 records。
+
+是否要把 application service 从 `kanban-sqlite` 抽成独立 crate，按
+[Application Service Extraction Evaluation](plans/application-service-extraction-evaluation.md)
+中的证据门槛评估；当前结论是先保持真实文档和共享 service path，不为匹配架构图而重构。
+
+可把系统按六个运行平面理解：
+
+| 平面 | 当前内容 | 写权限边界 |
+|---|---|---|
+| Interaction/adapters | `kanban-cli`、`kanban-server`、desktop、dispatcher 入口 | 转换输入/输出，不直接写 SQLite truth |
+| Application orchestration | 当前主要在 `kanban-sqlite::service` | 统一 transaction、use case 和 query 语义 |
+| Domain/state machine | `kanban-core` 的 status、guard 和 recompute helper | 纯逻辑，不访问 SQLite/HTTP/CLI |
+| Canonical SQLite truth | tasks/status、dependencies、labels、semantics、proposals、ontology ledger | 只能由 service path 写入 |
+| Propagation/control plane | `task_events`、`index_outbox`、dirty/generation/status markers | 记录同步水位和恢复入口，不替代 truth |
+| Rebuildable derived stores | Tantivy、Oxigraph、LanceDB `kb_chunks` / `kb_label_atoms` | 可删除重建，无 canonical write path |
 
 ---
 
@@ -103,17 +104,17 @@ apps/
 
 职责：
 
-- 定义领域类型：`Task`、`Board`、`Status`、`Run`、`Event`、`Dependency`。
-- 定义 command input/output。
-- 实现状态机与 transition guard。
-- 定义错误类型。
-- 定义 service 层接口。
+- 定义基础领域类型：`Board`、`BoardColumn`、`TaskStatus`。
+- 提供 typed ID、clock 和统一错误类型。
+- 实现纯状态机、readiness recompute 与 transition guard helper。
 - 不依赖 SQLite、HTTP、CLI、前端。
+- 当前不定义完整 command input/output，也不定义 application service interface。
+  这些 use-case orchestration 和持久化 records 主要在 `kanban-sqlite::service`。
 
 示例：
 
 ```rust
-pub enum Status {
+pub enum TaskStatus {
     Triage,
     Todo,
     Scheduled,
@@ -125,16 +126,10 @@ pub enum Status {
     Archived,
 }
 
-pub enum Command {
-    CreateTask(CreateTask),
-    UpdateTask(UpdateTask),
-    ClaimTask(ClaimTask),
-    Heartbeat(HeartbeatTask),
-    CompleteTask(CompleteTask),
-    BlockTask(BlockTask),
-    UnblockTask(UnblockTask),
-    ArchiveTask(ArchiveTask),
-}
+pub fn initial_status(...) -> TaskStatus;
+pub fn recompute_ready_status(...) -> TaskStatus;
+pub fn can_promote_from(status: TaskStatus) -> bool;
+pub fn can_complete_from(status: TaskStatus) -> bool;
 ```
 
 ### 2.2 `kanban-sqlite`
@@ -144,10 +139,11 @@ pub enum Command {
 - SQLite 连接初始化。
 - migrations。
 - transaction 封装。
-- repository 实现。
+- application/service orchestration 与 repository 实现。
 - 复杂查询。
 - CAS claim。
 - append event。
+- task/comment/dependency/run/label/ontology use cases。
 - label proposal validation / persistence，以及 `LabelProposalProvider` trait 边界。
 
 关键要求：
@@ -166,7 +162,8 @@ pub enum Command {
 
 - 解析命令。
 - 构造 command input。
-- 调用 core service。
+- 调用 `kanban-sqlite::service` 中的 shared use-case 函数；状态判断复用
+  `kanban-core` 的纯状态机 helper。
 - 输出 human table 或 JSON。
 - 返回稳定 exit code。
 
@@ -199,7 +196,7 @@ CLI 可以直接打开 SQLite DB 调用 service，不需要 server 常驻。
 - run result 写回。
 
 当前没有独立 `kanban-dispatcher` crate。Dispatcher 入口由 CLI 提供，
-执行路径复用同一套 SQLite service / command service 语义；`kanban serve`
+执行路径复用同一套 `kanban-sqlite::service` 语义；`kanban serve`
 不启动 dispatcher，server 同进程运行 dispatcher 仍是后续扩展。
 
 CLI 入口：
@@ -248,6 +245,38 @@ kanban-sqlite
 用于 CLI/API 显式传入的本地/offline candidate。未来真实 provider 的候选位置是
 `kanban-server`、本地 runtime、或独立 `kanban-ai` / `kanban-llm` crate，并且必须保持
 SQLite service 不知道 credentials、HTTP transport、prompt 模板或外部 SDK。
+
+### 2.8 Label ontology roles
+
+Label 系统有六个角色，但不是六个严格独立的存储层：
+
+1. `labels` / `task_labels`：canonical label identity 与 task 当前绑定事实。
+2. `label_semantics` / `label_atoms`：canonical ontology truth。
+3. `kb_label_atoms` / `label_atom_index_boards`：可重建 label atom derived retrieval。
+4. `label suggest`：基于当前 task、atoms 和 vector evidence 的计算/诊断，不是持久 truth。
+5. `label_semantic_proposals`：候选新 label 的 lifecycle 记录，accept 前不改变当前 task-label truth。
+6. `label_ontology_*` ledger：observation、signal、action、validation provenance。
+
+Proposal 与 ledger 是 SQLite canonical records，因为它们需要审计和可查询历史；但它们不替代
+`task_labels` 的当前绑定事实，也不替代 `label_semantics` / `label_atoms` 的 ontology truth。
+正式文档使用 `canonical truth`、`derived retrieval`、`proposal workflow` 和
+`ontology provenance` 这些边界词；不要把未定义的内部简称写成架构术语。
+
+### 2.9 Label ontology graph boundary
+
+当前没有 label-ontology 专属 graph projection。`kanban graph` / Oxigraph 只镜像
+`entity_relations` 中已有的 Knowledge Substrate 关系，例如 task-board 与 task dependency；
+label ontology 的 query surface 仍是 SQLite ledger、proposal、semantics、`label ontology
+review`、`label atom explain` 和 validation history。
+
+在 rename/split/merge provenance 查询或跨 action 关系查询出现明确需求前，不新增
+ontology graph store、ontology RDF schema 或后台 projection。若后续确实需要，它必须复用
+Knowledge Substrate 的派生层边界：
+
+- SQLite `labels` / `label_semantics` / `label_atoms` / `label_ontology_*` 仍是 truth。
+- Graph projection 只能从 SQLite 快照和 outbox 重建，可删除重建。
+- Graph API 只能查询 relation/provenance，不提供 canonical ontology mutation path。
+- Graph 故障、dirty 或删除不会改变 task labels、semantics、atoms、signals 或 actions。
 
 ---
 
@@ -462,7 +491,34 @@ SQLite WAL 和 busy timeout 负责排队。业务层仍需保证 transaction 短
 - server 输出结构化日志。
 - dispatcher 对每次 run 写入 `task_runs`。
 - worker stdout/stderr 可写入本地 log 文件，DB 只存路径和摘要。
-- `kanban doctor` 检查 DB、WAL、schema、integrity、orphan run，并报告 Knowledge Substrate 的 `index_outbox` backlog、derived store dirty/error 状态和 per-store last_error。派生层异常不改变 SQLite task truth；operator 通过 sync/rebuild 恢复 Tantivy/Oxigraph/LanceDB。
+- `kanban doctor` 检查 DB、WAL、schema、integrity、orphan run、基础关系表
+  board consistency、label ontology ledger consistency，并报告 Knowledge Substrate 的
+  `index_outbox` backlog、derived store dirty/error 状态和 per-store last_error。派生层
+  异常不改变 SQLite task truth；operator 通过 sync/rebuild 恢复 Tantivy/Oxigraph/LanceDB。
+
+### 8.1 Board scope 与 schema/service/doctor 分工
+
+Board 是本地 project/board，不是 tenant。正常写路径的隔离边界在 service 层：
+CLI、HTTP、desktop 和 dispatcher 通过 `kanban-sqlite::service` resolve board/task/label/run，
+再在同一 transaction 中写 canonical SQLite truth。Derived stores 只消费 SQLite/outbox
+投影，不拥有 canonical write 权限。
+
+关键关系表已经开始使用包含 `board_id` 的 composite FK。`task_labels`、
+`task_dependencies`、`task_runs` 在 SQLite 层直接保证 row board 与 referenced
+task/label board 一致；旧数据库升级到该 schema 前会先运行 preflight，若发现 existing
+cross-board rows，会报告具体表和 row key 并拒绝 migration。
+
+仍需注意：`task_comments`、`task_events`、`task_attachments` 等历史/审计表使用独立 FK
+保证 row board、task 或 run 各自存在，但还不能仅靠 SQLite constraint 证明
+`row.board_id == referenced.board_id`。因此：
+
+- service guard 是普通 CLI/API/Desktop/dispatcher 写入的主防线；
+- `kanban doctor` 是现有 DB 的只读巡检层，发现 cross-board relationship rows 时让
+  `ok=false`；
+- JSONL import 在 replace transaction 提交前运行同类 consistency gate，失败会回滚整个
+  import；
+- 如要继续 hardening 历史/审计表，需要针对 nullable task/run references 与
+  `ON DELETE SET NULL` 语义单独设计 table rebuild migration。
 
 ---
 

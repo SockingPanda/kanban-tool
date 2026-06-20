@@ -65,6 +65,7 @@ Implement visual/frontend follow-up in this order so architecture and behavior s
 - **List:** use data-table patterns for sortable/scannable task work. Pagination and search metadata should remain visible and deterministic.
 - **Events:** design for audit/debug use, with latest/tail behavior and stale/degraded search or event stream states made explicit.
 - **Runs:** show worker/run state as local execution history, not remote agent management.
+- **Ontology Review:** keep it an operator review workbench over existing HTTP APIs. It may list unresolved signals, show grouped review queues, inspect signal/action details, and explain atoms. Lifecycle buttons should call the generic ontology action API only for review states such as confirm/reject/resolve-no-change; canonical mutation, validation, revert, or direct SQLite writes stay outside this view unless a later task explicitly adds a policy-gated flow.
 - **Maintenance/Health/Settings:** keep them system/operator pages. Avoid user/admin/team language.
 - **Task Detail:** actions should be grouped by legal lifecycle transitions and expose claim token requirements or failures only when relevant to the operator.
 

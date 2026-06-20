@@ -238,6 +238,8 @@ pub(crate) struct LabelTaskArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct LabelAddTaskArgs {
+    #[arg(long)]
+    pub(crate) create_missing: bool,
     pub(crate) task_ref: String,
     #[arg(required = true)]
     pub(crate) labels: Vec<String>,
@@ -269,13 +271,21 @@ pub(crate) struct LabelBootstrapArgs {
 pub(crate) enum LabelSemanticsCommand {
     List,
     Show { label: String },
-    Upsert(LabelSemanticsUpsertArgs),
+    Upsert(Box<LabelSemanticsUpsertArgs>),
     Delete { label: String },
 }
 
 #[derive(Debug, Args)]
 pub(crate) struct LabelSemanticsUpsertArgs {
     pub(crate) label: String,
+    #[arg(long = "expected-semantics-hash")]
+    pub(crate) expected_semantics_hash: Option<String>,
+    #[arg(long)]
+    pub(crate) replace: bool,
+    #[arg(long)]
+    pub(crate) reason: Option<String>,
+    #[arg(long = "source-signal")]
+    pub(crate) source_signal_ids: Vec<String>,
     #[arg(long)]
     pub(crate) description: Option<String>,
     #[arg(long = "applies-when")]
@@ -286,6 +296,14 @@ pub(crate) struct LabelSemanticsUpsertArgs {
     pub(crate) positive_examples: Vec<String>,
     #[arg(long = "negative-example")]
     pub(crate) negative_examples: Vec<String>,
+    #[arg(long = "remove-applies-when")]
+    pub(crate) remove_applies_when: Vec<String>,
+    #[arg(long = "remove-excludes-when")]
+    pub(crate) remove_excludes_when: Vec<String>,
+    #[arg(long = "remove-positive-example")]
+    pub(crate) remove_positive_examples: Vec<String>,
+    #[arg(long = "remove-negative-example")]
+    pub(crate) remove_negative_examples: Vec<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -420,6 +438,7 @@ pub(crate) enum LabelOntologyCommand {
         signal_id: String,
     },
     Review(LabelOntologyReviewArgs),
+    Quality(LabelOntologyQualityArgs),
     Confirm(LabelOntologyActionArgs),
     Reject(LabelOntologyActionArgs),
     Supersede(LabelOntologySupersedeArgs),
@@ -428,6 +447,11 @@ pub(crate) enum LabelOntologyCommand {
         #[command(subcommand)]
         command: LabelOntologyApplyCommand,
     },
+    Structure {
+        #[command(subcommand)]
+        command: LabelOntologyStructureCommand,
+    },
+    Revert(LabelOntologyRevertArgs),
     Validate(LabelOntologyValidateArgs),
 }
 
@@ -436,6 +460,22 @@ pub(crate) struct LabelOntologyRecordArgs {
     pub(crate) task_ref: String,
     #[arg(long)]
     pub(crate) input: String,
+    #[arg(long = "suggestion-snapshot")]
+    pub(crate) suggestion_snapshot: Option<String>,
+    #[arg(long)]
+    pub(crate) capture_suggest: bool,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
+    pub(crate) limit: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
+    pub(crate) candidate_limit: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT)]
+    pub(crate) atom_limit: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS)]
+    pub(crate) max_selected_labels: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MIN_SCORE)]
+    pub(crate) min_score: f32,
+    #[arg(long = "vector-config", alias = "config")]
+    pub(crate) vector_config: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -466,6 +506,12 @@ pub(crate) struct LabelOntologyReviewArgs {
     pub(crate) limit: usize,
 }
 
+#[derive(Debug, Args)]
+pub(crate) struct LabelOntologyQualityArgs {
+    #[arg(long, default_value_t = 20)]
+    pub(crate) sample_limit: usize,
+}
+
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub(crate) enum LabelOntologyReviewGroupByArg {
     Label,
@@ -473,6 +519,7 @@ pub(crate) enum LabelOntologyReviewGroupByArg {
     CandidateAtom,
     #[value(name = "proposed-label")]
     ProposedLabel,
+    Cluster,
 }
 
 #[derive(Debug, Args)]
@@ -534,6 +581,54 @@ pub(crate) struct LabelOntologyApplyAtomArgs {
     pub(crate) retarget_reason: Option<String>,
 }
 
+#[derive(Debug, Subcommand)]
+pub(crate) enum LabelOntologyStructureCommand {
+    Plan(LabelOntologyStructurePlanArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelOntologyStructurePlanArgs {
+    #[arg(value_enum)]
+    pub(crate) change_type: LabelOntologyStructureChangeArg,
+    #[arg(required = true)]
+    pub(crate) signal_ids: Vec<String>,
+    #[arg(long = "target-label")]
+    pub(crate) target_label: String,
+    #[arg(long = "proposed-label")]
+    pub(crate) proposed_label: Option<String>,
+    #[arg(long = "related-label")]
+    pub(crate) related_labels: Vec<String>,
+    #[arg(long = "task-binding-policy")]
+    pub(crate) task_binding_policy: Option<String>,
+    #[arg(long = "validation-policy-json")]
+    pub(crate) validation_policy_json: Option<String>,
+    #[arg(long)]
+    pub(crate) reason: String,
+    #[command(flatten)]
+    pub(crate) actor: LabelOntologyActorArgs,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelOntologyRevertArgs {
+    pub(crate) action_id: String,
+    #[arg(long = "expected-current-hash")]
+    pub(crate) expected_current_hash: Option<String>,
+    #[arg(long)]
+    pub(crate) reason: String,
+    #[command(flatten)]
+    pub(crate) actor: LabelOntologyActorArgs,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum LabelOntologyStructureChangeArg {
+    #[value(name = "rename-label")]
+    RenameLabel,
+    #[value(name = "split-label")]
+    SplitLabel,
+    #[value(name = "merge-labels")]
+    MergeLabels,
+}
+
 #[derive(Debug, Clone, Args)]
 pub(crate) struct LabelOntologyActorArgs {
     #[arg(long = "actor-type", value_enum, default_value = "user")]
@@ -568,7 +663,21 @@ pub(crate) struct LabelOntologyValidateArgs {
     #[arg(long)]
     pub(crate) reason: String,
     #[arg(long)]
-    pub(crate) input: String,
+    pub(crate) input: Option<String>,
+    #[arg(long)]
+    pub(crate) trusted: bool,
+    #[arg(long = "vector-config", alias = "config")]
+    pub(crate) vector_config: Option<std::path::PathBuf>,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
+    pub(crate) limit: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
+    pub(crate) candidate_limit: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT)]
+    pub(crate) atom_limit: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS)]
+    pub(crate) max_selected_labels: usize,
+    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MIN_SCORE)]
+    pub(crate) min_score: f32,
     #[command(flatten)]
     pub(crate) actor: LabelOntologyActorArgs,
     pub(crate) signal_ids: Vec<String>,

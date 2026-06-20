@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   lock_version INTEGER NOT NULL DEFAULT 0 CHECK(lock_version >= 0),
 
   UNIQUE(board_id, seq),
+  UNIQUE(id, board_id),
   CHECK(
     (status != 'running') OR
     (claim_token IS NOT NULL AND claim_owner IS NOT NULL AND claim_expires_at IS NOT NULL)
@@ -97,7 +98,9 @@ CREATE TABLE IF NOT EXISTS task_dependencies (
   child_task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   created_at INTEGER NOT NULL,
   PRIMARY KEY(parent_task_id, child_task_id),
-  CHECK(parent_task_id != child_task_id)
+  CHECK(parent_task_id != child_task_id),
+  FOREIGN KEY(parent_task_id, board_id) REFERENCES tasks(id, board_id) ON DELETE CASCADE,
+  FOREIGN KEY(child_task_id, board_id) REFERENCES tasks(id, board_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS task_runs (
@@ -121,7 +124,9 @@ CREATE TABLE IF NOT EXISTS task_runs (
   summary TEXT,
   error TEXT,
   log_path TEXT,
-  metadata_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(metadata_json))
+  metadata_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(metadata_json)),
+
+  FOREIGN KEY(task_id, board_id) REFERENCES tasks(id, board_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS task_comments (
@@ -166,7 +171,8 @@ CREATE TABLE IF NOT EXISTS labels (
   color TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  UNIQUE(board_id, name)
+  UNIQUE(board_id, name),
+  UNIQUE(id, board_id)
 );
 
 CREATE TABLE IF NOT EXISTS task_labels (
@@ -174,7 +180,9 @@ CREATE TABLE IF NOT EXISTS task_labels (
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   label_id TEXT NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
   created_at INTEGER NOT NULL,
-  PRIMARY KEY(task_id, label_id)
+  PRIMARY KEY(task_id, label_id),
+  FOREIGN KEY(task_id, board_id) REFERENCES tasks(id, board_id) ON DELETE CASCADE,
+  FOREIGN KEY(label_id, board_id) REFERENCES labels(id, board_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS app_settings (

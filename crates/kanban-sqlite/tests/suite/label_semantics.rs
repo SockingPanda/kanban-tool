@@ -27,6 +27,10 @@ fn task_label_suggestions_degrade_when_vector_store_disabled() -> anyhow::Result
     assert_eq!(result.coverage_cosine, 0.0);
     assert_eq!(result.residual_norm, 1.0);
     assert!(!result.needs_new_label);
+    assert_eq!(
+        result.reason_codes,
+        vec!["degraded_result", "vector_store_disabled"]
+    );
     assert!(
         result
             .diagnostics
@@ -42,7 +46,7 @@ fn label_proposal_migration_and_provider_unavailable_are_non_polluting() -> anyh
     init_database(&temp.path, "tester")?;
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 14);
+    assert_eq!(user_version, 17);
     let has_table: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_semantic_proposals'",
         [],
@@ -135,6 +139,17 @@ fn label_proposal_manual_candidate_accepts_without_task_binding() -> anyhow::Res
             .iter()
             .any(|atom| atom.kind == "applies_when")
     );
+    let atom = semantics
+        .atoms
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("applies_when atom")?;
+    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
+    assert!(!explain.legacy_untracked);
+    assert!(explain.provenance_actions.iter().any(|provenance| {
+        provenance.action.action_type == LabelOntologyActionType::BootstrapLabel
+            && provenance.action.result_proposal_id.as_deref() == Some(proposal.id.as_str())
+    }));
     assert!(
         get_task(&temp.path, "default", &task.id)?.labels.is_empty(),
         "accept must not attach task_labels"
@@ -378,6 +393,11 @@ fn label_proposal_accept_rejects_non_bootstrap_signal_even_with_retarget() -> an
     )?
     .proposal
     .context("proposal")?;
+    let labels_before = list_labels(&temp.path, "default")?;
+    let semantics_before = get_label_semantics(&temp.path, "default", "database")?;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+    let conn = connect_file(&temp.path)?;
+    let task_labels_before = table_count(&conn, "task_labels")?;
 
     let error = result_err(accept_label_proposal_with_options(
         &temp.path,
@@ -393,6 +413,23 @@ fn label_proposal_accept_rejects_non_bootstrap_signal_even_with_retarget() -> an
     ))?;
     assert!(error.to_string().contains(&signal_id), "{error}");
     assert!(error.to_string().contains("vocabulary_gap"), "{error}");
+    let proposal_after = get_label_proposal(&temp.path, &proposal.id)?;
+    assert_eq!(proposal_after.status, LabelProposalStatus::Proposed);
+    assert!(proposal_after.resolved_label_id.is_none());
+    assert!(
+        list_labels(&temp.path, "default")?
+            .iter()
+            .all(|label| label.name != proposal.name),
+        "failed proposal adoption must not leave the proposal label"
+    );
+    assert_eq!(list_labels(&temp.path, "default")?, labels_before);
+    assert_eq!(
+        get_label_semantics(&temp.path, "default", "database")?,
+        semantics_before
+    );
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "task_labels")?, task_labels_before);
 
     Ok(())
 }
@@ -453,7 +490,10 @@ fn label_proposal_accept_links_creation_and_bootstrap_history() -> anyhow::Resul
     let bootstrap = detail
         .actions
         .iter()
-        .find(|action| action.action_type == LabelOntologyActionType::BootstrapLabel)
+        .find(|action| {
+            action.action_type == LabelOntologyActionType::BootstrapLabel
+                && action.result_atom_id.is_none()
+        })
         .context("bootstrap action")?;
     assert_eq!(
         bootstrap.parent_action_id.as_deref(),
@@ -469,8 +509,10 @@ fn label_proposal_accept_links_creation_and_bootstrap_history() -> anyhow::Resul
 }
 
 #[test]
-fn label_bootstrap_attaches_task_and_upserts_semantics_atomically() -> anyhow::Result<()> {
-    let temp = TempDb::new("label_bootstrap_attaches_task_and_upserts_semantics_atomically")?;
+fn label_bootstrap_attaches_task_and_rejects_existing_semantics_replacement() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_bootstrap_attaches_task_and_rejects_existing_semantics_replacement")?;
     init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
@@ -509,8 +551,9 @@ fn label_bootstrap_attaches_task_and_upserts_semantics_atomically() -> anyhow::R
     );
     let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
     assert_eq!(status.board_dirty, Some(true));
+    let before_atoms = first.semantics.atoms.clone();
 
-    let second = bootstrap_task_label(
+    let error = result_err(bootstrap_task_label(
         &temp.path,
         "default",
         "tester",
@@ -521,16 +564,22 @@ fn label_bootstrap_attaches_task_and_upserts_semantics_atomically() -> anyhow::R
             excludes_when: vec!["UI-only polish".to_owned()],
             ..BootstrapTaskLabel::default()
         },
-    )?;
+    ))?;
 
     assert_eq!(
-        second.task.labels.len(),
+        error.to_string(),
+        "invalid input: label bootstrap would replace existing semantics for label database; use a dedicated semantics mutation or proposal adoption path"
+    );
+    let after = get_label_semantics(&temp.path, "default", "database")?;
+    assert_eq!(
+        after.description.as_deref(),
+        Some("Database persistence work")
+    );
+    assert_eq!(after.atoms, before_atoms);
+    assert_eq!(
+        get_task(&temp.path, "default", &task.id)?.labels.len(),
         1,
         "task-label binding is idempotent"
-    );
-    assert_eq!(
-        second.semantics.description.as_deref(),
-        Some("Database and migration work")
     );
     assert_eq!(table_count(&connect_file(&temp.path)?, "task_labels")?, 1);
     Ok(())
@@ -570,6 +619,221 @@ fn label_bootstrap_rejects_empty_semantics_without_partial_writes() -> anyhow::R
     assert_eq!(table_count(&conn, "label_semantics")?, 0);
     assert_eq!(table_count(&conn, "label_atoms")?, 0);
     assert_eq!(table_count(&conn, "task_labels")?, 0);
+    Ok(())
+}
+
+#[test]
+fn label_bootstrap_snapshot_restore_deletes_unverified_new_label() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_snapshot_restore_deletes_unverified_new_label")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("bootstrap restore target"),
+    )?;
+
+    let snapshot =
+        snapshot_bootstrap_task_label_state(&temp.path, "default", &task.id, "database")?;
+    bootstrap_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        BootstrapTaskLabel {
+            name: "database".to_owned(),
+            description: Some("Database persistence work".to_owned()),
+            applies_when: vec!["touches SQLite migrations".to_owned()],
+            positive_examples: vec!["new table migration".to_owned()],
+            ..BootstrapTaskLabel::default()
+        },
+    )?;
+    assert_eq!(table_count(&connect_file(&temp.path)?, "labels")?, 1);
+
+    let restored = restore_bootstrap_task_label_state(&temp.path, "tester", &snapshot)?;
+
+    assert!(restored.label_deleted);
+    assert!(restored.task_binding_restored);
+    assert!(!restored.semantics_restored);
+    assert!(restored.index_marked_dirty);
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "labels")?, 0);
+    assert_eq!(table_count(&conn, "label_semantics")?, 0);
+    assert_eq!(table_count(&conn, "label_atoms")?, 0);
+    assert_eq!(table_count(&conn, "task_labels")?, 0);
+    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    assert_eq!(status.board_dirty, Some(true));
+    Ok(())
+}
+
+#[test]
+fn label_bootstrap_snapshot_restore_preserves_existing_unbound_label_without_semantics()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_bootstrap_snapshot_restore_preserves_existing_unbound_label_without_semantics",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("bootstrap restore existing label target"),
+    )?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "database".to_owned(),
+            color: None,
+        },
+    )?;
+
+    let snapshot =
+        snapshot_bootstrap_task_label_state(&temp.path, "default", &task.id, "database")?;
+    bootstrap_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        BootstrapTaskLabel {
+            name: "database".to_owned(),
+            description: Some("Database persistence work".to_owned()),
+            applies_when: vec!["touches SQLite migrations".to_owned()],
+            ..BootstrapTaskLabel::default()
+        },
+    )?;
+
+    let restored = restore_bootstrap_task_label_state(&temp.path, "tester", &snapshot)?;
+
+    assert!(!restored.label_deleted);
+    assert!(restored.task_binding_restored);
+    assert!(restored.semantics_restored);
+    assert!(restored.index_marked_dirty);
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "labels")?, 1);
+    assert_eq!(table_count(&conn, "label_semantics")?, 0);
+    assert_eq!(table_count(&conn, "label_atoms")?, 0);
+    assert_eq!(table_count(&conn, "task_labels")?, 0);
+    let error = result_err(get_label_semantics(&temp.path, "default", "database"))?;
+    assert!(error.to_string().contains("label semantics"));
+    Ok(())
+}
+
+#[test]
+fn label_bootstrap_snapshot_restore_preserves_existing_bound_label_without_semantics()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_bootstrap_snapshot_restore_preserves_existing_bound_label_without_semantics",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("bootstrap restore existing bound label target"),
+    )?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "database".to_owned(),
+            color: None,
+        },
+    )?;
+    kanban_sqlite::add_task_labels(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &["database".to_owned()],
+    )?;
+
+    let snapshot =
+        snapshot_bootstrap_task_label_state(&temp.path, "default", &task.id, "database")?;
+    bootstrap_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        BootstrapTaskLabel {
+            name: "database".to_owned(),
+            description: Some("Database persistence work".to_owned()),
+            applies_when: vec!["touches SQLite migrations".to_owned()],
+            ..BootstrapTaskLabel::default()
+        },
+    )?;
+
+    let restored = restore_bootstrap_task_label_state(&temp.path, "tester", &snapshot)?;
+
+    assert!(!restored.label_deleted);
+    assert!(!restored.task_binding_restored);
+    assert!(restored.semantics_restored);
+    assert_eq!(get_task(&temp.path, "default", &task.id)?.labels.len(), 1);
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "labels")?, 1);
+    assert_eq!(table_count(&conn, "label_semantics")?, 0);
+    assert_eq!(table_count(&conn, "label_atoms")?, 0);
+    assert_eq!(table_count(&conn, "task_labels")?, 1);
+    Ok(())
+}
+
+#[test]
+fn label_bootstrap_snapshot_restore_restores_existing_semantics_and_atoms_exactly()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_bootstrap_snapshot_restore_restores_existing_semantics_and_atoms_exactly",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("bootstrap restore existing semantics target"),
+    )?;
+    bootstrap_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        BootstrapTaskLabel {
+            name: "database".to_owned(),
+            description: Some("Database persistence work".to_owned()),
+            applies_when: vec!["touches SQLite migrations".to_owned()],
+            positive_examples: vec!["new table migration".to_owned()],
+            ..BootstrapTaskLabel::default()
+        },
+    )?;
+    let before = get_label_semantics(&temp.path, "default", "database")?;
+    let snapshot =
+        snapshot_bootstrap_task_label_state(&temp.path, "default", &task.id, "database")?;
+
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "database".to_owned(),
+            replace: true,
+            description: Some("Changed database semantics".to_owned()),
+            applies_when: vec!["changed applies".to_owned()],
+            excludes_when: vec!["changed excludes".to_owned()],
+            positive_examples: vec!["changed positive".to_owned()],
+            negative_examples: vec!["changed negative".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_ne!(
+        get_label_semantics(&temp.path, "default", "database")?,
+        before
+    );
+
+    let restored = restore_bootstrap_task_label_state(&temp.path, "tester", &snapshot)?;
+
+    assert!(restored.semantics_restored);
+    let after = get_label_semantics(&temp.path, "default", "database")?;
+    assert_eq!(after, before);
+    assert_eq!(get_task(&temp.path, "default", &task.id)?.labels.len(), 1);
+    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    assert_eq!(status.board_dirty, Some(true));
     Ok(())
 }
 
@@ -1484,15 +1748,119 @@ fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> an
     assert!(result.coverage_cosine > 0.99);
     assert!(result.residual_norm < 0.01);
     assert!(!result.needs_new_label);
+    assert!(result.reason_codes.is_empty());
     Ok(())
 }
 
 #[test]
-fn task_label_suggestions_signal_new_label_when_enabled_index_has_no_selected_labels()
--> anyhow::Result<()> {
-    let temp = TempDb::new(
-        "task_label_suggestions_signal_new_label_when_enabled_index_has_no_selected_labels",
+fn task_label_suggestions_reason_codes_for_selected_coverage_gap() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_label_suggestions_reason_codes_for_selected_coverage_gap")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
     )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("API docs update"),
+    )?;
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    let store = ResidualRecordingLabelAtomStore::new(vec![(
+        atom_hit(&backend, "positive", "applies_when", "server handlers", 0.0),
+        vec![1.0, 0.0, 0.0],
+    )]);
+
+    let result = kanban_sqlite::suggest_task_labels_with(
+        &temp.path,
+        "default",
+        &task.id,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            output_limit: 3,
+            atom_limit: 12,
+            min_score: 0.01,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
+        },
+    )?;
+
+    assert!(!result.degraded);
+    assert_eq!(result.selected_labels.len(), 1);
+    assert_eq!(result.selected_labels[0].label_name, "backend");
+    assert!(result.coverage < 0.55);
+    assert!(result.residual_norm <= 0.75);
+    assert!(result.needs_new_label);
+    assert_eq!(result.reason_codes, vec!["coverage_below_threshold"]);
+    Ok(())
+}
+
+#[test]
+fn task_label_suggestions_reason_codes_for_empty_selection_and_residual_gap() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("task_label_suggestions_reason_codes_for_empty_selection_and_residual_gap")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("API docs update"),
+    )?;
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    let store = ResidualRecordingLabelAtomStore::with_query_vector(
+        vec![(
+            atom_hit(&backend, "positive", "applies_when", "server handlers", 0.0),
+            vec![1.0, 0.0, 0.0],
+        )],
+        vec![0.01, 1.0, 0.0],
+    );
+
+    let result = kanban_sqlite::suggest_task_labels_with(
+        &temp.path,
+        "default",
+        &task.id,
+        &store,
+        kanban_sqlite::LabelSuggestionOptions {
+            output_limit: 3,
+            atom_limit: 12,
+            min_score: 0.001,
+            ..kanban_sqlite::LabelSuggestionOptions::default()
+        },
+    )?;
+
+    assert!(!result.degraded);
+    assert!(result.selected_labels.is_empty());
+    assert!(!result.candidates.is_empty());
+    assert_eq!(result.coverage, 0.0);
+    assert_eq!(result.residual_norm, 1.0);
+    assert!(result.needs_new_label);
+    assert_eq!(
+        result.reason_codes,
+        vec![
+            "coverage_below_threshold",
+            "no_selected_labels",
+            "residual_above_threshold"
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn task_label_suggestions_report_empty_index_as_degraded_reason() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_label_suggestions_report_empty_index_as_degraded_reason")?;
     init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
@@ -1510,7 +1878,12 @@ fn task_label_suggestions_signal_new_label_when_enabled_index_has_no_selected_la
         kanban_sqlite::LabelSuggestionOptions::default(),
     )?;
 
-    assert!(result.needs_new_label);
+    assert!(result.degraded);
+    assert!(!result.needs_new_label);
+    assert_eq!(
+        result.reason_codes,
+        vec!["degraded_result", "label_atom_index_empty"]
+    );
     assert_eq!(result.coverage, 0.0);
     assert_eq!(result.coverage_cosine, 0.0);
     assert!(
@@ -1553,6 +1926,10 @@ fn task_label_suggestions_degrade_on_label_atom_vector_query_error() -> anyhow::
     assert_eq!(result.coverage_cosine, 0.0);
     assert_eq!(result.residual_norm, 1.0);
     assert!(!result.needs_new_label);
+    assert_eq!(
+        result.reason_codes,
+        vec!["degraded_result", "vector_query_error"]
+    );
     assert!(
         result
             .diagnostics
@@ -1608,6 +1985,16 @@ fn task_label_suggestions_report_label_atom_index_dirty_and_errors() -> anyhow::
     )?;
 
     assert!(result.degraded);
+    assert!(!result.needs_new_label);
+    assert_eq!(
+        result.reason_codes,
+        vec![
+            "degraded_result",
+            "label_atom_index_dirty",
+            "label_atom_index_empty",
+            "label_atom_index_error"
+        ]
+    );
     assert!(
         result
             .diagnostics
@@ -2193,6 +2580,7 @@ impl kanban_vector::VectorStoreBackend for ProposalValidationStore {
             diagnostics: Vec::new(),
             dirty: Some(self.dirty),
             board_dirty: Some(self.board_dirty),
+            generation: None,
         }
     }
 }
@@ -2258,6 +2646,7 @@ impl kanban_vector::VectorStoreBackend for DiagnosticLabelAtomStore {
             diagnostics: Vec::new(),
             dirty: Some(self.dirty),
             board_dirty: Some(self.board_dirty),
+            generation: None,
         }
     }
 }
@@ -2282,13 +2671,22 @@ impl kanban_vector::LabelAtomVectorStore for DiagnosticLabelAtomStore {
 
 struct ResidualRecordingLabelAtomStore {
     atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>,
+    query_vector: Vec<f32>,
     queries: std::sync::Mutex<Vec<kanban_vector::LabelAtomVectorQuery>>,
 }
 
 impl ResidualRecordingLabelAtomStore {
     fn new(atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>) -> Self {
+        Self::with_query_vector(atoms, vec![1.0, 1.0, 0.0])
+    }
+
+    fn with_query_vector(
+        atoms: Vec<(kanban_vector::LabelAtomHit, Vec<f32>)>,
+        query_vector: Vec<f32>,
+    ) -> Self {
         Self {
             atoms,
+            query_vector,
             queries: std::sync::Mutex::new(Vec::new()),
         }
     }
@@ -2318,7 +2716,7 @@ impl kanban_vector::VectorStoreBackend for ResidualRecordingLabelAtomStore {
 
 impl kanban_vector::QueryEmbeddingProvider for ResidualRecordingLabelAtomStore {
     fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
-        Ok(vec![1.0, 1.0, 0.0])
+        Ok(self.query_vector.clone())
     }
 }
 
@@ -2388,6 +2786,23 @@ fn cosine(left: &[f32], right: &[f32]) -> f32 {
 
 fn vector_norm(vector: &[f32]) -> f32 {
     vector.iter().map(|value| value * value).sum::<f32>().sqrt()
+}
+
+fn mark_label_atom_index_clean_for_default_board(path: &std::path::Path) -> anyhow::Result<()> {
+    let board = get_board(path, "default")?;
+    let conn = connect_file(path)?;
+    conn.execute(
+        "UPDATE derived_store_state SET dirty=0,last_error=NULL WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "INSERT INTO label_atom_index_boards(\
+             store_name,board_id,dirty,last_rebuild_at,last_error,updated_at\
+         ) VALUES ('lancedb_label_atoms',?1,0,1,NULL,1) \
+         ON CONFLICT(store_name,board_id) DO UPDATE SET dirty=0,last_error=NULL,updated_at=excluded.updated_at",
+        [&board.id],
+    )?;
+    Ok(())
 }
 
 struct StaticLabelAtomStore {
@@ -2485,6 +2900,14 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
         "tester",
         CreateTask::ready("label target"),
     )?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "backend".into(),
+            color: None,
+        },
+    )?;
     let labeled =
         kanban_sqlite::add_task_label(&temp.path, "default", "tester", &task.id, "backend")?;
     let label = labeled
@@ -2503,6 +2926,7 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
             positive_examples: vec!["API handlers".to_owned()],
             excludes_when: vec!["frontend only".to_owned()],
             negative_examples: vec!["CSS polish".to_owned()],
+            ..UpsertLabelSemantics::default()
         },
     )?;
 
@@ -2672,10 +3096,374 @@ fn label_atom_rebuild_deduplicates_normalized_text_and_keeps_first_ordinal() -> 
 }
 
 #[test]
+fn direct_label_semantics_upsert_records_update_semantics_provenance() -> anyhow::Result<()> {
+    let temp = TempDb::new("direct_label_semantics_upsert_records_update_semantics_provenance")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+
+    let semantics = kanban_sqlite::upsert_label_semantics_with_options(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            applies_when: vec!["touches Rust service code".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+        kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("ontology-editor"),
+    )?;
+    let atom = semantics
+        .atoms
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("applies_when atom")?;
+
+    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
+
+    assert!(!explain.legacy_untracked);
+    assert_eq!(explain.provenance_actions.len(), 1);
+    let provenance = &explain.provenance_actions[0];
+    assert_eq!(provenance.matched_by, "atom_id");
+    assert_eq!(
+        provenance.action.action_type,
+        LabelOntologyActionType::UpdateSemantics
+    );
+    assert_eq!(
+        provenance.action.target_label_id.as_deref(),
+        Some(semantics.label_id.as_str())
+    );
+    assert_eq!(
+        provenance.action.result_atom_id.as_deref(),
+        Some(atom.id.as_str())
+    );
+    assert_eq!(
+        provenance.action.result_atom_content_hash.as_deref(),
+        Some(atom.content_hash.as_str())
+    );
+    assert_eq!(provenance.action.created_by, "ontology-editor");
+    assert_eq!(
+        provenance.action.validation_status,
+        LabelOntologyValidationStatus::Pending
+    );
+    assert!(provenance.action.canonical_before_hash.is_some());
+    assert!(provenance.action.canonical_after_hash.is_some());
+    Ok(())
+}
+
+#[test]
+fn label_semantics_patch_preserves_missing_fields_and_records_reason() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_semantics_patch_preserves_missing_fields_and_records_reason")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("Backend service work".to_owned()),
+            applies_when: vec!["touches Rust service code".to_owned()],
+            excludes_when: vec!["CSS-only polish".to_owned()],
+            positive_examples: vec!["add API handler".to_owned()],
+            negative_examples: vec!["adjust spacing".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let mut options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("editor");
+    options.reason = Some("Add a CLI-facing backend boundary.".to_owned());
+
+    let patched = kanban_sqlite::upsert_label_semantics_with_options(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash.clone()),
+            applies_when: vec!["exposes CLI JSON output".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+        options,
+    )?;
+
+    assert_eq!(patched.description.as_deref(), Some("Backend service work"));
+    assert_eq!(
+        patched.applies_when,
+        vec!["touches Rust service code", "exposes CLI JSON output"]
+    );
+    assert_eq!(patched.excludes_when, vec!["CSS-only polish"]);
+    assert_eq!(patched.positive_examples, vec!["add API handler"]);
+    assert_eq!(patched.negative_examples, vec!["adjust spacing"]);
+    assert_ne!(patched.semantics_hash, seed.semantics_hash);
+    let atom = patched
+        .atoms
+        .iter()
+        .find(|atom| atom.text == "exposes CLI JSON output")
+        .context("new applies_when atom")?;
+    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
+    assert!(
+        explain
+            .provenance_actions
+            .iter()
+            .any(|action| action.action.reason == "Add a CLI-facing backend boundary.")
+    );
+    Ok(())
+}
+
+#[test]
+fn label_semantics_patch_remove_atom_only_changes_target_collection() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_semantics_patch_remove_atom_only_changes_target_collection")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("Backend service work".to_owned()),
+            applies_when: vec![
+                "touches Rust service code".to_owned(),
+                "updates API handlers".to_owned(),
+            ],
+            excludes_when: vec!["CSS-only polish".to_owned()],
+            positive_examples: vec!["add API handler".to_owned()],
+            negative_examples: vec!["adjust spacing".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    let patched = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash.clone()),
+            remove_applies_when: vec![" touches Rust service code ".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    assert_eq!(patched.applies_when, vec!["updates API handlers"]);
+    assert_eq!(patched.excludes_when, vec!["CSS-only polish"]);
+    assert_eq!(patched.positive_examples, vec!["add API handler"]);
+    assert_eq!(patched.negative_examples, vec!["adjust spacing"]);
+    assert!(
+        patched.atoms.iter().all(|atom| {
+            atom.kind != "applies_when" || atom.text != "touches Rust service code"
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn label_semantics_replace_intent_required_to_clear_omitted_fields() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_semantics_replace_intent_required_to_clear_omitted_fields")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("Backend service work".to_owned()),
+            applies_when: vec!["touches Rust service code".to_owned()],
+            excludes_when: vec!["CSS-only polish".to_owned()],
+            positive_examples: vec!["add API handler".to_owned()],
+            negative_examples: vec!["adjust spacing".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    let patched = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash.clone()),
+            description: Some("Backend service ownership".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(
+        patched.description.as_deref(),
+        Some("Backend service ownership")
+    );
+    assert_eq!(patched.applies_when, seed.applies_when);
+    assert_eq!(patched.excludes_when, seed.excludes_when);
+    assert_eq!(patched.positive_examples, seed.positive_examples);
+    assert_eq!(patched.negative_examples, seed.negative_examples);
+
+    let replaced = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(patched.semantics_hash.clone()),
+            replace: true,
+            description: Some("Only the replacement description remains".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(
+        replaced.description.as_deref(),
+        Some("Only the replacement description remains")
+    );
+    assert!(replaced.applies_when.is_empty());
+    assert!(replaced.excludes_when.is_empty());
+    assert!(replaced.positive_examples.is_empty());
+    assert!(replaced.negative_examples.is_empty());
+    assert_eq!(replaced.atoms.len(), 1);
+    assert_eq!(replaced.atoms[0].kind, "description");
+    Ok(())
+}
+
+#[test]
+fn label_semantics_upsert_rejects_stale_expected_hash_without_mutating() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_semantics_upsert_rejects_stale_expected_hash_without_mutating")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("Backend service work".to_owned()),
+            applies_when: vec!["touches Rust service code".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let changed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash.clone()),
+            applies_when: vec!["updates API handlers".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let conn = connect_file(&temp.path)?;
+    let action_count = table_count(&conn, "label_ontology_actions")?;
+
+    let error = result_err(upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash),
+            applies_when: vec!["stale writer addition".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    ))?;
+
+    assert!(matches!(error, KanbanError::Conflict(_)));
+    assert!(error.to_string().contains("hash mismatch"));
+    let after = get_label_semantics(&temp.path, "default", "backend")?;
+    assert_eq!(after.semantics_hash, changed.semantics_hash);
+    assert_eq!(after.applies_when, changed.applies_when);
+    assert!(
+        !after
+            .applies_when
+            .iter()
+            .any(|item| item == "stale writer addition")
+    );
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, action_count);
+    Ok(())
+}
+
+#[test]
+fn direct_label_bootstrap_records_bootstrap_provenance_for_atoms() -> anyhow::Result<()> {
+    let temp = TempDb::new("direct_label_bootstrap_records_bootstrap_provenance_for_atoms")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("bootstrap ontology provenance target"),
+    )?;
+
+    let result = bootstrap_task_label(
+        &temp.path,
+        "default",
+        "bootstrapper",
+        &task.id,
+        BootstrapTaskLabel {
+            name: "ontology".to_owned(),
+            description: Some("Ontology provenance work".to_owned()),
+            applies_when: vec!["records semantics mutations in the ledger".to_owned()],
+            ..BootstrapTaskLabel::default()
+        },
+    )?;
+    let atom = result
+        .semantics
+        .atoms
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("applies_when atom")?;
+
+    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
+
+    assert!(!explain.legacy_untracked);
+    assert_eq!(explain.provenance_actions.len(), 1);
+    let provenance = &explain.provenance_actions[0];
+    assert_eq!(
+        provenance.action.action_type,
+        LabelOntologyActionType::BootstrapLabel
+    );
+    assert_eq!(
+        provenance.action.result_label_id.as_deref(),
+        Some(result.semantics.label_id.as_str())
+    );
+    assert_eq!(
+        provenance.action.result_atom_id.as_deref(),
+        Some(atom.id.as_str())
+    );
+    assert_eq!(provenance.action.created_by, "bootstrapper");
+    assert_eq!(
+        provenance.action.validation_status,
+        LabelOntologyValidationStatus::Pending
+    );
+    assert!(provenance.action.canonical_before_hash.is_some());
+    assert!(provenance.action.canonical_after_hash.is_some());
+    Ok(())
+}
+
+#[test]
 fn label_atom_explain_hydrates_provenance_signals_and_validation() -> anyhow::Result<()> {
     let temp = TempDb::new("label_atom_explain_hydrates_provenance_signals_and_validation")?;
     let fixture = seed_label_atom_explain_fixture(&temp, "Explain CLI atom provenance")?;
-    validate_label_ontology_action(
+    validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         passed_explain_validation_input(&fixture),
@@ -2772,6 +3560,7 @@ fn label_atom_explain_marks_existing_atom_without_provenance_as_legacy_untracked
             ..UpsertLabelSemantics::default()
         },
     )?;
+    connect_file(&temp.path)?.execute("DELETE FROM label_ontology_actions", [])?;
     let atom = list_label_atoms(&temp.path, "default")?
         .into_iter()
         .find(|atom| atom.kind == "applies_when")
@@ -2892,7 +3681,7 @@ fn init_v10_backfills_stable_label_atom_hashes_and_marks_index_dirty() -> anyhow
     assert!(label_atom_board_dirty(&temp.path, "default")?);
     let user_version: i64 =
         connect_file(&temp.path)?.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 14);
+    assert_eq!(user_version, 17);
     Ok(())
 }
 
@@ -3116,6 +3905,7 @@ fn label_semantics_jsonl_export_import_round_trips_truth_and_atoms() -> anyhow::
             positive_examples: vec!["SQLite repository change".to_owned()],
             excludes_when: vec!["UI-only polish".to_owned()],
             negative_examples: vec!["CSS-only tweak".to_owned()],
+            ..UpsertLabelSemantics::default()
         },
     )?;
     let source_atoms = semantics
@@ -3225,8 +4015,8 @@ fn doctor_reports_missing_label_semantics_tables_unhealthy() -> anyhow::Result<(
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(14));
-        assert_eq!(report.user_version, 14);
+        assert_eq!(report.migration_version, Some(17));
+        assert_eq!(report.user_version, 17);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())
@@ -3697,7 +4487,7 @@ fn passed_explain_validation_input(
         reason: "Source task now selects the target label after atom rebuild.".to_owned(),
         validation_status: LabelOntologyValidationStatus::Passed,
         validation_json: json!({
-            "evidence_type": "automated",
+            "evidence_type": "trusted_automated",
             "embedding_model": "test-embedding-v1",
             "solver_options": {"candidate_limit": 24, "atom_limit": 64},
             "index": {"status": "ready", "dirty": false, "generation": 7},

@@ -12,10 +12,10 @@ use super::{
     LabelOntologySignalInput, LabelOntologySignalKind, LabelOntologySignalListOptions,
     LabelOntologySignalRecord, LabelOntologySignalStatus, LabelOntologyStructurePlanInput,
     LabelOntologySuggestState, LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
-    LabelOntologyValidationStatus, LabelSemanticProposalRecord, LabelSemanticsMutationOptions,
-    LabelSuggestionEvidenceAtom, LabelSuggestionOptions, LabelSuggestionResult,
-    TaskOntologySignalSummary, TaskOntologySummary, TaskRecord, all_values, board_id,
-    derived_status_by_name, exec, get_task_by_id, get_task_by_id_global_conn,
+    LabelOntologyValidationRequirement, LabelOntologyValidationStatus, LabelSemanticProposalRecord,
+    LabelSemanticsMutationOptions, LabelSuggestionEvidenceAtom, LabelSuggestionOptions,
+    LabelSuggestionResult, TaskOntologySignalSummary, TaskOntologySummary, TaskRecord, all_values,
+    board_id, derived_status_by_name, exec, get_task_by_id, get_task_by_id_global_conn,
     label_atom_index_status_with, mark_label_atom_store_dirty, optional, required_row,
     resolve_task, storage, suggest_task_labels_with, upsert_label_semantics_in_tx,
     with_immediate_tx, with_read_tx,
@@ -542,6 +542,8 @@ pub fn create_label_ontology_action(
         let validation_status = input
             .validation_status
             .unwrap_or(LabelOntologyValidationStatus::NotRequired);
+        let validation_requirement =
+            validation_requirement_for_action(input.action_type, validation_status);
 
         validate_status_transition(input.action_type, &signals)?;
 
@@ -551,9 +553,9 @@ pub fn create_label_ontology_action(
             "INSERT INTO label_ontology_actions(\
              id, board_id, parent_action_id, action_type, reason, target_label_id, result_label_id, \
              result_atom_id, result_atom_content_hash, result_proposal_id, canonical_before_hash, \
-             canonical_after_hash, change_json, validation_status, validation_json, created_by, \
-             created_by_type, agent_type, created_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+             canonical_after_hash, change_json, validation_requirement, validation_status, \
+             validation_json, created_by, created_by_type, agent_type, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
             params![
                 action_id,
                 board_id,
@@ -568,6 +570,7 @@ pub fn create_label_ontology_action(
                 normalize_optional_text(input.canonical_before_hash)?,
                 normalize_optional_text(input.canonical_after_hash)?,
                 change_json,
+                validation_requirement.to_string(),
                 validation_status.to_string(),
                 validation_json,
                 actor.name,
@@ -4412,9 +4415,9 @@ fn insert_ontology_action(
         "INSERT INTO label_ontology_actions(\
          id, board_id, parent_action_id, action_type, reason, target_label_id, result_label_id, \
          result_atom_id, result_atom_content_hash, result_proposal_id, canonical_before_hash, \
-         canonical_after_hash, change_json, validation_status, validation_json, created_by, \
+         canonical_after_hash, change_json, validation_requirement, validation_status, validation_json, created_by, \
          created_by_type, agent_type, created_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
         params![
             action_id,
             board_id,
@@ -4429,6 +4432,8 @@ fn insert_ontology_action(
             input.canonical_before_hash,
             input.canonical_after_hash,
             input.change_json,
+            validation_requirement_for_action(input.action_type, input.validation_status)
+                .to_string(),
             input.validation_status.to_string(),
             input.validation_json,
             input.actor.name,
@@ -5147,11 +5152,38 @@ fn signal_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologySignalRecord>
     })
 }
 
-const ACTION_COLUMNS: &str = "a.id,a.board_id,a.parent_action_id,a.action_type,a.reason,a.target_label_id,a.result_label_id,a.result_atom_id,a.result_atom_content_hash,a.result_proposal_id,a.canonical_before_hash,a.canonical_after_hash,a.change_json,a.validation_status,a.validation_json,a.created_by,a.created_by_type,a.agent_type,a.created_at";
+const ACTION_COLUMNS: &str = "a.id,a.board_id,a.parent_action_id,a.action_type,a.reason,a.target_label_id,a.result_label_id,a.result_atom_id,a.result_atom_content_hash,a.result_proposal_id,a.canonical_before_hash,a.canonical_after_hash,a.change_json,a.validation_requirement,a.validation_status,a.validation_json,a.created_by,a.created_by_type,a.agent_type,a.created_at";
+
+fn validation_requirement_for_action(
+    action_type: LabelOntologyActionType,
+    validation_status: LabelOntologyValidationStatus,
+) -> LabelOntologyValidationRequirement {
+    if validation_status != LabelOntologyValidationStatus::Pending {
+        return LabelOntologyValidationRequirement::None;
+    }
+    match action_type {
+        LabelOntologyActionType::AddPositiveAtom
+        | LabelOntologyActionType::AddNegativeAtom
+        | LabelOntologyActionType::BootstrapLabel => LabelOntologyValidationRequirement::Required,
+        LabelOntologyActionType::UpdateSemantics
+        | LabelOntologyActionType::RevertOntologyMutation
+        | LabelOntologyActionType::RenameLabel
+        | LabelOntologyActionType::SplitLabel
+        | LabelOntologyActionType::MergeLabels => LabelOntologyValidationRequirement::Unsupported,
+        LabelOntologyActionType::Confirm
+        | LabelOntologyActionType::Reject
+        | LabelOntologyActionType::Supersede
+        | LabelOntologyActionType::ResolveNoChange
+        | LabelOntologyActionType::AdoptExistingAtom
+        | LabelOntologyActionType::CreateLabelProposal
+        | LabelOntologyActionType::Validate => LabelOntologyValidationRequirement::None,
+    }
+}
 
 fn action_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologyActionRecord> {
     let action_type: String = row.get(3)?;
-    let validation_status: String = row.get(13)?;
+    let validation_requirement: String = row.get(13)?;
+    let validation_status: String = row.get(14)?;
     Ok(LabelOntologyActionRecord {
         id: row.get(0)?,
         board_id: row.get(1)?,
@@ -5166,12 +5198,13 @@ fn action_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologyActionRecord>
         canonical_before_hash: row.get(10)?,
         canonical_after_hash: row.get(11)?,
         change_json: row.get(12)?,
+        validation_requirement: parse_row_enum(&validation_requirement)?,
         validation_status: parse_row_enum(&validation_status)?,
-        validation_json: row.get(14)?,
-        created_by: row.get(15)?,
-        created_by_type: row.get(16)?,
-        agent_type: row.get(17)?,
-        created_at: row.get(18)?,
+        validation_json: row.get(15)?,
+        created_by: row.get(16)?,
+        created_by_type: row.get(17)?,
+        agent_type: row.get(18)?,
+        created_at: row.get(19)?,
         signal_ids: Vec::new(),
     })
 }
@@ -5268,6 +5301,7 @@ mod tests {
             canonical_before_hash: Some("before".to_owned()),
             canonical_after_hash: Some("after".to_owned()),
             change_json: "{}".to_owned(),
+            validation_requirement: LabelOntologyValidationRequirement::Required,
             validation_status: LabelOntologyValidationStatus::Pending,
             validation_json: "{}".to_owned(),
             created_by: "tester".to_owned(),

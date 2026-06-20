@@ -147,6 +147,7 @@ export type LabelOntologyActionType =
   | "validate"
 
 export type LabelOntologyValidationStatus = "not_required" | "pending" | "passed" | "failed" | "partial"
+export type LabelOntologyValidationRequirement = "none" | "required" | "unsupported"
 
 export type LabelOntologySuggestState = "selected" | "candidate" | "absent" | "unavailable"
 
@@ -237,6 +238,7 @@ export type LabelOntologyActionRecord = {
   canonical_before_hash: string | null
   canonical_after_hash: string | null
   change_json: string
+  validation_requirement: LabelOntologyValidationRequirement
   validation_status: LabelOntologyValidationStatus
   validation_json: string
   created_by: string

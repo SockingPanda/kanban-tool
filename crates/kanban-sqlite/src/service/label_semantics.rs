@@ -870,7 +870,7 @@ const ONTOLOGY_OBSERVATION_COLUMNS: &str = "id,board_id,task_id,task_ref_snapsho
 
 const ONTOLOGY_SIGNAL_COLUMNS: &str = "s.id,s.observation_id,s.board_id,s.kind,s.status,s.target_label_id,s.target_label_name_snapshot,s.related_labels_json,s.proposed_action,s.candidate_atom_polarity,s.candidate_atom_kind,s.candidate_text,s.candidate_content_hash,s.proposed_label_name,s.proposed_label_name_normalized,s.proposal_json,s.agent_selected,s.suggest_state,s.suggest_score,s.suggest_rank,s.final_selected,s.rationale,s.confidence,s.signal_key,s.superseded_by_signal_id,s.status_reason,s.created_at,s.updated_at,s.reviewed_at,s.closed_at";
 
-const ONTOLOGY_ACTION_COLUMNS: &str = "a.id,a.board_id,a.parent_action_id,a.action_type,a.reason,a.target_label_id,a.result_label_id,a.result_atom_id,a.result_atom_content_hash,a.result_proposal_id,a.canonical_before_hash,a.canonical_after_hash,a.change_json,a.validation_status,a.validation_json,a.created_by,a.created_by_type,a.agent_type,a.created_at";
+const ONTOLOGY_ACTION_COLUMNS: &str = "a.id,a.board_id,a.parent_action_id,a.action_type,a.reason,a.target_label_id,a.result_label_id,a.result_atom_id,a.result_atom_content_hash,a.result_proposal_id,a.canonical_before_hash,a.canonical_after_hash,a.change_json,a.validation_requirement,a.validation_status,a.validation_json,a.created_by,a.created_by_type,a.agent_type,a.created_at";
 
 fn label_atom_provenance_actions(
     conn: &Connection,
@@ -1166,7 +1166,8 @@ fn ontology_signal_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologySign
 
 fn ontology_action_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologyActionRecord> {
     let action_type: String = row.get(3)?;
-    let validation_status: String = row.get(13)?;
+    let validation_requirement: String = row.get(13)?;
+    let validation_status: String = row.get(14)?;
     Ok(LabelOntologyActionRecord {
         id: row.get(0)?,
         board_id: row.get(1)?,
@@ -1181,12 +1182,13 @@ fn ontology_action_from_row(row: &Row<'_>) -> rusqlite::Result<LabelOntologyActi
         canonical_before_hash: row.get(10)?,
         canonical_after_hash: row.get(11)?,
         change_json: row.get(12)?,
+        validation_requirement: parse_row_enum(&validation_requirement)?,
         validation_status: parse_row_enum(&validation_status)?,
-        validation_json: row.get(14)?,
-        created_by: row.get(15)?,
-        created_by_type: row.get(16)?,
-        agent_type: row.get(17)?,
-        created_at: row.get(18)?,
+        validation_json: row.get(15)?,
+        created_by: row.get(16)?,
+        created_by_type: row.get(17)?,
+        agent_type: row.get(18)?,
+        created_at: row.get(19)?,
         signal_ids: Vec::new(),
     })
 }

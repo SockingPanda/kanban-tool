@@ -670,6 +670,7 @@ function labelOntologyAction(
     canonical_before_hash: null,
     canonical_after_hash: null,
     change_json: "{}",
+    validation_requirement: "none",
     validation_status: "not_required",
     validation_json: "{}",
     created_by: "desktop-test",

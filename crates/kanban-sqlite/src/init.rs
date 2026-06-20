@@ -43,7 +43,9 @@ const BOARD_ISOLATION_COMPOSITE_FK_MIGRATION: &str =
     include_str!("../../../migrations/017_board_isolation_composite_fk.sql");
 const LABEL_ONTOLOGY_ROOT_ACTION_EFFECTS_MIGRATION: &str =
     include_str!("../../../migrations/018_label_ontology_root_action_effects.sql");
-const LATEST_MIGRATION_VERSION: i64 = 18;
+const LABEL_ONTOLOGY_VALIDATION_REQUIREMENT_MIGRATION: &str =
+    include_str!("../../../migrations/019_label_ontology_validation_requirement.sql");
+const LATEST_MIGRATION_VERSION: i64 = 19;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &[
     "fnv64:0ca871be950fc8a6",
     "fnv64:3b08da4e2b6041f5",
@@ -147,6 +149,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 18,
         name: "018_label_ontology_root_action_effects",
         sql: LABEL_ONTOLOGY_ROOT_ACTION_EFFECTS_MIGRATION,
+    },
+    Migration {
+        version: 19,
+        name: "019_label_ontology_validation_requirement",
+        sql: LABEL_ONTOLOGY_VALIDATION_REQUIREMENT_MIGRATION,
     },
 ];
 

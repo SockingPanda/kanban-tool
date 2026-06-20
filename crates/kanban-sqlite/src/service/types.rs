@@ -854,6 +854,39 @@ impl std::str::FromStr for LabelOntologyValidationStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelOntologyValidationRequirement {
+    None,
+    Required,
+    Unsupported,
+}
+
+impl std::fmt::Display for LabelOntologyValidationRequirement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::None => "none",
+            Self::Required => "required",
+            Self::Unsupported => "unsupported",
+        })
+    }
+}
+
+impl std::str::FromStr for LabelOntologyValidationRequirement {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "none" => Ok(Self::None),
+            "required" => Ok(Self::Required),
+            "unsupported" => Ok(Self::Unsupported),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid label ontology validation requirement: {value}"
+            ))),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LabelOntologyActor {
     pub name: String,
@@ -978,6 +1011,7 @@ pub struct LabelOntologyActionRecord {
     pub canonical_before_hash: Option<String>,
     pub canonical_after_hash: Option<String>,
     pub change_json: String,
+    pub validation_requirement: LabelOntologyValidationRequirement,
     pub validation_status: LabelOntologyValidationStatus,
     pub validation_json: String,
     pub created_by: String,

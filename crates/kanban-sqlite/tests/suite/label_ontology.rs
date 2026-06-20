@@ -10,7 +10,7 @@ fn label_ontology_migration_creates_ledger_tables_and_json_constraints() -> anyh
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 18);
+    assert_eq!(user_version, 19);
     for table in [
         "label_ontology_observations",
         "label_ontology_signals",
@@ -4094,6 +4094,10 @@ fn label_ontology_jsonl_export_import_round_trips_ledger_and_self_refs() -> anyh
             "missing {record_type} in export:\n{export}"
         );
     }
+    assert!(
+        export.contains("\"validation_requirement\":\"required\""),
+        "missing required validation_requirement in export:\n{export}"
+    );
 
     let reordered_path = source.dir.join("ontology-reordered.jsonl");
     write_reordered_ontology_export(&export_path, &reordered_path)?;
@@ -4166,6 +4170,25 @@ fn label_ontology_jsonl_export_import_round_trips_ledger_and_self_refs() -> anyh
     assert_eq!(
         validation["cases"][0]["signal_id"],
         fixture.source_signal_id
+    );
+    let imported_requirements = conn
+        .prepare(
+            "SELECT id, validation_requirement
+             FROM label_ontology_actions
+             WHERE id IN (?1, ?2)
+             ORDER BY id ASC",
+        )?
+        .query_map(
+            params![fixture.apply_action_id, fixture.validation_action_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    assert_eq!(
+        imported_requirements,
+        vec![
+            (fixture.apply_action_id.clone(), "required".to_owned()),
+            (fixture.validation_action_id.clone(), "none".to_owned()),
+        ]
     );
 
     let observation_candidates: String = conn.query_row(

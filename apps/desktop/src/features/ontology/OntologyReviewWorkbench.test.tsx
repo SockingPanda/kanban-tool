@@ -83,6 +83,20 @@ describe("OntologyReviewWorkbench presentation", () => {
     expect(labels).toEqual(expect.arrayContaining(["Confirm", "Resolve no change", "Reject"]))
     expect(labels.join(" ")).not.toMatch(/\b(Apply|Validate|Revert)\b/)
 
+    const confirmedTree = SignalDetail({
+      loading: false,
+      detail: signalDetailFixture({ signal: signalFixture({ id: "los_reviewed", status: "confirmed" }) }),
+      actionReason: "Reviewed in desktop",
+      actionPending: false,
+      onActionReasonChange: () => undefined,
+      onLifecycleAction,
+      onExplainAtom: () => undefined,
+    })
+
+    expect(findButtonByText(confirmedTree, "Confirm")?.props.disabled).toBe(true)
+    expect(findButtonByText(confirmedTree, "Resolve no change")?.props.disabled).toBe(false)
+    expect(findButtonByText(confirmedTree, "Reject")?.props.disabled).toBe(false)
+
     const resolvedTree = SignalDetail({
       loading: false,
       detail: signalDetailFixture({ signal: signalFixture({ id: "los_done", status: "resolved" }) }),

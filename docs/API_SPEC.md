@@ -1747,7 +1747,7 @@ Foundation relationship diagnostics are read-only:
 - `consistency_issues[]` reports structured findings with `severity`, `code`, `message`, and `record_ids`.
 - Covered tables: `task_labels`, `task_dependencies`, `task_runs`, `task_comments`, `task_events`, and `task_attachments`.
 - Hard errors mean a row's `board_id` differs from a referenced task / label / run board. The message includes `table`, `row`, `row_board`, `referenced`, and `referenced_board`.
-- These checks complement service-layer board-scoped writes. Some foundational tables still use independent SQLite FKs rather than composite FKs, so doctor/import report raw-SQL or JSONL corruption until a later table-rebuild hardening adds schema-level composite constraints.
+- These checks complement service-layer board-scoped writes. `task_labels`, `task_dependencies`, and `task_runs` are also protected by board-scoped composite FKs in current schema. `task_comments`, `task_events`, `task_attachments`, and corrupted JSONL/raw-SQL inputs still rely on service, doctor, and import checks; any future table-rebuild hardening applies to those remaining relationship tables.
 - Nonzero `consistency_errors` make `ok=false`.
 
 Ontology ledger diagnostics are read-only:

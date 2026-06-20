@@ -1546,9 +1546,10 @@ semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
 - `ready/running` task 带有未来 `scheduled_at`。
 - 基础关系表 board consistency：`task_labels`、`task_dependencies`、`task_runs`、
   `task_comments`、`task_events`、`task_attachments` 的 row board 必须和 referenced
-  task / label / run board 一致。当前这些 v1 表的 SQLite schema 主要是独立 FK，
-  因此 doctor/import 是 raw SQL 或损坏 JSONL 的 hard-error 检测层；未来 composite FK
-  table rebuild 是单独 hardening 工作。
+  task / label / run board 一致。当前 schema 已用 board-scoped composite FK 保护
+  `task_labels`、`task_dependencies` 和 `task_runs`；`task_comments`、`task_events`、
+  `task_attachments` 以及 raw SQL / 损坏 JSONL 输入仍由 service、doctor 和 import
+  作为 hard-error 检测层。未来 composite FK table rebuild 只针对剩余关系表另行 harden。
 - `index_outbox` backlog：`outbox_pending`、`outbox_running`、`outbox_failed`。
 - derived store health：`derived_dirty_stores`、`derived_error_stores`、`derived_stores[]`，每个 store 包含 `dirty`、`last_error` 和按 store target 聚合的 pending/running/failed outbox 计数。
 - foundation relationship consistency：人类输出包含 `consistency_errors` /

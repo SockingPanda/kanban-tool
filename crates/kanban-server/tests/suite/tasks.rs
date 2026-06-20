@@ -1646,7 +1646,13 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
     .await?;
     assert_eq!(status, StatusCode::CREATED, "{json}");
     assert_eq!(json["data"]["action_type"], "add_positive_atom");
+    assert_eq!(json["data"]["validation_requirement"], "required");
     assert_eq!(json["data"]["validation_status"], "pending");
+    assert_eq!(json["data"]["validation_effective_outcome"], "pending");
+    assert_eq!(
+        json["data"]["validation_latest_attempt_id"],
+        serde_json::Value::Null
+    );
     let change: serde_json::Value = serde_json::from_str(
         json["data"]["change_json"]
             .as_str()
@@ -1698,7 +1704,33 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
                 "type": "user",
                 "agent_type": null
             },
-            "parent_action_id": apply_action_id,
+            "parent_action_id": apply_action_id.clone(),
+            "signal_ids": [],
+            "reason": "external failed diagnostics should not resolve the signal",
+            "validation_status": "failed",
+            "validation": {"cases": []}
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED, "{json}");
+    assert_eq!(json["data"]["action_type"], "validate");
+    assert_eq!(json["data"]["validation_status"], "failed");
+    assert_eq!(json["data"]["validation_effective_outcome"], "failed");
+    let failed_validation_id = json["data"]["id"]
+        .as_str()
+        .context("failed validation id")?
+        .to_owned();
+
+    let (status, json) = post_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/validate",
+        json!({
+            "actor": {
+                "name": "reviewer",
+                "type": "user",
+                "agent_type": null
+            },
+            "parent_action_id": apply_action_id.clone(),
             "signal_ids": [],
             "reason": "atom improves suggestion behavior",
             "validation_status": "passed",
@@ -1756,9 +1788,16 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
     .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["signal"]["status"], "confirmed");
+    let actions = json["data"]["actions"].as_array().context("actions")?;
+    assert_eq!(actions.len(), 3);
+    let apply_action = actions
+        .iter()
+        .find(|action| action["id"].as_str() == Some(apply_action_id.as_str()))
+        .context("apply action in signal detail")?;
+    assert_eq!(apply_action["validation_effective_outcome"], "failed");
     assert_eq!(
-        json["data"]["actions"].as_array().context("actions")?.len(),
-        2
+        apply_action["validation_latest_attempt_id"].as_str(),
+        Some(failed_validation_id.as_str())
     );
 
     let (status, json) = post_json(

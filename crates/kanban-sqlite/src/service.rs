@@ -76,6 +76,8 @@ pub(crate) use label_ontology::{
     label_ontology_semantics_snapshot_for_definition, label_ontology_semantics_snapshot_in_tx,
     record_label_ontology_semantics_mutation_in_tx,
 };
+#[cfg(feature = "vector-lancedb")]
+pub(crate) use label_semantics::{label_atom_vectors_for_board, label_atom_vectors_for_definition};
 pub(crate) use label_semantics::{
     mark_label_atom_store_dirty, rebuild_label_atoms_for_stable_hash_migration,
     stable_label_atom_hash_backfill_needed, upsert_label_semantics_candidate_in_tx,

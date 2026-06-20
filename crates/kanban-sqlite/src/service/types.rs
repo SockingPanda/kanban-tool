@@ -169,23 +169,21 @@ pub struct BootstrapTaskLabelResult {
     pub semantics: LabelSemanticsRecord,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BootstrapTaskLabelSnapshot {
-    pub board_id: String,
-    pub task_id: String,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BootstrapTaskLabelVerification {
     pub label_name: String,
-    pub label: Option<LabelRecord>,
-    pub task_label_existed: bool,
-    pub semantics: Option<LabelSemanticsRecord>,
+    pub score: f32,
+    pub source: String,
+    pub min_score: f32,
+    pub degraded: bool,
+    pub diagnostics: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BootstrapTaskLabelRestoreResult {
-    pub label_deleted: bool,
-    pub label_restored: bool,
-    pub task_binding_restored: bool,
-    pub semantics_restored: bool,
-    pub index_marked_dirty: bool,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BootstrapTaskLabelVerifiedResult {
+    pub task: TaskRecord,
+    pub semantics: LabelSemanticsRecord,
+    pub verification: BootstrapTaskLabelVerification,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -490,6 +488,7 @@ pub struct LabelSemanticsMutationOptions {
     pub actor: LabelOntologyActor,
     pub reason: Option<String>,
     pub source_signal_ids: Vec<String>,
+    pub context_json: Option<String>,
 }
 
 impl LabelSemanticsMutationOptions {
@@ -502,6 +501,7 @@ impl LabelSemanticsMutationOptions {
             },
             reason: None,
             source_signal_ids: Vec::new(),
+            context_json: None,
         }
     }
 }

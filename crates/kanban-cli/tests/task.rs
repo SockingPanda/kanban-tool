@@ -637,8 +637,8 @@ fn label_bootstrap_verify_requires_vector_provider_before_mutating() -> anyhow::
 
 #[cfg(feature = "vector-lancedb")]
 #[test]
-fn label_bootstrap_verify_rebuild_failure_restores_canonical_state() -> anyhow::Result<()> {
-    let temp = TempDb::new("label_bootstrap_verify_rebuild_failure_restores_canonical_state")?;
+fn label_bootstrap_verify_rebuild_failure_leaves_canonical_state_clean() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_verify_rebuild_failure_leaves_canonical_state_clean")?;
     kanban(&temp.path, &["init"])?.success()?;
     let task = kanban(
         &temp.path,
@@ -663,6 +663,7 @@ model = "offline-cli-test-model"
 dimensions = 3
 "#,
     )?;
+    let status_before = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
 
     let attempt = kanban(
         &temp.path,
@@ -687,10 +688,10 @@ dimensions = 3
     let stderr = String::from_utf8_lossy(&attempt.output.stderr);
     assert!(stderr.contains("Ollama embed request failed"), "{stderr}");
     assert!(
-        stderr.contains("bootstrap verification compensation restored canonical state"),
+        !stderr.contains("bootstrap verification compensation"),
         "{stderr}"
     );
-    assert!(stderr.contains("label_deleted=true"), "{stderr}");
+    assert!(!stderr.contains("label_deleted=true"), "{stderr}");
     let shown = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
     assert!(
         shown["data"]["labels"]
@@ -710,9 +711,25 @@ dimensions = 3
         conn.query_row("SELECT COUNT(*) FROM label_semantics", [], |row| row.get(0))?;
     let atoms: i64 = conn.query_row("SELECT COUNT(*) FROM label_atoms", [], |row| row.get(0))?;
     let bindings: i64 = conn.query_row("SELECT COUNT(*) FROM task_labels", [], |row| row.get(0))?;
+    let actions: i64 =
+        conn.query_row("SELECT COUNT(*) FROM label_ontology_actions", [], |row| {
+            row.get(0)
+        })?;
+    let effects: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM label_ontology_action_atom_effects",
+        [],
+        |row| row.get(0),
+    )?;
+    let compensation_events: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM task_events WHERE payload_json LIKE '%bootstrap verification compensation%'",
+        [],
+        |row| row.get(0),
+    )?;
     assert_eq!((labels, semantics, atoms, bindings), (0, 0, 0, 0));
+    assert_eq!((actions, effects, compensation_events), (0, 0, 0));
     let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
-    assert_eq!(status.board_dirty, Some(true));
+    assert_eq!(status.dirty, status_before.dirty);
+    assert_eq!(status.board_dirty, status_before.board_dirty);
     Ok(())
 }
 

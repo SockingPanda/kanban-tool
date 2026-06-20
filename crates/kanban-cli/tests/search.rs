@@ -81,6 +81,8 @@ fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
 fn search_command_filters_by_label() -> anyhow::Result<()> {
     let temp = TempDb::new("search_command_filters_by_label")?;
     kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "backend"])?.success()?;
+    kanban(&temp.path, &["label", "create", "frontend"])?.success()?;
     kanban(
         &temp.path,
         &[
@@ -132,6 +134,14 @@ fn search_command_filters_by_label() -> anyhow::Result<()> {
 fn search_command_filters_labels_before_search_pagination() -> anyhow::Result<()> {
     let temp = TempDb::new("search_command_filters_labels_before_search_pagination")?;
     kanban(&temp.path, &["init"])?.success()?;
+    kanban_sqlite::create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".into(),
+            color: None,
+        },
+    )?;
     let labeled = create_task_with_labels(
         &temp.path,
         "default",

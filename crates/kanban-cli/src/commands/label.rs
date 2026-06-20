@@ -9,28 +9,26 @@ use kanban_sqlite::{
     LabelOntologyCandidateAtomInput, LabelOntologyProposedAction, LabelOntologyQualityOptions,
     LabelOntologyRecordInput, LabelOntologyRetargetOptions, LabelOntologyRevertInput,
     LabelOntologyReviewGroupBy, LabelOntologyReviewOptions, LabelOntologySignalInput,
-    LabelOntologySignalKind, LabelOntologyStructurePlanInput, LabelOntologySuggestState,
-    LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
-    LabelOntologyValidationStatus, LabelProposalCandidate, LabelProposalCreateOptions,
-    LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalStatus,
-    LabelSemanticProposalRecord, LabelSemanticsMutationOptions, LabelSuggestionOptions,
-    LabelSuggestionResult, MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
-    accept_label_proposal_with_options, add_task_labels_with_options,
-    apply_label_ontology_atom_with_options, bootstrap_task_label, create_label,
-    create_label_ontology_action, delete_label, delete_label_semantics, explain_label_atom,
-    get_label_ontology_signal, get_label_proposal, get_label_semantics, label_atom_index_status,
-    label_ontology_quality_report, list_label_atoms, list_label_ontology_signals,
-    list_label_proposals, list_label_semantics, list_labels, plan_label_ontology_structure_change,
+    LabelOntologySignalKind, LabelOntologySuggestState, LabelOntologyTrustedValidationInput,
+    LabelOntologyValidationInput, LabelOntologyValidationStatus, LabelProposalCandidate,
+    LabelProposalCreateOptions, LabelProposalDecisionOptions, LabelProposalListOptions,
+    LabelProposalStatus, LabelSemanticProposalRecord, LabelSemanticsMutationOptions,
+    LabelSuggestionOptions, LabelSuggestionResult, MAX_TASK_LIST_LIMIT,
+    ManualLabelProposalProvider, UpsertLabelSemantics, accept_label_proposal_with_options,
+    add_task_labels_with_options, apply_label_ontology_atom_with_options, bootstrap_task_label,
+    clear_label_semantics_with_options, create_label_ontology_action, delete_label,
+    explain_label_atom, get_label_ontology_signal, get_label_proposal, get_label_semantics,
+    label_atom_index_status, label_ontology_quality_report, list_label_atoms,
+    list_label_ontology_signals, list_label_proposals, list_label_semantics, list_labels,
     propose_task_label_with_create_options, record_label_ontology_observation,
-    reject_label_proposal, remove_task_label, restore_bootstrap_task_label_state,
-    revert_label_ontology_mutation, review_label_ontology, snapshot_bootstrap_task_label_state,
-    suggest_task_labels, upsert_label_semantics_with_options, validate_label_ontology_action,
-    validate_label_ontology_action_with_trusted_suggestions,
+    reject_label_proposal, remove_task_label, revert_label_ontology_mutation,
+    review_label_ontology, suggest_task_labels, upsert_label_semantics_with_options,
+    validate_label_ontology_action, validate_label_ontology_action_with_trusted_suggestions,
 };
 #[cfg(feature = "vector-lancedb")]
 use kanban_sqlite::{
-    label_atom_index_status_with, query_label_atom_index_with, rebuild_label_atom_index_with,
-    suggest_task_labels_with,
+    bootstrap_task_label_with_staged_verification, label_atom_index_status_with,
+    query_label_atom_index_with, rebuild_label_atom_index_with, suggest_task_labels_with,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -38,8 +36,7 @@ use std::{fs, io::Read, str::FromStr};
 
 use crate::args::{
     LabelAtomPolarityArg, LabelCommand, LabelOntologyActorArgs, LabelOntologyActorTypeArg,
-    LabelOntologyAtomKindArg, LabelOntologyReviewGroupByArg, LabelOntologyStructureChangeArg,
-    LabelOntologyValidationStatusArg,
+    LabelOntologyAtomKindArg, LabelOntologyReviewGroupByArg, LabelOntologyValidationStatusArg,
 };
 use crate::commands::common::validate_page_bounds;
 use crate::output::{label_line, print_or_json, print_task};
@@ -59,9 +56,10 @@ pub(crate) fn handle_label(
             })?;
         }
         LabelCommand::Create(args) => {
-            let label = create_label(
+            let label = kanban_sqlite::create_label_with_actor(
                 db_path,
                 board,
+                actor,
                 CreateLabel {
                     name: args.name,
                     color: args.color,
@@ -98,53 +96,46 @@ pub(crate) fn handle_label(
                 positive_examples: args.positive_examples,
                 negative_examples: args.negative_examples,
             };
-            let bootstrap_snapshot = if verify {
-                Some(snapshot_bootstrap_task_label_state(
-                    db_path,
-                    board,
-                    &args.task_ref,
-                    &bootstrap_input.name,
-                )?)
-            } else {
-                None
-            };
-            let result =
-                bootstrap_task_label(db_path, board, actor, &args.task_ref, bootstrap_input)?;
-            let verification = if verify {
-                Some(
-                    match verify_label_bootstrap_suggestion(
+            let output = if verify {
+                #[cfg(feature = "vector-lancedb")]
+                {
+                    let Some(store) =
+                        configured_lancedb_store(db_path, args.vector_config.as_deref())?
+                    else {
+                        bail!(
+                            "label bootstrap verification requires a configured label atom vector store; pass --vector-config <path> or omit --verify"
+                        );
+                    };
+                    let result = bootstrap_task_label_with_staged_verification(
                         db_path,
                         board,
+                        actor,
                         &args.task_ref,
-                        &result.semantics.label_id,
-                        &result.semantics.label_name,
+                        bootstrap_input,
+                        &store,
                         args.min_verify_score,
-                        args.vector_config.as_deref(),
-                    ) {
-                        Ok(verification) => verification,
-                        Err(error) => {
-                            if let Some(snapshot) = &bootstrap_snapshot {
-                                match restore_bootstrap_task_label_state(db_path, actor, snapshot) {
-                                    Ok(restore) => bail!(
-                                        "{error}; bootstrap verification compensation restored canonical state ({})",
-                                        label_bootstrap_restore_summary(&restore)
-                                    ),
-                                    Err(cleanup_error) => bail!(
-                                        "{error}; additionally failed to restore bootstrap canonical state: {cleanup_error}"
-                                    ),
-                                }
-                            }
-                            return Err(error);
-                        }
-                    },
-                )
+                    )?;
+                    LabelBootstrapCommandOutput {
+                        task: result.task,
+                        semantics: result.semantics,
+                        verification: Some(result.verification),
+                    }
+                }
+                #[cfg(not(feature = "vector-lancedb"))]
+                {
+                    let _ = (db_path, board, actor, bootstrap_input);
+                    bail!(
+                        "label bootstrap verification requires a configured label atom vector store; pass --vector-config <path> or omit --verify"
+                    );
+                }
             } else {
-                None
-            };
-            let output = LabelBootstrapCommandOutput {
-                task: result.task,
-                semantics: result.semantics,
-                verification,
+                let result =
+                    bootstrap_task_label(db_path, board, actor, &args.task_ref, bootstrap_input)?;
+                LabelBootstrapCommandOutput {
+                    task: result.task,
+                    semantics: result.semantics,
+                    verification: None,
+                }
             };
             print_or_json(json, &output, || label_bootstrap_lines(&output))?;
         }
@@ -379,11 +370,19 @@ fn handle_label_semantics(
             )?;
             print_or_json(json, &semantics, || label_semantics_line(&semantics))?;
         }
-        crate::args::LabelSemanticsCommand::Delete { label } => {
-            delete_label_semantics(db_path, board, &label)?;
+        crate::args::LabelSemanticsCommand::Delete(args) => {
+            let mut options = LabelSemanticsMutationOptions::manual_actor(actor);
+            options.reason = Some(args.reason.clone());
+            clear_label_semantics_with_options(
+                db_path,
+                board,
+                &args.label,
+                args.expected_semantics_hash,
+                options,
+            )?;
             let deleted = serde_json::json!({ "deleted": true });
             print_or_json(json, &deleted, || {
-                format!("Deleted label semantics for {label}")
+                format!("Deleted label semantics for {}", args.label)
             })?;
         }
     }
@@ -606,31 +605,6 @@ fn handle_label_ontology(
                 print_or_json(json, &action, || label_ontology_action_line(&action))?;
             }
         },
-        crate::args::LabelOntologyCommand::Structure { command } => match command {
-            crate::args::LabelOntologyStructureCommand::Plan(args) => {
-                let validation_policy_json = args
-                    .validation_policy_json
-                    .as_deref()
-                    .map(read_json_input_string)
-                    .transpose()?;
-                let action = plan_label_ontology_structure_change(
-                    db_path,
-                    board,
-                    LabelOntologyStructurePlanInput {
-                        actor: label_ontology_cli_actor(actor, &args.actor),
-                        signal_ids: args.signal_ids,
-                        action_type: label_ontology_structure_change_type(args.change_type),
-                        target_label_ref: args.target_label,
-                        proposed_label_name: args.proposed_label,
-                        related_label_refs: args.related_labels,
-                        task_binding_policy: args.task_binding_policy,
-                        validation_policy_json,
-                        reason: args.reason,
-                    },
-                )?;
-                print_or_json(json, &action, || label_ontology_action_line(&action))?;
-            }
-        },
         crate::args::LabelOntologyCommand::Revert(args) => {
             let action = revert_label_ontology_mutation(
                 db_path,
@@ -674,10 +648,15 @@ fn handle_label_ontology(
                     args.signal_ids,
                     args.reason,
                     validation_status,
+                    args.positive_controls,
+                    args.positive_control_waiver,
                     args.vector_config.as_deref(),
                     options,
                 )?
             } else {
+                if !args.positive_controls.is_empty() || args.positive_control_waiver.is_some() {
+                    bail!("--positive-control and --positive-control-waiver require --trusted");
+                }
                 let Some(input) = args.input.as_deref() else {
                     bail!("label ontology validate requires --input unless --trusted is used");
                 };
@@ -1054,16 +1033,6 @@ fn label_ontology_atom_kind_value(kind: LabelOntologyAtomKindArg) -> &'static st
     }
 }
 
-fn label_ontology_structure_change_type(
-    change_type: LabelOntologyStructureChangeArg,
-) -> LabelOntologyActionType {
-    match change_type {
-        LabelOntologyStructureChangeArg::RenameLabel => LabelOntologyActionType::RenameLabel,
-        LabelOntologyStructureChangeArg::SplitLabel => LabelOntologyActionType::SplitLabel,
-        LabelOntologyStructureChangeArg::MergeLabels => LabelOntologyActionType::MergeLabels,
-    }
-}
-
 fn label_ontology_validation_status(
     status: LabelOntologyValidationStatusArg,
 ) -> LabelOntologyValidationStatus {
@@ -1361,17 +1330,7 @@ fn label_add_lines(result: &LabelAddCommandOutput) -> String {
 struct LabelBootstrapCommandOutput {
     task: kanban_sqlite::TaskRecord,
     semantics: kanban_sqlite::LabelSemanticsRecord,
-    verification: Option<LabelBootstrapVerification>,
-}
-
-#[derive(Debug, Serialize)]
-struct LabelBootstrapVerification {
-    label_name: String,
-    score: f32,
-    source: String,
-    min_score: f32,
-    degraded: bool,
-    diagnostics: Vec<String>,
+    verification: Option<kanban_sqlite::BootstrapTaskLabelVerification>,
 }
 
 fn label_bootstrap_lines(result: &LabelBootstrapCommandOutput) -> String {
@@ -1393,19 +1352,6 @@ fn label_bootstrap_lines(result: &LabelBootstrapCommandOutput) -> String {
     lines
 }
 
-fn label_bootstrap_restore_summary(
-    result: &kanban_sqlite::BootstrapTaskLabelRestoreResult,
-) -> String {
-    format!(
-        "label_deleted={} label_restored={} task_binding_restored={} semantics_restored={} index_marked_dirty={}",
-        result.label_deleted,
-        result.label_restored,
-        result.task_binding_restored,
-        result.semantics_restored,
-        result.index_marked_dirty
-    )
-}
-
 #[allow(clippy::too_many_arguments)]
 fn validate_label_ontology_action_with_trusted_cli_evidence(
     db_path: &PathBuf,
@@ -1416,6 +1362,8 @@ fn validate_label_ontology_action_with_trusted_cli_evidence(
     signal_ids: Vec<String>,
     reason: String,
     validation_status: LabelOntologyValidationStatus,
+    positive_control_task_refs: Vec<String>,
+    positive_control_waiver_reason: Option<String>,
     vector_config_path: Option<&std::path::Path>,
     options: LabelSuggestionOptions,
 ) -> Result<LabelOntologyActionRecord> {
@@ -1436,6 +1384,8 @@ fn validate_label_ontology_action_with_trusted_cli_evidence(
                 signal_ids,
                 reason,
                 validation_status,
+                positive_control_task_refs,
+                positive_control_waiver_reason,
             },
             &store,
             options,
@@ -1453,6 +1403,8 @@ fn validate_label_ontology_action_with_trusted_cli_evidence(
             signal_ids,
             reason,
             validation_status,
+            positive_control_task_refs,
+            positive_control_waiver_reason,
             vector_config_path,
             options,
         );
@@ -1515,65 +1467,6 @@ fn ensure_label_bootstrap_verification_available(
     bail!(
         "label bootstrap verification requires a configured label atom vector store; pass --vector-config <path> or omit --verify"
     )
-}
-
-fn verify_label_bootstrap_suggestion(
-    db_path: &PathBuf,
-    board: &str,
-    task_ref: &str,
-    label_id: &str,
-    label_name: &str,
-    min_score: f32,
-    vector_config_path: Option<&std::path::Path>,
-) -> Result<LabelBootstrapVerification> {
-    rebuild_configured_label_atom_index_optional(db_path, board, vector_config_path)?;
-    let suggestions = suggest_with_optional_vector_config(
-        db_path,
-        board,
-        task_ref,
-        LabelSuggestionOptions {
-            output_limit: MAX_TASK_LIST_LIMIT,
-            candidate_limit: kanban_sqlite::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT,
-            atom_limit: kanban_sqlite::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT,
-            max_selected_labels: kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS,
-            min_score: 0.0,
-        },
-        vector_config_path,
-    )?;
-    if suggestions.degraded {
-        bail!(
-            "label bootstrap verification failed: label suggest degraded ({})",
-            suggestions.diagnostics.join(",")
-        );
-    }
-    let selected = suggestions
-        .selected_labels
-        .iter()
-        .find(|label| label.label_id == label_id)
-        .map(|label| (label.score, "selected_labels"));
-    let candidate = suggestions
-        .candidates
-        .iter()
-        .find(|label| label.label_id == label_id)
-        .map(|label| (label.score, "candidates"));
-    let Some((score, source)) = selected.or(candidate) else {
-        bail!(
-            "label bootstrap verification failed: label {label_name} was not returned by label suggest"
-        );
-    };
-    if score < min_score {
-        bail!(
-            "label bootstrap verification failed: label {label_name} score {score:.3} is below min_verify_score {min_score:.3}"
-        );
-    }
-    Ok(LabelBootstrapVerification {
-        label_name: label_name.to_owned(),
-        score,
-        source: source.to_owned(),
-        min_score,
-        degraded: false,
-        diagnostics: suggestions.diagnostics,
-    })
 }
 
 fn query_configured_label_atom_index(

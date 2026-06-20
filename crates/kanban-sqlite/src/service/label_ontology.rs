@@ -1331,6 +1331,7 @@ pub(crate) struct LabelOntologySemanticsMutationInput<'a> {
     pub(crate) action_type: LabelOntologyActionType,
     pub(crate) before: LabelOntologySemanticsSnapshot,
     pub(crate) before_atoms: Vec<LabelOntologyMutationAtom>,
+    pub(crate) include_description_effects: bool,
     pub(crate) options: LabelSemanticsMutationOptions,
 }
 
@@ -1396,6 +1397,7 @@ pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
         action_type,
         before,
         before_atoms,
+        include_description_effects,
         options,
     } = input;
     let (target_label_id, result_label_id, default_reason) = match action_type {
@@ -1439,7 +1441,7 @@ pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
     }
     let after_atoms = label_ontology_mutation_atoms(conn, board_id, label_id)?;
     let (added_atoms, removed_atoms) =
-        label_ontology_atom_effect_delta(&before_atoms, &after_atoms);
+        label_ontology_atom_effect_delta(&before_atoms, &after_atoms, include_description_effects);
     let change_json = serde_json::to_string(&json!({
         "label": {
             "id": label_id,
@@ -1516,18 +1518,19 @@ pub(crate) fn label_ontology_mutation_atoms(
 fn label_ontology_atom_effect_delta<'a>(
     before_atoms: &'a [LabelOntologyMutationAtom],
     after_atoms: &'a [LabelOntologyMutationAtom],
+    include_description_effects: bool,
 ) -> (
     Vec<&'a LabelOntologyMutationAtom>,
     Vec<&'a LabelOntologyMutationAtom>,
 ) {
     let before_by_hash = before_atoms
         .iter()
-        .filter(|atom| label_ontology_atom_has_effect(atom))
+        .filter(|atom| label_ontology_atom_has_effect(atom, include_description_effects))
         .map(|atom| (atom.content_hash.as_str(), atom))
         .collect::<BTreeMap<_, _>>();
     let after_by_hash = after_atoms
         .iter()
-        .filter(|atom| label_ontology_atom_has_effect(atom))
+        .filter(|atom| label_ontology_atom_has_effect(atom, include_description_effects))
         .map(|atom| (atom.content_hash.as_str(), atom))
         .collect::<BTreeMap<_, _>>();
     let added = after_by_hash
@@ -1541,8 +1544,11 @@ fn label_ontology_atom_effect_delta<'a>(
     (added, removed)
 }
 
-fn label_ontology_atom_has_effect(atom: &LabelOntologyMutationAtom) -> bool {
-    atom.kind != "description"
+fn label_ontology_atom_has_effect(
+    atom: &LabelOntologyMutationAtom,
+    include_description_effects: bool,
+) -> bool {
+    include_description_effects || atom.kind != "description"
 }
 
 fn insert_action_atom_effect(

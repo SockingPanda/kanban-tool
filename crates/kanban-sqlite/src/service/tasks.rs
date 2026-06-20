@@ -160,11 +160,41 @@ pub fn create_label(
     board: &str,
     input: CreateLabel,
 ) -> Result<LabelRecord> {
+    create_label_with_actor(path, board, "system", input)
+}
+
+pub fn create_label_with_actor(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    input: CreateLabel,
+) -> Result<LabelRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
-        ensure_label_in_current_tx(&conn, &board_id, &input.name, input.color.as_deref(), now)
+        let name = normalize_label_name(&input.name)?;
+        if let Some(existing) = label_by_name(&conn, &board_id, &name)? {
+            return Ok(existing);
+        }
+        let label =
+            ensure_label_in_current_tx(&conn, &board_id, &name, input.color.as_deref(), now)?;
+        insert_event(
+            &conn,
+            &board_id,
+            None,
+            None,
+            "label.created",
+            actor,
+            &json!({
+                "label_id": label.id,
+                "label": label.name,
+                "color": label.color,
+            })
+            .to_string(),
+            now,
+        )?;
+        Ok(label)
     })
 }
 
@@ -206,16 +236,19 @@ pub fn delete_label(
         }
         let removed_semantics = count_label_semantics(&conn, &board_id, &label.id)? > 0;
         let removed_atoms = count_label_atoms(&conn, &board_id, &label.id)?;
-        exec(
-            &conn,
-            "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
-            params![board_id, label.id],
-        )?;
-        exec(
-            &conn,
-            "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
-            params![board_id, label.id],
-        )?;
+        if removed_semantics || removed_atoms > 0 {
+            return Err(KanbanError::InvalidInput(format!(
+                "label {} has semantics or atoms; clear semantics with reason and expected hash before deleting identity",
+                label.name
+            )));
+        }
+        if removed_task_bindings > 0 {
+            exec(
+                &conn,
+                "DELETE FROM task_labels WHERE board_id=?1 AND label_id=?2",
+                params![board_id, label.id],
+            )?;
+        }
         let changed = exec(
             &conn,
             "DELETE FROM labels WHERE board_id=?1 AND id=?2",
@@ -224,7 +257,6 @@ pub fn delete_label(
         ensure_changed_one(changed, || {
             KanbanError::NotFound(format!("label {}", label.id))
         })?;
-        mark_label_atom_store_dirty(&conn, &board_id, now)?;
         insert_event(
             &conn,
             &board_id,
@@ -237,8 +269,8 @@ pub fn delete_label(
                 "label": label.name,
                 "forced": force,
                 "removed_task_bindings": removed_task_bindings,
-                "removed_semantics": removed_semantics,
-                "removed_atoms": removed_atoms
+                "removed_semantics": false,
+                "removed_atoms": 0
             })
             .to_string(),
             now,
@@ -247,8 +279,8 @@ pub fn delete_label(
             label,
             forced: force,
             removed_task_bindings,
-            removed_semantics,
-            removed_atoms,
+            removed_semantics: false,
+            removed_atoms: 0,
         })
     })
 }
@@ -1356,6 +1388,7 @@ pub(crate) fn adopt_label_semantics_candidate_in_current_tx(
                     action_type: LabelOntologyActionType::BootstrapLabel,
                     before,
                     before_atoms,
+                    include_description_effects: true,
                     options: LabelSemanticsMutationOptions::manual_actor(actor),
                 },
                 now,

@@ -4,6 +4,16 @@ use crate::common::*;
 async fn search_returns_hits_with_tasks_and_sqlite_status() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
+    for name in ["backend", "frontend"] {
+        kanban_sqlite::create_label(
+            &db_path,
+            "default",
+            kanban_sqlite::CreateLabel {
+                name: name.to_owned(),
+                color: None,
+            },
+        )?;
+    }
     for (title, assignee, labels) in [
         (
             "alpha api search",

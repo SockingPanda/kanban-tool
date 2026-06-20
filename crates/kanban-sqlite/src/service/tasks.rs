@@ -89,6 +89,13 @@ pub fn create_task_with_labels_and_dependencies(
     let id = new_task_id();
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
+        let resolved_labels = labels
+            .iter()
+            .map(|label| {
+                label_for_task_binding_in_current_tx(&conn, &board_id, label, false, now)
+                    .map(|(label, _created)| label)
+            })
+            .collect::<Result<Vec<_>>>()?;
         let seq: i64 = scalar(
             &conn,
             "SELECT COALESCE(MAX(seq), 0) + 1 FROM tasks WHERE board_id=:board_id",
@@ -141,8 +148,7 @@ pub fn create_task_with_labels_and_dependencies(
             let child = get_task_by_id(&conn, &board_id, &id)?;
             add_dependency_in_current_tx(&conn, &board_id, actor, &parent, &child, now)?;
         }
-        for label in &labels {
-            let label = ensure_label_in_current_tx(&conn, &board_id, label, None, now)?;
+        for label in &resolved_labels {
             attach_label_in_current_tx(&conn, &board_id, actor, &id, &label.id, now)?;
         }
         get_task_by_id(&conn, &board_id, &id)

@@ -98,9 +98,36 @@ fn task_show_details_prints_full_readable_record() -> anyhow::Result<()> {
 }
 
 #[test]
+fn task_create_label_requires_existing_vocabulary() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_create_label_requires_existing_vocabulary")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "must not create missing label",
+            "--description",
+            "ready spec",
+            "--label",
+            "missing",
+        ],
+    )?
+    .failure_containing("label missing does not exist")?;
+
+    let tasks = kanban(&temp.path, &["--json", "task", "list"])?.success_json()?;
+    assert!(tasks["data"].as_array().context("tasks")?.is_empty());
+    let labels = kanban(&temp.path, &["--json", "label", "list"])?.success_json()?;
+    assert!(labels["data"].as_array().context("labels")?.is_empty());
+    Ok(())
+}
+
+#[test]
 fn task_create_and_label_commands_round_trip_labels() -> anyhow::Result<()> {
     let temp = TempDb::new("task_create_and_label_commands_round_trip_labels")?;
     kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "backend"])?.success()?;
     let created = kanban(
         &temp.path,
         &[
@@ -2837,6 +2864,7 @@ fn label_suggest_rejects_out_of_bounds_limits() -> anyhow::Result<()> {
 fn label_remove_accepts_l_prefixed_label_name() -> anyhow::Result<()> {
     let temp = TempDb::new("label_remove_accepts_l_prefixed_label_name")?;
     kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "l_bug"])?.success()?;
     let created = kanban(
         &temp.path,
         &[
@@ -2868,6 +2896,7 @@ fn label_remove_accepts_l_prefixed_label_name() -> anyhow::Result<()> {
 fn label_commands_reject_archived_tasks() -> anyhow::Result<()> {
     let temp = TempDb::new("label_commands_reject_archived_tasks")?;
     kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "backend"])?.success()?;
 
     let add_target = kanban(
         &temp.path,

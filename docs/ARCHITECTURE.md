@@ -28,6 +28,10 @@ server、desktop 和 dispatcher 都调用这组 Rust use-case 函数，在 SQLit
 承载 `TaskStatus`、ID/error/clock 和纯状态机 helper，但当前不是完整的 command-service
 interface crate，也不拥有持久化 records。
 
+是否要把 application service 从 `kanban-sqlite` 抽成独立 crate，按
+[Application Service Extraction Evaluation](plans/application-service-extraction-evaluation.md)
+中的证据门槛评估；当前结论是先保持真实文档和共享 service path，不为匹配架构图而重构。
+
 可把系统按六个运行平面理解：
 
 | 平面 | 当前内容 | 写权限边界 |

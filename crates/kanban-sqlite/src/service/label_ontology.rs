@@ -1,22 +1,22 @@
 use crate::connect_file;
 
 use super::{
-    LabelOntologyActionInput, LabelOntologyActionRecord, LabelOntologyActionType,
-    LabelOntologyActor, LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput,
-    LabelOntologyObservationRecord, LabelOntologyPrecisionRecallAvailability,
-    LabelOntologyProposedAction, LabelOntologyQualityDenominator, LabelOntologyQualityDisagreement,
-    LabelOntologyQualityOptions, LabelOntologyQualityRates, LabelOntologyQualityReport,
-    LabelOntologyRecordInput, LabelOntologyRetargetOptions, LabelOntologyRevertInput,
-    LabelOntologyReviewAtomVariant, LabelOntologyReviewGroup, LabelOntologyReviewGroupBy,
-    LabelOntologyReviewLabelRef, LabelOntologyReviewOptions, LabelOntologySignalDetail,
-    LabelOntologySignalInput, LabelOntologySignalKind, LabelOntologySignalListOptions,
-    LabelOntologySignalRecord, LabelOntologySignalStatus, LabelOntologySuggestState,
-    LabelOntologyTrustedValidationInput, LabelOntologyValidationEffectiveOutcome,
-    LabelOntologyValidationInput, LabelOntologyValidationRequirement,
-    LabelOntologyValidationStatus, LabelSemanticProposalRecord, LabelSemanticsMutationOptions,
-    LabelSuggestionEvidenceAtom, LabelSuggestionOptions, LabelSuggestionResult,
-    TaskOntologySignalSummary, TaskOntologySummary, TaskRecord, all_values, board_id,
-    derived_status_by_name, exec, get_task_by_id, get_task_by_id_global_conn,
+    LabelOntologyActionAtomEffectRecord, LabelOntologyActionInput, LabelOntologyActionRecord,
+    LabelOntologyActionType, LabelOntologyActor, LabelOntologyAtomApplyInput,
+    LabelOntologyCandidateAtomInput, LabelOntologyObservationRecord,
+    LabelOntologyPrecisionRecallAvailability, LabelOntologyProposedAction,
+    LabelOntologyQualityDenominator, LabelOntologyQualityDisagreement, LabelOntologyQualityOptions,
+    LabelOntologyQualityRates, LabelOntologyQualityReport, LabelOntologyRecordInput,
+    LabelOntologyRetargetOptions, LabelOntologyRevertInput, LabelOntologyReviewAtomVariant,
+    LabelOntologyReviewGroup, LabelOntologyReviewGroupBy, LabelOntologyReviewLabelRef,
+    LabelOntologyReviewOptions, LabelOntologySignalDetail, LabelOntologySignalInput,
+    LabelOntologySignalKind, LabelOntologySignalListOptions, LabelOntologySignalRecord,
+    LabelOntologySignalStatus, LabelOntologySuggestState, LabelOntologyTrustedValidationInput,
+    LabelOntologyValidationEffectiveOutcome, LabelOntologyValidationInput,
+    LabelOntologyValidationRequirement, LabelOntologyValidationStatus, LabelSemanticProposalRecord,
+    LabelSemanticsMutationOptions, LabelSuggestionEvidenceAtom, LabelSuggestionOptions,
+    LabelSuggestionResult, TaskOntologySignalSummary, TaskOntologySummary, TaskRecord, all_values,
+    board_id, derived_status_by_name, exec, get_task_by_id, get_task_by_id_global_conn,
     label_atom_index_status_with, mark_label_atom_store_dirty, optional, required_row,
     resolve_task, storage, suggest_task_labels_with, upsert_label_semantics_in_tx,
     with_immediate_tx, with_read_tx,
@@ -31,7 +31,10 @@ use std::{
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_typed_id};
 use kanban_indexer::LANCEDB_LABEL_ATOMS_STORE;
 use kanban_labels::LabelDefinition;
-use kanban_vector::{LabelAtomVectorStore, VectorStoreStatus};
+use kanban_vector::{
+    LabelAtomHit, LabelAtomQuery, LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore,
+    QueryEmbeddingProvider, VectorError, VectorStoreBackend, VectorStoreStatus,
+};
 use rusqlite::{Connection, OptionalExtension, Row, params, types::Value};
 use serde_json::{Value as JsonValue, json};
 
@@ -968,6 +971,16 @@ pub fn validate_label_ontology_action_with_trusted_suggestions(
         &input.parent_action_id,
         input.signal_ids.clone(),
     )?;
+    let positive_controls = collect_trusted_positive_controls(TrustedPositiveControlCollection {
+        path,
+        board,
+        context: &context,
+        actor: &input.actor,
+        control_task_refs: input.positive_control_task_refs.clone(),
+        waiver_reason: input.positive_control_waiver_reason.clone(),
+        store,
+        options,
+    })?;
     let mut collected_cases = Vec::with_capacity(context.signals.len());
     for signal in &context.signals {
         let observation = observation_for_collection(path, &signal.observation_id)?;
@@ -986,6 +999,7 @@ pub fn validate_label_ontology_action_with_trusted_suggestions(
         &index_status,
         store.embedding_model(),
         options,
+        &positive_controls,
     )?;
     validate_label_ontology_action_with_trusted_evidence(
         path,
@@ -1633,6 +1647,81 @@ struct TrustedValidationCase {
     suggestion: LabelSuggestionResult,
 }
 
+enum TrustedPositiveControlEvidence {
+    None,
+    Controls(Vec<JsonValue>),
+    Waiver(String),
+}
+
+struct TrustedBeforeActionStore<'a, S: LabelAtomVectorStore + ?Sized> {
+    source: &'a S,
+    excluded_atom_ids: BTreeSet<String>,
+    excluded_atom_hashes: BTreeSet<String>,
+}
+
+impl<'a, S: LabelAtomVectorStore + ?Sized> TrustedBeforeActionStore<'a, S> {
+    fn new(source: &'a S, excluded_effects: Vec<LabelOntologyActionAtomEffectRecord>) -> Self {
+        Self {
+            source,
+            excluded_atom_ids: excluded_effects
+                .iter()
+                .map(|effect| effect.atom_id_snapshot.clone())
+                .collect(),
+            excluded_atom_hashes: excluded_effects
+                .into_iter()
+                .map(|effect| effect.atom_content_hash)
+                .collect(),
+        }
+    }
+
+    fn keep_hit(&self, atom_id: &str, content_hash: &str) -> bool {
+        !self.excluded_atom_ids.contains(atom_id)
+            && !self.excluded_atom_hashes.contains(content_hash)
+    }
+}
+
+impl<S: LabelAtomVectorStore + ?Sized> VectorStoreBackend for TrustedBeforeActionStore<'_, S> {
+    fn embedding_model(&self) -> &str {
+        self.source.embedding_model()
+    }
+
+    fn status(&self) -> VectorStoreStatus {
+        self.source.status()
+    }
+}
+
+impl<S: LabelAtomVectorStore + ?Sized> QueryEmbeddingProvider for TrustedBeforeActionStore<'_, S> {
+    fn embed_query_text(&self, text: &str) -> std::result::Result<Vec<f32>, VectorError> {
+        self.source.embed_query_text(text)
+    }
+}
+
+impl<S: LabelAtomVectorStore + ?Sized> LabelAtomVectorStore for TrustedBeforeActionStore<'_, S> {
+    fn query_label_atoms(
+        &self,
+        query: &LabelAtomQuery,
+    ) -> std::result::Result<Vec<LabelAtomHit>, VectorError> {
+        Ok(self
+            .source
+            .query_label_atoms(query)?
+            .into_iter()
+            .filter(|hit| self.keep_hit(&hit.atom_id, &hit.content_hash))
+            .collect())
+    }
+
+    fn query_label_atoms_by_vector(
+        &self,
+        query: &LabelAtomVectorQuery,
+    ) -> std::result::Result<Vec<LabelAtomVectorHit>, VectorError> {
+        Ok(self
+            .source
+            .query_label_atoms_by_vector(query)?
+            .into_iter()
+            .filter(|hit| self.keep_hit(&hit.hit.atom_id, &hit.hit.content_hash))
+            .collect())
+    }
+}
+
 fn validation_collection_context(
     path: impl AsRef<Path>,
     board: &str,
@@ -1651,6 +1740,219 @@ fn observation_for_collection(
 ) -> Result<LabelOntologyObservationRecord> {
     let conn = connect_file(path.as_ref())?;
     with_read_tx(&conn, || observation_by_id(&conn, observation_id))
+}
+
+struct TrustedPositiveControlCollection<'a, S: LabelAtomVectorStore + ?Sized> {
+    path: &'a Path,
+    board: &'a str,
+    context: &'a ValidationContext,
+    actor: &'a LabelOntologyActor,
+    control_task_refs: Vec<String>,
+    waiver_reason: Option<String>,
+    store: &'a S,
+    options: LabelSuggestionOptions,
+}
+
+fn collect_trusted_positive_controls<S: LabelAtomVectorStore + ?Sized>(
+    args: TrustedPositiveControlCollection<'_, S>,
+) -> Result<TrustedPositiveControlEvidence> {
+    let TrustedPositiveControlCollection {
+        path,
+        board,
+        context,
+        actor,
+        control_task_refs,
+        waiver_reason,
+        store,
+        options,
+    } = args;
+    let control_task_refs = normalize_positive_control_task_refs(control_task_refs)?;
+    let waiver_reason = normalize_optional_waiver_reason(waiver_reason)?;
+    if context.parent_action.action_type != LabelOntologyActionType::AddNegativeAtom {
+        if !control_task_refs.is_empty() || waiver_reason.is_some() {
+            return Err(KanbanError::InvalidInput(
+                "positive controls and waivers are only accepted for negative atom validation"
+                    .into(),
+            ));
+        }
+        return Ok(TrustedPositiveControlEvidence::None);
+    }
+    if !control_task_refs.is_empty() && waiver_reason.is_some() {
+        return Err(KanbanError::InvalidInput(
+            "negative atom trusted validation accepts positive controls or a waiver, not both"
+                .into(),
+        ));
+    }
+    if let Some(reason) = waiver_reason {
+        let actor = normalize_actor(actor.clone())?;
+        if actor.actor_type != "user" {
+            return Err(KanbanError::InvalidInput(
+                "negative atom positive-control waiver requires actor_type=user".into(),
+            ));
+        }
+        return Ok(TrustedPositiveControlEvidence::Waiver(reason));
+    }
+    if control_task_refs.is_empty() {
+        return Err(KanbanError::InvalidInput(
+            "negative atom trusted validation requires at least one positive control or a user waiver"
+                .into(),
+        ));
+    }
+    let target_label_id = required_parent_field(
+        context.parent_action.target_label_id.as_deref(),
+        "negative atom validation requires a target label",
+    )?;
+    let excluded_effects =
+        trusted_before_added_atom_effects(path, &context.board_id, &context.parent_action)?;
+    let before_store = TrustedBeforeActionStore::new(store, excluded_effects);
+    let mut controls = Vec::with_capacity(control_task_refs.len());
+    for task_ref in control_task_refs {
+        let before = suggest_task_labels_with(path, board, &task_ref, &before_store, options)?;
+        let after = suggest_task_labels_with(path, board, &task_ref, store, options)?;
+        controls.push(trusted_positive_control_json(
+            &task_ref,
+            target_label_id,
+            &before,
+            &after,
+        )?);
+    }
+    Ok(TrustedPositiveControlEvidence::Controls(controls))
+}
+
+fn normalize_positive_control_task_refs(task_refs: Vec<String>) -> Result<Vec<String>> {
+    let mut normalized = Vec::with_capacity(task_refs.len());
+    for task_ref in task_refs {
+        normalized.push(normalize_required_text(&task_ref)?);
+    }
+    Ok(normalized)
+}
+
+fn normalize_optional_waiver_reason(value: Option<String>) -> Result<Option<String>> {
+    match value {
+        Some(value) if value.trim().is_empty() => Err(KanbanError::InvalidInput(
+            "negative atom positive-control waiver requires a non-empty reason".into(),
+        )),
+        Some(value) => Ok(Some(value)),
+        None => Ok(None),
+    }
+}
+
+fn trusted_before_added_atom_effects(
+    path: &Path,
+    board_id: &str,
+    parent_action: &LabelOntologyActionRecord,
+) -> Result<Vec<LabelOntologyActionAtomEffectRecord>> {
+    let conn = connect_file(path)?;
+    with_read_tx(&conn, || {
+        let mut stmt = conn
+            .prepare(
+            "SELECT board_id, action_id, label_id_snapshot, atom_id_snapshot, atom_content_hash, \
+             polarity, kind, text, effect, created_at \
+             FROM label_ontology_action_atom_effects \
+             WHERE board_id=?1 AND action_id=?2 AND effect='added' \
+             ORDER BY created_at, atom_id_snapshot",
+        )
+            .map_err(storage)?;
+        let mut rows = stmt
+            .query(params![board_id, parent_action.id])
+            .map_err(storage)?;
+        let mut effects = Vec::new();
+        while let Some(row) = rows.next().map_err(storage)? {
+            effects.push(LabelOntologyActionAtomEffectRecord {
+                board_id: row.get(0).map_err(storage)?,
+                action_id: row.get(1).map_err(storage)?,
+                label_id_snapshot: row.get(2).map_err(storage)?,
+                atom_id_snapshot: row.get(3).map_err(storage)?,
+                atom_content_hash: row.get(4).map_err(storage)?,
+                polarity: row.get(5).map_err(storage)?,
+                kind: row.get(6).map_err(storage)?,
+                text: row.get(7).map_err(storage)?,
+                effect: row.get(8).map_err(storage)?,
+                created_at: row.get(9).map_err(storage)?,
+            });
+        }
+        if effects.is_empty()
+            && let (Some(atom_id), Some(atom_hash), Some(label_id)) = (
+                parent_action.result_atom_id.as_ref(),
+                parent_action.result_atom_content_hash.as_ref(),
+                parent_action.target_label_id.as_ref(),
+            )
+        {
+            effects.push(LabelOntologyActionAtomEffectRecord {
+                board_id: board_id.to_owned(),
+                action_id: parent_action.id.clone(),
+                label_id_snapshot: label_id.clone(),
+                atom_id_snapshot: atom_id.clone(),
+                atom_content_hash: atom_hash.clone(),
+                polarity: "negative".to_owned(),
+                kind: String::new(),
+                text: String::new(),
+                effect: "added".to_owned(),
+                created_at: parent_action.created_at,
+            });
+        }
+        Ok(effects)
+    })
+}
+
+fn trusted_positive_control_json(
+    task_ref: &str,
+    target_label_id: &str,
+    before: &LabelSuggestionResult,
+    after: &LabelSuggestionResult,
+) -> Result<JsonValue> {
+    let (before_target, _, _) = trusted_after_target(before, target_label_id)?;
+    let (after_target, _, _) = trusted_after_target(after, target_label_id)?;
+    let before_evidence = target_evidence_from_json(&before_target);
+    let after_evidence = target_evidence_from_json(&after_target);
+    let before_positive = target_is_positive_control_match(before_evidence);
+    let after_positive = target_is_positive_control_match(after_evidence);
+    let selected_regressed =
+        before_evidence.selected == Some(true) && after_evidence.selected == Some(false);
+    let score_regressed = before_evidence
+        .score
+        .zip(after_evidence.score)
+        .is_some_and(|(before, after)| after < before);
+    let degraded = before.degraded || after.degraded;
+    let regressed = selected_regressed || score_regressed || degraded;
+    let passed = before_positive && after_positive && !regressed;
+    Ok(json!({
+        "task_ref": task_ref,
+        "task_id": &after.task_id,
+        "target_label_id": target_label_id,
+        "before": {
+            "target": before_target,
+            "coverage": before.coverage,
+            "coverage_cosine": before.coverage_cosine,
+            "residual_norm": before.residual_norm,
+            "degraded": before.degraded,
+            "diagnostics": &before.diagnostics,
+        },
+        "after": {
+            "target": after_target,
+            "coverage": after.coverage,
+            "coverage_cosine": after.coverage_cosine,
+            "residual_norm": after.residual_norm,
+            "degraded": after.degraded,
+            "diagnostics": &after.diagnostics,
+        },
+        "passed": passed,
+        "regressed": regressed,
+    }))
+}
+
+fn target_evidence_from_json(target: &JsonValue) -> TargetEvidence {
+    TargetEvidence {
+        selected: target.get("selected").and_then(JsonValue::as_bool),
+        score: target.get("score").and_then(JsonValue::as_f64),
+    }
+}
+
+fn target_is_positive_control_match(target: TargetEvidence) -> bool {
+    target.selected == Some(true)
+        || target
+            .score
+            .is_some_and(|score| score >= LABEL_ONTOLOGY_VALIDATION_SCORE_THRESHOLD)
 }
 
 fn resolve_validation_context(
@@ -1708,11 +2010,12 @@ fn trusted_validation_json(
     index_status: &VectorStoreStatus,
     embedding_model: &str,
     options: LabelSuggestionOptions,
+    positive_controls: &TrustedPositiveControlEvidence,
 ) -> Result<String> {
     let collected_at = SystemClock.now_ms();
     let cases = cases
         .iter()
-        .map(|case| trusted_validation_case_json(parent_action, case))
+        .map(|case| trusted_validation_case_json(parent_action, case, positive_controls))
         .collect::<Result<Vec<_>>>()?;
     serde_json::to_string(&json!({
         "evidence_type": "trusted_automated",
@@ -1738,6 +2041,7 @@ fn trusted_validation_json(
 fn trusted_validation_case_json(
     parent_action: &LabelOntologyActionRecord,
     case: &TrustedValidationCase,
+    positive_controls: &TrustedPositiveControlEvidence,
 ) -> Result<JsonValue> {
     let case_type = validation_case_type(parent_action.action_type)?;
     let target_label_id = validation_target_label_id(parent_action)?;
@@ -1748,6 +2052,36 @@ fn trusted_validation_case_json(
     let before_target = target_label_id
         .map(|label_id| trusted_before_target(&case.signal, label_id))
         .unwrap_or(JsonValue::Null);
+    let mut after = json!({
+        "degraded": case.suggestion.degraded,
+        "diagnostics": &case.suggestion.diagnostics,
+        "target": after_target,
+        "coverage": case.suggestion.coverage,
+        "coverage_cosine": case.suggestion.coverage_cosine,
+        "residual_norm": case.suggestion.residual_norm,
+        "needs_new_label": case.suggestion.needs_new_label,
+        "evidence_atoms": evidence_atoms,
+        "negative_evidence_atoms": negative_evidence_atoms,
+        "selected_labels": &case.suggestion.selected_labels,
+        "candidates": &case.suggestion.candidates,
+    });
+    if parent_action.action_type == LabelOntologyActionType::AddNegativeAtom {
+        let after = after
+            .as_object_mut()
+            .expect("trusted validation after payload should be an object");
+        match positive_controls {
+            TrustedPositiveControlEvidence::Controls(controls) => {
+                after.insert("positive_controls".to_owned(), json!(controls));
+            }
+            TrustedPositiveControlEvidence::Waiver(reason) => {
+                after.insert(
+                    "positive_control_waiver".to_owned(),
+                    json!({ "reason": reason }),
+                );
+            }
+            TrustedPositiveControlEvidence::None => {}
+        }
+    }
     Ok(json!({
         "signal_id": &case.signal.id,
         "case_type": case_type,
@@ -1761,19 +2095,7 @@ fn trusted_validation_case_json(
             "degraded": case.observation.suggest_degraded,
             "diagnostics": parse_json_field(&case.observation.diagnostics_json, "diagnostics_json", JsonShape::Array)?,
         },
-        "after": {
-            "degraded": case.suggestion.degraded,
-            "diagnostics": &case.suggestion.diagnostics,
-            "target": after_target,
-            "coverage": case.suggestion.coverage,
-            "coverage_cosine": case.suggestion.coverage_cosine,
-            "residual_norm": case.suggestion.residual_norm,
-            "needs_new_label": case.suggestion.needs_new_label,
-            "evidence_atoms": evidence_atoms,
-            "negative_evidence_atoms": negative_evidence_atoms,
-            "selected_labels": &case.suggestion.selected_labels,
-            "candidates": &case.suggestion.candidates,
-        },
+        "after": after,
         "suggestion": &case.suggestion,
     }))
 }

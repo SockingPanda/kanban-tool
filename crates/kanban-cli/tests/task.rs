@@ -2234,6 +2234,76 @@ fn label_ontology_cli_structure_plan_command_is_not_available() -> anyhow::Resul
 }
 
 #[test]
+fn label_ontology_cli_validate_positive_controls_require_trusted() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_validate_positive_controls_require_trusted")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "ontology",
+            "validate",
+            "loa_missing",
+            "--status",
+            "failed",
+            "--reason",
+            "Positive controls are trusted collector inputs.",
+            "--positive-control",
+            "default#1",
+        ],
+    )?
+    .failure_containing("--positive-control and --positive-control-waiver require --trusted")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "ontology",
+            "validate",
+            "loa_missing",
+            "--status",
+            "failed",
+            "--reason",
+            "Positive-control waiver is a trusted collector input.",
+            "--positive-control-waiver",
+            "No stable positive control exists.",
+        ],
+    )?
+    .failure_containing("--positive-control and --positive-control-waiver require --trusted")?;
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_validate_positive_controls_are_mutually_exclusive() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_validate_positive_controls_are_mutually_exclusive")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "ontology",
+            "validate",
+            "loa_missing",
+            "--trusted",
+            "--status",
+            "failed",
+            "--reason",
+            "Only controls or a waiver may be supplied.",
+            "--positive-control",
+            "default#1",
+            "--positive-control-waiver",
+            "No stable positive control exists.",
+        ],
+    )?
+    .failure_containing("cannot be used with")?;
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_cli_apply_existing_atom_uses_adopt_existing_action() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_cli_apply_existing_atom_uses_adopt_existing_action")?;
     kanban(&temp.path, &["init"])?.success()?;

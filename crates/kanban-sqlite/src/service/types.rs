@@ -1140,6 +1140,10 @@ pub struct LabelOntologyTrustedValidationInput {
     pub signal_ids: Vec<String>,
     pub reason: String,
     pub validation_status: LabelOntologyValidationStatus,
+    #[serde(default)]
+    pub positive_control_task_refs: Vec<String>,
+    #[serde(default)]
+    pub positive_control_waiver_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

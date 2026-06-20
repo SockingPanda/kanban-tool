@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CACHE_ROOT="${KANBAN_CLOUD_CACHE_ROOT:-$HOME/.cache/kanban-tool}"
 export KANBAN_CARGO_TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-$CACHE_ROOT/cargo-target}"
-export KANBAN_CARGO_BUILD_JOBS="${KANBAN_CARGO_BUILD_JOBS:-2}"
-export KANBAN_TEST_THREADS="${KANBAN_TEST_THREADS:-2}"
+export KANBAN_CARGO_BUILD_JOBS="${KANBAN_CARGO_BUILD_JOBS:-auto}"
+export KANBAN_TEST_THREADS="${KANBAN_TEST_THREADS:-auto}"
 export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
 export PATH="$HOME/.cargo/bin:$PNPM_HOME:$PATH"
 

@@ -27,15 +27,15 @@
 
 ```bash
 KANBAN_CARGO_TARGET_ROOT=$HOME/.cache/kanban-tool/cargo-target
-KANBAN_CARGO_BUILD_JOBS=2
-KANBAN_TEST_THREADS=2
+KANBAN_CARGO_BUILD_JOBS=auto
+KANBAN_TEST_THREADS=auto
 CODEX_CLOUD_INSTALL_TAURI_DEPS=1
 CODEX_CLOUD_INSTALL_NEXTEST=1
 CODEX_CLOUD_PREWARM_RUST=1
 CODEX_CLOUD_PREWARM_DESKTOP=0
 ```
 
-`KANBAN_CARGO_TARGET_ROOT` 是 Cloud 专用 target 目录。项目本地验证仍按 `AGENTS.md` 使用 `just` recipes；Cloud 环境需要这个变量是因为本地默认 target root 是开发机路径，容器中不应依赖它。
+`KANBAN_CARGO_TARGET_ROOT` 是 Cloud 专用 target 目录。项目本地验证仍按 `AGENTS.md` 使用 `just` recipes；Cloud 环境需要这个变量是因为本地默认 target root 是开发机路径，容器中不应依赖它。`KANBAN_CARGO_BUILD_JOBS=auto` 和 `KANBAN_TEST_THREADS=auto` 让 Cargo、nextest 和 libtest 使用容器默认并发；只有 Cloud runner 资源紧张时才改成具体数字。
 
 ## Installed Surface
 

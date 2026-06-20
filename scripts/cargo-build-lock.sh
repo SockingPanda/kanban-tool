@@ -32,6 +32,8 @@ Environment:
                               Default: /media/kanban-user/Data/cargo-targets/kanban-tool
   KANBAN_CARGO_BUILD_JOBS     Repo-level default for CARGO_BUILD_JOBS.
   KANBAN_TEST_THREADS         Repo-level default for nextest/libtest threads.
+                              Set either repo-level value to "auto" to leave the
+                              tool-specific variable unset.
 
 Examples:
   scripts/cargo-build-lock.sh -- cargo check --workspace --exclude kanban-desktop --tests
@@ -117,9 +119,24 @@ validate_inherited_target_dir() {
 }
 
 configure_resource_limits() {
-  export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-${KANBAN_CARGO_BUILD_JOBS:-2}}"
-  export NEXTEST_TEST_THREADS="${NEXTEST_TEST_THREADS:-${KANBAN_TEST_THREADS:-2}}"
-  export RUST_TEST_THREADS="${RUST_TEST_THREADS:-${KANBAN_TEST_THREADS:-2}}"
+  configure_resource_limit CARGO_BUILD_JOBS "${KANBAN_CARGO_BUILD_JOBS:-2}"
+  configure_resource_limit NEXTEST_TEST_THREADS "${KANBAN_TEST_THREADS:-2}"
+  configure_resource_limit RUST_TEST_THREADS "${KANBAN_TEST_THREADS:-2}"
+}
+
+configure_resource_limit() {
+  local name="$1"
+  local default_value="$2"
+
+  if [[ -n "${!name:-}" ]]; then
+    return 0
+  fi
+  case "$default_value" in
+    auto|AUTO)
+      return 0
+      ;;
+  esac
+  export "$name=$default_value"
 }
 
 main() {

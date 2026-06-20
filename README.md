@@ -177,4 +177,6 @@ Rust validation recipes run target-writing Cargo/Tauri commands through
 defaults local build/test parallelism to two jobs/threads to avoid swap-heavy
 workspace gates. Override with `KANBAN_CARGO_BUILD_JOBS` /
 `KANBAN_TEST_THREADS`, or tool-specific `CARGO_BUILD_JOBS`,
-`NEXTEST_TEST_THREADS`, and `RUST_TEST_THREADS`.
+`NEXTEST_TEST_THREADS`, and `RUST_TEST_THREADS`. Set the repo-level values to
+`auto` to leave the tool-specific variables unset, which is the preferred
+Codex Cloud setting.

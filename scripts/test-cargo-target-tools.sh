@@ -149,6 +149,15 @@ assert_resource_limit_defaults() {
     '
 
   KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+    KANBAN_CARGO_BUILD_JOBS=auto \
+    KANBAN_TEST_THREADS=auto \
+    "$LOCK_SCRIPT" -- bash -c '
+      [[ -z "${CARGO_BUILD_JOBS:-}" ]]
+      [[ -z "${NEXTEST_TEST_THREADS:-}" ]]
+      [[ -z "${RUST_TEST_THREADS:-}" ]]
+    '
+
+  KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
     CARGO_BUILD_JOBS=4 \
     NEXTEST_TEST_THREADS=5 \
     RUST_TEST_THREADS=6 \

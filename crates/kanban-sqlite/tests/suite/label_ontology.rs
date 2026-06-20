@@ -200,6 +200,121 @@ fn label_ontology_records_observation_signals_and_preserves_board_scope() -> any
 }
 
 #[test]
+fn label_ontology_quality_distinguishes_signal_counts_from_rates() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_quality_distinguishes_signal_counts_from_rates")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let cli_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Add CLI ontology quality report"),
+    )?;
+    let docs_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Document ontology quality cohort"),
+    )?;
+
+    for (fingerprint, signal_key) in [
+        ("cli-quality-run-a", "cli-quality-signal-a"),
+        ("cli-quality-run-b", "cli-quality-signal-b"),
+    ] {
+        let mut input = sample_record_input(vec![LabelOntologySignalInput {
+            kind: LabelOntologySignalKind::FalseNegative,
+            target_label_ref: Some("cli".to_owned()),
+            related_labels_json: "[]".to_owned(),
+            proposed_action: LabelOntologyProposedAction::AddPositiveAtom,
+            candidate_atom: Some(LabelOntologyCandidateAtomInput {
+                polarity: "positive".to_owned(),
+                kind: "applies_when".to_owned(),
+                text: "extends CLI subcommands or machine-readable output".to_owned(),
+            }),
+            proposed_label_name: None,
+            proposal_json: "{}".to_owned(),
+            agent_selected: true,
+            suggest_state: Some(LabelOntologySuggestState::Absent),
+            suggest_score: None,
+            suggest_rank: None,
+            final_selected: true,
+            rationale: "The task is clearly CLI work, but suggest did not select cli.".to_owned(),
+            confidence: Some(0.9),
+            signal_key: Some(signal_key.to_owned()),
+        }]);
+        input.capture_fingerprint = Some(fingerprint.to_owned());
+        record_label_ontology_observation(&temp.path, "default", &cli_task.id, input)?;
+    }
+
+    let signal_only_report = label_ontology_quality_report(
+        &temp.path,
+        "default",
+        LabelOntologyQualityOptions { sample_limit: 10 },
+    )?;
+    assert_eq!(signal_only_report.denominator.observation_count, 2);
+    assert_eq!(signal_only_report.denominator.distinct_task_count, 1);
+    assert_eq!(
+        signal_only_report.denominator.agreement_observation_count,
+        0
+    );
+    assert_eq!(signal_only_report.disagreement.signal_count, 2);
+    assert_eq!(signal_only_report.disagreement.distinct_task_count, 1);
+    assert_eq!(
+        signal_only_report
+            .disagreement
+            .by_kind
+            .get("false_negative"),
+        Some(&2)
+    );
+    assert_eq!(
+        signal_only_report.disagreement.by_status.get("open"),
+        Some(&2)
+    );
+    assert_eq!(signal_only_report.rates.disagreement_task_rate, None);
+    assert!(!signal_only_report.precision_recall.available);
+    assert!(
+        signal_only_report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("no agreement observations"))
+    );
+
+    insert_agreement_observation_fixture(&temp, &docs_task, "agreement-docs-quality")?;
+    let truth_counts_before = ontology_quality_truth_counts(&temp.path)?;
+    let report = label_ontology_quality_report(
+        &temp.path,
+        "default",
+        LabelOntologyQualityOptions { sample_limit: 10 },
+    )?;
+    let truth_counts_after = ontology_quality_truth_counts(&temp.path)?;
+    assert_eq!(truth_counts_after, truth_counts_before);
+
+    assert_eq!(report.denominator.source, "label_ontology_observations");
+    assert_eq!(report.denominator.observation_count, 3);
+    assert_eq!(report.denominator.distinct_task_count, 2);
+    assert_eq!(report.denominator.agreement_observation_count, 1);
+    assert_eq!(report.denominator.agreement_task_count, 1);
+    assert_eq!(report.disagreement.signal_count, 2);
+    assert_eq!(report.disagreement.distinct_task_count, 1);
+    assert_eq!(report.rates.disagreement_task_rate, Some(0.5));
+    assert!(!report.precision_recall.available);
+    assert!(report.precision_recall.reason.contains("expected labels"));
+    assert_eq!(
+        report.denominator.sample_task_refs,
+        vec![cli_task.task_ref.clone(), docs_task.task_ref.clone()]
+    );
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_record_derives_metrics_from_snapshot_and_preserves_canonical_state()
 -> anyhow::Result<()> {
     let temp = TempDb::new(
@@ -5719,6 +5834,80 @@ fn sample_record_input(signals: Vec<LabelOntologySignalInput>) -> LabelOntologyR
         capture_fingerprint: None,
         signals,
     }
+}
+
+fn insert_agreement_observation_fixture(
+    temp: &TempDb,
+    task: &TaskRecord,
+    capture_fingerprint: &str,
+) -> anyhow::Result<()> {
+    let conn = connect_file(&temp.path)?;
+    let created_at: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(created_at), 0) + 1 FROM label_ontology_observations",
+        [],
+        |row| row.get(0),
+    )?;
+    let observation_id = format!("lor_{capture_fingerprint}");
+    conn.execute(
+        "INSERT INTO label_ontology_observations(\
+         id, board_id, task_id, task_ref_snapshot, task_snapshot_json, suggest_input_hash, \
+         agent_candidates_json, suggestion_snapshot_json, final_decision_json, suggest_coverage, \
+         suggest_coverage_cosine, suggest_residual_norm, suggest_needs_new_label, suggest_degraded, \
+         diagnostics_json, capture_fingerprint, created_by, created_by_type, agent_type, created_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, '[]', ?7, ?8, 0.91, 0.88, 0.09, 0, 0, '[]', ?9, 'tester', 'agent', 'quality-test', ?10)",
+        params![
+            observation_id,
+            task.board_id,
+            task.id,
+            task.task_ref,
+            json!({
+                "id": task.id,
+                "board_id": task.board_id,
+                "ref": task.task_ref,
+                "title": task.title,
+                "description": task.description,
+            })
+            .to_string(),
+            "agreementhash000",
+            json!({"selected_labels": ["docs"], "candidates": []}).to_string(),
+            json!({"accepted_labels": ["docs"], "agreement": true}).to_string(),
+            capture_fingerprint,
+            created_at,
+        ],
+    )?;
+    Ok(())
+}
+
+fn ontology_quality_truth_counts(
+    path: &Path,
+) -> anyhow::Result<(i64, i64, i64, i64, i64, i64, i64)> {
+    let conn = connect_file(path)?;
+    Ok((
+        table_count(&conn, "labels")?,
+        table_count(&conn, "task_labels")?,
+        table_count(&conn, "label_semantics")?,
+        table_count(&conn, "label_atoms")?,
+        table_count(&conn, "label_ontology_observations")?,
+        table_count(&conn, "label_ontology_signals")?,
+        table_count(&conn, "label_ontology_actions")?,
+    ))
+}
+
+fn table_count(conn: &Connection, table: &str) -> anyhow::Result<i64> {
+    let table = match table {
+        "labels" => "labels",
+        "task_labels" => "task_labels",
+        "label_semantics" => "label_semantics",
+        "label_atoms" => "label_atoms",
+        "label_ontology_observations" => "label_ontology_observations",
+        "label_ontology_signals" => "label_ontology_signals",
+        "label_ontology_actions" => "label_ontology_actions",
+        _ => return Err(test_error(format!("unsupported table count: {table}"))),
+    };
+    conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+        row.get(0)
+    })
+    .map_err(Into::into)
 }
 
 enum ExistingAtomApplyKind {

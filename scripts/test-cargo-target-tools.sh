@@ -130,6 +130,45 @@ assert_package_help_output_path() {
   }
 }
 
+assert_resource_limit_defaults() {
+  local nested_marker="$TMPDIR/resource-nested-marker"
+
+  KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '
+    [[ "${CARGO_BUILD_JOBS:-}" == "2" ]]
+    [[ "${NEXTEST_TEST_THREADS:-}" == "2" ]]
+    [[ "${RUST_TEST_THREADS:-}" == "2" ]]
+  '
+
+  KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+    KANBAN_CARGO_BUILD_JOBS=1 \
+    KANBAN_TEST_THREADS=3 \
+    "$LOCK_SCRIPT" -- bash -c '
+      [[ "${CARGO_BUILD_JOBS:-}" == "1" ]]
+      [[ "${NEXTEST_TEST_THREADS:-}" == "3" ]]
+      [[ "${RUST_TEST_THREADS:-}" == "3" ]]
+    '
+
+  KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+    CARGO_BUILD_JOBS=4 \
+    NEXTEST_TEST_THREADS=5 \
+    RUST_TEST_THREADS=6 \
+    KANBAN_CARGO_BUILD_JOBS=1 \
+    KANBAN_TEST_THREADS=3 \
+    "$LOCK_SCRIPT" -- bash -c '
+      [[ "${CARGO_BUILD_JOBS:-}" == "4" ]]
+      [[ "${NEXTEST_TEST_THREADS:-}" == "5" ]]
+      [[ "${RUST_TEST_THREADS:-}" == "6" ]]
+    '
+
+  KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash -c '
+    [[ "${CARGO_BUILD_JOBS:-}" == "2" ]]
+    [[ "${NEXTEST_TEST_THREADS:-}" == "2" ]]
+    [[ "${RUST_TEST_THREADS:-}" == "2" ]]
+    touch "$1"
+  ' _ "$nested_marker"
+  [[ -e "$nested_marker" ]] || fail "nested resource limit command did not run"
+}
+
 [[ ! -e "$ROOT/scripts/$REMOVED_HELPER.sh" ]] || fail "removed target helper still exists"
 
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT/" "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$TARGET_ROOT"
@@ -213,6 +252,7 @@ outer_lock_marker="$TMPDIR/outer-lock-marker"
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash -c 'touch "$1"' _ "$outer_lock_marker"
 [[ -e "$outer_lock_marker" ]] || fail "nested lock-held command did not run"
 
+assert_resource_limit_defaults
 assert_no_bare_target_writing_cargo
 assert_package_help_output_path
 

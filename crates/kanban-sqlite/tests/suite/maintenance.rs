@@ -151,8 +151,8 @@ fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() -> anyhow::Resu
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(19));
-        assert_eq!(report.user_version, 19);
+        assert_eq!(report.migration_version, Some(20));
+        assert_eq!(report.user_version, 20);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())
@@ -175,8 +175,8 @@ fn doctor_ontology_reports_missing_v12_tables_unhealthy() -> anyhow::Result<()> 
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(19));
-        assert_eq!(report.user_version, 19);
+        assert_eq!(report.migration_version, Some(20));
+        assert_eq!(report.user_version, 20);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
         assert_eq!(report.ontology_ledger_errors, 1);
         assert!(report.ontology_ledger_issues.iter().any(|issue| {
@@ -275,18 +275,19 @@ fn doctor_ontology_detects_supersede_cycle() -> anyhow::Result<()> {
 }
 
 #[test]
-fn sqlite_rejects_cross_board_key_relationship_rows() -> anyhow::Result<()> {
+fn sqlite_rejects_cross_board_foundation_relationship_rows() -> anyhow::Result<()> {
     let temp = TempDb::new("sqlite_rejects_cross_board_key_relationship_rows")?;
     let fixture = seed_foundation_relationship_fixture(&temp)?;
     let conn = connect_file(&temp.path)?;
 
-    for (name, result) in [
+    for (name, result, expected) in [
         (
             "task_labels",
             conn.execute(
                 "UPDATE task_labels SET board_id=?1 WHERE task_id=?2 AND label_id=?3",
                 params![fixture.other_board_id, fixture.task_id, fixture.label_id],
             ),
+            "FOREIGN KEY constraint failed",
         ),
         (
             "task_dependencies",
@@ -298,6 +299,7 @@ fn sqlite_rejects_cross_board_key_relationship_rows() -> anyhow::Result<()> {
                     fixture.child_task_id
                 ],
             ),
+            "FOREIGN KEY constraint failed",
         ),
         (
             "task_runs",
@@ -305,11 +307,72 @@ fn sqlite_rejects_cross_board_key_relationship_rows() -> anyhow::Result<()> {
                 "UPDATE task_runs SET board_id=?1 WHERE id='r_cross_board'",
                 [&fixture.other_board_id],
             ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
+            "task_comments_update",
+            conn.execute(
+                "UPDATE task_comments SET board_id=?1 WHERE task_id=?2",
+                params![fixture.other_board_id, fixture.task_id],
+            ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
+            "task_comments_insert",
+            conn.execute(
+                "INSERT INTO task_comments(id, board_id, task_id, author, author_type, body, kind, metadata_json, created_at) \
+                 VALUES ('c_cross_board_insert', ?1, ?2, 'tester', 'user', 'bad comment', 'note', '{}', 1)",
+                params![fixture.other_board_id, fixture.task_id],
+            ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
+            "task_attachments_update",
+            conn.execute(
+                "UPDATE task_attachments SET board_id=?1 WHERE id='a_cross_board'",
+                [&fixture.other_board_id],
+            ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
+            "task_attachments_insert",
+            conn.execute(
+                "INSERT INTO task_attachments(id, board_id, task_id, filename, rel_path, size_bytes, created_by, created_at) \
+                 VALUES ('a_cross_board_insert', ?1, ?2, 'bad.txt', 'attachments/bad.txt', 0, 'tester', 1)",
+                params![fixture.other_board_id, fixture.task_id],
+            ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
+            "task_events_update_task",
+            conn.execute(
+                "UPDATE task_events SET board_id=?1 WHERE event_id='e_cross_board'",
+                [&fixture.other_board_id],
+            ),
+            "task_events.board_id must match task_id board_id",
+        ),
+        (
+            "task_events_insert_task",
+            conn.execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, kind, payload_json, created_at) \
+                 VALUES ('e_cross_board_insert_task', ?1, ?2, 'test.cross_board', '{}', 1)",
+                params![fixture.other_board_id, fixture.task_id],
+            ),
+            "task_events.board_id must match task_id board_id",
+        ),
+        (
+            "task_events_insert_run",
+            conn.execute(
+                "INSERT INTO task_events(event_id, board_id, run_id, kind, payload_json, created_at) \
+                 VALUES ('e_cross_board_insert_run', ?1, 'r_cross_board', 'test.cross_board', '{}', 1)",
+                [&fixture.other_board_id],
+            ),
+            "task_events.board_id must match run_id board_id",
         ),
     ] {
         let error = result_err(result)?;
         assert!(
-            error.to_string().contains("FOREIGN KEY constraint failed"),
+            error.to_string().contains(expected),
             "{name}: {error}"
         );
     }
@@ -324,6 +387,13 @@ fn doctor_detects_cross_board_history_relationship_rows() -> anyhow::Result<()> 
     let temp = TempDb::new("doctor_detects_cross_board_history_relationship_rows")?;
     let fixture = seed_foundation_relationship_fixture(&temp)?;
     let conn = connect_file(&temp.path)?;
+    conn.execute_batch(
+        "
+        PRAGMA foreign_keys=OFF;
+        DROP TRIGGER IF EXISTS trg_task_events_board_insert;
+        DROP TRIGGER IF EXISTS trg_task_events_board_update;
+        ",
+    )?;
     conn.execute(
         "UPDATE task_comments SET board_id=?1 WHERE task_id=?2",
         params![fixture.other_board_id, fixture.task_id],
@@ -408,24 +478,9 @@ fn jsonl_import_rejects_cross_board_foundation_relationship_rows() -> anyhow::Re
                     case.record_type
                 );
             }
-            FoundationRelationshipImportRejection::Doctor => {
+            FoundationRelationshipImportRejection::Trigger(expected) => {
                 assert!(
-                    message.contains("imported data failed doctor checks"),
-                    "{}: {message}",
-                    case.record_type
-                );
-                assert!(
-                    message.contains(case.table_name),
-                    "{}: {message}",
-                    case.record_type
-                );
-                assert!(
-                    message.contains("row_board="),
-                    "{}: {message}",
-                    case.record_type
-                );
-                assert!(
-                    message.contains("referenced_board="),
+                    message.contains(expected),
                     "{}: {message}",
                     case.record_type
                 );
@@ -483,46 +538,41 @@ struct FoundationRelationshipFixture {
 
 struct FoundationRelationshipImportCase {
     record_type: &'static str,
-    table_name: &'static str,
     rejection: FoundationRelationshipImportRejection,
 }
 
 #[derive(Clone, Copy)]
 enum FoundationRelationshipImportRejection {
     ForeignKey,
-    Doctor,
+    Trigger(&'static str),
 }
 
 const FOUNDATION_RELATIONSHIP_IMPORT_CASES: &[FoundationRelationshipImportCase] = &[
     FoundationRelationshipImportCase {
         record_type: "task_label",
-        table_name: "task_labels",
         rejection: FoundationRelationshipImportRejection::ForeignKey,
     },
     FoundationRelationshipImportCase {
         record_type: "dependency",
-        table_name: "task_dependencies",
         rejection: FoundationRelationshipImportRejection::ForeignKey,
     },
     FoundationRelationshipImportCase {
         record_type: "run",
-        table_name: "task_runs",
         rejection: FoundationRelationshipImportRejection::ForeignKey,
     },
     FoundationRelationshipImportCase {
         record_type: "comment",
-        table_name: "task_comments",
-        rejection: FoundationRelationshipImportRejection::Doctor,
+        rejection: FoundationRelationshipImportRejection::ForeignKey,
     },
     FoundationRelationshipImportCase {
         record_type: "event",
-        table_name: "task_events",
-        rejection: FoundationRelationshipImportRejection::Doctor,
+        rejection: FoundationRelationshipImportRejection::Trigger(
+            "task_events.board_id must match task_id board_id",
+        ),
     },
     FoundationRelationshipImportCase {
         record_type: "attachment",
-        table_name: "task_attachments",
-        rejection: FoundationRelationshipImportRejection::Doctor,
+        rejection: FoundationRelationshipImportRejection::ForeignKey,
     },
 ];
 

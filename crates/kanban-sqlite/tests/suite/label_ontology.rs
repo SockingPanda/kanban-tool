@@ -10,7 +10,7 @@ fn label_ontology_migration_creates_ledger_tables_and_json_constraints() -> anyh
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 19);
+    assert_eq!(user_version, 20);
     for table in [
         "label_ontology_observations",
         "label_ontology_signals",

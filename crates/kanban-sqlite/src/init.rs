@@ -45,7 +45,9 @@ const LABEL_ONTOLOGY_ROOT_ACTION_EFFECTS_MIGRATION: &str =
     include_str!("../../../migrations/018_label_ontology_root_action_effects.sql");
 const LABEL_ONTOLOGY_VALIDATION_REQUIREMENT_MIGRATION: &str =
     include_str!("../../../migrations/019_label_ontology_validation_requirement.sql");
-const LATEST_MIGRATION_VERSION: i64 = 19;
+const BOARD_ISOLATION_TASK_HISTORY_MIGRATION: &str =
+    include_str!("../../../migrations/020_board_isolation_task_history.sql");
+const LATEST_MIGRATION_VERSION: i64 = 20;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &[
     "fnv64:0ca871be950fc8a6",
     "fnv64:3b08da4e2b6041f5",
@@ -155,6 +157,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "019_label_ontology_validation_requirement",
         sql: LABEL_ONTOLOGY_VALIDATION_REQUIREMENT_MIGRATION,
     },
+    Migration {
+        version: 20,
+        name: "020_board_isolation_task_history",
+        sql: BOARD_ISOLATION_TASK_HISTORY_MIGRATION,
+    },
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -252,6 +259,9 @@ fn run_migration_preflight(conn: &Connection, migration: &Migration) -> Result<(
     if migration.version == 17 {
         ensure_no_cross_board_rows_for_composite_fk_migration(conn)?;
     }
+    if migration.version == 20 {
+        ensure_no_cross_board_rows_for_task_history_migration(conn)?;
+    }
     Ok(())
 }
 
@@ -287,6 +297,51 @@ fn ensure_no_cross_board_rows_for_composite_fk_migration(conn: &Connection) -> R
         if let Some(mismatch) = first_board_isolation_mismatch(conn, &check)? {
             return Err(KanbanError::Storage(format!(
                 "cannot apply migration 017_board_isolation_composite_fk: {} cross-board row {} has row board {}, referenced boards {}; run kanban doctor and repair before migrating",
+                check.table, mismatch.row_key, mismatch.row_board, mismatch.referenced_boards
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn ensure_no_cross_board_rows_for_task_history_migration(conn: &Connection) -> Result<()> {
+    for check in [
+        BoardIsolationPreflight {
+            table: "task_comments",
+            sql: "SELECT c.id, c.board_id, COALESCE(t.board_id, 'missing task ' || c.task_id), NULL \
+                  FROM task_comments c \
+                  LEFT JOIN tasks t ON t.id = c.task_id \
+                  WHERE t.id IS NULL OR c.board_id != t.board_id \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "task_events",
+            sql: "SELECT e.event_id, e.board_id, COALESCE(t.board_id, 'missing task ' || e.task_id), NULL \
+                  FROM task_events e \
+                  LEFT JOIN tasks t ON t.id = e.task_id \
+                  WHERE e.task_id IS NOT NULL AND (t.id IS NULL OR e.board_id != t.board_id) \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "task_events",
+            sql: "SELECT e.event_id, e.board_id, COALESCE(r.board_id, 'missing run ' || e.run_id), NULL \
+                  FROM task_events e \
+                  LEFT JOIN task_runs r ON r.id = e.run_id \
+                  WHERE e.run_id IS NOT NULL AND (r.id IS NULL OR e.board_id != r.board_id) \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "task_attachments",
+            sql: "SELECT a.id, a.board_id, COALESCE(t.board_id, 'missing task ' || a.task_id), NULL \
+                  FROM task_attachments a \
+                  LEFT JOIN tasks t ON t.id = a.task_id \
+                  WHERE t.id IS NULL OR a.board_id != t.board_id \
+                  LIMIT 1",
+        },
+    ] {
+        if let Some(mismatch) = first_board_isolation_mismatch(conn, &check)? {
+            return Err(KanbanError::Storage(format!(
+                "cannot apply migration 020_board_isolation_task_history: {} cross-board row {} has row board {}, referenced boards {}; run kanban doctor and repair before migrating",
                 check.table, mismatch.row_key, mismatch.row_board, mismatch.referenced_boards
             )));
         }

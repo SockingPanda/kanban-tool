@@ -3802,13 +3802,19 @@ fn label_ontology_revert_rejects_stale_current_hash() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("Add stale revert ontology fixture"),
     )?;
+    let mut second_signal = sample_signal_input("cli-revert-stale-second");
+    second_signal.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+        polarity: "positive".to_owned(),
+        kind: "positive_example".to_owned(),
+        text: "adds a new kanban label ontology command".to_owned(),
+    });
     let observation = record_label_ontology_observation(
         &temp.path,
         "default",
         &task.id,
         sample_record_input(vec![
             sample_signal_input("cli-revert-stale-first"),
-            sample_signal_input("cli-revert-stale-second"),
+            second_signal,
         ]),
     )?;
     let first_signal_id = observation.signals[0].id.clone();
@@ -4987,6 +4993,206 @@ fn label_ontology_atom_apply_rejects_mismatched_target_signal() -> anyhow::Resul
     assert!(error.to_string().contains(&signal_id), "{error}");
     assert!(error.to_string().contains("target label"), "{error}");
 
+    Ok(())
+}
+
+#[test]
+fn label_ontology_atom_apply_rejects_source_signal_action_polarity_and_kind_mismatch()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_atom_apply_rejects_source_signal_action_polarity_and_kind_mismatch",
+    )?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject incompatible source signal atoms"),
+    )?;
+
+    let cases = vec![
+        (
+            "positive-used-for-negative",
+            sample_signal_input("positive-used-for-negative"),
+            "excludes_when",
+            "only updates backend release notes",
+            "proposed action add_positive_atom does not match apply atom action add_negative_atom",
+        ),
+        (
+            "positive-kind-mismatch",
+            {
+                let mut signal = sample_signal_input("positive-kind-mismatch");
+                signal.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+                    polarity: "positive".to_owned(),
+                    kind: "positive_example".to_owned(),
+                    text: "adds a CLI command example".to_owned(),
+                });
+                signal
+            },
+            "applies_when",
+            "changes CLI command behavior",
+            "candidate atom kind",
+        ),
+        (
+            "update-semantics-used-for-atom",
+            {
+                let mut signal = sample_signal_input("update-semantics-used-for-atom");
+                signal.proposed_action = LabelOntologyProposedAction::UpdateSemantics;
+                signal.candidate_atom = None;
+                signal.rationale = "The label description needs broader wording.".to_owned();
+                signal
+            },
+            "applies_when",
+            "changes CLI command behavior",
+            "proposed action update_semantics does not match apply atom action add_positive_atom",
+        ),
+    ];
+
+    for (case_name, signal, apply_kind, apply_text, expected_error) in cases {
+        let signal_id = record_confirmed_test_signal(&temp, &task.id, signal)?;
+        let action_count_before = ontology_action_count(&temp.path)?;
+        let atoms_before = list_label_atoms(&temp.path, "default")?;
+
+        let error = result_err(apply_label_ontology_atom(
+            &temp.path,
+            "default",
+            LabelOntologyAtomApplyInput {
+                actor: reviewer_actor(),
+                signal_ids: vec![signal_id.clone()],
+                label_ref: "cli".to_owned(),
+                kind: apply_kind.to_owned(),
+                text: apply_text.to_owned(),
+                reason: format!("case {case_name} must be rejected"),
+            },
+        ))?;
+        assert!(
+            error.to_string().contains(expected_error),
+            "{case_name}: {error}"
+        );
+        assert_eq!(ontology_action_count(&temp.path)?, action_count_before);
+        assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
+    }
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_atom_apply_allows_generalized_text_with_matching_contract() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_atom_apply_allows_generalized_text_with_matching_contract")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Allow generalized atom text"),
+    )?;
+    let mut signal = sample_signal_input("generalized-text");
+    signal.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+        polarity: "positive".to_owned(),
+        kind: "applies_when".to_owned(),
+        text: "adds exactly the foo command flag".to_owned(),
+    });
+    let signal_id = record_confirmed_test_signal(&temp, &task.id, signal)?;
+
+    let action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![signal_id],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "changes CLI commands, flags, help output, or JSON behavior".to_owned(),
+            reason: "Generalize atom text while preserving action/polarity/kind contract."
+                .to_owned(),
+        },
+    )?;
+
+    assert_eq!(action.action_type, LabelOntologyActionType::AddPositiveAtom);
+    let semantics = get_label_semantics(&temp.path, "default", "cli")?;
+    assert!(
+        semantics
+            .applies_when
+            .iter()
+            .any(|atom| { atom == "changes CLI commands, flags, help output, or JSON behavior" })
+    );
+    Ok(())
+}
+
+#[test]
+fn label_ontology_atom_apply_retarget_does_not_bypass_atom_kind_contract() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_atom_apply_retarget_does_not_bypass_atom_kind_contract")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Retarget must preserve atom contract"),
+    )?;
+    let mut signal = sample_signal_input("retarget-kind-mismatch");
+    signal.target_label_ref = Some("backend".to_owned());
+    signal.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+        polarity: "positive".to_owned(),
+        kind: "positive_example".to_owned(),
+        text: "adds a backend API example".to_owned(),
+    });
+    let signal_id = record_confirmed_test_signal(&temp, &task.id, signal)?;
+    let action_count_before = ontology_action_count(&temp.path)?;
+
+    let error = result_err(apply_label_ontology_atom_with_options(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![signal_id],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "changes CLI command behavior".to_owned(),
+            reason: "Retarget cannot change atom kind.".to_owned(),
+        },
+        LabelOntologyRetargetOptions {
+            allow_retarget: true,
+            retarget_reason: Some("Reviewer retargets only the label boundary.".to_owned()),
+        },
+    ))?;
+    assert!(error.to_string().contains("candidate atom kind"), "{error}");
+    assert_eq!(ontology_action_count(&temp.path)?, action_count_before);
+    assert!(list_label_atoms(&temp.path, "default")?.is_empty());
     Ok(())
 }
 
@@ -7836,6 +8042,30 @@ fn sample_signal_input(signal_key: &str) -> LabelOntologySignalInput {
         confidence: Some(0.91),
         signal_key: Some(signal_key.to_owned()),
     }
+}
+
+fn record_confirmed_test_signal(
+    temp: &TempDb,
+    task_id: &str,
+    signal: LabelOntologySignalInput,
+) -> anyhow::Result<String> {
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        task_id,
+        sample_record_input(vec![signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer confirmed source signal.",
+        ),
+    )?;
+    Ok(signal_id)
 }
 
 fn validation_actor() -> LabelOntologyActor {

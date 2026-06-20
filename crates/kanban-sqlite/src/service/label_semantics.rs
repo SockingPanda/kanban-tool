@@ -105,6 +105,11 @@ fn upsert_label_semantics_resolved_in_tx(
     let after =
         label_ontology_semantics_snapshot_for_definition(&label.id, &label.name, &definition)?;
     if current.is_some() && before.hash == after.hash {
+        if !options.source_signal_ids.is_empty() {
+            return Err(KanbanError::InvalidInput(
+                "source signals require an actual label semantics change".into(),
+            ));
+        }
         return get_label_semantics_conn(conn, &label.board_id, &label.id);
     }
     let before_atoms = label_ontology_mutation_atoms(conn, &label.board_id, &label.id)?;

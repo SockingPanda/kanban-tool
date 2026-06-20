@@ -1526,6 +1526,138 @@ async fn label_ontology_observation_route_rejects_invalid_signal_contract() -> a
 }
 
 #[tokio::test]
+async fn label_ontology_apply_atom_route_rejects_incompatible_source_signal() -> anyhow::Result<()>
+{
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("ontology API incompatible source signal"),
+    )?;
+    let observation = kanban_sqlite::record_label_ontology_observation(
+        &db_path,
+        "default",
+        &task.id,
+        kanban_sqlite::LabelOntologyRecordInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: json!([{"label": "cli", "confidence": 0.92}]).to_string(),
+            suggestion_snapshot_json: json!({"selected_labels": []}).to_string(),
+            final_decision_json: json!({"accepted_labels": ["cli"]}).to_string(),
+            suggest_coverage: Some(0.61),
+            suggest_coverage_cosine: Some(0.74),
+            suggest_residual_norm: Some(0.39),
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: json!([]).to_string(),
+            capture_fingerprint: Some("api-incompatible-source-signal".to_owned()),
+            signals: vec![kanban_sqlite::LabelOntologySignalInput {
+                kind: kanban_sqlite::LabelOntologySignalKind::FalseNegative,
+                target_label_ref: Some("cli".to_owned()),
+                related_labels_json: json!([]).to_string(),
+                proposed_action: kanban_sqlite::LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(kanban_sqlite::LabelOntologyCandidateAtomInput {
+                    polarity: "positive".to_owned(),
+                    kind: "applies_when".to_owned(),
+                    text: "extends CLI subcommands, arguments, help output, or JSON behavior"
+                        .to_owned(),
+                }),
+                proposed_label_name: None,
+                proposal_json: json!({}).to_string(),
+                agent_selected: true,
+                suggest_state: Some(kanban_sqlite::LabelOntologySuggestState::Candidate),
+                suggest_score: Some(0.08),
+                suggest_rank: Some(4),
+                final_selected: true,
+                rationale: "The task expands the CLI surface.".to_owned(),
+                confidence: Some(0.91),
+                signal_key: Some("api-incompatible-source-signal".to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    kanban_sqlite::create_label_ontology_action(
+        &db_path,
+        "default",
+        kanban_sqlite::LabelOntologyActionInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            action_type: kanban_sqlite::LabelOntologyActionType::Confirm,
+            signal_ids: vec![signal_id.clone()],
+            reason: "valid false negative".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: None,
+            validation_status: None,
+            validation_json: None,
+        },
+    )?;
+    let conn = kanban_sqlite::connect_file(&db_path)?;
+    let action_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM label_ontology_actions", [], |row| {
+            row.get(0)
+        })?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app,
+        "/api/v1/boards/default/label-ontology/apply/atom",
+        json!({
+            "actor": {
+                "name": "reviewer",
+                "type": "user",
+                "agent_type": null
+            },
+            "signal_ids": [signal_id],
+            "label_ref": "cli",
+            "kind": "excludes_when",
+            "text": "only updates unrelated release notes",
+            "reason": "This should fail because the source signal requested a positive atom."
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .context("error message")?
+            .contains("proposed action add_positive_atom")
+    );
+    let post_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM label_ontology_actions", [], |row| {
+            row.get(0)
+        })?;
+    assert_eq!(post_count, action_count);
+    assert!(kanban_sqlite::list_label_atoms(&db_path, "default")?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
 async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();

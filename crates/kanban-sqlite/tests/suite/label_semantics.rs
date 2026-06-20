@@ -2600,6 +2600,78 @@ fn record_confirmed_proposal_source_signal(
     Ok(signal_id)
 }
 
+fn record_confirmed_semantics_source_signal(
+    temp: &TempDb,
+    task_id: &str,
+    signal_key: &str,
+    proposed_action: LabelOntologyProposedAction,
+    candidate_atom: Option<LabelOntologyCandidateAtomInput>,
+) -> anyhow::Result<String> {
+    let kind = match proposed_action {
+        LabelOntologyProposedAction::AddPositiveAtom => LabelOntologySignalKind::FalseNegative,
+        LabelOntologyProposedAction::AddNegativeAtom => LabelOntologySignalKind::FalsePositive,
+        LabelOntologyProposedAction::UpdateSemantics => LabelOntologySignalKind::BoundaryIssue,
+        _ => LabelOntologySignalKind::BoundaryIssue,
+    };
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        task_id,
+        LabelOntologyRecordInput {
+            actor: LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: json!([
+                {"label": "cli", "confidence": 0.88, "reason": "source signal contract test"}
+            ])
+            .to_string(),
+            suggestion_snapshot_json: json!({
+                "result": {"selected_labels": ["cli"], "candidates": []}
+            })
+            .to_string(),
+            final_decision_json: json!({"accepted_labels": ["cli"]}).to_string(),
+            suggest_coverage: Some(0.62),
+            suggest_coverage_cosine: Some(0.72),
+            suggest_residual_norm: Some(0.38),
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: "[]".to_owned(),
+            capture_fingerprint: None,
+            signals: vec![LabelOntologySignalInput {
+                kind,
+                target_label_ref: Some("cli".to_owned()),
+                related_labels_json: "[]".to_owned(),
+                proposed_action,
+                candidate_atom,
+                proposed_label_name: None,
+                proposal_json: "{}".to_owned(),
+                agent_selected: true,
+                suggest_state: Some(LabelOntologySuggestState::Selected),
+                suggest_score: Some(0.91),
+                suggest_rank: Some(1),
+                final_selected: true,
+                rationale: "Confirmed signal should constrain the canonical mutation kind."
+                    .to_owned(),
+                confidence: Some(0.84),
+                signal_key: Some(signal_key.to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer confirms source signal compatibility test.",
+        ),
+    )?;
+    Ok(signal_id)
+}
+
 fn record_confirmed_atom_source_signal(
     temp: &TempDb,
     task_ref: &str,
@@ -3352,6 +3424,212 @@ fn label_atom_hashes_are_stable_across_reordered_sources_without_dirty_noop() ->
     );
     assert!(!label_atom_store_dirty(&temp.path)?);
     assert!(!label_atom_board_dirty(&temp.path, "default")?);
+    Ok(())
+}
+
+#[test]
+fn label_semantics_source_signal_update_semantics_allows_true_hash_change() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_semantics_source_signal_update_semantics_allows_true_hash_change")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            description: Some("Command-line interface behavior".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Update CLI semantics from source signal"),
+    )?;
+    let signal_id = record_confirmed_semantics_source_signal(
+        &temp,
+        &task.id,
+        "update-semantics-source",
+        LabelOntologyProposedAction::UpdateSemantics,
+        None,
+    )?;
+    let conn = connect_file(&temp.path)?;
+    let action_count = table_count(&conn, "label_ontology_actions")?;
+    let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+
+    let updated = kanban_sqlite::upsert_label_semantics_with_options(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash),
+            description: Some("Command-line interface and CLI JSON behavior".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+        kanban_sqlite::LabelSemanticsMutationOptions {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            reason: Some("Clarify CLI semantics from confirmed source signal.".to_owned()),
+            source_signal_ids: vec![signal_id],
+        },
+    )?;
+
+    assert_ne!(
+        updated.description.as_deref(),
+        Some("Command-line interface behavior")
+    );
+    assert_eq!(
+        table_count(&conn, "label_ontology_actions")?,
+        action_count + 1
+    );
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count
+    );
+    Ok(())
+}
+
+#[test]
+fn label_semantics_source_signal_atom_effect_contract_rolls_back_mixed_batch() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_semantics_source_signal_atom_effect_contract_rolls_back_mixed_batch")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            description: Some("Command-line interface behavior".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Patch CLI atom effects from source signals"),
+    )?;
+    let positive_signal_id = record_confirmed_semantics_source_signal(
+        &temp,
+        &task.id,
+        "semantics-add-positive",
+        LabelOntologyProposedAction::AddPositiveAtom,
+        Some(LabelOntologyCandidateAtomInput {
+            polarity: "positive".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "adds exactly a CLI flag".to_owned(),
+        }),
+    )?;
+    let negative_signal_id = record_confirmed_semantics_source_signal(
+        &temp,
+        &task.id,
+        "semantics-missing-negative-effect",
+        LabelOntologyProposedAction::AddNegativeAtom,
+        Some(LabelOntologyCandidateAtomInput {
+            polarity: "negative".to_owned(),
+            kind: "excludes_when".to_owned(),
+            text: "only changes unrelated release notes".to_owned(),
+        }),
+    )?;
+    let conn = connect_file(&temp.path)?;
+    let action_count = table_count(&conn, "label_ontology_actions")?;
+    let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+
+    let error = result_err(kanban_sqlite::upsert_label_semantics_with_options(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash.clone()),
+            applies_when: vec![
+                "changes CLI commands, flags, help output, or JSON behavior".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+        kanban_sqlite::LabelSemanticsMutationOptions {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            reason: Some(
+                "Mixed batch should roll back when any source signal is incompatible.".to_owned(),
+            ),
+            source_signal_ids: vec![positive_signal_id.clone(), negative_signal_id],
+        },
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("requires an actual added negative atom effect"),
+        "{error}"
+    );
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, action_count);
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count
+    );
+    assert_eq!(
+        get_label_semantics(&temp.path, "default", "cli")?.semantics_hash,
+        seed.semantics_hash
+    );
+
+    let patched = kanban_sqlite::upsert_label_semantics_with_options(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash),
+            applies_when: vec![
+                "changes CLI commands, flags, help output, or JSON behavior".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+        kanban_sqlite::LabelSemanticsMutationOptions {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            reason: Some("Positive atom source signal matches the actual added effect.".to_owned()),
+            source_signal_ids: vec![positive_signal_id],
+        },
+    )?;
+    assert!(
+        patched
+            .applies_when
+            .iter()
+            .any(|atom| { atom == "changes CLI commands, flags, help output, or JSON behavior" })
+    );
+    assert_eq!(
+        table_count(&conn, "label_ontology_actions")?,
+        action_count + 1
+    );
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count + 1
+    );
     Ok(())
 }
 

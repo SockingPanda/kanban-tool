@@ -3408,11 +3408,19 @@ fn label_ontology_revert_update_semantics_restores_before_hash_and_keeps_atom_hi
         .iter()
         .find(|action| {
             action.action_type == LabelOntologyActionType::UpdateSemantics
-                && action.result_atom_content_hash.as_deref()
-                    == Some(stable_atom.content_hash.as_str())
+                && action.canonical_after_hash.as_deref()
+                    == Some(changed_semantics.semantics_hash.as_str())
         })
-        .context("update_semantics action for stable applies_when atom")?
+        .context("root update_semantics action")?
         .clone();
+    assert_eq!(update_action.result_atom_id, None);
+    assert_eq!(update_action.result_atom_content_hash, None);
+    let update_effect_count: i64 = connect_file(&temp.path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_action_atom_effects WHERE action_id=?1",
+        [&update_action.id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(update_effect_count, 0);
 
     let revert_action = revert_label_ontology_mutation(
         &temp.path,
@@ -3441,22 +3449,11 @@ fn label_ontology_revert_update_semantics_restores_before_hash_and_keeps_atom_hi
         &get_label_semantics(&temp.path, "default", "cli")?,
         &seed_semantics,
     );
-
-    let atom_explain = explain_label_atom(&temp.path, "default", &stable_atom.content_hash)?;
-    let explain_action_types = atom_explain
-        .provenance_actions
-        .iter()
-        .map(|provenance| provenance.action.action_type)
-        .collect::<Vec<_>>();
     assert!(
-        explain_action_types.contains(&LabelOntologyActionType::UpdateSemantics),
-        "{explain_action_types:?}"
+        list_label_atoms(&temp.path, "default")?
+            .iter()
+            .any(|atom| atom.content_hash == stable_atom.content_hash)
     );
-    assert!(
-        explain_action_types.contains(&LabelOntologyActionType::RevertOntologyMutation),
-        "{explain_action_types:?}"
-    );
-    assert!(atom_explain.current_semantics.is_some());
 
     Ok(())
 }

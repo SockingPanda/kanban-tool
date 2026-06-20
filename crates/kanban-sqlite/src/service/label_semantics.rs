@@ -6,7 +6,8 @@ use super::{
     LabelOntologyActionType, LabelOntologyObservationRecord, LabelOntologySemanticsMutationInput,
     LabelOntologySignalRecord, LabelProposalCandidate, LabelSemanticsMutationOptions,
     LabelSemanticsRecord, TaskRecord, UpsertLabelSemantics, board_id, derived_status_by_name,
-    get_task_by_id, label_ontology_semantics_snapshot_in_tx,
+    get_task_by_id, label_ontology_mutation_atoms,
+    label_ontology_semantics_snapshot_for_definition, label_ontology_semantics_snapshot_in_tx,
     record_label_ontology_semantics_mutation_in_tx, storage, vector_storage, with_immediate_tx,
 };
 
@@ -100,6 +101,12 @@ fn upsert_label_semantics_resolved_in_tx(
     }
     let current = get_label_semantics_conn_optional(conn, &label.board_id, &label.id)?;
     let definition = label_definition_for_semantics_mutation(label, current.as_ref(), input)?;
+    let after =
+        label_ontology_semantics_snapshot_for_definition(&label.id, &label.name, &definition)?;
+    if current.is_some() && before.hash == after.hash {
+        return get_label_semantics_conn(conn, &label.board_id, &label.id);
+    }
+    let before_atoms = label_ontology_mutation_atoms(conn, &label.board_id, &label.id)?;
     upsert_label_semantics_in_tx(conn, &label.board_id, &definition, now)?;
     mark_label_atom_store_dirty(conn, &label.board_id, now)?;
     record_label_ontology_semantics_mutation_in_tx(
@@ -110,6 +117,7 @@ fn upsert_label_semantics_resolved_in_tx(
             label_name: &label.name,
             action_type: LabelOntologyActionType::UpdateSemantics,
             before,
+            before_atoms,
             options,
         },
         now,

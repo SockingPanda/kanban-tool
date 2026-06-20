@@ -292,6 +292,7 @@ Dispatcher 见 [`DISPATCHER_SPEC.md`](DISPATCHER_SPEC.md)。
 13. `tasks.status`、label binding truth、label semantics truth、ontology ledger 和派生检索层各自有明确写权限；derived stores 不拥有 canonical write path。
 14. 新的 constructive ontology mutation 不通过 generic lifecycle action endpoint；必须由专用 command/API/service 路径同时写 canonical state 与 provenance action；采用已存在 atom 只写 `adopt_existing_atom` provenance action，不伪装成新增 atom。
 15. label ontology graph projection 当前不存在；如未来新增，只能从 SQLite truth 派生并重建，不得成为 `labels`、`task_labels`、`label_semantics`、`label_atoms` 或 `label_ontology_*` 的写入口。
+16. label ontology longitudinal regression corpus 是测试/评估基础设施：它可比较固定 corpus 的 selected labels、score 和 evidence atoms，但 corpus run 本身不得修改 canonical label/ontology/ledger truth，也不得成为日常 task label 绑定的默认流程。
 
 ---
 

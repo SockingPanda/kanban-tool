@@ -11,6 +11,7 @@ mod suite {
     mod dispatch;
     mod graph_oxigraph;
     mod init;
+    mod label_longitudinal_regression;
     mod label_ontology;
     mod label_semantics;
     mod maintenance;

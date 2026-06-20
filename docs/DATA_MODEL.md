@@ -558,6 +558,13 @@ signal 行数；同一 task 可以贡献多条 signals，所以它不能单独�
 recall 或 label suggest 质量。需要质量指标时必须另有 denominator，例如 agreement cohort
 或固定评估集。
 
+长期 label ontology regression corpus 属于测试/评估基础设施，不是新的 SQLite truth。
+当前固定 corpus 测试使用临时 DB 和内存 label atom index 跟踪 important labels 的 known
+positive/negative-control tasks，并比较 `label suggest` 的 selected labels、score 与
+evidence atoms。Corpus run 本身应保持只读 canonical ontology；只有测试中显式模拟的
+临时 semantics/atom 变更才会用于证明 comparison 能发现回归。真实 DB 上的长期 corpus
+需要等稳定任务集积累后再扩展，不应替代 ledger signals、trusted validation 或人工 review。
+
 当前没有 label-ontology 专属 graph projection。`label_ontology_*` 表本身就是 SQLite
 provenance truth；`kanban graph` / Oxigraph 只投影 Knowledge Substrate 的
 `entity_relations`，不保存或拥有 label ontology action/signal truth。若未来出现明确的

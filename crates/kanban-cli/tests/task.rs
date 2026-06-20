@@ -413,6 +413,9 @@ fn label_semantics_and_atoms_commands_round_trip_json() -> anyhow::Result<()> {
     );
     assert_eq!(replaced["data"]["applies_when"], json!([]));
     assert_eq!(replaced["data"]["positive_examples"], json!([]));
+    let replacement_hash = replaced["data"]["semantics_hash"]
+        .as_str()
+        .context("replacement semantics hash")?;
 
     let atoms = kanban(&temp.path, &["--json", "label", "atoms", "list"])?.success_json()?;
     assert!(
@@ -470,7 +473,17 @@ dimensions = 3
 
     let deleted = kanban(
         &temp.path,
-        &["--json", "label", "semantics", "delete", "backend"],
+        &[
+            "--json",
+            "label",
+            "semantics",
+            "delete",
+            "backend",
+            "--expected-semantics-hash",
+            replacement_hash,
+            "--reason",
+            "Clear backend semantics in CLI round trip",
+        ],
     )?
     .success_json()?;
     assert_eq!(deleted["data"]["deleted"], true);
@@ -685,7 +698,7 @@ fn label_delete_force_removes_canonical_label_and_task_bindings() -> anyhow::Res
     )?
     .success_json()?;
     let task_id = task["data"]["id"].as_str().context("task id")?;
-    kanban(
+    let bootstrapped = kanban(
         &temp.path,
         &[
             "--json",
@@ -700,9 +713,29 @@ fn label_delete_force_removes_canonical_label_and_task_bindings() -> anyhow::Res
         ],
     )?
     .success_json()?;
+    let semantics_hash = bootstrapped["data"]["semantics"]["semantics_hash"]
+        .as_str()
+        .context("semantics hash")?;
 
     kanban(&temp.path, &["label", "delete", "database"])?
         .failure_containing("attached to 1 task(s)")?;
+    kanban(&temp.path, &["label", "delete", "database", "--force"])?
+        .failure_containing("has semantics or atoms")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "semantics",
+            "delete",
+            "database",
+            "--expected-semantics-hash",
+            semantics_hash,
+            "--reason",
+            "Clear semantics before deleting label identity",
+        ],
+    )?
+    .success()?;
 
     let deleted = kanban(
         &temp.path,
@@ -712,13 +745,8 @@ fn label_delete_force_removes_canonical_label_and_task_bindings() -> anyhow::Res
     assert_eq!(deleted["data"]["label"]["name"], "database");
     assert_eq!(deleted["data"]["forced"], true);
     assert_eq!(deleted["data"]["removed_task_bindings"], 1);
-    assert_eq!(deleted["data"]["removed_semantics"], true);
-    assert!(
-        deleted["data"]["removed_atoms"]
-            .as_i64()
-            .context("removed atoms")?
-            > 0
-    );
+    assert_eq!(deleted["data"]["removed_semantics"], false);
+    assert_eq!(deleted["data"]["removed_atoms"], 0);
 
     let labels = kanban(&temp.path, &["--json", "label", "list"])?.success_json()?;
     assert!(labels["data"].as_array().context("labels")?.is_empty());

@@ -889,32 +889,20 @@ fn canonical_label_delete_removes_unbound_label_without_force() -> anyhow::Resul
             color: None,
         },
     )?;
-    upsert_label_semantics(
-        &temp.path,
-        "default",
-        UpsertLabelSemantics {
-            label_ref: "retired".to_owned(),
-            description: Some("Retired label vocabulary".to_owned()),
-            positive_examples: vec!["cleanup old label".to_owned()],
-            ..UpsertLabelSemantics::default()
-        },
-    )?;
 
     let deleted = delete_label(&temp.path, "default", "tester", "retired", false)?;
 
     assert!(!deleted.forced);
     assert_eq!(deleted.label.name, "retired");
     assert_eq!(deleted.removed_task_bindings, 0);
-    assert!(deleted.removed_semantics);
-    assert!(deleted.removed_atoms > 0);
+    assert!(!deleted.removed_semantics);
+    assert_eq!(deleted.removed_atoms, 0);
     assert!(list_labels(&temp.path, "default")?.is_empty());
     let conn = connect_file(&temp.path)?;
     assert_eq!(table_count(&conn, "labels")?, 0);
     assert_eq!(table_count(&conn, "task_labels")?, 0);
     assert_eq!(table_count(&conn, "label_semantics")?, 0);
     assert_eq!(table_count(&conn, "label_atoms")?, 0);
-    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
-    assert_eq!(status.board_dirty, Some(true));
     Ok(())
 }
 
@@ -928,7 +916,7 @@ fn canonical_label_delete_force_cleans_truth_and_marks_index_dirty() -> anyhow::
         "tester",
         CreateTask::ready("delete label force target"),
     )?;
-    bootstrap_task_label(
+    let bootstrapped = bootstrap_task_label(
         &temp.path,
         "default",
         "tester",
@@ -942,16 +930,37 @@ fn canonical_label_delete_force_cleans_truth_and_marks_index_dirty() -> anyhow::
         },
     )?;
 
+    let force_error = result_err(delete_label(
+        &temp.path, "default", "tester", "database", true,
+    ))?;
+    assert!(
+        force_error.to_string().contains("has semantics or atoms"),
+        "{force_error}"
+    );
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "labels")?, 1);
+    assert_eq!(table_count(&conn, "task_labels")?, 1);
+    assert_eq!(table_count(&conn, "label_semantics")?, 1);
+    assert!(table_count(&conn, "label_atoms")? > 0);
+
+    let mut clear_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    clear_options.reason = Some("Clear semantics before deleting identity.".to_owned());
+    clear_label_semantics_with_options(
+        &temp.path,
+        "default",
+        "database",
+        bootstrapped.semantics.semantics_hash,
+        clear_options,
+    )?;
     let deleted = delete_label(&temp.path, "default", "tester", "database", true)?;
 
     assert!(deleted.forced);
     assert_eq!(deleted.label.name, "database");
     assert_eq!(deleted.removed_task_bindings, 1);
-    assert!(deleted.removed_semantics);
-    assert!(deleted.removed_atoms > 0);
+    assert!(!deleted.removed_semantics);
+    assert_eq!(deleted.removed_atoms, 0);
     assert!(list_labels(&temp.path, "default")?.is_empty());
     assert!(get_task(&temp.path, "default", &task.id)?.labels.is_empty());
-    let conn = connect_file(&temp.path)?;
     assert_eq!(table_count(&conn, "labels")?, 0);
     assert_eq!(table_count(&conn, "task_labels")?, 0);
     assert_eq!(table_count(&conn, "label_semantics")?, 0);
@@ -3024,7 +3033,15 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
     assert_eq!(fresh_task.labels.len(), 1);
     assert_eq!(fresh_task.labels[0].id, label.id);
 
-    delete_label_semantics(&temp.path, "default", "backend")?;
+    let mut clear_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    clear_options.reason = Some("Clear semantics for CRUD cleanup.".to_owned());
+    clear_label_semantics_with_options(
+        &temp.path,
+        "default",
+        "backend",
+        semantics.semantics_hash.clone(),
+        clear_options,
+    )?;
     assert!(
         result_err(get_label_semantics(&temp.path, "default", "backend"))?
             .to_string()
@@ -3649,12 +3666,15 @@ fn direct_label_bootstrap_records_bootstrap_provenance_for_atoms() -> anyhow::Re
     let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
     assert_eq!(
         change["atom_effect_counts"],
-        json!({"added": 1, "removed": 0})
+        json!({"added": 2, "removed": 0})
     );
-    assert_eq!(ontology_action_atom_effect_count(&conn, &action.id)?, 1);
+    assert_eq!(ontology_action_atom_effect_count(&conn, &action.id)?, 2);
     assert_eq!(
         ontology_action_atom_effect_texts(&conn, &action.id, "added")?,
-        vec![atom.text.clone()]
+        vec![
+            "label: ontology\ndescription: Ontology provenance work".to_owned(),
+            atom.text.clone(),
+        ]
     );
     Ok(())
 }
@@ -4073,7 +4093,15 @@ fn label_semantics_resolves_l_prefixed_label_name_before_id_fallback() -> anyhow
     assert_eq!(semantics.label_name, "l_foo");
     let reread = get_label_semantics(&temp.path, "default", "l_foo")?;
     assert_eq!(reread.label_id, label.id);
-    delete_label_semantics(&temp.path, "default", "l_foo")?;
+    let mut clear_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    clear_options.reason = Some("Clear semantics for id fallback check.".to_owned());
+    clear_label_semantics_with_options(
+        &temp.path,
+        "default",
+        "l_foo",
+        semantics.semantics_hash,
+        clear_options,
+    )?;
     assert!(list_label_atoms(&temp.path, "default")?.is_empty());
     Ok(())
 }

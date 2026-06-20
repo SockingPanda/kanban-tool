@@ -118,6 +118,7 @@ fn upsert_label_semantics_resolved_in_tx(
             action_type: LabelOntologyActionType::UpdateSemantics,
             before,
             before_atoms,
+            include_description_effects: false,
             options,
         },
         now,
@@ -277,50 +278,86 @@ pub fn list_label_semantics(
         .collect()
 }
 
-pub fn delete_label_semantics(path: impl AsRef<Path>, board: &str, label_ref: &str) -> Result<()> {
+pub fn clear_label_semantics_with_options(
+    path: impl AsRef<Path>,
+    board: &str,
+    label_ref: &str,
+    expected_semantics_hash: String,
+    options: LabelSemanticsMutationOptions,
+) -> Result<()> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let label = resolve_label(&conn, &board_id, label_ref)?;
-        conn.execute(
-            "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
-            params![board_id, label.id],
-        )
-        .map_err(storage)?;
-        conn.execute(
-            "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
-            params![board_id, label.id],
-        )
-        .map_err(storage)?;
-        mark_label_atom_store_dirty(&conn, &board_id, now)?;
-        Ok(())
+        clear_label_semantics_resolved_in_tx(&conn, &label, expected_semantics_hash, options, now)
     })
 }
 
-pub fn delete_label_semantics_by_id(
+pub fn clear_label_semantics_by_id_with_options(
     path: impl AsRef<Path>,
     board: &str,
     label_id: &str,
+    expected_semantics_hash: String,
+    options: LabelSemanticsMutationOptions,
 ) -> Result<()> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let label = resolve_label_by_id_exact(&conn, &board_id, label_id)?;
-        conn.execute(
-            "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
-            params![board_id, label.id],
-        )
-        .map_err(storage)?;
-        conn.execute(
-            "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
-            params![board_id, label.id],
-        )
-        .map_err(storage)?;
-        mark_label_atom_store_dirty(&conn, &board_id, now)?;
-        Ok(())
+        clear_label_semantics_resolved_in_tx(&conn, &label, expected_semantics_hash, options, now)
     })
+}
+
+fn clear_label_semantics_resolved_in_tx(
+    conn: &Connection,
+    label: &ResolvedLabel,
+    expected_semantics_hash: String,
+    mut options: LabelSemanticsMutationOptions,
+    now: i64,
+) -> Result<()> {
+    let expected = normalize_optional_text(Some(expected_semantics_hash))
+        .ok_or_else(|| KanbanError::InvalidInput("expected_semantics_hash is required".into()))?;
+    let reason = normalize_optional_text(options.reason.clone())
+        .ok_or_else(|| KanbanError::InvalidInput("reason is required".into()))?;
+    options.reason = Some(reason);
+    get_label_semantics_conn(conn, &label.board_id, &label.id)?;
+    let before =
+        label_ontology_semantics_snapshot_in_tx(conn, &label.board_id, &label.id, &label.name)?;
+    if expected != before.hash {
+        return Err(KanbanError::Conflict(format!(
+            "label semantics hash mismatch for {}: expected {expected}, current {}",
+            label.name, before.hash
+        )));
+    }
+    let before_atoms = label_ontology_mutation_atoms(conn, &label.board_id, &label.id)?;
+    conn.execute(
+        "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
+        params![label.board_id, label.id],
+    )
+    .map_err(storage)?;
+    conn.execute(
+        "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
+        params![label.board_id, label.id],
+    )
+    .map_err(storage)?;
+    mark_label_atom_store_dirty(conn, &label.board_id, now)?;
+    record_label_ontology_semantics_mutation_in_tx(
+        conn,
+        LabelOntologySemanticsMutationInput {
+            board_id: &label.board_id,
+            label_id: &label.id,
+            label_name: &label.name,
+            action_type: LabelOntologyActionType::UpdateSemantics,
+            before,
+            before_atoms,
+            include_description_effects: true,
+            options,
+        },
+        now,
+    )?;
+    Ok(())
 }
 
 pub fn list_label_atoms(path: impl AsRef<Path>, board: &str) -> Result<Vec<LabelAtomRecord>> {

@@ -2597,6 +2597,10 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
     assert_eq!(json["data"]["description"], "Backend replacement semantics");
     assert_eq!(json["data"]["applies_when"], json!([]));
     assert_eq!(json["data"]["positive_examples"], json!([]));
+    let replacement_hash = json["data"]["semantics_hash"]
+        .as_str()
+        .context("replacement semantics hash")?
+        .to_owned();
 
     let (status, json) = get_json(
         app.clone(),
@@ -2662,7 +2666,9 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
 
     let (status, json) = delete_json(
         app.clone(),
-        &format!("/api/v1/boards/default/labels/{label_id}/semantics"),
+        &format!(
+            "/api/v1/boards/default/labels/{label_id}/semantics?expected_semantics_hash={replacement_hash}&reason=http-clear"
+        ),
     )
     .await?;
     assert_eq!(status, StatusCode::OK);

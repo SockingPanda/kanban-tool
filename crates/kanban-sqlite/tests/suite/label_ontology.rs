@@ -3155,6 +3155,14 @@ fn label_ontology_revert_positive_atom_restores_before_hash_and_records_action()
         .map(|provenance| provenance.action.action_type)
         .collect::<Vec<_>>();
     assert!(
+        atom_explain
+            .provenance_actions
+            .iter()
+            .all(|provenance| provenance.matched_by == "atom_effect"),
+        "{:?}",
+        atom_explain.provenance_actions
+    );
+    assert!(
         explain_action_types.contains(&LabelOntologyActionType::AddPositiveAtom),
         "{explain_action_types:?}"
     );
@@ -3168,6 +3176,23 @@ fn label_ontology_revert_positive_atom_restores_before_hash_and_records_action()
                 && support.signal.status == LabelOntologySignalStatus::Confirmed
         }),
         "atom explain should keep the source signal history"
+    );
+    let atom_hash = apply_action
+        .result_atom_content_hash
+        .as_deref()
+        .context("applied action atom hash")?;
+    let atom_explain_by_hash = explain_label_atom(&temp.path, "default", atom_hash)?;
+    assert!(
+        atom_explain_by_hash.atom.is_none(),
+        "reverted atom content hash should no longer resolve to a canonical atom"
+    );
+    assert!(
+        atom_explain_by_hash
+            .provenance_actions
+            .iter()
+            .all(|provenance| provenance.matched_by == "atom_effect"),
+        "{:?}",
+        atom_explain_by_hash.provenance_actions
     );
 
     let validation_action = validate_label_ontology_action(
@@ -3206,6 +3231,97 @@ fn label_ontology_revert_positive_atom_restores_before_hash_and_records_action()
         LabelOntologySignalStatus::Confirmed
     );
 
+    Ok(())
+}
+
+#[test]
+fn label_ontology_revert_legacy_child_action_records_warning() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_revert_legacy_child_action_records_warning")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Seed legacy per-atom revert target"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![sample_signal_input("cli-legacy-child-revert")]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed legacy child action fixture.",
+        ),
+    )?;
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![signal_id],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Create a canonical mutation that will be shaped like a legacy child row."
+                .to_owned(),
+        },
+    )?;
+    let conn = connect_file(&temp.path)?;
+    let board_id: String =
+        conn.query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })?;
+    conn.execute(
+        "INSERT INTO label_ontology_actions(
+         id, board_id, action_type, reason, change_json, validation_status, validation_json,
+         created_by, created_by_type, created_at)
+         VALUES ('loa_legacy_parent_root', ?1, 'update_semantics', 'legacy parent fixture',
+         '{}', 'not_required', '{}', 'fixture', 'agent', 1)",
+        [&board_id],
+    )?;
+    conn.execute(
+        "UPDATE label_ontology_actions SET parent_action_id='loa_legacy_parent_root' WHERE id=?1",
+        [&apply_action.id],
+    )?;
+    conn.execute(
+        "DELETE FROM label_ontology_action_atom_effects WHERE action_id=?1",
+        [&apply_action.id],
+    )?;
+
+    let revert_action = revert_label_ontology_mutation(
+        &temp.path,
+        "default",
+        LabelOntologyRevertInput {
+            actor: reviewer_actor(),
+            target_action_id: apply_action.id,
+            expected_current_hash: apply_action.canonical_after_hash,
+            reason: "Revert legacy per-atom child action fixture.".to_owned(),
+        },
+    )?;
+
+    let change: serde_json::Value = serde_json::from_str(&revert_action.change_json)?;
+    assert!(
+        change["legacy_warning"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("legacy per-atom ontology action"),
+        "{change}"
+    );
     Ok(())
 }
 
@@ -3696,7 +3812,7 @@ fn label_ontology_apply_existing_positive_atom_records_provenance_only_action() 
     assert!(explain.provenance_actions.iter().any(|provenance| {
         provenance.action.id == action.id
             && provenance.action.action_type == LabelOntologyActionType::AdoptExistingAtom
-            && provenance.matched_by == "atom_id"
+            && provenance.matched_by == "legacy_result_atom_id"
     }));
     assert!(
         explain

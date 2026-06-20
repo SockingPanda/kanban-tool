@@ -408,7 +408,8 @@ pub fn explain_label_atom(
     let validation_history = label_atom_validation_history(&conn, &provenance_actions)?;
     let legacy_untracked = atom.is_some() && provenance_actions.is_empty();
     let legacy_reason = legacy_untracked.then(|| {
-        "no ontology provenance action references this atom id or content hash".to_owned()
+        "no ontology provenance atom effect or legacy result atom reference matches this atom id or content hash"
+            .to_owned()
     });
     Ok(LabelAtomExplainRecord {
         query: atom_ref.to_owned(),
@@ -851,7 +852,38 @@ fn label_atom_provenance_actions(
     current_atom_id: Option<&str>,
     content_hash: &str,
 ) -> Result<Vec<LabelAtomExplainAction>> {
-    let mut stmt = conn
+    let mut seen = BTreeSet::new();
+    let mut provenance_actions = Vec::new();
+    let atom_id_ref = current_atom_id.unwrap_or(atom_ref);
+    let mut effect_stmt = conn
+        .prepare(&format!(
+            "SELECT {ONTOLOGY_ACTION_COLUMNS} FROM label_ontology_action_atom_effects e \
+             JOIN label_ontology_actions a ON a.board_id=e.board_id AND a.id=e.action_id \
+             WHERE e.board_id=?1 \
+               AND a.action_type IN ('add_positive_atom','add_negative_atom','update_semantics','bootstrap_label','revert_ontology_mutation') \
+               AND (e.atom_id_snapshot=?2 OR e.atom_id_snapshot=?3 OR e.atom_content_hash=?2 OR e.atom_content_hash=?4) \
+             ORDER BY a.created_at ASC, a.id ASC"
+        ))
+        .map_err(storage)?;
+    let effect_rows = effect_stmt
+        .query_map(
+            params![board_id, atom_ref, atom_id_ref, content_hash],
+            ontology_action_from_row,
+        )
+        .map_err(storage)?;
+    for row in effect_rows {
+        let mut action = row.map_err(storage)?;
+        if !seen.insert(action.id.clone()) {
+            continue;
+        }
+        hydrate_action_signal_ids(conn, &mut action)?;
+        provenance_actions.push(LabelAtomExplainAction {
+            action,
+            matched_by: "atom_effect".to_owned(),
+        });
+    }
+
+    let mut legacy_stmt = conn
         .prepare(&format!(
             "SELECT {ONTOLOGY_ACTION_COLUMNS} FROM label_ontology_actions a \
              WHERE a.board_id=?1 \
@@ -860,39 +892,38 @@ fn label_atom_provenance_actions(
              ORDER BY a.created_at ASC, a.id ASC"
         ))
         .map_err(storage)?;
-    let rows = stmt
+    let legacy_rows = legacy_stmt
         .query_map(
-            params![
-                board_id,
-                atom_ref,
-                current_atom_id.unwrap_or(atom_ref),
-                content_hash
-            ],
+            params![board_id, atom_ref, atom_id_ref, content_hash],
             ontology_action_from_row,
         )
         .map_err(storage)?;
-    let mut seen = BTreeSet::new();
-    rows.map(|row| row.map_err(storage))
-        .filter_map(|result| match result {
-            Ok(mut action) if seen.insert(action.id.clone()) => {
-                Some(hydrate_action_signal_ids(conn, &mut action).map(|()| {
-                    LabelAtomExplainAction {
-                        matched_by: if action.result_atom_id.as_deref() == Some(atom_ref)
-                            || current_atom_id.is_some_and(|atom_id| {
-                                action.result_atom_id.as_deref() == Some(atom_id)
-                            }) {
-                            "atom_id".to_owned()
-                        } else {
-                            "content_hash".to_owned()
-                        },
-                        action,
-                    }
-                }))
-            }
-            Ok(_) => None,
-            Err(err) => Some(Err(err)),
-        })
-        .collect()
+    for row in legacy_rows {
+        let mut action = row.map_err(storage)?;
+        if !seen.insert(action.id.clone()) {
+            continue;
+        }
+        let matched_by = if action.result_atom_id.as_deref() == Some(atom_ref)
+            || current_atom_id
+                .is_some_and(|atom_id| action.result_atom_id.as_deref() == Some(atom_id))
+        {
+            "legacy_result_atom_id"
+        } else {
+            "legacy_result_atom_hash"
+        };
+        hydrate_action_signal_ids(conn, &mut action)?;
+        provenance_actions.push(LabelAtomExplainAction {
+            action,
+            matched_by: matched_by.to_owned(),
+        });
+    }
+    provenance_actions.sort_by(|left, right| {
+        match left.action.created_at.cmp(&right.action.created_at) {
+            std::cmp::Ordering::Equal => left.action.id.cmp(&right.action.id),
+            ordering => ordering,
+        }
+    });
+    Ok(provenance_actions)
 }
 
 fn label_atom_supporting_signals(

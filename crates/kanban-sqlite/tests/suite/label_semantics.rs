@@ -3917,7 +3917,7 @@ fn label_atom_explain_hydrates_provenance_signals_and_validation() -> anyhow::Re
     assert!(!explain.legacy_untracked);
     assert_eq!(explain.legacy_reason, None);
     assert_eq!(explain.provenance_actions.len(), 1);
-    assert_eq!(explain.provenance_actions[0].matched_by, "atom_id");
+    assert_eq!(explain.provenance_actions[0].matched_by, "atom_effect");
     assert_eq!(
         explain.provenance_actions[0].action.id,
         fixture.apply_action_id
@@ -3959,9 +3959,50 @@ fn label_atom_explain_resolves_rebuilt_atom_by_content_hash() -> anyhow::Result<
     assert_eq!(atom.id, rebuilt_atom_id);
     assert_eq!(atom.content_hash, fixture.result_atom_content_hash);
     assert_eq!(explain.provenance_actions.len(), 1);
-    assert_eq!(explain.provenance_actions[0].matched_by, "content_hash");
+    assert_eq!(explain.provenance_actions[0].matched_by, "atom_effect");
     assert_eq!(
         explain.provenance_actions[0].action.id,
+        fixture.apply_action_id
+    );
+    Ok(())
+}
+
+#[test]
+fn label_atom_explain_keeps_legacy_result_atom_matches_without_effects() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_atom_explain_keeps_legacy_result_atom_matches_without_effects")?;
+    let fixture = seed_label_atom_explain_fixture(&temp, "Explain legacy atom provenance")?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "DELETE FROM label_ontology_action_atom_effects WHERE action_id=?1",
+        [&fixture.apply_action_id],
+    )?;
+
+    let by_atom_id = explain_label_atom(&temp.path, "default", &fixture.result_atom_id)?;
+
+    assert_eq!(by_atom_id.provenance_actions.len(), 1);
+    assert_eq!(
+        by_atom_id.provenance_actions[0].matched_by,
+        "legacy_result_atom_id"
+    );
+    assert_eq!(
+        by_atom_id.provenance_actions[0].action.id,
+        fixture.apply_action_id
+    );
+
+    let rebuilt_atom_id = "la_legacy_rebuilt_explain_atom";
+    conn.execute(
+        "UPDATE label_atoms SET id=?1 WHERE id=?2",
+        params![rebuilt_atom_id, fixture.result_atom_id],
+    )?;
+    let by_hash = explain_label_atom(&temp.path, "default", &fixture.result_atom_content_hash)?;
+
+    assert_eq!(by_hash.provenance_actions.len(), 1);
+    assert_eq!(
+        by_hash.provenance_actions[0].matched_by,
+        "legacy_result_atom_hash"
+    );
+    assert_eq!(
+        by_hash.provenance_actions[0].action.id,
         fixture.apply_action_id
     );
     Ok(())

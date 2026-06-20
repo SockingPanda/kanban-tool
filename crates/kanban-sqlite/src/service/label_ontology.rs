@@ -906,6 +906,22 @@ pub fn revert_label_ontology_mutation(
         ensure_action_on_board(&conn, &board_id, &target_action_id)?;
         let target_action = action_by_id_with_links(&conn, &target_action_id)?;
         ensure_revertable_action_type(target_action.action_type)?;
+        let target_action_effect_count =
+            ontology_action_atom_effect_row_count(&conn, &board_id, &target_action.id)?;
+        let legacy_warning = if target_action.parent_action_id.is_some()
+            && target_action_effect_count == 0
+        {
+            Some(
+                "legacy per-atom ontology action selected; new ontology reverts should target root mutation actions"
+                    .to_owned(),
+            )
+        } else if target_action.parent_action_id.is_some() {
+            return Err(KanbanError::InvalidInput(
+                "new ontology revert only accepts root mutation actions".into(),
+            ));
+        } else {
+            None
+        };
         let target_label_id = target_action.target_label_id.as_deref().ok_or_else(|| {
             KanbanError::InvalidInput(format!(
                 "ontology action {} has no target label to revert",
@@ -1008,6 +1024,7 @@ pub fn revert_label_ontology_mutation(
                 "added": added_atoms.len(),
                 "removed": removed_atoms.len(),
             },
+            "legacy_warning": legacy_warning,
             "index_dirty": true,
         }))
         .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
@@ -1543,6 +1560,20 @@ fn ontology_action_has_description_atom_effect(
         )
         .map_err(storage)?;
     Ok(count > 0)
+}
+
+fn ontology_action_atom_effect_row_count(
+    conn: &Connection,
+    board_id: &str,
+    action_id: &str,
+) -> Result<i64> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM label_ontology_action_atom_effects \
+         WHERE board_id=?1 AND action_id=?2",
+        params![board_id, action_id],
+        |row| row.get(0),
+    )
+    .map_err(storage)
 }
 
 fn label_ontology_atom_effect_delta<'a>(

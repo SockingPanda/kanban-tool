@@ -37,7 +37,6 @@ pub use kanban_sqlite::{
     review_label_ontology, search_tasks, set_task_retry_policy_by_id,
     snapshot_bootstrap_task_label_state, specify_task, submit_review_task, task_ontology_summary,
     unblock_task, update_task, upsert_label_semantics, validate_label_ontology_action,
-    validate_label_ontology_action_with_trusted_evidence,
 };
 #[cfg(feature = "vector-lancedb")]
 pub use kanban_sqlite::{

@@ -1703,7 +1703,7 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
             "reason": "atom improves suggestion behavior",
             "validation_status": "passed",
             "validation": json!({
-                "evidence_type": "automated",
+                "evidence_type": "trusted_automated",
                 "embedding_model": "test-embedding-v1",
                 "solver_options": {"candidate_limit": 24, "atom_limit": 64},
                 "index": {"status": "ready", "dirty": false, "generation": 7},
@@ -1741,6 +1741,13 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
     .await?;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
     assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .context("error message")?
+            .contains("trusted evidence collected by the kanban tool"),
+        "{json}"
+    );
 
     let (status, json) = get_json(
         app.clone(),

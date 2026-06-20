@@ -1040,7 +1040,7 @@ pub fn validate_label_ontology_action(
     )
 }
 
-pub fn validate_label_ontology_action_with_trusted_evidence(
+fn validate_label_ontology_action_with_trusted_evidence(
     path: impl AsRef<Path>,
     board: &str,
     input: LabelOntologyValidationInput,
@@ -5109,4 +5109,308 @@ fn stable_hash(text: &str) -> String {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     format!("{hash:016x}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_parent(action_type: LabelOntologyActionType) -> LabelOntologyActionRecord {
+        LabelOntologyActionRecord {
+            id: "loa_test_parent".to_owned(),
+            board_id: "b_test".to_owned(),
+            parent_action_id: None,
+            action_type,
+            reason: "test parent".to_owned(),
+            target_label_id: Some("l_cli".to_owned()),
+            result_label_id: Some("l_cli".to_owned()),
+            result_atom_id: Some("la_result".to_owned()),
+            result_atom_content_hash: Some("hash_result".to_owned()),
+            result_proposal_id: None,
+            canonical_before_hash: Some("before".to_owned()),
+            canonical_after_hash: Some("after".to_owned()),
+            change_json: "{}".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Pending,
+            validation_json: "{}".to_owned(),
+            created_by: "tester".to_owned(),
+            created_by_type: "agent".to_owned(),
+            agent_type: Some("unit".to_owned()),
+            created_at: 1,
+            signal_ids: vec!["los_test".to_owned()],
+        }
+    }
+
+    fn test_signal() -> LabelOntologySignalRecord {
+        LabelOntologySignalRecord {
+            id: "los_test".to_owned(),
+            observation_id: "loo_test".to_owned(),
+            board_id: "b_test".to_owned(),
+            kind: LabelOntologySignalKind::FalseNegative,
+            status: LabelOntologySignalStatus::Confirmed,
+            target_label_id: Some("l_cli".to_owned()),
+            target_label_name_snapshot: Some("cli".to_owned()),
+            related_labels_json: "[]".to_owned(),
+            proposed_action: LabelOntologyProposedAction::AddPositiveAtom,
+            candidate_atom_polarity: Some("positive".to_owned()),
+            candidate_atom_kind: Some("applies_when".to_owned()),
+            candidate_text: Some("CLI work".to_owned()),
+            candidate_content_hash: Some("hash_result".to_owned()),
+            proposed_label_name: None,
+            proposed_label_name_normalized: None,
+            proposal_json: "{}".to_owned(),
+            agent_selected: true,
+            suggest_state: Some(LabelOntologySuggestState::Absent),
+            suggest_score: None,
+            suggest_rank: None,
+            final_selected: true,
+            rationale: "unit test".to_owned(),
+            confidence: Some(0.9),
+            signal_key: "unit-signal".to_owned(),
+            superseded_by_signal_id: None,
+            status_reason: None,
+            created_at: 1,
+            updated_at: 1,
+            reviewed_at: None,
+            closed_at: None,
+        }
+    }
+
+    fn trusted_manual(case: JsonValue) -> JsonValue {
+        json!({
+            "evidence_type": "trusted_automated",
+            "embedding_model": "test-embedding-v1",
+            "solver_options": {"candidate_limit": 24, "atom_limit": 64},
+            "index": {"status": "ready", "dirty": false, "generation": 7},
+            "cases": [case]
+        })
+    }
+
+    fn positive_case(after_atoms: JsonValue) -> JsonValue {
+        json!({
+            "signal_id": "los_test",
+            "case_type": "positive_atom",
+            "passed": true,
+            "before": {
+                "target": {"label_id": "l_cli", "selected": false, "score": 0.08},
+                "coverage": 0.1
+            },
+            "after": {
+                "degraded": false,
+                "target": {"label_id": "l_cli", "selected": true, "score": 0.82},
+                "coverage": 0.9,
+                "evidence_atoms": after_atoms
+            }
+        })
+    }
+
+    fn negative_case(after_target: JsonValue, controls: JsonValue) -> JsonValue {
+        json!({
+            "signal_id": "los_test",
+            "case_type": "negative_atom",
+            "passed": true,
+            "before": {
+                "target": {"label_id": "l_cli", "selected": true, "score": 0.91}
+            },
+            "after": {
+                "degraded": false,
+                "target": after_target,
+                "negative_evidence_atoms": [{"id": "la_result", "content_hash": "hash_result"}],
+                "positive_controls": controls
+            }
+        })
+    }
+
+    fn bootstrap_case(after_target: JsonValue) -> JsonValue {
+        json!({
+            "signal_id": "los_test",
+            "case_type": "bootstrap_label",
+            "passed": true,
+            "before": {"target": {"selected": false, "score": 0.0}},
+            "after": {
+                "degraded": false,
+                "target": after_target,
+                "evidence_atoms": [{"label_id": "l_cli"}]
+            }
+        })
+    }
+
+    fn trusted_pass_result(parent: &LabelOntologyActionRecord, manual: JsonValue) -> Result<()> {
+        ensure_passed_validation_evidence(
+            &manual,
+            parent,
+            &[test_signal()],
+            LabelOntologyValidationStatus::Passed,
+            LabelOntologyValidationEvidenceSource::TrustedCollector,
+        )
+    }
+
+    #[test]
+    fn trusted_policy_requires_result_atom_evidence_for_positive_atom() {
+        let parent = test_parent(LabelOntologyActionType::AddPositiveAtom);
+        let error = trusted_pass_result(&parent, trusted_manual(positive_case(json!([]))))
+            .expect_err("missing atom evidence should fail");
+
+        assert!(error.to_string().contains("result atom"));
+    }
+
+    #[test]
+    fn trusted_policy_accepts_negative_atom_with_controls_or_waiver() {
+        let parent = test_parent(LabelOntologyActionType::AddNegativeAtom);
+        trusted_pass_result(
+            &parent,
+            trusted_manual(negative_case(
+                json!({"label_id": "l_cli", "selected": false, "score": 0.12}),
+                json!([{"passed": true, "regressed": false}]),
+            )),
+        )
+        .expect("positive controls should satisfy negative atom policy");
+
+        let mut with_waiver = negative_case(
+            json!({"label_id": "l_cli", "selected": false, "score": 0.12}),
+            json!([]),
+        );
+        with_waiver["after"]
+            .as_object_mut()
+            .expect("after object")
+            .remove("positive_controls");
+        with_waiver["after"]["positive_control_waiver"] =
+            json!({"reason": "No stable positive control exists."});
+        trusted_pass_result(&parent, trusted_manual(with_waiver))
+            .expect("waiver should satisfy negative atom policy");
+    }
+
+    #[test]
+    fn trusted_policy_rejects_negative_atom_without_control_or_suppression() {
+        let parent = test_parent(LabelOntologyActionType::AddNegativeAtom);
+        let missing_control = trusted_pass_result(
+            &parent,
+            trusted_manual(negative_case(
+                json!({"label_id": "l_cli", "selected": false, "score": 0.12}),
+                json!([]),
+            )),
+        )
+        .expect_err("missing controls should fail");
+        assert!(missing_control.to_string().contains("positive control"));
+
+        let no_suppression = trusted_pass_result(
+            &parent,
+            trusted_manual(negative_case(
+                json!({"label_id": "l_cli", "selected": true, "score": 0.91}),
+                json!([{"passed": true, "regressed": false}]),
+            )),
+        )
+        .expect_err("missing suppression should fail");
+        assert!(no_suppression.to_string().contains("selected=false"));
+    }
+
+    #[test]
+    fn trusted_policy_rejects_negative_atom_without_negative_evidence_slot() {
+        let parent = test_parent(LabelOntologyActionType::AddNegativeAtom);
+        let mut case = negative_case(
+            json!({"label_id": "l_cli", "selected": false, "score": 0.12}),
+            json!([{"passed": true, "regressed": false}]),
+        );
+        let after = case["after"].as_object_mut().expect("after object");
+        after.remove("negative_evidence_atoms");
+        after.insert(
+            "evidence_atoms".to_owned(),
+            json!([{"id": "la_result", "content_hash": "hash_result"}]),
+        );
+
+        let error = trusted_pass_result(&parent, trusted_manual(case))
+            .expect_err("negative atom evidence must use the negative slot");
+
+        assert!(error.to_string().contains("negative_evidence_atoms"));
+    }
+
+    #[test]
+    fn trusted_policy_rejects_empty_negative_control_waiver() {
+        let parent = test_parent(LabelOntologyActionType::AddNegativeAtom);
+        let mut case = negative_case(
+            json!({"label_id": "l_cli", "selected": false, "score": 0.12}),
+            json!([]),
+        );
+        let after = case["after"].as_object_mut().expect("after object");
+        after.remove("positive_controls");
+        after.insert(
+            "positive_control_waiver".to_owned(),
+            json!({"reason": "  "}),
+        );
+
+        let error = trusted_pass_result(&parent, trusted_manual(case))
+            .expect_err("negative atom waiver must be non-empty");
+
+        assert!(error.to_string().contains("non-empty reason"));
+    }
+
+    #[test]
+    fn trusted_policy_rejects_positive_control_regression() {
+        let parent = test_parent(LabelOntologyActionType::AddNegativeAtom);
+        let error = trusted_pass_result(
+            &parent,
+            trusted_manual(negative_case(
+                json!({"label_id": "l_cli", "selected": false, "score": 0.12}),
+                json!([{"passed": false, "regressed": true}]),
+            )),
+        )
+        .expect_err("regressed positive controls should fail");
+
+        assert!(error.to_string().contains("positive control"));
+    }
+
+    #[test]
+    fn trusted_policy_rejects_dirty_atom_index() {
+        let parent = test_parent(LabelOntologyActionType::AddPositiveAtom);
+        let mut manual = trusted_manual(positive_case(json!([{
+            "id": "la_result",
+            "content_hash": "hash_result"
+        }])));
+        manual["index"] = json!({
+            "status": "dirty",
+            "dirty": true,
+            "generation": 7
+        });
+
+        let error = trusted_pass_result(&parent, manual).expect_err("dirty atom index should fail");
+
+        assert!(error.to_string().contains("clean, non-dirty atom index"));
+    }
+
+    #[test]
+    fn trusted_policy_rejects_bootstrap_below_threshold() {
+        let parent = test_parent(LabelOntologyActionType::BootstrapLabel);
+        let error = trusted_pass_result(
+            &parent,
+            trusted_manual(bootstrap_case(json!({
+                "label_id": "l_cli",
+                "selected": false,
+                "score": 0.49
+            }))),
+        )
+        .expect_err("bootstrap below threshold should fail");
+
+        assert!(error.to_string().contains("bootstrap label"));
+    }
+
+    #[test]
+    fn trusted_policy_rejects_unsupported_update_semantics_passed() {
+        let parent = test_parent(LabelOntologyActionType::UpdateSemantics);
+        let error = trusted_pass_result(
+            &parent,
+            trusted_manual(json!({
+                "signal_id": "los_test",
+                "case_type": "update_semantics",
+                "passed": true,
+                "before": {},
+                "after": {"degraded": false}
+            })),
+        )
+        .expect_err("unsupported passed policy should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("passed validation for update_semantics is not supported")
+        );
+    }
 }

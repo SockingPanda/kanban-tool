@@ -144,17 +144,25 @@ fn label_proposal_manual_candidate_accepts_without_task_binding() -> anyhow::Res
         .iter()
         .find(|atom| atom.kind == "applies_when")
         .context("applies_when atom")?;
-    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
-    assert!(!explain.legacy_untracked);
-    assert!(explain.provenance_actions.iter().any(|provenance| {
-        provenance.action.action_type == LabelOntologyActionType::BootstrapLabel
-            && provenance.action.result_proposal_id.as_deref() == Some(proposal.id.as_str())
-    }));
+    let conn = connect_file(&temp.path)?;
+    let bootstrap_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions \
+         WHERE action_type='bootstrap_label' AND result_proposal_id=?1",
+        [&proposal.id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        ontology_action_atom_effect_count(&conn, &bootstrap_action_id)?,
+        semantics.atoms.len() as i64
+    );
+    assert!(
+        ontology_action_atom_effect_texts(&conn, &bootstrap_action_id, "added")?
+            .contains(&atom.text)
+    );
     assert!(
         get_task(&temp.path, "default", &task.id)?.labels.is_empty(),
         "accept must not attach task_labels"
     );
-    let conn = connect_file(&temp.path)?;
     assert_eq!(table_count(&conn, "task_labels")?, 0);
     Ok(())
 }

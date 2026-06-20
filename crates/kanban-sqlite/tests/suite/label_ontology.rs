@@ -4350,6 +4350,8 @@ fn label_ontology_trusted_collector_runs_suggest_and_resolves_signal() -> anyhow
             reason: "Trusted collector should close the signal from real suggest evidence."
                 .to_owned(),
             validation_status: LabelOntologyValidationStatus::Passed,
+            positive_control_task_refs: Vec::new(),
+            positive_control_waiver_reason: None,
         },
         &store,
         LabelSuggestionOptions {
@@ -4402,6 +4404,224 @@ fn label_ontology_trusted_collector_runs_suggest_and_resolves_signal() -> anyhow
     );
     let resolved = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
     assert_eq!(resolved.signal.status, LabelOntologySignalStatus::Resolved);
+
+    Ok(())
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn label_ontology_trusted_negative_collector_requires_control_or_user_waiver() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_trusted_negative_collector_requires_control_or_user_waiver")?;
+    init_database(&temp.path, "tester")?;
+    let (fixture, _control_task) = seed_negative_validation_fixture_with_positive_control(
+        &temp,
+        "Add ontology validation negative typed control requirement",
+        "cli-negative-typed-control-required",
+    )?;
+    let store = RecordingVectorStore::with_embedding_model("trusted-test-model");
+    rebuild_label_atom_index_with(&temp.path, "default", &store)?;
+
+    let error = result_err(validate_label_ontology_action_with_trusted_suggestions(
+        &temp.path,
+        "default",
+        LabelOntologyTrustedValidationInput {
+            actor: validation_actor(),
+            parent_action_id: fixture.apply_action_id.clone(),
+            signal_ids: Vec::new(),
+            reason: "Negative trusted validation should require typed controls or a user waiver."
+                .to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            positive_control_task_refs: Vec::new(),
+            positive_control_waiver_reason: None,
+        },
+        &store,
+        LabelSuggestionOptions {
+            output_limit: 5,
+            candidate_limit: 5,
+            atom_limit: 5,
+            max_selected_labels: 1,
+            min_score: 0.0,
+        },
+    ))?;
+
+    assert!(error.to_string().contains("positive control"), "{error}");
+    assert_eq!(
+        store.label_atom_vector_queries()?.len(),
+        0,
+        "collector should reject before running suggest"
+    );
+
+    let agent_waiver = result_err(validate_label_ontology_action_with_trusted_suggestions(
+        &temp.path,
+        "default",
+        LabelOntologyTrustedValidationInput {
+            actor: validation_actor(),
+            parent_action_id: fixture.apply_action_id.clone(),
+            signal_ids: Vec::new(),
+            reason: "Agent waiver should not be accepted for negative trusted validation."
+                .to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            positive_control_task_refs: Vec::new(),
+            positive_control_waiver_reason: Some("No stable positive control exists.".to_owned()),
+        },
+        &store,
+        LabelSuggestionOptions {
+            output_limit: 5,
+            candidate_limit: 5,
+            atom_limit: 5,
+            max_selected_labels: 1,
+            min_score: 0.0,
+        },
+    ))?;
+
+    assert!(agent_waiver.to_string().contains("user"), "{agent_waiver}");
+
+    let waiver_reason = "  No stable positive control exists.  ".to_owned();
+    let user_waiver = validate_label_ontology_action_with_trusted_suggestions(
+        &temp.path,
+        "default",
+        LabelOntologyTrustedValidationInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            parent_action_id: fixture.apply_action_id,
+            signal_ids: Vec::new(),
+            reason: "User waiver should be preserved in trusted validation evidence.".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            positive_control_task_refs: Vec::new(),
+            positive_control_waiver_reason: Some(waiver_reason.clone()),
+        },
+        &store,
+        LabelSuggestionOptions {
+            output_limit: 5,
+            candidate_limit: 5,
+            atom_limit: 5,
+            max_selected_labels: 1,
+            min_score: 0.0,
+        },
+    )?;
+    assert_eq!(
+        user_waiver.validation_status,
+        LabelOntologyValidationStatus::Passed
+    );
+    let validation_json: serde_json::Value = serde_json::from_str(&user_waiver.validation_json)?;
+    assert_eq!(
+        validation_json["manual"]["cases"][0]["after"]["positive_control_waiver"]["reason"],
+        waiver_reason
+    );
+
+    Ok(())
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn label_ontology_trusted_controls_are_negative_atom_only() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_trusted_controls_are_negative_atom_only")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Add ontology validation trusted control boundary",
+        "cli-trusted-control-boundary",
+    )?;
+    let store = RecordingVectorStore::with_embedding_model("trusted-test-model");
+    rebuild_label_atom_index_with(&temp.path, "default", &store)?;
+
+    let error = result_err(validate_label_ontology_action_with_trusted_suggestions(
+        &temp.path,
+        "default",
+        LabelOntologyTrustedValidationInput {
+            actor: validation_actor(),
+            parent_action_id: fixture.apply_action_id,
+            signal_ids: Vec::new(),
+            reason: "Positive controls should be accepted only for negative atom validation."
+                .to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            positive_control_task_refs: vec![fixture.task.task_ref],
+            positive_control_waiver_reason: None,
+        },
+        &store,
+        LabelSuggestionOptions {
+            output_limit: 5,
+            candidate_limit: 5,
+            atom_limit: 5,
+            max_selected_labels: 1,
+            min_score: 0.0,
+        },
+    ))?;
+
+    assert!(
+        error.to_string().contains("negative atom validation"),
+        "{error}"
+    );
+    assert_eq!(
+        store.label_atom_vector_queries()?.len(),
+        0,
+        "collector should reject unsupported control parameters before running suggest"
+    );
+
+    Ok(())
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn label_ontology_trusted_negative_collector_records_positive_controls() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_trusted_negative_collector_records_positive_controls")?;
+    init_database(&temp.path, "tester")?;
+    let (fixture, control_task) = seed_negative_validation_fixture_with_positive_control(
+        &temp,
+        "Add ontology validation negative typed controls",
+        "cli-negative-typed-control",
+    )?;
+    let store = RecordingVectorStore::with_embedding_model("trusted-test-model");
+    rebuild_label_atom_index_with(&temp.path, "default", &store)?;
+
+    let validation = validate_label_ontology_action_with_trusted_suggestions(
+        &temp.path,
+        "default",
+        LabelOntologyTrustedValidationInput {
+            actor: validation_actor(),
+            parent_action_id: fixture.apply_action_id.clone(),
+            signal_ids: Vec::new(),
+            reason: "Negative trusted validation should include tool-collected positive controls."
+                .to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            positive_control_task_refs: vec![control_task.task_ref.clone()],
+            positive_control_waiver_reason: None,
+        },
+        &store,
+        LabelSuggestionOptions {
+            output_limit: 5,
+            candidate_limit: 5,
+            atom_limit: 5,
+            max_selected_labels: 1,
+            min_score: 0.0,
+        },
+    )?;
+
+    assert_eq!(
+        validation.validation_status,
+        LabelOntologyValidationStatus::Passed
+    );
+    let validation_json: serde_json::Value = serde_json::from_str(&validation.validation_json)?;
+    let control = &validation_json["manual"]["cases"][0]["after"]["positive_controls"][0];
+    assert_eq!(control["task_ref"], control_task.task_ref);
+    assert_eq!(control["target_label_id"], fixture.target_label_id);
+    assert_eq!(control["passed"], true);
+    assert_eq!(control["regressed"], false);
+    assert_eq!(control["before"]["target"]["selected"], true);
+    assert_eq!(control["after"]["target"]["selected"], true);
+    assert_eq!(validation_json["manual"]["solver_options"]["atom_limit"], 5);
+    assert!(
+        store
+            .label_atom_vector_queries()?
+            .iter()
+            .all(|query| query.embedding_model.as_deref() == Some("trusted-test-model")),
+        "collector should query all cases with the same embedding model"
+    );
 
     Ok(())
 }
@@ -6098,6 +6318,104 @@ fn seed_negative_validation_fixture(
             .result_atom_content_hash
             .context("result atom hash")?,
     })
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn seed_negative_validation_fixture_with_positive_control(
+    temp: &TempDb,
+    title: &str,
+    signal_key: &str,
+) -> anyhow::Result<(OntologyValidationFixture, TaskRecord)> {
+    let label = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            applies_when: vec!["changes CLI user-visible behavior".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let control_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Positive control changes CLI user-visible behavior"),
+    )?;
+    let task = create_task(&temp.path, "default", "tester", CreateTask::ready(title))?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![LabelOntologySignalInput {
+            kind: LabelOntologySignalKind::FalsePositive,
+            target_label_ref: Some("cli".to_owned()),
+            related_labels_json: "[]".to_owned(),
+            proposed_action: LabelOntologyProposedAction::AddNegativeAtom,
+            candidate_atom: Some(LabelOntologyCandidateAtomInput {
+                polarity: "negative".to_owned(),
+                kind: "excludes_when".to_owned(),
+                text: "does not change user-visible CLI behavior".to_owned(),
+            }),
+            proposed_label_name: None,
+            proposal_json: "{}".to_owned(),
+            agent_selected: true,
+            suggest_state: Some(LabelOntologySuggestState::Selected),
+            suggest_score: Some(0.82),
+            suggest_rank: Some(1),
+            final_selected: false,
+            rationale: "The task was a false positive for the cli label.".to_owned(),
+            confidence: Some(0.9),
+            signal_key: Some(signal_key.to_owned()),
+        }]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed by reviewer.",
+        ),
+    )?;
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "excludes_when".to_owned(),
+            text: "does not change user-visible CLI behavior".to_owned(),
+            reason: "Confirmed false-positive support for CLI label suppression.".to_owned(),
+        },
+    )?;
+    Ok((
+        OntologyValidationFixture {
+            task,
+            observation_id: observation.id,
+            signal_id,
+            apply_action_id: apply_action.id,
+            target_label_id: label.id,
+            result_atom_id: apply_action.result_atom_id.context("result atom id")?,
+            result_atom_content_hash: apply_action
+                .result_atom_content_hash
+                .context("result atom hash")?,
+        },
+        control_task,
+    ))
 }
 
 fn passed_validation_input(

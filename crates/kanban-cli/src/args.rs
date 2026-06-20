@@ -634,6 +634,10 @@ pub(crate) struct LabelOntologyValidateArgs {
     pub(crate) input: Option<String>,
     #[arg(long)]
     pub(crate) trusted: bool,
+    #[arg(long = "positive-control", conflicts_with = "positive_control_waiver")]
+    pub(crate) positive_controls: Vec<String>,
+    #[arg(long = "positive-control-waiver", conflicts_with = "positive_controls")]
+    pub(crate) positive_control_waiver: Option<String>,
     #[arg(long = "vector-config", alias = "config")]
     pub(crate) vector_config: Option<std::path::PathBuf>,
     #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]

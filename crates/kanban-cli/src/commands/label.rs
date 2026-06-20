@@ -648,10 +648,15 @@ fn handle_label_ontology(
                     args.signal_ids,
                     args.reason,
                     validation_status,
+                    args.positive_controls,
+                    args.positive_control_waiver,
                     args.vector_config.as_deref(),
                     options,
                 )?
             } else {
+                if !args.positive_controls.is_empty() || args.positive_control_waiver.is_some() {
+                    bail!("--positive-control and --positive-control-waiver require --trusted");
+                }
                 let Some(input) = args.input.as_deref() else {
                     bail!("label ontology validate requires --input unless --trusted is used");
                 };
@@ -1357,6 +1362,8 @@ fn validate_label_ontology_action_with_trusted_cli_evidence(
     signal_ids: Vec<String>,
     reason: String,
     validation_status: LabelOntologyValidationStatus,
+    positive_control_task_refs: Vec<String>,
+    positive_control_waiver_reason: Option<String>,
     vector_config_path: Option<&std::path::Path>,
     options: LabelSuggestionOptions,
 ) -> Result<LabelOntologyActionRecord> {
@@ -1377,6 +1384,8 @@ fn validate_label_ontology_action_with_trusted_cli_evidence(
                 signal_ids,
                 reason,
                 validation_status,
+                positive_control_task_refs,
+                positive_control_waiver_reason,
             },
             &store,
             options,
@@ -1394,6 +1403,8 @@ fn validate_label_ontology_action_with_trusted_cli_evidence(
             signal_ids,
             reason,
             validation_status,
+            positive_control_task_refs,
+            positive_control_waiver_reason,
             vector_config_path,
             options,
         );

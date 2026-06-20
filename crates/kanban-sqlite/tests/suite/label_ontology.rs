@@ -3232,13 +3232,13 @@ fn label_ontology_revert_update_semantics_restores_before_hash_and_keeps_atom_hi
     let update_action = detail
         .actions
         .iter()
-        .find(|action| action.action_type == LabelOntologyActionType::UpdateSemantics)
-        .context("update_semantics action")?
+        .find(|action| {
+            action.action_type == LabelOntologyActionType::UpdateSemantics
+                && action.result_atom_content_hash.as_deref()
+                    == Some(stable_atom.content_hash.as_str())
+        })
+        .context("update_semantics action for stable applies_when atom")?
         .clone();
-    assert_eq!(
-        update_action.result_atom_content_hash.as_deref(),
-        Some(stable_atom.content_hash.as_str())
-    );
 
     let revert_action = revert_label_ontology_mutation(
         &temp.path,

@@ -3268,39 +3268,48 @@ fn review_group_key(group_by: LabelOntologyReviewGroupBy, row: &ReviewSignalRow)
 }
 
 fn review_cluster_key(row: &ReviewSignalRow) -> (String, String) {
-    if let Some(candidate_text) = row.candidate_text.as_deref() {
-        if let Some(normalized) = normalize_cluster_text(candidate_text) {
-            return (
-                format!("candidate:{normalized}"),
-                "normalized_candidate_text".to_owned(),
-            );
-        }
+    let scope = review_cluster_scope_key(row);
+    if let Some(candidate_text) = row.candidate_text.as_deref()
+        && let Some(normalized) = normalize_cluster_text(candidate_text)
+    {
+        return (
+            format!("candidate:{scope}|text:{normalized}"),
+            "normalized_candidate_text".to_owned(),
+        );
     }
-    if let Some(proposed_label_name) = row.proposed_label_name_normalized.as_deref() {
-        if let Some(normalized) = normalize_cluster_text(proposed_label_name) {
-            return (
-                format!("proposed_label:{normalized}"),
-                "normalized_proposed_label".to_owned(),
-            );
-        }
+    if let Some(proposed_label_name) = row.proposed_label_name_normalized.as_deref()
+        && let Some(normalized) = normalize_cluster_text(proposed_label_name)
+    {
+        return (
+            format!("proposed_label:{scope}|text:{normalized}"),
+            "normalized_proposed_label".to_owned(),
+        );
     }
     if let Some(normalized) = normalize_cluster_text(&row.rationale) {
         return (
-            format!("rationale:{normalized}"),
+            format!("rationale:{scope}|text:{normalized}"),
             "normalized_rationale".to_owned(),
         );
     }
     (
-        format!(
-            "fallback:kind:{}|action:{}|target:{}",
-            row.signal_kind,
-            row.proposed_action,
-            row.target_label_id
-                .as_deref()
-                .or(row.target_label_name_snapshot.as_deref())
-                .unwrap_or("none")
-        ),
+        format!("fallback:{scope}"),
         "kind_action_target_fallback".to_owned(),
+    )
+}
+
+fn review_cluster_scope_key(row: &ReviewSignalRow) -> String {
+    let target = row
+        .target_label_name_snapshot
+        .as_deref()
+        .or(row.target_label_id.as_deref())
+        .unwrap_or("none");
+    let proposed = row
+        .proposed_label_name_normalized
+        .as_deref()
+        .unwrap_or("none");
+    format!(
+        "kind:{}|action:{}|target:{}|proposed:{}",
+        row.signal_kind, row.proposed_action, target, proposed
     )
 }
 
@@ -3311,11 +3320,9 @@ fn normalize_cluster_text(value: &str) -> Option<String> {
         if ch.is_ascii_alphanumeric() {
             normalized.push(ch);
             previous_was_space = false;
-        } else if ch.is_whitespace() || ch.is_ascii_punctuation() {
-            if !previous_was_space {
-                normalized.push(' ');
-                previous_was_space = true;
-            }
+        } else if (ch.is_whitespace() || ch.is_ascii_punctuation()) && !previous_was_space {
+            normalized.push(' ');
+            previous_was_space = true;
         }
     }
     let normalized = normalized.trim();

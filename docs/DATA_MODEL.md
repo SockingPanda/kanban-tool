@@ -546,9 +546,11 @@ label 或 proposed label、以及 proposed action，例如
 
 `cluster` 是 opt-in duplicate-signal review-aid，不默认启用，不写 canonical atoms，不自动
 confirm/apply/validate/mutate，也不成为 SQLite truth。cluster key 每次 review 查询时从
-已有 signal 文本重建：优先 lexical-normalized candidate text，其次 proposed label，再其次
-rationale，最后退回 kind/action/target 组合；输出中的 `cluster_key` 和 `cluster_reason`
-只解释这个辅助分组来源。
+已有 signal 文本和 review scope 重建：key 始终包含 signal kind、proposed action、target
+label snapshot（或 id fallback）以及 proposed label scope，再附加优先级最高的
+lexical-normalized candidate text，其次 proposed label，再其次 rationale，最后退回纯
+scope 组合。这个 scope 前缀避免把相同文本但不同 label boundary/action 的 signals 强制
+合并；输出中的 `cluster_key` 和 `cluster_reason` 只解释这个辅助分组来源。
 
 Review queue 的默认排序使用 distinct source task count（`task_count`）作为主要热度指标，
 再按 confirmed count、latest signal time 和 key 排序。`signal_count` 只是 group 内原始

@@ -1062,7 +1062,7 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
     assert_eq!(groups[0]["group_by"], "cluster");
     assert_eq!(
         groups[0]["cluster_key"],
-        "candidate:extends cli subcommands arguments help output or json behavior"
+        "candidate:kind:false_negative|action:add_positive_atom|target:cli|proposed:none|text:extends cli subcommands arguments help output or json behavior"
     );
     assert_eq!(groups[0]["cluster_reason"], "normalized_candidate_text");
     assert_eq!(groups[0]["task_count"], 1);

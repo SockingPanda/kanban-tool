@@ -894,7 +894,9 @@ signals 合并到一个全局 bucket。
 `--group-by cluster` 是一个只读 review-aid：它不写 canonical atoms，也不会确认、
 应用、validate 或关闭 signal。cluster key 每次查询时从已有 signal 文本重建，优先使用
 lexical-normalized candidate text，其次 proposed label，再其次 rationale，最后才退回到
-kind/action/target 组合；`cluster_reason` 说明当前 key 的来源。
+kind/action/target/proposed-label scope 组合；所有 cluster key 都带有 signal kind、
+proposed action、target label 和 proposed-label scope，避免跨 label/action/boundary 误合并；
+`cluster_reason` 说明当前 key 的来源。
 
 `task_count` 是 group 内 distinct source task 数，也是默认热度排序的第一依据；同一 task
 上的多条 signals 仍只贡献一个 distinct task。`signal_count` 是原始 signal 行数，

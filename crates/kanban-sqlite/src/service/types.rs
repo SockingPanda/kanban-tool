@@ -169,23 +169,21 @@ pub struct BootstrapTaskLabelResult {
     pub semantics: LabelSemanticsRecord,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BootstrapTaskLabelSnapshot {
-    pub board_id: String,
-    pub task_id: String,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BootstrapTaskLabelVerification {
     pub label_name: String,
-    pub label: Option<LabelRecord>,
-    pub task_label_existed: bool,
-    pub semantics: Option<LabelSemanticsRecord>,
+    pub score: f32,
+    pub source: String,
+    pub min_score: f32,
+    pub degraded: bool,
+    pub diagnostics: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BootstrapTaskLabelRestoreResult {
-    pub label_deleted: bool,
-    pub label_restored: bool,
-    pub task_binding_restored: bool,
-    pub semantics_restored: bool,
-    pub index_marked_dirty: bool,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BootstrapTaskLabelVerifiedResult {
+    pub task: TaskRecord,
+    pub semantics: LabelSemanticsRecord,
+    pub verification: BootstrapTaskLabelVerification,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -490,6 +488,7 @@ pub struct LabelSemanticsMutationOptions {
     pub actor: LabelOntologyActor,
     pub reason: Option<String>,
     pub source_signal_ids: Vec<String>,
+    pub context_json: Option<String>,
 }
 
 impl LabelSemanticsMutationOptions {
@@ -502,6 +501,7 @@ impl LabelSemanticsMutationOptions {
             },
             reason: None,
             source_signal_ids: Vec::new(),
+            context_json: None,
         }
     }
 }
@@ -854,6 +854,81 @@ impl std::str::FromStr for LabelOntologyValidationStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelOntologyValidationRequirement {
+    None,
+    Required,
+    Unsupported,
+}
+
+impl std::fmt::Display for LabelOntologyValidationRequirement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::None => "none",
+            Self::Required => "required",
+            Self::Unsupported => "unsupported",
+        })
+    }
+}
+
+impl std::str::FromStr for LabelOntologyValidationRequirement {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "none" => Ok(Self::None),
+            "required" => Ok(Self::Required),
+            "unsupported" => Ok(Self::Unsupported),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid label ontology validation requirement: {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelOntologyValidationEffectiveOutcome {
+    NotRequired,
+    Unsupported,
+    Pending,
+    Passed,
+    Failed,
+    Partial,
+}
+
+impl std::fmt::Display for LabelOntologyValidationEffectiveOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::NotRequired => "not_required",
+            Self::Unsupported => "unsupported",
+            Self::Pending => "pending",
+            Self::Passed => "passed",
+            Self::Failed => "failed",
+            Self::Partial => "partial",
+        })
+    }
+}
+
+impl std::str::FromStr for LabelOntologyValidationEffectiveOutcome {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "not_required" => Ok(Self::NotRequired),
+            "unsupported" => Ok(Self::Unsupported),
+            "pending" => Ok(Self::Pending),
+            "passed" => Ok(Self::Passed),
+            "failed" => Ok(Self::Failed),
+            "partial" => Ok(Self::Partial),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid label ontology validation effective outcome: {value}"
+            ))),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LabelOntologyActor {
     pub name: String,
@@ -978,13 +1053,30 @@ pub struct LabelOntologyActionRecord {
     pub canonical_before_hash: Option<String>,
     pub canonical_after_hash: Option<String>,
     pub change_json: String,
+    pub validation_requirement: LabelOntologyValidationRequirement,
     pub validation_status: LabelOntologyValidationStatus,
+    pub validation_effective_outcome: LabelOntologyValidationEffectiveOutcome,
+    pub validation_latest_attempt_id: Option<String>,
     pub validation_json: String,
     pub created_by: String,
     pub created_by_type: String,
     pub agent_type: Option<String>,
     pub created_at: i64,
     pub signal_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyActionAtomEffectRecord {
+    pub board_id: String,
+    pub action_id: String,
+    pub label_id_snapshot: String,
+    pub atom_id_snapshot: String,
+    pub atom_content_hash: String,
+    pub polarity: String,
+    pub kind: String,
+    pub text: String,
+    pub effect: String,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1014,19 +1106,6 @@ pub struct LabelOntologyAtomApplyInput {
     pub label_ref: String,
     pub kind: String,
     pub text: String,
-    pub reason: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct LabelOntologyStructurePlanInput {
-    pub actor: LabelOntologyActor,
-    pub signal_ids: Vec<String>,
-    pub action_type: LabelOntologyActionType,
-    pub target_label_ref: String,
-    pub proposed_label_name: Option<String>,
-    pub related_label_refs: Vec<String>,
-    pub task_binding_policy: Option<String>,
-    pub validation_policy_json: Option<String>,
     pub reason: String,
 }
 
@@ -1061,6 +1140,10 @@ pub struct LabelOntologyTrustedValidationInput {
     pub signal_ids: Vec<String>,
     pub reason: String,
     pub validation_status: LabelOntologyValidationStatus,
+    #[serde(default)]
+    pub positive_control_task_refs: Vec<String>,
+    #[serde(default)]
+    pub positive_control_waiver_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

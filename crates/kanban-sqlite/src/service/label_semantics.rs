@@ -408,7 +408,7 @@ pub fn explain_label_atom(
     let validation_history = label_atom_validation_history(&conn, &provenance_actions)?;
     let legacy_untracked = atom.is_some() && provenance_actions.is_empty();
     let legacy_reason = legacy_untracked.then(|| {
-        "no ontology provenance atom effect or legacy result atom reference matches this atom id or content hash"
+        "no ontology provenance action, atom effect, or legacy result atom reference matches this atom id or content hash"
             .to_owned()
     });
     Ok(LabelAtomExplainRecord {

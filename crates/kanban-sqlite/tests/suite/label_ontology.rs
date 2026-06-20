@@ -4049,6 +4049,34 @@ fn label_ontology_jsonl_export_import_round_trips_ledger_and_self_refs() -> anyh
     let source =
         TempDb::new("label_ontology_jsonl_export_import_round_trips_ledger_and_self_refs_source")?;
     let fixture = seed_portable_ontology_ledger(&source)?;
+    let source_explain =
+        explain_label_atom(&source.path, "default", &fixture.result_atom_content_hash)?;
+    let source_explain_actions = source_explain
+        .provenance_actions
+        .iter()
+        .map(|provenance| {
+            (
+                provenance.action.id.clone(),
+                provenance.action.action_type,
+                provenance.matched_by.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let source_explain_signals = source_explain
+        .supporting_signals
+        .iter()
+        .map(|support| support.signal.id.clone())
+        .collect::<Vec<_>>();
+    let source_explain_validations = source_explain
+        .validation_history
+        .iter()
+        .map(|validation| {
+            (
+                validation.parent_action_id.clone(),
+                validation.validation_status,
+            )
+        })
+        .collect::<Vec<_>>();
     let export_path = source.dir.join("ontology.jsonl");
     export_jsonl(&source.path, "default", &export_path)?;
     let export = std::fs::read_to_string(&export_path)?;
@@ -4144,6 +4172,50 @@ fn label_ontology_jsonl_export_import_round_trips_ledger_and_self_refs() -> anyh
         |row| row.get(0),
     )?;
     assert!(observation_candidates.contains("adds CLI command surface"));
+    let imported_explain =
+        explain_label_atom(&target.path, "default", &fixture.result_atom_content_hash)?;
+    assert_eq!(
+        imported_explain.atom.as_ref().map(|atom| atom.id.as_str()),
+        Some(fixture.result_atom_id.as_str())
+    );
+    assert_eq!(
+        imported_explain
+            .atom
+            .as_ref()
+            .map(|atom| atom.content_hash.as_str()),
+        Some(fixture.result_atom_content_hash.as_str())
+    );
+    assert_eq!(
+        imported_explain
+            .provenance_actions
+            .iter()
+            .map(|provenance| (
+                provenance.action.id.clone(),
+                provenance.action.action_type,
+                provenance.matched_by.clone()
+            ))
+            .collect::<Vec<_>>(),
+        source_explain_actions
+    );
+    assert_eq!(
+        imported_explain
+            .supporting_signals
+            .iter()
+            .map(|support| support.signal.id.clone())
+            .collect::<Vec<_>>(),
+        source_explain_signals
+    );
+    assert_eq!(
+        imported_explain
+            .validation_history
+            .iter()
+            .map(|validation| (
+                validation.parent_action_id.clone(),
+                validation.validation_status
+            ))
+            .collect::<Vec<_>>(),
+        source_explain_validations
+    );
     Ok(())
 }
 
@@ -4417,8 +4489,10 @@ fn label_ontology_trusted_collector_runs_suggest_and_resolves_signal() -> anyhow
 
 #[cfg(feature = "vector-lancedb")]
 #[test]
-fn label_ontology_trusted_collector_rechecks_index_generation() -> anyhow::Result<()> {
-    let temp = TempDb::new("label_ontology_trusted_collector_rechecks_index_generation")?;
+fn label_ontology_public_validation_rejects_forged_trusted_generation_evidence()
+-> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_public_validation_rejects_forged_trusted_generation_evidence")?;
     init_database(&temp.path, "tester")?;
     let fixture = seed_validation_fixture(
         &temp,
@@ -4447,7 +4521,12 @@ fn label_ontology_trusted_collector_rechecks_index_generation() -> anyhow::Resul
             "Tool-collected validation must reject stale generation evidence.",
         ),
     ))?;
-    assert!(error.to_string().contains("generation changed"));
+    assert!(
+        error
+            .to_string()
+            .contains("external attestation cannot close ontology signals"),
+        "{error}"
+    );
     let signal = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
     assert_eq!(signal.signal.status, LabelOntologySignalStatus::Confirmed);
 
@@ -5191,6 +5270,143 @@ fn label_ontology_proposal_accept_records_bootstrap_provenance() -> anyhow::Resu
 }
 
 #[test]
+fn label_ontology_proposal_bootstrap_large_semantics_uses_one_root_action() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_proposal_bootstrap_large_semantics_uses_one_root_action")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Add large ontology proposal provenance"),
+    )?;
+    let proposed_atoms = (0..99)
+        .map(|index| format!("large ontology bootstrap atom {index:03}"))
+        .collect::<Vec<_>>();
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        LabelOntologyRecordInput {
+            signals: vec![LabelOntologySignalInput {
+                kind: LabelOntologySignalKind::VocabularyGap,
+                target_label_ref: None,
+                related_labels_json: "[]".to_owned(),
+                proposed_action: LabelOntologyProposedAction::BootstrapLabel,
+                candidate_atom: None,
+                proposed_label_name: Some("large-ontology-ledger".to_owned()),
+                proposal_json: json!({
+                    "name": "large-ontology-ledger",
+                    "applies_when": proposed_atoms
+                })
+                .to_string(),
+                agent_selected: true,
+                suggest_state: Some(LabelOntologySuggestState::Absent),
+                suggest_score: None,
+                suggest_rank: None,
+                final_selected: true,
+                rationale: "Existing labels do not express the large ontology bootstrap fixture."
+                    .to_owned(),
+                confidence: Some(0.86),
+                signal_key: Some("large-ontology-ledger-gap".to_owned()),
+            }],
+            ..sample_record_input(Vec::new())
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer agrees this large vocabulary gap is real.",
+        ),
+    )?;
+    let proposal_id = seed_label_semantic_proposal_with_semantics(
+        &temp.path,
+        &task.board_id,
+        &task.id,
+        "large-ontology-ledger",
+        None,
+        &proposed_atoms,
+        &[],
+    )?;
+
+    let accepted = accept_label_proposal_with_options(
+        &temp.path,
+        "reviewer",
+        &proposal_id,
+        Some("Bootstrap large label from confirmed ontology signal.".to_owned()),
+        LabelProposalDecisionOptions {
+            source_signal_ids: vec![signal_id.clone()],
+            ontology_actor: Some(LabelOntologyActor {
+                name: "ontology-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("codex".to_owned()),
+            }),
+            allow_retarget: false,
+            retarget_reason: None,
+        },
+    )?;
+
+    let result_label_id = accepted
+        .resolved_label_id
+        .as_deref()
+        .context("resolved label")?;
+    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
+    let bootstrap = detail
+        .actions
+        .iter()
+        .find(|action| {
+            action.action_type == LabelOntologyActionType::BootstrapLabel
+                && action.result_atom_id.is_none()
+        })
+        .context("bootstrap action")?;
+    assert_eq!(
+        bootstrap_action_count_for_proposal(&temp.path, &proposal_id)?,
+        1
+    );
+    assert_eq!(
+        ontology_action_atom_effect_count(&temp.path, &bootstrap.id, Some("added"))?,
+        100
+    );
+    let conn = connect_file(&temp.path)?;
+    let child_bootstrap_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM label_ontology_actions \
+         WHERE parent_action_id=?1 AND action_type='bootstrap_label'",
+        [&bootstrap.id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(child_bootstrap_count, 0);
+    let (bootstrap_rows, bootstrap_payload_sum): (i64, i64) = conn.query_row(
+        "SELECT COUNT(*), COALESCE(SUM(length(change_json)), 0) \
+         FROM label_ontology_actions \
+         WHERE result_proposal_id=?1 AND action_type='bootstrap_label'",
+        [&proposal_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let bootstrap_payload_len: i64 = conn.query_row(
+        "SELECT length(change_json) FROM label_ontology_actions WHERE id=?1",
+        [&bootstrap.id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(bootstrap_rows, 1);
+    assert_eq!(bootstrap_payload_sum, bootstrap_payload_len);
+    let semantics = get_label_semantics(&temp.path, "default", result_label_id)?;
+    assert_eq!(semantics.atoms.len(), 100);
+    let effect_hashes = ontology_action_atom_effect_hashes(&temp.path, &bootstrap.id, "added")?;
+    let mut expected_hashes = semantics
+        .atoms
+        .iter()
+        .map(|atom| atom.content_hash.clone())
+        .collect::<Vec<_>>();
+    expected_hashes.sort();
+    assert_eq!(effect_hashes, expected_hashes);
+    Ok(())
+}
+
+#[test]
 fn label_ontology_proposal_accept_rejects_unrelated_source_signal() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_proposal_accept_rejects_unrelated_source_signal")?;
     init_database(&temp.path, "tester")?;
@@ -5447,6 +5663,8 @@ struct PortableOntologyLedgerFixture {
     duplicate_signal_id: String,
     apply_action_id: String,
     validation_action_id: String,
+    result_atom_id: String,
+    result_atom_content_hash: String,
 }
 
 fn seed_validation_fixture(
@@ -5791,6 +6009,8 @@ fn seed_portable_ontology_ledger(temp: &TempDb) -> anyhow::Result<PortableOntolo
         duplicate_signal_id,
         apply_action_id: apply_action.id,
         validation_action_id,
+        result_atom_id,
+        result_atom_content_hash: result_atom_hash,
     })
 }
 
@@ -6854,6 +7074,26 @@ fn seed_label_semantic_proposal(
     task_id: &str,
     name: &str,
 ) -> anyhow::Result<String> {
+    seed_label_semantic_proposal_with_semantics(
+        path,
+        board_id,
+        task_id,
+        name,
+        Some("Label ontology ledger work"),
+        &["records ontology observations and signals".to_owned()],
+        &["label ontology ledger migration".to_owned()],
+    )
+}
+
+fn seed_label_semantic_proposal_with_semantics(
+    path: &Path,
+    board_id: &str,
+    task_id: &str,
+    name: &str,
+    description: Option<&str>,
+    applies_when: &[String],
+    positive_examples: &[String],
+) -> anyhow::Result<String> {
     let conn = connect_file(path)?;
     let id = format!("lp_test_{name}");
     conn.execute(
@@ -6867,9 +7107,9 @@ fn seed_label_semantic_proposal(
             board_id,
             task_id,
             name,
-            "Label ontology ledger work",
-            json!(["records ontology observations and signals"]).to_string(),
-            json!(["label ontology ledger migration"]).to_string(),
+            description,
+            json!(applies_when).to_string(),
+            json!(positive_examples).to_string(),
         ],
     )?;
     Ok(id)

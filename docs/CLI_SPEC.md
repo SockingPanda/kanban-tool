@@ -662,6 +662,21 @@ solver 内部搜索能力。内部能力由 `--candidate-limit`、`--atom-limit`
 以及最多进入 non-negative refit 的 label 数。所有 limit 参数都必须是
 `1..=1000`；`--min-score` 必须在 `0..=1`。
 
+Label ontology 的长期 regression corpus 目前是本地测试基础设施，不是一个会写生产
+DB 的 CLI mutation 流程。修改 label solver、semantics/atom 生成、trusted validation
+或重要 label ontology 时，可以运行：
+
+```bash
+just test-p kanban-sqlite label_ontology_longitudinal_regression
+```
+
+该测试在临时 SQLite DB 中建立固定 important labels、known positive tasks 和
+negative-control tasks，重建内存 label atom index，保存 baseline `label suggest`
+结果，再模拟一次过宽 atom 变更并比较 selected labels、score 和 evidence atoms。它会
+断言正常 corpus run 不修改 `labels`、`task_labels`、`label_semantics`、
+`label_atoms` 或 ontology ledger rows；真实项目 corpus 应在积累稳定任务后逐步扩展，
+但不应成为每个日常 task label 绑定的默认必跑步骤。
+
 `label semantics` 管理当前 board 上已有 label 的语义字典。`<label>` 接受 label
 name 或 `l_...` id。`upsert` 默认是 patch：`--description` 只在提供非空值时覆盖当前
 description，数组参数会追加到对应集合，`--remove-*` 只删除匹配的既有文本；未提供的

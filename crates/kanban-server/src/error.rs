@@ -49,6 +49,7 @@ impl IntoResponse for ApiError {
         let message = self.0.to_string();
         let (status, code) = match self.0 {
             KanbanError::NotFound(_) => (StatusCode::NOT_FOUND, "not_found"),
+            KanbanError::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
             KanbanError::InvalidInput(_) if message.contains("dependency cycle") => {
                 (StatusCode::CONFLICT, "dependency_cycle")
             }

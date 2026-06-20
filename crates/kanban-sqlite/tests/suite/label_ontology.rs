@@ -10,7 +10,7 @@ fn label_ontology_migration_creates_ledger_tables_and_json_constraints() -> anyh
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 14);
+    assert_eq!(user_version, 17);
     for table in [
         "label_ontology_observations",
         "label_ontology_signals",
@@ -200,6 +200,277 @@ fn label_ontology_records_observation_signals_and_preserves_board_scope() -> any
 }
 
 #[test]
+fn label_ontology_quality_distinguishes_signal_counts_from_rates() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_quality_distinguishes_signal_counts_from_rates")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let cli_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Add CLI ontology quality report"),
+    )?;
+    let docs_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Document ontology quality cohort"),
+    )?;
+
+    for (fingerprint, signal_key) in [
+        ("cli-quality-run-a", "cli-quality-signal-a"),
+        ("cli-quality-run-b", "cli-quality-signal-b"),
+    ] {
+        let mut input = sample_record_input(vec![LabelOntologySignalInput {
+            kind: LabelOntologySignalKind::FalseNegative,
+            target_label_ref: Some("cli".to_owned()),
+            related_labels_json: "[]".to_owned(),
+            proposed_action: LabelOntologyProposedAction::AddPositiveAtom,
+            candidate_atom: Some(LabelOntologyCandidateAtomInput {
+                polarity: "positive".to_owned(),
+                kind: "applies_when".to_owned(),
+                text: "extends CLI subcommands or machine-readable output".to_owned(),
+            }),
+            proposed_label_name: None,
+            proposal_json: "{}".to_owned(),
+            agent_selected: true,
+            suggest_state: Some(LabelOntologySuggestState::Absent),
+            suggest_score: None,
+            suggest_rank: None,
+            final_selected: true,
+            rationale: "The task is clearly CLI work, but suggest did not select cli.".to_owned(),
+            confidence: Some(0.9),
+            signal_key: Some(signal_key.to_owned()),
+        }]);
+        input.capture_fingerprint = Some(fingerprint.to_owned());
+        record_label_ontology_observation(&temp.path, "default", &cli_task.id, input)?;
+    }
+
+    let signal_only_report = label_ontology_quality_report(
+        &temp.path,
+        "default",
+        LabelOntologyQualityOptions { sample_limit: 10 },
+    )?;
+    assert_eq!(signal_only_report.denominator.observation_count, 2);
+    assert_eq!(signal_only_report.denominator.distinct_task_count, 1);
+    assert_eq!(
+        signal_only_report.denominator.agreement_observation_count,
+        0
+    );
+    assert_eq!(signal_only_report.disagreement.signal_count, 2);
+    assert_eq!(signal_only_report.disagreement.distinct_task_count, 1);
+    assert_eq!(
+        signal_only_report
+            .disagreement
+            .by_kind
+            .get("false_negative"),
+        Some(&2)
+    );
+    assert_eq!(
+        signal_only_report.disagreement.by_status.get("open"),
+        Some(&2)
+    );
+    assert_eq!(signal_only_report.rates.disagreement_task_rate, None);
+    assert!(!signal_only_report.precision_recall.available);
+    assert!(
+        signal_only_report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("no agreement observations"))
+    );
+
+    insert_agreement_observation_fixture(&temp, &docs_task, "agreement-docs-quality")?;
+    let truth_counts_before = ontology_quality_truth_counts(&temp.path)?;
+    let report = label_ontology_quality_report(
+        &temp.path,
+        "default",
+        LabelOntologyQualityOptions { sample_limit: 10 },
+    )?;
+    let truth_counts_after = ontology_quality_truth_counts(&temp.path)?;
+    assert_eq!(truth_counts_after, truth_counts_before);
+
+    assert_eq!(report.denominator.source, "label_ontology_observations");
+    assert_eq!(report.denominator.observation_count, 3);
+    assert_eq!(report.denominator.distinct_task_count, 2);
+    assert_eq!(report.denominator.agreement_observation_count, 1);
+    assert_eq!(report.denominator.agreement_task_count, 1);
+    assert_eq!(report.disagreement.signal_count, 2);
+    assert_eq!(report.disagreement.distinct_task_count, 1);
+    assert_eq!(report.rates.disagreement_task_rate, Some(0.5));
+    assert!(!report.precision_recall.available);
+    assert!(report.precision_recall.reason.contains("expected labels"));
+    assert_eq!(
+        report.denominator.sample_task_refs,
+        vec![cli_task.task_ref.clone(), docs_task.task_ref.clone()]
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_record_derives_metrics_from_snapshot_and_preserves_canonical_state()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_record_derives_metrics_from_snapshot_and_preserves_canonical_state",
+    )?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Capture ontology record metrics from suggest snapshot"),
+    )?;
+
+    let labels_before = list_labels(&temp.path, "default")?;
+    let task_labels_before = get_task(&temp.path, "default", &task.id)?.labels;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+    let mut input = sample_record_input(vec![sample_signal_input("snapshot-derived")]);
+    input.suggestion_snapshot_json = json!({
+        "selected_labels": [],
+        "candidates": [],
+        "coverage": 0.42,
+        "coverage_cosine": 0.37,
+        "residual_norm": 0.58,
+        "needs_new_label": true,
+        "degraded": true,
+        "diagnostics": ["vector_store_disabled"]
+    })
+    .to_string();
+    input.suggest_coverage = None;
+    input.suggest_coverage_cosine = None;
+    input.suggest_residual_norm = None;
+    input.suggest_needs_new_label = false;
+    input.suggest_degraded = false;
+    input.diagnostics_json = json!([]).to_string();
+    input.capture_fingerprint = Some("snapshot-derived-capture".to_owned());
+
+    let observation =
+        record_label_ontology_observation(&temp.path, "default", &task.id, input.clone())?;
+
+    assert_score_near(observation.suggest_coverage, 0.42);
+    assert_score_near(observation.suggest_coverage_cosine, 0.37);
+    assert_score_near(observation.suggest_residual_norm, 0.58);
+    assert!(observation.suggest_needs_new_label);
+    assert!(observation.suggest_degraded);
+    let diagnostics: serde_json::Value = serde_json::from_str(&observation.diagnostics_json)?;
+    assert_eq!(diagnostics, json!(["vector_store_disabled"]));
+    assert_eq!(observation.capture_fingerprint, "snapshot-derived-capture");
+
+    assert_eq!(list_labels(&temp.path, "default")?, labels_before);
+    assert_eq!(
+        get_task(&temp.path, "default", &task.id)?.labels,
+        task_labels_before
+    );
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
+
+    let duplicate_error = result_err(record_label_ontology_observation(
+        &temp.path, "default", &task.id, input,
+    ))?;
+    assert!(
+        duplicate_error.to_string().contains("capture_fingerprint")
+            || duplicate_error.to_string().contains("UNIQUE"),
+        "error: {duplicate_error}"
+    );
+    let signals = list_label_ontology_signals(
+        &temp.path,
+        "default",
+        LabelOntologySignalListOptions::default(),
+    )?;
+    assert_eq!(signals.len(), 1);
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_record_rejects_conflicting_snapshot_metrics() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_record_rejects_conflicting_snapshot_metrics")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject contradictory ontology record metrics"),
+    )?;
+    let snapshot = json!({
+        "coverage": 0.42,
+        "coverage_cosine": 0.37,
+        "residual_norm": 0.58,
+        "diagnostics": ["derived-diagnostic"]
+    })
+    .to_string();
+
+    let mut coverage_conflict = sample_record_input(vec![sample_signal_input("coverage-conflict")]);
+    coverage_conflict.suggestion_snapshot_json = snapshot.clone();
+    coverage_conflict.suggest_coverage = Some(0.99);
+    let error = result_err(record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        coverage_conflict,
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("suggest_coverage conflicts with suggestion_snapshot_json.coverage"),
+        "error: {error}"
+    );
+
+    let mut diagnostics_conflict =
+        sample_record_input(vec![sample_signal_input("diagnostics-conflict")]);
+    diagnostics_conflict.suggestion_snapshot_json = snapshot;
+    diagnostics_conflict.suggest_coverage = None;
+    diagnostics_conflict.suggest_coverage_cosine = None;
+    diagnostics_conflict.suggest_residual_norm = None;
+    diagnostics_conflict.diagnostics_json = json!(["manual-diagnostic"]).to_string();
+    let error = result_err(record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        diagnostics_conflict,
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("diagnostics_json conflicts with suggestion_snapshot_json.diagnostics"),
+        "error: {error}"
+    );
+
+    assert!(
+        list_label_ontology_signals(
+            &temp.path,
+            "default",
+            LabelOntologySignalListOptions::default(),
+        )?
+        .is_empty()
+    );
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_signal_input_rejects_atom_polarity_kind_mismatches() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_signal_input_rejects_atom_polarity_kind_mismatches")?;
     init_database(&temp.path, "tester")?;
@@ -324,6 +595,578 @@ fn label_ontology_review_groups_by_candidate_atom() -> anyhow::Result<()> {
             .contains(&fixture.cli_confirmed_signal_id)
     );
     assert!(cli_atom.action_ids.contains(&fixture.confirm_action_id));
+    Ok(())
+}
+
+#[test]
+fn label_ontology_review_clusters_duplicate_signals_without_mutating_atoms() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_review_clusters_duplicate_signals_without_mutating_atoms")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task_a = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Cluster signal source A"),
+    )?;
+    let task_b = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Cluster signal source B"),
+    )?;
+
+    let before_atoms = list_label_atoms(&temp.path, "default")?;
+    let observation_a = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task_a.id,
+        review_record_input(vec![review_label_signal(
+            "cluster-a",
+            "cli",
+            "Adds CLI commands!",
+            0.2,
+        )]),
+    )?;
+    let observation_b = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task_b.id,
+        review_record_input(vec![review_label_signal(
+            "cluster-b",
+            "cli",
+            "adds cli commands",
+            0.3,
+        )]),
+    )?;
+
+    let default_groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::CandidateAtom,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+    assert_eq!(default_groups.len(), 2);
+
+    let groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::Cluster,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+
+    assert_eq!(groups.len(), 1);
+    let cluster = &groups[0];
+    assert_eq!(cluster.group_by, LabelOntologyReviewGroupBy::Cluster);
+    assert_eq!(
+        cluster.cluster_key.as_deref(),
+        Some(
+            "candidate:kind:false_negative|action:add_positive_atom|target:cli|proposed:none|text:adds cli commands"
+        )
+    );
+    assert_eq!(
+        cluster.cluster_reason.as_deref(),
+        Some("normalized_candidate_text")
+    );
+    assert_eq!(cluster.task_count, 2);
+    assert_eq!(cluster.signal_count, 2);
+    assert!(cluster.signal_ids.contains(&observation_a.signals[0].id));
+    assert!(cluster.signal_ids.contains(&observation_b.signals[0].id));
+    assert_eq!(cluster.candidate_atom_variants.len(), 2);
+    assert_eq!(list_label_atoms(&temp.path, "default")?, before_atoms);
+    Ok(())
+}
+
+#[test]
+fn label_ontology_review_cluster_separates_same_text_across_label_and_action_scope()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_review_cluster_separates_same_text_across_label_and_action_scope",
+    )?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "docs".to_owned(),
+            color: None,
+        },
+    )?;
+    let cli_task_a = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI scoped cluster source A"),
+    )?;
+    let cli_task_b = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI scoped cluster source B"),
+    )?;
+    let docs_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Docs scoped cluster source"),
+    )?;
+    let cli_observe_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI observe scoped cluster source"),
+    )?;
+
+    let cli_a = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_task_a.id,
+        review_record_input(vec![review_label_signal(
+            "same-text-cli-a",
+            "cli",
+            "Shared Boundary",
+            0.21,
+        )]),
+    )?;
+    let cli_b = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_task_b.id,
+        review_record_input(vec![review_label_signal(
+            "same-text-cli-b",
+            "cli",
+            "shared boundary",
+            0.22,
+        )]),
+    )?;
+    let docs = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &docs_task.id,
+        review_record_input(vec![review_label_signal(
+            "same-text-docs",
+            "docs",
+            "shared boundary",
+            0.23,
+        )]),
+    )?;
+    let mut cli_observe_signal =
+        review_label_signal("same-text-cli-observe", "cli", "shared boundary", 0.24);
+    cli_observe_signal.proposed_action = LabelOntologyProposedAction::Observe;
+    let cli_observe = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_observe_task.id,
+        review_record_input(vec![cli_observe_signal]),
+    )?;
+
+    let groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::Cluster,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+
+    assert_eq!(groups.len(), 3);
+    let cli_group = groups
+        .iter()
+        .find(|group| group.signal_ids.contains(&cli_a.signals[0].id))
+        .context("cli add atom cluster")?;
+    assert_eq!(cli_group.signal_count, 2);
+    assert!(cli_group.signal_ids.contains(&cli_b.signals[0].id));
+    assert!(!cli_group.signal_ids.contains(&docs.signals[0].id));
+    assert!(!cli_group.signal_ids.contains(&cli_observe.signals[0].id));
+
+    let docs_group = groups
+        .iter()
+        .find(|group| group.signal_ids.contains(&docs.signals[0].id))
+        .context("docs add atom cluster")?;
+    assert_eq!(docs_group.signal_count, 1);
+    assert_ne!(cli_group.cluster_key, docs_group.cluster_key);
+
+    let observe_group = groups
+        .iter()
+        .find(|group| group.signal_ids.contains(&cli_observe.signals[0].id))
+        .context("cli observe cluster")?;
+    assert_eq!(observe_group.signal_count, 1);
+    assert_ne!(cli_group.cluster_key, observe_group.cluster_key);
+    assert_ne!(docs_group.cluster_key, observe_group.cluster_key);
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_review_cluster_is_repeatable_read_only_projection() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_review_cluster_is_repeatable_read_only_projection")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task_a = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Cluster readonly source A"),
+    )?;
+    let task_b = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Cluster readonly source B"),
+    )?;
+    let observation_a = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task_a.id,
+        review_record_input(vec![review_label_signal(
+            "readonly-cluster-a",
+            "cli",
+            "Readonly Cluster",
+            0.25,
+        )]),
+    )?;
+    let observation_b = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task_b.id,
+        review_record_input(vec![review_label_signal(
+            "readonly-cluster-b",
+            "cli",
+            "readonly cluster",
+            0.35,
+        )]),
+    )?;
+
+    let before_atoms = list_label_atoms(&temp.path, "default")?;
+    let board = get_board(&temp.path, "default")?;
+    let before_action_count: i64 = connect_file(&temp.path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_actions WHERE board_id=?1",
+        [&board.id],
+        |row| row.get(0),
+    )?;
+    let before_signals = list_label_ontology_signals(
+        &temp.path,
+        "default",
+        LabelOntologySignalListOptions::default(),
+    )?;
+    assert!(
+        before_signals
+            .iter()
+            .all(|signal| signal.status == LabelOntologySignalStatus::Open)
+    );
+
+    let first = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::Cluster,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+    let second = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::Cluster,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+
+    assert_eq!(first, second);
+    assert_eq!(first.len(), 1);
+    assert!(first[0].signal_ids.contains(&observation_a.signals[0].id));
+    assert!(first[0].signal_ids.contains(&observation_b.signals[0].id));
+    assert_eq!(list_label_atoms(&temp.path, "default")?, before_atoms);
+    assert_eq!(
+        connect_file(&temp.path)?.query_row(
+            "SELECT COUNT(*) FROM label_ontology_actions WHERE board_id=?1",
+            [&board.id],
+            |row| row.get::<_, i64>(0),
+        )?,
+        before_action_count
+    );
+    assert_eq!(
+        list_label_ontology_signals(
+            &temp.path,
+            "default",
+            LabelOntologySignalListOptions::default(),
+        )?,
+        before_signals
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_review_candidate_atom_fallback_separates_empty_candidates() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_review_candidate_atom_fallback_separates_empty_candidates")?;
+    let fixture = seed_label_ontology_review_fixture(&temp)?;
+    let gap_task_same = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Ontology gap source C"),
+    )?;
+    let gap_task_other = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Decision comment gap source"),
+    )?;
+
+    let same_gap_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &gap_task_same.id,
+        review_record_input(vec![review_gap_signal(
+            "gap-open-same",
+            "Ontology Ledger",
+            0.11,
+        )]),
+    )?;
+    let other_gap_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &gap_task_other.id,
+        review_record_input(vec![review_gap_signal(
+            "gap-open-other",
+            "Decision Comments",
+            0.13,
+        )]),
+    )?;
+
+    let groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::CandidateAtom,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+
+    let ontology_gap = groups
+        .iter()
+        .find(|group| group.signal_ids.contains(&fixture.open_gap_signal_id))
+        .context("ontology ledger empty-candidate group")?;
+    assert!(ontology_gap.key.contains("no-candidate-atom"));
+    assert!(ontology_gap.key.contains("vocabulary_gap"));
+    assert!(ontology_gap.key.contains("bootstrap_label"));
+    assert!(ontology_gap.key.contains("ontology ledger"));
+    assert_eq!(ontology_gap.task_count, 2);
+    assert_eq!(ontology_gap.signal_count, 2);
+    assert!(
+        ontology_gap
+            .signal_ids
+            .contains(&same_gap_observation.signals[0].id)
+    );
+
+    let other_gap = groups
+        .iter()
+        .find(|group| {
+            group
+                .signal_ids
+                .contains(&other_gap_observation.signals[0].id)
+        })
+        .context("decision comments empty-candidate group")?;
+    assert!(other_gap.key.contains("decision comments"));
+    assert_eq!(other_gap.task_count, 1);
+    assert_eq!(other_gap.signal_count, 1);
+    assert_ne!(ontology_gap.key, other_gap.key);
+
+    let cli_atom = groups
+        .iter()
+        .find(|group| group.candidate_text.as_deref() == Some("adds CLI commands"))
+        .context("cli candidate atom group")?;
+    assert_eq!(cli_atom.task_count, 2);
+    assert_eq!(cli_atom.signal_count, 2);
+    Ok(())
+}
+
+#[test]
+fn label_ontology_review_candidate_atom_fallback_separates_target_kind_and_action()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_review_candidate_atom_fallback_separates_target_kind_and_action",
+    )?;
+    seed_label_ontology_review_fixture(&temp)?;
+    let cli_update_a = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI empty candidate update source A"),
+    )?;
+    let cli_update_b = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI empty candidate update source B"),
+    )?;
+    let docs_update = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Docs empty candidate update source"),
+    )?;
+    let cli_observe = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI empty candidate observe source"),
+    )?;
+
+    let cli_update_a_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_update_a.id,
+        review_record_input(vec![review_empty_target_signal(
+            "empty-cli-update-a",
+            "cli",
+            LabelOntologySignalKind::BoundaryIssue,
+            LabelOntologyProposedAction::UpdateSemantics,
+            0.31,
+        )]),
+    )?;
+    let cli_update_b_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_update_b.id,
+        review_record_input(vec![review_empty_target_signal(
+            "empty-cli-update-b",
+            "cli",
+            LabelOntologySignalKind::BoundaryIssue,
+            LabelOntologyProposedAction::UpdateSemantics,
+            0.33,
+        )]),
+    )?;
+    let docs_update_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &docs_update.id,
+        review_record_input(vec![review_empty_target_signal(
+            "empty-docs-update",
+            "docs",
+            LabelOntologySignalKind::BoundaryIssue,
+            LabelOntologyProposedAction::UpdateSemantics,
+            0.8,
+        )]),
+    )?;
+    let cli_observe_observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_observe.id,
+        review_record_input(vec![review_empty_target_signal(
+            "empty-cli-observe",
+            "cli",
+            LabelOntologySignalKind::NameIssue,
+            LabelOntologyProposedAction::Observe,
+            0.41,
+        )]),
+    )?;
+    let cli_update_b_signal_id = cli_update_b_observation.signals[0].id.clone();
+    let confirm_action = create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![cli_update_b_signal_id.clone()],
+            "confirm empty candidate update group",
+        ),
+    )?;
+
+    let groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::CandidateAtom,
+            include_all: false,
+            limit: 20,
+        },
+    )?;
+
+    let cli_update_group = groups
+        .iter()
+        .find(|group| {
+            group
+                .signal_ids
+                .contains(&cli_update_a_observation.signals[0].id)
+        })
+        .context("cli update empty-candidate group")?;
+    assert!(cli_update_group.key.contains("boundary_issue"));
+    assert!(cli_update_group.key.contains("update_semantics"));
+    assert_eq!(cli_update_group.labels.len(), 1);
+    assert_eq!(cli_update_group.labels[0].name.as_deref(), Some("cli"));
+    assert_eq!(cli_update_group.task_count, 2);
+    assert_eq!(cli_update_group.signal_count, 2);
+    assert_eq!(cli_update_group.open_count, 1);
+    assert_eq!(cli_update_group.confirmed_count, 1);
+    assert_eq!(cli_update_group.action_count, 1);
+    assert!(cli_update_group.action_ids.contains(&confirm_action.id));
+    assert!(cli_update_group.candidate_atom_variants.is_empty());
+
+    let docs_update_group = groups
+        .iter()
+        .find(|group| {
+            group
+                .signal_ids
+                .contains(&docs_update_observation.signals[0].id)
+        })
+        .context("docs update empty-candidate group")?;
+    assert_eq!(docs_update_group.labels[0].name.as_deref(), Some("docs"));
+    assert_eq!(docs_update_group.task_count, 1);
+    assert_eq!(docs_update_group.signal_count, 1);
+    assert_ne!(cli_update_group.key, docs_update_group.key);
+
+    let cli_observe_group = groups
+        .iter()
+        .find(|group| {
+            group
+                .signal_ids
+                .contains(&cli_observe_observation.signals[0].id)
+        })
+        .context("cli observe empty-candidate group")?;
+    assert!(cli_observe_group.key.contains("name_issue"));
+    assert!(cli_observe_group.key.contains("observe"));
+    assert_eq!(cli_observe_group.labels[0].name.as_deref(), Some("cli"));
+    assert_eq!(cli_observe_group.task_count, 1);
+    assert_eq!(cli_observe_group.signal_count, 1);
+    assert_ne!(cli_update_group.key, cli_observe_group.key);
+    assert_ne!(docs_update_group.key, cli_observe_group.key);
+
     Ok(())
 }
 
@@ -955,6 +1798,520 @@ fn label_ontology_generic_action_rejects_canonical_mutation_types() -> anyhow::R
 }
 
 #[test]
+fn label_ontology_structure_plan_records_change_set_without_canonical_mutation()
+-> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_structure_plan_records_change_set_without_canonical_mutation")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Rename CLI ontology boundary"),
+    )?;
+    kanban_sqlite::add_task_labels_with_options(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        &["cli".to_owned()],
+        false,
+    )?;
+    let mut rename_signal = sample_signal_input("rename-cli-to-command-surface");
+    rename_signal.proposed_action = LabelOntologyProposedAction::RenameLabel;
+    rename_signal.candidate_atom = None;
+    rename_signal.proposed_label_name = Some("command surface".to_owned());
+    rename_signal.proposal_json = json!({
+        "from": "cli",
+        "to": "command surface",
+        "reason": "CLI now covers command surfaces beyond command-line only."
+    })
+    .to_string();
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![rename_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer agrees this structure signal is real.",
+        ),
+    )?;
+
+    let before_label_names: Vec<String> = connect_file(&temp.path)?
+        .prepare("SELECT name FROM labels ORDER BY name")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    let before_binding_count: i64 =
+        connect_file(&temp.path)?
+            .query_row("SELECT COUNT(*) FROM task_labels", [], |row| row.get(0))?;
+
+    let action = plan_label_ontology_structure_change(
+        &temp.path,
+        "default",
+        LabelOntologyStructurePlanInput {
+            actor: validation_actor(),
+            signal_ids: vec![signal_id.clone()],
+            action_type: LabelOntologyActionType::RenameLabel,
+            target_label_ref: "cli".to_owned(),
+            proposed_label_name: Some("command surface".to_owned()),
+            related_label_refs: Vec::new(),
+            task_binding_policy: None,
+            validation_policy_json: None,
+            reason: "Plan rename before any canonical label identity rewrite.".to_owned(),
+        },
+    )?;
+
+    assert_eq!(action.action_type, LabelOntologyActionType::RenameLabel);
+    assert_eq!(
+        action.validation_status,
+        LabelOntologyValidationStatus::Pending
+    );
+    assert_eq!(action.signal_ids, vec![signal_id]);
+    assert!(action.result_label_id.is_none());
+    assert!(action.result_atom_id.is_none());
+    assert!(action.canonical_before_hash.is_some());
+    assert!(action.canonical_after_hash.is_some());
+    assert_ne!(action.canonical_before_hash, action.canonical_after_hash);
+    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
+    assert_eq!(change["phase"], "planned_structure_change");
+    assert_eq!(change["canonical_mutation_applied"], false);
+    assert_eq!(change["change_type"], "rename_label");
+    assert_eq!(change["target_label"]["name"], "cli");
+    assert_eq!(change["after"]["proposed_label_name"], "command surface");
+    assert_eq!(
+        change["task_binding_migration_plan"]["policy"],
+        "preserve_bindings"
+    );
+    assert_eq!(change["validation_policy"]["required"], true);
+    assert_eq!(
+        change["validation_policy"]["trusted_validation_required_before_apply"],
+        true
+    );
+    let validation: serde_json::Value = serde_json::from_str(&action.validation_json)?;
+    assert_eq!(validation["state"], "pending_structure_change_plan");
+
+    let after_label_names: Vec<String> = connect_file(&temp.path)?
+        .prepare("SELECT name FROM labels ORDER BY name")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    let after_binding_count: i64 =
+        connect_file(&temp.path)?
+            .query_row("SELECT COUNT(*) FROM task_labels", [], |row| row.get(0))?;
+    assert_eq!(after_label_names, before_label_names);
+    assert_eq!(after_binding_count, before_binding_count);
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_structure_plan_requires_confirmed_source_signal() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_structure_plan_requires_confirmed_source_signal")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Plan CLI split ontology boundary"),
+    )?;
+    let mut split_signal = sample_signal_input("split-cli-surface");
+    split_signal.proposed_action = LabelOntologyProposedAction::SplitLabel;
+    split_signal.candidate_atom = None;
+    split_signal.related_labels_json = json!(["command-surface"]).to_string();
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![split_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+
+    let error = result_err(plan_label_ontology_structure_change(
+        &temp.path,
+        "default",
+        LabelOntologyStructurePlanInput {
+            actor: validation_actor(),
+            signal_ids: vec![signal_id],
+            action_type: LabelOntologyActionType::SplitLabel,
+            target_label_ref: "cli".to_owned(),
+            proposed_label_name: None,
+            related_label_refs: vec!["command-surface".to_owned()],
+            task_binding_policy: Some("manual_map_required".to_owned()),
+            validation_policy_json: None,
+            reason: "Unconfirmed signals cannot drive structure plans.".to_owned(),
+        },
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("must be one of [Confirmed], found open")
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_structure_plan_covers_split_and_signal_history() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_structure_plan_covers_split_and_signal_history")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "command-surface".to_owned(),
+            color: None,
+        },
+    )?;
+    let cli_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI task keeps current binding while split is planned"),
+    )?;
+    let related_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Command surface task keeps related binding while split is planned"),
+    )?;
+    kanban_sqlite::add_task_labels_with_options(
+        &temp.path,
+        "default",
+        "tester",
+        &cli_task.id,
+        &["cli".to_owned()],
+        false,
+    )?;
+    kanban_sqlite::add_task_labels_with_options(
+        &temp.path,
+        "default",
+        "tester",
+        &related_task.id,
+        &["command-surface".to_owned()],
+        false,
+    )?;
+    let mut split_signal = sample_signal_input("split-cli-command-surface");
+    split_signal.proposed_action = LabelOntologyProposedAction::SplitLabel;
+    split_signal.candidate_atom = None;
+    split_signal.related_labels_json = json!(["command-surface"]).to_string();
+    split_signal.rationale = "CLI should be split from broader command surface work.".to_owned();
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_task.id,
+        sample_record_input(vec![split_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer confirmed split structure signal.",
+        ),
+    )?;
+
+    let before_labels = structure_label_names(&temp.path)?;
+    let before_bindings = structure_task_label_rows(&temp.path)?;
+
+    let action = plan_label_ontology_structure_change(
+        &temp.path,
+        "default",
+        LabelOntologyStructurePlanInput {
+            actor: validation_actor(),
+            signal_ids: vec![signal_id.clone()],
+            action_type: LabelOntologyActionType::SplitLabel,
+            target_label_ref: "cli".to_owned(),
+            proposed_label_name: None,
+            related_label_refs: vec!["command-surface".to_owned()],
+            task_binding_policy: None,
+            validation_policy_json: None,
+            reason: "Plan split without rewriting canonical label identity or bindings.".to_owned(),
+        },
+    )?;
+
+    assert_eq!(action.action_type, LabelOntologyActionType::SplitLabel);
+    assert_eq!(
+        action.validation_status,
+        LabelOntologyValidationStatus::Pending
+    );
+    assert_eq!(action.signal_ids, vec![signal_id.clone()]);
+    assert!(action.result_label_id.is_none());
+    assert!(action.result_atom_id.is_none());
+    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
+    assert_eq!(change["phase"], "planned_structure_change");
+    assert_eq!(change["canonical_mutation_applied"], false);
+    assert_eq!(change["change_type"], "split_label");
+    assert_eq!(change["target_label"]["name"], "cli");
+    assert_eq!(change["related_labels"][0]["name"], "command-surface");
+    assert_eq!(change["before"]["labels"][0]["task_binding_count"], 1);
+    assert_eq!(change["before"]["labels"][1]["task_binding_count"], 1);
+    assert_eq!(
+        change["task_binding_migration_plan"]["policy"],
+        "manual_map_required"
+    );
+    assert_eq!(
+        change["source_signals"][0]["proposed_action"],
+        "split_label"
+    );
+    assert_eq!(
+        change["source_signals"][0]["related_labels"],
+        json!(["command-surface"])
+    );
+
+    assert_eq!(structure_label_names(&temp.path)?, before_labels);
+    assert_eq!(structure_task_label_rows(&temp.path)?, before_bindings);
+    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
+    assert_eq!(detail.signal.status, LabelOntologySignalStatus::Confirmed);
+    assert!(
+        detail
+            .actions
+            .iter()
+            .any(|candidate| candidate.id == action.id)
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_structure_plan_covers_merge_policy_without_binding_migration()
+-> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_structure_plan_covers_merge_policy_without_binding_migration")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "command-surface".to_owned(),
+            color: None,
+        },
+    )?;
+    let cli_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI task remains bound while merge is only planned"),
+    )?;
+    let related_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Related command task remains bound while merge is only planned"),
+    )?;
+    kanban_sqlite::add_task_labels_with_options(
+        &temp.path,
+        "default",
+        "tester",
+        &cli_task.id,
+        &["cli".to_owned()],
+        false,
+    )?;
+    kanban_sqlite::add_task_labels_with_options(
+        &temp.path,
+        "default",
+        "tester",
+        &related_task.id,
+        &["command-surface".to_owned()],
+        false,
+    )?;
+    let mut merge_signal = sample_signal_input("merge-command-surface-into-cli");
+    merge_signal.proposed_action = LabelOntologyProposedAction::MergeLabels;
+    merge_signal.candidate_atom = None;
+    merge_signal.related_labels_json = json!(["command-surface"]).to_string();
+    merge_signal.rationale = "Command surface should merge into CLI boundary.".to_owned();
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_task.id,
+        sample_record_input(vec![merge_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer confirmed merge structure signal.",
+        ),
+    )?;
+
+    let before_labels = structure_label_names(&temp.path)?;
+    let before_bindings = structure_task_label_rows(&temp.path)?;
+
+    let action = plan_label_ontology_structure_change(
+        &temp.path,
+        "default",
+        LabelOntologyStructurePlanInput {
+            actor: validation_actor(),
+            signal_ids: vec![signal_id.clone()],
+            action_type: LabelOntologyActionType::MergeLabels,
+            target_label_ref: "cli".to_owned(),
+            proposed_label_name: None,
+            related_label_refs: vec!["command-surface".to_owned()],
+            task_binding_policy: None,
+            validation_policy_json: Some(
+                json!({
+                    "required": true,
+                    "policy": "manual_merge_review",
+                    "trusted_validation_required_before_apply": true
+                })
+                .to_string(),
+            ),
+            reason: "Plan merge without moving existing task bindings yet.".to_owned(),
+        },
+    )?;
+
+    assert_eq!(action.action_type, LabelOntologyActionType::MergeLabels);
+    assert_eq!(action.signal_ids, vec![signal_id]);
+    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
+    assert_eq!(change["canonical_mutation_applied"], false);
+    assert_eq!(change["change_type"], "merge_labels");
+    assert_eq!(change["target_label"]["name"], "cli");
+    assert_eq!(change["related_labels"][0]["name"], "command-surface");
+    assert_eq!(
+        change["task_binding_migration_plan"]["policy"],
+        "move_related_to_target"
+    );
+    assert_eq!(change["validation_policy"]["policy"], "manual_merge_review");
+    let validation: serde_json::Value = serde_json::from_str(&action.validation_json)?;
+    assert_eq!(validation["state"], "pending_structure_change_plan");
+    assert_eq!(validation["trusted_validation_required_before_apply"], true);
+
+    assert_eq!(structure_label_names(&temp.path)?, before_labels);
+    assert_eq!(structure_task_label_rows(&temp.path)?, before_bindings);
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_structure_plan_failure_does_not_commit_partial_action() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_structure_plan_failure_does_not_commit_partial_action")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "command-surface".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Invalid structure plan should not leave action rows"),
+    )?;
+    let mut split_signal = sample_signal_input("split-cli-but-request-merge");
+    split_signal.proposed_action = LabelOntologyProposedAction::SplitLabel;
+    split_signal.candidate_atom = None;
+    split_signal.related_labels_json = json!(["command-surface"]).to_string();
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![split_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Reviewer confirmed split signal before an invalid plan request.",
+        ),
+    )?;
+    let before_action_count = ontology_action_count(&temp.path)?;
+    let before_link_count = ontology_action_signal_count(&temp.path)?;
+    let before_labels = structure_label_names(&temp.path)?;
+    let before_bindings = structure_task_label_rows(&temp.path)?;
+
+    let error = result_err(plan_label_ontology_structure_change(
+        &temp.path,
+        "default",
+        LabelOntologyStructurePlanInput {
+            actor: validation_actor(),
+            signal_ids: vec![signal_id.clone()],
+            action_type: LabelOntologyActionType::MergeLabels,
+            target_label_ref: "cli".to_owned(),
+            proposed_label_name: None,
+            related_label_refs: vec!["command-surface".to_owned()],
+            task_binding_policy: None,
+            validation_policy_json: None,
+            reason: "This intentionally mismatches the confirmed split signal.".to_owned(),
+        },
+    ))?;
+
+    assert!(
+        error
+            .to_string()
+            .contains("does not match structure plan action merge_labels")
+    );
+    assert_eq!(ontology_action_count(&temp.path)?, before_action_count);
+    assert_eq!(ontology_action_signal_count(&temp.path)?, before_link_count);
+    assert_eq!(structure_label_names(&temp.path)?, before_labels);
+    assert_eq!(structure_task_label_rows(&temp.path)?, before_bindings);
+    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
+    assert_eq!(detail.signal.status, LabelOntologySignalStatus::Confirmed);
+    assert_eq!(detail.actions.len(), 1);
+    assert_eq!(
+        detail.actions[0].action_type,
+        LabelOntologyActionType::Confirm
+    );
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_generic_action_rejects_fabricated_provenance_fields() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_generic_action_rejects_fabricated_provenance_fields")?;
     init_database(&temp.path, "tester")?;
@@ -1037,7 +2394,7 @@ fn label_ontology_validation_rejects_non_mutation_parent() -> anyhow::Result<()>
         ),
     )?;
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -1093,7 +2450,7 @@ fn label_ontology_validation_rejects_parent_without_pending_canonical_evidence()
     let bare_parent =
         seed_pending_mutation_action_without_evidence(&temp.path, &task.board_id, &signal_id)?;
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -1106,6 +2463,119 @@ fn label_ontology_validation_rejects_parent_without_pending_canonical_evidence()
         },
     ))?;
     assert!(error.to_string().contains("canonical mutation evidence"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_passed_validation_rejects_unsupported_canonical_mutation_policy()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_passed_validation_rejects_unsupported_canonical_mutation_policy",
+    )?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed_semantics = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            description: Some("Command-line interface behavior".to_owned()),
+            applies_when: vec!["changes CLI user-visible behavior".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject untyped semantics validation"),
+    )?;
+    let update_signal = review_empty_target_signal(
+        "cli-validation-update-semantics-unsupported-policy",
+        "cli",
+        LabelOntologySignalKind::BoundaryIssue,
+        LabelOntologyProposedAction::UpdateSemantics,
+        0.42,
+    );
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![update_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed semantics description adjustment.",
+        ),
+    )?;
+
+    kanban_sqlite::upsert_label_semantics_with_options(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            expected_semantics_hash: Some(seed_semantics.semantics_hash.clone()),
+            description: Some("Command-line interface and CLI JSON behavior".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+        kanban_sqlite::LabelSemanticsMutationOptions {
+            actor: reviewer_actor(),
+            reason: Some("Clarify CLI semantics description.".to_owned()),
+            source_signal_ids: vec![signal_id.clone()],
+        },
+    )?;
+    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
+    let update_action = detail
+        .actions
+        .iter()
+        .find(|action| action.action_type == LabelOntologyActionType::UpdateSemantics)
+        .context("update_semantics action")?;
+    let validation_json = json!({
+        "evidence_type": "trusted_automated",
+        "embedding_model": "test-embedding-v1",
+        "solver_options": {"candidate_limit": 24, "atom_limit": 64},
+        "index": {"status": "ready", "dirty": false, "generation": 7},
+        "cases": [{
+            "signal_id": signal_id,
+            "case_type": "update_semantics",
+            "passed": true,
+            "before": {},
+            "after": {"degraded": false}
+        }]
+    });
+
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: validation_actor(),
+            parent_action_id: update_action.id.clone(),
+            signal_ids: Vec::new(),
+            reason: "Passed validation requires a typed update semantics policy.".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            validation_json: validation_json.to_string(),
+        },
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("passed validation for update_semantics is not supported")
+    );
+    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
+    assert_eq!(detail.signal.status, LabelOntologySignalStatus::Confirmed);
 
     Ok(())
 }
@@ -1161,7 +2631,7 @@ fn label_ontology_passed_validation_rejects_empty_or_untyped_evidence() -> anyho
         },
     )?;
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -1174,6 +2644,41 @@ fn label_ontology_passed_validation_rejects_empty_or_untyped_evidence() -> anyho
         },
     ))?;
     assert!(error.to_string().contains("structured validation evidence"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_external_validation_rejects_fake_automated_passed_evidence() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_external_validation_rejects_fake_automated_passed_evidence")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Reject fake automated ontology validation",
+        "cli-fake-automated-validation",
+    )?;
+    let mut fake_json = typed_positive_fixture_json(&fixture);
+    fake_json["evidence_type"] = json!("automated");
+
+    let error = result_err(validate_label_ontology_action(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            fake_json,
+            "Hand-written automated evidence must not close ontology signals.",
+        ),
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("trusted evidence collected by the kanban tool"),
+        "{error}"
+    );
+    let detail = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    assert_eq!(detail.signal.status, LabelOntologySignalStatus::Confirmed);
 
     Ok(())
 }
@@ -1296,7 +2801,7 @@ fn label_ontology_atom_apply_records_provenance_and_validation_resolves_signal()
             .contains("is not linked to parent action")
     );
 
-    let validation = validate_label_ontology_action(
+    let validation = validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -1340,6 +2845,22 @@ fn label_ontology_atom_apply_records_provenance_and_validation_resolves_signal()
     assert_eq!(validation_json["cases"][0]["comparable"], true);
     assert_eq!(validation_json["cases"][0]["before"]["score"], 0.08);
     assert_eq!(validation_json["manual"]["cases"][0]["passed"], true);
+    assert_eq!(
+        validation_json["cases"][0]["after"]["manual_case_ref"]["source"],
+        "manual.cases"
+    );
+    assert_eq!(
+        validation_json["cases"][0]["after"]["manual_case_ref"]["index"],
+        0
+    );
+    assert_eq!(
+        validation_json["cases"][0]["after"]["manual_case_ref"]["signal_id"],
+        signal_id
+    );
+    assert!(
+        validation_json["cases"][0]["after"].get("manual").is_none(),
+        "generated validation case must reference top-level manual payload instead of duplicating it"
+    );
     let resolved = get_label_ontology_signal(&temp.path, &signal_id)?;
     assert_eq!(resolved.signal.status, LabelOntologySignalStatus::Resolved);
     assert_eq!(resolved.actions.len(), 3);
@@ -1364,6 +2885,940 @@ fn label_ontology_atom_apply_records_provenance_and_validation_resolves_signal()
         repeated_validation
             .to_string()
             .contains("invalid transition")
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_revert_positive_atom_restores_before_hash_and_records_action()
+-> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_revert_positive_atom_restores_before_hash_and_records_action")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            description: Some("Command-line interface behavior".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let before_semantics = get_label_semantics(&temp.path, "default", "cli")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Add ontology CLI revert action"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![sample_signal_input("cli-revert-positive-atom")]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed by reviewer.",
+        ),
+    )?;
+    clear_label_atom_dirty_flags(&temp.path, "default")?;
+
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed false-negative support for CLI surface changes.".to_owned(),
+        },
+    )?;
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+    clear_label_atom_dirty_flags(&temp.path, "default")?;
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+
+    let revert_action = revert_label_ontology_mutation(
+        &temp.path,
+        "default",
+        LabelOntologyRevertInput {
+            actor: reviewer_actor(),
+            target_action_id: apply_action.id.clone(),
+            expected_current_hash: apply_action.canonical_after_hash.clone(),
+            reason: "Revert test-only ontology mutation.".to_owned(),
+        },
+    )?;
+
+    assert_eq!(
+        revert_action.action_type,
+        LabelOntologyActionType::RevertOntologyMutation
+    );
+    assert_eq!(
+        revert_action.parent_action_id.as_deref(),
+        Some(apply_action.id.as_str())
+    );
+    assert_eq!(
+        revert_action.validation_status,
+        LabelOntologyValidationStatus::Pending
+    );
+    assert_eq!(
+        revert_action.canonical_before_hash,
+        apply_action.canonical_after_hash
+    );
+    assert_eq!(
+        revert_action.canonical_after_hash,
+        apply_action.canonical_before_hash
+    );
+    assert_eq!(revert_action.signal_ids, vec![signal_id.clone()]);
+    let change: serde_json::Value = serde_json::from_str(&revert_action.change_json)?;
+    assert_eq!(change["reverted_action_id"], apply_action.id);
+    assert_eq!(change["reverted_action_type"], "add_positive_atom");
+    assert_eq!(change["index_dirty"], true);
+    let restored_semantics = get_label_semantics(&temp.path, "default", "cli")?;
+    assert_eq!(
+        restored_semantics.semantics_hash,
+        before_semantics.semantics_hash
+    );
+    assert_eq!(restored_semantics.description, before_semantics.description);
+    assert_eq!(
+        restored_semantics.applies_when,
+        before_semantics.applies_when
+    );
+    assert_eq!(
+        restored_semantics.excludes_when,
+        before_semantics.excludes_when
+    );
+    assert_eq!(
+        restored_semantics.positive_examples,
+        before_semantics.positive_examples
+    );
+    assert_eq!(
+        restored_semantics.negative_examples,
+        before_semantics.negative_examples
+    );
+    assert_eq!(
+        restored_semantics
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>(),
+        before_semantics
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>()
+    );
+    let reverted_atom_id = apply_action
+        .result_atom_id
+        .as_deref()
+        .context("applied action atom id")?;
+    assert!(
+        !list_label_atoms(&temp.path, "default")?
+            .iter()
+            .any(|atom| atom.id == reverted_atom_id)
+    );
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+
+    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
+    let action_types = detail
+        .actions
+        .iter()
+        .map(|action| action.action_type)
+        .collect::<Vec<_>>();
+    assert!(action_types.contains(&LabelOntologyActionType::Confirm));
+    assert!(action_types.contains(&LabelOntologyActionType::AddPositiveAtom));
+    assert!(action_types.contains(&LabelOntologyActionType::RevertOntologyMutation));
+
+    let original_action = detail
+        .actions
+        .iter()
+        .find(|action| action.id == apply_action.id)
+        .context("original action remains in history")?;
+    assert_eq!(
+        original_action.action_type,
+        LabelOntologyActionType::AddPositiveAtom
+    );
+    let atom_explain = explain_label_atom(&temp.path, "default", reverted_atom_id)?;
+    assert!(
+        atom_explain.atom.is_none(),
+        "reverted atom should no longer be canonical"
+    );
+    let explain_action_types = atom_explain
+        .provenance_actions
+        .iter()
+        .map(|provenance| provenance.action.action_type)
+        .collect::<Vec<_>>();
+    assert!(
+        explain_action_types.contains(&LabelOntologyActionType::AddPositiveAtom),
+        "{explain_action_types:?}"
+    );
+    assert!(
+        explain_action_types.contains(&LabelOntologyActionType::RevertOntologyMutation),
+        "{explain_action_types:?}"
+    );
+    assert!(
+        atom_explain.supporting_signals.iter().any(|support| {
+            support.signal.id == signal_id
+                && support.signal.status == LabelOntologySignalStatus::Confirmed
+        }),
+        "atom explain should keep the source signal history"
+    );
+
+    let validation_action = validate_label_ontology_action(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: reviewer_actor(),
+            parent_action_id: revert_action.id.clone(),
+            signal_ids: vec![signal_id.clone()],
+            reason: "External validation records that revert needs a future trusted check."
+                .to_owned(),
+            validation_status: LabelOntologyValidationStatus::Failed,
+            validation_json: json!({
+                "evidence_type": "external_attestation",
+                "cases": []
+            })
+            .to_string(),
+        },
+    )?;
+    assert_eq!(
+        validation_action.action_type,
+        LabelOntologyActionType::Validate
+    );
+    assert_eq!(
+        validation_action.parent_action_id.as_deref(),
+        Some(revert_action.id.as_str())
+    );
+    assert_eq!(
+        validation_action.validation_status,
+        LabelOntologyValidationStatus::Failed
+    );
+    assert_eq!(
+        get_label_ontology_signal(&temp.path, &signal_id)?
+            .signal
+            .status,
+        LabelOntologySignalStatus::Confirmed
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_revert_negative_atom_restores_before_hash_and_explain_chain() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_revert_negative_atom_restores_before_hash_and_explain_chain")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            description: Some("Command-line interface behavior".to_owned()),
+            applies_when: vec!["changes CLI user-visible behavior".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let before_semantics = get_label_semantics(&temp.path, "default", "cli")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject docs-only task as CLI label match"),
+    )?;
+    let mut negative_signal = sample_signal_input("cli-revert-negative-atom");
+    negative_signal.kind = LabelOntologySignalKind::FalsePositive;
+    negative_signal.proposed_action = LabelOntologyProposedAction::AddNegativeAtom;
+    negative_signal.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+        polarity: "negative".to_owned(),
+        kind: "excludes_when".to_owned(),
+        text: "only changes release notes or prose without touching CLI behavior".to_owned(),
+    });
+    negative_signal.rationale =
+        "The source task was a false positive for cli and needs suppressing evidence.".to_owned();
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![negative_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed false-positive suppressing evidence.",
+        ),
+    )?;
+
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![signal_id.clone()],
+            label_ref: "cli".to_owned(),
+            kind: "excludes_when".to_owned(),
+            text: "only changes release notes or prose without touching CLI behavior".to_owned(),
+            reason: "Confirmed negative boundary for CLI label.".to_owned(),
+        },
+    )?;
+    assert_eq!(
+        apply_action.action_type,
+        LabelOntologyActionType::AddNegativeAtom
+    );
+    let applied_atom_id = apply_action
+        .result_atom_id
+        .as_deref()
+        .context("negative atom id")?;
+
+    let revert_action = revert_label_ontology_mutation(
+        &temp.path,
+        "default",
+        LabelOntologyRevertInput {
+            actor: reviewer_actor(),
+            target_action_id: apply_action.id.clone(),
+            expected_current_hash: apply_action.canonical_after_hash.clone(),
+            reason: "Revert negative boundary test mutation.".to_owned(),
+        },
+    )?;
+
+    assert_eq!(
+        revert_action.action_type,
+        LabelOntologyActionType::RevertOntologyMutation
+    );
+    assert_eq!(
+        revert_action.parent_action_id.as_deref(),
+        Some(apply_action.id.as_str())
+    );
+    assert_eq!(
+        revert_action.canonical_after_hash,
+        apply_action.canonical_before_hash
+    );
+    assert_eq!(revert_action.signal_ids, vec![signal_id.clone()]);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+    let restored_semantics = get_label_semantics(&temp.path, "default", "cli")?;
+    assert_semantics_content_eq(&restored_semantics, &before_semantics);
+    assert!(
+        !list_label_atoms(&temp.path, "default")?
+            .iter()
+            .any(|atom| atom.id == applied_atom_id)
+    );
+
+    let atom_explain = explain_label_atom(&temp.path, "default", applied_atom_id)?;
+    let explain_action_types = atom_explain
+        .provenance_actions
+        .iter()
+        .map(|provenance| provenance.action.action_type)
+        .collect::<Vec<_>>();
+    assert!(
+        explain_action_types.contains(&LabelOntologyActionType::AddNegativeAtom),
+        "{explain_action_types:?}"
+    );
+    assert!(
+        explain_action_types.contains(&LabelOntologyActionType::RevertOntologyMutation),
+        "{explain_action_types:?}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_revert_update_semantics_restores_before_hash_and_keeps_atom_history()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_revert_update_semantics_restores_before_hash_and_keeps_atom_history",
+    )?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed_semantics = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            description: Some("Command-line interface behavior".to_owned()),
+            applies_when: vec!["changes CLI user-visible behavior".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let stable_atom = seed_semantics
+        .atoms
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("stable applies_when atom")?
+        .clone();
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Update CLI semantics description"),
+    )?;
+    let update_signal = review_empty_target_signal(
+        "cli-revert-update-semantics",
+        "cli",
+        LabelOntologySignalKind::BoundaryIssue,
+        LabelOntologyProposedAction::UpdateSemantics,
+        0.42,
+    );
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![update_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed semantics description adjustment.",
+        ),
+    )?;
+
+    let changed_semantics = kanban_sqlite::upsert_label_semantics_with_options(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            expected_semantics_hash: Some(seed_semantics.semantics_hash.clone()),
+            description: Some("Command-line interface and CLI JSON behavior".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+        kanban_sqlite::LabelSemanticsMutationOptions {
+            actor: reviewer_actor(),
+            reason: Some("Clarify CLI semantics description.".to_owned()),
+            source_signal_ids: vec![signal_id.clone()],
+        },
+    )?;
+    assert_ne!(
+        changed_semantics.semantics_hash,
+        seed_semantics.semantics_hash
+    );
+    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
+    let update_action = detail
+        .actions
+        .iter()
+        .find(|action| {
+            action.action_type == LabelOntologyActionType::UpdateSemantics
+                && action.result_atom_content_hash.as_deref()
+                    == Some(stable_atom.content_hash.as_str())
+        })
+        .context("update_semantics action for stable applies_when atom")?
+        .clone();
+
+    let revert_action = revert_label_ontology_mutation(
+        &temp.path,
+        "default",
+        LabelOntologyRevertInput {
+            actor: reviewer_actor(),
+            target_action_id: update_action.id.clone(),
+            expected_current_hash: update_action.canonical_after_hash.clone(),
+            reason: "Revert semantics description adjustment.".to_owned(),
+        },
+    )?;
+
+    assert_eq!(
+        revert_action.action_type,
+        LabelOntologyActionType::RevertOntologyMutation
+    );
+    assert_eq!(
+        revert_action.parent_action_id.as_deref(),
+        Some(update_action.id.as_str())
+    );
+    assert_eq!(
+        revert_action.canonical_after_hash,
+        update_action.canonical_before_hash
+    );
+    assert_semantics_content_eq(
+        &get_label_semantics(&temp.path, "default", "cli")?,
+        &seed_semantics,
+    );
+
+    let atom_explain = explain_label_atom(&temp.path, "default", &stable_atom.content_hash)?;
+    let explain_action_types = atom_explain
+        .provenance_actions
+        .iter()
+        .map(|provenance| provenance.action.action_type)
+        .collect::<Vec<_>>();
+    assert!(
+        explain_action_types.contains(&LabelOntologyActionType::UpdateSemantics),
+        "{explain_action_types:?}"
+    );
+    assert!(
+        explain_action_types.contains(&LabelOntologyActionType::RevertOntologyMutation),
+        "{explain_action_types:?}"
+    );
+    assert!(atom_explain.current_semantics.is_some());
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_revert_rejects_expected_hash_mismatch_without_new_action() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_revert_rejects_expected_hash_mismatch_without_new_action")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Revert expected hash mismatch source"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![sample_signal_input("cli-revert-wrong-expected-hash")]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed expected hash mismatch fixture.",
+        ),
+    )?;
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![signal_id],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed atom for expected hash mismatch test.".to_owned(),
+        },
+    )?;
+    let action_count_before = ontology_action_count(&temp.path)?;
+    let current_semantics = get_label_semantics(&temp.path, "default", "cli")?;
+
+    let error = result_err(revert_label_ontology_mutation(
+        &temp.path,
+        "default",
+        LabelOntologyRevertInput {
+            actor: reviewer_actor(),
+            target_action_id: apply_action.id,
+            expected_current_hash: Some("definitely-not-the-current-hash".to_owned()),
+            reason: "Wrong expected hash should reject before writing action.".to_owned(),
+        },
+    ))?;
+
+    assert!(
+        error
+            .to_string()
+            .contains("expected_current_hash does not match"),
+        "{error}"
+    );
+    assert_eq!(ontology_action_count(&temp.path)?, action_count_before);
+    assert_semantics_content_eq(
+        &get_label_semantics(&temp.path, "default", "cli")?,
+        &current_semantics,
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_revert_rejects_stale_current_hash() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_revert_rejects_stale_current_hash")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Add stale revert ontology fixture"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![
+            sample_signal_input("cli-revert-stale-first"),
+            sample_signal_input("cli-revert-stale-second"),
+        ]),
+    )?;
+    let first_signal_id = observation.signals[0].id.clone();
+    let second_signal_id = observation.signals[1].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![first_signal_id.clone(), second_signal_id.clone()],
+            "Confirmed by reviewer.",
+        ),
+    )?;
+    let first_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![first_signal_id],
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed first atom.".to_owned(),
+        },
+    )?;
+    apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![second_signal_id],
+            label_ref: "cli".to_owned(),
+            kind: "positive_example".to_owned(),
+            text: "adds a new kanban label ontology command".to_owned(),
+            reason: "Confirmed second atom.".to_owned(),
+        },
+    )?;
+
+    let error = result_err(revert_label_ontology_mutation(
+        &temp.path,
+        "default",
+        LabelOntologyRevertInput {
+            actor: reviewer_actor(),
+            target_action_id: first_action.id,
+            expected_current_hash: None,
+            reason: "Stale revert should be rejected.".to_owned(),
+        },
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("canonical ontology state changed"),
+        "{error}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_apply_existing_positive_atom_records_provenance_only_action() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_apply_existing_positive_atom_records_provenance_only_action")?;
+    let fixture = seed_existing_atom_apply_fixture(
+        &temp,
+        ExistingAtomApplyKind::Positive,
+        vec!["existing-positive-atom"],
+    )?;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+    let semantics_before = get_label_semantics(&temp.path, "default", "cli")?;
+    clear_label_atom_dirty_flags(&temp.path, "default")?;
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+    let add_action_count_before = add_atom_action_count(&temp.path)?;
+
+    let action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![fixture.signal_ids[0].clone()],
+            label_ref: "cli".to_owned(),
+            kind: fixture.atom_kind.clone(),
+            text: fixture.atom_text.clone(),
+            reason: "Link confirmed signal to existing positive atom.".to_owned(),
+        },
+    )?;
+
+    assert_existing_atom_adoption_action(&action, &fixture, "add_positive_atom")?;
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
+    assert_eq!(
+        get_label_semantics(&temp.path, "default", "cli")?,
+        semantics_before
+    );
+    assert_eq!(add_atom_action_count(&temp.path)?, add_action_count_before);
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+
+    let explain = explain_label_atom(&temp.path, "default", &fixture.atom_id)?;
+    assert!(!explain.legacy_untracked);
+    assert!(explain.provenance_actions.iter().any(|provenance| {
+        provenance.action.id == action.id
+            && provenance.action.action_type == LabelOntologyActionType::AdoptExistingAtom
+            && provenance.matched_by == "atom_id"
+    }));
+    assert!(
+        explain
+            .supporting_signals
+            .iter()
+            .any(|support| support.signal.id == fixture.signal_ids[0])
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_apply_existing_negative_atom_records_provenance_only_action() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_apply_existing_negative_atom_records_provenance_only_action")?;
+    let fixture = seed_existing_atom_apply_fixture(
+        &temp,
+        ExistingAtomApplyKind::Negative,
+        vec!["existing-negative-atom"],
+    )?;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+    clear_label_atom_dirty_flags(&temp.path, "default")?;
+    let add_action_count_before = add_atom_action_count(&temp.path)?;
+
+    let action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![fixture.signal_ids[0].clone()],
+            label_ref: "cli".to_owned(),
+            kind: fixture.atom_kind.clone(),
+            text: fixture.atom_text.clone(),
+            reason: "Link confirmed signal to existing negative atom.".to_owned(),
+        },
+    )?;
+
+    assert_existing_atom_adoption_action(&action, &fixture, "add_negative_atom")?;
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
+    assert_eq!(add_atom_action_count(&temp.path)?, add_action_count_before);
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_apply_existing_atom_repeatedly_keeps_canonical_state_clean() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_apply_existing_atom_repeatedly_keeps_canonical_state_clean")?;
+    let fixture = seed_existing_atom_apply_fixture(
+        &temp,
+        ExistingAtomApplyKind::Positive,
+        vec!["existing-atom-first", "existing-atom-second"],
+    )?;
+    let atoms_before = list_label_atoms(&temp.path, "default")?;
+    let semantics_before = get_label_semantics(&temp.path, "default", "cli")?;
+    clear_label_atom_dirty_flags(&temp.path, "default")?;
+    let add_action_count_before = add_atom_action_count(&temp.path)?;
+
+    let first_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![fixture.signal_ids[0].clone()],
+            label_ref: "cli".to_owned(),
+            kind: fixture.atom_kind.clone(),
+            text: fixture.atom_text.clone(),
+            reason: "Link first signal to existing atom.".to_owned(),
+        },
+    )?;
+    let second_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: reviewer_actor(),
+            signal_ids: vec![fixture.signal_ids[1].clone()],
+            label_ref: "cli".to_owned(),
+            kind: fixture.atom_kind.clone(),
+            text: fixture.atom_text.clone(),
+            reason: "Link second signal to existing atom.".to_owned(),
+        },
+    )?;
+
+    assert_ne!(first_action.id, second_action.id);
+    assert_existing_atom_adoption_action(&first_action, &fixture, "add_positive_atom")?;
+    assert_existing_atom_adoption_action(&second_action, &fixture, "add_positive_atom")?;
+    assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
+    assert_eq!(
+        get_label_semantics(&temp.path, "default", "cli")?,
+        semantics_before
+    );
+    assert_eq!(add_atom_action_count(&temp.path)?, add_action_count_before);
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+
+    let explain = explain_label_atom(&temp.path, "default", &fixture.atom_id)?;
+    let adoption_action_ids = explain
+        .provenance_actions
+        .iter()
+        .filter(|provenance| {
+            provenance.action.action_type == LabelOntologyActionType::AdoptExistingAtom
+        })
+        .map(|provenance| provenance.action.id.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(adoption_action_ids.contains(first_action.id.as_str()));
+    assert!(adoption_action_ids.contains(second_action.id.as_str()));
+    let support_signal_ids = explain
+        .supporting_signals
+        .iter()
+        .map(|support| support.signal.id.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(support_signal_ids.contains(fixture.signal_ids[0].as_str()));
+    assert!(support_signal_ids.contains(fixture.signal_ids[1].as_str()));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_validation_serialization_grows_linearly_with_signal_cases() -> anyhow::Result<()>
+{
+    let size_1 = validated_payload_size_for_signal_count(1)?;
+    let size_10 = validated_payload_size_for_signal_count(10)?;
+    let size_100 = validated_payload_size_for_signal_count(100)?;
+
+    assert!(
+        size_10 < size_1 * 15,
+        "10-case validation payload should stay close to linear growth: size_1={size_1}, size_10={size_10}"
+    );
+    assert!(
+        size_100 < size_10 * 15,
+        "100-case validation payload should stay close to linear growth: size_10={size_10}, size_100={size_100}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_validation_show_preserves_new_and_legacy_payload_shapes() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_validation_show_preserves_new_and_legacy_payload_shapes")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_multi_validation_fixture(&temp, 2)?;
+    let validation_json = typed_positive_multi_validation_json(&fixture);
+
+    let validation = validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: validation_actor(),
+            parent_action_id: fixture.apply_action_id.clone(),
+            signal_ids: Vec::new(),
+            reason: "Multi-signal validation should store compact case references.".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            validation_json: validation_json.to_string(),
+        },
+    )?;
+    let compact_payload: serde_json::Value = serde_json::from_str(&validation.validation_json)?;
+    assert_eq!(compact_payload["summary"]["case_count"], 2);
+    assert_eq!(
+        compact_payload["manual"]["cases"][1]["signal_id"],
+        fixture.signal_ids[1]
+    );
+    let compact_case = compact_payload["cases"]
+        .as_array()
+        .context("compact cases")?
+        .iter()
+        .find(|case| case["signal_id"] == fixture.signal_ids[1])
+        .context("compact case for second signal")?;
+    assert_eq!(
+        compact_case["after"]["manual_case_ref"]["index"],
+        manual_case_index_for_signal(&fixture, &fixture.signal_ids[1])?
+    );
+    assert!(
+        compact_payload["cases"][1]["after"].get("manual").is_none(),
+        "new persisted cases must not duplicate top-level manual payload"
+    );
+    let compact_detail = get_label_ontology_signal(&temp.path, &fixture.signal_ids[0])?;
+    let compact_action = compact_detail
+        .actions
+        .iter()
+        .find(|action| action.id == validation.id)
+        .context("compact validation action should be visible from signal show")?;
+    let compact_show_payload: serde_json::Value =
+        serde_json::from_str(&compact_action.validation_json)?;
+    let compact_show_case = compact_show_payload["cases"]
+        .as_array()
+        .context("compact show cases")?
+        .iter()
+        .find(|case| case["signal_id"] == fixture.signal_ids[0])
+        .context("compact show case for first signal")?;
+    assert_eq!(
+        compact_show_case["after"]["manual_case_ref"]["signal_id"],
+        fixture.signal_ids[0]
+    );
+
+    let legacy_action_id = seed_legacy_validation_action(&temp, &fixture)?;
+    let legacy_detail = get_label_ontology_signal(&temp.path, &fixture.signal_ids[0])?;
+    let legacy_action = legacy_detail
+        .actions
+        .iter()
+        .find(|action| action.id == legacy_action_id)
+        .context("legacy validation action should be visible from signal show")?;
+    let legacy_payload: serde_json::Value = serde_json::from_str(&legacy_action.validation_json)?;
+    assert_eq!(
+        legacy_payload["cases"][0]["signal_id"],
+        fixture.signal_ids[0]
+    );
+    assert_eq!(
+        legacy_payload["cases"][0]["after"]["manual"]["cases"][0]["signal_id"],
+        fixture.signal_ids[0]
     );
 
     Ok(())
@@ -1548,7 +4003,7 @@ fn label_ontology_validation_allows_status_only_task_drift_with_warning() -> any
     )?;
     claim_task(&temp.path, "default", "worker", &fixture.task.id, 300_000)?;
 
-    let validation = validate_label_ontology_action(
+    let validation = validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         passed_validation_input(&fixture, "Status-only task drift must remain comparable."),
@@ -1593,7 +4048,7 @@ fn label_ontology_validation_allows_label_binding_drift_with_warning() -> anyhow
     )?;
     assert_ne!(rerecorded.id, fixture.observation_id);
 
-    let validation = validate_label_ontology_action(
+    let validation = validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         passed_validation_input(&fixture, "Label binding drift must remain comparable."),
@@ -1629,7 +4084,7 @@ fn label_ontology_typed_validation_rejects_dirty_atom_index() -> anyhow::Result<
         "generation": 9
     });
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         validation_input_from_json(
@@ -1639,6 +4094,132 @@ fn label_ontology_typed_validation_rejects_dirty_atom_index() -> anyhow::Result<
         ),
     ))?;
     assert!(error.to_string().contains("dirty atom index"));
+
+    Ok(())
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn label_ontology_trusted_collector_runs_suggest_and_resolves_signal() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_trusted_collector_runs_suggest_and_resolves_signal")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Add ontology validation trusted collector success",
+        "cli-trusted-collector-success",
+    )?;
+    connect_file(&temp.path)?.execute(
+        "UPDATE label_ontology_observations \
+         SET suggest_coverage=0.0,suggest_residual_norm=1.0 \
+         WHERE id=?1",
+        [&fixture.observation_id],
+    )?;
+    let store = RecordingVectorStore::with_embedding_model("trusted-test-model");
+    rebuild_label_atom_index_with(&temp.path, "default", &store)?;
+    let status = label_atom_index_status_with(&temp.path, "default", &store)?;
+    let generation = status.generation.context("label atom index generation")?;
+
+    let validation = validate_label_ontology_action_with_trusted_suggestions(
+        &temp.path,
+        "default",
+        LabelOntologyTrustedValidationInput {
+            actor: validation_actor(),
+            parent_action_id: fixture.apply_action_id.clone(),
+            signal_ids: Vec::new(),
+            reason: "Trusted collector should close the signal from real suggest evidence."
+                .to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+        },
+        &store,
+        LabelSuggestionOptions {
+            output_limit: 5,
+            candidate_limit: 5,
+            atom_limit: 5,
+            max_selected_labels: 1,
+            min_score: 0.0,
+        },
+    )?;
+
+    assert_eq!(
+        validation.validation_status,
+        LabelOntologyValidationStatus::Passed
+    );
+    let validation_json: serde_json::Value = serde_json::from_str(&validation.validation_json)?;
+    assert_eq!(validation_json["summary"]["case_count"], 1);
+    assert_eq!(
+        validation_json["manual"]["evidence_type"],
+        "trusted_automated"
+    );
+    assert_eq!(
+        validation_json["manual"]["collector"]["source"],
+        "label_ontology_validate_trusted"
+    );
+    assert_eq!(
+        validation_json["manual"]["embedding_model"],
+        "trusted-test-model"
+    );
+    assert_eq!(
+        validation_json["manual"]["solver_options"]["candidate_limit"],
+        5
+    );
+    assert_eq!(validation_json["manual"]["index"]["generation"], generation);
+    let evidence_atoms = validation_json["manual"]["cases"][0]["after"]["evidence_atoms"]
+        .as_array()
+        .context("trusted evidence atoms")?;
+    assert!(
+        evidence_atoms
+            .iter()
+            .any(|atom| atom["atom_id"] == fixture.result_atom_id),
+        "trusted evidence atoms: {evidence_atoms:?}"
+    );
+    assert!(
+        validation_json["manual"]["cases"][0]["suggestion"]["candidates"]
+            .as_array()
+            .context("trusted suggestion candidates")?
+            .iter()
+            .any(|candidate| candidate["label_id"] == fixture.target_label_id)
+    );
+    let resolved = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    assert_eq!(resolved.signal.status, LabelOntologySignalStatus::Resolved);
+
+    Ok(())
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn label_ontology_trusted_collector_rechecks_index_generation() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_trusted_collector_rechecks_index_generation")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_validation_fixture(
+        &temp,
+        "Add ontology validation trusted generation guard",
+        "cli-trusted-generation-guard",
+    )?;
+    let store = RecordingVectorStore::with_embedding_model("trusted-test-model");
+    rebuild_label_atom_index_with(&temp.path, "default", &store)?;
+    let status = label_atom_index_status_with(&temp.path, "default", &store)?;
+    let generation = status.generation.context("label atom index generation")?;
+    let mut validation_json = typed_positive_fixture_json(&fixture);
+    validation_json["collector"] = json!({
+        "tool": "kanban",
+        "source": "label_ontology_validate_trusted",
+        "collected_at": 123
+    });
+    validation_json["embedding_model"] = json!("trusted-test-model");
+    validation_json["index"]["generation"] = json!(generation - 1);
+
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Tool-collected validation must reject stale generation evidence.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("generation changed"));
+    let signal = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    assert_eq!(signal.signal.status, LabelOntologySignalStatus::Confirmed);
 
     Ok(())
 }
@@ -1816,7 +4397,7 @@ fn label_ontology_typed_validation_positive_atom_requires_result_atom_evidence()
     let mut validation_json = typed_positive_fixture_json(&fixture);
     validation_json["cases"][0]["after"]["evidence_atoms"] = json!([]);
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         validation_input_from_json(
@@ -1826,6 +4407,203 @@ fn label_ontology_typed_validation_positive_atom_requires_result_atom_evidence()
         ),
     ))?;
     assert!(error.to_string().contains("result atom"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_accepts_negative_evidence_atoms()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_typed_validation_negative_atom_accepts_negative_evidence_atoms",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom evidence",
+        "cli-negative-evidence-success",
+    )?;
+    let validation_json = typed_negative_fixture_json(&fixture, true);
+
+    let validation = validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Negative atom validation should accept true negative evidence.",
+        ),
+    )?;
+
+    assert_eq!(
+        validation.validation_status,
+        LabelOntologyValidationStatus::Passed
+    );
+    let resolved = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    assert_eq!(resolved.signal.status, LabelOntologySignalStatus::Resolved);
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_rejects_positive_evidence_slot()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_typed_validation_negative_atom_rejects_positive_evidence_slot",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom evidence slot",
+        "cli-negative-evidence-slot",
+    )?;
+    let mut validation_json = typed_negative_fixture_json(&fixture, true);
+    validation_json["cases"][0]["after"]["evidence_atoms"] =
+        validation_json["cases"][0]["after"]["negative_evidence_atoms"].take();
+
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Negative atom validation must cite negative evidence atoms.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("negative_evidence_atoms"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_requires_suppression_proof() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_typed_validation_negative_atom_requires_suppression_proof")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom suppression",
+        "cli-negative-suppression",
+    )?;
+    let mut validation_json = typed_negative_fixture_json(&fixture, true);
+    validation_json["cases"][0]["after"]["target"]["selected"] = json!(true);
+    validation_json["cases"][0]["after"]["target"]["score"] = json!(0.82);
+
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Negative atom validation must prove target suppression.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("selected=false"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_rejects_missing_controls_without_waiver()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_typed_validation_negative_atom_rejects_missing_controls_without_waiver",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom control requirement",
+        "cli-negative-missing-control",
+    )?;
+    let mut validation_json = typed_negative_fixture_json(&fixture, true);
+    let after = validation_json["cases"][0]["after"]
+        .as_object_mut()
+        .context("negative validation after object")?;
+    after.remove("positive_controls");
+
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Negative atom validation must include controls or waiver.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("positive control"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_accepts_waiver_reason() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_typed_validation_negative_atom_accepts_waiver_reason")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom waiver",
+        "cli-negative-waiver",
+    )?;
+    let mut validation_json = typed_negative_fixture_json(&fixture, true);
+    let after = validation_json["cases"][0]["after"]
+        .as_object_mut()
+        .context("negative validation after object")?;
+    after.remove("positive_controls");
+    after.insert(
+        "positive_control_waiver".to_owned(),
+        json!({"reason": "No stable positive control task exists in this disposable fixture."}),
+    );
+
+    let validation = validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Negative atom validation should accept explicit positive-control waiver.",
+        ),
+    )?;
+
+    assert_eq!(
+        validation.validation_status,
+        LabelOntologyValidationStatus::Passed
+    );
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_rejects_empty_waiver_reason() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_ontology_typed_validation_negative_atom_rejects_empty_waiver_reason")?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom empty waiver",
+        "cli-negative-empty-waiver",
+    )?;
+    let mut validation_json = typed_negative_fixture_json(&fixture, true);
+    let after = validation_json["cases"][0]["after"]
+        .as_object_mut()
+        .context("negative validation after object")?;
+    after.remove("positive_controls");
+    after.insert(
+        "positive_control_waiver".to_owned(),
+        json!({"reason": "  "}),
+    );
+
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        validation_input_from_json(
+            &fixture.apply_action_id,
+            validation_json,
+            "Negative atom validation must require a non-empty waiver reason.",
+        ),
+    ))?;
+    assert!(error.to_string().contains("non-empty reason"));
 
     Ok(())
 }
@@ -1843,7 +4621,7 @@ fn label_ontology_typed_validation_negative_atom_protects_positive_controls() ->
     )?;
     let validation_json = typed_negative_fixture_json(&fixture, false);
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         validation_input_from_json(
@@ -1853,6 +4631,40 @@ fn label_ontology_typed_validation_negative_atom_protects_positive_controls() ->
         ),
     ))?;
     assert!(error.to_string().contains("positive control"));
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_typed_validation_negative_atom_records_control_regression_as_failed()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_typed_validation_negative_atom_records_control_regression_as_failed",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_negative_validation_fixture(
+        &temp,
+        "Add ontology validation negative atom failed control",
+        "cli-negative-control-failed",
+    )?;
+    let mut validation_json = typed_negative_fixture_json(&fixture, false);
+    validation_json["cases"][0]["passed"] = json!(false);
+
+    let mut input = validation_input_from_json(
+        &fixture.apply_action_id,
+        validation_json,
+        "Negative atom validation records positive control regression as failed.",
+    );
+    input.validation_status = LabelOntologyValidationStatus::Failed;
+    let validation =
+        validate_label_ontology_action_with_trusted_evidence(&temp.path, "default", input)?;
+
+    assert_eq!(
+        validation.validation_status,
+        LabelOntologyValidationStatus::Failed
+    );
+    let signal = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
+    assert_eq!(signal.signal.status, LabelOntologySignalStatus::Confirmed);
 
     Ok(())
 }
@@ -1929,16 +4741,19 @@ fn label_ontology_typed_validation_bootstrap_enforces_score_threshold() -> anyho
     let bootstrap = detail
         .actions
         .iter()
-        .find(|action| action.action_type == LabelOntologyActionType::BootstrapLabel)
+        .find(|action| {
+            action.action_type == LabelOntologyActionType::BootstrapLabel
+                && action.result_atom_id.is_none()
+        })
         .context("bootstrap action")?;
 
-    let error = result_err(validate_label_ontology_action(
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         validation_input_from_json(
             &bootstrap.id,
             json!({
-                "evidence_type": "automated",
+                "evidence_type": "trusted_automated",
                 "embedding_model": "test-embedding-v1",
                 "solver_options": {"candidate_limit": 24, "atom_limit": 64},
                 "index": {"status": "ready", "dirty": false, "generation": 7},
@@ -1986,7 +4801,7 @@ fn label_ontology_validation_marks_title_description_drift_incomparable() -> any
         },
     )?;
 
-    let validation = validate_label_ontology_action(
+    let validation = validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -2028,7 +4843,7 @@ fn label_ontology_validation_marks_missing_legacy_suggest_hash_incomparable() ->
         [&fixture.observation_id],
     )?;
 
-    let validation = validate_label_ontology_action(
+    let validation = validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -2133,7 +4948,10 @@ fn label_ontology_proposal_accept_records_bootstrap_provenance() -> anyhow::Resu
     let bootstrap = detail
         .actions
         .iter()
-        .find(|action| action.action_type == LabelOntologyActionType::BootstrapLabel)
+        .find(|action| {
+            action.action_type == LabelOntologyActionType::BootstrapLabel
+                && action.result_atom_id.is_none()
+        })
         .context("bootstrap action")?;
     assert_eq!(bootstrap.signal_ids, vec![signal_id.clone()]);
     assert_eq!(bootstrap.created_by, "ontology-agent");
@@ -2152,6 +4970,28 @@ fn label_ontology_proposal_accept_records_bootstrap_provenance() -> anyhow::Resu
     assert!(bootstrap.change_json.contains("ontology-ledger"));
     let semantics = get_label_semantics(&temp.path, "default", result_label_id)?;
     assert_eq!(semantics.label_name, "ontology-ledger");
+    let atom = semantics
+        .atoms
+        .iter()
+        .find(|atom| atom.kind == "applies_when")
+        .context("applies_when atom")?;
+    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
+    assert!(!explain.legacy_untracked);
+    let atom_provenance = explain
+        .provenance_actions
+        .iter()
+        .find(|action| {
+            action.action.action_type == LabelOntologyActionType::BootstrapLabel
+                && action.action.result_atom_id.as_deref() == Some(atom.id.as_str())
+                && action.action.result_proposal_id.as_deref() == Some(proposal_id.as_str())
+        })
+        .context("proposal atom provenance action")?;
+    assert_eq!(atom_provenance.action.signal_ids, vec![signal_id.clone()]);
+    assert_eq!(atom_provenance.action.created_by, "ontology-agent");
+    assert_eq!(
+        atom_provenance.action.parent_action_id.as_deref(),
+        Some(bootstrap.id.as_str())
+    );
 
     Ok(())
 }
@@ -2398,6 +5238,15 @@ struct OntologyValidationFixture {
     result_atom_content_hash: String,
 }
 
+struct MultiOntologyValidationFixture {
+    board_id: String,
+    signal_ids: Vec<String>,
+    apply_action_id: String,
+    target_label_id: String,
+    result_atom_id: String,
+    result_atom_content_hash: String,
+}
+
 struct PortableOntologyLedgerFixture {
     observation_id: String,
     source_signal_id: String,
@@ -2465,6 +5314,175 @@ fn seed_validation_fixture(
     })
 }
 
+fn seed_multi_validation_fixture(
+    temp: &TempDb,
+    signal_count: usize,
+) -> anyhow::Result<MultiOntologyValidationFixture> {
+    let label = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Validate ontology serialization with many source signals"),
+    )?;
+    let signals = (0..signal_count)
+        .map(|index| {
+            sample_signal_input(&format!("validation-serialization-{signal_count}-{index}"))
+        })
+        .collect::<Vec<_>>();
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(signals),
+    )?;
+    let signal_ids = observation
+        .signals
+        .iter()
+        .map(|signal| signal.id.clone())
+        .collect::<Vec<_>>();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            signal_ids.clone(),
+            "Confirmed all serialization fixture signals.",
+        ),
+    )?;
+    let apply_action = apply_label_ontology_atom(
+        &temp.path,
+        "default",
+        LabelOntologyAtomApplyInput {
+            actor: LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: signal_ids.clone(),
+            label_ref: "cli".to_owned(),
+            kind: "applies_when".to_owned(),
+            text: "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned(),
+            reason: "Confirmed false-negative support from multiple source signals.".to_owned(),
+        },
+    )?;
+    Ok(MultiOntologyValidationFixture {
+        board_id: task.board_id,
+        signal_ids,
+        apply_action_id: apply_action.id,
+        target_label_id: label.id,
+        result_atom_id: apply_action.result_atom_id.context("result atom id")?,
+        result_atom_content_hash: apply_action
+            .result_atom_content_hash
+            .context("result atom hash")?,
+    })
+}
+
+fn validated_payload_size_for_signal_count(signal_count: usize) -> anyhow::Result<usize> {
+    let temp_name = format!("label_ontology_validation_payload_linear_{signal_count}");
+    let temp = TempDb::new(&temp_name)?;
+    init_database(&temp.path, "tester")?;
+    let fixture = seed_multi_validation_fixture(&temp, signal_count)?;
+    let validation = validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: validation_actor(),
+            parent_action_id: fixture.apply_action_id.clone(),
+            signal_ids: Vec::new(),
+            reason: format!("Validate compact serialization for {signal_count} signals."),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            validation_json: typed_positive_multi_validation_json(&fixture).to_string(),
+        },
+    )?;
+    let payload: serde_json::Value = serde_json::from_str(&validation.validation_json)?;
+    assert_eq!(payload["summary"]["case_count"], signal_count);
+    let cases = payload["cases"].as_array().context("generated cases")?;
+    for (index, case) in cases.iter().enumerate() {
+        assert!(
+            case["after"].get("manual").is_none(),
+            "case {index} unexpectedly duplicated the top-level manual payload"
+        );
+        let signal_id = case["signal_id"]
+            .as_str()
+            .context("generated case signal id")?;
+        assert_eq!(
+            case["after"]["manual_case_ref"]["index"],
+            manual_case_index_for_signal(&fixture, signal_id)?
+        );
+        assert_eq!(case["after"]["manual_case_ref"]["signal_id"], signal_id);
+    }
+    Ok(validation.validation_json.len())
+}
+
+fn manual_case_index_for_signal(
+    fixture: &MultiOntologyValidationFixture,
+    signal_id: &str,
+) -> anyhow::Result<usize> {
+    fixture
+        .signal_ids
+        .iter()
+        .position(|fixture_signal_id| fixture_signal_id == signal_id)
+        .ok_or_else(|| test_error(format!("missing fixture signal {signal_id}")))
+}
+
+fn seed_legacy_validation_action(
+    temp: &TempDb,
+    fixture: &MultiOntologyValidationFixture,
+) -> anyhow::Result<String> {
+    let legacy_action_id = "loa_legacy_validation_payload_shape".to_owned();
+    let manual = typed_positive_multi_validation_json(fixture);
+    let legacy_payload = json!({
+        "manual": manual.clone(),
+        "cases": [{
+            "signal_id": fixture.signal_ids[0],
+            "task_id": "legacy-task",
+            "after": {
+                "validation_status": "passed",
+                "manual": manual,
+            },
+            "passed": true
+        }],
+        "summary": {
+            "status": "passed",
+            "case_count": 1,
+            "stale_count": 0,
+            "degraded_count": 0,
+            "incomparable_count": 0
+        }
+    });
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "INSERT INTO label_ontology_actions(
+         id, board_id, parent_action_id, action_type, reason, target_label_id, result_label_id,
+         result_atom_id, result_atom_content_hash, result_proposal_id, canonical_before_hash,
+         canonical_after_hash, change_json, validation_status, validation_json, created_by,
+         created_by_type, agent_type, created_at)
+         VALUES (?1, ?2, ?3, 'validate', 'legacy validation payload shape',
+         NULL, NULL, NULL, NULL, NULL, NULL, NULL, '{}', 'passed', ?4, 'legacy-fixture',
+         'agent', 'codex', 123456)",
+        params![
+            legacy_action_id,
+            fixture.board_id,
+            fixture.apply_action_id,
+            legacy_payload.to_string(),
+        ],
+    )?;
+    conn.execute(
+        "INSERT INTO label_ontology_action_signals(board_id, action_id, signal_id, created_at)
+         VALUES (?1, ?2, ?3, 123456)",
+        params![fixture.board_id, legacy_action_id, fixture.signal_ids[0]],
+    )?;
+    Ok(legacy_action_id)
+}
+
 fn seed_portable_ontology_ledger(temp: &TempDb) -> anyhow::Result<PortableOntologyLedgerFixture> {
     init_database(&temp.path, "tester")?;
     let label = create_label(
@@ -2526,7 +5544,7 @@ fn seed_portable_ontology_ledger(temp: &TempDb) -> anyhow::Result<PortableOntolo
             reason: "Confirmed portable ontology atom support.".to_owned(),
         },
     )?;
-    let validation = validate_label_ontology_action(
+    let validation = validate_label_ontology_action_with_trusted_evidence(
         &temp.path,
         "default",
         LabelOntologyValidationInput {
@@ -2768,7 +5786,7 @@ fn typed_positive_validation_json(
     result_atom_content_hash: &str,
 ) -> serde_json::Value {
     json!({
-        "evidence_type": "automated",
+        "evidence_type": "trusted_automated",
         "embedding_model": "test-embedding-v1",
         "solver_options": {"candidate_limit": 24, "atom_limit": 64},
         "index": {"status": "ready", "dirty": false, "generation": 7},
@@ -2803,12 +5821,58 @@ fn typed_positive_validation_json(
     })
 }
 
+fn typed_positive_multi_validation_json(
+    fixture: &MultiOntologyValidationFixture,
+) -> serde_json::Value {
+    let cases = fixture
+        .signal_ids
+        .iter()
+        .map(|signal_id| {
+            json!({
+                "signal_id": signal_id,
+                "case_type": "positive_atom",
+                "passed": true,
+                "target_label_id": fixture.target_label_id,
+                "before": {
+                    "target": {
+                        "label_id": fixture.target_label_id,
+                        "selected": false,
+                        "score": 0.08
+                    },
+                    "coverage": 0.61
+                },
+                "after": {
+                    "degraded": false,
+                    "target": {
+                        "label_id": fixture.target_label_id,
+                        "selected": true,
+                        "score": 0.74
+                    },
+                    "coverage": 0.79,
+                    "evidence_atoms": [{
+                        "id": fixture.result_atom_id,
+                        "content_hash": fixture.result_atom_content_hash,
+                        "label_id": fixture.target_label_id
+                    }]
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "evidence_type": "trusted_automated",
+        "embedding_model": "test-embedding-v1",
+        "solver_options": {"candidate_limit": 24, "atom_limit": 64},
+        "index": {"status": "ready", "dirty": false, "generation": 7},
+        "cases": cases
+    })
+}
+
 fn typed_negative_fixture_json(
     fixture: &OntologyValidationFixture,
     positive_control_passed: bool,
 ) -> serde_json::Value {
     json!({
-        "evidence_type": "automated",
+        "evidence_type": "trusted_automated",
         "embedding_model": "test-embedding-v1",
         "solver_options": {"candidate_limit": 24, "atom_limit": 64},
         "index": {"status": "ready", "dirty": false, "generation": 7},
@@ -2831,7 +5895,7 @@ fn typed_negative_fixture_json(
                     "selected": false,
                     "score": 0.18
                 },
-                "evidence_atoms": [{
+                "negative_evidence_atoms": [{
                     "id": fixture.result_atom_id,
                     "content_hash": fixture.result_atom_content_hash,
                     "label_id": fixture.target_label_id
@@ -2889,6 +5953,363 @@ fn sample_record_input(signals: Vec<LabelOntologySignalInput>) -> LabelOntologyR
         capture_fingerprint: None,
         signals,
     }
+}
+
+fn insert_agreement_observation_fixture(
+    temp: &TempDb,
+    task: &TaskRecord,
+    capture_fingerprint: &str,
+) -> anyhow::Result<()> {
+    let conn = connect_file(&temp.path)?;
+    let created_at: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(created_at), 0) + 1 FROM label_ontology_observations",
+        [],
+        |row| row.get(0),
+    )?;
+    let observation_id = format!("lor_{capture_fingerprint}");
+    conn.execute(
+        "INSERT INTO label_ontology_observations(\
+         id, board_id, task_id, task_ref_snapshot, task_snapshot_json, suggest_input_hash, \
+         agent_candidates_json, suggestion_snapshot_json, final_decision_json, suggest_coverage, \
+         suggest_coverage_cosine, suggest_residual_norm, suggest_needs_new_label, suggest_degraded, \
+         diagnostics_json, capture_fingerprint, created_by, created_by_type, agent_type, created_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, '[]', ?7, ?8, 0.91, 0.88, 0.09, 0, 0, '[]', ?9, 'tester', 'agent', 'quality-test', ?10)",
+        params![
+            observation_id,
+            task.board_id,
+            task.id,
+            task.task_ref,
+            json!({
+                "id": task.id,
+                "board_id": task.board_id,
+                "ref": task.task_ref,
+                "title": task.title,
+                "description": task.description,
+            })
+            .to_string(),
+            "agreementhash000",
+            json!({"selected_labels": ["docs"], "candidates": []}).to_string(),
+            json!({"accepted_labels": ["docs"], "agreement": true}).to_string(),
+            capture_fingerprint,
+            created_at,
+        ],
+    )?;
+    Ok(())
+}
+
+fn ontology_quality_truth_counts(
+    path: &Path,
+) -> anyhow::Result<(i64, i64, i64, i64, i64, i64, i64)> {
+    let conn = connect_file(path)?;
+    Ok((
+        table_count(&conn, "labels")?,
+        table_count(&conn, "task_labels")?,
+        table_count(&conn, "label_semantics")?,
+        table_count(&conn, "label_atoms")?,
+        table_count(&conn, "label_ontology_observations")?,
+        table_count(&conn, "label_ontology_signals")?,
+        table_count(&conn, "label_ontology_actions")?,
+    ))
+}
+
+fn table_count(conn: &Connection, table: &str) -> anyhow::Result<i64> {
+    let table = match table {
+        "labels" => "labels",
+        "task_labels" => "task_labels",
+        "label_semantics" => "label_semantics",
+        "label_atoms" => "label_atoms",
+        "label_ontology_observations" => "label_ontology_observations",
+        "label_ontology_signals" => "label_ontology_signals",
+        "label_ontology_actions" => "label_ontology_actions",
+        _ => return Err(test_error(format!("unsupported table count: {table}"))),
+    };
+    conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+        row.get(0)
+    })
+    .map_err(Into::into)
+}
+
+enum ExistingAtomApplyKind {
+    Positive,
+    Negative,
+}
+
+struct ExistingAtomApplyFixture {
+    signal_ids: Vec<String>,
+    target_label_id: String,
+    atom_id: String,
+    atom_content_hash: String,
+    atom_kind: String,
+    atom_text: String,
+}
+
+fn seed_existing_atom_apply_fixture(
+    temp: &TempDb,
+    kind: ExistingAtomApplyKind,
+    signal_keys: Vec<&str>,
+) -> anyhow::Result<ExistingAtomApplyFixture> {
+    init_database(&temp.path, "tester")?;
+    let label = create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let (atom_kind, atom_text, semantics_input, signals) = match kind {
+        ExistingAtomApplyKind::Positive => {
+            let atom_kind = "applies_when".to_owned();
+            let atom_text =
+                "extends CLI subcommands, arguments, help output, or JSON behavior".to_owned();
+            let semantics_input = UpsertLabelSemantics {
+                label_ref: "cli".to_owned(),
+                applies_when: vec![atom_text.clone()],
+                ..UpsertLabelSemantics::default()
+            };
+            let signals = signal_keys
+                .into_iter()
+                .map(sample_signal_input)
+                .collect::<Vec<_>>();
+            (atom_kind, atom_text, semantics_input, signals)
+        }
+        ExistingAtomApplyKind::Negative => {
+            let atom_kind = "excludes_when".to_owned();
+            let atom_text =
+                "only changes unrelated release notes without touching CLI behavior".to_owned();
+            let semantics_input = UpsertLabelSemantics {
+                label_ref: "cli".to_owned(),
+                excludes_when: vec![atom_text.clone()],
+                ..UpsertLabelSemantics::default()
+            };
+            let signals = signal_keys
+                .into_iter()
+                .map(|signal_key| {
+                    let mut signal = sample_signal_input(signal_key);
+                    signal.proposed_action = LabelOntologyProposedAction::AddNegativeAtom;
+                    signal.candidate_atom = Some(LabelOntologyCandidateAtomInput {
+                        polarity: "negative".to_owned(),
+                        kind: atom_kind.clone(),
+                        text: atom_text.clone(),
+                    });
+                    signal.rationale =
+                        "The task was a false positive for cli and needs negative evidence."
+                            .to_owned();
+                    signal
+                })
+                .collect::<Vec<_>>();
+            (atom_kind, atom_text, semantics_input, signals)
+        }
+    };
+    upsert_label_semantics(&temp.path, "default", semantics_input)?;
+    let atom = list_label_atoms(&temp.path, "default")?
+        .into_iter()
+        .find(|atom| atom.kind == atom_kind && atom.text == atom_text)
+        .context("seeded atom")?;
+    let signal_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Existing ontology atom provenance source"),
+    )?;
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &signal_task.id,
+        sample_record_input(signals),
+    )?;
+    let signal_ids = observation
+        .signals
+        .iter()
+        .map(|signal| signal.id.clone())
+        .collect::<Vec<_>>();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            signal_ids.clone(),
+            "Confirmed existing atom provenance signal.",
+        ),
+    )?;
+    Ok(ExistingAtomApplyFixture {
+        signal_ids,
+        target_label_id: label.id,
+        atom_id: atom.id,
+        atom_content_hash: atom.content_hash,
+        atom_kind,
+        atom_text,
+    })
+}
+
+fn assert_existing_atom_adoption_action(
+    action: &kanban_sqlite::LabelOntologyActionRecord,
+    fixture: &ExistingAtomApplyFixture,
+    requested_action_type: &str,
+) -> anyhow::Result<()> {
+    assert_eq!(
+        action.action_type,
+        LabelOntologyActionType::AdoptExistingAtom
+    );
+    assert_eq!(
+        action.validation_status,
+        LabelOntologyValidationStatus::NotRequired
+    );
+    assert_eq!(
+        action.target_label_id.as_deref(),
+        Some(fixture.target_label_id.as_str())
+    );
+    assert_eq!(
+        action.result_atom_id.as_deref(),
+        Some(fixture.atom_id.as_str())
+    );
+    assert_eq!(
+        action.result_atom_content_hash.as_deref(),
+        Some(fixture.atom_content_hash.as_str())
+    );
+    assert_eq!(action.canonical_before_hash, action.canonical_after_hash);
+    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
+    assert_eq!(change["canonical_changed"], false);
+    assert_eq!(change["provenance_only"], true);
+    assert_eq!(change["requested_action_type"], requested_action_type);
+    assert_eq!(change["added_atom"]["id"], fixture.atom_id);
+    assert_eq!(
+        change["added_atom"]["content_hash"],
+        fixture.atom_content_hash
+    );
+    assert_eq!(change["before"], change["after"]);
+    Ok(())
+}
+
+fn reviewer_actor() -> LabelOntologyActor {
+    LabelOntologyActor {
+        name: "reviewer".to_owned(),
+        actor_type: "user".to_owned(),
+        agent_type: None,
+    }
+}
+
+fn clear_label_atom_dirty_flags(path: &Path, board: &str) -> anyhow::Result<()> {
+    let board = get_board(path, board)?;
+    let conn = connect_file(path)?;
+    conn.execute(
+        "UPDATE derived_store_state SET dirty=0, last_error=NULL \
+         WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE label_atom_index_boards SET dirty=0, last_error=NULL \
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [board.id],
+    )?;
+    Ok(())
+}
+
+fn add_atom_action_count(path: &Path) -> anyhow::Result<i64> {
+    Ok(connect_file(path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_actions \
+         WHERE action_type IN ('add_positive_atom','add_negative_atom')",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+fn assert_semantics_content_eq(
+    actual: &kanban_sqlite::LabelSemanticsRecord,
+    expected: &kanban_sqlite::LabelSemanticsRecord,
+) {
+    assert_eq!(actual.semantics_hash, expected.semantics_hash);
+    assert_eq!(actual.description, expected.description);
+    assert_eq!(actual.applies_when, expected.applies_when);
+    assert_eq!(actual.excludes_when, expected.excludes_when);
+    assert_eq!(actual.positive_examples, expected.positive_examples);
+    assert_eq!(actual.negative_examples, expected.negative_examples);
+    assert_eq!(
+        actual
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>(),
+        expected
+            .atoms
+            .iter()
+            .map(|atom| (
+                atom.polarity.as_str(),
+                atom.kind.as_str(),
+                atom.text.as_str(),
+                atom.ordinal,
+                atom.content_hash.as_str(),
+            ))
+            .collect::<Vec<_>>()
+    );
+}
+
+fn ontology_action_count(path: &Path) -> anyhow::Result<i64> {
+    Ok(
+        connect_file(path)?.query_row(
+            "SELECT COUNT(*) FROM label_ontology_actions",
+            [],
+            |row| row.get(0),
+        )?,
+    )
+}
+
+fn ontology_action_signal_count(path: &Path) -> anyhow::Result<i64> {
+    Ok(connect_file(path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_action_signals",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+fn structure_label_names(path: &Path) -> anyhow::Result<Vec<String>> {
+    connect_file(path)?
+        .prepare("SELECT name FROM labels ORDER BY name")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(Into::into)
+}
+
+fn structure_task_label_rows(path: &Path) -> anyhow::Result<Vec<(String, String)>> {
+    connect_file(path)?
+        .prepare(
+            "SELECT t.title, l.name \
+             FROM task_labels tl \
+             JOIN tasks t ON t.id=tl.task_id \
+             JOIN labels l ON l.id=tl.label_id \
+             ORDER BY t.title, l.name",
+        )?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(Into::into)
+}
+
+fn label_atom_store_dirty(path: &Path) -> anyhow::Result<bool> {
+    let stores = derived_store_statuses(path)?;
+    Ok(stores
+        .iter()
+        .find(|store| store.store_name == "lancedb_label_atoms")
+        .ok_or_else(|| test_error("missing lancedb_label_atoms"))?
+        .dirty)
+}
+
+fn label_atom_board_dirty(path: &Path, board: &str) -> anyhow::Result<bool> {
+    let board = get_board(path, board)?;
+    let count: i64 = connect_file(path)?.query_row(
+        "SELECT COUNT(*) FROM label_atom_index_boards \
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1 AND dirty<>0",
+        [board.id],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
 }
 
 struct LabelOntologyReviewFixture {
@@ -3071,6 +6492,26 @@ fn review_gap_signal(
     })
     .to_string();
     signal.suggest_score = Some(score);
+    signal
+}
+
+fn review_empty_target_signal(
+    signal_key: &str,
+    label: &str,
+    kind: LabelOntologySignalKind,
+    proposed_action: LabelOntologyProposedAction,
+    score: f64,
+) -> LabelOntologySignalInput {
+    let mut signal = sample_signal_input(signal_key);
+    signal.kind = kind;
+    signal.target_label_ref = Some(label.to_owned());
+    signal.related_labels_json = "[]".to_owned();
+    signal.proposed_action = proposed_action;
+    signal.candidate_atom = None;
+    signal.proposed_label_name = None;
+    signal.proposal_json = "{}".to_owned();
+    signal.suggest_score = Some(score);
+    signal.rationale = "Empty candidate signal used to review grouping boundaries.".to_owned();
     signal
 }
 

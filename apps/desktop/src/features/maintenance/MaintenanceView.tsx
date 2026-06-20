@@ -179,6 +179,10 @@ function DoctorReportView({ report }: { report: DoctorReport }) {
     ["outbox failed", report.outbox_failed],
     ["dirty stores", report.derived_dirty_stores],
     ["error stores", report.derived_error_stores],
+    ["consistency errors", report.consistency_errors],
+    ["consistency warnings", report.consistency_warnings],
+    ["ontology errors", report.ontology_ledger_errors],
+    ["ontology warnings", report.ontology_ledger_warnings],
   ] as const
   return (
     <div className="mt-3 space-y-3 text-sm">

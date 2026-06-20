@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use kanban_core::TaskStatus;
 use serde::{Deserialize, Serialize};
@@ -123,6 +123,12 @@ pub struct LabelRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddTaskLabelsResult {
+    pub task: TaskRecord,
+    pub created_labels: Vec<LabelRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeleteLabelResult {
     pub label: LabelRecord,
     pub forced: bool,
@@ -136,6 +142,7 @@ pub struct LabelSemanticsRecord {
     pub label_id: String,
     pub board_id: String,
     pub label_name: String,
+    pub semantics_hash: String,
     pub description: Option<String>,
     pub applies_when: Vec<String>,
     pub excludes_when: Vec<String>,
@@ -160,6 +167,25 @@ pub struct BootstrapTaskLabel {
 pub struct BootstrapTaskLabelResult {
     pub task: TaskRecord,
     pub semantics: LabelSemanticsRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BootstrapTaskLabelSnapshot {
+    pub board_id: String,
+    pub task_id: String,
+    pub label_name: String,
+    pub label: Option<LabelRecord>,
+    pub task_label_existed: bool,
+    pub semantics: Option<LabelSemanticsRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BootstrapTaskLabelRestoreResult {
+    pub label_deleted: bool,
+    pub label_restored: bool,
+    pub task_binding_restored: bool,
+    pub semantics_restored: bool,
+    pub index_marked_dirty: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -446,11 +472,38 @@ pub struct CreateLabel {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct UpsertLabelSemantics {
     pub label_ref: String,
+    pub expected_semantics_hash: Option<String>,
+    pub replace: bool,
     pub description: Option<String>,
     pub applies_when: Vec<String>,
     pub excludes_when: Vec<String>,
     pub positive_examples: Vec<String>,
     pub negative_examples: Vec<String>,
+    pub remove_applies_when: Vec<String>,
+    pub remove_excludes_when: Vec<String>,
+    pub remove_positive_examples: Vec<String>,
+    pub remove_negative_examples: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelSemanticsMutationOptions {
+    pub actor: LabelOntologyActor,
+    pub reason: Option<String>,
+    pub source_signal_ids: Vec<String>,
+}
+
+impl LabelSemanticsMutationOptions {
+    pub fn manual_actor(actor: impl Into<String>) -> Self {
+        Self {
+            actor: LabelOntologyActor {
+                name: actor.into(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            reason: None,
+            source_signal_ids: Vec::new(),
+        }
+    }
 }
 
 pub const DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT: usize = 5;
@@ -490,6 +543,7 @@ pub struct LabelSuggestionResult {
     pub coverage_cosine: f32,
     pub residual_norm: f32,
     pub needs_new_label: bool,
+    pub reason_codes: Vec<String>,
     pub degraded: bool,
     pub diagnostics: Vec<String>,
 }
@@ -701,12 +755,14 @@ pub enum LabelOntologyActionType {
     ResolveNoChange,
     AddPositiveAtom,
     AddNegativeAtom,
+    AdoptExistingAtom,
     UpdateSemantics,
     CreateLabelProposal,
     BootstrapLabel,
     RenameLabel,
     SplitLabel,
     MergeLabels,
+    RevertOntologyMutation,
     Validate,
 }
 
@@ -719,12 +775,14 @@ impl std::fmt::Display for LabelOntologyActionType {
             Self::ResolveNoChange => "resolve_no_change",
             Self::AddPositiveAtom => "add_positive_atom",
             Self::AddNegativeAtom => "add_negative_atom",
+            Self::AdoptExistingAtom => "adopt_existing_atom",
             Self::UpdateSemantics => "update_semantics",
             Self::CreateLabelProposal => "create_label_proposal",
             Self::BootstrapLabel => "bootstrap_label",
             Self::RenameLabel => "rename_label",
             Self::SplitLabel => "split_label",
             Self::MergeLabels => "merge_labels",
+            Self::RevertOntologyMutation => "revert_ontology_mutation",
             Self::Validate => "validate",
         })
     }
@@ -741,12 +799,14 @@ impl std::str::FromStr for LabelOntologyActionType {
             "resolve_no_change" => Ok(Self::ResolveNoChange),
             "add_positive_atom" => Ok(Self::AddPositiveAtom),
             "add_negative_atom" => Ok(Self::AddNegativeAtom),
+            "adopt_existing_atom" => Ok(Self::AdoptExistingAtom),
             "update_semantics" => Ok(Self::UpdateSemantics),
             "create_label_proposal" => Ok(Self::CreateLabelProposal),
             "bootstrap_label" => Ok(Self::BootstrapLabel),
             "rename_label" => Ok(Self::RenameLabel),
             "split_label" => Ok(Self::SplitLabel),
             "merge_labels" => Ok(Self::MergeLabels),
+            "revert_ontology_mutation" => Ok(Self::RevertOntologyMutation),
             "validate" => Ok(Self::Validate),
             _ => Err(kanban_core::KanbanError::InvalidInput(format!(
                 "invalid label ontology action type: {value}"
@@ -957,6 +1017,27 @@ pub struct LabelOntologyAtomApplyInput {
     pub reason: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyStructurePlanInput {
+    pub actor: LabelOntologyActor,
+    pub signal_ids: Vec<String>,
+    pub action_type: LabelOntologyActionType,
+    pub target_label_ref: String,
+    pub proposed_label_name: Option<String>,
+    pub related_label_refs: Vec<String>,
+    pub task_binding_policy: Option<String>,
+    pub validation_policy_json: Option<String>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyRevertInput {
+    pub actor: LabelOntologyActor,
+    pub target_action_id: String,
+    pub expected_current_hash: Option<String>,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LabelOntologyRetargetOptions {
     pub allow_retarget: bool,
@@ -974,6 +1055,15 @@ pub struct LabelOntologyValidationInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyTrustedValidationInput {
+    pub actor: LabelOntologyActor,
+    pub parent_action_id: String,
+    pub signal_ids: Vec<String>,
+    pub reason: String,
+    pub validation_status: LabelOntologyValidationStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LabelOntologySignalDetail {
     pub signal: LabelOntologySignalRecord,
     pub observation: LabelOntologyObservationRecord,
@@ -986,6 +1076,7 @@ pub enum LabelOntologyReviewGroupBy {
     Label,
     CandidateAtom,
     ProposedLabel,
+    Cluster,
 }
 
 impl std::fmt::Display for LabelOntologyReviewGroupBy {
@@ -994,6 +1085,7 @@ impl std::fmt::Display for LabelOntologyReviewGroupBy {
             Self::Label => "label",
             Self::CandidateAtom => "candidate_atom",
             Self::ProposedLabel => "proposed_label",
+            Self::Cluster => "cluster",
         })
     }
 }
@@ -1006,6 +1098,7 @@ impl std::str::FromStr for LabelOntologyReviewGroupBy {
             "label" => Ok(Self::Label),
             "candidate_atom" | "candidate-atom" => Ok(Self::CandidateAtom),
             "proposed_label" | "proposed-label" => Ok(Self::ProposedLabel),
+            "cluster" => Ok(Self::Cluster),
             _ => Err(kanban_core::KanbanError::InvalidInput(format!(
                 "invalid label ontology review group: {value}"
             ))),
@@ -1057,6 +1150,8 @@ pub struct LabelOntologyReviewGroup {
     pub candidate_content_hash: Option<String>,
     pub proposed_label_name: Option<String>,
     pub proposed_label_name_normalized: Option<String>,
+    pub cluster_key: Option<String>,
+    pub cluster_reason: Option<String>,
     pub task_count: i64,
     pub signal_count: i64,
     pub open_count: i64,
@@ -1076,6 +1171,61 @@ pub struct LabelOntologyReviewGroup {
     pub proposal_ids: Vec<String>,
     pub labels: Vec<LabelOntologyReviewLabelRef>,
     pub candidate_atom_variants: Vec<LabelOntologyReviewAtomVariant>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelOntologyQualityOptions {
+    pub sample_limit: usize,
+}
+
+impl Default for LabelOntologyQualityOptions {
+    fn default() -> Self {
+        Self { sample_limit: 20 }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyQualityReport {
+    pub board_id: String,
+    pub denominator: LabelOntologyQualityDenominator,
+    pub disagreement: LabelOntologyQualityDisagreement,
+    pub rates: LabelOntologyQualityRates,
+    pub precision_recall: LabelOntologyPrecisionRecallAvailability,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyQualityDenominator {
+    pub source: String,
+    pub description: String,
+    pub observation_count: i64,
+    pub distinct_task_count: i64,
+    pub agreement_observation_count: i64,
+    pub agreement_task_count: i64,
+    pub degraded_observation_count: i64,
+    pub first_observed_at: Option<i64>,
+    pub latest_observed_at: Option<i64>,
+    pub sample_task_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyQualityDisagreement {
+    pub signal_count: i64,
+    pub distinct_task_count: i64,
+    pub by_kind: BTreeMap<String, i64>,
+    pub by_status: BTreeMap<String, i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelOntologyQualityRates {
+    pub disagreement_task_rate: Option<f64>,
+    pub disagreement_task_rate_basis: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelOntologyPrecisionRecallAvailability {
+    pub available: bool,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

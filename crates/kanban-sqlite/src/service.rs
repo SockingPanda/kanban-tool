@@ -71,6 +71,10 @@ pub(crate) use graph::{
     context_graph_items, context_vector_items, context_vector_status, derived_status_by_name,
     graph_relation_snapshot_for_board,
 };
+pub(crate) use label_ontology::{
+    LabelOntologySemanticsMutationInput, label_ontology_semantics_snapshot_in_tx,
+    record_label_ontology_semantics_mutation_in_tx,
+};
 pub(crate) use label_semantics::{
     mark_label_atom_store_dirty, rebuild_label_atoms_for_stable_hash_migration,
     stable_label_atom_hash_backfill_needed, upsert_label_semantics_candidate_in_tx,

@@ -811,6 +811,36 @@ function autosizeTextarea(textarea: HTMLTextAreaElement | null) {
   textarea.style.height = `${textarea.scrollHeight}px`
 }
 
+function labelSuggestionReasonLabel(code: string) {
+  switch (code) {
+    case "coverage_below_threshold":
+      return "coverage gap"
+    case "degraded_result":
+      return "degraded result"
+    case "label_atom_index_dirty":
+      return "index dirty"
+    case "label_atom_index_empty":
+      return "index empty"
+    case "label_atom_index_error":
+      return "index error"
+    case "no_selected_labels":
+      return "no selected labels"
+    case "residual_above_threshold":
+      return "unexplained residual"
+    case "vector_query_error":
+      return "vector query error"
+    case "vector_store_disabled":
+      return "vector store disabled"
+    default:
+      return code.replace(/_/g, " ")
+  }
+}
+
+function labelSuggestionReasonText(reasonCodes: string[]) {
+  if (!reasonCodes.length) return "review required"
+  return reasonCodes.map(labelSuggestionReasonLabel).join(", ")
+}
+
 function LabelSuggestionsPanel({
   suggestions,
   requested,
@@ -831,6 +861,7 @@ function LabelSuggestionsPanel({
   onApply: (labelName: string) => void
 }) {
   const requestDisabled = disabled || loading || !onRequest
+  const reasonText = suggestions ? labelSuggestionReasonText(suggestions.reason_codes) : null
   const requestButton = (
     <Button
       type="button"
@@ -876,7 +907,7 @@ function LabelSuggestionsPanel({
       ) : null}
       {suggestions?.needs_new_label ? (
         <div className="max-w-full rounded-sm border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800">
-          new label may be needed
+          Existing label coverage needs review: {reasonText}
         </div>
       ) : null}
       {suggestions?.degraded ? (

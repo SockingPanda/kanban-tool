@@ -35,9 +35,19 @@ const LABEL_ONTOLOGY_SUGGEST_INPUT_HASH_MIGRATION: &str =
     include_str!("../../../migrations/013_label_ontology_suggest_input_hash.sql");
 const UNIQUE_LABEL_PROPOSAL_CREATE_ACTION_MIGRATION: &str =
     include_str!("../../../migrations/014_unique_label_proposal_create_action.sql");
-const LATEST_MIGRATION_VERSION: i64 = 14;
-const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] =
-    &["fnv64:0ca871be950fc8a6", "fnv64:3b08da4e2b6041f5"];
+const ADOPT_EXISTING_ATOM_ACTION_MIGRATION: &str =
+    include_str!("../../../migrations/015_adopt_existing_atom_action.sql");
+const REVERT_ONTOLOGY_MUTATION_ACTION_MIGRATION: &str =
+    include_str!("../../../migrations/016_revert_ontology_mutation_action.sql");
+const BOARD_ISOLATION_COMPOSITE_FK_MIGRATION: &str =
+    include_str!("../../../migrations/017_board_isolation_composite_fk.sql");
+const LATEST_MIGRATION_VERSION: i64 = 17;
+const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &[
+    "fnv64:0ca871be950fc8a6",
+    "fnv64:3b08da4e2b6041f5",
+    "fnv64:61b5ea6d6ed1eabe",
+];
+const LEGACY_PRIORITY_LEVELS_MIGRATION_CHECKSUMS: &[&str] = &["fnv64:127ec944f1b716ff"];
 
 struct Migration {
     version: i64,
@@ -116,6 +126,21 @@ const MIGRATIONS: &[Migration] = &[
         name: "014_unique_label_proposal_create_action",
         sql: UNIQUE_LABEL_PROPOSAL_CREATE_ACTION_MIGRATION,
     },
+    Migration {
+        version: 15,
+        name: "015_adopt_existing_atom_action",
+        sql: ADOPT_EXISTING_ATOM_ACTION_MIGRATION,
+    },
+    Migration {
+        version: 16,
+        name: "016_revert_ontology_mutation_action",
+        sql: REVERT_ONTOLOGY_MUTATION_ACTION_MIGRATION,
+    },
+    Migration {
+        version: 17,
+        name: "017_board_isolation_composite_fk",
+        sql: BOARD_ISOLATION_COMPOSITE_FK_MIGRATION,
+    },
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -190,6 +215,7 @@ fn validate_or_apply_migration(conn: &Connection, migration: &Migration) -> Resu
         }
         Some((_name, _stored)) => Ok(false),
         None => {
+            run_migration_preflight(conn, migration)?;
             conn.execute_batch(migration.sql)
                 .map_err(|err| KanbanError::Storage(err.to_string()))?;
             conn.execute(
@@ -208,8 +234,92 @@ fn validate_or_apply_migration(conn: &Connection, migration: &Migration) -> Resu
     }
 }
 
+fn run_migration_preflight(conn: &Connection, migration: &Migration) -> Result<()> {
+    if migration.version == 17 {
+        ensure_no_cross_board_rows_for_composite_fk_migration(conn)?;
+    }
+    Ok(())
+}
+
+fn ensure_no_cross_board_rows_for_composite_fk_migration(conn: &Connection) -> Result<()> {
+    for check in [
+        BoardIsolationPreflight {
+            table: "task_labels",
+            sql: "SELECT tl.task_id || ':' || tl.label_id, tl.board_id, t.board_id, l.board_id \
+                  FROM task_labels tl \
+                  JOIN tasks t ON t.id = tl.task_id \
+                  JOIN labels l ON l.id = tl.label_id \
+                  WHERE tl.board_id != t.board_id OR tl.board_id != l.board_id \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "task_dependencies",
+            sql: "SELECT d.parent_task_id || '->' || d.child_task_id, d.board_id, p.board_id, c.board_id \
+                  FROM task_dependencies d \
+                  JOIN tasks p ON p.id = d.parent_task_id \
+                  JOIN tasks c ON c.id = d.child_task_id \
+                  WHERE d.board_id != p.board_id OR d.board_id != c.board_id \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "task_runs",
+            sql: "SELECT r.id, r.board_id, t.board_id, NULL \
+                  FROM task_runs r \
+                  JOIN tasks t ON t.id = r.task_id \
+                  WHERE r.board_id != t.board_id \
+                  LIMIT 1",
+        },
+    ] {
+        if let Some(mismatch) = first_board_isolation_mismatch(conn, &check)? {
+            return Err(KanbanError::Storage(format!(
+                "cannot apply migration 017_board_isolation_composite_fk: {} cross-board row {} has row board {}, referenced boards {}; run kanban doctor and repair before migrating",
+                check.table, mismatch.row_key, mismatch.row_board, mismatch.referenced_boards
+            )));
+        }
+    }
+    Ok(())
+}
+
+struct BoardIsolationPreflight {
+    table: &'static str,
+    sql: &'static str,
+}
+
+struct BoardIsolationMismatch {
+    row_key: String,
+    row_board: String,
+    referenced_boards: String,
+}
+
+fn first_board_isolation_mismatch(
+    conn: &Connection,
+    check: &BoardIsolationPreflight,
+) -> Result<Option<BoardIsolationMismatch>> {
+    conn.query_row(check.sql, [], |row| {
+        let row_key: String = row.get(0)?;
+        let row_board: String = row.get(1)?;
+        let first_ref_board: String = row.get(2)?;
+        let second_ref_board: Option<String> = row.get(3)?;
+        let referenced_boards = match second_ref_board {
+            Some(second_ref_board) => format!("{first_ref_board}, {second_ref_board}"),
+            None => first_ref_board,
+        };
+        Ok(BoardIsolationMismatch {
+            row_key,
+            row_board,
+            referenced_boards,
+        })
+    })
+    .optional()
+    .map_err(|err| KanbanError::Storage(err.to_string()))
+}
+
 fn is_allowed_legacy_migration_checksum(migration: &Migration, stored: &str) -> bool {
-    migration.version == 1 && LEGACY_INITIAL_MIGRATION_CHECKSUMS.contains(&stored)
+    match migration.version {
+        1 => LEGACY_INITIAL_MIGRATION_CHECKSUMS.contains(&stored),
+        4 => LEGACY_PRIORITY_LEVELS_MIGRATION_CHECKSUMS.contains(&stored),
+        _ => false,
+    }
 }
 
 fn ensure_schema_migrations_shape(conn: &Connection) -> Result<()> {

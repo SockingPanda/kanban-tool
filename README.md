@@ -1,13 +1,13 @@
 # Kanban Tool 文档包
 
-本文档包面向一个 **Rust 核心实现、SQLite-only、本地单机运行、同时提供 Web 与 CLI 能力** 的 Kanban 工具。
+本文档包面向一个 **Rust workspace 实现、SQLite-only、本地单机运行、同时提供 Web 与 CLI 能力** 的 Kanban 工具。
 
 本项目不是 Trello 的简单复制品，而是一个更接近 Hermes Kanban 的本地可执行工作队列：
 
 - Kanban UI 负责可视化与人工操作。
 - CLI 负责脚本化、本地开发流与 agent/automation 入口。
 - SQLite 负责持久化任务、状态、依赖、评论、事件、运行记录。
-- Rust core 负责状态机与一致性约束。
+- Rust workspace 负责状态机、SQLite service/transaction 和一致性约束；当前 application orchestration 主要在 `kanban-sqlite::service`，`kanban-core` 提供纯状态机 helper。
 - Dispatcher 是可选本地调度器，用于 claim 显式 `ready` 任务、heartbeat、reclaim 和执行 worker profile；不自动提升 `todo/scheduled`。
 
 `docs/SPEC.md`、`docs/CLI_SPEC.md`、`docs/API_SPEC.md`、`docs/DISPATCHER_SPEC.md` 等分主题文档是当前行为的权威来源；`KANBAN_SPEC_BUNDLE.md` 是这些源文档的同步快照，便于一次性阅读和离线传递。

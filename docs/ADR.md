@@ -109,7 +109,7 @@ tasks snapshot + task_events append-only
 
 ---
 
-## ADR-0004：CLI 可以直接访问 SQLite，但必须走 Core Service
+## ADR-0004：CLI 可以直接访问 SQLite，但必须走统一 service path
 
 ### Status
 
@@ -121,7 +121,9 @@ Accepted
 
 ### Decision
 
-CLI 可以直接打开 SQLite DB，但只能调用 `kanban-core` service / `kanban-sqlite` repository，不允许绕过状态机执行裸 SQL 修改状态。
+CLI 可以直接打开 SQLite DB，但只能调用统一 Rust service path；当前实现主要是
+`kanban-sqlite::service` use-case 函数，并复用 `kanban-core` 的纯状态机 helper。
+CLI 不允许绕过状态机执行裸 SQL 修改状态。
 
 ### Consequences
 
@@ -134,7 +136,8 @@ CLI 可以直接打开 SQLite DB，但只能调用 `kanban-core` service / `kanb
 代价：
 
 - 需要处理 CLI/server/dispatcher 同机并发。
-- 所有状态逻辑必须集中在 core。
+- 所有状态逻辑必须集中在共享 service/state-machine path，避免 CLI、server 或
+  dispatcher 各自实现一套状态转换。
 
 ---
 
@@ -815,3 +818,79 @@ credentials 和 runtime 配置拖入 SQLite service。这样会破坏本项目�
 - 不上传本地 task 数据到远程服务。
 - 不让 provider 自动绑定 task label。
 - 不改变 proposal accept 后才创建 label semantics / atoms 的生命周期。
+
+---
+
+## ADR-0013：暂不引入 label ontology graph projection
+
+### Status
+
+Accepted
+
+### Context
+
+当前 label ontology 已有 SQLite truth 与查询面：
+
+- `labels` / `task_labels` 表达当前 task label binding truth。
+- `label_semantics` / `label_atoms` 表达 canonical ontology truth。
+- `label_semantic_proposals` 表达新 label proposal lifecycle。
+- `label_ontology_observations` / `signals` / `actions` / `action_signals` 表达
+  provenance、review、mutation 和 validation history。
+- `label ontology review`、`label atom explain`、JSONL export/import 和 doctor 已经从
+  SQLite records 直接回答第一批 review/provenance 问题。
+
+项目也已有通用 Knowledge Substrate graph：`entity_relations` 作为 SQLite mirror，
+Oxigraph 作为可重建 derived store，`index_outbox` / `derived_store_state` 管理 dirty、
+sync 和 rebuild。这个 graph 当前覆盖 task-board、task dependency 等通用 entity
+关系，不覆盖 label ontology ledger。
+
+第一版 ledger 还没有明确的关系查询需求需要 ontology-specific graph。过早投影 signals、
+actions、atoms 和 proposals 会增加 schema、outbox、query API 和 rebuild 复杂度，并提高把
+graph 误当第二 truth 的风险。
+
+### Decision
+
+暂不实现 label ontology graph projection。
+
+在 rename/split/merge、cross-action provenance、atom lineage 或 review workbench 出现明确
+关系查询需求前，ontology 查询继续走 SQLite service/API：
+
+- `label ontology review`
+- `label ontology show`
+- `label atom explain`
+- `label proposal list/show`
+- JSONL export/import 与 doctor
+
+未来若新增 ontology graph projection，它必须满足：
+
+- SQLite `labels`、`task_labels`、`label_semantics`、`label_atoms`、proposal 和
+  `label_ontology_*` 仍是 canonical truth。
+- projection 只能从 SQLite 快照/outbox 派生，可删除重建。
+- projection 状态通过 `index_outbox` 和 `derived_store_state` 或等价派生层控制面表达。
+- graph API 只能查询 relation/provenance，不提供 confirm/apply/validate/revert/bootstrap
+  或其它 canonical mutation 写入口。
+- graph dirty、error、删除或重建失败不改变 task status、task labels、semantics、atoms、
+  proposal 或 ledger rows。
+
+### Consequences
+
+优点：
+
+- 第一版 ontology workflow 保持简单，避免过早增加第二个 provenance 表达。
+- SQLite ledger/review/explain 继续作为可审计事实来源。
+- 未来如果确有查询需求，可以复用已存在的 Knowledge Substrate derived-store contract。
+- graph 故障不会影响 ontology mutation、validation 或 review 的 canonical state。
+
+代价：
+
+- 复杂 lineage / relationship traversal 暂时需要通过 SQLite query、review grouping、
+  `atom explain` 或导出后离线分析完成。
+- 未来若要支持 ontology graph，需要单独设计 projection schema、outbox fanout 和 rebuild
+  测试。
+
+### Non-Goals
+
+- 本 ADR 不新增 ontology RDF schema。
+- 不把 `label_ontology_*` rows 写入 `entity_relations`。
+- 不扩展 `kanban graph` 为 ontology mutation API。
+- 不用 graph 替代 label ontology review、show、atom explain 或 validation history。

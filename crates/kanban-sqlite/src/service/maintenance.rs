@@ -132,6 +132,8 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
     let ontology_ledger_issues = doctor_missing_ontology_table_issues(&missing_tables);
     let (ontology_ledger_errors, ontology_ledger_warnings) =
         doctor_issue_counts(&ontology_ledger_issues);
+    let consistency_issues = Vec::new();
+    let (consistency_errors, consistency_warnings) = doctor_issue_counts(&consistency_issues);
     if migration_version != Some(user_version) || !missing_tables.is_empty() {
         return Ok(DoctorReport {
             ok: false,
@@ -154,6 +156,9 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
             derived_dirty_stores: 0,
             derived_error_stores: 0,
             derived_stores: Vec::new(),
+            consistency_errors,
+            consistency_warnings,
+            consistency_issues,
             ontology_ledger_errors,
             ontology_ledger_warnings,
             ontology_ledger_issues,
@@ -204,6 +209,8 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
         .iter()
         .filter(|store| store.last_error.is_some() || store.failed_outbox > 0)
         .count() as i64;
+    let consistency_issues = doctor_consistency_issues(conn)?;
+    let (consistency_errors, consistency_warnings) = doctor_issue_counts(&consistency_issues);
     let ontology_ledger_issues = doctor_ontology_ledger_issues(conn)?;
     let (ontology_ledger_errors, ontology_ledger_warnings) =
         doctor_issue_counts(&ontology_ledger_issues);
@@ -221,6 +228,7 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
         && executable_schedule_violations == 0
         && outbox_failed == 0
         && derived_error_stores == 0
+        && consistency_errors == 0
         && ontology_ledger_errors == 0;
     Ok(DoctorReport {
         ok,
@@ -243,6 +251,9 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
         derived_dirty_stores,
         derived_error_stores,
         derived_stores,
+        consistency_errors,
+        consistency_warnings,
+        consistency_issues,
         ontology_ledger_errors,
         ontology_ledger_warnings,
         ontology_ledger_issues,
@@ -648,9 +659,236 @@ fn doctor_missing_ontology_table_issues(missing_tables: &[&'static str]) -> Vec<
         .collect()
 }
 
+fn doctor_consistency_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> {
+    let mut issues = Vec::new();
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT tl.task_id, tl.label_id, tl.board_id, t.board_id \
+         FROM task_labels tl \
+         JOIN tasks t ON t.id=tl.task_id \
+         WHERE tl.board_id<>t.board_id",
+        |row| {
+            let task_id: String = row.get(0)?;
+            let label_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "task_label_task_board_mismatch",
+                "task_labels",
+                format!("{task_id}:{label_id}"),
+                row_board,
+                "tasks",
+                task_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT tl.task_id, tl.label_id, tl.board_id, l.board_id \
+         FROM task_labels tl \
+         JOIN labels l ON l.id=tl.label_id \
+         WHERE tl.board_id<>l.board_id",
+        |row| {
+            let task_id: String = row.get(0)?;
+            let label_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "task_label_label_board_mismatch",
+                "task_labels",
+                format!("{task_id}:{label_id}"),
+                row_board,
+                "labels",
+                label_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT d.parent_task_id, d.child_task_id, d.board_id, p.board_id \
+         FROM task_dependencies d \
+         JOIN tasks p ON p.id=d.parent_task_id \
+         WHERE d.board_id<>p.board_id",
+        |row| {
+            let parent_task_id: String = row.get(0)?;
+            let child_task_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "task_dependency_parent_board_mismatch",
+                "task_dependencies",
+                format!("{parent_task_id}->{child_task_id}"),
+                row_board,
+                "tasks",
+                parent_task_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT d.parent_task_id, d.child_task_id, d.board_id, c.board_id \
+         FROM task_dependencies d \
+         JOIN tasks c ON c.id=d.child_task_id \
+         WHERE d.board_id<>c.board_id",
+        |row| {
+            let parent_task_id: String = row.get(0)?;
+            let child_task_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "task_dependency_child_board_mismatch",
+                "task_dependencies",
+                format!("{parent_task_id}->{child_task_id}"),
+                row_board,
+                "tasks",
+                child_task_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT r.id, r.task_id, r.board_id, t.board_id \
+         FROM task_runs r \
+         JOIN tasks t ON t.id=r.task_id \
+         WHERE r.board_id<>t.board_id",
+        |row| {
+            let run_id: String = row.get(0)?;
+            let task_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "task_run_task_board_mismatch",
+                "task_runs",
+                run_id,
+                row_board,
+                "tasks",
+                task_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT c.id, c.task_id, c.board_id, t.board_id \
+         FROM task_comments c \
+         JOIN tasks t ON t.id=c.task_id \
+         WHERE c.board_id<>t.board_id",
+        |row| {
+            let comment_id: String = row.get(0)?;
+            let task_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "task_comment_task_board_mismatch",
+                "task_comments",
+                comment_id,
+                row_board,
+                "tasks",
+                task_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT e.event_id, e.task_id, e.board_id, t.board_id \
+         FROM task_events e \
+         JOIN tasks t ON t.id=e.task_id \
+         WHERE e.task_id IS NOT NULL AND e.board_id<>t.board_id",
+        |row| {
+            let event_id: String = row.get(0)?;
+            let task_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "task_event_task_board_mismatch",
+                "task_events",
+                event_id,
+                row_board,
+                "tasks",
+                task_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT e.event_id, e.run_id, e.board_id, r.board_id \
+         FROM task_events e \
+         JOIN task_runs r ON r.id=e.run_id \
+         WHERE e.run_id IS NOT NULL AND e.board_id<>r.board_id",
+        |row| {
+            let event_id: String = row.get(0)?;
+            let run_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "task_event_run_board_mismatch",
+                "task_events",
+                event_id,
+                row_board,
+                "task_runs",
+                run_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT a.id, a.task_id, a.board_id, t.board_id \
+         FROM task_attachments a \
+         JOIN tasks t ON t.id=a.task_id \
+         WHERE a.board_id<>t.board_id",
+        |row| {
+            let attachment_id: String = row.get(0)?;
+            let task_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "task_attachment_task_board_mismatch",
+                "task_attachments",
+                attachment_id,
+                row_board,
+                "tasks",
+                task_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    Ok(issues)
+}
+
+fn relationship_board_mismatch_issue(
+    code: &str,
+    table: &str,
+    row_key: String,
+    row_board: String,
+    referenced_table: &str,
+    referenced_id: String,
+    referenced_board: String,
+) -> DoctorIssue {
+    doctor_issue(
+        "error",
+        code,
+        format!(
+            "cross-board relationship mismatch: table={table} row={row_key} row_board={row_board} referenced={referenced_table}:{referenced_id} referenced_board={referenced_board}"
+        ),
+        vec![
+            format!("{table}:{row_key}"),
+            row_board,
+            format!("{referenced_table}:{referenced_id}"),
+            referenced_board,
+        ],
+    )
+}
+
 fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> {
     let mut issues = Vec::new();
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT o.id, o.task_id \
          FROM label_ontology_observations o \
@@ -669,7 +907,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT o.id, o.task_id \
          FROM label_ontology_observations o \
@@ -688,7 +926,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT s.id, s.observation_id \
          FROM label_ontology_signals s \
@@ -707,7 +945,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT s.id, s.observation_id \
          FROM label_ontology_signals s \
@@ -726,7 +964,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT s.id, s.target_label_id \
          FROM label_ontology_signals s \
@@ -745,7 +983,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT s.id, s.target_label_id \
          FROM label_ontology_signals s \
@@ -764,7 +1002,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT s.id, s.superseded_by_signal_id \
          FROM label_ontology_signals s \
@@ -783,7 +1021,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT s.id, s.superseded_by_signal_id \
          FROM label_ontology_signals s \
@@ -802,7 +1040,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT a.id, a.parent_action_id \
          FROM label_ontology_actions a \
@@ -821,7 +1059,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT a.id, a.parent_action_id \
          FROM label_ontology_actions a \
@@ -840,7 +1078,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT a.id, a.target_label_id \
          FROM label_ontology_actions a \
@@ -859,7 +1097,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT a.id, a.target_label_id \
          FROM label_ontology_actions a \
@@ -878,7 +1116,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT a.id, a.result_label_id \
          FROM label_ontology_actions a \
@@ -897,7 +1135,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT a.id, a.result_label_id \
          FROM label_ontology_actions a \
@@ -916,7 +1154,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT a.id, a.result_proposal_id \
          FROM label_ontology_actions a \
@@ -935,7 +1173,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT a.id, a.result_proposal_id \
          FROM label_ontology_actions a \
@@ -954,7 +1192,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT a.id, a.result_atom_id \
          FROM label_ontology_actions a \
@@ -973,7 +1211,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT x.action_id, x.signal_id \
          FROM label_ontology_action_signals x \
@@ -993,7 +1231,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
             ))
         },
     )?);
-    issues.extend(query_ontology_issue_rows(
+    issues.extend(query_doctor_issue_rows(
         conn,
         "SELECT x.action_id, x.signal_id \
          FROM label_ontology_action_signals x \
@@ -1030,7 +1268,7 @@ fn doctor_ontology_ledger_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> 
     Ok(issues)
 }
 
-fn query_ontology_issue_rows<F>(
+fn query_doctor_issue_rows<F>(
     conn: &Connection,
     sql: &str,
     mut mapper: F,

@@ -1685,6 +1685,66 @@ fn table_count(conn: &Connection, table: &str) -> anyhow::Result<i64> {
     )
 }
 
+struct RootMutationActionRow {
+    id: String,
+    action_type: String,
+    target_label_id: Option<String>,
+    result_label_id: Option<String>,
+    result_atom_id: Option<String>,
+    result_atom_content_hash: Option<String>,
+    canonical_before_hash: Option<String>,
+    canonical_after_hash: Option<String>,
+    change_json: String,
+    validation_status: String,
+    created_by: String,
+}
+
+fn single_root_mutation_action(conn: &Connection) -> anyhow::Result<RootMutationActionRow> {
+    Ok(conn.query_row(
+        "SELECT id,action_type,target_label_id,result_label_id,result_atom_id,\
+         result_atom_content_hash,canonical_before_hash,canonical_after_hash,change_json,\
+         validation_status,created_by FROM label_ontology_actions",
+        [],
+        |row| {
+            Ok(RootMutationActionRow {
+                id: row.get(0)?,
+                action_type: row.get(1)?,
+                target_label_id: row.get(2)?,
+                result_label_id: row.get(3)?,
+                result_atom_id: row.get(4)?,
+                result_atom_content_hash: row.get(5)?,
+                canonical_before_hash: row.get(6)?,
+                canonical_after_hash: row.get(7)?,
+                change_json: row.get(8)?,
+                validation_status: row.get(9)?,
+                created_by: row.get(10)?,
+            })
+        },
+    )?)
+}
+
+fn ontology_action_atom_effect_count(conn: &Connection, action_id: &str) -> anyhow::Result<i64> {
+    Ok(conn.query_row(
+        "SELECT COUNT(*) FROM label_ontology_action_atom_effects WHERE action_id=?1",
+        [action_id],
+        |row| row.get(0),
+    )?)
+}
+
+fn ontology_action_atom_effect_texts(
+    conn: &Connection,
+    action_id: &str,
+    effect: &str,
+) -> anyhow::Result<Vec<String>> {
+    Ok(conn
+        .prepare(
+            "SELECT text FROM label_ontology_action_atom_effects \
+             WHERE action_id=?1 AND effect=?2 ORDER BY text",
+        )?
+        .query_map([action_id, effect], |row| row.get::<_, String>(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?)
+}
+
 #[test]
 fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> anyhow::Result<()> {
     let temp =
@@ -2976,10 +3036,10 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
 }
 
 #[test]
-fn label_atom_hashes_are_stable_across_reordered_sources_and_mark_index_dirty() -> anyhow::Result<()>
+fn label_atom_hashes_are_stable_across_reordered_sources_without_dirty_noop() -> anyhow::Result<()>
 {
     let temp =
-        TempDb::new("label_atom_hashes_are_stable_across_reordered_sources_and_mark_index_dirty")?;
+        TempDb::new("label_atom_hashes_are_stable_across_reordered_sources_without_dirty_noop")?;
     init_database(&temp.path, "tester")?;
     create_label(
         &temp.path,
@@ -3025,6 +3085,8 @@ fn label_atom_hashes_are_stable_across_reordered_sources_and_mark_index_dirty() 
          WHERE store_name='lancedb_label_atoms' AND board_id=?1",
         [&board.id],
     )?;
+    let action_count = table_count(&conn, "label_ontology_actions")?;
+    let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
 
     upsert_label_semantics(
         &temp.path,
@@ -3051,8 +3113,13 @@ fn label_atom_hashes_are_stable_across_reordered_sources_and_mark_index_dirty() 
         .collect::<std::collections::BTreeMap<_, _>>();
 
     assert_eq!(reordered_identity_by_text, first_identity_by_text);
-    assert!(label_atom_store_dirty(&temp.path)?);
-    assert!(label_atom_board_dirty(&temp.path, "default")?);
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, action_count);
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count
+    );
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
     Ok(())
 }
 
@@ -3124,35 +3191,161 @@ fn direct_label_semantics_upsert_records_update_semantics_provenance() -> anyhow
         .find(|atom| atom.kind == "applies_when")
         .context("applies_when atom")?;
 
-    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
-
-    assert!(!explain.legacy_untracked);
-    assert_eq!(explain.provenance_actions.len(), 1);
-    let provenance = &explain.provenance_actions[0];
-    assert_eq!(provenance.matched_by, "atom_id");
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, 1);
+    let action = single_root_mutation_action(&conn)?;
     assert_eq!(
-        provenance.action.action_type,
-        LabelOntologyActionType::UpdateSemantics
+        action.action_type,
+        LabelOntologyActionType::UpdateSemantics.to_string()
     );
     assert_eq!(
-        provenance.action.target_label_id.as_deref(),
+        action.target_label_id.as_deref(),
         Some(semantics.label_id.as_str())
     );
+    assert_eq!(action.result_label_id, None);
+    assert_eq!(action.result_atom_id, None);
+    assert_eq!(action.result_atom_content_hash, None);
+    assert_eq!(action.created_by, "ontology-editor");
     assert_eq!(
-        provenance.action.result_atom_id.as_deref(),
-        Some(atom.id.as_str())
+        action.validation_status,
+        LabelOntologyValidationStatus::Pending.to_string()
+    );
+    assert!(action.canonical_before_hash.is_some());
+    assert_eq!(
+        action.canonical_after_hash.as_deref(),
+        Some(semantics.semantics_hash.as_str())
+    );
+    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
+    assert!(change.get("atoms").is_none());
+    assert_eq!(
+        change["atom_effect_counts"],
+        json!({"added": 2, "removed": 0})
+    );
+    assert_eq!(ontology_action_atom_effect_count(&conn, &action.id)?, 2);
+    let added_texts = ontology_action_atom_effect_texts(&conn, &action.id, "added")?;
+    assert!(added_texts.iter().any(|text| text == "backend"));
+    assert!(added_texts.iter().any(|text| text == &atom.text));
+    Ok(())
+}
+
+#[test]
+fn label_semantics_root_actions_record_only_atom_effect_deltas() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_semantics_root_actions_record_only_atom_effect_deltas")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("Backend service work".to_owned()),
+            applies_when: vec![
+                "touches Rust service code".to_owned(),
+                "updates API handlers".to_owned(),
+            ],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+
+    let description_patch = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash.clone()),
+            description: Some("Backend service ownership".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, 2);
+    assert_eq!(table_count(&conn, "label_ontology_action_atom_effects")?, 2);
+    let description_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&description_patch.semantics_hash],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        ontology_action_atom_effect_count(&conn, &description_action_id)?,
+        0
+    );
+    assert!(label_atom_store_dirty(&temp.path)?);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    let action_count = table_count(&conn, "label_ontology_actions")?;
+    let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+    let no_op = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(description_patch.semantics_hash.clone()),
+            description: Some("Backend service ownership".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(no_op.semantics_hash, description_patch.semantics_hash);
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, action_count);
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count
+    );
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+
+    let added = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(no_op.semantics_hash.clone()),
+            applies_when: vec!["owns scheduler transitions".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let add_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&added.semantics_hash],
+        |row| row.get(0),
+    )?;
+    assert_eq!(ontology_action_atom_effect_count(&conn, &add_action_id)?, 1);
+    assert_eq!(
+        ontology_action_atom_effect_texts(&conn, &add_action_id, "added")?,
+        vec!["owns scheduler transitions"]
+    );
+
+    let removed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(added.semantics_hash.clone()),
+            remove_applies_when: vec!["updates API handlers".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let remove_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&removed.semantics_hash],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        ontology_action_atom_effect_count(&conn, &remove_action_id)?,
+        1
     );
     assert_eq!(
-        provenance.action.result_atom_content_hash.as_deref(),
-        Some(atom.content_hash.as_str())
+        ontology_action_atom_effect_texts(&conn, &remove_action_id, "removed")?,
+        vec!["updates API handlers"]
     );
-    assert_eq!(provenance.action.created_by, "ontology-editor");
-    assert_eq!(
-        provenance.action.validation_status,
-        LabelOntologyValidationStatus::Pending
-    );
-    assert!(provenance.action.canonical_before_hash.is_some());
-    assert!(provenance.action.canonical_after_hash.is_some());
     Ok(())
 }
 
@@ -3205,17 +3398,18 @@ fn label_semantics_patch_preserves_missing_fields_and_records_reason() -> anyhow
     assert_eq!(patched.positive_examples, vec!["add API handler"]);
     assert_eq!(patched.negative_examples, vec!["adjust spacing"]);
     assert_ne!(patched.semantics_hash, seed.semantics_hash);
-    let atom = patched
-        .atoms
-        .iter()
-        .find(|atom| atom.text == "exposes CLI JSON output")
-        .context("new applies_when atom")?;
-    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
-    assert!(
-        explain
-            .provenance_actions
-            .iter()
-            .any(|action| action.action.reason == "Add a CLI-facing backend boundary.")
+    let conn = connect_file(&temp.path)?;
+    let action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1 AND reason=?2",
+        [
+            patched.semantics_hash.as_str(),
+            "Add a CLI-facing backend boundary.",
+        ],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        ontology_action_atom_effect_texts(&conn, &action_id, "added")?,
+        vec!["exposes CLI JSON output"]
     );
     Ok(())
 }
@@ -3432,30 +3626,36 @@ fn direct_label_bootstrap_records_bootstrap_provenance_for_atoms() -> anyhow::Re
         .find(|atom| atom.kind == "applies_when")
         .context("applies_when atom")?;
 
-    let explain = explain_label_atom(&temp.path, "default", &atom.id)?;
-
-    assert!(!explain.legacy_untracked);
-    assert_eq!(explain.provenance_actions.len(), 1);
-    let provenance = &explain.provenance_actions[0];
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, 1);
+    let action = single_root_mutation_action(&conn)?;
     assert_eq!(
-        provenance.action.action_type,
-        LabelOntologyActionType::BootstrapLabel
+        action.action_type,
+        LabelOntologyActionType::BootstrapLabel.to_string()
     );
     assert_eq!(
-        provenance.action.result_label_id.as_deref(),
+        action.result_label_id.as_deref(),
         Some(result.semantics.label_id.as_str())
     );
+    assert_eq!(action.target_label_id, None);
+    assert_eq!(action.result_atom_id, None);
+    assert_eq!(action.result_atom_content_hash, None);
+    assert_eq!(action.created_by, "bootstrapper");
+    assert!(action.canonical_before_hash.is_some());
     assert_eq!(
-        provenance.action.result_atom_id.as_deref(),
-        Some(atom.id.as_str())
+        action.canonical_after_hash.as_deref(),
+        Some(result.semantics.semantics_hash.as_str())
     );
-    assert_eq!(provenance.action.created_by, "bootstrapper");
+    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
     assert_eq!(
-        provenance.action.validation_status,
-        LabelOntologyValidationStatus::Pending
+        change["atom_effect_counts"],
+        json!({"added": 1, "removed": 0})
     );
-    assert!(provenance.action.canonical_before_hash.is_some());
-    assert!(provenance.action.canonical_after_hash.is_some());
+    assert_eq!(ontology_action_atom_effect_count(&conn, &action.id)?, 1);
+    assert_eq!(
+        ontology_action_atom_effect_texts(&conn, &action.id, "added")?,
+        vec![atom.text.clone()]
+    );
     Ok(())
 }
 

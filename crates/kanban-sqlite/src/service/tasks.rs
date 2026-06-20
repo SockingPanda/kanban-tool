@@ -1342,6 +1342,7 @@ pub(crate) fn adopt_label_semantics_candidate_in_current_tx(
     let label =
         ensure_bootstrap_label_writable_in_current_tx(conn, board_id, &candidate.name, now)?;
     let before = label_ontology_semantics_snapshot_in_tx(conn, board_id, &label.id, &label.name)?;
+    let before_atoms = super::label_ontology_mutation_atoms(conn, board_id, &label.id)?;
     upsert_label_semantics_candidate_in_tx(conn, board_id, &label.id, &label.name, candidate, now)?;
     mark_label_atom_store_dirty(conn, board_id, now)?;
     match provenance {
@@ -1354,6 +1355,7 @@ pub(crate) fn adopt_label_semantics_candidate_in_current_tx(
                     label_name: &label.name,
                     action_type: LabelOntologyActionType::BootstrapLabel,
                     before,
+                    before_atoms,
                     options: LabelSemanticsMutationOptions::manual_actor(actor),
                 },
                 now,

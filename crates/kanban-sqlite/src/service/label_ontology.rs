@@ -1330,12 +1330,14 @@ pub(crate) struct LabelOntologySemanticsMutationInput<'a> {
     pub(crate) label_name: &'a str,
     pub(crate) action_type: LabelOntologyActionType,
     pub(crate) before: LabelOntologySemanticsSnapshot,
+    pub(crate) before_atoms: Vec<LabelOntologyMutationAtom>,
     pub(crate) options: LabelSemanticsMutationOptions,
 }
 
 #[derive(Debug, Clone)]
-struct LabelOntologyMutationAtom {
+pub(crate) struct LabelOntologyMutationAtom {
     id: String,
+    label_id: String,
     content_hash: String,
     polarity: String,
     kind: String,
@@ -1360,6 +1362,28 @@ pub(crate) fn label_ontology_semantics_snapshot_in_tx(
     })
 }
 
+pub(crate) fn label_ontology_semantics_snapshot_for_definition(
+    label_id: &str,
+    label_name: &str,
+    definition: &LabelDefinition,
+) -> Result<LabelOntologySemanticsSnapshot> {
+    let label = LabelSnapshot {
+        id: label_id.to_owned(),
+        name: label_name.to_owned(),
+    };
+    let parts = SemanticsParts {
+        description: definition.description.clone(),
+        applies_when: definition.applies_when.clone(),
+        excludes_when: definition.excludes_when.clone(),
+        positive_examples: definition.positive_examples.clone(),
+        negative_examples: definition.negative_examples.clone(),
+    };
+    Ok(LabelOntologySemanticsSnapshot {
+        hash: semantics_hash(&label, &parts)?,
+        json: semantics_json(&label, &parts),
+    })
+}
+
 pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
     conn: &Connection,
     input: LabelOntologySemanticsMutationInput<'_>,
@@ -1371,6 +1395,7 @@ pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
         label_name,
         action_type,
         before,
+        before_atoms,
         options,
     } = input;
     let (target_label_id, result_label_id, default_reason) = match action_type {
@@ -1408,8 +1433,13 @@ pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
     }
 
     let after = label_ontology_semantics_snapshot_in_tx(conn, board_id, label_id, label_name)?;
-    let atoms = label_ontology_mutation_atoms(conn, board_id, label_id)?;
     let changed = before.hash != after.hash;
+    if !changed {
+        return Ok(Vec::new());
+    }
+    let after_atoms = label_ontology_mutation_atoms(conn, board_id, label_id)?;
+    let (added_atoms, removed_atoms) =
+        label_ontology_atom_effect_delta(&before_atoms, &after_atoms);
     let change_json = serde_json::to_string(&json!({
         "label": {
             "id": label_id,
@@ -1418,85 +1448,64 @@ pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
         "changed": changed,
         "before": before.json,
         "after": after.json,
-        "atoms": atoms.iter().map(label_ontology_mutation_atom_json).collect::<Vec<_>>(),
+        "atom_effect_counts": {
+            "added": added_atoms.len(),
+            "removed": removed_atoms.len(),
+        },
     }))
     .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
 
-    let mut action_ids = Vec::new();
-    if atoms.is_empty() {
-        let action_id = insert_ontology_action(
-            conn,
-            board_id,
-            InsertOntologyAction {
-                action_type,
-                reason: reason.clone(),
-                actor: actor.clone(),
-                parent_action_id: None,
-                target_label_id: target_label_id.clone(),
-                result_label_id: result_label_id.clone(),
-                result_atom_id: None,
-                result_atom_content_hash: None,
-                result_proposal_id: None,
-                canonical_before_hash: Some(before.hash.clone()),
-                canonical_after_hash: Some(after.hash.clone()),
-                change_json: change_json.clone(),
-                validation_status: LabelOntologyValidationStatus::Pending,
-                validation_json: "{}".to_owned(),
-            },
-            now,
-        )?;
-        link_action_signals(conn, board_id, &action_id, &signal_ids, now)?;
-        action_ids.push(action_id);
-        return Ok(action_ids);
+    let action_id = insert_ontology_action(
+        conn,
+        board_id,
+        InsertOntologyAction {
+            action_type,
+            reason,
+            actor,
+            parent_action_id: None,
+            target_label_id,
+            result_label_id,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: Some(before.hash),
+            canonical_after_hash: Some(after.hash),
+            change_json,
+            validation_status: LabelOntologyValidationStatus::Pending,
+            validation_json: "{}".to_owned(),
+        },
+        now,
+    )?;
+    link_action_signals(conn, board_id, &action_id, &signal_ids, now)?;
+    for atom in added_atoms {
+        insert_action_atom_effect(conn, board_id, &action_id, atom, "added", now)?;
     }
-
-    for atom in atoms {
-        let action_id = insert_ontology_action(
-            conn,
-            board_id,
-            InsertOntologyAction {
-                action_type,
-                reason: reason.clone(),
-                actor: actor.clone(),
-                parent_action_id: None,
-                target_label_id: target_label_id.clone(),
-                result_label_id: result_label_id.clone(),
-                result_atom_id: Some(atom.id),
-                result_atom_content_hash: Some(atom.content_hash),
-                result_proposal_id: None,
-                canonical_before_hash: Some(before.hash.clone()),
-                canonical_after_hash: Some(after.hash.clone()),
-                change_json: change_json.clone(),
-                validation_status: LabelOntologyValidationStatus::Pending,
-                validation_json: "{}".to_owned(),
-            },
-            now,
-        )?;
-        link_action_signals(conn, board_id, &action_id, &signal_ids, now)?;
-        action_ids.push(action_id);
+    for atom in removed_atoms {
+        insert_action_atom_effect(conn, board_id, &action_id, atom, "removed", now)?;
     }
-    Ok(action_ids)
+    Ok(vec![action_id])
 }
 
-fn label_ontology_mutation_atoms(
+pub(crate) fn label_ontology_mutation_atoms(
     conn: &Connection,
     board_id: &str,
     label_id: &str,
 ) -> Result<Vec<LabelOntologyMutationAtom>> {
     let mut stmt = conn
         .prepare(
-            "SELECT id,content_hash,polarity,kind,text,ordinal \
+            "SELECT id,label_id,content_hash,polarity,kind,text,ordinal \
              FROM label_atoms WHERE board_id=?1 AND label_id=?2 ORDER BY ordinal ASC, id ASC",
         )
         .map_err(storage)?;
     stmt.query_map(params![board_id, label_id], |row| {
         Ok(LabelOntologyMutationAtom {
             id: row.get(0)?,
-            content_hash: row.get(1)?,
-            polarity: row.get(2)?,
-            kind: row.get(3)?,
-            text: row.get(4)?,
-            ordinal: row.get(5)?,
+            label_id: row.get(1)?,
+            content_hash: row.get(2)?,
+            polarity: row.get(3)?,
+            kind: row.get(4)?,
+            text: row.get(5)?,
+            ordinal: row.get(6)?,
         })
     })
     .map_err(storage)?
@@ -1504,9 +1513,72 @@ fn label_ontology_mutation_atoms(
     .map_err(storage)
 }
 
+fn label_ontology_atom_effect_delta<'a>(
+    before_atoms: &'a [LabelOntologyMutationAtom],
+    after_atoms: &'a [LabelOntologyMutationAtom],
+) -> (
+    Vec<&'a LabelOntologyMutationAtom>,
+    Vec<&'a LabelOntologyMutationAtom>,
+) {
+    let before_by_hash = before_atoms
+        .iter()
+        .filter(|atom| label_ontology_atom_has_effect(atom))
+        .map(|atom| (atom.content_hash.as_str(), atom))
+        .collect::<BTreeMap<_, _>>();
+    let after_by_hash = after_atoms
+        .iter()
+        .filter(|atom| label_ontology_atom_has_effect(atom))
+        .map(|atom| (atom.content_hash.as_str(), atom))
+        .collect::<BTreeMap<_, _>>();
+    let added = after_by_hash
+        .iter()
+        .filter_map(|(hash, atom)| (!before_by_hash.contains_key(hash)).then_some(*atom))
+        .collect::<Vec<_>>();
+    let removed = before_by_hash
+        .iter()
+        .filter_map(|(hash, atom)| (!after_by_hash.contains_key(hash)).then_some(*atom))
+        .collect::<Vec<_>>();
+    (added, removed)
+}
+
+fn label_ontology_atom_has_effect(atom: &LabelOntologyMutationAtom) -> bool {
+    atom.kind != "description"
+}
+
+fn insert_action_atom_effect(
+    conn: &Connection,
+    board_id: &str,
+    action_id: &str,
+    atom: &LabelOntologyMutationAtom,
+    effect: &str,
+    now: i64,
+) -> Result<()> {
+    exec(
+        conn,
+        "INSERT INTO label_ontology_action_atom_effects(\
+         board_id, action_id, label_id_snapshot, atom_id_snapshot, atom_content_hash, \
+         polarity, kind, text, effect, created_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![
+            board_id,
+            action_id,
+            atom.label_id,
+            atom.id,
+            atom.content_hash,
+            atom.polarity,
+            atom.kind,
+            atom.text,
+            effect,
+            now,
+        ],
+    )?;
+    Ok(())
+}
+
 fn label_ontology_mutation_atom_json(atom: &LabelOntologyMutationAtom) -> JsonValue {
     json!({
         "id": &atom.id,
+        "label_id": &atom.label_id,
         "content_hash": &atom.content_hash,
         "polarity": &atom.polarity,
         "kind": &atom.kind,

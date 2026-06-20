@@ -484,6 +484,97 @@ fn label_ontology_review_groups_by_candidate_atom() -> anyhow::Result<()> {
 }
 
 #[test]
+fn label_ontology_review_clusters_duplicate_signals_without_mutating_atoms() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("label_ontology_review_clusters_duplicate_signals_without_mutating_atoms")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task_a = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Cluster signal source A"),
+    )?;
+    let task_b = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Cluster signal source B"),
+    )?;
+
+    let before_atoms = list_label_atoms(&temp.path, "default")?;
+    let observation_a = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task_a.id,
+        review_record_input(vec![review_label_signal(
+            "cluster-a",
+            "cli",
+            "Adds CLI commands!",
+            0.2,
+        )]),
+    )?;
+    let observation_b = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task_b.id,
+        review_record_input(vec![review_label_signal(
+            "cluster-b",
+            "cli",
+            "adds cli commands",
+            0.3,
+        )]),
+    )?;
+
+    let default_groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::CandidateAtom,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+    assert_eq!(default_groups.len(), 2);
+
+    let groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::Cluster,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+
+    assert_eq!(groups.len(), 1);
+    let cluster = &groups[0];
+    assert_eq!(cluster.group_by, LabelOntologyReviewGroupBy::Cluster);
+    assert_eq!(
+        cluster.cluster_key.as_deref(),
+        Some("candidate:adds cli commands")
+    );
+    assert_eq!(
+        cluster.cluster_reason.as_deref(),
+        Some("normalized_candidate_text")
+    );
+    assert_eq!(cluster.task_count, 2);
+    assert_eq!(cluster.signal_count, 2);
+    assert!(cluster.signal_ids.contains(&observation_a.signals[0].id));
+    assert!(cluster.signal_ids.contains(&observation_b.signals[0].id));
+    assert_eq!(cluster.candidate_atom_variants.len(), 2);
+    assert_eq!(list_label_atoms(&temp.path, "default")?, before_atoms);
+    Ok(())
+}
+
+#[test]
 fn label_ontology_review_candidate_atom_fallback_separates_empty_candidates() -> anyhow::Result<()>
 {
     let temp =

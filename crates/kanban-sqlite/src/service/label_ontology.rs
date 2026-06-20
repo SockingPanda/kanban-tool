@@ -241,7 +241,7 @@ pub fn review_label_ontology(
              s.kind, s.proposed_action, s.target_label_id, s.target_label_name_snapshot, \
              s.candidate_atom_polarity, s.candidate_atom_kind, s.candidate_text, \
              s.candidate_content_hash, s.proposed_label_name, s.proposed_label_name_normalized, \
-             s.suggest_score, s.created_at \
+             s.suggest_score, s.rationale, s.created_at \
              FROM label_ontology_signals s \
              JOIN label_ontology_observations o ON o.id=s.observation_id \
              WHERE {where_sql} ORDER BY s.created_at ASC, s.id ASC"
@@ -3219,6 +3219,7 @@ struct ReviewSignalRow {
     proposed_label_name: Option<String>,
     proposed_label_name_normalized: Option<String>,
     suggest_score: Option<f64>,
+    rationale: String,
     created_at: i64,
 }
 
@@ -3243,7 +3244,8 @@ fn review_signal_row_from_row(row: &Row<'_>) -> rusqlite::Result<ReviewSignalRow
         proposed_label_name: row.get(13)?,
         proposed_label_name_normalized: row.get(14)?,
         suggest_score: row.get(15)?,
-        created_at: row.get(16)?,
+        rationale: row.get(16)?,
+        created_at: row.get(17)?,
     })
 }
 
@@ -3261,6 +3263,66 @@ fn review_group_key(group_by: LabelOntologyReviewGroupBy, row: &ReviewSignalRow)
             .proposed_label_name_normalized
             .clone()
             .unwrap_or_else(|| "no-proposed-label".to_owned()),
+        LabelOntologyReviewGroupBy::Cluster => review_cluster_key(row).0,
+    }
+}
+
+fn review_cluster_key(row: &ReviewSignalRow) -> (String, String) {
+    if let Some(candidate_text) = row.candidate_text.as_deref() {
+        if let Some(normalized) = normalize_cluster_text(candidate_text) {
+            return (
+                format!("candidate:{normalized}"),
+                "normalized_candidate_text".to_owned(),
+            );
+        }
+    }
+    if let Some(proposed_label_name) = row.proposed_label_name_normalized.as_deref() {
+        if let Some(normalized) = normalize_cluster_text(proposed_label_name) {
+            return (
+                format!("proposed_label:{normalized}"),
+                "normalized_proposed_label".to_owned(),
+            );
+        }
+    }
+    if let Some(normalized) = normalize_cluster_text(&row.rationale) {
+        return (
+            format!("rationale:{normalized}"),
+            "normalized_rationale".to_owned(),
+        );
+    }
+    (
+        format!(
+            "fallback:kind:{}|action:{}|target:{}",
+            row.signal_kind,
+            row.proposed_action,
+            row.target_label_id
+                .as_deref()
+                .or(row.target_label_name_snapshot.as_deref())
+                .unwrap_or("none")
+        ),
+        "kind_action_target_fallback".to_owned(),
+    )
+}
+
+fn normalize_cluster_text(value: &str) -> Option<String> {
+    let mut normalized = String::new();
+    let mut previous_was_space = true;
+    for ch in value.chars().flat_map(char::to_lowercase) {
+        if ch.is_ascii_alphanumeric() {
+            normalized.push(ch);
+            previous_was_space = false;
+        } else if ch.is_whitespace() || ch.is_ascii_punctuation() {
+            if !previous_was_space {
+                normalized.push(' ');
+                previous_was_space = true;
+            }
+        }
+    }
+    let normalized = normalized.trim();
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized.to_owned())
     }
 }
 
@@ -3345,6 +3407,8 @@ struct ReviewGroupAccumulator {
     candidate_content_hash: Option<String>,
     proposed_label_name: Option<String>,
     proposed_label_name_normalized: Option<String>,
+    cluster_key: Option<String>,
+    cluster_reason: Option<String>,
     task_ids: BTreeSet<String>,
     signal_count: i64,
     open_count: i64,
@@ -3377,6 +3441,8 @@ impl ReviewGroupAccumulator {
             candidate_content_hash: None,
             proposed_label_name: None,
             proposed_label_name_normalized: None,
+            cluster_key: None,
+            cluster_reason: None,
             task_ids: BTreeSet::new(),
             signal_count: 0,
             open_count: 0,
@@ -3423,6 +3489,11 @@ impl ReviewGroupAccumulator {
             Some(existing) => existing.max(row.created_at),
             None => row.created_at,
         });
+        if self.cluster_key.is_none() && self.group_by == LabelOntologyReviewGroupBy::Cluster {
+            let (cluster_key, cluster_reason) = review_cluster_key(&row);
+            self.cluster_key = Some(cluster_key);
+            self.cluster_reason = Some(cluster_reason);
+        }
         self.signal_ids.push(row.signal_id);
         if self.label_id.is_none() {
             self.label_id = row.target_label_id.clone();
@@ -3510,6 +3581,8 @@ impl ReviewGroupAccumulator {
             candidate_content_hash: self.candidate_content_hash,
             proposed_label_name: self.proposed_label_name,
             proposed_label_name_normalized: self.proposed_label_name_normalized,
+            cluster_key: self.cluster_key,
+            cluster_reason: self.cluster_reason,
             task_count: self.task_ids.len() as i64,
             signal_count: self.signal_count,
             open_count: self.open_count,

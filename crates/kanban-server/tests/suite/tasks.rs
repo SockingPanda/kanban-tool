@@ -1050,6 +1050,24 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
     );
     assert_eq!(groups[0]["labels"][0]["id"], label.id);
 
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/review?group_by=cluster&limit=10",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    assert_eq!(json["meta"]["group_by"], "cluster");
+    let groups = json["data"].as_array().context("cluster groups")?;
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0]["group_by"], "cluster");
+    assert_eq!(
+        groups[0]["cluster_key"],
+        "candidate:extends cli subcommands arguments help output or json behavior"
+    );
+    assert_eq!(groups[0]["cluster_reason"], "normalized_candidate_text");
+    assert_eq!(groups[0]["task_count"], 1);
+    assert_eq!(groups[0]["signal_ids"][0], signal_id);
+
     let (status, json) =
         get_json(app, &format!("/api/v1/label-ontology/signals/{signal_id}")).await?;
     assert_eq!(status, StatusCode::OK);

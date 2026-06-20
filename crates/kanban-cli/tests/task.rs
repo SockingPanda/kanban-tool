@@ -1160,6 +1160,34 @@ fn label_ontology_cli_record_list_show_review_round_trip() -> anyhow::Result<()>
     assert_eq!(groups[0]["open_count"], 1);
     assert_eq!(groups[0]["signal_ids"][0], signal_id);
 
+    let cluster_review = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "review",
+            "--group-by",
+            "cluster",
+        ],
+    )?
+    .success_json()?;
+    let cluster_groups = cluster_review["data"]
+        .as_array()
+        .context("cluster groups")?;
+    assert_eq!(cluster_groups.len(), 1);
+    assert_eq!(cluster_groups[0]["group_by"], "cluster");
+    assert_eq!(
+        cluster_groups[0]["cluster_key"],
+        "candidate:extends cli subcommands arguments help output or json behavior"
+    );
+    assert_eq!(
+        cluster_groups[0]["cluster_reason"],
+        "normalized_candidate_text"
+    );
+    assert_eq!(cluster_groups[0]["task_count"], 1);
+    assert_eq!(cluster_groups[0]["signal_ids"][0], signal_id);
+
     let review = kanban(
         &temp.path,
         &[

@@ -512,6 +512,7 @@ pub(crate) enum LabelOntologyReviewGroupByArg {
     CandidateAtom,
     #[value(name = "proposed-label")]
     ProposedLabel,
+    Cluster,
 }
 
 #[derive(Debug, Args)]

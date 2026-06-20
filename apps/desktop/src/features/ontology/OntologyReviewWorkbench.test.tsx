@@ -272,6 +272,8 @@ function reviewGroupFixture(overrides: Partial<LabelOntologyReviewGroup> = {}): 
     candidate_content_hash: "hash_1",
     proposed_label_name: null,
     proposed_label_name_normalized: null,
+    cluster_key: null,
+    cluster_reason: null,
     task_count: 1,
     signal_count: 1,
     open_count: 1,

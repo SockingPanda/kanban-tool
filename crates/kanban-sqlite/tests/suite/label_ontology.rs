@@ -129,6 +129,24 @@ fn label_ontology_schema_rejects_cross_board_ontology_links() -> anyhow::Result<
             "FOREIGN KEY constraint failed",
         ),
         (
+            "proposal_resolved_label_insert",
+            conn.execute(
+                "INSERT INTO label_semantic_proposals(
+                 id, board_id, task_id, status, name, resolved_label_id,
+                 applies_when, excludes_when, positive_examples, negative_examples,
+                 heuristic_coverage, heuristic_coverage_cosine, heuristic_residual_norm,
+                 diagnostics_json, created_by, created_at, updated_at)
+                 VALUES ('lp_schema_bad_resolved', ?1, ?2, 'proposed', 'bad-resolved',
+                 ?3, '[]', '[]', '[]', '[]', 0.1, 0.1, 0.9, '[]', 'tester', 1, 1)",
+                params![
+                    fixture.board_id,
+                    fixture.task_id,
+                    fixture.other_label_id
+                ],
+            ),
+            "label_semantic_proposals.board_id must match resolved_label_id board_id",
+        ),
+        (
             "proposal_resolved_label_update",
             conn.execute(
                 "UPDATE label_semantic_proposals SET resolved_label_id=?1 WHERE id=?2",
@@ -151,12 +169,48 @@ fn label_ontology_schema_rejects_cross_board_ontology_links() -> anyhow::Result<
             "label_ontology_signals.board_id must match observation_id board_id",
         ),
         (
+            "signal_target_label_insert",
+            conn.execute(
+                "INSERT INTO label_ontology_signals(
+                 id, observation_id, board_id, kind, status, target_label_id,
+                 related_labels_json, proposed_action, proposal_json, agent_selected,
+                 final_selected, rationale, signal_key, created_at, updated_at)
+                 VALUES ('los_schema_bad_target', ?1, ?2, 'false_negative',
+                 'open', ?3, '[]', 'add_positive_atom', '{}', 1, 1,
+                 'bad target label board', 'schema-bad-target', 1, 1)",
+                params![
+                    fixture.observation_id,
+                    fixture.board_id,
+                    fixture.other_label_id
+                ],
+            ),
+            "label_ontology_signals.board_id must match target_label_id board_id",
+        ),
+        (
             "signal_target_label_update",
             conn.execute(
                 "UPDATE label_ontology_signals SET target_label_id=?1 WHERE id=?2",
                 params![fixture.other_label_id, fixture.signal_id],
             ),
             "label_ontology_signals.board_id must match target_label_id board_id",
+        ),
+        (
+            "signal_supersede_insert",
+            conn.execute(
+                "INSERT INTO label_ontology_signals(
+                 id, observation_id, board_id, kind, status, superseded_by_signal_id,
+                 related_labels_json, proposed_action, proposal_json, agent_selected,
+                 final_selected, rationale, signal_key, created_at, updated_at)
+                 VALUES ('los_schema_bad_supersede', ?1, ?2, 'false_negative',
+                 'open', ?3, '[]', 'add_positive_atom', '{}', 1, 1,
+                 'bad supersede board', 'schema-bad-supersede', 1, 1)",
+                params![
+                    fixture.observation_id,
+                    fixture.board_id,
+                    fixture.other_signal_id
+                ],
+            ),
+            "label_ontology_signals.board_id must match superseded_by_signal_id board_id",
         ),
         (
             "signal_supersede_update",
@@ -167,12 +221,38 @@ fn label_ontology_schema_rejects_cross_board_ontology_links() -> anyhow::Result<
             "label_ontology_signals.board_id must match superseded_by_signal_id board_id",
         ),
         (
+            "action_parent_insert",
+            conn.execute(
+                "INSERT INTO label_ontology_actions(
+                 id, board_id, action_type, reason, parent_action_id, change_json,
+                 validation_requirement, validation_status, validation_json,
+                 created_by, created_by_type, created_at)
+                 VALUES ('loa_schema_bad_parent', ?1, 'confirm', 'bad parent board',
+                 ?2, '{}', 'none', 'not_required', '{}', 'tester', 'user', 1)",
+                params![fixture.board_id, fixture.other_action_id],
+            ),
+            "label_ontology_actions.board_id must match parent_action_id board_id",
+        ),
+        (
             "action_parent_update",
             conn.execute(
                 "UPDATE label_ontology_actions SET parent_action_id=?1 WHERE id=?2",
                 params![fixture.other_action_id, fixture.action_id],
             ),
             "label_ontology_actions.board_id must match parent_action_id board_id",
+        ),
+        (
+            "action_target_label_insert",
+            conn.execute(
+                "INSERT INTO label_ontology_actions(
+                 id, board_id, action_type, reason, target_label_id, change_json,
+                 validation_requirement, validation_status, validation_json,
+                 created_by, created_by_type, created_at)
+                 VALUES ('loa_schema_bad_target', ?1, 'confirm', 'bad target board',
+                 ?2, '{}', 'none', 'not_required', '{}', 'tester', 'user', 1)",
+                params![fixture.board_id, fixture.other_label_id],
+            ),
+            "label_ontology_actions.board_id must match target_label_id board_id",
         ),
         (
             "action_target_label_update",
@@ -183,12 +263,39 @@ fn label_ontology_schema_rejects_cross_board_ontology_links() -> anyhow::Result<
             "label_ontology_actions.board_id must match target_label_id board_id",
         ),
         (
+            "action_result_label_insert",
+            conn.execute(
+                "INSERT INTO label_ontology_actions(
+                 id, board_id, action_type, reason, result_label_id, change_json,
+                 validation_requirement, validation_status, validation_json,
+                 created_by, created_by_type, created_at)
+                 VALUES ('loa_schema_bad_result_label', ?1, 'confirm', 'bad result label board',
+                 ?2, '{}', 'none', 'not_required', '{}', 'tester', 'user', 1)",
+                params![fixture.board_id, fixture.other_label_id],
+            ),
+            "label_ontology_actions.board_id must match result_label_id board_id",
+        ),
+        (
             "action_result_label_update",
             conn.execute(
                 "UPDATE label_ontology_actions SET result_label_id=?1 WHERE id=?2",
                 params![fixture.other_label_id, fixture.action_id],
             ),
             "label_ontology_actions.board_id must match result_label_id board_id",
+        ),
+        (
+            "action_result_proposal_insert",
+            conn.execute(
+                "INSERT INTO label_ontology_actions(
+                 id, board_id, action_type, reason, result_proposal_id, change_json,
+                 validation_requirement, validation_status, validation_json,
+                 created_by, created_by_type, created_at)
+                 VALUES ('loa_schema_bad_result_proposal', ?1, 'confirm',
+                 'bad result proposal board', ?2, '{}', 'none', 'not_required',
+                 '{}', 'tester', 'user', 1)",
+                params![fixture.board_id, fixture.other_proposal_id],
+            ),
+            "label_ontology_actions.board_id must match result_proposal_id board_id",
         ),
         (
             "action_result_proposal_update",
@@ -204,6 +311,19 @@ fn label_ontology_schema_rejects_cross_board_ontology_links() -> anyhow::Result<
                 "INSERT INTO label_ontology_action_signals(board_id, action_id, signal_id, created_at)
                  VALUES (?1, ?2, ?3, 1)",
                 params![fixture.board_id, fixture.action_id, fixture.other_signal_id],
+            ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
+            "action_signal_update",
+            conn.execute(
+                "UPDATE label_ontology_action_signals SET signal_id=?1
+                 WHERE action_id=?2 AND signal_id=?3",
+                params![
+                    fixture.other_signal_id,
+                    fixture.action_id,
+                    fixture.signal_id
+                ],
             ),
             "FOREIGN KEY constraint failed",
         ),
@@ -4293,6 +4413,13 @@ fn label_ontology_jsonl_import_rejects_cross_board_action_signal_link() -> anyho
     let target =
         TempDb::new("label_ontology_jsonl_import_rejects_cross_board_action_signal_link_target")?;
     init_database(&target.path, "tester")?;
+    let sentinel = create_task(
+        &target.path,
+        "default",
+        "tester",
+        CreateTask::ready("ontology import rollback sentinel"),
+    )?;
+    let before_tasks = list_tasks(&target.path, "default", &[], true)?;
     let error = result_err(import_jsonl(&target.path, &invalid_export, true))?;
 
     assert!(
@@ -4301,6 +4428,9 @@ fn label_ontology_jsonl_import_rejects_cross_board_action_signal_link() -> anyho
             .contains("label ontology action-signal board mismatch"),
         "error: {error}"
     );
+    let after_tasks = list_tasks(&target.path, "default", &[], true)?;
+    assert_eq!(after_tasks, before_tasks);
+    assert_eq!(after_tasks[0].id, sentinel.id);
     Ok(())
 }
 

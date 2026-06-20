@@ -1674,7 +1674,7 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
     fs::write(
         &validation_path,
         json!({
-            "evidence_type": "automated",
+            "evidence_type": "trusted_automated",
             "embedding_model": "test-embedding-v1",
             "solver_options": {"candidate_limit": 24, "atom_limit": 64},
             "index": {"status": "ready", "dirty": false, "generation": 7},

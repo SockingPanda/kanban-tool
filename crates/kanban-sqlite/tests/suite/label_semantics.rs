@@ -3463,11 +3463,7 @@ fn direct_label_bootstrap_records_bootstrap_provenance_for_atoms() -> anyhow::Re
 fn label_atom_explain_hydrates_provenance_signals_and_validation() -> anyhow::Result<()> {
     let temp = TempDb::new("label_atom_explain_hydrates_provenance_signals_and_validation")?;
     let fixture = seed_label_atom_explain_fixture(&temp, "Explain CLI atom provenance")?;
-    validate_label_ontology_action_with_trusted_evidence(
-        &temp.path,
-        "default",
-        passed_explain_validation_input(&fixture),
-    )?;
+    seed_passed_explain_validation_action(&temp, &fixture)?;
 
     let explain = explain_label_atom(&temp.path, "default", &fixture.result_atom_id)?;
 
@@ -4473,20 +4469,12 @@ fn seed_label_atom_explain_fixture(
     })
 }
 
-fn passed_explain_validation_input(
+fn seed_passed_explain_validation_action(
+    temp: &TempDb,
     fixture: &LabelAtomExplainFixture,
-) -> LabelOntologyValidationInput {
-    LabelOntologyValidationInput {
-        actor: LabelOntologyActor {
-            name: "validator".to_owned(),
-            actor_type: "agent".to_owned(),
-            agent_type: Some("local".to_owned()),
-        },
-        parent_action_id: fixture.apply_action_id.clone(),
-        signal_ids: Vec::new(),
-        reason: "Source task now selects the target label after atom rebuild.".to_owned(),
-        validation_status: LabelOntologyValidationStatus::Passed,
-        validation_json: json!({
+) -> anyhow::Result<()> {
+    let validation_json = json!({
+        "manual": {
             "evidence_type": "trusted_automated",
             "embedding_model": "test-embedding-v1",
             "solver_options": {"candidate_limit": 24, "atom_limit": 64},
@@ -4519,9 +4507,53 @@ fn passed_explain_validation_input(
                     }]
                 }
             }]
-        })
-        .to_string(),
-    }
+        },
+        "cases": [{
+            "signal_id": fixture.signal_id,
+            "task_id": fixture.task.id,
+            "after": {
+                "validation_status": "passed",
+                "manual_case_ref": {
+                    "source": "manual.cases",
+                    "index": 0,
+                    "signal_id": fixture.signal_id
+                }
+            },
+            "passed": true
+        }],
+        "summary": {
+            "status": "passed",
+            "case_count": 1,
+            "stale_count": 0,
+            "degraded_count": 0,
+            "incomparable_count": 0
+        }
+    });
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "INSERT INTO label_ontology_actions(
+         id, board_id, parent_action_id, action_type, reason, target_label_id, result_label_id,
+         result_atom_id, result_atom_content_hash, result_proposal_id, canonical_before_hash,
+         canonical_after_hash, change_json, validation_status, validation_json, created_by,
+         created_by_type, agent_type, created_at)
+         VALUES ('loa_explain_validation', ?1, ?2, 'validate',
+         'seeded atom explain validation fixture', ?3, NULL, ?4, ?5, NULL, NULL, NULL,
+         '{}', 'passed', ?6, 'test-fixture', 'agent', 'codex', 123456)",
+        params![
+            fixture.task.board_id,
+            fixture.apply_action_id,
+            fixture.target_label_id,
+            fixture.result_atom_id,
+            fixture.result_atom_content_hash,
+            validation_json.to_string(),
+        ],
+    )?;
+    conn.execute(
+        "INSERT INTO label_ontology_action_signals(board_id, action_id, signal_id, created_at)
+         VALUES (?1, 'loa_explain_validation', ?2, 123456)",
+        params![fixture.task.board_id, fixture.signal_id],
+    )?;
+    Ok(())
 }
 
 fn label_atom_store_dirty(path: &Path) -> anyhow::Result<bool> {

@@ -1,8 +1,7 @@
 use crate::connect_file;
 
 use super::{
-    AddTaskLabelsResult, BootstrapTaskLabel, BootstrapTaskLabelRestoreResult,
-    BootstrapTaskLabelResult, BootstrapTaskLabelSnapshot, CreateLabel, CreateTask,
+    AddTaskLabelsResult, BootstrapTaskLabel, BootstrapTaskLabelResult, CreateLabel, CreateTask,
     DeleteLabelResult, LabelOntologyActionType, LabelOntologyProposalBootstrapOptions,
     LabelOntologySemanticsMutationInput, LabelRecord, LabelSemanticProposalRecord,
     LabelSemanticsMutationOptions, LabelSemanticsRecord, MAX_TASK_LIST_LIMIT, TaskListOptions,
@@ -13,12 +12,29 @@ use super::{
     record_label_ontology_semantics_mutation_in_tx, required_row, scalar,
     upsert_label_semantics_candidate_in_tx, validate_priority, with_immediate_tx,
 };
+#[cfg(feature = "vector-lancedb")]
+use super::{
+    BootstrapTaskLabelVerification, BootstrapTaskLabelVerifiedResult,
+    DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT, DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT,
+    DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS, LabelSuggestionOptions,
+    label_atom_vectors_for_board, label_atom_vectors_for_definition, suggest_task_labels_with,
+    vector_storage, with_read_tx,
+};
 
 use std::path::Path;
 
+#[cfg(feature = "vector-lancedb")]
+use kanban_core::new_label_id;
 use kanban_core::{
     Clock, KanbanError, ReadinessFacts, Result, SystemClock, TaskStatus,
     initial_status as core_initial_status, is_active_recomputable_status, new_task_id,
+};
+#[cfg(feature = "vector-lancedb")]
+use kanban_labels::LabelDefinition;
+#[cfg(feature = "vector-lancedb")]
+use kanban_vector::{
+    LabelAtomHit, LabelAtomVector, LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore,
+    VectorError, VectorStoreBackend, VectorStoreStatus,
 };
 
 use rusqlite::{Connection, Row, named_params, params, types::Value};
@@ -473,160 +489,547 @@ pub fn bootstrap_task_label_by_id(
     })
 }
 
-pub fn snapshot_bootstrap_task_label_state(
+#[cfg(feature = "vector-lancedb")]
+pub fn bootstrap_task_label_with_staged_verification(
     path: impl AsRef<Path>,
     board: &str,
+    actor: &str,
     task_ref: &str,
-    label_name: &str,
-) -> Result<BootstrapTaskLabelSnapshot> {
-    let conn = connect_file(path.as_ref())?;
-    let board_id = board_id(&conn, board)?;
-    let task = resolve_task(&conn, &board_id, task_ref)?;
-    ensure_task_allows_label_mutation(&conn, &task.id)?;
-    let label_name = normalize_label_name(label_name)?;
-    let label = label_by_name(&conn, &board_id, &label_name)?;
-    let (task_label_existed, semantics) = if let Some(label) = &label {
-        (
-            task_label_binding_exists(&conn, &board_id, &task.id, &label.id)?,
-            optional_label_semantics_conn(&conn, &board_id, &label.id)?,
+    input: BootstrapTaskLabel,
+    store: &(impl LabelAtomVectorStore + ?Sized),
+    min_score: f32,
+) -> Result<BootstrapTaskLabelVerifiedResult> {
+    bootstrap_task_label_with_staged_verification_impl(
+        BootstrapTaskLabelStagedVerificationArgs {
+            path: path.as_ref(),
+            board,
+            actor,
+            task_ref,
+            input,
+            store,
+            min_score,
+        },
+        |_| Ok(()),
+    )
+}
+
+#[cfg(feature = "vector-lancedb")]
+struct BootstrapTaskLabelStagedVerificationArgs<'a, S: LabelAtomVectorStore + ?Sized> {
+    path: &'a Path,
+    board: &'a str,
+    actor: &'a str,
+    task_ref: &'a str,
+    input: BootstrapTaskLabel,
+    store: &'a S,
+    min_score: f32,
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn bootstrap_task_label_with_staged_verification_impl<S: LabelAtomVectorStore + ?Sized>(
+    args: BootstrapTaskLabelStagedVerificationArgs<'_, S>,
+    mut stage_hook: impl FnMut(BootstrapStagedVerificationStage) -> Result<()>,
+) -> Result<BootstrapTaskLabelVerifiedResult> {
+    let BootstrapTaskLabelStagedVerificationArgs {
+        path,
+        board,
+        actor,
+        task_ref,
+        input,
+        store,
+        min_score,
+    } = args;
+    if !(0.0..=1.0).contains(&min_score) {
+        return Err(KanbanError::InvalidInput(
+            "min_verify_score must be between 0 and 1".to_owned(),
+        ));
+    }
+    let conn = connect_file(path)?;
+    let now = SystemClock.now_ms();
+    let candidate = bootstrap_label_candidate(input)?;
+    let preflight = with_read_tx(&conn, || {
+        bootstrap_staged_preflight(
+            &conn,
+            board,
+            task_ref,
+            &candidate,
+            store.embedding_model(),
+            now,
         )
-    } else {
-        (false, None)
+    })?;
+    reach_bootstrap_staged_verification_stage(
+        BootstrapStagedVerificationStage::BeforeVerify,
+        &mut stage_hook,
+    )?;
+    let staged_store = StagedBootstrapLabelAtomStore::new(store, preflight.atoms)?;
+    let suggestions = suggest_task_labels_with(
+        path,
+        board,
+        task_ref,
+        &staged_store,
+        LabelSuggestionOptions {
+            output_limit: MAX_TASK_LIST_LIMIT,
+            candidate_limit: DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT,
+            atom_limit: DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT,
+            max_selected_labels: DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS,
+            min_score: 0.0,
+        },
+    )?;
+    if suggestions.degraded {
+        return Err(KanbanError::InvalidInput(format!(
+            "label bootstrap verification failed: label suggest degraded ({})",
+            suggestions.diagnostics.join(",")
+        )));
+    }
+    let selected = suggestions
+        .selected_labels
+        .iter()
+        .find(|label| label.label_id == preflight.label_id)
+        .map(|label| (label.score, "selected_labels"));
+    let candidate_hit = suggestions
+        .candidates
+        .iter()
+        .find(|label| label.label_id == preflight.label_id)
+        .map(|label| (label.score, "candidates"));
+    let Some((score, source)) = selected.or(candidate_hit) else {
+        return Err(KanbanError::InvalidInput(format!(
+            "label bootstrap verification failed: label {} was not returned by label suggest",
+            candidate.name
+        )));
     };
-    Ok(BootstrapTaskLabelSnapshot {
-        board_id,
-        task_id: task.id,
-        label_name,
-        label,
-        task_label_existed,
+    if score < min_score {
+        return Err(KanbanError::InvalidInput(format!(
+            "label bootstrap verification failed: label {} score {score:.3} is below min_verify_score {min_score:.3}",
+            candidate.name
+        )));
+    }
+    let verification = BootstrapTaskLabelVerification {
+        label_name: candidate.name.clone(),
+        score,
+        source: source.to_owned(),
+        min_score,
+        degraded: false,
+        diagnostics: suggestions.diagnostics,
+    };
+    let verification_context = serde_json::to_string(&json!({
+        "bootstrap_verification": {
+            "label_name": verification.label_name,
+            "score": verification.score,
+            "source": verification.source,
+            "min_score": verification.min_score,
+            "degraded": verification.degraded,
+            "diagnostics": verification.diagnostics,
+        }
+    }))
+    .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
+
+    reach_bootstrap_staged_verification_stage(
+        BootstrapStagedVerificationStage::BeforeCommit,
+        &mut stage_hook,
+    )?;
+    let (task, semantics) = with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
+        let task = resolve_task(&conn, &board_id, task_ref)?;
+        ensure_task_allows_label_mutation(&conn, &task.id)?;
+        let task_hash = suggest_input_hash_for_task(&task);
+        let label_state_hash = bootstrap_label_state_hash(&conn, &board_id, &candidate.name)?;
+        let board_digest = board_ontology_digest(&conn, &board_id)?;
+        if task.id != preflight.task_id || task_hash != preflight.task_suggest_hash {
+            return Err(KanbanError::Conflict(
+                "label bootstrap verification conflict: task changed before commit".to_owned(),
+            ));
+        }
+        if label_state_hash != preflight.label_state_hash
+            || board_digest != preflight.board_ontology_digest
+        {
+            return Err(KanbanError::Conflict(
+                "label bootstrap verification conflict: ontology changed before commit".to_owned(),
+            ));
+        }
+        let adoption = adopt_label_semantics_candidate_with_reserved_label_in_current_tx(
+            &conn,
+            &board_id,
+            &candidate,
+            LabelAdoptionProvenance::DirectBootstrap { actor },
+            Some(&preflight.label_id),
+            now,
+            Some(verification_context),
+        )?;
+        attach_label_in_current_tx(&conn, &board_id, actor, &task.id, &adoption.label.id, now)?;
+        reach_bootstrap_staged_verification_stage(
+            BootstrapStagedVerificationStage::DuringCommit,
+            &mut stage_hook,
+        )?;
+        Ok((
+            get_task_by_id(&conn, &board_id, &task.id)?,
+            adoption.semantics,
+        ))
+    })?;
+    reach_bootstrap_staged_verification_stage(
+        BootstrapStagedVerificationStage::AfterCommit,
+        &mut stage_hook,
+    )?;
+    Ok(BootstrapTaskLabelVerifiedResult {
+        task,
         semantics,
+        verification,
     })
 }
 
-pub fn restore_bootstrap_task_label_state(
-    path: impl AsRef<Path>,
-    actor: &str,
-    snapshot: &BootstrapTaskLabelSnapshot,
-) -> Result<BootstrapTaskLabelRestoreResult> {
-    let conn = connect_file(path.as_ref())?;
-    let now = SystemClock.now_ms();
-    with_immediate_tx(&conn, || {
-        let mut label_deleted = false;
-        let mut label_restored = false;
-        let mut task_binding_restored = false;
-        let mut semantics_restored = false;
-        let mut index_marked_dirty = false;
+#[cfg(feature = "vector-lancedb")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BootstrapStagedVerificationStage {
+    BeforeVerify,
+    BeforeCommit,
+    DuringCommit,
+    AfterCommit,
+}
 
-        let mut label = label_by_name(&conn, &snapshot.board_id, &snapshot.label_name)?;
-        if label.is_none()
-            && let Some(before) = &snapshot.label
-        {
-            restore_label_record_in_current_tx(&conn, before)?;
-            label = Some(before.clone());
-            label_restored = true;
+#[cfg(feature = "vector-lancedb")]
+impl BootstrapStagedVerificationStage {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::BeforeVerify => "before_verify",
+            Self::BeforeCommit => "before_commit",
+            Self::DuringCommit => "during_commit",
+            Self::AfterCommit => "after_commit",
         }
+    }
+}
 
-        if let Some(label) = label {
-            let attached =
-                task_label_binding_exists(&conn, &snapshot.board_id, &snapshot.task_id, &label.id)?;
-            if snapshot.task_label_existed && !attached {
-                attach_label_in_current_tx(
-                    &conn,
-                    &snapshot.board_id,
-                    actor,
-                    &snapshot.task_id,
-                    &label.id,
-                    now,
-                )?;
-                task_binding_restored = true;
-            } else if !snapshot.task_label_existed && attached {
-                remove_task_label_in_current_tx(
-                    &conn,
-                    &snapshot.board_id,
-                    actor,
-                    &snapshot.task_id,
-                    &label.id,
-                    now,
-                )?;
-                task_binding_restored = true;
-            }
+#[cfg(feature = "vector-lancedb")]
+fn reach_bootstrap_staged_verification_stage(
+    stage: BootstrapStagedVerificationStage,
+    stage_hook: &mut impl FnMut(BootstrapStagedVerificationStage) -> Result<()>,
+) -> Result<()> {
+    bootstrap_staged_debug_failpoint(stage)?;
+    stage_hook(stage)
+}
 
-            if snapshot.label.is_none() {
-                let remaining_bindings =
-                    count_task_label_bindings(&conn, &snapshot.board_id, &label.id)?;
-                if remaining_bindings > 0 {
-                    return Err(KanbanError::InvalidInput(format!(
-                        "cannot delete unverified bootstrap label {} because it is still attached to {} task(s)",
-                        label.name, remaining_bindings
-                    )));
-                }
-                let removed_semantics =
-                    count_label_semantics(&conn, &snapshot.board_id, &label.id)? > 0;
-                let removed_atoms = count_label_atoms(&conn, &snapshot.board_id, &label.id)?;
-                exec(
-                    &conn,
-                    "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
-                    params![snapshot.board_id, label.id],
-                )?;
-                exec(
-                    &conn,
-                    "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
-                    params![snapshot.board_id, label.id],
-                )?;
-                exec(
-                    &conn,
-                    "DELETE FROM labels WHERE board_id=?1 AND id=?2",
-                    params![snapshot.board_id, label.id],
-                )?;
-                insert_event(
-                    &conn,
-                    &snapshot.board_id,
-                    None,
-                    None,
-                    "label.deleted",
-                    actor,
-                    &json!({
-                        "label_id": label.id,
-                        "label": label.name,
-                        "forced": false,
-                        "removed_task_bindings": 0,
-                        "removed_semantics": removed_semantics,
-                        "removed_atoms": removed_atoms,
-                        "reason": "bootstrap verification compensation"
-                    })
-                    .to_string(),
-                    now,
-                )?;
-                label_deleted = true;
-            } else if let Some(semantics) = &snapshot.semantics {
-                restore_label_semantics_record_in_current_tx(&conn, semantics)?;
-                semantics_restored = true;
-            } else {
-                exec(
-                    &conn,
-                    "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
-                    params![snapshot.board_id, label.id],
-                )?;
-                exec(
-                    &conn,
-                    "DELETE FROM label_semantics WHERE board_id=?1 AND label_id=?2",
-                    params![snapshot.board_id, label.id],
-                )?;
-                semantics_restored = true;
-            }
+#[cfg(all(feature = "vector-lancedb", debug_assertions))]
+fn bootstrap_staged_debug_failpoint(stage: BootstrapStagedVerificationStage) -> Result<()> {
+    if std::env::var("KANBAN_BOOTSTRAP_VERIFY_TEST_FAILPOINT").as_deref() != Ok(stage.as_str()) {
+        return Ok(());
+    }
+    if let Ok(marker) = std::env::var("KANBAN_BOOTSTRAP_VERIFY_TEST_MARKER") {
+        std::fs::write(&marker, stage.as_str()).map_err(|err| {
+            KanbanError::InvalidInput(format!(
+                "bootstrap verification test failpoint marker failed: {err}"
+            ))
+        })?;
+    }
+    let sleep_ms = std::env::var("KANBAN_BOOTSTRAP_VERIFY_TEST_SLEEP_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(30_000);
+    std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
+    Ok(())
+}
 
-            mark_label_atom_store_dirty(&conn, &snapshot.board_id, now)?;
-            index_marked_dirty = true;
+#[cfg(all(feature = "vector-lancedb", not(debug_assertions)))]
+fn bootstrap_staged_debug_failpoint(_stage: BootstrapStagedVerificationStage) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(feature = "vector-lancedb")]
+struct BootstrapStagedPreflight {
+    task_id: String,
+    label_id: String,
+    task_suggest_hash: String,
+    label_state_hash: String,
+    board_ontology_digest: String,
+    atoms: Vec<LabelAtomVector>,
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn bootstrap_staged_preflight(
+    conn: &Connection,
+    board: &str,
+    task_ref: &str,
+    candidate: &super::LabelProposalCandidate,
+    embedding_model: &str,
+    now: i64,
+) -> Result<BootstrapStagedPreflight> {
+    let board_id = board_id(conn, board)?;
+    let task = resolve_task(conn, &board_id, task_ref)?;
+    ensure_task_allows_label_mutation(conn, &task.id)?;
+    let label = label_by_name(conn, &board_id, &candidate.name)?;
+    let label_id = if let Some(label) = &label {
+        if count_label_semantics(conn, &board_id, &label.id)? > 0 {
+            return Err(KanbanError::InvalidInput(format!(
+                "label bootstrap would replace existing semantics for label {}; use a dedicated semantics mutation or proposal adoption path",
+                label.name
+            )));
         }
-
-        Ok(BootstrapTaskLabelRestoreResult {
-            label_deleted,
-            label_restored,
-            task_binding_restored,
-            semantics_restored,
-            index_marked_dirty,
-        })
+        label.id.clone()
+    } else {
+        new_label_id()
+    };
+    let mut atoms = label_atom_vectors_for_board(conn, &board_id, embedding_model)?;
+    atoms.retain(|atom| atom.label_id != label_id);
+    let definition = label_definition_from_bootstrap_candidate(&label_id, candidate);
+    atoms.extend(label_atom_vectors_for_definition(
+        &definition,
+        &board_id,
+        &candidate.name,
+        embedding_model,
+        now,
+    ));
+    Ok(BootstrapStagedPreflight {
+        task_id: task.id.clone(),
+        label_id,
+        task_suggest_hash: suggest_input_hash_for_task(&task),
+        label_state_hash: bootstrap_label_state_hash(conn, &board_id, &candidate.name)?,
+        board_ontology_digest: board_ontology_digest(conn, &board_id)?,
+        atoms,
     })
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn label_definition_from_bootstrap_candidate(
+    label_id: &str,
+    candidate: &super::LabelProposalCandidate,
+) -> LabelDefinition {
+    LabelDefinition {
+        id: label_id.to_owned(),
+        name: candidate.name.clone(),
+        description: candidate.description.clone(),
+        applies_when: candidate.applies_when.clone(),
+        positive_examples: candidate.positive_examples.clone(),
+        excludes_when: candidate.excludes_when.clone(),
+        negative_examples: candidate.negative_examples.clone(),
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+struct StagedBootstrapLabelAtomStore<'a, S: LabelAtomVectorStore + ?Sized> {
+    source: &'a S,
+    atoms: Vec<(LabelAtomVector, Vec<f32>)>,
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl<'a, S: LabelAtomVectorStore + ?Sized> StagedBootstrapLabelAtomStore<'a, S> {
+    fn new(source: &'a S, atoms: Vec<LabelAtomVector>) -> Result<Self> {
+        let atoms = atoms
+            .into_iter()
+            .map(|atom| {
+                let vector = source
+                    .embed_query_text(&atom.text)
+                    .map_err(vector_storage)?;
+                Ok((atom, vector))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Self { source, atoms })
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl<S: LabelAtomVectorStore + ?Sized> VectorStoreBackend for StagedBootstrapLabelAtomStore<'_, S> {
+    fn embedding_model(&self) -> &str {
+        self.source.embedding_model()
+    }
+
+    fn status(&self) -> VectorStoreStatus {
+        let mut status = self.source.status();
+        status.dirty = Some(false);
+        status.board_dirty = Some(false);
+        status
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl<S: LabelAtomVectorStore + ?Sized> kanban_vector::QueryEmbeddingProvider
+    for StagedBootstrapLabelAtomStore<'_, S>
+{
+    fn embed_query_text(&self, text: &str) -> std::result::Result<Vec<f32>, VectorError> {
+        self.source.embed_query_text(text)
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl<S: LabelAtomVectorStore + ?Sized> LabelAtomVectorStore
+    for StagedBootstrapLabelAtomStore<'_, S>
+{
+    fn query_label_atoms_by_vector(
+        &self,
+        query: &LabelAtomVectorQuery,
+    ) -> std::result::Result<Vec<LabelAtomVectorHit>, VectorError> {
+        let mut hits = self
+            .atoms
+            .iter()
+            .filter(|(atom, _vector)| {
+                query
+                    .board_id
+                    .as_ref()
+                    .is_none_or(|board_id| &atom.board_id == board_id)
+                    && query
+                        .embedding_model
+                        .as_ref()
+                        .is_none_or(|model| &atom.embedding_model == model)
+                    && query
+                        .polarity
+                        .as_ref()
+                        .is_none_or(|polarity| &atom.polarity == polarity)
+            })
+            .filter_map(|(atom, vector)| {
+                let similarity = cosine(&query.vector, vector);
+                (similarity > 0.0).then_some((similarity, atom, vector))
+            })
+            .collect::<Vec<_>>();
+        hits.sort_by(|left, right| right.0.total_cmp(&left.0));
+        Ok(hits
+            .into_iter()
+            .take(query.limit)
+            .map(|(similarity, atom, vector)| LabelAtomVectorHit {
+                hit: LabelAtomHit {
+                    atom_id: atom.atom_id.clone(),
+                    label_id: atom.label_id.clone(),
+                    label_name: atom.label_name.clone(),
+                    board_id: atom.board_id.clone(),
+                    polarity: atom.polarity.clone(),
+                    kind: atom.kind.clone(),
+                    text: atom.text.clone(),
+                    ordinal: atom.ordinal,
+                    content_hash: atom.content_hash.clone(),
+                    embedding_model: atom.embedding_model.clone(),
+                    distance: (1.0 / similarity.max(0.0001)) - 1.0,
+                },
+                vector: query.include_vector.then(|| vector.clone()),
+            })
+            .collect())
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn cosine(left: &[f32], right: &[f32]) -> f32 {
+    let dot = left
+        .iter()
+        .zip(right)
+        .map(|(left, right)| left * right)
+        .sum::<f32>();
+    let left_norm = left.iter().map(|value| value * value).sum::<f32>().sqrt();
+    let right_norm = right.iter().map(|value| value * value).sum::<f32>().sqrt();
+    if left_norm == 0.0 || right_norm == 0.0 {
+        0.0
+    } else {
+        dot / (left_norm * right_norm)
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn suggest_input_hash_for_task(task: &TaskRecord) -> String {
+    stable_hash(&task_suggest_input_text(
+        &task.title,
+        task.description.as_deref(),
+    ))
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn task_suggest_input_text(title: &str, description: Option<&str>) -> String {
+    match description.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(description) => format!("{}\n\n{}", title.trim(), description),
+        None => title.trim().to_owned(),
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn bootstrap_label_state_hash(
+    conn: &Connection,
+    board_id: &str,
+    label_name: &str,
+) -> Result<String> {
+    let label = label_by_name(conn, board_id, label_name)?;
+    let value = if let Some(label) = label {
+        let semantics_hash =
+            match super::label_semantics::get_label_semantics_conn(conn, board_id, &label.id) {
+                Ok(semantics) => Some(semantics.semantics_hash),
+                Err(KanbanError::NotFound(_)) => None,
+                Err(error) => return Err(error),
+            };
+        json!({
+            "state": "present",
+            "id": label.id,
+            "name": label.name,
+            "color": label.color,
+            "updated_at": label.updated_at,
+            "semantics_hash": semantics_hash,
+        })
+    } else {
+        json!({
+            "state": "missing",
+            "name": label_name,
+        })
+    };
+    stable_json_hash(&value)
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn board_ontology_digest(conn: &Connection, board_id: &str) -> Result<String> {
+    let labels = all(
+        conn,
+        "SELECT id,board_id,name,color,created_at,updated_at FROM labels WHERE board_id=?1 ORDER BY id ASC",
+        [board_id],
+        label_from_row,
+    )?;
+    let board_param = vec![rusqlite::types::Value::Text(board_id.to_owned())];
+    let semantics = all_values(
+        conn,
+        "SELECT label_id,description,applies_when,excludes_when,positive_examples,negative_examples,created_at,updated_at \
+         FROM label_semantics WHERE board_id=?1 ORDER BY label_id ASC",
+        &board_param,
+        |row| {
+            Ok(json!({
+                "label_id": row.get::<_, String>(0)?,
+                "description": row.get::<_, Option<String>>(1)?,
+                "applies_when": row.get::<_, String>(2)?,
+                "excludes_when": row.get::<_, String>(3)?,
+                "positive_examples": row.get::<_, String>(4)?,
+                "negative_examples": row.get::<_, String>(5)?,
+                "created_at": row.get::<_, i64>(6)?,
+                "updated_at": row.get::<_, i64>(7)?,
+            }))
+        },
+    )?;
+    let atoms = all_values(
+        conn,
+        "SELECT id,label_id,polarity,kind,text,ordinal,content_hash,created_at,updated_at \
+         FROM label_atoms WHERE board_id=?1 ORDER BY label_id ASC, ordinal ASC, id ASC",
+        &board_param,
+        |row| {
+            Ok(json!({
+                "id": row.get::<_, String>(0)?,
+                "label_id": row.get::<_, String>(1)?,
+                "polarity": row.get::<_, String>(2)?,
+                "kind": row.get::<_, String>(3)?,
+                "text": row.get::<_, String>(4)?,
+                "ordinal": row.get::<_, i64>(5)?,
+                "content_hash": row.get::<_, String>(6)?,
+                "created_at": row.get::<_, i64>(7)?,
+                "updated_at": row.get::<_, i64>(8)?,
+            }))
+        },
+    )?;
+    stable_json_hash(&json!({
+        "labels": labels,
+        "semantics": semantics,
+        "atoms": atoms,
+    }))
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn stable_json_hash(value: &serde_json::Value) -> Result<String> {
+    serde_json::to_string(value)
+        .map(|json| stable_hash(&json))
+        .map_err(|err| KanbanError::InvalidInput(err.to_string()))
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn stable_hash(text: &str) -> String {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in text.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{hash:016x}")
 }
 
 pub fn remove_task_label(
@@ -1371,8 +1774,27 @@ pub(crate) fn adopt_label_semantics_candidate_in_current_tx(
     provenance: LabelAdoptionProvenance<'_>,
     now: i64,
 ) -> Result<LabelAdoptionResult> {
-    let label =
-        ensure_bootstrap_label_writable_in_current_tx(conn, board_id, &candidate.name, now)?;
+    adopt_label_semantics_candidate_with_reserved_label_in_current_tx(
+        conn, board_id, candidate, provenance, None, now, None,
+    )
+}
+
+fn adopt_label_semantics_candidate_with_reserved_label_in_current_tx(
+    conn: &Connection,
+    board_id: &str,
+    candidate: &super::LabelProposalCandidate,
+    provenance: LabelAdoptionProvenance<'_>,
+    reserved_label_id: Option<&str>,
+    now: i64,
+    context_json: Option<String>,
+) -> Result<LabelAdoptionResult> {
+    let label = ensure_bootstrap_label_writable_in_current_tx(
+        conn,
+        board_id,
+        &candidate.name,
+        now,
+        reserved_label_id,
+    )?;
     let before = label_ontology_semantics_snapshot_in_tx(conn, board_id, &label.id, &label.name)?;
     let before_atoms = super::label_ontology_mutation_atoms(conn, board_id, &label.id)?;
     upsert_label_semantics_candidate_in_tx(conn, board_id, &label.id, &label.name, candidate, now)?;
@@ -1389,7 +1811,10 @@ pub(crate) fn adopt_label_semantics_candidate_in_current_tx(
                     before,
                     before_atoms,
                     include_description_effects: true,
-                    options: LabelSemanticsMutationOptions::manual_actor(actor),
+                    options: LabelSemanticsMutationOptions {
+                        context_json,
+                        ..LabelSemanticsMutationOptions::manual_actor(actor)
+                    },
                 },
                 now,
             )?;
@@ -1430,6 +1855,7 @@ fn ensure_bootstrap_label_writable_in_current_tx(
     board_id: &str,
     name: &str,
     now: i64,
+    reserved_label_id: Option<&str>,
 ) -> Result<LabelRecord> {
     let name = normalize_label_name(name)?;
     if let Some(existing) = label_by_name(conn, board_id, &name)? {
@@ -1440,6 +1866,9 @@ fn ensure_bootstrap_label_writable_in_current_tx(
             )));
         }
         return Ok(existing);
+    }
+    if let Some(id) = reserved_label_id {
+        return ensure_label_with_id_in_current_tx(conn, board_id, id, &name, None, now);
     }
     ensure_label_in_current_tx(conn, board_id, &name, None, now)
 }
@@ -1463,102 +1892,6 @@ fn label_for_task_binding_in_current_tx(
     ensure_label_in_current_tx(conn, board_id, &name, None, now).map(|label| (label, true))
 }
 
-fn optional_label_semantics_conn(
-    conn: &Connection,
-    board_id: &str,
-    label_id: &str,
-) -> Result<Option<LabelSemanticsRecord>> {
-    match super::label_semantics::get_label_semantics_conn(conn, board_id, label_id) {
-        Ok(record) => Ok(Some(record)),
-        Err(KanbanError::NotFound(_)) => Ok(None),
-        Err(error) => Err(error),
-    }
-}
-
-fn task_label_binding_exists(
-    conn: &Connection,
-    board_id: &str,
-    task_id: &str,
-    label_id: &str,
-) -> Result<bool> {
-    scalar(
-        conn,
-        "SELECT EXISTS(SELECT 1 FROM task_labels WHERE board_id=?1 AND task_id=?2 AND label_id=?3)",
-        params![board_id, task_id, label_id],
-        |row| row.get::<_, i64>(0),
-    )
-    .map(|exists| exists != 0)
-}
-
-fn restore_label_record_in_current_tx(conn: &Connection, label: &LabelRecord) -> Result<()> {
-    exec(
-        conn,
-        "INSERT OR IGNORE INTO labels(id, board_id, name, color, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![
-            label.id,
-            label.board_id,
-            label.name,
-            label.color,
-            label.created_at,
-            label.updated_at
-        ],
-    )?;
-    Ok(())
-}
-
-fn restore_label_semantics_record_in_current_tx(
-    conn: &Connection,
-    semantics: &LabelSemanticsRecord,
-) -> Result<()> {
-    exec(
-        conn,
-        "INSERT INTO label_semantics(label_id, board_id, description, applies_when, excludes_when, positive_examples, negative_examples, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) \
-         ON CONFLICT(label_id) DO UPDATE SET board_id=excluded.board_id, description=excluded.description, applies_when=excluded.applies_when, excludes_when=excluded.excludes_when, positive_examples=excluded.positive_examples, negative_examples=excluded.negative_examples, created_at=excluded.created_at, updated_at=excluded.updated_at",
-        params![
-            semantics.label_id,
-            semantics.board_id,
-            semantics.description,
-            json_string_array(&semantics.applies_when)?,
-            json_string_array(&semantics.excludes_when)?,
-            json_string_array(&semantics.positive_examples)?,
-            json_string_array(&semantics.negative_examples)?,
-            semantics.created_at,
-            semantics.updated_at
-        ],
-    )?;
-    exec(
-        conn,
-        "DELETE FROM label_atoms WHERE board_id=?1 AND label_id=?2",
-        params![semantics.board_id, semantics.label_id],
-    )?;
-    for atom in &semantics.atoms {
-        exec(
-            conn,
-            "INSERT INTO label_atoms(id, label_id, board_id, polarity, kind, text, ordinal, content_hash, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            params![
-                atom.id,
-                atom.label_id,
-                atom.board_id,
-                atom.polarity,
-                atom.kind,
-                atom.text,
-                atom.ordinal,
-                atom.content_hash,
-                atom.created_at,
-                atom.updated_at
-            ],
-        )?;
-    }
-    Ok(())
-}
-
-fn json_string_array(items: &[String]) -> Result<String> {
-    serde_json::to_string(items)
-        .map_err(|err| KanbanError::InvalidInput(format!("invalid semantic array: {err}")))
-}
-
 fn ensure_label_in_current_tx(
     conn: &Connection,
     board_id: &str,
@@ -1577,6 +1910,26 @@ fn ensure_label_in_current_tx(
         params![id, board_id, name, color, now],
     )?;
     label_by_id(conn, board_id, &id)?.ok_or_else(|| KanbanError::NotFound(format!("label {id}")))
+}
+
+fn ensure_label_with_id_in_current_tx(
+    conn: &Connection,
+    board_id: &str,
+    id: &str,
+    name: &str,
+    color: Option<&str>,
+    now: i64,
+) -> Result<LabelRecord> {
+    let name = normalize_label_name(name)?;
+    if let Some(existing) = label_by_name(conn, board_id, &name)? {
+        return Ok(existing);
+    }
+    exec(
+        conn,
+        "INSERT INTO labels(id, board_id, name, color, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+        params![id, board_id, name, color, now],
+    )?;
+    label_by_id(conn, board_id, id)?.ok_or_else(|| KanbanError::NotFound(format!("label {id}")))
 }
 
 fn attach_label_in_current_tx(
@@ -1746,4 +2099,282 @@ fn remove_task_label_in_current_tx(
         )?;
     }
     Ok(())
+}
+
+#[cfg(all(test, feature = "vector-lancedb"))]
+mod bootstrap_staged_verification_tests {
+    use super::*;
+    use crate::init::init_database;
+    use kanban_vector::{
+        LabelAtomVectorHit, LabelAtomVectorQuery, QueryEmbeddingProvider, VectorError,
+    };
+    use std::path::PathBuf;
+
+    struct TempDb {
+        _dir: tempfile::TempDir,
+        path: PathBuf,
+    }
+
+    impl TempDb {
+        fn new(name: &str) -> Self {
+            let dir = tempfile::Builder::new()
+                .prefix(&format!("kb-sqlite-bootstrap-stage-{name}-"))
+                .tempdir()
+                .expect("tempdir");
+            let path = dir.path().join("kb.db");
+            Self { _dir: dir, path }
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    struct PassingStore;
+
+    impl VectorStoreBackend for PassingStore {
+        fn embedding_model(&self) -> &str {
+            "bootstrap-stage-test-model"
+        }
+
+        fn status(&self) -> VectorStoreStatus {
+            VectorStoreStatus {
+                backend: "test-vector".to_owned(),
+                enabled: true,
+                message: "test vector store; dirty=false last_error=none; board_dirty=false"
+                    .to_owned(),
+                diagnostics: Vec::new(),
+                dirty: Some(false),
+                board_dirty: Some(false),
+                generation: None,
+            }
+        }
+    }
+
+    impl QueryEmbeddingProvider for PassingStore {
+        fn embed_query_text(&self, _text: &str) -> std::result::Result<Vec<f32>, VectorError> {
+            Ok(vec![1.0, 0.0, 0.0])
+        }
+    }
+
+    impl LabelAtomVectorStore for PassingStore {
+        fn query_label_atoms_by_vector(
+            &self,
+            _query: &LabelAtomVectorQuery,
+        ) -> std::result::Result<Vec<LabelAtomVectorHit>, VectorError> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct BootstrapCounts {
+        labels: i64,
+        label_semantics: i64,
+        label_atoms: i64,
+        task_labels: i64,
+        task_events: i64,
+        label_ontology_actions: i64,
+        label_ontology_action_atom_effects: i64,
+    }
+
+    fn table_count(conn: &Connection, table: &str) -> Result<i64> {
+        conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
+        .map_err(|err| KanbanError::Storage(err.to_string()))
+    }
+
+    fn bootstrap_counts(conn: &Connection) -> Result<BootstrapCounts> {
+        Ok(BootstrapCounts {
+            labels: table_count(conn, "labels")?,
+            label_semantics: table_count(conn, "label_semantics")?,
+            label_atoms: table_count(conn, "label_atoms")?,
+            task_labels: table_count(conn, "task_labels")?,
+            task_events: table_count(conn, "task_events")?,
+            label_ontology_actions: table_count(conn, "label_ontology_actions")?,
+            label_ontology_action_atom_effects: table_count(
+                conn,
+                "label_ontology_action_atom_effects",
+            )?,
+        })
+    }
+
+    fn label_count(conn: &Connection, label_name: &str) -> Result<i64> {
+        conn.query_row(
+            "SELECT COUNT(*) FROM labels WHERE name=?1",
+            [label_name],
+            |row| row.get(0),
+        )
+        .map_err(|err| KanbanError::Storage(err.to_string()))
+    }
+
+    fn bootstrap_action_count(conn: &Connection) -> Result<i64> {
+        conn.query_row(
+            "SELECT COUNT(*) FROM label_ontology_actions WHERE action_type='bootstrap_label'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|err| KanbanError::Storage(err.to_string()))
+    }
+
+    fn bootstrap_effect_count(conn: &Connection) -> Result<i64> {
+        conn.query_row(
+            "SELECT COUNT(*) FROM label_ontology_action_atom_effects",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|err| KanbanError::Storage(err.to_string()))
+    }
+
+    fn bootstrap_input() -> BootstrapTaskLabel {
+        BootstrapTaskLabel {
+            name: "database".to_owned(),
+            description: Some("Database persistence work".to_owned()),
+            applies_when: vec!["touches SQLite migrations".to_owned()],
+            positive_examples: vec!["new table migration".to_owned()],
+            ..BootstrapTaskLabel::default()
+        }
+    }
+
+    fn bootstrap_target(path: &std::path::Path) -> Result<TaskRecord> {
+        init_database(path, "tester")?;
+        create_task(
+            path,
+            "default",
+            "tester",
+            CreateTask::ready("bootstrap staged verify target"),
+        )
+    }
+
+    #[test]
+    fn staged_verify_rejects_task_change_between_verify_and_commit() -> Result<()> {
+        let temp = TempDb::new("task-change-before-commit");
+        let task = bootstrap_target(&temp.path)?;
+        let conn = connect_file(&temp.path)?;
+        let before = bootstrap_counts(&conn)?;
+        let hook_path = temp.path.clone();
+        let task_id = task.id.clone();
+        let mut changed = false;
+
+        let error = bootstrap_task_label_with_staged_verification_impl(
+            BootstrapTaskLabelStagedVerificationArgs {
+                path: &temp.path,
+                board: "default",
+                actor: "tester",
+                task_ref: &task.id,
+                input: bootstrap_input(),
+                store: &PassingStore,
+                min_score: 0.50,
+            },
+            |stage| {
+                if stage == BootstrapStagedVerificationStage::BeforeCommit && !changed {
+                    changed = true;
+                    update_task(
+                        &hook_path,
+                        "default",
+                        "tester",
+                        &task_id,
+                        TaskPatch {
+                            title: Some("bootstrap staged verify target changed".to_owned()),
+                            ..TaskPatch::default()
+                        },
+                    )?;
+                }
+                Ok(())
+            },
+        )
+        .expect_err("task change must conflict");
+
+        assert!(matches!(error, KanbanError::Conflict(_)), "{error}");
+        assert_eq!(label_count(&conn, "database")?, 0);
+        assert_eq!(
+            table_count(&conn, "label_semantics")?,
+            before.label_semantics
+        );
+        assert_eq!(table_count(&conn, "label_atoms")?, before.label_atoms);
+        assert_eq!(table_count(&conn, "task_labels")?, before.task_labels);
+        assert_eq!(bootstrap_action_count(&conn)?, 0);
+        assert_eq!(bootstrap_effect_count(&conn)?, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn staged_verify_rejects_ontology_change_between_verify_and_commit() -> Result<()> {
+        let temp = TempDb::new("ontology-change-before-commit");
+        let task = bootstrap_target(&temp.path)?;
+        let conn = connect_file(&temp.path)?;
+        let before = bootstrap_counts(&conn)?;
+        let hook_path = temp.path.clone();
+        let mut changed = false;
+
+        let error = bootstrap_task_label_with_staged_verification_impl(
+            BootstrapTaskLabelStagedVerificationArgs {
+                path: &temp.path,
+                board: "default",
+                actor: "tester",
+                task_ref: &task.id,
+                input: bootstrap_input(),
+                store: &PassingStore,
+                min_score: 0.50,
+            },
+            |stage| {
+                if stage == BootstrapStagedVerificationStage::BeforeCommit && !changed {
+                    changed = true;
+                    create_label(
+                        &hook_path,
+                        "default",
+                        CreateLabel {
+                            name: "concurrent-ontology".to_owned(),
+                            color: None,
+                        },
+                    )?;
+                }
+                Ok(())
+            },
+        )
+        .expect_err("ontology change must conflict");
+
+        assert!(matches!(error, KanbanError::Conflict(_)), "{error}");
+        assert_eq!(label_count(&conn, "database")?, 0);
+        assert_eq!(
+            table_count(&conn, "label_semantics")?,
+            before.label_semantics
+        );
+        assert_eq!(table_count(&conn, "label_atoms")?, before.label_atoms);
+        assert_eq!(table_count(&conn, "task_labels")?, before.task_labels);
+        assert_eq!(bootstrap_action_count(&conn)?, 0);
+        assert_eq!(bootstrap_effect_count(&conn)?, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn staged_verify_rolls_back_if_commit_stage_fails() -> Result<()> {
+        let temp = TempDb::new("during-commit-rollback");
+        let task = bootstrap_target(&temp.path)?;
+        let conn = connect_file(&temp.path)?;
+        let before = bootstrap_counts(&conn)?;
+
+        let error = bootstrap_task_label_with_staged_verification_impl(
+            BootstrapTaskLabelStagedVerificationArgs {
+                path: &temp.path,
+                board: "default",
+                actor: "tester",
+                task_ref: &task.id,
+                input: bootstrap_input(),
+                store: &PassingStore,
+                min_score: 0.50,
+            },
+            |stage| {
+                if stage == BootstrapStagedVerificationStage::DuringCommit {
+                    return Err(KanbanError::InvalidInput(
+                        "injected during commit failure".to_owned(),
+                    ));
+                }
+                Ok(())
+            },
+        )
+        .expect_err("during commit hook must fail");
+
+        assert!(error.to_string().contains("injected during commit failure"));
+        assert_eq!(bootstrap_counts(&conn)?, before);
+        assert_eq!(label_count(&conn, "database")?, 0);
+        Ok(())
+    }
 }

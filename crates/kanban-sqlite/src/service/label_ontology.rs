@@ -1482,7 +1482,7 @@ pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
         action_type,
         &added_atoms,
     )?;
-    let change_json = serde_json::to_string(&json!({
+    let mut change = json!({
         "label": {
             "id": label_id,
             "name": label_name,
@@ -1494,8 +1494,19 @@ pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
             "added": added_atoms.len(),
             "removed": removed_atoms.len(),
         },
-    }))
-    .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
+    });
+    if let Some(context_json) = options.context_json {
+        let context: JsonValue = serde_json::from_str(&context_json)
+            .map_err(|err| KanbanError::InvalidInput(format!("context_json: {err}")))?;
+        if !context.is_object() {
+            return Err(KanbanError::InvalidInput(
+                "context_json must be a JSON object".to_owned(),
+            ));
+        }
+        change["context"] = context;
+    }
+    let change_json =
+        serde_json::to_string(&change).map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
 
     let action_id = insert_ontology_action(
         conn,

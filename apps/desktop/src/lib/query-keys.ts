@@ -7,6 +7,7 @@ export type BoardTaskQuery = {
   priorities: number[]
   sort: TaskListSort
   mode: "board" | "list"
+  statuses: TaskStatus[]
   showArchived: boolean
   limit: number
   offset: number
@@ -28,6 +29,7 @@ export const queryKeys = {
         priorities: query.priorities,
         sort: query.sort,
         mode: query.mode,
+        statuses: query.statuses,
         showArchived: query.showArchived,
         limit: query.limit,
         offset: query.offset,

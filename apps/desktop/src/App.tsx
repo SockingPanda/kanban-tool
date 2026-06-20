@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { AppShell } from "@/app/AppShell"
 import { createBoardSwitchInvalidationTargets, createBoardSwitchReset } from "@/app/board-switch-state"
+import { queueCountsFromStats, queueCountsFromTasks } from "@/app/queue-counts"
 import { parseSidebarOpen, serializeSidebarOpen, SIDEBAR_OPEN_STORAGE_KEY } from "@/app/sidebar-state"
 import {
   applyRootTheme,
@@ -16,7 +17,7 @@ import { reconcileSelectedTaskId } from "@/app/task-selection"
 import { fallbackColumns } from "@/features/board/board-config"
 import { sortBoardColumnTasks } from "@/features/board/board-card-state"
 import { executeDragTransition, planDragTransition } from "@/features/board/drag-policy"
-import { useBoardTasks } from "@/features/board/useBoardTasks"
+import { BOARD_COLUMN_TASK_LIMIT, useBoardTasks } from "@/features/board/useBoardTasks"
 import { useEventPoller } from "@/features/events/useEventPoller"
 import type { OperatorView } from "@/features/navigation/view-types"
 import { defaultListSort, listSortToApiSort, type ListSortState } from "@/features/list/table-state"
@@ -157,15 +158,30 @@ function App() {
     },
   })
 
+  const visibleColumns = useMemo(
+    () => (columnsQuery.data ?? fallbackColumns).filter((column) => showArchived || (!column.hidden && column.status !== "archived")),
+    [columnsQuery.data, showArchived],
+  )
+
+  const statsQuery = useQuery({
+    enabled: Boolean(api),
+    queryKey: queryKeys.stats(api?.board ?? "pending"),
+    queryFn: ({ signal }) => {
+      if (!api) throw new Error("API client is not ready")
+      return api.stats({ signal })
+    },
+  })
+
   const tasksQuery = useBoardTasks({
     api,
+    boardStatuses: view === "list" ? [] : visibleColumns.map((column) => column.status),
     search: debouncedSearch,
     statusFilter,
     priorityFilters: view === "list" ? priorityFilters : [],
     sort: view === "list" ? listSortToApiSort(listSort) : "-updated_at",
     mode: view === "list" ? "list" : "board",
     showArchived,
-    limit: view === "list" ? rowsPerPage : DEFAULT_PAGE_SIZE,
+    limit: view === "list" ? rowsPerPage : BOARD_COLUMN_TASK_LIMIT,
     offset: view === "list" ? pageOffset : 0,
   })
 
@@ -240,6 +256,10 @@ function App() {
   }, [tasksQuery.error])
 
   useEffect(() => {
+    if (statsQuery.error) setError(errorMessage(statsQuery.error))
+  }, [statsQuery.error])
+
+  useEffect(() => {
     if (detailQuery.error) setError(errorMessage(detailQuery.error))
   }, [detailQuery.error])
 
@@ -250,11 +270,6 @@ function App() {
     selectedTaskId: selectedId,
     onError: handlePollError,
   })
-
-  const visibleColumns = useMemo(
-    () => (columnsQuery.data ?? fallbackColumns).filter((column) => showArchived || (!column.hidden && column.status !== "archived")),
-    [columnsQuery.data, showArchived],
-  )
 
   const groupedTasks = useMemo(() => {
     const map = new Map<TaskStatus, Task[]>()
@@ -276,11 +291,11 @@ function App() {
 
   const activeRun = detail.runs.find((run) => run.status === "running") ?? detail.runs[0]
   const claimToken = selectedTask ? claimTokens[selectedTask.id] ?? null : null
-  const queueCounts = {
-    ready: tasks.filter((task) => task.status === "ready").length,
-    running: tasks.filter((task) => task.status === "running").length,
-    blocked: tasks.filter((task) => task.status === "blocked").length,
-  }
+  const fallbackQueueCounts = useMemo(() => queueCountsFromTasks(tasks), [tasks])
+  const queueCounts = useMemo(
+    () => queueCountsFromStats(statsQuery.data?.status_counts, fallbackQueueCounts),
+    [fallbackQueueCounts, statsQuery.data?.status_counts],
+  )
 
   const invalidateTaskData = useCallback(
     async (taskId: string | null) => {

@@ -558,6 +558,15 @@ signal 行数；同一 task 可以贡献多条 signals，所以它不能单独�
 recall 或 label suggest 质量。需要质量指标时必须另有 denominator，例如 agreement cohort
 或固定评估集。
 
+`label ontology quality` 是一个只读 analytics 投影，不新增表，也不写 canonical truth。
+它把 `label_ontology_observations` 作为 denominator 来源并在输出中记录该来源、distinct
+task 数、observation 数、agreement/degraded observation 数、时间范围和 task ref sample；
+同时把 `label_ontology_signals` 作为 raw disagreement numerator 来源，按 kind/status
+给出原始 signal counts。只有当 denominator 中存在 agreement observations 时，才会给出
+`disagreement_task_rate`；只有 signals 的数据集会明确返回 rate unavailable，避免把分歧
+记录误称为错误率。Precision/recall 仍需要带 expected labels 的独立评估 cohort，当前
+ledger signal 不能单独提供这些指标。
+
 长期 label ontology regression corpus 属于测试/评估基础设施，不是新的 SQLite truth。
 当前固定 corpus 测试使用临时 DB 和内存 label atom index 跟踪 important labels 的 known
 positive/negative-control tasks，并比较 `label suggest` 的 selected labels、score 与

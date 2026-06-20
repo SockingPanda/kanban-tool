@@ -515,6 +515,7 @@ kanban label ontology record <task_ref> --input <path|-> [--suggestion-snapshot 
 kanban label ontology list [--status open|confirmed|resolved|rejected|superseded]... [--kind false_negative|false_positive|vocabulary_gap|name_issue|boundary_issue|structure_issue]... [--task <task_ref>] [--label <label>] [--proposed-label <name>] [--include-all] [--limit 100] [--json]
 kanban label ontology show <signal_id> [--json]
 kanban label ontology review [--group-by label|candidate-atom|proposed-label|cluster] [--include-all] [--limit 100] [--json]
+kanban label ontology quality [--sample-limit 20] [--json]
 kanban label ontology confirm <signal_id>... --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology reject <signal_id>... --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology supersede <signal_id>... --by <signal_id> --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
@@ -920,6 +921,22 @@ proposed action、target label 和 proposed-label scope，避免跨 label/action
 reviewer 的排查线索。排序为 `task_count` desc、`confirmed_count` desc、
 `latest_signal_at` desc、`key` asc；需要判断是否同一问题时，应继续查看 group 的
 sample tasks、signal ids 和 `label ontology show` 详情。
+
+`label ontology quality` 是只读 quality/analytics 报告。它从当前 board 的
+`label_ontology_observations` 取得可审计 denominator，并从
+`label_ontology_signals` 取得 raw disagreement counts；不会写入 task、label、
+semantics、atoms 或 ledger action。JSON 输出包含：
+
+- `denominator.source="label_ontology_observations"`、`observation_count`、
+  `distinct_task_count`、agreement/degraded observation counts、时间范围和
+  `sample_task_refs`。
+- `disagreement.signal_count`、`disagreement.distinct_task_count`、`by_kind`、
+  `by_status`。
+- `rates.disagreement_task_rate`，只在 denominator 至少包含一个 agreement
+  observation 时返回；只有 signals 的历史不会输出伪错误率。
+- `precision_recall.available=false`，直到项目有带 expected labels 的独立评估
+  cohort。raw signals 只能说明记录过分歧，不能单独证明 precision、recall、miss
+  rate 或模型错误率。
 
 Lifecycle commands 写入 action 并同步更新 signal status：
 

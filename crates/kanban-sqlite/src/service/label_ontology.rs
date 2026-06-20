@@ -3,13 +3,15 @@ use crate::connect_file;
 use super::{
     LabelOntologyActionInput, LabelOntologyActionRecord, LabelOntologyActionType,
     LabelOntologyActor, LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput,
-    LabelOntologyObservationRecord, LabelOntologyProposedAction, LabelOntologyRecordInput,
-    LabelOntologyRetargetOptions, LabelOntologyRevertInput, LabelOntologyReviewAtomVariant,
-    LabelOntologyReviewGroup, LabelOntologyReviewGroupBy, LabelOntologyReviewLabelRef,
-    LabelOntologyReviewOptions, LabelOntologySignalDetail, LabelOntologySignalInput,
-    LabelOntologySignalKind, LabelOntologySignalListOptions, LabelOntologySignalRecord,
-    LabelOntologySignalStatus, LabelOntologyStructurePlanInput, LabelOntologySuggestState,
-    LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
+    LabelOntologyObservationRecord, LabelOntologyPrecisionRecallAvailability,
+    LabelOntologyProposedAction, LabelOntologyQualityDenominator, LabelOntologyQualityDisagreement,
+    LabelOntologyQualityOptions, LabelOntologyQualityRates, LabelOntologyQualityReport,
+    LabelOntologyRecordInput, LabelOntologyRetargetOptions, LabelOntologyRevertInput,
+    LabelOntologyReviewAtomVariant, LabelOntologyReviewGroup, LabelOntologyReviewGroupBy,
+    LabelOntologyReviewLabelRef, LabelOntologyReviewOptions, LabelOntologySignalDetail,
+    LabelOntologySignalInput, LabelOntologySignalKind, LabelOntologySignalListOptions,
+    LabelOntologySignalRecord, LabelOntologySignalStatus, LabelOntologyStructurePlanInput,
+    LabelOntologySuggestState, LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
     LabelOntologyValidationStatus, LabelSemanticProposalRecord, LabelSemanticsMutationOptions,
     LabelSuggestionEvidenceAtom, LabelSuggestionOptions, LabelSuggestionResult,
     TaskOntologySignalSummary, TaskOntologySummary, TaskRecord, all_values, board_id,
@@ -290,6 +292,126 @@ pub fn review_label_ontology(
         });
         groups.truncate(limit);
         Ok(groups)
+    })
+}
+
+pub fn label_ontology_quality_report(
+    path: impl AsRef<Path>,
+    board: &str,
+    options: LabelOntologyQualityOptions,
+) -> Result<LabelOntologyQualityReport> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    with_read_tx(&conn, || {
+        let (
+            observation_count,
+            distinct_task_count,
+            degraded_observation_count,
+            first_observed_at,
+            latest_observed_at,
+        ): (i64, i64, i64, Option<i64>, Option<i64>) = conn
+            .query_row(
+                "SELECT COUNT(*), COUNT(DISTINCT task_id), \
+                 COALESCE(SUM(CASE WHEN suggest_degraded != 0 THEN 1 ELSE 0 END), 0), \
+                 MIN(created_at), MAX(created_at) \
+                 FROM label_ontology_observations WHERE board_id=?1",
+                params![board_id],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .map_err(storage)?;
+        let (agreement_observation_count, agreement_task_count): (i64, i64) = conn
+            .query_row(
+                "SELECT COUNT(*), COUNT(DISTINCT o.task_id) \
+                 FROM label_ontology_observations o \
+                 WHERE o.board_id=?1 \
+                   AND NOT EXISTS (\
+                     SELECT 1 FROM label_ontology_signals s WHERE s.observation_id=o.id\
+                   )",
+                params![board_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(storage)?;
+        let (signal_count, disagreement_task_count): (i64, i64) = conn
+            .query_row(
+                "SELECT COUNT(*), COUNT(DISTINCT o.task_id) \
+                 FROM label_ontology_signals s \
+                 JOIN label_ontology_observations o ON o.id=s.observation_id \
+                 WHERE s.board_id=?1",
+                params![board_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(storage)?;
+        let sample_limit = options.sample_limit.clamp(1, LABEL_ONTOLOGY_LIST_LIMIT_MAX);
+        let sample_task_refs =
+            label_ontology_quality_sample_task_refs(&conn, &board_id, sample_limit)?;
+        let by_kind = label_ontology_quality_count_map(&conn, &board_id, "kind")?;
+        let by_status = label_ontology_quality_count_map(&conn, &board_id, "status")?;
+        let disagreement_task_rate = if distinct_task_count > 0 && agreement_observation_count > 0 {
+            Some(disagreement_task_count as f64 / distinct_task_count as f64)
+        } else {
+            None
+        };
+        let mut warnings = Vec::new();
+        if observation_count == 0 {
+            warnings.push(
+                "no label ontology observations exist for this board; quality rates are unavailable"
+                    .to_owned(),
+            );
+        }
+        if observation_count > 0 && agreement_observation_count == 0 {
+            warnings.push(
+                "the denominator has no agreement observations, so raw disagreement counts must not be treated as an error rate"
+                    .to_owned(),
+            );
+        }
+        if degraded_observation_count > 0 {
+            warnings.push(format!(
+                "{degraded_observation_count} observation(s) were captured from degraded suggest output"
+            ));
+        }
+
+        Ok(LabelOntologyQualityReport {
+            board_id,
+            denominator: LabelOntologyQualityDenominator {
+                source: "label_ontology_observations".to_owned(),
+                description: "distinct task_id values with label ontology observations on this board".to_owned(),
+                observation_count,
+                distinct_task_count,
+                agreement_observation_count,
+                agreement_task_count,
+                degraded_observation_count,
+                first_observed_at,
+                latest_observed_at,
+                sample_task_refs,
+            },
+            disagreement: LabelOntologyQualityDisagreement {
+                signal_count,
+                distinct_task_count: disagreement_task_count,
+                by_kind,
+                by_status,
+            },
+            rates: LabelOntologyQualityRates {
+                disagreement_task_rate,
+                disagreement_task_rate_basis: if disagreement_task_rate.is_some() {
+                    "distinct disagreement tasks divided by distinct observed tasks; denominator includes at least one agreement observation".to_owned()
+                } else {
+                    "unavailable until the observed-task denominator includes agreement observations".to_owned()
+                },
+            },
+            precision_recall: LabelOntologyPrecisionRecallAvailability {
+                available: false,
+                reason: "precision and recall require an audited evaluation cohort with expected labels; ontology signals alone are only disagreement evidence".to_owned(),
+            },
+            warnings,
+        })
     })
 }
 
@@ -3265,6 +3387,61 @@ fn review_group_key(group_by: LabelOntologyReviewGroupBy, row: &ReviewSignalRow)
             .unwrap_or_else(|| "no-proposed-label".to_owned()),
         LabelOntologyReviewGroupBy::Cluster => review_cluster_key(row).0,
     }
+}
+
+fn label_ontology_quality_sample_task_refs(
+    conn: &Connection,
+    board_id: &str,
+    limit: usize,
+) -> Result<Vec<String>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT task_ref_snapshot \
+             FROM (\
+               SELECT task_id, MIN(task_ref_snapshot) AS task_ref_snapshot, MIN(created_at) AS first_created \
+               FROM label_ontology_observations \
+               WHERE board_id=?1 \
+               GROUP BY task_id\
+             ) \
+             ORDER BY first_created ASC, task_ref_snapshot ASC \
+             LIMIT ?2",
+        )
+        .map_err(storage)?;
+    stmt.query_map(params![board_id, limit as i64], |row| {
+        row.get::<_, String>(0)
+    })
+    .map_err(storage)?
+    .collect::<std::result::Result<Vec<_>, _>>()
+    .map_err(storage)
+}
+
+fn label_ontology_quality_count_map(
+    conn: &Connection,
+    board_id: &str,
+    column: &str,
+) -> Result<BTreeMap<String, i64>> {
+    let column = match column {
+        "kind" => "kind",
+        "status" => "status",
+        _ => {
+            return Err(KanbanError::InvalidInput(format!(
+                "unsupported label ontology quality count column: {column}"
+            )));
+        }
+    };
+    let sql = format!(
+        "SELECT {column}, COUNT(*) FROM label_ontology_signals \
+         WHERE board_id=?1 GROUP BY {column} ORDER BY {column} ASC"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(storage)?;
+    let rows = stmt
+        .query_map(params![board_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
+        .map_err(storage)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)?;
+    Ok(rows.into_iter().collect())
 }
 
 fn review_cluster_key(row: &ReviewSignalRow) -> (String, String) {

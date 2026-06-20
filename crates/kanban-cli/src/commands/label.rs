@@ -6,10 +6,10 @@ use anyhow::{Result, bail};
 use kanban_sqlite::{
     BootstrapTaskLabel, CreateLabel, LabelOntologyActionInput, LabelOntologyActionRecord,
     LabelOntologyActionType, LabelOntologyActor, LabelOntologyAtomApplyInput,
-    LabelOntologyCandidateAtomInput, LabelOntologyProposedAction, LabelOntologyRecordInput,
-    LabelOntologyRetargetOptions, LabelOntologyRevertInput, LabelOntologyReviewGroupBy,
-    LabelOntologyReviewOptions, LabelOntologySignalInput, LabelOntologySignalKind,
-    LabelOntologyStructurePlanInput, LabelOntologySuggestState,
+    LabelOntologyCandidateAtomInput, LabelOntologyProposedAction, LabelOntologyQualityOptions,
+    LabelOntologyRecordInput, LabelOntologyRetargetOptions, LabelOntologyRevertInput,
+    LabelOntologyReviewGroupBy, LabelOntologyReviewOptions, LabelOntologySignalInput,
+    LabelOntologySignalKind, LabelOntologyStructurePlanInput, LabelOntologySuggestState,
     LabelOntologyTrustedValidationInput, LabelOntologyValidationInput,
     LabelOntologyValidationStatus, LabelProposalCandidate, LabelProposalCreateOptions,
     LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalStatus,
@@ -19,12 +19,13 @@ use kanban_sqlite::{
     apply_label_ontology_atom_with_options, bootstrap_task_label, create_label,
     create_label_ontology_action, delete_label, delete_label_semantics, explain_label_atom,
     get_label_ontology_signal, get_label_proposal, get_label_semantics, label_atom_index_status,
-    list_label_atoms, list_label_ontology_signals, list_label_proposals, list_label_semantics,
-    list_labels, plan_label_ontology_structure_change, propose_task_label_with_create_options,
-    record_label_ontology_observation, reject_label_proposal, remove_task_label,
-    restore_bootstrap_task_label_state, revert_label_ontology_mutation, review_label_ontology,
-    snapshot_bootstrap_task_label_state, suggest_task_labels, upsert_label_semantics_with_options,
-    validate_label_ontology_action, validate_label_ontology_action_with_trusted_suggestions,
+    label_ontology_quality_report, list_label_atoms, list_label_ontology_signals,
+    list_label_proposals, list_label_semantics, list_labels, plan_label_ontology_structure_change,
+    propose_task_label_with_create_options, record_label_ontology_observation,
+    reject_label_proposal, remove_task_label, restore_bootstrap_task_label_state,
+    revert_label_ontology_mutation, review_label_ontology, snapshot_bootstrap_task_label_state,
+    suggest_task_labels, upsert_label_semantics_with_options, validate_label_ontology_action,
+    validate_label_ontology_action_with_trusted_suggestions,
 };
 #[cfg(feature = "vector-lancedb")]
 use kanban_sqlite::{
@@ -509,6 +510,17 @@ fn handle_label_ontology(
                 },
             )?;
             print_or_json(json, &groups, || label_ontology_review_group_lines(&groups))?;
+        }
+        crate::args::LabelOntologyCommand::Quality(args) => {
+            validate_page_bounds(args.sample_limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let report = label_ontology_quality_report(
+                db_path,
+                board,
+                LabelOntologyQualityOptions {
+                    sample_limit: args.sample_limit,
+                },
+            )?;
+            print_or_json(json, &report, || label_ontology_quality_line(&report))?;
         }
         crate::args::LabelOntologyCommand::Confirm(args) => {
             let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
@@ -1141,6 +1153,35 @@ fn label_ontology_review_group_line(group: &kanban_sqlite::LabelOntologyReviewGr
         group.sample_task_refs.join(","),
         group.signal_ids.join(","),
         group.action_ids.join(",")
+    )
+}
+
+fn label_ontology_quality_line(report: &kanban_sqlite::LabelOntologyQualityReport) -> String {
+    let rate = report
+        .rates
+        .disagreement_task_rate
+        .map(|value| format!("{value:.3}"))
+        .unwrap_or_else(|| "unavailable".to_owned());
+    let warnings = if report.warnings.is_empty() {
+        "-".to_owned()
+    } else {
+        report.warnings.join("; ")
+    };
+    format!(
+        "ontology quality observations={} observed_tasks={} agreement_observations={} raw_signals={} disagreement_tasks={} disagreement_task_rate={} precision_recall={} samples=[{}] warnings={}",
+        report.denominator.observation_count,
+        report.denominator.distinct_task_count,
+        report.denominator.agreement_observation_count,
+        report.disagreement.signal_count,
+        report.disagreement.distinct_task_count,
+        rate,
+        if report.precision_recall.available {
+            "available"
+        } else {
+            "unavailable"
+        },
+        report.denominator.sample_task_refs.join(","),
+        warnings
     )
 }
 

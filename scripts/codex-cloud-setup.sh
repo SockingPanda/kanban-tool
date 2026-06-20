@@ -2,15 +2,48 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CACHE_ROOT="${KANBAN_CLOUD_CACHE_ROOT:-$HOME/.cache/kanban-tool}"
-export KANBAN_CARGO_TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-$CACHE_ROOT/cargo-target}"
-export KANBAN_CARGO_BUILD_JOBS="${KANBAN_CARGO_BUILD_JOBS:-auto}"
-export KANBAN_TEST_THREADS="${KANBAN_TEST_THREADS:-auto}"
-export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
-export PATH="$HOME/.cargo/bin:$PNPM_HOME:$PATH"
 
 log() {
   printf '==> %s\n' "$*"
+}
+
+expand_home_path() {
+  local path="$1"
+
+  case "$path" in
+    '$HOME')
+      printf '%s\n' "$HOME"
+      ;;
+    '$HOME/'*)
+      printf '%s/%s\n' "$HOME" "${path#\$HOME/}"
+      ;;
+    '${HOME}')
+      printf '%s\n' "$HOME"
+      ;;
+    '${HOME}/'*)
+      printf '%s/%s\n' "$HOME" "${path#\$\{HOME\}/}"
+      ;;
+    '~')
+      printf '%s\n' "$HOME"
+      ;;
+    '~/'*)
+      printf '%s/%s\n' "$HOME" "${path#\~/}"
+      ;;
+    *)
+      printf '%s\n' "$path"
+      ;;
+  esac
+}
+
+configure_paths() {
+  CACHE_ROOT="$(expand_home_path "${KANBAN_CLOUD_CACHE_ROOT:-$HOME/.cache/kanban-tool}")"
+  export KANBAN_CARGO_TARGET_ROOT
+  KANBAN_CARGO_TARGET_ROOT="$(expand_home_path "${KANBAN_CARGO_TARGET_ROOT:-$CACHE_ROOT/cargo-target}")"
+  export KANBAN_CARGO_BUILD_JOBS="${KANBAN_CARGO_BUILD_JOBS:-auto}"
+  export KANBAN_TEST_THREADS="${KANBAN_TEST_THREADS:-auto}"
+  export PNPM_HOME
+  PNPM_HOME="$(expand_home_path "${PNPM_HOME:-$HOME/.local/share/pnpm}")"
+  export PATH="$HOME/.cargo/bin:$PNPM_HOME:$PATH"
 }
 
 persist_shell_defaults() {
@@ -67,7 +100,7 @@ install_system_packages() {
     return 0
   fi
 
-  log "Installing Linux build, packaging, and Tauri dependencies"
+  log "Installing Linux build, packaging, protobuf, and Tauri dependencies"
   apt_get update
 
   local common_packages=(
@@ -77,11 +110,13 @@ install_system_packages() {
     file
     libayatana-appindicator3-dev
     libgtk-3-dev
+    libprotobuf-dev
     libssl-dev
     libxdo-dev
     librsvg2-dev
     patchelf
     pkg-config
+    protobuf-compiler
     wget
   )
 
@@ -179,6 +214,7 @@ prewarm_desktop_dependencies() {
 }
 
 main() {
+  configure_paths
   persist_shell_defaults
   mkdir -p "$CACHE_ROOT" "$KANBAN_CARGO_TARGET_ROOT"
 

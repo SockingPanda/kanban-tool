@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-$HOME/.cache/kanban-tool/cargo-target}"
+RAW_TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-$HOME/.cache/kanban-tool/cargo-target}"
 CHILD_PID=""
 CHILD_PGID=""
 
@@ -98,8 +98,36 @@ normalize_path() {
   printf '%s\n' "$path"
 }
 
+expand_home_path() {
+  local path="$1"
+
+  case "$path" in
+    '$HOME')
+      printf '%s\n' "$HOME"
+      ;;
+    '$HOME/'*)
+      printf '%s/%s\n' "$HOME" "${path#\$HOME/}"
+      ;;
+    '${HOME}')
+      printf '%s\n' "$HOME"
+      ;;
+    '${HOME}/'*)
+      printf '%s/%s\n' "$HOME" "${path#\$\{HOME\}/}"
+      ;;
+    '~')
+      printf '%s\n' "$HOME"
+      ;;
+    '~/'*)
+      printf '%s/%s\n' "$HOME" "${path#\~/}"
+      ;;
+    *)
+      printf '%s\n' "$path"
+      ;;
+  esac
+}
+
 target_root() {
-  normalize_path "$TARGET_ROOT"
+  normalize_path "$(expand_home_path "$RAW_TARGET_ROOT")"
 }
 
 validate_inherited_target_dir() {
@@ -110,7 +138,7 @@ validate_inherited_target_dir() {
     return 0
   fi
 
-  actual="$(normalize_path "$CARGO_TARGET_DIR")"
+  actual="$(normalize_path "$(expand_home_path "$CARGO_TARGET_DIR")")"
   if [[ "$actual" != "$expected" ]]; then
     error "CARGO_TARGET_DIR must be the kanban-tool shared target root: $expected"
     error "got: $CARGO_TARGET_DIR"

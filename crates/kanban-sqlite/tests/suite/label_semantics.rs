@@ -838,6 +838,185 @@ fn label_bootstrap_snapshot_restore_restores_existing_semantics_and_atoms_exactl
 }
 
 #[test]
+fn canonical_label_identity_create_writes_event_without_ontology_action() -> anyhow::Result<()> {
+    let temp = TempDb::new("canonical_label_identity_create_writes_event_without_ontology_action")?;
+    init_database(&temp.path, "tester")?;
+
+    let label = kanban_sqlite::create_label_with_actor(
+        &temp.path,
+        "default",
+        "tester",
+        CreateLabel {
+            name: "identity-only".to_owned(),
+            color: Some("#112233".to_owned()),
+        },
+    )?;
+
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, 0);
+    let created_events = list_events(&temp.path, "default", None)?
+        .into_iter()
+        .filter(|event| event.kind == "label.created")
+        .collect::<Vec<_>>();
+    assert_eq!(created_events.len(), 1);
+    assert_eq!(created_events[0].actor.as_deref(), Some("tester"));
+    assert_eq!(created_events[0].task_id, None);
+    assert!(created_events[0].payload_json.contains(&label.id));
+    assert!(created_events[0].payload_json.contains("identity-only"));
+    assert!(created_events[0].payload_json.contains("#112233"));
+
+    let deleted = delete_label(&temp.path, "default", "tester", "identity-only", false)?;
+    assert_eq!(deleted.label.id, label.id);
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, 0);
+    let deleted_events = list_events(&temp.path, "default", None)?
+        .into_iter()
+        .filter(|event| event.kind == "label.deleted")
+        .collect::<Vec<_>>();
+    assert_eq!(deleted_events.len(), 1);
+    assert_eq!(deleted_events[0].actor.as_deref(), Some("tester"));
+    Ok(())
+}
+
+#[test]
+fn label_semantics_clear_requires_cas_records_root_action_effects_and_reverts() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("label_semantics_clear_requires_cas_records_root_action_effects_and_reverts")?;
+    init_database(&temp.path, "tester")?;
+    let label = create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("Backend service work".to_owned()),
+            applies_when: vec!["touches Rust service code".to_owned()],
+            excludes_when: vec!["CSS-only changes".to_owned()],
+            positive_examples: vec!["add HTTP route".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let original_atom_count = seed.atoms.len() as i64;
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    let conn = connect_file(&temp.path)?;
+    let action_count = table_count(&conn, "label_ontology_actions")?;
+    let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+
+    let mut stale_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    stale_options.reason = Some("Attempt stale clear.".to_owned());
+    let stale_error = result_err(clear_label_semantics_with_options(
+        &temp.path,
+        "default",
+        "backend",
+        "not-the-current-semantics-hash".to_owned(),
+        stale_options,
+    ))?;
+    assert!(matches!(stale_error, KanbanError::Conflict(_)));
+    assert_eq!(
+        get_label_semantics(&temp.path, "default", "backend")?.semantics_hash,
+        seed.semantics_hash
+    );
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, action_count);
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count
+    );
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+
+    let mut clear_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    clear_options.reason = Some("Clear semantics with audited CAS.".to_owned());
+    clear_label_semantics_with_options(
+        &temp.path,
+        "default",
+        "backend",
+        seed.semantics_hash.clone(),
+        clear_options,
+    )?;
+
+    assert!(
+        result_err(get_label_semantics(&temp.path, "default", "backend"))?
+            .to_string()
+            .contains("not found")
+    );
+    assert!(list_label_atoms(&temp.path, "default")?.is_empty());
+    assert_eq!(
+        table_count(&conn, "label_ontology_actions")?,
+        action_count + 1
+    );
+    let clear_action = root_mutation_action_by_before_hash(&conn, &seed.semantics_hash)?;
+    assert_eq!(
+        clear_action.action_type,
+        LabelOntologyActionType::UpdateSemantics.to_string()
+    );
+    assert_eq!(
+        clear_action.target_label_id.as_deref(),
+        Some(label.id.as_str())
+    );
+    assert_eq!(clear_action.result_label_id, None);
+    assert_eq!(clear_action.result_atom_id, None);
+    assert_eq!(clear_action.result_atom_content_hash, None);
+    assert_eq!(
+        clear_action.canonical_before_hash.as_deref(),
+        Some(seed.semantics_hash.as_str())
+    );
+    assert_eq!(
+        ontology_action_atom_effect_count(&conn, &clear_action.id)?,
+        original_atom_count
+    );
+    let mut expected_removed = seed
+        .atoms
+        .iter()
+        .map(|atom| atom.text.clone())
+        .collect::<Vec<_>>();
+    expected_removed.sort();
+    assert_eq!(
+        ontology_action_atom_effect_texts(&conn, &clear_action.id, "removed")?,
+        expected_removed
+    );
+    assert!(label_atom_store_dirty(&temp.path)?);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+
+    let revert_action = revert_label_ontology_mutation(
+        &temp.path,
+        "default",
+        LabelOntologyRevertInput {
+            actor: LabelOntologyActor {
+                name: "tester".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            target_action_id: clear_action.id.clone(),
+            expected_current_hash: clear_action.canonical_after_hash.clone(),
+            reason: "Restore cleared semantics for contract test.".to_owned(),
+        },
+    )?;
+    assert_eq!(
+        revert_action.action_type,
+        LabelOntologyActionType::RevertOntologyMutation
+    );
+    assert_eq!(
+        revert_action.parent_action_id.as_deref(),
+        Some(clear_action.id.as_str())
+    );
+    let restored = get_label_semantics(&temp.path, "default", "backend")?;
+    assert_eq!(restored.semantics_hash, seed.semantics_hash);
+    assert_eq!(restored.description, seed.description);
+    assert_eq!(restored.applies_when, seed.applies_when);
+    assert_eq!(restored.excludes_when, seed.excludes_when);
+    assert_eq!(restored.positive_examples, seed.positive_examples);
+    assert_eq!(restored.negative_examples, seed.negative_examples);
+    Ok(())
+}
+
+#[test]
 fn canonical_label_delete_rejects_bound_label_without_force() -> anyhow::Result<()> {
     let temp = TempDb::new("canonical_label_delete_rejects_bound_label_without_force")?;
     init_database(&temp.path, "tester")?;
@@ -1714,6 +1893,34 @@ fn single_root_mutation_action(conn: &Connection) -> anyhow::Result<RootMutation
          result_atom_content_hash,canonical_before_hash,canonical_after_hash,change_json,\
          validation_status,created_by FROM label_ontology_actions",
         [],
+        |row| {
+            Ok(RootMutationActionRow {
+                id: row.get(0)?,
+                action_type: row.get(1)?,
+                target_label_id: row.get(2)?,
+                result_label_id: row.get(3)?,
+                result_atom_id: row.get(4)?,
+                result_atom_content_hash: row.get(5)?,
+                canonical_before_hash: row.get(6)?,
+                canonical_after_hash: row.get(7)?,
+                change_json: row.get(8)?,
+                validation_status: row.get(9)?,
+                created_by: row.get(10)?,
+            })
+        },
+    )?)
+}
+
+fn root_mutation_action_by_before_hash(
+    conn: &Connection,
+    canonical_before_hash: &str,
+) -> anyhow::Result<RootMutationActionRow> {
+    Ok(conn.query_row(
+        "SELECT id,action_type,target_label_id,result_label_id,result_atom_id,\
+         result_atom_content_hash,canonical_before_hash,canonical_after_hash,change_json,\
+         validation_status,created_by FROM label_ontology_actions \
+         WHERE canonical_before_hash=?1 ORDER BY created_at DESC,id DESC LIMIT 1",
+        [canonical_before_hash],
         |row| {
             Ok(RootMutationActionRow {
                 id: row.get(0)?,

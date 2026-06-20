@@ -2666,6 +2666,28 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
 
     let (status, json) = delete_json(
         app.clone(),
+        &format!("/api/v1/boards/default/labels/{label_id}/semantics"),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+
+    let (status, json) = delete_json(
+        app.clone(),
+        &format!(
+            "/api/v1/boards/default/labels/{label_id}/semantics?expected_semantics_hash=not-the-current-semantics-hash&reason=http-stale-clear"
+        ),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json["error"]["code"], "conflict");
+    assert!(
+        !kanban_sqlite::list_label_atoms(&db_path, "default")?.is_empty(),
+        "stale clear must not remove atoms"
+    );
+
+    let (status, json) = delete_json(
+        app.clone(),
         &format!(
             "/api/v1/boards/default/labels/{label_id}/semantics?expected_semantics_hash={replacement_hash}&reason=http-clear"
         ),

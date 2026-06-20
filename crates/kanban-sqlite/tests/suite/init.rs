@@ -60,7 +60,7 @@ fn init_records_and_enforces_migration_checksum() -> anyhow::Result<()> {
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    assert_eq!(user_version, 17);
+    assert_eq!(user_version, 19);
     assert_eq!(name, "001_initial");
     assert!(checksum.starts_with("fnv64:"), "checksum: {checksum}");
 
@@ -86,7 +86,7 @@ fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 17);
+    assert_eq!(user_version, 19);
     for table in [
         "entities",
         "relation_predicates",
@@ -100,6 +100,7 @@ fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
         "label_ontology_observations",
         "label_ontology_signals",
         "label_ontology_actions",
+        "label_ontology_action_atom_effects",
         "label_ontology_action_signals",
     ] {
         let count: i64 = conn.query_row(
@@ -152,7 +153,7 @@ fn init_upgrades_v1_database_and_backfills_task_entities() -> anyhow::Result<()>
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 17);
+    assert_eq!(user_version, 19);
     let task_entity_title: String = conn.query_row(
         "SELECT title FROM entities WHERE uri='kb://task/t_test'",
         [],
@@ -177,12 +178,182 @@ fn init_v17_rebuilds_key_relationship_tables_without_losing_rows() -> anyhow::Re
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 17);
+    assert_eq!(user_version, 19);
     assert_eq!(v17_relationship_counts(&conn)?, before_counts);
     assert_eq!(
         task_label_board_for(&conn, &fixture.task_id, &fixture.label_id)?,
         fixture.board_id
     );
+    let fk_errors = foreign_key_check_rows(&conn)?;
+    assert!(fk_errors.is_empty(), "{fk_errors:#?}");
+    Ok(())
+}
+
+#[test]
+fn init_v18_adds_root_action_atom_effects_table_to_v17_database() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_v18_adds_root_action_atom_effects_table_to_v17_database")?;
+    seed_v17_board_isolation_fixture(&temp)?;
+
+    let conn = connect_file(&temp.path)?;
+    conn.execute("DROP TABLE label_ontology_action_atom_effects", [])?;
+    conn.execute(
+        "DROP INDEX IF EXISTS idx_label_ontology_actions_id_board",
+        [],
+    )?;
+    conn.execute("DELETE FROM schema_migrations WHERE version=18", [])?;
+    conn.pragma_update(None, "user_version", 17)?;
+    drop(conn);
+
+    init_database(&temp.path, "tester")?;
+
+    let conn = connect_file(&temp.path)?;
+    let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    assert_eq!(user_version, 19);
+    let table_exists: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_ontology_action_atom_effects'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(table_exists, 1);
+    let action_board_index_exists: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_label_ontology_actions_id_board'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(action_board_index_exists, 1);
+    let fk_errors = foreign_key_check_rows(&conn)?;
+    assert!(fk_errors.is_empty(), "{fk_errors:#?}");
+    Ok(())
+}
+
+#[test]
+fn init_v19_adds_validation_requirement_and_backfills_v18_actions() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_v19_adds_validation_requirement_and_backfills_v18_actions")?;
+    init_database(&temp.path, "tester")?;
+    let conn = connect_file(&temp.path)?;
+    downgrade_label_ontology_actions_to_v18_shape(&conn)?;
+    let board_id: String =
+        conn.query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })?;
+    for (id, action_type, status) in [
+        ("loa_required_positive", "add_positive_atom", "pending"),
+        ("loa_required_bootstrap", "bootstrap_label", "pending"),
+        ("loa_unsupported_update", "update_semantics", "pending"),
+        (
+            "loa_unsupported_revert",
+            "revert_ontology_mutation",
+            "pending",
+        ),
+        ("loa_unsupported_structure", "rename_label", "pending"),
+        ("loa_none_lifecycle", "confirm", "pending"),
+        ("loa_none_adoption", "adopt_existing_atom", "pending"),
+        ("loa_none_proposal", "create_label_proposal", "pending"),
+        ("loa_none_validate", "validate", "passed"),
+        ("loa_none_failed_add", "add_positive_atom", "failed"),
+    ] {
+        conn.execute(
+            "INSERT INTO label_ontology_actions(
+             id, board_id, action_type, reason, change_json, validation_status, validation_json,
+             created_by, created_by_type, created_at)
+             VALUES (?1, ?2, ?3, 'v18 validation requirement fixture', '{}', ?4, '{}',
+             'tester', 'user', 1)",
+            params![id, board_id, action_type, status],
+        )?;
+    }
+    conn.execute("DELETE FROM schema_migrations WHERE version=19", [])?;
+    conn.pragma_update(None, "user_version", 18)?;
+    drop(conn);
+
+    init_database(&temp.path, "tester")?;
+
+    let conn = connect_file(&temp.path)?;
+    let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    assert_eq!(user_version, 19);
+    let column_exists: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('label_ontology_actions') WHERE name='validation_requirement'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(column_exists, 1);
+    let rows = conn
+        .prepare(
+            "SELECT id, validation_status, validation_requirement
+             FROM label_ontology_actions
+             ORDER BY id ASC",
+        )?
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    assert_eq!(
+        rows,
+        vec![
+            (
+                "loa_none_adoption".to_owned(),
+                "pending".to_owned(),
+                "none".to_owned()
+            ),
+            (
+                "loa_none_failed_add".to_owned(),
+                "failed".to_owned(),
+                "none".to_owned()
+            ),
+            (
+                "loa_none_lifecycle".to_owned(),
+                "pending".to_owned(),
+                "none".to_owned()
+            ),
+            (
+                "loa_none_proposal".to_owned(),
+                "pending".to_owned(),
+                "none".to_owned()
+            ),
+            (
+                "loa_none_validate".to_owned(),
+                "passed".to_owned(),
+                "none".to_owned()
+            ),
+            (
+                "loa_required_bootstrap".to_owned(),
+                "pending".to_owned(),
+                "required".to_owned()
+            ),
+            (
+                "loa_required_positive".to_owned(),
+                "pending".to_owned(),
+                "required".to_owned()
+            ),
+            (
+                "loa_unsupported_revert".to_owned(),
+                "pending".to_owned(),
+                "unsupported".to_owned()
+            ),
+            (
+                "loa_unsupported_structure".to_owned(),
+                "pending".to_owned(),
+                "unsupported".to_owned()
+            ),
+            (
+                "loa_unsupported_update".to_owned(),
+                "pending".to_owned(),
+                "unsupported".to_owned()
+            ),
+        ]
+    );
+    let check_error = result_err(conn.execute(
+        "INSERT INTO label_ontology_actions(
+         id, board_id, action_type, reason, validation_requirement, change_json,
+         validation_status, validation_json, created_by, created_by_type, created_at)
+         VALUES ('loa_bad_requirement', ?1, 'confirm', 'bad requirement', 'later',
+         '{}', 'not_required', '{}', 'tester', 'user', 2)",
+        [&board_id],
+    ))?;
+    assert!(check_error.to_string().contains("CHECK"));
     let fk_errors = foreign_key_check_rows(&conn)?;
     assert!(fk_errors.is_empty(), "{fk_errors:#?}");
     Ok(())
@@ -348,6 +519,87 @@ fn foreign_key_check_rows(conn: &Connection) -> anyhow::Result<Vec<String>> {
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(rows)
+}
+
+fn downgrade_label_ontology_actions_to_v18_shape(conn: &Connection) -> anyhow::Result<()> {
+    conn.execute_batch(
+        "
+        PRAGMA foreign_keys=OFF;
+        DROP INDEX IF EXISTS idx_label_ontology_actions_board_type_created;
+        DROP INDEX IF EXISTS idx_label_ontology_actions_label_created;
+        DROP INDEX IF EXISTS idx_label_ontology_actions_unique_create_proposal;
+        DROP INDEX IF EXISTS idx_label_ontology_actions_id_board;
+        CREATE TABLE label_ontology_actions_v18 (
+          id TEXT PRIMARY KEY CHECK(id LIKE 'loa_%'),
+          board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+          parent_action_id TEXT REFERENCES label_ontology_actions(id) ON DELETE SET NULL,
+          action_type TEXT NOT NULL CHECK(action_type IN (
+            'confirm',
+            'reject',
+            'supersede',
+            'resolve_no_change',
+            'add_positive_atom',
+            'add_negative_atom',
+            'adopt_existing_atom',
+            'update_semantics',
+            'create_label_proposal',
+            'bootstrap_label',
+            'rename_label',
+            'split_label',
+            'merge_labels',
+            'validate',
+            'revert_ontology_mutation'
+          )),
+          reason TEXT NOT NULL CHECK(length(trim(reason)) > 0),
+          target_label_id TEXT REFERENCES labels(id) ON DELETE SET NULL,
+          result_label_id TEXT REFERENCES labels(id) ON DELETE SET NULL,
+          result_atom_id TEXT,
+          result_atom_content_hash TEXT,
+          result_proposal_id TEXT REFERENCES label_semantic_proposals(id) ON DELETE SET NULL,
+          canonical_before_hash TEXT,
+          canonical_after_hash TEXT,
+          change_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(change_json)),
+          validation_status TEXT NOT NULL DEFAULT 'not_required' CHECK(validation_status IN (
+            'not_required',
+            'pending',
+            'passed',
+            'failed',
+            'partial'
+          )),
+          validation_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(validation_json)),
+          created_by TEXT NOT NULL CHECK(length(trim(created_by)) > 0),
+          created_by_type TEXT NOT NULL CHECK(created_by_type IN ('user', 'agent')),
+          agent_type TEXT,
+          created_at INTEGER NOT NULL
+        );
+        INSERT INTO label_ontology_actions_v18(
+          id, board_id, parent_action_id, action_type, reason, target_label_id,
+          result_label_id, result_atom_id, result_atom_content_hash, result_proposal_id,
+          canonical_before_hash, canonical_after_hash, change_json, validation_status,
+          validation_json, created_by, created_by_type, agent_type, created_at
+        )
+        SELECT
+          id, board_id, parent_action_id, action_type, reason, target_label_id,
+          result_label_id, result_atom_id, result_atom_content_hash, result_proposal_id,
+          canonical_before_hash, canonical_after_hash, change_json, validation_status,
+          validation_json, created_by, created_by_type, agent_type, created_at
+        FROM label_ontology_actions;
+        DROP TABLE label_ontology_actions;
+        ALTER TABLE label_ontology_actions_v18 RENAME TO label_ontology_actions;
+        CREATE INDEX IF NOT EXISTS idx_label_ontology_actions_board_type_created
+          ON label_ontology_actions(board_id, action_type, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_label_ontology_actions_label_created
+          ON label_ontology_actions(board_id, target_label_id, created_at DESC);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_label_ontology_actions_unique_create_proposal
+          ON label_ontology_actions(board_id, result_proposal_id)
+          WHERE action_type = 'create_label_proposal'
+            AND result_proposal_id IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_label_ontology_actions_id_board
+          ON label_ontology_actions(id, board_id);
+        PRAGMA foreign_keys=ON;
+        ",
+    )?;
+    Ok(())
 }
 
 #[test]

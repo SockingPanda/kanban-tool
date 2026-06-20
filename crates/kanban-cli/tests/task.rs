@@ -98,9 +98,36 @@ fn task_show_details_prints_full_readable_record() -> anyhow::Result<()> {
 }
 
 #[test]
+fn task_create_label_requires_existing_vocabulary() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_create_label_requires_existing_vocabulary")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "must not create missing label",
+            "--description",
+            "ready spec",
+            "--label",
+            "missing",
+        ],
+    )?
+    .failure_containing("label missing does not exist")?;
+
+    let tasks = kanban(&temp.path, &["--json", "task", "list"])?.success_json()?;
+    assert!(tasks["data"].as_array().context("tasks")?.is_empty());
+    let labels = kanban(&temp.path, &["--json", "label", "list"])?.success_json()?;
+    assert!(labels["data"].as_array().context("labels")?.is_empty());
+    Ok(())
+}
+
+#[test]
 fn task_create_and_label_commands_round_trip_labels() -> anyhow::Result<()> {
     let temp = TempDb::new("task_create_and_label_commands_round_trip_labels")?;
     kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "backend"])?.success()?;
     let created = kanban(
         &temp.path,
         &[
@@ -386,6 +413,9 @@ fn label_semantics_and_atoms_commands_round_trip_json() -> anyhow::Result<()> {
     );
     assert_eq!(replaced["data"]["applies_when"], json!([]));
     assert_eq!(replaced["data"]["positive_examples"], json!([]));
+    let replacement_hash = replaced["data"]["semantics_hash"]
+        .as_str()
+        .context("replacement semantics hash")?;
 
     let atoms = kanban(&temp.path, &["--json", "label", "atoms", "list"])?.success_json()?;
     assert!(
@@ -441,9 +471,54 @@ dimensions = 3
     )?
     .failure_containing(expected_index_failure)?;
 
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "semantics",
+            "delete",
+            "backend",
+            "--expected-semantics-hash",
+            replacement_hash,
+        ],
+    )?
+    .failure_containing("required")?;
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "semantics",
+            "delete",
+            "backend",
+            "--expected-semantics-hash",
+            "not-the-current-semantics-hash",
+            "--reason",
+            "Stale clear should fail",
+        ],
+    )?
+    .failure_containing("hash mismatch")?;
+    let atoms_before_delete =
+        kanban(&temp.path, &["--json", "label", "atoms", "list"])?.success_json()?;
+    assert!(
+        !atoms_before_delete["data"]
+            .as_array()
+            .context("atoms before delete")?
+            .is_empty()
+    );
+
     let deleted = kanban(
         &temp.path,
-        &["--json", "label", "semantics", "delete", "backend"],
+        &[
+            "--json",
+            "label",
+            "semantics",
+            "delete",
+            "backend",
+            "--expected-semantics-hash",
+            replacement_hash,
+            "--reason",
+            "Clear backend semantics in CLI round trip",
+        ],
     )?
     .success_json()?;
     assert_eq!(deleted["data"]["deleted"], true);
@@ -562,8 +637,8 @@ fn label_bootstrap_verify_requires_vector_provider_before_mutating() -> anyhow::
 
 #[cfg(feature = "vector-lancedb")]
 #[test]
-fn label_bootstrap_verify_rebuild_failure_restores_canonical_state() -> anyhow::Result<()> {
-    let temp = TempDb::new("label_bootstrap_verify_rebuild_failure_restores_canonical_state")?;
+fn label_bootstrap_verify_rebuild_failure_leaves_canonical_state_clean() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_verify_rebuild_failure_leaves_canonical_state_clean")?;
     kanban(&temp.path, &["init"])?.success()?;
     let task = kanban(
         &temp.path,
@@ -588,6 +663,7 @@ model = "offline-cli-test-model"
 dimensions = 3
 "#,
     )?;
+    let status_before = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
 
     let attempt = kanban(
         &temp.path,
@@ -612,10 +688,10 @@ dimensions = 3
     let stderr = String::from_utf8_lossy(&attempt.output.stderr);
     assert!(stderr.contains("Ollama embed request failed"), "{stderr}");
     assert!(
-        stderr.contains("bootstrap verification compensation restored canonical state"),
+        !stderr.contains("bootstrap verification compensation"),
         "{stderr}"
     );
-    assert!(stderr.contains("label_deleted=true"), "{stderr}");
+    assert!(!stderr.contains("label_deleted=true"), "{stderr}");
     let shown = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
     assert!(
         shown["data"]["labels"]
@@ -635,9 +711,25 @@ dimensions = 3
         conn.query_row("SELECT COUNT(*) FROM label_semantics", [], |row| row.get(0))?;
     let atoms: i64 = conn.query_row("SELECT COUNT(*) FROM label_atoms", [], |row| row.get(0))?;
     let bindings: i64 = conn.query_row("SELECT COUNT(*) FROM task_labels", [], |row| row.get(0))?;
+    let actions: i64 =
+        conn.query_row("SELECT COUNT(*) FROM label_ontology_actions", [], |row| {
+            row.get(0)
+        })?;
+    let effects: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM label_ontology_action_atom_effects",
+        [],
+        |row| row.get(0),
+    )?;
+    let compensation_events: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM task_events WHERE payload_json LIKE '%bootstrap verification compensation%'",
+        [],
+        |row| row.get(0),
+    )?;
     assert_eq!((labels, semantics, atoms, bindings), (0, 0, 0, 0));
+    assert_eq!((actions, effects, compensation_events), (0, 0, 0));
     let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
-    assert_eq!(status.board_dirty, Some(true));
+    assert_eq!(status.dirty, status_before.dirty);
+    assert_eq!(status.board_dirty, status_before.board_dirty);
     Ok(())
 }
 
@@ -658,7 +750,7 @@ fn label_delete_force_removes_canonical_label_and_task_bindings() -> anyhow::Res
     )?
     .success_json()?;
     let task_id = task["data"]["id"].as_str().context("task id")?;
-    kanban(
+    let bootstrapped = kanban(
         &temp.path,
         &[
             "--json",
@@ -673,9 +765,29 @@ fn label_delete_force_removes_canonical_label_and_task_bindings() -> anyhow::Res
         ],
     )?
     .success_json()?;
+    let semantics_hash = bootstrapped["data"]["semantics"]["semantics_hash"]
+        .as_str()
+        .context("semantics hash")?;
 
     kanban(&temp.path, &["label", "delete", "database"])?
         .failure_containing("attached to 1 task(s)")?;
+    kanban(&temp.path, &["label", "delete", "database", "--force"])?
+        .failure_containing("has semantics or atoms")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "semantics",
+            "delete",
+            "database",
+            "--expected-semantics-hash",
+            semantics_hash,
+            "--reason",
+            "Clear semantics before deleting label identity",
+        ],
+    )?
+    .success()?;
 
     let deleted = kanban(
         &temp.path,
@@ -685,13 +797,8 @@ fn label_delete_force_removes_canonical_label_and_task_bindings() -> anyhow::Res
     assert_eq!(deleted["data"]["label"]["name"], "database");
     assert_eq!(deleted["data"]["forced"], true);
     assert_eq!(deleted["data"]["removed_task_bindings"], 1);
-    assert_eq!(deleted["data"]["removed_semantics"], true);
-    assert!(
-        deleted["data"]["removed_atoms"]
-            .as_i64()
-            .context("removed atoms")?
-            > 0
-    );
+    assert_eq!(deleted["data"]["removed_semantics"], false);
+    assert_eq!(deleted["data"]["removed_atoms"], 0);
 
     let labels = kanban(&temp.path, &["--json", "label", "list"])?.success_json()?;
     assert!(labels["data"].as_array().context("labels")?.is_empty());
@@ -1647,7 +1754,7 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
     fs::write(
         &validation_path,
         json!({
-            "evidence_type": "automated",
+            "evidence_type": "trusted_automated",
             "embedding_model": "test-embedding-v1",
             "solver_options": {"candidate_limit": 24, "atom_limit": 64},
             "index": {"status": "ready", "dirty": false, "generation": 7},
@@ -2092,124 +2199,106 @@ fn label_ontology_cli_revert_action_round_trip() -> anyhow::Result<()> {
 }
 
 #[test]
-fn label_ontology_cli_structure_plan_round_trip() -> anyhow::Result<()> {
-    let temp = TempDb::new("label_ontology_cli_structure_plan_round_trip")?;
+fn label_ontology_cli_structure_plan_command_is_not_available() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_structure_plan_command_is_not_available")?;
     kanban(&temp.path, &["init"])?.success()?;
-    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
-    let created = kanban(
-        &temp.path,
-        &[
-            "--json",
-            "task",
-            "create",
-            "ontology CLI structure plan task",
-            "--description",
-            "ready spec for ontology structure planning",
-        ],
-    )?
-    .success_json()?;
-    let task_id = created["data"]["id"].as_str().context("task id")?;
-    kanban(&temp.path, &["label", "add", task_id, "cli"])?.success()?;
-    let labels_before = list_labels(&temp.path, "default")?;
-    let task_labels_before = get_task(&temp.path, "default", task_id)?.labels;
-    let input_path = write_cli_ontology_structure_record_input(
-        &temp,
-        "ontology-structure-plan-record.json",
-        "rename-cli-to-command-surface",
-        "rename_label",
-        json!([]),
-        Some("command surface"),
-    )?;
+    let help = kanban(&temp.path, &["label", "ontology", "--help"])?.success_stdout()?;
+    assert!(!help.contains("structure"), "{help}");
 
-    let observation = kanban(
-        &temp.path,
-        &[
-            "--json",
-            "label",
-            "ontology",
-            "record",
-            task_id,
-            "--input",
-            &input_path,
-        ],
-    )?
-    .success_json()?;
-    let signal_id = observation["data"]["signals"][0]["id"]
-        .as_str()
-        .context("signal id")?;
     kanban(
         &temp.path,
         &[
-            "--json",
-            "label",
-            "ontology",
-            "confirm",
-            signal_id,
-            "--reason",
-            "Reviewer confirmed the rename structure signal.",
-        ],
-    )?
-    .success_json()?;
-
-    let planned = kanban(
-        &temp.path,
-        &[
-            "--json",
             "label",
             "ontology",
             "structure",
             "plan",
             "rename-label",
-            signal_id,
+            "los_missing",
             "--target-label",
             "cli",
             "--proposed-label",
             "command surface",
             "--reason",
-            "Plan rename before any canonical identity rewrite.",
-            "--actor-type",
-            "agent",
-            "--agent-type",
-            "local",
+            "Structure plans are no longer public write entries.",
         ],
     )?
-    .success_json()?;
-
-    assert_eq!(planned["data"]["action_type"], "rename_label");
-    assert_eq!(planned["data"]["validation_status"], "pending");
-    assert_eq!(planned["data"]["signal_ids"], json!([signal_id]));
-    let action_id = planned["data"]["id"].as_str().context("action id")?;
-    let change: serde_json::Value = serde_json::from_str(
-        planned["data"]["change_json"]
-            .as_str()
-            .context("change_json")?,
+    .failure_containing("unrecognized subcommand 'structure'")?;
+    let action_count: i64 = kanban_sqlite::connect_file(&temp.path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_actions",
+        [],
+        |row| row.get(0),
     )?;
-    assert_eq!(change["phase"], "planned_structure_change");
-    assert_eq!(change["canonical_mutation_applied"], false);
-    assert_eq!(change["change_type"], "rename_label");
-    assert_eq!(change["after"]["proposed_label_name"], "command surface");
-    assert_eq!(
-        change["task_binding_migration_plan"]["policy"],
-        "preserve_bindings"
-    );
+    assert_eq!(action_count, 0);
 
-    let shown = kanban(
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_validate_positive_controls_require_trusted() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_validate_positive_controls_require_trusted")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    kanban(
         &temp.path,
-        &["--json", "label", "ontology", "show", signal_id],
+        &[
+            "label",
+            "ontology",
+            "validate",
+            "loa_missing",
+            "--status",
+            "failed",
+            "--reason",
+            "Positive controls are trusted collector inputs.",
+            "--positive-control",
+            "default#1",
+        ],
     )?
-    .success_json()?;
-    assert!(
-        shown["data"]["actions"]
-            .as_array()
-            .context("actions")?
-            .iter()
-            .any(|action| action["id"] == action_id)
-    );
-    assert_eq!(list_labels(&temp.path, "default")?, labels_before);
-    assert_eq!(
-        get_task(&temp.path, "default", task_id)?.labels,
-        task_labels_before
-    );
+    .failure_containing("--positive-control and --positive-control-waiver require --trusted")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "ontology",
+            "validate",
+            "loa_missing",
+            "--status",
+            "failed",
+            "--reason",
+            "Positive-control waiver is a trusted collector input.",
+            "--positive-control-waiver",
+            "No stable positive control exists.",
+        ],
+    )?
+    .failure_containing("--positive-control and --positive-control-waiver require --trusted")?;
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_validate_positive_controls_are_mutually_exclusive() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_cli_validate_positive_controls_are_mutually_exclusive")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "ontology",
+            "validate",
+            "loa_missing",
+            "--trusted",
+            "--status",
+            "failed",
+            "--reason",
+            "Only controls or a waiver may be supplied.",
+            "--positive-control",
+            "default#1",
+            "--positive-control-waiver",
+            "No stable positive control exists.",
+        ],
+    )?
+    .failure_containing("cannot be used with")?;
 
     Ok(())
 }
@@ -2689,59 +2778,6 @@ fn write_cli_ontology_record_input(
         .to_owned())
 }
 
-fn write_cli_ontology_structure_record_input(
-    temp: &TempDb,
-    filename: &str,
-    signal_key: &str,
-    proposed_action: &str,
-    related_labels: serde_json::Value,
-    proposed_label_name: Option<&str>,
-) -> anyhow::Result<String> {
-    let path = temp.dir.join(filename);
-    fs::write(
-        &path,
-        json!({
-            "actor": {
-                "name": "label-agent",
-                "type": "agent",
-                "agent_type": "local"
-            },
-            "agent_candidates_json": "[]",
-            "suggestion_snapshot_json": "{}",
-            "final_decision_json": "{}",
-            "suggest_coverage": 0.61,
-            "suggest_coverage_cosine": 0.74,
-            "suggest_residual_norm": 0.39,
-            "suggest_needs_new_label": false,
-            "suggest_degraded": false,
-            "diagnostics_json": "[]",
-            "capture_fingerprint": filename,
-            "signals": [{
-                "kind": "false_negative",
-                "target_label_ref": "cli",
-                "related_labels_json": related_labels.to_string(),
-                "proposed_action": proposed_action,
-                "candidate_atom": null,
-                "proposed_label_name": proposed_label_name,
-                "proposal_json": "{}",
-                "agent_selected": true,
-                "suggest_state": "candidate",
-                "suggest_score": 0.08,
-                "suggest_rank": 4,
-                "final_selected": true,
-                "rationale": "The task exposes a structure-level label boundary issue.",
-                "confidence": 0.91,
-                "signal_key": signal_key
-            }]
-        })
-        .to_string(),
-    )?;
-    Ok(path
-        .to_str()
-        .context("temp path should be valid UTF-8")?
-        .to_owned())
-}
-
 fn seed_proposed_label_proposal(
     db_path: &Path,
     task_id: &str,
@@ -2837,6 +2873,7 @@ fn label_suggest_rejects_out_of_bounds_limits() -> anyhow::Result<()> {
 fn label_remove_accepts_l_prefixed_label_name() -> anyhow::Result<()> {
     let temp = TempDb::new("label_remove_accepts_l_prefixed_label_name")?;
     kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "l_bug"])?.success()?;
     let created = kanban(
         &temp.path,
         &[
@@ -2868,6 +2905,7 @@ fn label_remove_accepts_l_prefixed_label_name() -> anyhow::Result<()> {
 fn label_commands_reject_archived_tasks() -> anyhow::Result<()> {
     let temp = TempDb::new("label_commands_reject_archived_tasks")?;
     kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "backend"])?.success()?;
 
     let add_target = kanban(
         &temp.path,

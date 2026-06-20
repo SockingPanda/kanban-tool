@@ -244,6 +244,31 @@ fn task_update_description_preserves_explicit_todo_status() -> anyhow::Result<()
     Ok(())
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct TaskCreateLabelCounts {
+    tasks: i64,
+    labels: i64,
+    task_labels: i64,
+    task_events: i64,
+}
+
+fn task_create_label_counts(path: &Path) -> anyhow::Result<TaskCreateLabelCounts> {
+    let conn = connect_file(path)?;
+    Ok(TaskCreateLabelCounts {
+        tasks: count_rows(&conn, "tasks")?,
+        labels: count_rows(&conn, "labels")?,
+        task_labels: count_rows(&conn, "task_labels")?,
+        task_events: count_rows(&conn, "task_events")?,
+    })
+}
+
+fn count_rows(conn: &Connection, table: &str) -> anyhow::Result<i64> {
+    conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+        row.get(0)
+    })
+    .context("count rows")
+}
+
 #[test]
 fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Result<()> {
     let temp = TempDb::new("task_list_page_filters_priorities_and_sorts_by_table_fields")?;
@@ -320,6 +345,108 @@ fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Resu
         [Some("worker-b"), Some("worker-a"), None]
     );
 
+    Ok(())
+}
+
+#[test]
+fn task_create_with_missing_label_rolls_back_task_vocabulary_bindings_and_events()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "task_create_with_missing_label_rolls_back_task_vocabulary_bindings_and_events",
+    )?;
+    init_database(&temp.path, "tester")?;
+    let before = task_create_label_counts(&temp.path)?;
+
+    let error = result_err(kanban_sqlite::create_task_with_labels(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Missing label task"),
+        &["missing".to_owned()],
+    ))?;
+
+    assert!(error.to_string().contains("label missing does not exist"));
+    assert_eq!(task_create_label_counts(&temp.path)?, before);
+    assert!(list_tasks(&temp.path, "default", &[], false)?.is_empty());
+    assert!(kanban_sqlite::list_labels(&temp.path, "default")?.is_empty());
+    Ok(())
+}
+
+#[test]
+fn task_create_with_mixed_existing_and_missing_labels_rolls_back_atomically() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("task_create_with_mixed_existing_and_missing_labels_rolls_back_atomically")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let before = task_create_label_counts(&temp.path)?;
+
+    let error = result_err(kanban_sqlite::create_task_with_labels(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Partially labeled task"),
+        &["backend".to_owned(), "missing".to_owned()],
+    ))?;
+
+    assert!(error.to_string().contains("label missing does not exist"));
+    assert_eq!(task_create_label_counts(&temp.path)?, before);
+    assert_eq!(
+        kanban_sqlite::list_labels(&temp.path, "default")?
+            .into_iter()
+            .map(|label| label.id)
+            .collect::<Vec<_>>(),
+        [backend.id]
+    );
+    assert!(list_tasks(&temp.path, "default", &[], false)?.is_empty());
+    Ok(())
+}
+
+#[test]
+fn task_create_with_existing_label_binds_without_creating_vocabulary() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_create_with_existing_label_binds_without_creating_vocabulary")?;
+    init_database(&temp.path, "tester")?;
+    let backend = create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+
+    let task = kanban_sqlite::create_task_with_labels(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Existing label task"),
+        &["backend".to_owned()],
+    )?;
+
+    assert_eq!(task.labels.len(), 1);
+    assert_eq!(task.labels[0].id, backend.id);
+    assert_eq!(kanban_sqlite::list_labels(&temp.path, "default")?.len(), 1);
+    let events = list_events(&temp.path, "default", Some(&task.id))?;
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.kind == "task.label.added")
+            .count(),
+        1
+    );
+    assert!(
+        events
+            .iter()
+            .all(|event| matches!(event.kind.as_str(), "task.created" | "task.label.added")),
+        "{events:?}"
+    );
     Ok(())
 }
 

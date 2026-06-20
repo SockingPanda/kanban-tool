@@ -3582,6 +3582,170 @@ fn label_semantics_root_actions_record_only_atom_effect_deltas() -> anyhow::Resu
 }
 
 #[test]
+fn label_semantics_root_action_growth_is_linear_for_large_atom_sets() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_semantics_root_action_growth_is_linear_for_large_atom_sets")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let base_atoms = (0..99)
+        .map(|index| format!("large backend atom {index:03}"))
+        .collect::<Vec<_>>();
+    let seed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("Large backend service work".to_owned()),
+            applies_when: base_atoms.clone(),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(seed.atoms.len(), 100);
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    let conn = connect_file(&temp.path)?;
+    let mut action_count = table_count(&conn, "label_ontology_actions")?;
+    let mut effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+
+    let description_patch = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(seed.semantics_hash.clone()),
+            description: Some("Large backend service ownership".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(
+        table_count(&conn, "label_ontology_actions")?,
+        action_count + 1
+    );
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count
+    );
+    let description_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&description_patch.semantics_hash],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        ontology_action_atom_effect_count(&conn, &description_action_id)?,
+        0
+    );
+    let (description_rows, description_payload_sum): (i64, i64) = conn.query_row(
+        "SELECT COUNT(*), COALESCE(SUM(length(change_json)), 0) \
+         FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&description_patch.semantics_hash],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let description_payload_len: i64 = conn.query_row(
+        "SELECT length(change_json) FROM label_ontology_actions WHERE id=?1",
+        [&description_action_id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(description_rows, 1);
+    assert_eq!(description_payload_sum, description_payload_len);
+    assert!(label_atom_store_dirty(&temp.path)?);
+    assert!(label_atom_board_dirty(&temp.path, "default")?);
+
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    action_count = table_count(&conn, "label_ontology_actions")?;
+    effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+    let added = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(description_patch.semantics_hash.clone()),
+            applies_when: vec!["large backend atom 100".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(
+        table_count(&conn, "label_ontology_actions")?,
+        action_count + 1
+    );
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count + 1
+    );
+    let add_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&added.semantics_hash],
+        |row| row.get(0),
+    )?;
+    assert_eq!(ontology_action_atom_effect_count(&conn, &add_action_id)?, 1);
+    assert_eq!(
+        ontology_action_atom_effect_texts(&conn, &add_action_id, "added")?,
+        vec!["large backend atom 100"]
+    );
+
+    action_count = table_count(&conn, "label_ontology_actions")?;
+    effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+    let removed = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(added.semantics_hash.clone()),
+            remove_applies_when: base_atoms[0..3].to_vec(),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(
+        table_count(&conn, "label_ontology_actions")?,
+        action_count + 1
+    );
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count + 3
+    );
+    let remove_action_id: String = conn.query_row(
+        "SELECT id FROM label_ontology_actions WHERE canonical_after_hash=?1",
+        [&removed.semantics_hash],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        ontology_action_atom_effect_count(&conn, &remove_action_id)?,
+        3
+    );
+    assert_eq!(
+        ontology_action_atom_effect_texts(&conn, &remove_action_id, "removed")?,
+        base_atoms[0..3].to_vec()
+    );
+
+    mark_label_atom_index_clean_for_default_board(&temp.path)?;
+    action_count = table_count(&conn, "label_ontology_actions")?;
+    effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
+    let no_op = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            expected_semantics_hash: Some(removed.semantics_hash.clone()),
+            description: Some("Large backend service ownership".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    assert_eq!(no_op.semantics_hash, removed.semantics_hash);
+    assert_eq!(table_count(&conn, "label_ontology_actions")?, action_count);
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count
+    );
+    assert!(!label_atom_store_dirty(&temp.path)?);
+    assert!(!label_atom_board_dirty(&temp.path, "default")?);
+    Ok(())
+}
+
+#[test]
 fn label_semantics_patch_preserves_missing_fields_and_records_reason() -> anyhow::Result<()> {
     let temp = TempDb::new("label_semantics_patch_preserves_missing_fields_and_records_reason")?;
     init_database(&temp.path, "tester")?;

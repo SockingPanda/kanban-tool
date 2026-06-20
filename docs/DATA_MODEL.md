@@ -558,6 +558,14 @@ signal 行数；同一 task 可以贡献多条 signals，所以它不能单独�
 recall 或 label suggest 质量。需要质量指标时必须另有 denominator，例如 agreement cohort
 或固定评估集。
 
+当前没有 label-ontology 专属 graph projection。`label_ontology_*` 表本身就是 SQLite
+provenance truth；`kanban graph` / Oxigraph 只投影 Knowledge Substrate 的
+`entity_relations`，不保存或拥有 label ontology action/signal truth。若未来出现明确的
+rename/split/merge 或 provenance relationship 查询需求，新增 projection 必须从
+`labels`、`label_semantics`、`label_atoms`、`label_semantic_proposals` 和
+`label_ontology_*` 重建，并通过 `index_outbox` / `derived_store_state` 表达 dirty、sync、
+rebuild 和 error 状态；删除或损坏 graph 不得改变 canonical label/ontology/ledger rows。
+
 表：`label_ontology_actions`
 
 Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、修改 ontology 或

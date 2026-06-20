@@ -258,6 +258,22 @@ Proposal 与 ledger 是 SQLite canonical records，因为它们需要审计和�
 正式文档使用 `canonical truth`、`derived retrieval`、`proposal workflow` 和
 `ontology provenance` 这些边界词；不要把未定义的内部简称写成架构术语。
 
+### 2.9 Label ontology graph boundary
+
+当前没有 label-ontology 专属 graph projection。`kanban graph` / Oxigraph 只镜像
+`entity_relations` 中已有的 Knowledge Substrate 关系，例如 task-board 与 task dependency；
+label ontology 的 query surface 仍是 SQLite ledger、proposal、semantics、`label ontology
+review`、`label atom explain` 和 validation history。
+
+在 rename/split/merge provenance 查询或跨 action 关系查询出现明确需求前，不新增
+ontology graph store、ontology RDF schema 或后台 projection。若后续确实需要，它必须复用
+Knowledge Substrate 的派生层边界：
+
+- SQLite `labels` / `label_semantics` / `label_atoms` / `label_ontology_*` 仍是 truth。
+- Graph projection 只能从 SQLite 快照和 outbox 重建，可删除重建。
+- Graph API 只能查询 relation/provenance，不提供 canonical ontology mutation path。
+- Graph 故障、dirty 或删除不会改变 task labels、semantics、atoms、signals 或 actions。
+
 ---
 
 ## 3. 数据流

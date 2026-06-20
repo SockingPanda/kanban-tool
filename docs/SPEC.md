@@ -162,6 +162,12 @@ Label 系统保持四类角色分离：
 4. `label_semantic_proposals` 与 `label_ontology_*` ledger 记录候选、分歧、review、
    mutation provenance 和 validation history。
 
+当前不引入 label-ontology 专属 graph projection。现有 `kanban graph` / Oxigraph 只消费
+Knowledge Substrate 的 `entity_relations` mirror；ontology review、atom explain、proposal
+和 validation history 直接从 SQLite truth 读取。未来若为 rename/split/merge 或 provenance
+关系查询增加 graph projection，它必须是可删除重建的 derived store，不能拥有 canonical write
+path。
+
 Constructive ontology mutation 必须通过专用 service path：semantics patch/replace、
 atom apply、task-label bootstrap、proposal create/accept 和 validation 都要在同一 SQLite
 transaction 中写入对应 canonical row 与 provenance action，或一起回滚。通用
@@ -285,6 +291,7 @@ Dispatcher 见 [`DISPATCHER_SPEC.md`](DISPATCHER_SPEC.md)。
 12. task snapshot 与对应 event 必须同 transaction 提交。
 13. `tasks.status`、label binding truth、label semantics truth、ontology ledger 和派生检索层各自有明确写权限；derived stores 不拥有 canonical write path。
 14. 新的 constructive ontology mutation 不通过 generic lifecycle action endpoint；必须由专用 command/API/service 路径同时写 canonical state 与 provenance action；采用已存在 atom 只写 `adopt_existing_atom` provenance action，不伪装成新增 atom。
+15. label ontology graph projection 当前不存在；如未来新增，只能从 SQLite truth 派生并重建，不得成为 `labels`、`task_labels`、`label_semantics`、`label_atoms` 或 `label_ontology_*` 的写入口。
 
 ---
 

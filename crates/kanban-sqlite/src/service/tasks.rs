@@ -499,12 +499,50 @@ pub fn bootstrap_task_label_with_staged_verification(
     store: &(impl LabelAtomVectorStore + ?Sized),
     min_score: f32,
 ) -> Result<BootstrapTaskLabelVerifiedResult> {
+    bootstrap_task_label_with_staged_verification_impl(
+        BootstrapTaskLabelStagedVerificationArgs {
+            path: path.as_ref(),
+            board,
+            actor,
+            task_ref,
+            input,
+            store,
+            min_score,
+        },
+        |_| Ok(()),
+    )
+}
+
+#[cfg(feature = "vector-lancedb")]
+struct BootstrapTaskLabelStagedVerificationArgs<'a, S: LabelAtomVectorStore + ?Sized> {
+    path: &'a Path,
+    board: &'a str,
+    actor: &'a str,
+    task_ref: &'a str,
+    input: BootstrapTaskLabel,
+    store: &'a S,
+    min_score: f32,
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn bootstrap_task_label_with_staged_verification_impl<S: LabelAtomVectorStore + ?Sized>(
+    args: BootstrapTaskLabelStagedVerificationArgs<'_, S>,
+    mut stage_hook: impl FnMut(BootstrapStagedVerificationStage) -> Result<()>,
+) -> Result<BootstrapTaskLabelVerifiedResult> {
+    let BootstrapTaskLabelStagedVerificationArgs {
+        path,
+        board,
+        actor,
+        task_ref,
+        input,
+        store,
+        min_score,
+    } = args;
     if !(0.0..=1.0).contains(&min_score) {
         return Err(KanbanError::InvalidInput(
             "min_verify_score must be between 0 and 1".to_owned(),
         ));
     }
-    let path = path.as_ref();
     let conn = connect_file(path)?;
     let now = SystemClock.now_ms();
     let candidate = bootstrap_label_candidate(input)?;
@@ -518,6 +556,10 @@ pub fn bootstrap_task_label_with_staged_verification(
             now,
         )
     })?;
+    reach_bootstrap_staged_verification_stage(
+        BootstrapStagedVerificationStage::BeforeVerify,
+        &mut stage_hook,
+    )?;
     let staged_store = StagedBootstrapLabelAtomStore::new(store, preflight.atoms)?;
     let suggestions = suggest_task_labels_with(
         path,
@@ -580,6 +622,10 @@ pub fn bootstrap_task_label_with_staged_verification(
     }))
     .map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
 
+    reach_bootstrap_staged_verification_stage(
+        BootstrapStagedVerificationStage::BeforeCommit,
+        &mut stage_hook,
+    )?;
     let (task, semantics) = with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
         let task = resolve_task(&conn, &board_id, task_ref)?;
@@ -609,16 +655,79 @@ pub fn bootstrap_task_label_with_staged_verification(
             Some(verification_context),
         )?;
         attach_label_in_current_tx(&conn, &board_id, actor, &task.id, &adoption.label.id, now)?;
+        reach_bootstrap_staged_verification_stage(
+            BootstrapStagedVerificationStage::DuringCommit,
+            &mut stage_hook,
+        )?;
         Ok((
             get_task_by_id(&conn, &board_id, &task.id)?,
             adoption.semantics,
         ))
     })?;
+    reach_bootstrap_staged_verification_stage(
+        BootstrapStagedVerificationStage::AfterCommit,
+        &mut stage_hook,
+    )?;
     Ok(BootstrapTaskLabelVerifiedResult {
         task,
         semantics,
         verification,
     })
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BootstrapStagedVerificationStage {
+    BeforeVerify,
+    BeforeCommit,
+    DuringCommit,
+    AfterCommit,
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl BootstrapStagedVerificationStage {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::BeforeVerify => "before_verify",
+            Self::BeforeCommit => "before_commit",
+            Self::DuringCommit => "during_commit",
+            Self::AfterCommit => "after_commit",
+        }
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn reach_bootstrap_staged_verification_stage(
+    stage: BootstrapStagedVerificationStage,
+    stage_hook: &mut impl FnMut(BootstrapStagedVerificationStage) -> Result<()>,
+) -> Result<()> {
+    bootstrap_staged_debug_failpoint(stage)?;
+    stage_hook(stage)
+}
+
+#[cfg(all(feature = "vector-lancedb", debug_assertions))]
+fn bootstrap_staged_debug_failpoint(stage: BootstrapStagedVerificationStage) -> Result<()> {
+    if std::env::var("KANBAN_BOOTSTRAP_VERIFY_TEST_FAILPOINT").as_deref() != Ok(stage.as_str()) {
+        return Ok(());
+    }
+    if let Ok(marker) = std::env::var("KANBAN_BOOTSTRAP_VERIFY_TEST_MARKER") {
+        std::fs::write(&marker, stage.as_str()).map_err(|err| {
+            KanbanError::InvalidInput(format!(
+                "bootstrap verification test failpoint marker failed: {err}"
+            ))
+        })?;
+    }
+    let sleep_ms = std::env::var("KANBAN_BOOTSTRAP_VERIFY_TEST_SLEEP_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(30_000);
+    std::thread::sleep(std::time::Duration::from_millis(sleep_ms));
+    Ok(())
+}
+
+#[cfg(all(feature = "vector-lancedb", not(debug_assertions)))]
+fn bootstrap_staged_debug_failpoint(_stage: BootstrapStagedVerificationStage) -> Result<()> {
+    Ok(())
 }
 
 #[cfg(feature = "vector-lancedb")]
@@ -1990,4 +2099,282 @@ fn remove_task_label_in_current_tx(
         )?;
     }
     Ok(())
+}
+
+#[cfg(all(test, feature = "vector-lancedb"))]
+mod bootstrap_staged_verification_tests {
+    use super::*;
+    use crate::init::init_database;
+    use kanban_vector::{
+        LabelAtomVectorHit, LabelAtomVectorQuery, QueryEmbeddingProvider, VectorError,
+    };
+    use std::path::PathBuf;
+
+    struct TempDb {
+        _dir: tempfile::TempDir,
+        path: PathBuf,
+    }
+
+    impl TempDb {
+        fn new(name: &str) -> Self {
+            let dir = tempfile::Builder::new()
+                .prefix(&format!("kb-sqlite-bootstrap-stage-{name}-"))
+                .tempdir()
+                .expect("tempdir");
+            let path = dir.path().join("kb.db");
+            Self { _dir: dir, path }
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    struct PassingStore;
+
+    impl VectorStoreBackend for PassingStore {
+        fn embedding_model(&self) -> &str {
+            "bootstrap-stage-test-model"
+        }
+
+        fn status(&self) -> VectorStoreStatus {
+            VectorStoreStatus {
+                backend: "test-vector".to_owned(),
+                enabled: true,
+                message: "test vector store; dirty=false last_error=none; board_dirty=false"
+                    .to_owned(),
+                diagnostics: Vec::new(),
+                dirty: Some(false),
+                board_dirty: Some(false),
+                generation: None,
+            }
+        }
+    }
+
+    impl QueryEmbeddingProvider for PassingStore {
+        fn embed_query_text(&self, _text: &str) -> std::result::Result<Vec<f32>, VectorError> {
+            Ok(vec![1.0, 0.0, 0.0])
+        }
+    }
+
+    impl LabelAtomVectorStore for PassingStore {
+        fn query_label_atoms_by_vector(
+            &self,
+            _query: &LabelAtomVectorQuery,
+        ) -> std::result::Result<Vec<LabelAtomVectorHit>, VectorError> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct BootstrapCounts {
+        labels: i64,
+        label_semantics: i64,
+        label_atoms: i64,
+        task_labels: i64,
+        task_events: i64,
+        label_ontology_actions: i64,
+        label_ontology_action_atom_effects: i64,
+    }
+
+    fn table_count(conn: &Connection, table: &str) -> Result<i64> {
+        conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
+        .map_err(|err| KanbanError::Storage(err.to_string()))
+    }
+
+    fn bootstrap_counts(conn: &Connection) -> Result<BootstrapCounts> {
+        Ok(BootstrapCounts {
+            labels: table_count(conn, "labels")?,
+            label_semantics: table_count(conn, "label_semantics")?,
+            label_atoms: table_count(conn, "label_atoms")?,
+            task_labels: table_count(conn, "task_labels")?,
+            task_events: table_count(conn, "task_events")?,
+            label_ontology_actions: table_count(conn, "label_ontology_actions")?,
+            label_ontology_action_atom_effects: table_count(
+                conn,
+                "label_ontology_action_atom_effects",
+            )?,
+        })
+    }
+
+    fn label_count(conn: &Connection, label_name: &str) -> Result<i64> {
+        conn.query_row(
+            "SELECT COUNT(*) FROM labels WHERE name=?1",
+            [label_name],
+            |row| row.get(0),
+        )
+        .map_err(|err| KanbanError::Storage(err.to_string()))
+    }
+
+    fn bootstrap_action_count(conn: &Connection) -> Result<i64> {
+        conn.query_row(
+            "SELECT COUNT(*) FROM label_ontology_actions WHERE action_type='bootstrap_label'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|err| KanbanError::Storage(err.to_string()))
+    }
+
+    fn bootstrap_effect_count(conn: &Connection) -> Result<i64> {
+        conn.query_row(
+            "SELECT COUNT(*) FROM label_ontology_action_atom_effects",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|err| KanbanError::Storage(err.to_string()))
+    }
+
+    fn bootstrap_input() -> BootstrapTaskLabel {
+        BootstrapTaskLabel {
+            name: "database".to_owned(),
+            description: Some("Database persistence work".to_owned()),
+            applies_when: vec!["touches SQLite migrations".to_owned()],
+            positive_examples: vec!["new table migration".to_owned()],
+            ..BootstrapTaskLabel::default()
+        }
+    }
+
+    fn bootstrap_target(path: &std::path::Path) -> Result<TaskRecord> {
+        init_database(path, "tester")?;
+        create_task(
+            path,
+            "default",
+            "tester",
+            CreateTask::ready("bootstrap staged verify target"),
+        )
+    }
+
+    #[test]
+    fn staged_verify_rejects_task_change_between_verify_and_commit() -> Result<()> {
+        let temp = TempDb::new("task-change-before-commit");
+        let task = bootstrap_target(&temp.path)?;
+        let conn = connect_file(&temp.path)?;
+        let before = bootstrap_counts(&conn)?;
+        let hook_path = temp.path.clone();
+        let task_id = task.id.clone();
+        let mut changed = false;
+
+        let error = bootstrap_task_label_with_staged_verification_impl(
+            BootstrapTaskLabelStagedVerificationArgs {
+                path: &temp.path,
+                board: "default",
+                actor: "tester",
+                task_ref: &task.id,
+                input: bootstrap_input(),
+                store: &PassingStore,
+                min_score: 0.50,
+            },
+            |stage| {
+                if stage == BootstrapStagedVerificationStage::BeforeCommit && !changed {
+                    changed = true;
+                    update_task(
+                        &hook_path,
+                        "default",
+                        "tester",
+                        &task_id,
+                        TaskPatch {
+                            title: Some("bootstrap staged verify target changed".to_owned()),
+                            ..TaskPatch::default()
+                        },
+                    )?;
+                }
+                Ok(())
+            },
+        )
+        .expect_err("task change must conflict");
+
+        assert!(matches!(error, KanbanError::Conflict(_)), "{error}");
+        assert_eq!(label_count(&conn, "database")?, 0);
+        assert_eq!(
+            table_count(&conn, "label_semantics")?,
+            before.label_semantics
+        );
+        assert_eq!(table_count(&conn, "label_atoms")?, before.label_atoms);
+        assert_eq!(table_count(&conn, "task_labels")?, before.task_labels);
+        assert_eq!(bootstrap_action_count(&conn)?, 0);
+        assert_eq!(bootstrap_effect_count(&conn)?, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn staged_verify_rejects_ontology_change_between_verify_and_commit() -> Result<()> {
+        let temp = TempDb::new("ontology-change-before-commit");
+        let task = bootstrap_target(&temp.path)?;
+        let conn = connect_file(&temp.path)?;
+        let before = bootstrap_counts(&conn)?;
+        let hook_path = temp.path.clone();
+        let mut changed = false;
+
+        let error = bootstrap_task_label_with_staged_verification_impl(
+            BootstrapTaskLabelStagedVerificationArgs {
+                path: &temp.path,
+                board: "default",
+                actor: "tester",
+                task_ref: &task.id,
+                input: bootstrap_input(),
+                store: &PassingStore,
+                min_score: 0.50,
+            },
+            |stage| {
+                if stage == BootstrapStagedVerificationStage::BeforeCommit && !changed {
+                    changed = true;
+                    create_label(
+                        &hook_path,
+                        "default",
+                        CreateLabel {
+                            name: "concurrent-ontology".to_owned(),
+                            color: None,
+                        },
+                    )?;
+                }
+                Ok(())
+            },
+        )
+        .expect_err("ontology change must conflict");
+
+        assert!(matches!(error, KanbanError::Conflict(_)), "{error}");
+        assert_eq!(label_count(&conn, "database")?, 0);
+        assert_eq!(
+            table_count(&conn, "label_semantics")?,
+            before.label_semantics
+        );
+        assert_eq!(table_count(&conn, "label_atoms")?, before.label_atoms);
+        assert_eq!(table_count(&conn, "task_labels")?, before.task_labels);
+        assert_eq!(bootstrap_action_count(&conn)?, 0);
+        assert_eq!(bootstrap_effect_count(&conn)?, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn staged_verify_rolls_back_if_commit_stage_fails() -> Result<()> {
+        let temp = TempDb::new("during-commit-rollback");
+        let task = bootstrap_target(&temp.path)?;
+        let conn = connect_file(&temp.path)?;
+        let before = bootstrap_counts(&conn)?;
+
+        let error = bootstrap_task_label_with_staged_verification_impl(
+            BootstrapTaskLabelStagedVerificationArgs {
+                path: &temp.path,
+                board: "default",
+                actor: "tester",
+                task_ref: &task.id,
+                input: bootstrap_input(),
+                store: &PassingStore,
+                min_score: 0.50,
+            },
+            |stage| {
+                if stage == BootstrapStagedVerificationStage::DuringCommit {
+                    return Err(KanbanError::InvalidInput(
+                        "injected during commit failure".to_owned(),
+                    ));
+                }
+                Ok(())
+            },
+        )
+        .expect_err("during commit hook must fail");
+
+        assert!(error.to_string().contains("injected during commit failure"));
+        assert_eq!(bootstrap_counts(&conn)?, before);
+        assert_eq!(label_count(&conn, "database")?, 0);
+        Ok(())
+    }
 }

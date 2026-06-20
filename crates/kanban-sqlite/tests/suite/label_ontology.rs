@@ -1854,13 +1854,13 @@ fn label_ontology_generic_action_rejects_canonical_mutation_types() -> anyhow::R
 }
 
 #[test]
-fn label_ontology_structure_plan_records_change_set_without_canonical_mutation()
+fn label_ontology_legacy_structure_plan_actions_remain_readable_and_importable()
 -> anyhow::Result<()> {
-    let temp =
-        TempDb::new("label_ontology_structure_plan_records_change_set_without_canonical_mutation")?;
-    init_database(&temp.path, "tester")?;
+    let source =
+        TempDb::new("label_ontology_legacy_structure_plan_actions_remain_readable_and_importable")?;
+    init_database(&source.path, "tester")?;
     create_label(
-        &temp.path,
+        &source.path,
         "default",
         kanban_sqlite::CreateLabel {
             name: "cli".to_owned(),
@@ -1868,13 +1868,13 @@ fn label_ontology_structure_plan_records_change_set_without_canonical_mutation()
         },
     )?;
     let task = create_task(
-        &temp.path,
+        &source.path,
         "default",
         "tester",
-        CreateTask::ready("Rename CLI ontology boundary"),
+        CreateTask::ready("Legacy structure plan history remains readable"),
     )?;
     kanban_sqlite::add_task_labels_with_options(
-        &temp.path,
+        &source.path,
         "default",
         "tester",
         &task.id,
@@ -1888,480 +1888,127 @@ fn label_ontology_structure_plan_records_change_set_without_canonical_mutation()
     rename_signal.proposal_json = json!({
         "from": "cli",
         "to": "command surface",
-        "reason": "CLI now covers command surfaces beyond command-line only."
+        "reason": "Historical structure plan fixture."
     })
     .to_string();
     let observation = record_label_ontology_observation(
-        &temp.path,
+        &source.path,
         "default",
         &task.id,
         sample_record_input(vec![rename_signal]),
     )?;
     let signal_id = observation.signals[0].id.clone();
     create_label_ontology_action(
-        &temp.path,
+        &source.path,
         "default",
         action_input(
             LabelOntologyActionType::Confirm,
             vec![signal_id.clone()],
-            "Reviewer agrees this structure signal is real.",
+            "Reviewer confirmed historical structure signal.",
         ),
     )?;
+    let before_labels = structure_label_names(&source.path)?;
+    let before_bindings = structure_task_label_rows(&source.path)?;
 
-    let before_label_names: Vec<String> = connect_file(&temp.path)?
-        .prepare("SELECT name FROM labels ORDER BY name")?
-        .query_map([], |row| row.get::<_, String>(0))?
-        .collect::<Result<Vec<_>, _>>()?;
-    let before_binding_count: i64 =
-        connect_file(&temp.path)?
-            .query_row("SELECT COUNT(*) FROM task_labels", [], |row| row.get(0))?;
-
-    let action = plan_label_ontology_structure_change(
-        &temp.path,
-        "default",
-        LabelOntologyStructurePlanInput {
-            actor: validation_actor(),
-            signal_ids: vec![signal_id.clone()],
-            action_type: LabelOntologyActionType::RenameLabel,
-            target_label_ref: "cli".to_owned(),
-            proposed_label_name: Some("command surface".to_owned()),
-            related_label_refs: Vec::new(),
-            task_binding_policy: None,
-            validation_policy_json: None,
-            reason: "Plan rename before any canonical label identity rewrite.".to_owned(),
+    let conn = connect_file(&source.path)?;
+    let board_id: String =
+        conn.query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })?;
+    let target_label_id: String = conn.query_row(
+        "SELECT id FROM labels WHERE board_id=?1 AND name='cli'",
+        params![board_id.as_str()],
+        |row| row.get(0),
+    )?;
+    let action_id = "loa_legacy_structure_plan";
+    let change_json = json!({
+        "phase": "planned_structure_change",
+        "canonical_mutation_applied": false,
+        "change_type": "rename_label",
+        "target_label": {
+            "id": target_label_id,
+            "name": "cli",
         },
-    )?;
-
-    assert_eq!(action.action_type, LabelOntologyActionType::RenameLabel);
-    assert_eq!(
-        action.validation_status,
-        LabelOntologyValidationStatus::Pending
-    );
-    assert_eq!(action.signal_ids, vec![signal_id]);
-    assert!(action.result_label_id.is_none());
-    assert!(action.result_atom_id.is_none());
-    assert!(action.canonical_before_hash.is_some());
-    assert!(action.canonical_after_hash.is_some());
-    assert_ne!(action.canonical_before_hash, action.canonical_after_hash);
-    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
-    assert_eq!(change["phase"], "planned_structure_change");
-    assert_eq!(change["canonical_mutation_applied"], false);
-    assert_eq!(change["change_type"], "rename_label");
-    assert_eq!(change["target_label"]["name"], "cli");
-    assert_eq!(change["after"]["proposed_label_name"], "command surface");
-    assert_eq!(
-        change["task_binding_migration_plan"]["policy"],
-        "preserve_bindings"
-    );
-    assert_eq!(change["validation_policy"]["required"], true);
-    assert_eq!(
-        change["validation_policy"]["trusted_validation_required_before_apply"],
-        true
-    );
-    let validation: serde_json::Value = serde_json::from_str(&action.validation_json)?;
-    assert_eq!(validation["state"], "pending_structure_change_plan");
-
-    let after_label_names: Vec<String> = connect_file(&temp.path)?
-        .prepare("SELECT name FROM labels ORDER BY name")?
-        .query_map([], |row| row.get::<_, String>(0))?
-        .collect::<Result<Vec<_>, _>>()?;
-    let after_binding_count: i64 =
-        connect_file(&temp.path)?
-            .query_row("SELECT COUNT(*) FROM task_labels", [], |row| row.get(0))?;
-    assert_eq!(after_label_names, before_label_names);
-    assert_eq!(after_binding_count, before_binding_count);
-
-    Ok(())
-}
-
-#[test]
-fn label_ontology_structure_plan_requires_confirmed_source_signal() -> anyhow::Result<()> {
-    let temp = TempDb::new("label_ontology_structure_plan_requires_confirmed_source_signal")?;
-    init_database(&temp.path, "tester")?;
-    create_label(
-        &temp.path,
-        "default",
-        kanban_sqlite::CreateLabel {
-            name: "cli".to_owned(),
-            color: None,
+        "after": {
+            "proposed_label_name": "command surface",
         },
+    })
+    .to_string();
+    let validation_json = json!({
+        "state": "pending_structure_change_plan",
+        "trusted_validation_required_before_apply": true,
+    })
+    .to_string();
+    conn.execute(
+        "INSERT INTO label_ontology_actions(
+            id, board_id, parent_action_id, action_type, reason,
+            target_label_id, result_label_id, result_atom_id, result_atom_content_hash,
+            result_proposal_id, canonical_before_hash, canonical_after_hash,
+            change_json, validation_requirement, validation_status, validation_json,
+            created_by, created_by_type, agent_type, created_at
+        ) VALUES (
+            ?1, ?2, NULL, 'rename_label', ?3,
+            ?4, NULL, NULL, NULL,
+            NULL, 'legacy-before', 'legacy-after',
+            ?5, 'unsupported', 'pending', ?6,
+            'legacy-agent', 'agent', 'fixture', 42
+        )",
+        params![
+            action_id,
+            board_id.as_str(),
+            "Historical structure plan kept for read compatibility.",
+            target_label_id.as_str(),
+            change_json,
+            validation_json,
+        ],
     )?;
-    let task = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("Plan CLI split ontology boundary"),
-    )?;
-    let mut split_signal = sample_signal_input("split-cli-surface");
-    split_signal.proposed_action = LabelOntologyProposedAction::SplitLabel;
-    split_signal.candidate_atom = None;
-    split_signal.related_labels_json = json!(["command-surface"]).to_string();
-    let observation = record_label_ontology_observation(
-        &temp.path,
-        "default",
-        &task.id,
-        sample_record_input(vec![split_signal]),
-    )?;
-    let signal_id = observation.signals[0].id.clone();
-
-    let error = result_err(plan_label_ontology_structure_change(
-        &temp.path,
-        "default",
-        LabelOntologyStructurePlanInput {
-            actor: validation_actor(),
-            signal_ids: vec![signal_id],
-            action_type: LabelOntologyActionType::SplitLabel,
-            target_label_ref: "cli".to_owned(),
-            proposed_label_name: None,
-            related_label_refs: vec!["command-surface".to_owned()],
-            task_binding_policy: Some("manual_map_required".to_owned()),
-            validation_policy_json: None,
-            reason: "Unconfirmed signals cannot drive structure plans.".to_owned(),
-        },
-    ))?;
-    assert!(
-        error
-            .to_string()
-            .contains("must be one of [Confirmed], found open")
-    );
-
-    Ok(())
-}
-
-#[test]
-fn label_ontology_structure_plan_covers_split_and_signal_history() -> anyhow::Result<()> {
-    let temp = TempDb::new("label_ontology_structure_plan_covers_split_and_signal_history")?;
-    init_database(&temp.path, "tester")?;
-    create_label(
-        &temp.path,
-        "default",
-        kanban_sqlite::CreateLabel {
-            name: "cli".to_owned(),
-            color: None,
-        },
-    )?;
-    create_label(
-        &temp.path,
-        "default",
-        kanban_sqlite::CreateLabel {
-            name: "command-surface".to_owned(),
-            color: None,
-        },
-    )?;
-    let cli_task = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("CLI task keeps current binding while split is planned"),
-    )?;
-    let related_task = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("Command surface task keeps related binding while split is planned"),
-    )?;
-    kanban_sqlite::add_task_labels_with_options(
-        &temp.path,
-        "default",
-        "tester",
-        &cli_task.id,
-        &["cli".to_owned()],
-        false,
-    )?;
-    kanban_sqlite::add_task_labels_with_options(
-        &temp.path,
-        "default",
-        "tester",
-        &related_task.id,
-        &["command-surface".to_owned()],
-        false,
-    )?;
-    let mut split_signal = sample_signal_input("split-cli-command-surface");
-    split_signal.proposed_action = LabelOntologyProposedAction::SplitLabel;
-    split_signal.candidate_atom = None;
-    split_signal.related_labels_json = json!(["command-surface"]).to_string();
-    split_signal.rationale = "CLI should be split from broader command surface work.".to_owned();
-    let observation = record_label_ontology_observation(
-        &temp.path,
-        "default",
-        &cli_task.id,
-        sample_record_input(vec![split_signal]),
-    )?;
-    let signal_id = observation.signals[0].id.clone();
-    create_label_ontology_action(
-        &temp.path,
-        "default",
-        action_input(
-            LabelOntologyActionType::Confirm,
-            vec![signal_id.clone()],
-            "Reviewer confirmed split structure signal.",
-        ),
+    conn.execute(
+        "INSERT INTO label_ontology_action_signals(board_id, action_id, signal_id, created_at)
+         VALUES (?1, ?2, ?3, 42)",
+        params![board_id.as_str(), action_id, signal_id.as_str()],
     )?;
 
-    let before_labels = structure_label_names(&temp.path)?;
-    let before_bindings = structure_task_label_rows(&temp.path)?;
-
-    let action = plan_label_ontology_structure_change(
-        &temp.path,
-        "default",
-        LabelOntologyStructurePlanInput {
-            actor: validation_actor(),
-            signal_ids: vec![signal_id.clone()],
-            action_type: LabelOntologyActionType::SplitLabel,
-            target_label_ref: "cli".to_owned(),
-            proposed_label_name: None,
-            related_label_refs: vec!["command-surface".to_owned()],
-            task_binding_policy: None,
-            validation_policy_json: None,
-            reason: "Plan split without rewriting canonical label identity or bindings.".to_owned(),
-        },
-    )?;
-
-    assert_eq!(action.action_type, LabelOntologyActionType::SplitLabel);
-    assert_eq!(
-        action.validation_status,
-        LabelOntologyValidationStatus::Pending
-    );
-    assert_eq!(action.signal_ids, vec![signal_id.clone()]);
-    assert!(action.result_label_id.is_none());
-    assert!(action.result_atom_id.is_none());
-    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
-    assert_eq!(change["phase"], "planned_structure_change");
-    assert_eq!(change["canonical_mutation_applied"], false);
-    assert_eq!(change["change_type"], "split_label");
-    assert_eq!(change["target_label"]["name"], "cli");
-    assert_eq!(change["related_labels"][0]["name"], "command-surface");
-    assert_eq!(change["before"]["labels"][0]["task_binding_count"], 1);
-    assert_eq!(change["before"]["labels"][1]["task_binding_count"], 1);
-    assert_eq!(
-        change["task_binding_migration_plan"]["policy"],
-        "manual_map_required"
-    );
-    assert_eq!(
-        change["source_signals"][0]["proposed_action"],
-        "split_label"
-    );
-    assert_eq!(
-        change["source_signals"][0]["related_labels"],
-        json!(["command-surface"])
-    );
-
-    assert_eq!(structure_label_names(&temp.path)?, before_labels);
-    assert_eq!(structure_task_label_rows(&temp.path)?, before_bindings);
-    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
+    let detail = get_label_ontology_signal(&source.path, &signal_id)?;
     assert_eq!(detail.signal.status, LabelOntologySignalStatus::Confirmed);
-    assert!(
-        detail
-            .actions
-            .iter()
-            .any(|candidate| candidate.id == action.id)
-    );
-
-    Ok(())
-}
-
-#[test]
-fn label_ontology_structure_plan_covers_merge_policy_without_binding_migration()
--> anyhow::Result<()> {
-    let temp =
-        TempDb::new("label_ontology_structure_plan_covers_merge_policy_without_binding_migration")?;
-    init_database(&temp.path, "tester")?;
-    create_label(
-        &temp.path,
-        "default",
-        kanban_sqlite::CreateLabel {
-            name: "cli".to_owned(),
-            color: None,
-        },
-    )?;
-    create_label(
-        &temp.path,
-        "default",
-        kanban_sqlite::CreateLabel {
-            name: "command-surface".to_owned(),
-            color: None,
-        },
-    )?;
-    let cli_task = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("CLI task remains bound while merge is only planned"),
-    )?;
-    let related_task = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("Related command task remains bound while merge is only planned"),
-    )?;
-    kanban_sqlite::add_task_labels_with_options(
-        &temp.path,
-        "default",
-        "tester",
-        &cli_task.id,
-        &["cli".to_owned()],
-        false,
-    )?;
-    kanban_sqlite::add_task_labels_with_options(
-        &temp.path,
-        "default",
-        "tester",
-        &related_task.id,
-        &["command-surface".to_owned()],
-        false,
-    )?;
-    let mut merge_signal = sample_signal_input("merge-command-surface-into-cli");
-    merge_signal.proposed_action = LabelOntologyProposedAction::MergeLabels;
-    merge_signal.candidate_atom = None;
-    merge_signal.related_labels_json = json!(["command-surface"]).to_string();
-    merge_signal.rationale = "Command surface should merge into CLI boundary.".to_owned();
-    let observation = record_label_ontology_observation(
-        &temp.path,
-        "default",
-        &cli_task.id,
-        sample_record_input(vec![merge_signal]),
-    )?;
-    let signal_id = observation.signals[0].id.clone();
-    create_label_ontology_action(
-        &temp.path,
-        "default",
-        action_input(
-            LabelOntologyActionType::Confirm,
-            vec![signal_id.clone()],
-            "Reviewer confirmed merge structure signal.",
-        ),
-    )?;
-
-    let before_labels = structure_label_names(&temp.path)?;
-    let before_bindings = structure_task_label_rows(&temp.path)?;
-
-    let action = plan_label_ontology_structure_change(
-        &temp.path,
-        "default",
-        LabelOntologyStructurePlanInput {
-            actor: validation_actor(),
-            signal_ids: vec![signal_id.clone()],
-            action_type: LabelOntologyActionType::MergeLabels,
-            target_label_ref: "cli".to_owned(),
-            proposed_label_name: None,
-            related_label_refs: vec!["command-surface".to_owned()],
-            task_binding_policy: None,
-            validation_policy_json: Some(
-                json!({
-                    "required": true,
-                    "policy": "manual_merge_review",
-                    "trusted_validation_required_before_apply": true
-                })
-                .to_string(),
-            ),
-            reason: "Plan merge without moving existing task bindings yet.".to_owned(),
-        },
-    )?;
-
-    assert_eq!(action.action_type, LabelOntologyActionType::MergeLabels);
-    assert_eq!(action.signal_ids, vec![signal_id]);
-    let change: serde_json::Value = serde_json::from_str(&action.change_json)?;
-    assert_eq!(change["canonical_mutation_applied"], false);
-    assert_eq!(change["change_type"], "merge_labels");
-    assert_eq!(change["target_label"]["name"], "cli");
-    assert_eq!(change["related_labels"][0]["name"], "command-surface");
+    let legacy_action = detail
+        .actions
+        .iter()
+        .find(|action| action.id == action_id)
+        .context("legacy structure action")?;
     assert_eq!(
-        change["task_binding_migration_plan"]["policy"],
-        "move_related_to_target"
+        legacy_action.action_type,
+        LabelOntologyActionType::RenameLabel
     );
-    assert_eq!(change["validation_policy"]["policy"], "manual_merge_review");
-    let validation: serde_json::Value = serde_json::from_str(&action.validation_json)?;
-    assert_eq!(validation["state"], "pending_structure_change_plan");
-    assert_eq!(validation["trusted_validation_required_before_apply"], true);
-
-    assert_eq!(structure_label_names(&temp.path)?, before_labels);
-    assert_eq!(structure_task_label_rows(&temp.path)?, before_bindings);
-
-    Ok(())
-}
-
-#[test]
-fn label_ontology_structure_plan_failure_does_not_commit_partial_action() -> anyhow::Result<()> {
-    let temp = TempDb::new("label_ontology_structure_plan_failure_does_not_commit_partial_action")?;
-    init_database(&temp.path, "tester")?;
-    create_label(
-        &temp.path,
-        "default",
-        kanban_sqlite::CreateLabel {
-            name: "cli".to_owned(),
-            color: None,
-        },
-    )?;
-    create_label(
-        &temp.path,
-        "default",
-        kanban_sqlite::CreateLabel {
-            name: "command-surface".to_owned(),
-            color: None,
-        },
-    )?;
-    let task = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("Invalid structure plan should not leave action rows"),
-    )?;
-    let mut split_signal = sample_signal_input("split-cli-but-request-merge");
-    split_signal.proposed_action = LabelOntologyProposedAction::SplitLabel;
-    split_signal.candidate_atom = None;
-    split_signal.related_labels_json = json!(["command-surface"]).to_string();
-    let observation = record_label_ontology_observation(
-        &temp.path,
-        "default",
-        &task.id,
-        sample_record_input(vec![split_signal]),
-    )?;
-    let signal_id = observation.signals[0].id.clone();
-    create_label_ontology_action(
-        &temp.path,
-        "default",
-        action_input(
-            LabelOntologyActionType::Confirm,
-            vec![signal_id.clone()],
-            "Reviewer confirmed split signal before an invalid plan request.",
-        ),
-    )?;
-    let before_action_count = ontology_action_count(&temp.path)?;
-    let before_link_count = ontology_action_signal_count(&temp.path)?;
-    let before_labels = structure_label_names(&temp.path)?;
-    let before_bindings = structure_task_label_rows(&temp.path)?;
-
-    let error = result_err(plan_label_ontology_structure_change(
-        &temp.path,
-        "default",
-        LabelOntologyStructurePlanInput {
-            actor: validation_actor(),
-            signal_ids: vec![signal_id.clone()],
-            action_type: LabelOntologyActionType::MergeLabels,
-            target_label_ref: "cli".to_owned(),
-            proposed_label_name: None,
-            related_label_refs: vec!["command-surface".to_owned()],
-            task_binding_policy: None,
-            validation_policy_json: None,
-            reason: "This intentionally mismatches the confirmed split signal.".to_owned(),
-        },
-    ))?;
-
-    assert!(
-        error
-            .to_string()
-            .contains("does not match structure plan action merge_labels")
-    );
-    assert_eq!(ontology_action_count(&temp.path)?, before_action_count);
-    assert_eq!(ontology_action_signal_count(&temp.path)?, before_link_count);
-    assert_eq!(structure_label_names(&temp.path)?, before_labels);
-    assert_eq!(structure_task_label_rows(&temp.path)?, before_bindings);
-    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
-    assert_eq!(detail.signal.status, LabelOntologySignalStatus::Confirmed);
-    assert_eq!(detail.actions.len(), 1);
     assert_eq!(
-        detail.actions[0].action_type,
-        LabelOntologyActionType::Confirm
+        legacy_action.validation_requirement,
+        LabelOntologyValidationRequirement::Unsupported
+    );
+    assert_eq!(
+        legacy_action.validation_effective_outcome,
+        LabelOntologyValidationEffectiveOutcome::Unsupported
+    );
+    assert_eq!(legacy_action.signal_ids, vec![signal_id.clone()]);
+    assert_eq!(structure_label_names(&source.path)?, before_labels);
+    assert_eq!(structure_task_label_rows(&source.path)?, before_bindings);
+
+    let export_path = source.dir.join("legacy-structure-plan.jsonl");
+    export_jsonl(&source.path, "default", &export_path)?;
+    let target = TempDb::new("label_ontology_legacy_structure_plan_import_target")?;
+    init_database(&target.path, "tester")?;
+    import_jsonl(&target.path, &export_path, true)?;
+    let imported_detail = get_label_ontology_signal(&target.path, &signal_id)?;
+    let imported_action = imported_detail
+        .actions
+        .iter()
+        .find(|action| action.id == action_id)
+        .context("imported legacy structure action")?;
+    assert_eq!(
+        imported_action.validation_requirement,
+        LabelOntologyValidationRequirement::Unsupported
+    );
+    assert_eq!(
+        imported_action.validation_effective_outcome,
+        LabelOntologyValidationEffectiveOutcome::Unsupported
     );
 
     Ok(())
@@ -3037,14 +2684,14 @@ fn label_ontology_validation_effective_outcome_reduces_requirement_and_latest_at
     );
     assert_eq!(detail.signal.status, LabelOntologySignalStatus::Confirmed);
 
-    let passed_id = seed_validation_action_at(
-        &temp,
-        "loa_effective_passed_latest",
-        &fixture.task.board_id,
-        &fixture.apply_action_id,
-        std::slice::from_ref(&fixture.signal_id),
-        LabelOntologyValidationStatus::Passed,
-        json!({
+    let passed_id = seed_validation_action_with(SeedValidationAction {
+        temp: &temp,
+        id: "loa_effective_passed_latest",
+        board_id: &fixture.task.board_id,
+        parent_action_id: &fixture.apply_action_id,
+        signal_ids: std::slice::from_ref(&fixture.signal_id),
+        status: LabelOntologyValidationStatus::Passed,
+        validation_json: json!({
             "manual": typed_positive_fixture_json(&fixture),
             "cases": [{
                 "signal_id": &fixture.signal_id,
@@ -3055,8 +2702,8 @@ fn label_ontology_validation_effective_outcome_reduces_requirement_and_latest_at
                 "case_count": 1
             }
         }),
-        9_999_999_999_999,
-    )?;
+        created_at: 9_999_999_999_999,
+    })?;
     let detail = get_label_ontology_signal(&temp.path, &fixture.signal_id)?;
     let required_parent = detail
         .actions
@@ -6520,7 +6167,7 @@ fn seed_validation_action(
     status: LabelOntologyValidationStatus,
     validation_json: serde_json::Value,
 ) -> anyhow::Result<String> {
-    seed_validation_action_at(
+    seed_validation_action_with(SeedValidationAction {
         temp,
         id,
         board_id,
@@ -6528,21 +6175,23 @@ fn seed_validation_action(
         signal_ids,
         status,
         validation_json,
-        123456,
-    )
+        created_at: 123456,
+    })
 }
 
-fn seed_validation_action_at(
-    temp: &TempDb,
-    id: &str,
-    board_id: &str,
-    parent_action_id: &str,
-    signal_ids: &[String],
+struct SeedValidationAction<'a> {
+    temp: &'a TempDb,
+    id: &'a str,
+    board_id: &'a str,
+    parent_action_id: &'a str,
+    signal_ids: &'a [String],
     status: LabelOntologyValidationStatus,
     validation_json: serde_json::Value,
     created_at: i64,
-) -> anyhow::Result<String> {
-    let conn = connect_file(&temp.path)?;
+}
+
+fn seed_validation_action_with(input: SeedValidationAction<'_>) -> anyhow::Result<String> {
+    let conn = connect_file(&input.temp.path)?;
     conn.execute(
         "INSERT INTO label_ontology_actions(
          id, board_id, parent_action_id, action_type, reason, target_label_id, result_label_id,
@@ -6553,22 +6202,22 @@ fn seed_validation_action_at(
          NULL, NULL, NULL, NULL, NULL, NULL, NULL, '{}', ?4, ?5, 'test-fixture',
          'agent', 'codex', ?6)",
         params![
-            id,
-            board_id,
-            parent_action_id,
-            status.to_string(),
-            validation_json.to_string(),
-            created_at,
+            input.id,
+            input.board_id,
+            input.parent_action_id,
+            input.status.to_string(),
+            input.validation_json.to_string(),
+            input.created_at,
         ],
     )?;
-    for signal_id in signal_ids {
+    for signal_id in input.signal_ids {
         conn.execute(
             "INSERT INTO label_ontology_action_signals(board_id, action_id, signal_id, created_at)
              VALUES (?1, ?2, ?3, ?4)",
-            params![board_id, id, signal_id, created_at],
+            params![input.board_id, input.id, signal_id, input.created_at],
         )?;
     }
-    Ok(id.to_owned())
+    Ok(input.id.to_owned())
 }
 
 fn typed_positive_fixture_json(fixture: &OntologyValidationFixture) -> serde_json::Value {
@@ -7106,14 +6755,6 @@ fn ontology_action_count(path: &Path) -> anyhow::Result<i64> {
             |row| row.get(0),
         )?,
     )
-}
-
-fn ontology_action_signal_count(path: &Path) -> anyhow::Result<i64> {
-    Ok(connect_file(path)?.query_row(
-        "SELECT COUNT(*) FROM label_ontology_action_signals",
-        [],
-        |row| row.get(0),
-    )?)
 }
 
 fn structure_label_names(path: &Path) -> anyhow::Result<Vec<String>> {

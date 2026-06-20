@@ -314,7 +314,7 @@ function Panel({
   )
 }
 
-function SignalList({
+export function SignalList({
   loading,
   signals,
   selectedSignalId,
@@ -363,7 +363,7 @@ function SignalList({
   )
 }
 
-function ReviewGroups({
+export function ReviewGroups({
   loading,
   groups,
   onSelectSignal,
@@ -413,7 +413,7 @@ function ReviewGroups({
   )
 }
 
-function SignalDetail({
+export function SignalDetail({
   loading,
   detail,
   actionReason,
@@ -541,7 +541,7 @@ function ActionHistory({
   )
 }
 
-function AtomExplain({ loading, explain }: { loading: boolean; explain: LabelAtomExplainRecord | null }) {
+export function AtomExplain({ loading, explain }: { loading: boolean; explain: LabelAtomExplainRecord | null }) {
   if (loading) return <Skeleton className="h-24" />
   if (!explain) {
     return (
@@ -557,6 +557,9 @@ function AtomExplain({ loading, explain }: { loading: boolean; explain: LabelAto
           {explain.legacy_untracked ? "legacy untracked" : "provenance tracked"}
         </Badge>
         {explain.atom ? <Badge variant="secondary">{explain.atom.label_name}</Badge> : null}
+        {explain.supporting_signals.some((entry) => entry.suggest_degraded) ? (
+          <Badge variant="review">degraded evidence</Badge>
+        ) : null}
       </div>
       {explain.atom ? (
         <div className="rounded-md border border-border bg-card p-3">
@@ -580,6 +583,15 @@ function AtomExplain({ loading, explain }: { loading: boolean; explain: LabelAto
             <span className="text-xs text-muted-foreground">{entry.matched_by}</span>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{entry.action.reason}</p>
+        </div>
+      ))}
+      {explain.validation_history.slice(0, 4).map((entry) => (
+        <div key={entry.action.id} className="rounded-md border border-border bg-card p-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={validationTone(entry.validation_status)}>{entry.validation_status}</Badge>
+            <span className="text-xs text-muted-foreground">parent {shortId(entry.parent_action_id)}</span>
+          </div>
+          {entry.warnings.length ? <p className="mt-1 text-xs text-muted-foreground">{entry.warnings.join("; ")}</p> : null}
         </div>
       ))}
     </div>

@@ -4296,7 +4296,9 @@ fn label_ontology_jsonl_import_rejects_cross_board_action_signal_link() -> anyho
     let error = result_err(import_jsonl(&target.path, &invalid_export, true))?;
 
     assert!(
-        error.to_string().contains("FOREIGN KEY constraint failed"),
+        error
+            .to_string()
+            .contains("label ontology action-signal board mismatch"),
         "error: {error}"
     );
     Ok(())

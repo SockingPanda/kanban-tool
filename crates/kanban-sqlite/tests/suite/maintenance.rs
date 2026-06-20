@@ -439,6 +439,54 @@ fn doctor_detects_cross_board_history_relationship_rows() -> anyhow::Result<()> 
 }
 
 #[test]
+fn doctor_reports_sqlite_foreign_key_check_violations() -> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_reports_sqlite_foreign_key_check_violations")?;
+    let task = seed_label_semantic_proposal_fk_fixture(&temp)?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+    conn.execute(
+        "UPDATE label_semantic_proposals
+         SET top1_existing_label_id='l_missing_fk_parent'
+         WHERE id='lp_fk_check'",
+        [],
+    )?;
+    conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+    let fk_errors: i64 =
+        conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+            row.get(0)
+        })?;
+    assert_eq!(fk_errors, 1);
+    drop(conn);
+
+    let report = doctor_database(&temp.path)?;
+
+    assert!(!report.ok, "{report:#?}");
+    assert!(report.consistency_errors >= 1, "{report:#?}");
+    assert!(
+        report.consistency_issues.iter().any(|issue| {
+            issue.code == "sqlite_foreign_key_violation"
+                && issue.severity == "error"
+                && issue.message.contains("table=label_semantic_proposals")
+                && issue.message.contains("rowid=")
+                && issue.message.contains("parent=labels")
+                && issue.message.contains("fk_index=")
+                && issue
+                    .record_ids
+                    .iter()
+                    .any(|record_id| record_id.starts_with("label_semantic_proposals:"))
+                && issue
+                    .record_ids
+                    .iter()
+                    .any(|record_id| record_id == "labels")
+        }),
+        "task={} issues={:#?}",
+        task.id,
+        report.consistency_issues
+    );
+    Ok(())
+}
+
+#[test]
 fn jsonl_import_rejects_cross_board_foundation_relationship_rows() -> anyhow::Result<()> {
     let source = TempDb::new("jsonl_import_rejects_cross_board_foundation_source")?;
     let fixture = seed_foundation_relationship_fixture(&source)?;
@@ -477,9 +525,19 @@ fn jsonl_import_rejects_cross_board_foundation_relationship_rows() -> anyhow::Re
 
         let message = error.to_string();
         match case.rejection {
-            FoundationRelationshipImportRejection::ForeignKey => {
+            FoundationRelationshipImportRejection::Doctor(expected_table) => {
                 assert!(
-                    message.contains("FOREIGN KEY constraint failed"),
+                    message.contains("imported data failed doctor checks"),
+                    "{}: {message}",
+                    case.record_type
+                );
+                assert!(
+                    message.contains(expected_table),
+                    "{}: {message}",
+                    case.record_type
+                );
+                assert!(
+                    message.contains("table="),
                     "{}: {message}",
                     case.record_type
                 );
@@ -503,6 +561,50 @@ fn jsonl_import_rejects_cross_board_foundation_relationship_rows() -> anyhow::Re
         assert_eq!(target_tasks.len(), 1);
         assert_eq!(target_tasks[0].id, sentinel.id);
     }
+    Ok(())
+}
+
+#[test]
+fn jsonl_import_foreign_key_check_failure_rolls_back_replace() -> anyhow::Result<()> {
+    let source = TempDb::new("jsonl_import_foreign_key_check_failure_source")?;
+    seed_label_semantic_proposal_fk_fixture(&source)?;
+    let export_path = source.dir.join("fk-source.jsonl");
+    export_jsonl(&source.path, "default", &export_path)?;
+    let source_jsonl = std::fs::read_to_string(&export_path)?;
+    let invalid_jsonl = set_jsonl_record_field(
+        &source_jsonl,
+        "label_semantic_proposal",
+        "top1_existing_label_id",
+        serde_json::Value::String("l_missing_fk_parent".to_owned()),
+    )?;
+    let invalid_path = source.dir.join("fk-invalid.jsonl");
+    std::fs::write(&invalid_path, invalid_jsonl)?;
+
+    let target = TempDb::new("jsonl_import_foreign_key_check_failure_target")?;
+    init_database(&target.path, "tester")?;
+    let sentinel = create_task(
+        &target.path,
+        "default",
+        "tester",
+        CreateTask::ready("target sentinel fk import"),
+    )?;
+    let before_tasks = list_tasks(&target.path, "default", &[], true)?;
+
+    let error = result_err(import_jsonl(&target.path, &invalid_path, true))?;
+
+    let message = error.to_string();
+    assert!(
+        message.contains("imported data failed doctor checks"),
+        "{message}"
+    );
+    assert!(
+        message.contains("foreign key violation: table=label_semantic_proposals"),
+        "{message}"
+    );
+    assert!(message.contains("parent=labels"), "{message}");
+    let after_tasks = list_tasks(&target.path, "default", &[], true)?;
+    assert_eq!(after_tasks, before_tasks);
+    assert_eq!(after_tasks[0].id, sentinel.id);
     Ok(())
 }
 
@@ -549,26 +651,28 @@ struct FoundationRelationshipImportCase {
 
 #[derive(Clone, Copy)]
 enum FoundationRelationshipImportRejection {
-    ForeignKey,
+    Doctor(&'static str),
     Trigger(&'static str),
 }
 
 const FOUNDATION_RELATIONSHIP_IMPORT_CASES: &[FoundationRelationshipImportCase] = &[
     FoundationRelationshipImportCase {
         record_type: "task_label",
-        rejection: FoundationRelationshipImportRejection::ForeignKey,
+        rejection: FoundationRelationshipImportRejection::Doctor("task_labels"),
     },
     FoundationRelationshipImportCase {
         record_type: "dependency",
-        rejection: FoundationRelationshipImportRejection::ForeignKey,
+        rejection: FoundationRelationshipImportRejection::Doctor("task_dependencies"),
     },
     FoundationRelationshipImportCase {
         record_type: "run",
-        rejection: FoundationRelationshipImportRejection::ForeignKey,
+        rejection: FoundationRelationshipImportRejection::Trigger(
+            "task_events.board_id must match run_id board_id",
+        ),
     },
     FoundationRelationshipImportCase {
         record_type: "comment",
-        rejection: FoundationRelationshipImportRejection::ForeignKey,
+        rejection: FoundationRelationshipImportRejection::Doctor("task_comments"),
     },
     FoundationRelationshipImportCase {
         record_type: "event",
@@ -578,7 +682,7 @@ const FOUNDATION_RELATIONSHIP_IMPORT_CASES: &[FoundationRelationshipImportCase] 
     },
     FoundationRelationshipImportCase {
         record_type: "attachment",
-        rejection: FoundationRelationshipImportRejection::ForeignKey,
+        rejection: FoundationRelationshipImportRejection::Doctor("task_attachments"),
     },
 ];
 
@@ -881,6 +985,28 @@ fn insert_doctor_ontology_signal(
     Ok(())
 }
 
+fn seed_label_semantic_proposal_fk_fixture(temp: &TempDb) -> anyhow::Result<TaskRecord> {
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("label semantic proposal fk fixture"),
+    )?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "INSERT INTO label_semantic_proposals(
+         id, board_id, task_id, status, name, applies_when, excludes_when,
+         positive_examples, negative_examples, heuristic_coverage,
+         heuristic_coverage_cosine, heuristic_residual_norm, diagnostics_json,
+         created_by, created_at, updated_at)
+         VALUES ('lp_fk_check', ?1, ?2, 'proposed', 'fk-check',
+         '[]', '[]', '[]', '[]', 0.1, 0.1, 0.9, '[]', 'tester', 1, 1)",
+        params![task.board_id, task.id],
+    )?;
+    Ok(task)
+}
+
 fn replace_jsonl_record_board_id(
     input: &str,
     record_type: &str,
@@ -895,6 +1021,30 @@ fn replace_jsonl_record_board_id(
         let mut value: serde_json::Value = serde_json::from_str(line)?;
         if value["type"] == record_type {
             value["data"]["board_id"] = serde_json::Value::String(board_id.to_owned());
+            changed = true;
+        }
+        output.push_str(&value.to_string());
+        output.push('\n');
+    }
+    assert!(changed, "expected {record_type} record in JSONL");
+    Ok(output)
+}
+
+fn set_jsonl_record_field(
+    input: &str,
+    record_type: &str,
+    field: &str,
+    field_value: serde_json::Value,
+) -> anyhow::Result<String> {
+    let mut changed = false;
+    let mut output = String::new();
+    for line in input.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let mut value: serde_json::Value = serde_json::from_str(line)?;
+        if value["type"] == record_type {
+            value["data"][field] = field_value.clone();
             changed = true;
         }
         output.push_str(&value.to_string());

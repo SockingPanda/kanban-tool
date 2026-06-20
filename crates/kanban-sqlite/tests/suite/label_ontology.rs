@@ -10,11 +10,12 @@ fn label_ontology_migration_creates_ledger_tables_and_json_constraints() -> anyh
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 17);
+    assert_eq!(user_version, 18);
     for table in [
         "label_ontology_observations",
         "label_ontology_signals",
         "label_ontology_actions",
+        "label_ontology_action_atom_effects",
         "label_ontology_action_signals",
     ] {
         let count: i64 = conn.query_row(
@@ -48,6 +49,61 @@ fn label_ontology_migration_creates_ledger_tables_and_json_constraints() -> anyh
     ))?;
     assert!(err.to_string().contains("CHECK"));
 
+    Ok(())
+}
+
+#[test]
+fn label_ontology_action_atom_effects_use_board_scoped_action_fk() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_action_atom_effects_use_board_scoped_action_fk")?;
+    init_database(&temp.path, "tester")?;
+    let other_board = create_board(
+        &temp.path,
+        "tester",
+        CreateBoard {
+            slug: "other".to_owned(),
+            name: "Other".to_owned(),
+            description: None,
+        },
+    )?;
+    let conn = connect_file(&temp.path)?;
+    let board_id: String =
+        conn.query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })?;
+    conn.execute(
+        "INSERT INTO label_ontology_actions(
+         id, board_id, action_type, reason, change_json, validation_status, validation_json,
+         created_by, created_by_type, created_at)
+         VALUES ('loa_effect_fk', ?1, 'update_semantics', 'effect fk test', '{}',
+         'not_required', '{}', 'tester', 'user', 1)",
+        [&board_id],
+    )?;
+    conn.execute(
+        "INSERT INTO label_ontology_action_atom_effects(
+         board_id, action_id, label_id_snapshot, atom_id_snapshot, atom_content_hash,
+         polarity, kind, text, effect, created_at)
+         VALUES (?1, 'loa_effect_fk', 'l_snapshot', 'la_snapshot', 'hash-added',
+         'positive', 'applies_when', 'same board effect', 'added', 2)",
+        [&board_id],
+    )?;
+
+    let error = result_err(conn.execute(
+        "INSERT INTO label_ontology_action_atom_effects(
+         board_id, action_id, label_id_snapshot, atom_id_snapshot, atom_content_hash,
+         polarity, kind, text, effect, created_at)
+         VALUES (?1, 'loa_effect_fk', 'l_snapshot', 'la_snapshot2', 'hash-other-board',
+         'positive', 'applies_when', 'other board effect', 'added', 3)",
+        [&other_board.id],
+    ))?;
+    assert!(
+        error.to_string().contains("FOREIGN KEY constraint failed"),
+        "error: {error}"
+    );
+    let fk_error_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+            row.get(0)
+        })?;
+    assert_eq!(fk_error_count, 0);
     Ok(())
 }
 
@@ -3841,6 +3897,7 @@ fn label_ontology_jsonl_export_import_round_trips_ledger_and_self_refs() -> anyh
         "label_ontology_observation",
         "label_ontology_signal",
         "label_ontology_action",
+        "label_ontology_action_atom_effect",
         "label_ontology_action_signal",
     ] {
         assert!(
@@ -3876,10 +3933,21 @@ fn label_ontology_jsonl_export_import_round_trips_ledger_and_self_refs() -> anyh
         [],
         |row| row.get(0),
     )?;
+    let effect_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM label_ontology_action_atom_effects",
+        [],
+        |row| row.get(0),
+    )?;
     assert_eq!(observation_count, 1);
     assert_eq!(signal_count, 2);
     assert_eq!(action_count, 4);
+    assert_eq!(effect_count, 1);
     assert_eq!(link_count, 4);
+    let fk_error_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+            row.get(0)
+        })?;
+    assert_eq!(fk_error_count, 0);
 
     let duplicate = get_label_ontology_signal(&target.path, &fixture.duplicate_signal_id)?;
     assert_eq!(
@@ -5511,18 +5579,36 @@ fn seed_portable_ontology_ledger(temp: &TempDb) -> anyhow::Result<PortableOntolo
             reason: "Confirmed portable ontology atom support.".to_owned(),
         },
     )?;
+    let result_atom_id = apply_action
+        .result_atom_id
+        .as_deref()
+        .context("result atom id")?
+        .to_owned();
+    let result_atom_hash = apply_action
+        .result_atom_content_hash
+        .as_deref()
+        .context("result atom hash")?
+        .to_owned();
     let manual = typed_positive_validation_json(
         &source_signal_id,
         &label.id,
-        apply_action
-            .result_atom_id
-            .as_deref()
-            .context("result atom id")?,
-        apply_action
-            .result_atom_content_hash
-            .as_deref()
-            .context("result atom hash")?,
+        &result_atom_id,
+        &result_atom_hash,
     );
+    connect_file(&temp.path)?.execute(
+        "INSERT INTO label_ontology_action_atom_effects(
+         board_id, action_id, label_id_snapshot, atom_id_snapshot, atom_content_hash,
+         polarity, kind, text, effect, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 'positive', 'applies_when',
+         'extends CLI subcommands, arguments, help output, or JSON behavior', 'added', 123455)",
+        params![
+            task.board_id,
+            apply_action.id,
+            label.id,
+            result_atom_id,
+            result_atom_hash
+        ],
+    )?;
     let validation_action_id = seed_validation_action(
         temp,
         "loa_portable_validation",
@@ -5568,6 +5654,7 @@ fn write_reordered_ontology_export(input_path: &Path, output_path: &Path) -> any
     let mut observations = Vec::new();
     let mut signals = Vec::new();
     let mut actions = Vec::new();
+    let mut effects = Vec::new();
     let mut links = Vec::new();
     for line in std::fs::read_to_string(input_path)?.lines() {
         let value: serde_json::Value = serde_json::from_str(line)?;
@@ -5575,6 +5662,7 @@ fn write_reordered_ontology_export(input_path: &Path, output_path: &Path) -> any
             Some("label_ontology_observation") => observations.push(line.to_owned()),
             Some("label_ontology_signal") => signals.push(line.to_owned()),
             Some("label_ontology_action") => actions.push(line.to_owned()),
+            Some("label_ontology_action_atom_effect") => effects.push(line.to_owned()),
             Some("label_ontology_action_signal") => links.push(line.to_owned()),
             _ => non_ontology.push(line.to_owned()),
         }
@@ -5591,6 +5679,7 @@ fn write_reordered_ontology_export(input_path: &Path, output_path: &Path) -> any
     reordered.extend(observations);
     reordered.extend(signals);
     reordered.extend(actions);
+    reordered.extend(effects);
     reordered.extend(links);
     std::fs::write(output_path, format!("{}\n", reordered.join("\n")))?;
     Ok(())

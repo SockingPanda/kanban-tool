@@ -24,10 +24,11 @@ use kanban_indexer::{OUTBOX_DERIVED_STORE_SEEDS, OutboxTarget, derived_store_for
 
 use rusqlite::{Connection, OptionalExtension, params};
 
-const LABEL_ONTOLOGY_LEDGER_TABLES: [&str; 4] = [
+const LABEL_ONTOLOGY_LEDGER_TABLES: [&str; 5] = [
     "label_ontology_observations",
     "label_ontology_signals",
     "label_ontology_actions",
+    "label_ontology_action_atom_effects",
     "label_ontology_action_signals",
 ];
 

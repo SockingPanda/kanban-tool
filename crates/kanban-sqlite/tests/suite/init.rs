@@ -60,7 +60,7 @@ fn init_records_and_enforces_migration_checksum() -> anyhow::Result<()> {
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    assert_eq!(user_version, 17);
+    assert_eq!(user_version, 18);
     assert_eq!(name, "001_initial");
     assert!(checksum.starts_with("fnv64:"), "checksum: {checksum}");
 
@@ -86,7 +86,7 @@ fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 17);
+    assert_eq!(user_version, 18);
     for table in [
         "entities",
         "relation_predicates",
@@ -100,6 +100,7 @@ fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
         "label_ontology_observations",
         "label_ontology_signals",
         "label_ontology_actions",
+        "label_ontology_action_atom_effects",
         "label_ontology_action_signals",
     ] {
         let count: i64 = conn.query_row(
@@ -152,7 +153,7 @@ fn init_upgrades_v1_database_and_backfills_task_entities() -> anyhow::Result<()>
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 17);
+    assert_eq!(user_version, 18);
     let task_entity_title: String = conn.query_row(
         "SELECT title FROM entities WHERE uri='kb://task/t_test'",
         [],
@@ -177,12 +178,49 @@ fn init_v17_rebuilds_key_relationship_tables_without_losing_rows() -> anyhow::Re
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 17);
+    assert_eq!(user_version, 18);
     assert_eq!(v17_relationship_counts(&conn)?, before_counts);
     assert_eq!(
         task_label_board_for(&conn, &fixture.task_id, &fixture.label_id)?,
         fixture.board_id
     );
+    let fk_errors = foreign_key_check_rows(&conn)?;
+    assert!(fk_errors.is_empty(), "{fk_errors:#?}");
+    Ok(())
+}
+
+#[test]
+fn init_v18_adds_root_action_atom_effects_table_to_v17_database() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_v18_adds_root_action_atom_effects_table_to_v17_database")?;
+    seed_v17_board_isolation_fixture(&temp)?;
+
+    let conn = connect_file(&temp.path)?;
+    conn.execute("DROP TABLE label_ontology_action_atom_effects", [])?;
+    conn.execute(
+        "DROP INDEX IF EXISTS idx_label_ontology_actions_id_board",
+        [],
+    )?;
+    conn.execute("DELETE FROM schema_migrations WHERE version=18", [])?;
+    conn.pragma_update(None, "user_version", 17)?;
+    drop(conn);
+
+    init_database(&temp.path, "tester")?;
+
+    let conn = connect_file(&temp.path)?;
+    let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    assert_eq!(user_version, 18);
+    let table_exists: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_ontology_action_atom_effects'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(table_exists, 1);
+    let action_board_index_exists: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_label_ontology_actions_id_board'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(action_board_index_exists, 1);
     let fk_errors = foreign_key_check_rows(&conn)?;
     assert!(fk_errors.is_empty(), "{fk_errors:#?}");
     Ok(())

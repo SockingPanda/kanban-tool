@@ -170,3 +170,10 @@ desktop, CLI, server/API, SQLite/core/state-machine, search/graph/vector/context
 and scripts/packaging/release-sensitive groups, then emits matching `just`
 commands. Release-sensitive diffs set `full_gate_recommended=true`; `just
 release` remains the authoritative full gate.
+
+Rust validation recipes run target-writing Cargo/Tauri commands through
+`scripts/cargo-build-lock.sh`. The wrapper serializes shared target writes and
+defaults local build/test parallelism to two jobs/threads to avoid swap-heavy
+workspace gates. Override with `KANBAN_CARGO_BUILD_JOBS` /
+`KANBAN_TEST_THREADS`, or tool-specific `CARGO_BUILD_JOBS`,
+`NEXTEST_TEST_THREADS`, and `RUST_TEST_THREADS`.

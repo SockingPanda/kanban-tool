@@ -22,8 +22,16 @@ Options:
 Environment:
   CARGO_TARGET_DIR            If set, it must equal the configured shared target
                               root.
+  CARGO_BUILD_JOBS            Cargo build jobs passed through when set.
+                              Default: ${KANBAN_CARGO_BUILD_JOBS:-2}
+  NEXTEST_TEST_THREADS        cargo-nextest test threads passed through when set.
+                              Default: ${KANBAN_TEST_THREADS:-2}
+  RUST_TEST_THREADS           libtest threads passed through when set.
+                              Default: ${KANBAN_TEST_THREADS:-2}
   KANBAN_CARGO_TARGET_ROOT    Override target root for local tests.
                               Default: $HOME/.cache/kanban-tool/cargo-target
+  KANBAN_CARGO_BUILD_JOBS     Repo-level default for CARGO_BUILD_JOBS.
+  KANBAN_TEST_THREADS         Repo-level default for nextest/libtest threads.
 
 Examples:
   scripts/cargo-build-lock.sh -- cargo check --workspace --exclude kanban-desktop --tests
@@ -108,6 +116,12 @@ validate_inherited_target_dir() {
   fi
 }
 
+configure_resource_limits() {
+  export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-${KANBAN_CARGO_BUILD_JOBS:-2}}"
+  export NEXTEST_TEST_THREADS="${NEXTEST_TEST_THREADS:-${KANBAN_TEST_THREADS:-2}}"
+  export RUST_TEST_THREADS="${RUST_TEST_THREADS:-${KANBAN_TEST_THREADS:-2}}"
+}
+
 main() {
   local target_dir=""
   local lock_file=""
@@ -153,6 +167,7 @@ main() {
 
   lock_dir="$(dirname "$lock_file")"
   mkdir -p "$lock_dir" "$target_dir"
+  configure_resource_limits
 
   if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]]; then
     export CARGO_TARGET_DIR="$target_dir"

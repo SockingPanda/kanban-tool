@@ -559,7 +559,9 @@ fn label_ontology_review_clusters_duplicate_signals_without_mutating_atoms() -> 
     assert_eq!(cluster.group_by, LabelOntologyReviewGroupBy::Cluster);
     assert_eq!(
         cluster.cluster_key.as_deref(),
-        Some("candidate:adds cli commands")
+        Some(
+            "candidate:kind:false_negative|action:add_positive_atom|target:cli|proposed:none|text:adds cli commands"
+        )
     );
     assert_eq!(
         cluster.cluster_reason.as_deref(),
@@ -571,6 +573,244 @@ fn label_ontology_review_clusters_duplicate_signals_without_mutating_atoms() -> 
     assert!(cluster.signal_ids.contains(&observation_b.signals[0].id));
     assert_eq!(cluster.candidate_atom_variants.len(), 2);
     assert_eq!(list_label_atoms(&temp.path, "default")?, before_atoms);
+    Ok(())
+}
+
+#[test]
+fn label_ontology_review_cluster_separates_same_text_across_label_and_action_scope()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_review_cluster_separates_same_text_across_label_and_action_scope",
+    )?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "docs".to_owned(),
+            color: None,
+        },
+    )?;
+    let cli_task_a = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI scoped cluster source A"),
+    )?;
+    let cli_task_b = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI scoped cluster source B"),
+    )?;
+    let docs_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Docs scoped cluster source"),
+    )?;
+    let cli_observe_task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("CLI observe scoped cluster source"),
+    )?;
+
+    let cli_a = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_task_a.id,
+        review_record_input(vec![review_label_signal(
+            "same-text-cli-a",
+            "cli",
+            "Shared Boundary",
+            0.21,
+        )]),
+    )?;
+    let cli_b = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_task_b.id,
+        review_record_input(vec![review_label_signal(
+            "same-text-cli-b",
+            "cli",
+            "shared boundary",
+            0.22,
+        )]),
+    )?;
+    let docs = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &docs_task.id,
+        review_record_input(vec![review_label_signal(
+            "same-text-docs",
+            "docs",
+            "shared boundary",
+            0.23,
+        )]),
+    )?;
+    let mut cli_observe_signal =
+        review_label_signal("same-text-cli-observe", "cli", "shared boundary", 0.24);
+    cli_observe_signal.proposed_action = LabelOntologyProposedAction::Observe;
+    let cli_observe = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &cli_observe_task.id,
+        review_record_input(vec![cli_observe_signal]),
+    )?;
+
+    let groups = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::Cluster,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+
+    assert_eq!(groups.len(), 3);
+    let cli_group = groups
+        .iter()
+        .find(|group| group.signal_ids.contains(&cli_a.signals[0].id))
+        .context("cli add atom cluster")?;
+    assert_eq!(cli_group.signal_count, 2);
+    assert!(cli_group.signal_ids.contains(&cli_b.signals[0].id));
+    assert!(!cli_group.signal_ids.contains(&docs.signals[0].id));
+    assert!(!cli_group.signal_ids.contains(&cli_observe.signals[0].id));
+
+    let docs_group = groups
+        .iter()
+        .find(|group| group.signal_ids.contains(&docs.signals[0].id))
+        .context("docs add atom cluster")?;
+    assert_eq!(docs_group.signal_count, 1);
+    assert_ne!(cli_group.cluster_key, docs_group.cluster_key);
+
+    let observe_group = groups
+        .iter()
+        .find(|group| group.signal_ids.contains(&cli_observe.signals[0].id))
+        .context("cli observe cluster")?;
+    assert_eq!(observe_group.signal_count, 1);
+    assert_ne!(cli_group.cluster_key, observe_group.cluster_key);
+    assert_ne!(docs_group.cluster_key, observe_group.cluster_key);
+
+    Ok(())
+}
+
+#[test]
+fn label_ontology_review_cluster_is_repeatable_read_only_projection() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_ontology_review_cluster_is_repeatable_read_only_projection")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task_a = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Cluster readonly source A"),
+    )?;
+    let task_b = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Cluster readonly source B"),
+    )?;
+    let observation_a = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task_a.id,
+        review_record_input(vec![review_label_signal(
+            "readonly-cluster-a",
+            "cli",
+            "Readonly Cluster",
+            0.25,
+        )]),
+    )?;
+    let observation_b = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task_b.id,
+        review_record_input(vec![review_label_signal(
+            "readonly-cluster-b",
+            "cli",
+            "readonly cluster",
+            0.35,
+        )]),
+    )?;
+
+    let before_atoms = list_label_atoms(&temp.path, "default")?;
+    let board = get_board(&temp.path, "default")?;
+    let before_action_count: i64 = connect_file(&temp.path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_actions WHERE board_id=?1",
+        [&board.id],
+        |row| row.get(0),
+    )?;
+    let before_signals = list_label_ontology_signals(
+        &temp.path,
+        "default",
+        LabelOntologySignalListOptions::default(),
+    )?;
+    assert!(
+        before_signals
+            .iter()
+            .all(|signal| signal.status == LabelOntologySignalStatus::Open)
+    );
+
+    let first = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::Cluster,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+    let second = review_label_ontology(
+        &temp.path,
+        "default",
+        LabelOntologyReviewOptions {
+            group_by: LabelOntologyReviewGroupBy::Cluster,
+            include_all: false,
+            limit: 10,
+        },
+    )?;
+
+    assert_eq!(first, second);
+    assert_eq!(first.len(), 1);
+    assert!(first[0].signal_ids.contains(&observation_a.signals[0].id));
+    assert!(first[0].signal_ids.contains(&observation_b.signals[0].id));
+    assert_eq!(list_label_atoms(&temp.path, "default")?, before_atoms);
+    assert_eq!(
+        connect_file(&temp.path)?.query_row(
+            "SELECT COUNT(*) FROM label_ontology_actions WHERE board_id=?1",
+            [&board.id],
+            |row| row.get::<_, i64>(0),
+        )?,
+        before_action_count
+    );
+    assert_eq!(
+        list_label_ontology_signals(
+            &temp.path,
+            "default",
+            LabelOntologySignalListOptions::default(),
+        )?,
+        before_signals
+    );
+
     Ok(())
 }
 

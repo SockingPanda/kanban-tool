@@ -1462,7 +1462,9 @@ Groups sort by distinct `task_count` desc, then `confirmed_count` desc,
 默认不会启用，不写 canonical atoms，不确认、应用、validate 或关闭 signal，也不会创建
 新的 SQLite truth 表。cluster key 每次请求时从已有 signal 文本重建，优先使用
 lexical-normalized candidate text，其次 proposed label，再其次 rationale，最后退回到
-kind/action/target 组合；`cluster_reason` 说明 key 来源。`GET /api/v1/label-ontology/signals/{signal_id}`
+kind/action/target/proposed-label scope 组合；所有 cluster key 都带有 signal kind、
+proposed action、target label 和 proposed-label scope，避免跨 label/action/boundary 误合并；
+`cluster_reason` 说明 key 来源。`GET /api/v1/label-ontology/signals/{signal_id}`
 返回：
 
 ```json

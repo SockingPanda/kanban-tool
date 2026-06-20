@@ -151,8 +151,8 @@ fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() -> anyhow::Resu
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(19));
-        assert_eq!(report.user_version, 19);
+        assert_eq!(report.migration_version, Some(21));
+        assert_eq!(report.user_version, 21);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())
@@ -175,8 +175,8 @@ fn doctor_ontology_reports_missing_v12_tables_unhealthy() -> anyhow::Result<()> 
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(19));
-        assert_eq!(report.user_version, 19);
+        assert_eq!(report.migration_version, Some(21));
+        assert_eq!(report.user_version, 21);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
         assert_eq!(report.ontology_ledger_errors, 1);
         assert!(report.ontology_ledger_issues.iter().any(|issue| {
@@ -192,7 +192,13 @@ fn doctor_ontology_detects_cross_board_signal_rows() -> anyhow::Result<()> {
     let temp = TempDb::new("doctor_ontology_detects_cross_board_signal_rows")?;
     let fixture = seed_doctor_ontology_ledger(&temp)?;
     let conn = connect_file(&temp.path)?;
-    conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+    conn.execute_batch(
+        "
+        PRAGMA foreign_keys=OFF;
+        DROP TRIGGER IF EXISTS trg_label_ontology_signals_board_insert;
+        DROP TRIGGER IF EXISTS trg_label_ontology_signals_board_update;
+        ",
+    )?;
     conn.execute(
         "UPDATE label_ontology_signals SET board_id=?1 WHERE id=?2",
         params![fixture.other_board_id, fixture.signal_id],
@@ -275,18 +281,19 @@ fn doctor_ontology_detects_supersede_cycle() -> anyhow::Result<()> {
 }
 
 #[test]
-fn sqlite_rejects_cross_board_key_relationship_rows() -> anyhow::Result<()> {
+fn sqlite_rejects_cross_board_foundation_relationship_rows() -> anyhow::Result<()> {
     let temp = TempDb::new("sqlite_rejects_cross_board_key_relationship_rows")?;
     let fixture = seed_foundation_relationship_fixture(&temp)?;
     let conn = connect_file(&temp.path)?;
 
-    for (name, result) in [
+    for (name, result, expected) in [
         (
             "task_labels",
             conn.execute(
                 "UPDATE task_labels SET board_id=?1 WHERE task_id=?2 AND label_id=?3",
                 params![fixture.other_board_id, fixture.task_id, fixture.label_id],
             ),
+            "FOREIGN KEY constraint failed",
         ),
         (
             "task_dependencies",
@@ -298,6 +305,7 @@ fn sqlite_rejects_cross_board_key_relationship_rows() -> anyhow::Result<()> {
                     fixture.child_task_id
                 ],
             ),
+            "FOREIGN KEY constraint failed",
         ),
         (
             "task_runs",
@@ -305,11 +313,72 @@ fn sqlite_rejects_cross_board_key_relationship_rows() -> anyhow::Result<()> {
                 "UPDATE task_runs SET board_id=?1 WHERE id='r_cross_board'",
                 [&fixture.other_board_id],
             ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
+            "task_comments_update",
+            conn.execute(
+                "UPDATE task_comments SET board_id=?1 WHERE task_id=?2",
+                params![fixture.other_board_id, fixture.task_id],
+            ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
+            "task_comments_insert",
+            conn.execute(
+                "INSERT INTO task_comments(id, board_id, task_id, author, author_type, body, kind, metadata_json, created_at) \
+                 VALUES ('c_cross_board_insert', ?1, ?2, 'tester', 'user', 'bad comment', 'note', '{}', 1)",
+                params![fixture.other_board_id, fixture.task_id],
+            ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
+            "task_attachments_update",
+            conn.execute(
+                "UPDATE task_attachments SET board_id=?1 WHERE id='a_cross_board'",
+                [&fixture.other_board_id],
+            ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
+            "task_attachments_insert",
+            conn.execute(
+                "INSERT INTO task_attachments(id, board_id, task_id, filename, rel_path, size_bytes, created_by, created_at) \
+                 VALUES ('a_cross_board_insert', ?1, ?2, 'bad.txt', 'attachments/bad.txt', 0, 'tester', 1)",
+                params![fixture.other_board_id, fixture.task_id],
+            ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
+            "task_events_update_task",
+            conn.execute(
+                "UPDATE task_events SET board_id=?1 WHERE event_id='e_cross_board'",
+                [&fixture.other_board_id],
+            ),
+            "task_events.board_id must match task_id board_id",
+        ),
+        (
+            "task_events_insert_task",
+            conn.execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, kind, payload_json, created_at) \
+                 VALUES ('e_cross_board_insert_task', ?1, ?2, 'test.cross_board', '{}', 1)",
+                params![fixture.other_board_id, fixture.task_id],
+            ),
+            "task_events.board_id must match task_id board_id",
+        ),
+        (
+            "task_events_insert_run",
+            conn.execute(
+                "INSERT INTO task_events(event_id, board_id, run_id, kind, payload_json, created_at) \
+                 VALUES ('e_cross_board_insert_run', ?1, 'r_cross_board', 'test.cross_board', '{}', 1)",
+                [&fixture.other_board_id],
+            ),
+            "task_events.board_id must match run_id board_id",
         ),
     ] {
         let error = result_err(result)?;
         assert!(
-            error.to_string().contains("FOREIGN KEY constraint failed"),
+            error.to_string().contains(expected),
             "{name}: {error}"
         );
     }
@@ -320,10 +389,49 @@ fn sqlite_rejects_cross_board_key_relationship_rows() -> anyhow::Result<()> {
 }
 
 #[test]
+fn task_event_nullable_refs_are_cleared_when_task_and_run_are_deleted() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_event_nullable_refs_are_cleared_when_task_and_run_are_deleted")?;
+    let fixture = seed_foundation_relationship_fixture(&temp)?;
+    let conn = connect_file(&temp.path)?;
+    let before_event: (String, Option<String>, Option<String>) = conn.query_row(
+        "SELECT board_id, task_id, run_id FROM task_events WHERE event_id='e_cross_board'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(before_event.1.as_deref(), Some(fixture.task_id.as_str()));
+    assert_eq!(before_event.2.as_deref(), Some("r_cross_board"));
+
+    conn.execute("DELETE FROM tasks WHERE id=?1", [&fixture.task_id])?;
+
+    let after_event: (String, Option<String>, Option<String>) = conn.query_row(
+        "SELECT board_id, task_id, run_id FROM task_events WHERE event_id='e_cross_board'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(after_event.0, before_event.0);
+    assert_eq!(after_event.1, None);
+    assert_eq!(after_event.2, None);
+    let run_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM task_runs WHERE id='r_cross_board'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(run_count, 0);
+    Ok(())
+}
+
+#[test]
 fn doctor_detects_cross_board_history_relationship_rows() -> anyhow::Result<()> {
     let temp = TempDb::new("doctor_detects_cross_board_history_relationship_rows")?;
     let fixture = seed_foundation_relationship_fixture(&temp)?;
     let conn = connect_file(&temp.path)?;
+    conn.execute_batch(
+        "
+        PRAGMA foreign_keys=OFF;
+        DROP TRIGGER IF EXISTS trg_task_events_board_insert;
+        DROP TRIGGER IF EXISTS trg_task_events_board_update;
+        ",
+    )?;
     conn.execute(
         "UPDATE task_comments SET board_id=?1 WHERE task_id=?2",
         params![fixture.other_board_id, fixture.task_id],
@@ -359,6 +467,54 @@ fn doctor_detects_cross_board_history_relationship_rows() -> anyhow::Result<()> 
             report.consistency_issues
         );
     }
+    Ok(())
+}
+
+#[test]
+fn doctor_reports_sqlite_foreign_key_check_violations() -> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_reports_sqlite_foreign_key_check_violations")?;
+    let task = seed_label_semantic_proposal_fk_fixture(&temp)?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+    conn.execute(
+        "UPDATE label_semantic_proposals
+         SET top1_existing_label_id='l_missing_fk_parent'
+         WHERE id='lp_fk_check'",
+        [],
+    )?;
+    conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+    let fk_errors: i64 =
+        conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+            row.get(0)
+        })?;
+    assert_eq!(fk_errors, 1);
+    drop(conn);
+
+    let report = doctor_database(&temp.path)?;
+
+    assert!(!report.ok, "{report:#?}");
+    assert!(report.consistency_errors >= 1, "{report:#?}");
+    assert!(
+        report.consistency_issues.iter().any(|issue| {
+            issue.code == "sqlite_foreign_key_violation"
+                && issue.severity == "error"
+                && issue.message.contains("table=label_semantic_proposals")
+                && issue.message.contains("rowid=")
+                && issue.message.contains("parent=labels")
+                && issue.message.contains("fk_index=")
+                && issue
+                    .record_ids
+                    .iter()
+                    .any(|record_id| record_id.starts_with("label_semantic_proposals:"))
+                && issue
+                    .record_ids
+                    .iter()
+                    .any(|record_id| record_id == "labels")
+        }),
+        "task={} issues={:#?}",
+        task.id,
+        report.consistency_issues
+    );
     Ok(())
 }
 
@@ -401,31 +557,26 @@ fn jsonl_import_rejects_cross_board_foundation_relationship_rows() -> anyhow::Re
 
         let message = error.to_string();
         match case.rejection {
-            FoundationRelationshipImportRejection::ForeignKey => {
-                assert!(
-                    message.contains("FOREIGN KEY constraint failed"),
-                    "{}: {message}",
-                    case.record_type
-                );
-            }
-            FoundationRelationshipImportRejection::Doctor => {
+            FoundationRelationshipImportRejection::Doctor(expected_table) => {
                 assert!(
                     message.contains("imported data failed doctor checks"),
                     "{}: {message}",
                     case.record_type
                 );
                 assert!(
-                    message.contains(case.table_name),
+                    message.contains(expected_table),
                     "{}: {message}",
                     case.record_type
                 );
                 assert!(
-                    message.contains("row_board="),
+                    message.contains("table="),
                     "{}: {message}",
                     case.record_type
                 );
+            }
+            FoundationRelationshipImportRejection::Trigger(expected) => {
                 assert!(
-                    message.contains("referenced_board="),
+                    message.contains(expected),
                     "{}: {message}",
                     case.record_type
                 );
@@ -442,6 +593,50 @@ fn jsonl_import_rejects_cross_board_foundation_relationship_rows() -> anyhow::Re
         assert_eq!(target_tasks.len(), 1);
         assert_eq!(target_tasks[0].id, sentinel.id);
     }
+    Ok(())
+}
+
+#[test]
+fn jsonl_import_foreign_key_check_failure_rolls_back_replace() -> anyhow::Result<()> {
+    let source = TempDb::new("jsonl_import_foreign_key_check_failure_source")?;
+    seed_label_semantic_proposal_fk_fixture(&source)?;
+    let export_path = source.dir.join("fk-source.jsonl");
+    export_jsonl(&source.path, "default", &export_path)?;
+    let source_jsonl = std::fs::read_to_string(&export_path)?;
+    let invalid_jsonl = set_jsonl_record_field(
+        &source_jsonl,
+        "label_semantic_proposal",
+        "top1_existing_label_id",
+        serde_json::Value::String("l_missing_fk_parent".to_owned()),
+    )?;
+    let invalid_path = source.dir.join("fk-invalid.jsonl");
+    std::fs::write(&invalid_path, invalid_jsonl)?;
+
+    let target = TempDb::new("jsonl_import_foreign_key_check_failure_target")?;
+    init_database(&target.path, "tester")?;
+    let sentinel = create_task(
+        &target.path,
+        "default",
+        "tester",
+        CreateTask::ready("target sentinel fk import"),
+    )?;
+    let before_tasks = list_tasks(&target.path, "default", &[], true)?;
+
+    let error = result_err(import_jsonl(&target.path, &invalid_path, true))?;
+
+    let message = error.to_string();
+    assert!(
+        message.contains("imported data failed doctor checks"),
+        "{message}"
+    );
+    assert!(
+        message.contains("foreign key violation: table=label_semantic_proposals"),
+        "{message}"
+    );
+    assert!(message.contains("parent=labels"), "{message}");
+    let after_tasks = list_tasks(&target.path, "default", &[], true)?;
+    assert_eq!(after_tasks, before_tasks);
+    assert_eq!(after_tasks[0].id, sentinel.id);
     Ok(())
 }
 
@@ -483,46 +678,43 @@ struct FoundationRelationshipFixture {
 
 struct FoundationRelationshipImportCase {
     record_type: &'static str,
-    table_name: &'static str,
     rejection: FoundationRelationshipImportRejection,
 }
 
 #[derive(Clone, Copy)]
 enum FoundationRelationshipImportRejection {
-    ForeignKey,
-    Doctor,
+    Doctor(&'static str),
+    Trigger(&'static str),
 }
 
 const FOUNDATION_RELATIONSHIP_IMPORT_CASES: &[FoundationRelationshipImportCase] = &[
     FoundationRelationshipImportCase {
         record_type: "task_label",
-        table_name: "task_labels",
-        rejection: FoundationRelationshipImportRejection::ForeignKey,
+        rejection: FoundationRelationshipImportRejection::Doctor("task_labels"),
     },
     FoundationRelationshipImportCase {
         record_type: "dependency",
-        table_name: "task_dependencies",
-        rejection: FoundationRelationshipImportRejection::ForeignKey,
+        rejection: FoundationRelationshipImportRejection::Doctor("task_dependencies"),
     },
     FoundationRelationshipImportCase {
         record_type: "run",
-        table_name: "task_runs",
-        rejection: FoundationRelationshipImportRejection::ForeignKey,
+        rejection: FoundationRelationshipImportRejection::Trigger(
+            "task_events.board_id must match run_id board_id",
+        ),
     },
     FoundationRelationshipImportCase {
         record_type: "comment",
-        table_name: "task_comments",
-        rejection: FoundationRelationshipImportRejection::Doctor,
+        rejection: FoundationRelationshipImportRejection::Doctor("task_comments"),
     },
     FoundationRelationshipImportCase {
         record_type: "event",
-        table_name: "task_events",
-        rejection: FoundationRelationshipImportRejection::Doctor,
+        rejection: FoundationRelationshipImportRejection::Trigger(
+            "task_events.board_id must match task_id board_id",
+        ),
     },
     FoundationRelationshipImportCase {
         record_type: "attachment",
-        table_name: "task_attachments",
-        rejection: FoundationRelationshipImportRejection::Doctor,
+        rejection: FoundationRelationshipImportRejection::Doctor("task_attachments"),
     },
 ];
 
@@ -825,6 +1017,28 @@ fn insert_doctor_ontology_signal(
     Ok(())
 }
 
+fn seed_label_semantic_proposal_fk_fixture(temp: &TempDb) -> anyhow::Result<TaskRecord> {
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("label semantic proposal fk fixture"),
+    )?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "INSERT INTO label_semantic_proposals(
+         id, board_id, task_id, status, name, applies_when, excludes_when,
+         positive_examples, negative_examples, heuristic_coverage,
+         heuristic_coverage_cosine, heuristic_residual_norm, diagnostics_json,
+         created_by, created_at, updated_at)
+         VALUES ('lp_fk_check', ?1, ?2, 'proposed', 'fk-check',
+         '[]', '[]', '[]', '[]', 0.1, 0.1, 0.9, '[]', 'tester', 1, 1)",
+        params![task.board_id, task.id],
+    )?;
+    Ok(task)
+}
+
 fn replace_jsonl_record_board_id(
     input: &str,
     record_type: &str,
@@ -839,6 +1053,30 @@ fn replace_jsonl_record_board_id(
         let mut value: serde_json::Value = serde_json::from_str(line)?;
         if value["type"] == record_type {
             value["data"]["board_id"] = serde_json::Value::String(board_id.to_owned());
+            changed = true;
+        }
+        output.push_str(&value.to_string());
+        output.push('\n');
+    }
+    assert!(changed, "expected {record_type} record in JSONL");
+    Ok(output)
+}
+
+fn set_jsonl_record_field(
+    input: &str,
+    record_type: &str,
+    field: &str,
+    field_value: serde_json::Value,
+) -> anyhow::Result<String> {
+    let mut changed = false;
+    let mut output = String::new();
+    for line in input.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let mut value: serde_json::Value = serde_json::from_str(line)?;
+        if value["type"] == record_type {
+            value["data"][field] = field_value.clone();
             changed = true;
         }
         output.push_str(&value.to_string());

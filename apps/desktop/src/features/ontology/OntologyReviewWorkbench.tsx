@@ -439,7 +439,9 @@ export function SignalDetail({
     )
   }
   const signal = detail.signal
-  const actionDisabled = actionPending || !actionReason.trim() || !["open", "confirmed"].includes(signal.status)
+  const actionReady = !actionPending && Boolean(actionReason.trim())
+  const confirmDisabled = !actionReady || signal.status !== "open"
+  const reviewActionDisabled = !actionReady || !["open", "confirmed"].includes(signal.status)
   return (
     <div className="space-y-4 text-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -485,15 +487,15 @@ export function SignalDetail({
           placeholder="Reason for lifecycle action"
         />
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" disabled={actionDisabled} onClick={() => onLifecycleAction("confirm")}>
+          <Button type="button" variant="secondary" disabled={confirmDisabled} onClick={() => onLifecycleAction("confirm")}>
             <CheckCircle2 className="h-4 w-4" />
             Confirm
           </Button>
-          <Button type="button" variant="outline" disabled={actionDisabled} onClick={() => onLifecycleAction("resolve_no_change")}>
+          <Button type="button" variant="outline" disabled={reviewActionDisabled} onClick={() => onLifecycleAction("resolve_no_change")}>
             <CircleDashed className="h-4 w-4" />
             Resolve no change
           </Button>
-          <Button type="button" variant="outline" disabled={actionDisabled} onClick={() => onLifecycleAction("reject")}>
+          <Button type="button" variant="outline" disabled={reviewActionDisabled} onClick={() => onLifecycleAction("reject")}>
             <XCircle className="h-4 w-4" />
             Reject
           </Button>

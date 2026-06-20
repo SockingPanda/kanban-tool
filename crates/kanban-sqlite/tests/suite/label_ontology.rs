@@ -2468,6 +2468,119 @@ fn label_ontology_validation_rejects_parent_without_pending_canonical_evidence()
 }
 
 #[test]
+fn label_ontology_passed_validation_rejects_unsupported_canonical_mutation_policy()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "label_ontology_passed_validation_rejects_unsupported_canonical_mutation_policy",
+    )?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let seed_semantics = upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            description: Some("Command-line interface behavior".to_owned()),
+            applies_when: vec!["changes CLI user-visible behavior".to_owned()],
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("Reject untyped semantics validation"),
+    )?;
+    let update_signal = review_empty_target_signal(
+        "cli-validation-update-semantics-unsupported-policy",
+        "cli",
+        LabelOntologySignalKind::BoundaryIssue,
+        LabelOntologyProposedAction::UpdateSemantics,
+        0.42,
+    );
+    let observation = record_label_ontology_observation(
+        &temp.path,
+        "default",
+        &task.id,
+        sample_record_input(vec![update_signal]),
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    create_label_ontology_action(
+        &temp.path,
+        "default",
+        action_input(
+            LabelOntologyActionType::Confirm,
+            vec![signal_id.clone()],
+            "Confirmed semantics description adjustment.",
+        ),
+    )?;
+
+    kanban_sqlite::upsert_label_semantics_with_options(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "cli".to_owned(),
+            expected_semantics_hash: Some(seed_semantics.semantics_hash.clone()),
+            description: Some("Command-line interface and CLI JSON behavior".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+        kanban_sqlite::LabelSemanticsMutationOptions {
+            actor: reviewer_actor(),
+            reason: Some("Clarify CLI semantics description.".to_owned()),
+            source_signal_ids: vec![signal_id.clone()],
+        },
+    )?;
+    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
+    let update_action = detail
+        .actions
+        .iter()
+        .find(|action| action.action_type == LabelOntologyActionType::UpdateSemantics)
+        .context("update_semantics action")?;
+    let validation_json = json!({
+        "evidence_type": "trusted_automated",
+        "embedding_model": "test-embedding-v1",
+        "solver_options": {"candidate_limit": 24, "atom_limit": 64},
+        "index": {"status": "ready", "dirty": false, "generation": 7},
+        "cases": [{
+            "signal_id": signal_id,
+            "case_type": "update_semantics",
+            "passed": true,
+            "before": {},
+            "after": {"degraded": false}
+        }]
+    });
+
+    let error = result_err(validate_label_ontology_action_with_trusted_evidence(
+        &temp.path,
+        "default",
+        LabelOntologyValidationInput {
+            actor: validation_actor(),
+            parent_action_id: update_action.id.clone(),
+            signal_ids: Vec::new(),
+            reason: "Passed validation requires a typed update semantics policy.".to_owned(),
+            validation_status: LabelOntologyValidationStatus::Passed,
+            validation_json: validation_json.to_string(),
+        },
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("passed validation for update_semantics is not supported")
+    );
+    let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
+    assert_eq!(detail.signal.status, LabelOntologySignalStatus::Confirmed);
+
+    Ok(())
+}
+
+#[test]
 fn label_ontology_passed_validation_rejects_empty_or_untyped_evidence() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_passed_validation_rejects_empty_or_untyped_evidence")?;
     init_database(&temp.path, "tester")?;
@@ -3680,8 +3793,14 @@ fn label_ontology_validation_show_preserves_new_and_legacy_payload_shapes() -> a
         .context("compact validation action should be visible from signal show")?;
     let compact_show_payload: serde_json::Value =
         serde_json::from_str(&compact_action.validation_json)?;
+    let compact_show_case = compact_show_payload["cases"]
+        .as_array()
+        .context("compact show cases")?
+        .iter()
+        .find(|case| case["signal_id"] == fixture.signal_ids[0])
+        .context("compact show case for first signal")?;
     assert_eq!(
-        compact_show_payload["cases"][0]["after"]["manual_case_ref"]["signal_id"],
+        compact_show_case["after"]["manual_case_ref"]["signal_id"],
         fixture.signal_ids[0]
     );
 

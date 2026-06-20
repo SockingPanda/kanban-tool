@@ -2207,7 +2207,12 @@ fn ensure_passed_validation_evidence(
             | LabelOntologyActionType::RevertOntologyMutation
             | LabelOntologyActionType::RenameLabel
             | LabelOntologyActionType::SplitLabel
-            | LabelOntologyActionType::MergeLabels => {}
+            | LabelOntologyActionType::MergeLabels => {
+                return Err(KanbanError::InvalidInput(format!(
+                    "passed validation for {} is not supported until a typed validation policy exists",
+                    validation_case_type(parent_action.action_type)?
+                )));
+            }
             _ => {
                 return Err(KanbanError::InvalidInput(
                     "passed validation parent action must be a canonical mutation action".into(),

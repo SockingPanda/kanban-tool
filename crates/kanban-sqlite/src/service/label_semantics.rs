@@ -804,7 +804,7 @@ fn label_atoms_for_label(
         .map_err(storage)
 }
 
-fn label_atom_vectors_for_board(
+pub(crate) fn label_atom_vectors_for_board(
     conn: &Connection,
     board_id: &str,
     embedding_model: &str,
@@ -826,6 +826,33 @@ fn label_atom_vectors_for_board(
             updated_at: atom.updated_at,
         })
         .collect())
+}
+
+#[cfg(feature = "vector-lancedb")]
+pub(crate) fn label_atom_vectors_for_definition(
+    definition: &LabelDefinition,
+    board_id: &str,
+    label_name: &str,
+    embedding_model: &str,
+    now: i64,
+) -> Vec<LabelAtomVector> {
+    stable_label_atom_keys(definition, board_id)
+        .into_iter()
+        .map(|atom| LabelAtomVector {
+            atom_id: atom.id,
+            label_id: atom.label_id,
+            label_name: label_name.to_owned(),
+            board_id: atom.board_id,
+            polarity: atom.polarity,
+            kind: atom.kind,
+            text: atom.text,
+            ordinal: atom.ordinal,
+            content_hash: atom.content_hash,
+            embedding_model: embedding_model.to_owned(),
+            created_at: now,
+            updated_at: now,
+        })
+        .collect()
 }
 
 fn label_atom_from_row(row: &Row<'_>) -> rusqlite::Result<LabelAtomRecord> {

@@ -182,6 +182,19 @@ assert_resource_limit_defaults() {
 
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT/" "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$TARGET_ROOT"
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TARGET_ROOT/" "$LOCK_SCRIPT" -- true
+home_dir="$TMPDIR/home"
+home_target="$home_dir/.cache/kanban-tool/cargo-target"
+mkdir -p "$home_dir"
+env HOME="$home_dir" \
+  KANBAN_CARGO_TARGET_ROOT='$HOME/.cache/kanban-tool/cargo-target' \
+  "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$home_target"
+env HOME="$home_dir" \
+  KANBAN_CARGO_TARGET_ROOT='${HOME}/.cache/kanban-tool/cargo-target' \
+  CARGO_TARGET_DIR='${HOME}/.cache/kanban-tool/cargo-target' \
+  "$LOCK_SCRIPT" -- true
+env HOME="$home_dir" \
+  KANBAN_CARGO_TARGET_ROOT='~/.cache/kanban-tool/cargo-target' \
+  "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$home_target"
 assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TARGET_ROOT/analysis-123" "$LOCK_SCRIPT" -- true
 assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" "$REMOVED_FLAG" cli -- true
 assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" "$REMOVED_PATH_FLAG" "$TARGET_ROOT" -- true

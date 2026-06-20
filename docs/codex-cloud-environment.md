@@ -35,7 +35,7 @@ CODEX_CLOUD_PREWARM_RUST=1
 CODEX_CLOUD_PREWARM_DESKTOP=0
 ```
 
-`KANBAN_CARGO_TARGET_ROOT` 是 Cloud 专用 target 目录。项目本地验证仍按 `AGENTS.md` 使用 `just` recipes；Cloud 环境需要这个变量是因为本地默认 target root 是开发机路径，容器中不应依赖它。`KANBAN_CARGO_BUILD_JOBS=auto` 和 `KANBAN_TEST_THREADS=auto` 让 Cargo、nextest 和 libtest 使用容器默认并发；只有 Cloud runner 资源紧张时才改成具体数字。
+`KANBAN_CARGO_TARGET_ROOT` 是 Cloud 专用 target 目录。项目本地验证仍按 `AGENTS.md` 使用 `just` recipes；Cloud 环境需要这个变量是因为本地默认 target root 是开发机路径，容器中不应依赖它。Codex Cloud environment values are not shell-expanded by the UI, so the repo scripts expand literal `$HOME/...`, `${HOME}/...`, and `~/...` values before passing paths to Cargo. `KANBAN_CARGO_BUILD_JOBS=auto` 和 `KANBAN_TEST_THREADS=auto` 让 Cargo、nextest 和 libtest 使用容器默认并发；只有 Cloud runner 资源紧张时才改成具体数字。
 
 ## Installed Surface
 
@@ -45,12 +45,13 @@ Setup script 会准备：
 - `just`。
 - `cargo-nextest`，供 `just test` 和 `just rust-fast` 优先使用。
 - Node.js / pnpm 10 / `apps/desktop` dependencies。
-- Debian/Ubuntu 上的 Tauri Linux build dependencies，包括 WebKitGTK、GTK、ayatana appindicator、xdo、rsvg、OpenSSL 和 Debian packaging tools。
+- Debian/Ubuntu 上的 protobuf compiler / well-known types，以及 Tauri Linux build dependencies，包括 WebKitGTK、GTK、ayatana appindicator、xdo、rsvg、OpenSSL 和 Debian packaging tools。
 - Rust crate cache，通过 `cargo fetch --locked` 预热。
 
 Maintenance script 在 cached container 恢复后刷新：
 
 - Rust components。
+- protobuf compiler / well-known types，保证 cached container 也能获得新增系统依赖。
 - `just` / `cargo-nextest` 是否仍可用。
 - pnpm activation 和 `apps/desktop` dependencies。
 - Rust dependency cache。
@@ -139,6 +140,8 @@ Codex Cloud is useful for saving local CPU, RAM, and compile time, but keep thes
 ## Troubleshooting
 
 If `just` commands try to write to a missing local path, confirm `KANBAN_CARGO_TARGET_ROOT` is set in the environment settings or sourced from `~/.bashrc`.
+
+If `just check` fails in `lance-encoding` with `google/protobuf/empty.proto: File not found`, rerun maintenance or reset the environment cache so `protobuf-compiler` and `libprotobuf-dev` are installed.
 
 If `desktop-package` fails with missing `webkit2gtk`, reset the environment cache and rerun setup with `CODEX_CLOUD_INSTALL_TAURI_DEPS=1`.
 

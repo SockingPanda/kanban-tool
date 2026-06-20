@@ -514,7 +514,7 @@ kanban label proposals reject <proposal_id> [--reason <text>] [--json]
 kanban label ontology record <task_ref> --input <path|-> [--suggestion-snapshot <path|-> | --capture-suggest] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label ontology list [--status open|confirmed|resolved|rejected|superseded]... [--kind false_negative|false_positive|vocabulary_gap|name_issue|boundary_issue|structure_issue]... [--task <task_ref>] [--label <label>] [--proposed-label <name>] [--include-all] [--limit 100] [--json]
 kanban label ontology show <signal_id> [--json]
-kanban label ontology review [--group-by label|candidate-atom|proposed-label] [--include-all] [--limit 100] [--json]
+kanban label ontology review [--group-by label|candidate-atom|proposed-label|cluster] [--include-all] [--limit 100] [--json]
 kanban label ontology confirm <signal_id>... --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology reject <signal_id>... --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology supersede <signal_id>... --by <signal_id> --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
@@ -876,9 +876,9 @@ kanban label ontology record default#42 \
 `label ontology show` 返回 signal、observation 和关联 actions。`label ontology review`
 是只读聚合 review queue 视图，默认只聚合 `open` 和 `confirmed` signals；传
 `--include-all` 时包含 resolved/rejected/superseded 历史。`--group-by` 支持按
-`label`、`candidate-atom` 或 `proposed-label` 聚合，`--limit` 限制返回 group
+`label`、`candidate-atom`、`proposed-label` 或 opt-in `cluster` 聚合，`--limit` 限制返回 group
 数量。`--json` 每个 group 返回聚合维度、key、相关 label / candidate atom /
-proposed label、distinct task count、signal/status/degraded/action counts、score
+proposed label、cluster key/reason（仅 cluster view 有值）、distinct task count、signal/status/degraded/action counts、score
 summary、sample task refs、signal ids、action ids 和 proposal ids。排序优先使用
 distinct task count，其次 confirmed count、latest signal time 和 key。
 
@@ -891,6 +891,10 @@ target label 或 proposed label、以及 proposed action，例如
 `no-candidate-atom|kind:vocabulary_gap|proposed:ontology ledger|action:bootstrap_label`。
 这个 fallback 避免把不同 kind、不同 label 或不同 proposed action 的空 candidate
 signals 合并到一个全局 bucket。
+`--group-by cluster` 是一个只读 review-aid：它不写 canonical atoms，也不会确认、
+应用、validate 或关闭 signal。cluster key 每次查询时从已有 signal 文本重建，优先使用
+lexical-normalized candidate text，其次 proposed label，再其次 rationale，最后才退回到
+kind/action/target 组合；`cluster_reason` 说明当前 key 的来源。
 
 `task_count` 是 group 内 distinct source task 数，也是默认热度排序的第一依据；同一 task
 上的多条 signals 仍只贡献一个 distinct task。`signal_count` 是原始 signal 行数，

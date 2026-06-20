@@ -150,7 +150,7 @@ export type LabelOntologyValidationStatus = "not_required" | "pending" | "passed
 
 export type LabelOntologySuggestState = "selected" | "candidate" | "absent" | "unavailable"
 
-export type LabelOntologyReviewGroupBy = "label" | "candidate_atom" | "proposed_label"
+export type LabelOntologyReviewGroupBy = "label" | "candidate_atom" | "proposed_label" | "cluster"
 
 export type LabelAtomRecord = {
   id: string
@@ -276,6 +276,8 @@ export type LabelOntologyReviewGroup = {
   candidate_content_hash: string | null
   proposed_label_name: string | null
   proposed_label_name_normalized: string | null
+  cluster_key: string | null
+  cluster_reason: string | null
   task_count: number
   signal_count: number
   open_count: number

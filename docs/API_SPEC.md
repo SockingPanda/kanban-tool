@@ -1409,7 +1409,7 @@ observation 或 signals。
 
 `GET /api/v1/boards/{board}/label-ontology/review` 返回只读聚合 review queue。
 `group_by` 支持 `label`、`candidate-atom` / `candidate_atom`、`proposed-label` /
-`proposed_label`，默认 `label`；`include_all=false` 默认只聚合 `open` 和
+`proposed_label`、以及 opt-in `cluster`，默认 `label`；`include_all=false` 默认只聚合 `open` 和
 `confirmed` signals，`true` 时包含完整历史；`limit` 限制 group 数量。响应
 `meta` 回显 `group_by`、`include_all` 和 `limit`。每个 group 包含：
 
@@ -1425,6 +1425,8 @@ observation 或 signals。
   "candidate_content_hash": "14ada47e4b0566c5",
   "proposed_label_name": null,
   "proposed_label_name_normalized": null,
+  "cluster_key": null,
+  "cluster_reason": null,
   "task_count": 2,
   "signal_count": 3,
   "open_count": 2,
@@ -1456,7 +1458,11 @@ observation 或 signals。
 ```
 
 Groups sort by distinct `task_count` desc, then `confirmed_count` desc,
-`latest_signal_at` desc, and `key` asc。`GET /api/v1/label-ontology/signals/{signal_id}`
+`latest_signal_at` desc, and `key` asc。`group_by=cluster` 是可禁用的只读辅助视图：
+默认不会启用，不写 canonical atoms，不确认、应用、validate 或关闭 signal，也不会创建
+新的 SQLite truth 表。cluster key 每次请求时从已有 signal 文本重建，优先使用
+lexical-normalized candidate text，其次 proposed label，再其次 rationale，最后退回到
+kind/action/target 组合；`cluster_reason` 说明 key 来源。`GET /api/v1/label-ontology/signals/{signal_id}`
 返回：
 
 ```json

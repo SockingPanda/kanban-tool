@@ -1076,6 +1076,7 @@ pub enum LabelOntologyReviewGroupBy {
     Label,
     CandidateAtom,
     ProposedLabel,
+    Cluster,
 }
 
 impl std::fmt::Display for LabelOntologyReviewGroupBy {
@@ -1084,6 +1085,7 @@ impl std::fmt::Display for LabelOntologyReviewGroupBy {
             Self::Label => "label",
             Self::CandidateAtom => "candidate_atom",
             Self::ProposedLabel => "proposed_label",
+            Self::Cluster => "cluster",
         })
     }
 }
@@ -1096,6 +1098,7 @@ impl std::str::FromStr for LabelOntologyReviewGroupBy {
             "label" => Ok(Self::Label),
             "candidate_atom" | "candidate-atom" => Ok(Self::CandidateAtom),
             "proposed_label" | "proposed-label" => Ok(Self::ProposedLabel),
+            "cluster" => Ok(Self::Cluster),
             _ => Err(kanban_core::KanbanError::InvalidInput(format!(
                 "invalid label ontology review group: {value}"
             ))),
@@ -1147,6 +1150,8 @@ pub struct LabelOntologyReviewGroup {
     pub candidate_content_hash: Option<String>,
     pub proposed_label_name: Option<String>,
     pub proposed_label_name_normalized: Option<String>,
+    pub cluster_key: Option<String>,
+    pub cluster_reason: Option<String>,
     pub task_count: i64,
     pub signal_count: i64,
     pub open_count: i64,

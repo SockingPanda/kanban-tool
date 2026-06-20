@@ -1092,6 +1092,7 @@ fn label_ontology_review_group_by_value(
         LabelOntologyReviewGroupByArg::Label => LabelOntologyReviewGroupBy::Label,
         LabelOntologyReviewGroupByArg::CandidateAtom => LabelOntologyReviewGroupBy::CandidateAtom,
         LabelOntologyReviewGroupByArg::ProposedLabel => LabelOntologyReviewGroupBy::ProposedLabel,
+        LabelOntologyReviewGroupByArg::Cluster => LabelOntologyReviewGroupBy::Cluster,
     }
 }
 
@@ -1111,6 +1112,7 @@ fn label_ontology_review_group_line(group: &kanban_sqlite::LabelOntologyReviewGr
         LabelOntologyReviewGroupBy::Label => group.label_name.as_deref(),
         LabelOntologyReviewGroupBy::CandidateAtom => group.candidate_text.as_deref(),
         LabelOntologyReviewGroupBy::ProposedLabel => group.proposed_label_name.as_deref(),
+        LabelOntologyReviewGroupBy::Cluster => group.cluster_key.as_deref(),
     }
     .or(group.label_name.as_deref())
     .or(group.proposed_label_name.as_deref())

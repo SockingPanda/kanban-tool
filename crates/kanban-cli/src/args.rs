@@ -272,7 +272,16 @@ pub(crate) enum LabelSemanticsCommand {
     List,
     Show { label: String },
     Upsert(Box<LabelSemanticsUpsertArgs>),
-    Delete { label: String },
+    Delete(LabelSemanticsDeleteArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct LabelSemanticsDeleteArgs {
+    pub(crate) label: String,
+    #[arg(long = "expected-semantics-hash")]
+    pub(crate) expected_semantics_hash: String,
+    #[arg(long)]
+    pub(crate) reason: String,
 }
 
 #[derive(Debug, Args)]

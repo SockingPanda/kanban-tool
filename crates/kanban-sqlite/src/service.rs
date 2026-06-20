@@ -72,7 +72,8 @@ pub(crate) use graph::{
     graph_relation_snapshot_for_board,
 };
 pub(crate) use label_ontology::{
-    LabelOntologySemanticsMutationInput, label_ontology_semantics_snapshot_in_tx,
+    LabelOntologySemanticsMutationInput, label_ontology_mutation_atoms,
+    label_ontology_semantics_snapshot_for_definition, label_ontology_semantics_snapshot_in_tx,
     record_label_ontology_semantics_mutation_in_tx,
 };
 pub(crate) use label_semantics::{

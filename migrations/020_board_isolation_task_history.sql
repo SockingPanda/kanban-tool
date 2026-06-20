@@ -127,6 +127,7 @@ BEFORE UPDATE OF board_id, task_id, run_id ON task_events
 BEGIN
   SELECT RAISE(ABORT, 'task_events.board_id must match task_id board_id')
     WHERE NEW.task_id IS NOT NULL
+      AND (NEW.board_id IS NOT OLD.board_id OR NEW.task_id IS NOT OLD.task_id)
       AND NOT EXISTS (
         SELECT 1 FROM tasks
         WHERE id = NEW.task_id
@@ -134,6 +135,7 @@ BEGIN
       );
   SELECT RAISE(ABORT, 'task_events.board_id must match run_id board_id')
     WHERE NEW.run_id IS NOT NULL
+      AND (NEW.board_id IS NOT OLD.board_id OR NEW.run_id IS NOT OLD.run_id)
       AND NOT EXISTS (
         SELECT 1 FROM task_runs
         WHERE id = NEW.run_id

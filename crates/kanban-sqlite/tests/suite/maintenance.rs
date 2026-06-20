@@ -389,6 +389,38 @@ fn sqlite_rejects_cross_board_foundation_relationship_rows() -> anyhow::Result<(
 }
 
 #[test]
+fn task_event_nullable_refs_are_cleared_when_task_and_run_are_deleted() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_event_nullable_refs_are_cleared_when_task_and_run_are_deleted")?;
+    let fixture = seed_foundation_relationship_fixture(&temp)?;
+    let conn = connect_file(&temp.path)?;
+    let before_event: (String, Option<String>, Option<String>) = conn.query_row(
+        "SELECT board_id, task_id, run_id FROM task_events WHERE event_id='e_cross_board'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(before_event.1.as_deref(), Some(fixture.task_id.as_str()));
+    assert_eq!(before_event.2.as_deref(), Some("r_cross_board"));
+
+    conn.execute("DELETE FROM tasks WHERE id=?1", [&fixture.task_id])?;
+
+    let after_event: (String, Option<String>, Option<String>) = conn.query_row(
+        "SELECT board_id, task_id, run_id FROM task_events WHERE event_id='e_cross_board'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(after_event.0, before_event.0);
+    assert_eq!(after_event.1, None);
+    assert_eq!(after_event.2, None);
+    let run_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM task_runs WHERE id='r_cross_board'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(run_count, 0);
+    Ok(())
+}
+
+#[test]
 fn doctor_detects_cross_board_history_relationship_rows() -> anyhow::Result<()> {
     let temp = TempDb::new("doctor_detects_cross_board_history_relationship_rows")?;
     let fixture = seed_foundation_relationship_fixture(&temp)?;

@@ -659,6 +659,15 @@ pub fn apply_label_ontology_atom_with_options(
                 ));
             }
         };
+        let source_signal_proposed_action = match canonical_add_action_type {
+            LabelOntologyActionType::AddPositiveAtom => {
+                LabelOntologyProposedAction::AddPositiveAtom
+            }
+            LabelOntologyActionType::AddNegativeAtom => {
+                LabelOntologyProposedAction::AddNegativeAtom
+            }
+            _ => unreachable!("atom add action must be positive or negative"),
+        };
 
         let before = load_semantics_parts(&conn, &board_id, &label.id)?;
         let before_hash = semantics_hash(&label, &before)?;
@@ -671,6 +680,15 @@ pub fn apply_label_ontology_atom_with_options(
         } else {
             LabelOntologyActionType::AdoptExistingAtom
         };
+        ensure_atom_mutation_source_signal_contract(
+            &signals,
+            &label,
+            retarget_reason.is_some(),
+            source_signal_proposed_action,
+            &atom.polarity,
+            &atom.kind,
+            "apply atom",
+        )?;
         if canonical_changed {
             let definition = LabelDefinition {
                 id: label.id.clone(),
@@ -1313,7 +1331,9 @@ pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
     } else {
         normalize_signal_ids(options.source_signal_ids)?
     };
-    if !signal_ids.is_empty() {
+    let signals = if signal_ids.is_empty() {
+        Vec::new()
+    } else {
         let signals = signal_ids
             .iter()
             .map(|signal_id| signal_by_id(conn, signal_id))
@@ -1323,16 +1343,29 @@ pub(crate) fn record_label_ontology_semantics_mutation_in_tx(
             board_id,
             &[LabelOntologySignalStatus::Confirmed],
         )?;
-    }
+        signals
+    };
 
     let after = label_ontology_semantics_snapshot_in_tx(conn, board_id, label_id, label_name)?;
     let changed = before.hash != after.hash;
     if !changed {
+        if !signal_ids.is_empty() {
+            return Err(KanbanError::InvalidInput(
+                "source signals require an actual label semantics change".into(),
+            ));
+        }
         return Ok(Vec::new());
     }
     let after_atoms = label_ontology_mutation_atoms(conn, board_id, label_id)?;
     let (added_atoms, removed_atoms) =
         label_ontology_atom_effect_delta(&before_atoms, &after_atoms, include_description_effects);
+    ensure_semantics_mutation_source_signal_contract(
+        &signals,
+        label_id,
+        label_name,
+        action_type,
+        &added_atoms,
+    )?;
     let mut change = json!({
         "label": {
             "id": label_id,
@@ -4920,6 +4953,158 @@ fn source_signal_retarget_json(signal: &LabelOntologySignalRecord) -> JsonValue 
         "proposed_label_name": &signal.proposed_label_name,
         "proposed_label_name_normalized": &signal.proposed_label_name_normalized,
     })
+}
+
+fn ensure_atom_mutation_source_signal_contract(
+    signals: &[LabelOntologySignalRecord],
+    label: &LabelSnapshot,
+    allow_retarget: bool,
+    proposed_action: LabelOntologyProposedAction,
+    polarity: &str,
+    kind: &str,
+    context: &str,
+) -> Result<()> {
+    for signal in signals {
+        ensure_source_signal_target_label(signal, label, allow_retarget, context)?;
+        ensure_source_signal_atom_contract(signal, proposed_action, polarity, kind, context)?;
+    }
+    Ok(())
+}
+
+fn ensure_semantics_mutation_source_signal_contract(
+    signals: &[LabelOntologySignalRecord],
+    label_id: &str,
+    label_name: &str,
+    action_type: LabelOntologyActionType,
+    added_atoms: &[&LabelOntologyMutationAtom],
+) -> Result<()> {
+    if signals.is_empty() {
+        return Ok(());
+    }
+    let label = LabelSnapshot {
+        id: label_id.to_owned(),
+        name: label_name.to_owned(),
+    };
+    for signal in signals {
+        ensure_source_signal_target_label(signal, &label, false, "semantics mutation")?;
+        match signal.proposed_action {
+            LabelOntologyProposedAction::UpdateSemantics => {
+                if action_type != LabelOntologyActionType::UpdateSemantics {
+                    return Err(KanbanError::InvalidInput(format!(
+                        "source signal {} proposed action {} does not match semantics mutation action {action_type}",
+                        signal.id, signal.proposed_action
+                    )));
+                }
+            }
+            LabelOntologyProposedAction::AddPositiveAtom => {
+                let kind = required_source_signal_candidate_kind(signal, "add_positive_atom")?;
+                ensure_source_signal_atom_contract(
+                    signal,
+                    LabelOntologyProposedAction::AddPositiveAtom,
+                    "positive",
+                    kind,
+                    "semantics mutation",
+                )?;
+                ensure_source_signal_has_added_effect(signal, added_atoms, "positive", kind)?;
+            }
+            LabelOntologyProposedAction::AddNegativeAtom => {
+                let kind = required_source_signal_candidate_kind(signal, "add_negative_atom")?;
+                ensure_source_signal_atom_contract(
+                    signal,
+                    LabelOntologyProposedAction::AddNegativeAtom,
+                    "negative",
+                    kind,
+                    "semantics mutation",
+                )?;
+                ensure_source_signal_has_added_effect(signal, added_atoms, "negative", kind)?;
+            }
+            other => {
+                return Err(KanbanError::InvalidInput(format!(
+                    "source signal {} proposed action {} is incompatible with semantics mutation",
+                    signal.id, other
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn ensure_source_signal_target_label(
+    signal: &LabelOntologySignalRecord,
+    label: &LabelSnapshot,
+    allow_retarget: bool,
+    context: &str,
+) -> Result<()> {
+    match signal.target_label_id.as_deref() {
+        Some(target_label_id) if target_label_id == label.id => Ok(()),
+        Some(_) if allow_retarget => Ok(()),
+        Some(_) => Err(KanbanError::InvalidInput(format!(
+            "source signal {} does not target label {} for {context}",
+            signal.id, label.name
+        ))),
+        None => Err(KanbanError::InvalidInput(format!(
+            "source signal {} must target label {} for {context}",
+            signal.id, label.name
+        ))),
+    }
+}
+
+fn ensure_source_signal_atom_contract(
+    signal: &LabelOntologySignalRecord,
+    proposed_action: LabelOntologyProposedAction,
+    polarity: &str,
+    kind: &str,
+    context: &str,
+) -> Result<()> {
+    if signal.proposed_action != proposed_action {
+        return Err(KanbanError::InvalidInput(format!(
+            "source signal {} proposed action {} does not match {context} action {}",
+            signal.id, signal.proposed_action, proposed_action
+        )));
+    }
+    if signal.candidate_atom_polarity.as_deref() != Some(polarity) {
+        return Err(KanbanError::InvalidInput(format!(
+            "source signal {} candidate atom polarity does not match {context} polarity {polarity}",
+            signal.id
+        )));
+    }
+    if signal.candidate_atom_kind.as_deref() != Some(kind) {
+        return Err(KanbanError::InvalidInput(format!(
+            "source signal {} candidate atom kind does not match {context} kind {kind}",
+            signal.id
+        )));
+    }
+    Ok(())
+}
+
+fn required_source_signal_candidate_kind<'a>(
+    signal: &'a LabelOntologySignalRecord,
+    proposed_action: &str,
+) -> Result<&'a str> {
+    signal.candidate_atom_kind.as_deref().ok_or_else(|| {
+        KanbanError::InvalidInput(format!(
+            "source signal {} proposed action {proposed_action} requires candidate atom kind",
+            signal.id
+        ))
+    })
+}
+
+fn ensure_source_signal_has_added_effect(
+    signal: &LabelOntologySignalRecord,
+    added_atoms: &[&LabelOntologyMutationAtom],
+    polarity: &str,
+    kind: &str,
+) -> Result<()> {
+    if added_atoms
+        .iter()
+        .any(|atom| atom.polarity.as_str() == polarity && atom.kind.as_str() == kind)
+    {
+        return Ok(());
+    }
+    Err(KanbanError::InvalidInput(format!(
+        "source signal {} requires an actual added {polarity} atom effect of kind {kind}",
+        signal.id
+    )))
 }
 
 fn validate_status_transition(

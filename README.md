@@ -51,6 +51,7 @@ Board/project 使用同一个 SQLite DB。CLI 通过 `--board`、`KB_BOARD` 或�
 | [`docs/V0.5.md`](docs/V0.5.md) | V0.5 已实现范围、验证记录与暂未包含项 |
 | [`docs/V1.md`](docs/V1.md) | V1 Local Web API 已实现范围、`kanban serve`、SSE 行为与 smoke 流程 |
 | [`docs/V0.6.md`](docs/V0.6.md) | V0.6 invariant hardening：reclaim、migration、query、doctor |
+| [`docs/codex-cloud-environment.md`](docs/codex-cloud-environment.md) | Codex Cloud 前端/后端验证环境 setup、maintenance 与验证命令 |
 | [`migrations/001_initial.sql`](migrations/001_initial.sql) | SQLite 初始 schema |
 
 ## 当前仓库结构

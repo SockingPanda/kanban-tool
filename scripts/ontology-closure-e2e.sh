@@ -22,8 +22,8 @@ command -v python3 >/dev/null 2>&1 || {
   echo "error: python3 is required" >&2
   exit 1
 }
-command -v rg >/dev/null 2>&1 || {
-  echo "error: rg is required" >&2
+command -v pnpm >/dev/null 2>&1 || {
+  echo "error: pnpm is required" >&2
   exit 1
 }
 
@@ -39,10 +39,12 @@ fail() {
 }
 
 ensure_kanban_bin() {
-  if [[ -n "${KANBAN_BIN:-}" ]]; then
+  if [[ "${KANBAN_CLOSURE_USE_EXTERNAL_BIN:-0}" == "1" ]]; then
+    [[ -n "${KANBAN_BIN:-}" ]] || fail "KANBAN_CLOSURE_USE_EXTERNAL_BIN=1 requires KANBAN_BIN"
     [[ -x "$KANBAN_BIN" || "$(command -v "$KANBAN_BIN" 2>/dev/null)" ]] || {
       fail "KANBAN_BIN is not executable or on PATH: $KANBAN_BIN"
     }
+    log "+ using external KANBAN_BIN=$KANBAN_BIN"
     return 0
   fi
   log "+ $LOCK -- cargo build -q -p kanban-cli --bin kanban"
@@ -201,13 +203,12 @@ assert_no_foreign_key_violations() {
   [[ "$count" == "0" ]] || fail "foreign_key_check returned $count violations for $db"
 }
 
-run_desktop_source_guard() {
-  local component="$ROOT/apps/desktop/src/features/ontology/OntologyReviewWorkbench.tsx"
-  rg -n "Confirm signal" "$component" >/dev/null || fail "Desktop workbench must label lifecycle button Confirm signal"
-  rg -n "does not modify canonical semantics" "$component" >/dev/null || fail "Desktop workbench must show canonical semantics boundary"
-  rg -n "createLabelOntologyAction" "$component" >/dev/null || fail "Desktop workbench must use lifecycle action API"
-  if rg -n "applyLabelOntologyAtom|upsertLabelSemantics|deleteLabelSemantics|revertLabelOntologyMutation|validateLabelOntologyAction" "$component" >/dev/null; then
-    fail "Desktop lifecycle surface must not expose canonical mutation helpers"
+run_desktop_boundary_tests() {
+  local output="$RUN_DIR/desktop-boundary-tests.log"
+  log "+ pnpm --dir $ROOT/apps/desktop test -- OntologyReviewWorkbench.test.tsx api.test.ts > $output"
+  if ! pnpm --dir "$ROOT/apps/desktop" test -- OntologyReviewWorkbench.test.tsx api.test.ts >"$output" 2>&1; then
+    cat "$output" >&2 || true
+    fail "Desktop lifecycle boundary tests failed"
   fi
 }
 
@@ -329,7 +330,7 @@ if missing:
     raise SystemExit("imported actions must preserve validation_requirement")
 PY
 
-run_desktop_source_guard
+run_desktop_boundary_tests
 
 log "+ ontology-positive-atom-e2e"
 RUN_DIR="$RUN_DIR/positive-atom" KANBAN_BIN="$KANBAN_BIN" bash "$ROOT/scripts/ontology-positive-atom-e2e.sh"
@@ -358,7 +359,7 @@ jq -n \
       "generic lifecycle action could not accept canonical mutation spoof fields",
       "JSONL export/import preserved root actions, atom effects, and validation_requirement",
       "doctor and PRAGMA foreign_key_check passed for source and imported closure DBs",
-      "Desktop source guard only exposes lifecycle action controls",
+      "Desktop boundary tests only expose lifecycle action controls",
       "positive atom trusted collector E2E passed",
       "negative atom trusted collector controls/regression E2E passed",
       "bootstrap staged verification E2E passed"

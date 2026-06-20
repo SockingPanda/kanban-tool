@@ -1,6 +1,32 @@
 use crate::common::*;
 use kanban_sqlite::LabelProposalCandidate;
 
+#[derive(Debug, PartialEq, Eq)]
+struct HttpTaskCreateLabelCounts {
+    tasks: i64,
+    labels: i64,
+    task_labels: i64,
+    task_events: i64,
+}
+
+fn http_task_create_label_counts(
+    path: &std::path::Path,
+) -> anyhow::Result<HttpTaskCreateLabelCounts> {
+    let conn = kanban_sqlite::connect_file(path)?;
+    let count_rows = |table: &str| -> anyhow::Result<i64> {
+        conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
+        .context("count rows")
+    };
+    Ok(HttpTaskCreateLabelCounts {
+        tasks: count_rows("tasks")?,
+        labels: count_rows("labels")?,
+        task_labels: count_rows("task_labels")?,
+        task_events: count_rows("task_events")?,
+    })
+}
+
 #[tokio::test]
 async fn tasks_creates_task_and_event_with_body_actor_priority() -> anyhow::Result<()> {
     let test = TestApp::with_actor("default-actor")?;
@@ -198,8 +224,96 @@ async fn tasks_create_with_multiple_dependencies_rolls_back_prior_edges_on_later
 }
 
 #[tokio::test]
+async fn tasks_create_with_missing_label_returns_invalid_input_without_writes() -> anyhow::Result<()>
+{
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let before = http_task_create_label_counts(&db_path)?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app,
+        "/api/v1/boards/default/tasks",
+        json!({
+            "title": "missing label create",
+            "description": "ready spec",
+            "labels": ["missing"]
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("label missing does not exist")
+    );
+    assert_eq!(http_task_create_label_counts(&db_path)?, before);
+    Ok(())
+}
+
+#[tokio::test]
+async fn tasks_create_with_mixed_existing_and_missing_labels_rolls_back_atomically()
+-> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let backend = kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let before = http_task_create_label_counts(&db_path)?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app,
+        "/api/v1/boards/default/tasks",
+        json!({
+            "title": "partial label create",
+            "description": "ready spec",
+            "labels": ["backend", "missing"]
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("label missing does not exist")
+    );
+    assert_eq!(http_task_create_label_counts(&db_path)?, before);
+    assert_eq!(
+        kanban_sqlite::list_labels(&db_path, "default")?
+            .into_iter()
+            .map(|label| label.id)
+            .collect::<Vec<_>>(),
+        [backend.id]
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn tasks_create_accepts_labels_and_exposes_task_label_dto() -> anyhow::Result<()> {
     let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    for name in ["backend", "api"] {
+        kanban_sqlite::create_label(
+            &db_path,
+            "default",
+            kanban_sqlite::CreateLabel {
+                name: name.to_owned(),
+                color: None,
+            },
+        )?;
+    }
     let app = test.router();
 
     let (status, json) = post_json(
@@ -218,6 +332,19 @@ async fn tasks_create_accepts_labels_and_exposes_task_label_dto() -> anyhow::Res
     assert_eq!(labels.len(), 2);
     let names: Vec<_> = labels.iter().map(|label| label["name"].clone()).collect();
     assert_eq!(names, [json!("api"), json!("backend")]);
+    assert_eq!(kanban_sqlite::list_labels(&db_path, "default")?.len(), 2);
+    let events = kanban_sqlite::list_events(
+        &db_path,
+        "default",
+        Some(json["data"]["id"].as_str().context("task id")?),
+    )?;
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.kind == "task.label.added")
+            .count(),
+        2
+    );
     Ok(())
 }
 
@@ -456,6 +583,16 @@ async fn tasks_sorts_by_updated_at_ascending_and_descending() -> anyhow::Result<
 async fn tasks_lists_with_assignee_search_sort_and_label_filter() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
+    for name in ["backend", "frontend"] {
+        kanban_sqlite::create_label(
+            &db_path,
+            "default",
+            kanban_sqlite::CreateLabel {
+                name: name.to_owned(),
+                color: None,
+            },
+        )?;
+    }
     for (title, assignee, priority, labels) in [
         ("alpha bug", Some("alice"), 1, vec!["backend".to_owned()]),
         ("beta bug", Some("alice"), 3, vec!["backend".to_owned()]),
@@ -1389,6 +1526,138 @@ async fn label_ontology_observation_route_rejects_invalid_signal_contract() -> a
 }
 
 #[tokio::test]
+async fn label_ontology_apply_atom_route_rejects_incompatible_source_signal() -> anyhow::Result<()>
+{
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "cli".to_owned(),
+            color: None,
+        },
+    )?;
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("ontology API incompatible source signal"),
+    )?;
+    let observation = kanban_sqlite::record_label_ontology_observation(
+        &db_path,
+        "default",
+        &task.id,
+        kanban_sqlite::LabelOntologyRecordInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("local".to_owned()),
+            },
+            agent_candidates_json: json!([{"label": "cli", "confidence": 0.92}]).to_string(),
+            suggestion_snapshot_json: json!({"selected_labels": []}).to_string(),
+            final_decision_json: json!({"accepted_labels": ["cli"]}).to_string(),
+            suggest_coverage: Some(0.61),
+            suggest_coverage_cosine: Some(0.74),
+            suggest_residual_norm: Some(0.39),
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: json!([]).to_string(),
+            capture_fingerprint: Some("api-incompatible-source-signal".to_owned()),
+            signals: vec![kanban_sqlite::LabelOntologySignalInput {
+                kind: kanban_sqlite::LabelOntologySignalKind::FalseNegative,
+                target_label_ref: Some("cli".to_owned()),
+                related_labels_json: json!([]).to_string(),
+                proposed_action: kanban_sqlite::LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(kanban_sqlite::LabelOntologyCandidateAtomInput {
+                    polarity: "positive".to_owned(),
+                    kind: "applies_when".to_owned(),
+                    text: "extends CLI subcommands, arguments, help output, or JSON behavior"
+                        .to_owned(),
+                }),
+                proposed_label_name: None,
+                proposal_json: json!({}).to_string(),
+                agent_selected: true,
+                suggest_state: Some(kanban_sqlite::LabelOntologySuggestState::Candidate),
+                suggest_score: Some(0.08),
+                suggest_rank: Some(4),
+                final_selected: true,
+                rationale: "The task expands the CLI surface.".to_owned(),
+                confidence: Some(0.91),
+                signal_key: Some("api-incompatible-source-signal".to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    kanban_sqlite::create_label_ontology_action(
+        &db_path,
+        "default",
+        kanban_sqlite::LabelOntologyActionInput {
+            actor: kanban_sqlite::LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            action_type: kanban_sqlite::LabelOntologyActionType::Confirm,
+            signal_ids: vec![signal_id.clone()],
+            reason: "valid false negative".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: None,
+            validation_status: None,
+            validation_json: None,
+        },
+    )?;
+    let conn = kanban_sqlite::connect_file(&db_path)?;
+    let action_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM label_ontology_actions", [], |row| {
+            row.get(0)
+        })?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app,
+        "/api/v1/boards/default/label-ontology/apply/atom",
+        json!({
+            "actor": {
+                "name": "reviewer",
+                "type": "user",
+                "agent_type": null
+            },
+            "signal_ids": [signal_id],
+            "label_ref": "cli",
+            "kind": "excludes_when",
+            "text": "only updates unrelated release notes",
+            "reason": "This should fail because the source signal requested a positive atom."
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .context("error message")?
+            .contains("proposed action add_positive_atom")
+    );
+    let post_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM label_ontology_actions", [], |row| {
+            row.get(0)
+        })?;
+    assert_eq!(post_count, action_count);
+    assert!(kanban_sqlite::list_label_atoms(&db_path, "default")?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
 async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
@@ -1566,7 +1835,7 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
             "reason": "atom improves suggestion behavior",
             "validation_status": "passed",
             "validation": json!({
-                "evidence_type": "automated",
+                "evidence_type": "trusted_automated",
                 "embedding_model": "test-embedding-v1",
                 "solver_options": {"candidate_limit": 24, "atom_limit": 64},
                 "index": {"status": "ready", "dirty": false, "generation": 7},
@@ -1604,6 +1873,13 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
     .await?;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
     assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .context("error message")?
+            .contains("trusted evidence collected by the kanban tool"),
+        "{json}"
+    );
 
     let (status, json) = get_json(
         app.clone(),
@@ -2453,6 +2729,10 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
     assert_eq!(json["data"]["description"], "Backend replacement semantics");
     assert_eq!(json["data"]["applies_when"], json!([]));
     assert_eq!(json["data"]["positive_examples"], json!([]));
+    let replacement_hash = json["data"]["semantics_hash"]
+        .as_str()
+        .context("replacement semantics hash")?
+        .to_owned();
 
     let (status, json) = get_json(
         app.clone(),
@@ -2519,6 +2799,30 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
     let (status, json) = delete_json(
         app.clone(),
         &format!("/api/v1/boards/default/labels/{label_id}/semantics"),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+
+    let (status, json) = delete_json(
+        app.clone(),
+        &format!(
+            "/api/v1/boards/default/labels/{label_id}/semantics?expected_semantics_hash=not-the-current-semantics-hash&reason=http-stale-clear"
+        ),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(json["error"]["code"], "conflict");
+    assert!(
+        !kanban_sqlite::list_label_atoms(&db_path, "default")?.is_empty(),
+        "stale clear must not remove atoms"
+    );
+
+    let (status, json) = delete_json(
+        app.clone(),
+        &format!(
+            "/api/v1/boards/default/labels/{label_id}/semantics?expected_semantics_hash={replacement_hash}&reason=http-clear"
+        ),
     )
     .await?;
     assert_eq!(status, StatusCode::OK);

@@ -158,6 +158,10 @@ pub(crate) const BOARD_SCOPED_EXPORT_TABLES: &[(&str, &str)] = &[
     ("label_ontology_signal", "label_ontology_signals"),
     ("label_ontology_action", "label_ontology_actions"),
     (
+        "label_ontology_action_atom_effect",
+        "label_ontology_action_atom_effects",
+    ),
+    (
         "label_ontology_action_signal",
         "label_ontology_action_signals",
     ),
@@ -166,6 +170,7 @@ pub(crate) const BOARD_SCOPED_EXPORT_TABLES: &[(&str, &str)] = &[
 
 pub(crate) const IMPORT_DELETE_ORDER: &[&str] = &[
     "label_ontology_action_signals",
+    "label_ontology_action_atom_effects",
     "label_ontology_actions",
     "label_ontology_signals",
     "label_ontology_observations",
@@ -464,6 +469,7 @@ pub(crate) fn database_has_user_records(conn: &Connection) -> Result<bool> {
         "label_ontology_observations",
         "label_ontology_signals",
         "label_ontology_actions",
+        "label_ontology_action_atom_effects",
         "label_ontology_action_signals",
         "task_labels",
         "app_settings",
@@ -888,6 +894,7 @@ pub(crate) fn import_table_for_type(record_type: &str) -> Result<&'static str> {
         "label_ontology_observation" => Ok("label_ontology_observations"),
         "label_ontology_signal" => Ok("label_ontology_signals"),
         "label_ontology_action" => Ok("label_ontology_actions"),
+        "label_ontology_action_atom_effect" => Ok("label_ontology_action_atom_effects"),
         "label_ontology_action_signal" => Ok("label_ontology_action_signals"),
         "task_label" => Ok("task_labels"),
         "setting" => Ok("app_settings"),

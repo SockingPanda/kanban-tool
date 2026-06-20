@@ -83,6 +83,8 @@ fn task_list_supports_search_assignee_sort_limit_and_offset() -> anyhow::Result<
 fn task_list_filters_by_repeatable_labels() -> anyhow::Result<()> {
     let temp = TempDb::new("task_list_filters_by_repeatable_labels")?;
     kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "backend"])?.success()?;
+    kanban(&temp.path, &["label", "create", "api"])?.success()?;
     kanban(
         &temp.path,
         &[

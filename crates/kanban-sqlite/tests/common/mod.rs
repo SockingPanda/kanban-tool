@@ -22,12 +22,12 @@ pub use kanban_sqlite::{
     accept_label_proposal, accept_label_proposal_with_options, add_dependency,
     apply_label_ontology_atom, apply_label_ontology_atom_with_options, archive_board, archive_task,
     begin_database_replace, begin_database_runtime, block_task, bootstrap_task_label,
-    build_context_pack, claim_task, complete_task, connect_file, create_board, create_comment,
-    create_comment_with_options, create_label, create_label_ontology_action, create_task,
-    delete_label, delete_label_semantics, derived_store_statuses, dispatch_once, doctor_database,
-    explain_label_atom, export_jsonl, get_board, get_label_ontology_signal, get_label_proposal,
-    get_label_semantics, get_run_by_id_global, get_task, import_jsonl, init_database,
-    label_ontology_quality_report, list_board_columns, list_boards, list_comments,
+    build_context_pack, claim_task, clear_label_semantics_with_options, complete_task,
+    connect_file, create_board, create_comment, create_comment_with_options, create_label,
+    create_label_ontology_action, create_task, delete_label, derived_store_statuses, dispatch_once,
+    doctor_database, explain_label_atom, export_jsonl, get_board, get_label_ontology_signal,
+    get_label_proposal, get_label_semantics, get_run_by_id_global, get_task, import_jsonl,
+    init_database, label_ontology_quality_report, list_board_columns, list_boards, list_comments,
     list_dependencies, list_events, list_label_atoms, list_label_ontology_signals,
     list_label_proposals, list_labels, list_outbox, list_runs, list_tasks,
     plan_label_ontology_structure_change, promote_task, propose_task_label,
@@ -37,7 +37,6 @@ pub use kanban_sqlite::{
     review_label_ontology, search_tasks, set_task_retry_policy_by_id,
     snapshot_bootstrap_task_label_state, specify_task, submit_review_task, task_ontology_summary,
     unblock_task, update_task, upsert_label_semantics, validate_label_ontology_action,
-    validate_label_ontology_action_with_trusted_evidence,
 };
 #[cfg(feature = "vector-lancedb")]
 pub use kanban_sqlite::{

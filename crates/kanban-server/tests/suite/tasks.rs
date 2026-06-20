@@ -1,6 +1,32 @@
 use crate::common::*;
 use kanban_sqlite::LabelProposalCandidate;
 
+#[derive(Debug, PartialEq, Eq)]
+struct HttpTaskCreateLabelCounts {
+    tasks: i64,
+    labels: i64,
+    task_labels: i64,
+    task_events: i64,
+}
+
+fn http_task_create_label_counts(
+    path: &std::path::Path,
+) -> anyhow::Result<HttpTaskCreateLabelCounts> {
+    let conn = kanban_sqlite::connect_file(path)?;
+    let count_rows = |table: &str| -> anyhow::Result<i64> {
+        conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
+        .context("count rows")
+    };
+    Ok(HttpTaskCreateLabelCounts {
+        tasks: count_rows("tasks")?,
+        labels: count_rows("labels")?,
+        task_labels: count_rows("task_labels")?,
+        task_events: count_rows("task_events")?,
+    })
+}
+
 #[tokio::test]
 async fn tasks_creates_task_and_event_with_body_actor_priority() -> anyhow::Result<()> {
     let test = TestApp::with_actor("default-actor")?;
@@ -198,8 +224,96 @@ async fn tasks_create_with_multiple_dependencies_rolls_back_prior_edges_on_later
 }
 
 #[tokio::test]
+async fn tasks_create_with_missing_label_returns_invalid_input_without_writes() -> anyhow::Result<()>
+{
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let before = http_task_create_label_counts(&db_path)?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app,
+        "/api/v1/boards/default/tasks",
+        json!({
+            "title": "missing label create",
+            "description": "ready spec",
+            "labels": ["missing"]
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("label missing does not exist")
+    );
+    assert_eq!(http_task_create_label_counts(&db_path)?, before);
+    Ok(())
+}
+
+#[tokio::test]
+async fn tasks_create_with_mixed_existing_and_missing_labels_rolls_back_atomically()
+-> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let backend = kanban_sqlite::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    let before = http_task_create_label_counts(&db_path)?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app,
+        "/api/v1/boards/default/tasks",
+        json!({
+            "title": "partial label create",
+            "description": "ready spec",
+            "labels": ["backend", "missing"]
+        }),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("label missing does not exist")
+    );
+    assert_eq!(http_task_create_label_counts(&db_path)?, before);
+    assert_eq!(
+        kanban_sqlite::list_labels(&db_path, "default")?
+            .into_iter()
+            .map(|label| label.id)
+            .collect::<Vec<_>>(),
+        [backend.id]
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn tasks_create_accepts_labels_and_exposes_task_label_dto() -> anyhow::Result<()> {
     let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    for name in ["backend", "api"] {
+        kanban_sqlite::create_label(
+            &db_path,
+            "default",
+            kanban_sqlite::CreateLabel {
+                name: name.to_owned(),
+                color: None,
+            },
+        )?;
+    }
     let app = test.router();
 
     let (status, json) = post_json(
@@ -218,6 +332,19 @@ async fn tasks_create_accepts_labels_and_exposes_task_label_dto() -> anyhow::Res
     assert_eq!(labels.len(), 2);
     let names: Vec<_> = labels.iter().map(|label| label["name"].clone()).collect();
     assert_eq!(names, [json!("api"), json!("backend")]);
+    assert_eq!(kanban_sqlite::list_labels(&db_path, "default")?.len(), 2);
+    let events = kanban_sqlite::list_events(
+        &db_path,
+        "default",
+        Some(json["data"]["id"].as_str().context("task id")?),
+    )?;
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.kind == "task.label.added")
+            .count(),
+        2
+    );
     Ok(())
 }
 
@@ -456,6 +583,16 @@ async fn tasks_sorts_by_updated_at_ascending_and_descending() -> anyhow::Result<
 async fn tasks_lists_with_assignee_search_sort_and_label_filter() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
+    for name in ["backend", "frontend"] {
+        kanban_sqlite::create_label(
+            &db_path,
+            "default",
+            kanban_sqlite::CreateLabel {
+                name: name.to_owned(),
+                color: None,
+            },
+        )?;
+    }
     for (title, assignee, priority, labels) in [
         ("alpha bug", Some("alice"), 1, vec!["backend".to_owned()]),
         ("beta bug", Some("alice"), 3, vec!["backend".to_owned()]),

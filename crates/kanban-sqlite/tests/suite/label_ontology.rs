@@ -2591,6 +2591,7 @@ fn label_ontology_external_passed_validation_rejects_trusted_update_semantics_pa
             actor: reviewer_actor(),
             reason: Some("Clarify CLI semantics description.".to_owned()),
             source_signal_ids: vec![signal_id.clone()],
+            context_json: None,
         },
     )?;
     let detail = get_label_ontology_signal(&temp.path, &signal_id)?;
@@ -3538,6 +3539,7 @@ fn label_ontology_revert_update_semantics_restores_before_hash_and_keeps_atom_hi
             actor: reviewer_actor(),
             reason: Some("Clarify CLI semantics description.".to_owned()),
             source_signal_ids: vec![signal_id.clone()],
+            context_json: None,
         },
     )?;
     assert_ne!(

@@ -630,216 +630,105 @@ fn label_bootstrap_rejects_empty_semantics_without_partial_writes() -> anyhow::R
     Ok(())
 }
 
+#[cfg(feature = "vector-lancedb")]
 #[test]
-fn label_bootstrap_snapshot_restore_deletes_unverified_new_label() -> anyhow::Result<()> {
-    let temp = TempDb::new("label_bootstrap_snapshot_restore_deletes_unverified_new_label")?;
-    init_database(&temp.path, "tester")?;
-    let task = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("bootstrap restore target"),
-    )?;
-
-    let snapshot =
-        snapshot_bootstrap_task_label_state(&temp.path, "default", &task.id, "database")?;
-    bootstrap_task_label(
-        &temp.path,
-        "default",
-        "tester",
-        &task.id,
-        BootstrapTaskLabel {
-            name: "database".to_owned(),
-            description: Some("Database persistence work".to_owned()),
-            applies_when: vec!["touches SQLite migrations".to_owned()],
-            positive_examples: vec!["new table migration".to_owned()],
-            ..BootstrapTaskLabel::default()
-        },
-    )?;
-    assert_eq!(table_count(&connect_file(&temp.path)?, "labels")?, 1);
-
-    let restored = restore_bootstrap_task_label_state(&temp.path, "tester", &snapshot)?;
-
-    assert!(restored.label_deleted);
-    assert!(restored.task_binding_restored);
-    assert!(!restored.semantics_restored);
-    assert!(restored.index_marked_dirty);
-    let conn = connect_file(&temp.path)?;
-    assert_eq!(table_count(&conn, "labels")?, 0);
-    assert_eq!(table_count(&conn, "label_semantics")?, 0);
-    assert_eq!(table_count(&conn, "label_atoms")?, 0);
-    assert_eq!(table_count(&conn, "task_labels")?, 0);
-    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
-    assert_eq!(status.board_dirty, Some(true));
-    Ok(())
-}
-
-#[test]
-fn label_bootstrap_snapshot_restore_preserves_existing_unbound_label_without_semantics()
+fn label_bootstrap_staged_verify_threshold_failure_leaves_canonical_state_clean()
 -> anyhow::Result<()> {
     let temp = TempDb::new(
-        "label_bootstrap_snapshot_restore_preserves_existing_unbound_label_without_semantics",
+        "label_bootstrap_staged_verify_threshold_failure_leaves_canonical_state_clean",
     )?;
     init_database(&temp.path, "tester")?;
     let task = create_task(
         &temp.path,
         "default",
         "tester",
-        CreateTask::ready("bootstrap restore existing label target"),
+        CreateTask::ready("bootstrap staged verify target"),
     )?;
-    create_label(
-        &temp.path,
-        "default",
-        CreateLabel {
-            name: "database".to_owned(),
-            color: None,
-        },
-    )?;
-
-    let snapshot =
-        snapshot_bootstrap_task_label_state(&temp.path, "default", &task.id, "database")?;
-    bootstrap_task_label(
-        &temp.path,
-        "default",
-        "tester",
-        &task.id,
-        BootstrapTaskLabel {
-            name: "database".to_owned(),
-            description: Some("Database persistence work".to_owned()),
-            applies_when: vec!["touches SQLite migrations".to_owned()],
-            ..BootstrapTaskLabel::default()
-        },
-    )?;
-
-    let restored = restore_bootstrap_task_label_state(&temp.path, "tester", &snapshot)?;
-
-    assert!(!restored.label_deleted);
-    assert!(restored.task_binding_restored);
-    assert!(restored.semantics_restored);
-    assert!(restored.index_marked_dirty);
     let conn = connect_file(&temp.path)?;
-    assert_eq!(table_count(&conn, "labels")?, 1);
-    assert_eq!(table_count(&conn, "label_semantics")?, 0);
-    assert_eq!(table_count(&conn, "label_atoms")?, 0);
-    assert_eq!(table_count(&conn, "task_labels")?, 0);
-    let error = result_err(get_label_semantics(&temp.path, "default", "database"))?;
-    assert!(error.to_string().contains("label semantics"));
-    Ok(())
-}
+    let before = bootstrap_canonical_counts(&conn)?;
+    let status_before = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
 
-#[test]
-fn label_bootstrap_snapshot_restore_preserves_existing_bound_label_without_semantics()
--> anyhow::Result<()> {
-    let temp = TempDb::new(
-        "label_bootstrap_snapshot_restore_preserves_existing_bound_label_without_semantics",
-    )?;
-    init_database(&temp.path, "tester")?;
-    let task = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("bootstrap restore existing bound label target"),
-    )?;
-    create_label(
-        &temp.path,
-        "default",
-        CreateLabel {
-            name: "database".to_owned(),
-            color: None,
-        },
-    )?;
-    kanban_sqlite::add_task_labels(
-        &temp.path,
-        "default",
-        "tester",
-        &task.id,
-        &["database".to_owned()],
+    let error = result_err(
+        kanban_sqlite::bootstrap_task_label_with_staged_verification(
+            &temp.path,
+            "default",
+            "tester",
+            &task.id,
+            BootstrapTaskLabel {
+                name: "database".to_owned(),
+                description: Some("Database persistence work".to_owned()),
+                applies_when: vec!["touches SQLite migrations".to_owned()],
+                positive_examples: vec!["new table migration".to_owned()],
+                ..BootstrapTaskLabel::default()
+            },
+            &BootstrapStagedVerificationStore::low_score(),
+            0.50,
+        ),
     )?;
 
-    let snapshot =
-        snapshot_bootstrap_task_label_state(&temp.path, "default", &task.id, "database")?;
-    bootstrap_task_label(
-        &temp.path,
-        "default",
-        "tester",
-        &task.id,
-        BootstrapTaskLabel {
-            name: "database".to_owned(),
-            description: Some("Database persistence work".to_owned()),
-            applies_when: vec!["touches SQLite migrations".to_owned()],
-            ..BootstrapTaskLabel::default()
-        },
-    )?;
-
-    let restored = restore_bootstrap_task_label_state(&temp.path, "tester", &snapshot)?;
-
-    assert!(!restored.label_deleted);
-    assert!(!restored.task_binding_restored);
-    assert!(restored.semantics_restored);
-    assert_eq!(get_task(&temp.path, "default", &task.id)?.labels.len(), 1);
-    let conn = connect_file(&temp.path)?;
-    assert_eq!(table_count(&conn, "labels")?, 1);
-    assert_eq!(table_count(&conn, "label_semantics")?, 0);
-    assert_eq!(table_count(&conn, "label_atoms")?, 0);
-    assert_eq!(table_count(&conn, "task_labels")?, 1);
-    Ok(())
-}
-
-#[test]
-fn label_bootstrap_snapshot_restore_restores_existing_semantics_and_atoms_exactly()
--> anyhow::Result<()> {
-    let temp = TempDb::new(
-        "label_bootstrap_snapshot_restore_restores_existing_semantics_and_atoms_exactly",
-    )?;
-    init_database(&temp.path, "tester")?;
-    let task = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("bootstrap restore existing semantics target"),
-    )?;
-    bootstrap_task_label(
-        &temp.path,
-        "default",
-        "tester",
-        &task.id,
-        BootstrapTaskLabel {
-            name: "database".to_owned(),
-            description: Some("Database persistence work".to_owned()),
-            applies_when: vec!["touches SQLite migrations".to_owned()],
-            positive_examples: vec!["new table migration".to_owned()],
-            ..BootstrapTaskLabel::default()
-        },
-    )?;
-    let before = get_label_semantics(&temp.path, "default", "database")?;
-    let snapshot =
-        snapshot_bootstrap_task_label_state(&temp.path, "default", &task.id, "database")?;
-
-    upsert_label_semantics(
-        &temp.path,
-        "default",
-        UpsertLabelSemantics {
-            label_ref: "database".to_owned(),
-            replace: true,
-            description: Some("Changed database semantics".to_owned()),
-            applies_when: vec!["changed applies".to_owned()],
-            excludes_when: vec!["changed excludes".to_owned()],
-            positive_examples: vec!["changed positive".to_owned()],
-            negative_examples: vec!["changed negative".to_owned()],
-            ..UpsertLabelSemantics::default()
-        },
-    )?;
-    assert_ne!(
-        get_label_semantics(&temp.path, "default", "database")?,
-        before
+    let message = error.to_string();
+    assert!(
+        message.contains("label bootstrap verification failed"),
+        "{message}"
     );
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(bootstrap_canonical_counts(&conn)?, before);
+    let status_after = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    assert_eq!(status_after.dirty, status_before.dirty);
+    assert_eq!(status_after.board_dirty, status_before.board_dirty);
+    assert_eq!(bootstrap_compensation_event_count(&conn)?, 0);
+    Ok(())
+}
 
-    let restored = restore_bootstrap_task_label_state(&temp.path, "tester", &snapshot)?;
+#[cfg(feature = "vector-lancedb")]
+#[test]
+fn label_bootstrap_staged_verify_success_writes_single_root_action() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_staged_verify_success_writes_single_root_action")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("bootstrap staged verify target"),
+    )?;
+    let conn = connect_file(&temp.path)?;
+    let action_count = table_count(&conn, "label_ontology_actions")?;
+    let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
 
-    assert!(restored.semantics_restored);
-    let after = get_label_semantics(&temp.path, "default", "database")?;
-    assert_eq!(after, before);
-    assert_eq!(get_task(&temp.path, "default", &task.id)?.labels.len(), 1);
+    let result = kanban_sqlite::bootstrap_task_label_with_staged_verification(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        BootstrapTaskLabel {
+            name: "database".to_owned(),
+            description: Some("Database persistence work".to_owned()),
+            applies_when: vec!["touches SQLite migrations".to_owned()],
+            positive_examples: vec!["new table migration".to_owned()],
+            ..BootstrapTaskLabel::default()
+        },
+        &BootstrapStagedVerificationStore::pass(),
+        0.50,
+    )?;
+
+    assert_eq!(result.semantics.label_name, "database");
+    assert_eq!(result.verification.label_name, "database");
+    assert!(result.verification.score >= 0.50);
+    assert_eq!(result.verification.source, "selected_labels");
+    assert_eq!(result.task.labels.len(), 1);
+    assert_eq!(result.task.labels[0].name, "database");
+
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(
+        table_count(&conn, "label_ontology_actions")?,
+        action_count + 1
+    );
+    assert_eq!(
+        table_count(&conn, "label_ontology_action_atom_effects")?,
+        effect_count + result.semantics.atoms.len() as i64
+    );
+    assert_eq!(bootstrap_action_count(&conn)?, 1);
+    assert_eq!(bootstrap_compensation_event_count(&conn)?, 0);
     let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
     assert_eq!(status.board_dirty, Some(true));
     Ok(())
@@ -1879,6 +1768,52 @@ fn table_count(conn: &Connection, table: &str) -> anyhow::Result<i64> {
             row.get(0)
         })?,
     )
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct BootstrapCanonicalCounts {
+    labels: i64,
+    label_semantics: i64,
+    label_atoms: i64,
+    task_labels: i64,
+    task_events: i64,
+    label_ontology_actions: i64,
+    label_ontology_action_atom_effects: i64,
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn bootstrap_canonical_counts(conn: &Connection) -> anyhow::Result<BootstrapCanonicalCounts> {
+    Ok(BootstrapCanonicalCounts {
+        labels: table_count(conn, "labels")?,
+        label_semantics: table_count(conn, "label_semantics")?,
+        label_atoms: table_count(conn, "label_atoms")?,
+        task_labels: table_count(conn, "task_labels")?,
+        task_events: table_count(conn, "task_events")?,
+        label_ontology_actions: table_count(conn, "label_ontology_actions")?,
+        label_ontology_action_atom_effects: table_count(
+            conn,
+            "label_ontology_action_atom_effects",
+        )?,
+    })
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn bootstrap_action_count(conn: &Connection) -> anyhow::Result<i64> {
+    Ok(conn.query_row(
+        "SELECT COUNT(*) FROM label_ontology_actions WHERE action_type='bootstrap_label'",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+#[cfg(feature = "vector-lancedb")]
+fn bootstrap_compensation_event_count(conn: &Connection) -> anyhow::Result<i64> {
+    Ok(conn.query_row(
+        "SELECT COUNT(*) FROM task_events WHERE payload_json LIKE '%bootstrap verification compensation%'",
+        [],
+        |row| row.get(0),
+    )?)
 }
 
 struct RootMutationActionRow {
@@ -3087,6 +3022,62 @@ fn mark_label_atom_index_clean_for_default_board(path: &std::path::Path) -> anyh
         [&board.id],
     )?;
     Ok(())
+}
+
+#[cfg(feature = "vector-lancedb")]
+#[derive(Clone, Copy)]
+struct BootstrapStagedVerificationStore {
+    low_score: bool,
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl BootstrapStagedVerificationStore {
+    fn pass() -> Self {
+        Self { low_score: false }
+    }
+
+    fn low_score() -> Self {
+        Self { low_score: true }
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl kanban_vector::VectorStoreBackend for BootstrapStagedVerificationStore {
+    fn embedding_model(&self) -> &str {
+        "bootstrap-test-model"
+    }
+
+    fn status(&self) -> kanban_vector::VectorStoreStatus {
+        kanban_vector::VectorStoreStatus {
+            backend: "test-vector".to_owned(),
+            enabled: true,
+            message: "test vector store; dirty=false last_error=none; board_dirty=false".to_owned(),
+            diagnostics: Vec::new(),
+            dirty: Some(false),
+            board_dirty: Some(false),
+            generation: None,
+        }
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl kanban_vector::QueryEmbeddingProvider for BootstrapStagedVerificationStore {
+    fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
+        if !self.low_score || text.contains("bootstrap staged verify target") {
+            return Ok(vec![1.0, 0.0, 0.0]);
+        }
+        Ok(vec![0.0, 1.0, 0.0])
+    }
+}
+
+#[cfg(feature = "vector-lancedb")]
+impl kanban_vector::LabelAtomVectorStore for BootstrapStagedVerificationStore {
+    fn query_label_atoms_by_vector(
+        &self,
+        _query: &kanban_vector::LabelAtomVectorQuery,
+    ) -> Result<Vec<kanban_vector::LabelAtomVectorHit>, kanban_vector::VectorError> {
+        Ok(Vec::new())
+    }
 }
 
 struct StaticLabelAtomStore {

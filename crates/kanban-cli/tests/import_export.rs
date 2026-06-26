@@ -5,6 +5,18 @@ use common::{TempDb, kanban, kanban_in_dir};
 use kanban_sqlite::maintenance_lock_path;
 use pretty_assertions::assert_eq;
 use std::path::Path;
+
+fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
+    kanban_sqlite::mark_execution_plan_not_required(
+        db_path,
+        "default",
+        "cli-import-export-test",
+        task_id,
+        "import/export fixture does not need subtasks",
+    )?;
+    Ok(())
+}
+
 #[test]
 fn backup_writes_database_copy() -> anyhow::Result<()> {
     let source = initialized_database("backup_writes_database_copy")?;
@@ -97,6 +109,7 @@ fn source_with_completed_run(source: &TempDb) -> anyhow::Result<SourceData> {
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
+    mark_no_plan_required(&source.path, task_id)?;
     let dispatch = kanban_in_dir(
         &source.path,
         &[
@@ -280,6 +293,7 @@ fn import_replace_restores_over_corrupt_existing_database() -> anyhow::Result<()
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
+    mark_no_plan_required(&source.path, task_id)?;
     let export_path = source.dir.join("restore.jsonl");
     kanban(
         &source.path,
@@ -316,7 +330,7 @@ fn import_replace_restores_over_corrupt_existing_database() -> anyhow::Result<()
 fn import_replace_rejects_maintenance_locked_database() -> anyhow::Result<()> {
     let source = TempDb::new("import_replace_rejects_maintenance_locked_database_source")?;
     kanban(&source.path, &["init"])?.success()?;
-    kanban(
+    let incoming = kanban(
         &source.path,
         &[
             "--json",
@@ -328,6 +342,10 @@ fn import_replace_rejects_maintenance_locked_database() -> anyhow::Result<()> {
         ],
     )?
     .success_json()?;
+    let incoming_id = incoming["data"]["id"]
+        .as_str()
+        .context("expected JSON string")?;
+    mark_no_plan_required(&source.path, incoming_id)?;
     let export_path = source.dir.join("restore.jsonl");
     kanban(
         &source.path,
@@ -357,6 +375,7 @@ fn import_replace_rejects_maintenance_locked_database() -> anyhow::Result<()> {
     let existing_id = existing["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
+    mark_no_plan_required(&target.path, existing_id)?;
     let lock_path = maintenance_lock_path(&target.path);
     std::fs::write(&lock_path, "locked")?;
 
@@ -447,6 +466,7 @@ fn import_replace_rejects_running_work_in_target_database() -> anyhow::Result<()
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
+    mark_no_plan_required(&target.path, task_id)?;
     kanban(&target.path, &["--json", "task", "claim", task_id])?.success_json()?;
 
     let import_result = kanban(
@@ -495,6 +515,7 @@ fn export_scrubs_active_running_claims_for_roundtrip_import() -> anyhow::Result<
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
+    mark_no_plan_required(&source.path, task_id)?;
     kanban(
         &source.path,
         &["--json", "task", "claim", task_id, "--ttl-ms", "600000"],

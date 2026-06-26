@@ -2,6 +2,17 @@
 
 use crate::common::*;
 
+fn mark_ready_fixture(db_path: &std::path::Path, task_id: &str) -> anyhow::Result<()> {
+    kanban_sqlite::mark_execution_plan_not_required(
+        db_path,
+        "default",
+        "tantivy-search-test",
+        task_id,
+        "search fixture does not need subtasks",
+    )?;
+    Ok(())
+}
+
 #[test]
 fn tantivy_rebuild_marks_only_current_board_outbox_done() -> anyhow::Result<()> {
     let temp = TempDb::new("tantivy_rebuild_marks_only_current_board_outbox_done")?;
@@ -156,6 +167,7 @@ fn tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters() 
             metadata_json: "{}".into(),
         },
     )?;
+    mark_ready_fixture(&temp.path, &title.id)?;
     let description = create_task(
         &temp.path,
         "default",
@@ -172,6 +184,7 @@ fn tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters() 
             metadata_json: "{}".into(),
         },
     )?;
+    mark_ready_fixture(&temp.path, &description.id)?;
     let comment = create_task(
         &temp.path,
         "default",
@@ -340,6 +353,10 @@ fn stale_tantivy_index_falls_back_to_sqlite_before_current_filters_are_applied()
             metadata_json: "{}".into(),
         },
     )?;
+    mark_ready_fixture(&temp.path, &archive_candidate.id)?;
+    mark_ready_fixture(&temp.path, &status_candidate.id)?;
+    mark_ready_fixture(&temp.path, &assignee_candidate.id)?;
+    let assignee_candidate = get_task(&temp.path, "default", &assignee_candidate.id)?;
 
     kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
     let indexed = search_tasks(
@@ -552,6 +569,10 @@ fn tantivy_sync_reindexes_task_comment_run_event_and_archive_changes() -> anyhow
         "tester",
         CreateTask::ready("archive syncneedle"),
     )?;
+    for task in [&updated, &commented, &run_task, &event_task, &archived] {
+        mark_ready_fixture(&temp.path, &task.id)?;
+    }
+    let updated = get_task(&temp.path, "default", &updated.id)?;
 
     kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
     update_task(
@@ -1098,6 +1119,7 @@ fn tantivy_exact_task_ref_searches_fall_back_to_sqlite_after_rebuild() -> anyhow
         "tester",
         CreateTask::ready("first exact ref task"),
     )?;
+    mark_ready_fixture(&temp.path, &first.id)?;
     let mentions_one = create_task(
         &temp.path,
         "default",

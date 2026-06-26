@@ -13,6 +13,17 @@ use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::{fs, path::Path};
 
+fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
+    kanban_sqlite::mark_execution_plan_not_required(
+        db_path,
+        "default",
+        "cli-task-test",
+        task_id,
+        "task cli fixture does not need subtasks",
+    )?;
+    Ok(())
+}
+
 #[test]
 fn task_show_defaults_to_one_line_summary() -> anyhow::Result<()> {
     let temp = TempDb::new("task_show_defaults_to_one_line_summary")?;
@@ -36,6 +47,7 @@ fn task_show_defaults_to_one_line_summary() -> anyhow::Result<()> {
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
+    mark_no_plan_required(&temp.path, task_id)?;
 
     let stdout = kanban(&temp.path, &["task", "show", task_id])?.success_stdout()?;
 
@@ -76,6 +88,7 @@ fn task_show_details_prints_full_readable_record() -> anyhow::Result<()> {
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
+    mark_no_plan_required(&temp.path, task_id)?;
 
     let stdout = kanban(&temp.path, &["task", "show", task_id, "--details"])?.success_stdout()?;
 
@@ -3355,6 +3368,7 @@ fn task_complete_alias_finishes_running_task() -> anyhow::Result<()> {
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
+    mark_no_plan_required(&temp.path, task_id)?;
     let claim = kanban(&temp.path, &["--json", "task", "claim", task_id])?.success_json()?;
     let token = claim["data"]["claim_token"]
         .as_str()
@@ -3395,6 +3409,7 @@ fn task_claim_start_and_heartbeat_reject_nonpositive_ttl_ms() -> anyhow::Result<
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
+    mark_no_plan_required(&temp.path, task_id)?;
 
     for command in ["claim", "start"] {
         for ttl_ms in ["0", "-1"] {
@@ -3448,6 +3463,7 @@ fn task_reclaim_expired_alias_matches_default_reclaim() -> anyhow::Result<()> {
         let task_id = created["data"]["id"]
             .as_str()
             .context("expected JSON string")?;
+        mark_no_plan_required(&temp.path, task_id)?;
         kanban(
             &temp.path,
             &["--json", "task", "claim", task_id, "--ttl-ms", "1"],

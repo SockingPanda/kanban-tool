@@ -175,3 +175,32 @@ async fn board_task_map_returns_active_graph_with_done_context_and_excludes_arch
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn task_graph_rejects_unsupported_depth_options() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("center"),
+    )?;
+
+    let (status, json) = get_json(
+        test.router(),
+        &format!("/api/v1/tasks/{}/neighborhood?depth=2", task.id),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+
+    let (status, json) = get_json(
+        test.router(),
+        "/api/v1/boards/default/task-map?context_depth=2",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    Ok(())
+}

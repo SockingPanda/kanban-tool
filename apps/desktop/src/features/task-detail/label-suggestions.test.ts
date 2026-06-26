@@ -35,7 +35,7 @@ describe("label suggestions", () => {
     const html = renderTaskDetailWithSuggestions(longSuggestionResult)
 
     expect(classListForElementWithAttribute(html, 'data-test-sheet="task-detail"')).toEqual(
-      expect.arrayContaining(["fixed", "flex", "flex-col", "w-[min(620px,calc(100vw-32px))]", "p-0"]),
+      expect.arrayContaining(["fixed", "flex", "flex-col", "w-[min(1100px,calc(100vw-24px))]", "p-0"]),
     )
     expect(classListForPanelRoot(html)).toEqual(
       expect.arrayContaining(["min-w-0", "w-full", "max-w-full", "overflow-hidden"]),
@@ -67,7 +67,7 @@ function renderTaskDetailWithSuggestions(suggestions: LabelSuggestionResult) {
         "div",
         {
           "data-test-sheet": "task-detail",
-          className: `${sheetContentClassName("right")} w-[min(620px,calc(100vw-32px))] p-0`,
+          className: `${sheetContentClassName("right")} w-[min(1100px,calc(100vw-24px))] p-0`,
         },
         createElement(TaskDetail, {
           api: null,

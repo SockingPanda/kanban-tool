@@ -9,6 +9,17 @@ describe("task detail loading", () => {
     const api = {
       getTask: vi.fn(async () => task),
       listDependencies: vi.fn(async () => ({ parents: [], children: [] })),
+      getTaskNeighborhood: vi.fn(async () => ({
+        center_task_id: task.id,
+        nodes: [],
+        edges: [],
+        meta: { generated_at: 1, truncated: false, node_count: 0, edge_count: 0, depth: 1 },
+      })),
+      listSubtasks: vi.fn(async () => ({
+        task_id: task.id,
+        subtasks: [],
+        execution_plan: { board_id: task.board_id, task_id: task.id, state: "unplanned", reason: null, updated_by: "system", updated_at: 1 },
+      })),
       listRuns: vi.fn(async () => []),
       listEvents: vi.fn(async () => ({ events: [], next_after: 0 })),
       listComments: vi.fn(async () => []),
@@ -21,6 +32,10 @@ describe("task detail loading", () => {
 
     expect(result.task).toBe(task)
     expect(result.detail.labelSuggestions).toBeNull()
+    expect(result.detail.neighborhood?.center_task_id).toBe(task.id)
+    expect(result.detail.subtasks?.task_id).toBe(task.id)
+    expect(api.getTaskNeighborhood).toHaveBeenCalledWith(task.id, { depth: 1, limitNodes: 40, signal: undefined })
+    expect(api.listSubtasks).toHaveBeenCalledWith(task.id, { signal: undefined })
     expect(api.suggestTaskLabels).not.toHaveBeenCalled()
   })
 
@@ -80,5 +95,9 @@ const task = {
   lock_version: 0,
   dependency_blocked: false,
   unfinished_parent_count: 0,
+  execution_plan_state: "unplanned",
+  required_subtask_count: 0,
+  completed_required_subtask_count: 0,
+  optional_subtask_count: 0,
   labels: [],
 }

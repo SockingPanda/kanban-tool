@@ -33,6 +33,13 @@ fn cli_adapter_contract_commits_to_shared_task_label_and_run_state() -> anyhow::
         .as_str()
         .context("task id")?
         .to_owned();
+    kanban_sqlite::mark_execution_plan_not_required(
+        &temp.path,
+        "default",
+        "cli-adapter",
+        &task_id,
+        "adapter contract task does not need subtasks",
+    )?;
     assert_eq!(
         kanban_sqlite::get_task(&temp.path, "default", &task_id)?.status,
         kanban_core::TaskStatus::Ready

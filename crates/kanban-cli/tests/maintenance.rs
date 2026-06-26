@@ -5,6 +5,18 @@ use common::{TempDb, kanban, kanban_in_dir};
 use kanban_sqlite::maintenance_lock_path;
 use pretty_assertions::assert_eq;
 use std::path::Path;
+
+fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
+    kanban_sqlite::mark_execution_plan_not_required(
+        db_path,
+        "default",
+        "cli-maintenance-test",
+        task_id,
+        "maintenance fixture does not need subtasks",
+    )?;
+    Ok(())
+}
+
 #[test]
 fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     let temp = TempDb::new("doctor_reports_integrity_migration_and_expired_running_tasks")?;
@@ -24,6 +36,7 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     let task_id = created["data"]["id"]
         .as_str()
         .context("expected JSON string")?;
+    mark_no_plan_required(&temp.path, task_id)?;
     kanban(
         &temp.path,
         &["--json", "task", "claim", task_id, "--ttl-ms", "1"],
@@ -34,8 +47,8 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     let doctor = kanban(&temp.path, &["--json", "doctor"])?.success_json()?;
 
     assert_eq!(doctor["data"]["integrity_check"], "ok");
-    assert_eq!(doctor["data"]["migration_version"], 21);
-    assert_eq!(doctor["data"]["user_version"], 21);
+    assert_eq!(doctor["data"]["migration_version"], 22);
+    assert_eq!(doctor["data"]["user_version"], 22);
     assert_eq!(doctor["data"]["expired_running_tasks"], 1);
     assert_eq!(doctor["data"]["dependency_cycles"], 0);
     assert_eq!(doctor["data"]["archived_dependency_edges"], 0);
@@ -43,7 +56,12 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     assert_eq!(doctor["data"]["executable_dependency_violations"], 0);
     assert_eq!(doctor["data"]["executable_spec_violations"], 0);
     assert_eq!(doctor["data"]["executable_schedule_violations"], 0);
-    assert_eq!(doctor["data"]["outbox_pending"], 6);
+    assert_eq!(doctor["data"]["unplanned_active_tasks"], 0);
+    assert_eq!(
+        doctor["data"]["active_parents_with_incomplete_required_subtasks"],
+        0
+    );
+    assert_eq!(doctor["data"]["outbox_pending"], 12);
     assert_eq!(doctor["data"]["outbox_running"], 0);
     assert_eq!(doctor["data"]["outbox_failed"], 0);
     assert_eq!(doctor["data"]["derived_dirty_stores"], 3);
@@ -80,7 +98,7 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
             .iter()
             .any(|store| store["store_name"] == "tantivy_tasks"
                 && store["dirty"] == true
-                && store["pending_outbox"] == 2
+                && store["pending_outbox"] == 4
                 && store["failed_outbox"] == 0)
     );
     assert!(

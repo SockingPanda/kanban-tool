@@ -641,6 +641,8 @@ export type TaskPageResult = {
   page: PageMeta
 }
 
+export type TaskPlanFilter = "plan_needed" | "has_subtasks" | "incomplete_required_subtasks"
+
 export type TaskListSort =
   | "seq"
   | "-seq"
@@ -797,6 +799,7 @@ export class KanbanApi {
     for (const label of options.labels ?? []) {
       if (label.trim()) params.append("label", label.trim())
     }
+    for (const filter of options.planFilters ?? []) params.append("plan_filter", filter)
     const envelope = await this.requestEnvelope<Task[], PageEnvelopeMeta>(
       `/api/v1/boards/${this.board}/tasks?${params.toString()}`,
       { signal: options.signal },
@@ -1162,6 +1165,7 @@ type TaskListOptions = {
   statuses?: TaskStatus[]
   priorities?: number[]
   labels?: string[]
+  planFilters?: TaskPlanFilter[]
   query?: string
   sort?: TaskListSort
   limit?: number

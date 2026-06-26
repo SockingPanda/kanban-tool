@@ -7,6 +7,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use kanban_core::TaskStatus;
+use kanban_sqlite::TaskPlanFilter;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value as JsonValue, json};
 use std::str::FromStr;
@@ -33,6 +34,24 @@ pub(crate) struct TaskListQuery {
     q: Option<String>,
     search: Option<String>,
     sort: Option<String>,
+}
+
+fn parse_plan_filters(raw_query: Option<&str>) -> Result<Vec<TaskPlanFilter>, ApiError> {
+    let Some(raw_query) = raw_query else {
+        return Ok(Vec::new());
+    };
+    let pairs = serde_urlencoded::from_str::<Vec<(String, String)>>(raw_query)
+        .map_err(|error| invalid_input(error.to_string()))?;
+    pairs
+        .into_iter()
+        .filter(|(key, _)| key == "plan_filter")
+        .map(|(_, value)| match value.trim() {
+            "plan_needed" => Ok(TaskPlanFilter::PlanNeeded),
+            "has_subtasks" => Ok(TaskPlanFilter::HasSubtasks),
+            "incomplete_required_subtasks" => Ok(TaskPlanFilter::IncompleteRequiredSubtasks),
+            other => Err(invalid_input(format!("unknown plan_filter {other}"))),
+        })
+        .collect()
 }
 
 #[derive(Debug, Deserialize)]
@@ -447,6 +466,7 @@ pub(crate) async fn list_tasks(
     let statuses = parse_status_filters(raw_query.as_deref())?;
     let priorities = parse_priority_filters(raw_query.as_deref())?;
     let labels = parse_label_filters(raw_query.as_deref())?;
+    let plan_filters = parse_plan_filters(raw_query.as_deref())?;
     let assignee = query
         .assignee
         .as_deref()
@@ -468,6 +488,7 @@ pub(crate) async fn list_tasks(
             statuses,
             priorities,
             labels,
+            plan_filters,
             include_archived: query.include_archived,
             assignee,
             search,

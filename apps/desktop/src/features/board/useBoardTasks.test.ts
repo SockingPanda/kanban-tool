@@ -16,6 +16,7 @@ describe("resolveBoardTaskRequest", () => {
       search: "  blocked parent  ",
       statusFilter: "ready",
       priorityFilters: [0, 2],
+      planFilters: ["plan_needed"],
       sort: "priority",
       showArchived: true,
       limit: BOARD_COLUMN_TASK_LIMIT,
@@ -27,6 +28,7 @@ describe("resolveBoardTaskRequest", () => {
       statusFilter: "all",
       statuses: ["triage", "blocked"],
       priorityFilters: [],
+      planFilters: [],
       sort: "-updated_at",
       limit: 50,
       offset: 0,
@@ -39,6 +41,7 @@ describe("resolveBoardTaskRequest", () => {
       search: "  dashboard  ",
       statusFilter: "blocked",
       priorityFilters: [1, 3],
+      planFilters: ["plan_needed", "has_subtasks"],
       sort: "priority",
       showArchived: false,
       limit: 50,
@@ -50,6 +53,7 @@ describe("resolveBoardTaskRequest", () => {
       statusFilter: "blocked",
       statuses: ["blocked"],
       priorityFilters: [1, 3],
+      planFilters: ["plan_needed", "has_subtasks"],
       sort: "priority",
       limit: 50,
       offset: 100,
@@ -85,6 +89,38 @@ describe("loadBoardTasks", () => {
     expect(result.tasks.map((entry) => entry.status)).toEqual(["triage", "blocked"])
     expect(result.page).toEqual({ limit: 100, offset: 0, total: 120 })
     expect(result.searchMeta).toBeNull()
+  })
+
+  it("passes list execution plan filters to the task list endpoint", async () => {
+    const listTasks = vi.fn(async () => ({
+      tasks: [task("task-ready", "ready")],
+      page: { limit: 50, offset: 25, total: 1 },
+    }) satisfies TaskPageResult)
+    const api = { board: "default", listTasks } as unknown as KanbanApi
+    const request = resolveBoardTaskRequest({
+      mode: "list",
+      search: "",
+      statusFilter: "ready",
+      priorityFilters: [1],
+      planFilters: ["plan_needed", "incomplete_required_subtasks"],
+      sort: "priority",
+      showArchived: false,
+      limit: 50,
+      offset: 25,
+    })
+
+    await loadBoardTasks(api, request)
+
+    expect(listTasks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statuses: ["ready"],
+        priorities: [1],
+        planFilters: ["plan_needed", "incomplete_required_subtasks"],
+        sort: "priority",
+        limit: 50,
+        offset: 25,
+      }),
+    )
   })
 
   it("searches each visible board status and merges search metadata", async () => {

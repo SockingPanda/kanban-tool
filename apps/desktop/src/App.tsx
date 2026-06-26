@@ -20,7 +20,7 @@ import { executeDragTransition, planDragTransition } from "@/features/board/drag
 import { BOARD_COLUMN_TASK_LIMIT, useBoardTasks } from "@/features/board/useBoardTasks"
 import { useEventPoller } from "@/features/events/useEventPoller"
 import type { OperatorView } from "@/features/navigation/view-types"
-import { defaultListSort, listSortToApiSort, type ListSortState } from "@/features/list/table-state"
+import { defaultListSort, listSortToApiSort, type ListSortState, type TaskPlanFilter } from "@/features/list/table-state"
 import { invalidateTaskDetailAndBoard } from "@/features/task-detail/detail-invalidation"
 import { requestTaskLabelSuggestions, taskDetailOrEmpty, useTaskDetail } from "@/features/task-detail/useTaskDetail"
 import {
@@ -94,12 +94,14 @@ function App() {
   const debouncedSearch = useDebouncedValue(search, 250)
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all")
   const [priorityFilters, setPriorityFilters] = useState<number[]>([])
+  const [planFilters, setPlanFilters] = useState<TaskPlanFilter[]>([])
   const [listSort, setListSort] = useState<ListSortState>(defaultListSort)
   const [showArchived, setShowArchived] = useState(false)
   const [pageOffset, setPageOffset] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE)
   const [newTitle, setNewTitle] = useState("")
   const [newDescription, setNewDescription] = useState("")
+  const [newFirstSubtaskTitle, setNewFirstSubtaskTitle] = useState("")
   const [blockReason, setBlockReason] = useState("")
   const [dependencyInput, setDependencyInput] = useState("")
   const [commentBody, setCommentBody] = useState("")
@@ -138,7 +140,7 @@ function App() {
 
   useEffect(() => {
     setPageOffset(0)
-  }, [debouncedSearch, showArchived, statusFilter, priorityFilters, listSort])
+  }, [debouncedSearch, showArchived, statusFilter, priorityFilters, planFilters, listSort])
 
   const columnsQuery = useQuery({
     enabled: Boolean(api),
@@ -178,6 +180,7 @@ function App() {
     search: debouncedSearch,
     statusFilter,
     priorityFilters: view === "list" ? priorityFilters : [],
+    planFilters: view === "list" ? planFilters : [],
     sort: view === "list" ? listSortToApiSort(listSort) : "-updated_at",
     mode: view === "list" ? "list" : "board",
     showArchived,
@@ -343,9 +346,13 @@ function App() {
         title: newTitle.trim(),
         description: newDescription.trim() || undefined,
       })
+      if (newFirstSubtaskTitle.trim()) {
+        await api.createSubtask(task.id, { title: newFirstSubtaskTitle.trim(), priority: task.priority, required: true })
+      }
       setSelectedId(task.id)
       setNewTitle("")
       setNewDescription("")
+      setNewFirstSubtaskTitle("")
       return task
     }, "create")
     return isTask(result)
@@ -550,6 +557,7 @@ function App() {
         searchMeta={searchMeta}
         statusFilter={statusFilter}
         priorityFilters={priorityFilters}
+        planFilters={planFilters}
         listSort={listSort}
         showArchived={showArchived}
         page={page}
@@ -559,6 +567,7 @@ function App() {
         rowsPerPage={rowsPerPage}
         newTitle={newTitle}
         newDescription={newDescription}
+        newFirstSubtaskTitle={newFirstSubtaskTitle}
         blockReason={blockReason}
         dependencyInput={dependencyInput}
         commentBody={commentBody}
@@ -579,10 +588,12 @@ function App() {
         onSidebarOpenChange={setSidebarOpen}
         onStatusFilterChange={setStatusFilter}
         onPriorityFiltersChange={setPriorityFilters}
+        onPlanFiltersChange={setPlanFilters}
         onListSortChange={setListSort}
         onResetListFilters={() => {
           setStatusFilter("all")
           setPriorityFilters([])
+          setPlanFilters([])
           setPageOffset(0)
         }}
         onShowArchivedChange={setShowArchived}
@@ -598,6 +609,7 @@ function App() {
         onCreateTask={createTask}
         onNewTitleChange={setNewTitle}
         onNewDescriptionChange={setNewDescription}
+        onNewFirstSubtaskTitleChange={setNewFirstSubtaskTitle}
         onSelectTask={setSelectedId}
         onCloseTaskDetail={() => setSelectedId(null)}
         onDropTask={(taskId, status) => void dropTask(taskId, status)}

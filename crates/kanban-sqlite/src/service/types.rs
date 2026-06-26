@@ -1472,6 +1472,13 @@ pub struct DispatchResult {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskPlanFilter {
+    PlanNeeded,
+    HasSubtasks,
+    IncompleteRequiredSubtasks,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskListSort {
     Seq,
     SeqDesc,
@@ -1500,6 +1507,7 @@ pub struct TaskListOptions {
     pub statuses: Vec<TaskStatus>,
     pub priorities: Vec<i64>,
     pub labels: Vec<String>,
+    pub plan_filters: Vec<TaskPlanFilter>,
     pub include_archived: bool,
     pub assignee: Option<String>,
     pub search: Option<String>,

@@ -104,7 +104,7 @@ SQLite 是 canonical truth，但 board isolation 由 schema、service 和 diagno
 
 1. DB constraint：所有 board-scoped rows 都有 `board_id` 并引用 `boards(id)`；
    referenced task / label / run id 也各自有 FK，确保引用对象存在。`task_labels`、
-   `task_dependencies`、`task_runs`、`task_comments`、`task_attachments` 和较新的
+   `task_dependencies`、`task_subtasks`、`task_execution_plans`、`task_runs`、`task_comments`、`task_attachments` 和较新的
    label semantics / atoms / ontology link 表使用包含 `board_id` 的复合 FK，直接阻止这些
    关系表出现 cross-board row。`task_events` 保留 nullable task/run refs 与
    `ON DELETE SET NULL` 语义，由 INSERT/UPDATE triggers 校验非空 refs 的 board scope。
@@ -112,7 +112,7 @@ SQLite 是 canonical truth，但 board isolation 由 schema、service 和 diagno
    scope 内 resolve task、label、run 等对象，再写关系 row；例如 task label binding、
    dependency、comment、event、run 和 attachment 都不应跨 board 组合。
 3. Doctor/import check：`kanban doctor` 和 JSONL import final gate 会只读检查基础关系表
-   中 `row.board_id` 与 referenced task / label / run 的 board 是否一致，并运行
+   中 `row.board_id` 与 referenced task / label / run 的 board 是否一致，检测 subtask cycle，并运行
    `PRAGMA foreign_key_check`。任一 violation 都会成为 hard-error issue；import 会在
    commit 前回滚整个 replace transaction。
 
@@ -237,9 +237,91 @@ parent neither done nor archived => child cannot be ready/running
 
 添加依赖时必须做环检测。归档 parent 会满足 hard dependency guard，但 dependency edge 保留为历史，不会自动 promote child。
 
+
 ---
 
-## 7. Run
+## 7. Subtask / Execution Plan
+
+Subtask / step 是执行拆解关系，不是阻塞依赖关系。子任务本身仍是普通 `tasks`
+row，可以被搜索、打开 detail、评论、运行和归档；关系由独立表表达，不能写进
+`description` Markdown，也不能复用 `task_dependencies`。
+
+### 7.1 Subtasks
+
+表：`task_subtasks`
+
+Schema-level invariant：`parent_task_id` 和 `child_task_id` 必须都属于 row
+`board_id`，且 `parent_task_id != child_task_id`。Service 还必须拒绝 cross-board
+绑定、archived parent/child、以及会形成 subtask cycle 的绑定。
+
+字段：
+
+| 字段 | 说明 |
+|---|---|
+| `board_id` | 所属 board。 |
+| `parent_task_id` | 被拆解的父任务。 |
+| `child_task_id` | 作为步骤的普通 task。 |
+| `position` | 父任务内步骤排序键。 |
+| `required` | 是否为父任务执行计划的 required step。 |
+| `created_by` | 创建 actor。 |
+| `created_at` | 创建时间。 |
+
+索引：
+
+- `idx_subtasks_parent_position(parent_task_id, position)`
+- `idx_subtasks_child(child_task_id)`
+
+语义：
+
+```text
+parent contains child step
+```
+
+这条边不会自动变成 dependency，也不会直接驱动 `dependency_blocked` 或
+`unfinished_parent_count`。后续状态机 guard 可以显式读取 required subtasks 来限制
+promote / claim / complete，但那是执行计划规则，不是 dependency 语义。
+
+### 7.2 Execution plans
+
+表：`task_execution_plans`
+
+字段：
+
+| 字段 | 说明 |
+|---|---|
+| `board_id` | 所属 board。 |
+| `task_id` | 被规划的 task。 |
+| `state` | `unplanned`、`planned` 或 `not_required`。 |
+| `reason` | `not_required` 的说明。 |
+| `updated_by` | 最近更新 actor。 |
+| `updated_at` | 最近更新时间。 |
+
+索引：
+
+- `idx_execution_plans_board_state(board_id, state)`
+
+派生口径：
+
+```text
+required subtasks > 0 => planned
+explicit not_required row and no required subtasks => not_required
+otherwise => unplanned
+```
+
+事件：
+
+```text
+task.subtask.created
+task.subtask.attached
+task.subtask.removed
+task.subtask.reordered
+task.execution_plan.planned
+task.execution_plan.not_required
+```
+
+---
+
+## 8. Run
 
 表：`task_runs`
 
@@ -248,13 +330,13 @@ Schema-level invariant：`task_id` 必须属于 row `board_id`。这保证 run a
 
 Run 是一次 execution attempt。
 
-### 7.1 Run status
+### 8.1 Run status
 
 ```text
 running | succeeded | failed | canceled | expired
 ```
 
-### 7.2 字段
+### 8.2 字段
 
 | 字段 | 说明 |
 |---|---|
@@ -273,7 +355,7 @@ running | succeeded | failed | canceled | expired
 | `log_path` | stdout/stderr 日志路径。 |
 | `metadata_json` | 执行元数据。 |
 
-### 7.3 约束
+### 8.3 约束
 
 - active `running` task 必须有 active run。
 - 一个 task 可以有多个历史 run。
@@ -283,13 +365,13 @@ SQLite 不强制最后一条，需要 service 层和 transaction 保证。
 
 ---
 
-## 8. Event
+## 9. Event
 
 表：`task_events`
 
 Event 是 append-only 事实记录。
 
-### 8.1 Event kind
+### 9.1 Event kind
 
 建议初始 kind：
 

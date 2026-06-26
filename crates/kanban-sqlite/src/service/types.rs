@@ -461,6 +461,73 @@ pub struct CreateTask {
     pub metadata_json: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StepPlanState {
+    Unplanned,
+    Planned,
+    NotRequired,
+}
+
+impl StepPlanState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unplanned => "unplanned",
+            Self::Planned => "planned",
+            Self::NotRequired => "not_required",
+        }
+    }
+
+    pub fn from_db_str(value: &str) -> Option<Self> {
+        match value {
+            "unplanned" => Some(Self::Unplanned),
+            "planned" => Some(Self::Planned),
+            "not_required" => Some(Self::NotRequired),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateSubtaskInput {
+    pub task: CreateTask,
+    pub position: Option<i64>,
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttachSubtaskInput {
+    pub child_ref: String,
+    pub position: Option<i64>,
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct UpdateSubtaskInput {
+    pub position: Option<i64>,
+    pub required: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskSubtaskRecord {
+    pub parent_task_id: String,
+    pub child_task: TaskRecord,
+    pub position: i64,
+    pub required: bool,
+    pub created_by: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskExecutionPlanRecord {
+    pub board_id: String,
+    pub task_id: String,
+    pub state: StepPlanState,
+    pub reason: Option<String>,
+    pub updated_by: String,
+    pub updated_at: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateLabel {
     pub name: String,

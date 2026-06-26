@@ -1,4 +1,5 @@
 use kanban_core::TaskStatus;
+use kanban_sqlite::StepPlanState;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
@@ -54,6 +55,10 @@ pub(super) struct TaskDto {
     pub(super) lock_version: i64,
     pub(super) dependency_blocked: bool,
     pub(super) unfinished_parent_count: i64,
+    pub(super) execution_plan_state: StepPlanState,
+    pub(super) required_subtask_count: i64,
+    pub(super) completed_required_subtask_count: i64,
+    pub(super) optional_subtask_count: i64,
     pub(super) labels: Vec<LabelDto>,
 }
 
@@ -92,6 +97,10 @@ impl From<kanban_sqlite::TaskRecord> for TaskDto {
             lock_version: task.lock_version,
             dependency_blocked: task.dependency_blocked,
             unfinished_parent_count: task.unfinished_parent_count,
+            execution_plan_state: task.execution_plan_state,
+            required_subtask_count: task.required_subtask_count,
+            completed_required_subtask_count: task.completed_required_subtask_count,
+            optional_subtask_count: task.optional_subtask_count,
             labels: task.labels.into_iter().map(LabelDto::from).collect(),
         }
     }

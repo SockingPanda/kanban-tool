@@ -10,6 +10,7 @@ fn block_rolls_back_task_state_when_event_insert_fails() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("block rollback"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &task.id)?;
     connect_file(&temp.path)
         ?
         .execute(

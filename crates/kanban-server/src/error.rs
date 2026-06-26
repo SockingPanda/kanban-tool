@@ -56,6 +56,10 @@ impl IntoResponse for ApiError {
             KanbanError::InvalidInput(_) | KanbanError::InvalidStatus(_) => {
                 (StatusCode::BAD_REQUEST, "invalid_input")
             }
+            KanbanError::ExecutionPlanRequired(_) => {
+                (StatusCode::CONFLICT, "execution_plan_required")
+            }
+            KanbanError::SubtasksIncomplete(_) => (StatusCode::CONFLICT, "subtasks_incomplete"),
             KanbanError::InvalidTransition(_) if message.contains("claim token mismatch") => {
                 (StatusCode::FORBIDDEN, "claim_token_mismatch")
             }

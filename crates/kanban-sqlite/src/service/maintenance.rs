@@ -95,12 +95,18 @@ pub fn queue_stats(path: impl AsRef<Path>, board: &str) -> Result<QueueStats> {
         .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)?;
 
+    let unplanned_active_tasks = count_unplanned_active_tasks(&conn, Some(&board_id))?;
+    let active_parents_with_incomplete_required_subtasks =
+        count_active_parents_with_incomplete_required_subtasks(&conn, Some(&board_id))?;
+
     Ok(QueueStats {
         board_id,
         generated_at,
         status_counts,
         stale_claims,
         blocked_reasons,
+        unplanned_active_tasks,
+        active_parents_with_incomplete_required_subtasks,
     })
 }
 
@@ -151,6 +157,8 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
             executable_dependency_violations: 0,
             executable_spec_violations: 0,
             executable_schedule_violations: 0,
+            unplanned_active_tasks: 0,
+            active_parents_with_incomplete_required_subtasks: 0,
             outbox_pending: 0,
             outbox_running: 0,
             outbox_failed: 0,
@@ -201,6 +209,9 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
     let executable_dependency_violations = count_executable_dependency_violations(conn)?;
     let executable_spec_violations = count_executable_spec_violations(conn)?;
     let executable_schedule_violations = count_executable_schedule_violations(conn, now)?;
+    let unplanned_active_tasks = count_unplanned_active_tasks(conn, None)?;
+    let active_parents_with_incomplete_required_subtasks =
+        count_active_parents_with_incomplete_required_subtasks(conn, None)?;
     let derived_stores = doctor_derived_store_reports(conn)?;
     let outbox_pending = count_table_status(conn, "index_outbox", "pending")?;
     let outbox_running = count_table_status(conn, "index_outbox", "running")?;
@@ -248,6 +259,8 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
         executable_dependency_violations,
         executable_spec_violations,
         executable_schedule_violations,
+        unplanned_active_tasks,
+        active_parents_with_incomplete_required_subtasks,
         outbox_pending,
         outbox_running,
         outbox_failed,
@@ -499,6 +512,38 @@ pub(crate) fn count_executable_schedule_violations(conn: &Connection, now: i64) 
         |row| row.get(0),
     )
     .map_err(storage)
+}
+
+pub(crate) fn count_unplanned_active_tasks(
+    conn: &Connection,
+    board_id: Option<&str>,
+) -> Result<i64> {
+    let board_filter = board_id.map_or("".to_owned(), |_| " AND t.board_id=?1".to_owned());
+    let sql = format!(
+        "SELECT COUNT(*) FROM tasks t WHERE t.status NOT IN ('done','archived') AND t.archived_at IS NULL{board_filter} AND NOT EXISTS(SELECT 1 FROM task_subtasks s WHERE s.board_id=t.board_id AND s.parent_task_id=t.id AND s.required=1) AND NOT EXISTS(SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=t.board_id AND ep.task_id=t.id AND ep.state='not_required')"
+    );
+    match board_id {
+        Some(board_id) => conn
+            .query_row(&sql, [board_id], |row| row.get(0))
+            .map_err(storage),
+        None => conn.query_row(&sql, [], |row| row.get(0)).map_err(storage),
+    }
+}
+
+pub(crate) fn count_active_parents_with_incomplete_required_subtasks(
+    conn: &Connection,
+    board_id: Option<&str>,
+) -> Result<i64> {
+    let board_filter = board_id.map_or("".to_owned(), |_| " AND t.board_id=?1".to_owned());
+    let sql = format!(
+        "SELECT COUNT(*) FROM tasks t WHERE t.status NOT IN ('done','archived') AND t.archived_at IS NULL{board_filter} AND EXISTS(SELECT 1 FROM task_subtasks s JOIN tasks child ON child.id=s.child_task_id WHERE s.board_id=t.board_id AND s.parent_task_id=t.id AND s.required=1 AND child.status NOT IN ('done','archived'))"
+    );
+    match board_id {
+        Some(board_id) => conn
+            .query_row(&sql, [board_id], |row| row.get(0))
+            .map_err(storage),
+        None => conn.query_row(&sql, [], |row| row.get(0)).map_err(storage),
+    }
 }
 
 pub(crate) fn assert_database_idle_for_replace(path: &Path) -> Result<()> {

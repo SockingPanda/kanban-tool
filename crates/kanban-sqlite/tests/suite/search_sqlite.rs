@@ -71,6 +71,10 @@ fn sqlite_search_fallback_matches_task_related_text_with_filters_and_paging() ->
             metadata_json: "{}".into(),
         },
     )?;
+    let alpha = mark_plan_not_required_for_test(&temp.path, "default", "tester", &alpha.id)?;
+    let beta = mark_plan_not_required_for_test(&temp.path, "default", "tester", &beta.id)?;
+    let gamma = mark_plan_not_required_for_test(&temp.path, "default", "tester", &gamma.id)?;
+    let archived = mark_plan_not_required_for_test(&temp.path, "default", "tester", &archived.id)?;
 
     create_comment(
         &temp.path,
@@ -222,13 +226,17 @@ fn sqlite_task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("archived task"),
     )?;
-    archive_task(&temp.path, "default", "tester", &archived.id, false)?;
     let other = create_task(
         &temp.path,
         "other",
         "tester",
         CreateTask::ready("other board same seq"),
     )?;
+    let first = mark_plan_not_required_for_test(&temp.path, "default", "tester", &first.id)?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &second.id)?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &archived.id)?;
+    archive_task(&temp.path, "default", "tester", &archived.id, false)?;
+    mark_plan_not_required_for_test(&temp.path, "other", "tester", &other.id)?;
 
     for query in ["1", "#1", "default#1", "default/#1", first.id.as_str()] {
         let page = kanban_sqlite::list_tasks_page(
@@ -362,13 +370,17 @@ fn sqlite_search_matches_task_refs_exactly() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("archived searchable task"),
     )?;
-    archive_task(&temp.path, "default", "tester", &archived.id, false)?;
     let other = create_task(
         &temp.path,
         "other",
         "tester",
         CreateTask::ready("other board same seq"),
     )?;
+    let first = mark_plan_not_required_for_test(&temp.path, "default", "tester", &first.id)?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &second.id)?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &archived.id)?;
+    archive_task(&temp.path, "default", "tester", &archived.id, false)?;
+    mark_plan_not_required_for_test(&temp.path, "other", "tester", &other.id)?;
 
     for query in ["1", "#1", "default#1", first.id.as_str()] {
         let results = search_tasks(

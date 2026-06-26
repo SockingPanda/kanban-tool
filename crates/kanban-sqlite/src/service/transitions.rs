@@ -42,7 +42,7 @@ pub fn promote_task(
                 "scheduled_at is in the future".into(),
             ));
         }
-        let target = recompute_ready_status(&conn, &task, now)?;
+        let target = recompute_core_ready_status(&conn, &task, now)?;
         if target != TaskStatus::Ready {
             return Err(KanbanError::InvalidTransition(match target {
                 TaskStatus::Todo => "dependency blocked".into(),
@@ -51,6 +51,7 @@ pub fn promote_task(
                 _ => format!("cannot promote to {}", target.as_str()),
             }));
         }
+        ensure_execution_plan_ready(&conn, &board_id, &task.id)?;
         guarded_set_status(
             &conn,
             &board_id,
@@ -168,7 +169,7 @@ pub(crate) fn claim_next_ready_conn(
     }
     let selected = conn
         .query_row(
-            "SELECT id FROM tasks WHERE board_id=?1 AND status='ready' AND claim_token IS NULL AND (assignee IS NULL OR assignee=?2) AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) ORDER BY priority ASC, created_at ASC LIMIT 1",
+            "SELECT id FROM tasks WHERE board_id=?1 AND status='ready' AND claim_token IS NULL AND (assignee IS NULL OR assignee=?2) AND (EXISTS (SELECT 1 FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1) OR EXISTS (SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=tasks.board_id AND ep.task_id=tasks.id AND ep.state='not_required')) AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) ORDER BY priority ASC, created_at ASC LIMIT 1",
             params![board_id, worker_profile],
             |row| row.get::<_, String>(0),
         )
@@ -221,11 +222,12 @@ pub(crate) fn claim_task_in_current_tx(
         ));
     }
     ensure_dependencies_done(conn, task_id)?;
+    ensure_execution_plan_ready(conn, board_id, task_id)?;
     let token = new_typed_id("claim");
     let run_id = new_run_id();
     let expires = now + ttl_ms;
     let changed = conn.execute(
-        "UPDATE tasks SET status='running', claim_token=?1, claim_owner=?2, claim_expires_at=?3, last_heartbeat_at=?4, started_at=COALESCE(started_at, ?4), updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='ready' AND claim_token IS NULL AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived'))",
+        "UPDATE tasks SET status='running', claim_token=?1, claim_owner=?2, claim_expires_at=?3, last_heartbeat_at=?4, started_at=COALESCE(started_at, ?4), updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='ready' AND claim_token IS NULL AND (EXISTS (SELECT 1 FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1) OR EXISTS (SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=tasks.board_id AND ep.task_id=tasks.id AND ep.state='not_required')) AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived'))",
         params![token, actor, expires, now, task_id, board_id],
     ).map_err(storage)?;
     if changed != 1 {
@@ -357,6 +359,88 @@ fn ensure_positive_ttl(ttl_ms: i64) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn ensure_execution_plan_ready(
+    conn: &Connection,
+    board_id: &str,
+    task_id: &str,
+) -> Result<()> {
+    if execution_plan_is_ready(conn, board_id, task_id)? {
+        Ok(())
+    } else {
+        Err(KanbanError::ExecutionPlanRequired(
+            "add required subtasks or mark execution plan not_required before starting task".into(),
+        ))
+    }
+}
+
+pub(crate) fn execution_plan_is_ready(
+    conn: &Connection,
+    board_id: &str,
+    task_id: &str,
+) -> Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM task_subtasks s WHERE s.board_id=?1 AND s.parent_task_id=?2 AND s.required=1) OR EXISTS(SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=?1 AND ep.task_id=?2 AND ep.state='not_required')",
+        params![board_id, task_id],
+        |row| row.get(0),
+    )
+    .map_err(storage)
+}
+
+fn plan_guarded_retry_status(
+    conn: &Connection,
+    board_id: &str,
+    task_id: &str,
+    target: TaskStatus,
+) -> Result<TaskStatus> {
+    if target == TaskStatus::Ready && !execution_plan_is_ready(conn, board_id, task_id)? {
+        Ok(TaskStatus::Todo)
+    } else {
+        Ok(target)
+    }
+}
+
+fn ensure_required_subtasks_complete(
+    conn: &Connection,
+    board_id: &str,
+    task_id: &str,
+) -> Result<()> {
+    let incomplete: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM task_subtasks s JOIN tasks child ON child.id=s.child_task_id WHERE s.board_id=?1 AND s.parent_task_id=?2 AND s.required=1 AND child.status NOT IN ('done','archived')",
+            params![board_id, task_id],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if incomplete == 0 {
+        Ok(())
+    } else {
+        Err(KanbanError::SubtasksIncomplete(format!(
+            "{incomplete} required subtask(s) must be done or archived first"
+        )))
+    }
+}
+
+fn ensure_no_active_required_subtasks(
+    conn: &Connection,
+    board_id: &str,
+    task_id: &str,
+) -> Result<()> {
+    let active: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM task_subtasks s JOIN tasks child ON child.id=s.child_task_id WHERE s.board_id=?1 AND s.parent_task_id=?2 AND s.required=1 AND child.status NOT IN ('done','archived')",
+            params![board_id, task_id],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if active == 0 {
+        Ok(())
+    } else {
+        Err(KanbanError::SubtasksIncomplete(format!(
+            "cannot archive parent with {active} active required subtask(s) without force"
+        )))
+    }
+}
+
 pub fn complete_task(
     path: impl AsRef<Path>,
     board: &str,
@@ -416,6 +500,7 @@ pub fn complete_task_with_summary_and_result(
     }
     with_immediate_tx(&conn, || {
         ensure_board_active(&conn, &board_id)?;
+        ensure_required_subtasks_complete(&conn, &board_id, &task.id)?;
         finish_running(
             &conn,
             &board_id,
@@ -693,6 +778,8 @@ pub fn reclaim_task_to(
             ));
         }
         let decision = retry_decision(fresh.retry_count, fresh.max_retries, to_status);
+        let target_status =
+            plan_guarded_retry_status(&conn, &board_id, &fresh.id, decision.status)?;
         let default_reason = if decision.max_retries_reached {
             "max retries reached"
         } else if force {
@@ -708,7 +795,7 @@ pub fn reclaim_task_to(
             actor,
             if force { "canceled" } else { "expired" },
             effective_reason,
-            decision.status,
+            target_status,
             tx_now,
             (!force).then_some(tx_now),
         )?;
@@ -734,6 +821,9 @@ pub fn archive_task(
     }
     with_immediate_tx(&conn, || {
         ensure_board_active(&conn, &board_id)?;
+        if !force {
+            ensure_no_active_required_subtasks(&conn, &board_id, &task.id)?;
+        }
         if task.status == TaskStatus::Running {
             let run_id = task.current_run_id.as_deref().ok_or_else(|| {
                 KanbanError::InvalidTransition("force archive requires active run".into())
@@ -893,6 +983,7 @@ pub(crate) fn retry_running_task(
         ));
     }
     let decision = retry_decision(task.retry_count, task.max_retries, TaskStatus::Ready);
+    let target_status = plan_guarded_retry_status(conn, board_id, &task.id, decision.status)?;
     if let (Some(run_id), Some(token)) = (&task.current_run_id, &task.claim_token) {
         let changed = exec_named(
             conn,
@@ -938,7 +1029,7 @@ pub(crate) fn retry_running_task(
            AND current_run_id=:current_run_id
            AND (:expiry_guard IS NULL OR claim_expires_at <= :expiry_guard)",
         named_params! {
-            ":status": decision.status.as_str(),
+            ":status": target_status.as_str(),
             ":status_reason": status_reason,
             ":retry_count": decision.retry_count,
             ":now": now,
@@ -1215,7 +1306,7 @@ pub(crate) fn guarded_set_status_with_reason(
     )
 }
 
-pub(crate) fn recompute_ready_status(
+fn recompute_core_ready_status(
     conn: &Connection,
     task: &TaskRecord,
     now: i64,
@@ -1229,6 +1320,27 @@ pub(crate) fn recompute_ready_status(
         },
         now,
     ))
+}
+
+pub(crate) fn recompute_ready_status(
+    conn: &Connection,
+    task: &TaskRecord,
+    now: i64,
+) -> Result<TaskStatus> {
+    let target = core_recompute_ready_status(
+        ReadinessFacts {
+            title: &task.title,
+            description: task.description.as_deref(),
+            scheduled_at: task.scheduled_at,
+            dependencies_done: dependencies_done(conn, &task.id)?,
+        },
+        now,
+    );
+    if target == TaskStatus::Ready && !execution_plan_is_ready(conn, &task.board_id, &task.id)? {
+        Ok(TaskStatus::Todo)
+    } else {
+        Ok(target)
+    }
 }
 
 pub(crate) fn ensure_dependencies_done(conn: &Connection, task_id: &str) -> Result<()> {

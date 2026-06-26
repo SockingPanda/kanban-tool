@@ -59,6 +59,10 @@ pub struct TaskRecord {
     pub lock_version: i64,
     pub dependency_blocked: bool,
     pub unfinished_parent_count: i64,
+    pub execution_plan_state: StepPlanState,
+    pub required_subtask_count: i64,
+    pub completed_required_subtask_count: i64,
+    pub optional_subtask_count: i64,
     pub labels: Vec<LabelRecord>,
 }
 
@@ -1691,4 +1695,6 @@ pub struct QueueStats {
     pub status_counts: Vec<StatusCount>,
     pub stale_claims: Vec<StaleClaimRecord>,
     pub blocked_reasons: Vec<BlockedReasonCount>,
+    pub unplanned_active_tasks: i64,
+    pub active_parents_with_incomplete_required_subtasks: i64,
 }

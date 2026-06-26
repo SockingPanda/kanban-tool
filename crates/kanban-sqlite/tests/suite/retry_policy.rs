@@ -12,6 +12,7 @@ fn failed_ready_retry_policy_increments_retry_count_and_blocks_at_max_retries() 
         "tester",
         CreateTask::ready("retry worker"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &task.id)?;
     set_retry_policy(&temp.path, &task.id, 2)?;
 
     for expected_retry_count in [1, 2] {
@@ -52,6 +53,7 @@ fn reclaim_expired_increments_retry_count_and_blocks_at_max_retries() -> anyhow:
         "tester",
         CreateTask::ready("retry reclaim"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &retrying.id)?;
     set_retry_policy(&temp.path, &retrying.id, 2)?;
     let blocking = create_task(
         &temp.path,
@@ -59,6 +61,7 @@ fn reclaim_expired_increments_retry_count_and_blocks_at_max_retries() -> anyhow:
         "tester",
         CreateTask::ready("blocking reclaim"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &blocking.id)?;
     set_retry_policy(&temp.path, &blocking.id, 1)?;
 
     for task in [&retrying, &blocking] {
@@ -93,6 +96,7 @@ fn reclaim_expired_skips_task_heartbeated_after_scan_before_claim_tx() -> anyhow
         "tester",
         CreateTask::ready("heartbeat race"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &task.id)?;
     let claim = claim_task(&temp.path, "default", "worker", &task.id, 1)?;
     thread::sleep(Duration::from_millis(5));
 

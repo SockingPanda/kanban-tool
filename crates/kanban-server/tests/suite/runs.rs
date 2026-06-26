@@ -4,13 +4,7 @@ use crate::common::*;
 async fn runs_lists_task_runs_without_claim_token() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
-        &db_path,
-        "default",
-        "seed",
-        kanban_sqlite::CreateTask::ready("runs"),
-    )
-    .context("task")?;
+    let task = create_ready_task_for_test(&db_path, "default", "seed", "runs").context("task")?;
     let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000)
         .context("claim")?;
     let app = test.router();
@@ -29,13 +23,8 @@ async fn run_log_reads_dispatch_log_content_without_claim_token() -> anyhow::Res
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let log_dir = test.dir_path().join("logs");
-    let task = kanban_sqlite::create_task(
-        &db_path,
-        "default",
-        "seed",
-        kanban_sqlite::CreateTask::ready("logged run"),
-    )
-    .context("task")?;
+    let task =
+        create_ready_task_for_test(&db_path, "default", "seed", "logged run").context("task")?;
     let result = kanban_sqlite::dispatch_once(
         &db_path,
         "default",
@@ -69,13 +58,8 @@ async fn run_log_reads_dispatch_log_content_without_claim_token() -> anyhow::Res
 async fn run_log_rejects_suspicious_log_paths() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    kanban_sqlite::create_task(
-        &db_path,
-        "default",
-        "seed",
-        kanban_sqlite::CreateTask::ready("suspicious logged run"),
-    )
-    .context("task")?;
+    let _task = create_ready_task_for_test(&db_path, "default", "seed", "suspicious logged run")
+        .context("task")?;
     let result = kanban_sqlite::dispatch_once(
         &db_path,
         "default",
@@ -113,13 +97,8 @@ async fn run_log_returns_tail_window_when_log_is_large() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let log_dir = test.dir_path().join("logs");
-    kanban_sqlite::create_task(
-        &db_path,
-        "default",
-        "seed",
-        kanban_sqlite::CreateTask::ready("large logged run"),
-    )
-    .context("task")?;
+    let _task = create_ready_task_for_test(&db_path, "default", "seed", "large logged run")
+        .context("task")?;
     let result = kanban_sqlite::dispatch_once(
         &db_path,
         "default",
@@ -153,13 +132,8 @@ async fn run_log_returns_tail_window_when_log_is_large() -> anyhow::Result<()> {
 async fn claim_uses_requested_worker_profile_in_response_run() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
-        &db_path,
-        "default",
-        "seed",
-        kanban_sqlite::CreateTask::ready("profile claim"),
-    )
-    .context("task")?;
+    let task =
+        create_ready_task_for_test(&db_path, "default", "seed", "profile claim").context("task")?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -178,13 +152,8 @@ async fn claim_uses_requested_worker_profile_in_response_run() -> anyhow::Result
 async fn runs_gets_run_by_id_without_claim_token() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
-        &db_path,
-        "default",
-        "seed",
-        kanban_sqlite::CreateTask::ready("get run"),
-    )
-    .context("task")?;
+    let task =
+        create_ready_task_for_test(&db_path, "default", "seed", "get run").context("task")?;
     let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000)
         .context("claim")?;
     let app = test.router();

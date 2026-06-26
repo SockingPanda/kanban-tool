@@ -23,7 +23,7 @@ fn task_crud_writes_events_and_hides_archived_by_default() -> anyhow::Result<()>
     )?;
 
     assert_eq!(task.seq, 1);
-    assert_eq!(task.status, TaskStatus::Ready);
+    assert_eq!(task.status, TaskStatus::Todo);
     assert_eq!(
         list_events(&temp.path, "default", Some(&task.id))?[0].kind,
         "task.created"
@@ -461,6 +461,7 @@ fn labels_create_attach_filter_and_remove_without_status_side_effects() -> anyho
         "tester",
         CreateTask::ready("Ready task"),
     )?;
+    let ready = mark_plan_not_required_for_test(&temp.path, "default", "tester", &ready.id)?;
     let todo = create_task(
         &temp.path,
         "default",

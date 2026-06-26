@@ -3,7 +3,8 @@ use crate::connect_file;
 use super::{
     AttachSubtaskInput, CreateSubtaskInput, StepPlanState, TaskExecutionPlanRecord, TaskRecord,
     TaskSubtaskRecord, UpdateSubtaskInput, all, board_id, create_task, ensure_board_active,
-    get_task_by_id, insert_event, resolve_task, scalar, storage, with_immediate_tx,
+    get_task_by_id, guarded_set_status, insert_event, recompute_ready_status, resolve_task, scalar,
+    storage, with_immediate_tx,
 };
 
 use std::{
@@ -11,7 +12,9 @@ use std::{
     path::Path,
 };
 
-use kanban_core::{Clock, KanbanError, Result, SystemClock, TaskStatus};
+use kanban_core::{
+    Clock, KanbanError, Result, SystemClock, TaskStatus, is_active_recomputable_status,
+};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::json;
 
@@ -115,6 +118,7 @@ fn attach_subtask_with_event(
                     emit_event: true,
                 },
             )?;
+            recompute_parent_after_plan_change(&conn, &board_id, actor, &parent.id, now)?;
         }
         Ok(record)
     })
@@ -148,7 +152,8 @@ pub fn detach_subtask(
             actor,
             &existing,
             now,
-        )
+        )?;
+        recompute_parent_after_plan_change(&conn, &board_id, actor, &parent.id, now)
     })
 }
 
@@ -200,6 +205,9 @@ pub fn update_subtask(
                     emit_event: true,
                 },
             )?;
+        }
+        if input.required.is_some() {
+            recompute_parent_after_plan_change(&conn, &board_id, actor, &parent.id, now)?;
         }
         Ok(updated)
     })
@@ -278,6 +286,7 @@ pub fn mark_execution_plan_not_required(
                 emit_event: true,
             },
         )?;
+        recompute_parent_after_plan_change(&conn, &board_id, actor, &task.id, now)?;
         derive_execution_plan(&conn, &board_id, &task.id)
     })
 }
@@ -300,6 +309,24 @@ pub(crate) fn count_subtask_cycles(conn: &Connection) -> Result<i64> {
         graph.entry(parent).or_default().push(child);
     }
     Ok(super::count_cyclic_components(&nodes, &graph))
+}
+
+fn recompute_parent_after_plan_change(
+    conn: &Connection,
+    board_id: &str,
+    actor: &str,
+    task_id: &str,
+    now: i64,
+) -> Result<()> {
+    let task = get_task_by_id(conn, board_id, task_id)?;
+    if !is_active_recomputable_status(task.status) {
+        return Ok(());
+    }
+    let target = recompute_ready_status(conn, &task, now)?;
+    if target != task.status {
+        guarded_set_status(conn, board_id, &task, target, actor, "task.recomputed", now)?;
+    }
+    Ok(())
 }
 
 fn ensure_subtask_relation_allowed(

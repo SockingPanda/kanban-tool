@@ -37,4 +37,57 @@ describe("layoutTaskGraph", () => {
 
     expect(first.nodes.map((node) => [node.id, node.x, node.y])).toEqual(second.nodes.map((node) => [node.id, node.x, node.y]))
   })
+
+  it("returns finite dimensions for an empty graph", () => {
+    const layout = layoutTaskGraph({ nodes: [], edges: [] }, { mode: "board-map" })
+
+    expect(layout.nodes).toEqual([])
+    expect(layout.edges).toEqual([])
+    expect(Number.isFinite(layout.width)).toBe(true)
+    expect(Number.isFinite(layout.height)).toBe(true)
+    expect(layout.width).toBeGreaterThan(0)
+    expect(layout.height).toBeGreaterThan(0)
+  })
+
+  it("routes reverse board-map edges from the source left side to the target right side", () => {
+    const reverseLayout = layoutTaskGraph(
+      {
+        nodes: [
+          { id: "ready", ref: "default#123", title: "Ready", status: "ready", role: "context" },
+          { id: "done", ref: "default#123", title: "Done context", status: "done", role: "context", contextOnly: true },
+        ],
+        edges: [{ id: "dep:done:ready", sourceTaskId: "done", targetTaskId: "ready", kind: "dependency", blocking: false }],
+      },
+      { mode: "board-map" },
+    )
+    const source = reverseLayout.nodes.find((node) => node.id === "done")
+    const target = reverseLayout.nodes.find((node) => node.id === "ready")
+    const edge = reverseLayout.edges[0]
+
+    expect(source).toBeTruthy()
+    expect(target).toBeTruthy()
+    expect(edge.path.startsWith(`M ${source?.x} ${source ? source.y + source.height / 2 : 0}`)).toBe(true)
+    expect(edge.path.endsWith(`${target ? target.x + target.width : 0} ${target ? target.y + target.height / 2 : 0}`)).toBe(true)
+  })
+
+  it("routes same-column edges vertically instead of looping through side anchors", () => {
+    const sameColumnLayout = layoutTaskGraph(
+      {
+        nodes: [
+          { id: "first", ref: "default#123", title: "First", status: "ready", role: "context" },
+          { id: "second", ref: "default#123", title: "Second", status: "ready", role: "context" },
+        ],
+        edges: [{ id: "dep:first:second", sourceTaskId: "first", targetTaskId: "second", kind: "dependency", blocking: false }],
+      },
+      { mode: "board-map" },
+    )
+    const source = sameColumnLayout.nodes.find((node) => node.id === "first")
+    const target = sameColumnLayout.nodes.find((node) => node.id === "second")
+    const edge = sameColumnLayout.edges[0]
+
+    expect(source).toBeTruthy()
+    expect(target).toBeTruthy()
+    expect(edge.path.startsWith(`M ${source ? source.x + source.width / 2 : 0} ${source ? source.y + source.height : 0}`)).toBe(true)
+    expect(edge.path.endsWith(`${target ? target.x + target.width / 2 : 0} ${target?.y}`)).toBe(true)
+  })
 })

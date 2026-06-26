@@ -84,4 +84,12 @@ describe("BoardTaskMapView filters", () => {
 
     expect(result?.nodes.map((node) => node.task.id).sort()).toEqual(["done", "parent", "ready", "running"])
   })
+
+  it("bounds deterministic zoom steps", () => {
+    expect(__test.clampMapZoom(0)).toBe(0.65)
+    expect(__test.clampMapZoom(2)).toBe(1.5)
+    expect(__test.clampMapZoom(Number.NaN)).toBe(1)
+    expect(__test.stepMapZoom(1, 1)).toBe(1.15)
+    expect(__test.stepMapZoom(0.7, -1)).toBe(0.65)
+  })
 })

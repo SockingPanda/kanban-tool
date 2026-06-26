@@ -7,7 +7,7 @@ use super::{
     BackupResult, BlockedReasonCount, CheckpointResult, DatabaseReplaceGuard, DatabaseRuntimeGuard,
     DoctorDerivedStoreReport, DoctorIssue, DoctorReport, MaintenanceResult, QueueStats,
     RunLogPathStatus, StaleClaimRecord, StatusCount, board_id, count_dependency_cycles,
-    derived_store_statuses_conn, run_log_path_status_for_db_dir, storage,
+    count_subtask_cycles, derived_store_statuses_conn, run_log_path_status_for_db_dir, storage,
 };
 
 use std::{
@@ -211,6 +211,7 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
         .filter(|store| store.last_error.is_some() || store.failed_outbox > 0)
         .count() as i64;
     let mut consistency_issues = doctor_consistency_issues(conn)?;
+    consistency_issues.extend(doctor_subtask_cycle_issues(conn)?);
     consistency_issues.extend(doctor_foreign_key_issues(conn)?);
     let (consistency_errors, consistency_warnings) = doctor_issue_counts(&consistency_issues);
     let ontology_ledger_issues = doctor_ontology_ledger_issues(conn)?;
@@ -637,6 +638,9 @@ fn doctor_missing_required_tables(
     if migration_version.unwrap_or(0) >= 12 || user_version >= 12 {
         required_tables.extend(LABEL_ONTOLOGY_LEDGER_TABLES);
     }
+    if migration_version.unwrap_or(0) >= 22 || user_version >= 22 {
+        required_tables.extend(["task_subtasks", "task_execution_plans"]);
+    }
     let mut missing = Vec::new();
     for table in required_tables {
         if !table_exists(conn, table)? {
@@ -659,6 +663,19 @@ fn doctor_missing_ontology_table_issues(missing_tables: &[&'static str]) -> Vec<
             )
         })
         .collect()
+}
+
+fn doctor_subtask_cycle_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> {
+    let cycles = count_subtask_cycles(conn)?;
+    if cycles == 0 {
+        return Ok(Vec::new());
+    }
+    Ok(vec![doctor_issue(
+        "error",
+        "task_subtask_cycle",
+        format!("task_subtasks contains {cycles} cyclic component(s)"),
+        Vec::new(),
+    )])
 }
 
 fn doctor_consistency_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> {
@@ -747,6 +764,71 @@ fn doctor_consistency_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> {
                 row_board,
                 "tasks",
                 child_task_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT s.parent_task_id, s.child_task_id, s.board_id, p.board_id \
+         FROM task_subtasks s \
+         JOIN tasks p ON p.id=s.parent_task_id \
+         WHERE s.board_id<>p.board_id",
+        |row| {
+            let parent_task_id: String = row.get(0)?;
+            let child_task_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "task_subtask_parent_board_mismatch",
+                "task_subtasks",
+                format!("{parent_task_id}->{child_task_id}"),
+                row_board,
+                "tasks",
+                parent_task_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT s.parent_task_id, s.child_task_id, s.board_id, c.board_id \
+         FROM task_subtasks s \
+         JOIN tasks c ON c.id=s.child_task_id \
+         WHERE s.board_id<>c.board_id",
+        |row| {
+            let parent_task_id: String = row.get(0)?;
+            let child_task_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "task_subtask_child_board_mismatch",
+                "task_subtasks",
+                format!("{parent_task_id}->{child_task_id}"),
+                row_board,
+                "tasks",
+                child_task_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT p.task_id, p.board_id, t.board_id \
+         FROM task_execution_plans p \
+         JOIN tasks t ON t.id=p.task_id \
+         WHERE p.board_id<>t.board_id",
+        |row| {
+            let task_id: String = row.get(0)?;
+            let row_board: String = row.get(1)?;
+            let referenced_board: String = row.get(2)?;
+            Ok(relationship_board_mismatch_issue(
+                "task_execution_plan_task_board_mismatch",
+                "task_execution_plans",
+                task_id.clone(),
+                row_board,
+                "tasks",
+                task_id,
                 referenced_board,
             ))
         },

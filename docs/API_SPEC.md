@@ -591,7 +591,7 @@ GET /api/v1/tasks/{task_id}/neighborhood?depth=1&limit_nodes=250&include_archive
 ```
 
 This read-only endpoint returns the selected task, direct dependency parents,
-direct dependency children, and every dependency edge whose source and target are
+direct dependency children, direct subtask parents/children, and every dependency or subtask edge whose source and target are
 both visible. V1 only accepts `depth=1`; deeper graph expansion is intentionally
 reserved for later.
 
@@ -648,9 +648,7 @@ context is excluded unless explicitly requested. V1 only accepts
 `context_depth=0` or `context_depth=1`.
 
 Node roles are `active` for active board tasks and `context` for one-hop context.
-Dependency edges are returned only when both endpoints are visible. The `meta`
-object reports active statuses, node/edge counts, truncation, limit, and the
-query context flags.
+Dependency and subtask edges are returned only when both endpoints are visible. Dependency edges use `kind=dependency`, `required=true`, and `blocking=true`; subtask edges use `kind=subtask`, preserve the relation `required` flag, and set `blocking=false`. The `meta` object reports active statuses, node/edge counts, truncation, limit, and the query context flags.
 
 
 ---
@@ -1842,9 +1840,9 @@ Foundation relationship diagnostics are read-only:
 
 - `consistency_errors` / `consistency_warnings` summarize board consistency findings for base relationship rows.
 - `consistency_issues[]` reports structured findings with `severity`, `code`, `message`, and `record_ids`.
-- Covered tables: `task_labels`, `task_dependencies`, `task_runs`, `task_comments`, `task_events`, and `task_attachments`.
+- Covered tables: `task_labels`, `task_dependencies`, `task_subtasks`, `task_execution_plans`, `task_runs`, `task_comments`, `task_events`, and `task_attachments`.
 - Hard errors mean a row's `board_id` differs from a referenced task / label / run board. The message includes `table`, `row`, `row_board`, `referenced`, and `referenced_board`.
-- These checks complement service-layer board-scoped writes. `task_labels`, `task_dependencies`, `task_runs`, `task_comments`, and `task_attachments` are protected by board-scoped composite FKs in current schema. `task_events` retains nullable task/run references and `ON DELETE SET NULL`; INSERT/UPDATE triggers enforce board scope whenever those refs are present. Corrupted JSONL/raw-SQL inputs are still checked by doctor/import as a hard-error diagnostic layer.
+- These checks complement service-layer board-scoped writes. `task_labels`, `task_dependencies`, `task_subtasks`, `task_execution_plans`, `task_runs`, `task_comments`, and `task_attachments` are protected by board-scoped composite FKs in current schema. `task_events` retains nullable task/run references and `ON DELETE SET NULL`; INSERT/UPDATE triggers enforce board scope whenever those refs are present. Corrupted JSONL/raw-SQL inputs are still checked by doctor/import as a hard-error diagnostic layer.
 - `PRAGMA foreign_key_check` results are surfaced as hard-error `consistency_issues[]` with table, rowid, parent table, and FK index. Import runs the same gate before commit and rolls back on violation.
 - Nonzero `consistency_errors` make `ok=false`.
 

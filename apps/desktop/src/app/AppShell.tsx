@@ -7,6 +7,7 @@ import {
   HeartPulse,
   Inbox,
   Loader2,
+  Map,
   Network,
   RefreshCcw,
   Search,
@@ -70,6 +71,7 @@ import { OntologyReviewWorkbench } from "@/features/ontology/OntologyReviewWorkb
 import { RunsView } from "@/features/runs/RunsView"
 import { SettingsView } from "@/features/settings/SettingsView"
 import { TaskDetail } from "@/features/task-detail/TaskDetail"
+import { BoardTaskMapView } from "@/features/task-map/BoardTaskMapView"
 import {
   isSidebarWidthTransition,
   nextSidebarContentOpen,
@@ -98,6 +100,7 @@ import { cn } from "@/lib/utils"
 const viewMetadata: Record<OperatorView, { label: string; icon: ElementType }> = {
   board: { label: "Board", icon: SquareKanban },
   list: { label: "List", icon: Inbox },
+  map: { label: "Map", icon: Map },
   events: { label: "Events", icon: Activity },
   runs: { label: "Runs", icon: TerminalSquare },
   ontology: { label: "Review", icon: Network },
@@ -476,7 +479,7 @@ function ShellSidebar({
       </SidebarHeader>
       <SidebarContent>
         <SidebarNavGroup label="Task Explorer" open={contentOpen}>
-          {sidebarViews.filter((item) => ["board", "list", "runs", "events", "ontology"].includes(item)).map((item) => (
+          {sidebarViews.filter((item) => ["board", "list", "map", "runs", "events", "ontology"].includes(item)).map((item) => (
             <SidebarNavItem
               key={item}
               icon={viewIcon(item)}
@@ -874,6 +877,10 @@ function MainView({
       />
     )
   }
+  if (view === "map") {
+    return <BoardTaskMapView api={api} selectedTaskId={selectedId} onSelectTask={onSelectTask} />
+  }
+
   if (view === "list") {
     return (
       <ListView

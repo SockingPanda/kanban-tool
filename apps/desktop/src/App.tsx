@@ -198,8 +198,9 @@ function App() {
   }, [config?.actor, tasks])
 
   useEffect(() => {
+    if (view === "map") return
     setSelectedId((current) => reconcileSelectedTaskId(current, tasks))
-  }, [tasks])
+  }, [tasks, view])
 
   const detailQuery = useTaskDetail(api, selectedId)
   const labelSuggestionsQuery = useQuery({

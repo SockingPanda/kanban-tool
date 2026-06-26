@@ -223,6 +223,59 @@ pub(super) struct DependenciesDto {
 }
 
 #[derive(Debug, Serialize)]
+pub(super) struct TaskSubtaskDto {
+    pub(super) parent_task_id: String,
+    pub(super) child_task: TaskDto,
+    pub(super) position: i64,
+    pub(super) required: bool,
+    pub(super) created_by: String,
+    pub(super) created_at: i64,
+}
+
+impl From<kanban_sqlite::TaskSubtaskRecord> for TaskSubtaskDto {
+    fn from(subtask: kanban_sqlite::TaskSubtaskRecord) -> Self {
+        Self {
+            parent_task_id: subtask.parent_task_id,
+            child_task: TaskDto::from(subtask.child_task),
+            position: subtask.position,
+            required: subtask.required,
+            created_by: subtask.created_by,
+            created_at: subtask.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct TaskExecutionPlanDto {
+    pub(super) board_id: String,
+    pub(super) task_id: String,
+    pub(super) state: kanban_sqlite::StepPlanState,
+    pub(super) reason: Option<String>,
+    pub(super) updated_by: String,
+    pub(super) updated_at: i64,
+}
+
+impl From<kanban_sqlite::TaskExecutionPlanRecord> for TaskExecutionPlanDto {
+    fn from(plan: kanban_sqlite::TaskExecutionPlanRecord) -> Self {
+        Self {
+            board_id: plan.board_id,
+            task_id: plan.task_id,
+            state: plan.state,
+            reason: plan.reason,
+            updated_by: plan.updated_by,
+            updated_at: plan.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct TaskSubtasksDto {
+    pub(super) task_id: String,
+    pub(super) subtasks: Vec<TaskSubtaskDto>,
+    pub(super) execution_plan: TaskExecutionPlanDto,
+}
+
+#[derive(Debug, Serialize)]
 pub(super) struct SearchTaskHitDto {
     pub(super) task_id: String,
     pub(super) seq: i64,

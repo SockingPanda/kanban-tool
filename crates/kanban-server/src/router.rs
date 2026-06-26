@@ -6,7 +6,7 @@ use axum::{
     http::{HeaderValue, Method, header},
     middleware::{Next, from_fn_with_state},
     response::Response,
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post},
 };
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
@@ -168,6 +168,22 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/tasks/:child_task_id/dependencies/:parent_task_id",
             delete(remove_dependency),
+        )
+        .route(
+            "/api/v1/tasks/:task_id/subtasks",
+            get(list_subtasks).post(create_subtask),
+        )
+        .route(
+            "/api/v1/tasks/:task_id/subtasks/attach",
+            post(attach_subtask),
+        )
+        .route(
+            "/api/v1/tasks/:task_id/subtasks/:child_task_id",
+            patch(update_subtask).delete(remove_subtask),
+        )
+        .route(
+            "/api/v1/tasks/:task_id/execution-plan/not-required",
+            post(mark_execution_plan_not_required),
         )
         .route("/api/v1/tasks/:task_id/runs", get(list_runs))
         .route("/api/v1/runs/:run_id", get(get_run))

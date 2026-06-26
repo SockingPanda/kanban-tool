@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 import { invalidateTaskDetailAndBoard } from "./detail-invalidation"
 
 describe("detail invalidation", () => {
-  it("invalidates the board task root, stats, and selected task detail", async () => {
+  it("invalidates board, detail, subtask, and graph queries", async () => {
     const queryClient = new QueryClient()
     const invalidate = vi.spyOn(queryClient, "invalidateQueries")
 
@@ -12,6 +12,9 @@ describe("detail invalidation", () => {
 
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["tasks", "default"] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["stats", "default"] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["board-task-map", "default"] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["task-detail", "t_1"] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["task-subtasks", "t_1"] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["task-neighborhood", "t_1"] })
   })
 })

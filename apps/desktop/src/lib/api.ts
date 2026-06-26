@@ -501,6 +501,109 @@ export type Dependencies = {
   children: Task[]
 }
 
+export type StepPlanState = "unplanned" | "planned" | "not_required"
+
+export type TaskSubtask = {
+  parent_task_id: string
+  child_task: Task
+  position: number
+  required: boolean
+  created_by: string
+  created_at: number
+}
+
+export type TaskExecutionPlan = {
+  board_id: string
+  task_id: string
+  state: StepPlanState
+  reason: string | null
+  updated_by: string
+  updated_at: number
+}
+
+export type TaskSubtasks = {
+  task_id: string
+  subtasks: TaskSubtask[]
+  execution_plan: TaskExecutionPlan
+}
+
+export type TaskGraphNodeRole =
+  | "center"
+  | "dependency_parent"
+  | "dependency_child"
+  | "subtask_parent"
+  | "subtask_child"
+  | "active"
+  | "context"
+
+export type TaskGraphEdgeKind = "dependency" | "subtask"
+
+export type TaskGraphNode = {
+  task: Task
+  role: TaskGraphNodeRole
+  context_only: boolean
+}
+
+export type TaskGraphEdge = {
+  id: string
+  source_task_id: string
+  target_task_id: string
+  kind: TaskGraphEdgeKind
+  required: boolean
+  blocking: boolean
+}
+
+export type TaskGraphMeta = {
+  depth?: number
+  context_depth?: number
+  generated_at: number
+  truncated: boolean
+  node_count: number
+  edge_count: number
+  active_statuses?: TaskStatus[]
+  include_done_context?: boolean
+  include_archived_context?: boolean
+  active_only?: boolean
+}
+
+export type TaskNeighborhood = {
+  center_task_id: string
+  nodes: TaskGraphNode[]
+  edges: TaskGraphEdge[]
+  meta: TaskGraphMeta
+}
+
+export type BoardTaskMap = {
+  nodes: TaskGraphNode[]
+  edges: TaskGraphEdge[]
+  meta: TaskGraphMeta
+}
+
+export type CreateSubtaskInput = {
+  title: string
+  description?: string | null
+  status?: TaskStatus
+  assignee?: string | null
+  priority?: number
+  scheduled_at?: number | null
+  due_at?: number | null
+  max_retries?: number | null
+  metadata?: Record<string, unknown>
+  position?: number
+  required?: boolean
+}
+
+export type AttachSubtaskInput = {
+  child_task_id: string
+  position?: number
+  required?: boolean
+}
+
+export type UpdateSubtaskInput = {
+  position?: number
+  required?: boolean
+}
+
 export type ClaimResponse = {
   task: Task
   run: Run
@@ -767,6 +870,91 @@ export class KanbanApi {
   async removeDependency(taskId: string, parentTaskId: string, options: RequestOptions = {}) {
     return this.request<Dependencies>(`/api/v1/tasks/${taskId}/dependencies/${parentTaskId}`, {
       method: "DELETE",
+      signal: options.signal,
+    })
+  }
+
+  async getTaskNeighborhood(
+    taskId: string,
+    options: RequestOptions & { depth?: number; limitNodes?: number } = {},
+  ) {
+    const params = new URLSearchParams({ depth: String(options.depth ?? 1) })
+    if (typeof options.limitNodes === "number") params.set("limit_nodes", String(options.limitNodes))
+    return this.request<TaskNeighborhood>("/api/v1/tasks/" + taskId + "/neighborhood?" + params.toString(), {
+      signal: options.signal,
+    })
+  }
+
+  async getBoardTaskMap(
+    board = this.board,
+    options: RequestOptions & {
+      activeOnly?: boolean
+      contextDepth?: number
+      includeDoneContext?: boolean
+      includeArchivedContext?: boolean
+      limitNodes?: number
+    } = {},
+  ) {
+    const params = new URLSearchParams({
+      active_only: String(options.activeOnly ?? true),
+      context_depth: String(options.contextDepth ?? 1),
+    })
+    if (typeof options.includeDoneContext === "boolean") {
+      params.set("include_done_context", String(options.includeDoneContext))
+    }
+    if (typeof options.includeArchivedContext === "boolean") {
+      params.set("include_archived_context", String(options.includeArchivedContext))
+    }
+    if (typeof options.limitNodes === "number") params.set("limit_nodes", String(options.limitNodes))
+    return this.request<BoardTaskMap>("/api/v1/boards/" + board + "/task-map?" + params.toString(), {
+      signal: options.signal,
+    })
+  }
+
+  async listSubtasks(taskId: string, options: RequestOptions = {}) {
+    return this.request<TaskSubtasks>("/api/v1/tasks/" + taskId + "/subtasks", options)
+  }
+
+  async createSubtask(taskId: string, input: CreateSubtaskInput, options: RequestOptions = {}) {
+    return this.request<TaskSubtasks>("/api/v1/tasks/" + taskId + "/subtasks", {
+      method: "POST",
+      body: { ...input, actor: this.actor },
+      signal: options.signal,
+    })
+  }
+
+  async attachSubtask(taskId: string, input: AttachSubtaskInput, options: RequestOptions = {}) {
+    return this.request<TaskSubtasks>("/api/v1/tasks/" + taskId + "/subtasks/attach", {
+      method: "POST",
+      body: { ...input, actor: this.actor },
+      signal: options.signal,
+    })
+  }
+
+  async updateSubtask(
+    taskId: string,
+    childTaskId: string,
+    input: UpdateSubtaskInput,
+    options: RequestOptions = {},
+  ) {
+    return this.request<TaskSubtasks>("/api/v1/tasks/" + taskId + "/subtasks/" + childTaskId, {
+      method: "PATCH",
+      body: { ...input, actor: this.actor },
+      signal: options.signal,
+    })
+  }
+
+  async removeSubtask(taskId: string, childTaskId: string, options: RequestOptions = {}) {
+    return this.request<TaskSubtasks>("/api/v1/tasks/" + taskId + "/subtasks/" + childTaskId, {
+      method: "DELETE",
+      signal: options.signal,
+    })
+  }
+
+  async markExecutionPlanNotRequired(taskId: string, reason: string, options: RequestOptions = {}) {
+    return this.request<TaskExecutionPlan>("/api/v1/tasks/" + taskId + "/execution-plan/not-required", {
+      method: "POST",
+      body: { reason, actor: this.actor },
       signal: options.signal,
     })
   }

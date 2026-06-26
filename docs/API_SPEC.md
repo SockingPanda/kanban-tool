@@ -582,9 +582,100 @@ Response：
 }
 ```
 
+### 6.4 Subtasks and execution plan
+
+Subtasks are first-class tasks connected by `task_subtasks`. They are not
+`task_dependencies` edges and do not affect dependency readiness directly. A
+required subtask makes the parent execution plan `planned`; without required
+subtasks the plan is `unplanned` unless explicitly marked `not_required`.
+
+```http
+GET /api/v1/tasks/{task_id}/subtasks
+POST /api/v1/tasks/{task_id}/subtasks
+POST /api/v1/tasks/{task_id}/subtasks/attach
+PATCH /api/v1/tasks/{task_id}/subtasks/{child_task_id}
+DELETE /api/v1/tasks/{task_id}/subtasks/{child_task_id}
+POST /api/v1/tasks/{task_id}/execution-plan/not-required
+```
+
+Create request:
+
+```json
+{
+  "title": "Test strategy",
+  "description": "Scope and acceptance cases",
+  "priority": 2,
+  "position": 2048,
+  "required": true,
+  "actor": "alice"
+}
+```
+
+Attach request:
+
+```json
+{
+  "child_task_id": "t_01HX...",
+  "position": 2048,
+  "required": true,
+  "actor": "alice"
+}
+```
+
+Update request:
+
+```json
+{
+  "position": 4096,
+  "required": false,
+  "actor": "alice"
+}
+```
+
+Mark not required request:
+
+```json
+{
+  "reason": "Small text-only cleanup",
+  "actor": "alice"
+}
+```
+
+Subtask list and relation mutation responses return the parent task subtask
+snapshot:
+
+```json
+{
+  "data": {
+    "task_id": "t_parent",
+    "subtasks": [
+      {
+        "parent_task_id": "t_parent",
+        "child_task": { "id": "t_child", "ref": "default#13" },
+        "position": 2048,
+        "required": true,
+        "created_by": "alice",
+        "created_at": 1717520000000
+      }
+    ],
+    "execution_plan": {
+      "board_id": "b_01HX...",
+      "task_id": "t_parent",
+      "state": "planned",
+      "reason": null,
+      "updated_by": "system",
+      "updated_at": 0
+    }
+  }
+}
+```
+
+`POST /execution-plan/not-required` returns the execution plan record directly.
+Missing relation targets return `404 not_found`; cross-board or cyclic subtask
+relations return `400 invalid_input` in the standard error envelope.
 
 
-### 6.4 Task neighborhood
+### 6.5 Task neighborhood
 
 ```http
 GET /api/v1/tasks/{task_id}/neighborhood?depth=1&limit_nodes=250&include_archived_context=false
@@ -634,7 +725,7 @@ Response:
 `task` uses the same public task DTO as task list/detail responses and does not
 expose `claim_token`.
 
-### 6.5 Board task map
+### 6.6 Board task map
 
 ```http
 GET /api/v1/boards/{board}/task-map?active_only=true&context_depth=1&limit_nodes=250&include_done_context=true&include_archived_context=false&hide_isolated=false

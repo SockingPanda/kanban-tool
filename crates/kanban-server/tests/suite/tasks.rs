@@ -56,7 +56,8 @@ async fn tasks_creates_task_and_event_with_body_actor_priority() -> anyhow::Resu
     assert!(task["id"].as_str().context("task id")?.starts_with("t_"));
     assert_eq!(task["title"], "HTTP create");
     assert_eq!(task["description"], "ready spec");
-    assert_eq!(task["status"], "ready");
+    assert_eq!(task["status"], "todo");
+    assert_eq!(task["execution_plan_state"], "unplanned");
     assert_eq!(task["assignee"], "worker-a");
     assert_eq!(task["priority"], 1);
     assert_task_dto_exposes_ui_fields_without_claim_token(task);
@@ -448,6 +449,14 @@ async fn tasks_lists_with_single_status_filter() -> anyhow::Result<()> {
         kanban_sqlite::CreateTask::ready("ready task"),
     )
     .context("ready task")?;
+    kanban_sqlite::mark_execution_plan_not_required(
+        &db_path,
+        "default",
+        "seed",
+        &ready.id,
+        "status filter fixture",
+    )
+    .context("mark ready not required")?;
     let todo = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -488,6 +497,14 @@ async fn tasks_lists_with_repeated_status_filters() -> anyhow::Result<()> {
         kanban_sqlite::CreateTask::ready("ready task"),
     )
     .context("ready task")?;
+    kanban_sqlite::mark_execution_plan_not_required(
+        &db_path,
+        "default",
+        "seed",
+        &ready.id,
+        "status filter fixture",
+    )
+    .context("mark ready not required")?;
     let running = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -495,6 +512,14 @@ async fn tasks_lists_with_repeated_status_filters() -> anyhow::Result<()> {
         kanban_sqlite::CreateTask::ready("running task"),
     )
     .context("running task")?;
+    kanban_sqlite::mark_execution_plan_not_required(
+        &db_path,
+        "default",
+        "seed",
+        &running.id,
+        "status filter fixture",
+    )
+    .context("mark running not required")?;
     kanban_sqlite::claim_task(&db_path, "default", "seed", &running.id, 60_000)
         .context("claim task")?;
     let todo = kanban_sqlite::create_task(
@@ -3019,7 +3044,7 @@ async fn tasks_accepts_list_view_sort_contract_for_ref_title_and_status() -> any
         ("alpha contract sort", kanban_core::TaskStatus::Ready),
         ("bravo contract sort", kanban_core::TaskStatus::Todo),
     ] {
-        kanban_sqlite::create_task(
+        let task = kanban_sqlite::create_task(
             &db_path,
             "default",
             "seed",
@@ -3036,6 +3061,16 @@ async fn tasks_accepts_list_view_sort_contract_for_ref_title_and_status() -> any
             },
         )
         .context("seed task")?;
+        if status == kanban_core::TaskStatus::Ready {
+            kanban_sqlite::mark_execution_plan_not_required(
+                &db_path,
+                "default",
+                "seed",
+                &task.id,
+                "sort fixture",
+            )
+            .context("mark ready not required")?;
+        }
     }
     let app = test.router();
 
@@ -3305,6 +3340,15 @@ async fn tasks_patches_editable_fields_and_uses_header_actor_when_body_actor_abs
         kanban_sqlite::CreateTask::ready("before update"),
     )
     .context("task")?;
+    kanban_sqlite::mark_execution_plan_not_required(
+        &db_path,
+        "default",
+        "seed",
+        &task.id,
+        "patch fixture",
+    )
+    .context("mark not required")?;
+    let task = kanban_sqlite::get_task(&db_path, "default", &task.id).context("task after plan")?;
     let app = test.router();
 
     let (status, json) = patch_json(

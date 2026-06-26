@@ -4476,6 +4476,7 @@ fn label_ontology_validation_allows_status_only_task_drift_with_warning() -> any
         "Add ontology validation status drift warning",
         "cli-status-drift",
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &fixture.task.id)?;
     claim_task(&temp.path, "default", "worker", &fixture.task.id, 300_000)?;
 
     let validation = validate_label_ontology_action(

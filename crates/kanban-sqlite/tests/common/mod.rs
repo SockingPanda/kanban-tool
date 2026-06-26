@@ -75,6 +75,22 @@ where
     }
 }
 
+pub fn mark_plan_not_required_for_test(
+    path: &Path,
+    board: &str,
+    actor: &str,
+    task_id: &str,
+) -> anyhow::Result<TaskRecord> {
+    mark_execution_plan_not_required(
+        path,
+        board,
+        actor,
+        task_id,
+        "test fixture does not require subtasks",
+    )?;
+    get_task(path, board, task_id).map_err(Into::into)
+}
+
 pub struct TempDb {
     _temp_dir: tempfile::TempDir,
     pub dir: std::path::PathBuf,

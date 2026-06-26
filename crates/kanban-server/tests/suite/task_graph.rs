@@ -109,12 +109,7 @@ async fn board_task_map_returns_active_graph_with_done_context_and_excludes_arch
 -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let done_parent = kanban_sqlite::create_task(
-        &db_path,
-        "default",
-        "seed",
-        kanban_sqlite::CreateTask::ready("done context"),
-    )?;
+    let done_parent = create_ready_task_for_test(&db_path, "default", "seed", "done context")?;
     let done_claim =
         kanban_sqlite::claim_task(&db_path, "default", "seed", &done_parent.id, 60_000)?;
     kanban_sqlite::complete_task(
@@ -125,18 +120,8 @@ async fn board_task_map_returns_active_graph_with_done_context_and_excludes_arch
         Some(&done_claim.claim_token),
         false,
     )?;
-    let active = kanban_sqlite::create_task(
-        &db_path,
-        "default",
-        "seed",
-        kanban_sqlite::CreateTask::ready("active"),
-    )?;
-    let archived = kanban_sqlite::create_task(
-        &db_path,
-        "default",
-        "seed",
-        kanban_sqlite::CreateTask::ready("archived context"),
-    )?;
+    let active = create_ready_task_for_test(&db_path, "default", "seed", "active")?;
+    let archived = create_ready_task_for_test(&db_path, "default", "seed", "archived context")?;
     kanban_sqlite::archive_task(&db_path, "default", "seed", &archived.id, false)?;
     kanban_sqlite::add_dependency(&db_path, "default", "seed", &done_parent.id, &active.id)?;
     kanban_sqlite::add_dependency(&db_path, "default", "seed", &archived.id, &active.id)?;

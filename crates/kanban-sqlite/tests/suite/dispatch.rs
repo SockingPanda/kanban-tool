@@ -10,6 +10,7 @@ fn dispatch_once_runs_ready_task_and_records_log() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("跑 worker"),
     )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
     let log_dir = temp.dir.join("logs");
 
     let result = dispatch_once(
@@ -52,6 +53,7 @@ fn dispatch_once_rejects_untrusted_log_dir_before_claiming() -> anyhow::Result<(
         "tester",
         CreateTask::ready("untrusted log dir"),
     )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
 
     let err = result_err(dispatch_once(
         &temp.path,
@@ -90,6 +92,7 @@ fn dispatch_once_recovers_post_claim_log_dir_setup_failure() -> anyhow::Result<(
         "tester",
         CreateTask::ready("log dir setup fails after claim"),
     )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
     set_retry_policy(&temp.path, &task.id, 2)?;
     let log_dir = temp.dir.join("logs");
     std::fs::write(&log_dir, "not a directory")?;
@@ -136,6 +139,7 @@ fn dispatch_once_recovers_post_claim_worker_start_failure() -> anyhow::Result<()
         "tester",
         CreateTask::ready("worker start fails after claim"),
     )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
     set_retry_policy(&temp.path, &task.id, 2)?;
     let log_dir = temp.dir.join("logs");
     std::fs::create_dir_all(&log_dir)?;
@@ -146,7 +150,7 @@ fn dispatch_once_recovers_post_claim_worker_start_failure() -> anyhow::Result<()
         "default",
         DispatchOptions {
             actor: "dispatcher".into(),
-            command: "printf should-not-run".into(),
+            command: "printf\0should-not-run".into(),
             worker_profile: "default".into(),
             claim_ttl_ms: 300_000,
             heartbeat_interval_ms: 30_000,
@@ -198,6 +202,13 @@ fn dispatch_once_does_not_claim_review_or_dependency_blocked_tasks() -> anyhow::
         "default",
         "tester",
         CreateTask::ready("review 不可 claim"),
+    )?;
+    mark_execution_plan_not_required(
+        &temp.path,
+        "default",
+        "tester",
+        &review_task.id,
+        "small task",
     )?;
     let review_claim = claim_task(&temp.path, "default", "worker", &review_task.id, 300_000)?;
     kanban_sqlite::submit_review_task(
@@ -271,6 +282,7 @@ fn dispatch_once_claims_ready_task_with_only_archived_parent() -> anyhow::Result
         "tester",
         CreateTask::ready("ready child"),
     )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &child.id, "small task")?;
     add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
     connect_file(&temp.path)?
         .execute("UPDATE tasks SET status='ready' WHERE id=?1", [&child.id])?;
@@ -353,6 +365,7 @@ fn claim_actor_with_quotes_and_control_chars_writes_valid_event_json() -> anyhow
         "tester",
         CreateTask::ready("claim JSON escaping"),
     )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
     let actor = "bad\"actor\nwith\tcontrol";
 
     let claim = claim_task(&temp.path, "default", actor, &task.id, 300_000)?;
@@ -456,6 +469,7 @@ fn dispatch_once_heartbeats_while_long_running_command_blocks() -> anyhow::Resul
         "tester",
         CreateTask::ready("long worker"),
     )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
 
     dispatch_once(
         &temp.path,
@@ -612,6 +626,7 @@ fn worker_large_output_does_not_deadlock_under_heartbeat_wrapper() -> anyhow::Re
         "tester",
         CreateTask::ready("large output"),
     )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
 
     let result = dispatch_once(
         &temp.path,

@@ -10,6 +10,7 @@ fn doctor_resolves_legacy_relative_run_log_paths_against_database_dir() -> anyho
         "tester",
         CreateTask::ready("legacy log path"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &task.id)?;
     let log_dir = temp.dir.join("logs");
     dispatch_once(
         &temp.path,
@@ -64,6 +65,8 @@ fn doctor_counts_suspicious_run_log_paths_separately_from_missing_allowed_logs()
         "tester",
         CreateTask::ready("missing log path"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &suspicious_task.id)?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &missing_task.id)?;
     let log_dir = temp.dir.join("logs");
     let suspicious = dispatch_once(
         &temp.path,
@@ -833,6 +836,7 @@ fn doctor_reports_executable_status_invariant_violations() -> anyhow::Result<()>
         "tester",
         CreateTask::ready("invalid ready child"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &child.id)?;
     add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
     let missing_spec = create_task(
         &temp.path,
@@ -846,14 +850,16 @@ fn doctor_reports_executable_status_invariant_violations() -> anyhow::Result<()>
         "tester",
         CreateTask::ready("invalid future schedule"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &missing_spec.id)?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &future_scheduled.id)?;
     let conn = connect_file(&temp.path)?;
     conn.execute("UPDATE tasks SET status='ready' WHERE id=?1", [&child.id])?;
     conn.execute(
-        "UPDATE tasks SET description=NULL WHERE id=?1",
+        "UPDATE tasks SET status='ready', description=NULL WHERE id=?1",
         [&missing_spec.id],
     )?;
     conn.execute(
-        "UPDATE tasks SET scheduled_at=?1 WHERE id=?2",
+        "UPDATE tasks SET status='ready', scheduled_at=?1 WHERE id=?2",
         params![4_102_444_800_000_i64, future_scheduled.id],
     )?;
 

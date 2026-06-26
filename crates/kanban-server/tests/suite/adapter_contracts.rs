@@ -46,6 +46,7 @@ async fn api_adapter_contract_commits_to_shared_canonical_state() -> anyhow::Res
         .as_str()
         .context("task id")?
         .to_owned();
+    mark_plan_not_required_for_test(&db_path, "default", "api-adapter", &task_id)?;
     assert_eq!(
         kanban_sqlite::get_task(&db_path, "default", &task_id)?.status,
         kanban_core::TaskStatus::Ready
@@ -204,12 +205,8 @@ async fn api_adapter_contract_commits_to_shared_canonical_state() -> anyhow::Res
 fn dispatcher_adapter_contract_uses_shared_transition_service() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
-        &db_path,
-        "default",
-        "seed",
-        kanban_sqlite::CreateTask::ready("dispatcher adapter contract"),
-    )?;
+    let task =
+        create_ready_task_for_test(&db_path, "default", "seed", "dispatcher adapter contract")?;
 
     let result = kanban_sqlite::dispatch_once(
         &db_path,

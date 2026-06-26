@@ -61,6 +61,10 @@ export type Task = {
   lock_version: number
   dependency_blocked: boolean
   unfinished_parent_count: number
+  execution_plan_state: StepPlanState
+  required_subtask_count: number
+  completed_required_subtask_count: number
+  optional_subtask_count: number
   labels: LabelRecord[]
 }
 

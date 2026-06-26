@@ -10,6 +10,7 @@ fn concurrent_claim_attempts_on_one_ready_task_have_exactly_one_success() -> any
         "tester",
         CreateTask::ready("只允许一个 claim"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &task.id)?;
 
     let path = Arc::new(temp.path.clone());
     let task_id = Arc::new(task.id.clone());

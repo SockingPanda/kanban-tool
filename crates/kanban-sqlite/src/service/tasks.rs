@@ -4,11 +4,12 @@ use super::{
     AddTaskLabelsResult, BootstrapTaskLabel, BootstrapTaskLabelResult, CreateLabel, CreateTask,
     DeleteLabelResult, LabelOntologyActionType, LabelOntologyProposalBootstrapOptions,
     LabelOntologySemanticsMutationInput, LabelRecord, LabelSemanticProposalRecord,
-    LabelSemanticsMutationOptions, LabelSemanticsRecord, MAX_TASK_LIST_LIMIT, TaskListOptions,
-    TaskListPage, TaskListSort, TaskPatch, TaskRecord, add_dependency_in_current_tx, all,
-    all_values, board_id, board_id_any, ensure_changed_one, exec, exec_named, exec_one_named,
-    insert_event, json_valid, label_ontology_semantics_snapshot_in_tx, mark_label_atom_store_dirty,
-    optional, recompute_ready_status, record_label_ontology_proposal_bootstrap_in_tx,
+    LabelSemanticsMutationOptions, LabelSemanticsRecord, MAX_TASK_LIST_LIMIT, StepPlanState,
+    TaskListOptions, TaskListPage, TaskListSort, TaskPatch, TaskRecord,
+    add_dependency_in_current_tx, all, all_values, board_id, board_id_any, ensure_changed_one,
+    exec, exec_named, exec_one_named, insert_event, json_valid,
+    label_ontology_semantics_snapshot_in_tx, mark_label_atom_store_dirty, optional,
+    recompute_ready_status, record_label_ontology_proposal_bootstrap_in_tx,
     record_label_ontology_semantics_mutation_in_tx, required_row, scalar,
     upsert_label_semantics_candidate_in_tx, validate_priority, with_immediate_tx,
 };
@@ -92,7 +93,7 @@ pub fn create_task_with_labels_and_dependencies(
             "metadata_json must be valid JSON".into(),
         ));
     }
-    let status = core_initial_status(
+    let mut status = core_initial_status(
         input.status,
         ReadinessFacts {
             title: &title,
@@ -102,6 +103,9 @@ pub fn create_task_with_labels_and_dependencies(
         },
         now,
     )?;
+    if status == TaskStatus::Ready {
+        status = TaskStatus::Todo;
+    }
     let id = new_task_id();
     with_immediate_tx(&conn, || {
         let board_id = board_id(&conn, board)?;
@@ -1554,7 +1558,7 @@ pub(crate) fn task_order_by(sort: TaskListSort) -> &'static str {
     }
 }
 
-pub(crate) const TASK_COLUMNS: &str = "id,board_id,(SELECT slug FROM boards WHERE boards.id=tasks.board_id) AS board_slug,((SELECT slug FROM boards WHERE boards.id=tasks.board_id) || '#' || seq) AS task_ref,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,result_json,metadata_json,lock_version,EXISTS(SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS dependency_blocked,(SELECT COUNT(*) FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS unfinished_parent_count,COALESCE((SELECT json_group_array(json_object('id', id, 'board_id', board_id, 'name', name, 'color', color, 'created_at', created_at, 'updated_at', updated_at)) FROM (SELECT l.id, l.board_id, l.name, l.color, l.created_at, l.updated_at FROM task_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.task_id=tasks.id ORDER BY l.name ASC)), '[]') AS labels_json";
+pub(crate) const TASK_COLUMNS: &str = "id,board_id,(SELECT slug FROM boards WHERE boards.id=tasks.board_id) AS board_slug,((SELECT slug FROM boards WHERE boards.id=tasks.board_id) || '#' || seq) AS task_ref,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,result_json,metadata_json,lock_version,EXISTS(SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS dependency_blocked,(SELECT COUNT(*) FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS unfinished_parent_count,CASE WHEN EXISTS(SELECT 1 FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1) THEN 'planned' WHEN EXISTS(SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=tasks.board_id AND ep.task_id=tasks.id AND ep.state='not_required') THEN 'not_required' ELSE 'unplanned' END AS execution_plan_state,(SELECT COUNT(*) FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1) AS required_subtask_count,(SELECT COUNT(*) FROM task_subtasks s JOIN tasks child ON child.id=s.child_task_id WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1 AND child.status IN ('done','archived')) AS completed_required_subtask_count,(SELECT COUNT(*) FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=0) AS optional_subtask_count,COALESCE((SELECT json_group_array(json_object('id', id, 'board_id', board_id, 'name', name, 'color', color, 'created_at', created_at, 'updated_at', updated_at)) FROM (SELECT l.id, l.board_id, l.name, l.color, l.created_at, l.updated_at FROM task_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.task_id=tasks.id ORDER BY l.name ASC)), '[]') AS labels_json";
 
 pub(crate) fn query_tasks(conn: &Connection, board_id: &str) -> Result<Vec<TaskRecord>> {
     all(
@@ -1672,7 +1676,8 @@ pub(crate) fn get_task_by_seq(
 
 pub(crate) fn task_from_row(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
     let status: String = row.get(7)?;
-    let labels_json: String = row.get(33)?;
+    let execution_plan_state: String = row.get(33)?;
+    let labels_json: String = row.get(37)?;
     let labels: Vec<LabelRecord> = serde_json::from_str(&labels_json)
         .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))?;
     Ok(TaskRecord {
@@ -1710,6 +1715,16 @@ pub(crate) fn task_from_row(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
         lock_version: row.get(30)?,
         dependency_blocked: row.get(31)?,
         unfinished_parent_count: row.get(32)?,
+        execution_plan_state: StepPlanState::from_db_str(&execution_plan_state).ok_or_else(
+            || {
+                rusqlite::Error::InvalidParameterName(format!(
+                    "invalid execution plan state: {execution_plan_state}"
+                ))
+            },
+        )?,
+        required_subtask_count: row.get(34)?,
+        completed_required_subtask_count: row.get(35)?,
+        optional_subtask_count: row.get(36)?,
         labels,
     })
 }

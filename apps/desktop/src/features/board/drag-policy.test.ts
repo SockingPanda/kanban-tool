@@ -166,6 +166,10 @@ function task(overrides: Partial<Task> = {}): Task {
     lock_version: 0,
     dependency_blocked: false,
     unfinished_parent_count: 0,
+    execution_plan_state: "unplanned",
+    required_subtask_count: 0,
+    completed_required_subtask_count: 0,
+    optional_subtask_count: 0,
     labels: [],
     ...overrides,
   }

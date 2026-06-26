@@ -582,6 +582,77 @@ Response：
 }
 ```
 
+
+
+### 6.4 Task neighborhood
+
+```http
+GET /api/v1/tasks/{task_id}/neighborhood?depth=1&limit_nodes=250&include_archived_context=false
+```
+
+This read-only endpoint returns the selected task, direct dependency parents,
+direct dependency children, and every dependency edge whose source and target are
+both visible. V1 only accepts `depth=1`; deeper graph expansion is intentionally
+reserved for later.
+
+Response:
+
+```json
+{
+  "data": {
+    "center_task_id": "t_01HX...",
+    "nodes": [
+      {
+        "task": { "id": "t_01HX...", "ref": "default#12", "status": "ready" },
+        "role": "center",
+        "context_only": false
+      }
+    ],
+    "edges": [
+      {
+        "id": "dependency:t_parent->t_child",
+        "source_task_id": "t_parent",
+        "target_task_id": "t_child",
+        "kind": "dependency",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "meta": {
+      "depth": 1,
+      "context_depth": 0,
+      "node_count": 1,
+      "edge_count": 0,
+      "truncated": false,
+      "limit_nodes": 250,
+      "include_archived_context": false
+    }
+  }
+}
+```
+
+`task` uses the same public task DTO as task list/detail responses and does not
+expose `claim_token`.
+
+### 6.5 Board task map
+
+```http
+GET /api/v1/boards/{board}/task-map?active_only=true&context_depth=1&limit_nodes=250&include_done_context=true&include_archived_context=false&hide_isolated=false
+```
+
+This read-only endpoint returns an operational graph for the board. By default it
+includes all active, non-archived tasks (`triage`, `todo`, `scheduled`, `ready`,
+`running`, `blocked`, `review`) plus at most one dependency-hop of non-archived
+context. Done context is included by default and marked `context_only`; archived
+context is excluded unless explicitly requested. V1 only accepts
+`context_depth=0` or `context_depth=1`.
+
+Node roles are `active` for active board tasks and `context` for one-hop context.
+Dependency edges are returned only when both endpoints are visible. The `meta`
+object reports active statuses, node/edge counts, truncation, limit, and the
+query context flags.
+
+
 ---
 
 ## 7. Comments

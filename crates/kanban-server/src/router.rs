@@ -57,7 +57,12 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/boards/:board/tasks",
             get(list_tasks).post(create_task),
         )
+        .route("/api/v1/boards/:board/task-map", get(board_task_map))
         .route("/api/v1/tasks/:task_id", get(get_task).patch(update_task))
+        .route(
+            "/api/v1/tasks/:task_id/neighborhood",
+            get(task_neighborhood),
+        )
         .route(
             "/api/v1/tasks/:task_id/labels",
             get(list_task_labels).post(add_task_label),

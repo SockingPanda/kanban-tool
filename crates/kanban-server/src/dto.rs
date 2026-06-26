@@ -288,3 +288,95 @@ fn default_context_max_items() -> usize {
 fn default_graph_limit() -> usize {
     50
 }
+
+#[derive(Debug, Serialize)]
+pub(super) struct TaskGraphNodeDto {
+    pub(super) task: TaskDto,
+    pub(super) role: kanban_sqlite::TaskGraphNodeRole,
+    pub(super) context_only: bool,
+}
+
+impl From<kanban_sqlite::TaskGraphNodeRecord> for TaskGraphNodeDto {
+    fn from(node: kanban_sqlite::TaskGraphNodeRecord) -> Self {
+        Self {
+            task: TaskDto::from(node.task),
+            role: node.role,
+            context_only: node.context_only,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct TaskGraphEdgeDto {
+    pub(super) id: String,
+    pub(super) source_task_id: String,
+    pub(super) target_task_id: String,
+    pub(super) kind: kanban_sqlite::TaskGraphEdgeKind,
+    pub(super) required: bool,
+    pub(super) blocking: bool,
+}
+
+impl From<kanban_sqlite::TaskGraphEdgeRecord> for TaskGraphEdgeDto {
+    fn from(edge: kanban_sqlite::TaskGraphEdgeRecord) -> Self {
+        Self {
+            id: edge.id,
+            source_task_id: edge.source_task_id,
+            target_task_id: edge.target_task_id,
+            kind: edge.kind,
+            required: edge.required,
+            blocking: edge.blocking,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct TaskNeighborhoodDto {
+    pub(super) center_task_id: String,
+    pub(super) nodes: Vec<TaskGraphNodeDto>,
+    pub(super) edges: Vec<TaskGraphEdgeDto>,
+    pub(super) meta: kanban_sqlite::TaskGraphMeta,
+}
+
+impl From<kanban_sqlite::TaskNeighborhoodRecord> for TaskNeighborhoodDto {
+    fn from(graph: kanban_sqlite::TaskNeighborhoodRecord) -> Self {
+        Self {
+            center_task_id: graph.center_task_id,
+            nodes: graph
+                .nodes
+                .into_iter()
+                .map(TaskGraphNodeDto::from)
+                .collect(),
+            edges: graph
+                .edges
+                .into_iter()
+                .map(TaskGraphEdgeDto::from)
+                .collect(),
+            meta: graph.meta,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct BoardTaskMapDto {
+    pub(super) nodes: Vec<TaskGraphNodeDto>,
+    pub(super) edges: Vec<TaskGraphEdgeDto>,
+    pub(super) meta: kanban_sqlite::TaskGraphMeta,
+}
+
+impl From<kanban_sqlite::BoardTaskMapRecord> for BoardTaskMapDto {
+    fn from(graph: kanban_sqlite::BoardTaskMapRecord) -> Self {
+        Self {
+            nodes: graph
+                .nodes
+                .into_iter()
+                .map(TaskGraphNodeDto::from)
+                .collect(),
+            edges: graph
+                .edges
+                .into_iter()
+                .map(TaskGraphEdgeDto::from)
+                .collect(),
+            meta: graph.meta,
+        }
+    }
+}

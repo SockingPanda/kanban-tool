@@ -21,6 +21,7 @@ describe("desktop task selection rules", () => {
     expect(shouldOpenTaskDetailSheet("board", { id: "t_1" })).toBe(true)
     expect(shouldOpenTaskDetailSheet("list", { id: "t_1" })).toBe(true)
     expect(shouldOpenTaskDetailSheet("runs", { id: "t_1" })).toBe(true)
+    expect(shouldOpenTaskDetailSheet("map", { id: "t_1" })).toBe(true)
     expect(shouldOpenTaskDetailSheet("runs", null)).toBe(false)
     expect(shouldOpenTaskDetailSheet("events", { id: "t_1" })).toBe(false)
     expect(shouldOpenTaskDetailSheet("maintenance", { id: "t_1" })).toBe(false)

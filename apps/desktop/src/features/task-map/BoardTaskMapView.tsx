@@ -1,4 +1,4 @@
-import { AlertTriangle, EyeOff, ListFilter, Loader2, Network, RefreshCcw } from "lucide-react"
+import { AlertTriangle, EyeOff, ListFilter, Loader2, Minus, Network, Plus, RefreshCcw, RotateCcw } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -16,6 +16,10 @@ import { apiTaskGraphToCanvasGraph } from "./task-graph-adapter"
 import { useBoardTaskMap } from "./useBoardTaskMap"
 
 type BoardMapFilter = "all" | "blocked" | "ready" | "running" | "unplanned" | "incomplete-subtasks"
+
+const MIN_MAP_ZOOM = 0.65
+const MAX_MAP_ZOOM = 1.5
+const MAP_ZOOM_STEP = 0.15
 
 const filterOptions: { value: BoardMapFilter; label: string }[] = [
   { value: "all", label: "All active" },
@@ -38,6 +42,7 @@ export function BoardTaskMapView({
   const [filter, setFilter] = useState<BoardMapFilter>("all")
   const [showDoneContext, setShowDoneContext] = useState(false)
   const [hideIsolated, setHideIsolated] = useState(false)
+  const [zoom, setZoom] = useState(1)
   const mapQuery = useBoardTaskMap(api, { includeDoneContext: showDoneContext })
   const sourceGraph = mapQuery.data ?? null
   const visibleGraph = useMemo(
@@ -52,6 +57,7 @@ export function BoardTaskMapView({
     [selectedTaskId, sourceGraph],
   )
   const hiddenSelection = Boolean(selectedNode && !visibleGraph.nodes.some((node) => node.id === selectedNode.task.id))
+  const zoomLabel = `${Math.round(zoom * 100)}%`
 
   if (!api) {
     return (
@@ -102,6 +108,35 @@ export function BoardTaskMapView({
             >
               Show done context
             </Button>
+            <Separator orientation="vertical" className="hidden h-6 sm:block" />
+            <div className="flex items-center gap-1 rounded-md border border-border bg-background p-0.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Zoom out task map"
+                title="Zoom out"
+                disabled={zoom <= MIN_MAP_ZOOM}
+                onClick={() => setZoom((current) => stepMapZoom(current, -1))}
+              >
+                <Minus className="h-4 w-4" />
+              </Button>
+              <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">{zoomLabel}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Zoom in task map"
+                title="Zoom in"
+                disabled={zoom >= MAX_MAP_ZOOM}
+                onClick={() => setZoom((current) => stepMapZoom(current, 1))}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon" aria-label="Reset task map zoom" title="Reset zoom" onClick={() => setZoom(1)}>
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            </div>
             <Button type="button" variant="outline" size="sm" disabled={mapQuery.isFetching} onClick={() => void mapQuery.refetch()}>
               {mapQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
               Refresh
@@ -136,6 +171,7 @@ export function BoardTaskMapView({
                 selectedTaskId={selectedNode?.task.id ?? selectedTaskId}
                 onSelectTask={onSelectTask}
                 mode="board-map"
+                scale={zoom}
                 className="h-full min-h-[520px]"
               />
             ) : (
@@ -178,6 +214,15 @@ function nodeMatchesFilter(node: ApiTaskGraphNode, filter: BoardMapFilter) {
   if (filter === "running") return node.task.status === "running" && !node.context_only
   if (filter === "unplanned") return node.task.execution_plan_state === "unplanned" && !node.context_only
   return incompleteRequiredSubtasks(node.task) > 0 && !node.context_only
+}
+
+function stepMapZoom(current: number, direction: -1 | 1) {
+  return clampMapZoom(Number((current + direction * MAP_ZOOM_STEP).toFixed(2)))
+}
+
+function clampMapZoom(value: number) {
+  if (!Number.isFinite(value)) return 1
+  return Math.min(MAX_MAP_ZOOM, Math.max(MIN_MAP_ZOOM, value))
 }
 
 function MapInspector({
@@ -281,4 +326,4 @@ function errorMessage(err: unknown) {
   return err instanceof Error ? err.message : String(err)
 }
 
-export const __test = { filterBoardMap }
+export const __test = { clampMapZoom, filterBoardMap, stepMapZoom }

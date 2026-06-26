@@ -24,11 +24,13 @@ export function layoutTaskGraph(graph: TaskGraph, options: LayoutOptions): TaskG
     if (!source || !target) return []
     return [{ ...edge, source, target, path: edgePath(source, target) }]
   })
+  const maxX = nodes.length ? Math.max(...nodes.map((node) => node.x + node.width)) : NODE_WIDTH
+  const maxY = nodes.length ? Math.max(...nodes.map((node) => node.y + node.height)) : NODE_HEIGHT
   return {
     nodes,
     edges,
-    width: Math.max(...nodes.map((node) => node.x + node.width), NODE_WIDTH) + 24,
-    height: Math.max(...nodes.map((node) => node.y + node.height), NODE_HEIGHT) + 24,
+    width: maxX + 24,
+    height: maxY + 24,
   }
 }
 
@@ -74,10 +76,23 @@ function toLayoutNode(node: TaskGraphNode, x: number, y: number): TaskGraphLayou
 }
 
 function edgePath(source: TaskGraphLayoutNode, target: TaskGraphLayoutNode) {
-  const startX = source.x + source.width
-  const startY = source.y + source.height / 2
-  const endX = target.x
-  const endY = target.y + target.height / 2
+  if (target.x >= source.x + source.width) {
+    return horizontalEdgePath(source.x + source.width, source.y + source.height / 2, target.x, target.y + target.height / 2)
+  }
+  if (source.x >= target.x + target.width) {
+    return horizontalEdgePath(source.x, source.y + source.height / 2, target.x + target.width, target.y + target.height / 2)
+  }
+
+  const sourceBelowTarget = source.y > target.y
+  const startX = source.x + source.width / 2
+  const startY = sourceBelowTarget ? source.y : source.y + source.height
+  const endX = target.x + target.width / 2
+  const endY = sourceBelowTarget ? target.y + target.height : target.y
+  const midY = startY + (endY - startY) / 2
+  return `M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`
+}
+
+function horizontalEdgePath(startX: number, startY: number, endX: number, endY: number) {
   const midX = startX + (endX - startX) / 2
   return `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`
 }

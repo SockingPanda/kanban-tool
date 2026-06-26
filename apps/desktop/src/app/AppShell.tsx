@@ -374,7 +374,7 @@ export function AppShell({
               if (!open) onCloseTaskDetail()
             }}
           >
-            <SheetContent side="right" className="w-[min(620px,calc(100vw-32px))] p-0">
+            <SheetContent side="right" className="w-[min(1100px,calc(100vw-24px))] p-0">
               <TaskDetail
                 api={api}
                 task={selectedTask}

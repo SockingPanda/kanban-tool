@@ -67,6 +67,7 @@ pub(crate) fn handle_task(
                         statuses,
                         priorities: vec![],
                         labels: args.labels,
+                        plan_filters: vec![],
                         include_archived: args.include_archived,
                         assignee: args.assignee,
                         search: args.search,

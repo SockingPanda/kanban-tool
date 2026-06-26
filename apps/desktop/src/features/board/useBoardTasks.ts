@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 
-import type { KanbanApi, SearchTasksResult, TaskListSort, TaskPageResult, TaskStatus } from "@/lib/api"
+import type { KanbanApi, SearchTasksResult, TaskListSort, TaskPageResult, TaskPlanFilter, TaskStatus } from "@/lib/api"
 import { queryKeys } from "@/lib/query-keys"
 
 export const BOARD_COLUMN_TASK_LIMIT = 50
@@ -17,6 +17,7 @@ export type BoardTaskRequestInput = {
   search: string
   statusFilter: TaskStatus | "all"
   priorityFilters?: number[]
+  planFilters?: TaskPlanFilter[]
   sort?: TaskListSort
   showArchived: boolean
   limit: number
@@ -28,6 +29,7 @@ export type BoardTaskRequest = {
   search: string
   statusFilter: TaskStatus | "all"
   priorityFilters: number[]
+  planFilters: TaskPlanFilter[]
   sort: TaskListSort
   statuses: TaskStatus[]
   showArchived: boolean
@@ -41,6 +43,7 @@ export function resolveBoardTaskRequest({
   search,
   statusFilter,
   priorityFilters = [],
+  planFilters = [],
   sort = "-updated_at",
   showArchived,
   limit,
@@ -54,6 +57,7 @@ export function resolveBoardTaskRequest({
       statusFilter: "all",
       statuses: uniqueStatuses(boardStatuses),
       priorityFilters: [],
+      planFilters: [],
       sort: "-updated_at",
       showArchived,
       limit,
@@ -67,6 +71,7 @@ export function resolveBoardTaskRequest({
     statusFilter,
     statuses: statusFilter === "all" ? [] : [statusFilter],
     priorityFilters,
+    planFilters,
     sort,
     showArchived,
     limit,
@@ -84,6 +89,7 @@ export function useBoardTasks({ api, ...input }: BoardTaskRequestInput & { api: 
       search: request.search,
       status: request.statusFilter,
       priorities: request.priorityFilters,
+      planFilters: request.planFilters,
       sort: request.sort,
       mode: request.mode,
       statuses: request.statuses,
@@ -107,6 +113,7 @@ export async function loadBoardTasks(api: KanbanApi, request: BoardTaskRequest, 
     includeArchived: request.showArchived,
     statuses: request.statuses,
     priorities: request.priorityFilters,
+    planFilters: request.planFilters,
     query: request.search,
     sort: request.sort,
     limit: request.limit,

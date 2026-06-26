@@ -43,6 +43,7 @@ describe("KanbanApi task search", () => {
       statuses: ["ready", "blocked"],
       priorities: [0, 2],
       labels: [" backend ", "api"],
+      planFilters: ["plan_needed", "incomplete_required_subtasks"],
       sort: "priority",
       limit: 25,
       offset: 0,
@@ -55,6 +56,7 @@ describe("KanbanApi task search", () => {
     expect(url.searchParams.getAll("status")).toEqual(["ready", "blocked"])
     expect(url.searchParams.getAll("priority")).toEqual(["0", "2"])
     expect(url.searchParams.getAll("label")).toEqual(["backend", "api"])
+    expect(url.searchParams.getAll("plan_filter")).toEqual(["plan_needed", "incomplete_required_subtasks"])
   })
 
   it("keeps list task pagination metadata from the response envelope", async () => {

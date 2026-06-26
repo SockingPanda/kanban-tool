@@ -3,6 +3,7 @@ import type {
   LabelOntologySignalKind,
   LabelOntologySignalStatus,
   TaskListSort,
+  TaskPlanFilter,
   TaskStatus,
 } from "./api"
 
@@ -11,6 +12,7 @@ export type BoardTaskQuery = {
   search: string
   status: TaskStatus | "all"
   priorities: number[]
+  planFilters: TaskPlanFilter[]
   sort: TaskListSort
   mode: "board" | "list"
   statuses: TaskStatus[]
@@ -48,6 +50,7 @@ export const queryKeys = {
         search: query.search,
         status: query.status,
         priorities: query.priorities,
+        planFilters: query.planFilters,
         sort: query.sort,
         mode: query.mode,
         statuses: query.statuses,

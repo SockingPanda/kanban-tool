@@ -5,7 +5,7 @@ use super::{
     DeleteLabelResult, LabelOntologyActionType, LabelOntologyProposalBootstrapOptions,
     LabelOntologySemanticsMutationInput, LabelRecord, LabelSemanticProposalRecord,
     LabelSemanticsMutationOptions, LabelSemanticsRecord, MAX_TASK_LIST_LIMIT, StepPlanState,
-    TaskListOptions, TaskListPage, TaskListSort, TaskPatch, TaskRecord,
+    TaskListOptions, TaskListPage, TaskListSort, TaskPatch, TaskPlanFilter, TaskRecord,
     add_dependency_in_current_tx, all, all_values, board_id, board_id_any, ensure_changed_one,
     exec, exec_named, exec_one_named, insert_event, json_valid,
     label_ontology_semantics_snapshot_in_tx, mark_label_atom_store_dirty, optional,
@@ -1396,6 +1396,22 @@ pub(crate) fn task_query_where(board_id: &str, options: &TaskListOptions) -> (St
         );
         params.push(Value::Text(label.to_owned()));
         params.push(Value::Text(label.to_owned()));
+    }
+    for filter in &options.plan_filters {
+        match filter {
+            TaskPlanFilter::PlanNeeded => clauses.push(
+                "status NOT IN ('done','archived') AND NOT EXISTS (SELECT 1 FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1) AND NOT EXISTS (SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=tasks.board_id AND ep.task_id=tasks.id AND ep.state='not_required')"
+                    .to_owned(),
+            ),
+            TaskPlanFilter::HasSubtasks => clauses.push(
+                "EXISTS (SELECT 1 FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id)"
+                    .to_owned(),
+            ),
+            TaskPlanFilter::IncompleteRequiredSubtasks => clauses.push(
+                "EXISTS (SELECT 1 FROM task_subtasks s JOIN tasks child ON child.id=s.child_task_id WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1 AND child.status NOT IN ('done','archived'))"
+                    .to_owned(),
+            ),
+        }
     }
     if let Some(assignee) = options
         .assignee

@@ -92,6 +92,7 @@ import type {
   RuntimeConfig,
   SearchTasksMeta,
   Task,
+  TaskPlanFilter,
   TaskStatus,
   PageMeta,
 } from "@/lib/api"
@@ -141,6 +142,7 @@ export function AppShell({
   searchMeta,
   statusFilter,
   priorityFilters,
+  planFilters,
   listSort,
   showArchived,
   page,
@@ -150,6 +152,7 @@ export function AppShell({
   rowsPerPage,
   newTitle,
   newDescription,
+  newFirstSubtaskTitle,
   blockReason,
   dependencyInput,
   commentBody,
@@ -170,6 +173,7 @@ export function AppShell({
   onSidebarOpenChange,
   onStatusFilterChange,
   onPriorityFiltersChange,
+  onPlanFiltersChange,
   onListSortChange,
   onResetListFilters,
   onShowArchivedChange,
@@ -182,6 +186,7 @@ export function AppShell({
   onCreateTask,
   onNewTitleChange,
   onNewDescriptionChange,
+  onNewFirstSubtaskTitleChange,
   onSelectTask,
   onCloseTaskDetail,
   onDropTask,
@@ -222,6 +227,7 @@ export function AppShell({
   searchMeta: SearchTasksMeta | null
   statusFilter: TaskStatus | "all"
   priorityFilters: number[]
+  planFilters: TaskPlanFilter[]
   listSort: ListSortState
   showArchived: boolean
   page: PageMeta
@@ -231,6 +237,7 @@ export function AppShell({
   rowsPerPage: number
   newTitle: string
   newDescription: string
+  newFirstSubtaskTitle: string
   blockReason: string
   dependencyInput: string
   commentBody: string
@@ -251,6 +258,7 @@ export function AppShell({
   onSidebarOpenChange: (value: boolean) => void
   onStatusFilterChange: (value: TaskStatus | "all") => void
   onPriorityFiltersChange: (value: number[]) => void
+  onPlanFiltersChange: (value: TaskPlanFilter[]) => void
   onListSortChange: (value: ListSortState) => void
   onResetListFilters: () => void
   onShowArchivedChange: (value: boolean) => void
@@ -263,6 +271,7 @@ export function AppShell({
   onCreateTask: () => Promise<boolean>
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
+  onNewFirstSubtaskTitleChange: (value: string) => void
   onSelectTask: (taskId: string) => void
   onCloseTaskDetail: () => void
   onDropTask: (taskId: string, targetStatus: TaskStatus) => void
@@ -323,6 +332,8 @@ export function AppShell({
           onCreateTask={onCreateTask}
           onNewTitleChange={onNewTitleChange}
           onNewDescriptionChange={onNewDescriptionChange}
+          newFirstSubtaskTitle={newFirstSubtaskTitle}
+          onNewFirstSubtaskTitleChange={onNewFirstSubtaskTitleChange}
         />
 
         {error ? (
@@ -357,10 +368,12 @@ export function AppShell({
               rowsPerPage={rowsPerPage}
               statusFilter={statusFilter}
               priorityFilters={priorityFilters}
+              planFilters={planFilters}
               listSort={listSort}
               tasksRefreshing={tasksRefreshing}
               onStatusFilterChange={onStatusFilterChange}
               onPriorityFiltersChange={onPriorityFiltersChange}
+              onPlanFiltersChange={onPlanFiltersChange}
               onListSortChange={onListSortChange}
               onResetListFilters={onResetListFilters}
               onFirstPage={onFirstPage}
@@ -608,6 +621,7 @@ function ShellHeader({
   showArchived,
   newTitle,
   newDescription,
+  newFirstSubtaskTitle,
   tasksRefreshing,
   pendingAction,
   onSearchChange,
@@ -620,6 +634,7 @@ function ShellHeader({
   onCreateTask,
   onNewTitleChange,
   onNewDescriptionChange,
+  onNewFirstSubtaskTitleChange,
 }: {
   config: RuntimeConfig | null
   view: OperatorView
@@ -632,6 +647,7 @@ function ShellHeader({
   showArchived: boolean
   newTitle: string
   newDescription: string
+  newFirstSubtaskTitle: string
   tasksRefreshing: boolean
   pendingAction: string | null
   onSearchChange: (value: string) => void
@@ -644,6 +660,7 @@ function ShellHeader({
   onCreateTask: () => Promise<boolean>
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
+  onNewFirstSubtaskTitleChange: (value: string) => void
 }) {
   const ThemeIcon = themeMode === "dark" ? Moon : themeMode === "light" ? Sun : Monitor
   const showAddTask = shouldShowTaskExplorerToolbar(view)
@@ -706,10 +723,12 @@ function ShellHeader({
             canCreateTask={canCreateTask}
             newTitle={newTitle}
             newDescription={newDescription}
+            newFirstSubtaskTitle={newFirstSubtaskTitle}
             pendingAction={pendingAction}
             onCreateTask={onCreateTask}
             onNewTitleChange={onNewTitleChange}
             onNewDescriptionChange={onNewDescriptionChange}
+            onNewFirstSubtaskTitleChange={onNewFirstSubtaskTitleChange}
           />
         ) : null}
         <Badge variant="secondary">actor {config?.actor ?? "-"}</Badge>
@@ -735,18 +754,22 @@ function AddTaskDialog({
   canCreateTask,
   newTitle,
   newDescription,
+  newFirstSubtaskTitle,
   pendingAction,
   onCreateTask,
   onNewTitleChange,
   onNewDescriptionChange,
+  onNewFirstSubtaskTitleChange,
 }: {
   canCreateTask: boolean
   newTitle: string
   newDescription: string
+  newFirstSubtaskTitle: string
   pendingAction: string | null
   onCreateTask: () => Promise<boolean>
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
+  onNewFirstSubtaskTitleChange: (value: string) => void
 }) {
   const [addTaskOpen, setAddTaskOpen] = useState(false)
   const creating = pendingAction === "create"
@@ -787,6 +810,14 @@ function AddTaskDialog({
               onChange={(event) => onNewDescriptionChange(event.target.value)}
               placeholder="Optional spec or description"
             />
+            <Input
+              aria-label="First subtask title"
+              name="new-first-subtask-title"
+              autoComplete="off"
+              value={newFirstSubtaskTitle}
+              onChange={(event) => onNewFirstSubtaskTitleChange(event.target.value)}
+              placeholder="Optional first required subtask"
+            />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setAddTaskOpen(false)}>
@@ -822,10 +853,12 @@ function MainView({
   rowsPerPage,
   statusFilter,
   priorityFilters,
+  planFilters,
   listSort,
   tasksRefreshing,
   onStatusFilterChange,
   onPriorityFiltersChange,
+  onPlanFiltersChange,
   onListSortChange,
   onResetListFilters,
   onFirstPage,
@@ -853,10 +886,12 @@ function MainView({
   rowsPerPage: number
   statusFilter: TaskStatus | "all"
   priorityFilters: number[]
+  planFilters: TaskPlanFilter[]
   listSort: ListSortState
   tasksRefreshing: boolean
   onStatusFilterChange: (value: TaskStatus | "all") => void
   onPriorityFiltersChange: (value: number[]) => void
+  onPlanFiltersChange: (value: TaskPlanFilter[]) => void
   onListSortChange: (value: ListSortState) => void
   onResetListFilters: () => void
   onFirstPage: () => void
@@ -893,10 +928,12 @@ function MainView({
         rowsPerPage={rowsPerPage}
         statusFilter={statusFilter}
         priorityFilters={priorityFilters}
+        planFilters={planFilters}
         listSort={listSort}
         tasksRefreshing={tasksRefreshing}
         onStatusFilterChange={onStatusFilterChange}
         onPriorityFiltersChange={onPriorityFiltersChange}
+        onPlanFiltersChange={onPlanFiltersChange}
         onListSortChange={onListSortChange}
         onResetListFilters={onResetListFilters}
         onSelectTask={onSelectTask}

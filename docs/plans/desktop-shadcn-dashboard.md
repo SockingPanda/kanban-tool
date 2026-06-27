@@ -81,10 +81,11 @@ pnpm --dir apps/desktop typecheck
 git diff --check
 ```
 
-Browser-only desktop development must wire the API explicitly. Set
-`VITE_KB_API_BASE_URL` to an API origin with suitable CORS, or set it to a local
-proxy base such as `/__kb_api__` and set `VITE_KB_DEV_PROXY_TARGET` to the
-current `kanban serve` origin. The Vite dev server must not silently proxy
+Browser-only desktop development defaults to the local Vite proxy base
+`/__kb_api__`, with `VITE_KB_DEV_PROXY_TARGET` defaulting to
+`http://127.0.0.1:8721`. Start `kanban serve` on that origin before opening the
+Vite page. Set `VITE_KB_API_BASE_URL` to a different API origin or proxy base
+when targeting another runtime. The Vite dev server must not silently proxy
 `/api` or `/health` to a hardcoded stale runtime.
 
 When visual implementation changes shell/layout/components, also run browser or screenshot checks at representative desktop and narrow widths. Confirm there are no overlapping controls, blank views, clipped labels, or broken loading/empty states before claiming the UI work complete.

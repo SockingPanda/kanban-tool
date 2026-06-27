@@ -604,7 +604,19 @@ describe("loadRuntimeConfig web mode", () => {
     vi.unstubAllGlobals()
   })
 
-  it("requires an explicit API base URL outside Tauri to avoid stale dev runtimes", async () => {
+  it("uses the local Vite API proxy by default in web dev mode", async () => {
+    vi.stubEnv("VITE_KB_API_BASE_URL", "")
+
+    await expect(loadRuntimeConfig()).resolves.toEqual({
+      apiBaseUrl: "/__kb_api__",
+      dbPath: "local kanban serve",
+      actor: "desktop-dev",
+      board: "kanban-tool",
+    })
+  })
+
+  it("requires an explicit API base URL outside Tauri in production web mode", async () => {
+    vi.stubEnv("DEV", false)
     vi.stubEnv("VITE_KB_API_BASE_URL", "")
 
     await expect(loadRuntimeConfig()).rejects.toThrow("VITE_KB_API_BASE_URL")

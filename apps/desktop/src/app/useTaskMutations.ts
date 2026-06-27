@@ -16,6 +16,7 @@ import { queryKeys } from "@/lib/query-keys"
 export type RunActionOptions = {
   label?: string
   fallbackTaskId?: string | null
+  invalidate?: "detail" | "timeline"
 }
 
 export function useTaskMutations({
@@ -64,8 +65,14 @@ export function useTaskMutations({
   })
 
   const invalidateTaskData = useCallback(
-    async (taskId: string | null) => {
+    async (taskId: string | null, scope: RunActionOptions["invalidate"] = "detail") => {
       if (!api) return
+      if (scope === "timeline" && taskId) {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.events(api.board) })
+        await queryClient.invalidateQueries({ queryKey: queryKeys.taskEvents(taskId) })
+        await queryClient.invalidateQueries({ queryKey: queryKeys.taskComments(taskId) })
+        return
+      }
       await invalidateTaskDetailAndBoard(queryClient, api.board, taskId)
       if (taskId) {
         queryClient.removeQueries({ queryKey: queryKeys.taskLabelSuggestions(taskId) })
@@ -79,6 +86,7 @@ export function useTaskMutations({
     async (action: () => Promise<unknown>, options: RunActionOptions | string = "action") => {
       const label = typeof options === "string" ? options : options.label ?? "action"
       const fallbackTaskId = typeof options === "string" ? selectedId : options.fallbackTaskId
+      const invalidateScope = typeof options === "string" ? "detail" : options.invalidate ?? "detail"
       setPendingAction(label)
       setError(null)
       try {
@@ -93,7 +101,7 @@ export function useTaskMutations({
           await invalidateTaskData(result.id)
           return result
         }
-        await invalidateTaskData(fallbackTaskId ?? null)
+        await invalidateTaskData(fallbackTaskId ?? null, invalidateScope)
         return result
       } catch (err) {
         setError(errorMessage(err))
@@ -172,7 +180,7 @@ export function useTaskMutations({
       const result = await api.createComment(taskId, commentBody.trim())
       setCommentBody("")
       return result
-    }, { label: "comment", fallbackTaskId: taskId })
+    }, { label: "comment", fallbackTaskId: taskId, invalidate: "timeline" })
   }, [api, commentBody, runAction, selectedTask, setCommentBody])
 
   const updateDraft = useCallback(

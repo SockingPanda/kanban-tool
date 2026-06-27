@@ -21,6 +21,9 @@ describe("task detail loading", () => {
         execution_plan: { board_id: task.board_id, task_id: task.id, state: "unplanned", reason: null, updated_by: "system", updated_at: 1 },
       })),
       listRuns: vi.fn(async () => []),
+      getRunLog: vi.fn(async () => {
+        throw new Error("run log should be lazy")
+      }),
       listEvents: vi.fn(async () => ({ events: [], next_after: 0 })),
       listComments: vi.fn(async () => []),
       suggestTaskLabels: vi.fn(async () => {
@@ -36,6 +39,7 @@ describe("task detail loading", () => {
     expect(result.detail.steps?.task_id).toBe(task.id)
     expect(api.getTaskNeighborhood).toHaveBeenCalledWith(task.id, { depth: 1, limitNodes: 40, signal: undefined })
     expect(api.listSteps).toHaveBeenCalledWith(task.id, { signal: undefined })
+    expect(api.getRunLog).not.toHaveBeenCalled()
     expect(api.suggestTaskLabels).not.toHaveBeenCalled()
   })
 

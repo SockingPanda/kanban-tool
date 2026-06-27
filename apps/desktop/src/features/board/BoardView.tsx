@@ -1,6 +1,6 @@
 import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,6 +13,7 @@ import {
   dependencyBlockedTodoClass,
   requiredStepProgressLabel,
   selectedDependencyCountForTask,
+  selectedIdForColumn,
   selectedUnlockCountForTask,
   taskNeedsExecutionPlan,
   type SelectedDependencySnapshot,
@@ -80,18 +81,42 @@ export function BoardView({
       <div ref={scrollerRef} className={boardScrollerClassName} onScroll={handleBoardScroll}>
         <div className="grid h-full min-h-0 gap-px" style={boardGridStyle(columns.length)}>
           {columns.map((column) => (
-            <BoardColumn
+            <BoardColumnBridge
               key={column.id}
               column={column}
               tasks={groupedTasks.get(column.status) ?? []}
               selectedId={selectedId}
               dependencySnapshot={dependencySnapshot}
-              onSelect={onSelectTask}
+              onSelectTask={onSelectTask}
             />
           ))}
         </div>
       </div>
     </DragDropProvider>
+  )
+}
+
+function BoardColumnBridge({
+  column,
+  tasks,
+  selectedId,
+  dependencySnapshot,
+  onSelectTask,
+}: {
+  column: ApiBoardColumn
+  tasks: Task[]
+  selectedId?: string
+  dependencySnapshot: SelectedDependencySnapshot
+  onSelectTask: (taskId: string) => void
+}) {
+  return (
+    <BoardColumn
+      column={column}
+      tasks={tasks}
+      selectedId={selectedIdForColumn(tasks, selectedId)}
+      dependencySnapshot={dependencySnapshot}
+      onSelect={onSelectTask}
+    />
   )
 }
 
@@ -155,10 +180,11 @@ function BoardColumn({
               >
                 <TaskCard
                   task={task}
+                  taskId={task.id}
                   selected={task.id === selectedId}
                   dependencyCount={selectedDependencyCountForTask(task.id, dependencySnapshot)}
                   unlockCount={selectedUnlockCountForTask(task.id, dependencySnapshot)}
-                  onSelect={() => onSelect(task.id)}
+                  onSelectTask={onSelect}
                 />
               </div>
             )
@@ -169,23 +195,27 @@ function BoardColumn({
   )
 }
 
-function TaskCard({
+const TaskCard = memo(function TaskCard({
   task,
+  taskId,
   selected,
   dependencyCount,
   unlockCount,
-  onSelect,
+  onSelectTask,
 }: {
   task: Task
+  taskId: string
   selected: boolean
   dependencyCount?: number
   unlockCount?: number
-  onSelect: () => void
+  onSelectTask: (taskId: string) => void
 }) {
   const { ref, isDragging } = useDraggable({
-    id: task.id,
-    data: { type: "task", taskId: task.id },
+    id: taskId,
+    data: { type: "task", taskId },
   })
+  const handleSelect = useCallback(() => onSelectTask(taskId), [onSelectTask, taskId])
+  const requiredStepProgress = requiredStepProgressLabel(task)
 
   return (
     <Button
@@ -198,7 +228,7 @@ function TaskCard({
         dependencyBlockedTodoClass(task),
         isDragging && "opacity-60",
       )}
-      onClick={onSelect}
+      onClick={handleSelect}
     >
       <div className="flex min-w-0 w-full items-start gap-2">
         <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", statusAccent[task.status])} />
@@ -210,7 +240,7 @@ function TaskCard({
             {task.due_at ? <span>due {formatRelativeTime(task.due_at)}</span> : null}
             {task.scheduled_at ? <span>scheduled {formatRelativeTime(task.scheduled_at)}</span> : null}
             {task.status === "running" ? <span>heartbeat {formatRelativeTime(task.last_heartbeat_at)}</span> : null}
-            {requiredStepProgressLabel(task) ? <span>{requiredStepProgressLabel(task)}</span> : null}
+            {requiredStepProgress ? <span>{requiredStepProgress}</span> : null}
             {taskNeedsExecutionPlan(task) ? <Badge variant="blocked" className="px-1.5 py-0 text-[11px] leading-5">plan needed</Badge> : null}
             {task.dependency_blocked ? <span>blocked by {task.unfinished_parent_count}</span> : null}
             {typeof unlockCount === "number" && unlockCount > 0 ? <span>unlocks {unlockCount}</span> : null}
@@ -230,7 +260,7 @@ function TaskCard({
       </div>
     </Button>
   )
-}
+})
 
 function isTaskStatus(value: unknown): value is TaskStatus {
   return (

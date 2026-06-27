@@ -339,6 +339,8 @@ pub(super) struct BoardQuery {
 
 #[derive(Debug, Deserialize)]
 pub(super) struct GraphNeighborsQuery {
+    #[serde(default = "default_board")]
+    pub(super) board: String,
     pub(super) entity_uri: String,
     pub(super) predicate: Option<String>,
     #[serde(default = "default_graph_limit")]

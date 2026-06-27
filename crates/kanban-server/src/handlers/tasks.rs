@@ -14,6 +14,7 @@ use std::str::FromStr;
 
 use crate::dto::{Envelope, LabelDto, TaskDto};
 use crate::error::{ApiError, extractor_error, invalid_input, validate_page_bounds};
+use crate::helper::{HelperKind, helper_degraded_message, run_helper_json};
 use crate::state::AppState;
 
 use super::shared::{
@@ -790,16 +791,7 @@ pub(crate) async fn label_atom_index_status(
     State(state): State<AppState>,
     Path(board): Path<String>,
 ) -> Result<Json<Envelope<kanban_vector::VectorStoreStatus>>, ApiError> {
-    let index_state = state.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        label_atom_index_status_for_state(&index_state, &board)
-    })
-    .await
-    .map_err(|error| {
-        ApiError(kanban_core::KanbanError::Storage(format!(
-            "label atom index status worker failed: {error}"
-        )))
-    })??;
+    let result = label_atom_index_status_for_state(state, board).await?;
     Ok(Json(Envelope {
         data: result,
         meta: None,
@@ -810,16 +802,8 @@ pub(crate) async fn rebuild_label_atom_index(
     State(state): State<AppState>,
     Path(board): Path<String>,
 ) -> Result<Json<Envelope<kanban_vector::VectorStoreStatus>>, ApiError> {
-    let index_state = state.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        rebuild_label_atom_index_for_state(&index_state, &board)
-    })
-    .await
-    .map_err(|error| {
-        ApiError(kanban_core::KanbanError::Storage(format!(
-            "label atom index rebuild worker failed: {error}"
-        )))
-    })??;
+    let _ = (state, board);
+    let result = rebuild_label_atom_index_for_state()?;
     Ok(Json(Envelope {
         data: result,
         meta: None,
@@ -842,26 +826,9 @@ pub(crate) async fn query_label_atom_index(
         .as_deref()
         .map(parse_label_atom_polarity)
         .transpose()?;
-    let index_state = state.clone();
-    let index_board = board;
-    let index_text = text.to_owned();
-    let index_polarity = polarity;
-    let index_limit = query.limit;
-    let result = tokio::task::spawn_blocking(move || {
-        query_label_atom_index_for_state(
-            &index_state,
-            &index_board,
-            &index_text,
-            index_polarity,
-            index_limit,
-        )
-    })
-    .await
-    .map_err(|error| {
-        ApiError(kanban_core::KanbanError::Storage(format!(
-            "label atom index query worker failed: {error}"
-        )))
-    })??;
+    let result =
+        query_label_atom_index_for_state(state, board, text.to_owned(), polarity, query.limit)
+            .await?;
     Ok(Json(Envelope {
         data: result,
         meta: None,
@@ -1827,19 +1794,6 @@ fn suggest_task_labels_for_state(
     task_id: &str,
     options: kanban_sqlite::LabelSuggestionOptions,
 ) -> Result<kanban_sqlite::LabelSuggestionResult, ApiError> {
-    #[cfg(feature = "vector-lancedb")]
-    {
-        if let Some(store) = super::shared::configured_lancedb_store(state)? {
-            return kanban_sqlite::suggest_task_labels_with(
-                state.db_path(),
-                board,
-                task_id,
-                &store,
-                options,
-            )
-            .map_err(ApiError::from);
-        }
-    }
     kanban_sqlite::suggest_task_labels(state.db_path(), board, task_id, options)
         .map_err(ApiError::from)
 }
@@ -1853,41 +1807,6 @@ fn propose_task_label_for_state(
     options: kanban_sqlite::LabelSuggestionOptions,
     create_options: kanban_sqlite::LabelProposalCreateOptions,
 ) -> Result<kanban_sqlite::LabelProposalAttempt, ApiError> {
-    #[cfg(feature = "vector-lancedb")]
-    {
-        if let Some(store) = super::shared::configured_lancedb_store(state)? {
-            return match candidate {
-                Some(candidate) => {
-                    let provider = kanban_sqlite::ManualLabelProposalProvider::new(candidate);
-                    kanban_sqlite::propose_task_label_with_store_and_create_options(
-                        state.db_path(),
-                        board,
-                        actor,
-                        task_id,
-                        &provider,
-                        &store,
-                        kanban_sqlite::LabelProposalProposeOptions {
-                            suggestion: options,
-                            create: create_options,
-                        },
-                    )
-                }
-                None => kanban_sqlite::propose_task_label_with_store_and_create_options(
-                    state.db_path(),
-                    board,
-                    actor,
-                    task_id,
-                    &kanban_sqlite::DisabledLabelProposalProvider,
-                    &store,
-                    kanban_sqlite::LabelProposalProposeOptions {
-                        suggestion: options,
-                        create: create_options,
-                    },
-                ),
-            }
-            .map_err(ApiError::from);
-        }
-    }
     match candidate {
         Some(candidate) => {
             let provider = kanban_sqlite::ManualLabelProposalProvider::new(candidate);
@@ -1914,68 +1833,55 @@ fn propose_task_label_for_state(
     .map_err(ApiError::from)
 }
 
-fn label_atom_index_status_for_state(
-    state: &AppState,
-    board: &str,
+async fn label_atom_index_status_for_state(
+    state: AppState,
+    board: String,
 ) -> Result<kanban_vector::VectorStoreStatus, ApiError> {
-    #[cfg(feature = "vector-lancedb")]
+    let args = super::vector::vector_helper_args(&state, &board, &["status".to_owned()]);
+    match run_helper_json::<kanban_vector::VectorStoreStatus>(state, HelperKind::Vector, args).await
     {
-        if let Some(store) = super::shared::configured_lancedb_store(state)? {
-            return kanban_sqlite::label_atom_index_status_with(state.db_path(), board, &store)
-                .map_err(ApiError::from);
+        Ok(status) => Ok(status),
+        Err(error) if error.is_status_degraded() => {
+            Ok(super::vector::degraded_vector_status(&error))
         }
+        Err(error) => Err(error.into()),
     }
-    kanban_sqlite::label_atom_index_status(state.db_path(), board).map_err(ApiError::from)
 }
 
-fn rebuild_label_atom_index_for_state(
-    state: &AppState,
-    board: &str,
-) -> Result<kanban_vector::VectorStoreStatus, ApiError> {
-    #[cfg(feature = "vector-lancedb")]
-    {
-        if let Some(store) = super::shared::configured_lancedb_store(state)? {
-            return kanban_sqlite::rebuild_label_atom_index_with(state.db_path(), board, &store)
-                .map_err(ApiError::from);
-        }
-    }
-    #[cfg(not(feature = "vector-lancedb"))]
-    let _ = (state, board);
+fn rebuild_label_atom_index_for_state() -> Result<kanban_vector::VectorStoreStatus, ApiError> {
     Err(invalid_input(
-        "label atom index rebuild requires a configured label atom vector store",
+        "label atom index rebuild is not available through the server helper adapter; run the vector helper/CLI rebuild path outside the server",
     ))
 }
 
-fn query_label_atom_index_for_state(
-    state: &AppState,
-    board: &str,
-    text: &str,
+async fn query_label_atom_index_for_state(
+    state: AppState,
+    board: String,
+    text: String,
     polarity: Option<String>,
     limit: usize,
 ) -> Result<Vec<kanban_vector::LabelAtomHit>, ApiError> {
-    #[cfg(feature = "vector-lancedb")]
-    {
-        if let Some(store) = super::shared::configured_lancedb_store(state)? {
-            return kanban_sqlite::query_label_atom_index_with(
-                state.db_path(),
-                board,
-                &store,
-                kanban_vector::LabelAtomQuery {
-                    text: text.to_owned(),
-                    limit,
-                    board_id: None,
-                    embedding_model: None,
-                    polarity,
-                },
-            )
-            .map_err(ApiError::from);
-        }
+    let mut command_args = vec![
+        "query-label-atoms".to_owned(),
+        "--text".to_owned(),
+        text,
+        "--limit".to_owned(),
+        limit.to_string(),
+    ];
+    if let Some(polarity) = polarity {
+        command_args.push("--polarity".to_owned());
+        command_args.push(polarity);
     }
-    #[cfg(not(feature = "vector-lancedb"))]
-    let _ = (state, board, text, polarity, limit);
-    Err(invalid_input(
-        "label atom index query requires a configured label atom vector store",
-    ))
+    let args = super::vector::vector_helper_args(&state, &board, &command_args);
+    match run_helper_json::<Vec<kanban_vector::LabelAtomHit>>(state, HelperKind::Vector, args).await
+    {
+        Ok(hits) => Ok(hits),
+        Err(error) if error.is_helper_missing() => Err(invalid_input(helper_degraded_message(
+            HelperKind::Vector,
+            &error,
+        ))),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn parse_label_atom_polarity(value: &str) -> Result<String, ApiError> {

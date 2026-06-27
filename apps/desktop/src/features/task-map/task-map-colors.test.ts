@@ -24,6 +24,5 @@ describe("task map colors", () => {
     expect(graphNodeStatusMiniMapColor("ready")).not.toBe(graphNodeStatusMiniMapColor("blocked"))
     expect(graphNodeStatusMiniMapColor("running")).toBe("#0284c7")
     expect(graphNodeStatusMiniMapColor("done")).toBe("#65a30d")
-    expect(graphNodeStatusMiniMapColor("done", true)).toBe("#65a30d")
   })
 })

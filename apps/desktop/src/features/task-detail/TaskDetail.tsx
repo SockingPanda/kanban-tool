@@ -16,7 +16,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react"
-import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react"
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
 import remarkGfm from "remark-gfm"
 
@@ -156,6 +156,8 @@ export function TaskDetail({
     setConfirmAction(null)
   }, [task?.id])
 
+  const graph = useMemo(() => apiTaskGraphToCanvasGraph(detail.neighborhood), [detail.neighborhood])
+
   if (!task) return null
   const currentTask = task
 
@@ -164,7 +166,6 @@ export function TaskDetail({
   const renderedDescription = visibleDescription(task.description, descriptionExpanded)
   const commentsPage = commentPageState({ comments: detail.comments, page: commentPage, sortOrder: commentSortOrder })
   const actionView = taskActionView(task, actions)
-  const graph = apiTaskGraphToCanvasGraph(detail.neighborhood)
 
   async function saveAndClose() {
     const saved = await onSaveTask()

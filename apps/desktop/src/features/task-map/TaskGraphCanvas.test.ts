@@ -43,6 +43,17 @@ describe("TaskGraphCanvas interactions", () => {
     expect(__test.taskGraphLayoutKey(changedTopologyGraph, "board-map")).not.toBe(__test.taskGraphLayoutKey(graph, "board-map"))
   })
 
+  it("tracks task card data changes separately from topology layout", () => {
+    const graph = graphFixture()
+    const updatedGraph: TaskGraph = {
+      ...graph,
+      nodes: graph.nodes.map((node) => (node.id === "parent" ? { ...node, title: "Updated title", status: "blocked", stepCounts: { completed: 1, total: 3 } } : node)),
+    }
+
+    expect(__test.taskGraphLayoutKey(updatedGraph, "detail")).toBe(__test.taskGraphLayoutKey(graph, "detail"))
+    expect(__test.taskGraphDataKey(updatedGraph)).not.toBe(__test.taskGraphDataKey(graph))
+  })
+
   it("patches only previous and next selected flow nodes", () => {
     const nodes = __test.buildTaskFlowNodes(__test.layoutTaskGraphFallback(graphFixture(), { mode: "board-map" }), graphFixture(), "parent", undefined)
     const patched = __test.patchTaskFlowNodeSelection(nodes, "parent", "child")

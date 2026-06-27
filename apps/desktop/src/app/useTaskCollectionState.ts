@@ -83,7 +83,8 @@ export function useTaskCollectionState(api: KanbanApi | null, view: OperatorView
 
   const taskData = enabled ? tasksQuery.data : undefined
   const tasks = taskData?.tasks ?? EMPTY_TASKS
-  const page = taskData?.page ?? { limit: rowsPerPage, offset: pageOffset, total: null }
+  const fallbackPage = useMemo(() => ({ limit: rowsPerPage, offset: pageOffset, total: null }), [pageOffset, rowsPerPage])
+  const page = taskData?.page ?? fallbackPage
   const searchMeta = taskData?.searchMeta ?? null
   const hasNext = hasNextPage(page, tasks.length)
   const hasPrevious = hasPreviousPage(page)

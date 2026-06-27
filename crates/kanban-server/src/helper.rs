@@ -232,7 +232,7 @@ where
     })
 }
 
-fn resolve_helper(state: &AppState, kind: HelperKind) -> PathBuf {
+pub(crate) fn resolve_helper(state: &AppState, kind: HelperKind) -> PathBuf {
     if let Some(path) = kind.configured_path(state) {
         return path;
     }

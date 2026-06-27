@@ -14,7 +14,7 @@ use std::str::FromStr;
 
 use crate::dto::{Envelope, LabelDto, TaskDto};
 use crate::error::{ApiError, extractor_error, invalid_input, validate_page_bounds};
-use crate::helper::{HelperKind, helper_degraded_message, run_helper_json};
+use crate::helper::{HelperKind, helper_degraded_message, resolve_helper, run_helper_json};
 use crate::state::AppState;
 
 use super::shared::{
@@ -1794,7 +1794,13 @@ fn suggest_task_labels_for_state(
     task_id: &str,
     options: kanban_sqlite::LabelSuggestionOptions,
 ) -> Result<kanban_sqlite::LabelSuggestionResult, ApiError> {
-    kanban_sqlite::suggest_task_labels(state.db_path(), board, task_id, options)
+    let store = kanban_vector::SubprocessVectorStore::new(
+        resolve_helper(state, HelperKind::Vector),
+        state.db_path().to_path_buf(),
+        board.to_owned(),
+        state.vector_config_path().map(std::path::Path::to_path_buf),
+    );
+    kanban_sqlite::suggest_task_labels_with(state.db_path(), board, task_id, &store, options)
         .map_err(ApiError::from)
 }
 
@@ -1810,25 +1816,45 @@ fn propose_task_label_for_state(
     match candidate {
         Some(candidate) => {
             let provider = kanban_sqlite::ManualLabelProposalProvider::new(candidate);
-            kanban_sqlite::propose_task_label_with_create_options(
+            let store = kanban_vector::SubprocessVectorStore::new(
+                resolve_helper(state, HelperKind::Vector),
+                state.db_path().to_path_buf(),
+                board.to_owned(),
+                state.vector_config_path().map(std::path::Path::to_path_buf),
+            );
+            kanban_sqlite::propose_task_label_with_store_and_create_options(
                 state.db_path(),
                 board,
                 actor,
                 task_id,
                 &provider,
-                options,
-                create_options,
+                &store,
+                kanban_sqlite::LabelProposalProposeOptions {
+                    suggestion: options,
+                    create: create_options,
+                },
             )
         }
-        None => kanban_sqlite::propose_task_label_with_create_options(
-            state.db_path(),
-            board,
-            actor,
-            task_id,
-            &kanban_sqlite::DisabledLabelProposalProvider,
-            options,
-            create_options,
-        ),
+        None => {
+            let store = kanban_vector::SubprocessVectorStore::new(
+                resolve_helper(state, HelperKind::Vector),
+                state.db_path().to_path_buf(),
+                board.to_owned(),
+                state.vector_config_path().map(std::path::Path::to_path_buf),
+            );
+            kanban_sqlite::propose_task_label_with_store_and_create_options(
+                state.db_path(),
+                board,
+                actor,
+                task_id,
+                &kanban_sqlite::DisabledLabelProposalProvider,
+                &store,
+                kanban_sqlite::LabelProposalProposeOptions {
+                    suggestion: options,
+                    create: create_options,
+                },
+            )
+        }
     }
     .map_err(ApiError::from)
 }

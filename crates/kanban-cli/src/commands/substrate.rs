@@ -10,6 +10,7 @@ use kanban_sqlite::{
     EntityListOptions, MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT, OutboxListOptions,
     derived_store_statuses, get_entity, list_entities, list_outbox,
 };
+use kanban_vector::SubprocessVectorStore;
 
 use crate::args::{
     ContextCommand, DerivedCommand, EntityCommand, GraphCommand, OutboxCommand, VectorCommand,
@@ -17,7 +18,7 @@ use crate::args::{
 };
 use crate::commands::common::validate_page_bounds;
 use crate::commands::helper::{
-    HelperKind, HelperRunError, helper_degraded_message, run_helper_json,
+    HelperKind, HelperRunError, helper_degraded_message, resolve_helper, run_helper_json,
     run_helper_json_classified,
 };
 use crate::output::print_or_json;
@@ -575,24 +576,14 @@ fn build_configured_context_pack(
     policy: ContextPolicy,
     vector_config_path: Option<&Path>,
 ) -> Result<kanban_context::ContextPack> {
-    let _ = vector_config_path;
-    #[cfg(any())]
-    {
-        match configured_lancedb_store(db_path, vector_config_path) {
-            Ok(Some(store)) => {
-                return kanban_sqlite::build_context_pack_with_vector_store(
-                    db_path, board, task_ref, policy, &store,
-                )
-                .map_err(Into::into);
-            }
-            Ok(None) => {}
-            Err(error) => {
-                let pack = kanban_sqlite::build_context_pack(db_path, board, task_ref, policy)?;
-                return Ok(mark_vector_store_construction_error(pack, &error));
-            }
-        }
-    }
-    kanban_sqlite::build_context_pack(db_path, board, task_ref, policy).map_err(Into::into)
+    let store = SubprocessVectorStore::new(
+        resolve_helper(HelperKind::Vector),
+        db_path.clone(),
+        board.to_owned(),
+        vector_config_path.map(Path::to_path_buf),
+    );
+    kanban_sqlite::build_context_pack_with_vector_store(db_path, board, task_ref, policy, &store)
+        .map_err(Into::into)
 }
 
 #[cfg(any())]

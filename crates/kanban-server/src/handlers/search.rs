@@ -2,8 +2,9 @@ use axum::{
     Json,
     extract::{Query, RawQuery, State, rejection::QueryRejection},
 };
+use kanban_core::TaskStatus;
 use kanban_search::SearchQuery;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::dto::{Envelope, SearchTaskHitDto, SearchTasksDto, TaskDto};
@@ -33,6 +34,26 @@ pub(crate) struct SearchTasksQuery {
 pub(crate) struct SearchStatusQuery {
     #[serde(default = "default_board")]
     board: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct SearchPageMetaDto {
+    limit: usize,
+    offset: usize,
+    total: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct SearchTaskStatusWindowDto {
+    status: TaskStatus,
+    tasks: Vec<TaskDto>,
+    search_meta: kanban_search::SearchMeta,
+    page: SearchPageMetaDto,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct SearchTaskStatusWindowsDto {
+    statuses: Vec<SearchTaskStatusWindowDto>,
 }
 
 fn default_search_limit() -> usize {
@@ -92,6 +113,67 @@ pub(crate) async fn search_tasks(
             hits,
             meta: results.meta,
         },
+        meta: Some(json!({ "limit": query.limit, "offset": query.offset })),
+    }))
+}
+
+pub(crate) async fn search_tasks_by_status(
+    State(state): State<AppState>,
+    RawQuery(raw_query): RawQuery,
+    query: Result<Query<SearchTasksQuery>, QueryRejection>,
+) -> Result<Json<Envelope<SearchTaskStatusWindowsDto>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    validate_page_bounds(query.limit, kanban_sqlite::MAX_SEARCH_LIMIT, query.offset)?;
+    let statuses = parse_status_filters(raw_query.as_deref())?;
+    let labels = parse_label_filters(raw_query.as_deref())?;
+    let q = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned);
+    let assignee = query
+        .assignee
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned);
+    let mut windows = Vec::with_capacity(statuses.len());
+    for status in statuses {
+        let results = kanban_sqlite::search_tasks(
+            state.db_path(),
+            SearchQuery {
+                board: query.board.clone(),
+                q: q.clone(),
+                statuses: vec![status],
+                labels: labels.clone(),
+                assignee: assignee.clone(),
+                include_archived: query.include_archived,
+                limit: query.limit,
+                offset: query.offset,
+            },
+        )?;
+        let tasks = results
+            .hits
+            .into_iter()
+            .map(|hit| kanban_sqlite::get_task_by_id_global(state.db_path(), &hit.task_id))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .map(TaskDto::from)
+            .collect();
+        windows.push(SearchTaskStatusWindowDto {
+            status,
+            tasks,
+            search_meta: results.meta,
+            page: SearchPageMetaDto {
+                limit: query.limit,
+                offset: query.offset,
+                total: None,
+            },
+        });
+    }
+    Ok(Json(Envelope {
+        data: SearchTaskStatusWindowsDto { statuses: windows },
         meta: Some(json!({ "limit": query.limit, "offset": query.offset })),
     }))
 }

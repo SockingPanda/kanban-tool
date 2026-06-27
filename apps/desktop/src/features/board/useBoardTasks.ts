@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 
-import type { KanbanApi, SearchTasksResult, TaskListSort, TaskPageResult, TaskPlanFilter, TaskStatus } from "@/lib/api"
+import { ApiError, type KanbanApi, type SearchTasksResult, type TaskListSort, type TaskPageResult, type TaskPlanFilter, type TaskStatus } from "@/lib/api"
 import { queryKeys } from "@/lib/query-keys"
 
 export const BOARD_COLUMN_TASK_LIMIT = 50
@@ -136,6 +136,22 @@ export async function loadBoardTasks(api: KanbanApi, request: BoardTaskRequest, 
 async function listBoardStatuses(api: KanbanApi, request: BoardTaskRequest, signal?: AbortSignal): Promise<BoardTasksData> {
   if (request.statuses.length === 0) return emptyBoardWindow()
 
+  if (typeof api.listTasksByStatus === "function") {
+    try {
+      const batch = await api.listTasksByStatus({
+        includeArchived: request.showArchived,
+        statuses: request.statuses,
+        sort: request.sort,
+        limit: request.limit,
+        offset: 0,
+        signal,
+      })
+      return boardWindowsToData(batch.statuses, null)
+    } catch (error) {
+      if (!isBatchUnavailable(error)) throw error
+    }
+  }
+
   const results = await Promise.all(
     request.statuses.map((status) =>
       api.listTasks({
@@ -159,6 +175,22 @@ async function listBoardStatuses(api: KanbanApi, request: BoardTaskRequest, sign
 async function searchBoardStatuses(api: KanbanApi, request: BoardTaskRequest, signal?: AbortSignal): Promise<BoardTasksData> {
   if (request.statuses.length === 0) return emptyBoardWindow()
 
+  if (typeof api.searchTasksByStatus === "function") {
+    try {
+      const batch = await api.searchTasksByStatus({
+        query: request.search,
+        includeArchived: request.showArchived,
+        statuses: request.statuses,
+        limit: request.limit,
+        offset: 0,
+        signal,
+      })
+      return boardWindowsToData(batch.statuses, mergeSearchMeta(batch.statuses.map((entry) => entry.searchMeta)))
+    } catch (error) {
+      if (!isBatchUnavailable(error)) throw error
+    }
+  }
+
   const results = await Promise.all(
     request.statuses.map((status) =>
       api.searchTasks({
@@ -177,6 +209,28 @@ async function searchBoardStatuses(api: KanbanApi, request: BoardTaskRequest, si
     page: aggregateStatusPages(results.map((result) => result.page)),
     searchMeta: mergeSearchMeta(results.map((result) => result.searchMeta)),
   } satisfies BoardTasksData
+}
+
+function boardWindowsToData(
+  windows: Array<{ tasks: TaskPageResult["tasks"]; page: TaskPageResult["page"] }>,
+  searchMeta: SearchTasksResult["searchMeta"] | null,
+) {
+  return {
+    tasks: windows.flatMap((entry) => entry.tasks),
+    page: aggregateStatusPages(windows.map((entry) => entry.page)),
+    searchMeta,
+  } satisfies BoardTasksData
+}
+
+function isBatchUnavailable(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.code === "not_found") return true
+    return error.code === "http_error" && /(^|\s)404(\s|$)/.test(error.message)
+  }
+  if (!error || typeof error !== "object") return false
+  const code = "code" in error ? error.code : null
+  const message = "message" in error ? error.message : null
+  return code === "http_error" && typeof message === "string" && /(^|\s)404(\s|$)/.test(message)
 }
 
 function uniqueStatuses(statuses: TaskStatus[]) {

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { Activity, Database, RefreshCcw } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -42,11 +42,12 @@ export function buildHealthRuntimeModel(health: HealthStatus, config: RuntimeCon
 export function HealthView({ api, config }: { api: KanbanApi | null; config: RuntimeConfig | null }) {
   const healthQuery = useQuery({
     enabled: Boolean(api),
-    queryKey: ["health", api?.board ?? "pending"],
+    queryKey: ["health", config?.apiBaseUrl ?? "pending", config?.dbPath ?? "pending"],
     queryFn: ({ signal }) => {
       if (!api) throw new Error("API client is not ready")
       return api.health({ signal })
     },
+    placeholderData: keepPreviousData,
   })
 
   const runtimeModel = healthQuery.data ? buildHealthRuntimeModel(healthQuery.data, config) : null

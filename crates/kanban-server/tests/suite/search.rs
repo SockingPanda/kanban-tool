@@ -86,6 +86,64 @@ async fn search_returns_hits_with_tasks_and_sqlite_status() -> anyhow::Result<()
     Ok(())
 }
 
+#[tokio::test]
+async fn search_by_status_returns_per_status_windows() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    create_ready_task_for_test(&db_path, "default", "seed", "ready batch needle")
+        .context("seed ready task")?;
+    for (title, status) in [
+        ("todo batch needle", kanban_core::TaskStatus::Todo),
+        ("triage batch needle", kanban_core::TaskStatus::Triage),
+    ] {
+        kanban_sqlite::create_task(
+            &db_path,
+            "default",
+            "seed",
+            kanban_sqlite::CreateTask {
+                title: title.to_owned(),
+                description: Some("search batch spec".to_owned()),
+                status: Some(status),
+                assignee: None,
+                priority: 0,
+                scheduled_at: None,
+                due_at: None,
+                max_retries: None,
+                metadata_json: "{}".to_owned(),
+            },
+        )
+        .context("seed task")?;
+    }
+    let app = test.router();
+
+    let (status, json) = get_json(
+        app,
+        "/api/v1/search/tasks/by-status?board=default&q=batch&status=ready&status=todo&limit=1",
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["meta"]["limit"], 1);
+    assert_eq!(json["meta"]["offset"], 0);
+    let windows = json["data"]["statuses"]
+        .as_array()
+        .context("status windows")?;
+    assert_eq!(windows.len(), 2);
+    assert_eq!(windows[0]["status"], "ready");
+    assert_eq!(
+        windows[0]["tasks"].as_array().context("ready tasks")?.len(),
+        1
+    );
+    assert_eq!(windows[0]["search_meta"]["backend"], "sqlite");
+    assert_eq!(windows[1]["status"], "todo");
+    assert_eq!(
+        windows[1]["tasks"].as_array().context("todo tasks")?.len(),
+        1
+    );
+    assert_eq!(windows[1]["search_meta"]["backend"], "sqlite");
+    Ok(())
+}
+
 #[cfg(feature = "tantivy-backend")]
 mod tantivy_backend {
     use super::*;

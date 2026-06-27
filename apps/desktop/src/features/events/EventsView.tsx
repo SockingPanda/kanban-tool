@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { CircleDot, RefreshCcw } from "lucide-react"
 import { memo } from "react"
 
@@ -20,6 +20,7 @@ export function EventsView({ api }: { api: KanbanApi | null }) {
       if (!api) throw new Error("API client is not ready")
       return api.listBoardEvents({ limit: 150, signal })
     },
+    placeholderData: keepPreviousData,
   })
   const events = eventsQuery.data?.events ?? []
 

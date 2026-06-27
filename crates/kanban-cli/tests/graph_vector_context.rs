@@ -4,6 +4,16 @@ use anyhow::Context;
 use common::{TempDb, kanban, kanban_in_dir_envs};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+
+#[cfg(unix)]
+fn write_executable(path: &std::path::Path, body: &str) -> anyhow::Result<()> {
+    std::fs::write(path, body)?;
+    let mut permissions = std::fs::metadata(path)?.permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(path, permissions)?;
+    Ok(())
+}
+
 #[test]
 fn substrate_commands_report_entities_outbox_and_derived_status() -> anyhow::Result<()> {
     let temp = TempDb::new("substrate_commands_report_entities_outbox_and_derived_status")?;
@@ -215,6 +225,159 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
             .iter()
             .any(|item| item["entity_uri"] == format!("kb://task/{task_id}"))
     );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn context_build_uses_vector_helper_chunks_when_available() -> anyhow::Result<()> {
+    let temp = TempDb::new("context_build_uses_vector_helper_chunks_when_available")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let subject = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "subject context helper",
+            "--description",
+            "needs helper context",
+        ],
+    )?
+    .success_json()?;
+    let subject_id = subject["data"]["id"].as_str().context("subject id")?;
+    let related = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "vector helper related",
+            "--description",
+            "vector-only context item",
+        ],
+    )?
+    .success_json()?;
+    let related_id = related["data"]["id"].as_str().context("related id")?;
+    let helper = temp.dir.join("vector-helper.py");
+    write_executable(
+        &helper,
+        &format!(
+            r#"#!/usr/bin/env python3
+import json, sys
+args = sys.argv[1:]
+cmd = args[0]
+if cmd == "status":
+    payload = {{"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[]}}
+elif cmd == "query-chunks":
+    payload = [{{
+        "chunk": {{"uri":"kb://chunk/task/{related_id}/0","entity_uri":"kb://task/{related_id}","ordinal":0,"content_hash":"hash"}},
+        "score": 0.91,
+        "text": "vector-only context item",
+        "summary": "vector helper related"
+    }}]
+else:
+    payload = []
+print(json.dumps({{"protocol":"kanban-derived-helper.v1","payload_json":json.dumps(payload)}}))
+"#
+        ),
+    )?;
+
+    let context = kanban_in_dir_envs(
+        &temp.path,
+        &[
+            "--json",
+            "context",
+            "build",
+            subject_id,
+            "--vector-limit",
+            "2",
+        ],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", helper.as_path())],
+    )?
+    .success_json()?;
+
+    assert!(
+        context["data"]["items"]
+            .as_array()
+            .context("items")?
+            .iter()
+            .any(
+                |item| item["entity_uri"] == format!("kb://task/{related_id}")
+                    && item["source"] == "vector"
+            )
+    );
+    assert!(
+        !context["data"]["degraded"]
+            .as_array()
+            .context("degraded")?
+            .iter()
+            .any(|value| value == "vector_disabled")
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn vector_query_label_atoms_supports_raw_vector_helper_query() -> anyhow::Result<()> {
+    let temp = TempDb::new("vector_query_label_atoms_supports_raw_vector_helper_query")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let helper = temp.dir.join("vector-helper.py");
+    write_executable(
+        &helper,
+        r#"#!/usr/bin/env python3
+import json, sys
+args = sys.argv[1:]
+cmd = args[0]
+if cmd == "query-label-atoms":
+    assert "--vector-json" in args, args
+    assert args[args.index("--vector-json") + 1] == "[1.0,0.0]", args
+    assert args[args.index("--embedding-model") + 1] == "review-model", args
+    assert args[args.index("--polarity") + 1] == "positive", args
+    assert "--include-vector" in args, args
+    payload = [{"hit": {
+        "atom_id":"atom_backend_positive",
+        "label_id":"label_backend",
+        "label_name":"backend",
+        "board_id":"b_default",
+        "polarity":"positive",
+        "kind":"applies_when",
+        "text":"touches rust service code",
+        "ordinal":0,
+        "content_hash":"hash",
+        "embedding_model":"review-model",
+        "distance":0.0
+    }, "vector": [1.0, 0.0]}]
+else:
+    payload = []
+print(json.dumps({"protocol":"kanban-derived-helper.v1","payload_json":json.dumps(payload)}))
+"#,
+    )?;
+
+    let hits = kanban_in_dir_envs(
+        &temp.path,
+        &[
+            "--json",
+            "vector",
+            "query-label-atoms",
+            "--vector-json",
+            "[1.0,0.0]",
+            "--include-vector",
+            "--embedding-model",
+            "review-model",
+            "--polarity",
+            "positive",
+            "--limit",
+            "2",
+        ],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", helper.as_path())],
+    )?
+    .success_json()?;
+
+    assert_eq!(hits["data"][0]["hit"]["label_name"], "backend");
+    assert_eq!(hits["data"][0]["vector"], serde_json::json!([1.0, 0.0]));
     Ok(())
 }
 

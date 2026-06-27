@@ -9,8 +9,8 @@ use kanban_derived_io::{
 };
 use kanban_indexer::LANCEDB_CHUNKS_STORE;
 use kanban_vector::{
-    ChunkVectorStore, LabelAtomQuery, LabelAtomVectorStore, VectorQuery, VectorStoreBackend,
-    VectorStoreStatus,
+    ChunkVectorStore, EmbeddingProvider, LabelAtomQuery, LabelAtomVectorQuery,
+    LabelAtomVectorStore, VectorQuery, VectorStoreBackend, VectorStoreStatus,
 };
 use kanban_vector_lancedb::{LanceDbConfig, LanceDbStore, OllamaEmbeddingProvider};
 use serde::Serialize;
@@ -33,6 +33,7 @@ enum Command {
     Sync(StoreArgs),
     QueryChunks(QueryChunksArgs),
     QueryLabelAtoms(QueryLabelAtomsArgs),
+    EmbedQuery(EmbedQueryArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -69,14 +70,36 @@ struct QueryChunksArgs {
 struct QueryLabelAtomsArgs {
     #[command(flatten)]
     store: StoreArgs,
-    #[arg(long)]
-    text: String,
+    #[arg(
+        long,
+        conflicts_with = "vector_json",
+        required_unless_present = "vector_json"
+    )]
+    text: Option<String>,
+    #[arg(
+        long = "vector-json",
+        conflicts_with = "text",
+        required_unless_present = "text"
+    )]
+    vector_json: Option<String>,
     #[arg(long, default_value_t = 10)]
     limit: usize,
     #[arg(long)]
     board_id: Option<String>,
+    #[arg(long = "embedding-model")]
+    embedding_model: Option<String>,
     #[arg(long)]
     polarity: Option<String>,
+    #[arg(long = "include-vector")]
+    include_vector: bool,
+}
+
+#[derive(Debug, Parser)]
+struct EmbedQueryArgs {
+    #[command(flatten)]
+    store: StoreArgs,
+    #[arg(long)]
+    text: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -139,16 +162,44 @@ fn run() -> Result<()> {
         }
         Command::QueryLabelAtoms(args) => {
             let store = configured_store(&args.store)?;
-            let hits = store.query_label_atoms(&LabelAtomQuery {
-                text: args.text,
-                limit: args.limit,
-                board_id: args.board_id,
-                embedding_model: None,
-                polarity: args.polarity,
-            })?;
-            print_payload(hits)
+            if let Some(vector_json) = args.vector_json {
+                let vector: Vec<f32> =
+                    serde_json::from_str(&vector_json).context("invalid --vector-json payload")?;
+                let hits = store.query_label_atoms_by_vector(&LabelAtomVectorQuery {
+                    vector,
+                    limit: args.limit,
+                    board_id: args.board_id,
+                    embedding_model: args.embedding_model,
+                    polarity: args.polarity,
+                    include_vector: args.include_vector,
+                })?;
+                print_payload(hits)
+            } else {
+                let hits = store.query_label_atoms(&LabelAtomQuery {
+                    text: args.text.unwrap_or_default(),
+                    limit: args.limit,
+                    board_id: args.board_id,
+                    embedding_model: args.embedding_model,
+                    polarity: args.polarity,
+                })?;
+                print_payload(hits)
+            }
+        }
+        Command::EmbedQuery(args) => {
+            let provider = provider_from_store_args(&args.store)?;
+            print_payload(provider.embed(&args.text)?)
         }
     }
+}
+
+fn provider_from_store_args(args: &StoreArgs) -> Result<OllamaEmbeddingProvider> {
+    let config = kanban_local::resolved_vector_config(args.vector_config.as_deref())?
+        .context("vector config is required")?;
+    Ok(provider(&ProviderArgs {
+        endpoint: config.endpoint,
+        model: config.model,
+        dimensions: config.dimensions,
+    })?)
 }
 
 fn vector_status(args: &StoreArgs) -> Result<VectorStoreStatus> {

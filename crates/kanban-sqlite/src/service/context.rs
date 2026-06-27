@@ -41,7 +41,6 @@ pub fn build_context_pack(
     build_context_pack_inner(path.as_ref(), board, task_ref, policy, None)
 }
 
-#[cfg(feature = "vector-lancedb")]
 pub fn build_context_pack_with_vector_store(
     path: impl AsRef<Path>,
     board: &str,

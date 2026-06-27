@@ -129,6 +129,24 @@ async fn vector_and_label_atom_endpoints_use_vector_helper() -> anyhow::Result<(
             .any(|pair| pair[0] == "--polarity" && pair[1] == "positive")
     );
 
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/labels/atom-index/query?vector_json=%5B1.0%2C0.0%5D&embedding_model=review-model&include_vector=true&polarity=positive&limit=2",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"].as_array().context("hits")?.len(), 0);
+    let args: Vec<String> = serde_json::from_str(&std::fs::read_to_string(&log)?)?;
+    assert!(
+        args.windows(2)
+            .any(|pair| pair[0] == "--vector-json" && pair[1] == "[1.0,0.0]")
+    );
+    assert!(
+        args.windows(2)
+            .any(|pair| pair[0] == "--embedding-model" && pair[1] == "review-model")
+    );
+    assert!(args.iter().any(|arg| arg == "--include-vector"));
+
     let (status, json) = post_json(
         app,
         "/api/v1/boards/default/labels/atom-index/rebuild",
@@ -142,6 +160,138 @@ async fn vector_and_label_atom_endpoints_use_vector_helper() -> anyhow::Result<(
             .as_str()
             .context("error message")?
             .contains("server helper adapter")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn label_suggest_and_propose_use_resolved_vector_config_model() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let seed_task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("server helper model seed"),
+    )?;
+    kanban_sqlite::bootstrap_task_label(
+        &db_path,
+        "default",
+        "seed",
+        &seed_task.id,
+        kanban_sqlite::BootstrapTaskLabel {
+            name: "backend".to_owned(),
+            description: Some("Backend work".to_owned()),
+            applies_when: vec!["touches rust service code".to_owned()],
+            excludes_when: Vec::new(),
+            positive_examples: vec!["new rust service".to_owned()],
+            negative_examples: Vec::new(),
+        },
+    )?;
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("server helper model target touches rust service code"),
+    )?;
+    let vector_config = test.dir_path().join("review-vector.toml");
+    std::fs::write(
+        &vector_config,
+        r#"[vector]
+provider = "ollama"
+endpoint = "http://127.0.0.1:1"
+model = "review-model"
+dimensions = 2
+"#,
+    )?;
+    let log = test.dir_path().join("label-vector-args.jsonl");
+    let log_path = log.display().to_string();
+    let helper = write_helper(
+        test.dir_path(),
+        "label-vector-helper",
+        &format!(
+            r#"#!/usr/bin/env python3
+import json, pathlib, sys
+log = pathlib.Path({log_path:?})
+args = sys.argv[1:]
+with log.open("a") as handle:
+    handle.write(json.dumps(args) + "\n")
+cmd = args[0] if args else ""
+if cmd == "status":
+    payload = {{"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[]}}
+elif cmd == "embed-query":
+    payload = [1.0, 0.0]
+elif cmd == "query-label-atoms":
+    model = args[args.index("--embedding-model") + 1] if "--embedding-model" in args else ""
+    if model != "review-model":
+        print(json.dumps({{"protocol":"kanban-derived-helper.v1","payload_json":json.dumps({{"code":"unexpected_model","message":"expected review-model, got " + model}})}}))
+        sys.exit(1)
+    polarity = args[args.index("--polarity") + 1] if "--polarity" in args else "positive"
+    if polarity == "positive":
+        hit = {{
+            "atom_id":"atom_backend_positive",
+            "label_id":"label_backend",
+            "label_name":"backend",
+            "board_id":"b_default",
+            "polarity":"positive",
+            "kind":"applies_when",
+            "text":"touches rust service code",
+            "ordinal":0,
+            "content_hash":"hash",
+            "embedding_model":"review-model",
+            "distance":0.0
+        }}
+        payload = [{{"hit": hit, "vector": [1.0, 0.0]}}] if "--include-vector" in args else [hit]
+    else:
+        payload = []
+else:
+    payload = []
+print(json.dumps({{"protocol":"kanban-derived-helper.v1","payload_json":json.dumps(payload)}}))
+"#,
+        ),
+    )?;
+    let app = build_router(
+        AppState::new(&db_path, "api-test")
+            .with_vector_helper_path(helper)
+            .with_vector_config_path(&vector_config),
+    );
+
+    let (status, _json) = get_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/labels/suggestions?limit=3", task.id),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, _json) = post_json(
+        app,
+        &format!("/api/v1/tasks/{}/label-proposals?limit=3", task.id),
+        json!({
+            "proposal": {
+                "name": "workflow",
+                "description": "Workflow classification",
+                "applies_when": ["classifies execution flow"],
+                "excludes_when": ["UI-only polish"],
+                "positive_examples": ["triage work queue"],
+                "negative_examples": ["CSS tweak"]
+            },
+            "actor": "api-test-proposer"
+        }),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+
+    let helper_calls = std::fs::read_to_string(&log)?;
+    let query_calls = helper_calls
+        .lines()
+        .filter(|line| line.contains("query-label-atoms"))
+        .collect::<Vec<_>>();
+    assert!(!query_calls.is_empty(), "{helper_calls}");
+    assert!(
+        query_calls
+            .iter()
+            .all(|line| line.contains("--embedding-model") && line.contains("review-model")),
+        "{helper_calls}"
     );
     Ok(())
 }

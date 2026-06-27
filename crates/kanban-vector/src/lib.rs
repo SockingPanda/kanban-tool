@@ -1,5 +1,8 @@
 use kanban_entity::ChunkRef;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::process::Command;
 use thiserror::Error;
 
 pub const DEFAULT_EMBEDDING_MODEL: &str = "kb-local-default";
@@ -293,6 +296,256 @@ impl ChunkVectorStore for DisabledVectorStore {
 }
 
 impl LabelAtomVectorStore for DisabledVectorStore {}
+
+#[derive(Debug, Clone)]
+pub struct SubprocessVectorStore {
+    helper_path: PathBuf,
+    db_path: PathBuf,
+    board: String,
+    vector_config_path: Option<PathBuf>,
+    embedding_model: Option<String>,
+}
+
+impl SubprocessVectorStore {
+    pub fn new(
+        helper_path: impl Into<PathBuf>,
+        db_path: impl Into<PathBuf>,
+        board: impl Into<String>,
+        vector_config_path: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            helper_path: helper_path.into(),
+            db_path: db_path.into(),
+            board: board.into(),
+            vector_config_path,
+            embedding_model: None,
+        }
+    }
+
+    pub fn with_embedding_model(mut self, embedding_model: impl Into<String>) -> Self {
+        self.embedding_model = Some(embedding_model.into());
+        self
+    }
+
+    fn helper_args(&self, command_args: &[String]) -> Vec<String> {
+        let mut args = command_args.to_vec();
+        args.push("--db".to_owned());
+        args.push(self.db_path.display().to_string());
+        args.push("--board".to_owned());
+        args.push(self.board.clone());
+        if let Some(path) = &self.vector_config_path {
+            args.push("--vector-config".to_owned());
+            args.push(path.display().to_string());
+        }
+        args
+    }
+
+    fn run_helper<T>(&self, command_args: &[String]) -> Result<T, VectorError>
+    where
+        T: DeserializeOwned,
+    {
+        let args = self.helper_args(command_args);
+        let output = Command::new(&self.helper_path)
+            .args(&args)
+            .output()
+            .map_err(|error| {
+                VectorError::Store(format!(
+                    "vector helper unavailable: failed to run {}: {}",
+                    self.helper_path.display(),
+                    error
+                ))
+            })?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if !output.status.success() {
+            if let Ok(envelope) = HelperEnvelopePayload::from_json(stdout.trim())
+                && let Ok(error) = envelope.decode::<HelperErrorPayload>()
+            {
+                return Err(VectorError::Store(format!(
+                    "vector helper failed: {} ({})",
+                    error.message, error.code
+                )));
+            }
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(VectorError::Store(format!(
+                "vector helper {} exited with status {:?}: {}",
+                self.helper_path.display(),
+                output.status.code(),
+                bounded_helper_message(stderr.trim())
+            )));
+        }
+        let envelope = HelperEnvelopePayload::from_json(stdout.trim()).map_err(|error| {
+            VectorError::Store(format!(
+                "vector helper {} returned invalid JSON envelope: {}",
+                self.helper_path.display(),
+                error
+            ))
+        })?;
+        envelope.decode::<T>().map_err(|error| {
+            VectorError::Store(format!(
+                "vector helper {} returned an invalid payload: {}",
+                self.helper_path.display(),
+                error
+            ))
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct HelperEnvelopePayload {
+    protocol: String,
+    payload_json: String,
+}
+
+impl HelperEnvelopePayload {
+    fn from_json(raw: &str) -> std::result::Result<Self, serde_json::Error> {
+        let envelope: Self = serde_json::from_str(raw)?;
+        if envelope.protocol != "kanban-derived-helper.v1" {
+            return serde_json::from_str("null");
+        }
+        Ok(envelope)
+    }
+
+    fn decode<T: DeserializeOwned>(&self) -> std::result::Result<T, serde_json::Error> {
+        serde_json::from_str(&self.payload_json)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct HelperErrorPayload {
+    code: String,
+    message: String,
+}
+
+fn bounded_helper_message(value: &str) -> String {
+    const MAX: usize = 240;
+    let mut value = value.replace(['\r', '\n'], " ");
+    if value.len() > MAX {
+        value.truncate(MAX);
+        value.push_str("...");
+    }
+    value
+}
+
+impl VectorStoreBackend for SubprocessVectorStore {
+    fn embedding_model(&self) -> &str {
+        self.embedding_model
+            .as_deref()
+            .unwrap_or(DEFAULT_EMBEDDING_MODEL)
+    }
+
+    fn status(&self) -> VectorStoreStatus {
+        match self.run_helper::<VectorStoreStatus>(&["status".to_owned()]) {
+            Ok(status) => status,
+            Err(error) => {
+                let mut status = VectorStoreStatus::new(
+                    "helper-missing",
+                    false,
+                    format!("vector helper unavailable: {error}"),
+                );
+                status.diagnostics.push("helper_missing".to_owned());
+                status
+            }
+        }
+    }
+}
+
+impl QueryEmbeddingProvider for SubprocessVectorStore {
+    fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, VectorError> {
+        self.run_helper(&[
+            "embed-query".to_owned(),
+            "--text".to_owned(),
+            text.to_owned(),
+        ])
+    }
+}
+
+impl ChunkVectorStore for SubprocessVectorStore {
+    fn delete_board(&self, _board_id: &str) -> Result<(), VectorError> {
+        Err(VectorError::Disabled)
+    }
+
+    fn delete_entities(&self, _entity_uris: &[String]) -> Result<(), VectorError> {
+        Err(VectorError::Disabled)
+    }
+
+    fn upsert(&self, _chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
+        Err(VectorError::Disabled)
+    }
+
+    fn query(&self, query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
+        self.run_helper(&[
+            "query-chunks".to_owned(),
+            "--text".to_owned(),
+            query.text.clone(),
+            "--limit".to_owned(),
+            query.limit.to_string(),
+        ])
+    }
+}
+
+impl LabelAtomVectorStore for SubprocessVectorStore {
+    fn query_label_atoms(&self, query: &LabelAtomQuery) -> Result<Vec<LabelAtomHit>, VectorError> {
+        let mut args = vec![
+            "query-label-atoms".to_owned(),
+            "--text".to_owned(),
+            query.text.clone(),
+            "--limit".to_owned(),
+            query.limit.to_string(),
+        ];
+        push_label_atom_filters(
+            &mut args,
+            query.board_id.as_deref(),
+            query.embedding_model.as_deref(),
+            query.polarity.as_deref(),
+        );
+        self.run_helper(&args)
+    }
+
+    fn query_label_atoms_by_vector(
+        &self,
+        query: &LabelAtomVectorQuery,
+    ) -> Result<Vec<LabelAtomVectorHit>, VectorError> {
+        let vector_json = serde_json::to_string(&query.vector)
+            .map_err(|error| VectorError::Store(error.to_string()))?;
+        let mut args = vec![
+            "query-label-atoms".to_owned(),
+            "--vector-json".to_owned(),
+            vector_json,
+            "--limit".to_owned(),
+            query.limit.to_string(),
+        ];
+        push_label_atom_filters(
+            &mut args,
+            query.board_id.as_deref(),
+            query.embedding_model.as_deref(),
+            query.polarity.as_deref(),
+        );
+        if query.include_vector {
+            args.push("--include-vector".to_owned());
+        }
+        self.run_helper(&args)
+    }
+}
+
+fn push_label_atom_filters(
+    args: &mut Vec<String>,
+    board_id: Option<&str>,
+    embedding_model: Option<&str>,
+    polarity: Option<&str>,
+) {
+    if let Some(board_id) = board_id {
+        args.push("--board-id".to_owned());
+        args.push(board_id.to_owned());
+    }
+    if let Some(embedding_model) = embedding_model {
+        args.push("--embedding-model".to_owned());
+        args.push(embedding_model.to_owned());
+    }
+    if let Some(polarity) = polarity {
+        args.push("--polarity".to_owned());
+        args.push(polarity.to_owned());
+    }
+}
 pub fn ensure_dimensions(vector: &[f32], expected: usize) -> Result<(), VectorError> {
     if vector.len() == expected {
         Ok(())

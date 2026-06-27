@@ -618,9 +618,9 @@ Bootstrap 默认不会覆盖已有 `label_semantics`。如果同名 label 已经
 同一 task/label 只在目标 label 仍无 semantics 时保持 task-label 绑定幂等。JSON
 返回 `{ "task": <TaskRecord>, "semantics": <LabelSemanticsRecord>, "verification": null|<Verification> }`。
 
-当前 no-heavy CLI build 尚未把 label vector workflow 接到 helper subprocess adapter；
-`kanban vector ...` 的 helper 只提供 raw chunk / label-atom 查询能力，不会替代
-`label suggest`、`label atom-index rebuild/query` 或 trusted ontology collector。
+当前 no-heavy CLI build 已把 label suggestion/proposal、bootstrap staged verification 和
+label atom query 接到 vector helper subprocess adapter；`kanban vector ...` 仍保留 raw chunk /
+label-atom 查询入口，`label atom-index rebuild` 仍是独立 rebuild 能力。
 
 传入 `--verify` 或 `--vector-config <toml>` 时，CLI 使用 pre-commit staged
 verification：先在 canonical DB transaction 外读取当前 task、target label state 和
@@ -629,9 +629,7 @@ board ontology digest，并在隔离的临时 atom store 中加载当前 atoms �
 `selected_labels` 或 `candidates`，且 score 至少达到 `--min-verify-score`（默认
 `0.50`）。rebuild、suggest、threshold、provider 或临时 store 失败时不会写
 canonical label、semantics、atoms、task-label binding、ontology action、event 或 dirty
-marker。默认 no-heavy CLI 当前会在写入前返回
-`label vector helper adapter is not available in this CLI build`；需要本地 vector 验证时
-等待 label helper adapter 接入，或改走 external attestation `--input` 路径。
+marker。如果 vector helper/provider 不可用会返回明确的 verification error；需要离线验收时也可改走 external attestation `--input` 路径。
 
 验证通过后 CLI 才开启短 `BEGIN IMMEDIATE` transaction，重算 task suggest-input hash、
 target label state 和 board ontology digest；任一值变化会返回 conflict 且零写入。成功
@@ -693,9 +691,9 @@ diagnostics 和人工语义判断。
 它不会自动创建新 label，也不会写入 new-label proposal。应用建议时仍使用现有
 `label add <task_ref> <label>...` / API attach 流程。
 
-默认 no-heavy CLI 没有内置 label vector helper adapter，因此命令成功返回
-degraded 结果而不是失败；无 provider/adapter 时 `needs_new_label=false`。`--vector-config`
-使用与 `kanban vector configure/status` 相同的 TOML 解析规则。`LabelAtomHit.distance`
+默认 no-heavy CLI 通过 vector helper adapter 运行 label vector 查询；helper/provider 不可用时命令成功返回
+degraded 结果而不是失败，且 `needs_new_label=false`。`--vector-config`
+使用与 `kanban vector configure/status` 相同的 TOML 解析规则，并把解析出的 embedding model 传给 helper 查询。`LabelAtomHit.distance`
 保留 LanceDB `_distance` 的原始语义；suggestion / proposal 的 score 只根据返回
 atom vector 与当前 query/residual 在本地计算 cosine similarity，不从 distance 推导。
 
@@ -782,16 +780,18 @@ content hash 时命令成功返回 `legacy_untracked=true` 和 `legacy_reason`�
 `validation_history`、`legacy_untracked` 和 `legacy_reason`。由于 content hash 不含
 ordinal，semantics rebuild 后同语义 atom 的 id 改变时仍可用 content hash 解释历史。
 
-`label atom-index status` 返回 label atom vector index 的状态。未配置 provider、未
-启用内置 vector store，或默认 no-heavy CLI 尚未接入 label helper adapter 时仍成功返回 disabled/degraded 状态。JSON 保留兼容字段
-`message`，并返回结构化 `diagnostics: string[]`、`dirty: boolean | null`、
-`board_dirty: boolean | null`；调用方应使用结构化字段判断 dirty/error，而不要解析
-`message` 文案。`rebuild` 与 `query` 需要 `--vector-config <toml>` 和可用的 label
-vector workflow adapter；默认 no-heavy CLI 当前失败且不会修改 SQLite truth。需要 raw
-helper 查询时使用 `kanban vector query-label-atoms`，但它不是 `label suggest` 的
-完整 adapter。`query` 的
-`--polarity` 只接受 `positive` 或 `negative`；human 输出和 JSON hit 都把 LanceDB
-`_distance` 暴露为 `distance`。
+`label atom-index status` 返回 label atom vector index 的状态。未配置 provider 或 helper
+不可用时仍成功返回 disabled/degraded 状态。JSON 保留兼容字段 `message`，并返回结构化
+`diagnostics: string[]`、`dirty: boolean | null`、`board_dirty: boolean | null`；调用方应使用
+结构化字段判断 dirty/error，而不要解析 `message` 文案。`query` 通过 helper adapter 查询
+label atom vector index，`--polarity` 只接受 `positive` 或 `negative`，human 输出和 JSON hit
+都把 LanceDB `_distance` 暴露为 `distance`。`rebuild` 仍需要可用的 rebuild-capable vector
+store/helper 路径；默认 no-heavy CLI 对 rebuild 返回显式 unavailable，不修改 SQLite truth。
+
+`kanban vector query-label-atoms` 是公开 raw helper 查询入口，支持 text 查询和 raw vector 查询：
+`kanban vector query-label-atoms <text> [--polarity positive|negative] [--limit N] [--embedding-model MODEL] [--vector-config <toml>]`，或
+`kanban vector query-label-atoms --vector-json '[0.1,0.2]' [--include-vector] [--embedding-model MODEL] [--polarity positive|negative] [--limit N]`。
+`--include-vector` 只对 helper 支持的 raw vector/vector hit 输出有意义。
 
 `label propose` 是独立的新 label semantics 提案流程，不复用或改变 `label suggest`。
 它先读取当前 task-level label suggestions 的 `coverage` / `coverage_cosine` / `residual_norm` /
@@ -802,7 +802,7 @@ degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms`
 `--atom-limit`、`--max-selected-labels`、`--min-score` 会在 proposal 持久化前调节底层
 label suggestion solver，用于计算 coverage、coverage_cosine、residual_norm 和 top1 existing label。
 `--vector-config` 使用与 `label suggest` 相同的 TOML 解析规则。默认 no-heavy CLI
-当前没有 label vector helper adapter；未配置或 adapter/provider 不可用时保持
+通过 vector helper adapter 运行 residual validation；未配置或 helper/provider 不可用时保持
 degraded fallback，不写入普通 label 或 task-label 关联。
 
 Provider boundary：CLI 当前只使用 disabled provider 或 `--proposal-json` 显式传入的

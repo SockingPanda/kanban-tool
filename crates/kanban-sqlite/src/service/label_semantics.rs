@@ -829,7 +829,6 @@ pub(crate) fn label_atom_vectors_for_board(
         .collect())
 }
 
-#[cfg(feature = "vector-lancedb")]
 pub(crate) fn label_atom_vectors_for_definition(
     definition: &LabelDefinition,
     board_id: &str,

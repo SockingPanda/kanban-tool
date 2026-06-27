@@ -976,58 +976,6 @@ async fn task_label_proposal_route_with_candidate_degrades_without_polluting_tru
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
-#[tokio::test]
-async fn task_label_proposal_route_attempts_configured_vector_store() -> anyhow::Result<()> {
-    let test = TestApp::new()?;
-    let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
-        &db_path,
-        "default",
-        "seed",
-        kanban_sqlite::CreateTask::ready("label proposal route configured vector target"),
-    )?;
-    let vector_config = test.dir_path().join("vector.toml");
-    std::fs::write(
-        &vector_config,
-        r#"[vector]
-provider = "ollama"
-endpoint = "http://127.0.0.1:1"
-model = "offline-api-test-model"
-dimensions = 3
-"#,
-    )?;
-    let app =
-        build_router(AppState::new(&db_path, "api-test").with_vector_config_path(vector_config));
-
-    let (status, json) = post_json(
-        app,
-        &format!("/api/v1/tasks/{}/label-proposals", task.id),
-        json!({}),
-    )
-    .await?;
-
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["data"]["proposal"], serde_json::Value::Null);
-    assert_eq!(json["data"]["degraded"], true);
-    let diagnostics = json["data"]["diagnostics"]
-        .as_array()
-        .context("diagnostics")?;
-    assert!(
-        diagnostics
-            .iter()
-            .any(|value| value == "vector_query_error"),
-        "{diagnostics:?}"
-    );
-    assert!(
-        !diagnostics
-            .iter()
-            .any(|value| value == "vector_store_disabled"),
-        "{diagnostics:?}"
-    );
-    Ok(())
-}
-
 #[tokio::test]
 async fn task_label_proposal_route_accepts_and_rejects_without_task_binding() -> anyhow::Result<()>
 {
@@ -2753,13 +2701,13 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
         json!({}),
     )
     .await?;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(json["error"]["code"], "invalid_input");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["enabled"], false);
     assert!(
-        json["error"]["message"]
-            .as_str()
-            .context("error message")?
-            .contains("requires a configured label atom vector store")
+        json["data"]["diagnostics"]
+            .as_array()
+            .context("diagnostics")?
+            .contains(&json!("label_atom_index_rebuild_degraded"))
     );
 
     let (status, json) = get_json(

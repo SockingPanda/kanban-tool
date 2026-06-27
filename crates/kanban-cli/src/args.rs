@@ -917,10 +917,34 @@ pub(crate) enum VectorCommand {
     Configure(VectorConfigureArgs),
     Rebuild(VectorConfigPathArgs),
     Sync(VectorConfigPathArgs),
+    QueryChunks(VectorQueryChunksArgs),
+    QueryLabelAtoms(VectorQueryLabelAtomsArgs),
 }
 
 #[derive(Debug, Args)]
 pub(crate) struct VectorConfigPathArgs {
+    #[arg(long = "vector-config", alias = "config")]
+    pub(crate) vector_config: Option<std::path::PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct VectorQueryChunksArgs {
+    pub(crate) text: String,
+    #[arg(long, default_value_t = 10)]
+    pub(crate) limit: usize,
+    #[arg(long = "vector-config", alias = "config")]
+    pub(crate) vector_config: Option<std::path::PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct VectorQueryLabelAtomsArgs {
+    pub(crate) text: String,
+    #[arg(long, default_value_t = 10)]
+    pub(crate) limit: usize,
+    #[arg(long)]
+    pub(crate) board_id: Option<String>,
+    #[arg(long)]
+    pub(crate) polarity: Option<String>,
     #[arg(long = "vector-config", alias = "config")]
     pub(crate) vector_config: Option<std::path::PathBuf>,
 }

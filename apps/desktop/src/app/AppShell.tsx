@@ -172,6 +172,7 @@ export type AppShellTaskDetailProps = {
   draftDirty: boolean
   claimToken: string | null
   detailLoading: boolean
+  taskRunsExpanded: boolean
 }
 
 export type AppShellTaskCreationProps = {
@@ -218,6 +219,7 @@ export type AppShellCommandProps = {
   setTaskCreationFirstStepTitle: (value: string) => void
   setTaskCreationOpen: (value: boolean) => void
   setTaskCreationTitle: (value: string) => void
+  setTaskRunsExpanded: (value: boolean) => void
   setView: (value: OperatorView) => void
 }
 
@@ -270,6 +272,7 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
     labelSuggestionsRequested,
     selectedId,
     selectedTask,
+    taskRunsExpanded,
   } = taskDetail
   const showDetailSheet = shouldOpenTaskDetailSheet(view, selectedTask)
 
@@ -397,6 +400,7 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
                 draftDirty={draftDirty}
                 setEditDraft={commands.setEditDraft}
                 detailLoading={detailLoading}
+                runsExpanded={taskRunsExpanded}
                 pendingAction={pendingAction}
                 onAction={commands.runAction}
                 onAddDependency={commands.addDependency}
@@ -406,6 +410,7 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
                 onSaveTask={commands.saveTask}
                 onCancelEdit={commands.cancelTaskEdit}
                 onAddComment={commands.addComment}
+                onRunsExpandedChange={commands.setTaskRunsExpanded}
               />
             </SheetContent>
           </Sheet>

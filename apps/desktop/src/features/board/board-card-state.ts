@@ -26,6 +26,11 @@ export function selectedUnlockCountForTask(taskId: string, snapshot: SelectedDep
   return snapshot.dependencies.children.length
 }
 
+export function selectedIdForColumn(tasks: Pick<Task, "id">[], selectedId?: string) {
+  if (!selectedId) return undefined
+  return tasks.some((task) => task.id === selectedId) ? selectedId : undefined
+}
+
 export function taskNeedsExecutionPlan(task: Task) {
   return task.execution_plan_state === "unplanned" && task.status !== "done" && task.status !== "archived"
 }

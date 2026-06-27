@@ -201,4 +201,48 @@ describe("desktop shadcn control convergence", () => {
     expect(detail).toContain('aria-label="Comment body"')
     expect(detail).toContain('autoComplete="off"')
   })
+
+  it("exposes local shadcn composites for repeated desktop operator patterns", () => {
+    const composites = source("components/ui/composites.tsx")
+
+    expect(composites).toContain("PageToolbar")
+    expect(composites).toContain("SectionCard")
+    expect(composites).toContain("MetricStrip")
+    expect(composites).toContain("TaskStatusBadge")
+    expect(composites).toContain("PriorityBadge")
+    expect(composites).toContain("TaskIdentityLine")
+    expect(composites).toContain("@/components/ui/badge")
+    expect(composites).toContain("@/components/ui/card")
+    expect(composites).toContain("@/components/ui/item")
+  })
+
+  it("routes repeated task badges, identity lines, toolbars, metrics, and section cards through composites", () => {
+    const board = source("features/board/BoardView.tsx")
+    const list = source("features/list/ListView.tsx")
+    const detail = source("features/task-detail/TaskDetail.tsx")
+    const map = source("features/task-map/BoardTaskMapView.tsx")
+    const maintenance = source("features/maintenance/MaintenanceView.tsx")
+    const health = source("features/health/HealthView.tsx")
+    const events = source("features/events/EventsView.tsx")
+    const runs = source("features/runs/RunsView.tsx")
+
+    for (const content of [board, list, detail, map]) {
+      expect(content).toContain("TaskStatusBadge")
+      expect(content).toContain("PriorityBadge")
+      expect(content).not.toContain("function badgeVariant")
+    }
+
+    for (const content of [list, detail, map, runs]) {
+      expect(content).toContain("TaskIdentityLine")
+    }
+
+    for (const content of [list, map, events, runs]) {
+      expect(content).toContain("PageToolbar")
+    }
+
+    for (const content of [maintenance, health]) {
+      expect(content).toContain("SectionCard")
+      expect(content).toContain("MetricStrip")
+    }
+  })
 })

@@ -4,13 +4,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { PriorityBadge, TaskStatusBadge } from "@/components/ui/composites"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { BoardColumn as ApiBoardColumn, Task, TaskStatus } from "@/lib/api"
 import { cn, formatRelativeTime } from "@/lib/utils"
 
 import {
-  priorityBadgeClass,
-  priorityBadgeLabel,
   dependencyBlockedTodoClass,
   requiredStepProgressLabel,
   selectedDependencyCountForTask,
@@ -206,9 +205,8 @@ function TaskCard({
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">#{task.seq} {task.title}</div>
           <div className="mt-1 flex flex-wrap gap-1 text-xs text-muted-foreground">
-            <Badge variant="secondary" className={cn("px-1.5 py-0 text-[11px] leading-5", priorityBadgeClass(task.priority))}>
-              {priorityBadgeLabel(task.priority)}
-            </Badge>
+            <TaskStatusBadge status={task.status} className="px-1.5 py-0 text-[11px] leading-5" />
+            <PriorityBadge priority={task.priority} className="px-1.5 py-0 text-[11px] leading-5" />
             {task.due_at ? <span>due {formatRelativeTime(task.due_at)}</span> : null}
             {task.scheduled_at ? <span>scheduled {formatRelativeTime(task.scheduled_at)}</span> : null}
             {task.status === "running" ? <span>heartbeat {formatRelativeTime(task.last_heartbeat_at)}</span> : null}

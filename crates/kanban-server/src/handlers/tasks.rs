@@ -1819,14 +1819,27 @@ fn suggest_task_labels_for_state(
     task_id: &str,
     options: kanban_sqlite::LabelSuggestionOptions,
 ) -> Result<kanban_sqlite::LabelSuggestionResult, ApiError> {
+    let store = subprocess_vector_store_for_state(state, board)?;
+    kanban_sqlite::suggest_task_labels_with(state.db_path(), board, task_id, &store, options)
+        .map_err(ApiError::from)
+}
+
+fn subprocess_vector_store_for_state(
+    state: &AppState,
+    board: &str,
+) -> Result<kanban_vector::SubprocessVectorStore, ApiError> {
     let store = kanban_vector::SubprocessVectorStore::new(
         resolve_helper(state, HelperKind::Vector),
         state.db_path().to_path_buf(),
         board.to_owned(),
         state.vector_config_path().map(std::path::Path::to_path_buf),
     );
-    kanban_sqlite::suggest_task_labels_with(state.db_path(), board, task_id, &store, options)
-        .map_err(ApiError::from)
+    let Some(config) = kanban_local::resolved_vector_config(state.vector_config_path())
+        .map_err(|error| invalid_input(error.to_string()))?
+    else {
+        return Ok(store);
+    };
+    Ok(store.with_embedding_model(config.model))
 }
 
 fn propose_task_label_for_state(
@@ -1841,12 +1854,7 @@ fn propose_task_label_for_state(
     match candidate {
         Some(candidate) => {
             let provider = kanban_sqlite::ManualLabelProposalProvider::new(candidate);
-            let store = kanban_vector::SubprocessVectorStore::new(
-                resolve_helper(state, HelperKind::Vector),
-                state.db_path().to_path_buf(),
-                board.to_owned(),
-                state.vector_config_path().map(std::path::Path::to_path_buf),
-            );
+            let store = subprocess_vector_store_for_state(state, board)?;
             kanban_sqlite::propose_task_label_with_store_and_create_options(
                 state.db_path(),
                 board,
@@ -1861,12 +1869,7 @@ fn propose_task_label_for_state(
             )
         }
         None => {
-            let store = kanban_vector::SubprocessVectorStore::new(
-                resolve_helper(state, HelperKind::Vector),
-                state.db_path().to_path_buf(),
-                board.to_owned(),
-                state.vector_config_path().map(std::path::Path::to_path_buf),
-            );
+            let store = subprocess_vector_store_for_state(state, board)?;
             kanban_sqlite::propose_task_label_with_store_and_create_options(
                 state.db_path(),
                 board,

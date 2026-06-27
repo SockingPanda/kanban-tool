@@ -57,11 +57,15 @@ desktop-package:
 cli-package:
     scripts/package-cli-linux.sh --format deb
 
+cli-package-layout:
+    scripts/test-cli-package-layout.sh
+
 smoke:
     scripts/smoke-v1-local.sh
 
 target-tools:
     scripts/test-cargo-target-tools.sh
+    scripts/test-helper-cargo-tree.sh
 
 diff-check:
     git diff --check

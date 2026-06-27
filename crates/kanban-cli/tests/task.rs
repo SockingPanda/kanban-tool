@@ -464,7 +464,7 @@ dimensions = 3
     )?;
     #[cfg(any())]
     let expected_index_failure = "Ollama embed request failed";
-    let expected_index_failure = "requires a configured label atom vector store";
+    let expected_index_failure = "label vector helper adapter is not available";
     kanban(
         &temp.path,
         &[
@@ -639,9 +639,7 @@ fn label_bootstrap_verify_requires_vector_provider_before_mutating() -> anyhow::
             "--verify",
         ],
     )?
-    .failure_containing(
-        "label bootstrap verification requires a configured label atom vector store",
-    )?;
+    .failure_containing("label vector helper adapter is not available")?;
 
     let shown = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
     assert!(

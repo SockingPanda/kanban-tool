@@ -2,6 +2,8 @@ mod common;
 
 use anyhow::Context;
 use common::{TempDb, kanban, kanban_in_dir_envs};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 #[test]
 fn substrate_commands_report_entities_outbox_and_derived_status() -> anyhow::Result<()> {
     let temp = TempDb::new("substrate_commands_report_entities_outbox_and_derived_status")?;
@@ -227,7 +229,7 @@ fn vector_status_reports_invalid_helper_json_as_degraded() -> anyhow::Result<()>
         &[("KANBAN_VECTOR_HELPER", std::path::Path::new("/bin/echo"))],
     )?
     .success_json()?;
-    assert_eq!(status["data"]["backend"], "helper-missing");
+    assert_eq!(status["data"]["backend"], "helper-invalid");
     assert_eq!(status["data"]["enabled"], false);
     assert!(
         status["data"]["message"]
@@ -235,6 +237,62 @@ fn vector_status_reports_invalid_helper_json_as_degraded() -> anyhow::Result<()>
             .context("expected JSON string")?
             .contains("invalid JSON envelope")
     );
+    assert!(
+        status["data"]["diagnostics"]
+            .as_array()
+            .context("expected diagnostics array")?
+            .iter()
+            .any(|value| value == "helper_invalid_envelope")
+    );
+    Ok(())
+}
+
+#[test]
+fn graph_status_reports_invalid_helper_json_as_degraded() -> anyhow::Result<()> {
+    let temp = TempDb::new("graph_status_reports_invalid_helper_json_as_degraded")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let status = kanban_in_dir_envs(
+        &temp.path,
+        &["--json", "graph", "status"],
+        &temp.dir,
+        &[("KANBAN_GRAPH_HELPER", std::path::Path::new("/bin/echo"))],
+    )?
+    .success_json()?;
+    assert_eq!(status["data"]["backend"], "helper-invalid");
+    assert_eq!(status["data"]["enabled"], false);
+    assert!(
+        status["data"]["message"]
+            .as_str()
+            .context("expected JSON string")?
+            .contains("invalid JSON envelope")
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn graph_status_preserves_helper_error_envelope() -> anyhow::Result<()> {
+    let temp = TempDb::new("graph_status_preserves_helper_error_envelope")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let helper = temp.dir.join("helper-error.sh");
+    std::fs::write(
+        &helper,
+        r#"#!/usr/bin/env bash
+printf '%s\n' '{"protocol":"kanban-derived-helper.v1","payload_json":"{\"code\":\"bad_board\",\"message\":\"bad board\"}"}'
+exit 1
+"#,
+    )?;
+    let mut perms = std::fs::metadata(&helper)?.permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(&helper, perms)?;
+
+    kanban_in_dir_envs(
+        &temp.path,
+        &["--json", "graph", "status"],
+        &temp.dir,
+        &[("KANBAN_GRAPH_HELPER", helper.as_path())],
+    )?
+    .failure_containing("graph helper failed: bad board (bad_board)")?;
     Ok(())
 }
 

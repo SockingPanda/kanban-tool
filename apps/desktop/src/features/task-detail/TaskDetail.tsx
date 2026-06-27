@@ -16,7 +16,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react"
-import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react"
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
 import remarkGfm from "remark-gfm"
 
@@ -56,7 +56,7 @@ import { legalActions, type LegalTaskAction } from "@/features/task-actions/lega
 import { TaskGraphCanvas } from "@/features/task-map/TaskGraphCanvas"
 import { apiTaskGraphToCanvasGraph } from "@/features/task-map/task-graph-adapter"
 import { isBlockableStatus } from "@/lib/action-policy"
-import type { CommentRecord, KanbanApi, LabelSuggestionResult, Run, Task, TaskStatus, TaskSteps } from "@/lib/api"
+import type { CommentRecord, KanbanApi, LabelSuggestionResult, Run, Task, TaskStatus, TaskStep, TaskSteps } from "@/lib/api"
 import { priorityBadgeClass, priorityLabel, priorityLevels } from "@/lib/priority"
 import { cn, formatRelativeTime, shortId } from "@/lib/utils"
 
@@ -156,6 +156,8 @@ export function TaskDetail({
     setConfirmAction(null)
   }, [task?.id])
 
+  const graph = useMemo(() => apiTaskGraphToCanvasGraph(detail.neighborhood), [detail.neighborhood])
+
   if (!task) return null
   const currentTask = task
 
@@ -164,7 +166,6 @@ export function TaskDetail({
   const renderedDescription = visibleDescription(task.description, descriptionExpanded)
   const commentsPage = commentPageState({ comments: detail.comments, page: commentPage, sortOrder: commentSortOrder })
   const actionView = taskActionView(task, actions)
-  const graph = apiTaskGraphToCanvasGraph(detail.neighborhood)
 
   async function saveAndClose() {
     const saved = await onSaveTask()
@@ -398,7 +399,7 @@ function TaskStepsSection({ task, steps, pending, stepTitle, attachStepId, notRe
       <div className="space-y-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Badge variant={task.execution_plan_state === "unplanned" ? "secondary" : "ready"}>{task.execution_plan_state}</Badge>
-          <span>{doneRequired}/{required.length} required resolved</span>
+          <span>{doneRequired}/{required.length} steps</span>
           <span>{running} linked running</span>
           <span>{blocked} linked blocked</span>
         </div>
@@ -407,7 +408,7 @@ function TaskStepsSection({ task, steps, pending, stepTitle, attachStepId, notRe
             {items.map((item, index) => {
               const linkedTask = item.linked_task
               return (
-                <div key={item.id} className="flex min-w-0 items-start gap-2 rounded-md border border-border bg-card px-2 py-2 text-sm">
+                <div key={item.id} className={cn("flex min-w-0 items-start gap-2 rounded-md border px-2 py-2 text-sm", stepRowClass(item.status))}>
                   <Badge variant="secondary" className="mt-0.5 shrink-0">S{index + 1}</Badge>
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{item.title}</div>
@@ -420,11 +421,7 @@ function TaskStepsSection({ task, steps, pending, stepTitle, attachStepId, notRe
                       <div className="mt-1 text-xs text-muted-foreground">Text step</div>
                     )}
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <Badge variant="secondary">{item.required ? "required" : "optional"}</Badge>
-                    <Badge variant={item.status === "todo" ? "secondary" : "ready"}>{item.status}</Badge>
-                    {linkedTask ? <Badge variant={badgeVariant(linkedTask.status)}>{linkedTask.status}</Badge> : null}
-                  </div>
+                  {linkedTask ? <div className="flex shrink-0 flex-col items-end gap-1"><Badge variant={badgeVariant(linkedTask.status)}>{linkedTask.status}</Badge></div> : null}
                 </div>
               )
             })}
@@ -460,6 +457,12 @@ function TaskStepsSection({ task, steps, pending, stepTitle, attachStepId, notRe
       </div>
     </Section>
   )
+}
+
+function stepRowClass(status: TaskStep["status"]) {
+  if (status === "done") return "border-lime-300 bg-lime-50 text-lime-950 dark:border-lime-900 dark:bg-lime-950/30 dark:text-lime-100"
+  if (status === "skipped") return "border-border bg-muted/30 text-muted-foreground"
+  return "border-border bg-card"
 }
 
 function CommentsSection({ commentsPage, commentSortOrder, setCommentSortOrder, setCommentPage, commentBody, setCommentBody, pendingAction, onAddComment }: { commentsPage: ReturnType<typeof commentPageState>; commentSortOrder: CommentSortOrder; setCommentSortOrder: (value: CommentSortOrder) => void; setCommentPage: (value: number | ((current: number) => number)) => void; commentBody: string; setCommentBody: (value: string) => void; pendingAction: string | null; onAddComment: () => Promise<void> }) {

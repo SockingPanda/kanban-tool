@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { __test } from "./TaskGraphCanvas"
+import type { TaskGraph } from "./task-graph-types"
 
 describe("TaskGraphCanvas interactions", () => {
   it("shows zoom controls and viewport pan in detail mode", () => {
@@ -10,7 +11,7 @@ describe("TaskGraphCanvas interactions", () => {
     expect(interaction.showMiniMap).toBe(false)
     expect(interaction.panOnDrag).toBe(true)
     expect(interaction.zoomOnPinch).toBe(true)
-    expect(interaction.zoomOnScroll).toBe(false)
+    expect(interaction.zoomOnScroll).toBe(true)
     expect(interaction.zoomOnDoubleClick).toBe(false)
     expect(interaction.maxZoom).toBeGreaterThan(1.75)
   })
@@ -26,4 +27,44 @@ describe("TaskGraphCanvas interactions", () => {
     expect(interaction.zoomOnDoubleClick).toBe(true)
     expect(interaction.maxZoom).toBe(1.75)
   })
+
+  it("keeps the layout key stable for non-topology task data", () => {
+    const graph = graphFixture()
+    const renamedGraph: TaskGraph = {
+      ...graph,
+      nodes: graph.nodes.map((node) => (node.id === "parent" ? { ...node, title: "Renamed parent", status: "blocked" } : node)),
+    }
+    const changedTopologyGraph: TaskGraph = {
+      ...graph,
+      edges: [...graph.edges, { id: "dep:other:child", sourceTaskId: "other", targetTaskId: "child", kind: "dependency" }],
+    }
+
+    expect(__test.taskGraphLayoutKey(renamedGraph, "board-map")).toBe(__test.taskGraphLayoutKey(graph, "board-map"))
+    expect(__test.taskGraphLayoutKey(changedTopologyGraph, "board-map")).not.toBe(__test.taskGraphLayoutKey(graph, "board-map"))
+  })
+
+  it("patches only previous and next selected flow nodes", () => {
+    const nodes = __test.buildTaskFlowNodes(__test.layoutTaskGraphFallback(graphFixture(), { mode: "board-map" }), graphFixture(), "parent", undefined)
+    const patched = __test.patchTaskFlowNodeSelection(nodes, "parent", "child")
+    const originalById = new Map(nodes.map((node) => [node.id, node]))
+    const patchedById = new Map(patched.map((node) => [node.id, node]))
+
+    expect(patched).not.toBe(nodes)
+    expect(patchedById.get("parent")).not.toBe(originalById.get("parent"))
+    expect(patchedById.get("child")).not.toBe(originalById.get("child"))
+    expect(patchedById.get("other")).toBe(originalById.get("other"))
+    expect(patchedById.get("parent")?.selected).toBe(false)
+    expect(patchedById.get("child")?.selected).toBe(true)
+  })
 })
+
+function graphFixture(): TaskGraph {
+  return {
+    nodes: [
+      { id: "parent", ref: "#1", title: "Parent", status: "todo", role: "context" },
+      { id: "child", ref: "#2", title: "Child", status: "ready", role: "context" },
+      { id: "other", ref: "#3", title: "Other", status: "running", role: "context" },
+    ],
+    edges: [{ id: "dep:parent:child", sourceTaskId: "parent", targetTaskId: "child", kind: "dependency", blocking: true }],
+  }
+}

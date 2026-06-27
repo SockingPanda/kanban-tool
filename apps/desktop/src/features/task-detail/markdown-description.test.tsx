@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 
-import type { Task } from "@/lib/api"
+import type { Task, TaskStep, TaskSteps } from "@/lib/api"
 import { Sheet } from "@/components/ui/sheet"
 
 import { emptyDetail } from "./detail-state"
@@ -462,6 +462,54 @@ describe("MarkdownDescription", () => {
     expect(html).not.toContain("Legal transitions")
   })
 
+  it("renders resolved execution plan rows without required or done badges", () => {
+    const taskWithSteps: Task = {
+      ...task,
+      execution_plan_state: "planned",
+      required_step_count: 3,
+      completed_required_step_count: 2,
+    }
+    const html = renderToStaticMarkup(
+      <Sheet open>
+        <TaskDetail
+          api={null}
+          task={taskWithSteps}
+          detail={{
+            ...emptyDetail,
+            steps: stepsFixture(taskWithSteps.id),
+          }}
+          blockReason=""
+          setBlockReason={() => undefined}
+          dependencyInput=""
+          setDependencyInput={() => undefined}
+          claimToken={null}
+          commentBody=""
+          setCommentBody={() => undefined}
+          editDraft={null}
+          draftDirty={false}
+          setEditDraft={() => undefined}
+          detailLoading={false}
+          pendingAction={null}
+          onAction={async () => undefined}
+          onAddDependency={async () => undefined}
+          onRemoveDependency={async () => undefined}
+          onSelectTask={() => undefined}
+          onSaveTask={async () => true}
+          onCancelEdit={() => undefined}
+          onAddComment={async () => undefined}
+        />
+      </Sheet>,
+    )
+
+    expect(html).toContain("2/3 steps")
+    expect(html).toContain("Step finished")
+    expect(html).toContain("border-lime-300 bg-lime-50")
+    expect(html).toContain("Step skipped")
+    expect(html).toContain("bg-muted/30 text-muted-foreground")
+    expect(html).not.toMatch(/<span[^>]*>required<\/span>/)
+    expect(html).not.toMatch(/<span[^>]*>done<\/span>/)
+  })
+
 })
 
 const task: Task = {
@@ -502,4 +550,43 @@ const task: Task = {
   completed_required_step_count: 0,
   optional_step_count: 0,
   labels: [],
+}
+
+function stepsFixture(taskId: string): TaskSteps {
+  return {
+    task_id: taskId,
+    execution_plan: {
+      board_id: "b_1",
+      task_id: taskId,
+      state: "planned",
+      reason: null,
+      updated_by: "codex",
+      updated_at: task.updated_at,
+    },
+    steps: [
+      stepFixture(taskId, "step_done", "Step finished", "done"),
+      stepFixture(taskId, "step_skipped", "Step skipped", "skipped"),
+      stepFixture(taskId, "step_todo", "Step pending", "todo"),
+    ],
+  }
+}
+
+function stepFixture(parentTaskId: string, id: string, title: string, status: TaskStep["status"]): TaskStep {
+  return {
+    id,
+    parent_task_id: parentTaskId,
+    title,
+    body: null,
+    linked_task: null,
+    position: 1024,
+    required: true,
+    status,
+    resolution_note: null,
+    resolved_by: null,
+    resolved_at: null,
+    created_by: "codex",
+    created_at: task.created_at,
+    updated_by: "codex",
+    updated_at: task.updated_at,
+  }
 }

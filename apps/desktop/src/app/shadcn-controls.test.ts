@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { dirname, resolve } from "node:path"
 
@@ -8,6 +8,20 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 
 function source(path: string) {
   return readFileSync(resolve(root, path), "utf8")
+}
+
+function taskDetailSource() {
+  const directory = resolve(root, "features/task-detail")
+
+  return readdirSync(directory)
+    .filter((name) => name.endsWith(".tsx"))
+    .sort()
+    .map((name) => readFileSync(resolve(directory, name), "utf8"))
+    .join("\n")
+}
+
+function sourceOrTaskDetail(path: string) {
+  return path === "features/task-detail/TaskDetail.tsx" ? taskDetailSource() : source(path)
 }
 
 describe("desktop shadcn control convergence", () => {
@@ -42,7 +56,7 @@ describe("desktop shadcn control convergence", () => {
     ]
 
     for (const file of files) {
-      expect(source(file), file).not.toContain("<button")
+      expect(sourceOrTaskDetail(file), file).not.toContain("<button")
     }
   })
 
@@ -54,7 +68,7 @@ describe("desktop shadcn control convergence", () => {
     ]
 
     for (const file of files) {
-      const content = source(file)
+      const content = sourceOrTaskDetail(file)
       expect(content, file).not.toContain("NativeSelect")
       expect(content, file).not.toContain("<select")
       expect(content, file).not.toContain('type="checkbox"')
@@ -129,7 +143,7 @@ describe("desktop shadcn control convergence", () => {
     expect(item).not.toContain("flex shrink-0 items-center gap-2")
 
     for (const file of files) {
-      expect(source(file), file).toContain("@/components/ui/item")
+      expect(sourceOrTaskDetail(file), file).toContain("@/components/ui/item")
     }
   })
 
@@ -149,7 +163,7 @@ describe("desktop shadcn control convergence", () => {
     ]
 
     for (const file of files) {
-      const content = source(file)
+      const content = sourceOrTaskDetail(file)
       expect(content, file).not.toContain("window.confirm")
       expect(content, file).not.toContain("window.prompt")
     }
@@ -159,7 +173,7 @@ describe("desktop shadcn control convergence", () => {
     expect(source("components/ui/tabs.tsx")).toContain("@radix-ui/react-tabs")
     expect(source("App.tsx")).toContain("AlertDialog")
     expect(source("App.tsx")).toContain("Dialog")
-    expect(source("features/task-detail/TaskDetail.tsx")).toContain("AlertDialog")
+    expect(taskDetailSource()).toContain("AlertDialog")
     expect(source("features/maintenance/MaintenanceView.tsx")).toContain("AlertDialog")
   })
 
@@ -171,7 +185,7 @@ describe("desktop shadcn control convergence", () => {
     expect(source("components/ui/textarea.tsx")).toContain("Textarea")
 
     const shell = source("app/AppShell.tsx")
-    const detail = source("features/task-detail/TaskDetail.tsx")
+    const detail = taskDetailSource()
     const list = source("features/list/ListView.tsx")
     const events = source("features/events/EventsView.tsx")
     const runs = source("features/runs/RunsView.tsx")
@@ -193,7 +207,7 @@ describe("desktop shadcn control convergence", () => {
   })
 
   it("uses the shadcn-compatible textarea composition for task comments", () => {
-    const detail = source("features/task-detail/TaskDetail.tsx")
+    const detail = taskDetailSource()
 
     expect(source("components/ui/input-group.tsx")).toContain("InputGroupTextarea")
     expect(detail).toContain("InputGroupTextarea")
@@ -219,7 +233,7 @@ describe("desktop shadcn control convergence", () => {
   it("routes repeated task badges, identity lines, toolbars, metrics, and section cards through composites", () => {
     const board = source("features/board/BoardView.tsx")
     const list = source("features/list/ListView.tsx")
-    const detail = source("features/task-detail/TaskDetail.tsx")
+    const detail = taskDetailSource()
     const map = source("features/task-map/BoardTaskMapView.tsx")
     const maintenance = source("features/maintenance/MaintenanceView.tsx")
     const health = source("features/health/HealthView.tsx")

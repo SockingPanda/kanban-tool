@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 
@@ -12,7 +12,6 @@ const targetedViewFiles = [
   "features/health/HealthView.tsx",
   "features/maintenance/MaintenanceView.tsx",
   "features/settings/SettingsView.tsx",
-  "features/task-detail/TaskDetail.tsx",
 ]
 
 const neutralTextLevels = ["900", "800", "700", "600", "500", "400", "300", "200", "100", "50"]
@@ -31,7 +30,11 @@ const bannedLightOnlyClassPattern = new RegExp(
 
 describe("desktop dark surface coverage", () => {
   it("keeps targeted feature views on semantic surface tokens", () => {
-    const violations = targetedViewFiles.flatMap((relativePath) => {
+    const taskDetailFiles = readdirSync(new URL("features/task-detail/", `file://${sourceRoot}`))
+      .filter((name) => name.endsWith(".tsx"))
+      .map((name) => `features/task-detail/${name}`)
+
+    const violations = [...targetedViewFiles, ...taskDetailFiles].flatMap((relativePath) => {
       const content = readFileSync(new URL(relativePath, `file://${sourceRoot}`), "utf8")
       return [...content.matchAll(bannedLightOnlyClassPattern)].map((match) => `${relativePath}: ${match[0]}`)
     })

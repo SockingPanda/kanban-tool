@@ -83,6 +83,7 @@ import type { TaskEditDraft } from "@/features/task-detail/task-draft"
 import type { SelectedDependencySnapshot } from "@/features/board/board-card-state"
 import { apiEndpointLabel, shouldShowTaskExplorerToolbar } from "@/app/shell-rules"
 import type { ListSortState } from "@/features/list/table-state"
+import type { RunActionOptions } from "@/app/useTaskMutations"
 import type {
   BoardColumn,
   Board,
@@ -116,112 +117,28 @@ const themeModeOptions: MenuSelectOption<ThemeMode>[] = [
   { value: "dark", label: "dark" },
 ]
 
-export function AppShell({
-  config,
-  api,
-  boards,
-  boardsLoading,
-  boardsError,
-  view,
-  themeMode,
-  sidebarOpen,
-  columns,
-  tasks,
-  groupedTasks,
-  selectedTask,
-  selectedId,
-  dependencySnapshot,
-  detail,
-  labelSuggestions,
-  labelSuggestionsRequested,
-  labelSuggestionsLoading,
-  labelSuggestionsError,
-  activeRun,
-  search,
-  debouncedSearch,
-  searchMeta,
-  statusFilter,
-  priorityFilters,
-  planFilters,
-  listSort,
-  showArchived,
-  page,
-  hasNextPage,
-  hasPreviousPage,
-  canGoLastPage,
-  rowsPerPage,
-  newTitle,
-  newDescription,
-  newFirstStepTitle,
-  blockReason,
-  dependencyInput,
-  commentBody,
-  editDraft,
-  draftDirty,
-  claimToken,
-  tasksRefreshing,
-  detailLoading,
-  pendingAction,
-  error,
-  lastRefreshAt,
-  queueCounts,
-  onSearchChange,
-  onBoardChange,
-  onViewChange,
-  onThemeModeChange,
-  onCycleThemeMode,
-  onSidebarOpenChange,
-  onStatusFilterChange,
-  onPriorityFiltersChange,
-  onPlanFiltersChange,
-  onListSortChange,
-  onResetListFilters,
-  onShowArchivedChange,
-  onRefreshTasks,
-  onFirstPage,
-  onPreviousPage,
-  onNextPage,
-  onLastPage,
-  onRowsPerPageChange,
-  onCreateTask,
-  onNewTitleChange,
-  onNewDescriptionChange,
-  onNewFirstStepTitleChange,
-  onSelectTask,
-  onCloseTaskDetail,
-  onDropTask,
-  onBlockReasonChange,
-  onDependencyInputChange,
-  onCommentBodyChange,
-  onEditDraftChange,
-  onAction,
-  onAddDependency,
-  onRemoveDependency,
-  onRequestLabelSuggestions,
-  onSaveTask,
-  onCancelTaskEdit,
-  onAddComment,
-}: {
+export type AppShellRuntimeProps = {
   config: RuntimeConfig | null
   api: KanbanApi | null
   boards: Board[]
   boardsLoading: boolean
   boardsError: string | null
-  view: OperatorView
   themeMode: ThemeMode
+  pendingAction: string | null
+  error: string | null
+  lastRefreshAt: number | null
+  queueCounts: { ready: number; running: number; blocked: number }
+}
+
+export type AppShellNavigationProps = {
+  view: OperatorView
   sidebarOpen: boolean
+}
+
+export type AppShellTaskCollectionProps = {
   columns: BoardColumn[]
   tasks: Task[]
   groupedTasks: Map<TaskStatus, Task[]>
-  selectedTask: Task | null
-  selectedId: string | null
-  dependencySnapshot: SelectedDependencySnapshot
-  detail: DetailState
-  labelSuggestions: LabelSuggestionResult | null
-  labelSuggestionsRequested: boolean
-  labelSuggestionsLoading: boolean
-  labelSuggestionsError: string | null
-  activeRun?: Run
   search: string
   debouncedSearch: string
   searchMeta: SearchTasksMeta | null
@@ -235,64 +152,131 @@ export function AppShell({
   hasPreviousPage: boolean
   canGoLastPage: boolean
   rowsPerPage: number
-  newTitle: string
-  newDescription: string
-  newFirstStepTitle: string
+  tasksRefreshing: boolean
+}
+
+export type AppShellTaskDetailProps = {
+  selectedTask: Task | null
+  selectedId: string | null
+  dependencySnapshot: SelectedDependencySnapshot
+  detail: DetailState
+  labelSuggestions: LabelSuggestionResult | null
+  labelSuggestionsRequested: boolean
+  labelSuggestionsLoading: boolean
+  labelSuggestionsError: string | null
+  activeRun?: Run
   blockReason: string
   dependencyInput: string
   commentBody: string
   editDraft: TaskEditDraft | null
   draftDirty: boolean
   claimToken: string | null
-  tasksRefreshing: boolean
   detailLoading: boolean
-  pendingAction: string | null
-  error: string | null
-  lastRefreshAt: number | null
-  queueCounts: { ready: number; running: number; blocked: number }
-  onSearchChange: (value: string) => void
-  onBoardChange: (board: string) => void
-  onViewChange: (value: OperatorView) => void
-  onThemeModeChange: (value: ThemeMode) => void
-  onCycleThemeMode: () => void
-  onSidebarOpenChange: (value: boolean) => void
-  onStatusFilterChange: (value: TaskStatus | "all") => void
-  onPriorityFiltersChange: (value: number[]) => void
-  onPlanFiltersChange: (value: TaskPlanFilter[]) => void
-  onListSortChange: (value: ListSortState) => void
-  onResetListFilters: () => void
-  onShowArchivedChange: (value: boolean) => void
-  onRefreshTasks: () => void
-  onFirstPage: () => void
-  onPreviousPage: () => void
-  onNextPage: () => void
-  onLastPage: () => void
-  onRowsPerPageChange: (value: number) => void
-  onCreateTask: () => Promise<boolean>
-  onNewTitleChange: (value: string) => void
-  onNewDescriptionChange: (value: string) => void
-  onNewFirstStepTitleChange: (value: string) => void
-  onSelectTask: (taskId: string) => void
-  onCloseTaskDetail: () => void
-  onDropTask: (taskId: string, targetStatus: TaskStatus) => void
-  onBlockReasonChange: (value: string) => void
-  onDependencyInputChange: (value: string) => void
-  onCommentBodyChange: (value: string) => void
-  onEditDraftChange: (value: TaskEditDraft) => void
-  onAction: (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null }) => Promise<unknown>
-  onAddDependency: () => Promise<void>
-  onRemoveDependency: (parentTaskId: string) => Promise<void>
-  onRequestLabelSuggestions: () => void
-  onSaveTask: () => Promise<boolean>
-  onCancelTaskEdit: () => void
-  onAddComment: () => Promise<void>
-}) {
+}
+
+export type AppShellTaskCreationProps = {
+  open: boolean
+  title: string
+  description: string
+  firstStepTitle: string
+}
+
+export type AppShellCommandProps = {
+  addComment: () => Promise<void>
+  addDependency: () => Promise<void>
+  cancelTaskEdit: () => void
+  changeBoard: (board: string) => void
+  changeThemeMode: (value: ThemeMode) => void
+  closeTaskDetail: () => void
+  createTask: () => Promise<boolean>
+  cycleThemeMode: () => void
+  dropTask: (taskId: string, targetStatus: TaskStatus) => void
+  firstPage: () => void
+  lastPage: () => void
+  nextPage: () => void
+  previousPage: () => void
+  refreshTasks: () => void
+  removeDependency: (parentTaskId: string) => Promise<void>
+  requestLabelSuggestions: () => void
+  resetListFilters: () => void
+  runAction: (action: () => Promise<unknown>, options?: RunActionOptions | string) => Promise<unknown>
+  saveTask: () => Promise<boolean>
+  selectTask: (taskId: string) => void
+  setBlockReason: (value: string) => void
+  setCommentBody: (value: string) => void
+  setDependencyInput: (value: string) => void
+  setEditDraft: (value: TaskEditDraft) => void
+  setListSort: (value: ListSortState) => void
+  setPlanFilters: (value: TaskPlanFilter[]) => void
+  setPriorityFilters: (value: number[]) => void
+  setRowsPerPage: (value: number) => void
+  setSearch: (value: string) => void
+  setShowArchived: (value: boolean) => void
+  setSidebarOpen: (value: boolean) => void
+  setStatusFilter: (value: TaskStatus | "all") => void
+  setTaskCreationDescription: (value: string) => void
+  setTaskCreationFirstStepTitle: (value: string) => void
+  setTaskCreationOpen: (value: boolean) => void
+  setTaskCreationTitle: (value: string) => void
+  setView: (value: OperatorView) => void
+}
+
+export type AppShellProps = {
+  runtime: AppShellRuntimeProps
+  navigation: AppShellNavigationProps
+  taskCollection: AppShellTaskCollectionProps
+  taskDetail: AppShellTaskDetailProps
+  taskCreation: AppShellTaskCreationProps
+  commands: AppShellCommandProps
+}
+
+export function AppShell({ runtime, navigation, taskCollection, taskDetail, taskCreation, commands }: AppShellProps) {
+  const { api, boards, boardsError, boardsLoading, config, error, lastRefreshAt, pendingAction, queueCounts, themeMode } = runtime
+  const { sidebarOpen, view } = navigation
+  const { description: newDescription, firstStepTitle: newFirstStepTitle, open: taskCreationOpen, title: newTitle } = taskCreation
+  const {
+    canGoLastPage,
+    columns,
+    debouncedSearch,
+    groupedTasks,
+    hasNextPage,
+    hasPreviousPage,
+    listSort,
+    page,
+    planFilters,
+    priorityFilters,
+    rowsPerPage,
+    search,
+    searchMeta,
+    showArchived,
+    statusFilter,
+    tasks,
+    tasksRefreshing,
+  } = taskCollection
+  const {
+    activeRun,
+    blockReason,
+    claimToken,
+    commentBody,
+    dependencyInput,
+    dependencySnapshot,
+    detail,
+    detailLoading,
+    draftDirty,
+    editDraft,
+    labelSuggestions,
+    labelSuggestionsError,
+    labelSuggestionsLoading,
+    labelSuggestionsRequested,
+    selectedId,
+    selectedTask,
+  } = taskDetail
   const showDetailSheet = shouldOpenTaskDetailSheet(view, selectedTask)
 
   return (
     <SidebarProvider
       open={sidebarOpen}
-      onOpenChange={onSidebarOpenChange}
+      onOpenChange={commands.setSidebarOpen}
       className="h-screen w-screen overflow-hidden bg-background text-foreground"
     >
       <ShellSidebar
@@ -303,8 +287,8 @@ export function AppShell({
         switchingBoard={pendingAction === "board"}
         view={view}
         open={sidebarOpen}
-        onBoardChange={onBoardChange}
-        onViewChange={onViewChange}
+        onBoardChange={commands.changeBoard}
+        onViewChange={commands.setView}
       />
 
       <SidebarInset className="flex flex-col overflow-hidden bg-background">
@@ -320,20 +304,22 @@ export function AppShell({
           showArchived={showArchived}
           newTitle={newTitle}
           newDescription={newDescription}
+          newFirstStepTitle={newFirstStepTitle}
           tasksRefreshing={tasksRefreshing}
           pendingAction={pendingAction}
-          onSearchChange={onSearchChange}
-          onViewChange={onViewChange}
-          onThemeModeChange={onThemeModeChange}
-          onCycleThemeMode={onCycleThemeMode}
-          onSidebarOpenChange={onSidebarOpenChange}
-          onShowArchivedChange={onShowArchivedChange}
-          onRefreshTasks={onRefreshTasks}
-          onCreateTask={onCreateTask}
-          onNewTitleChange={onNewTitleChange}
-          onNewDescriptionChange={onNewDescriptionChange}
-          newFirstStepTitle={newFirstStepTitle}
-          onNewFirstStepTitleChange={onNewFirstStepTitleChange}
+          taskCreationOpen={taskCreationOpen}
+          onSearchChange={commands.setSearch}
+          onViewChange={commands.setView}
+          onThemeModeChange={commands.changeThemeMode}
+          onCycleThemeMode={commands.cycleThemeMode}
+          onSidebarOpenChange={commands.setSidebarOpen}
+          onShowArchivedChange={commands.setShowArchived}
+          onRefreshTasks={commands.refreshTasks}
+          onCreateTask={commands.createTask}
+          onNewTitleChange={commands.setTaskCreationTitle}
+          onNewDescriptionChange={commands.setTaskCreationDescription}
+          onNewFirstStepTitleChange={commands.setTaskCreationFirstStepTitle}
+          onTaskCreationOpenChange={commands.setTaskCreationOpen}
         />
 
         {error ? (
@@ -359,8 +345,8 @@ export function AppShell({
               selectedId={selectedId}
               dependencySnapshot={dependencySnapshot}
               detail={detail}
-              onSelectTask={onSelectTask}
-              onDropTask={onDropTask}
+              onSelectTask={commands.selectTask}
+              onDropTask={commands.dropTask}
               page={page}
               hasNextPage={hasNextPage}
               hasPreviousPage={hasPreviousPage}
@@ -371,23 +357,23 @@ export function AppShell({
               planFilters={planFilters}
               listSort={listSort}
               tasksRefreshing={tasksRefreshing}
-              onStatusFilterChange={onStatusFilterChange}
-              onPriorityFiltersChange={onPriorityFiltersChange}
-              onPlanFiltersChange={onPlanFiltersChange}
-              onListSortChange={onListSortChange}
-              onResetListFilters={onResetListFilters}
-              onFirstPage={onFirstPage}
-              onPreviousPage={onPreviousPage}
-              onNextPage={onNextPage}
-              onLastPage={onLastPage}
-              onRowsPerPageChange={onRowsPerPageChange}
+              onStatusFilterChange={commands.setStatusFilter}
+              onPriorityFiltersChange={commands.setPriorityFilters}
+              onPlanFiltersChange={commands.setPlanFilters}
+              onListSortChange={commands.setListSort}
+              onResetListFilters={commands.resetListFilters}
+              onFirstPage={commands.firstPage}
+              onPreviousPage={commands.previousPage}
+              onNextPage={commands.nextPage}
+              onLastPage={commands.lastPage}
+              onRowsPerPageChange={commands.setRowsPerPage}
             />
           </section>
 
           <Sheet
             open={showDetailSheet}
             onOpenChange={(open) => {
-              if (!open) onCloseTaskDetail()
+              if (!open) commands.closeTaskDetail()
             }}
           >
             <SheetContent side="right" className="w-[min(1100px,calc(100vw-24px))] p-0">
@@ -401,25 +387,25 @@ export function AppShell({
                 labelSuggestionsError={labelSuggestionsError}
                 activeRun={activeRun}
                 blockReason={blockReason}
-                setBlockReason={onBlockReasonChange}
+                setBlockReason={commands.setBlockReason}
                 dependencyInput={dependencyInput}
-                setDependencyInput={onDependencyInputChange}
+                setDependencyInput={commands.setDependencyInput}
                 claimToken={claimToken}
                 commentBody={commentBody}
-                setCommentBody={onCommentBodyChange}
+                setCommentBody={commands.setCommentBody}
                 editDraft={editDraft}
                 draftDirty={draftDirty}
-                setEditDraft={onEditDraftChange}
+                setEditDraft={commands.setEditDraft}
                 detailLoading={detailLoading}
                 pendingAction={pendingAction}
-                onAction={onAction}
-                onAddDependency={onAddDependency}
-                onRemoveDependency={onRemoveDependency}
-                onRequestLabelSuggestions={onRequestLabelSuggestions}
-                onSelectTask={onSelectTask}
-                onSaveTask={onSaveTask}
-                onCancelEdit={onCancelTaskEdit}
-                onAddComment={onAddComment}
+                onAction={commands.runAction}
+                onAddDependency={commands.addDependency}
+                onRemoveDependency={commands.removeDependency}
+                onRequestLabelSuggestions={commands.requestLabelSuggestions}
+                onSelectTask={commands.selectTask}
+                onSaveTask={commands.saveTask}
+                onCancelEdit={commands.cancelTaskEdit}
+                onAddComment={commands.addComment}
               />
             </SheetContent>
           </Sheet>
@@ -624,6 +610,7 @@ function ShellHeader({
   newFirstStepTitle,
   tasksRefreshing,
   pendingAction,
+  taskCreationOpen,
   onSearchChange,
   onViewChange,
   onThemeModeChange,
@@ -635,6 +622,7 @@ function ShellHeader({
   onNewTitleChange,
   onNewDescriptionChange,
   onNewFirstStepTitleChange,
+  onTaskCreationOpenChange,
 }: {
   config: RuntimeConfig | null
   view: OperatorView
@@ -650,6 +638,7 @@ function ShellHeader({
   newFirstStepTitle: string
   tasksRefreshing: boolean
   pendingAction: string | null
+  taskCreationOpen: boolean
   onSearchChange: (value: string) => void
   onViewChange: (value: OperatorView) => void
   onThemeModeChange: (value: ThemeMode) => void
@@ -661,6 +650,7 @@ function ShellHeader({
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
   onNewFirstStepTitleChange: (value: string) => void
+  onTaskCreationOpenChange: (value: boolean) => void
 }) {
   const ThemeIcon = themeMode === "dark" ? Moon : themeMode === "light" ? Sun : Monitor
   const showAddTask = shouldShowTaskExplorerToolbar(view)
@@ -721,11 +711,13 @@ function ShellHeader({
         {showAddTask ? (
           <AddTaskDialog
             canCreateTask={canCreateTask}
+            open={taskCreationOpen}
             newTitle={newTitle}
             newDescription={newDescription}
             newFirstStepTitle={newFirstStepTitle}
             pendingAction={pendingAction}
             onCreateTask={onCreateTask}
+            onOpenChange={onTaskCreationOpenChange}
             onNewTitleChange={onNewTitleChange}
             onNewDescriptionChange={onNewDescriptionChange}
             onNewFirstStepTitleChange={onNewFirstStepTitleChange}
@@ -752,38 +744,41 @@ function ShellHeader({
 
 function AddTaskDialog({
   canCreateTask,
+  open,
   newTitle,
   newDescription,
   newFirstStepTitle,
   pendingAction,
   onCreateTask,
+  onOpenChange,
   onNewTitleChange,
   onNewDescriptionChange,
   onNewFirstStepTitleChange,
 }: {
   canCreateTask: boolean
+  open: boolean
   newTitle: string
   newDescription: string
   newFirstStepTitle: string
   pendingAction: string | null
   onCreateTask: () => Promise<boolean>
+  onOpenChange: (value: boolean) => void
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
   onNewFirstStepTitleChange: (value: string) => void
 }) {
-  const [addTaskOpen, setAddTaskOpen] = useState(false)
   const creating = pendingAction === "create"
 
   async function submitTask(event: FormEvent) {
     event.preventDefault()
     if (!canCreateTask || !newTitle.trim() || creating) return
     const created = await onCreateTask()
-    if (created) setAddTaskOpen(false)
+    if (created) onOpenChange(false)
   }
 
   return (
-    <Dialog open={addTaskOpen} onOpenChange={setAddTaskOpen}>
-      <Button type="button" aria-label="Add task" onClick={() => setAddTaskOpen(true)}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <Button type="button" aria-label="Add task" onClick={() => onOpenChange(true)}>
         <Plus className="h-4 w-4" />
         Add task
       </Button>
@@ -820,7 +815,7 @@ function AddTaskDialog({
             />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setAddTaskOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={!canCreateTask || !newTitle.trim() || creating}>

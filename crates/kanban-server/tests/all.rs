@@ -12,6 +12,7 @@ mod suite {
     mod maintenance;
     mod runs;
     mod search;
+    mod server_helpers;
     mod sse;
     mod steps;
     mod task_graph;

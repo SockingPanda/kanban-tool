@@ -5,6 +5,8 @@ pub struct AppState {
     db_path: PathBuf,
     default_actor: String,
     vector_config_path: Option<PathBuf>,
+    vector_helper_path: Option<PathBuf>,
+    graph_helper_path: Option<PathBuf>,
 }
 
 impl AppState {
@@ -13,11 +15,23 @@ impl AppState {
             db_path: db_path.into(),
             default_actor: default_actor.into(),
             vector_config_path: None,
+            vector_helper_path: None,
+            graph_helper_path: None,
         }
     }
 
     pub fn with_vector_config_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.vector_config_path = Some(path.into());
+        self
+    }
+
+    pub fn with_vector_helper_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.vector_helper_path = Some(path.into());
+        self
+    }
+
+    pub fn with_graph_helper_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.graph_helper_path = Some(path.into());
         self
     }
 
@@ -31,6 +45,14 @@ impl AppState {
 
     pub fn vector_config_path(&self) -> Option<&std::path::Path> {
         self.vector_config_path.as_deref()
+    }
+
+    pub fn vector_helper_path(&self) -> Option<&std::path::Path> {
+        self.vector_helper_path.as_deref()
+    }
+
+    pub fn graph_helper_path(&self) -> Option<&std::path::Path> {
+        self.graph_helper_path.as_deref()
     }
 }
 

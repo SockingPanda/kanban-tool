@@ -312,7 +312,7 @@ function taskGraphInteraction(mode: TaskGraphMode) {
     minZoom: detailMode ? 0.4 : 0.35,
     maxZoom: detailMode ? 2.5 : 1.75,
     panOnDrag: true,
-    zoomOnScroll: !detailMode,
+    zoomOnScroll: true,
     zoomOnPinch: true,
     zoomOnDoubleClick: !detailMode,
     showControls: true,

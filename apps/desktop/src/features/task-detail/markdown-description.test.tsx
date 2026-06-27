@@ -402,6 +402,66 @@ describe("MarkdownDescription", () => {
     expect(html).toContain("add API handler")
     expect(html).toContain("negative evidence 1")
   })
+
+  it("renders the workbench map, execution plan, and gated primary action", () => {
+    const parentTask: Task = { ...task, id: "t_parent", ref: "kanban-tool#2", seq: 2, title: "Parent blocker", status: "blocked" }
+    const childTask: Task = { ...task, id: "t_child", ref: "kanban-tool#3", seq: 3, title: "Unlocked child", status: "todo" }
+    const html = renderToStaticMarkup(
+      <Sheet open>
+        <TaskDetail
+          api={null}
+          task={task}
+          detail={{
+            ...emptyDetail,
+            dependencies: { parents: [parentTask], children: [childTask] },
+            neighborhood: {
+              center_task_id: task.id,
+              nodes: [
+                { task, role: "center", context_only: false },
+                { task: parentTask, role: "dependency_parent", context_only: false },
+                { task: childTask, role: "dependency_child", context_only: false },
+              ],
+              edges: [
+                { id: "e_parent", source_task_id: parentTask.id, target_task_id: task.id, kind: "dependency", required: true, blocking: true },
+                { id: "e_child", source_task_id: task.id, target_task_id: childTask.id, kind: "dependency", required: true, blocking: false },
+              ],
+              meta: { generated_at: task.created_at, truncated: false, node_count: 3, edge_count: 2, depth: 1 },
+            },
+          }}
+          blockReason=""
+          setBlockReason={() => undefined}
+          dependencyInput=""
+          setDependencyInput={() => undefined}
+          claimToken={null}
+          commentBody=""
+          setCommentBody={() => undefined}
+          editDraft={null}
+          draftDirty={false}
+          setEditDraft={() => undefined}
+          detailLoading={false}
+          pendingAction={null}
+          onAction={async () => undefined}
+          onAddDependency={async () => undefined}
+          onRemoveDependency={async () => undefined}
+          onSelectTask={() => undefined}
+          onSaveTask={async () => true}
+          onCancelEdit={() => undefined}
+          onAddComment={async () => undefined}
+        />
+      </Sheet>,
+    )
+
+    expect(html).toContain("One-hop map")
+    expect(html).toContain("Parent blocker")
+    expect(html).toContain("Unlocked child")
+    expect(html).toContain("Execution plan")
+    expect(html).toContain("Execution plan is not planned")
+    expect(html).toContain("Primary action")
+    expect(html).toContain("Plan steps first")
+    expect(html).toContain("More actions")
+    expect(html).not.toContain("Legal transitions")
+  })
+
 })
 
 const task: Task = {
@@ -437,5 +497,9 @@ const task: Task = {
   lock_version: 0,
   dependency_blocked: false,
   unfinished_parent_count: 0,
+  execution_plan_state: "unplanned",
+  required_subtask_count: 0,
+  completed_required_subtask_count: 0,
+  optional_subtask_count: 0,
   labels: [],
 }

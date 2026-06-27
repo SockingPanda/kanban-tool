@@ -1529,7 +1529,7 @@ kanban vector sync [--vector-config <toml>]
 kanban context build t_... [--lexical-limit 5] [--vector-config <toml>]
 ```
 
-`kanban stats --json` 返回 status counts、过期 running claim 列表和 blocked reason 聚合，用于本地 operator recovery。
+`kanban stats --json` 返回 status counts、过期 running claim 列表、blocked reason 聚合、unplanned active task 数量，以及 required subtasks 未完成的 active parent 数量，用于本地 operator recovery。
 
 `kanban backup` 使用 SQLite `VACUUM INTO` 创建一致备份；目标文件已存在时失败，避免覆盖。
 `kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kanban backup`。JSONL export 包含 label ontology ledger record types：`label_ontology_observation`、`label_ontology_signal`、`label_ontology_action`、`label_ontology_action_atom_effect` 和 `label_ontology_action_signal`；因此 portable JSONL 与 SQLite backup 都会保留 ontology observation/signal/action/effect provenance。
@@ -1568,7 +1568,7 @@ semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
 检查：
 
 - DB 文件存在。
-- migrations 完整；当前 schema user_version 为 21。
+- migrations 完整；当前 schema user_version 为 22。
 - `PRAGMA integrity_check`。
 - orphan active run。
 - running task 是否缺 claim。
@@ -1584,7 +1584,8 @@ semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
   `task_comments`、`task_events`、`task_attachments` 的 row board 必须和 referenced
   task / label / run board 一致。当前 schema 用 board-scoped composite FK 保护
   `task_labels`、`task_dependencies`、`task_runs`、`task_comments` 和
-  `task_attachments`；`task_events` 保留 nullable task/run refs 与 `ON DELETE SET NULL`
+  `task_attachments`；v22+ 还检查 `task_subtasks` parent/child board scope 和
+  `task_execution_plans` task board scope，并报告 `task_subtask_cycle`。`task_events` 保留 nullable task/run refs 与 `ON DELETE SET NULL`
   语义，通过 INSERT/UPDATE triggers 校验非空 refs 的 board scope。
 - SQLite `PRAGMA foreign_key_check`：doctor 将每条 violation 转换为 hard-error issue；
   JSONL import final gate 也会在 commit 前运行同一检查，失败时回滚整个 replace

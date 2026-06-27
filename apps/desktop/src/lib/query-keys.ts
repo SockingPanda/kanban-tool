@@ -3,6 +3,7 @@ import type {
   LabelOntologySignalKind,
   LabelOntologySignalStatus,
   TaskListSort,
+  TaskPlanFilter,
   TaskStatus,
 } from "./api"
 
@@ -11,6 +12,7 @@ export type BoardTaskQuery = {
   search: string
   status: TaskStatus | "all"
   priorities: number[]
+  planFilters: TaskPlanFilter[]
   sort: TaskListSort
   mode: "board" | "list"
   statuses: TaskStatus[]
@@ -48,6 +50,7 @@ export const queryKeys = {
         search: query.search,
         status: query.status,
         priorities: query.priorities,
+        planFilters: query.planFilters,
         sort: query.sort,
         mode: query.mode,
         statuses: query.statuses,
@@ -57,6 +60,11 @@ export const queryKeys = {
       },
     ] as const,
   taskDetail: (taskId: string) => ["task-detail", taskId] as const,
+  taskSubtasks: (taskId: string) => ["task-subtasks", taskId] as const,
+  taskNeighborhood: (taskId: string) => ["task-neighborhood", taskId] as const,
+  boardTaskMapRoot: (board: string) => ["board-task-map", board] as const,
+  boardTaskMap: (board: string, options?: { includeDoneContext?: boolean }) =>
+    [...queryKeys.boardTaskMapRoot(board), options ?? {}] as const,
   taskLabelSuggestions: (taskId: string) => ["task-label-suggestions", taskId] as const,
   ontologyRoot: (board: string) => ["label-ontology", board] as const,
   ontologySignals: (query: LabelOntologySignalsQuery) =>

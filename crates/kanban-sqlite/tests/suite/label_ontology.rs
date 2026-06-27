@@ -10,7 +10,7 @@ fn label_ontology_migration_creates_ledger_tables_and_json_constraints() -> anyh
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 21);
+    assert_eq!(user_version, 22);
     for table in [
         "label_ontology_observations",
         "label_ontology_signals",
@@ -4476,6 +4476,7 @@ fn label_ontology_validation_allows_status_only_task_drift_with_warning() -> any
         "Add ontology validation status drift warning",
         "cli-status-drift",
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &fixture.task.id)?;
     claim_task(&temp.path, "default", "worker", &fixture.task.id, 300_000)?;
 
     let validation = validate_label_ontology_action(

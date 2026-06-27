@@ -208,7 +208,7 @@ fn dag_ancestors_returns_topological_subset_and_excludes_archived() -> anyhow::R
 }
 
 fn create_ready(temp: &TempDb, title: &str, priority: i64) -> anyhow::Result<TaskRecord> {
-    create_task(
+    let task = create_task(
         &temp.path,
         "default",
         "tester",
@@ -223,8 +223,8 @@ fn create_ready(temp: &TempDb, title: &str, priority: i64) -> anyhow::Result<Tas
             max_retries: None,
             metadata_json: "{}".into(),
         },
-    )
-    .map_err(Into::into)
+    )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &task.id)
 }
 
 fn complete_ready(temp: &TempDb, task_id: &str) -> anyhow::Result<()> {

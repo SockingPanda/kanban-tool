@@ -150,6 +150,7 @@ fn board_archive_rejects_running_work() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("running task"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "busy", "tester", &task.id)?;
     claim_task(&temp.path, "busy", "runner", &task.id, 60_000)?;
 
     let error = result_err(archive_board(&temp.path, "busy", "tester"))?;
@@ -178,6 +179,7 @@ fn archived_board_keeps_read_only_history_inspectable() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("history task"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "archivable", "tester", &task.id)?;
     create_comment(&temp.path, &task.id, "tester", "history note", None)?;
     let claim = claim_task(&temp.path, "archivable", "runner", &task.id, 60_000)?;
     complete_task(

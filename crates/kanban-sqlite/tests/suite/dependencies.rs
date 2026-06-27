@@ -6,6 +6,8 @@ fn claim_complete_leaves_dependency_child_todo_until_manual_promote() -> anyhow:
     init_database(&temp.path, "tester")?;
     let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("父任务"))?;
     let child = create_task(&temp.path, "default", "tester", CreateTask::ready("子任务"))?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &parent.id)?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &child.id)?;
 
     add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
     assert_eq!(
@@ -67,6 +69,7 @@ fn archived_parent_unblocks_child_without_auto_promote() -> anyhow::Result<()> {
         CreateTask::ready("archived parent"),
     )?;
     let child = create_task(&temp.path, "default", "tester", CreateTask::ready("child"))?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &child.id)?;
 
     add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
     assert_eq!(
@@ -159,6 +162,8 @@ fn block_unblock_recomputes_target_and_cycle_detection_rejects_cycles() -> anyho
     init_database(&temp.path, "tester")?;
     let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("父任务"))?;
     let child = create_task(&temp.path, "default", "tester", CreateTask::ready("子任务"))?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &parent.id)?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &child.id)?;
     add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
 
     let err = result_err(add_dependency(
@@ -216,6 +221,7 @@ fn add_dependency_rolls_back_edge_and_status_when_event_insert_fails() -> anyhow
         },
     )?;
     let child = create_task(&temp.path, "default", "tester", CreateTask::ready("child"))?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &child.id)?;
     connect_file(&temp.path)
         ?
         .execute(
@@ -267,6 +273,7 @@ fn remove_dependency_keeps_child_todo_until_manual_promote() -> anyhow::Result<(
         "tester",
         CreateTask::ready("child should unblock"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &child.id)?;
 
     add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
     assert_eq!(
@@ -315,6 +322,7 @@ fn adding_incomplete_parent_to_running_child_is_rejected_without_force() -> anyh
         "tester",
         CreateTask::ready("running child"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &child.id)?;
     claim_task(&temp.path, "default", "worker", &child.id, 300_000)?;
 
     let err = result_err(add_dependency(
@@ -343,6 +351,7 @@ fn adding_archived_parent_to_running_child_is_allowed() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("archived parent"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &parent.id)?;
     archive_task(&temp.path, "default", "tester", &parent.id, false)?;
     let child = create_task(
         &temp.path,
@@ -350,6 +359,7 @@ fn adding_archived_parent_to_running_child_is_allowed() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("running child"),
     )?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &child.id)?;
     claim_task(&temp.path, "default", "worker", &child.id, 300_000)?;
 
     add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;

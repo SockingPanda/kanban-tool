@@ -1,4 +1,5 @@
 use kanban_core::TaskStatus;
+use kanban_sqlite::StepPlanState;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
@@ -54,6 +55,10 @@ pub(super) struct TaskDto {
     pub(super) lock_version: i64,
     pub(super) dependency_blocked: bool,
     pub(super) unfinished_parent_count: i64,
+    pub(super) execution_plan_state: StepPlanState,
+    pub(super) required_subtask_count: i64,
+    pub(super) completed_required_subtask_count: i64,
+    pub(super) optional_subtask_count: i64,
     pub(super) labels: Vec<LabelDto>,
 }
 
@@ -92,6 +97,10 @@ impl From<kanban_sqlite::TaskRecord> for TaskDto {
             lock_version: task.lock_version,
             dependency_blocked: task.dependency_blocked,
             unfinished_parent_count: task.unfinished_parent_count,
+            execution_plan_state: task.execution_plan_state,
+            required_subtask_count: task.required_subtask_count,
+            completed_required_subtask_count: task.completed_required_subtask_count,
+            optional_subtask_count: task.optional_subtask_count,
             labels: task.labels.into_iter().map(LabelDto::from).collect(),
         }
     }
@@ -223,6 +232,59 @@ pub(super) struct DependenciesDto {
 }
 
 #[derive(Debug, Serialize)]
+pub(super) struct TaskSubtaskDto {
+    pub(super) parent_task_id: String,
+    pub(super) child_task: TaskDto,
+    pub(super) position: i64,
+    pub(super) required: bool,
+    pub(super) created_by: String,
+    pub(super) created_at: i64,
+}
+
+impl From<kanban_sqlite::TaskSubtaskRecord> for TaskSubtaskDto {
+    fn from(subtask: kanban_sqlite::TaskSubtaskRecord) -> Self {
+        Self {
+            parent_task_id: subtask.parent_task_id,
+            child_task: TaskDto::from(subtask.child_task),
+            position: subtask.position,
+            required: subtask.required,
+            created_by: subtask.created_by,
+            created_at: subtask.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct TaskExecutionPlanDto {
+    pub(super) board_id: String,
+    pub(super) task_id: String,
+    pub(super) state: kanban_sqlite::StepPlanState,
+    pub(super) reason: Option<String>,
+    pub(super) updated_by: String,
+    pub(super) updated_at: i64,
+}
+
+impl From<kanban_sqlite::TaskExecutionPlanRecord> for TaskExecutionPlanDto {
+    fn from(plan: kanban_sqlite::TaskExecutionPlanRecord) -> Self {
+        Self {
+            board_id: plan.board_id,
+            task_id: plan.task_id,
+            state: plan.state,
+            reason: plan.reason,
+            updated_by: plan.updated_by,
+            updated_at: plan.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct TaskSubtasksDto {
+    pub(super) task_id: String,
+    pub(super) subtasks: Vec<TaskSubtaskDto>,
+    pub(super) execution_plan: TaskExecutionPlanDto,
+}
+
+#[derive(Debug, Serialize)]
 pub(super) struct SearchTaskHitDto {
     pub(super) task_id: String,
     pub(super) seq: i64,
@@ -287,4 +349,96 @@ fn default_context_max_items() -> usize {
 
 fn default_graph_limit() -> usize {
     50
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct TaskGraphNodeDto {
+    pub(super) task: TaskDto,
+    pub(super) role: kanban_sqlite::TaskGraphNodeRole,
+    pub(super) context_only: bool,
+}
+
+impl From<kanban_sqlite::TaskGraphNodeRecord> for TaskGraphNodeDto {
+    fn from(node: kanban_sqlite::TaskGraphNodeRecord) -> Self {
+        Self {
+            task: TaskDto::from(node.task),
+            role: node.role,
+            context_only: node.context_only,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct TaskGraphEdgeDto {
+    pub(super) id: String,
+    pub(super) source_task_id: String,
+    pub(super) target_task_id: String,
+    pub(super) kind: kanban_sqlite::TaskGraphEdgeKind,
+    pub(super) required: bool,
+    pub(super) blocking: bool,
+}
+
+impl From<kanban_sqlite::TaskGraphEdgeRecord> for TaskGraphEdgeDto {
+    fn from(edge: kanban_sqlite::TaskGraphEdgeRecord) -> Self {
+        Self {
+            id: edge.id,
+            source_task_id: edge.source_task_id,
+            target_task_id: edge.target_task_id,
+            kind: edge.kind,
+            required: edge.required,
+            blocking: edge.blocking,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct TaskNeighborhoodDto {
+    pub(super) center_task_id: String,
+    pub(super) nodes: Vec<TaskGraphNodeDto>,
+    pub(super) edges: Vec<TaskGraphEdgeDto>,
+    pub(super) meta: kanban_sqlite::TaskGraphMeta,
+}
+
+impl From<kanban_sqlite::TaskNeighborhoodRecord> for TaskNeighborhoodDto {
+    fn from(graph: kanban_sqlite::TaskNeighborhoodRecord) -> Self {
+        Self {
+            center_task_id: graph.center_task_id,
+            nodes: graph
+                .nodes
+                .into_iter()
+                .map(TaskGraphNodeDto::from)
+                .collect(),
+            edges: graph
+                .edges
+                .into_iter()
+                .map(TaskGraphEdgeDto::from)
+                .collect(),
+            meta: graph.meta,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct BoardTaskMapDto {
+    pub(super) nodes: Vec<TaskGraphNodeDto>,
+    pub(super) edges: Vec<TaskGraphEdgeDto>,
+    pub(super) meta: kanban_sqlite::TaskGraphMeta,
+}
+
+impl From<kanban_sqlite::BoardTaskMapRecord> for BoardTaskMapDto {
+    fn from(graph: kanban_sqlite::BoardTaskMapRecord) -> Self {
+        Self {
+            nodes: graph
+                .nodes
+                .into_iter()
+                .map(TaskGraphNodeDto::from)
+                .collect(),
+            edges: graph
+                .edges
+                .into_iter()
+                .map(TaskGraphEdgeDto::from)
+                .collect(),
+            meta: graph.meta,
+        }
+    }
 }

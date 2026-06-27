@@ -39,8 +39,10 @@ import {
   listColumnLabels,
   selectedRowCount,
   sortForColumn,
+  togglePlanFilter,
   togglePriorityFilter,
   type ListColumnId,
+  type TaskPlanFilter,
   type ListSortDirection,
   type ListSortState,
 } from "./table-state"
@@ -55,6 +57,12 @@ const rowsPerPageOptions: MenuSelectOption<string>[] = [25, 50, 100, 200].map((v
   label: String(value),
 }))
 
+const planFilterOptions: { value: TaskPlanFilter; label: string }[] = [
+  { value: "plan_needed", label: "Plan needed" },
+  { value: "has_subtasks", label: "Has subtasks" },
+  { value: "incomplete_required_subtasks", label: "Incomplete required" },
+]
+
 export function ListView({
   tasks,
   selectedId,
@@ -65,10 +73,12 @@ export function ListView({
   rowsPerPage,
   statusFilter,
   priorityFilters,
+  planFilters,
   listSort,
   tasksRefreshing,
   onStatusFilterChange,
   onPriorityFiltersChange,
+  onPlanFiltersChange,
   onListSortChange,
   onResetListFilters,
   onSelectTask,
@@ -87,10 +97,12 @@ export function ListView({
   rowsPerPage: number
   statusFilter: TaskStatus | "all"
   priorityFilters: number[]
+  planFilters: TaskPlanFilter[]
   listSort: ListSortState
   tasksRefreshing: boolean
   onStatusFilterChange: (value: TaskStatus | "all") => void
   onPriorityFiltersChange: (value: number[]) => void
+  onPlanFiltersChange: (value: TaskPlanFilter[]) => void
   onListSortChange: (value: ListSortState) => void
   onResetListFilters: () => void
   onSelectTask: (taskId: string) => void
@@ -194,6 +206,26 @@ export function ListView({
         ),
       },
       {
+        id: "execution_plan",
+        header: ({ column }) => <StaticHeader columnId="execution_plan" onHide={() => column.toggleVisibility(false)} />,
+        cell: ({ row }) => <ExecutionPlanBadge task={row.original} />,
+      },
+      {
+        id: "required_subtasks",
+        header: ({ column }) => <StaticHeader columnId="required_subtasks" onHide={() => column.toggleVisibility(false)} />,
+        cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.required_subtask_count}</span>,
+      },
+      {
+        id: "done_required_subtasks",
+        header: ({ column }) => <StaticHeader columnId="done_required_subtasks" onHide={() => column.toggleVisibility(false)} />,
+        cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.completed_required_subtask_count}</span>,
+      },
+      {
+        id: "dependency_blocked",
+        header: ({ column }) => <StaticHeader columnId="dependency_blocked" onHide={() => column.toggleVisibility(false)} />,
+        cell: ({ row }) => <DependencyBlockedBadge task={row.original} />,
+      },
+      {
         id: "schedule",
         header: ({ column }) => (
           <SortableHeader columnId="schedule" listSort={listSort} onListSortChange={onListSortChange} onHide={() => column.toggleVisibility(false)} />
@@ -258,7 +290,7 @@ export function ListView({
   })
 
   const selectedCount = selectedRowCount(rowSelection)
-  const activeFilters = hasActiveListFilters("", statusFilter, priorityFilters)
+  const activeFilters = hasActiveListFilters("", statusFilter, priorityFilters, planFilters)
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-card">
@@ -288,6 +320,25 @@ export function ListView({
                 onCheckedChange={() => onPriorityFiltersChange(togglePriorityFilter(priorityFilters, priority))}
               >
                 {priorityLabel(priority)}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm">
+              Plan
+              {planFilters.length ? ` (${planFilters.length})` : ""}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {planFilterOptions.map((option) => (
+              <DropdownMenuCheckboxItem
+                key={option.value}
+                checked={planFilters.includes(option.value)}
+                onCheckedChange={() => onPlanFiltersChange(togglePlanFilter(planFilters, option.value))}
+              >
+                {option.label}
               </DropdownMenuCheckboxItem>
             ))}
           </DropdownMenuContent>
@@ -435,6 +486,19 @@ export function ListView({
   )
 }
 
+function ExecutionPlanBadge({ task }: { task: Task }) {
+  if (task.execution_plan_state === "planned") {
+    return <Badge variant="secondary">steps {task.completed_required_subtask_count}/{task.required_subtask_count}</Badge>
+  }
+  if (task.execution_plan_state === "not_required") return <Badge variant="secondary">not required</Badge>
+  return <Badge variant="blocked">plan needed</Badge>
+}
+
+function DependencyBlockedBadge({ task }: { task: Task }) {
+  if (!task.dependency_blocked) return <span className="text-xs text-muted-foreground">-</span>
+  return <Badge variant="blocked">blocked by {task.unfinished_parent_count}</Badge>
+}
+
 function DateLine({ label, value }: { label: string; value: number | null }) {
   return (
     <div className="flex items-center gap-1">
@@ -442,6 +506,21 @@ function DateLine({ label, value }: { label: string; value: number | null }) {
       <span className="font-medium text-muted-foreground">{label}</span>
       <span>{value ? formatRelativeTime(value) : "-"}</span>
     </div>
+  )
+}
+
+function StaticHeader({ columnId, onHide }: { columnId: ListColumnId; onHide: () => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-7 px-1.5 text-xs uppercase">
+          {listColumnLabels[columnId]}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuItem onSelect={onHide}>Hide</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

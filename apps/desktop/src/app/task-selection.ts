@@ -1,7 +1,7 @@
 import type { OperatorView } from "@/features/navigation/view-types"
 import type { Task } from "@/lib/api"
 
-const detailCapableViews = new Set<OperatorView>(["board", "list", "runs"])
+const detailCapableViews = new Set<OperatorView>(["board", "list", "map", "runs"])
 
 export function reconcileSelectedTaskId(selectedId: string | null, tasks: Pick<Task, "id">[]): string | null {
   if (!selectedId) return null

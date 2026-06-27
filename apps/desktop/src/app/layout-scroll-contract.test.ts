@@ -43,7 +43,7 @@ describe("desktop layout and scroll contracts", () => {
     expect(sheetContentClassName("right").split(" ")).toEqual(
       expect.arrayContaining(["fixed", "flex", "flex-col"]),
     )
-    expect(appShell).toContain('className="w-[min(620px,calc(100vw-32px))] p-0"')
+    expect(appShell).toContain('className="w-[min(1100px,calc(100vw-24px))] p-0"')
     expect(taskDetail).toContain('className="flex h-full min-h-0 flex-col"')
     expect(taskDetail).toContain('<ScrollArea className="flex-1 p-4">')
   })

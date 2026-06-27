@@ -74,7 +74,7 @@ fn claim_rejects_nonpositive_ttl_without_mutating_task() -> anyhow::Result<()> {
     }
 
     let unchanged = get_task(&temp.path, "default", &task.id)?;
-    assert_eq!(unchanged.status, TaskStatus::Ready);
+    assert_eq!(unchanged.status, TaskStatus::Todo);
     assert!(unchanged.claim_token.is_none());
     assert!(unchanged.claim_owner.is_none());
     assert!(unchanged.claim_expires_at.is_none());
@@ -97,6 +97,7 @@ fn heartbeat_rejects_nonpositive_ttl_without_shortening_claim() -> anyhow::Resul
         "tester",
         CreateTask::ready("heartbeat ttl validation"),
     )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
     let claim = claim_task(&temp.path, "default", "worker", &task.id, 300_000)?;
 
     for ttl_ms in [0, -1] {
@@ -136,6 +137,7 @@ fn force_archive_running_task_closes_active_run() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("archive running"),
     )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
     let claim = claim_task(&temp.path, "default", "worker", &task.id, 300_000)?;
 
     let archived = archive_task(&temp.path, "default", "tester", &task.id, true)?;
@@ -259,6 +261,7 @@ fn clearing_schedule_recomputes_complete_task_without_dependencies_to_ready() ->
         },
     )?;
 
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
     let updated = update_task(
         &temp.path,
         "default",
@@ -376,6 +379,7 @@ fn updating_description_recomputes_active_triage_to_ready() -> anyhow::Result<()
     )?;
     assert_eq!(task.status, TaskStatus::Triage);
 
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
     let updated = update_task(
         &temp.path,
         "default",
@@ -401,6 +405,7 @@ fn updating_description_recomputes_active_ready_to_triage() -> anyhow::Result<()
         "tester",
         CreateTask::ready("remove spec"),
     )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
 
     let updated = update_task(
         &temp.path,
@@ -427,6 +432,7 @@ fn claimed_task_has_current_run_running_run_and_claimed_event() -> anyhow::Resul
         "tester",
         CreateTask::ready("claim invariant"),
     )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
 
     let claim = claim_task(&temp.path, "default", "worker", &task.id, 300_000)?;
     let claimed = get_task(&temp.path, "default", &task.id)?;
@@ -465,6 +471,7 @@ fn heartbeat_against_stale_non_running_claim_fails_without_touching_heartbeat_fi
         "tester",
         CreateTask::ready("stale hb"),
     )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
     let claim = claim_task(&temp.path, "default", "worker", &task.id, 300_000)?;
     block_task(
         &temp.path,
@@ -491,5 +498,362 @@ fn heartbeat_against_stale_non_running_claim_fails_without_touching_heartbeat_fi
     assert_eq!(after.status, TaskStatus::Blocked);
     assert_eq!(after.claim_expires_at, blocked.claim_expires_at);
     assert_eq!(after.last_heartbeat_at, blocked.last_heartbeat_at);
+    Ok(())
+}
+
+#[test]
+fn execution_plan_required_blocks_promote_claim_and_dispatch_until_planned() -> anyhow::Result<()> {
+    let temp = TempDb::new("execution_plan_required_blocks_executable_paths")?;
+    init_database(&temp.path, "tester")?;
+    let todo = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "needs plan".into(),
+            description: Some("ready spec".into()),
+            status: Some(TaskStatus::Todo),
+            assignee: None,
+            priority: 1,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: None,
+            metadata_json: "{}".into(),
+        },
+    )?;
+
+    let promote_err = result_err(promote_task(&temp.path, "default", "tester", &todo.id))?;
+    assert!(
+        matches!(promote_err, KanbanError::ExecutionPlanRequired(_)),
+        "{promote_err}"
+    );
+
+    mark_execution_plan_not_required(
+        &temp.path,
+        "default",
+        "tester",
+        &todo.id,
+        "single-step task",
+    )?;
+    let ready = get_task(&temp.path, "default", &todo.id)?;
+    assert_eq!(ready.status, TaskStatus::Ready);
+    assert_eq!(ready.execution_plan_state, StepPlanState::NotRequired);
+    assert_eq!(ready.required_subtask_count, 0);
+
+    let unplanned_ready = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("unplanned ready"),
+    )?;
+    assert_eq!(unplanned_ready.status, TaskStatus::Todo);
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "UPDATE tasks SET status='ready' WHERE id=?1",
+        params![unplanned_ready.id],
+    )?;
+    let claim_err = result_err(claim_task(
+        &temp.path,
+        "default",
+        "worker",
+        &unplanned_ready.id,
+        300_000,
+    ))?;
+    assert!(
+        matches!(claim_err, KanbanError::ExecutionPlanRequired(_)),
+        "{claim_err}"
+    );
+
+    let result = dispatch_once(
+        &temp.path,
+        "default",
+        DispatchOptions {
+            actor: "dispatcher".into(),
+            command: "printf should-not-run".into(),
+            worker_profile: "default".into(),
+            claim_ttl_ms: 300_000,
+            heartbeat_interval_ms: 30_000,
+            on_success: FinishPolicy::Done,
+            on_failure: FinishPolicy::Blocked,
+            log_dir: temp.dir.join("logs"),
+        },
+    )?;
+    assert_eq!(
+        result.claimed, 1,
+        "planned ready task should still be claimable"
+    );
+    assert_eq!(
+        get_task(&temp.path, "default", &unplanned_ready.id)?.status,
+        TaskStatus::Ready
+    );
+
+    let triage = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "specify without plan".into(),
+            description: None,
+            status: None,
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: None,
+            metadata_json: "{}".into(),
+        },
+    )?;
+    let specified = specify_task(
+        &temp.path,
+        "tester",
+        &triage.id,
+        Some("ready spec".into()),
+        None,
+    )?;
+    assert_eq!(specified.status, TaskStatus::Todo);
+
+    let blocked = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "blocked without plan".into(),
+            description: Some("ready spec".into()),
+            status: Some(TaskStatus::Todo),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: None,
+            metadata_json: "{}".into(),
+        },
+    )?;
+    block_task(
+        &temp.path,
+        "default",
+        "tester",
+        &blocked.id,
+        "waiting",
+        None,
+        false,
+    )?;
+    let unblocked = unblock_task(&temp.path, "default", "tester", &blocked.id)?;
+    assert_eq!(unblocked.status, TaskStatus::Todo);
+
+    let reclaim_target = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("reclaim loses plan"),
+    )?;
+    mark_execution_plan_not_required(
+        &temp.path,
+        "default",
+        "tester",
+        &reclaim_target.id,
+        "small task",
+    )?;
+    let reclaim_claim = claim_task(&temp.path, "default", "worker", &reclaim_target.id, 300_000)?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "DELETE FROM task_execution_plans WHERE task_id=?1",
+        params![reclaim_target.id],
+    )?;
+    let reclaimed = kanban_sqlite::reclaim_task(
+        &temp.path,
+        "default",
+        "tester",
+        &reclaim_claim.task.id,
+        true,
+    )?;
+    assert_eq!(reclaimed.status, TaskStatus::Todo);
+    Ok(())
+}
+
+#[test]
+fn removing_required_subtask_demotes_ready_parent_to_todo() -> anyhow::Result<()> {
+    let temp = TempDb::new("removing_required_subtask_demotes_ready_parent_to_todo")?;
+    init_database(&temp.path, "tester")?;
+
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("parent required toggle"),
+    )?;
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("child required toggle"),
+    )?;
+    attach_subtask(
+        &temp.path,
+        "default",
+        "tester",
+        &parent.id,
+        AttachSubtaskInput {
+            child_ref: child.id.clone(),
+            position: None,
+            required: true,
+        },
+    )?;
+    assert_eq!(
+        get_task(&temp.path, "default", &parent.id)?.status,
+        TaskStatus::Ready
+    );
+
+    update_subtask(
+        &temp.path,
+        "default",
+        "tester",
+        &parent.id,
+        &child.id,
+        UpdateSubtaskInput {
+            position: None,
+            required: Some(false),
+        },
+    )?;
+    let downgraded = get_task(&temp.path, "default", &parent.id)?;
+    assert_eq!(downgraded.execution_plan_state, StepPlanState::Unplanned);
+    assert_eq!(downgraded.status, TaskStatus::Todo);
+
+    let detach_parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("parent detach required"),
+    )?;
+    let detach_child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("child detach required"),
+    )?;
+    attach_subtask(
+        &temp.path,
+        "default",
+        "tester",
+        &detach_parent.id,
+        AttachSubtaskInput {
+            child_ref: detach_child.id.clone(),
+            position: None,
+            required: true,
+        },
+    )?;
+    assert_eq!(
+        get_task(&temp.path, "default", &detach_parent.id)?.status,
+        TaskStatus::Ready
+    );
+
+    kanban_sqlite::detach_subtask(
+        &temp.path,
+        "default",
+        "tester",
+        &detach_parent.id,
+        &detach_child.id,
+    )?;
+    let detached = get_task(&temp.path, "default", &detach_parent.id)?;
+    assert_eq!(detached.execution_plan_state, StepPlanState::Unplanned);
+    assert_eq!(detached.status, TaskStatus::Todo);
+    Ok(())
+}
+
+#[test]
+fn required_subtasks_gate_complete_and_archive_parent() -> anyhow::Result<()> {
+    let temp = TempDb::new("required_subtasks_gate_complete_and_archive_parent")?;
+    init_database(&temp.path, "tester")?;
+    let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("parent"))?;
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask {
+            title: "child step".into(),
+            description: Some("step spec".into()),
+            status: Some(TaskStatus::Todo),
+            assignee: None,
+            priority: 1,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: None,
+            metadata_json: "{}".into(),
+        },
+    )?;
+    attach_subtask(
+        &temp.path,
+        "default",
+        "tester",
+        &parent.id,
+        AttachSubtaskInput {
+            child_ref: child.id.clone(),
+            position: None,
+            required: true,
+        },
+    )?;
+    let planned = get_task(&temp.path, "default", &parent.id)?;
+    assert_eq!(planned.execution_plan_state, StepPlanState::Planned);
+    assert_eq!(planned.required_subtask_count, 1);
+    assert_eq!(planned.completed_required_subtask_count, 0);
+
+    let archive_err = result_err(archive_task(
+        &temp.path, "default", "tester", &parent.id, false,
+    ))?;
+    assert!(
+        matches!(archive_err, KanbanError::SubtasksIncomplete(_)),
+        "{archive_err}"
+    );
+
+    let claim = claim_task(&temp.path, "default", "worker", &parent.id, 300_000)?;
+    let complete_err = result_err(complete_task(
+        &temp.path,
+        "default",
+        "worker",
+        &parent.id,
+        Some(&claim.claim_token),
+        false,
+    ))?;
+    assert!(
+        matches!(complete_err, KanbanError::SubtasksIncomplete(_)),
+        "{complete_err}"
+    );
+
+    archive_task(&temp.path, "default", "tester", &child.id, false)?;
+    let completed = complete_task(
+        &temp.path,
+        "default",
+        "worker",
+        &parent.id,
+        Some(&claim.claim_token),
+        false,
+    )?;
+    assert_eq!(completed.status, TaskStatus::Done);
+    assert_eq!(completed.completed_required_subtask_count, 1);
+
+    let force_parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("force parent"),
+    )?;
+    let force_child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("force child"),
+    )?;
+    attach_subtask(
+        &temp.path,
+        "default",
+        "tester",
+        &force_parent.id,
+        AttachSubtaskInput {
+            child_ref: force_child.id,
+            position: None,
+            required: true,
+        },
+    )?;
+    let archived = archive_task(&temp.path, "default", "tester", &force_parent.id, true)?;
+    assert_eq!(archived.status, TaskStatus::Archived);
     Ok(())
 }

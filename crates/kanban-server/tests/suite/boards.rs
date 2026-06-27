@@ -104,13 +104,8 @@ async fn boards_archive_rejects_running_work() -> anyhow::Result<()> {
         },
     )
     .context("board")?;
-    let task = kanban_sqlite::create_task(
-        &db_path,
-        "busy",
-        "seed",
-        kanban_sqlite::CreateTask::ready("running task"),
-    )
-    .context("task")?;
+    let task =
+        create_ready_task_for_test(&db_path, "busy", "seed", "running task").context("task")?;
     kanban_sqlite::claim_task(&db_path, "busy", "worker", &task.id, 60_000).context("claim")?;
     let app = test.router();
 
@@ -239,13 +234,8 @@ async fn archived_board_history_apis_remain_readable() -> anyhow::Result<()> {
         },
     )
     .context("board")?;
-    let task = kanban_sqlite::create_task(
-        &db_path,
-        "project",
-        "seed",
-        kanban_sqlite::CreateTask::ready("archived history"),
-    )
-    .context("task")?;
+    let task = create_ready_task_for_test(&db_path, "project", "seed", "archived history")
+        .context("task")?;
     kanban_sqlite::create_comment(&db_path, &task.id, "operator", "history note", None)
         .context("comment")?;
     let claim = kanban_sqlite::claim_task(&db_path, "project", "worker", &task.id, 60_000)

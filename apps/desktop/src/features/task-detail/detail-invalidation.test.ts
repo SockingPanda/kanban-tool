@@ -33,4 +33,21 @@ describe("detail invalidation", () => {
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["task-steps", "t_1"] })
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["task-neighborhood", "t_1"] })
   })
+
+  it("starts timeline invalidations in parallel", async () => {
+    const queryClient = new QueryClient()
+    const pending: Array<() => void> = []
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries").mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          pending.push(resolve)
+        }),
+    )
+
+    const invalidation = invalidateTaskTimelineQueries(queryClient, "t_1")
+
+    expect(invalidate).toHaveBeenCalledTimes(2)
+    pending.forEach((resolve) => resolve())
+    await invalidation
+  })
 })

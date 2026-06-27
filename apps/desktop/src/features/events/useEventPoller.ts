@@ -1,9 +1,12 @@
 import { useEffect, useRef } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 
-import type { KanbanApi } from "@/lib/api"
+import type { EventPage, KanbanApi } from "@/lib/api"
+import { queryKeys } from "@/lib/query-keys"
 
-import { affectedQueriesForEvents, nextEventCursor, queryKeysForAffectedEvents } from "./event-invalidation"
+import { mergeBoardEventPage } from "./event-cache"
+import { recordEventPollerInstrumentation } from "./event-poller-instrumentation"
+import { EVENT_POLL_LIMIT, planEventPollResult } from "./event-polling"
 
 export function useEventPoller({
   api,
@@ -16,9 +19,11 @@ export function useEventPoller({
 }) {
   const queryClient = useQueryClient()
   const cursorRef = useRef(0)
+  const seededRef = useRef(false)
 
   useEffect(() => {
     cursorRef.current = 0
+    seededRef.current = false
   }, [api])
 
   useEffect(() => {
@@ -31,18 +36,36 @@ export function useEventPoller({
       if (inFlight) return
       const controller = new AbortController()
       inFlight = controller
+      const startedAt = performance.now()
       try {
-        const page = await api.listEventsAfter(cursorRef.current, { signal: controller.signal })
-        if (stopped || !page.events.length) return
+        const page = await api.listBoardEvents({ after: cursorRef.current, limit: EVENT_POLL_LIMIT, signal: controller.signal })
+        if (stopped) return
 
-        cursorRef.current = nextEventCursor(cursorRef.current, page.events, page.meta)
-        const affected = affectedQueriesForEvents(page.events)
-        const queryKeysToInvalidate = queryKeysForAffectedEvents({
-          affected,
+        const plan = planEventPollResult({
           board: api.board,
+          currentCursor: cursorRef.current,
+          events: page.events,
+          meta: page.meta,
+          seeded: seededRef.current,
         })
-        const uniqueQueryKeys = Array.from(new Map(queryKeysToInvalidate.map((queryKey) => [JSON.stringify(queryKey), queryKey])).values())
-        await Promise.all(uniqueQueryKeys.map((queryKey) => queryClient.invalidateQueries({ queryKey })))
+        cursorRef.current = plan.nextCursor
+        if (!seededRef.current) seededRef.current = true
+
+        if (plan.eventsForCache.length) {
+          queryClient.setQueryData<EventPage | undefined>(queryKeys.events(api.board), (current) =>
+            mergeBoardEventPage(current, plan.eventsForCache),
+          )
+        }
+        await Promise.all(plan.queryKeysToInvalidate.map((queryKey) => queryClient.invalidateQueries({ queryKey })))
+        recordEventPollerInstrumentation({
+          enabled: import.meta.env.DEV,
+          board: api.board,
+          receivedEvents: page.events.length,
+          seedOnly: plan.seedOnly,
+          setDataEvents: plan.eventsForCache.length,
+          invalidatedQueryKeys: plan.queryKeysToInvalidate,
+          durationMs: performance.now() - startedAt,
+        })
       } catch (error) {
         if (!controller.signal.aborted) onError(error)
       } finally {

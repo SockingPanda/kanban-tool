@@ -30,6 +30,46 @@ describe("TaskGraphNodeCard", () => {
     expect(text).toContain("3/4 step")
     expect(text).not.toContain("open")
   })
+
+  it("fills nodes from the left by completed step progress", () => {
+    const node = nodeFixture({ id: "t_center", ref: "default#123", title: "Graph base" })
+    const tree = TaskGraphNodeCard({
+      node: { ...node, stepCounts: { completed: 3, total: 4 } },
+      selected: false,
+    })
+
+    const progress = findByTestId(tree, "task-graph-node-step-progress")
+
+    expect(progress?.props["aria-hidden"]).toBe(true)
+    expect(progress?.props.style).toMatchObject({ width: "75%" })
+  })
+
+  it("clamps step progress fill to the node width", () => {
+    const node = nodeFixture({ id: "t_center", ref: "default#123", title: "Graph base" })
+    const overComplete = TaskGraphNodeCard({
+      node: { ...node, stepCounts: { completed: 8, total: 4 } },
+      selected: false,
+    })
+    const negativeComplete = TaskGraphNodeCard({
+      node: { ...node, stepCounts: { completed: -2, total: 4 } },
+      selected: false,
+    })
+
+    expect(findByTestId(overComplete, "task-graph-node-step-progress")?.props.style).toMatchObject({ width: "100%" })
+    expect(findByTestId(negativeComplete, "task-graph-node-step-progress")).toBeNull()
+  })
+
+  it("does not render progress fill when step counts are unavailable", () => {
+    const node = nodeFixture({ id: "t_center", ref: "default#123", title: "Graph base" })
+    const withoutCounts = TaskGraphNodeCard({ node, selected: false })
+    const emptyCounts = TaskGraphNodeCard({
+      node: { ...node, stepCounts: { completed: 0, total: 0 } },
+      selected: false,
+    })
+
+    expect(findByTestId(withoutCounts, "task-graph-node-step-progress")).toBeNull()
+    expect(findByTestId(emptyCounts, "task-graph-node-step-progress")).toBeNull()
+  })
 })
 
 type ButtonProps = {
@@ -60,6 +100,20 @@ function textContent(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") return String(node)
   if (!isValidElement(node)) return ""
   return textContent((node as ReactElement<{ children?: ReactNode }>).props.children)
+}
+
+function findByTestId(node: ReactNode, testId: string): ReactElement<Record<string, unknown>> | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const match = findByTestId(child, testId)
+      if (match) return match
+    }
+    return null
+  }
+  if (!isValidElement(node)) return null
+  const element = node as ReactElement<Record<string, unknown> & { children?: ReactNode }>
+  if (element.props["data-testid"] === testId) return element
+  return findByTestId(element.props.children, testId)
 }
 
 function nodeFixture(overrides: Pick<TaskGraphLayoutNode, "id" | "ref" | "title">): TaskGraphLayoutNode {

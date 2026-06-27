@@ -157,10 +157,12 @@ async fn context_api_degrades_when_configured_vector_store_construction_fails() 
             model: "static-test",
             dimensions: 2,
         });
-        let _store = kanban_vector::LanceDbStore::connect(kanban_vector::LanceDbConfig::new(
-            kanban_local::vector_store_path(seed_db_path),
-            provider,
-        ))?;
+        let _store = kanban_vector_lancedb::LanceDbStore::connect(
+            kanban_vector_lancedb::LanceDbConfig::new(
+                kanban_local::vector_store_path(seed_db_path),
+                provider,
+            ),
+        )?;
         Ok::<(), kanban_vector::VectorError>(())
     })
     .await

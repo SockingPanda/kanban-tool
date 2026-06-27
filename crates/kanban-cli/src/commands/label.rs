@@ -1631,7 +1631,7 @@ fn propose_with_optional_vector_config(
 fn configured_lancedb_store(
     db_path: &Path,
     vector_config_path: Option<&Path>,
-) -> Result<Option<kanban_vector::LanceDbStore>> {
+) -> Result<Option<kanban_vector_lancedb::LanceDbStore>> {
     let Some(config) = kanban_local::resolved_vector_config(vector_config_path)? else {
         return Ok(None);
     };
@@ -1641,12 +1641,12 @@ fn configured_lancedb_store(
             config.provider
         ));
     }
-    let provider = Arc::new(kanban_vector::OllamaEmbeddingProvider::new(
+    let provider = Arc::new(kanban_vector_lancedb::OllamaEmbeddingProvider::new(
         config.endpoint.clone(),
         config.model.clone(),
         config.dimensions,
     )?);
-    kanban_vector::LanceDbStore::connect(kanban_vector::LanceDbConfig::new(
+    kanban_vector_lancedb::LanceDbStore::connect(kanban_vector_lancedb::LanceDbConfig::new(
         kanban_local::vector_store_path(db_path.to_path_buf()),
         provider,
     ))

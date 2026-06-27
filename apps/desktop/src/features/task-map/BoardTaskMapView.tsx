@@ -45,7 +45,7 @@ export function BoardTaskMapView({
   const [hideIsolated, setHideIsolated] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [inspectedTaskId, setInspectedTaskId] = useState<string | null>(selectedTaskId)
-  const mapQuery = useBoardTaskMap(api, { includeDoneContext: showDoneContext })
+  const mapQuery = useBoardTaskMap(api, { includeDoneContext: showDoneContext, hideIsolated })
   const sourceGraph = mapQuery.data ?? null
   const visibleGraph = useMemo(
     () => apiTaskGraphToCanvasGraph(filterBoardMap(sourceGraph, filter, hideIsolated)),

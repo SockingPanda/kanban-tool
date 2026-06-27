@@ -113,6 +113,59 @@ describe("KanbanApi task search", () => {
     expect(url.searchParams.getAll("label")).toEqual(["backend", "api"])
   })
 
+  it("uses batch task windows by status", async () => {
+    const ready = task({ id: "t_ready", status: "ready" })
+    const blocked = task({ id: "t_blocked", status: "blocked" })
+    const fetchMock = mockFetch({
+      data: {
+        statuses: [
+          { status: "ready", tasks: [ready], page: { limit: 50, offset: 0, total: 1 } },
+          { status: "blocked", tasks: [blocked], page: { limit: 50, offset: 0, total: 1 } },
+        ],
+      },
+      meta: { limit: 50, offset: 0 },
+    })
+    const api = new KanbanApi(runtimeConfig)
+
+    const result = await api.listTasksByStatus({ statuses: ["ready", "blocked"], includeArchived: false, limit: 50 })
+
+    expect(result.statuses.map((entry) => entry.status)).toEqual(["ready", "blocked"])
+    expect(result.statuses.flatMap((entry) => entry.tasks)).toEqual([ready, blocked])
+    const url = calledUrl(fetchMock)
+    expect(url.pathname).toBe("/api/v1/boards/default/tasks/by-status")
+    expect(url.searchParams.getAll("status")).toEqual(["ready", "blocked"])
+    expect(url.searchParams.get("limit")).toBe("50")
+    expect(calledInit(fetchMock).headers).toEqual({})
+  })
+
+  it("uses batch search windows by status", async () => {
+    const ready = task({ id: "t_search_ready", status: "ready" })
+    const searchMeta = {
+      backend: "sqlite",
+      stale: false,
+      index_version: null,
+      last_event_id: null,
+      index_lag_events: null,
+    } satisfies SearchTasksMeta
+    const fetchMock = mockFetch({
+      data: {
+        statuses: [
+          { status: "ready", tasks: [ready], search_meta: searchMeta, page: { limit: 50, offset: 0, total: null } },
+        ],
+      },
+      meta: { limit: 50, offset: 0 },
+    })
+    const api = new KanbanApi(runtimeConfig)
+
+    const result = await api.searchTasksByStatus({ query: "needle", statuses: ["ready"], includeArchived: false, limit: 50 })
+
+    expect(result.statuses[0]).toMatchObject({ status: "ready", tasks: [ready], searchMeta })
+    const url = calledUrl(fetchMock)
+    expect(url.pathname).toBe("/api/v1/search/tasks/by-status")
+    expect(url.searchParams.get("q")).toBe("needle")
+    expect(url.searchParams.getAll("status")).toEqual(["ready"])
+  })
+
   it("passes AbortSignal through queryable API requests", async () => {
     const fetchMock = mockFetch({ data: [], meta: { limit: 10, offset: 0, total: 0 } })
     const api = new KanbanApi(runtimeConfig)

@@ -286,7 +286,51 @@ Notes：
 - `priority` 是整数等级 `0..3`：`0` = P0 incident/blocker/must-handle-immediately，`1` = P1 近期重点，`2` = P2 重要后续，`3` = P3 普通 backlog/低优先级/默认。创建时会拒绝非法值。
 - `labels` 可选。名称会先 trim；空白名称会被拒绝；所有 label 必须已存在于当前 board。任一 label 缺失时，整个 create 返回 `400 invalid_input`，且不会写入 `tasks`、`labels`、`task_labels` 或 `task_events`。Task create 不提供 create-missing 模式。
 
-### 4.3 Get task
+### 4.3 List task windows by status
+
+```http
+GET /api/v1/boards/{board}/tasks/by-status?status=triage&status=ready&include_archived=false&limit=50&offset=0&sort=-updated_at
+```
+
+This read-only endpoint batches the board-column query pattern into one request.
+It accepts the same filter params as `GET /api/v1/boards/{board}/tasks`, but
+returns one independent task window per repeated `status`. `limit` and `offset`
+apply per status window, preserving board per-column pagination semantics.
+Status order in the response follows query parameter order. Omitting `status`
+returns an empty `statuses` array.
+
+Response:
+
+```json
+{
+  "data": {
+    "statuses": [
+      {
+        "status": "ready",
+        "tasks": [
+          {
+            "id": "t_01HX...",
+            "ref": "default#12",
+            "status": "ready",
+            "title": "实现状态机"
+          }
+        ],
+        "page": {
+          "limit": 50,
+          "offset": 0,
+          "total": 3
+        }
+      }
+    ]
+  },
+  "meta": {
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+### 4.4 Get task
 
 ```http
 GET /api/v1/tasks/{task_id}
@@ -309,7 +353,14 @@ sample signals（id/kind/status/proposed_action/score/stale/degraded/action coun
 queue/review 仍使用 `/label-ontology/signals`、`/label-ontology/review` 和
 `/label-ontology/signals/{signal_id}`。
 
-### 4.4 Update task fields
+Task detail aggregate endpoints such as
+`GET /api/v1/tasks/{task_id}/detail?include=dependencies,steps,runs,events,comments,neighborhood`,
+panel-specific timelines, or execution-context bundles are not part of the
+current API. They remain a follow-up optimization candidate for reducing
+TaskDetail panel fan-out after the existing per-panel routes and cache
+invalidation behavior are stable.
+
+### 4.5 Update task fields
 
 ```http
 PATCH /api/v1/tasks/{task_id}
@@ -1920,7 +1971,58 @@ Response:
 
 Task mutations do not write Tantivy inside their SQLite transactions. When served by `kanban serve` with `tantivy-backend`, a background loop makes one prompt startup `sync_search_index` attempt and then syncs every `--search-sync-interval-ms` milliseconds by default (`5000`; `0` disables). Manual `kanban index sync` remains available after normal task changes, and `kanban index rebuild` replaces the derived index. The Tantivy state is stored in board-scoped `app_settings` under `search.tasks.state.<board_id>` and round-trips through existing export/import.
 
-### 13.2 Search status
+### 13.2 Search task windows by status
+
+```http
+GET /api/v1/search/tasks/by-status?board=default&q=needle&status=ready&status=review&include_archived=false&limit=50&offset=0
+```
+
+This read-only endpoint batches board search columns into one request. It
+accepts the same query, board, label, assignee, archive, and pagination params as
+`GET /api/v1/search/tasks`, but returns one independent search window per
+repeated `status`. `limit` and `offset` apply per status window. Status order in
+the response follows query parameter order. Omitting `status` returns an empty
+`statuses` array.
+
+Response:
+
+```json
+{
+  "data": {
+    "statuses": [
+      {
+        "status": "ready",
+        "tasks": [
+          {
+            "id": "t_01HX...",
+            "ref": "default#12",
+            "status": "ready",
+            "title": "实现状态机"
+          }
+        ],
+        "search_meta": {
+          "backend": "sqlite",
+          "stale": false,
+          "index_version": null,
+          "last_event_id": 42,
+          "index_lag_events": 0
+        },
+        "page": {
+          "limit": 50,
+          "offset": 0,
+          "total": null
+        }
+      }
+    ]
+  },
+  "meta": {
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+### 13.3 Search status
 
 ```http
 GET /api/v1/search/status?board=default

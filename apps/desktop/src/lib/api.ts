@@ -649,6 +649,16 @@ export type TaskPageResult = {
   page: PageMeta
 }
 
+export type TaskStatusWindow = {
+  status: TaskStatus
+  tasks: Task[]
+  page: PageMeta
+}
+
+export type TaskStatusWindowsResult = {
+  statuses: TaskStatusWindow[]
+}
+
 export type TaskPlanFilter = "plan_needed" | "has_steps" | "incomplete_required_steps"
 
 export type TaskListSort =
@@ -677,6 +687,14 @@ export type SearchTasksResult = {
   page: PageMeta
 }
 
+export type SearchTaskStatusWindow = TaskStatusWindow & {
+  searchMeta: SearchTasksMeta
+}
+
+export type SearchTaskStatusWindowsResult = {
+  statuses: SearchTaskStatusWindow[]
+}
+
 export type EventMeta = {
   next_after?: number
 }
@@ -699,6 +717,27 @@ type SearchTaskHit = {
 type SearchTasksResponse = {
   hits: SearchTaskHit[]
   meta: SearchTasksMeta
+}
+
+type TaskStatusWindowResponse = {
+  status: TaskStatus
+  tasks: Task[]
+  page?: PageEnvelopeMeta
+}
+
+type TaskStatusWindowsResponse = {
+  statuses: TaskStatusWindowResponse[]
+}
+
+type SearchTaskStatusWindowResponse = {
+  status: TaskStatus
+  tasks: Task[]
+  search_meta: SearchTasksMeta
+  page?: PageEnvelopeMeta
+}
+
+type SearchTaskStatusWindowsResponse = {
+  statuses: SearchTaskStatusWindowResponse[]
 }
 
 export class ApiError extends Error {
@@ -821,6 +860,22 @@ export class KanbanApi {
     } satisfies TaskPageResult
   }
 
+  async listTasksByStatus(options: TaskListOptions & { statuses: TaskStatus[] }) {
+    const params = this.taskListParams(options)
+    const envelope = await this.requestEnvelope<TaskStatusWindowsResponse, PageEnvelopeMeta>(
+      `/api/v1/boards/${this.board}/tasks/by-status?${params.toString()}`,
+      { signal: options.signal },
+    )
+    const data = expectRecord<TaskStatusWindowsResponse>(envelope.data, "task status windows response data")
+    return {
+      statuses: expectArray<TaskStatusWindowResponse>(data.statuses, "task status windows").map((entry) => ({
+        status: entry.status,
+        tasks: expectArray<Task>(entry.tasks, "task status window tasks"),
+        page: normalizePageMeta(entry.page, { limit: options.limit ?? 100, offset: options.offset ?? 0 }),
+      })),
+    } satisfies TaskStatusWindowsResult
+  }
+
   async searchTasks(options: SearchTaskOptions) {
     const params = new URLSearchParams()
     const limit = options.limit ?? 100
@@ -845,6 +900,23 @@ export class KanbanApi {
       searchMeta: search.meta,
       page: normalizePageMeta(envelope.meta, { limit, offset }),
     } satisfies SearchTasksResult
+  }
+
+  async searchTasksByStatus(options: SearchTaskOptions & { statuses: TaskStatus[] }) {
+    const params = this.searchTaskParams(options)
+    const envelope = await this.requestEnvelope<SearchTaskStatusWindowsResponse, PageEnvelopeMeta>(
+      `/api/v1/search/tasks/by-status?${params.toString()}`,
+      { signal: options.signal },
+    )
+    const data = expectRecord<SearchTaskStatusWindowsResponse>(envelope.data, "search status windows response data")
+    return {
+      statuses: expectArray<SearchTaskStatusWindowResponse>(data.statuses, "search status windows").map((entry) => ({
+        status: entry.status,
+        tasks: expectArray<Task>(entry.tasks, "search status window tasks"),
+        searchMeta: entry.search_meta,
+        page: normalizePageMeta(entry.page, { limit: options.limit ?? 100, offset: options.offset ?? 0 }),
+      })),
+    } satisfies SearchTaskStatusWindowsResult
   }
 
   async createTask(input: { title: string; description?: string; status?: TaskStatus }, options: RequestOptions = {}) {
@@ -1158,12 +1230,13 @@ export class KanbanApi {
   }
 
   async requestEnvelope<T, M = Record<string, unknown>>(path: string, init: RequestOptions = {}) {
+    const method = init.method ?? "GET"
+    const headers: Record<string, string> = {}
+    if (init.body !== undefined) headers["Content-Type"] = "application/json"
+    if (method.toUpperCase() !== "GET") headers["X-KB-Actor"] = this.actor
     const response = await fetch(`${this.config.apiBaseUrl}${path}`, {
-      method: init.method ?? "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "X-KB-Actor": this.actor,
-      },
+      method,
+      headers,
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
       signal: init.signal,
     })
@@ -1181,6 +1254,40 @@ export class KanbanApi {
   private async request<T>(path: string, init: RequestOptions = {}) {
     const envelope = await this.requestEnvelope<T>(path, init)
     return envelope.data
+  }
+
+  private taskListParams(options: TaskListOptions = {}) {
+    const params = new URLSearchParams()
+    const limit = options.limit ?? 100
+    const offset = options.offset ?? 0
+    params.set("include_archived", String(options.includeArchived ?? false))
+    params.set("limit", String(limit))
+    params.set("offset", String(offset))
+    params.set("sort", options.sort ?? "-updated_at")
+    if (options.query?.trim()) params.set("q", options.query.trim())
+    for (const status of options.statuses ?? []) params.append("status", status)
+    for (const priority of options.priorities ?? []) params.append("priority", String(priority))
+    for (const label of options.labels ?? []) {
+      if (label.trim()) params.append("label", label.trim())
+    }
+    for (const filter of options.planFilters ?? []) params.append("plan_filter", filter)
+    return params
+  }
+
+  private searchTaskParams(options: SearchTaskOptions) {
+    const params = new URLSearchParams()
+    const limit = options.limit ?? 100
+    const offset = options.offset ?? 0
+    params.set("board", this.board)
+    params.set("q", options.query.trim())
+    params.set("include_archived", String(options.includeArchived ?? false))
+    params.set("limit", String(limit))
+    params.set("offset", String(offset))
+    for (const status of options.statuses ?? []) params.append("status", status)
+    for (const label of options.labels ?? []) {
+      if (label.trim()) params.append("label", label.trim())
+    }
+    return params
   }
 }
 

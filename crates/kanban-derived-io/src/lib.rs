@@ -4,7 +4,10 @@ mod graph_io;
 mod status;
 mod vector_io;
 
-pub use db::{board_id, connect_file, current_last_event_id, default_pragmas};
+pub use db::{
+    board_id, connect_file, current_last_event_id, default_pragmas, maintenance_lock_blocks,
+    maintenance_lock_path,
+};
 pub use envelope::HelperEnvelope;
 pub use graph_io::{
     graph_entity_uris_for_board, graph_relation_snapshot_for_board, graph_relations_for_entity,

@@ -5,6 +5,7 @@ use axum::{
 
 use crate::dto::{ContextBuildQuery, Envelope};
 use crate::error::{ApiError, extractor_error, invalid_input, validate_page_bounds};
+use crate::helper::{HelperKind, resolve_helper};
 use crate::state::AppState;
 
 pub(crate) async fn build_context(
@@ -28,8 +29,20 @@ pub(crate) async fn build_context(
         vector_limit: query.vector_limit,
         max_items: query.max_items,
     };
+    let store = kanban_vector::SubprocessVectorStore::new(
+        resolve_helper(&state, HelperKind::Vector),
+        state.db_path().to_path_buf(),
+        query.board.clone(),
+        state.vector_config_path().map(std::path::Path::to_path_buf),
+    );
     Ok(Json(Envelope {
-        data: kanban_sqlite::build_context_pack(state.db_path(), &query.board, &task_id, policy)?,
+        data: kanban_sqlite::build_context_pack_with_vector_store(
+            state.db_path(),
+            &query.board,
+            &task_id,
+            policy,
+            &store,
+        )?,
         meta: None,
     }))
 }

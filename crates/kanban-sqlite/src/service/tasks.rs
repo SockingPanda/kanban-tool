@@ -13,7 +13,6 @@ use super::{
     record_label_ontology_semantics_mutation_in_tx, required_row, scalar,
     upsert_label_semantics_candidate_in_tx, validate_priority, with_immediate_tx,
 };
-#[cfg(feature = "vector-lancedb")]
 use super::{
     BootstrapTaskLabelVerification, BootstrapTaskLabelVerifiedResult,
     DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT, DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT,
@@ -24,15 +23,12 @@ use super::{
 
 use std::path::Path;
 
-#[cfg(feature = "vector-lancedb")]
 use kanban_core::new_label_id;
 use kanban_core::{
     Clock, KanbanError, ReadinessFacts, Result, SystemClock, TaskStatus,
     initial_status as core_initial_status, is_active_recomputable_status, new_task_id,
 };
-#[cfg(feature = "vector-lancedb")]
 use kanban_labels::LabelDefinition;
-#[cfg(feature = "vector-lancedb")]
 use kanban_vector::{
     LabelAtomHit, LabelAtomVector, LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore,
     VectorError, VectorStoreBackend, VectorStoreStatus,
@@ -493,7 +489,6 @@ pub fn bootstrap_task_label_by_id(
     })
 }
 
-#[cfg(feature = "vector-lancedb")]
 pub fn bootstrap_task_label_with_staged_verification(
     path: impl AsRef<Path>,
     board: &str,
@@ -517,7 +512,6 @@ pub fn bootstrap_task_label_with_staged_verification(
     )
 }
 
-#[cfg(feature = "vector-lancedb")]
 struct BootstrapTaskLabelStagedVerificationArgs<'a, S: LabelAtomVectorStore + ?Sized> {
     path: &'a Path,
     board: &'a str,
@@ -528,7 +522,6 @@ struct BootstrapTaskLabelStagedVerificationArgs<'a, S: LabelAtomVectorStore + ?S
     min_score: f32,
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn bootstrap_task_label_with_staged_verification_impl<S: LabelAtomVectorStore + ?Sized>(
     args: BootstrapTaskLabelStagedVerificationArgs<'_, S>,
     mut stage_hook: impl FnMut(BootstrapStagedVerificationStage) -> Result<()>,
@@ -679,7 +672,6 @@ fn bootstrap_task_label_with_staged_verification_impl<S: LabelAtomVectorStore + 
     })
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BootstrapStagedVerificationStage {
     BeforeVerify,
@@ -688,7 +680,6 @@ enum BootstrapStagedVerificationStage {
     AfterCommit,
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl BootstrapStagedVerificationStage {
     fn as_str(self) -> &'static str {
         match self {
@@ -700,7 +691,6 @@ impl BootstrapStagedVerificationStage {
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn reach_bootstrap_staged_verification_stage(
     stage: BootstrapStagedVerificationStage,
     stage_hook: &mut impl FnMut(BootstrapStagedVerificationStage) -> Result<()>,
@@ -709,7 +699,7 @@ fn reach_bootstrap_staged_verification_stage(
     stage_hook(stage)
 }
 
-#[cfg(all(feature = "vector-lancedb", debug_assertions))]
+#[cfg(debug_assertions)]
 fn bootstrap_staged_debug_failpoint(stage: BootstrapStagedVerificationStage) -> Result<()> {
     if std::env::var("KANBAN_BOOTSTRAP_VERIFY_TEST_FAILPOINT").as_deref() != Ok(stage.as_str()) {
         return Ok(());
@@ -729,12 +719,11 @@ fn bootstrap_staged_debug_failpoint(stage: BootstrapStagedVerificationStage) -> 
     Ok(())
 }
 
-#[cfg(all(feature = "vector-lancedb", not(debug_assertions)))]
+#[cfg(not(debug_assertions))]
 fn bootstrap_staged_debug_failpoint(_stage: BootstrapStagedVerificationStage) -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
 struct BootstrapStagedPreflight {
     task_id: String,
     label_id: String,
@@ -744,7 +733,6 @@ struct BootstrapStagedPreflight {
     atoms: Vec<LabelAtomVector>,
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn bootstrap_staged_preflight(
     conn: &Connection,
     board: &str,
@@ -788,7 +776,6 @@ fn bootstrap_staged_preflight(
     })
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn label_definition_from_bootstrap_candidate(
     label_id: &str,
     candidate: &super::LabelProposalCandidate,
@@ -804,13 +791,11 @@ fn label_definition_from_bootstrap_candidate(
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 struct StagedBootstrapLabelAtomStore<'a, S: LabelAtomVectorStore + ?Sized> {
     source: &'a S,
     atoms: Vec<(LabelAtomVector, Vec<f32>)>,
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl<'a, S: LabelAtomVectorStore + ?Sized> StagedBootstrapLabelAtomStore<'a, S> {
     fn new(source: &'a S, atoms: Vec<LabelAtomVector>) -> Result<Self> {
         let atoms = atoms
@@ -826,7 +811,6 @@ impl<'a, S: LabelAtomVectorStore + ?Sized> StagedBootstrapLabelAtomStore<'a, S> 
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl<S: LabelAtomVectorStore + ?Sized> VectorStoreBackend for StagedBootstrapLabelAtomStore<'_, S> {
     fn embedding_model(&self) -> &str {
         self.source.embedding_model()
@@ -840,7 +824,6 @@ impl<S: LabelAtomVectorStore + ?Sized> VectorStoreBackend for StagedBootstrapLab
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl<S: LabelAtomVectorStore + ?Sized> kanban_vector::QueryEmbeddingProvider
     for StagedBootstrapLabelAtomStore<'_, S>
 {
@@ -849,7 +832,6 @@ impl<S: LabelAtomVectorStore + ?Sized> kanban_vector::QueryEmbeddingProvider
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl<S: LabelAtomVectorStore + ?Sized> LabelAtomVectorStore
     for StagedBootstrapLabelAtomStore<'_, S>
 {
@@ -903,7 +885,6 @@ impl<S: LabelAtomVectorStore + ?Sized> LabelAtomVectorStore
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn cosine(left: &[f32], right: &[f32]) -> f32 {
     let dot = left
         .iter()
@@ -919,7 +900,6 @@ fn cosine(left: &[f32], right: &[f32]) -> f32 {
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn suggest_input_hash_for_task(task: &TaskRecord) -> String {
     stable_hash(&task_suggest_input_text(
         &task.title,
@@ -927,7 +907,6 @@ fn suggest_input_hash_for_task(task: &TaskRecord) -> String {
     ))
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn task_suggest_input_text(title: &str, description: Option<&str>) -> String {
     match description.map(str::trim).filter(|value| !value.is_empty()) {
         Some(description) => format!("{}\n\n{}", title.trim(), description),
@@ -935,7 +914,6 @@ fn task_suggest_input_text(title: &str, description: Option<&str>) -> String {
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn bootstrap_label_state_hash(
     conn: &Connection,
     board_id: &str,
@@ -966,7 +944,6 @@ fn bootstrap_label_state_hash(
     stable_json_hash(&value)
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn board_ontology_digest(conn: &Connection, board_id: &str) -> Result<String> {
     let labels = all(
         conn,
@@ -1019,14 +996,12 @@ fn board_ontology_digest(conn: &Connection, board_id: &str) -> Result<String> {
     }))
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn stable_json_hash(value: &serde_json::Value) -> Result<String> {
     serde_json::to_string(value)
         .map(|json| stable_hash(&json))
         .map_err(|err| KanbanError::InvalidInput(err.to_string()))
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn stable_hash(text: &str) -> String {
     let mut hash = 0xcbf29ce484222325_u64;
     for byte in text.as_bytes() {

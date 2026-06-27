@@ -66,7 +66,6 @@ pub use transitions::*;
 pub use types::*;
 pub use vector::*;
 
-#[cfg(feature = "vector-lancedb")]
 pub(crate) use context::{push_context_diagnostic, push_degraded_marker};
 pub(crate) use entities::{
     derived_store_status_from_row, derived_store_statuses_conn, outbox_from_row,

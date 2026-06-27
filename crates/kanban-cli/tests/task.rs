@@ -1,7 +1,7 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kanban};
+use common::{TempDb, kanban, kanban_in_dir_envs};
 use kanban_sqlite::{
     CreateLabel, CreateTask, LabelOntologyActionInput, LabelOntologyActionType, LabelOntologyActor,
     LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput, LabelOntologyProposedAction,
@@ -11,7 +11,18 @@ use kanban_sqlite::{
 };
 use pretty_assertions::assert_eq;
 use serde_json::json;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::{fs, path::Path};
+
+#[cfg(unix)]
+fn write_executable(path: &Path, body: &str) -> anyhow::Result<()> {
+    fs::write(path, body)?;
+    let mut permissions = fs::metadata(path)?.permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions)?;
+    Ok(())
+}
 
 fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
     kanban_sqlite::mark_execution_plan_not_required(
@@ -291,6 +302,108 @@ fn label_suggest_returns_degraded_json_without_vector_provider() -> anyhow::Resu
     );
     assert!(
         suggestions["data"]["diagnostics"]
+            .as_array()
+            .context("diagnostics")?
+            .iter()
+            .any(|value| value == "vector_store_disabled")
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn label_suggest_uses_vector_helper_adapter_successfully() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_suggest_uses_vector_helper_adapter_successfully")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "backend helper suggestion",
+            "--description",
+            "touches rust service code",
+            "--status",
+            "ready",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+    let helper = temp.dir.join("vector-helper.py");
+    write_executable(
+        &helper,
+        r#"#!/usr/bin/env python3
+import json, sys
+args = sys.argv[1:]
+cmd = args[0]
+if cmd == "status":
+    payload = {"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[]}
+elif cmd == "embed-query":
+    payload = [1.0, 0.0]
+elif cmd == "query-label-atoms":
+    model = args[args.index("--embedding-model") + 1] if "--embedding-model" in args else ""
+    if model != "review-model":
+        print(json.dumps({"protocol":"kanban-derived-helper.v1","payload_json":json.dumps({"code":"unexpected_model","message":"expected review-model, got " + model})}))
+        sys.exit(1)
+    polarity = args[args.index("--polarity") + 1] if "--polarity" in args else "positive"
+    if polarity == "positive":
+        hit = {
+            "atom_id":"atom_backend_positive",
+            "label_id":"label_backend",
+            "label_name":"backend",
+            "board_id":"b_default",
+            "polarity":"positive",
+            "kind":"applies_when",
+            "text":"touches rust service code",
+            "ordinal":0,
+            "content_hash":"hash",
+            "embedding_model":"review-model",
+            "distance":0.0,
+        }
+        payload = [{"hit": hit, "vector": [1.0, 0.0]}] if "--include-vector" in args else [hit]
+    else:
+        payload = []
+else:
+    payload = []
+print(json.dumps({"protocol":"kanban-derived-helper.v1","payload_json":json.dumps(payload)}))
+"#,
+    )?;
+    let vector_config = temp.dir.join("vector.toml");
+    std::fs::write(
+        &vector_config,
+        r#"[vector]
+provider = "ollama"
+endpoint = "http://127.0.0.1:1"
+model = "review-model"
+dimensions = 2
+"#,
+    )?;
+
+    let suggestions = kanban_in_dir_envs(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "suggest",
+            task_id,
+            "--limit",
+            "3",
+            "--vector-config",
+            vector_config.to_str().context("vector config path")?,
+        ],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", helper.as_path())],
+    )?
+    .success_json()?;
+
+    assert_eq!(suggestions["data"]["degraded"], false);
+    assert_eq!(
+        suggestions["data"]["selected_labels"][0]["label_name"],
+        "backend"
+    );
+    assert!(
+        !suggestions["data"]["diagnostics"]
             .as_array()
             .context("diagnostics")?
             .iter()
@@ -639,7 +752,7 @@ fn label_bootstrap_verify_requires_vector_provider_before_mutating() -> anyhow::
             "--verify",
         ],
     )?
-    .failure_containing("label vector helper adapter is not available")?;
+    .failure_containing("vector helper unavailable for bootstrap verification")?;
 
     let shown = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
     assert!(
@@ -999,6 +1112,69 @@ dimensions = 3
             .any(|value| value == "vector_store_disabled"),
         "{diagnostics:?}"
     );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn label_bootstrap_verify_uses_vector_helper_adapter_successfully() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_bootstrap_verify_uses_vector_helper_adapter_successfully")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "bootstrap helper task",
+            "--description",
+            "touches rust service code",
+            "--status",
+            "ready",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+    let helper = temp.dir.join("vector-helper.py");
+    write_executable(
+        &helper,
+        r#"#!/usr/bin/env python3
+import json, sys
+args = sys.argv[1:]
+cmd = args[0]
+if cmd == "status":
+    payload = {"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[]}
+elif cmd == "embed-query":
+    payload = [1.0, 0.0]
+else:
+    payload = []
+print(json.dumps({"protocol":"kanban-derived-helper.v1","payload_json":json.dumps(payload)}))
+"#,
+    )?;
+
+    let result = kanban_in_dir_envs(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "bootstrap",
+            task_id,
+            "backend",
+            "--description",
+            "Backend work",
+            "--applies-when",
+            "touches rust service code",
+            "--verify",
+            "--min-verify-score",
+            "0.0",
+        ],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", helper.as_path())],
+    )?
+    .success_json()?;
+
+    assert_eq!(result["data"]["verification"]["label_name"], "backend");
+    assert_eq!(result["data"]["task"]["labels"][0]["name"], "backend");
     Ok(())
 }
 

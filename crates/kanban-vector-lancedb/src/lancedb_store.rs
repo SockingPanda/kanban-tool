@@ -13,9 +13,10 @@ use lancedb::expr::{col, lit};
 use lancedb::query::{ExecutableQuery, QueryBase, Select};
 use tokio::runtime::Runtime;
 
-use crate::{
+use crate::LanceDbConfig;
+use kanban_vector::{
     ChunkVectorStore, EmbeddingChunk, EmbeddingProvider, LabelAtomHit, LabelAtomQuery,
-    LabelAtomVector, LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore, LanceDbConfig,
+    LabelAtomVector, LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore,
     QueryEmbeddingProvider, VectorError, VectorHit, VectorQuery, VectorStoreBackend,
     VectorStoreStatus, ensure_dimensions,
 };
@@ -88,7 +89,7 @@ impl VectorStoreBackend for LanceDbStore {
         self.provider
             .as_ref()
             .map(|provider| provider.embedding_model())
-            .unwrap_or(crate::DEFAULT_EMBEDDING_MODEL)
+            .unwrap_or(kanban_vector::DEFAULT_EMBEDDING_MODEL)
     }
 
     fn status(&self) -> VectorStoreStatus {
@@ -954,10 +955,11 @@ fn map_lancedb_error(err: lancedb::Error) -> VectorError {
 mod tests {
     use std::sync::Arc;
 
-    use crate::{
+    use crate::{LanceDbConfig, LanceDbStore};
+    use kanban_vector::{
         ChunkBuilder, ChunkVectorStore, EmbeddingProvider, LabelAtomQuery, LabelAtomVector,
-        LabelAtomVectorQuery, LabelAtomVectorStore, LanceDbConfig, LanceDbStore, TaskChunkSource,
-        VectorError, VectorQuery, VectorStoreBackend,
+        LabelAtomVectorQuery, LabelAtomVectorStore, TaskChunkSource, VectorError, VectorQuery,
+        VectorStoreBackend,
     };
 
     struct StaticProvider;
@@ -1521,7 +1523,11 @@ mod tests {
         ));
     }
 
-    fn build_chunk(builder: &ChunkBuilder, task_id: &str, title: &str) -> crate::EmbeddingChunk {
+    fn build_chunk(
+        builder: &ChunkBuilder,
+        task_id: &str,
+        title: &str,
+    ) -> kanban_vector::EmbeddingChunk {
         builder
             .build_task_chunks(&TaskChunkSource {
                 task_uri: format!("kb://task/{task_id}"),

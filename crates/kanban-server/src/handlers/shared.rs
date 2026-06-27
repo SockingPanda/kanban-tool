@@ -263,7 +263,7 @@ pub(crate) fn parse_status_filters(raw_query: Option<&str>) -> Result<Vec<TaskSt
 #[cfg(feature = "vector-lancedb")]
 pub(crate) fn configured_lancedb_store(
     state: &AppState,
-) -> Result<Option<kanban_vector::LanceDbStore>, ApiError> {
+) -> Result<Option<kanban_vector_lancedb::LanceDbStore>, ApiError> {
     let Some(config) = kanban_local::resolved_vector_config(state.vector_config_path())
         .map_err(|error| ApiError(kanban_core::KanbanError::Storage(error.to_string())))?
     else {
@@ -276,14 +276,14 @@ pub(crate) fn configured_lancedb_store(
         )));
     }
     let provider = Arc::new(
-        kanban_vector::OllamaEmbeddingProvider::new(
+        kanban_vector_lancedb::OllamaEmbeddingProvider::new(
             config.endpoint.clone(),
             config.model.clone(),
             config.dimensions,
         )
         .map_err(|error| ApiError(kanban_core::KanbanError::Storage(error.to_string())))?,
     );
-    kanban_vector::LanceDbStore::connect(kanban_vector::LanceDbConfig::new(
+    kanban_vector_lancedb::LanceDbStore::connect(kanban_vector_lancedb::LanceDbConfig::new(
         kanban_local::vector_store_path(state.db_path().clone()),
         provider,
     ))

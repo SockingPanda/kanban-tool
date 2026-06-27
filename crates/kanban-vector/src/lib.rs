@@ -1,19 +1,8 @@
 use kanban_entity::ChunkRef;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "vector-lancedb")]
-use std::{path::PathBuf, sync::Arc};
 use thiserror::Error;
 
 pub const DEFAULT_EMBEDDING_MODEL: &str = "kb-local-default";
-
-#[cfg(feature = "vector-lancedb")]
-mod lancedb_store;
-#[cfg(feature = "vector-lancedb")]
-mod ollama;
-#[cfg(feature = "vector-lancedb")]
-pub use lancedb_store::LanceDbStore;
-#[cfg(feature = "vector-lancedb")]
-pub use ollama::OllamaEmbeddingProvider;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VectorStoreStatus {
@@ -304,40 +293,6 @@ impl ChunkVectorStore for DisabledVectorStore {
 }
 
 impl LabelAtomVectorStore for DisabledVectorStore {}
-
-#[cfg(feature = "vector-lancedb")]
-#[derive(Clone)]
-pub struct LanceDbConfig {
-    pub path: PathBuf,
-    pub table_name: String,
-    pub label_atom_table_name: String,
-    pub provider: Option<Arc<dyn EmbeddingProvider + Send + Sync>>,
-}
-
-#[cfg(feature = "vector-lancedb")]
-impl LanceDbConfig {
-    pub fn new(
-        path: impl Into<PathBuf>,
-        provider: Arc<dyn EmbeddingProvider + Send + Sync>,
-    ) -> Self {
-        Self {
-            path: path.into(),
-            table_name: "kb_chunks".to_owned(),
-            label_atom_table_name: "kb_label_atoms".to_owned(),
-            provider: Some(provider),
-        }
-    }
-
-    pub fn degraded(path: impl Into<PathBuf>) -> Self {
-        Self {
-            path: path.into(),
-            table_name: "kb_chunks".to_owned(),
-            label_atom_table_name: "kb_label_atoms".to_owned(),
-            provider: None,
-        }
-    }
-}
-
 pub fn ensure_dimensions(vector: &[f32], expected: usize) -> Result<(), VectorError> {
     if vector.len() == expected {
         Ok(())
@@ -452,143 +407,5 @@ mod tests {
                 actual: 2
             }
         ));
-    }
-
-    #[cfg(feature = "vector-lancedb")]
-    mod ollama_provider {
-        use std::io::{Read, Write};
-        use std::net::TcpListener;
-        use std::thread;
-
-        use crate::{EmbeddingProvider, OllamaEmbeddingProvider, VectorError};
-
-        fn mock_ollama(response: &'static str) -> String {
-            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-            let endpoint = format!("http://{}", listener.local_addr().unwrap());
-            thread::spawn(move || {
-                let (mut stream, _) = listener.accept().unwrap();
-                let request = read_http_request(&mut stream);
-                assert!(request.starts_with("POST /api/embed "));
-                write!(
-                    stream,
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                    response.len(),
-                    response
-                )
-                .unwrap();
-            });
-            endpoint
-        }
-
-        fn mock_ollama_with_request(
-            response: &'static str,
-        ) -> (String, thread::JoinHandle<String>) {
-            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-            let endpoint = format!("http://{}", listener.local_addr().unwrap());
-            let handle = thread::spawn(move || {
-                let (mut stream, _) = listener.accept().unwrap();
-                let request = read_http_request(&mut stream);
-                assert!(request.starts_with("POST /api/embed "));
-                write!(
-                    stream,
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                    response.len(),
-                    response
-                )
-                .unwrap();
-                request
-            });
-            (endpoint, handle)
-        }
-
-        fn read_http_request(stream: &mut std::net::TcpStream) -> String {
-            let mut buffer = Vec::new();
-            let mut chunk = [0; 1024];
-            let header_end = loop {
-                let read = stream.read(&mut chunk).unwrap();
-                assert!(read > 0);
-                buffer.extend_from_slice(&chunk[..read]);
-                if let Some(position) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
-                    break position + 4;
-                }
-            };
-            let headers = String::from_utf8_lossy(&buffer[..header_end]).to_string();
-            let content_length = headers
-                .lines()
-                .find_map(|line| {
-                    let (name, value) = line.split_once(':')?;
-                    name.eq_ignore_ascii_case("content-length")
-                        .then(|| value.trim().parse::<usize>().unwrap())
-                })
-                .unwrap_or(0);
-            while buffer.len() < header_end + content_length {
-                let read = stream.read(&mut chunk).unwrap();
-                assert!(read > 0);
-                buffer.extend_from_slice(&chunk[..read]);
-            }
-            String::from_utf8_lossy(&buffer).to_string()
-        }
-
-        #[test]
-        fn ollama_provider_reads_first_embedding() {
-            let endpoint = mock_ollama(r#"{"embeddings":[[0.1,0.2,0.3]]}"#);
-            let provider = OllamaEmbeddingProvider::new(endpoint, "test-model", 3).unwrap();
-
-            assert_eq!(provider.embedding_model(), "test-model");
-            assert_eq!(provider.embed("short text").unwrap(), vec![0.1, 0.2, 0.3]);
-        }
-
-        #[test]
-        fn ollama_provider_sends_dimensions_in_embed_request() {
-            let (endpoint, request) = mock_ollama_with_request(r#"{"embeddings":[[0.1,0.2,0.3]]}"#);
-            let provider = OllamaEmbeddingProvider::new(endpoint, "test-model", 3).unwrap();
-
-            assert_eq!(provider.embed("short text").unwrap(), vec![0.1, 0.2, 0.3]);
-            let request = request.join().unwrap();
-            let body = request.split("\r\n\r\n").nth(1).unwrap();
-            let body: serde_json::Value = serde_json::from_str(body).unwrap();
-            assert_eq!(body["model"], "test-model");
-            assert_eq!(body["input"], "short text");
-            assert_eq!(body["dimensions"], 3);
-        }
-
-        #[test]
-        fn ollama_provider_rejects_dimension_mismatch() {
-            let endpoint = mock_ollama(r#"{"embeddings":[[0.1,0.2]]}"#);
-            let provider = OllamaEmbeddingProvider::new(endpoint, "test-model", 3).unwrap();
-
-            assert!(matches!(
-                provider.embed("short text"),
-                Err(VectorError::DimensionMismatch {
-                    expected: 3,
-                    actual: 2
-                })
-            ));
-        }
-
-        #[test]
-        fn ollama_provider_maps_error_responses_to_store_errors() {
-            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-            let endpoint = format!("http://{}", listener.local_addr().unwrap());
-            thread::spawn(move || {
-                let (mut stream, _) = listener.accept().unwrap();
-                let mut request = [0; 2048];
-                let _ = stream.read(&mut request).unwrap();
-                let response = r#"{"error":"model not found"}"#;
-                write!(
-                    stream,
-                    "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                    response.len(),
-                    response
-                )
-                .unwrap();
-            });
-            let provider = OllamaEmbeddingProvider::new(endpoint, "test-model", 3).unwrap();
-
-            assert!(matches!(
-                provider.embed("short text"),
-                Err(VectorError::Store(_))
-            ));
-        }
     }
 }

@@ -461,10 +461,12 @@ dimensions = 1024
             model: "static-test",
             dimensions: 2,
         });
-        let _store = kanban_vector::LanceDbStore::connect(kanban_vector::LanceDbConfig::new(
-            kanban_local::vector_store_path(temp.path.clone()),
-            provider,
-        ))
+        let _store = kanban_vector_lancedb::LanceDbStore::connect(
+            kanban_vector_lancedb::LanceDbConfig::new(
+                kanban_local::vector_store_path(temp.path.clone()),
+                provider,
+            ),
+        )
         .context("seed 2-dimensional LanceDB table")?;
 
         let vector_config = temp.dir.join("mismatched-vector.toml");

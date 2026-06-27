@@ -26,6 +26,27 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       ...(proxy ? { proxy } : {}),
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes("node_modules/elkjs")) return "graph-elk"
+            if (id.includes("node_modules/@xyflow")) return "graph-flow"
+            if (id.includes("node_modules/react-markdown") || id.includes("node_modules/remark-gfm")) return "markdown-renderer"
+            if (
+              id.includes("node_modules/react/") ||
+              id.includes("node_modules/react-dom/") ||
+              id.includes("node_modules/react-is/") ||
+              id.includes("node_modules/scheduler/")
+            ) {
+              return "react-core"
+            }
+            if (id.includes("node_modules/@radix-ui") || id.includes("node_modules/lucide-react")) return "ui-vendor"
+            if (id.includes("node_modules/@tanstack")) return "query-table-vendor"
+          },
+        },
+      },
+    },
   }
 })
 

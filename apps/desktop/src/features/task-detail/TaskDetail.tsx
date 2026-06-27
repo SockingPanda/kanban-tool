@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react"
 import { ChevronDown, ListChecks, Map, MessageSquare, Network } from "lucide-react"
 
 import {
@@ -16,8 +16,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import { legalActions, type LegalTaskAction } from "@/features/task-actions/legal-actions"
-import { TaskGraphCanvas } from "@/features/task-map/TaskGraphCanvas"
 import { apiTaskGraphToCanvasGraph } from "@/features/task-map/task-graph-adapter"
 import type { KanbanApi, LabelSuggestionResult, Run, Task } from "@/lib/api"
 
@@ -40,6 +40,8 @@ import { Section } from "./task-detail-shared"
 export { applySuggestedTaskLabel } from "./TaskLabelsPanel"
 export { DependencyGroup } from "./TaskDependencyPanel"
 export { MarkdownDescription } from "./markdown"
+
+const TaskGraphCanvas = lazy(() => import("@/features/task-map/TaskGraphCanvas").then((module) => ({ default: module.TaskGraphCanvas })))
 
 type TaskDetailActionOptions = {
   label?: string
@@ -266,7 +268,9 @@ export function TaskDetail({
                 onOpenChange={onGraphExpandedChange}
               >
                 {graph.nodes.length ? (
-                  <TaskGraphCanvas graph={graph} selectedTaskId={task.id} onSelectTask={onSelectTask} className="h-[420px] min-h-[320px]" />
+                  <Suspense fallback={<TaskDetailGraphSkeleton />}>
+                    <TaskGraphCanvas graph={graph} selectedTaskId={task.id} onSelectTask={onSelectTask} className="h-[420px] min-h-[320px]" />
+                  </Suspense>
                 ) : (
                   <Empty className="items-start rounded-md border border-border bg-muted/20 p-3 text-left">
                     <EmptyDescription>No task context graph yet.</EmptyDescription>
@@ -417,6 +421,16 @@ export function TaskDetail({
   )
 }
 
+function TaskDetailGraphSkeleton() {
+  return (
+    <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
+      <Skeleton className="h-20 w-2/3" />
+      <Skeleton className="ml-auto h-20 w-3/4" />
+      <Skeleton className="h-20 w-1/2" />
+    </div>
+  )
+}
+
 function TaskDetailPanel({
   children,
   icon,
@@ -442,7 +456,7 @@ function TaskDetailPanel({
             <ChevronDown className="h-4 w-4" />
           </Button>
         </CollapsibleTrigger>
-        <CollapsibleContent>{children}</CollapsibleContent>
+        <CollapsibleContent>{open ? children : null}</CollapsibleContent>
       </Section>
     </Collapsible>
   )

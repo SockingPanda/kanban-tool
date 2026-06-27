@@ -99,6 +99,15 @@ describe("BoardTaskMapView filters", () => {
     expect(__test.resolveBoardMapSelectedNode(graph, "running", "ready")?.task.id).toBe("running")
     expect(__test.resolveBoardMapSelectedNode(graph, null, "ready")?.task.id).toBe("ready")
   })
+
+  it("builds relation counts once per source graph", () => {
+    const counts = __test.buildRelationCountIndex(graph)
+
+    expect(counts.get("ready")).toEqual({ parents: 1, children: 0, steps: 0 })
+    expect(counts.get("done")).toEqual({ parents: 0, children: 1, steps: 0 })
+    expect(counts.get("parent")).toEqual({ parents: 0, children: 0, steps: 1 })
+    expect(counts.get("running")).toBeUndefined()
+  })
 })
 
 describe("boardTaskMapQueryOptions", () => {

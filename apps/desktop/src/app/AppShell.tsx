@@ -1,4 +1,4 @@
-import { useEffect, useState, type ElementType, type FormEvent, type ReactNode, type TransitionEvent } from "react"
+import { lazy, Suspense, useEffect, useState, type ElementType, type FormEvent, type ReactNode, type TransitionEvent } from "react"
 import {
   Activity,
   ChevronDown,
@@ -64,14 +64,10 @@ import { BoardView } from "@/features/board/BoardView"
 import { EventsView } from "@/features/events/EventsView"
 import { HealthView } from "@/features/health/HealthView"
 import { ListView } from "@/features/list/ListView"
-import { MaintenanceView } from "@/features/maintenance/MaintenanceView"
 import type { OperatorView } from "@/features/navigation/view-types"
 import { primaryViews, sidebarViews } from "@/features/navigation/view-types"
-import { OntologyReviewWorkbench } from "@/features/ontology/OntologyReviewWorkbench"
 import { RunsView } from "@/features/runs/RunsView"
 import { SettingsView } from "@/features/settings/SettingsView"
-import { TaskDetail } from "@/features/task-detail/TaskDetail"
-import { BoardTaskMapView } from "@/features/task-map/BoardTaskMapView"
 import {
   isSidebarWidthTransition,
   nextSidebarContentOpen,
@@ -116,6 +112,13 @@ const themeModeOptions: MenuSelectOption<ThemeMode>[] = [
   { value: "light", label: "light" },
   { value: "dark", label: "dark" },
 ]
+
+const BoardTaskMapView = lazy(() => import("@/features/task-map/BoardTaskMapView").then((module) => ({ default: module.BoardTaskMapView })))
+const MaintenanceView = lazy(() => import("@/features/maintenance/MaintenanceView").then((module) => ({ default: module.MaintenanceView })))
+const OntologyReviewWorkbench = lazy(() =>
+  import("@/features/ontology/OntologyReviewWorkbench").then((module) => ({ default: module.OntologyReviewWorkbench })),
+)
+const TaskDetail = lazy(() => import("@/features/task-detail/TaskDetail").then((module) => ({ default: module.TaskDetail })))
 
 export type AppShellRuntimeProps = {
   config: RuntimeConfig | null
@@ -395,48 +398,50 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
             }}
           >
             <SheetContent side="right" className="w-[min(1100px,calc(100vw-24px))] p-0">
-              <TaskDetail
-                api={api}
-                task={selectedTask}
-                detail={detail}
-                labelSuggestions={labelSuggestions}
-                labelSuggestionsRequested={labelSuggestionsRequested}
-                labelSuggestionsLoading={labelSuggestionsLoading}
-                labelSuggestionsError={labelSuggestionsError}
-                activeRun={activeRun}
-                blockReason={blockReason}
-                setBlockReason={commands.setBlockReason}
-                dependencyInput={dependencyInput}
-                setDependencyInput={commands.setDependencyInput}
-                claimToken={claimToken}
-                commentBody={commentBody}
-                setCommentBody={commands.setCommentBody}
-                editDraft={editDraft}
-                draftDirty={draftDirty}
-                setEditDraft={commands.setEditDraft}
-                detailLoading={detailLoading}
-                commentsExpanded={taskCommentsExpanded}
-                dependenciesExpanded={taskDependenciesExpanded}
-                eventsExpanded={taskEventsExpanded}
-                graphExpanded={taskGraphExpanded}
-                runsExpanded={taskRunsExpanded}
-                stepsExpanded={taskStepsExpanded}
-                pendingAction={pendingAction}
-                onAction={commands.runAction}
-                onAddDependency={commands.addDependency}
-                onRemoveDependency={commands.removeDependency}
-                onRequestLabelSuggestions={commands.requestLabelSuggestions}
-                onSelectTask={commands.selectTask}
-                onSaveTask={commands.saveTask}
-                onCancelEdit={commands.cancelTaskEdit}
-                onAddComment={commands.addComment}
-                onCommentsExpandedChange={commands.setTaskCommentsExpanded}
-                onDependenciesExpandedChange={commands.setTaskDependenciesExpanded}
-                onEventsExpandedChange={commands.setTaskEventsExpanded}
-                onGraphExpandedChange={commands.setTaskGraphExpanded}
-                onRunsExpandedChange={commands.setTaskRunsExpanded}
-                onStepsExpandedChange={commands.setTaskStepsExpanded}
-              />
+              <Suspense fallback={<LazyViewFallback label="Loading task detail" />}>
+                <TaskDetail
+                  api={api}
+                  task={selectedTask}
+                  detail={detail}
+                  labelSuggestions={labelSuggestions}
+                  labelSuggestionsRequested={labelSuggestionsRequested}
+                  labelSuggestionsLoading={labelSuggestionsLoading}
+                  labelSuggestionsError={labelSuggestionsError}
+                  activeRun={activeRun}
+                  blockReason={blockReason}
+                  setBlockReason={commands.setBlockReason}
+                  dependencyInput={dependencyInput}
+                  setDependencyInput={commands.setDependencyInput}
+                  claimToken={claimToken}
+                  commentBody={commentBody}
+                  setCommentBody={commands.setCommentBody}
+                  editDraft={editDraft}
+                  draftDirty={draftDirty}
+                  setEditDraft={commands.setEditDraft}
+                  detailLoading={detailLoading}
+                  commentsExpanded={taskCommentsExpanded}
+                  dependenciesExpanded={taskDependenciesExpanded}
+                  eventsExpanded={taskEventsExpanded}
+                  graphExpanded={taskGraphExpanded}
+                  runsExpanded={taskRunsExpanded}
+                  stepsExpanded={taskStepsExpanded}
+                  pendingAction={pendingAction}
+                  onAction={commands.runAction}
+                  onAddDependency={commands.addDependency}
+                  onRemoveDependency={commands.removeDependency}
+                  onRequestLabelSuggestions={commands.requestLabelSuggestions}
+                  onSelectTask={commands.selectTask}
+                  onSaveTask={commands.saveTask}
+                  onCancelEdit={commands.cancelTaskEdit}
+                  onAddComment={commands.addComment}
+                  onCommentsExpandedChange={commands.setTaskCommentsExpanded}
+                  onDependenciesExpandedChange={commands.setTaskDependenciesExpanded}
+                  onEventsExpandedChange={commands.setTaskEventsExpanded}
+                  onGraphExpandedChange={commands.setTaskGraphExpanded}
+                  onRunsExpandedChange={commands.setTaskRunsExpanded}
+                  onStepsExpandedChange={commands.setTaskStepsExpanded}
+                />
+              </Suspense>
             </SheetContent>
           </Sheet>
         </div>
@@ -938,7 +943,11 @@ function MainView({
     )
   }
   if (view === "map") {
-    return <BoardTaskMapView api={api} selectedTaskId={selectedId} onSelectTask={onSelectTask} />
+    return (
+      <Suspense fallback={<LazyViewFallback label="Loading task map" />}>
+        <BoardTaskMapView api={api} selectedTaskId={selectedId} onSelectTask={onSelectTask} />
+      </Suspense>
+    )
   }
 
   if (view === "list") {
@@ -972,10 +981,33 @@ function MainView({
   }
   if (view === "events") return <EventsView api={api} />
   if (view === "runs") return <RunsView selectedTask={selectedTask} detail={detail} />
-  if (view === "ontology") return <OntologyReviewWorkbench api={api} />
-  if (view === "maintenance") return <MaintenanceView api={api} />
+  if (view === "ontology") {
+    return (
+      <Suspense fallback={<LazyViewFallback label="Loading review workbench" />}>
+        <OntologyReviewWorkbench api={api} />
+      </Suspense>
+    )
+  }
+  if (view === "maintenance") {
+    return (
+      <Suspense fallback={<LazyViewFallback label="Loading maintenance" />}>
+        <MaintenanceView api={api} />
+      </Suspense>
+    )
+  }
   if (view === "health") return <HealthView api={api} config={config} />
   return <SettingsView config={config} />
+}
+
+function LazyViewFallback({ label }: { label: string }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+      <div className="text-sm text-muted-foreground">{label}</div>
+      <Skeleton className="h-10 w-72" />
+      <Skeleton className="h-48 w-full" />
+      <Skeleton className="h-32 w-2/3" />
+    </div>
+  )
 }
 
 function StatusBar({

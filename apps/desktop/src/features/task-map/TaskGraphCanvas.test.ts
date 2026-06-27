@@ -54,6 +54,25 @@ describe("TaskGraphCanvas interactions", () => {
     expect(__test.taskGraphDataKey(updatedGraph)).not.toBe(__test.taskGraphDataKey(graph))
   })
 
+  it("prefers explicit graph meta for layout keys when available", () => {
+    const graph: TaskGraph = { ...graphFixture(), meta: { contentHash: "abc123" } }
+    const updatedGraph: TaskGraph = {
+      ...graph,
+      nodes: graph.nodes.map((node) => ({ ...node, title: `${node.title} updated` })),
+    }
+
+    expect(__test.taskGraphMetaLayoutKey(graph)).toBe("hash:abc123")
+    expect(__test.taskGraphLayoutKey(updatedGraph, "board-map")).toBe("board-map|hash:abc123")
+  })
+
+  it("stores graph layouts in a bounded LRU cache", () => {
+    const layout = __test.layoutTaskGraphFallback(graphFixture(), { mode: "board-map" })
+
+    __test.setCachedTaskGraphLayout("test-layout", layout)
+
+    expect(__test.getCachedTaskGraphLayout("test-layout")).toBe(layout)
+  })
+
   it("patches only previous and next selected flow nodes", () => {
     const nodes = __test.buildTaskFlowNodes(__test.layoutTaskGraphFallback(graphFixture(), { mode: "board-map" }), graphFixture(), "parent", undefined)
     const patched = __test.patchTaskFlowNodeSelection(nodes, "parent", "child")

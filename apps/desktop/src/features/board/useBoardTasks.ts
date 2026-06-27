@@ -24,6 +24,11 @@ export type BoardTaskRequestInput = {
   offset: number
 }
 
+type UseBoardTasksInput = BoardTaskRequestInput & {
+  api: KanbanApi | null
+  enabled?: boolean
+}
+
 export type BoardTaskRequest = {
   mode: "board" | "list"
   search: string
@@ -79,11 +84,11 @@ export function resolveBoardTaskRequest({
   }
 }
 
-export function useBoardTasks({ api, ...input }: BoardTaskRequestInput & { api: KanbanApi | null }) {
+export function useBoardTasks({ api, enabled = true, ...input }: UseBoardTasksInput) {
   const request = resolveBoardTaskRequest(input)
 
   return useQuery({
-    enabled: Boolean(api),
+    enabled: Boolean(enabled && api),
     queryKey: queryKeys.boardTasks({
       board: api?.board ?? "pending",
       search: request.search,

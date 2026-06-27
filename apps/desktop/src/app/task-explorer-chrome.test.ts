@@ -63,10 +63,12 @@ describe("task explorer chrome", () => {
 
   it("keeps global search out of List reset while sizing Board by column status", () => {
     const content = source("App.tsx")
-    const taskQuery = content.slice(content.indexOf("const tasksQuery = useBoardTasks"), content.indexOf("const tasks = tasksQuery.data"))
+    const taskQuery = content.slice(content.indexOf("const tasksQuery = useBoardTasks"), content.indexOf("const taskData ="))
     const resetListFilters = content.slice(content.indexOf("onResetListFilters={() =>"), content.indexOf("onShowArchivedChange"))
 
-    expect(taskQuery).toContain('boardStatuses: view === "list" ? [] : visibleColumns.map((column) => column.status)')
+    expect(content).toContain("const taskCollectionEnabled = shouldLoadTaskCollection(view)")
+    expect(taskQuery).toContain("enabled: taskCollectionEnabled")
+    expect(taskQuery).toContain('boardStatuses: view === "board" ? visibleColumnStatuses : []')
     expect(taskQuery).toContain('limit: view === "list" ? rowsPerPage : BOARD_COLUMN_TASK_LIMIT')
     expect(taskQuery).toContain('offset: view === "list" ? pageOffset : 0')
     expect(resetListFilters).not.toContain("setSearch")

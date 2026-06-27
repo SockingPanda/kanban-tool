@@ -93,6 +93,7 @@ function TaskGraphCanvasInner({
   const safeScale = clampTaskGraphScale(scale)
   const interaction = taskGraphInteraction(mode)
   const layoutKey = useMemo(() => taskGraphLayoutKey(graph, mode), [graph, mode])
+  const graphDataKey = useMemo(() => taskGraphDataKey(graph), [graph])
 
   onSelectTaskRef.current = onSelectTask
   onOpenTaskRef.current = onOpenTask
@@ -116,9 +117,10 @@ function TaskGraphCanvasInner({
   }, [layoutKey, mode])
 
   useEffect(() => {
-    setNodes(buildTaskFlowNodes(layout, graph, selectedTaskIdRef.current, handleSelectTask, handleOpenTask))
+    const layoutGraph = latestGraphRef.current
+    setNodes(buildTaskFlowNodes(layout, layoutGraph, selectedTaskIdRef.current, handleSelectTask, handleOpenTask))
     setEdges(buildTaskFlowEdges(layout))
-  }, [graph, handleOpenTask, handleSelectTask, layout])
+  }, [graphDataKey, handleOpenTask, handleSelectTask, layout])
 
   useEffect(() => {
     const previousTaskId = selectedTaskIdRef.current
@@ -178,7 +180,7 @@ function TaskGraphCanvasInner({
 
 const TaskGraphFlowNode = memo(function TaskGraphFlowNode({ data, selected }: NodeProps<TaskFlowNode>) {
   return (
-    <div className="nodrag nowheel">
+    <div className="nodrag">
       <Handle type="target" position={Position.Left} isConnectable={false} className="opacity-0" />
       <Handle type="target" position={Position.Top} isConnectable={false} className="opacity-0" />
       <TaskGraphNodeCard
@@ -244,6 +246,32 @@ function taskGraphLayoutKey(graph: TaskGraph, mode: TaskGraphMode) {
     .sort()
     .join(",")
   return `${mode}|${nodes}|${edges}`
+}
+
+function taskGraphDataKey(graph: TaskGraph) {
+  const nodes = graph.nodes
+    .map((node) =>
+      [
+        node.id,
+        node.ref,
+        node.title,
+        node.status,
+        node.priority ?? "",
+        node.role ?? "",
+        node.contextOnly ? "context" : "active",
+        node.dependencyBlocked ? "blocked" : "clear",
+        node.unfinishedParentCount ?? 0,
+        node.stepCounts?.completed ?? "",
+        node.stepCounts?.total ?? "",
+      ].join(":"),
+    )
+    .sort()
+    .join(",")
+  const edges = graph.edges
+    .map((edge) => `${edge.id}:${edge.sourceTaskId}>${edge.targetTaskId}:${edge.kind}:${edge.blocking ? "blocking" : "clear"}:${edge.required ? "required" : "optional"}`)
+    .sort()
+    .join(",")
+  return `${nodes}|${edges}`
 }
 
 function buildTaskFlowNodes(
@@ -329,6 +357,7 @@ export const __test = {
   buildTaskFlowNodes,
   layoutTaskGraphFallback,
   patchTaskFlowNodeSelection,
+  taskGraphDataKey,
   taskGraphLayoutKey,
   taskGraphInteraction,
 }

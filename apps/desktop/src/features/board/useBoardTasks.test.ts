@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
+import { keepPreviousData } from "@tanstack/react-query"
 
 import type { KanbanApi, SearchTasksResult, Task, TaskPageResult, TaskStatus } from "@/lib/api"
 
-import { BOARD_COLUMN_TASK_LIMIT, loadBoardTasks, resolveBoardTaskRequest } from "./useBoardTasks"
+import { BOARD_COLUMN_TASK_LIMIT, boardTasksQueryOptions, loadBoardTasks, resolveBoardTaskRequest } from "./useBoardTasks"
 
 function task(id: string, status: TaskStatus) {
   return { id, status } as Task
@@ -58,6 +59,68 @@ describe("resolveBoardTaskRequest", () => {
       limit: 50,
       offset: 100,
     })
+  })
+})
+
+describe("boardTasksQueryOptions", () => {
+  it("keeps previous board data while board query parameters fetch the next result", () => {
+    const api = { board: "default" } as unknown as KanbanApi
+    const firstQuery = boardTasksQueryOptions({
+      api,
+      mode: "board",
+      boardStatuses: ["triage", "ready"],
+      search: "",
+      statusFilter: "all",
+      showArchived: false,
+      limit: BOARD_COLUMN_TASK_LIMIT,
+      offset: 0,
+    })
+    const nextQuery = boardTasksQueryOptions({
+      api,
+      mode: "board",
+      boardStatuses: ["triage", "ready"],
+      search: "  blocked  ",
+      statusFilter: "all",
+      showArchived: false,
+      limit: BOARD_COLUMN_TASK_LIMIT,
+      offset: 0,
+    })
+
+    expect(firstQuery.queryKey).not.toEqual(nextQuery.queryKey)
+    expect(firstQuery.placeholderData).toBe(keepPreviousData)
+    expect(nextQuery.placeholderData).toBe(keepPreviousData)
+  })
+
+  it("keeps previous list data while filters, sort, or pagination fetch the next result", () => {
+    const api = { board: "default" } as unknown as KanbanApi
+    const firstQuery = boardTasksQueryOptions({
+      api,
+      mode: "list",
+      search: "",
+      statusFilter: "all",
+      priorityFilters: [],
+      planFilters: [],
+      sort: "-updated_at",
+      showArchived: false,
+      limit: 100,
+      offset: 0,
+    })
+    const nextQuery = boardTasksQueryOptions({
+      api,
+      mode: "list",
+      search: "",
+      statusFilter: "blocked",
+      priorityFilters: [1],
+      planFilters: ["plan_needed"],
+      sort: "priority",
+      showArchived: false,
+      limit: 50,
+      offset: 50,
+    })
+
+    expect(firstQuery.queryKey).not.toEqual(nextQuery.queryKey)
+    expect(firstQuery.placeholderData).toBe(keepPreviousData)
+    expect(nextQuery.placeholderData).toBe(keepPreviousData)
   })
 })
 

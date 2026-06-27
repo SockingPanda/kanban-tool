@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
+import { keepPreviousData } from "@tanstack/react-query"
 
-import type { BoardTaskMap, Task } from "@/lib/api"
+import type { BoardTaskMap, KanbanApi, Task } from "@/lib/api"
 
 import { __test } from "./BoardTaskMapView"
+import { boardTaskMapQueryOptions } from "./useBoardTaskMap"
 
 function task(id: string, status: Task["status"], overrides: Partial<Task> = {}): Task {
   return {
@@ -96,5 +98,17 @@ describe("BoardTaskMapView filters", () => {
   it("prefers local inspected map selection over global detail selection", () => {
     expect(__test.resolveBoardMapSelectedNode(graph, "running", "ready")?.task.id).toBe("running")
     expect(__test.resolveBoardMapSelectedNode(graph, null, "ready")?.task.id).toBe("ready")
+  })
+})
+
+describe("boardTaskMapQueryOptions", () => {
+  it("keeps previous map data while include-done-context changes fetch the next graph", () => {
+    const api = { board: "default" } as unknown as KanbanApi
+    const activeOnlyQuery = boardTaskMapQueryOptions(api, { includeDoneContext: false })
+    const withDoneContextQuery = boardTaskMapQueryOptions(api, { includeDoneContext: true })
+
+    expect(activeOnlyQuery.queryKey).not.toEqual(withDoneContextQuery.queryKey)
+    expect(activeOnlyQuery.placeholderData).toBe(keepPreviousData)
+    expect(withDoneContextQuery.placeholderData).toBe(keepPreviousData)
   })
 })

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 
 import type { KanbanApi } from "@/lib/api"
 import { queryKeys } from "@/lib/query-keys"
@@ -8,11 +8,15 @@ export type BoardTaskMapOptions = {
 }
 
 export function useBoardTaskMap(api: KanbanApi | null, options: BoardTaskMapOptions) {
+  return useQuery(boardTaskMapQueryOptions(api, options))
+}
+
+export function boardTaskMapQueryOptions(api: KanbanApi | null, options: BoardTaskMapOptions) {
   const board = api?.board ?? "pending"
-  return useQuery({
+  return {
     enabled: Boolean(api),
     queryKey: queryKeys.boardTaskMap(board, { includeDoneContext: options.includeDoneContext }),
-    queryFn: ({ signal }) => {
+    queryFn: ({ signal }: { signal?: AbortSignal }) => {
       if (!api) throw new Error("Board task map query is not ready")
       return api.getBoardTaskMap(api.board, {
         activeOnly: true,
@@ -23,5 +27,6 @@ export function useBoardTaskMap(api: KanbanApi | null, options: BoardTaskMapOpti
         signal,
       })
     },
-  })
+    placeholderData: keepPreviousData,
+  }
 }

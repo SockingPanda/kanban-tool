@@ -1,6 +1,6 @@
 import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,6 @@ import {
   dependencyBlockedTodoClass,
   requiredStepProgressLabel,
   selectedDependencyCountForTask,
-  selectedIdForColumn,
   selectedUnlockCountForTask,
   taskNeedsExecutionPlan,
   type SelectedDependencySnapshot,
@@ -38,6 +37,7 @@ export function BoardView({
 }) {
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const scrollEndTimerRef = useRef<number | null>(null)
+  const scrollFrameRef = useRef<number | null>(null)
   const taskIds = useMemo(() => {
     const ids = new Set<string>()
     for (const tasks of groupedTasks.values()) {
@@ -45,6 +45,13 @@ export function BoardView({
     }
     return ids
   }, [groupedTasks])
+  const selectedStatus = useMemo(() => {
+    if (!selectedId) return undefined
+    for (const [status, tasks] of groupedTasks.entries()) {
+      if (tasks.some((task) => task.id === selectedId)) return status
+    }
+    return undefined
+  }, [groupedTasks, selectedId])
 
   useLayoutEffect(() => {
     if (scrollerRef.current) clampBoardScrollLeft(scrollerRef.current, columns.length)
@@ -53,31 +60,41 @@ export function BoardView({
   useEffect(() => {
     return () => {
       if (scrollEndTimerRef.current) window.clearTimeout(scrollEndTimerRef.current)
+      if (scrollFrameRef.current) window.cancelAnimationFrame(scrollFrameRef.current)
     }
   }, [])
 
-  function handleBoardScroll() {
+  const handleBoardScroll = useCallback(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
 
-    scroller.dataset.scrolling = "true"
+    if (scrollFrameRef.current === null) {
+      scrollFrameRef.current = window.requestAnimationFrame(() => {
+        scrollFrameRef.current = null
+        const currentScroller = scrollerRef.current
+        if (currentScroller) currentScroller.dataset.scrolling = "true"
+      })
+    }
     if (scrollEndTimerRef.current) window.clearTimeout(scrollEndTimerRef.current)
     scrollEndTimerRef.current = window.setTimeout(() => {
       scroller.removeAttribute("data-scrolling")
       scrollEndTimerRef.current = null
     }, 700)
-  }
+  }, [])
+
+  const handleDragEnd = useCallback(
+    (event: Parameters<NonNullable<ComponentProps<typeof DragDropProvider>["onDragEnd"]>>[0]) => {
+      if (event.canceled) return
+      const sourceId = event.operation.source?.id
+      const targetStatus = event.operation.target?.data?.status
+      if (typeof sourceId !== "string" || !taskIds.has(sourceId) || !isTaskStatus(targetStatus)) return
+      onDropTask(sourceId, targetStatus)
+    },
+    [onDropTask, taskIds],
+  )
 
   return (
-    <DragDropProvider
-      onDragEnd={(event) => {
-        if (event.canceled) return
-        const sourceId = event.operation.source?.id
-        const targetStatus = event.operation.target?.data?.status
-        if (typeof sourceId !== "string" || !taskIds.has(sourceId) || !isTaskStatus(targetStatus)) return
-        onDropTask(sourceId, targetStatus)
-      }}
-    >
+    <DragDropProvider onDragEnd={handleDragEnd}>
       <div ref={scrollerRef} className={boardScrollerClassName} onScroll={handleBoardScroll}>
         <div className="grid h-full min-h-0 gap-px" style={boardGridStyle(columns.length)}>
           {columns.map((column) => (
@@ -85,7 +102,7 @@ export function BoardView({
               key={column.id}
               column={column}
               tasks={groupedTasks.get(column.status) ?? []}
-              selectedId={selectedId}
+              selectedId={column.status === selectedStatus ? selectedId : undefined}
               dependencySnapshot={dependencySnapshot}
               onSelectTask={onSelectTask}
             />
@@ -96,7 +113,7 @@ export function BoardView({
   )
 }
 
-function BoardColumnBridge({
+const BoardColumnBridge = memo(function BoardColumnBridge({
   column,
   tasks,
   selectedId,
@@ -109,18 +126,10 @@ function BoardColumnBridge({
   dependencySnapshot: SelectedDependencySnapshot
   onSelectTask: (taskId: string) => void
 }) {
-  return (
-    <BoardColumn
-      column={column}
-      tasks={tasks}
-      selectedId={selectedIdForColumn(tasks, selectedId)}
-      dependencySnapshot={dependencySnapshot}
-      onSelect={onSelectTask}
-    />
-  )
-}
+  return <BoardColumn column={column} tasks={tasks} selectedId={selectedId} dependencySnapshot={dependencySnapshot} onSelect={onSelectTask} />
+}, areBoardColumnBridgePropsEqual)
 
-function BoardColumn({
+const BoardColumn = memo(function BoardColumn({
   column,
   tasks,
   selectedId,
@@ -192,6 +201,42 @@ function BoardColumn({
         </div>
       </ScrollArea>
     </div>
+  )
+}, areBoardColumnBridgePropsEqual)
+
+function areBoardColumnBridgePropsEqual(
+  previous: {
+    column: ApiBoardColumn
+    tasks: Task[]
+    selectedId?: string
+    dependencySnapshot: SelectedDependencySnapshot
+    onSelectTask?: (taskId: string) => void
+    onSelect?: (taskId: string) => void
+  },
+  next: {
+    column: ApiBoardColumn
+    tasks: Task[]
+    selectedId?: string
+    dependencySnapshot: SelectedDependencySnapshot
+    onSelectTask?: (taskId: string) => void
+    onSelect?: (taskId: string) => void
+  },
+) {
+  return (
+    previous.column.id === next.column.id &&
+    previous.column.status === next.column.status &&
+    previous.column.title === next.column.title &&
+    previous.column.position === next.column.position &&
+    previous.column.hidden === next.column.hidden &&
+    previous.column.wip_limit === next.column.wip_limit &&
+    previous.tasks === next.tasks &&
+    previous.selectedId === next.selectedId &&
+    previous.dependencySnapshot.selectedTaskId === next.dependencySnapshot.selectedTaskId &&
+    previous.dependencySnapshot.detailTaskId === next.dependencySnapshot.detailTaskId &&
+    previous.dependencySnapshot.dependencies === next.dependencySnapshot.dependencies &&
+    previous.dependencySnapshot.loading === next.dependencySnapshot.loading &&
+    previous.onSelectTask === next.onSelectTask &&
+    previous.onSelect === next.onSelect
   )
 }
 

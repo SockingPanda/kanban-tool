@@ -42,6 +42,11 @@
   --priority-p2-bg: #fffbeb;
   --priority-p2-fg: #92400e;
   --priority-p2-ring: #fde68a;
+  --dependency-blocked-border: #ef4444;
+  --dependency-blocked-hover-border: #dc2626;
+  --graph-edge-step: #7c3aed;
+  --graph-edge-blocking: #dc2626;
+  --graph-edge-dependency: #059669;
   font-family:
     "LXGW WenKai GB Screen", "LXGW WenKai", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
@@ -93,6 +98,11 @@
   --priority-p2-bg: #451a03;
   --priority-p2-fg: #fcd34d;
   --priority-p2-ring: #b45309;
+  --dependency-blocked-border: #f87171;
+  --dependency-blocked-hover-border: #fca5a5;
+  --graph-edge-step: #a78bfa;
+  --graph-edge-blocking: #f87171;
+  --graph-edge-dependency: #34d399;
 }
 
 @theme inline {

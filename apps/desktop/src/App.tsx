@@ -296,6 +296,7 @@ function App() {
       labelSuggestionsRequested: taskDetailState.labelSuggestionsRequested,
       selectedId: taskDetailState.selectedId,
       selectedTask: taskDetailState.selectedTask,
+      taskRunsExpanded: taskDetailState.taskRunsExpanded,
     }),
     [taskDetailState],
   )
@@ -350,6 +351,7 @@ function App() {
       setTaskCreationFirstStepTitle: creationDialogState.setFirstStepTitle,
       setTaskCreationOpen: creationDialogState.setOpen,
       setTaskCreationTitle: creationDialogState.setTitle,
+      setTaskRunsExpanded: taskDetailState.setTaskRunsExpanded,
       setView,
       runAction: taskMutations.runAction,
     }),

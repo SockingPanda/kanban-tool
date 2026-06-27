@@ -6,6 +6,7 @@ import {
   dependencyBlockedTodoClass,
   priorityBadgeLabel,
   requiredStepProgressLabel,
+  selectedIdForColumn,
   selectedUnlockCountForTask,
   sortBoardColumnTasks,
   taskNeedsExecutionPlan,
@@ -86,6 +87,12 @@ describe("board card state", () => {
         loading: false,
       }),
     ).toBeUndefined()
+  })
+
+  it("narrows selected ids to the column that owns the task", () => {
+    expect(selectedIdForColumn([task("t_1"), task("t_2")], "t_2")).toBe("t_2")
+    expect(selectedIdForColumn([task("t_1")], "t_2")).toBeUndefined()
+    expect(selectedIdForColumn([task("t_1")], undefined)).toBeUndefined()
   })
 
   it("derives execution plan and required step card signals", () => {

@@ -7,8 +7,20 @@ export async function invalidateTaskDetailAndBoard(queryClient: QueryClient, boa
   await queryClient.invalidateQueries({ queryKey: queryKeys.stats(board) })
   await queryClient.invalidateQueries({ queryKey: queryKeys.boardTaskMapRoot(board) })
   if (taskId) {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.taskDetail(taskId) })
-    await queryClient.invalidateQueries({ queryKey: queryKeys.taskSteps(taskId) })
-    await queryClient.invalidateQueries({ queryKey: queryKeys.taskNeighborhood(taskId) })
+    await invalidateTaskDetailQueries(queryClient, taskId)
   }
+}
+
+export async function invalidateTaskDetailQueries(queryClient: QueryClient, taskId: string) {
+  await queryClient.invalidateQueries({ queryKey: queryKeys.taskDetail(taskId) })
+  await queryClient.invalidateQueries({ queryKey: queryKeys.taskDependencies(taskId) })
+  await queryClient.invalidateQueries({ queryKey: queryKeys.taskSteps(taskId) })
+  await queryClient.invalidateQueries({ queryKey: queryKeys.taskNeighborhood(taskId) })
+  await queryClient.invalidateQueries({ queryKey: queryKeys.taskRuns(taskId) })
+  await invalidateTaskTimelineQueries(queryClient, taskId)
+}
+
+export async function invalidateTaskTimelineQueries(queryClient: QueryClient, taskId: string) {
+  await queryClient.invalidateQueries({ queryKey: queryKeys.taskEvents(taskId) })
+  await queryClient.invalidateQueries({ queryKey: queryKeys.taskComments(taskId) })
 }

@@ -77,4 +77,16 @@ describe("task explorer chrome", () => {
     expect(resetListFilters).toContain("setPriorityFilters([])")
     expect(resetListFilters).toContain("setPageOffset(0)")
   })
+
+  it("memoizes the disabled task collection fallback page identity", () => {
+    const collection = source("app/useTaskCollectionState.ts")
+    const fallbackPage = collection.slice(collection.indexOf("const fallbackPage = useMemo"), collection.indexOf("const page ="))
+
+    expect(fallbackPage).toContain("useMemo(")
+    expect(fallbackPage).toContain("limit: rowsPerPage")
+    expect(fallbackPage).toContain("offset: pageOffset")
+    expect(fallbackPage).toContain("total: null")
+    expect(collection).toContain("const page = taskData?.page ?? fallbackPage")
+    expect(collection).not.toContain("const page = taskData?.page ?? {")
+  })
 })

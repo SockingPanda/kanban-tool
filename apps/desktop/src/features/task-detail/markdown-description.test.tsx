@@ -5,9 +5,21 @@ import type { Task, TaskStep, TaskSteps } from "@/lib/api"
 import { Sheet } from "@/components/ui/sheet"
 
 import { emptyDetail } from "./detail-state"
+import { __test as markdownTest } from "./markdown"
 import { MarkdownDescription, TaskDetail } from "./TaskDetail"
 
 describe("MarkdownDescription", () => {
+  it("uses stable markdown renderer configuration", () => {
+    const initialRemarkPlugins = markdownTest.markdownRemarkPlugins
+    const initialComponents = markdownTest.markdownComponents
+
+    renderToStaticMarkup(<MarkdownDescription>{"[safe](https://example.com)"}</MarkdownDescription>)
+    renderToStaticMarkup(<MarkdownDescription>{"| a |\n| - |\n| b |"}</MarkdownDescription>)
+
+    expect(markdownTest.markdownRemarkPlugins).toBe(initialRemarkPlugins)
+    expect(markdownTest.markdownComponents).toBe(initialComponents)
+  })
+
   it("renders GFM markdown without enabling raw HTML", () => {
     const html = renderToStaticMarkup(
       <MarkdownDescription>{"**bold**\n\n- item\n\n<script>alert('x')</script>"}</MarkdownDescription>,

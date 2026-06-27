@@ -1,32 +1,22 @@
 use std::path::{Path, PathBuf};
-#[cfg(feature = "vector-lancedb")]
+#[cfg(any())]
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use kanban_context::ContextPolicy;
-#[cfg(feature = "vector-lancedb")]
+#[cfg(any())]
 use kanban_context::{ContextDiagnostic, ContextPack};
-use kanban_entity::EntityUri;
-#[cfg(not(feature = "graph-oxigraph"))]
-use kanban_graph::DisabledGraphStore;
-use kanban_graph::RelationGraph;
-#[cfg(feature = "graph-oxigraph")]
-use kanban_graph_oxigraph::OxigraphStore;
 use kanban_sqlite::{
     EntityListOptions, MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT, OutboxListOptions,
-    derived_store_statuses, get_entity, list_entities, list_outbox, rebuild_graph_store,
-    rebuild_vector_store, sync_graph_store, sync_vector_store, vector_store_status,
-};
-#[cfg(feature = "vector-lancedb")]
-use kanban_sqlite::{
-    configured_vector_store_status, rebuild_vector_store_with, sync_vector_store_with,
+    derived_store_statuses, get_entity, list_entities, list_outbox,
 };
 
 use crate::args::{
     ContextCommand, DerivedCommand, EntityCommand, GraphCommand, OutboxCommand, VectorCommand,
     VectorConfigureArgs,
 };
-use crate::commands::common::{parse_predicate, validate_page_bounds};
+use crate::commands::common::validate_page_bounds;
+use crate::commands::helper::{HelperKind, helper_missing_message, run_helper_json};
 use crate::output::print_or_json;
 
 pub(crate) fn handle_entity(command: EntityCommand, db_path: &PathBuf, json: bool) -> Result<()> {
@@ -126,7 +116,18 @@ pub(crate) fn handle_graph(
 ) -> Result<()> {
     match command {
         GraphCommand::Status => {
-            let status = kanban_sqlite::graph_store_status(db_path, board)?;
+            let status = match graph_helper_json::<kanban_graph::GraphStoreStatus>(
+                db_path,
+                board,
+                &["status".to_owned()],
+            ) {
+                Ok(status) => status,
+                Err(error) => kanban_graph::GraphStoreStatus {
+                    backend: "helper-missing".to_owned(),
+                    enabled: false,
+                    message: helper_missing_message(HelperKind::Graph, &error),
+                },
+            };
             print_or_json(json, &status, || {
                 format!(
                     "graph backend={} enabled={}: {}",
@@ -136,13 +137,22 @@ pub(crate) fn handle_graph(
         }
         GraphCommand::Neighbors(args) => {
             validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
-            let graph = open_graph_store(db_path)?;
-            let uri = EntityUri::new(args.entity_uri)?;
-            let predicate = args.predicate.as_deref().map(parse_predicate).transpose()?;
-            let neighbors = graph.neighbors(&uri, predicate, args.limit)?;
+            let mut helper_args = vec![
+                "neighbors".to_owned(),
+                "--entity-uri".to_owned(),
+                args.entity_uri,
+                "--limit".to_owned(),
+                args.limit.to_string(),
+            ];
+            if let Some(predicate) = args.predicate {
+                helper_args.push("--predicate".to_owned());
+                helper_args.push(predicate);
+            }
+            let neighbors =
+                graph_helper_json::<Vec<kanban_entity::Relation>>(db_path, board, &helper_args)?;
             print_or_json(json, &neighbors, || {
                 if neighbors.is_empty() {
-                    "No graph neighbors (graph store disabled)".to_owned()
+                    "No graph neighbors".to_owned()
                 } else {
                     neighbors
                         .iter()
@@ -158,7 +168,11 @@ pub(crate) fn handle_graph(
             })?;
         }
         GraphCommand::Rebuild => {
-            let status = rebuild_graph_store(db_path, board)?;
+            let status = graph_helper_json::<kanban_graph::GraphStoreStatus>(
+                db_path,
+                board,
+                &["rebuild".to_owned()],
+            )?;
             print_or_json(json, &status, || {
                 format!(
                     "graph backend={} enabled={}: {}",
@@ -167,7 +181,11 @@ pub(crate) fn handle_graph(
             })?;
         }
         GraphCommand::Sync => {
-            let status = sync_graph_store(db_path, board)?;
+            let status = graph_helper_json::<kanban_graph::GraphStoreStatus>(
+                db_path,
+                board,
+                &["sync".to_owned()],
+            )?;
             print_or_json(json, &status, || {
                 format!(
                     "graph backend={} enabled={}: {}",
@@ -177,8 +195,18 @@ pub(crate) fn handle_graph(
         }
         GraphCommand::Query(args) => {
             validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
-            let graph = open_graph_store(db_path)?;
-            let rows = graph.query(&args.sparql, args.limit)?;
+            let helper_args = vec![
+                "query".to_owned(),
+                "--sparql".to_owned(),
+                args.sparql,
+                "--limit".to_owned(),
+                args.limit.to_string(),
+            ];
+            let rows = graph_helper_json::<Vec<kanban_graph::GraphQueryRow>>(
+                db_path,
+                board,
+                &helper_args,
+            )?;
             print_or_json(json, &rows, || {
                 if rows.is_empty() {
                     "No graph query results".to_owned()
@@ -200,14 +228,16 @@ pub(crate) fn handle_graph(
     Ok(())
 }
 
-#[cfg(feature = "graph-oxigraph")]
-pub(crate) fn open_graph_store(db_path: &Path) -> Result<OxigraphStore> {
-    OxigraphStore::open(kanban_local::graph_store_path(db_path.to_path_buf())).map_err(Into::into)
-}
-
-#[cfg(not(feature = "graph-oxigraph"))]
-pub(crate) fn open_graph_store(_db_path: &Path) -> Result<DisabledGraphStore> {
-    Ok(DisabledGraphStore)
+fn graph_helper_json<T>(db_path: &Path, board: &str, command_args: &[String]) -> Result<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let mut args = command_args.to_vec();
+    args.push("--db".to_owned());
+    args.push(db_path.display().to_string());
+    args.push("--board".to_owned());
+    args.push(board.to_owned());
+    run_helper_json(HelperKind::Graph, &args)
 }
 
 pub(crate) fn handle_vector(
@@ -219,16 +249,18 @@ pub(crate) fn handle_vector(
     match command {
         VectorCommand::Configure(args) => {
             let config = vector_config_from_args(&args)?;
-            #[cfg(feature = "vector-lancedb")]
             if !args.skip_check {
-                let provider = ollama_provider_from_config(&config)?;
-                provider
-                    .check()
+                let helper_args = vec![
+                    "check-provider".to_owned(),
+                    "--endpoint".to_owned(),
+                    config.endpoint.clone(),
+                    "--model".to_owned(),
+                    config.model.clone(),
+                    "--dimensions".to_owned(),
+                    config.dimensions.to_string(),
+                ];
+                run_helper_json::<serde_json::Value>(HelperKind::Vector, &helper_args)
                     .with_context(|| "Ollama embedding check failed; config was not written")?;
-            }
-            #[cfg(not(feature = "vector-lancedb"))]
-            if !args.skip_check {
-                bail!("vector configure check requires the vector-lancedb feature");
             }
             match args.vector_config.as_deref() {
                 Some(path) => kanban_local::write_vector_config_at(path, config.clone())
@@ -246,7 +278,23 @@ pub(crate) fn handle_vector(
             })?;
         }
         VectorCommand::Status(args) => {
-            let status = configured_vector_status(db_path, board, args.vector_config.as_deref())?;
+            let status = match vector_helper_json::<kanban_vector::VectorStoreStatus>(
+                db_path,
+                board,
+                &["status".to_owned()],
+                args.vector_config.as_deref(),
+            ) {
+                Ok(status) => status,
+                Err(error) => {
+                    let mut status = kanban_vector::VectorStoreStatus::new(
+                        "helper-missing",
+                        false,
+                        helper_missing_message(HelperKind::Vector, &error),
+                    );
+                    status.diagnostics.push("helper_missing".to_owned());
+                    status
+                }
+            };
             print_or_json(json, &status, || {
                 format!(
                     "vector backend={} enabled={}: {}",
@@ -255,8 +303,12 @@ pub(crate) fn handle_vector(
             })?;
         }
         VectorCommand::Rebuild(args) => {
-            let status =
-                rebuild_configured_vector_store(db_path, board, args.vector_config.as_deref())?;
+            let status = vector_helper_json::<kanban_vector::VectorStoreStatus>(
+                db_path,
+                board,
+                &["rebuild".to_owned()],
+                args.vector_config.as_deref(),
+            )?;
             print_or_json(json, &status, || {
                 format!(
                     "vector backend={} enabled={}: {}",
@@ -265,8 +317,12 @@ pub(crate) fn handle_vector(
             })?;
         }
         VectorCommand::Sync(args) => {
-            let status =
-                sync_configured_vector_store(db_path, board, args.vector_config.as_deref())?;
+            let status = vector_helper_json::<kanban_vector::VectorStoreStatus>(
+                db_path,
+                board,
+                &["sync".to_owned()],
+                args.vector_config.as_deref(),
+            )?;
             print_or_json(json, &status, || {
                 format!(
                     "vector backend={} enabled={}: {}",
@@ -274,8 +330,101 @@ pub(crate) fn handle_vector(
                 )
             })?;
         }
+        VectorCommand::QueryChunks(args) => {
+            validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let command_args = vec![
+                "query-chunks".to_owned(),
+                "--text".to_owned(),
+                args.text,
+                "--limit".to_owned(),
+                args.limit.to_string(),
+            ];
+            let hits = vector_helper_json::<Vec<kanban_vector::VectorHit>>(
+                db_path,
+                board,
+                &command_args,
+                args.vector_config.as_deref(),
+            )?;
+            print_or_json(json, &hits, || {
+                if hits.is_empty() {
+                    "No vector chunk results".to_owned()
+                } else {
+                    hits.iter()
+                        .map(|hit| {
+                            format!(
+                                "{} score={} {}",
+                                hit.chunk.entity_uri,
+                                hit.score,
+                                hit.summary.as_deref().unwrap_or("")
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+            })?;
+        }
+        VectorCommand::QueryLabelAtoms(args) => {
+            validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let mut command_args = vec![
+                "query-label-atoms".to_owned(),
+                "--text".to_owned(),
+                args.text,
+                "--limit".to_owned(),
+                args.limit.to_string(),
+            ];
+            if let Some(board_id) = args.board_id {
+                command_args.push("--board-id".to_owned());
+                command_args.push(board_id);
+            }
+            if let Some(polarity) = args.polarity {
+                command_args.push("--polarity".to_owned());
+                command_args.push(polarity);
+            }
+            let hits = vector_helper_json::<Vec<kanban_vector::LabelAtomHit>>(
+                db_path,
+                board,
+                &command_args,
+                args.vector_config.as_deref(),
+            )?;
+            print_or_json(json, &hits, || {
+                if hits.is_empty() {
+                    "No label atom vector results".to_owned()
+                } else {
+                    hits.iter()
+                        .map(|hit| {
+                            format!(
+                                "{} label={} polarity={} distance={} {}",
+                                hit.atom_id, hit.label_name, hit.polarity, hit.distance, hit.text
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+            })?;
+        }
     }
     Ok(())
+}
+
+fn vector_helper_json<T>(
+    db_path: &Path,
+    board: &str,
+    command_args: &[String],
+    vector_config_path: Option<&Path>,
+) -> Result<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let mut args = command_args.to_vec();
+    args.push("--db".to_owned());
+    args.push(db_path.display().to_string());
+    args.push("--board".to_owned());
+    args.push(board.to_owned());
+    if let Some(path) = vector_config_path {
+        args.push("--vector-config".to_owned());
+        args.push(path.display().to_string());
+    }
+    run_helper_json(HelperKind::Vector, &args)
 }
 
 pub(crate) fn handle_context(
@@ -334,7 +483,7 @@ fn vector_config_from_args(args: &VectorConfigureArgs) -> Result<kanban_local::V
     })
 }
 
-#[cfg(feature = "vector-lancedb")]
+#[cfg(any())]
 fn ollama_provider_from_config(
     config: &kanban_local::VectorConfig,
 ) -> Result<kanban_vector_lancedb::OllamaEmbeddingProvider> {
@@ -349,7 +498,7 @@ fn ollama_provider_from_config(
     .map_err(Into::into)
 }
 
-#[cfg(feature = "vector-lancedb")]
+#[cfg(any())]
 fn configured_lancedb_store(
     db_path: &Path,
     vector_config_path: Option<&Path>,
@@ -366,64 +515,6 @@ fn configured_lancedb_store(
     .map_err(Into::into)
 }
 
-fn configured_vector_status(
-    db_path: &PathBuf,
-    board: &str,
-    vector_config_path: Option<&Path>,
-) -> Result<kanban_vector::VectorStoreStatus> {
-    #[cfg(not(feature = "vector-lancedb"))]
-    let _ = vector_config_path;
-    #[cfg(feature = "vector-lancedb")]
-    {
-        if let Some(config) = kanban_local::resolved_vector_config(vector_config_path)? {
-            if config.provider != "ollama" {
-                bail!("unsupported vector provider in config: {}", config.provider);
-            }
-            return configured_vector_store_status(
-                db_path,
-                board,
-                &config.endpoint,
-                &config.model,
-                config.dimensions,
-            )
-            .map_err(Into::into);
-        }
-    }
-    vector_store_status(db_path, board).map_err(Into::into)
-}
-
-fn rebuild_configured_vector_store(
-    db_path: &PathBuf,
-    board: &str,
-    vector_config_path: Option<&Path>,
-) -> Result<kanban_vector::VectorStoreStatus> {
-    #[cfg(not(feature = "vector-lancedb"))]
-    let _ = vector_config_path;
-    #[cfg(feature = "vector-lancedb")]
-    {
-        if let Some(store) = configured_lancedb_store(db_path, vector_config_path)? {
-            return rebuild_vector_store_with(db_path, board, &store).map_err(Into::into);
-        }
-    }
-    rebuild_vector_store(db_path, board).map_err(Into::into)
-}
-
-fn sync_configured_vector_store(
-    db_path: &PathBuf,
-    board: &str,
-    vector_config_path: Option<&Path>,
-) -> Result<kanban_vector::VectorStoreStatus> {
-    #[cfg(not(feature = "vector-lancedb"))]
-    let _ = vector_config_path;
-    #[cfg(feature = "vector-lancedb")]
-    {
-        if let Some(store) = configured_lancedb_store(db_path, vector_config_path)? {
-            return sync_vector_store_with(db_path, board, &store).map_err(Into::into);
-        }
-    }
-    sync_vector_store(db_path, board).map_err(Into::into)
-}
-
 fn build_configured_context_pack(
     db_path: &PathBuf,
     board: &str,
@@ -431,9 +522,8 @@ fn build_configured_context_pack(
     policy: ContextPolicy,
     vector_config_path: Option<&Path>,
 ) -> Result<kanban_context::ContextPack> {
-    #[cfg(not(feature = "vector-lancedb"))]
     let _ = vector_config_path;
-    #[cfg(feature = "vector-lancedb")]
+    #[cfg(any())]
     {
         match configured_lancedb_store(db_path, vector_config_path) {
             Ok(Some(store)) => {
@@ -452,7 +542,7 @@ fn build_configured_context_pack(
     kanban_sqlite::build_context_pack(db_path, board, task_ref, policy).map_err(Into::into)
 }
 
-#[cfg(feature = "vector-lancedb")]
+#[cfg(any())]
 fn mark_vector_store_construction_error(
     mut pack: ContextPack,
     error: &impl std::fmt::Display,
@@ -468,7 +558,7 @@ fn mark_vector_store_construction_error(
     pack
 }
 
-#[cfg(feature = "vector-lancedb")]
+#[cfg(any())]
 fn bounded_diagnostic_message(error: &impl std::fmt::Display) -> String {
     const MAX_DIAGNOSTIC_MESSAGE_LEN: usize = 240;
     let mut message = error.to_string().replace(['\r', '\n'], " ");

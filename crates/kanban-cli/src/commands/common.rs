@@ -2,28 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use kanban_core::TaskStatus;
-use kanban_entity::Predicate;
 use kanban_sqlite::TaskListSort;
-
-pub(crate) fn parse_predicate(value: &str) -> Result<Predicate> {
-    match value {
-        "belongs_to_board" => Ok(Predicate::BelongsToBoard),
-        "belongs_to_task" => Ok(Predicate::BelongsToTask),
-        "depends_on" => Ok(Predicate::DependsOn),
-        "produced_by" => Ok(Predicate::ProducedBy),
-        "generated_by" => Ok(Predicate::GeneratedBy),
-        "references_artifact" => Ok(Predicate::ReferencesArtifact),
-        "related_to" => Ok(Predicate::RelatedTo),
-        "uses_skill" => Ok(Predicate::UsesSkill),
-        "uses_context" => Ok(Predicate::UsesContext),
-        "derived_from" => Ok(Predicate::DerivedFrom),
-        "supersedes" => Ok(Predicate::Supersedes),
-        "similar_to" => Ok(Predicate::SimilarTo),
-        "requires_review" => Ok(Predicate::RequiresReview),
-        "waiting_for_user" => Ok(Predicate::WaitingForUser),
-        _ => bail!("unsupported predicate: {value}"),
-    }
-}
 
 pub(crate) fn validate_page_bounds(limit: usize, max_limit: usize, offset: usize) -> Result<()> {
     if limit > max_limit {

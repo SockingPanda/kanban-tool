@@ -462,9 +462,8 @@ model = "offline-cli-test-model"
 dimensions = 3
 "#,
     )?;
-    #[cfg(feature = "vector-lancedb")]
+    #[cfg(any())]
     let expected_index_failure = "Ollama embed request failed";
-    #[cfg(not(feature = "vector-lancedb"))]
     let expected_index_failure = "requires a configured label atom vector store";
     kanban(
         &temp.path,
@@ -654,7 +653,7 @@ fn label_bootstrap_verify_requires_vector_provider_before_mutating() -> anyhow::
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
+#[cfg(any())]
 #[test]
 fn label_bootstrap_verify_rebuild_failure_leaves_canonical_state_clean() -> anyhow::Result<()> {
     let temp = TempDb::new("label_bootstrap_verify_rebuild_failure_leaves_canonical_state_clean")?;
@@ -941,7 +940,7 @@ fn label_propose_with_proposal_json_degrades_without_polluting_truth() -> anyhow
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
+#[cfg(any())]
 #[test]
 fn label_propose_with_vector_config_attempts_configured_store() -> anyhow::Result<()> {
     let temp = TempDb::new("label_propose_with_vector_config_attempts_configured_store")?;

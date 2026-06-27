@@ -18,6 +18,11 @@ export type RuntimeConfig = {
   board: string
 }
 
+const WEB_DEV_API_BASE_URL = "/__kb_api__"
+const WEB_DEV_DB_LABEL = "local kanban serve"
+const WEB_DEV_DEFAULT_ACTOR = "desktop-dev"
+const WEB_DEV_DEFAULT_BOARD = "kanban-tool"
+
 export type Board = {
   id: string
   slug: string
@@ -709,7 +714,9 @@ export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
   if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
     return invoke<RuntimeConfig>("runtime_config")
   }
-  const apiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_KB_API_BASE_URL)
+  const configuredApiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_KB_API_BASE_URL)
+  const usingWebDevDefault = !configuredApiBaseUrl && import.meta.env.DEV
+  const apiBaseUrl = configuredApiBaseUrl || (usingWebDevDefault ? WEB_DEV_API_BASE_URL : "")
   if (!apiBaseUrl) {
     throw new Error(
       "VITE_KB_API_BASE_URL is required outside Tauri; set it to an explicit API origin or an explicit Vite proxy base such as /__kb_api__.",
@@ -717,9 +724,9 @@ export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
   }
   return {
     apiBaseUrl,
-    dbPath: import.meta.env.VITE_KB_DB_PATH?.trim() || "external API",
-    actor: import.meta.env.VITE_KB_ACTOR ?? "desktop-dev",
-    board: import.meta.env.VITE_KB_BOARD ?? "default",
+    dbPath: import.meta.env.VITE_KB_DB_PATH?.trim() || (usingWebDevDefault ? WEB_DEV_DB_LABEL : "external API"),
+    actor: import.meta.env.VITE_KB_ACTOR ?? WEB_DEV_DEFAULT_ACTOR,
+    board: import.meta.env.VITE_KB_BOARD ?? (usingWebDevDefault ? WEB_DEV_DEFAULT_BOARD : "default"),
   }
 }
 

@@ -60,9 +60,9 @@ pub struct TaskRecord {
     pub dependency_blocked: bool,
     pub unfinished_parent_count: i64,
     pub execution_plan_state: StepPlanState,
-    pub required_subtask_count: i64,
-    pub completed_required_subtask_count: i64,
-    pub optional_subtask_count: i64,
+    pub required_step_count: i64,
+    pub completed_required_step_count: i64,
+    pub optional_step_count: i64,
     pub labels: Vec<LabelRecord>,
 }
 
@@ -492,37 +492,72 @@ impl StepPlanState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CreateSubtaskInput {
-    pub task: CreateTask,
-    pub position: Option<i64>,
-    pub required: bool,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StepStatus {
+    Todo,
+    Done,
+    Skipped,
+}
+
+impl StepStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Todo => "todo",
+            Self::Done => "done",
+            Self::Skipped => "skipped",
+        }
+    }
+
+    pub fn from_db_str(value: &str) -> Option<Self> {
+        match value {
+            "todo" => Some(Self::Todo),
+            "done" => Some(Self::Done),
+            "skipped" => Some(Self::Skipped),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AttachSubtaskInput {
-    pub child_ref: String,
+pub struct CreateStepInput {
+    pub title: String,
+    pub body: Option<String>,
+    pub linked_task_ref: Option<String>,
     pub position: Option<i64>,
     pub required: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct UpdateSubtaskInput {
+pub struct UpdateStepInput {
+    pub title: Option<String>,
+    pub body: Option<Option<String>>,
+    pub linked_task_ref: Option<String>,
+    pub unlink_task: bool,
     pub position: Option<i64>,
     pub required: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TaskSubtaskRecord {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskStepRecord {
+    pub id: String,
     pub parent_task_id: String,
-    pub child_task: TaskRecord,
+    pub title: String,
+    pub body: Option<String>,
+    pub linked_task: Option<TaskRecord>,
     pub position: i64,
     pub required: bool,
+    pub status: StepStatus,
+    pub resolution_note: Option<String>,
+    pub resolved_by: Option<String>,
+    pub resolved_at: Option<i64>,
     pub created_by: String,
     pub created_at: i64,
+    pub updated_by: String,
+    pub updated_at: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskExecutionPlanRecord {
     pub board_id: String,
     pub task_id: String,
@@ -1474,8 +1509,8 @@ pub struct DispatchResult {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskPlanFilter {
     PlanNeeded,
-    HasSubtasks,
-    IncompleteRequiredSubtasks,
+    HasSteps,
+    IncompleteRequiredSteps,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1704,5 +1739,5 @@ pub struct QueueStats {
     pub stale_claims: Vec<StaleClaimRecord>,
     pub blocked_reasons: Vec<BlockedReasonCount>,
     pub unplanned_active_tasks: i64,
-    pub active_parents_with_incomplete_required_subtasks: i64,
+    pub active_parents_with_incomplete_required_steps: i64,
 }

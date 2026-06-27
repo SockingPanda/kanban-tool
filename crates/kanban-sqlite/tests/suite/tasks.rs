@@ -351,8 +351,8 @@ fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Resu
 }
 
 #[test]
-fn task_list_page_filters_execution_plan_and_subtask_progress() -> anyhow::Result<()> {
-    let temp = TempDb::new("task_list_page_filters_execution_plan_and_subtask_progress")?;
+fn task_list_page_filters_execution_plan_and_step_progress() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_list_page_filters_execution_plan_and_step_progress")?;
     init_database(&temp.path, "tester")?;
 
     let unplanned = create_task(
@@ -365,7 +365,7 @@ fn task_list_page_filters_execution_plan_and_subtask_progress() -> anyhow::Resul
         &temp.path,
         "default",
         "tester",
-        CreateTask::ready("small task without subtasks"),
+        CreateTask::ready("small task without steps"),
     )?;
     mark_execution_plan_not_required(
         &temp.path,
@@ -380,13 +380,15 @@ fn task_list_page_filters_execution_plan_and_subtask_progress() -> anyhow::Resul
         "tester",
         CreateTask::ready("planned parent task"),
     )?;
-    let relation = create_subtask(
+    create_step(
         &temp.path,
         "default",
         "tester",
         &parent.id,
-        CreateSubtaskInput {
-            task: CreateTask::ready("required child step"),
+        CreateStepInput {
+            title: "required execution step".into(),
+            body: None,
+            linked_task_ref: None,
             position: None,
             required: true,
         },
@@ -414,17 +416,17 @@ fn task_list_page_filters_execution_plan_and_subtask_progress() -> anyhow::Resul
             .iter()
             .map(|task| task.id.as_str())
             .collect::<Vec<_>>(),
-        [unplanned.id.as_str(), relation.child_task.id.as_str()]
+        [unplanned.id.as_str()]
     );
 
-    let has_subtasks = kanban_sqlite::list_tasks_page(
+    let has_steps = kanban_sqlite::list_tasks_page(
         &temp.path,
         "default",
         kanban_sqlite::TaskListOptions {
             statuses: vec![],
             priorities: vec![],
             labels: vec![],
-            plan_filters: vec![kanban_sqlite::TaskPlanFilter::HasSubtasks],
+            plan_filters: vec![kanban_sqlite::TaskPlanFilter::HasSteps],
             include_archived: false,
             assignee: None,
             search: None,
@@ -433,8 +435,8 @@ fn task_list_page_filters_execution_plan_and_subtask_progress() -> anyhow::Resul
             offset: 0,
         },
     )?;
-    assert_eq!(has_subtasks.tasks.len(), 1);
-    assert_eq!(has_subtasks.tasks[0].id, parent.id);
+    assert_eq!(has_steps.tasks.len(), 1);
+    assert_eq!(has_steps.tasks[0].id, parent.id);
 
     let incomplete_required = kanban_sqlite::list_tasks_page(
         &temp.path,
@@ -443,7 +445,7 @@ fn task_list_page_filters_execution_plan_and_subtask_progress() -> anyhow::Resul
             statuses: vec![],
             priorities: vec![],
             labels: vec![],
-            plan_filters: vec![kanban_sqlite::TaskPlanFilter::IncompleteRequiredSubtasks],
+            plan_filters: vec![kanban_sqlite::TaskPlanFilter::IncompleteRequiredSteps],
             include_archived: false,
             assignee: None,
             search: None,

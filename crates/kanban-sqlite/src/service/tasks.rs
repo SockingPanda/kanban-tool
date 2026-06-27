@@ -1400,15 +1400,15 @@ pub(crate) fn task_query_where(board_id: &str, options: &TaskListOptions) -> (St
     for filter in &options.plan_filters {
         match filter {
             TaskPlanFilter::PlanNeeded => clauses.push(
-                "status NOT IN ('done','archived') AND NOT EXISTS (SELECT 1 FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1) AND NOT EXISTS (SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=tasks.board_id AND ep.task_id=tasks.id AND ep.state='not_required')"
+                "status NOT IN ('done','archived') AND NOT EXISTS (SELECT 1 FROM task_steps s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id) AND NOT EXISTS (SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=tasks.board_id AND ep.task_id=tasks.id AND ep.state='not_required')"
                     .to_owned(),
             ),
-            TaskPlanFilter::HasSubtasks => clauses.push(
-                "EXISTS (SELECT 1 FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id)"
+            TaskPlanFilter::HasSteps => clauses.push(
+                "EXISTS (SELECT 1 FROM task_steps s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id)"
                     .to_owned(),
             ),
-            TaskPlanFilter::IncompleteRequiredSubtasks => clauses.push(
-                "EXISTS (SELECT 1 FROM task_subtasks s JOIN tasks child ON child.id=s.child_task_id WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1 AND child.status NOT IN ('done','archived'))"
+            TaskPlanFilter::IncompleteRequiredSteps => clauses.push(
+                "EXISTS (SELECT 1 FROM task_steps s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1 AND s.status NOT IN ('done','skipped'))"
                     .to_owned(),
             ),
         }
@@ -1574,7 +1574,7 @@ pub(crate) fn task_order_by(sort: TaskListSort) -> &'static str {
     }
 }
 
-pub(crate) const TASK_COLUMNS: &str = "id,board_id,(SELECT slug FROM boards WHERE boards.id=tasks.board_id) AS board_slug,((SELECT slug FROM boards WHERE boards.id=tasks.board_id) || '#' || seq) AS task_ref,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,result_json,metadata_json,lock_version,EXISTS(SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS dependency_blocked,(SELECT COUNT(*) FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS unfinished_parent_count,CASE WHEN EXISTS(SELECT 1 FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1) THEN 'planned' WHEN EXISTS(SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=tasks.board_id AND ep.task_id=tasks.id AND ep.state='not_required') THEN 'not_required' ELSE 'unplanned' END AS execution_plan_state,(SELECT COUNT(*) FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1) AS required_subtask_count,(SELECT COUNT(*) FROM task_subtasks s JOIN tasks child ON child.id=s.child_task_id WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1 AND child.status IN ('done','archived')) AS completed_required_subtask_count,(SELECT COUNT(*) FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=0) AS optional_subtask_count,COALESCE((SELECT json_group_array(json_object('id', id, 'board_id', board_id, 'name', name, 'color', color, 'created_at', created_at, 'updated_at', updated_at)) FROM (SELECT l.id, l.board_id, l.name, l.color, l.created_at, l.updated_at FROM task_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.task_id=tasks.id ORDER BY l.name ASC)), '[]') AS labels_json";
+pub(crate) const TASK_COLUMNS: &str = "id,board_id,(SELECT slug FROM boards WHERE boards.id=tasks.board_id) AS board_slug,((SELECT slug FROM boards WHERE boards.id=tasks.board_id) || '#' || seq) AS task_ref,seq,title,description,status,status_reason,assignee,priority,position,scheduled_at,due_at,created_by,created_at,updated_at,started_at,completed_at,archived_at,claim_token,claim_owner,claim_expires_at,last_heartbeat_at,current_run_id,retry_count,max_retries,result_summary,result_json,metadata_json,lock_version,EXISTS(SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS dependency_blocked,(SELECT COUNT(*) FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) AS unfinished_parent_count,CASE WHEN EXISTS(SELECT 1 FROM task_steps s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id) THEN 'planned' WHEN EXISTS(SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=tasks.board_id AND ep.task_id=tasks.id AND ep.state='not_required') THEN 'not_required' ELSE 'unplanned' END AS execution_plan_state,(SELECT COUNT(*) FROM task_steps s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1) AS required_step_count,(SELECT COUNT(*) FROM task_steps s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1 AND s.status IN ('done','skipped')) AS completed_required_step_count,(SELECT COUNT(*) FROM task_steps s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=0) AS optional_step_count,COALESCE((SELECT json_group_array(json_object('id', id, 'board_id', board_id, 'name', name, 'color', color, 'created_at', created_at, 'updated_at', updated_at)) FROM (SELECT l.id, l.board_id, l.name, l.color, l.created_at, l.updated_at FROM task_labels tl JOIN labels l ON l.id=tl.label_id WHERE tl.task_id=tasks.id ORDER BY l.name ASC)), '[]') AS labels_json";
 
 pub(crate) fn query_tasks(conn: &Connection, board_id: &str) -> Result<Vec<TaskRecord>> {
     all(
@@ -1738,9 +1738,9 @@ pub(crate) fn task_from_row(row: &Row<'_>) -> rusqlite::Result<TaskRecord> {
                 ))
             },
         )?,
-        required_subtask_count: row.get(34)?,
-        completed_required_subtask_count: row.get(35)?,
-        optional_subtask_count: row.get(36)?,
+        required_step_count: row.get(34)?,
+        completed_required_step_count: row.get(35)?,
+        optional_step_count: row.get(36)?,
         labels,
     })
 }

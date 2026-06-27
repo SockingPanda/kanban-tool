@@ -15,7 +15,7 @@ import { TaskGraphCanvas } from "./TaskGraphCanvas"
 import { apiTaskGraphToCanvasGraph } from "./task-graph-adapter"
 import { useBoardTaskMap } from "./useBoardTaskMap"
 
-type BoardMapFilter = "all" | "blocked" | "ready" | "running" | "unplanned" | "incomplete-subtasks"
+type BoardMapFilter = "all" | "blocked" | "ready" | "running" | "unplanned" | "incomplete-steps"
 
 const MIN_MAP_ZOOM = 0.65
 const MAX_MAP_ZOOM = 1.5
@@ -27,7 +27,7 @@ const filterOptions: { value: BoardMapFilter; label: string }[] = [
   { value: "ready", label: "Ready now" },
   { value: "running", label: "Running" },
   { value: "unplanned", label: "Unplanned steps" },
-  { value: "incomplete-subtasks", label: "Incomplete subtasks" },
+  { value: "incomplete-steps", label: "Incomplete steps" },
 ]
 
 export function BoardTaskMapView({
@@ -213,7 +213,7 @@ function nodeMatchesFilter(node: ApiTaskGraphNode, filter: BoardMapFilter) {
   if (filter === "ready") return node.task.status === "ready" && !node.context_only
   if (filter === "running") return node.task.status === "running" && !node.context_only
   if (filter === "unplanned") return node.task.execution_plan_state === "unplanned" && !node.context_only
-  return incompleteRequiredSubtasks(node.task) > 0 && !node.context_only
+  return incompleteRequiredSteps(node.task) > 0 && !node.context_only
 }
 
 function stepMapZoom(current: number, direction: -1 | 1) {
@@ -237,7 +237,7 @@ function MapInspector({
   onSelectTask: (taskId: string) => void
 }) {
   const task = node?.task ?? null
-  const counts = task && graph ? relationCounts(graph, task.id) : { parents: 0, children: 0, subtasks: 0 }
+  const counts = task && graph ? relationCounts(graph, task.id) : { parents: 0, children: 0, steps: 0 }
   return (
     <aside className="min-w-0 shrink-0 lg:w-80">
       <Card className="space-y-4 p-3">
@@ -272,10 +272,10 @@ function MapInspector({
             <Separator />
             <div className="grid grid-cols-2 gap-2 text-sm">
               <InfoTile label="Plan" value={task.execution_plan_state} />
-              <InfoTile label="Required open" value={String(incompleteRequiredSubtasks(task))} />
+              <InfoTile label="Required open" value={String(incompleteRequiredSteps(task))} />
               <InfoTile label="Parents" value={String(counts.parents)} />
               <InfoTile label="Children" value={String(counts.children)} />
-              <InfoTile label="Subtasks" value={String(counts.subtasks)} />
+              <InfoTile label="Steps" value={String(counts.steps)} />
               <InfoTile label="Blocked by" value={String(task.unfinished_parent_count)} />
             </div>
             <Button type="button" className="w-full" onClick={() => onSelectTask(task.id)}>
@@ -291,17 +291,17 @@ function MapInspector({
 function relationCounts(graph: BoardTaskMap, taskId: string) {
   return graph.edges.reduce(
     (counts, edge) => {
-      if (edge.kind === "subtask" && edge.source_task_id === taskId) counts.subtasks += 1
+      if (edge.kind === "step" && edge.source_task_id === taskId) counts.steps += 1
       if (edge.kind === "dependency" && edge.target_task_id === taskId) counts.parents += 1
       if (edge.kind === "dependency" && edge.source_task_id === taskId) counts.children += 1
       return counts
     },
-    { parents: 0, children: 0, subtasks: 0 },
+    { parents: 0, children: 0, steps: 0 },
   )
 }
 
-function incompleteRequiredSubtasks(task: Task) {
-  return Math.max(0, task.required_subtask_count - task.completed_required_subtask_count)
+function incompleteRequiredSteps(task: Task) {
+  return Math.max(0, task.required_step_count - task.completed_required_step_count)
 }
 
 function InfoTile({ label, value }: { label: string; value: string }) {

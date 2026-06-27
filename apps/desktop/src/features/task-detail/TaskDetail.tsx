@@ -56,7 +56,7 @@ import { legalActions, type LegalTaskAction } from "@/features/task-actions/lega
 import { TaskGraphCanvas } from "@/features/task-map/TaskGraphCanvas"
 import { apiTaskGraphToCanvasGraph } from "@/features/task-map/task-graph-adapter"
 import { isBlockableStatus } from "@/lib/action-policy"
-import type { CommentRecord, KanbanApi, LabelSuggestionResult, Run, Task, TaskStatus, TaskSubtasks } from "@/lib/api"
+import type { CommentRecord, KanbanApi, LabelSuggestionResult, Run, Task, TaskStatus, TaskSteps } from "@/lib/api"
 import { priorityBadgeClass, priorityLabel, priorityLevels } from "@/lib/priority"
 import { cn, formatRelativeTime, shortId } from "@/lib/utils"
 
@@ -139,8 +139,8 @@ export function TaskDetail({
   const [labelInput, setLabelInput] = useState("")
   const [commentSortOrder, setCommentSortOrder] = useState<CommentSortOrder>("newest")
   const [commentPage, setCommentPage] = useState(0)
-  const [subtaskTitle, setSubtaskTitle] = useState("")
-  const [attachSubtaskId, setAttachSubtaskId] = useState("")
+  const [stepTitle, setStepTitle] = useState("")
+  const [attachStepId, setAttachStepId] = useState("")
   const [notRequiredReason, setNotRequiredReason] = useState("")
   const [confirmAction, setConfirmAction] = useState<LegalTaskAction | null>(null)
 
@@ -150,8 +150,8 @@ export function TaskDetail({
     setLabelInput("")
     setCommentSortOrder("newest")
     setCommentPage(0)
-    setSubtaskTitle("")
-    setAttachSubtaskId("")
+    setStepTitle("")
+    setAttachStepId("")
     setNotRequiredReason("")
     setConfirmAction(null)
   }, [task?.id])
@@ -195,24 +195,28 @@ export function TaskDetail({
     await applySuggestedTaskLabel(api, currentTask.id, labelName, onAction)
   }
 
-  async function createSubtask() {
-    if (!api || !subtaskTitle.trim()) return
-    const title = subtaskTitle.trim()
+  async function createStep() {
+    if (!api || !stepTitle.trim()) return
+    const title = stepTitle.trim()
     await onAction(async () => {
-      const result = await api.createSubtask(currentTask.id, { title, priority: currentTask.priority, required: true })
-      setSubtaskTitle("")
+      const result = await api.createStep(currentTask.id, { title, required: true })
+      setStepTitle("")
       return result
-    }, { fallbackTaskId: currentTask.id, label: "subtask" })
+    }, { fallbackTaskId: currentTask.id, label: "step" })
   }
 
-  async function attachSubtask() {
-    if (!api || !attachSubtaskId.trim()) return
-    const childTaskId = attachSubtaskId.trim()
+  async function attachStep() {
+    if (!api || !attachStepId.trim()) return
+    const linkedTaskRef = attachStepId.trim()
     await onAction(async () => {
-      const result = await api.attachSubtask(currentTask.id, { child_task_id: childTaskId, required: true })
-      setAttachSubtaskId("")
+      const result = await api.createStep(currentTask.id, {
+        title: "Review linked task " + linkedTaskRef,
+        linked_task_ref: linkedTaskRef,
+        required: true,
+      })
+      setAttachStepId("")
       return result
-    }, { fallbackTaskId: currentTask.id, label: "subtask" })
+    }, { fallbackTaskId: currentTask.id, label: "step" })
   }
 
   async function markPlanNotRequired() {
@@ -222,7 +226,7 @@ export function TaskDetail({
       const result = await api.markExecutionPlanNotRequired(currentTask.id, reason)
       setNotRequiredReason("")
       return result
-    }, { fallbackTaskId: currentTask.id, label: "subtask" })
+    }, { fallbackTaskId: currentTask.id, label: "step" })
   }
 
   function runAction(action: LegalTaskAction) {
@@ -311,7 +315,7 @@ export function TaskDetail({
                 {longDescription ? <Button className="mt-2 px-0" variant="ghost" size="sm" onClick={() => setDescriptionExpanded((current) => !current)}>{descriptionExpanded ? "Show less" : "Show more"}</Button> : null}
               </Section>
               <Separator />
-              <TaskSubtasksSection task={task} subtasks={detail.subtasks} pending={pendingAction === "subtask"} subtaskTitle={subtaskTitle} attachSubtaskId={attachSubtaskId} notRequiredReason={notRequiredReason} setSubtaskTitle={setSubtaskTitle} setAttachSubtaskId={setAttachSubtaskId} setNotRequiredReason={setNotRequiredReason} onCreateSubtask={() => void createSubtask()} onAttachSubtask={() => void attachSubtask()} onMarkNotRequired={() => void markPlanNotRequired()} onSelectTask={onSelectTask} />
+              <TaskStepsSection task={task} steps={detail.steps} pending={pendingAction === "step"} stepTitle={stepTitle} attachStepId={attachStepId} notRequiredReason={notRequiredReason} setStepTitle={setStepTitle} setAttachStepId={setAttachStepId} setNotRequiredReason={setNotRequiredReason} onCreateStep={() => void createStep()} onAttachStep={() => void attachStep()} onMarkNotRequired={() => void markPlanNotRequired()} onSelectTask={onSelectTask} />
               <Separator />
               <Section title="Primary action"><PrimaryActionPanel api={api} task={task} pendingAction={pendingAction} blockReason={blockReason} setBlockReason={setBlockReason} actionView={actionView} onRun={runAction} onConfirm={setConfirmAction} /></Section>
               <Separator />
@@ -340,38 +344,38 @@ export function TaskDetail({
 }
 
 type ActionViewItem = { action: LegalTaskAction; enabled: boolean; disabledReason: string | null }
-type ActionView = { primary: ActionViewItem | null; items: ActionViewItem[]; planBlocked: boolean; incompleteRequiredSubtasks: number }
+type ActionView = { primary: ActionViewItem | null; items: ActionViewItem[]; planBlocked: boolean; incompleteRequiredSteps: number }
 
 function taskActionView(task: Task, actions: LegalTaskAction[]): ActionView {
   const planBlocked = executionPlanBlocksStart(task)
-  const incompleteRequiredSubtasks = incompleteRequiredSubtasksFor(task)
+  const incompleteRequiredSteps = incompleteRequiredStepsFor(task)
   const items = actions.map((action) => {
-    const disabledReason = actionDisabledReason(action.label, planBlocked, incompleteRequiredSubtasks)
+    const disabledReason = actionDisabledReason(action.label, planBlocked, incompleteRequiredSteps)
     return { action, enabled: action.enabled && !disabledReason, disabledReason }
   })
   const preferred = ["Claim", "Promote", "Specify", "Heartbeat", "Complete", "Review", "Unblock", "Block", "Archive"]
   const primary = preferred.map((label) => items.find((item) => item.action.label === label && item.enabled)).find(Boolean) ?? null
-  return { primary, items, planBlocked, incompleteRequiredSubtasks }
+  return { primary, items, planBlocked, incompleteRequiredSteps }
 }
 
 function executionPlanBlocksStart(task: Task) {
   return task.execution_plan_state === "unplanned" && (task.status === "todo" || task.status === "scheduled" || task.status === "ready")
 }
 
-function incompleteRequiredSubtasksFor(task: Task) {
-  return Math.max(0, task.required_subtask_count - task.completed_required_subtask_count)
+function incompleteRequiredStepsFor(task: Task) {
+  return Math.max(0, task.required_step_count - task.completed_required_step_count)
 }
 
-function actionDisabledReason(label: string, planBlocked: boolean, incompleteRequiredSubtasks: number) {
-  if (planBlocked && (label === "Promote" || label === "Claim")) return "Add subtasks before starting"
-  if (label === "Complete" && incompleteRequiredSubtasks > 0) return "Complete required subtasks first"
+function actionDisabledReason(label: string, planBlocked: boolean, incompleteRequiredSteps: number) {
+  if (planBlocked && (label === "Promote" || label === "Claim")) return "Add steps before starting"
+  if (label === "Complete" && incompleteRequiredSteps > 0) return "Complete required steps first"
   return null
 }
 
 function PrimaryActionPanel({ api, task, pendingAction, blockReason, setBlockReason, actionView, onRun, onConfirm }: { api: KanbanApi | null; task: Task; pendingAction: string | null; blockReason: string; setBlockReason: (value: string) => void; actionView: ActionView; onRun: (action: LegalTaskAction) => void; onConfirm: (action: LegalTaskAction) => void }) {
   const primary = actionView.primary
   const busy = Boolean(pendingAction)
-  return <div className="space-y-3"><div className="flex min-w-0 flex-wrap items-center gap-2">{actionView.planBlocked ? <Button disabled><ListChecks className="h-4 w-4" />Plan steps first</Button> : primary ? <ActionButton item={primary} api={api} busy={busy} onRun={onRun} onConfirm={onConfirm} /> : <Button disabled><CheckCircle2 className="h-4 w-4" />No primary action</Button>}<MoreActionsMenu items={actionView.items} api={api} busy={busy} onRun={onRun} onConfirm={onConfirm} /></div>{actionView.incompleteRequiredSubtasks > 0 ? <div className="text-xs text-muted-foreground">{actionView.incompleteRequiredSubtasks} required subtask{actionView.incompleteRequiredSubtasks === 1 ? "" : "s"} must finish before Complete.</div> : null}{task.status === "blocked" ? <div className="text-xs text-muted-foreground">Unblock asks the service to recompute schedule and dependency state.</div> : null}{isBlockableStatus(task.status) ? <Field><FieldLabel>Block reason</FieldLabel><Textarea aria-label="Block reason" name="block-reason" autoComplete="off" placeholder="Block reason" value={blockReason} onChange={(event) => setBlockReason(event.target.value)} /></Field> : null}</div>
+  return <div className="space-y-3"><div className="flex min-w-0 flex-wrap items-center gap-2">{actionView.planBlocked ? <Button disabled><ListChecks className="h-4 w-4" />Plan steps first</Button> : primary ? <ActionButton item={primary} api={api} busy={busy} onRun={onRun} onConfirm={onConfirm} /> : <Button disabled><CheckCircle2 className="h-4 w-4" />No primary action</Button>}<MoreActionsMenu items={actionView.items} api={api} busy={busy} onRun={onRun} onConfirm={onConfirm} /></div>{actionView.incompleteRequiredSteps > 0 ? <div className="text-xs text-muted-foreground">{actionView.incompleteRequiredSteps} required step{actionView.incompleteRequiredSteps === 1 ? "" : "s"} must finish before Complete.</div> : null}{task.status === "blocked" ? <div className="text-xs text-muted-foreground">Unblock asks the service to recompute schedule and dependency state.</div> : null}{isBlockableStatus(task.status) ? <Field><FieldLabel>Block reason</FieldLabel><Textarea aria-label="Block reason" name="block-reason" autoComplete="off" placeholder="Block reason" value={blockReason} onChange={(event) => setBlockReason(event.target.value)} /></Field> : null}</div>
 }
 
 function ActionButton({ item, api, busy, onRun, onConfirm }: { item: ActionViewItem; api: KanbanApi | null; busy: boolean; onRun: (action: LegalTaskAction) => void; onConfirm: (action: LegalTaskAction) => void }) {
@@ -383,12 +387,79 @@ function MoreActionsMenu({ items, api, busy, onRun, onConfirm }: { items: Action
   return <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" disabled={!api || busy}><MoreHorizontal className="h-4 w-4" />More actions</Button></DropdownMenuTrigger><DropdownMenuContent align="start" className="min-w-56">{items.map((item, index) => { const Icon = item.action.icon; return <div key={item.action.label}>{index === 6 ? <DropdownMenuSeparator /> : null}<DropdownMenuItem disabled={!item.enabled} title={item.disabledReason ?? undefined} onSelect={(event) => { event.preventDefault(); if (!item.enabled) return; if (item.action.confirmation) onConfirm(item.action); else onRun(item.action) }}><Icon className="h-4 w-4" /><span>{item.action.label}</span>{item.disabledReason ? <span className="ml-auto text-xs text-muted-foreground">blocked</span> : null}</DropdownMenuItem></div> })}</DropdownMenuContent></DropdownMenu>
 }
 
-function TaskSubtasksSection({ task, subtasks, pending, subtaskTitle, attachSubtaskId, notRequiredReason, setSubtaskTitle, setAttachSubtaskId, setNotRequiredReason, onCreateSubtask, onAttachSubtask, onMarkNotRequired, onSelectTask }: { task: Task; subtasks: TaskSubtasks | null; pending: boolean; subtaskTitle: string; attachSubtaskId: string; notRequiredReason: string; setSubtaskTitle: (value: string) => void; setAttachSubtaskId: (value: string) => void; setNotRequiredReason: (value: string) => void; onCreateSubtask: () => void; onAttachSubtask: () => void; onMarkNotRequired: () => void; onSelectTask: (taskId: string) => void }) {
-  const items = subtasks?.subtasks ?? []
+function TaskStepsSection({ task, steps, pending, stepTitle, attachStepId, notRequiredReason, setStepTitle, setAttachStepId, setNotRequiredReason, onCreateStep, onAttachStep, onMarkNotRequired, onSelectTask }: { task: Task; steps: TaskSteps | null; pending: boolean; stepTitle: string; attachStepId: string; notRequiredReason: string; setStepTitle: (value: string) => void; setAttachStepId: (value: string) => void; setNotRequiredReason: (value: string) => void; onCreateStep: () => void; onAttachStep: () => void; onMarkNotRequired: () => void; onSelectTask: (taskId: string) => void }) {
+  const items = steps?.steps ?? []
   const required = items.filter((item) => item.required)
-  const running = items.filter((item) => item.child_task.status === "running").length
-  const blocked = items.filter((item) => item.child_task.status === "blocked" || item.child_task.dependency_blocked).length
-  return <Section title="Execution plan"><div className="space-y-3"><div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground"><Badge variant={task.execution_plan_state === "unplanned" ? "secondary" : "ready"}>{task.execution_plan_state}</Badge><span>{required.length} required</span><span>{running} running</span><span>{blocked} blocked</span></div>{items.length ? <div className="space-y-1.5">{items.map((item) => <Button key={item.child_task.id} type="button" variant="outline" className="h-auto w-full justify-start gap-2 px-2 py-2 text-left" onClick={() => onSelectTask(item.child_task.id)}><Badge variant={badgeVariant(item.child_task.status)} className="shrink-0">#{item.child_task.seq}</Badge><span className="min-w-0 flex-1 truncate">{item.child_task.title}</span><Badge variant="secondary" className="shrink-0">{item.required ? "required" : "optional"}</Badge><span className="shrink-0 text-xs text-muted-foreground">{item.child_task.status}</span></Button>)}</div> : <Empty className="items-start rounded-md border border-border bg-muted/20 p-3 text-left"><EmptyDescription>Execution plan is not planned. Add subtasks before starting, or record why this task does not need them.</EmptyDescription></Empty>}<div className="grid gap-2 md:grid-cols-2"><Field><FieldLabel>New subtask title</FieldLabel><InputGroup><InputGroupInput aria-label="New subtask title" name="new-subtask-title" autoComplete="off" value={subtaskTitle} onChange={(event) => setSubtaskTitle(event.target.value)} placeholder="Add subtask" /><InputGroupButton variant="outline" aria-label="Add subtask" disabled={pending || !subtaskTitle.trim()} onClick={onCreateSubtask}><Plus className="h-4 w-4" /></InputGroupButton></InputGroup></Field><Field><FieldLabel>Existing child task id</FieldLabel><InputGroup><InputGroupInput aria-label="Existing child task id" name="existing-child-task-id" autoComplete="off" value={attachSubtaskId} onChange={(event) => setAttachSubtaskId(event.target.value)} placeholder="Task id" /><InputGroupButton variant="outline" aria-label="Attach subtask" disabled={pending || !attachSubtaskId.trim()} onClick={onAttachSubtask}><Network className="h-4 w-4" /></InputGroupButton></InputGroup></Field></div><Field><FieldLabel>Not required reason</FieldLabel><InputGroup><InputGroupInput aria-label="Not required reason" name="not-required-reason" autoComplete="off" value={notRequiredReason} onChange={(event) => setNotRequiredReason(event.target.value)} placeholder="Reason this task does not need subtasks" /><InputGroupButton variant="outline" aria-label="Mark execution plan not required" disabled={pending || !notRequiredReason.trim()} onClick={onMarkNotRequired}><ListChecks className="h-4 w-4" /></InputGroupButton></InputGroup></Field></div></Section>
+  const doneRequired = required.filter((item) => item.status === "done" || item.status === "skipped").length
+  const running = items.filter((item) => item.linked_task?.status === "running").length
+  const blocked = items.filter((item) => item.linked_task?.status === "blocked" || item.linked_task?.dependency_blocked).length
+  return (
+    <Section title="Execution plan">
+      <div className="space-y-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <Badge variant={task.execution_plan_state === "unplanned" ? "secondary" : "ready"}>{task.execution_plan_state}</Badge>
+          <span>{doneRequired}/{required.length} required resolved</span>
+          <span>{running} linked running</span>
+          <span>{blocked} linked blocked</span>
+        </div>
+        {items.length ? (
+          <div className="space-y-1.5">
+            {items.map((item, index) => {
+              const linkedTask = item.linked_task
+              return (
+                <div key={item.id} className="flex min-w-0 items-start gap-2 rounded-md border border-border bg-card px-2 py-2 text-sm">
+                  <Badge variant="secondary" className="mt-0.5 shrink-0">S{index + 1}</Badge>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{item.title}</div>
+                    {item.body ? <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.body}</div> : null}
+                    {linkedTask ? (
+                      <Button type="button" variant="ghost" size="sm" className="mt-1 h-7 px-1.5 text-xs" onClick={() => onSelectTask(linkedTask.id)}>
+                        <Network className="h-3.5 w-3.5" />#{linkedTask.seq} {linkedTask.title}
+                      </Button>
+                    ) : (
+                      <div className="mt-1 text-xs text-muted-foreground">Text step</div>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <Badge variant="secondary">{item.required ? "required" : "optional"}</Badge>
+                    <Badge variant={item.status === "todo" ? "secondary" : "ready"}>{item.status}</Badge>
+                    {linkedTask ? <Badge variant={badgeVariant(linkedTask.status)}>{linkedTask.status}</Badge> : null}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <Empty className="items-start rounded-md border border-border bg-muted/20 p-3 text-left">
+            <EmptyDescription>Execution plan is not planned. Add steps before starting, or record why this task does not need them.</EmptyDescription>
+          </Empty>
+        )}
+        <div className="grid gap-2 md:grid-cols-2">
+          <Field>
+            <FieldLabel>New step title</FieldLabel>
+            <InputGroup>
+              <InputGroupInput aria-label="New step title" name="new-step-title" autoComplete="off" value={stepTitle} onChange={(event) => setStepTitle(event.target.value)} placeholder="Add text step" />
+              <InputGroupButton variant="outline" aria-label="Add step" disabled={pending || !stepTitle.trim()} onClick={onCreateStep}><Plus className="h-4 w-4" /></InputGroupButton>
+            </InputGroup>
+          </Field>
+          <Field>
+            <FieldLabel>Linked task ref</FieldLabel>
+            <InputGroup>
+              <InputGroupInput aria-label="Linked task ref" name="linked-task-ref" autoComplete="off" value={attachStepId} onChange={(event) => setAttachStepId(event.target.value)} placeholder="Task ref or id" />
+              <InputGroupButton variant="outline" aria-label="Add linked step" disabled={pending || !attachStepId.trim()} onClick={onAttachStep}><Network className="h-4 w-4" /></InputGroupButton>
+            </InputGroup>
+          </Field>
+        </div>
+        <Field>
+          <FieldLabel>Not required reason</FieldLabel>
+          <InputGroup>
+            <InputGroupInput aria-label="Not required reason" name="not-required-reason" autoComplete="off" value={notRequiredReason} onChange={(event) => setNotRequiredReason(event.target.value)} placeholder="Reason this task does not need steps" />
+            <InputGroupButton variant="outline" aria-label="Mark execution plan not required" disabled={pending || !notRequiredReason.trim()} onClick={onMarkNotRequired}><ListChecks className="h-4 w-4" /></InputGroupButton>
+          </InputGroup>
+        </Field>
+      </div>
+    </Section>
+  )
 }
 
 function CommentsSection({ commentsPage, commentSortOrder, setCommentSortOrder, setCommentPage, commentBody, setCommentBody, pendingAction, onAddComment }: { commentsPage: ReturnType<typeof commentPageState>; commentSortOrder: CommentSortOrder; setCommentSortOrder: (value: CommentSortOrder) => void; setCommentPage: (value: number | ((current: number) => number)) => void; commentBody: string; setCommentBody: (value: string) => void; pendingAction: string | null; onAddComment: () => Promise<void> }) {

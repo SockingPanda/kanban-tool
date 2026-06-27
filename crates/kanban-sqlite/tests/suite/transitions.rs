@@ -538,7 +538,7 @@ fn execution_plan_required_blocks_promote_claim_and_dispatch_until_planned() -> 
     let ready = get_task(&temp.path, "default", &todo.id)?;
     assert_eq!(ready.status, TaskStatus::Ready);
     assert_eq!(ready.execution_plan_state, StepPlanState::NotRequired);
-    assert_eq!(ready.required_subtask_count, 0);
+    assert_eq!(ready.required_step_count, 0);
 
     let unplanned_ready = create_task(
         &temp.path,
@@ -671,8 +671,8 @@ fn execution_plan_required_blocks_promote_claim_and_dispatch_until_planned() -> 
 }
 
 #[test]
-fn removing_required_subtask_demotes_ready_parent_to_todo() -> anyhow::Result<()> {
-    let temp = TempDb::new("removing_required_subtask_demotes_ready_parent_to_todo")?;
+fn removing_last_step_demotes_ready_parent_to_todo() -> anyhow::Result<()> {
+    let temp = TempDb::new("removing_last_step_demotes_ready_parent_to_todo")?;
     init_database(&temp.path, "tester")?;
 
     let parent = create_task(
@@ -681,19 +681,15 @@ fn removing_required_subtask_demotes_ready_parent_to_todo() -> anyhow::Result<()
         "tester",
         CreateTask::ready("parent required toggle"),
     )?;
-    let child = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("child required toggle"),
-    )?;
-    attach_subtask(
+    let step = create_step(
         &temp.path,
         "default",
         "tester",
         &parent.id,
-        AttachSubtaskInput {
-            child_ref: child.id.clone(),
+        CreateStepInput {
+            title: "only step".into(),
+            body: None,
+            linked_task_ref: None,
             position: None,
             required: true,
         },
@@ -703,65 +699,16 @@ fn removing_required_subtask_demotes_ready_parent_to_todo() -> anyhow::Result<()
         TaskStatus::Ready
     );
 
-    update_subtask(
-        &temp.path,
-        "default",
-        "tester",
-        &parent.id,
-        &child.id,
-        UpdateSubtaskInput {
-            position: None,
-            required: Some(false),
-        },
-    )?;
-    let downgraded = get_task(&temp.path, "default", &parent.id)?;
-    assert_eq!(downgraded.execution_plan_state, StepPlanState::Unplanned);
-    assert_eq!(downgraded.status, TaskStatus::Todo);
-
-    let detach_parent = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("parent detach required"),
-    )?;
-    let detach_child = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("child detach required"),
-    )?;
-    attach_subtask(
-        &temp.path,
-        "default",
-        "tester",
-        &detach_parent.id,
-        AttachSubtaskInput {
-            child_ref: detach_child.id.clone(),
-            position: None,
-            required: true,
-        },
-    )?;
-    assert_eq!(
-        get_task(&temp.path, "default", &detach_parent.id)?.status,
-        TaskStatus::Ready
-    );
-
-    kanban_sqlite::detach_subtask(
-        &temp.path,
-        "default",
-        "tester",
-        &detach_parent.id,
-        &detach_child.id,
-    )?;
-    let detached = get_task(&temp.path, "default", &detach_parent.id)?;
+    remove_step(&temp.path, "default", "tester", &parent.id, &step.id)?;
+    let detached = get_task(&temp.path, "default", &parent.id)?;
     assert_eq!(detached.execution_plan_state, StepPlanState::Unplanned);
     assert_eq!(detached.status, TaskStatus::Todo);
     Ok(())
 }
 
 #[test]
-fn required_subtasks_gate_complete_and_archive_parent() -> anyhow::Result<()> {
-    let temp = TempDb::new("required_subtasks_gate_complete_and_archive_parent")?;
+fn required_steps_gate_complete_and_archive_parent() -> anyhow::Result<()> {
+    let temp = TempDb::new("required_steps_gate_complete_and_archive_parent")?;
     init_database(&temp.path, "tester")?;
     let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("parent"))?;
     let child = create_task(
@@ -769,8 +716,8 @@ fn required_subtasks_gate_complete_and_archive_parent() -> anyhow::Result<()> {
         "default",
         "tester",
         CreateTask {
-            title: "child step".into(),
-            description: Some("step spec".into()),
+            title: "linked task context".into(),
+            description: Some("task context, not completion state".into()),
             status: Some(TaskStatus::Todo),
             assignee: None,
             priority: 1,
@@ -780,27 +727,29 @@ fn required_subtasks_gate_complete_and_archive_parent() -> anyhow::Result<()> {
             metadata_json: "{}".into(),
         },
     )?;
-    attach_subtask(
+    let step = create_step(
         &temp.path,
         "default",
         "tester",
         &parent.id,
-        AttachSubtaskInput {
-            child_ref: child.id.clone(),
+        CreateStepInput {
+            title: "required verification".into(),
+            body: None,
+            linked_task_ref: Some(child.id.clone()),
             position: None,
             required: true,
         },
     )?;
     let planned = get_task(&temp.path, "default", &parent.id)?;
     assert_eq!(planned.execution_plan_state, StepPlanState::Planned);
-    assert_eq!(planned.required_subtask_count, 1);
-    assert_eq!(planned.completed_required_subtask_count, 0);
+    assert_eq!(planned.required_step_count, 1);
+    assert_eq!(planned.completed_required_step_count, 0);
 
     let archive_err = result_err(archive_task(
         &temp.path, "default", "tester", &parent.id, false,
     ))?;
     assert!(
-        matches!(archive_err, KanbanError::SubtasksIncomplete(_)),
+        matches!(archive_err, KanbanError::StepsIncomplete(_)),
         "{archive_err}"
     );
 
@@ -814,11 +763,32 @@ fn required_subtasks_gate_complete_and_archive_parent() -> anyhow::Result<()> {
         false,
     ))?;
     assert!(
-        matches!(complete_err, KanbanError::SubtasksIncomplete(_)),
+        matches!(complete_err, KanbanError::StepsIncomplete(_)),
         "{complete_err}"
     );
 
     archive_task(&temp.path, "default", "tester", &child.id, false)?;
+    let still_blocked = result_err(complete_task(
+        &temp.path,
+        "default",
+        "worker",
+        &parent.id,
+        Some(&claim.claim_token),
+        false,
+    ))?;
+    assert!(
+        matches!(still_blocked, KanbanError::StepsIncomplete(_)),
+        "{still_blocked}"
+    );
+
+    complete_step(
+        &temp.path,
+        "default",
+        "tester",
+        &parent.id,
+        &step.id,
+        "step verified",
+    )?;
     let completed = complete_task(
         &temp.path,
         "default",
@@ -828,7 +798,7 @@ fn required_subtasks_gate_complete_and_archive_parent() -> anyhow::Result<()> {
         false,
     )?;
     assert_eq!(completed.status, TaskStatus::Done);
-    assert_eq!(completed.completed_required_subtask_count, 1);
+    assert_eq!(completed.completed_required_step_count, 1);
 
     let force_parent = create_task(
         &temp.path,
@@ -836,19 +806,15 @@ fn required_subtasks_gate_complete_and_archive_parent() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("force parent"),
     )?;
-    let force_child = create_task(
-        &temp.path,
-        "default",
-        "tester",
-        CreateTask::ready("force child"),
-    )?;
-    attach_subtask(
+    create_step(
         &temp.path,
         "default",
         "tester",
         &force_parent.id,
-        AttachSubtaskInput {
-            child_ref: force_child.id,
+        CreateStepInput {
+            title: "active required step".into(),
+            body: None,
+            linked_task_ref: None,
             position: None,
             required: true,
         },

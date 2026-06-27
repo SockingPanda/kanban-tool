@@ -54,10 +54,14 @@ pub(crate) fn print_or_json<T: serde::Serialize>(
 pub(crate) fn task_line(task: &kanban_sqlite::TaskRecord) -> String {
     let labels = task_label_suffix(task);
     format!(
-        "{} {} [{}] {}{}",
+        "{} {} [{}] P{} plan={} steps={}/{} {}{}",
         task.task_ref,
         task.id,
         task.status.as_str(),
+        task.priority,
+        task.execution_plan_state.as_str(),
+        task.completed_required_step_count,
+        task.required_step_count,
         task.title,
         labels
     )
@@ -96,6 +100,15 @@ pub(crate) fn task_details(
         ),
         format!("assignee: {}", option_display(task.assignee.as_deref())),
         format!("priority: P{}", task.priority),
+        format!(
+            "execution_plan_state: {}",
+            task.execution_plan_state.as_str()
+        ),
+        format!(
+            "required_steps: {}/{}",
+            task.completed_required_step_count, task.required_step_count
+        ),
+        format!("optional_steps: {}", task.optional_step_count),
         format!("position: {}", task.position),
         format!("scheduled_at: {}", option_i64(task.scheduled_at)),
         format!("due_at: {}", option_i64(task.due_at)),

@@ -5,7 +5,7 @@ import type { Dependencies, Task } from "@/lib/api"
 import {
   dependencyBlockedTodoClass,
   priorityBadgeLabel,
-  requiredSubtaskProgressLabel,
+  requiredStepProgressLabel,
   selectedUnlockCountForTask,
   sortBoardColumnTasks,
   taskNeedsExecutionPlan,
@@ -91,8 +91,8 @@ describe("board card state", () => {
   it("derives execution plan and required step card signals", () => {
     expect(taskNeedsExecutionPlan(task("unplanned", { status: "ready", execution_plan_state: "unplanned" }))).toBe(true)
     expect(taskNeedsExecutionPlan(task("done", { status: "done", execution_plan_state: "unplanned" }))).toBe(false)
-    expect(requiredSubtaskProgressLabel(task("steps", { required_subtask_count: 5, completed_required_subtask_count: 2 }))).toBe("steps 2/5")
-    expect(requiredSubtaskProgressLabel(task("none", { required_subtask_count: 0 }))).toBeNull()
+    expect(requiredStepProgressLabel(task("steps", { required_step_count: 5, completed_required_step_count: 2 }))).toBe("steps 2/5")
+    expect(requiredStepProgressLabel(task("none", { required_step_count: 0 }))).toBeNull()
   })
 
   it("labels priority levels and falls back to P3 for legacy values", () => {
@@ -182,9 +182,9 @@ function baseTask(id: string): Task {
     dependency_blocked: false,
     unfinished_parent_count: 0,
     execution_plan_state: "unplanned",
-    required_subtask_count: 0,
-    completed_required_subtask_count: 0,
-    optional_subtask_count: 0,
+    required_step_count: 0,
+    completed_required_step_count: 0,
+    optional_step_count: 0,
     labels: [],
   }
 }

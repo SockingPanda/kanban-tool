@@ -12,7 +12,7 @@ fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
         "default",
         "cli-maintenance-test",
         task_id,
-        "maintenance fixture does not need subtasks",
+        "maintenance fixture does not need steps",
     )?;
     Ok(())
 }
@@ -47,8 +47,8 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     let doctor = kanban(&temp.path, &["--json", "doctor"])?.success_json()?;
 
     assert_eq!(doctor["data"]["integrity_check"], "ok");
-    assert_eq!(doctor["data"]["migration_version"], 22);
-    assert_eq!(doctor["data"]["user_version"], 22);
+    assert_eq!(doctor["data"]["migration_version"], 23);
+    assert_eq!(doctor["data"]["user_version"], 23);
     assert_eq!(doctor["data"]["expired_running_tasks"], 1);
     assert_eq!(doctor["data"]["dependency_cycles"], 0);
     assert_eq!(doctor["data"]["archived_dependency_edges"], 0);
@@ -58,7 +58,7 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     assert_eq!(doctor["data"]["executable_schedule_violations"], 0);
     assert_eq!(doctor["data"]["unplanned_active_tasks"], 0);
     assert_eq!(
-        doctor["data"]["active_parents_with_incomplete_required_subtasks"],
+        doctor["data"]["active_parents_with_incomplete_required_steps"],
         0
     );
     assert_eq!(doctor["data"]["outbox_pending"], 12);

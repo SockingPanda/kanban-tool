@@ -5,6 +5,7 @@ import { Braces, CheckCircle2, CircleDashed, RefreshCcw, Search, XCircle } from 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge, type BadgeProps } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { MetricStrip, PageToolbar, SectionCard } from "@/components/ui/composites"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -190,14 +191,12 @@ export function OntologyReviewWorkbench({ api }: { api: KanbanApi | null }) {
   return (
     <ScrollArea className="flex-1 bg-card">
       <div className="flex min-h-full min-w-0 flex-col gap-3 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-base font-semibold">Ontology review</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Review aid; does not modify canonical semantics. Lifecycle actions do not modify canonical label semantics.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+        <PageToolbar
+          className="rounded-md border border-border bg-background"
+          title="Ontology review"
+          description="Review aid; does not modify canonical semantics. Lifecycle actions do not modify canonical label semantics."
+          meta={
+            <>
             <Button
               type="button"
               variant={includeAll ? "secondary" : "outline"}
@@ -217,8 +216,9 @@ export function OntologyReviewWorkbench({ api }: { api: KanbanApi | null }) {
               <RefreshCcw className={cn("h-4 w-4", (signalsQuery.isFetching || reviewQuery.isFetching) && "animate-spin")} />
               Refresh
             </Button>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {localError ? (
           <Alert className="border-destructive/50">
@@ -301,16 +301,18 @@ function Panel({
   children: ReactNode
 }) {
   return (
-    <section className="flex min-h-0 min-w-0 flex-col rounded-md border border-border bg-background">
-      <div className="flex min-h-12 flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <h2 className="truncate text-sm font-semibold">{title}</h2>
+    <SectionCard
+      title={title}
+      className="flex min-h-0 min-w-0 flex-col"
+      actions={
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {meta ? <Badge variant="secondary">{meta}</Badge> : null}
+          {controls}
         </div>
-        {controls}
-      </div>
+      }
+    >
       <div className="min-h-0 flex-1 overflow-auto p-3">{children}</div>
-    </section>
+    </SectionCard>
   )
 }
 
@@ -336,11 +338,12 @@ export function SignalList({
   return (
     <div className="space-y-2">
       {signals.map((signal) => (
-        <button
+        <Button
           key={signal.id}
           type="button"
+          variant="ghost"
           className={cn(
-            "w-full rounded-md border border-border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60",
+            "h-auto w-full justify-start rounded-md border border-border bg-card px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60",
             selectedSignalId === signal.id && "border-primary/50 bg-muted",
           )}
           onClick={() => onSelectSignal(signal.id)}
@@ -359,7 +362,7 @@ export function SignalList({
               <Badge variant="secondary">recorded score {formatScore(signal.suggest_score)}</Badge>
             ) : null}
           </div>
-        </button>
+        </Button>
       ))}
     </div>
   )
@@ -396,12 +399,15 @@ export function ReviewGroups({
             <Badge variant="review">{group.task_count} source tasks</Badge>
           </div>
           {group.candidate_text ? <p className="mt-2 text-xs text-muted-foreground">{group.candidate_text}</p> : null}
-          <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
-            <Metric label="signal rows" value={group.signal_count} />
-            <Metric label="open" value={group.open_count} />
-            <Metric label="confirmed" value={group.confirmed_count} />
-            <Metric label="actions" value={group.action_count} />
-          </div>
+          <MetricStrip
+            className="mt-3 grid-cols-4 text-xs"
+            items={[
+              { id: "signal-rows", label: "signal rows", value: group.signal_count },
+              { id: "open", label: "open", value: group.open_count },
+              { id: "confirmed", label: "confirmed", value: group.confirmed_count },
+              { id: "actions", label: "actions", value: group.action_count },
+            ]}
+          />
           <div className="mt-3 flex flex-wrap gap-1">
             {group.signal_ids.slice(0, 4).map((signalId) => (
               <Button key={signalId} type="button" variant="outline" size="sm" onClick={() => onSelectSignal(signalId)}>
@@ -577,11 +583,14 @@ export function AtomExplain({ loading, explain }: { loading: boolean; explain: L
         <p className="text-muted-foreground">No current atom resolved for {explain.query}.</p>
       )}
       {explain.legacy_reason ? <p className="text-xs text-muted-foreground">{explain.legacy_reason}</p> : null}
-      <div className="grid grid-cols-3 gap-2 text-xs">
-        <Metric label="actions" value={explain.provenance_actions.length} />
-        <Metric label="signal rows" value={explain.supporting_signals.length} />
-        <Metric label="validations" value={explain.validation_history.length} />
-      </div>
+      <MetricStrip
+        className="grid-cols-3 text-xs"
+        items={[
+          { id: "actions", label: "actions", value: explain.provenance_actions.length },
+          { id: "signal-rows", label: "signal rows", value: explain.supporting_signals.length },
+          { id: "validations", label: "validations", value: explain.validation_history.length },
+        ]}
+      />
       {explain.provenance_actions.slice(0, 4).map((entry) => (
         <div key={entry.action.id} className="rounded-md border border-border bg-card p-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -609,15 +618,6 @@ function Info({ label, value }: { label: string; value: string }) {
     <div className="min-w-0 rounded-md border border-border bg-card px-3 py-2">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="truncate text-sm font-medium">{value}</div>
-    </div>
-  )
-}
-
-function Metric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md border border-border bg-background px-2 py-1">
-      <div className="text-[11px] text-muted-foreground">{label}</div>
-      <div className="font-medium">{value}</div>
     </div>
   )
 }

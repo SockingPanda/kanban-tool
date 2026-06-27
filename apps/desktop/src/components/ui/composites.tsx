@@ -65,6 +65,7 @@ export function SectionCard({
 }
 
 export type MetricStripItem = {
+  id: string
   label: ReactNode
   value: ReactNode
   tone?: BadgeProps["variant"]
@@ -81,8 +82,8 @@ export function MetricStrip({
 }) {
   return (
     <div className={cn("grid gap-2", className)}>
-      {items.map((item, index) => (
-        <MetricTile key={typeof item.label === "string" ? item.label : index} item={item} className={itemClassName} />
+      {items.map((item) => (
+        <MetricTile key={item.id} item={item} className={itemClassName} />
       ))}
     </div>
   )

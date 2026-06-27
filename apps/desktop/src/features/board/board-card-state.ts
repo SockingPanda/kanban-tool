@@ -26,11 +26,6 @@ export function selectedUnlockCountForTask(taskId: string, snapshot: SelectedDep
   return snapshot.dependencies.children.length
 }
 
-export function selectedIdForColumn(tasks: Pick<Task, "id">[], selectedId?: string) {
-  if (!selectedId) return undefined
-  return tasks.some((task) => task.id === selectedId) ? selectedId : undefined
-}
-
 export function taskNeedsExecutionPlan(task: Task) {
   return task.execution_plan_state === "unplanned" && task.status !== "done" && task.status !== "archived"
 }
@@ -50,7 +45,7 @@ export function sortBoardColumnTasks(tasks: Task[], status: TaskStatus) {
 
 export function dependencyBlockedTodoClass(task: Task) {
   if (task.status === "todo" && task.dependency_blocked) {
-    return "border-red-500 hover:border-red-600"
+    return "border-[var(--dependency-blocked-border)] hover:border-[var(--dependency-blocked-hover-border)]"
   }
   return null
 }

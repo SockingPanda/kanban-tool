@@ -264,8 +264,8 @@ function flowNodeType(role: TaskGraphLayoutNode["role"], contextOnly?: boolean):
 }
 
 function graphEdgeStroke(kind: TaskGraphEdgeKind, blocking?: boolean) {
-  if (kind === "step") return "#7c3aed"
-  return blocking ? "#dc2626" : "#059669"
+  if (kind === "step") return "var(--graph-edge-step)"
+  return blocking ? "var(--graph-edge-blocking)" : "var(--graph-edge-dependency)"
 }
 
 function taskGraphLayoutKey(graph: TaskGraph, mode: TaskGraphMode) {

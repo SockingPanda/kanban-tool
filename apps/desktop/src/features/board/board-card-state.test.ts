@@ -6,7 +6,6 @@ import {
   dependencyBlockedTodoClass,
   priorityBadgeLabel,
   requiredStepProgressLabel,
-  selectedIdForColumn,
   selectedUnlockCountForTask,
   sortBoardColumnTasks,
   taskNeedsExecutionPlan,
@@ -88,13 +87,6 @@ describe("board card state", () => {
       }),
     ).toBeUndefined()
   })
-
-  it("narrows selected ids to the column that owns the task", () => {
-    expect(selectedIdForColumn([task("t_1"), task("t_2")], "t_2")).toBe("t_2")
-    expect(selectedIdForColumn([task("t_1")], "t_2")).toBeUndefined()
-    expect(selectedIdForColumn([task("t_1")], undefined)).toBeUndefined()
-  })
-
   it("derives execution plan and required step card signals", () => {
     expect(taskNeedsExecutionPlan(task("unplanned", { status: "ready", execution_plan_state: "unplanned" }))).toBe(true)
     expect(taskNeedsExecutionPlan(task("done", { status: "done", execution_plan_state: "unplanned" }))).toBe(false)
@@ -137,7 +129,9 @@ describe("board card state", () => {
   })
 
   it("adds red border styling only for dependency-blocked todo cards", () => {
-    expect(dependencyBlockedTodoClass(task("blocked", { status: "todo", dependency_blocked: true }))).toContain("border-red")
+    expect(dependencyBlockedTodoClass(task("blocked", { status: "todo", dependency_blocked: true }))).toContain(
+      "--dependency-blocked-border",
+    )
     expect(dependencyBlockedTodoClass(task("ready", { status: "ready", dependency_blocked: true }))).toBeNull()
     expect(dependencyBlockedTodoClass(task("todo", { status: "todo", dependency_blocked: false }))).toBeNull()
   })

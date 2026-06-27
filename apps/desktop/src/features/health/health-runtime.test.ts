@@ -15,11 +15,11 @@ describe("Health runtime model", () => {
     const model = buildHealthRuntimeModel({ ok: true, db: "ok", version: "1.1.2" }, config)
 
     expect(model.metrics).toEqual([
-      { label: "ok", value: "true", tone: "ready" },
-      { label: "db", value: "ok", tone: "ready" },
-      { label: "version", value: "1.1.2", tone: "secondary" },
-      { label: "db_path", value: "not reported", tone: "secondary" },
-      { label: "db_fingerprint", value: "not reported", tone: "secondary" },
+      { id: "ok", label: "ok", value: "true", tone: "ready" },
+      { id: "db", label: "db", value: "ok", tone: "ready" },
+      { id: "version", label: "version", value: "1.1.2", tone: "secondary" },
+      { id: "db-path", label: "db_path", value: "not reported", tone: "secondary" },
+      { id: "db-fingerprint", label: "db_fingerprint", value: "not reported", tone: "secondary" },
     ])
     expect(model.warning).toBeNull()
   })
@@ -35,8 +35,9 @@ describe("Health runtime model", () => {
 
     const model = buildHealthRuntimeModel(health, config)
 
-    expect(model.metrics).toContainEqual({ label: "db_path", value: "/tmp/current/kb.db", tone: "secondary" })
+    expect(model.metrics).toContainEqual({ id: "db-path", label: "db_path", value: "/tmp/current/kb.db", tone: "secondary" })
     expect(model.metrics).toContainEqual({
+      id: "db-fingerprint",
       label: "db_fingerprint",
       value: "sqlite:131072:1717520000000",
       tone: "secondary",

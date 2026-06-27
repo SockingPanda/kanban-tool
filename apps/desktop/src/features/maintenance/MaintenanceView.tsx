@@ -109,8 +109,8 @@ function StatsGrid({ stats }: { stats?: BoardStats }) {
         <MetricStrip
           className="contents"
           items={[
-            { label: "board", value: stats.board_id },
-            { label: "generated", value: String(stats.generated_at) },
+            { id: "board", label: "board", value: stats.board_id },
+            { id: "generated", label: "generated", value: String(stats.generated_at) },
           ]}
         />
       </div>
@@ -119,7 +119,7 @@ function StatsGrid({ stats }: { stats?: BoardStats }) {
         <div className="grid grid-cols-3 gap-2">
           <MetricStrip
             className="contents"
-            items={stats.status_counts.map((entry) => ({ label: entry.status, value: String(entry.count) }))}
+            items={stats.status_counts.map((entry) => ({ id: `status-${entry.status}`, label: entry.status, value: String(entry.count) }))}
           />
           {stats.status_counts.length === 0 ? <EmptyText>No status counts returned.</EmptyText> : null}
         </div>
@@ -187,7 +187,7 @@ function DoctorReportView({ report }: { report: DoctorReport }) {
       <div className="grid grid-cols-2 gap-2">
         <MetricStrip
           className="contents"
-          items={findings.map(([label, value]) => ({ label, value: String(value) }))}
+          items={findings.map(([label, value]) => ({ id: label.replace(/ /g, "-"), label, value: String(value) }))}
         />
       </div>
       <div>

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { ChevronDown, ListChecks, Map, MessageSquare, Network } from "lucide-react"
 
 import {
   AlertDialog,
@@ -11,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -65,7 +67,12 @@ export function TaskDetail({
   draftDirty,
   setEditDraft,
   detailLoading,
+  commentsExpanded = false,
+  dependenciesExpanded = false,
+  eventsExpanded = false,
+  graphExpanded = false,
   runsExpanded = false,
+  stepsExpanded = false,
   pendingAction,
   onAction,
   onAddDependency,
@@ -75,7 +82,12 @@ export function TaskDetail({
   onSaveTask,
   onCancelEdit,
   onAddComment,
+  onCommentsExpandedChange = () => {},
+  onDependenciesExpandedChange = () => {},
+  onEventsExpandedChange = () => {},
+  onGraphExpandedChange = () => {},
   onRunsExpandedChange = () => {},
+  onStepsExpandedChange = () => {},
 }: {
   api: KanbanApi | null
   task: Task | null
@@ -96,7 +108,12 @@ export function TaskDetail({
   draftDirty: boolean
   setEditDraft: (value: TaskEditDraft) => void
   detailLoading: boolean
+  commentsExpanded?: boolean
+  dependenciesExpanded?: boolean
+  eventsExpanded?: boolean
+  graphExpanded?: boolean
   runsExpanded?: boolean
+  stepsExpanded?: boolean
   pendingAction: string | null
   onAction: (action: () => Promise<unknown>, options?: TaskDetailActionOptions) => Promise<unknown>
   onAddDependency: () => Promise<void>
@@ -106,7 +123,12 @@ export function TaskDetail({
   onSaveTask: () => Promise<boolean>
   onCancelEdit: () => void
   onAddComment: () => Promise<void>
+  onCommentsExpandedChange?: (value: boolean) => void
+  onDependenciesExpandedChange?: (value: boolean) => void
+  onEventsExpandedChange?: (value: boolean) => void
+  onGraphExpandedChange?: (value: boolean) => void
   onRunsExpandedChange?: (value: boolean) => void
+  onStepsExpandedChange?: (value: boolean) => void
 }) {
   const [descriptionExpanded, setDescriptionExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -236,7 +258,13 @@ export function TaskDetail({
         ) : (
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(260px,320px)_minmax(420px,1fr)_minmax(220px,260px)] lg:grid-cols-[minmax(260px,320px)_minmax(420px,1fr)]">
             <aside className="min-w-0 space-y-4">
-              <Section title="One-hop map">
+              <TaskDetailPanel
+                title="One-hop map"
+                icon={<Map className="h-4 w-4" />}
+                open={graphExpanded}
+                summary={graphExpanded ? `${graph.nodes.length} node${graph.nodes.length === 1 ? "" : "s"}` : "Load map"}
+                onOpenChange={onGraphExpandedChange}
+              >
                 {graph.nodes.length ? (
                   <TaskGraphCanvas graph={graph} selectedTaskId={task.id} onSelectTask={onSelectTask} className="h-[420px] min-h-[320px]" />
                 ) : (
@@ -244,17 +272,31 @@ export function TaskDetail({
                     <EmptyDescription>No task context graph yet.</EmptyDescription>
                   </Empty>
                 )}
-              </Section>
-              <TaskDependencyPanel
-                parents={detail.dependencies.parents}
-                children={detail.dependencies.children}
-                dependencyInput={dependencyInput}
-                pending={pendingAction === "dependency"}
-                setDependencyInput={setDependencyInput}
-                onAddDependency={() => void onAddDependency()}
-                onRemoveDependency={(parentTaskId) => void onRemoveDependency(parentTaskId)}
-                onSelectTask={onSelectTask}
-              />
+              </TaskDetailPanel>
+              <TaskDetailPanel
+                title="Dependencies"
+                icon={<Network className="h-4 w-4" />}
+                open={dependenciesExpanded}
+                summary={
+                  dependenciesExpanded
+                    ? `${detail.dependencies.parents.length + detail.dependencies.children.length} link${
+                        detail.dependencies.parents.length + detail.dependencies.children.length === 1 ? "" : "s"
+                      }`
+                    : "Load dependencies"
+                }
+                onOpenChange={onDependenciesExpandedChange}
+              >
+                <TaskDependencyPanel
+                  parents={detail.dependencies.parents}
+                  children={detail.dependencies.children}
+                  dependencyInput={dependencyInput}
+                  pending={pendingAction === "dependency"}
+                  setDependencyInput={setDependencyInput}
+                  onAddDependency={() => void onAddDependency()}
+                  onRemoveDependency={(parentTaskId) => void onRemoveDependency(parentTaskId)}
+                  onSelectTask={onSelectTask}
+                />
+              </TaskDetailPanel>
             </aside>
 
             <main className="min-w-0 space-y-4">
@@ -267,21 +309,29 @@ export function TaskDetail({
                 ) : null}
               </Section>
               <Separator />
-              <TaskExecutionPlanPanel
-                task={task}
-                steps={detail.steps}
-                pending={pendingAction === "step"}
-                stepTitle={stepTitle}
-                attachStepId={attachStepId}
-                notRequiredReason={notRequiredReason}
-                setStepTitle={setStepTitle}
-                setAttachStepId={setAttachStepId}
-                setNotRequiredReason={setNotRequiredReason}
-                onCreateStep={() => void createStep()}
-                onAttachStep={() => void attachStep()}
-                onMarkNotRequired={() => void markPlanNotRequired()}
-                onSelectTask={onSelectTask}
-              />
+              <TaskDetailPanel
+                title="Execution plan"
+                icon={<ListChecks className="h-4 w-4" />}
+                open={stepsExpanded}
+                summary={stepsExpanded ? `${detail.steps?.steps.length ?? 0} step${detail.steps?.steps.length === 1 ? "" : "s"}` : "Load steps"}
+                onOpenChange={onStepsExpandedChange}
+              >
+                <TaskExecutionPlanPanel
+                  task={task}
+                  steps={detail.steps}
+                  pending={pendingAction === "step"}
+                  stepTitle={stepTitle}
+                  attachStepId={attachStepId}
+                  notRequiredReason={notRequiredReason}
+                  setStepTitle={setStepTitle}
+                  setAttachStepId={setAttachStepId}
+                  setNotRequiredReason={setNotRequiredReason}
+                  onCreateStep={() => void createStep()}
+                  onAttachStep={() => void attachStep()}
+                  onMarkNotRequired={() => void markPlanNotRequired()}
+                  onSelectTask={onSelectTask}
+                />
+              </TaskDetailPanel>
               <Separator />
               <Section title="Primary action">
                 <TaskActionPanel
@@ -296,19 +346,27 @@ export function TaskDetail({
                 />
               </Section>
               <Separator />
-              <TaskCommentsPanel
-                commentsPage={commentsPage}
-                commentSortOrder={commentSortOrder}
-                setCommentSortOrder={setCommentSortOrder}
-                setCommentPage={setCommentPage}
-                commentBody={commentBody}
-                setCommentBody={setCommentBody}
-                pendingAction={pendingAction}
-                onAddComment={onAddComment}
-              />
+              <TaskDetailPanel
+                title="Discussion"
+                icon={<MessageSquare className="h-4 w-4" />}
+                open={commentsExpanded}
+                summary={commentsExpanded ? `${commentsPage.total} comment${commentsPage.total === 1 ? "" : "s"}` : "Load comments"}
+                onOpenChange={onCommentsExpandedChange}
+              >
+                <TaskCommentsPanel
+                  commentsPage={commentsPage}
+                  commentSortOrder={commentSortOrder}
+                  setCommentSortOrder={setCommentSortOrder}
+                  setCommentPage={setCommentPage}
+                  commentBody={commentBody}
+                  setCommentBody={setCommentBody}
+                  pendingAction={pendingAction}
+                  onAddComment={onAddComment}
+                />
+              </TaskDetailPanel>
               <Separator />
               <TaskRunsPanel activeRun={activeRun} detail={detail} open={runsExpanded} onOpenChange={onRunsExpandedChange} />
-              <TaskEventsPanel events={detail.events} />
+              <TaskEventsPanel events={detail.events} open={eventsExpanded} onOpenChange={onEventsExpandedChange} />
             </main>
 
             <aside className="min-w-0 space-y-4 lg:col-span-2 xl:col-span-1">
@@ -356,5 +414,36 @@ export function TaskDetail({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+function TaskDetailPanel({
+  children,
+  icon,
+  open,
+  summary,
+  title,
+  onOpenChange,
+}: {
+  children: ReactNode
+  icon: ReactNode
+  open: boolean
+  summary: string
+  title: string
+  onOpenChange: (value: boolean) => void
+}) {
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange}>
+      <Section title={title}>
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" size="sm" className="mb-3">
+            {icon}
+            {summary}
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>{children}</CollapsibleContent>
+      </Section>
+    </Collapsible>
   )
 }

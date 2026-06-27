@@ -9,8 +9,6 @@ import { TaskStatusBadge } from "@/components/ui/composites"
 import type { Task, TaskStep, TaskSteps } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-import { Section } from "./task-detail-shared"
-
 export function TaskExecutionPlanPanel({
   task,
   steps,
@@ -47,81 +45,79 @@ export function TaskExecutionPlanPanel({
   const blocked = items.filter((item) => item.linked_task?.status === "blocked" || item.linked_task?.dependency_blocked).length
 
   return (
-    <Section title="Execution plan">
-      <div className="space-y-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <Badge variant={task.execution_plan_state === "unplanned" ? "secondary" : "ready"}>
-            {task.execution_plan_state}
-          </Badge>
-          <span>
-            {doneRequired}/{required.length} steps
-          </span>
-          <span>{running} linked running</span>
-          <span>{blocked} linked blocked</span>
-        </div>
-        {items.length ? <TaskStepRows items={items} onSelectTask={onSelectTask} /> : <EmptyExecutionPlan />}
-        <div className="grid gap-2 md:grid-cols-2">
-          <Field>
-            <FieldLabel>New step title</FieldLabel>
-            <InputGroup>
-              <InputGroupInput
-                aria-label="New step title"
-                name="new-step-title"
-                autoComplete="off"
-                value={stepTitle}
-                onChange={(event) => setStepTitle(event.target.value)}
-                placeholder="Add text step"
-              />
-              <InputGroupButton variant="outline" aria-label="Add step" disabled={pending || !stepTitle.trim()} onClick={onCreateStep}>
-                <Plus className="h-4 w-4" />
-              </InputGroupButton>
-            </InputGroup>
-          </Field>
-          <Field>
-            <FieldLabel>Linked task ref</FieldLabel>
-            <InputGroup>
-              <InputGroupInput
-                aria-label="Linked task ref"
-                name="linked-task-ref"
-                autoComplete="off"
-                value={attachStepId}
-                onChange={(event) => setAttachStepId(event.target.value)}
-                placeholder="Task ref or id"
-              />
-              <InputGroupButton
-                variant="outline"
-                aria-label="Add linked step"
-                disabled={pending || !attachStepId.trim()}
-                onClick={onAttachStep}
-              >
-                <Network className="h-4 w-4" />
-              </InputGroupButton>
-            </InputGroup>
-          </Field>
-        </div>
+    <div className="space-y-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <Badge variant={task.execution_plan_state === "unplanned" ? "secondary" : "ready"}>
+          {task.execution_plan_state}
+        </Badge>
+        <span>
+          {doneRequired}/{required.length} steps
+        </span>
+        <span>{running} linked running</span>
+        <span>{blocked} linked blocked</span>
+      </div>
+      {items.length ? <TaskStepRows items={items} onSelectTask={onSelectTask} /> : <EmptyExecutionPlan />}
+      <div className="grid gap-2 md:grid-cols-2">
         <Field>
-          <FieldLabel>Not required reason</FieldLabel>
+          <FieldLabel>New step title</FieldLabel>
           <InputGroup>
             <InputGroupInput
-              aria-label="Not required reason"
-              name="not-required-reason"
+              aria-label="New step title"
+              name="new-step-title"
               autoComplete="off"
-              value={notRequiredReason}
-              onChange={(event) => setNotRequiredReason(event.target.value)}
-              placeholder="Reason this task does not need steps"
+              value={stepTitle}
+              onChange={(event) => setStepTitle(event.target.value)}
+              placeholder="Add text step"
+            />
+            <InputGroupButton variant="outline" aria-label="Add step" disabled={pending || !stepTitle.trim()} onClick={onCreateStep}>
+              <Plus className="h-4 w-4" />
+            </InputGroupButton>
+          </InputGroup>
+        </Field>
+        <Field>
+          <FieldLabel>Linked task ref</FieldLabel>
+          <InputGroup>
+            <InputGroupInput
+              aria-label="Linked task ref"
+              name="linked-task-ref"
+              autoComplete="off"
+              value={attachStepId}
+              onChange={(event) => setAttachStepId(event.target.value)}
+              placeholder="Task ref or id"
             />
             <InputGroupButton
               variant="outline"
-              aria-label="Mark execution plan not required"
-              disabled={pending || !notRequiredReason.trim()}
-              onClick={onMarkNotRequired}
+              aria-label="Add linked step"
+              disabled={pending || !attachStepId.trim()}
+              onClick={onAttachStep}
             >
-              <ListChecks className="h-4 w-4" />
+              <Network className="h-4 w-4" />
             </InputGroupButton>
           </InputGroup>
         </Field>
       </div>
-    </Section>
+      <Field>
+        <FieldLabel>Not required reason</FieldLabel>
+        <InputGroup>
+          <InputGroupInput
+            aria-label="Not required reason"
+            name="not-required-reason"
+            autoComplete="off"
+            value={notRequiredReason}
+            onChange={(event) => setNotRequiredReason(event.target.value)}
+            placeholder="Reason this task does not need steps"
+          />
+          <InputGroupButton
+            variant="outline"
+            aria-label="Mark execution plan not required"
+            disabled={pending || !notRequiredReason.trim()}
+            onClick={onMarkNotRequired}
+          >
+            <ListChecks className="h-4 w-4" />
+          </InputGroupButton>
+        </InputGroup>
+      </Field>
+    </div>
   )
 }
 

@@ -76,6 +76,7 @@ describe("MarkdownDescription", () => {
           draftDirty={false}
           setEditDraft={() => undefined}
           detailLoading={false}
+          commentsExpanded
           pendingAction={null}
           onAction={async () => undefined}
           onAddDependency={async () => undefined}
@@ -138,6 +139,7 @@ describe("MarkdownDescription", () => {
           draftDirty={false}
           setEditDraft={() => undefined}
           detailLoading={false}
+          commentsExpanded
           pendingAction={null}
           onAction={async () => undefined}
           onAddDependency={async () => undefined}
@@ -199,6 +201,7 @@ describe("MarkdownDescription", () => {
           draftDirty={false}
           setEditDraft={() => undefined}
           detailLoading={false}
+          commentsExpanded
           pendingAction={null}
           onAction={async () => undefined}
           onAddDependency={async () => undefined}
@@ -249,6 +252,7 @@ describe("MarkdownDescription", () => {
           draftDirty={false}
           setEditDraft={() => undefined}
           detailLoading={false}
+          commentsExpanded
           pendingAction={null}
           onAction={async () => undefined}
           onAddDependency={async () => undefined}
@@ -451,6 +455,9 @@ describe("MarkdownDescription", () => {
           draftDirty={false}
           setEditDraft={() => undefined}
           detailLoading={false}
+          dependenciesExpanded
+          graphExpanded
+          stepsExpanded
           pendingAction={null}
           onAction={async () => undefined}
           onAddDependency={async () => undefined}
@@ -501,6 +508,7 @@ describe("MarkdownDescription", () => {
           draftDirty={false}
           setEditDraft={() => undefined}
           detailLoading={false}
+          stepsExpanded
           pendingAction={null}
           onAction={async () => undefined}
           onAddDependency={async () => undefined}

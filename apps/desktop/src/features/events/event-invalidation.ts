@@ -60,11 +60,9 @@ export function affectedQueriesForEvents(events: EventRecord[]): AffectedQueries
 export function queryKeysForAffectedEvents({
   affected,
   board,
-  selectedTaskId,
 }: {
   affected: AffectedQueries
   board: string
-  selectedTaskId: string | null
 }) {
   const keys = []
 
@@ -76,9 +74,6 @@ export function queryKeysForAffectedEvents({
     keys.push(queryKeys.searchStatus(board))
   }
   for (const taskId of affected.taskIds) keys.push(queryKeys.taskDetail(taskId))
-  if (selectedTaskId && !affected.taskIds.has(selectedTaskId) && affected.invalidateEvents) {
-    keys.push(queryKeys.taskDetail(selectedTaskId))
-  }
 
   return keys
 }

@@ -157,15 +157,20 @@ export function TaskDetail({
   }, [task?.id])
 
   const graph = useMemo(() => apiTaskGraphToCanvasGraph(detail.neighborhood), [detail.neighborhood])
+  const actions = useMemo(() => (task ? legalActions(task, claimToken, blockReason) : []), [blockReason, claimToken, task])
+  const longDescription = useMemo(() => Boolean(task && isLongDescription(task.description)), [task])
+  const renderedDescription = useMemo(
+    () => (task ? visibleDescription(task.description, descriptionExpanded) : ""),
+    [descriptionExpanded, task],
+  )
+  const commentsPage = useMemo(
+    () => commentPageState({ comments: detail.comments, page: commentPage, sortOrder: commentSortOrder }),
+    [commentPage, commentSortOrder, detail.comments],
+  )
+  const actionView = useMemo(() => (task ? taskActionView(task, actions) : null), [actions, task])
 
-  if (!task) return null
+  if (!task || !actionView) return null
   const currentTask = task
-
-  const actions = legalActions(task, claimToken, blockReason)
-  const longDescription = isLongDescription(task.description)
-  const renderedDescription = visibleDescription(task.description, descriptionExpanded)
-  const commentsPage = commentPageState({ comments: detail.comments, page: commentPage, sortOrder: commentSortOrder })
-  const actionView = taskActionView(task, actions)
 
   async function saveAndClose() {
     const saved = await onSaveTask()

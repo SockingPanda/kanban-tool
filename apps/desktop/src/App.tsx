@@ -13,7 +13,7 @@ import {
   THEME_STORAGE_KEY,
   type ThemeMode,
 } from "@/app/theme"
-import { reconcileSelectedTaskId } from "@/app/task-selection"
+import { reconcileSelectedTaskId, shouldLoadTaskCollection, shouldLoadTaskDetail } from "@/app/task-selection"
 import { fallbackColumns } from "@/features/board/board-config"
 import { sortBoardColumnTasks } from "@/features/board/board-card-state"
 import { executeDragTransition, planDragTransition } from "@/features/board/drag-policy"
@@ -164,6 +164,9 @@ function App() {
     () => (columnsQuery.data ?? fallbackColumns).filter((column) => showArchived || (!column.hidden && column.status !== "archived")),
     [columnsQuery.data, showArchived],
   )
+  const visibleColumnStatuses = useMemo(() => visibleColumns.map((column) => column.status), [visibleColumns])
+  const taskCollectionEnabled = shouldLoadTaskCollection(view)
+  const taskDetailEnabled = shouldLoadTaskDetail(view, selectedId)
 
   const statsQuery = useQuery({
     enabled: Boolean(api),
@@ -176,7 +179,8 @@ function App() {
 
   const tasksQuery = useBoardTasks({
     api,
-    boardStatuses: view === "list" ? [] : visibleColumns.map((column) => column.status),
+    enabled: taskCollectionEnabled,
+    boardStatuses: view === "board" ? visibleColumnStatuses : [],
     search: debouncedSearch,
     statusFilter,
     priorityFilters: view === "list" ? priorityFilters : [],
@@ -188,24 +192,26 @@ function App() {
     offset: view === "list" ? pageOffset : 0,
   })
 
-  const tasks = tasksQuery.data?.tasks ?? EMPTY_TASKS
-  const page = tasksQuery.data?.page ?? { limit: rowsPerPage, offset: pageOffset, total: null }
-  const searchMeta = tasksQuery.data?.searchMeta ?? null
+  const taskData = taskCollectionEnabled ? tasksQuery.data : undefined
+  const tasks = taskData?.tasks ?? EMPTY_TASKS
+  const page = taskData?.page ?? { limit: rowsPerPage, offset: pageOffset, total: null }
+  const searchMeta = taskData?.searchMeta ?? null
 
   useEffect(() => {
-    if (tasksQuery.dataUpdatedAt) setLastRefreshAt(tasksQuery.dataUpdatedAt)
-  }, [tasksQuery.dataUpdatedAt])
+    if (taskCollectionEnabled && tasksQuery.dataUpdatedAt) setLastRefreshAt(tasksQuery.dataUpdatedAt)
+  }, [taskCollectionEnabled, tasksQuery.dataUpdatedAt])
 
   useEffect(() => {
+    if (!taskCollectionEnabled) return
     setClaimTokens((current) => reconcileClaimTokensForTasks(current, tasks, config?.actor ?? null))
-  }, [config?.actor, tasks])
+  }, [config?.actor, taskCollectionEnabled, tasks])
 
   useEffect(() => {
-    if (view === "map") return
+    if (!taskCollectionEnabled) return
     setSelectedId((current) => reconcileSelectedTaskId(current, tasks))
-  }, [tasks, view])
+  }, [taskCollectionEnabled, tasks])
 
-  const detailQuery = useTaskDetail(api, selectedId)
+  const detailQuery = useTaskDetail(api, selectedId, { enabled: taskDetailEnabled })
   const labelSuggestionsQuery = useQuery({
     enabled: false,
     queryKey: selectedId ? queryKeys.taskLabelSuggestions(selectedId) : ["task-label-suggestions", "none"],
@@ -218,16 +224,16 @@ function App() {
     () => (selectedId ? tasks.find((task) => task.id === selectedId) ?? null : null),
     [selectedId, tasks],
   )
-  const selectedTask = selectedId ? detailQuery.data?.task ?? boardSelectedTask : null
+  const selectedTask = selectedId ? detailQuery.data?.task ?? (taskCollectionEnabled ? boardSelectedTask : null) : null
   const detail = taskDetailOrEmpty(detailQuery.data)
   const dependencySnapshot = useMemo(
     () => ({
       selectedTaskId: selectedId,
       detailTaskId: detailQuery.data?.task.id ?? null,
       dependencies: detailQuery.data?.detail.dependencies ?? null,
-      loading: Boolean(selectedId && detailQuery.isFetching),
+      loading: Boolean(taskDetailEnabled && detailQuery.isFetching),
     }),
-    [detailQuery.data?.detail.dependencies, detailQuery.data?.task.id, detailQuery.isFetching, selectedId],
+    [detailQuery.data?.detail.dependencies, detailQuery.data?.task.id, detailQuery.isFetching, selectedId, taskDetailEnabled],
   )
 
   useEffect(() => {
@@ -256,22 +262,21 @@ function App() {
   }, [boardsQuery.error])
 
   useEffect(() => {
-    if (tasksQuery.error) setError(errorMessage(tasksQuery.error))
-  }, [tasksQuery.error])
+    if (taskCollectionEnabled && tasksQuery.error) setError(errorMessage(tasksQuery.error))
+  }, [taskCollectionEnabled, tasksQuery.error])
 
   useEffect(() => {
     if (statsQuery.error) setError(errorMessage(statsQuery.error))
   }, [statsQuery.error])
 
   useEffect(() => {
-    if (detailQuery.error) setError(errorMessage(detailQuery.error))
-  }, [detailQuery.error])
+    if (taskDetailEnabled && detailQuery.error) setError(errorMessage(detailQuery.error))
+  }, [detailQuery.error, taskDetailEnabled])
 
   const handlePollError = useCallback((err: unknown) => setError(errorMessage(err)), [])
   useEventPoller({
     api,
     enabled: Boolean(api),
-    selectedTaskId: selectedId,
     onError: handlePollError,
   })
 
@@ -574,8 +579,8 @@ function App() {
         editDraft={draftState?.draft ?? null}
         draftDirty={draftState?.dirty ?? false}
         claimToken={claimToken}
-        tasksRefreshing={tasksQuery.isFetching}
-        detailLoading={detailQuery.isFetching}
+        tasksRefreshing={taskCollectionEnabled && tasksQuery.isFetching}
+        detailLoading={taskDetailEnabled && detailQuery.isFetching}
         pendingAction={pendingAction}
         error={error}
         lastRefreshAt={lastRefreshAt}
@@ -597,7 +602,11 @@ function App() {
           setPageOffset(0)
         }}
         onShowArchivedChange={setShowArchived}
-        onRefreshTasks={() => void tasksQuery.refetch()}
+        onRefreshTasks={() => {
+          const refreshes: Promise<unknown>[] = [statsQuery.refetch()]
+          if (taskCollectionEnabled) refreshes.push(tasksQuery.refetch())
+          void Promise.all(refreshes)
+        }}
         onFirstPage={() => setPageOffset(0)}
         onPreviousPage={() => setPageOffset((current) => Math.max(0, current - rowsPerPage))}
         onNextPage={() => setPageOffset((current) => current + rowsPerPage)}

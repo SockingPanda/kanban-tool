@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 
 import type { KanbanApi, SearchTasksResult, TaskListSort, TaskPageResult, TaskPlanFilter, TaskStatus } from "@/lib/api"
 import { queryKeys } from "@/lib/query-keys"
@@ -85,9 +85,13 @@ export function resolveBoardTaskRequest({
 }
 
 export function useBoardTasks({ api, enabled = true, ...input }: UseBoardTasksInput) {
+  return useQuery(boardTasksQueryOptions({ api, enabled, ...input }))
+}
+
+export function boardTasksQueryOptions({ api, enabled = true, ...input }: UseBoardTasksInput) {
   const request = resolveBoardTaskRequest(input)
 
-  return useQuery({
+  return {
     enabled: Boolean(enabled && api),
     queryKey: queryKeys.boardTasks({
       board: api?.board ?? "pending",
@@ -102,11 +106,12 @@ export function useBoardTasks({ api, enabled = true, ...input }: UseBoardTasksIn
       limit: request.limit,
       offset: request.offset,
     }),
-    queryFn: async ({ signal }) => {
+    queryFn: async ({ signal }: { signal?: AbortSignal }) => {
       if (!api) throw new Error("API client is not ready")
       return loadBoardTasks(api, request, signal)
     },
-  })
+    placeholderData: keepPreviousData,
+  }
 }
 
 export async function loadBoardTasks(api: KanbanApi, request: BoardTaskRequest, signal?: AbortSignal): Promise<BoardTasksData> {

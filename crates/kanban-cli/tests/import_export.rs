@@ -12,7 +12,7 @@ fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
         "default",
         "cli-import-export-test",
         task_id,
-        "import/export fixture does not need subtasks",
+        "import/export fixture does not need steps",
     )?;
     Ok(())
 }

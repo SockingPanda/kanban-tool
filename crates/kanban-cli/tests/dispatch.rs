@@ -11,7 +11,7 @@ fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
         "default",
         "cli-dispatch-test",
         task_id,
-        "dispatch test task does not need subtasks",
+        "dispatch test task does not need steps",
     )?;
     Ok(())
 }

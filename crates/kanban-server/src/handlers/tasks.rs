@@ -47,8 +47,8 @@ fn parse_plan_filters(raw_query: Option<&str>) -> Result<Vec<TaskPlanFilter>, Ap
         .filter(|(key, _)| key == "plan_filter")
         .map(|(_, value)| match value.trim() {
             "plan_needed" => Ok(TaskPlanFilter::PlanNeeded),
-            "has_subtasks" => Ok(TaskPlanFilter::HasSubtasks),
-            "incomplete_required_subtasks" => Ok(TaskPlanFilter::IncompleteRequiredSubtasks),
+            "has_steps" => Ok(TaskPlanFilter::HasSteps),
+            "incomplete_required_steps" => Ok(TaskPlanFilter::IncompleteRequiredSteps),
             other => Err(invalid_input(format!("unknown plan_filter {other}"))),
         })
         .collect()

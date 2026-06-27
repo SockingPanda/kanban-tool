@@ -31,9 +31,9 @@ function task(id: string, status: Task["status"], overrides: Partial<Task> = {})
     dependency_blocked: false,
     unfinished_parent_count: 0,
     execution_plan_state: "planned",
-    required_subtask_count: 0,
-    completed_required_subtask_count: 0,
-    optional_subtask_count: 0,
+    required_step_count: 0,
+    completed_required_step_count: 0,
+    optional_step_count: 0,
     max_retries: null,
     retry_count: 0,
     current_run_id: null,
@@ -54,11 +54,11 @@ const graph: BoardTaskMap = {
     { task: task("running", "running"), role: "active", context_only: false },
     { task: task("done", "done"), role: "context", context_only: true },
     { task: task("unplanned", "todo", { execution_plan_state: "unplanned" }), role: "active", context_only: false },
-    { task: task("parent", "todo", { required_subtask_count: 2, completed_required_subtask_count: 1 }), role: "active", context_only: false },
+    { task: task("parent", "todo", { required_step_count: 2, completed_required_step_count: 1 }), role: "active", context_only: false },
   ],
   edges: [
     { id: "dep:done:ready", source_task_id: "done", target_task_id: "ready", kind: "dependency", required: true, blocking: false },
-    { id: "subtask:parent:running", source_task_id: "parent", target_task_id: "running", kind: "subtask", required: true, blocking: false },
+    { id: "step:parent:running", source_task_id: "parent", target_task_id: "running", kind: "step", required: true, blocking: false },
   ],
   meta: { generated_at: 1, truncated: false, node_count: 6, edge_count: 2 },
 }
@@ -76,7 +76,7 @@ describe("BoardTaskMapView filters", () => {
     expect(__test.filterBoardMap(graph, "blocked", false)?.nodes.map((node) => node.task.id)).toEqual(["blocked"])
     expect(__test.filterBoardMap(graph, "running", false)?.nodes.map((node) => node.task.id)).toEqual(["running"])
     expect(__test.filterBoardMap(graph, "unplanned", false)?.nodes.map((node) => node.task.id)).toEqual(["unplanned"])
-    expect(__test.filterBoardMap(graph, "incomplete-subtasks", false)?.nodes.map((node) => node.task.id)).toEqual(["parent"])
+    expect(__test.filterBoardMap(graph, "incomplete-steps", false)?.nodes.map((node) => node.task.id)).toEqual(["parent"])
   })
 
   it("can hide isolated nodes after filtering", () => {

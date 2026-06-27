@@ -12,7 +12,7 @@ export function TaskGraphNodeCard({ node, selected, onSelectTask, className }: {
   onSelectTask?: (taskId: string) => void
   className?: string
 }) {
-  const Icon = node.role === "subtask_child" || node.role === "subtask_parent" ? ListChecks : node.role === "dependency_child" ? GitMerge : GitBranch
+  const Icon = node.role === "step_child" || node.role === "step_parent" ? ListChecks : node.role === "dependency_child" ? GitMerge : GitBranch
   return (
     <button
       type="button"
@@ -33,9 +33,9 @@ export function TaskGraphNodeCard({ node, selected, onSelectTask, className }: {
         <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="line-clamp-2 min-w-0 text-xs font-medium leading-4">{node.title}</span>
       </div>
-      {node.subtaskCounts ? (
+      {node.stepCounts ? (
         <span className="mt-auto text-[10px] text-muted-foreground">
-          {node.subtaskCounts.incomplete}/{node.subtaskCounts.total} open
+          {node.stepCounts.incomplete}/{node.stepCounts.total} open
         </span>
       ) : null}
     </button>

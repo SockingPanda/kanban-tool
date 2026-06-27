@@ -12,7 +12,7 @@ fn mark_no_plan_required(db_path: &std::path::Path, task_id: &str) -> anyhow::Re
         "default",
         "cli-search-test",
         task_id,
-        "search fixture does not need subtasks",
+        "search fixture does not need steps",
     )?;
     Ok(())
 }

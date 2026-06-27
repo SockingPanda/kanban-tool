@@ -62,9 +62,9 @@ export type Task = {
   dependency_blocked: boolean
   unfinished_parent_count: number
   execution_plan_state: StepPlanState
-  required_subtask_count: number
-  completed_required_subtask_count: number
-  optional_subtask_count: number
+  required_step_count: number
+  completed_required_step_count: number
+  optional_step_count: number
   labels: LabelRecord[]
 }
 
@@ -507,13 +507,24 @@ export type Dependencies = {
 
 export type StepPlanState = "unplanned" | "planned" | "not_required"
 
-export type TaskSubtask = {
+export type StepStatus = "todo" | "done" | "skipped"
+
+export type TaskStep = {
+  id: string
   parent_task_id: string
-  child_task: Task
+  title: string
+  body: string | null
+  linked_task: Task | null
   position: number
   required: boolean
+  status: StepStatus
+  resolution_note: string | null
+  resolved_by: string | null
+  resolved_at: number | null
   created_by: string
   created_at: number
+  updated_by: string
+  updated_at: number
 }
 
 export type TaskExecutionPlan = {
@@ -525,9 +536,9 @@ export type TaskExecutionPlan = {
   updated_at: number
 }
 
-export type TaskSubtasks = {
+export type TaskSteps = {
   task_id: string
-  subtasks: TaskSubtask[]
+  steps: TaskStep[]
   execution_plan: TaskExecutionPlan
 }
 
@@ -535,12 +546,12 @@ export type TaskGraphNodeRole =
   | "center"
   | "dependency_parent"
   | "dependency_child"
-  | "subtask_parent"
-  | "subtask_child"
+  | "step_parent"
+  | "step_child"
   | "active"
   | "context"
 
-export type TaskGraphEdgeKind = "dependency" | "subtask"
+export type TaskGraphEdgeKind = "dependency" | "step"
 
 export type TaskGraphNode = {
   task: Task
@@ -583,27 +594,19 @@ export type BoardTaskMap = {
   meta: TaskGraphMeta
 }
 
-export type CreateSubtaskInput = {
+export type CreateStepInput = {
   title: string
-  description?: string | null
-  status?: TaskStatus
-  assignee?: string | null
-  priority?: number
-  scheduled_at?: number | null
-  due_at?: number | null
-  max_retries?: number | null
-  metadata?: Record<string, unknown>
+  body?: string | null
+  linked_task_ref?: string | null
   position?: number
   required?: boolean
 }
 
-export type AttachSubtaskInput = {
-  child_task_id: string
-  position?: number
-  required?: boolean
-}
-
-export type UpdateSubtaskInput = {
+export type UpdateStepInput = {
+  title?: string
+  body?: string | null
+  linked_task_ref?: string | null
+  unlink_task?: boolean
   position?: number
   required?: boolean
 }
@@ -641,7 +644,7 @@ export type TaskPageResult = {
   page: PageMeta
 }
 
-export type TaskPlanFilter = "plan_needed" | "has_subtasks" | "incomplete_required_subtasks"
+export type TaskPlanFilter = "plan_needed" | "has_steps" | "incomplete_required_steps"
 
 export type TaskListSort =
   | "seq"
@@ -899,6 +902,7 @@ export class KanbanApi {
       contextDepth?: number
       includeDoneContext?: boolean
       includeArchivedContext?: boolean
+      hideIsolated?: boolean
       limitNodes?: number
     } = {},
   ) {
@@ -912,48 +916,67 @@ export class KanbanApi {
     if (typeof options.includeArchivedContext === "boolean") {
       params.set("include_archived_context", String(options.includeArchivedContext))
     }
+    if (typeof options.hideIsolated === "boolean") {
+      params.set("hide_isolated", String(options.hideIsolated))
+    }
     if (typeof options.limitNodes === "number") params.set("limit_nodes", String(options.limitNodes))
     return this.request<BoardTaskMap>("/api/v1/boards/" + board + "/task-map?" + params.toString(), {
       signal: options.signal,
     })
   }
 
-  async listSubtasks(taskId: string, options: RequestOptions = {}) {
-    return this.request<TaskSubtasks>("/api/v1/tasks/" + taskId + "/subtasks", options)
+  async listSteps(taskId: string, options: RequestOptions = {}) {
+    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps", options)
   }
 
-  async createSubtask(taskId: string, input: CreateSubtaskInput, options: RequestOptions = {}) {
-    return this.request<TaskSubtasks>("/api/v1/tasks/" + taskId + "/subtasks", {
+  async createStep(taskId: string, input: CreateStepInput, options: RequestOptions = {}) {
+    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps", {
       method: "POST",
       body: { ...input, actor: this.actor },
       signal: options.signal,
     })
   }
 
-  async attachSubtask(taskId: string, input: AttachSubtaskInput, options: RequestOptions = {}) {
-    return this.request<TaskSubtasks>("/api/v1/tasks/" + taskId + "/subtasks/attach", {
-      method: "POST",
-      body: { ...input, actor: this.actor },
-      signal: options.signal,
-    })
-  }
-
-  async updateSubtask(
+  async updateStep(
     taskId: string,
-    childTaskId: string,
-    input: UpdateSubtaskInput,
+    stepId: string,
+    input: UpdateStepInput,
     options: RequestOptions = {},
   ) {
-    return this.request<TaskSubtasks>("/api/v1/tasks/" + taskId + "/subtasks/" + childTaskId, {
+    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps/" + stepId, {
       method: "PATCH",
       body: { ...input, actor: this.actor },
       signal: options.signal,
     })
   }
 
-  async removeSubtask(taskId: string, childTaskId: string, options: RequestOptions = {}) {
-    return this.request<TaskSubtasks>("/api/v1/tasks/" + taskId + "/subtasks/" + childTaskId, {
+  async removeStep(taskId: string, stepId: string, options: RequestOptions = {}) {
+    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps/" + stepId, {
       method: "DELETE",
+      signal: options.signal,
+    })
+  }
+
+  async completeStep(taskId: string, stepId: string, note: string, options: RequestOptions = {}) {
+    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps/" + stepId + "/done", {
+      method: "POST",
+      body: { note, actor: this.actor },
+      signal: options.signal,
+    })
+  }
+
+  async skipStep(taskId: string, stepId: string, reason: string, options: RequestOptions = {}) {
+    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps/" + stepId + "/skip", {
+      method: "POST",
+      body: { reason, actor: this.actor },
+      signal: options.signal,
+    })
+  }
+
+  async reopenStep(taskId: string, stepId: string, reason: string, options: RequestOptions = {}) {
+    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps/" + stepId + "/reopen", {
+      method: "POST",
+      body: { reason, actor: this.actor },
       signal: options.signal,
     })
   }

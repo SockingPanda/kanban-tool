@@ -6,11 +6,11 @@ export type TaskGraphNodeRole =
   | "center"
   | "dependency_parent"
   | "dependency_child"
-  | "subtask_parent"
-  | "subtask_child"
+  | "step_parent"
+  | "step_child"
   | "context"
 
-export type TaskGraphEdgeKind = "dependency" | "subtask"
+export type TaskGraphEdgeKind = "dependency" | "step"
 
 export type TaskGraphNode = {
   id: string
@@ -22,7 +22,7 @@ export type TaskGraphNode = {
   contextOnly?: boolean
   dependencyBlocked?: boolean
   unfinishedParentCount?: number
-  subtaskCounts?: {
+  stepCounts?: {
     total: number
     incomplete: number
   }

@@ -152,7 +152,7 @@ export function AppShell({
   rowsPerPage,
   newTitle,
   newDescription,
-  newFirstSubtaskTitle,
+  newFirstStepTitle,
   blockReason,
   dependencyInput,
   commentBody,
@@ -186,7 +186,7 @@ export function AppShell({
   onCreateTask,
   onNewTitleChange,
   onNewDescriptionChange,
-  onNewFirstSubtaskTitleChange,
+  onNewFirstStepTitleChange,
   onSelectTask,
   onCloseTaskDetail,
   onDropTask,
@@ -237,7 +237,7 @@ export function AppShell({
   rowsPerPage: number
   newTitle: string
   newDescription: string
-  newFirstSubtaskTitle: string
+  newFirstStepTitle: string
   blockReason: string
   dependencyInput: string
   commentBody: string
@@ -271,7 +271,7 @@ export function AppShell({
   onCreateTask: () => Promise<boolean>
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
-  onNewFirstSubtaskTitleChange: (value: string) => void
+  onNewFirstStepTitleChange: (value: string) => void
   onSelectTask: (taskId: string) => void
   onCloseTaskDetail: () => void
   onDropTask: (taskId: string, targetStatus: TaskStatus) => void
@@ -332,8 +332,8 @@ export function AppShell({
           onCreateTask={onCreateTask}
           onNewTitleChange={onNewTitleChange}
           onNewDescriptionChange={onNewDescriptionChange}
-          newFirstSubtaskTitle={newFirstSubtaskTitle}
-          onNewFirstSubtaskTitleChange={onNewFirstSubtaskTitleChange}
+          newFirstStepTitle={newFirstStepTitle}
+          onNewFirstStepTitleChange={onNewFirstStepTitleChange}
         />
 
         {error ? (
@@ -621,7 +621,7 @@ function ShellHeader({
   showArchived,
   newTitle,
   newDescription,
-  newFirstSubtaskTitle,
+  newFirstStepTitle,
   tasksRefreshing,
   pendingAction,
   onSearchChange,
@@ -634,7 +634,7 @@ function ShellHeader({
   onCreateTask,
   onNewTitleChange,
   onNewDescriptionChange,
-  onNewFirstSubtaskTitleChange,
+  onNewFirstStepTitleChange,
 }: {
   config: RuntimeConfig | null
   view: OperatorView
@@ -647,7 +647,7 @@ function ShellHeader({
   showArchived: boolean
   newTitle: string
   newDescription: string
-  newFirstSubtaskTitle: string
+  newFirstStepTitle: string
   tasksRefreshing: boolean
   pendingAction: string | null
   onSearchChange: (value: string) => void
@@ -660,7 +660,7 @@ function ShellHeader({
   onCreateTask: () => Promise<boolean>
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
-  onNewFirstSubtaskTitleChange: (value: string) => void
+  onNewFirstStepTitleChange: (value: string) => void
 }) {
   const ThemeIcon = themeMode === "dark" ? Moon : themeMode === "light" ? Sun : Monitor
   const showAddTask = shouldShowTaskExplorerToolbar(view)
@@ -723,12 +723,12 @@ function ShellHeader({
             canCreateTask={canCreateTask}
             newTitle={newTitle}
             newDescription={newDescription}
-            newFirstSubtaskTitle={newFirstSubtaskTitle}
+            newFirstStepTitle={newFirstStepTitle}
             pendingAction={pendingAction}
             onCreateTask={onCreateTask}
             onNewTitleChange={onNewTitleChange}
             onNewDescriptionChange={onNewDescriptionChange}
-            onNewFirstSubtaskTitleChange={onNewFirstSubtaskTitleChange}
+            onNewFirstStepTitleChange={onNewFirstStepTitleChange}
           />
         ) : null}
         <Badge variant="secondary">actor {config?.actor ?? "-"}</Badge>
@@ -754,22 +754,22 @@ function AddTaskDialog({
   canCreateTask,
   newTitle,
   newDescription,
-  newFirstSubtaskTitle,
+  newFirstStepTitle,
   pendingAction,
   onCreateTask,
   onNewTitleChange,
   onNewDescriptionChange,
-  onNewFirstSubtaskTitleChange,
+  onNewFirstStepTitleChange,
 }: {
   canCreateTask: boolean
   newTitle: string
   newDescription: string
-  newFirstSubtaskTitle: string
+  newFirstStepTitle: string
   pendingAction: string | null
   onCreateTask: () => Promise<boolean>
   onNewTitleChange: (value: string) => void
   onNewDescriptionChange: (value: string) => void
-  onNewFirstSubtaskTitleChange: (value: string) => void
+  onNewFirstStepTitleChange: (value: string) => void
 }) {
   const [addTaskOpen, setAddTaskOpen] = useState(false)
   const creating = pendingAction === "create"
@@ -811,12 +811,12 @@ function AddTaskDialog({
               placeholder="Optional spec or description"
             />
             <Input
-              aria-label="First subtask title"
-              name="new-first-subtask-title"
+              aria-label="First step title"
+              name="new-first-step-title"
               autoComplete="off"
-              value={newFirstSubtaskTitle}
-              onChange={(event) => onNewFirstSubtaskTitleChange(event.target.value)}
-              placeholder="Optional first required subtask"
+              value={newFirstStepTitle}
+              onChange={(event) => onNewFirstStepTitleChange(event.target.value)}
+              placeholder="Optional first required step"
             />
           </div>
           <DialogFooter>

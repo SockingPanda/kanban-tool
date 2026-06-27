@@ -229,7 +229,7 @@ pub fn mark_plan_not_required_for_test(
         board,
         actor,
         task_id,
-        "test fixture does not require subtasks",
+        "test fixture does not require steps",
     )?;
     kanban_sqlite::get_task(path, board, task_id).map_err(Into::into)
 }
@@ -251,9 +251,9 @@ pub fn assert_task_dto_exposes_ui_fields_without_claim_token(task: &Value) {
         "dependency_blocked",
         "unfinished_parent_count",
         "execution_plan_state",
-        "required_subtask_count",
-        "completed_required_subtask_count",
-        "optional_subtask_count",
+        "required_step_count",
+        "completed_required_step_count",
+        "optional_step_count",
     ] {
         assert!(task.get(exposed).is_some(), "{exposed} must be exposed");
     }

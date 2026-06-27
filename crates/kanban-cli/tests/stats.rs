@@ -10,7 +10,7 @@ fn mark_no_plan_required(db_path: &std::path::Path, task_id: &str) -> anyhow::Re
         "default",
         "cli-stats-test",
         task_id,
-        "stats fixture does not need subtasks",
+        "stats fixture does not need steps",
     )?;
     Ok(())
 }
@@ -73,7 +73,7 @@ fn stats_command_reports_stale_claims_and_blocked_reasons() -> anyhow::Result<()
 
     assert_eq!(stats["data"]["unplanned_active_tasks"], 1);
     assert_eq!(
-        stats["data"]["active_parents_with_incomplete_required_subtasks"],
+        stats["data"]["active_parents_with_incomplete_required_steps"],
         0
     );
     assert_eq!(stats["data"]["stale_claims"][0]["task_id"], stale_id);

@@ -56,9 +56,9 @@ pub(super) struct TaskDto {
     pub(super) dependency_blocked: bool,
     pub(super) unfinished_parent_count: i64,
     pub(super) execution_plan_state: StepPlanState,
-    pub(super) required_subtask_count: i64,
-    pub(super) completed_required_subtask_count: i64,
-    pub(super) optional_subtask_count: i64,
+    pub(super) required_step_count: i64,
+    pub(super) completed_required_step_count: i64,
+    pub(super) optional_step_count: i64,
     pub(super) labels: Vec<LabelDto>,
 }
 
@@ -98,9 +98,9 @@ impl From<kanban_sqlite::TaskRecord> for TaskDto {
             dependency_blocked: task.dependency_blocked,
             unfinished_parent_count: task.unfinished_parent_count,
             execution_plan_state: task.execution_plan_state,
-            required_subtask_count: task.required_subtask_count,
-            completed_required_subtask_count: task.completed_required_subtask_count,
-            optional_subtask_count: task.optional_subtask_count,
+            required_step_count: task.required_step_count,
+            completed_required_step_count: task.completed_required_step_count,
+            optional_step_count: task.optional_step_count,
             labels: task.labels.into_iter().map(LabelDto::from).collect(),
         }
     }
@@ -232,24 +232,42 @@ pub(super) struct DependenciesDto {
 }
 
 #[derive(Debug, Serialize)]
-pub(super) struct TaskSubtaskDto {
+pub(super) struct TaskStepDto {
+    pub(super) id: String,
     pub(super) parent_task_id: String,
-    pub(super) child_task: TaskDto,
+    pub(super) title: String,
+    pub(super) body: Option<String>,
+    pub(super) linked_task: Option<TaskDto>,
     pub(super) position: i64,
     pub(super) required: bool,
+    pub(super) status: kanban_sqlite::StepStatus,
+    pub(super) resolution_note: Option<String>,
+    pub(super) resolved_by: Option<String>,
+    pub(super) resolved_at: Option<i64>,
     pub(super) created_by: String,
     pub(super) created_at: i64,
+    pub(super) updated_by: String,
+    pub(super) updated_at: i64,
 }
 
-impl From<kanban_sqlite::TaskSubtaskRecord> for TaskSubtaskDto {
-    fn from(subtask: kanban_sqlite::TaskSubtaskRecord) -> Self {
+impl From<kanban_sqlite::TaskStepRecord> for TaskStepDto {
+    fn from(step: kanban_sqlite::TaskStepRecord) -> Self {
         Self {
-            parent_task_id: subtask.parent_task_id,
-            child_task: TaskDto::from(subtask.child_task),
-            position: subtask.position,
-            required: subtask.required,
-            created_by: subtask.created_by,
-            created_at: subtask.created_at,
+            id: step.id,
+            parent_task_id: step.parent_task_id,
+            title: step.title,
+            body: step.body,
+            linked_task: step.linked_task.map(TaskDto::from),
+            position: step.position,
+            required: step.required,
+            status: step.status,
+            resolution_note: step.resolution_note,
+            resolved_by: step.resolved_by,
+            resolved_at: step.resolved_at,
+            created_by: step.created_by,
+            created_at: step.created_at,
+            updated_by: step.updated_by,
+            updated_at: step.updated_at,
         }
     }
 }
@@ -278,9 +296,9 @@ impl From<kanban_sqlite::TaskExecutionPlanRecord> for TaskExecutionPlanDto {
 }
 
 #[derive(Debug, Serialize)]
-pub(super) struct TaskSubtasksDto {
+pub(super) struct TaskStepsDto {
     pub(super) task_id: String,
-    pub(super) subtasks: Vec<TaskSubtaskDto>,
+    pub(super) steps: Vec<TaskStepDto>,
     pub(super) execution_plan: TaskExecutionPlanDto,
 }
 

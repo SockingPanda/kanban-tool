@@ -12,7 +12,7 @@ import {
   priorityBadgeClass,
   priorityBadgeLabel,
   dependencyBlockedTodoClass,
-  requiredSubtaskProgressLabel,
+  requiredStepProgressLabel,
   selectedDependencyCountForTask,
   selectedUnlockCountForTask,
   taskNeedsExecutionPlan,
@@ -212,7 +212,7 @@ function TaskCard({
             {task.due_at ? <span>due {formatRelativeTime(task.due_at)}</span> : null}
             {task.scheduled_at ? <span>scheduled {formatRelativeTime(task.scheduled_at)}</span> : null}
             {task.status === "running" ? <span>heartbeat {formatRelativeTime(task.last_heartbeat_at)}</span> : null}
-            {requiredSubtaskProgressLabel(task) ? <span>{requiredSubtaskProgressLabel(task)}</span> : null}
+            {requiredStepProgressLabel(task) ? <span>{requiredStepProgressLabel(task)}</span> : null}
             {taskNeedsExecutionPlan(task) ? <Badge variant="blocked" className="px-1.5 py-0 text-[11px] leading-5">plan needed</Badge> : null}
             {task.dependency_blocked ? <span>blocked by {task.unfinished_parent_count}</span> : null}
             {typeof unlockCount === "number" && unlockCount > 0 ? <span>unlocks {unlockCount}</span> : null}

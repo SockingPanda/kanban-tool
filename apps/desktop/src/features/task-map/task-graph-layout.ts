@@ -38,10 +38,10 @@ function layoutDetailNodes(nodes: TaskGraphNode[], selectedTaskId?: string | nul
   const sorted = [...nodes].sort(compareNodes)
   const center = sorted.find((node) => node.role === "center") ?? sorted.find((node) => node.id === selectedTaskId) ?? sorted[0]
   const groups = {
-    parents: sorted.filter((node) => node.id !== center?.id && (node.role === "dependency_parent" || node.role === "subtask_parent")),
+    parents: sorted.filter((node) => node.id !== center?.id && (node.role === "dependency_parent" || node.role === "step_parent")),
     children: sorted.filter((node) => node.id !== center?.id && node.role === "dependency_child"),
-    subtasks: sorted.filter((node) => node.id !== center?.id && node.role === "subtask_child"),
-    context: sorted.filter((node) => node.id !== center?.id && !["dependency_parent", "subtask_parent", "dependency_child", "subtask_child"].includes(node.role ?? "")),
+    steps: sorted.filter((node) => node.id !== center?.id && node.role === "step_child"),
+    context: sorted.filter((node) => node.id !== center?.id && !["dependency_parent", "step_parent", "dependency_child", "step_child"].includes(node.role ?? "")),
   }
   const result: TaskGraphLayoutNode[] = []
   const centerX = 24 + NODE_WIDTH + DETAIL_COLUMN_GAP
@@ -49,7 +49,7 @@ function layoutDetailNodes(nodes: TaskGraphNode[], selectedTaskId?: string | nul
   if (center) result.push(toLayoutNode(center, centerX, centerY))
   result.push(...stack(groups.parents, 24, 72))
   result.push(...stack(groups.children, centerX + NODE_WIDTH + DETAIL_COLUMN_GAP, 72))
-  result.push(...stack(groups.subtasks, centerX, centerY + NODE_HEIGHT + 88))
+  result.push(...stack(groups.steps, centerX, centerY + NODE_HEIGHT + 88))
   result.push(...stack(groups.context, centerX + NODE_WIDTH + DETAIL_COLUMN_GAP, 72 + groups.children.length * (NODE_HEIGHT + DETAIL_ROW_GAP)))
   return result
 }

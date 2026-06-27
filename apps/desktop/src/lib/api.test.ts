@@ -43,7 +43,7 @@ describe("KanbanApi task search", () => {
       statuses: ["ready", "blocked"],
       priorities: [0, 2],
       labels: [" backend ", "api"],
-      planFilters: ["plan_needed", "incomplete_required_subtasks"],
+      planFilters: ["plan_needed", "incomplete_required_steps"],
       sort: "priority",
       limit: 25,
       offset: 0,
@@ -56,7 +56,7 @@ describe("KanbanApi task search", () => {
     expect(url.searchParams.getAll("status")).toEqual(["ready", "blocked"])
     expect(url.searchParams.getAll("priority")).toEqual(["0", "2"])
     expect(url.searchParams.getAll("label")).toEqual(["backend", "api"])
-    expect(url.searchParams.getAll("plan_filter")).toEqual(["plan_needed", "incomplete_required_subtasks"])
+    expect(url.searchParams.getAll("plan_filter")).toEqual(["plan_needed", "incomplete_required_steps"])
   })
 
   it("keeps list task pagination metadata from the response envelope", async () => {
@@ -464,18 +464,27 @@ describe("KanbanApi task search", () => {
     expect(calledInit(fetchMock).method).toBe("DELETE")
   })
 
-  it("uses subtask routes and includes the desktop actor", async () => {
+  it("uses step routes and includes the desktop actor", async () => {
     const child = task({ id: "t_child", title: "Child" })
-    const subtasks = {
+    const steps = {
       task_id: "t_parent",
-      subtasks: [
+      steps: [
         {
+          id: "step_1",
           parent_task_id: "t_parent",
-          child_task: child,
+          title: "Review child",
+          body: "child context",
+          linked_task: child,
           position: 2048,
           required: true,
+          status: "todo",
+          resolution_note: null,
+          resolved_by: null,
+          resolved_at: null,
           created_by: "desktop-test",
           created_at: 1,
+          updated_by: "desktop-test",
+          updated_at: 1,
         },
       ],
       execution_plan: {
@@ -487,54 +496,63 @@ describe("KanbanApi task search", () => {
         updated_at: 0,
       },
     }
-    const fetchMock = mockFetch({ data: subtasks })
+    const fetchMock = mockFetch({ data: steps })
     const api = new KanbanApi(runtimeConfig)
 
     await expect(
-      api.createSubtask("t_parent", {
-        title: "Child",
-        description: "child spec",
-        priority: 2,
+      api.createStep("t_parent", {
+        title: "Review child",
+        body: "child context",
+        linked_task_ref: "#123",
         required: true,
         position: 2048,
       }),
-    ).resolves.toEqual(subtasks)
-    expect(calledUrl(fetchMock).pathname).toBe("/api/v1/tasks/t_parent/subtasks")
+    ).resolves.toEqual(steps)
+    expect(calledUrl(fetchMock).pathname).toBe("/api/v1/tasks/t_parent/steps")
     expect(calledInit(fetchMock).method).toBe("POST")
     expect(JSON.parse(calledInit(fetchMock).body as string)).toEqual({
-      title: "Child",
-      description: "child spec",
-      priority: 2,
+      title: "Review child",
+      body: "child context",
+      linked_task_ref: "#123",
       required: true,
       position: 2048,
       actor: "desktop-test",
     })
 
     vi.unstubAllGlobals()
-    const attachFetch = mockFetch({ data: subtasks })
-    await api.attachSubtask("t_parent", { child_task_id: "t_child", required: false })
-    expect(calledUrl(attachFetch).pathname).toBe("/api/v1/tasks/t_parent/subtasks/attach")
-    expect(JSON.parse(calledInit(attachFetch).body as string)).toEqual({
-      child_task_id: "t_child",
-      required: false,
-      actor: "desktop-test",
-    })
-
-    vi.unstubAllGlobals()
-    const updateFetch = mockFetch({ data: subtasks })
-    await api.updateSubtask("t_parent", "t_child", { position: 4096, required: false })
-    expect(calledUrl(updateFetch).pathname).toBe("/api/v1/tasks/t_parent/subtasks/t_child")
+    const updateFetch = mockFetch({ data: steps })
+    await api.updateStep("t_parent", "step_1", { position: 4096, required: false, unlink_task: true })
+    expect(calledUrl(updateFetch).pathname).toBe("/api/v1/tasks/t_parent/steps/step_1")
     expect(calledInit(updateFetch).method).toBe("PATCH")
     expect(JSON.parse(calledInit(updateFetch).body as string)).toEqual({
       position: 4096,
       required: false,
+      unlink_task: true,
       actor: "desktop-test",
     })
 
     vi.unstubAllGlobals()
-    const removeFetch = mockFetch({ data: { ...subtasks, subtasks: [] } })
-    await api.removeSubtask("t_parent", "t_child")
-    expect(calledUrl(removeFetch).pathname).toBe("/api/v1/tasks/t_parent/subtasks/t_child")
+    const doneFetch = mockFetch({ data: steps })
+    await api.completeStep("t_parent", "step_1", "done")
+    expect(calledUrl(doneFetch).pathname).toBe("/api/v1/tasks/t_parent/steps/step_1/done")
+    expect(JSON.parse(calledInit(doneFetch).body as string)).toEqual({ note: "done", actor: "desktop-test" })
+
+    vi.unstubAllGlobals()
+    const skipFetch = mockFetch({ data: steps })
+    await api.skipStep("t_parent", "step_1", "not needed")
+    expect(calledUrl(skipFetch).pathname).toBe("/api/v1/tasks/t_parent/steps/step_1/skip")
+    expect(JSON.parse(calledInit(skipFetch).body as string)).toEqual({ reason: "not needed", actor: "desktop-test" })
+
+    vi.unstubAllGlobals()
+    const reopenFetch = mockFetch({ data: steps })
+    await api.reopenStep("t_parent", "step_1", "redo")
+    expect(calledUrl(reopenFetch).pathname).toBe("/api/v1/tasks/t_parent/steps/step_1/reopen")
+    expect(JSON.parse(calledInit(reopenFetch).body as string)).toEqual({ reason: "redo", actor: "desktop-test" })
+
+    vi.unstubAllGlobals()
+    const removeFetch = mockFetch({ data: { ...steps, steps: [] } })
+    await api.removeStep("t_parent", "step_1")
+    expect(calledUrl(removeFetch).pathname).toBe("/api/v1/tasks/t_parent/steps/step_1")
     expect(calledInit(removeFetch).method).toBe("DELETE")
   })
 
@@ -568,13 +586,14 @@ describe("KanbanApi task search", () => {
     expect(neighborhoodUrl.searchParams.get("depth")).toBe("1")
     expect(neighborhoodUrl.searchParams.get("limit_nodes")).toBe("20")
 
-    await api.getBoardTaskMap("default", { includeDoneContext: true, includeArchivedContext: false })
+    await api.getBoardTaskMap("default", { includeDoneContext: true, includeArchivedContext: false, hideIsolated: true })
     const mapUrl = new URL(String(fetchMock.mock.calls[2]?.[0]))
     expect(mapUrl.pathname).toBe("/api/v1/boards/default/task-map")
     expect(mapUrl.searchParams.get("active_only")).toBe("true")
     expect(mapUrl.searchParams.get("context_depth")).toBe("1")
     expect(mapUrl.searchParams.get("include_done_context")).toBe("true")
     expect(mapUrl.searchParams.get("include_archived_context")).toBe("false")
+    expect(mapUrl.searchParams.get("hide_isolated")).toBe("true")
   })
 
 })
@@ -713,9 +732,9 @@ function task(overrides: Partial<Task> = {}): Task {
     dependency_blocked: false,
     unfinished_parent_count: 0,
     execution_plan_state: "unplanned",
-    required_subtask_count: 0,
-    completed_required_subtask_count: 0,
-    optional_subtask_count: 0,
+    required_step_count: 0,
+    completed_required_step_count: 0,
+    optional_step_count: 0,
     labels: [],
     ...overrides,
   }

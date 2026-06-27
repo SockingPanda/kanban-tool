@@ -155,6 +155,89 @@ pub(crate) enum TaskCommand {
         #[arg(long)]
         force: bool,
     },
+    Step {
+        #[command(subcommand)]
+        command: TaskStepCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum TaskStepCommand {
+    List {
+        task_ref: String,
+    },
+    Add(TaskStepAddArgs),
+    Update(TaskStepUpdateArgs),
+    Done(TaskStepDoneArgs),
+    Skip(TaskStepReasonArgs),
+    Reopen(TaskStepReasonArgs),
+    Remove {
+        task_ref: String,
+        step_ref: String,
+    },
+    #[command(name = "not-required")]
+    NotRequired(TaskStepNotRequiredArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct TaskStepAddArgs {
+    pub(crate) task_ref: String,
+    pub(crate) title: String,
+    #[arg(long)]
+    pub(crate) body: Option<String>,
+    #[arg(long = "link-task")]
+    pub(crate) linked_task_ref: Option<String>,
+    #[arg(long)]
+    pub(crate) position: Option<i64>,
+    #[arg(long)]
+    pub(crate) required: bool,
+    #[arg(long)]
+    pub(crate) optional: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct TaskStepUpdateArgs {
+    pub(crate) task_ref: String,
+    pub(crate) step_ref: String,
+    #[arg(long)]
+    pub(crate) title: Option<String>,
+    #[arg(long)]
+    pub(crate) body: Option<String>,
+    #[arg(long = "clear-body")]
+    pub(crate) clear_body: bool,
+    #[arg(long = "link-task")]
+    pub(crate) linked_task_ref: Option<String>,
+    #[arg(long = "unlink-task")]
+    pub(crate) unlink_task: bool,
+    #[arg(long)]
+    pub(crate) position: Option<i64>,
+    #[arg(long)]
+    pub(crate) required: bool,
+    #[arg(long)]
+    pub(crate) optional: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct TaskStepDoneArgs {
+    pub(crate) task_ref: String,
+    pub(crate) step_ref: String,
+    #[arg(long)]
+    pub(crate) note: String,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct TaskStepReasonArgs {
+    pub(crate) task_ref: String,
+    pub(crate) step_ref: String,
+    #[arg(long)]
+    pub(crate) reason: String,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct TaskStepNotRequiredArgs {
+    pub(crate) task_ref: String,
+    #[arg(long)]
+    pub(crate) reason: String,
 }
 
 #[derive(Debug, Subcommand)]
@@ -726,6 +809,24 @@ pub(crate) struct ListArgs {
     pub(crate) offset: Option<usize>,
     #[arg(long)]
     pub(crate) sort: Option<String>,
+    #[arg(long = "plan-needed")]
+    pub(crate) plan_needed: bool,
+    #[arg(long = "has-steps")]
+    pub(crate) has_steps: bool,
+    #[arg(long = "incomplete-required-steps")]
+    pub(crate) incomplete_required_steps: bool,
+    #[arg(long = "plan-filter", value_enum)]
+    pub(crate) plan_filters: Vec<TaskPlanFilterArg>,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum TaskPlanFilterArg {
+    #[value(name = "plan-needed")]
+    PlanNeeded,
+    #[value(name = "has-steps")]
+    HasSteps,
+    #[value(name = "incomplete-required-steps")]
+    IncompleteRequiredSteps,
 }
 
 #[derive(Debug, Args)]

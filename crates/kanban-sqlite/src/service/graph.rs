@@ -31,13 +31,15 @@ use kanban_entity::{EntityUri, Predicate, Provenance, Relation};
 
 #[cfg(feature = "graph-oxigraph")]
 use kanban_graph::GraphStoreStatus;
+use kanban_graph::RelationGraph;
 #[cfg(feature = "graph-oxigraph")]
-use kanban_graph::{OxigraphStore, RelationGraph};
+use kanban_graph_oxigraph::OxigraphStore;
 #[cfg(feature = "graph-oxigraph")]
 use kanban_indexer::OXIGRAPH_RELATIONS_STORE;
 use kanban_vector::{ChunkVectorStore, VectorStoreStatus};
+use kanban_vector::{VectorHit, VectorQuery};
 #[cfg(feature = "vector-lancedb")]
-use kanban_vector::{LanceDbConfig, LanceDbStore, VectorHit, VectorQuery};
+use kanban_vector_lancedb::{LanceDbConfig, LanceDbStore};
 
 #[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
 use crate::connect_file;

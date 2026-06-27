@@ -1,15 +1,17 @@
 [package]
-name = "kanban-graph"
+name = "kanban-graph-oxigraph"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 
-[features]
-default = []
-
 [dependencies]
 kanban-entity.workspace = true
+kanban-graph.workspace = true
+oxigraph.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

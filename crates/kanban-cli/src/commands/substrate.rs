@@ -9,9 +9,9 @@ use kanban_context::{ContextDiagnostic, ContextPack};
 use kanban_entity::EntityUri;
 #[cfg(not(feature = "graph-oxigraph"))]
 use kanban_graph::DisabledGraphStore;
-#[cfg(feature = "graph-oxigraph")]
-use kanban_graph::OxigraphStore;
 use kanban_graph::RelationGraph;
+#[cfg(feature = "graph-oxigraph")]
+use kanban_graph_oxigraph::OxigraphStore;
 use kanban_sqlite::{
     EntityListOptions, MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT, OutboxListOptions,
     derived_store_statuses, get_entity, list_entities, list_outbox, rebuild_graph_store,
@@ -337,11 +337,11 @@ fn vector_config_from_args(args: &VectorConfigureArgs) -> Result<kanban_local::V
 #[cfg(feature = "vector-lancedb")]
 fn ollama_provider_from_config(
     config: &kanban_local::VectorConfig,
-) -> Result<kanban_vector::OllamaEmbeddingProvider> {
+) -> Result<kanban_vector_lancedb::OllamaEmbeddingProvider> {
     if config.provider != "ollama" {
         bail!("unsupported vector provider in config: {}", config.provider);
     }
-    kanban_vector::OllamaEmbeddingProvider::new(
+    kanban_vector_lancedb::OllamaEmbeddingProvider::new(
         config.endpoint.clone(),
         config.model.clone(),
         config.dimensions,
@@ -353,12 +353,12 @@ fn ollama_provider_from_config(
 fn configured_lancedb_store(
     db_path: &Path,
     vector_config_path: Option<&Path>,
-) -> Result<Option<kanban_vector::LanceDbStore>> {
+) -> Result<Option<kanban_vector_lancedb::LanceDbStore>> {
     let Some(config) = kanban_local::resolved_vector_config(vector_config_path)? else {
         return Ok(None);
     };
     let provider = Arc::new(ollama_provider_from_config(&config)?);
-    kanban_vector::LanceDbStore::connect(kanban_vector::LanceDbConfig::new(
+    kanban_vector_lancedb::LanceDbStore::connect(kanban_vector_lancedb::LanceDbConfig::new(
         kanban_local::vector_store_path(db_path.to_path_buf()),
         provider,
     ))

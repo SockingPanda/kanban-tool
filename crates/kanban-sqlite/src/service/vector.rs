@@ -19,7 +19,7 @@ use kanban_vector::{
     ChunkBuilder, ChunkVectorStore, TaskChunkSource, VectorStoreBackend, VectorStoreStatus,
 };
 #[cfg(feature = "vector-lancedb")]
-use kanban_vector::{LanceDbConfig, LanceDbStore};
+use kanban_vector_lancedb::{LanceDbConfig, LanceDbStore};
 
 use rusqlite::{Connection, Row, params, params_from_iter, types::Value};
 

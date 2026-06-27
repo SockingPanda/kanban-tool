@@ -63,8 +63,10 @@ kanban-tool/
     kanban-cli/
     kanban-context/
     kanban-core/
+    kanban-derived-io/
     kanban-entity/
     kanban-graph/
+    kanban-graph-oxigraph/
     kanban-indexer/
     kanban-labels/
     kanban-local/
@@ -72,11 +74,15 @@ kanban-tool/
     kanban-server/
     kanban-sqlite/
     kanban-vector/
+    kanban-vector-lancedb/
   apps/
     desktop/
   docs/
   migrations/
 ```
+
+`kanban-derived-io` contains shared derived-store IO helpers; `kanban-graph-oxigraph` and
+`kanban-vector-lancedb` are helper-heavy backend crates packaged as helper binaries.
 
 ## 默认二进制名
 

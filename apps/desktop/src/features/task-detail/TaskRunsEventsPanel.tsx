@@ -9,9 +9,19 @@ import { formatRelativeTime, shortId } from "@/lib/utils"
 import type { DetailState } from "./detail-state"
 import { InfoRow, Section } from "./task-detail-shared"
 
-export function TaskRunsPanel({ activeRun, detail }: { activeRun?: Run; detail: DetailState }) {
+export function TaskRunsPanel({
+  activeRun,
+  detail,
+  open,
+  onOpenChange,
+}: {
+  activeRun?: Run
+  detail: DetailState
+  open: boolean
+  onOpenChange: (value: boolean) => void
+}) {
   return (
-    <Collapsible>
+    <Collapsible open={open} onOpenChange={onOpenChange}>
       <Section title="Runs">
         <CollapsibleTrigger asChild>
           <Button variant="outline" size="sm" className="mb-3">

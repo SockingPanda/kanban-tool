@@ -60,8 +60,13 @@ export const queryKeys = {
       },
     ] as const,
   taskDetail: (taskId: string) => ["task-detail", taskId] as const,
+  taskDependencies: (taskId: string) => ["task-dependencies", taskId] as const,
   taskSteps: (taskId: string) => ["task-steps", taskId] as const,
   taskNeighborhood: (taskId: string) => ["task-neighborhood", taskId] as const,
+  taskRuns: (taskId: string) => ["task-runs", taskId] as const,
+  taskRunLog: (runId: string) => ["task-run-log", runId] as const,
+  taskEvents: (taskId: string) => ["task-events", taskId] as const,
+  taskComments: (taskId: string) => ["task-comments", taskId] as const,
   boardTaskMapRoot: (board: string) => ["board-task-map", board] as const,
   boardTaskMap: (board: string, options?: { includeDoneContext?: boolean }) =>
     [...queryKeys.boardTaskMapRoot(board), options ?? {}] as const,

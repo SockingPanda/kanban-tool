@@ -3,6 +3,13 @@ import { queryKeys } from "@/lib/query-keys"
 
 export type AffectedQueries = {
   taskIds: Set<string>
+  taskDetailIds: Set<string>
+  taskDependencyIds: Set<string>
+  taskNeighborhoodIds: Set<string>
+  taskStepIds: Set<string>
+  taskRunIds: Set<string>
+  taskCommentIds: Set<string>
+  taskEventIds: Set<string>
   invalidateBoards?: boolean
   invalidateBoardTasks: boolean
   invalidateStats: boolean
@@ -69,6 +76,8 @@ const BOARD_TASK_MAP_KINDS = new Set([
 ])
 
 const BOARD_LIFECYCLE_KINDS = new Set(["board.created", "board.updated", "board.archived"])
+const COMMENT_KINDS = new Set(["task.comment.created"])
+const DEPENDENCY_KINDS = new Set(["dependency.added", "dependency.removed"])
 
 export function nextEventCursor(current: number, events: EventRecord[], meta: EventMeta) {
   if (typeof meta.next_after === "number" && Number.isFinite(meta.next_after)) return meta.next_after
@@ -81,9 +90,32 @@ export function affectedQueriesForEvents(events: EventRecord[]): AffectedQueries
   let invalidateStats = false
   let invalidateBoardTaskMap = false
   const taskIds = new Set<string>()
+  const taskDetailIds = new Set<string>()
+  const taskDependencyIds = new Set<string>()
+  const taskNeighborhoodIds = new Set<string>()
+  const taskStepIds = new Set<string>()
+  const taskRunIds = new Set<string>()
+  const taskCommentIds = new Set<string>()
+  const taskEventIds = new Set<string>()
 
   for (const event of events) {
-    if (event.task_id) taskIds.add(event.task_id)
+    if (event.task_id) {
+      taskIds.add(event.task_id)
+      taskEventIds.add(event.task_id)
+      if (COMMENT_KINDS.has(event.kind)) {
+        taskCommentIds.add(event.task_id)
+      } else if (DEPENDENCY_KINDS.has(event.kind)) {
+        taskDependencyIds.add(event.task_id)
+        taskNeighborhoodIds.add(event.task_id)
+      } else if (event.kind.startsWith("step.") || event.kind.includes(".step.")) {
+        taskStepIds.add(event.task_id)
+        taskNeighborhoodIds.add(event.task_id)
+      } else if (event.kind.startsWith("run.") || event.kind.includes(".run.")) {
+        taskRunIds.add(event.task_id)
+      } else {
+        taskDetailIds.add(event.task_id)
+      }
+    }
     if (BOARD_LIFECYCLE_KINDS.has(event.kind)) invalidateBoards = true
     if (!event.task_id || BOARD_ROW_TASK_KINDS.has(event.kind)) invalidateBoardTasks = true
     if (!event.task_id || STATUS_COUNTER_TASK_KINDS.has(event.kind)) invalidateStats = true
@@ -92,6 +124,13 @@ export function affectedQueriesForEvents(events: EventRecord[]): AffectedQueries
 
   return {
     taskIds,
+    taskDetailIds,
+    taskDependencyIds,
+    taskNeighborhoodIds,
+    taskStepIds,
+    taskRunIds,
+    taskCommentIds,
+    taskEventIds,
     ...(invalidateBoards ? { invalidateBoards } : {}),
     invalidateBoardTasks,
     invalidateStats,
@@ -116,7 +155,13 @@ export function queryKeysForAffectedEvents({
   if (affected.invalidateStats) keys.push(queryKeys.stats(board))
   if (affected.invalidateSearchStatus) keys.push(queryKeys.searchStatus(board))
   if (affected.invalidateBoardTaskMap) keys.push(queryKeys.boardTaskMapRoot(board))
-  for (const taskId of affected.taskIds) keys.push(queryKeys.taskDetail(taskId))
+  for (const taskId of affected.taskDetailIds) keys.push(queryKeys.taskDetail(taskId))
+  for (const taskId of affected.taskDependencyIds) keys.push(queryKeys.taskDependencies(taskId))
+  for (const taskId of affected.taskNeighborhoodIds) keys.push(queryKeys.taskNeighborhood(taskId))
+  for (const taskId of affected.taskStepIds) keys.push(queryKeys.taskSteps(taskId))
+  for (const taskId of affected.taskRunIds) keys.push(queryKeys.taskRuns(taskId))
+  for (const taskId of affected.taskCommentIds) keys.push(queryKeys.taskComments(taskId))
+  for (const taskId of affected.taskEventIds) keys.push(queryKeys.taskEvents(taskId))
 
   return keys
 }

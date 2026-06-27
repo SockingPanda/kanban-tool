@@ -59,6 +59,7 @@ export function TaskDetail({
   draftDirty,
   setEditDraft,
   detailLoading,
+  runsExpanded = false,
   pendingAction,
   onAction,
   onAddDependency,
@@ -68,6 +69,7 @@ export function TaskDetail({
   onSaveTask,
   onCancelEdit,
   onAddComment,
+  onRunsExpandedChange = () => {},
 }: {
   api: KanbanApi | null
   task: Task | null
@@ -88,6 +90,7 @@ export function TaskDetail({
   draftDirty: boolean
   setEditDraft: (value: TaskEditDraft) => void
   detailLoading: boolean
+  runsExpanded?: boolean
   pendingAction: string | null
   onAction: (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null }) => Promise<unknown>
   onAddDependency: () => Promise<void>
@@ -97,6 +100,7 @@ export function TaskDetail({
   onSaveTask: () => Promise<boolean>
   onCancelEdit: () => void
   onAddComment: () => Promise<void>
+  onRunsExpandedChange?: (value: boolean) => void
 }) {
   const [descriptionExpanded, setDescriptionExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -293,7 +297,7 @@ export function TaskDetail({
                 onAddComment={onAddComment}
               />
               <Separator />
-              <TaskRunsPanel activeRun={activeRun} detail={detail} />
+              <TaskRunsPanel activeRun={activeRun} detail={detail} open={runsExpanded} onOpenChange={onRunsExpandedChange} />
               <TaskEventsPanel events={detail.events} />
             </main>
 

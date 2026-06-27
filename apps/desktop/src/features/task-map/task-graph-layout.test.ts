@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { layoutTaskGraph } from "./task-graph-layout"
+import { layoutTaskGraphFallback, layoutTaskGraphWithElk } from "./task-graph-layout"
 import type { TaskGraph } from "./task-graph-types"
 
 const graph: TaskGraph = {
@@ -17,9 +17,9 @@ const graph: TaskGraph = {
   ],
 }
 
-describe("layoutTaskGraph", () => {
-  it("places the detail center between dependency parents, children, and steps", () => {
-    const layout = layoutTaskGraph(graph, { mode: "detail", selectedTaskId: "center" })
+describe("layoutTaskGraphWithElk", () => {
+  it("layers detail nodes by visible edge direction", async () => {
+    const layout = await layoutTaskGraphWithElk(graph, { mode: "detail", selectedTaskId: "center" })
     const center = layout.nodes.find((node) => node.id === "center")
     const parent = layout.nodes.find((node) => node.id === "parent")
     const child = layout.nodes.find((node) => node.id === "child")
@@ -27,19 +27,19 @@ describe("layoutTaskGraph", () => {
 
     expect(parent?.x).toBeLessThan(center?.x ?? 0)
     expect(child?.x).toBeGreaterThan(center?.x ?? 0)
-    expect(step?.y).toBeGreaterThan(center?.y ?? 0)
+    expect(step?.x).toBeGreaterThan(center?.x ?? 0)
     expect(layout.edges.map((edge) => edge.id)).toEqual(["dep:parent:center", "dep:center:child", "step:center:step"])
   })
 
-  it("keeps board-map layout deterministic by status then ref", () => {
-    const first = layoutTaskGraph(graph, { mode: "board-map" })
-    const second = layoutTaskGraph({ nodes: [...graph.nodes].reverse(), edges: graph.edges }, { mode: "board-map" })
+  it("keeps board-map layout deterministic independent of input order", async () => {
+    const first = await layoutTaskGraphWithElk(graph, { mode: "board-map" })
+    const second = await layoutTaskGraphWithElk({ nodes: [...graph.nodes].reverse(), edges: graph.edges }, { mode: "board-map" })
 
     expect(first.nodes.map((node) => [node.id, node.x, node.y])).toEqual(second.nodes.map((node) => [node.id, node.x, node.y]))
   })
 
-  it("returns finite dimensions for an empty graph", () => {
-    const layout = layoutTaskGraph({ nodes: [], edges: [] }, { mode: "board-map" })
+  it("returns finite dimensions for an empty graph", async () => {
+    const layout = await layoutTaskGraphWithElk({ nodes: [], edges: [] }, { mode: "board-map" })
 
     expect(layout.nodes).toEqual([])
     expect(layout.edges).toEqual([])
@@ -49,8 +49,8 @@ describe("layoutTaskGraph", () => {
     expect(layout.height).toBeGreaterThan(0)
   })
 
-  it("routes reverse board-map edges from the source left side to the target right side", () => {
-    const reverseLayout = layoutTaskGraph(
+  it("uses graph topology instead of status buckets for board-map layers", async () => {
+    const reverseLayout = await layoutTaskGraphWithElk(
       {
         nodes: [
           { id: "ready", ref: "kanban-tool#1", title: "Ready", status: "ready", role: "context" },
@@ -62,16 +62,14 @@ describe("layoutTaskGraph", () => {
     )
     const source = reverseLayout.nodes.find((node) => node.id === "done")
     const target = reverseLayout.nodes.find((node) => node.id === "ready")
-    const edge = reverseLayout.edges[0]
 
     expect(source).toBeTruthy()
     expect(target).toBeTruthy()
-    expect(edge.path.startsWith(`M ${source?.x} ${source ? source.y + source.height / 2 : 0}`)).toBe(true)
-    expect(edge.path.endsWith(`${target ? target.x + target.width : 0} ${target ? target.y + target.height / 2 : 0}`)).toBe(true)
+    expect(source?.x).toBeLessThan(target?.x ?? 0)
   })
 
-  it("routes same-column edges vertically instead of looping through side anchors", () => {
-    const sameColumnLayout = layoutTaskGraph(
+  it("keeps the fallback layout topology-directed", () => {
+    const sameColumnLayout = layoutTaskGraphFallback(
       {
         nodes: [
           { id: "first", ref: "kanban-tool#1", title: "First", status: "ready", role: "context" },
@@ -83,11 +81,9 @@ describe("layoutTaskGraph", () => {
     )
     const source = sameColumnLayout.nodes.find((node) => node.id === "first")
     const target = sameColumnLayout.nodes.find((node) => node.id === "second")
-    const edge = sameColumnLayout.edges[0]
 
     expect(source).toBeTruthy()
     expect(target).toBeTruthy()
-    expect(edge.path.startsWith(`M ${source ? source.x + source.width / 2 : 0} ${source ? source.y + source.height : 0}`)).toBe(true)
-    expect(edge.path.endsWith(`${target ? target.x + target.width / 2 : 0} ${target?.y}`)).toBe(true)
+    expect(source?.x).toBeLessThan(target?.x ?? 0)
   })
 })

@@ -18,14 +18,15 @@ import {
   type NodeProps,
   type NodeTypes,
 } from "@xyflow/react"
-import { memo, useEffect, useMemo } from "react"
+import { memo, useEffect, useMemo, useState } from "react"
 
 import { cn } from "@/lib/utils"
 
 import { TaskGraphNodeCard } from "./TaskGraphNodeCard"
 import { clampTaskGraphScale } from "./task-graph-scale"
-import { layoutTaskGraph } from "./task-graph-layout"
-import type { TaskGraph, TaskGraphEdgeKind, TaskGraphLayoutNode, TaskGraphMode } from "./task-graph-types"
+import { layoutTaskGraphFallback, layoutTaskGraphWithElk } from "./task-graph-layout"
+import { graphNodeStatusMiniMapColor } from "./task-map-colors"
+import type { TaskGraph, TaskGraphEdgeKind, TaskGraphLayout, TaskGraphLayoutNode, TaskGraphMode } from "./task-graph-types"
 
 type TaskGraphCanvasProps = {
   graph: TaskGraph
@@ -61,9 +62,26 @@ export function TaskGraphCanvas(props: TaskGraphCanvasProps) {
 
 function TaskGraphCanvasInner({ graph, selectedTaskId, onSelectTask, mode = "detail", scale = 1, className }: TaskGraphCanvasProps) {
   const reactFlow = useReactFlow<TaskFlowNode, TaskFlowEdge>()
-  const layout = useMemo(() => layoutTaskGraph(graph, { mode, selectedTaskId }), [graph, mode, selectedTaskId])
+  const [layout, setLayout] = useState<TaskGraphLayout>(() => layoutTaskGraphFallback(graph, { mode, selectedTaskId }))
   const safeScale = clampTaskGraphScale(scale)
   const interaction = taskGraphInteraction(mode)
+
+  useEffect(() => {
+    let cancelled = false
+    const fallback = layoutTaskGraphFallback(graph, { mode, selectedTaskId })
+    setLayout(fallback)
+    void layoutTaskGraphWithElk(graph, { mode, selectedTaskId })
+      .then((nextLayout) => {
+        if (!cancelled) setLayout(nextLayout)
+      })
+      .catch(() => {
+        if (!cancelled) setLayout(fallback)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [graph, mode, selectedTaskId])
+
   const nodes = useMemo(
     () =>
       layout.nodes.map((node): TaskFlowNode => {
@@ -75,12 +93,12 @@ function TaskGraphCanvasInner({ graph, selectedTaskId, onSelectTask, mode = "det
           data: { node, selected, onSelectTask },
           draggable: false,
           selectable: true,
-          sourcePosition: mode === "detail" && node.role === "step_child" ? Position.Top : Position.Right,
-          targetPosition: mode === "detail" && node.role === "step_child" ? Position.Top : Position.Left,
+          sourcePosition: Position.Right,
+          targetPosition: Position.Left,
           ariaLabel: `Task graph node ${node.ref} ${node.title}`,
         }
       }),
-    [layout.nodes, mode, onSelectTask, selectedTaskId],
+    [layout.nodes, onSelectTask, selectedTaskId],
   )
   const edges = useMemo(
     () =>
@@ -222,12 +240,7 @@ function taskGraphInteraction(mode: TaskGraphMode) {
 
 function miniMapNodeColor(node: Node) {
   const data = node.data as Partial<TaskFlowNodeData>
-  if (data.node?.role === "center") return "#111827"
-  if (data.node?.contextOnly) return "#9ca3af"
-  if (data.node?.role === "dependency_parent") return "#dc2626"
-  if (data.node?.role === "dependency_child") return "#059669"
-  if (data.node?.role === "step_child" || data.node?.role === "step_parent") return "#7c3aed"
-  return "#64748b"
+  return graphNodeStatusMiniMapColor(data.node?.status, data.node?.contextOnly)
 }
 
 export const __test = {

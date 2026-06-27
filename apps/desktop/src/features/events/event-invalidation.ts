@@ -8,6 +8,7 @@ export type AffectedQueries = {
   taskNeighborhoodIds: Set<string>
   taskStepIds: Set<string>
   taskRunIds: Set<string>
+  taskRunLogIds: Set<string>
   taskCommentIds: Set<string>
   taskEventIds: Set<string>
   invalidateBoards?: boolean
@@ -95,6 +96,7 @@ export function affectedQueriesForEvents(events: EventRecord[]): AffectedQueries
   const taskNeighborhoodIds = new Set<string>()
   const taskStepIds = new Set<string>()
   const taskRunIds = new Set<string>()
+  const taskRunLogIds = new Set<string>()
   const taskCommentIds = new Set<string>()
   const taskEventIds = new Set<string>()
 
@@ -102,6 +104,10 @@ export function affectedQueriesForEvents(events: EventRecord[]): AffectedQueries
     if (event.task_id) {
       taskIds.add(event.task_id)
       taskEventIds.add(event.task_id)
+      if (event.run_id) {
+        taskRunIds.add(event.task_id)
+        taskRunLogIds.add(event.run_id)
+      }
       if (COMMENT_KINDS.has(event.kind)) {
         taskCommentIds.add(event.task_id)
       } else if (DEPENDENCY_KINDS.has(event.kind)) {
@@ -129,6 +135,7 @@ export function affectedQueriesForEvents(events: EventRecord[]): AffectedQueries
     taskNeighborhoodIds,
     taskStepIds,
     taskRunIds,
+    taskRunLogIds,
     taskCommentIds,
     taskEventIds,
     ...(invalidateBoards ? { invalidateBoards } : {}),
@@ -160,6 +167,7 @@ export function queryKeysForAffectedEvents({
   for (const taskId of affected.taskNeighborhoodIds) keys.push(queryKeys.taskNeighborhood(taskId))
   for (const taskId of affected.taskStepIds) keys.push(queryKeys.taskSteps(taskId))
   for (const taskId of affected.taskRunIds) keys.push(queryKeys.taskRuns(taskId))
+  for (const runId of affected.taskRunLogIds) keys.push(queryKeys.taskRunLog(runId))
   for (const taskId of affected.taskCommentIds) keys.push(queryKeys.taskComments(taskId))
   for (const taskId of affected.taskEventIds) keys.push(queryKeys.taskEvents(taskId))
 

@@ -126,6 +126,36 @@ describe("event invalidation helpers", () => {
     }))
   })
 
+  it("invalidates run metadata and run log queries for task events with run ids", () => {
+    expect(
+      affectedQueriesForEvents([eventRecord({ task_id: "t_2", run_id: "r_1", kind: "task.claimed" })]),
+    ).toEqual(affected({
+      taskIds: new Set(["t_2"]),
+      taskDetailIds: new Set(["t_2"]),
+      taskRunIds: new Set(["t_2"]),
+      taskRunLogIds: new Set(["r_1"]),
+      taskEventIds: new Set(["t_2"]),
+      invalidateBoardTasks: true,
+      invalidateStats: true,
+      invalidateSearchStatus: true,
+      invalidateBoardTaskMap: true,
+      invalidateEvents: true,
+    }))
+
+    const completed = affectedQueriesForEvents([eventRecord({ task_id: "t_2", run_id: "r_2", kind: "task.completed" })])
+    expect(queryKeysForAffectedEvents({ affected: completed, board: "default" })).toEqual([
+      ["events", "default"],
+      ["tasks", "default"],
+      ["stats", "default"],
+      ["search-status", "default"],
+      ["board-task-map", "default"],
+      ["task-detail", "t_2"],
+      ["task-runs", "t_2"],
+      ["task-run-log", "r_2"],
+      ["task-events", "t_2"],
+    ])
+  })
+
   it("invalidates the board switcher list for board lifecycle events", () => {
     const affected = affectedQueriesForEvents([eventRecord({ task_id: null, kind: "board.created" })])
 
@@ -204,6 +234,7 @@ function affected(overrides: Partial<AffectedQueries>): AffectedQueries {
     taskNeighborhoodIds: new Set(),
     taskStepIds: new Set(),
     taskRunIds: new Set(),
+    taskRunLogIds: new Set(),
     taskCommentIds: new Set(),
     taskEventIds: new Set(),
     invalidateBoardTasks: false,

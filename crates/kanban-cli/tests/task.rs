@@ -752,7 +752,7 @@ fn label_bootstrap_verify_requires_vector_provider_before_mutating() -> anyhow::
             "--verify",
         ],
     )?
-    .failure_containing("label vector helper adapter is not available")?;
+    .failure_containing("vector helper unavailable for bootstrap verification")?;
 
     let shown = kanban(&temp.path, &["--json", "task", "show", task_id])?.success_json()?;
     assert!(

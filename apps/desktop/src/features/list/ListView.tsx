@@ -12,6 +12,7 @@ import { useMemo, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { PageToolbar, PriorityBadge, TaskIdentityLine, TaskStatusBadge } from "@/components/ui/composites"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Label } from "@/components/ui/label"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
@@ -30,8 +31,8 @@ import {
 import { filterStatuses } from "@/features/board/board-config"
 import type { PageMeta, Task, TaskStatus } from "@/lib/api"
 import { pageRangeLabel } from "@/lib/pagination"
-import { priorityBadgeClass, priorityLabel, priorityLevels } from "@/lib/priority"
-import { cn, formatRelativeTime, shortId } from "@/lib/utils"
+import { priorityLabel, priorityLevels } from "@/lib/priority"
+import { cn, formatRelativeTime } from "@/lib/utils"
 
 import {
   defaultListColumnVisibility,
@@ -142,10 +143,12 @@ export function ListView({
           <SortableHeader columnId="ref" listSort={listSort} onListSortChange={onListSortChange} onHide={() => column.toggleVisibility(false)} />
         ),
         cell: ({ row }) => (
-          <div>
-            <div className="font-medium text-foreground">{row.original.ref || `#${row.original.seq}`}</div>
-            <div className="text-xs text-muted-foreground">{shortId(row.original.id)}</div>
-          </div>
+          <TaskIdentityLine
+            id={row.original.id}
+            ref={row.original.ref}
+            seq={row.original.seq}
+            className="[&>div:first-child]:text-foreground"
+          />
         ),
       },
       {
@@ -183,18 +186,14 @@ export function ListView({
         header: ({ column }) => (
           <SortableHeader columnId="status" listSort={listSort} onListSortChange={onListSortChange} onHide={() => column.toggleVisibility(false)} />
         ),
-        cell: ({ row }) => <Badge variant={badgeVariant(row.original.status)}>{row.original.status}</Badge>,
+        cell: ({ row }) => <TaskStatusBadge status={row.original.status} />,
       },
       {
         accessorKey: "priority",
         header: ({ column }) => (
           <SortableHeader columnId="priority" listSort={listSort} onListSortChange={onListSortChange} onHide={() => column.toggleVisibility(false)} />
         ),
-        cell: ({ row }) => (
-          <Badge variant="secondary" className={priorityBadgeClass(row.original.priority)}>
-            {priorityLabel(row.original.priority)}
-          </Badge>
-        ),
+        cell: ({ row }) => <PriorityBadge priority={row.original.priority} />,
       },
       {
         accessorKey: "assignee",
@@ -294,7 +293,7 @@ export function ListView({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-card">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+      <PageToolbar>
         <div className="flex items-center gap-2">
           <Label className="text-xs text-muted-foreground">Status</Label>
           <MenuSelect
@@ -380,7 +379,7 @@ export function ListView({
           <span>{pageRangeLabel(page, tasks.length)}</span>
           {tasksRefreshing ? <span>refreshing</span> : null}
         </div>
-      </div>
+      </PageToolbar>
 
       <ScrollArea className="min-w-0 flex-1">
         <Table className="min-w-[980px] border-separate border-spacing-0">
@@ -567,12 +566,4 @@ function SortableHeader({
       </DropdownMenuContent>
     </DropdownMenu>
   )
-}
-
-function badgeVariant(status: Task["status"]) {
-  if (status === "ready" || status === "done") return "ready"
-  if (status === "running") return "running"
-  if (status === "blocked") return "blocked"
-  if (status === "review") return "review"
-  return "secondary"
 }

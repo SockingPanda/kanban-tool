@@ -5,11 +5,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { MetricStrip, PageToolbar, PriorityBadge, SectionCard, TaskIdentityLine, TaskStatusBadge } from "@/components/ui/composites"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Separator } from "@/components/ui/separator"
 import type { BoardTaskMap, KanbanApi, Task, TaskGraphNode as ApiTaskGraphNode } from "@/lib/api"
-import { priorityBadgeClass, priorityLabel } from "@/lib/priority"
-import { shortId } from "@/lib/utils"
 
 import { TaskGraphCanvas } from "./TaskGraphCanvas"
 import { apiTaskGraphToCanvasGraph } from "./task-graph-adapter"
@@ -77,7 +76,7 @@ export function BoardTaskMapView({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-3 lg:flex-row lg:p-4">
         <section className="flex min-w-0 flex-1 flex-col gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <PageToolbar className="rounded-md border border-border bg-card">
             <div className="flex min-w-0 flex-wrap items-center gap-1.5">
               {filterOptions.map((option) => (
                 <Button
@@ -145,7 +144,7 @@ export function BoardTaskMapView({
               {mapQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
               Refresh
             </Button>
-          </div>
+          </PageToolbar>
 
           {mapQuery.error ? (
             <Alert className="border-destructive/50 bg-destructive/5">
@@ -255,11 +254,7 @@ function MapInspector({
   const counts = task && graph ? relationCounts(graph, task.id) : { parents: 0, children: 0, steps: 0 }
   return (
     <aside className="min-w-0 shrink-0 lg:w-80">
-      <Card className="space-y-4 p-3">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Network className="h-4 w-4" />
-          Inspector
-        </div>
+      <SectionCard title="Inspector" icon={Network}>
         {!task ? (
           <Empty className="items-start p-0 text-left">
             <EmptyDescription>Select a map node to inspect it.</EmptyDescription>
@@ -272,33 +267,31 @@ function MapInspector({
               </Badge>
             ) : null}
             <div className="space-y-2">
-              <div className="text-xs text-muted-foreground">
-                {task.ref} · {shortId(task.id)}
-              </div>
-              <div className="break-words text-sm font-semibold">{task.title}</div>
+              <TaskIdentityLine id={task.id} ref={task.ref} seq={task.seq} title={task.title} />
               <div className="flex flex-wrap gap-1.5">
-                <Badge variant={badgeVariant(task.status)}>{task.status}</Badge>
-                <Badge variant="secondary" className={priorityBadgeClass(task.priority)}>
-                  {priorityLabel(task.priority)}
-                </Badge>
+                <TaskStatusBadge status={task.status} />
+                <PriorityBadge priority={task.priority} />
                 {node?.context_only ? <Badge variant="secondary">context</Badge> : null}
               </div>
             </div>
             <Separator />
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <InfoTile label="Plan" value={task.execution_plan_state} />
-              <InfoTile label="Required open" value={String(incompleteRequiredSteps(task))} />
-              <InfoTile label="Parents" value={String(counts.parents)} />
-              <InfoTile label="Children" value={String(counts.children)} />
-              <InfoTile label="Steps" value={String(counts.steps)} />
-              <InfoTile label="Blocked by" value={String(task.unfinished_parent_count)} />
-            </div>
+            <MetricStrip
+              className="grid-cols-2 text-sm"
+              items={[
+                { label: "Plan", value: task.execution_plan_state },
+                { label: "Required open", value: String(incompleteRequiredSteps(task)) },
+                { label: "Parents", value: String(counts.parents) },
+                { label: "Children", value: String(counts.children) },
+                { label: "Steps", value: String(counts.steps) },
+                { label: "Blocked by", value: String(task.unfinished_parent_count) },
+              ]}
+            />
             <Button type="button" className="w-full" onClick={() => onOpenTask(task.id)}>
               Open detail
             </Button>
           </div>
         )}
-      </Card>
+      </SectionCard>
     </aside>
   )
 }
@@ -317,24 +310,6 @@ function relationCounts(graph: BoardTaskMap, taskId: string) {
 
 function incompleteRequiredSteps(task: Task) {
   return Math.max(0, task.required_step_count - task.completed_required_step_count)
-}
-
-function InfoTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-border bg-muted/30 p-2">
-      <div className="text-[10px] uppercase tracking-normal text-muted-foreground">{label}</div>
-      <div className="mt-1 truncate text-sm font-medium">{value}</div>
-    </div>
-  )
-}
-
-function badgeVariant(status: string) {
-  if (status === "ready") return "ready"
-  if (status === "running") return "running"
-  if (status === "blocked") return "blocked"
-  if (status === "review") return "review"
-  if (status === "done") return "secondary"
-  return "secondary"
 }
 
 function errorMessage(err: unknown) {

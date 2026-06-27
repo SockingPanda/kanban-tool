@@ -288,12 +288,12 @@ function MapInspector({
             <MetricStrip
               className="grid-cols-2 text-sm"
               items={[
-                { label: "Plan", value: task.execution_plan_state },
-                { label: "Required open", value: String(incompleteRequiredSteps(task)) },
-                { label: "Parents", value: String(counts.parents) },
-                { label: "Children", value: String(counts.children) },
-                { label: "Steps", value: String(counts.steps) },
-                { label: "Blocked by", value: String(task.unfinished_parent_count) },
+                { id: "plan", label: "Plan", value: task.execution_plan_state },
+                { id: "required-open", label: "Required open", value: String(incompleteRequiredSteps(task)) },
+                { id: "parents", label: "Parents", value: String(counts.parents) },
+                { id: "children", label: "Children", value: String(counts.children) },
+                { id: "steps", label: "Steps", value: String(counts.steps) },
+                { id: "blocked-by", label: "Blocked by", value: String(task.unfinished_parent_count) },
               ]}
             />
             <Button type="button" className="w-full" onClick={() => onOpenTask(task.id)}>

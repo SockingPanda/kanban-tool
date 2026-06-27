@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { CircleDot, RefreshCcw } from "lucide-react"
+import { memo } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -51,7 +52,7 @@ export function EventsView({ api }: { api: KanbanApi | null }) {
   )
 }
 
-function EventRow({ event }: { event: EventRecord }) {
+const EventRow = memo(function EventRow({ event }: { event: EventRecord }) {
   return (
     <Card className="grid grid-cols-[auto_1fr_auto] gap-3 px-3 py-2 text-sm">
       <CircleDot className="mt-0.5 h-4 w-4 text-muted-foreground" />
@@ -67,4 +68,4 @@ function EventRow({ event }: { event: EventRecord }) {
       </div>
     </Card>
   )
-}
+})

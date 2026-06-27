@@ -52,6 +52,7 @@ describe("desktop shadcn control convergence", () => {
       "app/AppShell.tsx",
       "features/board/BoardView.tsx",
       "features/list/ListView.tsx",
+      "features/ontology/OntologyReviewWorkbench.tsx",
       "features/task-detail/TaskDetail.tsx",
     ]
 
@@ -263,6 +264,7 @@ describe("desktop shadcn control convergence", () => {
     const health = source("features/health/HealthView.tsx")
     const events = source("features/events/EventsView.tsx")
     const runs = source("features/runs/RunsView.tsx")
+    const ontology = source("features/ontology/OntologyReviewWorkbench.tsx")
 
     for (const content of [board, list, detail, map]) {
       expect(content).toContain("TaskStatusBadge")
@@ -282,5 +284,9 @@ describe("desktop shadcn control convergence", () => {
       expect(content).toContain("SectionCard")
       expect(content).toContain("MetricStrip")
     }
+
+    expect(ontology).toContain("PageToolbar")
+    expect(ontology).toContain("SectionCard")
+    expect(ontology).toContain("MetricStrip")
   })
 })

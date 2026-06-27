@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type ElementType, type FormEvent, type ReactNode, type TransitionEvent } from "react"
+import { lazy, memo, Suspense, useEffect, useState, type ElementType, type FormEvent, type ReactNode, type TransitionEvent } from "react"
 import {
   Activity,
   ChevronDown,
@@ -269,28 +269,10 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
     tasksRefreshing,
   } = taskCollection
   const {
-    activeRun,
-    blockReason,
-    claimToken,
-    commentBody,
-    dependencyInput,
     dependencySnapshot,
     detail,
-    detailLoading,
-    draftDirty,
-    editDraft,
-    labelSuggestions,
-    labelSuggestionsError,
-    labelSuggestionsLoading,
-    labelSuggestionsRequested,
     selectedId,
     selectedTask,
-    taskCommentsExpanded,
-    taskDependenciesExpanded,
-    taskEventsExpanded,
-    taskGraphExpanded,
-    taskRunsExpanded,
-    taskStepsExpanded,
   } = taskDetail
   const showDetailSheet = shouldOpenTaskDetailSheet(view, selectedTask)
 
@@ -300,7 +282,7 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
       onOpenChange={commands.setSidebarOpen}
       className="h-screen w-screen overflow-hidden bg-background text-foreground"
     >
-      <ShellSidebar
+      <MemoShellSidebar
         config={config}
         boards={boards}
         boardsLoading={boardsLoading}
@@ -313,7 +295,7 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
       />
 
       <SidebarInset className="flex flex-col overflow-hidden bg-background">
-        <ShellHeader
+        <MemoShellHeader
           config={config}
           view={view}
           canCreateTask={Boolean(api)}
@@ -355,7 +337,7 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
 
         <div className="flex min-h-0 min-w-0 flex-1">
           <section className="flex min-w-0 flex-1 flex-col">
-            <MainView
+            <MemoMainView
               api={api}
               config={config}
               view={view}
@@ -391,64 +373,117 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
             />
           </section>
 
-          <Sheet
+          <MemoTaskDetailSheet
+            api={api}
             open={showDetailSheet}
-            onOpenChange={(open) => {
-              if (!open) commands.closeTaskDetail()
-            }}
-          >
-            <SheetContent side="right" className="w-[min(1100px,calc(100vw-24px))] p-0">
-              <Suspense fallback={<LazyViewFallback label="Loading task detail" />}>
-                <TaskDetail
-                  api={api}
-                  task={selectedTask}
-                  detail={detail}
-                  labelSuggestions={labelSuggestions}
-                  labelSuggestionsRequested={labelSuggestionsRequested}
-                  labelSuggestionsLoading={labelSuggestionsLoading}
-                  labelSuggestionsError={labelSuggestionsError}
-                  activeRun={activeRun}
-                  blockReason={blockReason}
-                  setBlockReason={commands.setBlockReason}
-                  dependencyInput={dependencyInput}
-                  setDependencyInput={commands.setDependencyInput}
-                  claimToken={claimToken}
-                  commentBody={commentBody}
-                  setCommentBody={commands.setCommentBody}
-                  editDraft={editDraft}
-                  draftDirty={draftDirty}
-                  setEditDraft={commands.setEditDraft}
-                  detailLoading={detailLoading}
-                  commentsExpanded={taskCommentsExpanded}
-                  dependenciesExpanded={taskDependenciesExpanded}
-                  eventsExpanded={taskEventsExpanded}
-                  graphExpanded={taskGraphExpanded}
-                  runsExpanded={taskRunsExpanded}
-                  stepsExpanded={taskStepsExpanded}
-                  pendingAction={pendingAction}
-                  onAction={commands.runAction}
-                  onAddDependency={commands.addDependency}
-                  onRemoveDependency={commands.removeDependency}
-                  onRequestLabelSuggestions={commands.requestLabelSuggestions}
-                  onSelectTask={commands.selectTask}
-                  onSaveTask={commands.saveTask}
-                  onCancelEdit={commands.cancelTaskEdit}
-                  onAddComment={commands.addComment}
-                  onCommentsExpandedChange={commands.setTaskCommentsExpanded}
-                  onDependenciesExpandedChange={commands.setTaskDependenciesExpanded}
-                  onEventsExpandedChange={commands.setTaskEventsExpanded}
-                  onGraphExpandedChange={commands.setTaskGraphExpanded}
-                  onRunsExpandedChange={commands.setTaskRunsExpanded}
-                  onStepsExpandedChange={commands.setTaskStepsExpanded}
-                />
-              </Suspense>
-            </SheetContent>
-          </Sheet>
+            pendingAction={pendingAction}
+            taskDetail={taskDetail}
+            commands={commands}
+          />
         </div>
 
-        <StatusBar lastRefreshAt={lastRefreshAt} queueCounts={queueCounts} />
+        <MemoStatusBar lastRefreshAt={lastRefreshAt} queueCounts={queueCounts} />
       </SidebarInset>
     </SidebarProvider>
+  )
+}
+
+const MemoShellSidebar = memo(ShellSidebar)
+const MemoShellHeader = memo(ShellHeader)
+const MemoMainView = memo(MainView)
+const MemoTaskDetailSheet = memo(TaskDetailSheet)
+const MemoStatusBar = memo(StatusBar)
+
+function TaskDetailSheet({
+  api,
+  commands,
+  open,
+  pendingAction,
+  taskDetail,
+}: {
+  api: KanbanApi | null
+  commands: AppShellCommandProps
+  open: boolean
+  pendingAction: string | null
+  taskDetail: AppShellTaskDetailProps
+}) {
+  const {
+    activeRun,
+    blockReason,
+    claimToken,
+    commentBody,
+    dependencyInput,
+    detail,
+    detailLoading,
+    draftDirty,
+    editDraft,
+    labelSuggestions,
+    labelSuggestionsError,
+    labelSuggestionsLoading,
+    labelSuggestionsRequested,
+    selectedTask,
+    taskCommentsExpanded,
+    taskDependenciesExpanded,
+    taskEventsExpanded,
+    taskGraphExpanded,
+    taskRunsExpanded,
+    taskStepsExpanded,
+  } = taskDetail
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) commands.closeTaskDetail()
+      }}
+    >
+      <SheetContent side="right" className="w-[min(1100px,calc(100vw-24px))] p-0">
+        <Suspense fallback={<LazyViewFallback label="Loading task detail" />}>
+          <TaskDetail
+            api={api}
+            task={selectedTask}
+            detail={detail}
+            labelSuggestions={labelSuggestions}
+            labelSuggestionsRequested={labelSuggestionsRequested}
+            labelSuggestionsLoading={labelSuggestionsLoading}
+            labelSuggestionsError={labelSuggestionsError}
+            activeRun={activeRun}
+            blockReason={blockReason}
+            setBlockReason={commands.setBlockReason}
+            dependencyInput={dependencyInput}
+            setDependencyInput={commands.setDependencyInput}
+            claimToken={claimToken}
+            commentBody={commentBody}
+            setCommentBody={commands.setCommentBody}
+            editDraft={editDraft}
+            draftDirty={draftDirty}
+            setEditDraft={commands.setEditDraft}
+            detailLoading={detailLoading}
+            commentsExpanded={taskCommentsExpanded}
+            dependenciesExpanded={taskDependenciesExpanded}
+            eventsExpanded={taskEventsExpanded}
+            graphExpanded={taskGraphExpanded}
+            runsExpanded={taskRunsExpanded}
+            stepsExpanded={taskStepsExpanded}
+            pendingAction={pendingAction}
+            onAction={commands.runAction}
+            onAddDependency={commands.addDependency}
+            onRemoveDependency={commands.removeDependency}
+            onRequestLabelSuggestions={commands.requestLabelSuggestions}
+            onSelectTask={commands.selectTask}
+            onSaveTask={commands.saveTask}
+            onCancelEdit={commands.cancelTaskEdit}
+            onAddComment={commands.addComment}
+            onCommentsExpandedChange={commands.setTaskCommentsExpanded}
+            onDependenciesExpandedChange={commands.setTaskDependenciesExpanded}
+            onEventsExpandedChange={commands.setTaskEventsExpanded}
+            onGraphExpandedChange={commands.setTaskGraphExpanded}
+            onRunsExpandedChange={commands.setTaskRunsExpanded}
+            onStepsExpandedChange={commands.setTaskStepsExpanded}
+          />
+        </Suspense>
+      </SheetContent>
+    </Sheet>
   )
 }
 

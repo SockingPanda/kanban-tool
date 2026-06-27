@@ -30,4 +30,33 @@ describe("desktop shell state boundaries", () => {
     expect(appSource).toContain("taskCreation={taskCreation}")
     expect(appSource).toContain("commands={commands}")
   })
+
+  it("keeps shell regions behind memoized sub-boundaries", () => {
+    const shellSource = readFileSync(new URL("./AppShell.tsx", import.meta.url), "utf8")
+
+    expect(shellSource).toContain("const MemoShellSidebar = memo(ShellSidebar)")
+    expect(shellSource).toContain("const MemoShellHeader = memo(ShellHeader)")
+    expect(shellSource).toContain("const MemoMainView = memo(MainView)")
+    expect(shellSource).toContain("const MemoTaskDetailSheet = memo(TaskDetailSheet)")
+    expect(shellSource).toContain("const MemoStatusBar = memo(StatusBar)")
+    expect(shellSource).toContain("<MemoShellSidebar")
+    expect(shellSource).toContain("<MemoShellHeader")
+    expect(shellSource).toContain("<MemoMainView")
+    expect(shellSource).toContain("<MemoTaskDetailSheet")
+    expect(shellSource).toContain("<MemoStatusBar")
+  })
+
+  it("keeps App command callbacks stable before composing the command group", () => {
+    const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8")
+
+    expect(appSource).toContain("const changeBoard = useCallback")
+    expect(appSource).toContain("const closeTaskDetail = useCallback")
+    expect(appSource).toContain("const refreshTasks = useCallback")
+    expect(appSource).toContain("const resetListFilters = useCallback")
+    expect(appSource).toContain("const setRowsPerPageCommand = useCallback")
+    expect(appSource).toContain("changeBoard,")
+    expect(appSource).toContain("resetListFilters,")
+    expect(appSource).not.toContain("taskCollectionState,")
+    expect(appSource).not.toContain("taskDetailState,")
+  })
 })

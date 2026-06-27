@@ -13,6 +13,7 @@ import type { HealthStatus, KanbanApi, RuntimeConfig } from "@/lib/api"
 type MetricTone = "ready" | "blocked" | "secondary"
 
 type HealthMetric = {
+  id: string
   label: string
   value: string
   tone: MetricTone
@@ -25,11 +26,11 @@ type RuntimeWarning = {
 
 export function buildHealthRuntimeModel(health: HealthStatus, config: RuntimeConfig | null) {
   const metrics: HealthMetric[] = [
-    { label: "ok", value: String(health.ok), tone: health.ok ? "ready" : "blocked" },
-    { label: "db", value: health.db, tone: health.db === "ok" ? "ready" : "blocked" },
-    { label: "version", value: health.version, tone: "secondary" },
-    { label: "db_path", value: reportedValue(health.db_path), tone: "secondary" },
-    { label: "db_fingerprint", value: reportedValue(health.db_fingerprint), tone: "secondary" },
+    { id: "ok", label: "ok", value: String(health.ok), tone: health.ok ? "ready" : "blocked" },
+    { id: "db", label: "db", value: health.db, tone: health.db === "ok" ? "ready" : "blocked" },
+    { id: "version", label: "version", value: health.version, tone: "secondary" },
+    { id: "db-path", label: "db_path", value: reportedValue(health.db_path), tone: "secondary" },
+    { id: "db-fingerprint", label: "db_fingerprint", value: reportedValue(health.db_fingerprint), tone: "secondary" },
   ]
 
   return {

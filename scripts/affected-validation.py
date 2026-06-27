@@ -52,6 +52,52 @@ def is_desktop(path: str) -> bool:
     return path.startswith("apps/desktop/")
 
 
+CORE_CRATES = {
+    "kanban-core",
+    "kanban-entity",
+    "kanban-indexer",
+    "kanban-search",
+    "kanban-graph",
+    "kanban-vector",
+    "kanban-derived-io",
+    "kanban-labels",
+    "kanban-context",
+    "kanban-sqlite",
+    "kanban-local",
+    "kanban-server",
+    "kanban-cli",
+}
+
+
+def crate_name(path: str) -> str | None:
+    parts = _parts(path)
+    if len(parts) >= 2 and parts[0] == "crates":
+        return parts[1]
+    return None
+
+
+def is_core(path: str) -> bool:
+    return (
+        crate_name(path) in CORE_CRATES
+        or path.startswith("migrations/")
+        or path in {
+            "docs/STATE_MACHINE.md",
+            "docs/DATA_MODEL.md",
+            "docs/CLI_SPEC.md",
+            "docs/API_SPEC.md",
+            "docs/DISPATCHER_SPEC.md",
+        }
+    )
+
+
+def is_vector_helper(path: str) -> bool:
+    return path.startswith("crates/kanban-vector-lancedb/")
+
+
+def is_graph_helper(path: str) -> bool:
+    return path.startswith("crates/kanban-graph-oxigraph/")
+
+
 def is_cli(path: str) -> bool:
     return path.startswith("crates/kanban-cli/") or path == "docs/CLI_SPEC.md"
 
@@ -102,6 +148,9 @@ def is_scripts_packaging_release_sensitive(path: str) -> bool:
 CLASSIFIERS = {
     "docs-only": is_docs_only,
     "desktop": is_desktop,
+    "core": is_core,
+    "vector-helper": is_vector_helper,
+    "graph-helper": is_graph_helper,
     "cli": is_cli,
     "server/api": is_server_api,
     "sqlite/core/state-machine": is_sqlite_core_state_machine,
@@ -112,6 +161,9 @@ CLASSIFIERS = {
 
 RULES = (
     Rule("desktop", (["just", "desktop-check"],)),
+    Rule("core", (["just", "check-core"],)),
+    Rule("vector-helper", (["just", "check-p", "kanban-vector-lancedb"],)),
+    Rule("graph-helper", (["just", "check-p", "kanban-graph-oxigraph"],)),
     Rule(
         "cli",
         (
@@ -166,6 +218,7 @@ RULES = (
         "scripts/packaging/release-sensitive",
         (
             ["just", "affected-self-test"],
+            ["just", "check-full"],
             ["just", "target-tools"],
         ),
     ),
@@ -259,7 +312,7 @@ def build_plan(base: str, paths: list[str]) -> Plan:
         commands.append(["just", "diff-check"])
     else:
         if any(path in WORKSPACE_RUST_FAST_PATTERNS for path in paths):
-            commands.append(["just", "rust-fast"])
+            commands.append(["just", "check-full"])
         for rule in RULES:
             if any(rule.matches(path) for path in paths):
                 commands.extend(rule.commands)
@@ -352,29 +405,29 @@ def self_test() -> None:
         (
             "cli",
             ["crates/kanban-cli/src/main.rs"],
-            {"cli"},
-            [["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
+            {"core", "cli"},
+            [["just", "check-core"], ["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
             False,
         ),
         (
             "cli spec",
             ["docs/CLI_SPEC.md"],
-            {"docs-only", "cli"},
-            [["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
+            {"docs-only", "core", "cli"},
+            [["just", "check-core"], ["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
             False,
         ),
         (
             "server api",
             ["crates/kanban-server/src/router.rs", "docs/API_SPEC.md"],
-            {"server/api", "docs-only"},
-            [["just", "check-p", "kanban-server"], ["just", "diff-check"]],
+            {"core", "server/api", "docs-only"},
+            [["just", "check-core"], ["just", "check-p", "kanban-server"], ["just", "diff-check"]],
             False,
         ),
         (
             "sqlite state",
             ["crates/kanban-sqlite/src/service/transitions.rs", "migrations/004_priority_levels.sql"],
-            {"sqlite/core/state-machine"},
-            [["just", "check-p", "kanban-core"], ["just", "check-p", "kanban-sqlite"]],
+            {"core", "sqlite/core/state-machine"},
+            [["just", "check-core"], ["just", "check-p", "kanban-core"], ["just", "check-p", "kanban-sqlite"]],
             False,
         ),
         (
@@ -385,8 +438,9 @@ def self_test() -> None:
                 "crates/kanban-indexer/src/lib.rs",
                 "crates/kanban-entity/src/lib.rs",
             ],
-            {"search/graph/vector/context"},
+            {"core", "search/graph/vector/context"},
             [
+                ["just", "check-core"],
                 ["just", "check-p", "kanban-vector"],
                 ["just", "check-p", "kanban-context"],
                 ["just", "check-p", "kanban-indexer"],
@@ -395,24 +449,49 @@ def self_test() -> None:
             False,
         ),
         (
+            "vector helper",
+            ["crates/kanban-vector-lancedb/src/lib.rs"],
+            {"vector-helper"},
+            [["just", "check-p", "kanban-vector-lancedb"], ["just", "diff-check"]],
+            False,
+        ),
+        (
+            "graph helper",
+            ["crates/kanban-graph-oxigraph/src/lib.rs"],
+            {"graph-helper"},
+            [["just", "check-p", "kanban-graph-oxigraph"], ["just", "diff-check"]],
+            False,
+        ),
+        (
+            "both helpers",
+            ["crates/kanban-vector-lancedb/src/lib.rs", "crates/kanban-graph-oxigraph/src/lib.rs"],
+            {"vector-helper", "graph-helper"},
+            [
+                ["just", "check-p", "kanban-vector-lancedb"],
+                ["just", "check-p", "kanban-graph-oxigraph"],
+                ["just", "diff-check"],
+            ],
+            False,
+        ),
+        (
             "release sensitive",
             ["justfile", "scripts/package-cli-linux.sh"],
             {"scripts/packaging/release-sensitive"},
-            [["just", "affected-self-test"], ["just", "target-tools"], ["just", "diff-check"]],
+            [["just", "affected-self-test"], ["just", "check-full"], ["just", "target-tools"], ["just", "diff-check"]],
             True,
         ),
         (
             "workspace manifest",
             ["Cargo.toml"],
             {"scripts/packaging/release-sensitive"},
-            [["just", "rust-fast"], ["just", "affected-self-test"], ["just", "diff-check"]],
+            [["just", "check-full"], ["just", "affected-self-test"], ["just", "diff-check"]],
             True,
         ),
         (
             "nested crate manifest",
             ["crates/kanban-cli/Cargo.toml"],
-            {"cli"},
-            [["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
+            {"core", "cli"},
+            [["just", "check-core"], ["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
             True,
         ),
         (

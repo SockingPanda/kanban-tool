@@ -63,8 +63,10 @@ kanban-tool/
     kanban-cli/
     kanban-context/
     kanban-core/
+    kanban-derived-io/
     kanban-entity/
     kanban-graph/
+    kanban-graph-oxigraph/
     kanban-indexer/
     kanban-labels/
     kanban-local/
@@ -72,11 +74,15 @@ kanban-tool/
     kanban-server/
     kanban-sqlite/
     kanban-vector/
+    kanban-vector-lancedb/
   apps/
     desktop/
   docs/
   migrations/
 ```
+
+`kanban-derived-io` contains shared derived-store IO helpers; `kanban-graph-oxigraph` and
+`kanban-vector-lancedb` are helper-heavy backend crates packaged as helper binaries.
 
 ## 默认二进制名
 
@@ -125,9 +131,10 @@ Feature flags can be passed through to the cargo build:
 ./scripts/package-cli-linux.sh --format deb --all-features
 ```
 
-The default CLI build includes the Tantivy search, Oxigraph graph, and LanceDB
-vector backends. Use `--no-default-features` only when a minimal fallback binary
-is desired.
+The default CLI package installs the main `kanban` binary plus helper binaries
+for the Oxigraph graph and LanceDB vector backends under `/usr/lib/kanban/`.
+The main CLI/server dependency trees stay free of those helper-only heavy
+dependencies.
 
 ### Install the CLI directly with cargo
 
@@ -167,10 +174,19 @@ just affected base="main"
 
 The router combines the branch diff from `base...HEAD`, staged changes, working
 tree changes, and untracked files. It classifies changed paths into docs,
-desktop, CLI, server/API, SQLite/core/state-machine, search/graph/vector/context,
-and scripts/packaging/release-sensitive groups, then emits matching `just`
-commands. Release-sensitive diffs set `full_gate_recommended=true`; `just
-release` remains the authoritative full gate.
+desktop, core, vector-helper, graph-helper, CLI, server/API,
+SQLite/core/state-machine, search/graph/vector/context, and
+scripts/packaging/release-sensitive groups, then emits matching `just` commands.
+Release-sensitive diffs set `full_gate_recommended=true`; `just release` remains
+the authoritative full gate.
+
+Rust check gates are split by helper architecture:
+
+```bash
+just check-core     # default `just check`; excludes helper-heavy crates
+just check-helpers  # checks kanban-vector-lancedb and kanban-graph-oxigraph
+just check-full     # check-core followed by check-helpers
+```
 
 Rust validation recipes run target-writing Cargo/Tauri commands through
 `scripts/cargo-build-lock.sh`. The wrapper serializes shared target writes and

@@ -35,6 +35,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { PriorityBadge, TaskIdentityLine, TaskStatusBadge } from "@/components/ui/composites"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,7 +58,7 @@ import { TaskGraphCanvas } from "@/features/task-map/TaskGraphCanvas"
 import { apiTaskGraphToCanvasGraph } from "@/features/task-map/task-graph-adapter"
 import { isBlockableStatus } from "@/lib/action-policy"
 import type { CommentRecord, KanbanApi, LabelSuggestionResult, Run, Task, TaskStatus, TaskStep, TaskSteps } from "@/lib/api"
-import { priorityBadgeClass, priorityLabel, priorityLevels } from "@/lib/priority"
+import { priorityLabel, priorityLevels } from "@/lib/priority"
 import { cn, formatRelativeTime, shortId } from "@/lib/utils"
 
 import { isLongDescription, visibleDescription } from "./description-state"
@@ -245,15 +246,15 @@ export function TaskDetail({
       <div className="border-b border-border p-4 pr-12">
         <div className="flex items-start justify-between gap-3">
           <SheetHeader className="min-w-0">
-            <div className="text-xs text-muted-foreground">#{task.seq} {shortId(task.id)}</div>
+            <TaskIdentityLine id={task.id} ref={task.ref} seq={task.seq} />
             <SheetTitle className="mt-1 break-words">{editing ? "Edit task" : task.title}</SheetTitle>
             <SheetDescription className="sr-only">
               Task workbench with one-hop map, description, execution plan, primary action, discussion, runs, events, and metadata.
             </SheetDescription>
           </SheetHeader>
           <div className="flex shrink-0 flex-col items-end gap-1">
-            <Badge variant={badgeVariant(task.status)}>{task.status}</Badge>
-            <Badge variant="secondary" className={priorityBadgeClass(task.priority)}>{priorityLabel(task.priority)}</Badge>
+            <TaskStatusBadge status={task.status} />
+            <PriorityBadge priority={task.priority} />
             {detailLoading ? <span className="text-xs text-muted-foreground">refreshing</span> : null}
           </div>
         </div>
@@ -426,7 +427,7 @@ function TaskStepsSection({ task, steps, pending, stepTitle, attachStepId, notRe
                       <div className="mt-1 text-xs text-muted-foreground">Text step</div>
                     )}
                   </div>
-                  {linkedTask ? <div className="flex shrink-0 flex-col items-end gap-1"><Badge variant={badgeVariant(linkedTask.status)}>{linkedTask.status}</Badge></div> : null}
+                  {linkedTask ? <div className="flex shrink-0 flex-col items-end gap-1"><TaskStatusBadge status={linkedTask.status} /></div> : null}
                 </div>
               )
             })}
@@ -934,14 +935,6 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       </ItemActions>
     </Item>
   )
-}
-
-function badgeVariant(status: TaskStatus) {
-  if (status === "ready" || status === "done") return "ready"
-  if (status === "running") return "running"
-  if (status === "blocked") return "blocked"
-  if (status === "review") return "review"
-  return "secondary"
 }
 
 function dependencyBadgeVariant(status: TaskStatus): "ready" | "blocked" | "secondary" {

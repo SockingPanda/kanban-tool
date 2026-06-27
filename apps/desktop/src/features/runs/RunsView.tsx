@@ -2,6 +2,7 @@ import { FileText } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import { PageToolbar, TaskIdentityLine } from "@/components/ui/composites"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -19,12 +20,14 @@ export function RunsView({
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
-      <div className="border-b border-border px-4 py-3">
-        <div className="text-sm font-medium">Runs</div>
-        <div className="text-xs text-muted-foreground">
-          {selectedTask ? `Selected task #${selectedTask.seq} · ${shortId(selectedTask.id)}` : "Select a task to inspect runs."}
-        </div>
-      </div>
+      <PageToolbar
+        title="Runs"
+        description={
+          selectedTask ? (
+            <TaskIdentityLine id={selectedTask.id} ref={selectedTask.ref} seq={selectedTask.seq} />
+          ) : "Select a task to inspect runs."
+        }
+      />
       <div className="grid min-h-0 flex-1 grid-cols-[360px_1fr]">
         <ScrollArea className="border-r border-border p-3">
           {detail.runs.length ? detail.runs.map((run) => <RunRow key={run.id} run={run} />) : (

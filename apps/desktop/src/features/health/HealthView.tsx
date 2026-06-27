@@ -2,11 +2,10 @@ import { useQuery } from "@tanstack/react-query"
 import { Activity, Database, RefreshCcw } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { MetricStrip, SectionCard } from "@/components/ui/composites"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
+import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { HealthStatus, KanbanApi, RuntimeConfig } from "@/lib/api"
@@ -53,23 +52,22 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
 
   return (
     <ScrollArea className="flex-1 bg-card p-4">
-      <Card className="p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-sm font-semibold">
-            <Activity className="h-4 w-4 text-muted-foreground" />
-            Runtime health
-          </h2>
+      <SectionCard
+        title="Runtime health"
+        icon={Activity}
+        actions={
           <Button variant="ghost" size="sm" disabled={healthQuery.isFetching} onClick={() => void healthQuery.refetch()}>
             <RefreshCcw className="h-4 w-4" />
             Refresh
           </Button>
-        </div>
+        }
+      >
         {healthQuery.data ? (
-          <div className="grid gap-3 text-sm md:grid-cols-3 xl:grid-cols-5">
-            {runtimeModel?.metrics.map((metric) => (
-              <Metric key={metric.label} label={metric.label} value={metric.value} tone={metric.tone} />
-            ))}
-          </div>
+          <MetricStrip
+            className="grid gap-3 text-sm md:grid-cols-3 xl:grid-cols-5"
+            itemClassName="p-3"
+            items={runtimeModel?.metrics ?? []}
+          />
         ) : (
           healthQuery.isLoading ? <Skeleton className="h-16" /> : (
             <Empty className="p-0">
@@ -88,34 +86,17 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
             <AlertDescription className="text-destructive">{healthQuery.error.message}</AlertDescription>
           </Alert>
         ) : null}
-      </Card>
+      </SectionCard>
 
-      <Card className="mt-4 p-4">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-          <Database className="h-4 w-4 text-muted-foreground" />
-          Runtime config
-        </h2>
+      <SectionCard title="Runtime config" icon={Database} className="mt-4">
         <div className="space-y-2 text-sm">
           <InfoRow label="board" value={config?.board ?? "-"} />
           <InfoRow label="actor" value={config?.actor ?? "-"} />
           <InfoRow label="api" value={config?.apiBaseUrl || "same-origin"} />
           <InfoRow label="db" value={config?.dbPath ?? "-"} />
         </div>
-      </Card>
+      </SectionCard>
     </ScrollArea>
-  )
-}
-
-function Metric({ label, value, tone = "secondary" }: { label: string; value: string; tone?: MetricTone }) {
-  return (
-    <Item className="min-w-0 border-border bg-card p-3">
-      <ItemContent>
-        <ItemDescription>{label}</ItemDescription>
-        <ItemTitle className="mt-1">
-          <Badge variant={tone} className="max-w-full truncate">{value}</Badge>
-        </ItemTitle>
-      </ItemContent>
-    </Item>
   )
 }
 

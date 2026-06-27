@@ -206,6 +206,30 @@ describe("desktop shadcn control convergence", () => {
     }
   })
 
+  it("keeps graph and low-frequency desktop views behind lazy import boundaries", () => {
+    const shell = source("app/AppShell.tsx")
+    const detail = source("features/task-detail/TaskDetail.tsx")
+    const map = source("features/task-map/BoardTaskMapView.tsx")
+    const layout = source("features/task-map/task-graph-layout.ts")
+
+    expect(shell).toContain("lazy(() => import(\"@/features/task-map/BoardTaskMapView\")")
+    expect(shell).toContain("lazy(() => import(\"@/features/task-detail/TaskDetail\")")
+    expect(shell).toContain("lazy(() => import(\"@/features/maintenance/MaintenanceView\")")
+    expect(shell).toContain("lazy(() =>")
+    expect(shell).not.toContain("from \"@/features/task-map/BoardTaskMapView\"")
+    expect(shell).not.toContain("from \"@/features/task-detail/TaskDetail\"")
+    expect(shell).not.toContain("from \"@/features/maintenance/MaintenanceView\"")
+    expect(shell).not.toContain("from \"@/features/ontology/OntologyReviewWorkbench\"")
+
+    expect(detail).toContain("lazy(() => import(\"@/features/task-map/TaskGraphCanvas\")")
+    expect(detail).not.toContain("from \"@/features/task-map/TaskGraphCanvas\"")
+    expect(detail).toContain("<CollapsibleContent>{open ? children : null}</CollapsibleContent>")
+    expect(map).toContain("lazy(() => import(\"./TaskGraphCanvas\")")
+    expect(map).not.toContain("from \"./TaskGraphCanvas\"")
+    expect(layout).toContain("import(\"elkjs/lib/elk.bundled.js\")")
+    expect(layout).not.toContain("import ELK")
+  })
+
   it("uses the shadcn-compatible textarea composition for task comments", () => {
     const detail = taskDetailSource()
 

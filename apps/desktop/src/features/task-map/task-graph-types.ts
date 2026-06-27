@@ -40,6 +40,13 @@ export type TaskGraphEdge = {
 export type TaskGraph = {
   nodes: TaskGraphNode[]
   edges: TaskGraphEdge[]
+  meta?: {
+    version?: string | number | null
+    contentHash?: string | null
+    generatedAt?: number | null
+    nodeCount?: number | null
+    edgeCount?: number | null
+  }
 }
 
 export type TaskGraphLayoutNode = TaskGraphNode & {

@@ -28,6 +28,67 @@ fn http_task_create_label_counts(
 }
 
 #[tokio::test]
+async fn tasks_by_status_returns_per_status_windows() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    create_ready_task_for_test(&db_path, "default", "seed", "ready alpha")
+        .context("seed ready alpha")?;
+    create_ready_task_for_test(&db_path, "default", "seed", "ready beta")
+        .context("seed ready beta")?;
+    kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask {
+            title: "todo gamma".to_owned(),
+            description: Some("ready spec".to_owned()),
+            status: Some(kanban_core::TaskStatus::Todo),
+            assignee: None,
+            priority: 0,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: None,
+            metadata_json: "{}".to_owned(),
+        },
+    )
+    .context("seed blocked gamma")?;
+    let app = test.router();
+
+    let (status, json) = get_json(
+        app,
+        "/api/v1/boards/default/tasks/by-status?status=ready&status=todo&limit=1",
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["meta"]["limit"], 1);
+    assert_eq!(json["meta"]["offset"], 0);
+    let windows = json["data"]["statuses"]
+        .as_array()
+        .context("status windows")?;
+    assert_eq!(windows.len(), 2);
+    assert_eq!(windows[0]["status"], "ready");
+    assert_eq!(
+        windows[0]["tasks"].as_array().context("ready tasks")?.len(),
+        1
+    );
+    assert_eq!(
+        windows[0]["page"],
+        json!({"limit": 1, "offset": 0, "total": 2})
+    );
+    assert_eq!(windows[1]["status"], "todo");
+    assert_eq!(
+        windows[1]["tasks"].as_array().context("todo tasks")?.len(),
+        1
+    );
+    assert_eq!(
+        windows[1]["page"],
+        json!({"limit": 1, "offset": 0, "total": 1})
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn tasks_creates_task_and_event_with_body_actor_priority() -> anyhow::Result<()> {
     let test = TestApp::with_actor("default-actor")?;
     let db_path = test.db_path().to_path_buf();

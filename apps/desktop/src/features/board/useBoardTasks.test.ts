@@ -125,6 +125,66 @@ describe("boardTasksQueryOptions", () => {
 })
 
 describe("loadBoardTasks", () => {
+  it("loads visible board statuses through the batch endpoint when available", async () => {
+    const listTasksByStatus = vi.fn(async () => ({
+      statuses: [
+        { status: "triage", tasks: [task("task-triage", "triage")], page: { limit: 50, offset: 0, total: 1 } },
+        { status: "blocked", tasks: [task("task-blocked", "blocked")], page: { limit: 50, offset: 0, total: 2 } },
+      ],
+    }))
+    const listTasks = vi.fn()
+    const api = { board: "default", listTasksByStatus, listTasks } as unknown as KanbanApi
+    const request = resolveBoardTaskRequest({
+      mode: "board",
+      boardStatuses: ["triage", "blocked"],
+      search: "",
+      statusFilter: "all",
+      showArchived: false,
+      limit: BOARD_COLUMN_TASK_LIMIT,
+      offset: 0,
+    })
+
+    const result = await loadBoardTasks(api, request)
+
+    expect(listTasksByStatus).toHaveBeenCalledWith(expect.objectContaining({
+      statuses: ["triage", "blocked"],
+      limit: 50,
+      offset: 0,
+    }))
+    expect(listTasks).not.toHaveBeenCalled()
+    expect(result.tasks.map((entry) => entry.status)).toEqual(["triage", "blocked"])
+    expect(result.page).toEqual({ limit: 100, offset: 0, total: 3 })
+  })
+
+  it("falls back to per-status task requests when batch is unavailable", async () => {
+    const listTasksByStatus = vi.fn(async () => {
+      throw Object.assign(new Error("404 Not Found"), { code: "http_error" })
+    })
+    const listTasks = vi.fn(async (options: { statuses?: TaskStatus[]; limit?: number; offset?: number }) => {
+      const status = options.statuses?.[0] ?? "triage"
+      return {
+        tasks: [task(`task-${status}`, status)],
+        page: { limit: options.limit ?? 0, offset: options.offset ?? 0, total: 1 },
+      } satisfies TaskPageResult
+    })
+    const api = { board: "default", listTasksByStatus, listTasks } as unknown as KanbanApi
+    const request = resolveBoardTaskRequest({
+      mode: "board",
+      boardStatuses: ["triage", "blocked"],
+      search: "",
+      statusFilter: "all",
+      showArchived: false,
+      limit: BOARD_COLUMN_TASK_LIMIT,
+      offset: 0,
+    })
+
+    const result = await loadBoardTasks(api, request)
+
+    expect(listTasksByStatus).toHaveBeenCalledTimes(1)
+    expect(listTasks).toHaveBeenCalledTimes(2)
+    expect(result.tasks.map((entry) => entry.status)).toEqual(["triage", "blocked"])
+  })
+
   it("loads the first page independently for each visible board status", async () => {
     const listTasks = vi.fn(async (options: { statuses?: TaskStatus[]; limit?: number; offset?: number }) => {
       const status = options.statuses?.[0] ?? "triage"
@@ -232,5 +292,43 @@ describe("loadBoardTasks", () => {
       last_event_id: 12,
       index_lag_events: 3,
     })
+  })
+
+  it("searches visible board statuses through the batch endpoint when available", async () => {
+    const searchMeta = {
+      backend: "sqlite",
+      stale: false,
+      index_version: null,
+      last_event_id: null,
+      index_lag_events: null,
+    } satisfies SearchTasksResult["searchMeta"]
+    const searchTasksByStatus = vi.fn(async () => ({
+      statuses: [
+        { status: "triage", tasks: [task("search-triage", "triage")], page: { limit: 50, offset: 0, total: 1 }, searchMeta },
+        { status: "blocked", tasks: [task("search-blocked", "blocked")], page: { limit: 50, offset: 0, total: 1 }, searchMeta },
+      ],
+    }))
+    const searchTasks = vi.fn()
+    const api = { board: "default", searchTasksByStatus, searchTasks } as unknown as KanbanApi
+    const request = resolveBoardTaskRequest({
+      mode: "board",
+      boardStatuses: ["triage", "blocked"],
+      search: "blocked parent",
+      statusFilter: "all",
+      showArchived: false,
+      limit: BOARD_COLUMN_TASK_LIMIT,
+      offset: 0,
+    })
+
+    const result = await loadBoardTasks(api, request)
+
+    expect(searchTasksByStatus).toHaveBeenCalledWith(expect.objectContaining({
+      query: "blocked parent",
+      statuses: ["triage", "blocked"],
+      limit: 50,
+      offset: 0,
+    }))
+    expect(searchTasks).not.toHaveBeenCalled()
+    expect(result.tasks.map((entry) => entry.status)).toEqual(["triage", "blocked"])
   })
 })

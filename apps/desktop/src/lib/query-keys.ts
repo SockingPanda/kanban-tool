@@ -68,7 +68,7 @@ export const queryKeys = {
   taskEvents: (taskId: string) => ["task-events", taskId] as const,
   taskComments: (taskId: string) => ["task-comments", taskId] as const,
   boardTaskMapRoot: (board: string) => ["board-task-map", board] as const,
-  boardTaskMap: (board: string, options?: { includeDoneContext?: boolean }) =>
+  boardTaskMap: (board: string, options?: { includeDoneContext?: boolean; hideIsolated?: boolean }) =>
     [...queryKeys.boardTaskMapRoot(board), options ?? {}] as const,
   taskLabelSuggestions: (taskId: string) => ["task-label-suggestions", taskId] as const,
   ontologyRoot: (board: string) => ["label-ontology", board] as const,

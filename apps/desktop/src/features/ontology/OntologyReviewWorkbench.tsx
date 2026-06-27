@@ -1,5 +1,5 @@
 import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Braces, CheckCircle2, CircleDashed, RefreshCcw, Search, XCircle } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -75,6 +75,7 @@ export function OntologyReviewWorkbench({ api }: { api: KanbanApi | null }) {
         signal,
       })
     },
+    placeholderData: keepPreviousData,
   })
 
   const reviewQuery = useQuery({
@@ -89,6 +90,7 @@ export function OntologyReviewWorkbench({ api }: { api: KanbanApi | null }) {
         signal,
       })
     },
+    placeholderData: keepPreviousData,
   })
 
   const signalDetailQuery = useQuery({

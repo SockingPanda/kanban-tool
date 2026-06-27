@@ -1,50 +1,18 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { FormEvent, useCallback, useMemo, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 
 import { AppShell } from "@/app/AppShell"
 import { createBoardSwitchInvalidationTargets, createBoardSwitchReset } from "@/app/board-switch-state"
-import { queueCountsFromStats, queueCountsFromTasks } from "@/app/queue-counts"
-import { parseSidebarOpen, serializeSidebarOpen, SIDEBAR_OPEN_STORAGE_KEY } from "@/app/sidebar-state"
-import {
-  applyRootTheme,
-  effectiveTheme,
-  nextThemeMode,
-  parseThemeMode,
-  THEME_STORAGE_KEY,
-  type ThemeMode,
-} from "@/app/theme"
-import { reconcileSelectedTaskId, shouldLoadTaskCollection, shouldLoadTaskDetail } from "@/app/task-selection"
-import { fallbackColumns } from "@/features/board/board-config"
-import { sortBoardColumnTasks } from "@/features/board/board-card-state"
+import { useRuntimeConfigState, errorMessage } from "@/app/useRuntimeConfigState"
+import { useSelectedTaskDetailState } from "@/app/useSelectedTaskDetailState"
+import { useTaskCollectionState } from "@/app/useTaskCollectionState"
+import { useTaskCreationDialogState } from "@/app/useTaskCreationDialogState"
+import { useTaskMutations } from "@/app/useTaskMutations"
 import { executeDragTransition, planDragTransition } from "@/features/board/drag-policy"
-import { BOARD_COLUMN_TASK_LIMIT, useBoardTasks } from "@/features/board/useBoardTasks"
 import { useEventPoller } from "@/features/events/useEventPoller"
 import type { OperatorView } from "@/features/navigation/view-types"
-import { defaultListSort, listSortToApiSort, type ListSortState, type TaskPlanFilter } from "@/features/list/table-state"
-import { invalidateTaskDetailAndBoard } from "@/features/task-detail/detail-invalidation"
-import { requestTaskLabelSuggestions, taskDetailOrEmpty, useTaskDetail } from "@/features/task-detail/useTaskDetail"
-import {
-  parseDateInput,
-  reconcileSavedTaskDraft,
-  reconcileTaskDraft,
-  type TaskDraftState,
-  type TaskEditDraft,
-} from "@/features/task-detail/task-draft"
-import {
-  ApiError,
-  BoardColumn,
-  ClaimResponse,
-  KanbanApi,
-  RuntimeConfig,
-  Task,
-  TaskStatus,
-  loadRuntimeConfig,
-} from "@/lib/api"
+import { Task, TaskStatus } from "@/lib/api"
 import { switchRuntimeBoard } from "@/lib/runtime-board"
-import { queryKeys } from "@/lib/query-keys"
-import { hasNextPage, hasPreviousPage, lastPageOffset } from "@/lib/pagination"
-import { useDebouncedValue } from "@/lib/use-debounced-value"
-import { reconcileClaimTokenForTask, reconcileClaimTokensForTasks } from "@/lib/claim-tokens"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -66,573 +34,358 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 
-const DEFAULT_PAGE_SIZE = 100
-const EMPTY_TASKS: Task[] = []
-
 type PlannedDragTransition = {
   task: Task
   plan: Extract<ReturnType<typeof planDragTransition>, { ok: true }>
 }
 
-type RunActionOptions = {
-  label?: string
-  fallbackTaskId?: string | null
-}
-
 function App() {
   const queryClient = useQueryClient()
-  const [config, setConfig] = useState<RuntimeConfig | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [view, setView] = useState<OperatorView>("board")
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
-    typeof window === "undefined" ? "system" : parseThemeMode(window.localStorage.getItem(THEME_STORAGE_KEY)),
-  )
-  const [sidebarOpen, setSidebarOpen] = useState(() =>
-    typeof window === "undefined" ? true : parseSidebarOpen(window.localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY)),
-  )
-  const [search, setSearch] = useState("")
-  const debouncedSearch = useDebouncedValue(search, 250)
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all")
-  const [priorityFilters, setPriorityFilters] = useState<number[]>([])
-  const [planFilters, setPlanFilters] = useState<TaskPlanFilter[]>([])
-  const [listSort, setListSort] = useState<ListSortState>(defaultListSort)
-  const [showArchived, setShowArchived] = useState(false)
-  const [pageOffset, setPageOffset] = useState(0)
-  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE)
-  const [newTitle, setNewTitle] = useState("")
-  const [newDescription, setNewDescription] = useState("")
-  const [newFirstStepTitle, setNewFirstStepTitle] = useState("")
-  const [blockReason, setBlockReason] = useState("")
-  const [dependencyInput, setDependencyInput] = useState("")
-  const [commentBody, setCommentBody] = useState("")
-  const [draftState, setDraftState] = useState<TaskDraftState | null>(null)
-  const [claimTokens, setClaimTokens] = useState<Record<string, string>>({})
-  const [lastRefreshAt, setLastRefreshAt] = useState<number | null>(null)
-  const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [dragReasonRequest, setDragReasonRequest] = useState<PlannedDragTransition | null>(null)
   const [dragConfirmRequest, setDragConfirmRequest] = useState<PlannedDragTransition | null>(null)
   const [dragReasonDraft, setDragReasonDraft] = useState("")
-  const [labelSuggestionsRequested, setLabelSuggestionsRequested] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadRuntimeConfig()
-      .then(setConfig)
-      .catch((err: unknown) => setError(errorMessage(err)))
-  }, [])
+  const runtimeState = useRuntimeConfigState()
+  const { api, config, error, setConfig, setError } = runtimeState
+  const reportError = useCallback((err: unknown) => setError(errorMessage(err)), [setError])
 
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const media = window.matchMedia("(prefers-color-scheme: dark)")
-    const apply = () => applyRootTheme(document.documentElement.classList, effectiveTheme(themeMode, media.matches))
-    apply()
-    window.localStorage.setItem(THEME_STORAGE_KEY, themeMode)
-    media.addEventListener("change", apply)
-    return () => media.removeEventListener("change", apply)
-  }, [themeMode])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    window.localStorage.setItem(SIDEBAR_OPEN_STORAGE_KEY, serializeSidebarOpen(sidebarOpen))
-  }, [sidebarOpen])
-
-  const api = useMemo(() => (config ? new KanbanApi(config) : null), [config])
-
-  useEffect(() => {
-    setPageOffset(0)
-  }, [debouncedSearch, showArchived, statusFilter, priorityFilters, planFilters, listSort])
-
-  const columnsQuery = useQuery({
-    enabled: Boolean(api),
-    queryKey: queryKeys.columns(api?.board ?? "pending"),
-    queryFn: ({ signal }) => {
-      if (!api) throw new Error("API client is not ready")
-      return api.listBoardColumns({ signal })
-    },
-  })
-
-  const boardsQuery = useQuery({
-    enabled: Boolean(api),
-    queryKey: queryKeys.boards(),
-    queryFn: ({ signal }) => {
-      if (!api) throw new Error("API client is not ready")
-      return api.listBoards({ signal })
-    },
-  })
-
-  const visibleColumns = useMemo(
-    () => (columnsQuery.data ?? fallbackColumns).filter((column) => showArchived || (!column.hidden && column.status !== "archived")),
-    [columnsQuery.data, showArchived],
-  )
-  const visibleColumnStatuses = useMemo(() => visibleColumns.map((column) => column.status), [visibleColumns])
-  const taskCollectionEnabled = shouldLoadTaskCollection(view)
-  const taskDetailEnabled = shouldLoadTaskDetail(view, selectedId)
-
-  const statsQuery = useQuery({
-    enabled: Boolean(api),
-    queryKey: queryKeys.stats(api?.board ?? "pending"),
-    queryFn: ({ signal }) => {
-      if (!api) throw new Error("API client is not ready")
-      return api.stats({ signal })
-    },
-  })
-
-  const tasksQuery = useBoardTasks({
-    api,
-    enabled: taskCollectionEnabled,
-    boardStatuses: view === "board" ? visibleColumnStatuses : [],
-    search: debouncedSearch,
-    statusFilter,
-    priorityFilters: view === "list" ? priorityFilters : [],
-    planFilters: view === "list" ? planFilters : [],
-    sort: view === "list" ? listSortToApiSort(listSort) : "-updated_at",
-    mode: view === "list" ? "list" : "board",
-    showArchived,
-    limit: view === "list" ? rowsPerPage : BOARD_COLUMN_TASK_LIMIT,
-    offset: view === "list" ? pageOffset : 0,
-  })
-
-  const taskData = taskCollectionEnabled ? tasksQuery.data : undefined
-  const tasks = taskData?.tasks ?? EMPTY_TASKS
-  const page = taskData?.page ?? { limit: rowsPerPage, offset: pageOffset, total: null }
-  const searchMeta = taskData?.searchMeta ?? null
-
-  useEffect(() => {
-    if (taskCollectionEnabled && tasksQuery.dataUpdatedAt) setLastRefreshAt(tasksQuery.dataUpdatedAt)
-  }, [taskCollectionEnabled, tasksQuery.dataUpdatedAt])
-
-  useEffect(() => {
-    if (!taskCollectionEnabled) return
-    setClaimTokens((current) => reconcileClaimTokensForTasks(current, tasks, config?.actor ?? null))
-  }, [config?.actor, taskCollectionEnabled, tasks])
-
-  useEffect(() => {
-    if (!taskCollectionEnabled) return
-    setSelectedId((current) => reconcileSelectedTaskId(current, tasks))
-  }, [taskCollectionEnabled, tasks])
-
-  const detailQuery = useTaskDetail(api, selectedId, { enabled: taskDetailEnabled })
-  const labelSuggestionsQuery = useQuery({
-    enabled: false,
-    queryKey: selectedId ? queryKeys.taskLabelSuggestions(selectedId) : ["task-label-suggestions", "none"],
-    queryFn: ({ signal }) => {
-      if (!api || !selectedId) throw new Error("Label suggestions query is not ready")
-      return requestTaskLabelSuggestions(api, selectedId, signal)
-    },
-  })
-  const boardSelectedTask = useMemo(
-    () => (selectedId ? tasks.find((task) => task.id === selectedId) ?? null : null),
-    [selectedId, tasks],
-  )
-  const selectedTask = selectedId ? detailQuery.data?.task ?? (taskCollectionEnabled ? boardSelectedTask : null) : null
-  const detail = taskDetailOrEmpty(detailQuery.data)
-  const dependencySnapshot = useMemo(
-    () => ({
-      selectedTaskId: selectedId,
-      detailTaskId: detailQuery.data?.task.id ?? null,
-      dependencies: detailQuery.data?.detail.dependencies ?? null,
-      loading: Boolean(taskDetailEnabled && detailQuery.isFetching),
-    }),
-    [detailQuery.data?.detail.dependencies, detailQuery.data?.task.id, detailQuery.isFetching, selectedId, taskDetailEnabled],
-  )
-
-  useEffect(() => {
-    setDraftState((current) => reconcileTaskDraft(current, selectedTask))
-  }, [selectedTask])
-
-  useEffect(() => {
-    setLabelSuggestionsRequested(false)
-  }, [selectedId])
-
-  useEffect(() => {
-    if (!selectedTask) return
-    setClaimTokens((current) => reconcileClaimTokenForTask(current, selectedTask, config?.actor ?? null))
-  }, [config?.actor, selectedTask])
-
-  useEffect(() => {
-    setBlockReason("")
-  }, [selectedTask?.id, selectedTask?.status])
-
-  useEffect(() => {
-    if (columnsQuery.error) setError(errorMessage(columnsQuery.error))
-  }, [columnsQuery.error])
-
-  useEffect(() => {
-    if (boardsQuery.error) setError(errorMessage(boardsQuery.error))
-  }, [boardsQuery.error])
-
-  useEffect(() => {
-    if (taskCollectionEnabled && tasksQuery.error) setError(errorMessage(tasksQuery.error))
-  }, [taskCollectionEnabled, tasksQuery.error])
-
-  useEffect(() => {
-    if (statsQuery.error) setError(errorMessage(statsQuery.error))
-  }, [statsQuery.error])
-
-  useEffect(() => {
-    if (taskDetailEnabled && detailQuery.error) setError(errorMessage(detailQuery.error))
-  }, [detailQuery.error, taskDetailEnabled])
-
-  const handlePollError = useCallback((err: unknown) => setError(errorMessage(err)), [])
   useEventPoller({
     api,
     enabled: Boolean(api),
-    onError: handlePollError,
+    onError: reportError,
   })
 
-  const groupedTasks = useMemo(() => {
-    const map = new Map<TaskStatus, Task[]>()
-    for (const column of visibleColumns) map.set(column.status, [])
-    for (const task of tasks) {
-      if (map.has(task.status)) map.get(task.status)!.push(task)
-    }
-    for (const [status, columnTasks] of map) {
-      map.set(status, sortBoardColumnTasks(columnTasks, status))
-    }
-    return map
-  }, [tasks, visibleColumns])
-
-  const tasksById = useMemo(() => new Map(tasks.map((task) => [task.id, task])), [tasks])
-
-  const actionMutation = useMutation({
-    mutationFn: (action: () => Promise<unknown>) => action(),
+  const taskCollectionState = useTaskCollectionState(api, view, reportError)
+  const taskDetailState = useSelectedTaskDetailState(
+    api,
+    view,
+    taskCollectionState.tasks,
+    taskCollectionState.enabled,
+    config?.actor ?? null,
+    reportError,
+  )
+  const creationDialogState = useTaskCreationDialogState()
+  const taskMutations = useTaskMutations({
+    api,
+    commentBody: taskDetailState.commentBody,
+    config,
+    creation: creationDialogState,
+    dependencyInput: taskDetailState.dependencyInput,
+    draftState: taskDetailState.draftState,
+    queryClient,
+    selectedId: taskDetailState.selectedId,
+    selectedTask: taskDetailState.selectedTask,
+    setClaimTokens: taskDetailState.setClaimTokens,
+    setCommentBody: taskDetailState.setCommentBody,
+    setDependencyInput: taskDetailState.setDependencyInput,
+    setDraftState: taskDetailState.setDraftState,
+    setError,
+    setLabelSuggestionsRequested: taskDetailState.setLabelSuggestionsRequested,
+    setSelectedId: taskDetailState.setSelectedId,
   })
 
-  const activeRun = detail.runs.find((run) => run.status === "running") ?? detail.runs[0]
-  const claimToken = selectedTask ? claimTokens[selectedTask.id] ?? null : null
-  const fallbackQueueCounts = useMemo(() => queueCountsFromTasks(tasks), [tasks])
-  const queueCounts = useMemo(
-    () => queueCountsFromStats(statsQuery.data?.status_counts, fallbackQueueCounts),
-    [fallbackQueueCounts, statsQuery.data?.status_counts],
+  const tasksById = useMemo(
+    () => new Map(taskCollectionState.tasks.map((task) => [task.id, task])),
+    [taskCollectionState.tasks],
   )
 
-  const invalidateTaskData = useCallback(
-    async (taskId: string | null) => {
+  const requestLabelSuggestions = useCallback(async () => {
+    if (!api || !taskDetailState.selectedId) return
+    taskDetailState.setLabelSuggestionsRequested(true)
+    await taskDetailState.labelSuggestionsQuery.refetch()
+  }, [api, taskDetailState])
+
+  const dropTask = useCallback(
+    (taskId: string, targetStatus: TaskStatus) => {
       if (!api) return
-      await invalidateTaskDetailAndBoard(queryClient, api.board, taskId)
-      if (taskId) {
-        queryClient.removeQueries({ queryKey: queryKeys.taskLabelSuggestions(taskId) })
-        if (taskId === selectedId) setLabelSuggestionsRequested(false)
+      const task = tasksById.get(taskId)
+      if (!task) return
+      const token = taskDetailState.claimTokens[task.id] ?? null
+      const plan = planDragTransition(task, targetStatus, token)
+      if (!plan.ok) {
+        setError(plan.reason)
+        return
       }
+      if (plan.promptReason) {
+        setDragReasonDraft("")
+        setDragReasonRequest({ task, plan })
+        return
+      }
+      requestDragExecution({ task, plan })
     },
-    [api, queryClient, selectedId],
+    [api, taskDetailState.claimTokens, tasksById, setError],
   )
 
-  async function runAction(action: () => Promise<unknown>, options: RunActionOptions | string = "action") {
-    const label = typeof options === "string" ? options : options.label ?? "action"
-    const fallbackTaskId = typeof options === "string" ? selectedId : options.fallbackTaskId
-    setPendingAction(label)
-    setError(null)
-    try {
-      const result = await actionMutation.mutateAsync(action)
-      if (isClaimResponse(result)) {
-        setClaimTokens((current) => ({ ...current, [result.task.id]: result.claim_token }))
-        await invalidateTaskData(result.task.id)
-        return result
-      }
-      if (isTask(result)) {
-        setClaimTokens((current) => reconcileClaimTokenForTask(current, result, config?.actor ?? null))
-        await invalidateTaskData(result.id)
-        return result
-      }
-      await invalidateTaskData(fallbackTaskId ?? null)
-      return result
-    } catch (err) {
-      setError(errorMessage(err))
-    } finally {
-      setPendingAction(null)
-    }
-  }
-
-  async function createTask() {
-    if (!api || !newTitle.trim()) return false
-    const result = await runAction(async () => {
-      const task = await api.createTask({
-        title: newTitle.trim(),
-        description: newDescription.trim() || undefined,
+  const executePlannedDrag = useCallback(
+    async ({ task, plan }: PlannedDragTransition) => {
+      if (!api) return
+      await taskMutations.runAction(() => executeDragTransition(api, task, plan), {
+        label: "transition",
+        fallbackTaskId: task.id,
       })
-      if (newFirstStepTitle.trim()) {
-        await api.createStep(task.id, { title: newFirstStepTitle.trim(), required: true })
+    },
+    [api, taskMutations],
+  )
+
+  const requestDragExecution = useCallback(
+    (request: PlannedDragTransition) => {
+      if (request.plan.confirm) {
+        setDragConfirmRequest(request)
+        return
       }
-      setSelectedId(task.id)
-      setNewTitle("")
-      setNewDescription("")
-      setNewFirstStepTitle("")
-      return task
-    }, "create")
-    return isTask(result)
-  }
+      void executePlannedDrag(request)
+    },
+    [executePlannedDrag],
+  )
 
-  async function addDependency() {
-    if (!api || !selectedTask || !dependencyInput.trim()) return
-    const taskId = selectedTask.id
-    await runAction(async () => {
-      const result = await api.addDependency(taskId, dependencyInput.trim())
-      setDependencyInput("")
-      return result
-    }, { label: "dependency", fallbackTaskId: taskId })
-  }
-
-  async function removeDependency(parentTaskId: string) {
-    if (!api || !selectedTask) return
-    const taskId = selectedTask.id
-    await runAction(async () => api.removeDependency(taskId, parentTaskId), { label: "dependency", fallbackTaskId: taskId })
-  }
-
-  async function dropTask(taskId: string, targetStatus: TaskStatus) {
-    if (!api) return
-    const task = tasksById.get(taskId)
-    if (!task) return
-    const token = claimTokens[task.id] ?? null
-    const plan = planDragTransition(task, targetStatus, token)
-    if (!plan.ok) {
-      setError(plan.reason)
-      return
-    }
-    if (plan.promptReason) {
+  const submitDragReason = useCallback(
+    (event: FormEvent) => {
+      event.preventDefault()
+      if (!dragReasonRequest) return
+      const reason = dragReasonDraft.trim()
+      if (!reason) {
+        setError("A block reason is required.")
+        return
+      }
+      const request = {
+        task: dragReasonRequest.task,
+        plan: {
+          ...dragReasonRequest.plan,
+          body: { ...dragReasonRequest.plan.body, reason },
+          promptReason: false,
+        },
+      }
+      setDragReasonRequest(null)
       setDragReasonDraft("")
-      setDragReasonRequest({ task, plan })
-      return
-    }
-    requestDragExecution({ task, plan })
-  }
+      requestDragExecution(request)
+    },
+    [dragReasonDraft, dragReasonRequest, requestDragExecution, setError],
+  )
 
-  function requestDragExecution(request: PlannedDragTransition) {
-    if (request.plan.confirm) {
-      setDragConfirmRequest(request)
-      return
-    }
-    void executePlannedDrag(request)
-  }
+  const switchBoard = useCallback(
+    async (board: string) => {
+      if (!config || board === config.board) return
+      taskMutations.runAction(async () => {
+        const nextConfig = await switchRuntimeBoard(config, board)
+        const reset = createBoardSwitchReset({
+          config: nextConfig,
+          selectedId: taskDetailState.selectedId,
+          pageOffset: taskCollectionState.pageOffset,
+          newTitle: creationDialogState.title,
+          newDescription: creationDialogState.description,
+          blockReason: taskDetailState.blockReason,
+          dependencyInput: taskDetailState.dependencyInput,
+          commentBody: taskDetailState.commentBody,
+          draftState: taskDetailState.draftState,
+          claimTokens: taskDetailState.claimTokens,
+          lastRefreshAt: taskCollectionState.lastRefreshAt,
+          error,
+        })
+        setConfig(reset.config)
+        taskDetailState.setSelectedId(reset.selectedId)
+        taskCollectionState.setPageOffset(reset.pageOffset)
+        creationDialogState.setTitle(reset.newTitle)
+        creationDialogState.setDescription(reset.newDescription)
+        taskDetailState.setBlockReason(reset.blockReason)
+        taskDetailState.setDependencyInput(reset.dependencyInput)
+        taskDetailState.setCommentBody(reset.commentBody)
+        taskDetailState.setDraftState(reset.draftState)
+        taskDetailState.setClaimTokens(reset.claimTokens)
+        taskCollectionState.setLastRefreshAt(reset.lastRefreshAt)
+        setError(reset.error)
+        await Promise.all(
+          createBoardSwitchInvalidationTargets({
+            previousBoard: config.board,
+            nextBoard: reset.config.board,
+          }).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+        )
+        return reset.config
+      }, { label: "board", fallbackTaskId: taskDetailState.selectedId })
+    },
+    [
+      config,
+      creationDialogState,
+      error,
+      queryClient,
+      setConfig,
+      setError,
+      taskCollectionState,
+      taskDetailState,
+      taskMutations,
+    ],
+  )
 
-  async function executePlannedDrag({ task, plan }: PlannedDragTransition) {
-    if (!api) return
-    await runAction(() => executeDragTransition(api, task, plan), { label: "transition", fallbackTaskId: task.id })
-  }
+  const navigation = useMemo(
+    () => ({
+      view,
+      sidebarOpen: runtimeState.sidebarOpen,
+      setView,
+      setSidebarOpen: runtimeState.setSidebarOpen,
+    }),
+    [runtimeState.setSidebarOpen, runtimeState.sidebarOpen, view],
+  )
 
-  function submitDragReason(event: FormEvent) {
-    event.preventDefault()
-    if (!dragReasonRequest) return
-    const reason = dragReasonDraft.trim()
-    if (!reason) {
-      setError("A block reason is required.")
-      return
-    }
-    const request = {
-      task: dragReasonRequest.task,
-      plan: {
-        ...dragReasonRequest.plan,
-        body: { ...dragReasonRequest.plan.body, reason },
-        promptReason: false,
+  const runtime = useMemo(
+    () => ({
+      api,
+      boards: taskCollectionState.boardsQuery.data ?? [],
+      boardsError: taskCollectionState.boardsQuery.error ? errorMessage(taskCollectionState.boardsQuery.error) : null,
+      boardsLoading: taskCollectionState.boardsQuery.isLoading,
+      config,
+      error,
+      pendingAction: taskMutations.pendingAction,
+      queueCounts: taskCollectionState.queueCounts,
+      themeMode: runtimeState.themeMode,
+      lastRefreshAt: taskCollectionState.lastRefreshAt,
+    }),
+    [
+      api,
+      config,
+      error,
+      runtimeState.themeMode,
+      taskCollectionState.boardsQuery.data,
+      taskCollectionState.boardsQuery.error,
+      taskCollectionState.boardsQuery.isLoading,
+      taskCollectionState.lastRefreshAt,
+      taskCollectionState.queueCounts,
+      taskMutations.pendingAction,
+    ],
+  )
+
+  const taskCollection = useMemo(
+    () => ({
+      canGoLastPage: taskCollectionState.lastOffset !== null && taskCollectionState.lastOffset !== taskCollectionState.page.offset,
+      columns: taskCollectionState.columns,
+      debouncedSearch: taskCollectionState.debouncedSearch,
+      groupedTasks: taskCollectionState.groupedTasks,
+      hasNextPage: taskCollectionState.hasNext,
+      hasPreviousPage: taskCollectionState.hasPrevious,
+      listSort: taskCollectionState.listSort,
+      page: taskCollectionState.page,
+      planFilters: taskCollectionState.planFilters,
+      priorityFilters: taskCollectionState.priorityFilters,
+      rowsPerPage: taskCollectionState.rowsPerPage,
+      search: taskCollectionState.search,
+      searchMeta: taskCollectionState.searchMeta,
+      showArchived: taskCollectionState.showArchived,
+      statusFilter: taskCollectionState.statusFilter,
+      tasks: taskCollectionState.tasks,
+      tasksRefreshing: taskCollectionState.enabled && taskCollectionState.tasksQuery.isFetching,
+    }),
+    [taskCollectionState],
+  )
+
+  const taskDetail = useMemo(
+    () => ({
+      activeRun: taskDetailState.activeRun,
+      blockReason: taskDetailState.blockReason,
+      claimToken: taskDetailState.claimToken,
+      commentBody: taskDetailState.commentBody,
+      dependencyInput: taskDetailState.dependencyInput,
+      dependencySnapshot: taskDetailState.dependencySnapshot,
+      detail: taskDetailState.detail,
+      detailLoading: taskDetailState.detailLoading,
+      draftDirty: taskDetailState.draftState?.dirty ?? false,
+      editDraft: taskDetailState.draftState?.draft ?? null,
+      labelSuggestions: taskDetailState.labelSuggestionsQuery.data ?? null,
+      labelSuggestionsError: taskDetailState.labelSuggestionsQuery.error
+        ? errorMessage(taskDetailState.labelSuggestionsQuery.error)
+        : null,
+      labelSuggestionsLoading: taskDetailState.labelSuggestionsQuery.isFetching,
+      labelSuggestionsRequested: taskDetailState.labelSuggestionsRequested,
+      selectedId: taskDetailState.selectedId,
+      selectedTask: taskDetailState.selectedTask,
+    }),
+    [taskDetailState],
+  )
+
+  const commands = useMemo(
+    () => ({
+      addComment: taskMutations.addComment,
+      addDependency: taskMutations.addDependency,
+      cancelTaskEdit: taskMutations.cancelTaskEdit,
+      changeBoard: (board: string) => void switchBoard(board),
+      changeThemeMode: runtimeState.setThemeMode,
+      closeTaskDetail: () => taskDetailState.setSelectedId(null),
+      createTask: taskMutations.createTask,
+      cycleThemeMode: runtimeState.cycleThemeMode,
+      dropTask: (taskId: string, status: TaskStatus) => dropTask(taskId, status),
+      firstPage: () => taskCollectionState.setPageOffset(0),
+      lastPage: () => taskCollectionState.setPageOffset(taskCollectionState.lastOffset ?? taskCollectionState.pageOffset),
+      nextPage: () => taskCollectionState.setPageOffset((current) => current + taskCollectionState.rowsPerPage),
+      previousPage: () =>
+        taskCollectionState.setPageOffset((current) => Math.max(0, current - taskCollectionState.rowsPerPage)),
+      refreshTasks: () => {
+        const refreshes: Promise<unknown>[] = [taskCollectionState.statsQuery.refetch()]
+        if (taskCollectionState.enabled) refreshes.push(taskCollectionState.tasksQuery.refetch())
+        void Promise.all(refreshes)
       },
-    }
-    setDragReasonRequest(null)
-    setDragReasonDraft("")
-    requestDragExecution(request)
-  }
+      removeDependency: taskMutations.removeDependency,
+      requestLabelSuggestions: () => void requestLabelSuggestions(),
+      resetListFilters: () => {
+        taskCollectionState.setStatusFilter("all")
+        taskCollectionState.setPriorityFilters([])
+        taskCollectionState.setPlanFilters([])
+        taskCollectionState.setPageOffset(0)
+      },
+      saveTask: taskMutations.saveTask,
+      selectTask: taskDetailState.setSelectedId,
+      setBlockReason: taskDetailState.setBlockReason,
+      setCommentBody: taskDetailState.setCommentBody,
+      setDependencyInput: taskDetailState.setDependencyInput,
+      setEditDraft: taskMutations.updateDraft,
+      setListSort: taskCollectionState.setListSort,
+      setPlanFilters: taskCollectionState.setPlanFilters,
+      setPriorityFilters: taskCollectionState.setPriorityFilters,
+      setRowsPerPage: (value: number) => {
+        taskCollectionState.setRowsPerPage(value)
+        taskCollectionState.setPageOffset(0)
+      },
+      setSearch: taskCollectionState.setSearch,
+      setShowArchived: taskCollectionState.setShowArchived,
+      setSidebarOpen: runtimeState.setSidebarOpen,
+      setStatusFilter: taskCollectionState.setStatusFilter,
+      setTaskCreationDescription: creationDialogState.setDescription,
+      setTaskCreationFirstStepTitle: creationDialogState.setFirstStepTitle,
+      setTaskCreationOpen: creationDialogState.setOpen,
+      setTaskCreationTitle: creationDialogState.setTitle,
+      setView,
+      runAction: taskMutations.runAction,
+    }),
+    [
+      creationDialogState,
+      dropTask,
+      requestLabelSuggestions,
+      runtimeState.cycleThemeMode,
+      runtimeState.setSidebarOpen,
+      runtimeState.setThemeMode,
+      switchBoard,
+      taskCollectionState,
+      taskDetailState,
+      taskMutations,
+    ],
+  )
 
-  async function saveTask() {
-    if (!api || !selectedTask || !draftState) return false
-    if (draftState.taskId !== selectedTask.id) return false
-    if (!draftState.draft.title.trim()) return false
-    const taskId = selectedTask.id
-    const draft = draftState.draft
-    const result = await runAction(async () => {
-      const updated = await api.updateTask(taskId, {
-        title: draft.title.trim(),
-        description: draft.description.trim() || null,
-        assignee: draft.assignee.trim() || null,
-        priority: Number(draft.priority),
-        due_at: parseDateInput(draft.dueAt),
-        scheduled_at: parseDateInput(draft.scheduledAt),
-      })
-      setDraftState((current) => reconcileSavedTaskDraft(current, updated))
-      return updated
-    }, { label: "save", fallbackTaskId: taskId })
-    return isTask(result)
-  }
-
-  function cancelTaskEdit() {
-    setDraftState((current) => reconcileTaskDraft(current, selectedTask, { force: true }))
-  }
-
-  async function addComment() {
-    if (!api || !selectedTask || !commentBody.trim()) return
-    const taskId = selectedTask.id
-    await runAction(async () => {
-      const result = await api.createComment(taskId, commentBody.trim())
-      setCommentBody("")
-      return result
-    }, { label: "comment", fallbackTaskId: taskId })
-  }
-
-  async function requestLabelSuggestions() {
-    if (!api || !selectedId) return
-    setLabelSuggestionsRequested(true)
-    await labelSuggestionsQuery.refetch()
-  }
-
-  function updateDraft(draft: TaskEditDraft) {
-    setDraftState((current) => {
-      if (current) return { ...current, draft, dirty: true }
-      if (!selectedTask) return null
-      return { taskId: selectedTask.id, draft, dirty: true }
-    })
-  }
-
-  async function switchBoard(board: string) {
-    if (!config || board === config.board) return
-    setPendingAction("board")
-    setError(null)
-    try {
-      const nextConfig = await switchRuntimeBoard(config, board)
-      const reset = createBoardSwitchReset({
-        config: nextConfig,
-        selectedId,
-        pageOffset,
-        newTitle,
-        newDescription,
-        blockReason,
-        dependencyInput,
-        commentBody,
-        draftState,
-        claimTokens,
-        lastRefreshAt,
-        error,
-      })
-      setConfig(reset.config)
-      setSelectedId(reset.selectedId)
-      setPageOffset(reset.pageOffset)
-      setNewTitle(reset.newTitle)
-      setNewDescription(reset.newDescription)
-      setBlockReason(reset.blockReason)
-      setDependencyInput(reset.dependencyInput)
-      setCommentBody(reset.commentBody)
-      setDraftState(reset.draftState)
-      setClaimTokens(reset.claimTokens)
-      setLastRefreshAt(reset.lastRefreshAt)
-      setError(reset.error)
-      await Promise.all(
-        createBoardSwitchInvalidationTargets({
-          previousBoard: config.board,
-          nextBoard: reset.config.board,
-        }).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-      )
-    } catch (err) {
-      setError(errorMessage(err))
-    } finally {
-      setPendingAction(null)
-    }
-  }
-
-  const hasNext = hasNextPage(page, tasks.length)
-  const hasPrevious = hasPreviousPage(page)
-  const lastOffset = lastPageOffset(page)
+  const taskCreation = useMemo(
+    () => ({
+      description: creationDialogState.description,
+      firstStepTitle: creationDialogState.firstStepTitle,
+      open: creationDialogState.open,
+      title: creationDialogState.title,
+    }),
+    [creationDialogState.description, creationDialogState.firstStepTitle, creationDialogState.open, creationDialogState.title],
+  )
 
   return (
     <>
       <AppShell
-        config={config}
-        api={api}
-        boards={boardsQuery.data ?? []}
-        boardsLoading={boardsQuery.isLoading}
-        boardsError={boardsQuery.error ? errorMessage(boardsQuery.error) : null}
-        view={view}
-        themeMode={themeMode}
-        sidebarOpen={sidebarOpen}
-        columns={visibleColumns as BoardColumn[]}
-        tasks={tasks}
-        groupedTasks={groupedTasks}
-        selectedTask={selectedTask}
-        selectedId={selectedId}
-        dependencySnapshot={dependencySnapshot}
-        detail={detail}
-        labelSuggestions={labelSuggestionsQuery.data ?? null}
-        labelSuggestionsRequested={
-          labelSuggestionsRequested ||
-          labelSuggestionsQuery.isFetched ||
-          labelSuggestionsQuery.isFetching ||
-          Boolean(labelSuggestionsQuery.error)
-        }
-        labelSuggestionsLoading={labelSuggestionsQuery.isFetching}
-        labelSuggestionsError={labelSuggestionsQuery.error ? errorMessage(labelSuggestionsQuery.error) : null}
-        activeRun={activeRun}
-        search={search}
-        debouncedSearch={debouncedSearch}
-        searchMeta={searchMeta}
-        statusFilter={statusFilter}
-        priorityFilters={priorityFilters}
-        planFilters={planFilters}
-        listSort={listSort}
-        showArchived={showArchived}
-        page={page}
-        hasNextPage={hasNext}
-        hasPreviousPage={hasPrevious}
-        canGoLastPage={lastOffset !== null && lastOffset !== page.offset}
-        rowsPerPage={rowsPerPage}
-        newTitle={newTitle}
-        newDescription={newDescription}
-        newFirstStepTitle={newFirstStepTitle}
-        blockReason={blockReason}
-        dependencyInput={dependencyInput}
-        commentBody={commentBody}
-        editDraft={draftState?.draft ?? null}
-        draftDirty={draftState?.dirty ?? false}
-        claimToken={claimToken}
-        tasksRefreshing={taskCollectionEnabled && tasksQuery.isFetching}
-        detailLoading={taskDetailEnabled && detailQuery.isFetching}
-        pendingAction={pendingAction}
-        error={error}
-        lastRefreshAt={lastRefreshAt}
-        queueCounts={queueCounts}
-        onSearchChange={setSearch}
-        onBoardChange={(board) => void switchBoard(board)}
-        onViewChange={setView}
-        onThemeModeChange={setThemeMode}
-        onCycleThemeMode={() => setThemeMode((current) => nextThemeMode(current))}
-        onSidebarOpenChange={setSidebarOpen}
-        onStatusFilterChange={setStatusFilter}
-        onPriorityFiltersChange={setPriorityFilters}
-        onPlanFiltersChange={setPlanFilters}
-        onListSortChange={setListSort}
-        onResetListFilters={() => {
-          setStatusFilter("all")
-          setPriorityFilters([])
-          setPlanFilters([])
-          setPageOffset(0)
-        }}
-        onShowArchivedChange={setShowArchived}
-        onRefreshTasks={() => {
-          const refreshes: Promise<unknown>[] = [statsQuery.refetch()]
-          if (taskCollectionEnabled) refreshes.push(tasksQuery.refetch())
-          void Promise.all(refreshes)
-        }}
-        onFirstPage={() => setPageOffset(0)}
-        onPreviousPage={() => setPageOffset((current) => Math.max(0, current - rowsPerPage))}
-        onNextPage={() => setPageOffset((current) => current + rowsPerPage)}
-        onLastPage={() => setPageOffset(lastOffset ?? pageOffset)}
-        onRowsPerPageChange={(value) => {
-          setRowsPerPage(value)
-          setPageOffset(0)
-        }}
-        onCreateTask={createTask}
-        onNewTitleChange={setNewTitle}
-        onNewDescriptionChange={setNewDescription}
-        onNewFirstStepTitleChange={setNewFirstStepTitle}
-        onSelectTask={setSelectedId}
-        onCloseTaskDetail={() => setSelectedId(null)}
-        onDropTask={(taskId, status) => void dropTask(taskId, status)}
-        onBlockReasonChange={setBlockReason}
-        onDependencyInputChange={setDependencyInput}
-        onCommentBodyChange={setCommentBody}
-        onEditDraftChange={updateDraft}
-        onAction={runAction}
-        onAddDependency={addDependency}
-        onRemoveDependency={removeDependency}
-        onRequestLabelSuggestions={() => void requestLabelSuggestions()}
-        onSaveTask={saveTask}
-        onCancelTaskEdit={cancelTaskEdit}
-        onAddComment={addComment}
+        runtime={runtime}
+        navigation={navigation}
+        taskCollection={taskCollection}
+        taskDetail={taskDetail}
+        taskCreation={taskCreation}
+        commands={commands}
       />
       <Dialog
         open={Boolean(dragReasonRequest)}
@@ -703,20 +456,6 @@ function App() {
       </AlertDialog>
     </>
   )
-}
-
-function isClaimResponse(value: unknown): value is ClaimResponse {
-  return Boolean(value && typeof value === "object" && "claim_token" in value)
-}
-
-function isTask(value: unknown): value is Task {
-  return Boolean(value && typeof value === "object" && "id" in value && "status" in value)
-}
-
-function errorMessage(err: unknown) {
-  if (err instanceof ApiError) return `${err.code}: ${err.message}`
-  if (err instanceof Error) return err.message
-  return String(err)
 }
 
 export default App

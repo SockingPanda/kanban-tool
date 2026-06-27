@@ -107,7 +107,7 @@ pub(crate) fn handle_label(
                         configured_lancedb_store(db_path, args.vector_config.as_deref())?
                     else {
                         bail!(
-                            "label bootstrap verification requires a configured label atom vector store; pass --vector-config <path> or omit --verify"
+                            "{LABEL_VECTOR_HELPER_ADAPTER_UNAVAILABLE}; omit --verify to bootstrap without vector verification"
                         );
                     };
                     let result = bootstrap_task_label_with_staged_verification(
@@ -128,7 +128,7 @@ pub(crate) fn handle_label(
                 {
                     let _ = (db_path, board, actor, bootstrap_input);
                     bail!(
-                        "label bootstrap verification requires a configured label atom vector store; pass --vector-config <path> or omit --verify"
+                        "{LABEL_VECTOR_HELPER_ADAPTER_UNAVAILABLE}; omit --verify to bootstrap without vector verification"
                     );
                 }
             } else {
@@ -1410,7 +1410,9 @@ fn validate_label_ontology_action_with_trusted_cli_evidence(
             vector_config_path,
             options,
         );
-        bail!("trusted ontology validation requires the vector-lancedb feature")
+        bail!(
+            "{LABEL_VECTOR_HELPER_ADAPTER_UNAVAILABLE}; use external attestation via --input for this CLI build"
+        )
     }
 }
 
@@ -1449,7 +1451,9 @@ fn rebuild_configured_label_atom_index_optional(
         }
     }
     let _ = (db_path, board, vector_config_path);
-    bail!("label atom index rebuild requires a configured label atom vector store")
+    bail!(
+        "{LABEL_VECTOR_HELPER_ADAPTER_UNAVAILABLE}; use `kanban vector query-label-atoms` for raw helper queries after a separately rebuilt helper index"
+    )
 }
 
 fn ensure_label_bootstrap_verification_available(
@@ -1464,7 +1468,7 @@ fn ensure_label_bootstrap_verification_available(
     }
     let _ = (db_path, vector_config_path);
     bail!(
-        "label bootstrap verification requires a configured label atom vector store; pass --vector-config <path> or omit --verify"
+        "{LABEL_VECTOR_HELPER_ADAPTER_UNAVAILABLE}; omit --verify to bootstrap without vector verification"
     )
 }
 
@@ -1495,8 +1499,13 @@ fn query_configured_label_atom_index(
         }
     }
     let _ = (db_path, board, text, polarity, limit, vector_config_path);
-    bail!("label atom index query requires a configured label atom vector store")
+    bail!(
+        "{LABEL_VECTOR_HELPER_ADAPTER_UNAVAILABLE}; use `kanban vector query-label-atoms` for raw helper queries"
+    )
 }
+
+const LABEL_VECTOR_HELPER_ADAPTER_UNAVAILABLE: &str =
+    "label vector helper adapter is not available in this CLI build";
 
 #[cfg(any())]
 fn label_atom_polarity_value(polarity: LabelAtomPolarityArg) -> String {

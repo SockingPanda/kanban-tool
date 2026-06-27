@@ -1,6 +1,6 @@
-use std::{env, path::PathBuf, process::Command};
+use std::{env, fmt, io, path::PathBuf, process::Command};
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 use kanban_derived_io::HelperEnvelope;
 use serde::de::DeserializeOwned;
 
@@ -39,6 +39,67 @@ struct HelperErrorPayload {
     message: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HelperRunErrorKind {
+    SpawnNotFound,
+    SpawnPermission,
+    SpawnFailed,
+    InvalidEnvelope,
+    InvalidPayload,
+    HelperError,
+    ExitFailed,
+}
+
+#[derive(Debug)]
+pub(crate) struct HelperRunError {
+    kind: HelperRunErrorKind,
+    message: String,
+}
+
+impl HelperRunError {
+    pub(crate) fn kind(&self) -> HelperRunErrorKind {
+        self.kind
+    }
+
+    pub(crate) fn is_status_degraded(&self) -> bool {
+        matches!(
+            self.kind,
+            HelperRunErrorKind::SpawnNotFound
+                | HelperRunErrorKind::SpawnPermission
+                | HelperRunErrorKind::InvalidEnvelope
+        )
+    }
+
+    pub(crate) fn degraded_backend(&self) -> &'static str {
+        match self.kind {
+            HelperRunErrorKind::InvalidEnvelope => "helper-invalid",
+            _ => "helper-missing",
+        }
+    }
+
+    pub(crate) fn degraded_diagnostic(&self) -> &'static str {
+        match self.kind {
+            HelperRunErrorKind::InvalidEnvelope => "helper_invalid_envelope",
+            _ => "helper_missing",
+        }
+    }
+
+    fn new(kind: HelperRunErrorKind, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for HelperRunError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for HelperRunError {}
+
 pub(crate) fn resolve_helper(kind: HelperKind) -> PathBuf {
     if let Ok(value) = env::var(kind.env_var()) {
         let trimmed = value.trim();
@@ -68,13 +129,32 @@ pub(crate) fn run_helper_json<T>(kind: HelperKind, args: &[String]) -> Result<T>
 where
     T: DeserializeOwned,
 {
+    run_helper_json_classified(kind, args).map_err(Into::into)
+}
+
+pub(crate) fn run_helper_json_classified<T>(
+    kind: HelperKind,
+    args: &[String],
+) -> std::result::Result<T, HelperRunError>
+where
+    T: DeserializeOwned,
+{
     let helper = resolve_helper(kind);
-    let output = Command::new(&helper).args(args).output().with_context(|| {
-        format!(
-            "failed to run {} helper {} (set {} to override)",
-            kind.label(),
-            helper.display(),
-            kind.env_var()
+    let output = Command::new(&helper).args(args).output().map_err(|error| {
+        let kind_code = match error.kind() {
+            io::ErrorKind::NotFound => HelperRunErrorKind::SpawnNotFound,
+            io::ErrorKind::PermissionDenied => HelperRunErrorKind::SpawnPermission,
+            _ => HelperRunErrorKind::SpawnFailed,
+        };
+        HelperRunError::new(
+            kind_code,
+            format!(
+                "failed to run {} helper {} (set {} to override): {}",
+                kind.label(),
+                helper.display(),
+                kind.env_var(),
+                error
+            ),
         )
     })?;
 
@@ -82,48 +162,71 @@ where
     if !output.status.success() {
         if let Ok(envelope) = HelperEnvelope::from_json(stdout.trim()) {
             if let Ok(error) = envelope.decode::<HelperErrorPayload>() {
-                bail!(
-                    "{} helper failed: {} ({})",
-                    kind.label(),
-                    error.message,
-                    error.code
-                );
+                return Err(HelperRunError::new(
+                    HelperRunErrorKind::HelperError,
+                    format!(
+                        "{} helper failed: {} ({})",
+                        kind.label(),
+                        error.message,
+                        error.code
+                    ),
+                ));
             }
         }
         let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!(
-            "{} helper {} exited with status {:?}: {}",
-            kind.label(),
-            helper.display(),
-            output.status.code(),
-            bounded(stderr.trim())
-        );
+        return Err(HelperRunError::new(
+            HelperRunErrorKind::ExitFailed,
+            format!(
+                "{} helper {} exited with status {:?}: {}",
+                kind.label(),
+                helper.display(),
+                output.status.code(),
+                bounded(stderr.trim())
+            ),
+        ));
     }
 
-    let envelope = HelperEnvelope::from_json(stdout.trim()).with_context(|| {
-        format!(
-            "{} helper {} returned invalid JSON envelope",
-            kind.label(),
-            helper.display()
+    let envelope = HelperEnvelope::from_json(stdout.trim()).map_err(|error| {
+        HelperRunError::new(
+            HelperRunErrorKind::InvalidEnvelope,
+            format!(
+                "{} helper {} returned invalid JSON envelope: {}",
+                kind.label(),
+                helper.display(),
+                error
+            ),
         )
     })?;
-    envelope.decode::<T>().with_context(|| {
-        format!(
-            "{} helper {} returned an invalid payload",
-            kind.label(),
-            helper.display()
+    envelope.decode::<T>().map_err(|error| {
+        HelperRunError::new(
+            HelperRunErrorKind::InvalidPayload,
+            format!(
+                "{} helper {} returned an invalid payload: {}",
+                kind.label(),
+                helper.display(),
+                error
+            ),
         )
     })
 }
 
-pub(crate) fn helper_missing_message(kind: HelperKind, error: &anyhow::Error) -> String {
-    format!(
-        "{} helper unavailable: {}; set {} or install /usr/lib/kanban/{}",
-        kind.label(),
-        bounded(&error.to_string()),
-        kind.env_var(),
-        kind.binary_name()
-    )
+pub(crate) fn helper_degraded_message(kind: HelperKind, error: &HelperRunError) -> String {
+    match error.kind() {
+        HelperRunErrorKind::InvalidEnvelope => format!(
+            "{} helper returned invalid output: {}; set {} or install /usr/lib/kanban/{}",
+            kind.label(),
+            bounded(&error.to_string()),
+            kind.env_var(),
+            kind.binary_name()
+        ),
+        _ => format!(
+            "{} helper unavailable: {}; set {} or install /usr/lib/kanban/{}",
+            kind.label(),
+            bounded(&error.to_string()),
+            kind.env_var(),
+            kind.binary_name()
+        ),
+    }
 }
 
 fn bounded(value: &str) -> String {

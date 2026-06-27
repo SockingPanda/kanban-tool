@@ -16,7 +16,10 @@ use crate::args::{
     VectorConfigureArgs,
 };
 use crate::commands::common::validate_page_bounds;
-use crate::commands::helper::{HelperKind, helper_missing_message, run_helper_json};
+use crate::commands::helper::{
+    HelperKind, HelperRunError, helper_degraded_message, run_helper_json,
+    run_helper_json_classified,
+};
 use crate::output::print_or_json;
 
 pub(crate) fn handle_entity(command: EntityCommand, db_path: &PathBuf, json: bool) -> Result<()> {
@@ -116,17 +119,16 @@ pub(crate) fn handle_graph(
 ) -> Result<()> {
     match command {
         GraphCommand::Status => {
-            let status = match graph_helper_json::<kanban_graph::GraphStoreStatus>(
+            let status = match graph_helper_json_classified::<kanban_graph::GraphStoreStatus>(
                 db_path,
                 board,
                 &["status".to_owned()],
             ) {
                 Ok(status) => status,
-                Err(error) => kanban_graph::GraphStoreStatus {
-                    backend: "helper-missing".to_owned(),
-                    enabled: false,
-                    message: helper_missing_message(HelperKind::Graph, &error),
-                },
+                Err(error) if error.is_status_degraded() => {
+                    graph_degraded_status(HelperKind::Graph, &error)
+                }
+                Err(error) => return Err(error.into()),
             };
             print_or_json(json, &status, || {
                 format!(
@@ -240,6 +242,33 @@ where
     run_helper_json(HelperKind::Graph, &args)
 }
 
+fn graph_helper_json_classified<T>(
+    db_path: &Path,
+    board: &str,
+    command_args: &[String],
+) -> std::result::Result<T, HelperRunError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let mut args = command_args.to_vec();
+    args.push("--db".to_owned());
+    args.push(db_path.display().to_string());
+    args.push("--board".to_owned());
+    args.push(board.to_owned());
+    run_helper_json_classified(HelperKind::Graph, &args)
+}
+
+fn graph_degraded_status(
+    kind: HelperKind,
+    error: &HelperRunError,
+) -> kanban_graph::GraphStoreStatus {
+    kanban_graph::GraphStoreStatus {
+        backend: error.degraded_backend().to_owned(),
+        enabled: false,
+        message: helper_degraded_message(kind, error),
+    }
+}
+
 pub(crate) fn handle_vector(
     command: VectorCommand,
     db_path: &PathBuf,
@@ -278,22 +307,25 @@ pub(crate) fn handle_vector(
             })?;
         }
         VectorCommand::Status(args) => {
-            let status = match vector_helper_json::<kanban_vector::VectorStoreStatus>(
+            let status = match vector_helper_json_classified::<kanban_vector::VectorStoreStatus>(
                 db_path,
                 board,
                 &["status".to_owned()],
                 args.vector_config.as_deref(),
             ) {
                 Ok(status) => status,
-                Err(error) => {
+                Err(error) if error.is_status_degraded() => {
                     let mut status = kanban_vector::VectorStoreStatus::new(
-                        "helper-missing",
+                        error.degraded_backend(),
                         false,
-                        helper_missing_message(HelperKind::Vector, &error),
+                        helper_degraded_message(HelperKind::Vector, &error),
                     );
-                    status.diagnostics.push("helper_missing".to_owned());
+                    status
+                        .diagnostics
+                        .push(error.degraded_diagnostic().to_owned());
                     status
                 }
+                Err(error) => return Err(error.into()),
             };
             print_or_json(json, &status, || {
                 format!(
@@ -425,6 +457,27 @@ where
         args.push(path.display().to_string());
     }
     run_helper_json(HelperKind::Vector, &args)
+}
+
+fn vector_helper_json_classified<T>(
+    db_path: &Path,
+    board: &str,
+    command_args: &[String],
+    vector_config_path: Option<&Path>,
+) -> std::result::Result<T, HelperRunError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let mut args = command_args.to_vec();
+    args.push("--db".to_owned());
+    args.push(db_path.display().to_string());
+    args.push("--board".to_owned());
+    args.push(board.to_owned());
+    if let Some(path) = vector_config_path {
+        args.push("--vector-config".to_owned());
+        args.push(path.display().to_string());
+    }
+    run_helper_json_classified(HelperKind::Vector, &args)
 }
 
 pub(crate) fn handle_context(

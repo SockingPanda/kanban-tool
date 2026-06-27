@@ -88,10 +88,10 @@ export async function applySuggestedTaskLabel(
   api: Pick<KanbanApi, "addTaskLabel"> | null,
   taskId: string,
   labelName: string,
-  onAction: (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null }) => Promise<unknown>,
+  onAction: (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null; invalidate?: "task" }) => Promise<unknown>,
 ) {
   if (!api) return undefined
-  return onAction(() => api.addTaskLabel(taskId, labelName), { fallbackTaskId: taskId, label: "label" })
+  return onAction(() => api.addTaskLabel(taskId, labelName), { fallbackTaskId: taskId, label: "label", invalidate: "task" })
 }
 
 function labelSuggestionReasonLabel(code: string) {

@@ -126,6 +126,55 @@ describe("event invalidation helpers", () => {
     }))
   })
 
+  it.each(["task.updated", "task.specified", "task.promoted", "task.claimed"])(
+    "invalidates board rows and task detail for %s",
+    (kind) => {
+      expect(
+        affectedQueriesForEvents([eventRecord({ task_id: "t_2", kind })]),
+      ).toEqual(affected({
+        taskIds: new Set(["t_2"]),
+        taskDetailIds: new Set(["t_2"]),
+        taskEventIds: new Set(["t_2"]),
+        invalidateBoardTasks: true,
+        invalidateStats: kind === "task.updated" ? false : true,
+        invalidateSearchStatus: true,
+        invalidateBoardTaskMap: true,
+        invalidateEvents: true,
+      }))
+    },
+  )
+
+  it.each(["task.blocked", "task.unblocked", "task.archived", "task.restored"])(
+    "invalidates status counters for lifecycle event %s",
+    (kind) => {
+      expect(
+        affectedQueriesForEvents([eventRecord({ task_id: "t_2", kind })]),
+      ).toEqual(affected({
+        taskIds: new Set(["t_2"]),
+        taskDetailIds: new Set(["t_2"]),
+        taskEventIds: new Set(["t_2"]),
+        invalidateBoardTasks: true,
+        invalidateStats: true,
+        invalidateSearchStatus: true,
+        invalidateBoardTaskMap: true,
+        invalidateEvents: true,
+      }))
+    },
+  )
+
+  it("invalidates board queries for board update lifecycle events", () => {
+    const affected = affectedQueriesForEvents([eventRecord({ task_id: null, kind: "board.updated" })])
+
+    expect(queryKeysForAffectedEvents({ affected, board: "default" })).toEqual([
+      ["events", "default"],
+      ["boards"],
+      ["tasks", "default"],
+      ["stats", "default"],
+      ["search-status", "default"],
+      ["board-task-map", "default"],
+    ])
+  })
+
   it("invalidates run metadata and run log queries for task events with run ids", () => {
     expect(
       affectedQueriesForEvents([eventRecord({ task_id: "t_2", run_id: "r_1", kind: "task.claimed" })]),

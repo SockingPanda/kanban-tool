@@ -39,6 +39,12 @@ export { applySuggestedTaskLabel } from "./TaskLabelsPanel"
 export { DependencyGroup } from "./TaskDependencyPanel"
 export { MarkdownDescription } from "./markdown"
 
+type TaskDetailActionOptions = {
+  label?: string
+  fallbackTaskId?: string | null
+  invalidate?: "task" | "steps" | "board-and-task"
+}
+
 export function TaskDetail({
   api,
   task,
@@ -92,7 +98,7 @@ export function TaskDetail({
   detailLoading: boolean
   runsExpanded?: boolean
   pendingAction: string | null
-  onAction: (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null }) => Promise<unknown>
+  onAction: (action: () => Promise<unknown>, options?: TaskDetailActionOptions) => Promise<unknown>
   onAddDependency: () => Promise<void>
   onRemoveDependency: (parentTaskId: string) => Promise<void>
   onRequestLabelSuggestions?: () => void
@@ -157,12 +163,12 @@ export function TaskDetail({
       const updated = await api.addTaskLabel(currentTask.id, name)
       setLabelInput("")
       return updated
-    }, { fallbackTaskId: currentTask.id, label: "label" })
+    }, { fallbackTaskId: currentTask.id, label: "label", invalidate: "task" })
   }
 
   async function removeLabel(labelId: string) {
     if (!api) return
-    await onAction(() => api.removeTaskLabel(currentTask.id, labelId), { fallbackTaskId: currentTask.id, label: "label" })
+    await onAction(() => api.removeTaskLabel(currentTask.id, labelId), { fallbackTaskId: currentTask.id, label: "label", invalidate: "task" })
   }
 
   async function applySuggestedLabel(labelName: string) {
@@ -176,7 +182,7 @@ export function TaskDetail({
       const result = await api.createStep(currentTask.id, { title, required: true })
       setStepTitle("")
       return result
-    }, { fallbackTaskId: currentTask.id, label: "step" })
+    }, { fallbackTaskId: currentTask.id, label: "step", invalidate: "steps" })
   }
 
   async function attachStep() {
@@ -190,7 +196,7 @@ export function TaskDetail({
       })
       setAttachStepId("")
       return result
-    }, { fallbackTaskId: currentTask.id, label: "step" })
+    }, { fallbackTaskId: currentTask.id, label: "step", invalidate: "steps" })
   }
 
   async function markPlanNotRequired() {
@@ -200,12 +206,16 @@ export function TaskDetail({
       const result = await api.markExecutionPlanNotRequired(currentTask.id, reason)
       setNotRequiredReason("")
       return result
-    }, { fallbackTaskId: currentTask.id, label: "step" })
+    }, { fallbackTaskId: currentTask.id, label: "step", invalidate: "steps" })
   }
 
   function runAction(action: LegalTaskAction) {
     if (!api) return
-    void onAction(() => action.run(api, currentTask), { fallbackTaskId: currentTask.id, label: action.label.toLowerCase() })
+    void onAction(() => action.run(api, currentTask), {
+      fallbackTaskId: currentTask.id,
+      label: action.label.toLowerCase(),
+      invalidate: "board-and-task",
+    })
   }
 
   return (

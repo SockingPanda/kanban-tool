@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { useMutation, type QueryClient } from "@tanstack/react-query"
 
-import { invalidateTaskDetailAndBoard } from "@/features/task-detail/detail-invalidation"
 import {
   parseDateInput,
   reconcileSavedTaskDraft,
@@ -13,10 +12,12 @@ import type { ClaimResponse, KanbanApi, RuntimeConfig, Task } from "@/lib/api"
 import { reconcileClaimTokenForTask } from "@/lib/claim-tokens"
 import { queryKeys } from "@/lib/query-keys"
 
+import { invalidateTaskMutationScope, type TaskMutationInvalidationScope } from "./task-mutation-invalidation"
+
 export type RunActionOptions = {
   label?: string
   fallbackTaskId?: string | null
-  invalidate?: "detail" | "timeline"
+  invalidate?: TaskMutationInvalidationScope
 }
 
 export function useTaskMutations({
@@ -65,15 +66,15 @@ export function useTaskMutations({
   })
 
   const invalidateTaskData = useCallback(
-    async (taskId: string | null, scope: RunActionOptions["invalidate"] = "detail") => {
+    async (taskId: string | null, scope: TaskMutationInvalidationScope = "board-and-task") => {
       if (!api) return
-      if (scope === "timeline" && taskId) {
-        await queryClient.invalidateQueries({ queryKey: queryKeys.events(api.board) })
-        await queryClient.invalidateQueries({ queryKey: queryKeys.taskEvents(taskId) })
-        await queryClient.invalidateQueries({ queryKey: queryKeys.taskComments(taskId) })
-        return
-      }
-      await invalidateTaskDetailAndBoard(queryClient, api.board, taskId)
+      await invalidateTaskMutationScope({
+        board: api.board,
+        queryClient,
+        scope,
+        selectedTaskId: selectedId,
+        taskId,
+      })
       if (taskId) {
         queryClient.removeQueries({ queryKey: queryKeys.taskLabelSuggestions(taskId) })
         if (taskId === selectedId) setLabelSuggestionsRequested(false)
@@ -86,19 +87,19 @@ export function useTaskMutations({
     async (action: () => Promise<unknown>, options: RunActionOptions | string = "action") => {
       const label = typeof options === "string" ? options : options.label ?? "action"
       const fallbackTaskId = typeof options === "string" ? selectedId : options.fallbackTaskId
-      const invalidateScope = typeof options === "string" ? "detail" : options.invalidate ?? "detail"
+      const invalidateScope = typeof options === "string" ? "board-and-task" : options.invalidate ?? "board-and-task"
       setPendingAction(label)
       setError(null)
       try {
         const result = await actionMutation.mutateAsync(action)
         if (isClaimResponse(result)) {
           setClaimTokens((current) => ({ ...current, [result.task.id]: result.claim_token }))
-          await invalidateTaskData(result.task.id)
+          await invalidateTaskData(result.task.id, invalidateScope)
           return result
         }
         if (isTask(result)) {
           setClaimTokens((current) => reconcileClaimTokenForTask(current, result, config?.actor ?? null))
-          await invalidateTaskData(result.id)
+          await invalidateTaskData(result.id, invalidateScope)
           return result
         }
         await invalidateTaskData(fallbackTaskId ?? null, invalidateScope)
@@ -125,7 +126,7 @@ export function useTaskMutations({
       setSelectedId(task.id)
       creation.reset()
       return task
-    }, "create")
+    }, { label: "create", invalidate: "board-and-task" })
     return isTask(result)
   }, [api, creation, runAction, setSelectedId])
 
@@ -136,14 +137,18 @@ export function useTaskMutations({
       const result = await api.addDependency(taskId, dependencyInput.trim())
       setDependencyInput("")
       return result
-    }, { label: "dependency", fallbackTaskId: taskId })
+    }, { label: "dependency", fallbackTaskId: taskId, invalidate: "dependencies" })
   }, [api, dependencyInput, runAction, selectedTask, setDependencyInput])
 
   const removeDependency = useCallback(
     async (parentTaskId: string) => {
       if (!api || !selectedTask) return
       const taskId = selectedTask.id
-      await runAction(async () => api.removeDependency(taskId, parentTaskId), { label: "dependency", fallbackTaskId: taskId })
+      await runAction(async () => api.removeDependency(taskId, parentTaskId), {
+        label: "dependency",
+        fallbackTaskId: taskId,
+        invalidate: "dependencies",
+      })
     },
     [api, runAction, selectedTask],
   )
@@ -165,7 +170,7 @@ export function useTaskMutations({
       })
       setDraftState((current) => reconcileSavedTaskDraft(current, updated))
       return updated
-    }, { label: "save", fallbackTaskId: taskId })
+    }, { label: "save", fallbackTaskId: taskId, invalidate: "task" })
     return isTask(result)
   }, [api, draftState, runAction, selectedTask, setDraftState])
 

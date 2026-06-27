@@ -10,6 +10,7 @@ arrow-array.workspace = true
 arrow-schema.workspace = true
 futures.workspace = true
 kanban-entity.workspace = true
+kanban-derived-io.workspace = true
 kanban-vector.workspace = true
 lancedb.workspace = true
 serde.workspace = true

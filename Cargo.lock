@@ -3810,8 +3810,15 @@ dependencies = [
 name = "kanban-derived-io"
 version = "1.4.1"
 dependencies = [
+ "kanban-core",
+ "kanban-entity",
+ "kanban-graph",
+ "kanban-indexer",
+ "kanban-vector",
+ "rusqlite",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 
@@ -3853,6 +3860,7 @@ dependencies = [
 name = "kanban-graph-oxigraph"
 version = "1.4.1"
 dependencies = [
+ "kanban-derived-io",
  "kanban-entity",
  "kanban-graph",
  "oxigraph",
@@ -3970,6 +3978,7 @@ dependencies = [
  "arrow-array",
  "arrow-schema",
  "futures",
+ "kanban-derived-io",
  "kanban-entity",
  "kanban-vector",
  "lancedb",

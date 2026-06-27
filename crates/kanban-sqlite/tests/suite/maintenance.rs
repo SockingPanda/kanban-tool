@@ -154,8 +154,8 @@ fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() -> anyhow::Resu
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(22));
-        assert_eq!(report.user_version, 22);
+        assert_eq!(report.migration_version, Some(23));
+        assert_eq!(report.user_version, 23);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())
@@ -178,8 +178,8 @@ fn doctor_ontology_reports_missing_v12_tables_unhealthy() -> anyhow::Result<()> 
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(22));
-        assert_eq!(report.user_version, 22);
+        assert_eq!(report.migration_version, Some(23));
+        assert_eq!(report.user_version, 23);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
         assert_eq!(report.ontology_ledger_errors, 1);
         assert!(report.ontology_ledger_issues.iter().any(|issue| {

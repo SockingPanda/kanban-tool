@@ -59,8 +59,8 @@ const rowsPerPageOptions: MenuSelectOption<string>[] = [25, 50, 100, 200].map((v
 
 const planFilterOptions: { value: TaskPlanFilter; label: string }[] = [
   { value: "plan_needed", label: "Plan needed" },
-  { value: "has_subtasks", label: "Has subtasks" },
-  { value: "incomplete_required_subtasks", label: "Incomplete required" },
+  { value: "has_steps", label: "Has steps" },
+  { value: "incomplete_required_steps", label: "Incomplete required" },
 ]
 
 export function ListView({
@@ -211,14 +211,14 @@ export function ListView({
         cell: ({ row }) => <ExecutionPlanBadge task={row.original} />,
       },
       {
-        id: "required_subtasks",
-        header: ({ column }) => <StaticHeader columnId="required_subtasks" onHide={() => column.toggleVisibility(false)} />,
-        cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.required_subtask_count}</span>,
+        id: "required_steps",
+        header: ({ column }) => <StaticHeader columnId="required_steps" onHide={() => column.toggleVisibility(false)} />,
+        cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.required_step_count}</span>,
       },
       {
-        id: "done_required_subtasks",
-        header: ({ column }) => <StaticHeader columnId="done_required_subtasks" onHide={() => column.toggleVisibility(false)} />,
-        cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.completed_required_subtask_count}</span>,
+        id: "done_required_steps",
+        header: ({ column }) => <StaticHeader columnId="done_required_steps" onHide={() => column.toggleVisibility(false)} />,
+        cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.completed_required_step_count}</span>,
       },
       {
         id: "dependency_blocked",
@@ -488,7 +488,7 @@ export function ListView({
 
 function ExecutionPlanBadge({ task }: { task: Task }) {
   if (task.execution_plan_state === "planned") {
-    return <Badge variant="secondary">steps {task.completed_required_subtask_count}/{task.required_subtask_count}</Badge>
+    return <Badge variant="secondary">steps {task.completed_required_step_count}/{task.required_step_count}</Badge>
   }
   if (task.execution_plan_state === "not_required") return <Badge variant="secondary">not required</Badge>
   return <Badge variant="blocked">plan needed</Badge>

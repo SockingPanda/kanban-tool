@@ -104,7 +104,7 @@ SQLite 是 canonical truth，但 board isolation 由 schema、service 和 diagno
 
 1. DB constraint：所有 board-scoped rows 都有 `board_id` 并引用 `boards(id)`；
    referenced task / label / run id 也各自有 FK，确保引用对象存在。`task_labels`、
-   `task_dependencies`、`task_subtasks`、`task_execution_plans`、`task_runs`、`task_comments`、`task_attachments` 和较新的
+   `task_dependencies`、`task_steps`、`task_execution_plans`、`task_runs`、`task_comments`、`task_attachments` 和较新的
    label semantics / atoms / ontology link 表使用包含 `board_id` 的复合 FK，直接阻止这些
    关系表出现 cross-board row。`task_events` 保留 nullable task/run refs 与
    `ON DELETE SET NULL` 语义，由 INSERT/UPDATE triggers 校验非空 refs 的 board scope。
@@ -112,7 +112,7 @@ SQLite 是 canonical truth，但 board isolation 由 schema、service 和 diagno
    scope 内 resolve task、label、run 等对象，再写关系 row；例如 task label binding、
    dependency、comment、event、run 和 attachment 都不应跨 board 组合。
 3. Doctor/import check：`kanban doctor` 和 JSONL import final gate 会只读检查基础关系表
-   中 `row.board_id` 与 referenced task / label / run 的 board 是否一致，检测 subtask cycle，并运行
+   中 `row.board_id` 与 referenced task / label / run 的 board 是否一致，并运行
    `PRAGMA foreign_key_check`。任一 violation 都会成为 hard-error issue；import 会在
    commit 前回滚整个 replace transaction。
 
@@ -240,46 +240,58 @@ parent neither done nor archived => child cannot be ready/running
 
 ---
 
-## 7. Subtask / Execution Plan
+## 7. Step / Execution Plan
 
-Subtask / step 是执行拆解关系，不是阻塞依赖关系。子任务本身仍是普通 `tasks`
-row，可以被搜索、打开 detail、评论、运行和归档；关系由独立表表达，不能写进
-`description` Markdown，也不能复用 `task_dependencies`。
+Step 是父任务内部的有序执行步骤，不是阻塞依赖关系。Step 可以是普通文本，
+也可以链接到另一个普通 task 作为上下文。链接 task 不会自动创建
+`task_dependencies` 边，也不会用 linked task 的状态自动完成 step；step 自己有独立的
+`todo | done | skipped` 状态。
 
-### 7.1 Subtasks
+### 7.1 Steps
 
-表：`task_subtasks`
+表：`task_steps`
 
-Schema-level invariant：`parent_task_id` 和 `child_task_id` 必须都属于 row
-`board_id`，且 `parent_task_id != child_task_id`。Service 还必须拒绝 cross-board
-绑定、archived parent/child、以及会形成 subtask cycle 的绑定。
+Schema-level invariant：`parent_task_id` 必须属于 row `board_id`；可选的
+`linked_task_id` 也必须属于同一 board，且不能等于 `parent_task_id`。Service 还必须
+拒绝 archived parent、archived linked task、空白标题和 cross-board link。
 
 字段：
 
 | 字段 | 说明 |
 |---|---|
+| `id` | Step ID。 |
 | `board_id` | 所属 board。 |
-| `parent_task_id` | 被拆解的父任务。 |
-| `child_task_id` | 作为步骤的普通 task。 |
+| `parent_task_id` | 被规划的父任务。 |
 | `position` | 父任务内步骤排序键。 |
-| `required` | 是否为父任务执行计划的 required step。 |
+| `title` | 步骤标题。 |
+| `body` | 可选说明文本。 |
+| `linked_task_id` | 可选上下文 task。 |
+| `required` | 是否阻塞父任务 complete/archive。 |
+| `status` | `todo`、`done` 或 `skipped`。 |
+| `resolution_note` | done/skip/reopen 的说明。 |
+| `resolved_by` | 最近一次 resolution actor。 |
+| `resolved_at` | 最近一次 resolution 时间。 |
 | `created_by` | 创建 actor。 |
 | `created_at` | 创建时间。 |
+| `updated_by` | 最近更新 actor。 |
+| `updated_at` | 最近更新时间。 |
 
 索引：
 
-- `idx_subtasks_parent_position(parent_task_id, position)`
-- `idx_subtasks_child(child_task_id)`
+- `idx_steps_parent_position(parent_task_id, position)`
+- `idx_steps_linked_task(linked_task_id)`
+- `idx_steps_board_status(board_id, status)`
 
 语义：
 
 ```text
-parent contains child step
+parent task contains ordered step
+optional linked_task_id supplies task context only
 ```
 
-这条边不会自动变成 dependency，也不会直接驱动 `dependency_blocked` 或
-`unfinished_parent_count`。后续状态机 guard 可以显式读取 required subtasks 来限制
-promote / claim / complete，但那是执行计划规则，不是 dependency 语义。
+Step 不会直接驱动 `dependency_blocked` 或 `unfinished_parent_count`。Required step
+只参与 execution-plan guard：父任务不能 complete/archive，直到所有 required step
+都是 `done` 或 `skipped`。
 
 ### 7.2 Execution plans
 
@@ -303,23 +315,23 @@ promote / claim / complete，但那是执行计划规则，不是 dependency 语
 派生口径：
 
 ```text
-required subtasks > 0 => planned
-explicit not_required row and no required subtasks => not_required
+steps count > 0 => planned
+explicit not_required row and no steps => not_required
 otherwise => unplanned
 ```
 
 事件：
 
 ```text
-task.subtask.created
-task.subtask.attached
-task.subtask.removed
-task.subtask.reordered
+task.step.created
+task.step.updated
+task.step.removed
+task.step.done
+task.step.skipped
+task.step.reopened
 task.execution_plan.planned
 task.execution_plan.not_required
 ```
-
----
 
 ## 8. Run
 

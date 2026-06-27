@@ -169,7 +169,7 @@ pub(crate) fn claim_next_ready_conn(
     }
     let selected = conn
         .query_row(
-            "SELECT id FROM tasks WHERE board_id=?1 AND status='ready' AND claim_token IS NULL AND (assignee IS NULL OR assignee=?2) AND (EXISTS (SELECT 1 FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1) OR EXISTS (SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=tasks.board_id AND ep.task_id=tasks.id AND ep.state='not_required')) AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) ORDER BY priority ASC, created_at ASC LIMIT 1",
+            "SELECT id FROM tasks WHERE board_id=?1 AND status='ready' AND claim_token IS NULL AND (assignee IS NULL OR assignee=?2) AND (EXISTS (SELECT 1 FROM task_steps s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id) OR EXISTS (SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=tasks.board_id AND ep.task_id=tasks.id AND ep.state='not_required')) AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived')) ORDER BY priority ASC, created_at ASC LIMIT 1",
             params![board_id, worker_profile],
             |row| row.get::<_, String>(0),
         )
@@ -227,7 +227,7 @@ pub(crate) fn claim_task_in_current_tx(
     let run_id = new_run_id();
     let expires = now + ttl_ms;
     let changed = conn.execute(
-        "UPDATE tasks SET status='running', claim_token=?1, claim_owner=?2, claim_expires_at=?3, last_heartbeat_at=?4, started_at=COALESCE(started_at, ?4), updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='ready' AND claim_token IS NULL AND (EXISTS (SELECT 1 FROM task_subtasks s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id AND s.required=1) OR EXISTS (SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=tasks.board_id AND ep.task_id=tasks.id AND ep.state='not_required')) AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived'))",
+        "UPDATE tasks SET status='running', claim_token=?1, claim_owner=?2, claim_expires_at=?3, last_heartbeat_at=?4, started_at=COALESCE(started_at, ?4), updated_at=?4, lock_version=lock_version+1 WHERE id=?5 AND board_id=?6 AND status='ready' AND claim_token IS NULL AND (EXISTS (SELECT 1 FROM task_steps s WHERE s.board_id=tasks.board_id AND s.parent_task_id=tasks.id) OR EXISTS (SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=tasks.board_id AND ep.task_id=tasks.id AND ep.state='not_required')) AND NOT EXISTS (SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id=d.parent_task_id WHERE d.child_task_id=tasks.id AND p.status NOT IN ('done','archived'))",
         params![token, actor, expires, now, task_id, board_id],
     ).map_err(storage)?;
     if changed != 1 {
@@ -368,7 +368,7 @@ pub(crate) fn ensure_execution_plan_ready(
         Ok(())
     } else {
         Err(KanbanError::ExecutionPlanRequired(
-            "add required subtasks or mark execution plan not_required before starting task".into(),
+            "add steps or mark execution plan not_required before starting task".into(),
         ))
     }
 }
@@ -379,7 +379,7 @@ pub(crate) fn execution_plan_is_ready(
     task_id: &str,
 ) -> Result<bool> {
     conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM task_subtasks s WHERE s.board_id=?1 AND s.parent_task_id=?2 AND s.required=1) OR EXISTS(SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=?1 AND ep.task_id=?2 AND ep.state='not_required')",
+        "SELECT EXISTS(SELECT 1 FROM task_steps s WHERE s.board_id=?1 AND s.parent_task_id=?2) OR EXISTS(SELECT 1 FROM task_execution_plans ep WHERE ep.board_id=?1 AND ep.task_id=?2 AND ep.state='not_required')",
         params![board_id, task_id],
         |row| row.get(0),
     )
@@ -399,14 +399,10 @@ fn plan_guarded_retry_status(
     }
 }
 
-fn ensure_required_subtasks_complete(
-    conn: &Connection,
-    board_id: &str,
-    task_id: &str,
-) -> Result<()> {
+fn ensure_required_steps_complete(conn: &Connection, board_id: &str, task_id: &str) -> Result<()> {
     let incomplete: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM task_subtasks s JOIN tasks child ON child.id=s.child_task_id WHERE s.board_id=?1 AND s.parent_task_id=?2 AND s.required=1 AND child.status NOT IN ('done','archived')",
+            "SELECT COUNT(*) FROM task_steps s WHERE s.board_id=?1 AND s.parent_task_id=?2 AND s.required=1 AND s.status NOT IN ('done','skipped')",
             params![board_id, task_id],
             |row| row.get(0),
         )
@@ -414,20 +410,16 @@ fn ensure_required_subtasks_complete(
     if incomplete == 0 {
         Ok(())
     } else {
-        Err(KanbanError::SubtasksIncomplete(format!(
-            "{incomplete} required subtask(s) must be done or archived first"
+        Err(KanbanError::StepsIncomplete(format!(
+            "{incomplete} required step(s) must be done or skipped first"
         )))
     }
 }
 
-fn ensure_no_active_required_subtasks(
-    conn: &Connection,
-    board_id: &str,
-    task_id: &str,
-) -> Result<()> {
+fn ensure_no_active_required_steps(conn: &Connection, board_id: &str, task_id: &str) -> Result<()> {
     let active: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM task_subtasks s JOIN tasks child ON child.id=s.child_task_id WHERE s.board_id=?1 AND s.parent_task_id=?2 AND s.required=1 AND child.status NOT IN ('done','archived')",
+            "SELECT COUNT(*) FROM task_steps s WHERE s.board_id=?1 AND s.parent_task_id=?2 AND s.required=1 AND s.status NOT IN ('done','skipped')",
             params![board_id, task_id],
             |row| row.get(0),
         )
@@ -435,8 +427,8 @@ fn ensure_no_active_required_subtasks(
     if active == 0 {
         Ok(())
     } else {
-        Err(KanbanError::SubtasksIncomplete(format!(
-            "cannot archive parent with {active} active required subtask(s) without force"
+        Err(KanbanError::StepsIncomplete(format!(
+            "cannot archive parent with {active} active required step(s) without force"
         )))
     }
 }
@@ -500,7 +492,7 @@ pub fn complete_task_with_summary_and_result(
     }
     with_immediate_tx(&conn, || {
         ensure_board_active(&conn, &board_id)?;
-        ensure_required_subtasks_complete(&conn, &board_id, &task.id)?;
+        ensure_required_steps_complete(&conn, &board_id, &task.id)?;
         finish_running(
             &conn,
             &board_id,
@@ -822,7 +814,7 @@ pub fn archive_task(
     with_immediate_tx(&conn, || {
         ensure_board_active(&conn, &board_id)?;
         if !force {
-            ensure_no_active_required_subtasks(&conn, &board_id, &task.id)?;
+            ensure_no_active_required_steps(&conn, &board_id, &task.id)?;
         }
         if task.status == TaskStatus::Running {
             let run_id = task.current_run_id.as_deref().ok_or_else(|| {

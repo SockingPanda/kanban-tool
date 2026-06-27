@@ -6,12 +6,12 @@ import type {
   Run,
   RunLog,
   TaskNeighborhood,
-  TaskSubtasks,
+  TaskSteps,
 } from "@/lib/api"
 
 export type DetailState = {
   dependencies: Dependencies
-  subtasks: TaskSubtasks | null
+  steps: TaskSteps | null
   neighborhood: TaskNeighborhood | null
   runs: Run[]
   events: EventRecord[]
@@ -22,7 +22,7 @@ export type DetailState = {
 
 export const emptyDetail: DetailState = {
   dependencies: { parents: [], children: [] },
-  subtasks: null,
+  steps: null,
   neighborhood: null,
   runs: [],
   events: [],

@@ -13,7 +13,7 @@ mod suite {
     mod runs;
     mod search;
     mod sse;
-    mod subtasks;
+    mod steps;
     mod task_graph;
     mod tasks;
     mod transitions;

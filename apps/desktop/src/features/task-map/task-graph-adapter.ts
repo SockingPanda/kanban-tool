@@ -17,9 +17,9 @@ export function apiTaskGraphToCanvasGraph(graph: ApiGraph | null | undefined): T
       contextOnly: node.context_only,
       dependencyBlocked: node.task.dependency_blocked,
       unfinishedParentCount: node.task.unfinished_parent_count,
-      subtaskCounts: {
-        total: node.task.required_subtask_count + node.task.optional_subtask_count,
-        incomplete: Math.max(0, node.task.required_subtask_count - node.task.completed_required_subtask_count),
+      stepCounts: {
+        total: node.task.required_step_count + node.task.optional_step_count,
+        incomplete: Math.max(0, node.task.required_step_count - node.task.completed_required_step_count),
       },
     })),
     edges: graph.edges.map((edge) => ({

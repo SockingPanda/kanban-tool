@@ -101,7 +101,7 @@ function App() {
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE)
   const [newTitle, setNewTitle] = useState("")
   const [newDescription, setNewDescription] = useState("")
-  const [newFirstSubtaskTitle, setNewFirstSubtaskTitle] = useState("")
+  const [newFirstStepTitle, setNewFirstStepTitle] = useState("")
   const [blockReason, setBlockReason] = useState("")
   const [dependencyInput, setDependencyInput] = useState("")
   const [commentBody, setCommentBody] = useState("")
@@ -346,13 +346,13 @@ function App() {
         title: newTitle.trim(),
         description: newDescription.trim() || undefined,
       })
-      if (newFirstSubtaskTitle.trim()) {
-        await api.createSubtask(task.id, { title: newFirstSubtaskTitle.trim(), priority: task.priority, required: true })
+      if (newFirstStepTitle.trim()) {
+        await api.createStep(task.id, { title: newFirstStepTitle.trim(), required: true })
       }
       setSelectedId(task.id)
       setNewTitle("")
       setNewDescription("")
-      setNewFirstSubtaskTitle("")
+      setNewFirstStepTitle("")
       return task
     }, "create")
     return isTask(result)
@@ -567,7 +567,7 @@ function App() {
         rowsPerPage={rowsPerPage}
         newTitle={newTitle}
         newDescription={newDescription}
-        newFirstSubtaskTitle={newFirstSubtaskTitle}
+        newFirstStepTitle={newFirstStepTitle}
         blockReason={blockReason}
         dependencyInput={dependencyInput}
         commentBody={commentBody}
@@ -609,7 +609,7 @@ function App() {
         onCreateTask={createTask}
         onNewTitleChange={setNewTitle}
         onNewDescriptionChange={setNewDescription}
-        onNewFirstSubtaskTitleChange={setNewFirstSubtaskTitle}
+        onNewFirstStepTitleChange={setNewFirstStepTitle}
         onSelectTask={setSelectedId}
         onCloseTaskDetail={() => setSelectedId(null)}
         onDropTask={(taskId, status) => void dropTask(taskId, status)}

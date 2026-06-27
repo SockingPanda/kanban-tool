@@ -38,7 +38,7 @@ fn cli_adapter_contract_commits_to_shared_task_label_and_run_state() -> anyhow::
         "default",
         "cli-adapter",
         &task_id,
-        "adapter contract task does not need subtasks",
+        "adapter contract task does not need steps",
     )?;
     assert_eq!(
         kanban_sqlite::get_task(&temp.path, "default", &task_id)?.status,

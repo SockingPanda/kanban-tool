@@ -30,9 +30,9 @@ export function taskNeedsExecutionPlan(task: Task) {
   return task.execution_plan_state === "unplanned" && task.status !== "done" && task.status !== "archived"
 }
 
-export function requiredSubtaskProgressLabel(task: Task) {
-  if (task.required_subtask_count <= 0) return null
-  return `steps ${task.completed_required_subtask_count}/${task.required_subtask_count}`
+export function requiredStepProgressLabel(task: Task) {
+  if (task.required_step_count <= 0) return null
+  return `steps ${task.completed_required_step_count}/${task.required_step_count}`
 }
 
 export function sortBoardColumnTasks(tasks: Task[], status: TaskStatus) {

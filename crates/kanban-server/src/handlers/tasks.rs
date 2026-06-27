@@ -1908,7 +1908,7 @@ async fn query_label_atom_index_for_state(
     match run_helper_json::<Vec<kanban_vector::LabelAtomHit>>(state, HelperKind::Vector, args).await
     {
         Ok(hits) => Ok(hits),
-        Err(error) if error.is_status_degraded() => Err(invalid_input(helper_degraded_message(
+        Err(error) if error.is_helper_missing() => Err(invalid_input(helper_degraded_message(
             HelperKind::Vector,
             &error,
         ))),

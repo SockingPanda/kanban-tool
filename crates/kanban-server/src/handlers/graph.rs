@@ -65,7 +65,7 @@ pub(crate) async fn graph_neighbors(
         .await
     {
         Ok(data) => data,
-        Err(error) if error.is_status_degraded() => Vec::new(),
+        Err(error) if error.is_helper_missing() => Vec::new(),
         Err(error) => return Err(error.into()),
     };
     Ok(Json(Envelope {

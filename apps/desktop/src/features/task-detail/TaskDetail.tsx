@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { ChevronDown, ListChecks, Map, MessageSquare, Network } from "lucide-react"
 
 import {
@@ -170,17 +170,17 @@ export function TaskDetail({
   if (!task || !actionView) return null
   const currentTask = task
 
-  async function saveAndClose() {
+  const saveAndClose = useCallback(async () => {
     const saved = await onSaveTask()
     if (saved) setEditing(false)
-  }
+  }, [onSaveTask])
 
-  function cancelEdit() {
+  const cancelEdit = useCallback(() => {
     onCancelEdit()
     setEditing(false)
-  }
+  }, [onCancelEdit])
 
-  async function addLabel() {
+  const addLabel = useCallback(async () => {
     if (!api || !labelInput.trim()) return
     const name = labelInput.trim()
     await onAction(async () => {
@@ -188,18 +188,18 @@ export function TaskDetail({
       setLabelInput("")
       return updated
     }, { fallbackTaskId: currentTask.id, label: "label", invalidate: "task" })
-  }
+  }, [api, currentTask.id, labelInput, onAction])
 
-  async function removeLabel(labelId: string) {
+  const removeLabel = useCallback(async (labelId: string) => {
     if (!api) return
     await onAction(() => api.removeTaskLabel(currentTask.id, labelId), { fallbackTaskId: currentTask.id, label: "label", invalidate: "task" })
-  }
+  }, [api, currentTask.id, onAction])
 
-  async function applySuggestedLabel(labelName: string) {
+  const applySuggestedLabel = useCallback(async (labelName: string) => {
     await applySuggestedTaskLabel(api, currentTask.id, labelName, onAction)
-  }
+  }, [api, currentTask.id, onAction])
 
-  async function createStep() {
+  const createStep = useCallback(async () => {
     if (!api || !stepTitle.trim()) return
     const title = stepTitle.trim()
     await onAction(async () => {
@@ -207,9 +207,9 @@ export function TaskDetail({
       setStepTitle("")
       return result
     }, { fallbackTaskId: currentTask.id, label: "step", invalidate: "steps" })
-  }
+  }, [api, currentTask.id, onAction, stepTitle])
 
-  async function attachStep() {
+  const attachStep = useCallback(async () => {
     if (!api || !attachStepId.trim()) return
     const linkedTaskRef = attachStepId.trim()
     await onAction(async () => {
@@ -221,9 +221,9 @@ export function TaskDetail({
       setAttachStepId("")
       return result
     }, { fallbackTaskId: currentTask.id, label: "step", invalidate: "steps" })
-  }
+  }, [api, attachStepId, currentTask.id, onAction])
 
-  async function markPlanNotRequired() {
+  const markPlanNotRequired = useCallback(async () => {
     if (!api || !notRequiredReason.trim()) return
     const reason = notRequiredReason.trim()
     await onAction(async () => {
@@ -231,16 +231,26 @@ export function TaskDetail({
       setNotRequiredReason("")
       return result
     }, { fallbackTaskId: currentTask.id, label: "step", invalidate: "steps" })
-  }
+  }, [api, currentTask.id, notRequiredReason, onAction])
 
-  function runAction(action: LegalTaskAction) {
+  const runAction = useCallback((action: LegalTaskAction) => {
     if (!api) return
     void onAction(() => action.run(api, currentTask), {
       fallbackTaskId: currentTask.id,
       label: action.label.toLowerCase(),
       invalidate: "board-and-task",
     })
-  }
+  }, [api, currentTask, onAction])
+
+  const handleSaveTask = useCallback(() => void saveAndClose(), [saveAndClose])
+  const handleCreateStep = useCallback(() => void createStep(), [createStep])
+  const handleAttachStep = useCallback(() => void attachStep(), [attachStep])
+  const handleMarkPlanNotRequired = useCallback(() => void markPlanNotRequired(), [markPlanNotRequired])
+  const handleAddDependency = useCallback(() => void onAddDependency(), [onAddDependency])
+  const handleRemoveDependency = useCallback((parentTaskId: string) => void onRemoveDependency(parentTaskId), [onRemoveDependency])
+  const handleAddLabel = useCallback(() => void addLabel(), [addLabel])
+  const handleRemoveLabel = useCallback((labelId: string) => void removeLabel(labelId), [removeLabel])
+  const handleApplySuggestedLabel = useCallback((labelName: string) => void applySuggestedLabel(labelName), [applySuggestedLabel])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -254,7 +264,7 @@ export function TaskDetail({
             draftDirty={draftDirty}
             pendingAction={pendingAction}
             setEditDraft={setEditDraft}
-            onSave={() => void saveAndClose()}
+            onSave={handleSaveTask}
             onCancel={cancelEdit}
           />
         ) : (
@@ -296,8 +306,8 @@ export function TaskDetail({
                   dependencyInput={dependencyInput}
                   pending={pendingAction === "dependency"}
                   setDependencyInput={setDependencyInput}
-                  onAddDependency={() => void onAddDependency()}
-                  onRemoveDependency={(parentTaskId) => void onRemoveDependency(parentTaskId)}
+                  onAddDependency={handleAddDependency}
+                  onRemoveDependency={handleRemoveDependency}
                   onSelectTask={onSelectTask}
                 />
               </TaskDetailPanel>
@@ -330,9 +340,9 @@ export function TaskDetail({
                   setStepTitle={setStepTitle}
                   setAttachStepId={setAttachStepId}
                   setNotRequiredReason={setNotRequiredReason}
-                  onCreateStep={() => void createStep()}
-                  onAttachStep={() => void attachStep()}
-                  onMarkNotRequired={() => void markPlanNotRequired()}
+                  onCreateStep={handleCreateStep}
+                  onAttachStep={handleAttachStep}
+                  onMarkNotRequired={handleMarkPlanNotRequired}
                   onSelectTask={onSelectTask}
                 />
               </TaskDetailPanel>
@@ -386,10 +396,10 @@ export function TaskDetail({
                   suggestionsLoading={labelSuggestionsLoading}
                   suggestionsError={labelSuggestionsError}
                   pending={pendingAction === "label"}
-                  onAddLabel={() => void addLabel()}
-                  onRemoveLabel={(labelId) => void removeLabel(labelId)}
+                  onAddLabel={handleAddLabel}
+                  onRemoveLabel={handleRemoveLabel}
                   onRequestLabelSuggestions={onRequestLabelSuggestions}
-                  onApplySuggestedLabel={(labelName) => void applySuggestedLabel(labelName)}
+                  onApplySuggestedLabel={handleApplySuggestedLabel}
                 />
               </Section>
             </aside>

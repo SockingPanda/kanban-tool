@@ -57,51 +57,130 @@ function App() {
   })
 
   const taskCollectionState = useTaskCollectionState(api, view, reportError)
+  const {
+    boardsQuery,
+    columns,
+    debouncedSearch,
+    enabled: taskCollectionEnabled,
+    groupedTasks,
+    hasNext,
+    hasPrevious,
+    lastOffset,
+    lastRefreshAt,
+    listSort,
+    page,
+    pageOffset,
+    planFilters,
+    priorityFilters,
+    queueCounts,
+    rowsPerPage,
+    search,
+    searchMeta,
+    setLastRefreshAt,
+    setListSort,
+    setPageOffset,
+    setPlanFilters,
+    setPriorityFilters,
+    setRowsPerPage,
+    setSearch,
+    setShowArchived,
+    setStatusFilter,
+    showArchived,
+    statsQuery,
+    statusFilter,
+    tasks,
+    tasksQuery,
+  } = taskCollectionState
   const taskDetailState = useSelectedTaskDetailState(
     api,
     view,
-    taskCollectionState.tasks,
-    taskCollectionState.enabled,
+    tasks,
+    taskCollectionEnabled,
     config?.actor ?? null,
     reportError,
   )
+  const {
+    activeRun,
+    blockReason,
+    claimToken,
+    claimTokens,
+    commentBody,
+    dependencyInput,
+    dependencySnapshot,
+    detail,
+    detailLoading,
+    draftState,
+    labelSuggestionsQuery,
+    labelSuggestionsRequested,
+    selectedId,
+    selectedTask,
+    setBlockReason,
+    setClaimTokens,
+    setCommentBody,
+    setDependencyInput,
+    setDraftState,
+    setLabelSuggestionsRequested,
+    setSelectedId,
+    taskCommentsExpanded,
+    taskDependenciesExpanded,
+    taskEventsExpanded,
+    taskGraphExpanded,
+    taskRunsExpanded,
+    taskStepsExpanded,
+    setTaskCommentsExpanded,
+    setTaskDependenciesExpanded,
+    setTaskEventsExpanded,
+    setTaskGraphExpanded,
+    setTaskRunsExpanded,
+    setTaskStepsExpanded,
+  } = taskDetailState
   const creationDialogState = useTaskCreationDialogState()
+  const {
+    description: newDescription,
+    firstStepTitle: newFirstStepTitle,
+    open: taskCreationOpen,
+    setDescription: setTaskCreationDescription,
+    setFirstStepTitle: setTaskCreationFirstStepTitle,
+    setOpen: setTaskCreationOpen,
+    setTitle: setTaskCreationTitle,
+    title: newTitle,
+  } = creationDialogState
   const taskMutations = useTaskMutations({
     api,
-    commentBody: taskDetailState.commentBody,
+    commentBody,
     config,
     creation: creationDialogState,
-    dependencyInput: taskDetailState.dependencyInput,
-    draftState: taskDetailState.draftState,
+    dependencyInput,
+    draftState,
     queryClient,
-    selectedId: taskDetailState.selectedId,
-    selectedTask: taskDetailState.selectedTask,
-    setClaimTokens: taskDetailState.setClaimTokens,
-    setCommentBody: taskDetailState.setCommentBody,
-    setDependencyInput: taskDetailState.setDependencyInput,
-    setDraftState: taskDetailState.setDraftState,
+    selectedId,
+    selectedTask,
+    setClaimTokens,
+    setCommentBody,
+    setDependencyInput,
+    setDraftState,
     setError,
-    setLabelSuggestionsRequested: taskDetailState.setLabelSuggestionsRequested,
-    setSelectedId: taskDetailState.setSelectedId,
+    setLabelSuggestionsRequested,
+    setSelectedId,
   })
 
   const tasksById = useMemo(
-    () => new Map(taskCollectionState.tasks.map((task) => [task.id, task])),
-    [taskCollectionState.tasks],
+    () => new Map(tasks.map((task) => [task.id, task])),
+    [tasks],
   )
 
   const requestLabelSuggestions = useCallback(async () => {
-    if (!api || !taskDetailState.selectedId) return
-    taskDetailState.setLabelSuggestionsRequested(true)
-    await taskDetailState.labelSuggestionsQuery.refetch()
-  }, [api, taskDetailState])
+    if (!api || !selectedId) return
+    setLabelSuggestionsRequested(true)
+    await labelSuggestionsQuery.refetch()
+  }, [api, labelSuggestionsQuery, selectedId, setLabelSuggestionsRequested])
 
   const dropTask = useCallback(
     (taskId: string, targetStatus: TaskStatus) => {
       if (!api) return
       const task = tasksById.get(taskId)
       if (!task) return
-      const token = taskDetailState.claimTokens[task.id] ?? null
+      const token = claimTokens[task.id] ?? null
       const plan = planDragTransition(task, targetStatus, token)
       if (!plan.ok) {
         setError(plan.reason)
@@ -114,7 +193,7 @@ function App() {
       }
       requestDragExecution({ task, plan })
     },
-    [api, taskDetailState.claimTokens, tasksById, setError],
+    [api, claimTokens, tasksById, setError],
   )
 
   const executePlannedDrag = useCallback(
@@ -171,29 +250,29 @@ function App() {
         const nextConfig = await switchRuntimeBoard(config, board)
         const reset = createBoardSwitchReset({
           config: nextConfig,
-          selectedId: taskDetailState.selectedId,
-          pageOffset: taskCollectionState.pageOffset,
-          newTitle: creationDialogState.title,
-          newDescription: creationDialogState.description,
-          blockReason: taskDetailState.blockReason,
-          dependencyInput: taskDetailState.dependencyInput,
-          commentBody: taskDetailState.commentBody,
-          draftState: taskDetailState.draftState,
-          claimTokens: taskDetailState.claimTokens,
-          lastRefreshAt: taskCollectionState.lastRefreshAt,
+          selectedId,
+          pageOffset,
+          newTitle,
+          newDescription,
+          blockReason,
+          dependencyInput,
+          commentBody,
+          draftState,
+          claimTokens,
+          lastRefreshAt,
           error,
         })
         setConfig(reset.config)
-        taskDetailState.setSelectedId(reset.selectedId)
-        taskCollectionState.setPageOffset(reset.pageOffset)
-        creationDialogState.setTitle(reset.newTitle)
-        creationDialogState.setDescription(reset.newDescription)
-        taskDetailState.setBlockReason(reset.blockReason)
-        taskDetailState.setDependencyInput(reset.dependencyInput)
-        taskDetailState.setCommentBody(reset.commentBody)
-        taskDetailState.setDraftState(reset.draftState)
-        taskDetailState.setClaimTokens(reset.claimTokens)
-        taskCollectionState.setLastRefreshAt(reset.lastRefreshAt)
+        setSelectedId(reset.selectedId)
+        setPageOffset(reset.pageOffset)
+        setTaskCreationTitle(reset.newTitle)
+        setTaskCreationDescription(reset.newDescription)
+        setBlockReason(reset.blockReason)
+        setDependencyInput(reset.dependencyInput)
+        setCommentBody(reset.commentBody)
+        setDraftState(reset.draftState)
+        setClaimTokens(reset.claimTokens)
+        setLastRefreshAt(reset.lastRefreshAt)
         setError(reset.error)
         await Promise.all(
           createBoardSwitchInvalidationTargets({
@@ -202,17 +281,34 @@ function App() {
           }).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
         )
         return reset.config
-      }, { label: "board", fallbackTaskId: taskDetailState.selectedId, invalidate: "none" })
+      }, { label: "board", fallbackTaskId: selectedId, invalidate: "none" })
     },
     [
+      blockReason,
+      claimTokens,
+      commentBody,
       config,
-      creationDialogState,
+      dependencyInput,
+      draftState,
       error,
+      lastRefreshAt,
+      newDescription,
+      newTitle,
+      pageOffset,
       queryClient,
+      selectedId,
+      setBlockReason,
+      setClaimTokens,
+      setCommentBody,
       setConfig,
+      setDependencyInput,
+      setDraftState,
       setError,
-      taskCollectionState,
-      taskDetailState,
+      setLastRefreshAt,
+      setPageOffset,
+      setSelectedId,
+      setTaskCreationDescription,
+      setTaskCreationTitle,
       taskMutations,
     ],
   )
@@ -230,81 +326,151 @@ function App() {
   const runtime = useMemo(
     () => ({
       api,
-      boards: taskCollectionState.boardsQuery.data ?? [],
-      boardsError: taskCollectionState.boardsQuery.error ? errorMessage(taskCollectionState.boardsQuery.error) : null,
-      boardsLoading: taskCollectionState.boardsQuery.isLoading,
+      boards: boardsQuery.data ?? [],
+      boardsError: boardsQuery.error ? errorMessage(boardsQuery.error) : null,
+      boardsLoading: boardsQuery.isLoading,
       config,
       error,
       pendingAction: taskMutations.pendingAction,
-      queueCounts: taskCollectionState.queueCounts,
+      queueCounts,
       themeMode: runtimeState.themeMode,
-      lastRefreshAt: taskCollectionState.lastRefreshAt,
+      lastRefreshAt,
     }),
     [
       api,
       config,
       error,
       runtimeState.themeMode,
-      taskCollectionState.boardsQuery.data,
-      taskCollectionState.boardsQuery.error,
-      taskCollectionState.boardsQuery.isLoading,
-      taskCollectionState.lastRefreshAt,
-      taskCollectionState.queueCounts,
+      boardsQuery.data,
+      boardsQuery.error,
+      boardsQuery.isLoading,
+      lastRefreshAt,
+      queueCounts,
       taskMutations.pendingAction,
     ],
   )
 
   const taskCollection = useMemo(
     () => ({
-      canGoLastPage: taskCollectionState.lastOffset !== null && taskCollectionState.lastOffset !== taskCollectionState.page.offset,
-      columns: taskCollectionState.columns,
-      debouncedSearch: taskCollectionState.debouncedSearch,
-      groupedTasks: taskCollectionState.groupedTasks,
-      hasNextPage: taskCollectionState.hasNext,
-      hasPreviousPage: taskCollectionState.hasPrevious,
-      listSort: taskCollectionState.listSort,
-      page: taskCollectionState.page,
-      planFilters: taskCollectionState.planFilters,
-      priorityFilters: taskCollectionState.priorityFilters,
-      rowsPerPage: taskCollectionState.rowsPerPage,
-      search: taskCollectionState.search,
-      searchMeta: taskCollectionState.searchMeta,
-      showArchived: taskCollectionState.showArchived,
-      statusFilter: taskCollectionState.statusFilter,
-      tasks: taskCollectionState.tasks,
-      tasksRefreshing: taskCollectionState.enabled && taskCollectionState.tasksQuery.isFetching,
+      canGoLastPage: lastOffset !== null && lastOffset !== page.offset,
+      columns,
+      debouncedSearch,
+      groupedTasks,
+      hasNextPage: hasNext,
+      hasPreviousPage: hasPrevious,
+      listSort,
+      page,
+      planFilters,
+      priorityFilters,
+      rowsPerPage,
+      search,
+      searchMeta,
+      showArchived,
+      statusFilter,
+      tasks,
+      tasksRefreshing: taskCollectionEnabled && tasksQuery.isFetching,
     }),
-    [taskCollectionState],
+    [
+      columns,
+      debouncedSearch,
+      groupedTasks,
+      hasNext,
+      hasPrevious,
+      lastOffset,
+      listSort,
+      page,
+      planFilters,
+      priorityFilters,
+      rowsPerPage,
+      search,
+      searchMeta,
+      showArchived,
+      statusFilter,
+      taskCollectionEnabled,
+      tasks,
+      tasksQuery.isFetching,
+    ],
   )
 
   const taskDetail = useMemo(
     () => ({
-      activeRun: taskDetailState.activeRun,
-      blockReason: taskDetailState.blockReason,
-      claimToken: taskDetailState.claimToken,
-      commentBody: taskDetailState.commentBody,
-      dependencyInput: taskDetailState.dependencyInput,
-      dependencySnapshot: taskDetailState.dependencySnapshot,
-      detail: taskDetailState.detail,
-      detailLoading: taskDetailState.detailLoading,
-      draftDirty: taskDetailState.draftState?.dirty ?? false,
-      editDraft: taskDetailState.draftState?.draft ?? null,
-      labelSuggestions: taskDetailState.labelSuggestionsQuery.data ?? null,
-      labelSuggestionsError: taskDetailState.labelSuggestionsQuery.error
-        ? errorMessage(taskDetailState.labelSuggestionsQuery.error)
+      activeRun,
+      blockReason,
+      claimToken,
+      commentBody,
+      dependencyInput,
+      dependencySnapshot,
+      detail,
+      detailLoading,
+      draftDirty: draftState?.dirty ?? false,
+      editDraft: draftState?.draft ?? null,
+      labelSuggestions: labelSuggestionsQuery.data ?? null,
+      labelSuggestionsError: labelSuggestionsQuery.error
+        ? errorMessage(labelSuggestionsQuery.error)
         : null,
-      labelSuggestionsLoading: taskDetailState.labelSuggestionsQuery.isFetching,
-      labelSuggestionsRequested: taskDetailState.labelSuggestionsRequested,
-      selectedId: taskDetailState.selectedId,
-      selectedTask: taskDetailState.selectedTask,
-      taskCommentsExpanded: taskDetailState.taskCommentsExpanded,
-      taskDependenciesExpanded: taskDetailState.taskDependenciesExpanded,
-      taskEventsExpanded: taskDetailState.taskEventsExpanded,
-      taskGraphExpanded: taskDetailState.taskGraphExpanded,
-      taskRunsExpanded: taskDetailState.taskRunsExpanded,
-      taskStepsExpanded: taskDetailState.taskStepsExpanded,
+      labelSuggestionsLoading: labelSuggestionsQuery.isFetching,
+      labelSuggestionsRequested,
+      selectedId,
+      selectedTask,
+      taskCommentsExpanded,
+      taskDependenciesExpanded,
+      taskEventsExpanded,
+      taskGraphExpanded,
+      taskRunsExpanded,
+      taskStepsExpanded,
     }),
-    [taskDetailState],
+    [
+      activeRun,
+      blockReason,
+      claimToken,
+      commentBody,
+      dependencyInput,
+      dependencySnapshot,
+      detail,
+      detailLoading,
+      draftState,
+      labelSuggestionsQuery.data,
+      labelSuggestionsQuery.error,
+      labelSuggestionsQuery.isFetching,
+      labelSuggestionsRequested,
+      selectedId,
+      selectedTask,
+      taskCommentsExpanded,
+      taskDependenciesExpanded,
+      taskEventsExpanded,
+      taskGraphExpanded,
+      taskRunsExpanded,
+      taskStepsExpanded,
+    ],
+  )
+
+  const changeBoard = useCallback((board: string) => void switchBoard(board), [switchBoard])
+  const closeTaskDetail = useCallback(() => setSelectedId(null), [setSelectedId])
+  const firstPage = useCallback(() => setPageOffset(0), [setPageOffset])
+  const lastPage = useCallback(() => setPageOffset(lastOffset ?? pageOffset), [lastOffset, pageOffset, setPageOffset])
+  const nextPage = useCallback(() => setPageOffset((current) => current + rowsPerPage), [rowsPerPage, setPageOffset])
+  const previousPage = useCallback(
+    () => setPageOffset((current) => Math.max(0, current - rowsPerPage)),
+    [rowsPerPage, setPageOffset],
+  )
+  const refreshTasks = useCallback(() => {
+    const refreshes: Promise<unknown>[] = [statsQuery.refetch()]
+    if (taskCollectionEnabled) refreshes.push(tasksQuery.refetch())
+    void Promise.all(refreshes)
+  }, [statsQuery, taskCollectionEnabled, tasksQuery])
+  const resetListFilters = useCallback(() => {
+    setStatusFilter("all")
+    setPriorityFilters([])
+    setPlanFilters([])
+    setPageOffset(0)
+  }, [setPageOffset, setPlanFilters, setPriorityFilters, setStatusFilter])
+  const requestLabelSuggestionsCommand = useCallback(() => void requestLabelSuggestions(), [requestLabelSuggestions])
+  const setRowsPerPageCommand = useCallback(
+    (value: number) => {
+      setRowsPerPage(value)
+      setPageOffset(0)
+    },
+    [setPageOffset, setRowsPerPage],
   )
 
   const commands = useMemo(
@@ -312,82 +478,94 @@ function App() {
       addComment: taskMutations.addComment,
       addDependency: taskMutations.addDependency,
       cancelTaskEdit: taskMutations.cancelTaskEdit,
-      changeBoard: (board: string) => void switchBoard(board),
+      changeBoard,
       changeThemeMode: runtimeState.setThemeMode,
-      closeTaskDetail: () => taskDetailState.setSelectedId(null),
+      closeTaskDetail,
       createTask: taskMutations.createTask,
       cycleThemeMode: runtimeState.cycleThemeMode,
-      dropTask: (taskId: string, status: TaskStatus) => dropTask(taskId, status),
-      firstPage: () => taskCollectionState.setPageOffset(0),
-      lastPage: () => taskCollectionState.setPageOffset(taskCollectionState.lastOffset ?? taskCollectionState.pageOffset),
-      nextPage: () => taskCollectionState.setPageOffset((current) => current + taskCollectionState.rowsPerPage),
-      previousPage: () =>
-        taskCollectionState.setPageOffset((current) => Math.max(0, current - taskCollectionState.rowsPerPage)),
-      refreshTasks: () => {
-        const refreshes: Promise<unknown>[] = [taskCollectionState.statsQuery.refetch()]
-        if (taskCollectionState.enabled) refreshes.push(taskCollectionState.tasksQuery.refetch())
-        void Promise.all(refreshes)
-      },
+      dropTask,
+      firstPage,
+      lastPage,
+      nextPage,
+      previousPage,
+      refreshTasks,
       removeDependency: taskMutations.removeDependency,
-      requestLabelSuggestions: () => void requestLabelSuggestions(),
-      resetListFilters: () => {
-        taskCollectionState.setStatusFilter("all")
-        taskCollectionState.setPriorityFilters([])
-        taskCollectionState.setPlanFilters([])
-        taskCollectionState.setPageOffset(0)
-      },
+      requestLabelSuggestions: requestLabelSuggestionsCommand,
+      resetListFilters,
       saveTask: taskMutations.saveTask,
-      selectTask: taskDetailState.setSelectedId,
-      setBlockReason: taskDetailState.setBlockReason,
-      setCommentBody: taskDetailState.setCommentBody,
-      setDependencyInput: taskDetailState.setDependencyInput,
+      selectTask: setSelectedId,
+      setBlockReason,
+      setCommentBody,
+      setDependencyInput,
       setEditDraft: taskMutations.updateDraft,
-      setListSort: taskCollectionState.setListSort,
-      setPlanFilters: taskCollectionState.setPlanFilters,
-      setPriorityFilters: taskCollectionState.setPriorityFilters,
-      setRowsPerPage: (value: number) => {
-        taskCollectionState.setRowsPerPage(value)
-        taskCollectionState.setPageOffset(0)
-      },
-      setSearch: taskCollectionState.setSearch,
-      setShowArchived: taskCollectionState.setShowArchived,
+      setListSort,
+      setPlanFilters,
+      setPriorityFilters,
+      setRowsPerPage: setRowsPerPageCommand,
+      setSearch,
+      setShowArchived,
       setSidebarOpen: runtimeState.setSidebarOpen,
-      setStatusFilter: taskCollectionState.setStatusFilter,
-      setTaskCommentsExpanded: taskDetailState.setTaskCommentsExpanded,
-      setTaskCreationDescription: creationDialogState.setDescription,
-      setTaskCreationFirstStepTitle: creationDialogState.setFirstStepTitle,
-      setTaskCreationOpen: creationDialogState.setOpen,
-      setTaskCreationTitle: creationDialogState.setTitle,
-      setTaskDependenciesExpanded: taskDetailState.setTaskDependenciesExpanded,
-      setTaskEventsExpanded: taskDetailState.setTaskEventsExpanded,
-      setTaskGraphExpanded: taskDetailState.setTaskGraphExpanded,
-      setTaskRunsExpanded: taskDetailState.setTaskRunsExpanded,
-      setTaskStepsExpanded: taskDetailState.setTaskStepsExpanded,
+      setStatusFilter,
+      setTaskCommentsExpanded,
+      setTaskCreationDescription,
+      setTaskCreationFirstStepTitle,
+      setTaskCreationOpen,
+      setTaskCreationTitle,
+      setTaskDependenciesExpanded,
+      setTaskEventsExpanded,
+      setTaskGraphExpanded,
+      setTaskRunsExpanded,
+      setTaskStepsExpanded,
       setView,
       runAction: taskMutations.runAction,
     }),
     [
-      creationDialogState,
+      changeBoard,
+      closeTaskDetail,
       dropTask,
-      requestLabelSuggestions,
+      firstPage,
+      lastPage,
+      nextPage,
+      previousPage,
+      refreshTasks,
+      requestLabelSuggestionsCommand,
+      resetListFilters,
       runtimeState.cycleThemeMode,
       runtimeState.setSidebarOpen,
       runtimeState.setThemeMode,
-      switchBoard,
-      taskCollectionState,
-      taskDetailState,
+      setBlockReason,
+      setCommentBody,
+      setDependencyInput,
+      setListSort,
+      setPlanFilters,
+      setPriorityFilters,
+      setRowsPerPageCommand,
+      setSearch,
+      setSelectedId,
+      setShowArchived,
+      setStatusFilter,
+      setTaskCommentsExpanded,
+      setTaskCreationDescription,
+      setTaskCreationFirstStepTitle,
+      setTaskCreationOpen,
+      setTaskCreationTitle,
+      setTaskDependenciesExpanded,
+      setTaskEventsExpanded,
+      setTaskGraphExpanded,
+      setTaskRunsExpanded,
+      setTaskStepsExpanded,
       taskMutations,
     ],
   )
 
   const taskCreation = useMemo(
     () => ({
-      description: creationDialogState.description,
-      firstStepTitle: creationDialogState.firstStepTitle,
-      open: creationDialogState.open,
-      title: creationDialogState.title,
+      description: newDescription,
+      firstStepTitle: newFirstStepTitle,
+      open: taskCreationOpen,
+      title: newTitle,
     }),
-    [creationDialogState.description, creationDialogState.firstStepTitle, creationDialogState.open, creationDialogState.title],
+    [newDescription, newFirstStepTitle, newTitle, taskCreationOpen],
   )
 
   return (

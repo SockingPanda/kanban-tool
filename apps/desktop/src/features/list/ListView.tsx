@@ -7,7 +7,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table"
 import { ArrowDown, ArrowUp, CalendarClock, ChevronsLeft, ChevronsRight, Eye, MoreHorizontal, Rows3, X } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -115,6 +115,24 @@ export function ListView({
 }) {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(defaultListColumnVisibility)
+  const selectTaskRef = useRef(onSelectTask)
+  selectTaskRef.current = onSelectTask
+
+  useEffect(() => {
+    const taskIds = new Set(tasks.map((task) => task.id))
+    setRowSelection((current) => {
+      let changed = false
+      const next: RowSelectionState = {}
+      for (const [taskId, selected] of Object.entries(current)) {
+        if (!taskIds.has(taskId)) {
+          changed = true
+          continue
+        }
+        next[taskId] = selected
+      }
+      return changed ? next : current
+    })
+  }, [tasks])
 
   const columns = useMemo<ColumnDef<Task>[]>(
     () => [
@@ -162,7 +180,7 @@ export function ListView({
               type="button"
               variant="ghost"
               className="h-auto max-w-full justify-start truncate px-0 py-0 text-left font-medium text-foreground underline-offset-2 hover:bg-transparent hover:underline"
-              onClick={() => onSelectTask(row.original.id)}
+              onClick={() => selectTaskRef.current(row.original.id)}
             >
               {row.original.title}
             </Button>
@@ -263,7 +281,7 @@ export function ListView({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => onSelectTask(row.original.id)}>
+              <DropdownMenuItem onSelect={() => selectTaskRef.current(row.original.id)}>
                 <Eye className="h-4 w-4" />
                 Open detail
               </DropdownMenuItem>
@@ -272,7 +290,7 @@ export function ListView({
         ),
       },
     ],
-    [listSort, onListSortChange, onSelectTask],
+    [listSort, onListSortChange],
   )
 
   const table = useReactTable({

@@ -65,7 +65,7 @@ describe("task explorer chrome", () => {
     const collection = source("app/useTaskCollectionState.ts")
     const app = source("App.tsx")
     const taskQuery = collection.slice(collection.indexOf("const tasksQuery = useBoardTasks"), collection.indexOf("const taskData ="))
-    const resetListFilters = app.slice(app.indexOf("resetListFilters: () =>"), app.indexOf("saveTask: taskMutations.saveTask"))
+    const resetListFilters = app.slice(app.indexOf("const resetListFilters = useCallback"), app.indexOf("const requestLabelSuggestionsCommand"))
 
     expect(collection).toContain("const enabled = shouldLoadTaskCollection(view)")
     expect(taskQuery).toContain("enabled,")
@@ -76,6 +76,18 @@ describe("task explorer chrome", () => {
     expect(resetListFilters).toContain('setStatusFilter("all")')
     expect(resetListFilters).toContain("setPriorityFilters([])")
     expect(resetListFilters).toContain("setPageOffset(0)")
+  })
+
+  it("prunes stale List row selection when task rows change", () => {
+    const list = source("features/list/ListView.tsx")
+
+    expect(list).toContain("const selectTaskRef = useRef(onSelectTask)")
+    expect(list).toContain("const taskIds = new Set(tasks.map((task) => task.id))")
+    expect(list).toContain("setRowSelection((current) => {")
+    expect(list).toContain("if (!taskIds.has(taskId))")
+    expect(list).toContain("return changed ? next : current")
+    expect(list).toContain("[listSort, onListSortChange]")
+    expect(list).not.toContain("[listSort, onListSortChange, onSelectTask]")
   })
 
   it("memoizes the disabled task collection fallback page identity", () => {

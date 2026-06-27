@@ -16,9 +16,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
+import { MetricStrip, SectionCard } from "@/components/ui/composites"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
+import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { BoardStats, CheckpointReport, DoctorDerivedStore, DoctorReport, KanbanApi, SearchIndexStatus, StaleClaim } from "@/lib/api"
@@ -97,17 +98,7 @@ export function MaintenanceView({ api }: { api: KanbanApi | null }) {
 }
 
 function Panel({ title, icon: Icon, children }: { title: string; icon: ElementType; children: ReactNode }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-muted-foreground" />
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
-  )
+  return <SectionCard title={title} icon={Icon}>{children}</SectionCard>
 }
 
 function StatsGrid({ stats }: { stats?: BoardStats }) {
@@ -115,15 +106,21 @@ function StatsGrid({ stats }: { stats?: BoardStats }) {
   return (
     <div className="space-y-4 text-sm">
       <div className="grid grid-cols-2 gap-2">
-        <Metric label="board" value={stats.board_id} />
-        <Metric label="generated" value={String(stats.generated_at)} />
+        <MetricStrip
+          className="contents"
+          items={[
+            { label: "board", value: stats.board_id },
+            { label: "generated", value: String(stats.generated_at) },
+          ]}
+        />
       </div>
       <div>
         <Subheading>Status counts</Subheading>
         <div className="grid grid-cols-3 gap-2">
-          {stats.status_counts.map((entry) => (
-            <Metric key={entry.status} label={entry.status} value={String(entry.count)} />
-          ))}
+          <MetricStrip
+            className="contents"
+            items={stats.status_counts.map((entry) => ({ label: entry.status, value: String(entry.count) }))}
+          />
           {stats.status_counts.length === 0 ? <EmptyText>No status counts returned.</EmptyText> : null}
         </div>
       </div>
@@ -188,9 +185,10 @@ function DoctorReportView({ report }: { report: DoctorReport }) {
     <div className="mt-3 space-y-3 text-sm">
       <Badge variant={report.ok ? "ready" : "blocked"}>{report.ok ? "ok" : "findings"}</Badge>
       <div className="grid grid-cols-2 gap-2">
-        {findings.map(([label, value]) => (
-          <Metric key={label} label={label} value={String(value)} />
-        ))}
+        <MetricStrip
+          className="contents"
+          items={findings.map(([label, value]) => ({ label, value: String(value) }))}
+        />
       </div>
       <div>
         <Subheading>Derived stores</Subheading>
@@ -256,17 +254,6 @@ function CheckpointResultView({ result }: { result: CheckpointReport }) {
       <InfoRow label="log frames" value={String(result.log_frames)} />
       <InfoRow label="checkpointed frames" value={String(result.checkpointed_frames)} />
     </div>
-  )
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <Item className="border-border bg-card p-2">
-      <ItemContent>
-        <ItemDescription>{label}</ItemDescription>
-        <ItemTitle>{value}</ItemTitle>
-      </ItemContent>
-    </Item>
   )
 }
 

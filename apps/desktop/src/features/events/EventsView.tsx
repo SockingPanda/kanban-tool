@@ -3,6 +3,7 @@ import { CircleDot, RefreshCcw } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { PageToolbar } from "@/components/ui/composites"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -23,13 +24,12 @@ export function EventsView({ api }: { api: KanbanApi | null }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
-      <div className="flex h-10 items-center justify-between border-b border-border px-4 text-sm">
-        <span className="font-medium">Board events</span>
+      <PageToolbar title="Board events" className="py-2" meta={
         <Button variant="ghost" size="sm" disabled={eventsQuery.isFetching} onClick={() => void eventsQuery.refetch()}>
           <RefreshCcw className="h-4 w-4" />
           Refresh
         </Button>
-      </div>
+      } />
       <ScrollArea className="flex-1 p-4">
         {events.length ? (
           <div className="space-y-2">

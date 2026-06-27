@@ -1331,12 +1331,15 @@ ontology provenance action 引用其 id 或 content hash 时返回 `200` 且
 调用方应使用结构化字段判断 dirty/error，而不要解析 `message` 文案。
 同一 `VectorStoreStatus` shape 也用于 `/api/v1/vector/status`。
 
-`POST /api/v1/boards/{board}/labels/atom-index/rebuild` 用已配置 vector store 重建
-派生的 `lancedb_label_atoms`。`GET /api/v1/boards/{board}/labels/atom-index/query`
-查询该派生索引，`q` 必填，`polarity` 可选且只接受 `positive` / `negative`，
-`limit` 默认 24；hit 中的 `distance` 是 LanceDB `_distance`，不是 solver
-similarity score。未配置 provider、adapter/feature 不可用或 vector store 不可用时，rebuild/query
-返回显式 API error，不修改 SQLite truth。
+`POST /api/v1/boards/{board}/labels/atom-index/rebuild` 在当前 server helper adapter
+下不可用，返回 `400 invalid_input`；server 不调用 helper `status`，也不把 helper
+缺失或 malformed output fallback 成 `200` degraded success。真实 rebuild 仍应走 CLI/helper
+重建路径，或由后续 #330/相关任务补齐 server adapter support。
+`GET /api/v1/boards/{board}/labels/atom-index/query` 查询派生的 `lancedb_label_atoms`
+索引，`q` 必填，`polarity` 可选且只接受 `positive` / `negative`，`limit` 默认 24；
+hit 中的 `distance` 是 LanceDB `_distance`，不是 solver similarity score。未配置
+provider、adapter/feature 不可用或 vector store 不可用时，query 返回显式 API error，
+不修改 SQLite truth。
 
 ### 12.2 Task label suggestions
 

@@ -8,21 +8,14 @@ import { affectedQueriesForEvents, nextEventCursor, queryKeysForAffectedEvents }
 export function useEventPoller({
   api,
   enabled,
-  selectedTaskId,
   onError,
 }: {
   api: KanbanApi | null
   enabled: boolean
-  selectedTaskId: string | null
   onError: (error: unknown) => void
 }) {
   const queryClient = useQueryClient()
   const cursorRef = useRef(0)
-  const selectedTaskIdRef = useRef(selectedTaskId)
-
-  useEffect(() => {
-    selectedTaskIdRef.current = selectedTaskId
-  }, [selectedTaskId])
 
   useEffect(() => {
     cursorRef.current = 0
@@ -47,11 +40,9 @@ export function useEventPoller({
         const queryKeysToInvalidate = queryKeysForAffectedEvents({
           affected,
           board: api.board,
-          selectedTaskId: selectedTaskIdRef.current,
         })
-        for (const queryKey of queryKeysToInvalidate) {
-          await queryClient.invalidateQueries({ queryKey })
-        }
+        const uniqueQueryKeys = Array.from(new Map(queryKeysToInvalidate.map((queryKey) => [JSON.stringify(queryKey), queryKey])).values())
+        await Promise.all(uniqueQueryKeys.map((queryKey) => queryClient.invalidateQueries({ queryKey })))
       } catch (error) {
         if (!controller.signal.aborted) onError(error)
       } finally {

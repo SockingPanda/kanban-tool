@@ -43,9 +43,10 @@ export function requestTaskLabelSuggestions(api: KanbanApi, taskId: string, sign
   return api.suggestTaskLabels(taskId, { signal })
 }
 
-export function useTaskDetail(api: KanbanApi | null, taskId: string | null) {
+export function useTaskDetail(api: KanbanApi | null, taskId: string | null, options: { enabled?: boolean } = {}) {
+  const enabled = options.enabled ?? true
   return useQuery({
-    enabled: Boolean(api && taskId),
+    enabled: Boolean(enabled && api && taskId),
     queryKey: taskId ? queryKeys.taskDetail(taskId) : ["task-detail", "none"],
     queryFn: async ({ signal }) => {
       if (!api || !taskId) throw new Error("Task detail query is not ready")

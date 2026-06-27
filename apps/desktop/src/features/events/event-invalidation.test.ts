@@ -73,7 +73,7 @@ describe("event invalidation helpers", () => {
   it("invalidates the board switcher list for board lifecycle events", () => {
     const affected = affectedQueriesForEvents([eventRecord({ task_id: null, kind: "board.created" })])
 
-    expect(queryKeysForAffectedEvents({ affected, board: "default", selectedTaskId: null })).toEqual([
+    expect(queryKeysForAffectedEvents({ affected, board: "default" })).toEqual([
       ["events", "default"],
       ["boards"],
       ["tasks", "default"],
@@ -88,21 +88,20 @@ describe("event invalidation helpers", () => {
       eventRecord({ task_id: "t_3", kind: "task.comment.created" }),
     ])
 
-    expect(queryKeysForAffectedEvents({ affected, board: "default", selectedTaskId: "t_selected" })).toEqual([
+    expect(queryKeysForAffectedEvents({ affected, board: "default" })).toEqual([
       ["events", "default"],
       ["tasks", "default"],
       ["stats", "default"],
       ["search-status", "default"],
       ["task-detail", "t_2"],
       ["task-detail", "t_3"],
-      ["task-detail", "t_selected"],
     ])
   })
 
   it("invalidates board search keys for task-scoped comment events", () => {
     const affected = affectedQueriesForEvents([eventRecord({ task_id: "t_2", kind: "task.comment.created" })])
 
-    expect(queryKeysForAffectedEvents({ affected, board: "default", selectedTaskId: "t_2" })).toEqual([
+    expect(queryKeysForAffectedEvents({ affected, board: "default" })).toEqual([
       ["events", "default"],
       ["tasks", "default"],
       ["stats", "default"],

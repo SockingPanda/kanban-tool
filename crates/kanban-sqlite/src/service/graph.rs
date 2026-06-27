@@ -2,19 +2,19 @@
 use rusqlite::params;
 use rusqlite::{Connection, OptionalExtension, Row};
 
+#[cfg(feature = "vector-lancedb")]
+use super::vector_store_path;
 use super::{
     DerivedStoreStatusRecord, MAX_TASK_LIST_LIMIT, TaskRecord, derived_store_status_from_row,
-    storage, validate_page_bounds, vector_store_status,
+    storage, validate_page_bounds,
 };
 #[cfg(feature = "graph-oxigraph")]
 use super::{
     IndexOutboxRecord, board_id, current_last_event_id, mark_derived_store_failure,
     mark_derived_store_success, outbox_from_row, search_lag,
 };
-#[cfg(feature = "vector-lancedb")]
 use super::{
-    push_context_diagnostic, push_degraded_marker, vector_storage, vector_store_path,
-    vector_store_status_with_conn,
+    push_context_diagnostic, push_degraded_marker, vector_storage, vector_store_status_with_conn,
 };
 
 use std::path::Path;
@@ -37,13 +37,11 @@ use kanban_graph::RelationGraph;
 use kanban_graph_oxigraph::OxigraphStore;
 #[cfg(feature = "graph-oxigraph")]
 use kanban_indexer::OXIGRAPH_RELATIONS_STORE;
-use kanban_vector::{ChunkVectorStore, VectorStoreStatus};
-#[cfg(feature = "vector-lancedb")]
+use kanban_vector::{ChunkVectorStore, VectorStoreBackend, VectorStoreStatus};
 use kanban_vector::{VectorHit, VectorQuery};
 #[cfg(feature = "vector-lancedb")]
 use kanban_vector_lancedb::{LanceDbConfig, LanceDbStore};
 
-#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
 use crate::connect_file;
 
 #[cfg(feature = "graph-oxigraph")]
@@ -106,7 +104,6 @@ pub(crate) fn context_graph_items(
     Ok(Vec::new())
 }
 
-#[cfg(feature = "vector-lancedb")]
 pub(crate) fn context_vector_items(
     path: &Path,
     task: &TaskRecord,
@@ -117,14 +114,8 @@ pub(crate) fn context_vector_items(
     if !status.enabled || limit == 0 {
         return Ok(Vec::new());
     }
-    let owned_store;
-    let store = match store {
-        Some(store) => store,
-        None => {
-            owned_store = LanceDbStore::connect(LanceDbConfig::degraded(vector_store_path(path)))
-                .map_err(vector_storage)?;
-            &owned_store
-        }
+    let Some(store) = store else {
+        return Ok(Vec::new());
     };
     let hits = store
         .query(&VectorQuery {
@@ -135,55 +126,29 @@ pub(crate) fn context_vector_items(
     vector_hits_to_context_items(path, hits)
 }
 
-#[cfg(not(feature = "vector-lancedb"))]
-pub(crate) fn context_vector_items(
-    _path: &Path,
-    _task: &TaskRecord,
-    _status: &VectorStoreStatus,
-    _limit: usize,
-    _store: Option<&dyn ChunkVectorStore>,
-) -> Result<Vec<ContextItem>> {
-    Ok(Vec::new())
-}
-
-#[cfg(feature = "vector-lancedb")]
 pub(crate) fn context_vector_status(
-    path: &Path,
+    _path: &Path,
     conn: &Connection,
     board_id: &str,
-    board: &str,
+    _board: &str,
     store: Option<&dyn ChunkVectorStore>,
     degraded: &mut Vec<String>,
     diagnostics: &mut Vec<ContextDiagnostic>,
 ) -> VectorStoreStatus {
     let status = match store {
         Some(store) => vector_store_status_with_conn(conn, board_id, store),
-        None => vector_store_status(path, board),
+        None => Ok(kanban_vector::DisabledVectorStore.status()),
     };
     match status {
         Ok(status) => status,
         Err(error) => {
             push_degraded_marker(degraded, "vector_error");
             push_context_diagnostic(diagnostics, "vector", "vector_error", &error);
-            VectorStoreStatus::new("lancedb", true, error.to_string())
+            VectorStoreStatus::new("helper-missing", false, error.to_string())
         }
     }
 }
 
-#[cfg(not(feature = "vector-lancedb"))]
-pub(crate) fn context_vector_status(
-    path: &Path,
-    _conn: &Connection,
-    _board_id: &str,
-    board: &str,
-    _store: Option<&dyn ChunkVectorStore>,
-    _degraded: &mut Vec<String>,
-    _diagnostics: &mut Vec<ContextDiagnostic>,
-) -> VectorStoreStatus {
-    vector_store_status(path, board).expect("disabled vector status is infallible")
-}
-
-#[cfg(feature = "vector-lancedb")]
 fn vector_hits_to_context_items(path: &Path, hits: Vec<VectorHit>) -> Result<Vec<ContextItem>> {
     let conn = connect_file(path)?;
     Ok(hits
@@ -204,7 +169,6 @@ fn vector_hits_to_context_items(path: &Path, hits: Vec<VectorHit>) -> Result<Vec
         .collect())
 }
 
-#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
 fn entity_title(conn: &Connection, uri: &str) -> Result<Option<String>> {
     conn.query_row("SELECT title FROM entities WHERE uri=?1", [uri], |row| {
         row.get(0)
@@ -213,7 +177,6 @@ fn entity_title(conn: &Connection, uri: &str) -> Result<Option<String>> {
     .map_err(storage)
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn task_context_text(task: &TaskRecord) -> String {
     match task.description.as_deref().map(str::trim) {
         Some(description) if !description.is_empty() => {

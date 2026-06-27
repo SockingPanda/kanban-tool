@@ -39,6 +39,10 @@ export function graphNodeStatusMiniMapColor(status: TaskStatus | undefined) {
   return miniMapStatusColors[status]
 }
 
+export function graphNodeStepProgressClass() {
+  return "bg-lime-200/70 dark:bg-lime-800/35"
+}
+
 export function graphEdgeClass(kind: TaskGraphEdgeKind, blocking?: boolean) {
   if (kind === "step") return "stroke-violet-500"
   return blocking ? "stroke-red-500" : "stroke-emerald-500"

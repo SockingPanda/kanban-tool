@@ -123,6 +123,7 @@ function App() {
       await taskMutations.runAction(() => executeDragTransition(api, task, plan), {
         label: "transition",
         fallbackTaskId: task.id,
+        invalidate: "board-and-task",
       })
     },
     [api, taskMutations],
@@ -201,7 +202,7 @@ function App() {
           }).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
         )
         return reset.config
-      }, { label: "board", fallbackTaskId: taskDetailState.selectedId })
+      }, { label: "board", fallbackTaskId: taskDetailState.selectedId, invalidate: "none" })
     },
     [
       config,

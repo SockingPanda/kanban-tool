@@ -20,8 +20,8 @@ describe("label suggestions", () => {
     const api: Pick<KanbanApi, "addTaskLabel"> = {
       addTaskLabel: vi.fn(async () => updatedTask),
     }
-    const onAction = vi.fn(async (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null }) => {
-      expect(options).toEqual({ fallbackTaskId: task.id, label: "label" })
+    const onAction = vi.fn(async (action: () => Promise<unknown>, options?: { label?: string; fallbackTaskId?: string | null; invalidate?: string }) => {
+      expect(options).toEqual({ fallbackTaskId: task.id, label: "label", invalidate: "task" })
       return action()
     })
 

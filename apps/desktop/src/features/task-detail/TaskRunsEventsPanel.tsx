@@ -38,9 +38,17 @@ export function TaskRunsPanel({
   )
 }
 
-export function TaskEventsPanel({ events }: { events: DetailState["events"] }) {
+export function TaskEventsPanel({
+  events,
+  open,
+  onOpenChange,
+}: {
+  events: DetailState["events"]
+  open: boolean
+  onOpenChange: (value: boolean) => void
+}) {
   return (
-    <Collapsible>
+    <Collapsible open={open} onOpenChange={onOpenChange}>
       <Section title="Events">
         <CollapsibleTrigger asChild>
           <Button variant="outline" size="sm" className="mb-3">

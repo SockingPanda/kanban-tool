@@ -10,6 +10,30 @@ export type TaskDetailData = {
   detail: DetailState
 }
 
+export type TaskDetailQueryOptions = {
+  enabled?: boolean
+  dependenciesEnabled?: boolean
+  neighborhoodEnabled?: boolean
+  stepsEnabled?: boolean
+  runsEnabled?: boolean
+  eventsEnabled?: boolean
+  commentsEnabled?: boolean
+  runLogEnabled?: boolean
+}
+
+export function resolveTaskDetailQueryEnablement(options: TaskDetailQueryOptions = {}) {
+  return {
+    task: options.enabled ?? true,
+    dependencies: Boolean(options.dependenciesEnabled),
+    neighborhood: Boolean(options.neighborhoodEnabled),
+    steps: Boolean(options.stepsEnabled),
+    runs: Boolean(options.runsEnabled),
+    events: Boolean(options.eventsEnabled),
+    comments: Boolean(options.commentsEnabled),
+    runLog: Boolean(options.runLogEnabled),
+  }
+}
+
 export async function fetchTaskDetail(api: KanbanApi, taskId: string, signal?: AbortSignal) {
   const [task, dependencies, neighborhood, steps, runs, eventsPage, comments] = await Promise.all([
     api.getTask(taskId, { signal }),
@@ -43,9 +67,10 @@ export function requestTaskLabelSuggestions(api: KanbanApi, taskId: string, sign
 export function useTaskDetail(
   api: KanbanApi | null,
   taskId: string | null,
-  options: { enabled?: boolean; runLogEnabled?: boolean } = {},
+  options: TaskDetailQueryOptions = {},
 ) {
-  const enabled = options.enabled ?? true
+  const queryEnablement = resolveTaskDetailQueryEnablement(options)
+  const enabled = queryEnablement.task
   const ready = Boolean(enabled && api && taskId)
 
   const taskQuery = useQuery({
@@ -58,7 +83,7 @@ export function useTaskDetail(
   })
 
   const dependenciesQuery = useQuery({
-    enabled: ready,
+    enabled: Boolean(ready && queryEnablement.dependencies),
     queryKey: taskId ? queryKeys.taskDependencies(taskId) : ["task-dependencies", "none"],
     queryFn: ({ signal }) => {
       if (!api || !taskId) throw new Error("Task dependencies query is not ready")
@@ -67,7 +92,7 @@ export function useTaskDetail(
   })
 
   const neighborhoodQuery = useQuery({
-    enabled: ready,
+    enabled: Boolean(ready && queryEnablement.neighborhood),
     queryKey: taskId ? queryKeys.taskNeighborhood(taskId) : ["task-neighborhood", "none"],
     queryFn: ({ signal }) => {
       if (!api || !taskId) throw new Error("Task neighborhood query is not ready")
@@ -76,7 +101,7 @@ export function useTaskDetail(
   })
 
   const stepsQuery = useQuery({
-    enabled: ready,
+    enabled: Boolean(ready && queryEnablement.steps),
     queryKey: taskId ? queryKeys.taskSteps(taskId) : ["task-steps", "none"],
     queryFn: ({ signal }) => {
       if (!api || !taskId) throw new Error("Task steps query is not ready")
@@ -85,7 +110,7 @@ export function useTaskDetail(
   })
 
   const runsQuery = useQuery({
-    enabled: ready,
+    enabled: Boolean(ready && queryEnablement.runs),
     queryKey: taskId ? queryKeys.taskRuns(taskId) : ["task-runs", "none"],
     queryFn: ({ signal }) => {
       if (!api || !taskId) throw new Error("Task runs query is not ready")
@@ -94,7 +119,7 @@ export function useTaskDetail(
   })
 
   const eventsQuery = useQuery({
-    enabled: ready,
+    enabled: Boolean(ready && queryEnablement.events),
     queryKey: taskId ? queryKeys.taskEvents(taskId) : ["task-events", "none"],
     queryFn: async ({ signal }) => {
       if (!api || !taskId) throw new Error("Task events query is not ready")
@@ -104,7 +129,7 @@ export function useTaskDetail(
   })
 
   const commentsQuery = useQuery({
-    enabled: ready,
+    enabled: Boolean(ready && queryEnablement.comments),
     queryKey: taskId ? queryKeys.taskComments(taskId) : ["task-comments", "none"],
     queryFn: ({ signal }) => {
       if (!api || !taskId) throw new Error("Task comments query is not ready")
@@ -114,7 +139,7 @@ export function useTaskDetail(
 
   const runWithLog = runsQuery.data?.find((run) => Boolean(run.log_path)) ?? null
   const runLogQuery = useQuery({
-    enabled: Boolean(ready && options.runLogEnabled && runWithLog),
+    enabled: Boolean(ready && queryEnablement.runLog && runWithLog),
     queryKey: runWithLog ? queryKeys.taskRunLog(runWithLog.id) : ["task-run-log", "none"],
     queryFn: ({ signal }) => {
       if (!api || !runWithLog) throw new Error("Task run log query is not ready")

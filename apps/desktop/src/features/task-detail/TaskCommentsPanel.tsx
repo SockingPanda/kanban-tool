@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react"
 import { ChevronDown, MessageSquare } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -14,7 +15,6 @@ import { cn, formatRelativeTime } from "@/lib/utils"
 
 import { commentPageState, type CommentSortOrder } from "./comment-list-state"
 import { MarkdownDescription } from "./markdown"
-import { Section } from "./task-detail-shared"
 
 const commentSortOptions: MenuSelectOption<CommentSortOrder>[] = [
   { value: "newest", label: "Newest first" },
@@ -41,52 +41,50 @@ export function TaskCommentsPanel({
   onAddComment: () => Promise<void>
 }) {
   return (
-    <Section title="Discussion">
-      <div className="space-y-3">
-        {commentsPage.total ? (
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-xs text-muted-foreground">
-              {commentsPage.total} comment{commentsPage.total === 1 ? "" : "s"}
-            </div>
-            <MenuSelect
-              ariaLabel="Comment sort order"
-              options={commentSortOptions}
-              value={commentSortOrder}
-              onValueChange={(value) => {
-                setCommentSortOrder(value)
-                setCommentPage(0)
-              }}
-              triggerClassName="h-8 w-36"
-            />
+    <div className="space-y-3">
+      {commentsPage.total ? (
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs text-muted-foreground">
+            {commentsPage.total} comment{commentsPage.total === 1 ? "" : "s"}
           </div>
-        ) : null}
-        <CommentRows commentsPage={commentsPage} />
-        {commentsPage.pageCount > 1 ? <CommentPager commentsPage={commentsPage} setCommentPage={setCommentPage} /> : null}
-        <Field>
-          <FieldLabel>Comment body</FieldLabel>
-          <InputGroup>
-            <InputGroupTextarea
-              className="min-h-20 resize-y py-2"
-              aria-label="Comment body"
-              name="comment-body"
-              autoComplete="off"
-              value={commentBody}
-              onChange={(event) => setCommentBody(event.target.value)}
-              placeholder="Add handoff note"
-            />
-            <InputGroupButton
-              className="h-auto self-stretch"
-              variant="outline"
-              aria-label="Add comment"
-              disabled={!commentBody.trim() || pendingAction === "comment"}
-              onClick={() => void onAddComment()}
-            >
-              <MessageSquare className="h-4 w-4" />
-            </InputGroupButton>
-          </InputGroup>
-        </Field>
-      </div>
-    </Section>
+          <MenuSelect
+            ariaLabel="Comment sort order"
+            options={commentSortOptions}
+            value={commentSortOrder}
+            onValueChange={(value) => {
+              setCommentSortOrder(value)
+              setCommentPage(0)
+            }}
+            triggerClassName="h-8 w-36"
+          />
+        </div>
+      ) : null}
+      <CommentRows commentsPage={commentsPage} />
+      {commentsPage.pageCount > 1 ? <CommentPager commentsPage={commentsPage} setCommentPage={setCommentPage} /> : null}
+      <Field>
+        <FieldLabel>Comment body</FieldLabel>
+        <InputGroup>
+          <InputGroupTextarea
+            className="min-h-20 resize-y py-2"
+            aria-label="Comment body"
+            name="comment-body"
+            autoComplete="off"
+            value={commentBody}
+            onChange={(event) => setCommentBody(event.target.value)}
+            placeholder="Add handoff note"
+          />
+          <InputGroupButton
+            className="h-auto self-stretch"
+            variant="outline"
+            aria-label="Add comment"
+            disabled={!commentBody.trim() || pendingAction === "comment"}
+            onClick={() => void onAddComment()}
+          >
+            <MessageSquare className="h-4 w-4" />
+          </InputGroupButton>
+        </InputGroup>
+      </Field>
+    </div>
   )
 }
 
@@ -154,8 +152,8 @@ type DecisionMetadata = {
 
 type ParsedDecision = { ok: true; metadata: DecisionMetadata } | { ok: false; error: string }
 
-export function DecisionComment({ comment }: { comment: CommentRecord }) {
-  const decision = parseDecisionMetadata(comment.metadata_json)
+export const DecisionComment = memo(function DecisionComment({ comment }: { comment: CommentRecord }) {
+  const decision = useMemo(() => parseDecisionMetadata(comment.metadata_json), [comment.metadata_json])
   if (!decision.ok) {
     return (
       <Alert className="mt-2 border-destructive/50 bg-destructive/5">
@@ -206,7 +204,7 @@ export function DecisionComment({ comment }: { comment: CommentRecord }) {
       {metadata.verification ? <DecisionField label="verification" value={metadata.verification} /> : null}
     </div>
   )
-}
+})
 
 function DecisionField({ label, value }: { label: string; value: string }) {
   return (

@@ -18,6 +18,7 @@ mod suite {
     mod retry_policy;
     mod search_sqlite;
     mod search_tantivy;
+    mod subtasks;
     mod tasks;
     mod transaction_guards;
     mod transitions;

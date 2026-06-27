@@ -3,6 +3,18 @@ mod common;
 use anyhow::Context;
 use common::{TempDb, kanban};
 use pretty_assertions::assert_eq;
+use std::path::Path;
+
+fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
+    kanban_sqlite::mark_execution_plan_not_required(
+        db_path,
+        "default",
+        "cli-dispatch-test",
+        task_id,
+        "dispatch test task does not need subtasks",
+    )?;
+    Ok(())
+}
 #[test]
 fn dispatch_profile_routes_assignees() -> anyhow::Result<()> {
     let temp =
@@ -36,6 +48,19 @@ fn dispatch_profile_routes_assignees() -> anyhow::Result<()> {
         ],
     )?
     .success_json()?;
+    mark_no_plan_required(
+        &temp.path,
+        backend["data"]["id"]
+            .as_str()
+            .context("expected JSON string")?,
+    )?;
+    mark_no_plan_required(
+        &temp.path,
+        frontend["data"]["id"]
+            .as_str()
+            .context("expected JSON string")?,
+    )?;
+
     let config = temp.dir.join("workers.toml");
     let logs = temp.dir.join("logs");
     std::fs::write(
@@ -110,6 +135,13 @@ fn dispatch_rejects_untrusted_log_dir() -> anyhow::Result<()> {
         ],
     )?
     .success_json()?;
+    mark_no_plan_required(
+        &temp.path,
+        task["data"]["id"]
+            .as_str()
+            .context("expected JSON string")?,
+    )?;
+
     let config = temp.dir.join("workers.toml");
     let untrusted_logs = temp.dir.join("custom-logs");
     std::fs::write(
@@ -173,6 +205,7 @@ fn retry_policy_and_run_logs_support_recovery() -> anyhow::Result<()> {
         .as_str()
         .context("expected JSON string")?;
     assert_eq!(created["data"]["max_retries"], 2);
+    mark_no_plan_required(&temp.path, task_id)?;
 
     let updated = kanban(
         &temp.path,
@@ -221,9 +254,10 @@ fn retry_policy_and_run_logs_support_recovery() -> anyhow::Result<()> {
 fn run_logs_reject_suspicious_paths() -> anyhow::Result<()> {
     let temp = TempDb::new("run_log_command_rejects_suspicious_log_paths")?;
     kanban(&temp.path, &["init"])?.success()?;
-    kanban(
+    let created = kanban(
         &temp.path,
         &[
+            "--json",
             "task",
             "create",
             "suspicious log",
@@ -231,7 +265,13 @@ fn run_logs_reject_suspicious_paths() -> anyhow::Result<()> {
             "ready spec",
         ],
     )?
-    .success()?;
+    .success_json()?;
+    mark_no_plan_required(
+        &temp.path,
+        created["data"]["id"]
+            .as_str()
+            .context("expected JSON string")?,
+    )?;
     let dispatch = kanban(
         &temp.path,
         &[

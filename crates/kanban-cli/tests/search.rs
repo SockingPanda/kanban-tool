@@ -5,13 +5,26 @@ use common::{TempDb, kanban};
 use kanban_core::TaskStatus;
 use kanban_sqlite::{CreateTask, connect_file, create_task, create_task_with_labels};
 use pretty_assertions::assert_eq;
+
+fn mark_no_plan_required(db_path: &std::path::Path, task_id: &str) -> anyhow::Result<()> {
+    kanban_sqlite::mark_execution_plan_not_required(
+        db_path,
+        "default",
+        "cli-search-test",
+        task_id,
+        "search fixture does not need subtasks",
+    )?;
+    Ok(())
+}
+
 #[test]
 fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
     let temp = TempDb::new("search_command_outputs_json_and_human_hits")?;
     kanban(&temp.path, &["init"])?.success()?;
-    kanban(
+    let alpha = kanban(
         &temp.path,
         &[
+            "--json",
             "task",
             "create",
             "Alpha search surface",
@@ -21,10 +34,17 @@ fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
             "worker-a",
         ],
     )?
-    .success()?;
-    kanban(
+    .success_json()?;
+    mark_no_plan_required(
+        &temp.path,
+        alpha["data"]["id"]
+            .as_str()
+            .context("expected JSON string")?,
+    )?;
+    let beta = kanban(
         &temp.path,
         &[
+            "--json",
             "task",
             "create",
             "Beta search surface",
@@ -34,7 +54,13 @@ fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
             "worker-b",
         ],
     )?
-    .success()?;
+    .success_json()?;
+    mark_no_plan_required(
+        &temp.path,
+        beta["data"]["id"]
+            .as_str()
+            .context("expected JSON string")?,
+    )?;
 
     let json = kanban(
         &temp.path,

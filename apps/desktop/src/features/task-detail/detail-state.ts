@@ -1,7 +1,18 @@
-import type { CommentRecord, Dependencies, EventRecord, LabelSuggestionResult, Run, RunLog } from "@/lib/api"
+import type {
+  CommentRecord,
+  Dependencies,
+  EventRecord,
+  LabelSuggestionResult,
+  Run,
+  RunLog,
+  TaskNeighborhood,
+  TaskSubtasks,
+} from "@/lib/api"
 
 export type DetailState = {
   dependencies: Dependencies
+  subtasks: TaskSubtasks | null
+  neighborhood: TaskNeighborhood | null
   runs: Run[]
   events: EventRecord[]
   comments: CommentRecord[]
@@ -11,6 +22,8 @@ export type DetailState = {
 
 export const emptyDetail: DetailState = {
   dependencies: { parents: [], children: [] },
+  subtasks: null,
+  neighborhood: null,
   runs: [],
   events: [],
   comments: [],

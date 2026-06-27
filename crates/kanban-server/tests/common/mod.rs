@@ -207,6 +207,33 @@ pub async fn options_raw_for_method(
     Ok((response.status(), response.headers().clone()))
 }
 
+pub fn create_ready_task_for_test(
+    path: &std::path::Path,
+    board: &str,
+    actor: &str,
+    title: &str,
+) -> Result<kanban_sqlite::TaskRecord> {
+    let task =
+        kanban_sqlite::create_task(path, board, actor, kanban_sqlite::CreateTask::ready(title))?;
+    mark_plan_not_required_for_test(path, board, actor, &task.id)
+}
+
+pub fn mark_plan_not_required_for_test(
+    path: &std::path::Path,
+    board: &str,
+    actor: &str,
+    task_id: &str,
+) -> Result<kanban_sqlite::TaskRecord> {
+    kanban_sqlite::mark_execution_plan_not_required(
+        path,
+        board,
+        actor,
+        task_id,
+        "test fixture does not require subtasks",
+    )?;
+    kanban_sqlite::get_task(path, board, task_id).map_err(Into::into)
+}
+
 pub fn assert_task_dto_exposes_ui_fields_without_claim_token(task: &Value) {
     assert!(
         task.get("claim_token").is_none(),
@@ -223,6 +250,10 @@ pub fn assert_task_dto_exposes_ui_fields_without_claim_token(task: &Value) {
         "result_summary",
         "dependency_blocked",
         "unfinished_parent_count",
+        "execution_plan_state",
+        "required_subtask_count",
+        "completed_required_subtask_count",
+        "optional_subtask_count",
     ] {
         assert!(task.get(exposed).is_some(), "{exposed} must be exposed");
     }

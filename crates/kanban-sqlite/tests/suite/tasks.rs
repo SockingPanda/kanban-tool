@@ -23,7 +23,7 @@ fn task_crud_writes_events_and_hides_archived_by_default() -> anyhow::Result<()>
     )?;
 
     assert_eq!(task.seq, 1);
-    assert_eq!(task.status, TaskStatus::Ready);
+    assert_eq!(task.status, TaskStatus::Todo);
     assert_eq!(
         list_events(&temp.path, "default", Some(&task.id))?[0].kind,
         "task.created"
@@ -304,6 +304,7 @@ fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Resu
             statuses: vec![],
             priorities: vec![0, 2],
             labels: vec![],
+            plan_filters: vec![],
             include_archived: false,
             assignee: None,
             search: None,
@@ -329,6 +330,7 @@ fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Resu
             statuses: vec![],
             priorities: vec![],
             labels: vec![],
+            plan_filters: vec![],
             include_archived: false,
             assignee: None,
             search: None,
@@ -345,6 +347,113 @@ fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Resu
         [Some("worker-b"), Some("worker-a"), None]
     );
 
+    Ok(())
+}
+
+#[test]
+fn task_list_page_filters_execution_plan_and_subtask_progress() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_list_page_filters_execution_plan_and_subtask_progress")?;
+    init_database(&temp.path, "tester")?;
+
+    let unplanned = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("unplanned ready task"),
+    )?;
+    let not_required = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("small task without subtasks"),
+    )?;
+    mark_execution_plan_not_required(
+        &temp.path,
+        "default",
+        "tester",
+        &not_required.id,
+        "test fixture does not need steps",
+    )?;
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("planned parent task"),
+    )?;
+    let relation = create_subtask(
+        &temp.path,
+        "default",
+        "tester",
+        &parent.id,
+        CreateSubtaskInput {
+            task: CreateTask::ready("required child step"),
+            position: None,
+            required: true,
+        },
+    )?;
+
+    let plan_needed = kanban_sqlite::list_tasks_page(
+        &temp.path,
+        "default",
+        kanban_sqlite::TaskListOptions {
+            statuses: vec![],
+            priorities: vec![],
+            labels: vec![],
+            plan_filters: vec![kanban_sqlite::TaskPlanFilter::PlanNeeded],
+            include_archived: false,
+            assignee: None,
+            search: None,
+            sort: kanban_sqlite::TaskListSort::Seq,
+            limit: 100,
+            offset: 0,
+        },
+    )?;
+    assert_eq!(
+        plan_needed
+            .tasks
+            .iter()
+            .map(|task| task.id.as_str())
+            .collect::<Vec<_>>(),
+        [unplanned.id.as_str(), relation.child_task.id.as_str()]
+    );
+
+    let has_subtasks = kanban_sqlite::list_tasks_page(
+        &temp.path,
+        "default",
+        kanban_sqlite::TaskListOptions {
+            statuses: vec![],
+            priorities: vec![],
+            labels: vec![],
+            plan_filters: vec![kanban_sqlite::TaskPlanFilter::HasSubtasks],
+            include_archived: false,
+            assignee: None,
+            search: None,
+            sort: kanban_sqlite::TaskListSort::Seq,
+            limit: 100,
+            offset: 0,
+        },
+    )?;
+    assert_eq!(has_subtasks.tasks.len(), 1);
+    assert_eq!(has_subtasks.tasks[0].id, parent.id);
+
+    let incomplete_required = kanban_sqlite::list_tasks_page(
+        &temp.path,
+        "default",
+        kanban_sqlite::TaskListOptions {
+            statuses: vec![],
+            priorities: vec![],
+            labels: vec![],
+            plan_filters: vec![kanban_sqlite::TaskPlanFilter::IncompleteRequiredSubtasks],
+            include_archived: false,
+            assignee: None,
+            search: None,
+            sort: kanban_sqlite::TaskListSort::Seq,
+            limit: 100,
+            offset: 0,
+        },
+    )?;
+    assert_eq!(incomplete_required.tasks.len(), 1);
+    assert_eq!(incomplete_required.tasks[0].id, parent.id);
     Ok(())
 }
 
@@ -461,6 +570,7 @@ fn labels_create_attach_filter_and_remove_without_status_side_effects() -> anyho
         "tester",
         CreateTask::ready("Ready task"),
     )?;
+    let ready = mark_plan_not_required_for_test(&temp.path, "default", "tester", &ready.id)?;
     let todo = create_task(
         &temp.path,
         "default",
@@ -536,6 +646,7 @@ fn labels_create_attach_filter_and_remove_without_status_side_effects() -> anyho
             statuses: vec![],
             priorities: vec![],
             labels: vec!["backend".into()],
+            plan_filters: vec![],
             include_archived: false,
             assignee: None,
             search: None,

@@ -10,6 +10,8 @@ pub(crate) mod maintenance;
 pub(crate) mod runs;
 pub(crate) mod search;
 pub(crate) mod shared;
+pub(crate) mod subtasks;
+pub(crate) mod task_graph;
 pub(crate) mod tasks;
 pub(crate) mod transitions;
 pub(crate) mod vector;

@@ -81,6 +81,8 @@ Content-Type: text/event-stream
 | `not_found` | 404 |
 | `invalid_transition` | 409 |
 | `dependency_blocked` | 409 |
+| `execution_plan_required` | 409 |
+| `subtasks_incomplete` | 409 |
 | `claim_conflict` | 409 |
 | `claim_token_mismatch` | 403 |
 | `db_busy` | 503 |
@@ -279,7 +281,8 @@ Notes：
 - `status` 只能是 `triage|todo|scheduled|ready`。
 - 若不传 `status`，服务端计算初始状态。
 - 若存在未完成 dependencies（parent 不是 `done` 或 `archived`），不能创建为 `ready`。
-- Task 响应会暴露派生 dependency 字段：`dependency_blocked` 和 `unfinished_parent_count`。它们是查询元数据，不是可写 task 字段。
+- 若 execution plan 仍为 `unplanned`，不能创建为 `ready`；先添加 required subtask，或显式标记 `not_required` 并填写 reason。
+- Task 响应会暴露派生 dependency 和 execution-plan 字段：`dependency_blocked`、`unfinished_parent_count`、`execution_plan_state`、required/optional subtask counts。它们是查询元数据，不是可写 task 字段。
 - `priority` 是整数等级 `0..3`：`0` = P0 incident/blocker/must-handle-immediately，`1` = P1 近期重点，`2` = P2 重要后续，`3` = P3 普通 backlog/低优先级/默认。创建时会拒绝非法值。
 - `labels` 可选。名称会先 trim；空白名称会被拒绝；所有 label 必须已存在于当前 board。任一 label 缺失时，整个 create 返回 `400 invalid_input`，且不会写入 `tasks`、`labels`、`task_labels` 或 `task_events`。Task create 不提供 create-missing 模式。
 
@@ -331,7 +334,7 @@ PATCH /api/v1/tasks/{task_id}
 
 `priority` updates reject values outside `0..3`.
 
-`max_retries: null` 清空 retry policy。
+`max_retries: null` 清空 retry policy。Task DTOs include `execution_plan_state`, `required_subtask_count`, `completed_required_subtask_count`, and `optional_subtask_count` so clients can show plan readiness without separately listing subtasks.
 
 禁止字段：
 
@@ -373,6 +376,8 @@ Request：
 POST /api/v1/tasks/{task_id}/transitions/promote
 ```
 
+Promote is rejected with `409 execution_plan_required` while the task execution plan is `unplanned`.
+
 Request：
 
 ```json
@@ -386,6 +391,8 @@ Request：
 ```http
 POST /api/v1/tasks/{task_id}/transitions/claim
 ```
+
+Claim/start is rejected with `409 execution_plan_required` while the task execution plan is `unplanned`.
 
 Request：
 
@@ -582,6 +589,166 @@ Response：
 }
 ```
 
+### 6.4 Subtasks and execution plan
+
+Subtasks are first-class tasks connected by `task_subtasks`. They are not
+`task_dependencies` edges and do not affect dependency readiness directly. A
+required subtask makes the parent execution plan `planned`; without required
+subtasks the plan is `unplanned` unless explicitly marked `not_required`.
+
+```http
+GET /api/v1/tasks/{task_id}/subtasks
+POST /api/v1/tasks/{task_id}/subtasks
+POST /api/v1/tasks/{task_id}/subtasks/attach
+PATCH /api/v1/tasks/{task_id}/subtasks/{child_task_id}
+DELETE /api/v1/tasks/{task_id}/subtasks/{child_task_id}
+POST /api/v1/tasks/{task_id}/execution-plan/not-required
+```
+
+Create request:
+
+```json
+{
+  "title": "Test strategy",
+  "description": "Scope and acceptance cases",
+  "priority": 2,
+  "position": 2048,
+  "required": true,
+  "actor": "alice"
+}
+```
+
+Attach request:
+
+```json
+{
+  "child_task_id": "t_01HX...",
+  "position": 2048,
+  "required": true,
+  "actor": "alice"
+}
+```
+
+Update request:
+
+```json
+{
+  "position": 4096,
+  "required": false,
+  "actor": "alice"
+}
+```
+
+Mark not required request:
+
+```json
+{
+  "reason": "Small text-only cleanup",
+  "actor": "alice"
+}
+```
+
+Subtask list and relation mutation responses return the parent task subtask
+snapshot:
+
+```json
+{
+  "data": {
+    "task_id": "t_parent",
+    "subtasks": [
+      {
+        "parent_task_id": "t_parent",
+        "child_task": { "id": "t_child", "ref": "default#13" },
+        "position": 2048,
+        "required": true,
+        "created_by": "alice",
+        "created_at": 1717520000000
+      }
+    ],
+    "execution_plan": {
+      "board_id": "b_01HX...",
+      "task_id": "t_parent",
+      "state": "planned",
+      "reason": null,
+      "updated_by": "system",
+      "updated_at": 0
+    }
+  }
+}
+```
+
+`POST /execution-plan/not-required` returns the execution plan record directly.
+Missing relation targets return `404 not_found`; cross-board or cyclic subtask
+relations return `400 invalid_input` in the standard error envelope. Completing a parent with incomplete required direct subtasks returns `409 subtasks_incomplete`.
+
+
+### 6.5 Task neighborhood
+
+```http
+GET /api/v1/tasks/{task_id}/neighborhood?depth=1&limit_nodes=250&include_archived_context=false
+```
+
+This read-only endpoint returns the selected task, direct dependency parents,
+direct dependency children, direct subtask parents/children, and every dependency or subtask edge whose source and target are
+both visible. V1 only accepts `depth=1`; deeper graph expansion is intentionally
+reserved for later.
+
+Response:
+
+```json
+{
+  "data": {
+    "center_task_id": "t_01HX...",
+    "nodes": [
+      {
+        "task": { "id": "t_01HX...", "ref": "default#12", "status": "ready" },
+        "role": "center",
+        "context_only": false
+      }
+    ],
+    "edges": [
+      {
+        "id": "dependency:t_parent->t_child",
+        "source_task_id": "t_parent",
+        "target_task_id": "t_child",
+        "kind": "dependency",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "meta": {
+      "depth": 1,
+      "context_depth": 0,
+      "node_count": 1,
+      "edge_count": 0,
+      "truncated": false,
+      "limit_nodes": 250,
+      "include_archived_context": false
+    }
+  }
+}
+```
+
+`task` uses the same public task DTO as task list/detail responses and does not
+expose `claim_token`.
+
+### 6.6 Board task map
+
+```http
+GET /api/v1/boards/{board}/task-map?active_only=true&context_depth=1&limit_nodes=250&include_done_context=true&include_archived_context=false&hide_isolated=false
+```
+
+This read-only endpoint returns an operational graph for the board. By default it
+includes all active, non-archived tasks (`triage`, `todo`, `scheduled`, `ready`,
+`running`, `blocked`, `review`) plus at most one dependency-hop of non-archived
+context. Done context is included by default and marked `context_only`; archived
+context is excluded unless explicitly requested. V1 only accepts
+`context_depth=0` or `context_depth=1`.
+
+Node roles are `active` for active board tasks and `context` for one-hop context.
+Dependency and subtask edges are returned only when both endpoints are visible. Dependency edges use `kind=dependency`, `required=true`, and `blocking=true`; subtask edges use `kind=subtask`, preserve the relation `required` flag, and set `blocking=false`. The `meta` object reports active statuses, node/edge counts, truncation, limit, and the query context flags.
+
+
 ---
 
 ## 7. Comments
@@ -723,7 +890,9 @@ Response：
     ],
     "blocked_reasons": [
       {"reason": "waiting on operator", "count": 2}
-    ]
+    ],
+    "unplanned_active_tasks": 4,
+    "active_parents_with_incomplete_required_subtasks": 1
   }
 }
 ```
@@ -1771,9 +1940,9 @@ Foundation relationship diagnostics are read-only:
 
 - `consistency_errors` / `consistency_warnings` summarize board consistency findings for base relationship rows.
 - `consistency_issues[]` reports structured findings with `severity`, `code`, `message`, and `record_ids`.
-- Covered tables: `task_labels`, `task_dependencies`, `task_runs`, `task_comments`, `task_events`, and `task_attachments`.
+- Covered tables: `task_labels`, `task_dependencies`, `task_subtasks`, `task_execution_plans`, `task_runs`, `task_comments`, `task_events`, and `task_attachments`.
 - Hard errors mean a row's `board_id` differs from a referenced task / label / run board. The message includes `table`, `row`, `row_board`, `referenced`, and `referenced_board`.
-- These checks complement service-layer board-scoped writes. `task_labels`, `task_dependencies`, `task_runs`, `task_comments`, and `task_attachments` are protected by board-scoped composite FKs in current schema. `task_events` retains nullable task/run references and `ON DELETE SET NULL`; INSERT/UPDATE triggers enforce board scope whenever those refs are present. Corrupted JSONL/raw-SQL inputs are still checked by doctor/import as a hard-error diagnostic layer.
+- These checks complement service-layer board-scoped writes. `task_labels`, `task_dependencies`, `task_subtasks`, `task_execution_plans`, `task_runs`, `task_comments`, and `task_attachments` are protected by board-scoped composite FKs in current schema. `task_events` retains nullable task/run references and `ON DELETE SET NULL`; INSERT/UPDATE triggers enforce board scope whenever those refs are present. Corrupted JSONL/raw-SQL inputs are still checked by doctor/import as a hard-error diagnostic layer.
 - `PRAGMA foreign_key_check` results are surfaced as hard-error `consistency_issues[]` with table, rowid, parent table, and FK index. Import runs the same gate before commit and rolls back on violation.
 - Nonzero `consistency_errors` make `ok=false`.
 

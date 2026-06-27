@@ -11,6 +11,14 @@ async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Resul
         kanban_sqlite::CreateTask::ready("stale claim"),
     )
     .context("stale task")?;
+    kanban_sqlite::mark_execution_plan_not_required(
+        &db_path,
+        "default",
+        "seed",
+        &stale.id,
+        "stale claim fixture",
+    )
+    .context("mark stale not required")?;
     kanban_sqlite::claim_task(&db_path, "default", "worker", &stale.id, 60_000).context("claim")?;
     let conn = kanban_sqlite::connect_file(&db_path).context("connect")?;
     conn.execute(
@@ -57,6 +65,50 @@ async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Resul
         true,
     )
     .context("block b")?;
+    let parent = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("parent with incomplete step"),
+    )
+    .context("parent")?;
+    let child = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("child step"),
+    )
+    .context("child")?;
+    kanban_sqlite::attach_subtask(
+        &db_path,
+        "default",
+        "seed",
+        &parent.id,
+        kanban_sqlite::AttachSubtaskInput {
+            child_ref: child.id,
+            position: None,
+            required: true,
+        },
+    )
+    .context("attach subtask")?;
+    let unplanned = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask {
+            title: "unplanned active".to_owned(),
+            description: Some("spec".to_owned()),
+            status: Some(kanban_core::TaskStatus::Todo),
+            assignee: None,
+            priority: 1,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: None,
+            metadata_json: "{}".to_owned(),
+        },
+    )
+    .context("unplanned")?;
+
     let app = test.router();
 
     let (status, json) = get_json(app, "/api/v1/stats?board=default").await?;
@@ -74,6 +126,15 @@ async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Resul
             .context("value")?
             .iter()
             .any(|count| count["status"] == "running" && count["count"] == 1)
+    );
+    assert_eq!(json["data"]["unplanned_active_tasks"], 4);
+    assert_eq!(
+        json["data"]["active_parents_with_incomplete_required_subtasks"],
+        1
+    );
+    assert_eq!(
+        kanban_sqlite::get_task(&db_path, "default", &unplanned.id)?.execution_plan_state,
+        kanban_sqlite::StepPlanState::Unplanned
     );
     Ok(())
 }

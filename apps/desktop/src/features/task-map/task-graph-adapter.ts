@@ -3,10 +3,16 @@ import type { BoardTaskMap, TaskGraphNodeRole as ApiTaskGraphNodeRole, TaskNeigh
 import type { TaskGraph, TaskGraphNodeRole } from "./task-graph-types"
 
 type ApiGraph = Pick<TaskNeighborhood | BoardTaskMap, "nodes" | "edges">
+type ApiGraphWithMeta = ApiGraph & Partial<Pick<TaskNeighborhood | BoardTaskMap, "meta">>
 
-export function apiTaskGraphToCanvasGraph(graph: ApiGraph | null | undefined): TaskGraph {
+export function apiTaskGraphToCanvasGraph(graph: ApiGraphWithMeta | null | undefined): TaskGraph {
   if (!graph) return { nodes: [], edges: [] }
   return {
+    meta: {
+      generatedAt: graph.meta?.generated_at,
+      nodeCount: graph.meta?.node_count,
+      edgeCount: graph.meta?.edge_count,
+    },
     nodes: graph.nodes.map((node) => ({
       id: node.task.id,
       ref: node.task.ref,

@@ -802,7 +802,8 @@ pub(crate) async fn rebuild_label_atom_index(
     State(state): State<AppState>,
     Path(board): Path<String>,
 ) -> Result<Json<Envelope<kanban_vector::VectorStoreStatus>>, ApiError> {
-    let result = rebuild_label_atom_index_for_state(state, board).await?;
+    let _ = (state, board);
+    let result = rebuild_label_atom_index_for_state()?;
     Ok(Json(Envelope {
         data: result,
         meta: None,
@@ -1847,43 +1848,10 @@ async fn label_atom_index_status_for_state(
     }
 }
 
-async fn rebuild_label_atom_index_for_state(
-    state: AppState,
-    board: String,
-) -> Result<kanban_vector::VectorStoreStatus, ApiError> {
-    let args = super::vector::vector_helper_args(&state, &board, &["status".to_owned()]);
-    match run_helper_json::<kanban_vector::VectorStoreStatus>(state, HelperKind::Vector, args).await
-    {
-        Ok(mut status) => {
-            status.enabled = false;
-            status.backend = "label-atom-helper-adapter".to_owned();
-            status.message = "label atom index rebuild is degraded in the server helper adapter; run the vector helper/CLI rebuild path outside the server".to_owned();
-            if !status
-                .diagnostics
-                .iter()
-                .any(|value| value == "label_atom_index_rebuild_degraded")
-            {
-                status
-                    .diagnostics
-                    .push("label_atom_index_rebuild_degraded".to_owned());
-            }
-            Ok(status)
-        }
-        Err(error) if error.is_status_degraded() => {
-            let mut status = super::vector::degraded_vector_status(&error);
-            if !status
-                .diagnostics
-                .iter()
-                .any(|value| value == "label_atom_index_rebuild_degraded")
-            {
-                status
-                    .diagnostics
-                    .push("label_atom_index_rebuild_degraded".to_owned());
-            }
-            Ok(status)
-        }
-        Err(error) => Err(error.into()),
-    }
+fn rebuild_label_atom_index_for_state() -> Result<kanban_vector::VectorStoreStatus, ApiError> {
+    Err(invalid_input(
+        "label atom index rebuild is not available through the server helper adapter; run the vector helper/CLI rebuild path outside the server",
+    ))
 }
 
 async fn query_label_atom_index_for_state(

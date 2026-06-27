@@ -2701,13 +2701,13 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
         json!({}),
     )
     .await?;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["data"]["enabled"], false);
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
     assert!(
-        json["data"]["diagnostics"]
-            .as_array()
-            .context("diagnostics")?
-            .contains(&json!("label_atom_index_rebuild_degraded"))
+        json["error"]["message"]
+            .as_str()
+            .context("error message")?
+            .contains("server helper adapter")
     );
 
     let (status, json) = get_json(

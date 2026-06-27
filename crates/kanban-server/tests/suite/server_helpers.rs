@@ -135,14 +135,13 @@ async fn vector_and_label_atom_endpoints_use_vector_helper() -> anyhow::Result<(
         json!({}),
     )
     .await?;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["data"]["enabled"], false);
-    assert_eq!(json["data"]["backend"], "label-atom-helper-adapter");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
     assert!(
-        json["data"]["diagnostics"]
-            .as_array()
-            .context("diagnostics")?
-            .contains(&json!("label_atom_index_rebuild_degraded"))
+        json["error"]["message"]
+            .as_str()
+            .context("error message")?
+            .contains("server helper adapter")
     );
     Ok(())
 }
@@ -179,6 +178,36 @@ async fn graph_status_and_neighbors_use_graph_helper() -> anyhow::Result<()> {
     assert!(
         args.windows(2)
             .any(|pair| pair[0] == "--predicate" && pair[1] == "depends_on")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn label_atom_rebuild_does_not_treat_malformed_helper_output_as_degraded_success()
+-> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let helper = write_helper(
+        test.dir_path(),
+        "bad-vector-helper-rebuild",
+        "#!/bin/sh\necho not-json\n",
+    )?;
+    let app =
+        build_router(AppState::new(test.db_path(), "api-test").with_vector_helper_path(helper));
+
+    let (status, json) = post_json(
+        app,
+        "/api/v1/boards/default/labels/atom-index/rebuild",
+        json!({}),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .context("error message")?
+            .contains("server helper adapter")
     );
     Ok(())
 }

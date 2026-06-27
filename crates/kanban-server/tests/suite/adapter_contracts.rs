@@ -309,13 +309,13 @@ async fn derived_adapter_contract_does_not_write_canonical_label_truth() -> anyh
         json!({}),
     )
     .await?;
-    assert_eq!(status, StatusCode::OK, "{rebuild_json}");
-    assert_eq!(rebuild_json["data"]["enabled"], false);
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{rebuild_json}");
+    assert_eq!(rebuild_json["error"]["code"], "invalid_input");
     assert!(
-        rebuild_json["data"]["diagnostics"]
-            .as_array()
-            .context("diagnostics")?
-            .contains(&json!("label_atom_index_rebuild_degraded"))
+        rebuild_json["error"]["message"]
+            .as_str()
+            .context("error message")?
+            .contains("server helper adapter")
     );
     assert_eq!(
         canonical_counts(&db_path)?,

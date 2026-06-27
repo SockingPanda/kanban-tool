@@ -1,24 +1,75 @@
+import ELK, { type ElkExtendedEdge, type ElkNode } from "elkjs/lib/elk.bundled.js"
+
 import type { TaskGraph, TaskGraphLayout, TaskGraphLayoutEdge, TaskGraphLayoutNode, TaskGraphMode, TaskGraphNode } from "./task-graph-types"
 
 const NODE_WIDTH = 176
 const NODE_HEIGHT = 72
-const DETAIL_COLUMN_GAP = 112
-const DETAIL_ROW_GAP = 24
-const BOARD_COLUMN_GAP = 40
-const BOARD_ROW_GAP = 20
-const BOARD_STATUSES = ["ready", "running", "blocked", "review", "todo", "scheduled", "triage", "done", "archived"] as const
+const DETAIL_LAYER_GAP = 112
+const DETAIL_ROW_GAP = 28
+const BOARD_LAYER_GAP = 96
+const BOARD_ROW_GAP = 24
+const LAYOUT_PADDING = 24
+
+const elk = new ELK()
 
 type LayoutOptions = {
   mode: TaskGraphMode
   selectedTaskId?: string | null
 }
 
-export function layoutTaskGraph(graph: TaskGraph, options: LayoutOptions): TaskGraphLayout {
-  const nodes = options.mode === "detail"
-    ? layoutDetailNodes(graph.nodes, options.selectedTaskId)
-    : layoutBoardMapNodes(graph.nodes)
+export async function layoutTaskGraph(graph: TaskGraph, options: LayoutOptions): Promise<TaskGraphLayout> {
+  return layoutTaskGraphWithElk(graph, options)
+}
+
+export async function layoutTaskGraphWithElk(graph: TaskGraph, options: LayoutOptions): Promise<TaskGraphLayout> {
+  if (!graph.nodes.length) return emptyLayout()
+  const sortedNodes = [...graph.nodes].sort(compareNodes)
+  const visibleNodeIds = new Set(sortedNodes.map((node) => node.id))
+  const visibleEdges = graph.edges.filter((edge) => visibleNodeIds.has(edge.sourceTaskId) && visibleNodeIds.has(edge.targetTaskId))
+  const elkGraph: ElkNode = {
+    id: "task-graph-root",
+    layoutOptions: {
+      "elk.algorithm": "layered",
+      "elk.direction": "RIGHT",
+      "elk.edgeRouting": "SPLINES",
+      "elk.spacing.nodeNode": `${options.mode === "detail" ? DETAIL_ROW_GAP : BOARD_ROW_GAP}`,
+      "elk.layered.spacing.nodeNodeBetweenLayers": `${options.mode === "detail" ? DETAIL_LAYER_GAP : BOARD_LAYER_GAP}`,
+      "elk.layered.cycleBreaking.strategy": "GREEDY",
+    },
+    children: sortedNodes.map((node) => ({
+      id: node.id,
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
+    })),
+    edges: visibleEdges.map((edge): ElkExtendedEdge => ({
+      id: edge.id,
+      sources: [edge.sourceTaskId],
+      targets: [edge.targetTaskId],
+    })),
+  }
+
+  const result = await elk.layout(elkGraph)
+  const children = result.children ?? []
+  const minX = children.length ? Math.min(...children.map((child) => child.x ?? 0)) : 0
+  const minY = children.length ? Math.min(...children.map((child) => child.y ?? 0)) : 0
+  const childById = new Map(children.map((child) => [child.id, child]))
+  const layoutNodes = sortedNodes.map((node) => {
+    const child = childById.get(node.id)
+    return toLayoutNode(node, Math.round((child?.x ?? 0) - minX + LAYOUT_PADDING), Math.round((child?.y ?? 0) - minY + LAYOUT_PADDING))
+  })
+
+  return finalizeLayout(layoutNodes, graph.edges)
+}
+
+export function layoutTaskGraphFallback(graph: TaskGraph, options: LayoutOptions): TaskGraphLayout {
+  if (!graph.nodes.length) return emptyLayout()
+  const nodes = layoutFallbackNodes(graph.nodes, graph.edges, options.mode)
+  return finalizeLayout(nodes, graph.edges)
+}
+
+function finalizeLayout(nodes: TaskGraphLayoutNode[], graphEdges: TaskGraph["edges"]): TaskGraphLayout {
   const nodeById = new Map(nodes.map((node) => [node.id, node]))
-  const edges = graph.edges.flatMap((edge): TaskGraphLayoutEdge[] => {
+  const edges = graphEdges.flatMap((edge): TaskGraphLayoutEdge[] => {
     const source = nodeById.get(edge.sourceTaskId)
     const target = nodeById.get(edge.targetTaskId)
     if (!source || !target) return []
@@ -34,37 +85,48 @@ export function layoutTaskGraph(graph: TaskGraph, options: LayoutOptions): TaskG
   }
 }
 
-function layoutDetailNodes(nodes: TaskGraphNode[], selectedTaskId?: string | null) {
+function layoutFallbackNodes(nodes: TaskGraphNode[], edges: TaskGraph["edges"], mode: TaskGraphMode) {
   const sorted = [...nodes].sort(compareNodes)
-  const center = sorted.find((node) => node.role === "center") ?? sorted.find((node) => node.id === selectedTaskId) ?? sorted[0]
-  const groups = {
-    parents: sorted.filter((node) => node.id !== center?.id && (node.role === "dependency_parent" || node.role === "step_parent")),
-    children: sorted.filter((node) => node.id !== center?.id && node.role === "dependency_child"),
-    steps: sorted.filter((node) => node.id !== center?.id && node.role === "step_child"),
-    context: sorted.filter((node) => node.id !== center?.id && !["dependency_parent", "step_parent", "dependency_child", "step_child"].includes(node.role ?? "")),
+  const visibleIds = new Set(sorted.map((node) => node.id))
+  const ranks = fallbackRanks(sorted, edges.filter((edge) => visibleIds.has(edge.sourceTaskId) && visibleIds.has(edge.targetTaskId)))
+  const layers = new Map<number, TaskGraphNode[]>()
+  for (const node of sorted) {
+    const rank = ranks.get(node.id) ?? 0
+    layers.set(rank, [...(layers.get(rank) ?? []), node])
   }
-  const result: TaskGraphLayoutNode[] = []
-  const centerX = 24 + NODE_WIDTH + DETAIL_COLUMN_GAP
-  const centerY = 120
-  if (center) result.push(toLayoutNode(center, centerX, centerY))
-  result.push(...stack(groups.parents, 24, 72))
-  result.push(...stack(groups.children, centerX + NODE_WIDTH + DETAIL_COLUMN_GAP, 72))
-  result.push(...stack(groups.steps, centerX, centerY + NODE_HEIGHT + 88))
-  result.push(...stack(groups.context, centerX + NODE_WIDTH + DETAIL_COLUMN_GAP, 72 + groups.children.length * (NODE_HEIGHT + DETAIL_ROW_GAP)))
-  return result
+  const layerGap = mode === "detail" ? DETAIL_LAYER_GAP : BOARD_LAYER_GAP
+  const rowGap = mode === "detail" ? DETAIL_ROW_GAP : BOARD_ROW_GAP
+  return [...layers.keys()].sort((a, b) => a - b).flatMap((rank) => {
+    const x = LAYOUT_PADDING + rank * (NODE_WIDTH + layerGap)
+    return stack(layers.get(rank) ?? [], x, LAYOUT_PADDING, rowGap)
+  })
 }
 
-function layoutBoardMapNodes(nodes: TaskGraphNode[]) {
-  const byStatus = new Map<string, TaskGraphNode[]>()
-  for (const node of [...nodes].sort(compareNodes)) {
-    const bucket = node.contextOnly ? "context" : node.status
-    byStatus.set(bucket, [...(byStatus.get(bucket) ?? []), node])
+function fallbackRanks(nodes: TaskGraphNode[], edges: TaskGraph["edges"]) {
+  const indegree = new Map(nodes.map((node) => [node.id, 0]))
+  const adjacency = new Map(nodes.map((node) => [node.id, [] as string[]]))
+  for (const edge of edges) {
+    indegree.set(edge.targetTaskId, (indegree.get(edge.targetTaskId) ?? 0) + 1)
+    adjacency.set(edge.sourceTaskId, [...(adjacency.get(edge.sourceTaskId) ?? []), edge.targetTaskId])
   }
-  const statuses = [...BOARD_STATUSES, "context"].filter((status) => byStatus.has(status))
-  return statuses.flatMap((status, column) => {
-    const x = 24 + column * (NODE_WIDTH + BOARD_COLUMN_GAP)
-    return stack(byStatus.get(status) ?? [], x, 56, BOARD_ROW_GAP)
-  })
+
+  const ranks = new Map(nodes.map((node) => [node.id, 0]))
+  const queue = nodes.filter((node) => (indegree.get(node.id) ?? 0) === 0).map((node) => node.id)
+  const visited = new Set<string>()
+  for (let index = 0; index < queue.length; index += 1) {
+    const current = queue[index]
+    visited.add(current)
+    for (const next of adjacency.get(current) ?? []) {
+      ranks.set(next, Math.max(ranks.get(next) ?? 0, (ranks.get(current) ?? 0) + 1))
+      indegree.set(next, (indegree.get(next) ?? 0) - 1)
+      if ((indegree.get(next) ?? 0) === 0) queue.push(next)
+    }
+  }
+
+  for (const node of nodes) {
+    if (!visited.has(node.id)) ranks.set(node.id, ranks.get(node.id) ?? 0)
+  }
+  return ranks
 }
 
 function stack(nodes: TaskGraphNode[], x: number, startY: number, rowGap = DETAIL_ROW_GAP) {
@@ -98,12 +160,14 @@ function horizontalEdgePath(startX: number, startY: number, endX: number, endY: 
 }
 
 function compareNodes(a: TaskGraphNode, b: TaskGraphNode) {
-  const statusDelta = statusRank(a.status) - statusRank(b.status)
-  if (statusDelta !== 0) return statusDelta
   return `${a.ref}:${a.id}`.localeCompare(`${b.ref}:${b.id}`)
 }
 
-function statusRank(status: string) {
-  const index = BOARD_STATUSES.indexOf(status as (typeof BOARD_STATUSES)[number])
-  return index === -1 ? BOARD_STATUSES.length : index
+function emptyLayout(): TaskGraphLayout {
+  return {
+    nodes: [],
+    edges: [],
+    width: NODE_WIDTH,
+    height: NODE_HEIGHT,
+  }
 }

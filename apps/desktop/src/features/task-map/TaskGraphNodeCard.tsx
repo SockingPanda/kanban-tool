@@ -3,7 +3,7 @@ import { GitBranch, GitMerge, ListChecks } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
-import { graphNodeRoleClass } from "./task-map-colors"
+import { graphNodeStatusClass } from "./task-map-colors"
 import type { TaskGraphLayoutNode } from "./task-graph-types"
 
 export function TaskGraphNodeCard({ node, selected, onSelectTask, className }: {
@@ -20,7 +20,7 @@ export function TaskGraphNodeCard({ node, selected, onSelectTask, className }: {
       aria-pressed={selected}
       className={cn(
         "flex h-[72px] w-44 flex-col rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        graphNodeRoleClass(node.role, selected, node.contextOnly),
+        graphNodeStatusClass(node.status, selected, node.contextOnly),
         className,
       )}
       onClick={() => onSelectTask?.(node.id)}

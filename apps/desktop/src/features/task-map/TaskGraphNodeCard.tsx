@@ -6,10 +6,11 @@ import { cn } from "@/lib/utils"
 import { graphNodeStatusClass } from "./task-map-colors"
 import type { TaskGraphLayoutNode } from "./task-graph-types"
 
-export function TaskGraphNodeCard({ node, selected, onSelectTask, className }: {
+export function TaskGraphNodeCard({ node, selected, onSelectTask, onOpenTask, className }: {
   node: TaskGraphLayoutNode
   selected: boolean
   onSelectTask?: (taskId: string) => void
+  onOpenTask?: (taskId: string) => void
   className?: string
 }) {
   const Icon = node.role === "step_child" || node.role === "step_parent" ? ListChecks : node.role === "dependency_child" ? GitMerge : GitBranch
@@ -24,6 +25,7 @@ export function TaskGraphNodeCard({ node, selected, onSelectTask, className }: {
         className,
       )}
       onClick={() => onSelectTask?.(node.id)}
+      onDoubleClick={() => onOpenTask?.(node.id)}
     >
       <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="truncate text-xs font-medium text-muted-foreground">{node.ref}</span>
@@ -35,7 +37,7 @@ export function TaskGraphNodeCard({ node, selected, onSelectTask, className }: {
       </div>
       {node.stepCounts ? (
         <span className="mt-auto text-[10px] text-muted-foreground">
-          {node.stepCounts.incomplete}/{node.stepCounts.total} open
+          {node.stepCounts.completed}/{node.stepCounts.total} step
         </span>
       ) : null}
     </button>

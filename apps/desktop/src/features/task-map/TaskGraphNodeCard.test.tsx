@@ -17,6 +17,19 @@ describe("TaskGraphNodeCard", () => {
     button?.props.onClick?.()
     expect(onSelectTask).toHaveBeenCalledWith("t_center")
   })
+
+  it("shows completed step progress instead of open step counts", () => {
+    const node = nodeFixture({ id: "t_center", ref: "default#123", title: "Graph base" })
+    const tree = TaskGraphNodeCard({
+      node: { ...node, stepCounts: { completed: 3, total: 4 } },
+      selected: false,
+    })
+
+    const text = textContent(tree)
+
+    expect(text).toContain("3/4 step")
+    expect(text).not.toContain("open")
+  })
 })
 
 type ButtonProps = {
@@ -39,6 +52,14 @@ function findButton(node: ReactNode): ReactElement<ButtonProps> | null {
   const element = node as ReactElement<ButtonProps>
   if (element.props.type === "button") return element
   return findButton(element.props.children)
+}
+
+function textContent(node: ReactNode): string {
+  if (Array.isArray(node)) return node.map(textContent).join("")
+  if (node === null || node === undefined || typeof node === "boolean") return ""
+  if (typeof node === "string" || typeof node === "number") return String(node)
+  if (!isValidElement(node)) return ""
+  return textContent((node as ReactElement<{ children?: ReactNode }>).props.children)
 }
 
 function nodeFixture(overrides: Pick<TaskGraphLayoutNode, "id" | "ref" | "title">): TaskGraphLayoutNode {

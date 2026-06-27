@@ -24,7 +24,7 @@ export type TaskGraphNode = {
   unfinishedParentCount?: number
   stepCounts?: {
     total: number
-    incomplete: number
+    completed: number
   }
 }
 

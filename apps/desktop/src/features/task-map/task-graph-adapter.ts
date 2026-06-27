@@ -19,7 +19,10 @@ export function apiTaskGraphToCanvasGraph(graph: ApiGraph | null | undefined): T
       unfinishedParentCount: node.task.unfinished_parent_count,
       stepCounts: {
         total: node.task.required_step_count + node.task.optional_step_count,
-        incomplete: Math.max(0, node.task.required_step_count - node.task.completed_required_step_count),
+        completed: Math.min(
+          node.task.required_step_count + node.task.optional_step_count,
+          Math.max(0, node.task.completed_required_step_count),
+        ),
       },
     })),
     edges: graph.edges.map((edge) => ({

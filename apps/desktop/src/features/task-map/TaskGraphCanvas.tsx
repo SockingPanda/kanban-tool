@@ -18,7 +18,7 @@ import {
   type NodeProps,
   type NodeTypes,
 } from "@xyflow/react"
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -32,6 +32,7 @@ type TaskGraphCanvasProps = {
   graph: TaskGraph
   selectedTaskId?: string | null
   onSelectTask?: (taskId: string) => void
+  onOpenTask?: (taskId: string) => void
   mode?: TaskGraphMode
   scale?: number
   className?: string
@@ -41,6 +42,7 @@ type TaskFlowNodeData = {
   node: TaskGraphLayoutNode
   selected: boolean
   onSelectTask?: (taskId: string) => void
+  onOpenTask?: (taskId: string) => void
 } & Record<string, unknown>
 
 type TaskFlowEdgeData = {
@@ -60,17 +62,48 @@ export function TaskGraphCanvas(props: TaskGraphCanvasProps) {
   )
 }
 
-function TaskGraphCanvasInner({ graph, selectedTaskId, onSelectTask, mode = "detail", scale = 1, className }: TaskGraphCanvasProps) {
+function TaskGraphCanvasInner({
+  graph,
+  selectedTaskId,
+  onSelectTask,
+  onOpenTask,
+  mode = "detail",
+  scale = 1,
+  className,
+}: TaskGraphCanvasProps) {
   const reactFlow = useReactFlow<TaskFlowNode, TaskFlowEdge>()
-  const [layout, setLayout] = useState<TaskGraphLayout>(() => layoutTaskGraphFallback(graph, { mode, selectedTaskId }))
+  const onSelectTaskRef = useRef(onSelectTask)
+  const onOpenTaskRef = useRef(onOpenTask)
+  const selectedTaskIdRef = useRef<string | null>(selectedTaskId ?? null)
+  const latestGraphRef = useRef(graph)
+  const initialLayoutRef = useRef<TaskGraphLayout | null>(null)
+  if (!initialLayoutRef.current) initialLayoutRef.current = layoutTaskGraphFallback(graph, { mode })
+  const initialLayout = initialLayoutRef.current
+  const handleSelectTask = useCallback((taskId: string) => {
+    onSelectTaskRef.current?.(taskId)
+  }, [])
+  const handleOpenTask = useCallback((taskId: string) => {
+    ;(onOpenTaskRef.current ?? onSelectTaskRef.current)?.(taskId)
+  }, [])
+  const [layout, setLayout] = useState<TaskGraphLayout>(initialLayout)
+  const [nodes, setNodes] = useState<TaskFlowNode[]>(() =>
+    buildTaskFlowNodes(initialLayout, graph, selectedTaskId ?? null, handleSelectTask, handleOpenTask),
+  )
+  const [edges, setEdges] = useState<TaskFlowEdge[]>(() => buildTaskFlowEdges(initialLayout))
   const safeScale = clampTaskGraphScale(scale)
   const interaction = taskGraphInteraction(mode)
+  const layoutKey = useMemo(() => taskGraphLayoutKey(graph, mode), [graph, mode])
+
+  onSelectTaskRef.current = onSelectTask
+  onOpenTaskRef.current = onOpenTask
+  latestGraphRef.current = graph
 
   useEffect(() => {
     let cancelled = false
-    const fallback = layoutTaskGraphFallback(graph, { mode, selectedTaskId })
+    const layoutGraph = latestGraphRef.current
+    const fallback = layoutTaskGraphFallback(layoutGraph, { mode })
     setLayout(fallback)
-    void layoutTaskGraphWithElk(graph, { mode, selectedTaskId })
+    void layoutTaskGraphWithElk(layoutGraph, { mode })
       .then((nextLayout) => {
         if (!cancelled) setLayout(nextLayout)
       })
@@ -80,43 +113,20 @@ function TaskGraphCanvasInner({ graph, selectedTaskId, onSelectTask, mode = "det
     return () => {
       cancelled = true
     }
-  }, [graph, mode, selectedTaskId])
+  }, [layoutKey, mode])
 
-  const nodes = useMemo(
-    () =>
-      layout.nodes.map((node): TaskFlowNode => {
-        const selected = node.id === selectedTaskId || node.role === "center"
-        return {
-          id: node.id,
-          type: flowNodeType(node.role, node.contextOnly),
-          position: { x: node.x, y: node.y },
-          data: { node, selected, onSelectTask },
-          draggable: false,
-          selectable: true,
-          sourcePosition: Position.Right,
-          targetPosition: Position.Left,
-          ariaLabel: `Task graph node ${node.ref} ${node.title}`,
-        }
-      }),
-    [layout.nodes, onSelectTask, selectedTaskId],
-  )
-  const edges = useMemo(
-    () =>
-      layout.edges.map((edge): TaskFlowEdge => {
-        const color = graphEdgeStroke(edge.kind, edge.blocking)
-        return {
-          id: edge.id,
-          source: edge.sourceTaskId,
-          target: edge.targetTaskId,
-          type: edge.kind === "step" ? "stepEdge" : "dependencyEdge",
-          data: { kind: edge.kind, blocking: edge.blocking, required: edge.required },
-          markerEnd: { type: MarkerType.ArrowClosed, color },
-          style: { stroke: color, strokeWidth: edge.kind === "step" ? 2.5 : 2 },
-          selectable: true,
-        }
-      }),
-    [layout.edges],
-  )
+  useEffect(() => {
+    setNodes(buildTaskFlowNodes(layout, graph, selectedTaskIdRef.current, handleSelectTask, handleOpenTask))
+    setEdges(buildTaskFlowEdges(layout))
+  }, [graph, handleOpenTask, handleSelectTask, layout])
+
+  useEffect(() => {
+    const previousTaskId = selectedTaskIdRef.current
+    const nextTaskId = selectedTaskId ?? null
+    if (previousTaskId === nextTaskId) return
+    selectedTaskIdRef.current = nextTaskId
+    setNodes((currentNodes) => patchTaskFlowNodeSelection(currentNodes, previousTaskId, nextTaskId))
+  }, [selectedTaskId])
 
   useEffect(() => {
     if (!nodes.length) return
@@ -124,7 +134,7 @@ function TaskGraphCanvasInner({ graph, selectedTaskId, onSelectTask, mode = "det
       void reactFlow.fitView({ padding: interaction.fitViewPadding, duration: 160 })
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [interaction.fitViewPadding, layout.height, layout.width, nodes.length, reactFlow, selectedTaskId])
+  }, [interaction.fitViewPadding, layout.height, layout.width, nodes.length, reactFlow])
 
   useEffect(() => {
     if (mode !== "board-map") return
@@ -142,7 +152,6 @@ function TaskGraphCanvasInner({ graph, selectedTaskId, onSelectTask, mode = "det
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        fitView
         minZoom={interaction.minZoom}
         maxZoom={interaction.maxZoom}
         nodesConnectable={false}
@@ -154,8 +163,8 @@ function TaskGraphCanvasInner({ graph, selectedTaskId, onSelectTask, mode = "det
         zoomOnDoubleClick={interaction.zoomOnDoubleClick}
         connectOnClick={false}
         proOptions={{ hideAttribution: true }}
-        onNodeClick={(_, node) => onSelectTask?.(node.id)}
-        onNodeDoubleClick={(_, node) => onSelectTask?.(node.id)}
+        onNodeClick={(_, node) => handleSelectTask(node.id)}
+        onNodeDoubleClick={(_, node) => handleOpenTask(node.id)}
       >
         <Background gap={24} size={1} className="opacity-40" />
         {interaction.showMiniMap ? (
@@ -172,7 +181,12 @@ const TaskGraphFlowNode = memo(function TaskGraphFlowNode({ data, selected }: No
     <div className="nodrag nowheel">
       <Handle type="target" position={Position.Left} isConnectable={false} className="opacity-0" />
       <Handle type="target" position={Position.Top} isConnectable={false} className="opacity-0" />
-      <TaskGraphNodeCard node={data.node} selected={data.selected || selected} onSelectTask={data.onSelectTask} />
+      <TaskGraphNodeCard
+        node={data.node}
+        selected={data.selected || selected}
+        onSelectTask={data.onSelectTask}
+        onOpenTask={data.onOpenTask}
+      />
       <Handle type="source" position={Position.Right} isConnectable={false} className="opacity-0" />
       <Handle type="source" position={Position.Bottom} isConnectable={false} className="opacity-0" />
     </div>
@@ -223,6 +237,74 @@ function graphEdgeStroke(kind: TaskGraphEdgeKind, blocking?: boolean) {
   return blocking ? "#dc2626" : "#059669"
 }
 
+function taskGraphLayoutKey(graph: TaskGraph, mode: TaskGraphMode) {
+  const nodes = graph.nodes.map((node) => node.id).sort().join(",")
+  const edges = graph.edges
+    .map((edge) => `${edge.sourceTaskId}>${edge.targetTaskId}:${edge.kind}:${edge.id}`)
+    .sort()
+    .join(",")
+  return `${mode}|${nodes}|${edges}`
+}
+
+function buildTaskFlowNodes(
+  layout: TaskGraphLayout,
+  graph: TaskGraph,
+  selectedTaskId: string | null,
+  onSelectTask?: (taskId: string) => void,
+  onOpenTask?: (taskId: string) => void,
+) {
+  const graphNodeById = new Map(graph.nodes.map((node) => [node.id, node]))
+  return layout.nodes.map((layoutNode): TaskFlowNode => {
+    const graphNode = graphNodeById.get(layoutNode.id)
+    const node = graphNode ? { ...graphNode, x: layoutNode.x, y: layoutNode.y, width: layoutNode.width, height: layoutNode.height } : layoutNode
+    const selected = taskFlowNodeSelected(node, selectedTaskId)
+    return {
+      id: node.id,
+      type: flowNodeType(node.role, node.contextOnly),
+      position: { x: node.x, y: node.y },
+      data: { node, selected, onSelectTask, onOpenTask },
+      draggable: false,
+      selectable: true,
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+      ariaLabel: `Task graph node ${node.ref} ${node.title}`,
+    }
+  })
+}
+
+function buildTaskFlowEdges(layout: TaskGraphLayout) {
+  return layout.edges.map((edge): TaskFlowEdge => {
+    const color = graphEdgeStroke(edge.kind, edge.blocking)
+    return {
+      id: edge.id,
+      source: edge.sourceTaskId,
+      target: edge.targetTaskId,
+      type: edge.kind === "step" ? "stepEdge" : "dependencyEdge",
+      data: { kind: edge.kind, blocking: edge.blocking, required: edge.required },
+      markerEnd: { type: MarkerType.ArrowClosed, color },
+      style: { stroke: color, strokeWidth: edge.kind === "step" ? 2.5 : 2 },
+      selectable: true,
+    }
+  })
+}
+
+function patchTaskFlowNodeSelection(nodes: TaskFlowNode[], previousTaskId: string | null, nextTaskId: string | null) {
+  if (previousTaskId === nextTaskId) return nodes
+  let changed = false
+  const nextNodes = nodes.map((node) => {
+    if (node.id !== previousTaskId && node.id !== nextTaskId && node.data.node.role !== "center") return node
+    const selected = taskFlowNodeSelected(node.data.node, nextTaskId)
+    if (node.selected === selected && node.data.selected === selected) return node
+    changed = true
+    return { ...node, selected, data: { ...node.data, selected } }
+  })
+  return changed ? nextNodes : nodes
+}
+
+function taskFlowNodeSelected(node: Pick<TaskGraphLayoutNode, "id" | "role">, selectedTaskId: string | null) {
+  return node.id === selectedTaskId || node.role === "center"
+}
+
 function taskGraphInteraction(mode: TaskGraphMode) {
   const detailMode = mode === "detail"
   return {
@@ -230,7 +312,7 @@ function taskGraphInteraction(mode: TaskGraphMode) {
     minZoom: detailMode ? 0.4 : 0.35,
     maxZoom: detailMode ? 2.5 : 1.75,
     panOnDrag: true,
-    zoomOnScroll: !detailMode,
+    zoomOnScroll: true,
     zoomOnPinch: true,
     zoomOnDoubleClick: !detailMode,
     showControls: true,
@@ -240,9 +322,13 @@ function taskGraphInteraction(mode: TaskGraphMode) {
 
 function miniMapNodeColor(node: Node) {
   const data = node.data as Partial<TaskFlowNodeData>
-  return graphNodeStatusMiniMapColor(data.node?.status, data.node?.contextOnly)
+  return graphNodeStatusMiniMapColor(data.node?.status)
 }
 
 export const __test = {
+  buildTaskFlowNodes,
+  layoutTaskGraphFallback,
+  patchTaskFlowNodeSelection,
+  taskGraphLayoutKey,
   taskGraphInteraction,
 }

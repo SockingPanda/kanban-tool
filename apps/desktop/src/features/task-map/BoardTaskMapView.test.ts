@@ -92,4 +92,9 @@ describe("BoardTaskMapView filters", () => {
     expect(__test.stepMapZoom(1, 1)).toBe(1.15)
     expect(__test.stepMapZoom(0.7, -1)).toBe(0.65)
   })
+
+  it("prefers local inspected map selection over global detail selection", () => {
+    expect(__test.resolveBoardMapSelectedNode(graph, "running", "ready")?.task.id).toBe("running")
+    expect(__test.resolveBoardMapSelectedNode(graph, null, "ready")?.task.id).toBe("ready")
+  })
 })

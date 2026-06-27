@@ -1,5 +1,5 @@
 import { AlertTriangle, EyeOff, ListFilter, Loader2, Minus, Network, Plus, RefreshCcw, RotateCcw } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -43,21 +43,25 @@ export function BoardTaskMapView({
   const [showDoneContext, setShowDoneContext] = useState(false)
   const [hideIsolated, setHideIsolated] = useState(false)
   const [zoom, setZoom] = useState(1)
+  const [inspectedTaskId, setInspectedTaskId] = useState<string | null>(selectedTaskId)
   const mapQuery = useBoardTaskMap(api, { includeDoneContext: showDoneContext })
   const sourceGraph = mapQuery.data ?? null
   const visibleGraph = useMemo(
     () => apiTaskGraphToCanvasGraph(filterBoardMap(sourceGraph, filter, hideIsolated)),
     [filter, hideIsolated, sourceGraph],
   )
-  const selectedNode = useMemo(
-    () =>
-      sourceGraph?.nodes.find((node) => node.task.id === selectedTaskId) ??
-      sourceGraph?.nodes.find((node) => !node.context_only) ??
-      null,
-    [selectedTaskId, sourceGraph],
-  )
+  const selectedNode = useMemo(() => resolveBoardMapSelectedNode(sourceGraph, inspectedTaskId, selectedTaskId), [
+    inspectedTaskId,
+    selectedTaskId,
+    sourceGraph,
+  ])
+  const inspectTask = useCallback((taskId: string) => setInspectedTaskId(taskId), [])
   const hiddenSelection = Boolean(selectedNode && !visibleGraph.nodes.some((node) => node.id === selectedNode.task.id))
   const zoomLabel = `${Math.round(zoom * 100)}%`
+
+  useEffect(() => {
+    if (selectedTaskId) setInspectedTaskId(selectedTaskId)
+  }, [selectedTaskId])
 
   if (!api) {
     return (
@@ -168,8 +172,9 @@ export function BoardTaskMapView({
             ) : visibleGraph.nodes.length ? (
               <TaskGraphCanvas
                 graph={visibleGraph}
-                selectedTaskId={selectedNode?.task.id ?? selectedTaskId}
-                onSelectTask={onSelectTask}
+                selectedTaskId={selectedNode?.task.id ?? inspectedTaskId ?? selectedTaskId}
+                onSelectTask={inspectTask}
+                onOpenTask={onSelectTask}
                 mode="board-map"
                 scale={zoom}
                 className="h-full min-h-[520px]"
@@ -182,9 +187,19 @@ export function BoardTaskMapView({
           </div>
         </section>
 
-        <MapInspector node={selectedNode} graph={sourceGraph} hiddenSelection={hiddenSelection} onSelectTask={onSelectTask} />
+        <MapInspector node={selectedNode} graph={sourceGraph} hiddenSelection={hiddenSelection} onOpenTask={onSelectTask} />
       </div>
     </div>
+  )
+}
+
+function resolveBoardMapSelectedNode(graph: BoardTaskMap | null, inspectedTaskId: string | null, selectedTaskId: string | null) {
+  if (!graph) return null
+  return (
+    graph.nodes.find((node) => node.task.id === inspectedTaskId) ??
+    graph.nodes.find((node) => node.task.id === selectedTaskId) ??
+    graph.nodes.find((node) => !node.context_only) ??
+    null
   )
 }
 
@@ -229,12 +244,12 @@ function MapInspector({
   node,
   graph,
   hiddenSelection,
-  onSelectTask,
+  onOpenTask,
 }: {
   node: ApiTaskGraphNode | null
   graph: BoardTaskMap | null
   hiddenSelection: boolean
-  onSelectTask: (taskId: string) => void
+  onOpenTask: (taskId: string) => void
 }) {
   const task = node?.task ?? null
   const counts = task && graph ? relationCounts(graph, task.id) : { parents: 0, children: 0, steps: 0 }
@@ -278,7 +293,7 @@ function MapInspector({
               <InfoTile label="Steps" value={String(counts.steps)} />
               <InfoTile label="Blocked by" value={String(task.unfinished_parent_count)} />
             </div>
-            <Button type="button" className="w-full" onClick={() => onSelectTask(task.id)}>
+            <Button type="button" className="w-full" onClick={() => onOpenTask(task.id)}>
               Open detail
             </Button>
           </div>
@@ -326,4 +341,4 @@ function errorMessage(err: unknown) {
   return err instanceof Error ? err.message : String(err)
 }
 
-export const __test = { clampMapZoom, filterBoardMap, stepMapZoom }
+export const __test = { clampMapZoom, filterBoardMap, resolveBoardMapSelectedNode, stepMapZoom }

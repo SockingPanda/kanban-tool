@@ -34,7 +34,7 @@ export function graphNodeStatusClass(status: TaskStatus | undefined, selected: b
   ].filter(Boolean).join(" ")
 }
 
-export function graphNodeStatusMiniMapColor(status: TaskStatus | undefined, _contextOnly?: boolean) {
+export function graphNodeStatusMiniMapColor(status: TaskStatus | undefined) {
   if (!status) return "#64748b"
   return miniMapStatusColors[status]
 }

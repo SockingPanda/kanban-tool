@@ -3766,15 +3766,14 @@ dependencies = [
  "clap_complete",
  "kanban-context",
  "kanban-core",
+ "kanban-derived-io",
  "kanban-entity",
  "kanban-graph",
- "kanban-graph-oxigraph",
  "kanban-local",
  "kanban-search",
  "kanban-server",
  "kanban-sqlite",
  "kanban-vector",
- "kanban-vector-lancedb",
  "predicates",
  "pretty_assertions",
  "serde",
@@ -3860,9 +3859,13 @@ dependencies = [
 name = "kanban-graph-oxigraph"
 version = "1.4.1"
 dependencies = [
+ "anyhow",
+ "clap",
  "kanban-derived-io",
  "kanban-entity",
  "kanban-graph",
+ "kanban-indexer",
+ "kanban-local",
  "oxigraph",
  "serde",
  "serde_json",
@@ -3975,11 +3978,15 @@ dependencies = [
 name = "kanban-vector-lancedb"
 version = "1.4.1"
 dependencies = [
+ "anyhow",
  "arrow-array",
  "arrow-schema",
+ "clap",
  "futures",
  "kanban-derived-io",
  "kanban-entity",
+ "kanban-indexer",
+ "kanban-local",
  "kanban-vector",
  "lancedb",
  "serde",

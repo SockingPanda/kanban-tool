@@ -1324,7 +1324,8 @@ ontology provenance action 引用其 id 或 content hash 时返回 `200` 且
 `legacy_untracked=true`；未知 id/hash 返回 not found。
 
 `GET /api/v1/boards/{board}/labels/atom-index/status` 返回 label atom vector index
-状态。默认 CLI/server build 启用 `vector-lancedb`；无 vector provider 或二进制显式以 `--no-default-features` 构建时仍返回 `200` disabled
+状态。CLI 默认 no-heavy build 当前没有 label vector helper adapter；server route 仍按
+进程内可用能力报告。无 vector provider、adapter 不可用或二进制未包含内置 vector store 时仍返回 `200` disabled
 状态。JSON 保留兼容字段 `message`，并额外返回结构化
 `diagnostics: string[]`、`dirty: boolean | null`、`board_dirty: boolean | null`；
 调用方应使用结构化字段判断 dirty/error，而不要解析 `message` 文案。
@@ -1334,7 +1335,7 @@ ontology provenance action 引用其 id 或 content hash 时返回 `200` 且
 派生的 `lancedb_label_atoms`。`GET /api/v1/boards/{board}/labels/atom-index/query`
 查询该派生索引，`q` 必填，`polarity` 可选且只接受 `positive` / `negative`，
 `limit` 默认 24；hit 中的 `distance` 是 LanceDB `_distance`，不是 solver
-similarity score。未配置 provider、feature 不可用或 vector store 不可用时，rebuild/query
+similarity score。未配置 provider、adapter/feature 不可用或 vector store 不可用时，rebuild/query
 返回显式 API error，不修改 SQLite truth。
 
 ### 12.2 Task label suggestions
@@ -1343,7 +1344,7 @@ similarity score。未配置 provider、feature 不可用或 vector store 不可
 GET /api/v1/tasks/{task_id}/labels/suggestions?limit=5&candidate_limit=32&atom_limit=80&max_selected_labels=4&min_score=0.15
 ```
 
-返回 task-level label suggestions。当前使用 task title + description embedding
+返回 task-level label suggestions。带可用 label atom vector store 的部署使用 task title + description embedding
 查询 `lancedb_label_atoms`：正向 atoms 按 residual 多轮检索，负向 atoms 固定用原始
 query 检索并做 penalty / suppression。solver 在 label group 层执行 Group OMP 选择，
 再把选中 label 的 top positive atom vectors 作为 basis 做 non-negative refit；
@@ -1366,7 +1367,7 @@ solver 内部搜索能力。内部能力由 `candidate_limit`、`atom_limit` 和
 以及最多进入 non-negative refit 的 label 数。所有 limit 参数都必须是
 `1..=1000`；`min_score` 必须在 `0..=1`。
 
-未配置 provider、二进制未启用 `vector-lancedb` feature、LanceDB 表缺失、索引为空或索引
+未配置 provider、label vector adapter/feature 不可用、LanceDB 表缺失、索引为空或索引
 dirty 时，接口仍返回 `200` 和结构化 degraded JSON；普通 label CRUD、task
 list/search/filter 与状态转移不受影响。Dirty 判断来自结构化 status/SQLite dirty
 字段，不依赖 `message` 文案。无 provider 时 `needs_new_label=false`，

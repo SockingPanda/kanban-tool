@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGE_NAME="kanban-tool-cli"
 BIN_NAME="kanban"
+HELPER_BINARIES=("kanban-vector-lancedb" "kanban-graph-oxigraph")
+HELPER_INSTALL_DIR="usr/lib/kanban"
 REVISION="1"
 BUILD_ARGS=()
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
@@ -89,6 +91,10 @@ deb_arch() {
 install_payload() {
   local root="$1"
   install -Dm755 "$BIN_PATH" "$root/usr/bin/$BIN_NAME"
+  local helper
+  for helper in "${HELPER_BINARIES[@]}"; do
+    install -Dm755 "$TARGET_DIR/$helper" "$root/$HELPER_INSTALL_DIR/$helper"
+  done
   install -Dm644 "$ROOT/README.md" "$root/usr/share/doc/$PACKAGE_NAME/README.md"
 }
 
@@ -96,8 +102,13 @@ build_binary() {
   (
     cd "$ROOT"
     "$LOCK" -- cargo build -p kanban-cli --release "${BUILD_ARGS[@]}"
+    "$LOCK" -- cargo build -p kanban-vector-lancedb -p kanban-graph-oxigraph --release --bins
   )
   [[ -x "$BIN_PATH" ]] || { echo "error: expected binary not found: $BIN_PATH" >&2; exit 1; }
+  local helper
+  for helper in "${HELPER_BINARIES[@]}"; do
+    [[ -x "$TARGET_DIR/$helper" ]] || { echo "error: expected helper binary not found: $TARGET_DIR/$helper" >&2; exit 1; }
+  done
 }
 
 deb_depends() {
@@ -118,9 +129,15 @@ Package: $PACKAGE_NAME
 Architecture: any
 EOF
 
+  local shlib_inputs=("$package_root/usr/bin/$BIN_NAME")
+  local helper
+  for helper in "${HELPER_BINARIES[@]}"; do
+    shlib_inputs+=("$package_root/$HELPER_INSTALL_DIR/$helper")
+  done
+
   output="$(
     cd "$dep_workspace"
-    dpkg-shlibdeps -O "-S$package_root" "$package_root/usr/bin/$BIN_NAME"
+    dpkg-shlibdeps -O "-S$package_root" "${shlib_inputs[@]}"
   )" || {
     echo "error: dpkg-shlibdeps failed to generate shared-library dependencies" >&2
     exit 1

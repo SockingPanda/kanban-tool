@@ -5,6 +5,7 @@ pub(crate) mod common;
 pub(crate) mod dag;
 pub(crate) mod dep;
 pub(crate) mod dispatch;
+pub(crate) mod helper;
 pub(crate) mod index;
 pub(crate) mod label;
 pub(crate) mod maintenance;

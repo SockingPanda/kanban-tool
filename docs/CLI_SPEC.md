@@ -618,6 +618,10 @@ Bootstrap 默认不会覆盖已有 `label_semantics`。如果同名 label 已经
 同一 task/label 只在目标 label 仍无 semantics 时保持 task-label 绑定幂等。JSON
 返回 `{ "task": <TaskRecord>, "semantics": <LabelSemanticsRecord>, "verification": null|<Verification> }`。
 
+当前 no-heavy CLI build 尚未把 label vector workflow 接到 helper subprocess adapter；
+`kanban vector ...` 的 helper 只提供 raw chunk / label-atom 查询能力，不会替代
+`label suggest`、`label atom-index rebuild/query` 或 trusted ontology collector。
+
 传入 `--verify` 或 `--vector-config <toml>` 时，CLI 使用 pre-commit staged
 verification：先在 canonical DB transaction 外读取当前 task、target label state 和
 board ontology digest，并在隔离的临时 atom store 中加载当前 atoms 与 candidate atoms。
@@ -625,7 +629,9 @@ board ontology digest，并在隔离的临时 atom store 中加载当前 atoms �
 `selected_labels` 或 `candidates`，且 score 至少达到 `--min-verify-score`（默认
 `0.50`）。rebuild、suggest、threshold、provider 或临时 store 失败时不会写
 canonical label、semantics、atoms、task-label binding、ontology action、event 或 dirty
-marker。
+marker。默认 no-heavy CLI 当前会在写入前返回
+`label vector helper adapter is not available in this CLI build`；需要本地 vector 验证时
+等待 label helper adapter 接入，或改走 external attestation `--input` 路径。
 
 验证通过后 CLI 才开启短 `BEGIN IMMEDIATE` transaction，重算 task suggest-input hash、
 target label state 和 board ontology digest；任一值变化会返回 conflict 且零写入。成功
@@ -664,7 +670,8 @@ Task 的人类可读摘要如果存在 labels，会在末尾追加方括号标�
 default#12 t_01HX... [ready] 修复 API 回归 [backend,p1]
 ```
 
-`label suggest` 返回 task-level label suggestions。当前实现把 task title +
+`label suggest` 返回 task-level label suggestions。带内置 label atom vector store 的
+构建会把 task title +
 description embedding 作为 query，使用 `lancedb_label_atoms` 按残差多轮检索正向
 label atoms，并用原始 query 检索负向 atoms 做 penalty / suppression。solver 在
 label group 层执行 Group OMP 选择，再用选中 label 的 top positive atom vectors 做
@@ -686,8 +693,8 @@ diagnostics 和人工语义判断。
 它不会自动创建新 label，也不会写入 new-label proposal。应用建议时仍使用现有
 `label add <task_ref> <label>...` / API attach 流程。
 
-默认未配置 vector provider 或二进制未启用 `vector-lancedb` 时，命令成功返回
-degraded 结果而不是失败；无 provider 时 `needs_new_label=false`。`--vector-config`
+默认 no-heavy CLI 没有内置 label vector helper adapter，因此命令成功返回
+degraded 结果而不是失败；无 provider/adapter 时 `needs_new_label=false`。`--vector-config`
 使用与 `kanban vector configure/status` 相同的 TOML 解析规则。`LabelAtomHit.distance`
 保留 LanceDB `_distance` 的原始语义；suggestion / proposal 的 score 只根据返回
 atom vector 与当前 query/residual 在本地计算 cosine similarity，不从 distance 推导。
@@ -775,12 +782,14 @@ content hash 时命令成功返回 `legacy_untracked=true` 和 `legacy_reason`�
 `validation_history`、`legacy_untracked` 和 `legacy_reason`。由于 content hash 不含
 ordinal，semantics rebuild 后同语义 atom 的 id 改变时仍可用 content hash 解释历史。
 
-`label atom-index status` 返回 label atom vector index 的状态。未配置 provider 或未
-启用 `vector-lancedb` 时仍成功返回 disabled/degraded 状态。JSON 保留兼容字段
+`label atom-index status` 返回 label atom vector index 的状态。未配置 provider、未
+启用内置 vector store，或默认 no-heavy CLI 尚未接入 label helper adapter 时仍成功返回 disabled/degraded 状态。JSON 保留兼容字段
 `message`，并返回结构化 `diagnostics: string[]`、`dirty: boolean | null`、
 `board_dirty: boolean | null`；调用方应使用结构化字段判断 dirty/error，而不要解析
-`message` 文案。`rebuild` 与 `query` 需要 `--vector-config <toml>` 和可用的 vector
-store；无可用 provider/feature 时命令失败，不会修改 SQLite truth。`query` 的
+`message` 文案。`rebuild` 与 `query` 需要 `--vector-config <toml>` 和可用的 label
+vector workflow adapter；默认 no-heavy CLI 当前失败且不会修改 SQLite truth。需要 raw
+helper 查询时使用 `kanban vector query-label-atoms`，但它不是 `label suggest` 的
+完整 adapter。`query` 的
 `--polarity` 只接受 `positive` 或 `negative`；human 输出和 JSON hit 都把 LanceDB
 `_distance` 暴露为 `distance`。
 
@@ -792,10 +801,9 @@ degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms`
 `--limit` 只截断 proposal attempt 中复用的 suggestion 输出；`--candidate-limit`、
 `--atom-limit`、`--max-selected-labels`、`--min-score` 会在 proposal 持久化前调节底层
 label suggestion solver，用于计算 coverage、coverage_cosine、residual_norm 和 top1 existing label。
-`--vector-config` 使用与 `label suggest` 相同的 TOML 解析规则；配置可用时，
-proposal attempt 会用同一套 LanceDB label atom store 做 suggestion 与后续残差
-校验。未配置或 feature/provider 不可用时保持 degraded fallback，不写入普通 label
-或 task-label 关联。
+`--vector-config` 使用与 `label suggest` 相同的 TOML 解析规则。默认 no-heavy CLI
+当前没有 label vector helper adapter；未配置或 adapter/provider 不可用时保持
+degraded fallback，不写入普通 label 或 task-label 关联。
 
 Provider boundary：CLI 当前只使用 disabled provider 或 `--proposal-json` 显式传入的
 本地/offline candidate。真实 LLM provider 不属于 `kanban-sqlite`；未来若接入本机
@@ -1081,7 +1089,7 @@ parent action 结果引用包装进 validation envelope。公共 supplied/collec
 手写 trusted evidence JSON；CLI 只能走内置 collector。Trusted 表示工具在当前 parent
 action、source signals、canonical hash、atom index generation 和指定 cases/controls 上做了
 机械采集和检查，不表示 ontology 在全局语义上正确。CLI 必须有可用 label atom vector
-store（`vector-lancedb` build 且可解析 `--vector-config` 或默认 config），先在 SQLite transaction 外 rebuild atom index，再用同一
+workflow adapter（当前 no-heavy CLI 尚未接入；旧内置 `vector-lancedb` build 需可解析 `--vector-config` 或默认 config），先在 SQLite transaction 外 rebuild atom index，再用同一
 `--limit` / `--candidate-limit` / `--atom-limit` / `--max-selected-labels` /
 `--min-score` options 对 linked source signals 重新运行 `label suggest`，由工具生成
 `evidence_type="trusted_automated"`、`collector.source="label_ontology_validate_trusted"`、
@@ -1581,7 +1589,12 @@ kanban context build t_... [--lexical-limit 5] [--vector-config <toml>]
 `kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kanban backup`。JSONL export 包含 label ontology ledger record types：`label_ontology_observation`、`label_ontology_signal`、`label_ontology_action`、`label_ontology_action_atom_effect` 和 `label_ontology_action_signal`；因此 portable JSONL 与 SQLite backup 都会保留 ontology observation/signal/action/effect provenance。
 `kanban import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kanban import --replace` 是 offline-only 操作；运行前必须停止 `kanban serve` 和常驻 `kanban dispatch`，如果检测到 active runtime lock 会直接拒绝。Import 在同一 SQLite transaction 内执行插入与 final doctor gate：基础关系表会校验 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、`task_events`、`task_attachments` 的 row board 与 referenced task / label / run board 一致；失败时整个 replace transaction 回滚，不提交部分数据。Ontology import 会延迟回填 `label_ontology_signals.superseded_by_signal_id` 与 `label_ontology_actions.parent_action_id`，因此不依赖 JSONL 中同表自引用 rows 的偶然顺序；导入后会拒绝跨 board ontology links、orphan action-signal links、supersede cycles 和 action parent cycles。
 `kanban entity`、`kanban outbox`、`kanban derived` 是 Knowledge Substrate 的只读维护入口。SQLite 仍是事实源；这些命令只报告统一 entity registry、派生索引 outbox 和 derived store 状态，不改变 task 状态或 claim。
-`kanban graph` 和 `kanban vector` 是 feature-gated 派生层入口。默认 CLI build 启用 `graph-oxigraph` 和 `vector-lancedb`；显式以 `--no-default-features` 构建或缺少 embedding provider 时返回 disabled/degraded status。启用后仍只作为可重建 relation/vector store，不参与 task 状态事务。
+`kanban graph` 和 `kanban vector` 是 helper subprocess 派生层入口。默认 CLI 不链接
+Oxigraph/LanceDB heavy deps；它解析 `KANBAN_GRAPH_HELPER` / `KANBAN_VECTOR_HELPER`、
+`/usr/lib/kanban/<helper>`、CLI sibling binary 或 `PATH` 中的 helper。helper 缺失或
+返回非法 envelope 时，`status` 返回 disabled/degraded status；helper error envelope、
+坏 board/db/config 或 payload/domain 错误会作为命令错误返回。启用后仍只作为可重建
+relation/vector store，不参与 task 状态事务。
 `kanban vector status --json` 保留 `message` 兼容字段，同时返回结构化
 `diagnostics`、`dirty`、`board_dirty` 字段；dirty/error 判断应使用这些字段，不解析
 `message` 文案。
@@ -1597,7 +1610,7 @@ model = "qwen3-embedding:0.6b"
 dimensions = 1024
 ```
 
-项目级 `.kb/config.toml` 可以覆盖全局 `[vector]`；命令行 `--vector-config <toml>` 优先级最高。解析顺序是：显式 `--vector-config`、最近的项目 `.kb/config.toml`、全局 config。`kanban board use <board>` 更新项目配置文件的 `board` 字段时必须保留该文件内已有 `[vector]` 配置。默认 CLI build 启用 `vector-lancedb`；配置有效时 `kanban vector status/rebuild/sync` 和 `kanban context build` 使用该 provider，未配置或二进制显式以 `--no-default-features` 构建时保持 disabled/degraded fallback。
+项目级 `.kb/config.toml` 可以覆盖全局 `[vector]`；命令行 `--vector-config <toml>` 优先级最高。解析顺序是：显式 `--vector-config`、最近的项目 `.kb/config.toml`、全局 config。`kanban board use <board>` 更新项目配置文件的 `board` 字段时必须保留该文件内已有 `[vector]` 配置。配置有效且 helper 可用时 `kanban vector status/rebuild/sync` 使用该 provider；未配置或 helper 不可用时保持 disabled/degraded fallback。`kanban context build` 当前仍使用 SQLite/lexical fallback，并通过 degraded markers 报告 graph/vector 不可用。
 `kanban context build` 通过 SQLite hydrate canonical task，并合并 lexical、graph、vector hits。graph/vector 不可用或失败时返回 degraded markers；失败原因通过有界 diagnostics 暴露，context pack 本身仍可用。
 
 `kanban derived status` 中的 `last_event_id` 是 store 级成功处理水位，不是当前 board 的局部水位。`dirty=true` 表示该 store 仍有任意 board 的 pending/running/failed outbox，或最近一次派生更新失败；board-scoped `kanban index sync`、`kanban graph sync`、`kanban vector sync` 只清理当前 board 的 job，不能因为本 board clean 就强制清掉全局 dirty。

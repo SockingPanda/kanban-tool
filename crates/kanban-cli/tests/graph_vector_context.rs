@@ -1,9 +1,9 @@
 mod common;
 
 use anyhow::Context;
-#[cfg(feature = "vector-lancedb")]
-use common::kanban_in_dir_envs;
-use common::{TempDb, kanban};
+use common::{TempDb, kanban, kanban_in_dir_envs};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 #[test]
 fn substrate_commands_report_entities_outbox_and_derived_status() -> anyhow::Result<()> {
     let temp = TempDb::new("substrate_commands_report_entities_outbox_and_derived_status")?;
@@ -112,99 +112,53 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
         .as_str()
         .context("expected JSON string")?;
 
-    let graph = kanban(&temp.path, &["--json", "graph", "status"])?.success_json()?;
-    #[cfg(not(feature = "graph-oxigraph"))]
-    {
-        assert_eq!(graph["data"]["backend"], "disabled");
-        assert_eq!(graph["data"]["enabled"], false);
-
-        let neighbors = kanban(
-            &temp.path,
-            &[
-                "--json",
-                "graph",
-                "neighbors",
-                &format!("kb://task/{task_id}"),
-            ],
-        )?
-        .success_json()?;
-        assert_eq!(
-            neighbors["data"]
-                .as_array()
-                .context("expected JSON array")?
-                .len(),
-            0
-        );
-    }
-    #[cfg(feature = "graph-oxigraph")]
-    {
-        let board_id = created["data"]["board_id"]
+    let missing_graph_helper = temp.dir.join("missing-graph-helper");
+    let missing_vector_helper = temp.dir.join("missing-vector-helper");
+    let graph = kanban_in_dir_envs(
+        &temp.path,
+        &["--json", "graph", "status"],
+        &temp.dir,
+        &[("KANBAN_GRAPH_HELPER", missing_graph_helper.as_path())],
+    )?
+    .success_json()?;
+    assert_eq!(graph["data"]["backend"], "helper-missing");
+    assert_eq!(graph["data"]["enabled"], false);
+    assert!(
+        graph["data"]["message"]
             .as_str()
-            .context("expected JSON string")?;
-        assert_eq!(graph["data"]["backend"], "oxigraph");
-        assert_eq!(graph["data"]["enabled"], true);
+            .context("expected JSON string")?
+            .contains("graph helper unavailable")
+    );
 
-        let rebuilt = kanban(&temp.path, &["--json", "graph", "rebuild"])?.success_json()?;
-        assert_eq!(rebuilt["data"]["backend"], "oxigraph");
-        assert_eq!(rebuilt["data"]["enabled"], true);
+    kanban_in_dir_envs(
+        &temp.path,
+        &[
+            "--json",
+            "graph",
+            "neighbors",
+            &format!("kb://task/{task_id}"),
+        ],
+        &temp.dir,
+        &[("KANBAN_GRAPH_HELPER", missing_graph_helper.as_path())],
+    )?
+    .failure_containing("failed to run graph helper")?;
 
-        let neighbors = kanban(
-            &temp.path,
-            &[
-                "--json",
-                "graph",
-                "neighbors",
-                &format!("kb://task/{task_id}"),
-            ],
-        )?
-        .success_json()?;
-        assert!(
-            neighbors["data"]
-                .as_array()
-                .context("expected JSON array")?
-                .iter()
-                .any(|relation| relation["predicate"] == "belongs_to_board"
-                    && relation["object_uri"] == format!("kb://board/{board_id}"))
-        );
-
-        let query = kanban(
-            &temp.path,
-            &[
-                "--json",
-                "graph",
-                "query",
-                &format!(
-                    "SELECT ?board WHERE {{ GRAPH ?g {{ <kb://task/{task_id}> <kb://predicate/belongs_to_board> ?board }} }}"
-                ),
-            ],
-        )?
-        .success_json()?;
-        assert_eq!(
-            query["data"]
-                .as_array()
-                .context("expected JSON array")?
-                .len(),
-            1
-        );
-    }
-
-    let vector = kanban(&temp.path, &["--json", "vector", "status"])?.success_json()?;
-    #[cfg(not(feature = "vector-lancedb"))]
-    {
-        assert_eq!(vector["data"]["backend"], "disabled");
-        assert_eq!(vector["data"]["enabled"], false);
-    }
-    #[cfg(feature = "vector-lancedb")]
-    {
-        assert_eq!(vector["data"]["backend"], "lancedb");
-        assert_eq!(vector["data"]["enabled"], false);
-        assert!(
-            vector["data"]["message"]
-                .as_str()
-                .context("expected JSON string")?
-                .contains("without an embedding provider")
-        );
-    }
+    let vector = kanban_in_dir_envs(
+        &temp.path,
+        &["--json", "vector", "status"],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", missing_vector_helper.as_path())],
+    )?
+    .success_json()?;
+    assert_eq!(vector["data"]["backend"], "helper-missing");
+    assert_eq!(vector["data"]["enabled"], false);
+    assert!(
+        vector["data"]["diagnostics"]
+            .as_array()
+            .context("expected diagnostics array")?
+            .iter()
+            .any(|value| value == "helper_missing")
+    );
 
     let context = kanban(
         &temp.path,
@@ -219,7 +173,6 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
     )?
     .success_json()?;
     assert_eq!(context["data"]["subject"], format!("kb://task/{task_id}"));
-    #[cfg(not(feature = "graph-oxigraph"))]
     assert!(
         context["data"]["degraded"]
             .as_array()
@@ -227,7 +180,7 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
             .iter()
             .any(|value| value == "graph_disabled")
     );
-    #[cfg(feature = "graph-oxigraph")]
+    #[cfg(any())]
     assert!(
         !context["data"]["degraded"]
             .as_array()
@@ -235,7 +188,6 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
             .iter()
             .any(|value| value == "graph_disabled")
     );
-    #[cfg(not(feature = "vector-lancedb"))]
     assert!(
         context["data"]["degraded"]
             .as_array()
@@ -243,7 +195,7 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
             .iter()
             .any(|value| value == "vector_disabled")
     );
-    #[cfg(feature = "vector-lancedb")]
+    #[cfg(any())]
     assert!(
         context["data"]["degraded"]
             .as_array()
@@ -266,7 +218,85 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
+#[test]
+fn vector_status_reports_invalid_helper_json_as_degraded() -> anyhow::Result<()> {
+    let temp = TempDb::new("vector_status_reports_invalid_helper_json_as_degraded")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let status = kanban_in_dir_envs(
+        &temp.path,
+        &["--json", "vector", "status"],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", std::path::Path::new("/bin/echo"))],
+    )?
+    .success_json()?;
+    assert_eq!(status["data"]["backend"], "helper-invalid");
+    assert_eq!(status["data"]["enabled"], false);
+    assert!(
+        status["data"]["message"]
+            .as_str()
+            .context("expected JSON string")?
+            .contains("invalid JSON envelope")
+    );
+    assert!(
+        status["data"]["diagnostics"]
+            .as_array()
+            .context("expected diagnostics array")?
+            .iter()
+            .any(|value| value == "helper_invalid_envelope")
+    );
+    Ok(())
+}
+
+#[test]
+fn graph_status_reports_invalid_helper_json_as_degraded() -> anyhow::Result<()> {
+    let temp = TempDb::new("graph_status_reports_invalid_helper_json_as_degraded")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let status = kanban_in_dir_envs(
+        &temp.path,
+        &["--json", "graph", "status"],
+        &temp.dir,
+        &[("KANBAN_GRAPH_HELPER", std::path::Path::new("/bin/echo"))],
+    )?
+    .success_json()?;
+    assert_eq!(status["data"]["backend"], "helper-invalid");
+    assert_eq!(status["data"]["enabled"], false);
+    assert!(
+        status["data"]["message"]
+            .as_str()
+            .context("expected JSON string")?
+            .contains("invalid JSON envelope")
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn graph_status_preserves_helper_error_envelope() -> anyhow::Result<()> {
+    let temp = TempDb::new("graph_status_preserves_helper_error_envelope")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let helper = temp.dir.join("helper-error.sh");
+    std::fs::write(
+        &helper,
+        r#"#!/usr/bin/env bash
+printf '%s\n' '{"protocol":"kanban-derived-helper.v1","payload_json":"{\"code\":\"bad_board\",\"message\":\"bad board\"}"}'
+exit 1
+"#,
+    )?;
+    let mut perms = std::fs::metadata(&helper)?.permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(&helper, perms)?;
+
+    kanban_in_dir_envs(
+        &temp.path,
+        &["--json", "graph", "status"],
+        &temp.dir,
+        &[("KANBAN_GRAPH_HELPER", helper.as_path())],
+    )?
+    .failure_containing("graph helper failed: bad board (bad_board)")?;
+    Ok(())
+}
+
+#[cfg(any())]
 mod vector_lancedb {
     use super::*;
 
@@ -287,44 +317,6 @@ mod vector_lancedb {
         fn embed(&self, _text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
             Ok(vec![0.0; self.dimensions])
         }
-    }
-
-    #[test]
-    fn vector_status_reports_lancedb_degraded_without_embedding_provider() -> anyhow::Result<()> {
-        let temp =
-            TempDb::new("vector_status_reports_lancedb_degraded_without_embedding_provider")?;
-        kanban(&temp.path, &["init"])?.success()?;
-        kanban(
-            &temp.path,
-            &[
-                "task",
-                "create",
-                "degraded vector source",
-                "--description",
-                "ready spec",
-            ],
-        )?
-        .success()?;
-
-        let status = kanban(&temp.path, &["--json", "vector", "status"])?.success_json()?;
-        assert_eq!(status["data"]["backend"], "lancedb");
-        assert_eq!(status["data"]["enabled"], false);
-        assert!(
-            status["data"]["message"]
-                .as_str()
-                .context("expected JSON string")?
-                .contains("without an embedding provider")
-        );
-        assert_eq!(status["data"]["dirty"], true);
-        assert_eq!(status["data"]["board_dirty"], true);
-        assert!(
-            status["data"]["diagnostics"]
-                .as_array()
-                .context("expected diagnostics array")?
-                .iter()
-                .any(|code| code == "vector_dirty")
-        );
-        Ok(())
     }
 
     #[test]

@@ -938,13 +938,23 @@ pub(crate) struct VectorQueryChunksArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct VectorQueryLabelAtomsArgs {
-    pub(crate) text: String,
+    #[arg(
+        required_unless_present = "vector_json",
+        conflicts_with = "vector_json"
+    )]
+    pub(crate) text: Option<String>,
+    #[arg(long = "vector-json", required_unless_present = "text")]
+    pub(crate) vector_json: Option<String>,
     #[arg(long, default_value_t = 10)]
     pub(crate) limit: usize,
     #[arg(long)]
     pub(crate) board_id: Option<String>,
+    #[arg(long = "embedding-model")]
+    pub(crate) embedding_model: Option<String>,
     #[arg(long)]
     pub(crate) polarity: Option<String>,
+    #[arg(long = "include-vector")]
+    pub(crate) include_vector: bool,
     #[arg(long = "vector-config", alias = "config")]
     pub(crate) vector_config: Option<std::path::PathBuf>,
 }

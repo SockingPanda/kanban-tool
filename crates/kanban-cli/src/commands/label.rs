@@ -1,6 +1,4 @@
 use std::path::{Path, PathBuf};
-#[cfg(any())]
-use std::sync::Arc;
 
 use anyhow::{Result, bail};
 use kanban_sqlite::{
@@ -16,10 +14,11 @@ use kanban_sqlite::{
     LabelSuggestionResult, MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
     accept_label_proposal_with_options, add_task_labels_with_options,
     apply_label_ontology_atom_with_options, bootstrap_task_label,
-    clear_label_semantics_with_options, create_label_ontology_action, delete_label,
-    explain_label_atom, get_label_ontology_signal, get_label_proposal, get_label_semantics,
-    label_atom_index_status_with, label_ontology_quality_report, list_label_atoms,
-    list_label_ontology_signals, list_label_proposals, list_label_semantics, list_labels,
+    bootstrap_task_label_with_staged_verification, clear_label_semantics_with_options,
+    create_label_ontology_action, delete_label, explain_label_atom, get_label_ontology_signal,
+    get_label_proposal, get_label_semantics, label_atom_index_status_with,
+    label_ontology_quality_report, list_label_atoms, list_label_ontology_signals,
+    list_label_proposals, list_label_semantics, list_labels,
     propose_task_label_with_store_and_create_options, record_label_ontology_observation,
     reject_label_proposal, remove_task_label, revert_label_ontology_mutation,
     review_label_ontology, suggest_task_labels_with, upsert_label_semantics_with_options,
@@ -28,11 +27,6 @@ use kanban_sqlite::{
 #[cfg(any())]
 use kanban_sqlite::{
     LabelOntologyTrustedValidationInput, validate_label_ontology_action_with_trusted_suggestions,
-};
-#[cfg(any())]
-use kanban_sqlite::{
-    bootstrap_task_label_with_staged_verification, label_atom_index_status_with,
-    query_label_atom_index_with, rebuild_label_atom_index_with, suggest_task_labels_with,
 };
 use kanban_vector::{SubprocessVectorStore, VectorStoreBackend};
 use serde::{Deserialize, Serialize};
@@ -104,35 +98,20 @@ pub(crate) fn handle_label(
                 negative_examples: args.negative_examples,
             };
             let output = if verify {
-                #[cfg(any())]
-                {
-                    let Some(store) =
-                        configured_lancedb_store(db_path, args.vector_config.as_deref())?
-                    else {
-                        bail!(
-                            "{LABEL_VECTOR_HELPER_ADAPTER_UNAVAILABLE}; omit --verify to bootstrap without vector verification"
-                        );
-                    };
-                    let result = bootstrap_task_label_with_staged_verification(
-                        db_path,
-                        board,
-                        actor,
-                        &args.task_ref,
-                        bootstrap_input,
-                        &store,
-                        args.min_verify_score,
-                    )?;
-                    LabelBootstrapCommandOutput {
-                        task: result.task,
-                        semantics: result.semantics,
-                        verification: Some(result.verification),
-                    }
-                }
-                {
-                    let _ = (db_path, board, actor, bootstrap_input);
-                    bail!(
-                        "{LABEL_VECTOR_HELPER_ADAPTER_UNAVAILABLE}; omit --verify to bootstrap without vector verification"
-                    );
+                let store = subprocess_vector_store(db_path, board, args.vector_config.as_deref())?;
+                let result = bootstrap_task_label_with_staged_verification(
+                    db_path,
+                    board,
+                    actor,
+                    &args.task_ref,
+                    bootstrap_input,
+                    &store,
+                    args.min_verify_score,
+                )?;
+                LabelBootstrapCommandOutput {
+                    task: result.task,
+                    semantics: result.semantics,
+                    verification: Some(result.verification),
                 }
             } else {
                 let result =
@@ -1424,7 +1403,7 @@ fn label_atom_index_status_optional_config(
     board: &str,
     vector_config_path: Option<&std::path::Path>,
 ) -> Result<kanban_vector::VectorStoreStatus> {
-    let store = subprocess_vector_store(db_path, board, vector_config_path);
+    let store = subprocess_vector_store(db_path, board, vector_config_path)?;
     label_atom_index_status_with(db_path, board, &store).map_err(Into::into)
 }
 
@@ -1458,7 +1437,7 @@ fn ensure_label_bootstrap_verification_available(
     board: &str,
     vector_config_path: Option<&Path>,
 ) -> Result<()> {
-    let store = subprocess_vector_store(db_path, board, vector_config_path);
+    let store = subprocess_vector_store(db_path, board, vector_config_path)?;
     let status = store.status();
     if status.enabled {
         return Ok(());
@@ -1477,7 +1456,7 @@ fn query_configured_label_atom_index(
     limit: usize,
     vector_config_path: &std::path::Path,
 ) -> Result<Vec<kanban_vector::LabelAtomHit>> {
-    let store = subprocess_vector_store(db_path, board, Some(vector_config_path));
+    let store = subprocess_vector_store(db_path, board, Some(vector_config_path))?;
     kanban_sqlite::query_label_atom_index_with(
         db_path,
         board,
@@ -1577,7 +1556,7 @@ fn suggest_with_optional_vector_config(
     options: LabelSuggestionOptions,
     vector_config_path: Option<&std::path::Path>,
 ) -> Result<LabelSuggestionResult> {
-    let store = subprocess_vector_store(db_path, board, vector_config_path);
+    let store = subprocess_vector_store(db_path, board, vector_config_path)?;
     suggest_task_labels_with(db_path, board, task_ref, &store, options).map_err(Into::into)
 }
 
@@ -1590,7 +1569,7 @@ fn propose_with_optional_vector_config(
     propose_options: kanban_sqlite::LabelProposalProposeOptions,
     vector_config_path: Option<&std::path::Path>,
 ) -> Result<kanban_sqlite::LabelProposalAttempt> {
-    let store = subprocess_vector_store(db_path, board, vector_config_path);
+    let store = subprocess_vector_store(db_path, board, vector_config_path)?;
     propose_task_label_with_store_and_create_options(
         db_path,
         board,
@@ -1607,38 +1586,15 @@ fn subprocess_vector_store(
     db_path: &Path,
     board: &str,
     vector_config_path: Option<&Path>,
-) -> SubprocessVectorStore {
-    SubprocessVectorStore::new(
+) -> Result<SubprocessVectorStore> {
+    let store = SubprocessVectorStore::new(
         resolve_helper(HelperKind::Vector),
         db_path.to_path_buf(),
         board.to_owned(),
         vector_config_path.map(Path::to_path_buf),
-    )
-}
-
-#[cfg(any())]
-fn configured_lancedb_store(
-    db_path: &Path,
-    vector_config_path: Option<&Path>,
-) -> Result<Option<kanban_vector_lancedb::LanceDbStore>> {
+    );
     let Some(config) = kanban_local::resolved_vector_config(vector_config_path)? else {
-        return Ok(None);
+        return Ok(store);
     };
-    if config.provider != "ollama" {
-        return Err(anyhow::anyhow!(
-            "unsupported vector provider in config: {}",
-            config.provider
-        ));
-    }
-    let provider = Arc::new(kanban_vector_lancedb::OllamaEmbeddingProvider::new(
-        config.endpoint.clone(),
-        config.model.clone(),
-        config.dimensions,
-    )?);
-    kanban_vector_lancedb::LanceDbStore::connect(kanban_vector_lancedb::LanceDbConfig::new(
-        kanban_local::vector_store_path(db_path.to_path_buf()),
-        provider,
-    ))
-    .map(Some)
-    .map_err(Into::into)
+    Ok(store.with_embedding_model(config.model))
 }

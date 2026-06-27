@@ -63,6 +63,7 @@ function TaskGraphCanvasInner({ graph, selectedTaskId, onSelectTask, mode = "det
   const reactFlow = useReactFlow<TaskFlowNode, TaskFlowEdge>()
   const layout = useMemo(() => layoutTaskGraph(graph, { mode, selectedTaskId }), [graph, mode, selectedTaskId])
   const safeScale = clampTaskGraphScale(scale)
+  const interaction = taskGraphInteraction(mode)
   const nodes = useMemo(
     () =>
       layout.nodes.map((node): TaskFlowNode => {
@@ -102,10 +103,10 @@ function TaskGraphCanvasInner({ graph, selectedTaskId, onSelectTask, mode = "det
   useEffect(() => {
     if (!nodes.length) return
     const frame = window.requestAnimationFrame(() => {
-      void reactFlow.fitView({ padding: mode === "detail" ? 0.28 : 0.16, duration: 160 })
+      void reactFlow.fitView({ padding: interaction.fitViewPadding, duration: 160 })
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [layout.height, layout.width, mode, nodes.length, reactFlow, selectedTaskId])
+  }, [interaction.fitViewPadding, layout.height, layout.width, nodes.length, reactFlow, selectedTaskId])
 
   useEffect(() => {
     if (mode !== "board-map") return
@@ -124,27 +125,25 @@ function TaskGraphCanvasInner({ graph, selectedTaskId, onSelectTask, mode = "det
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        minZoom={mode === "detail" ? 0.4 : 0.35}
-        maxZoom={1.75}
+        minZoom={interaction.minZoom}
+        maxZoom={interaction.maxZoom}
         nodesConnectable={false}
         nodesDraggable={false}
         elementsSelectable
-        panOnDrag={mode === "board-map"}
-        zoomOnScroll={mode === "board-map"}
-        zoomOnPinch={mode === "board-map"}
-        zoomOnDoubleClick={mode === "board-map"}
+        panOnDrag={interaction.panOnDrag}
+        zoomOnScroll={interaction.zoomOnScroll}
+        zoomOnPinch={interaction.zoomOnPinch}
+        zoomOnDoubleClick={interaction.zoomOnDoubleClick}
         connectOnClick={false}
         proOptions={{ hideAttribution: true }}
         onNodeClick={(_, node) => onSelectTask?.(node.id)}
         onNodeDoubleClick={(_, node) => onSelectTask?.(node.id)}
       >
         <Background gap={24} size={1} className="opacity-40" />
-        {mode === "board-map" ? (
-          <>
-            <MiniMap pannable zoomable nodeColor={miniMapNodeColor} nodeStrokeWidth={3} className="!bg-background/95" />
-            <Controls showInteractive={false} />
-          </>
+        {interaction.showMiniMap ? (
+          <MiniMap pannable zoomable nodeColor={miniMapNodeColor} nodeStrokeWidth={3} className="!bg-background/95" />
         ) : null}
+        {interaction.showControls ? <Controls showInteractive={false} /> : null}
       </ReactFlow>
     </div>
   )
@@ -206,6 +205,21 @@ function graphEdgeStroke(kind: TaskGraphEdgeKind, blocking?: boolean) {
   return blocking ? "#dc2626" : "#059669"
 }
 
+function taskGraphInteraction(mode: TaskGraphMode) {
+  const detailMode = mode === "detail"
+  return {
+    fitViewPadding: detailMode ? 0.28 : 0.16,
+    minZoom: detailMode ? 0.4 : 0.35,
+    maxZoom: detailMode ? 2.5 : 1.75,
+    panOnDrag: true,
+    zoomOnScroll: !detailMode,
+    zoomOnPinch: true,
+    zoomOnDoubleClick: !detailMode,
+    showControls: true,
+    showMiniMap: !detailMode,
+  }
+}
+
 function miniMapNodeColor(node: Node) {
   const data = node.data as Partial<TaskFlowNodeData>
   if (data.node?.role === "center") return "#111827"
@@ -214,4 +228,8 @@ function miniMapNodeColor(node: Node) {
   if (data.node?.role === "dependency_child") return "#059669"
   if (data.node?.role === "step_child" || data.node?.role === "step_parent") return "#7c3aed"
   return "#64748b"
+}
+
+export const __test = {
+  taskGraphInteraction,
 }

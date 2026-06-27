@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { graphNodeStatusClass, graphNodeStatusMiniMapColor } from "./task-map-colors"
+import { graphNodeStatusClass, graphNodeStatusMiniMapColor, graphNodeStepProgressClass } from "./task-map-colors"
 
 describe("task map colors", () => {
   it("colors graph nodes by task status", () => {
@@ -24,5 +24,9 @@ describe("task map colors", () => {
     expect(graphNodeStatusMiniMapColor("ready")).not.toBe(graphNodeStatusMiniMapColor("blocked"))
     expect(graphNodeStatusMiniMapColor("running")).toBe("#0284c7")
     expect(graphNodeStatusMiniMapColor("done")).toBe("#65a30d")
+  })
+
+  it("uses done colors for graph node step progress fill", () => {
+    expect(graphNodeStepProgressClass()).toContain("lime")
   })
 })

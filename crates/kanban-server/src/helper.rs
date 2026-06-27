@@ -70,11 +70,13 @@ impl HelperRunError {
     }
 
     pub(crate) fn is_status_degraded(&self) -> bool {
+        self.is_helper_missing() || matches!(self.kind, HelperRunErrorKind::InvalidEnvelope)
+    }
+
+    pub(crate) fn is_helper_missing(&self) -> bool {
         matches!(
             self.kind,
-            HelperRunErrorKind::SpawnNotFound
-                | HelperRunErrorKind::SpawnPermission
-                | HelperRunErrorKind::InvalidEnvelope
+            HelperRunErrorKind::SpawnNotFound | HelperRunErrorKind::SpawnPermission
         )
     }
 

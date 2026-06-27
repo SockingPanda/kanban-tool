@@ -184,6 +184,64 @@ async fn graph_status_and_neighbors_use_graph_helper() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn graph_neighbors_malformed_helper_output_is_server_error() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let helper = write_helper(
+        test.dir_path(),
+        "bad-graph-helper",
+        "#!/bin/sh\necho not-json\n",
+    )?;
+    let app =
+        build_router(AppState::new(test.db_path(), "api-test").with_graph_helper_path(helper));
+
+    let (status, json) = get_json(
+        app,
+        "/api/v1/graph/neighbors?board=default&entity_uri=kb%3A%2F%2Ftask%2Ft_test&limit=2",
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(json["error"]["code"], "internal");
+    assert_ne!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .context("message")?
+            .contains("invalid JSON envelope")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn label_atom_query_malformed_helper_output_is_server_error() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let helper = write_helper(
+        test.dir_path(),
+        "bad-vector-helper-query",
+        "#!/bin/sh\necho not-json\n",
+    )?;
+    let app =
+        build_router(AppState::new(test.db_path(), "api-test").with_vector_helper_path(helper));
+
+    let (status, json) = get_json(
+        app,
+        "/api/v1/boards/default/labels/atom-index/query?q=hello&limit=1",
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(json["error"]["code"], "internal");
+    assert_ne!(json["error"]["code"], "invalid_input");
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .context("message")?
+            .contains("invalid JSON envelope")
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn helper_error_payload_maps_to_api_error() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let helper = write_helper(

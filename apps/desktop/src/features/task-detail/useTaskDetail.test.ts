@@ -2,10 +2,60 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { KanbanApi } from "@/lib/api"
 
-import { fetchTaskDetail, requestTaskLabelSuggestions } from "./useTaskDetail"
+import { fetchTaskDetail, requestTaskLabelSuggestions, resolveTaskDetailQueryEnablement } from "./useTaskDetail"
 
 describe("task detail loading", () => {
-  it("does not request label suggestions during default task detail loading", async () => {
+  it("enables only the selected task query by default", () => {
+    expect(resolveTaskDetailQueryEnablement()).toEqual({
+      task: true,
+      dependencies: false,
+      neighborhood: false,
+      steps: false,
+      runs: false,
+      events: false,
+      comments: false,
+      runLog: false,
+    })
+  })
+
+  it("enables subqueries only from explicit panel state", () => {
+    expect(
+      resolveTaskDetailQueryEnablement({
+        enabled: true,
+        dependenciesEnabled: true,
+        neighborhoodEnabled: true,
+        stepsEnabled: true,
+        runsEnabled: true,
+        eventsEnabled: true,
+        commentsEnabled: true,
+        runLogEnabled: true,
+      }),
+    ).toEqual({
+      task: true,
+      dependencies: true,
+      neighborhood: true,
+      steps: true,
+      runs: true,
+      events: true,
+      comments: true,
+      runLog: true,
+    })
+  })
+
+  it("can disable the selected task query while preserving panel intent", () => {
+    expect(resolveTaskDetailQueryEnablement({ enabled: false, runsEnabled: true, runLogEnabled: true })).toEqual({
+      task: false,
+      dependencies: false,
+      neighborhood: false,
+      steps: false,
+      runs: true,
+      events: false,
+      comments: false,
+      runLog: true,
+    })
+  })
+
+  it("keeps the legacy aggregate fetch helper lazy for label suggestions and run logs", async () => {
     const api = {
       getTask: vi.fn(async () => task),
       listDependencies: vi.fn(async () => ({ parents: [], children: [] })),

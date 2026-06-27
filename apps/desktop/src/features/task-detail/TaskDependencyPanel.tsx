@@ -6,8 +6,6 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import { InputGroup, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import type { Task, TaskStatus } from "@/lib/api"
 
-import { Section } from "./task-detail-shared"
-
 export function TaskDependencyPanel({
   parents,
   children,
@@ -28,33 +26,31 @@ export function TaskDependencyPanel({
   onSelectTask: (taskId: string) => void
 }) {
   return (
-    <Section title="Dependency controls">
-      <div className="space-y-3">
-        <DependencyGroup title="Parents" tasks={parents} pending={pending} onSelect={onSelectTask} onRemove={onRemoveDependency} />
-        <DependencyGroup title="Children" tasks={children} onSelect={onSelectTask} />
-        <Field>
-          <FieldLabel>Parent task id</FieldLabel>
-          <InputGroup>
-            <InputGroupInput
-              aria-label="Parent task id"
-              name="parent-task-id"
-              autoComplete="off"
-              value={dependencyInput}
-              onChange={(event) => setDependencyInput(event.target.value)}
-              placeholder="Parent task id"
-            />
-            <InputGroupButton
-              variant="outline"
-              aria-label="Add parent dependency"
-              disabled={!dependencyInput.trim() || pending}
-              onClick={onAddDependency}
-            >
-              <GitBranch className="h-4 w-4" />
-            </InputGroupButton>
-          </InputGroup>
-        </Field>
-      </div>
-    </Section>
+    <div className="space-y-3">
+      <DependencyGroup title="Parents" tasks={parents} pending={pending} onSelect={onSelectTask} onRemove={onRemoveDependency} />
+      <DependencyGroup title="Children" tasks={children} onSelect={onSelectTask} />
+      <Field>
+        <FieldLabel>Parent task id</FieldLabel>
+        <InputGroup>
+          <InputGroupInput
+            aria-label="Parent task id"
+            name="parent-task-id"
+            autoComplete="off"
+            value={dependencyInput}
+            onChange={(event) => setDependencyInput(event.target.value)}
+            placeholder="Parent task id"
+          />
+          <InputGroupButton
+            variant="outline"
+            aria-label="Add parent dependency"
+            disabled={!dependencyInput.trim() || pending}
+            onClick={onAddDependency}
+          >
+            <GitBranch className="h-4 w-4" />
+          </InputGroupButton>
+        </InputGroup>
+      </Field>
+    </div>
   )
 }
 

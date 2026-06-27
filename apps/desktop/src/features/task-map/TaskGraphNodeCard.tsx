@@ -6,10 +6,11 @@ import { cn } from "@/lib/utils"
 import { graphNodeRoleClass } from "./task-map-colors"
 import type { TaskGraphLayoutNode } from "./task-graph-types"
 
-export function TaskGraphNodeCard({ node, selected, onSelectTask }: {
+export function TaskGraphNodeCard({ node, selected, onSelectTask, className }: {
   node: TaskGraphLayoutNode
   selected: boolean
   onSelectTask?: (taskId: string) => void
+  className?: string
 }) {
   const Icon = node.role === "subtask_child" || node.role === "subtask_parent" ? ListChecks : node.role === "dependency_child" ? GitMerge : GitBranch
   return (
@@ -18,10 +19,10 @@ export function TaskGraphNodeCard({ node, selected, onSelectTask }: {
       aria-label={`Open task ${node.ref} ${node.title}`}
       aria-pressed={selected}
       className={cn(
-        "absolute flex h-[72px] w-44 flex-col rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "flex h-[72px] w-44 flex-col rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         graphNodeRoleClass(node.role, selected, node.contextOnly),
+        className,
       )}
-      style={{ left: node.x, top: node.y }}
       onClick={() => onSelectTask?.(node.id)}
     >
       <div className="flex min-w-0 items-center justify-between gap-2">

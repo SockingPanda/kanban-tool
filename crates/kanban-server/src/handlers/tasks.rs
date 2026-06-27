@@ -95,7 +95,11 @@ pub(crate) struct LabelSuggestionQuery {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct LabelAtomIndexQuery {
-    q: String,
+    q: Option<String>,
+    vector_json: Option<String>,
+    embedding_model: Option<String>,
+    #[serde(default)]
+    include_vector: bool,
     polarity: Option<String>,
     #[serde(default = "default_label_atom_query_limit")]
     limit: usize,
@@ -814,21 +818,42 @@ pub(crate) async fn query_label_atom_index(
     State(state): State<AppState>,
     Path(board): Path<String>,
     query: Result<Query<LabelAtomIndexQuery>, QueryRejection>,
-) -> Result<Json<Envelope<Vec<kanban_vector::LabelAtomHit>>>, ApiError> {
+) -> Result<Json<Envelope<JsonValue>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
     validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
-    let text = query.q.trim();
-    if text.is_empty() {
-        return Err(invalid_input("q is required"));
+    let text = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let vector_json = query
+        .vector_json
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    match (text, vector_json) {
+        (Some(_), Some(_)) => {
+            return Err(invalid_input("q and vector_json are mutually exclusive"));
+        }
+        (None, None) => return Err(invalid_input("q or vector_json is required")),
+        _ => {}
     }
     let polarity = query
         .polarity
         .as_deref()
         .map(parse_label_atom_polarity)
         .transpose()?;
-    let result =
-        query_label_atom_index_for_state(state, board, text.to_owned(), polarity, query.limit)
-            .await?;
+    let result = query_label_atom_index_for_state(
+        state,
+        board,
+        text.map(str::to_owned),
+        vector_json.map(str::to_owned),
+        query.embedding_model,
+        query.include_vector,
+        polarity,
+        query.limit,
+    )
+    .await?;
     Ok(Json(Envelope {
         data: result,
         meta: None,
@@ -1883,24 +1908,36 @@ fn rebuild_label_atom_index_for_state() -> Result<kanban_vector::VectorStoreStat
 async fn query_label_atom_index_for_state(
     state: AppState,
     board: String,
-    text: String,
+    text: Option<String>,
+    vector_json: Option<String>,
+    embedding_model: Option<String>,
+    include_vector: bool,
     polarity: Option<String>,
     limit: usize,
-) -> Result<Vec<kanban_vector::LabelAtomHit>, ApiError> {
-    let mut command_args = vec![
-        "query-label-atoms".to_owned(),
-        "--text".to_owned(),
-        text,
-        "--limit".to_owned(),
-        limit.to_string(),
-    ];
+) -> Result<JsonValue, ApiError> {
+    let mut command_args = vec!["query-label-atoms".to_owned()];
+    if let Some(text) = text {
+        command_args.push("--text".to_owned());
+        command_args.push(text);
+    } else if let Some(vector_json) = vector_json {
+        command_args.push("--vector-json".to_owned());
+        command_args.push(vector_json);
+    }
+    command_args.push("--limit".to_owned());
+    command_args.push(limit.to_string());
+    if let Some(embedding_model) = embedding_model {
+        command_args.push("--embedding-model".to_owned());
+        command_args.push(embedding_model);
+    }
     if let Some(polarity) = polarity {
         command_args.push("--polarity".to_owned());
         command_args.push(polarity);
     }
+    if include_vector {
+        command_args.push("--include-vector".to_owned());
+    }
     let args = super::vector::vector_helper_args(&state, &board, &command_args);
-    match run_helper_json::<Vec<kanban_vector::LabelAtomHit>>(state, HelperKind::Vector, args).await
-    {
+    match run_helper_json::<JsonValue>(state, HelperKind::Vector, args).await {
         Ok(hits) => Ok(hits),
         Err(error) if error.is_helper_missing() => Err(invalid_input(helper_degraded_message(
             HelperKind::Vector,

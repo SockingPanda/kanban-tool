@@ -1324,21 +1324,20 @@ ontology provenance action 引用其 id 或 content hash 时返回 `200` 且
 `legacy_untracked=true`；未知 id/hash 返回 not found。
 
 `GET /api/v1/boards/{board}/labels/atom-index/status` 返回 label atom vector index
-状态。CLI 默认 no-heavy build 当前没有 label vector helper adapter；server route 仍按
-进程内可用能力报告。无 vector provider、adapter 不可用或二进制未包含内置 vector store 时仍返回 `200` disabled
-状态。JSON 保留兼容字段 `message`，并额外返回结构化
-`diagnostics: string[]`、`dirty: boolean | null`、`board_dirty: boolean | null`；
-调用方应使用结构化字段判断 dirty/error，而不要解析 `message` 文案。
-同一 `VectorStoreStatus` shape 也用于 `/api/v1/vector/status`。
+状态。server no-heavy route 通过 vector helper adapter 报告当前 helper 能力。无 vector provider、
+adapter 不可用或 helper 缺失时仍返回 `200` disabled 状态。JSON 保留兼容字段 `message`，并额外返回结构化
+`diagnostics: string[]`、`dirty: boolean | null`、`board_dirty: boolean | null`；调用方应使用结构化字段判断 dirty/error，
+而不要解析 `message` 文案。同一 `VectorStoreStatus` shape 也用于 `/api/v1/vector/status`。
 
 `POST /api/v1/boards/{board}/labels/atom-index/rebuild` 在当前 server helper adapter
 下不可用，返回 `400 invalid_input`；server 不调用 helper `status`，也不把 helper
 缺失或 malformed output fallback 成 `200` degraded success。真实 rebuild 仍应走 CLI/helper
 重建路径，或由后续 #330/相关任务补齐 server adapter support。
-`GET /api/v1/boards/{board}/labels/atom-index/query` 查询派生的 `lancedb_label_atoms`
-索引，`q` 必填，`polarity` 可选且只接受 `positive` / `negative`，`limit` 默认 24；
-hit 中的 `distance` 是 LanceDB `_distance`，不是 solver similarity score。未配置
-provider、adapter/feature 不可用或 vector store 不可用时，query 返回显式 API error，
+`GET /api/v1/boards/{board}/labels/atom-index/query` 通过 vector helper adapter 查询派生的
+`lancedb_label_atoms` 索引。请求必须提供 `q=<text>` 或 `vector_json=<json-array>` 之一，二者互斥；
+`embedding_model` 可选，`include_vector=true` 可要求 raw vector hit 返回向量，`polarity` 可选且只接受
+`positive` / `negative`，`limit` 默认 24。hit 中的 `distance` 是 LanceDB `_distance`，不是 solver
+similarity score。未配置 provider、adapter/helper 不可用或 vector store 不可用时，query 返回显式 API error，
 不修改 SQLite truth。
 
 ### 12.2 Task label suggestions

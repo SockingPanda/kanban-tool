@@ -129,6 +129,24 @@ async fn vector_and_label_atom_endpoints_use_vector_helper() -> anyhow::Result<(
             .any(|pair| pair[0] == "--polarity" && pair[1] == "positive")
     );
 
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/labels/atom-index/query?vector_json=%5B1.0%2C0.0%5D&embedding_model=review-model&include_vector=true&polarity=positive&limit=2",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"].as_array().context("hits")?.len(), 0);
+    let args: Vec<String> = serde_json::from_str(&std::fs::read_to_string(&log)?)?;
+    assert!(
+        args.windows(2)
+            .any(|pair| pair[0] == "--vector-json" && pair[1] == "[1.0,0.0]")
+    );
+    assert!(
+        args.windows(2)
+            .any(|pair| pair[0] == "--embedding-model" && pair[1] == "review-model")
+    );
+    assert!(args.iter().any(|arg| arg == "--include-vector"));
+
     let (status, json) = post_json(
         app,
         "/api/v1/boards/default/labels/atom-index/rebuild",

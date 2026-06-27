@@ -303,6 +303,7 @@ pub struct SubprocessVectorStore {
     db_path: PathBuf,
     board: String,
     vector_config_path: Option<PathBuf>,
+    embedding_model: Option<String>,
 }
 
 impl SubprocessVectorStore {
@@ -317,7 +318,13 @@ impl SubprocessVectorStore {
             db_path: db_path.into(),
             board: board.into(),
             vector_config_path,
+            embedding_model: None,
         }
+    }
+
+    pub fn with_embedding_model(mut self, embedding_model: impl Into<String>) -> Self {
+        self.embedding_model = Some(embedding_model.into());
+        self
     }
 
     fn helper_args(&self, command_args: &[String]) -> Vec<String> {
@@ -421,7 +428,9 @@ fn bounded_helper_message(value: &str) -> String {
 
 impl VectorStoreBackend for SubprocessVectorStore {
     fn embedding_model(&self) -> &str {
-        DEFAULT_EMBEDDING_MODEL
+        self.embedding_model
+            .as_deref()
+            .unwrap_or(DEFAULT_EMBEDDING_MODEL)
     }
 
     fn status(&self) -> VectorStoreStatus {

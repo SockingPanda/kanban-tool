@@ -318,6 +318,69 @@ print(json.dumps({{"protocol":"kanban-derived-helper.v1","payload_json":json.dum
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn vector_query_label_atoms_supports_raw_vector_helper_query() -> anyhow::Result<()> {
+    let temp = TempDb::new("vector_query_label_atoms_supports_raw_vector_helper_query")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let helper = temp.dir.join("vector-helper.py");
+    write_executable(
+        &helper,
+        r#"#!/usr/bin/env python3
+import json, sys
+args = sys.argv[1:]
+cmd = args[0]
+if cmd == "query-label-atoms":
+    assert "--vector-json" in args, args
+    assert args[args.index("--vector-json") + 1] == "[1.0,0.0]", args
+    assert args[args.index("--embedding-model") + 1] == "review-model", args
+    assert args[args.index("--polarity") + 1] == "positive", args
+    assert "--include-vector" in args, args
+    payload = [{"hit": {
+        "atom_id":"atom_backend_positive",
+        "label_id":"label_backend",
+        "label_name":"backend",
+        "board_id":"b_default",
+        "polarity":"positive",
+        "kind":"applies_when",
+        "text":"touches rust service code",
+        "ordinal":0,
+        "content_hash":"hash",
+        "embedding_model":"review-model",
+        "distance":0.0
+    }, "vector": [1.0, 0.0]}]
+else:
+    payload = []
+print(json.dumps({"protocol":"kanban-derived-helper.v1","payload_json":json.dumps(payload)}))
+"#,
+    )?;
+
+    let hits = kanban_in_dir_envs(
+        &temp.path,
+        &[
+            "--json",
+            "vector",
+            "query-label-atoms",
+            "--vector-json",
+            "[1.0,0.0]",
+            "--include-vector",
+            "--embedding-model",
+            "review-model",
+            "--polarity",
+            "positive",
+            "--limit",
+            "2",
+        ],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", helper.as_path())],
+    )?
+    .success_json()?;
+
+    assert_eq!(hits["data"][0]["hit"]["label_name"], "backend");
+    assert_eq!(hits["data"][0]["vector"], serde_json::json!([1.0, 0.0]));
+    Ok(())
+}
+
 #[test]
 fn vector_status_reports_invalid_helper_json_as_degraded() -> anyhow::Result<()> {
     let temp = TempDb::new("vector_status_reports_invalid_helper_json_as_degraded")?;

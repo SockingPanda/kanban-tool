@@ -398,36 +398,64 @@ pub(crate) fn handle_vector(
         }
         VectorCommand::QueryLabelAtoms(args) => {
             validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
-            let mut command_args = vec![
-                "query-label-atoms".to_owned(),
-                "--text".to_owned(),
-                args.text,
-                "--limit".to_owned(),
-                args.limit.to_string(),
-            ];
+            let mut command_args = vec!["query-label-atoms".to_owned()];
+            if let Some(text) = args.text {
+                command_args.push("--text".to_owned());
+                command_args.push(text);
+            } else if let Some(vector_json) = args.vector_json {
+                command_args.push("--vector-json".to_owned());
+                command_args.push(vector_json);
+            } else {
+                bail!("query-label-atoms requires TEXT or --vector-json");
+            }
+            command_args.push("--limit".to_owned());
+            command_args.push(args.limit.to_string());
             if let Some(board_id) = args.board_id {
                 command_args.push("--board-id".to_owned());
                 command_args.push(board_id);
+            }
+            if let Some(embedding_model) = args.embedding_model {
+                command_args.push("--embedding-model".to_owned());
+                command_args.push(embedding_model);
             }
             if let Some(polarity) = args.polarity {
                 command_args.push("--polarity".to_owned());
                 command_args.push(polarity);
             }
-            let hits = vector_helper_json::<Vec<kanban_vector::LabelAtomHit>>(
+            if args.include_vector {
+                command_args.push("--include-vector".to_owned());
+            }
+            let values = vector_helper_json::<serde_json::Value>(
                 db_path,
                 board,
                 &command_args,
                 args.vector_config.as_deref(),
             )?;
-            print_or_json(json, &hits, || {
+            print_or_json(json, &values, || {
+                let hits = values.as_array().cloned().unwrap_or_default();
                 if hits.is_empty() {
                     "No label atom vector results".to_owned()
                 } else {
                     hits.iter()
                         .map(|hit| {
+                            let hit = hit.get("hit").unwrap_or(hit);
                             format!(
                                 "{} label={} polarity={} distance={} {}",
-                                hit.atom_id, hit.label_name, hit.polarity, hit.distance, hit.text
+                                hit.get("atom_id")
+                                    .and_then(|value| value.as_str())
+                                    .unwrap_or(""),
+                                hit.get("label_name")
+                                    .and_then(|value| value.as_str())
+                                    .unwrap_or(""),
+                                hit.get("polarity")
+                                    .and_then(|value| value.as_str())
+                                    .unwrap_or(""),
+                                hit.get("distance")
+                                    .map(|value| value.to_string())
+                                    .unwrap_or_default(),
+                                hit.get("text")
+                                    .and_then(|value| value.as_str())
+                                    .unwrap_or("")
                             )
                         })
                         .collect::<Vec<_>>()
@@ -576,12 +604,15 @@ fn build_configured_context_pack(
     policy: ContextPolicy,
     vector_config_path: Option<&Path>,
 ) -> Result<kanban_context::ContextPack> {
-    let store = SubprocessVectorStore::new(
+    let mut store = SubprocessVectorStore::new(
         resolve_helper(HelperKind::Vector),
         db_path.clone(),
         board.to_owned(),
         vector_config_path.map(Path::to_path_buf),
     );
+    if let Some(config) = kanban_local::resolved_vector_config(vector_config_path)? {
+        store = store.with_embedding_model(config.model);
+    }
     kanban_sqlite::build_context_pack_with_vector_store(db_path, board, task_ref, policy, &store)
         .map_err(Into::into)
 }

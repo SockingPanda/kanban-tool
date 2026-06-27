@@ -5,6 +5,7 @@ import { queryKeys } from "@/lib/query-keys"
 
 export type BoardTaskMapOptions = {
   includeDoneContext: boolean
+  hideIsolated?: boolean
 }
 
 export function useBoardTaskMap(api: KanbanApi | null, options: BoardTaskMapOptions) {
@@ -15,7 +16,10 @@ export function boardTaskMapQueryOptions(api: KanbanApi | null, options: BoardTa
   const board = api?.board ?? "pending"
   return {
     enabled: Boolean(api),
-    queryKey: queryKeys.boardTaskMap(board, { includeDoneContext: options.includeDoneContext }),
+    queryKey: queryKeys.boardTaskMap(board, {
+      includeDoneContext: options.includeDoneContext,
+      hideIsolated: Boolean(options.hideIsolated),
+    }),
     queryFn: ({ signal }: { signal?: AbortSignal }) => {
       if (!api) throw new Error("Board task map query is not ready")
       return api.getBoardTaskMap(api.board, {
@@ -23,6 +27,7 @@ export function boardTaskMapQueryOptions(api: KanbanApi | null, options: BoardTa
         contextDepth: 1,
         includeDoneContext: options.includeDoneContext,
         includeArchivedContext: false,
+        hideIsolated: Boolean(options.hideIsolated),
         limitNodes: 240,
         signal,
       })

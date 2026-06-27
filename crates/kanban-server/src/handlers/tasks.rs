@@ -36,6 +36,25 @@ pub(crate) struct TaskListQuery {
     sort: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub(crate) struct TaskPageMetaDto {
+    limit: usize,
+    offset: usize,
+    total: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct TaskStatusWindowDto {
+    status: TaskStatus,
+    tasks: Vec<TaskDto>,
+    page: TaskPageMetaDto,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct TaskStatusWindowsDto {
+    statuses: Vec<TaskStatusWindowDto>,
+}
+
 fn parse_plan_filters(raw_query: Option<&str>) -> Result<Vec<TaskPlanFilter>, ApiError> {
     let Some(raw_query) = raw_query else {
         return Ok(Vec::new());
@@ -501,6 +520,70 @@ pub(crate) async fn list_tasks(
     Ok(Json(Envelope {
         data: tasks,
         meta: Some(json!({ "limit": query.limit, "offset": query.offset, "total": page.total })),
+    }))
+}
+
+pub(crate) async fn list_tasks_by_status(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+    RawQuery(raw_query): RawQuery,
+    query: Result<Query<TaskListQuery>, QueryRejection>,
+) -> Result<Json<Envelope<TaskStatusWindowsDto>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    validate_page_bounds(
+        query.limit,
+        kanban_sqlite::MAX_TASK_LIST_LIMIT,
+        query.offset,
+    )?;
+    let statuses = parse_status_filters(raw_query.as_deref())?;
+    let priorities = parse_priority_filters(raw_query.as_deref())?;
+    let labels = parse_label_filters(raw_query.as_deref())?;
+    let plan_filters = parse_plan_filters(raw_query.as_deref())?;
+    let assignee = query
+        .assignee
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned);
+    let search = query
+        .q
+        .as_deref()
+        .or(query.search.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned);
+    let sort = parse_task_sort(query.sort.as_deref())?;
+    let mut windows = Vec::with_capacity(statuses.len());
+    for status in statuses {
+        let page = kanban_sqlite::list_tasks_page(
+            state.db_path(),
+            &board,
+            kanban_sqlite::TaskListOptions {
+                statuses: vec![status],
+                priorities: priorities.clone(),
+                labels: labels.clone(),
+                plan_filters: plan_filters.clone(),
+                include_archived: query.include_archived,
+                assignee: assignee.clone(),
+                search: search.clone(),
+                sort,
+                limit: query.limit,
+                offset: query.offset,
+            },
+        )?;
+        windows.push(TaskStatusWindowDto {
+            status,
+            tasks: page.tasks.into_iter().map(TaskDto::from).collect(),
+            page: TaskPageMetaDto {
+                limit: query.limit,
+                offset: query.offset,
+                total: page.total,
+            },
+        });
+    }
+    Ok(Json(Envelope {
+        data: TaskStatusWindowsDto { statuses: windows },
+        meta: Some(json!({ "limit": query.limit, "offset": query.offset })),
     }))
 }
 

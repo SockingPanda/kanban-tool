@@ -57,6 +57,10 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/boards/:board/tasks",
             get(list_tasks).post(create_task),
         )
+        .route(
+            "/api/v1/boards/:board/tasks/by-status",
+            get(list_tasks_by_status),
+        )
         .route("/api/v1/boards/:board/task-map", get(board_task_map))
         .route("/api/v1/tasks/:task_id", get(get_task).patch(update_task))
         .route(
@@ -202,6 +206,10 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/stats", get(get_stats))
         .route("/api/v1/search/tasks", get(search_tasks))
+        .route(
+            "/api/v1/search/tasks/by-status",
+            get(search_tasks_by_status),
+        )
         .route("/api/v1/search/status", get(search_status))
         .route("/api/v1/tasks/:task_id/context", get(build_context))
         .route("/api/v1/graph/status", get(graph_status))

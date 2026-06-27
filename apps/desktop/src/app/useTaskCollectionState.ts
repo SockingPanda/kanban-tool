@@ -56,14 +56,16 @@ export function useTaskCollectionState(api: KanbanApi | null, view: OperatorView
   )
   const visibleColumnStatuses = useMemo(() => visibleColumns.map((column) => column.status), [visibleColumns])
   const enabled = shouldLoadTaskCollection(view)
+  const statsEnabled = view === "board" || view === "list" || view === "map" || view === "runs"
 
   const statsQuery = useQuery({
-    enabled: Boolean(api),
+    enabled: Boolean(api && statsEnabled),
     queryKey: queryKeys.stats(api?.board ?? "pending"),
     queryFn: ({ signal }) => {
       if (!api) throw new Error("API client is not ready")
       return api.stats({ signal })
     },
+    staleTime: 30_000,
   })
 
   const tasksQuery = useBoardTasks({

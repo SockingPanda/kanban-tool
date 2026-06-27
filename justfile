@@ -16,8 +16,32 @@ clippy:
 clippy-p package:
     scripts/cargo-build-lock.sh -- cargo clippy -p {{package}} --tests -- -D warnings
 
-check:
-    scripts/cargo-build-lock.sh -- cargo check --workspace --exclude kanban-desktop --tests
+check: check-core
+
+check-core:
+    scripts/cargo-build-lock.sh -- cargo check --tests \
+        -p kanban-core \
+        -p kanban-entity \
+        -p kanban-indexer \
+        -p kanban-search \
+        -p kanban-graph \
+        -p kanban-vector \
+        -p kanban-derived-io \
+        -p kanban-labels \
+        -p kanban-context \
+        -p kanban-sqlite \
+        -p kanban-local \
+        -p kanban-server \
+        -p kanban-cli
+
+check-helpers:
+    scripts/cargo-build-lock.sh -- cargo check --tests \
+        -p kanban-vector-lancedb \
+        -p kanban-graph-oxigraph
+
+check-full:
+    just check-core
+    just check-helpers
 
 test *args:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop "$@"; fi
@@ -30,7 +54,7 @@ check-p package:
 
 rust-fast:
     cargo fmt -- --check
-    scripts/cargo-build-lock.sh -- cargo check --workspace --exclude kanban-desktop --tests
+    just check-core
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop; fi
     scripts/cargo-build-lock.sh -- cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings
 
@@ -88,8 +112,10 @@ feature-p package features:
 
 release:
     just affected-self-test
-    just affected
+    just check-full
+    just target-tools
     just cli-package
+    just cli-package-layout
     just desktop-package
     just smoke
     just diff-check

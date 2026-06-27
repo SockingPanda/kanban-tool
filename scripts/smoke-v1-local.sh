@@ -11,6 +11,7 @@ KB=("$LOCK" -- cargo run -q -p kanban-cli --bin kanban -- --db "$TMPDIR/kb.db" -
 "${KB[@]}" init >/dev/null
 task_json="$("${KB[@]}" task create "v1 smoke task" --description "ready spec" --max-retries 2)"
 task_id="$(printf '%s' "$task_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["id"])')"
+"${KB[@]}" task step not-required "$task_id" --reason "smoke task has no execution plan steps" >/dev/null
 
 "${KB[@]}" dispatch --once --command "printf 'smoke log\n'" --log-dir "$TMPDIR/logs" >/dev/null
 "${KB[@]}" run logs "$("${KB[@]}" runs "$task_id" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])')" >/dev/null

@@ -172,7 +172,12 @@ export type AppShellTaskDetailProps = {
   draftDirty: boolean
   claimToken: string | null
   detailLoading: boolean
+  taskCommentsExpanded: boolean
+  taskDependenciesExpanded: boolean
+  taskEventsExpanded: boolean
+  taskGraphExpanded: boolean
   taskRunsExpanded: boolean
+  taskStepsExpanded: boolean
 }
 
 export type AppShellTaskCreationProps = {
@@ -215,11 +220,16 @@ export type AppShellCommandProps = {
   setShowArchived: (value: boolean) => void
   setSidebarOpen: (value: boolean) => void
   setStatusFilter: (value: TaskStatus | "all") => void
+  setTaskCommentsExpanded: (value: boolean) => void
   setTaskCreationDescription: (value: string) => void
   setTaskCreationFirstStepTitle: (value: string) => void
   setTaskCreationOpen: (value: boolean) => void
   setTaskCreationTitle: (value: string) => void
+  setTaskDependenciesExpanded: (value: boolean) => void
+  setTaskEventsExpanded: (value: boolean) => void
+  setTaskGraphExpanded: (value: boolean) => void
   setTaskRunsExpanded: (value: boolean) => void
+  setTaskStepsExpanded: (value: boolean) => void
   setView: (value: OperatorView) => void
 }
 
@@ -272,7 +282,12 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
     labelSuggestionsRequested,
     selectedId,
     selectedTask,
+    taskCommentsExpanded,
+    taskDependenciesExpanded,
+    taskEventsExpanded,
+    taskGraphExpanded,
     taskRunsExpanded,
+    taskStepsExpanded,
   } = taskDetail
   const showDetailSheet = shouldOpenTaskDetailSheet(view, selectedTask)
 
@@ -400,7 +415,12 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
                 draftDirty={draftDirty}
                 setEditDraft={commands.setEditDraft}
                 detailLoading={detailLoading}
+                commentsExpanded={taskCommentsExpanded}
+                dependenciesExpanded={taskDependenciesExpanded}
+                eventsExpanded={taskEventsExpanded}
+                graphExpanded={taskGraphExpanded}
                 runsExpanded={taskRunsExpanded}
+                stepsExpanded={taskStepsExpanded}
                 pendingAction={pendingAction}
                 onAction={commands.runAction}
                 onAddDependency={commands.addDependency}
@@ -410,7 +430,12 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
                 onSaveTask={commands.saveTask}
                 onCancelEdit={commands.cancelTaskEdit}
                 onAddComment={commands.addComment}
+                onCommentsExpandedChange={commands.setTaskCommentsExpanded}
+                onDependenciesExpandedChange={commands.setTaskDependenciesExpanded}
+                onEventsExpandedChange={commands.setTaskEventsExpanded}
+                onGraphExpandedChange={commands.setTaskGraphExpanded}
                 onRunsExpandedChange={commands.setTaskRunsExpanded}
+                onStepsExpandedChange={commands.setTaskStepsExpanded}
               />
             </SheetContent>
           </Sheet>

@@ -24,10 +24,24 @@ export function useSelectedTaskDetailState(
   const [draftState, setDraftState] = useState<TaskDraftState | null>(null)
   const [claimTokens, setClaimTokens] = useState<Record<string, string>>({})
   const [labelSuggestionsRequested, setLabelSuggestionsRequested] = useState(false)
+  const [taskDependenciesExpanded, setTaskDependenciesExpanded] = useState(false)
+  const [taskGraphExpanded, setTaskGraphExpanded] = useState(false)
+  const [taskStepsExpanded, setTaskStepsExpanded] = useState(false)
   const [taskRunsExpanded, setTaskRunsExpanded] = useState(false)
+  const [taskEventsExpanded, setTaskEventsExpanded] = useState(false)
+  const [taskCommentsExpanded, setTaskCommentsExpanded] = useState(false)
 
   const enabled = shouldLoadTaskDetail(view, selectedId)
-  const detailQuery = useTaskDetail(api, selectedId, { enabled, runLogEnabled: view === "runs" || taskRunsExpanded })
+  const detailQuery = useTaskDetail(api, selectedId, {
+    enabled,
+    dependenciesEnabled: taskDependenciesExpanded,
+    neighborhoodEnabled: taskGraphExpanded,
+    stepsEnabled: taskStepsExpanded,
+    runsEnabled: view === "runs" || taskRunsExpanded,
+    eventsEnabled: taskEventsExpanded,
+    commentsEnabled: taskCommentsExpanded,
+    runLogEnabled: view === "runs" || taskRunsExpanded,
+  })
   const labelSuggestionsQuery = useQuery({
     enabled: false,
     queryKey: selectedId ? queryKeys.taskLabelSuggestions(selectedId) : ["task-label-suggestions", "none"],
@@ -71,7 +85,12 @@ export function useSelectedTaskDetailState(
 
   useEffect(() => {
     setLabelSuggestionsRequested(false)
+    setTaskDependenciesExpanded(false)
+    setTaskGraphExpanded(false)
+    setTaskStepsExpanded(false)
     setTaskRunsExpanded(false)
+    setTaskEventsExpanded(false)
+    setTaskCommentsExpanded(false)
   }, [selectedId])
 
   useEffect(() => {
@@ -117,8 +136,18 @@ export function useSelectedTaskDetailState(
       setDraftState,
       setLabelSuggestionsRequested,
       setSelectedId,
+      setTaskCommentsExpanded,
+      setTaskDependenciesExpanded,
+      setTaskEventsExpanded,
+      setTaskGraphExpanded,
       setTaskRunsExpanded,
+      setTaskStepsExpanded,
+      taskCommentsExpanded,
+      taskDependenciesExpanded,
+      taskEventsExpanded,
+      taskGraphExpanded,
       taskRunsExpanded,
+      taskStepsExpanded,
     }),
     [
       activeRun,
@@ -136,7 +165,12 @@ export function useSelectedTaskDetailState(
       labelSuggestionsRequested,
       selectedId,
       selectedTask,
+      taskCommentsExpanded,
+      taskDependenciesExpanded,
+      taskEventsExpanded,
+      taskGraphExpanded,
       taskRunsExpanded,
+      taskStepsExpanded,
     ],
   )
 }

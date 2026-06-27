@@ -31,8 +31,8 @@ export type ListColumnId =
   | "priority"
   | "assignee"
   | "execution_plan"
-  | "required_subtasks"
-  | "done_required_subtasks"
+  | "required_steps"
+  | "done_required_steps"
   | "dependency_blocked"
   | "schedule"
   | "updated"
@@ -46,8 +46,8 @@ export const listColumnLabels: Record<ListColumnId, string> = {
   priority: "Priority",
   assignee: "Assignee",
   execution_plan: "Execution plan",
-  required_subtasks: "Required subtasks",
-  done_required_subtasks: "Done required subtasks",
+  required_steps: "Required steps",
+  done_required_steps: "Done required steps",
   dependency_blocked: "Dependency blocked",
   schedule: "Scheduled / due",
   updated: "Updated",
@@ -62,8 +62,8 @@ export const defaultListColumnVisibility: Record<ListColumnId, boolean> = {
   priority: true,
   assignee: true,
   execution_plan: true,
-  required_subtasks: true,
-  done_required_subtasks: true,
+  required_steps: true,
+  done_required_steps: true,
   dependency_blocked: true,
   schedule: true,
   updated: true,
@@ -122,8 +122,8 @@ function matchesPriority(task: Task, priority: PriorityFilter) {
 function matchesPlanFilters(task: Task, filters: TaskPlanFilter[]) {
   return filters.every((filter) => {
     if (filter === "plan_needed") return task.execution_plan_state === "unplanned" && task.status !== "done" && task.status !== "archived"
-    if (filter === "has_subtasks") return task.required_subtask_count + task.optional_subtask_count > 0
-    if (filter === "incomplete_required_subtasks") return task.completed_required_subtask_count < task.required_subtask_count
+    if (filter === "has_steps") return task.required_step_count + task.optional_step_count > 0
+    if (filter === "incomplete_required_steps") return task.completed_required_step_count < task.required_step_count
     return true
   })
 }

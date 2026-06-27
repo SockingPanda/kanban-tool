@@ -129,8 +129,7 @@ follow-up; P3 is ordinary backlog/low/default. Ordinary ready tasks should remai
 P1/P2/P3 unless they are truly immediate blockers. A P0 task in `todo`,
 `scheduled`, or `triage` is still not claimable until the normal state-machine
 guards allow explicit promotion to `ready`. A task whose execution plan is still
-`unplanned` is not claimable even if its status is `ready`; add required
-subtasks or mark the plan `not_required` before dispatcher claim.
+`unplanned` is not claimable even if its status is `ready`; add steps or mark the plan `not_required` before dispatcher claim.
 
 可选后续扩展：
 
@@ -173,7 +172,7 @@ WHERE tasks.board_id = ?
   AND (assignee IS NULL OR assignee = ?)
   AND (
     EXISTS (
-      SELECT 1 FROM task_subtasks s
+      SELECT 1 FROM task_steps s
       WHERE s.board_id = tasks.board_id
         AND s.parent_task_id = tasks.id
         AND s.required = 1

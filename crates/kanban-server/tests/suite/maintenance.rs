@@ -72,25 +72,20 @@ async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Resul
         kanban_sqlite::CreateTask::ready("parent with incomplete step"),
     )
     .context("parent")?;
-    let child = kanban_sqlite::create_task(
-        &db_path,
-        "default",
-        "seed",
-        kanban_sqlite::CreateTask::ready("child step"),
-    )
-    .context("child")?;
-    kanban_sqlite::attach_subtask(
+    kanban_sqlite::create_step(
         &db_path,
         "default",
         "seed",
         &parent.id,
-        kanban_sqlite::AttachSubtaskInput {
-            child_ref: child.id,
+        kanban_sqlite::CreateStepInput {
+            title: "child step".to_owned(),
+            body: None,
+            linked_task_ref: None,
             position: None,
             required: true,
         },
     )
-    .context("attach subtask")?;
+    .context("create step")?;
     let unplanned = kanban_sqlite::create_task(
         &db_path,
         "default",
@@ -127,9 +122,9 @@ async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Resul
             .iter()
             .any(|count| count["status"] == "running" && count["count"] == 1)
     );
-    assert_eq!(json["data"]["unplanned_active_tasks"], 4);
+    assert_eq!(json["data"]["unplanned_active_tasks"], 3);
     assert_eq!(
-        json["data"]["active_parents_with_incomplete_required_subtasks"],
+        json["data"]["active_parents_with_incomplete_required_steps"],
         1
     );
     assert_eq!(

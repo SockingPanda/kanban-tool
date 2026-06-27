@@ -19,8 +19,8 @@ pub enum TaskGraphNodeRole {
     Center,
     DependencyParent,
     DependencyChild,
-    SubtaskParent,
-    SubtaskChild,
+    StepParent,
+    StepChild,
     Active,
     Context,
 }
@@ -29,7 +29,7 @@ pub enum TaskGraphNodeRole {
 #[serde(rename_all = "snake_case")]
 pub enum TaskGraphEdgeKind {
     Dependency,
-    Subtask,
+    Step,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,7 +127,8 @@ struct DependencyEdge {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct SubtaskEdge {
+struct StepEdge {
+    step_id: String,
     parent_task_id: String,
     child_task_id: String,
     required: bool,
@@ -143,7 +144,7 @@ pub fn task_neighborhood(
     let options = normalize_neighborhood_options(options)?;
     let all_tasks = tasks_by_id(&conn, &center.board_id)?;
     let dependencies = dependency_edges_for_board(&conn, &center.board_id)?;
-    let subtasks = subtask_edges_for_board(&conn, &center.board_id)?;
+    let steps = step_edges_for_board(&conn, &center.board_id)?;
     let mut node_ids = BTreeSet::new();
     node_ids.insert(center.id.clone());
     let mut roles = BTreeMap::new();
@@ -178,7 +179,7 @@ pub fn task_neighborhood(
         }
     }
 
-    for edge in &subtasks {
+    for edge in &steps {
         if edge.child_task_id == center.id
             && context_task_allowed(
                 &all_tasks,
@@ -190,7 +191,7 @@ pub fn task_neighborhood(
             node_ids.insert(edge.parent_task_id.clone());
             roles
                 .entry(edge.parent_task_id.clone())
-                .or_insert(TaskGraphNodeRole::SubtaskParent);
+                .or_insert(TaskGraphNodeRole::StepParent);
         }
         if edge.parent_task_id == center.id
             && context_task_allowed(
@@ -203,7 +204,7 @@ pub fn task_neighborhood(
             node_ids.insert(edge.child_task_id.clone());
             roles
                 .entry(edge.child_task_id.clone())
-                .or_insert(TaskGraphNodeRole::SubtaskChild);
+                .or_insert(TaskGraphNodeRole::StepChild);
         }
     }
 
@@ -214,7 +215,7 @@ pub fn task_neighborhood(
         std::slice::from_ref(&center.id),
     );
     let visible = node_ids.iter().cloned().collect::<HashSet<_>>();
-    let edges = graph_edges_from_relations(&dependencies, &subtasks, &visible);
+    let edges = graph_edges_from_relations(&dependencies, &steps, &visible);
     let nodes = graph_nodes_from_ids(&node_ids, &all_tasks, &roles, false)?;
     let meta = TaskGraphMeta {
         depth: options.depth,
@@ -248,7 +249,7 @@ pub fn board_task_map(
     let options = normalize_board_task_map_options(options)?;
     let all_tasks = tasks_by_id(&conn, &board_id)?;
     let dependencies = dependency_edges_for_board(&conn, &board_id)?;
-    let subtasks = subtask_edges_for_board(&conn, &board_id)?;
+    let steps = step_edges_for_board(&conn, &board_id)?;
     let active_statuses = active_statuses();
     let active_status_set = active_statuses.iter().copied().collect::<HashSet<_>>();
     let mut active_ids = BTreeSet::new();
@@ -268,7 +269,7 @@ pub fn board_task_map(
         for edge in dependencies
             .iter()
             .map(RelationRef::Dependency)
-            .chain(subtasks.iter().map(RelationRef::Subtask))
+            .chain(steps.iter().map(RelationRef::Step))
         {
             if active_ids.contains(edge.parent_task_id()) {
                 maybe_insert_context(
@@ -293,7 +294,7 @@ pub fn board_task_map(
 
     let (mut node_ids, mut truncated) = limit_node_ids(node_ids, &all_tasks, options.limit_nodes);
     let mut visible = node_ids.iter().cloned().collect::<HashSet<_>>();
-    let mut edges = graph_edges_from_relations(&dependencies, &subtasks, &visible);
+    let mut edges = graph_edges_from_relations(&dependencies, &steps, &visible);
     if options.hide_isolated {
         let connected = edges
             .iter()
@@ -301,7 +302,7 @@ pub fn board_task_map(
             .collect::<HashSet<_>>();
         node_ids.retain(|task_id| connected.contains(task_id));
         visible = node_ids.iter().cloned().collect();
-        edges = graph_edges_from_relations(&dependencies, &subtasks, &visible);
+        edges = graph_edges_from_relations(&dependencies, &steps, &visible);
     }
     let roles = node_ids
         .iter()
@@ -381,21 +382,21 @@ fn tasks_by_id(conn: &Connection, board_id: &str) -> Result<BTreeMap<String, Tas
 
 enum RelationRef<'a> {
     Dependency(&'a DependencyEdge),
-    Subtask(&'a SubtaskEdge),
+    Step(&'a StepEdge),
 }
 
 impl RelationRef<'_> {
     fn parent_task_id(&self) -> &str {
         match self {
             Self::Dependency(edge) => &edge.parent_task_id,
-            Self::Subtask(edge) => &edge.parent_task_id,
+            Self::Step(edge) => &edge.parent_task_id,
         }
     }
 
     fn child_task_id(&self) -> &str {
         match self {
             Self::Dependency(edge) => &edge.child_task_id,
-            Self::Subtask(edge) => &edge.child_task_id,
+            Self::Step(edge) => &edge.child_task_id,
         }
     }
 }
@@ -414,16 +415,17 @@ fn dependency_edges_for_board(conn: &Connection, board_id: &str) -> Result<Vec<D
     )
 }
 
-fn subtask_edges_for_board(conn: &Connection, board_id: &str) -> Result<Vec<SubtaskEdge>> {
+fn step_edges_for_board(conn: &Connection, board_id: &str) -> Result<Vec<StepEdge>> {
     all(
         conn,
-        "SELECT parent_task_id, child_task_id, required FROM task_subtasks WHERE board_id=?1 ORDER BY position ASC, created_at ASC, parent_task_id ASC, child_task_id ASC",
+        "SELECT id, parent_task_id, linked_task_id, required FROM task_steps WHERE board_id=?1 AND linked_task_id IS NOT NULL ORDER BY position ASC, created_at ASC, parent_task_id ASC, linked_task_id ASC",
         params![board_id],
         |row| {
-            let required: i64 = row.get(2)?;
-            Ok(SubtaskEdge {
-                parent_task_id: row.get(0)?,
-                child_task_id: row.get(1)?,
+            let required: i64 = row.get(3)?;
+            Ok(StepEdge {
+                step_id: row.get(0)?,
+                parent_task_id: row.get(1)?,
+                child_task_id: row.get(2)?,
                 required: required != 0,
             })
         },
@@ -539,7 +541,7 @@ fn graph_nodes_from_ids(
 
 fn graph_edges_from_relations(
     dependencies: &[DependencyEdge],
-    subtasks: &[SubtaskEdge],
+    steps: &[StepEdge],
     visible: &HashSet<String>,
 ) -> Vec<TaskGraphEdgeRecord> {
     let mut edges = dependencies
@@ -557,16 +559,16 @@ fn graph_edges_from_relations(
         })
         .collect::<Vec<_>>();
     edges.extend(
-        subtasks
+        steps
             .iter()
             .filter(|edge| {
                 visible.contains(&edge.parent_task_id) && visible.contains(&edge.child_task_id)
             })
             .map(|edge| TaskGraphEdgeRecord {
-                id: format!("subtask:{}->{}", edge.parent_task_id, edge.child_task_id),
+                id: format!("step:{}", edge.step_id),
                 source_task_id: edge.parent_task_id.clone(),
                 target_task_id: edge.child_task_id.clone(),
-                kind: TaskGraphEdgeKind::Subtask,
+                kind: TaskGraphEdgeKind::Step,
                 required: edge.required,
                 blocking: false,
             }),

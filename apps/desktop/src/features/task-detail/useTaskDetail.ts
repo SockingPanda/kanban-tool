@@ -10,11 +10,11 @@ export type TaskDetailData = {
 }
 
 export async function fetchTaskDetail(api: KanbanApi, taskId: string, signal?: AbortSignal) {
-  const [task, dependencies, neighborhood, subtasks, runs, eventsPage, comments] = await Promise.all([
+  const [task, dependencies, neighborhood, steps, runs, eventsPage, comments] = await Promise.all([
     api.getTask(taskId, { signal }),
     api.listDependencies(taskId, { signal }),
     api.getTaskNeighborhood(taskId, { depth: 1, limitNodes: 40, signal }),
-    api.listSubtasks(taskId, { signal }),
+    api.listSteps(taskId, { signal }),
     api.listRuns(taskId, { signal }),
     api.listEvents(taskId, { signal }),
     api.listComments(taskId, { signal }),
@@ -28,7 +28,7 @@ export async function fetchTaskDetail(api: KanbanApi, taskId: string, signal?: A
     task,
     detail: {
       dependencies,
-      subtasks,
+      steps,
       neighborhood,
       runs,
       events: eventsPage.events,

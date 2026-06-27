@@ -8,7 +8,7 @@ export async function invalidateTaskDetailAndBoard(queryClient: QueryClient, boa
   await queryClient.invalidateQueries({ queryKey: queryKeys.boardTaskMapRoot(board) })
   if (taskId) {
     await queryClient.invalidateQueries({ queryKey: queryKeys.taskDetail(taskId) })
-    await queryClient.invalidateQueries({ queryKey: queryKeys.taskSubtasks(taskId) })
+    await queryClient.invalidateQueries({ queryKey: queryKeys.taskSteps(taskId) })
     await queryClient.invalidateQueries({ queryKey: queryKeys.taskNeighborhood(taskId) })
   }
 }

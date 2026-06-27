@@ -47,9 +47,9 @@ const baseTask: Task = {
   dependency_blocked: false,
   unfinished_parent_count: 0,
   execution_plan_state: "unplanned",
-  required_subtask_count: 0,
-  completed_required_subtask_count: 0,
-  optional_subtask_count: 0,
+  required_step_count: 0,
+  completed_required_step_count: 0,
+  optional_step_count: 0,
   labels: [],
 }
 
@@ -92,23 +92,23 @@ describe("list table state helpers", () => {
 
   it("toggles execution plan filters", () => {
     expect(togglePlanFilter([], "plan_needed")).toEqual(["plan_needed"])
-    expect(togglePlanFilter(["plan_needed"], "has_subtasks")).toEqual(["plan_needed", "has_subtasks"])
-    expect(togglePlanFilter(["plan_needed", "has_subtasks"], "plan_needed")).toEqual(["has_subtasks"])
+    expect(togglePlanFilter(["plan_needed"], "has_steps")).toEqual(["plan_needed", "has_steps"])
+    expect(togglePlanFilter(["plan_needed", "has_steps"], "plan_needed")).toEqual(["has_steps"])
   })
 
-  it("filters the current page by execution plan state and subtask progress", () => {
+  it("filters the current page by execution plan state and step progress", () => {
     const tasks = [
       task("t_1", "ready", 1, { execution_plan_state: "unplanned" }),
-      task("t_2", "ready", 1, { execution_plan_state: "planned", required_subtask_count: 2, completed_required_subtask_count: 1 }),
-      task("t_3", "ready", 1, { execution_plan_state: "planned", required_subtask_count: 2, completed_required_subtask_count: 2 }),
+      task("t_2", "ready", 1, { execution_plan_state: "planned", required_step_count: 2, completed_required_step_count: 1 }),
+      task("t_3", "ready", 1, { execution_plan_state: "planned", required_step_count: 2, completed_required_step_count: 2 }),
       task("t_4", "done", 1, { execution_plan_state: "unplanned" }),
-      task("t_5", "todo", 1, { execution_plan_state: "not_required", optional_subtask_count: 1 }),
+      task("t_5", "todo", 1, { execution_plan_state: "not_required", optional_step_count: 1 }),
     ]
 
     expect(filterListTasks(tasks, "all", "all", ["plan_needed"]).map((item) => item.id)).toEqual(["t_1"])
-    expect(filterListTasks(tasks, "all", "all", ["has_subtasks"]).map((item) => item.id)).toEqual(["t_2", "t_3", "t_5"])
-    expect(filterListTasks(tasks, "all", "all", ["incomplete_required_subtasks"]).map((item) => item.id)).toEqual(["t_2"])
-    expect(filterListTasks(tasks, "ready", "all", ["has_subtasks", "incomplete_required_subtasks"]).map((item) => item.id)).toEqual(["t_2"])
+    expect(filterListTasks(tasks, "all", "all", ["has_steps"]).map((item) => item.id)).toEqual(["t_2", "t_3", "t_5"])
+    expect(filterListTasks(tasks, "all", "all", ["incomplete_required_steps"]).map((item) => item.id)).toEqual(["t_2"])
+    expect(filterListTasks(tasks, "ready", "all", ["has_steps", "incomplete_required_steps"]).map((item) => item.id)).toEqual(["t_2"])
   })
 
   it("detects active list filters for reset controls", () => {

@@ -102,7 +102,7 @@ pub struct DoctorReport {
     pub executable_spec_violations: i64,
     pub executable_schedule_violations: i64,
     pub unplanned_active_tasks: i64,
-    pub active_parents_with_incomplete_required_subtasks: i64,
+    pub active_parents_with_incomplete_required_steps: i64,
     pub outbox_pending: i64,
     pub outbox_running: i64,
     pub outbox_failed: i64,

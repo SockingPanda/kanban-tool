@@ -19,7 +19,7 @@ fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
         "default",
         "cli-task-test",
         task_id,
-        "task cli fixture does not need subtasks",
+        "task cli fixture does not need steps",
     )?;
     Ok(())
 }
@@ -53,7 +53,7 @@ fn task_show_defaults_to_one_line_summary() -> anyhow::Result<()> {
 
     assert_eq!(
         stdout,
-        format!("default#1 {task_id} [ready] show summary title\n")
+        format!("default#1 {task_id} [ready] P2 plan=not_required steps=0/0 show summary title\n")
     );
     assert!(!stdout.contains("line one"), "{stdout}");
     assert_eq!(stdout.lines().count(), 1);
@@ -99,6 +99,12 @@ fn task_show_details_prints_full_readable_record() -> anyhow::Result<()> {
     assert!(stdout.contains("labels: -"), "{stdout}");
     assert!(stdout.contains("assignee: executor"), "{stdout}");
     assert!(stdout.contains("priority: P1"), "{stdout}");
+    assert!(
+        stdout.contains("execution_plan_state: not_required"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("required_steps: 0/0"), "{stdout}");
+    assert!(stdout.contains("optional_steps: 0"), "{stdout}");
     assert!(stdout.contains("scheduled_at: 1767225600000"), "{stdout}");
     assert!(stdout.contains("due_at: 1767312000000"), "{stdout}");
     assert!(stdout.contains("created_at: "), "{stdout}");
@@ -3478,5 +3484,205 @@ fn task_reclaim_expired_alias_matches_default_reclaim() -> anyhow::Result<()> {
 
     assert_eq!(bare_result, explicit_result);
     assert_eq!(explicit_result["data"]["reclaimed"], 1);
+    Ok(())
+}
+
+#[test]
+fn task_step_commands_manage_text_steps() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_step_commands_manage_text_steps")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "step parent",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+
+    let listed =
+        kanban(&temp.path, &["--json", "task", "step", "list", task_id])?.success_json()?;
+    assert_eq!(listed["data"]["execution_plan"]["state"], "unplanned");
+    assert!(
+        listed["data"]["steps"]
+            .as_array()
+            .context("steps")?
+            .is_empty()
+    );
+
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "add",
+            task_id,
+            "Draft execution plan",
+            "--body",
+            "write the concrete path",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(added["data"]["title"], "Draft execution plan");
+    assert_eq!(added["data"]["status"], "todo");
+    assert_eq!(added["data"]["required"], true);
+
+    let human = kanban(&temp.path, &["task", "step", "list", task_id])?.success_stdout()?;
+    assert!(human.contains("Execution plan: planned"), "{human}");
+    assert!(
+        human.contains("Required steps: 0/1 done-or-skipped"),
+        "{human}"
+    );
+    assert!(human.contains("S1 "), "{human}");
+    assert!(human.contains("Draft execution plan"), "{human}");
+
+    let done = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "done",
+            task_id,
+            "S1",
+            "--note",
+            "implemented",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(done["data"]["status"], "done");
+    assert_eq!(done["data"]["resolution_note"], "implemented");
+
+    let reopened = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "reopen",
+            task_id,
+            "S1",
+            "--reason",
+            "needs another pass",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(reopened["data"]["status"], "todo");
+    assert!(reopened["data"]["resolution_note"].is_null());
+
+    let updated = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "update",
+            task_id,
+            "S1",
+            "--optional",
+            "--position",
+            "4096",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(updated["data"]["required"], false);
+    assert_eq!(updated["data"]["position"], 4096);
+
+    kanban(&temp.path, &["task", "step", "remove", task_id, "S1"])?.success()?;
+    let empty = kanban(&temp.path, &["--json", "task", "step", "list", task_id])?.success_json()?;
+    assert_eq!(empty["data"]["execution_plan"]["state"], "unplanned");
+    assert!(
+        empty["data"]["steps"]
+            .as_array()
+            .context("steps")?
+            .is_empty()
+    );
+
+    let plan = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "not-required",
+            task_id,
+            "--reason",
+            "tiny task",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(plan["data"]["state"], "not_required");
+    assert_eq!(plan["data"]["reason"], "tiny task");
+    Ok(())
+}
+
+#[test]
+fn task_step_linked_task_is_context_only() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_step_linked_task_is_context_only")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let parent = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "parent",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let child = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "child",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let parent_id = parent["data"]["id"].as_str().context("parent id")?;
+    let child_id = child["data"]["id"].as_str().context("child id")?;
+
+    let step = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "add",
+            parent_id,
+            "Review child output",
+            "--link-task",
+            child_id,
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(step["data"]["linked_task"]["id"], child_id);
+    assert_eq!(step["data"]["status"], "todo");
+
+    mark_no_plan_required(&temp.path, child_id)?;
+    let claim = kanban(&temp.path, &["--json", "task", "claim", child_id])?.success_json()?;
+    let token = claim["data"]["claim_token"]
+        .as_str()
+        .context("claim token")?;
+    kanban(
+        &temp.path,
+        &["task", "complete", child_id, "--claim-token", token],
+    )?
+    .success()?;
+    let listed =
+        kanban(&temp.path, &["--json", "task", "step", "list", parent_id])?.success_json()?;
+    assert_eq!(listed["data"]["steps"][0]["linked_task"]["status"], "done");
+    assert_eq!(listed["data"]["steps"][0]["status"], "todo");
     Ok(())
 }

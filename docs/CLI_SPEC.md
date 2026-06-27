@@ -253,6 +253,10 @@ Options：
 | `--limit <n>` | 限制数量。 |
 | `--offset <n>` | 分页偏移。 |
 | `--sort <field>` | `seq` / `title` / `status` / `position` / `priority` / `assignee` / `scheduled_at` / `due_at` / `created_at` / `updated_at`。降序可用 `<field>_desc`，也兼容 API 风格 `-<field>`。`priority` sorts P0 -> P3; `priority_desc` / `-priority` sorts P3 -> P0. |
+| `--plan-needed` | 只列出 execution plan 仍为 `unplanned` 的 active tasks。 |
+| `--has-steps` | 只列出至少有一个 step 的 tasks。 |
+| `--incomplete-required-steps` | 只列出存在未完成 required step 的 tasks。 |
+| `--plan-filter <filter>` | 可重复：`plan-needed` / `has-steps` / `incomplete-required-steps`。 |
 
 Priority sort does not promote work into `ready`; it only orders tasks within the selected result set.
 
@@ -268,6 +272,8 @@ kanban task list
 kanban task list --status ready --status running
 kanban task list --label backend --label p1
 kanban task list --assignee agent-default --json
+kanban task list --plan-needed
+kanban task list --plan-filter incomplete-required-steps
 ```
 
 ### 5.3 Show task
@@ -285,7 +291,7 @@ agent-work#12 t_01HX... [ready] 实现状态机
 
 `--details` 改变人类可读输出，显示为易读字段列表。可用时包含 task
 ref/id/status/title、完整多行 description、assignee、priority、labels、
-scheduled_at、due_at、created_at、updated_at，以及其他 task snapshot 字段。
+scheduled_at、due_at、created_at、updated_at、execution_plan_state、required/optional step counts，以及其他 task snapshot 字段。
 如果该 task 有 label ontology signals，details 输出还会追加紧凑的
 `ontology_summary`，列出 signal/status/degraded/stale/action counts、aging 时间和
 少量 sample signal ids。
@@ -460,6 +466,46 @@ Options：
 | Option | 说明 |
 |---|---|
 | `--force` | 允许 archive running task，并关闭 active run。 |
+
+---
+
+### 6.10 Step / Execution Plan
+
+```bash
+kanban task step list <task_ref>
+kanban task step add <task_ref> <title> [--body <text>] [--link-task <task_ref>] [--position <n>] [--required|--optional]
+kanban task step update <task_ref> <step_ref> [--title <text>] [--body <text>|--clear-body] [--link-task <task_ref>|--unlink-task] [--position <n>] [--required|--optional]
+kanban task step done <task_ref> <step_ref> --note <text>
+kanban task step skip <task_ref> <step_ref> --reason <text>
+kanban task step reopen <task_ref> <step_ref> --reason <text>
+kanban task step remove <task_ref> <step_ref>
+kanban task step not-required <task_ref> --reason <text>
+```
+
+Step 是 execution plan 的一等结构化项目。它可以是纯文本步骤，也可以通过
+`--link-task` 引用同一 board 内的普通 task 作为上下文。链接 task 不等于 dependency，
+不会让 linked task 的状态自动完成 step。Step 自己的状态是 `todo`、`done` 或
+`skipped`。
+
+`step_ref` 支持 step id，也支持父任务列表里的 `S<n>` 序号。`add` 默认创建
+required step；`--required` / `--optional` 互斥。`update` 只有在显式传
+`--required` 或 `--optional` 时才改变 required flag。`done`、`skip` 和 `reopen`
+必须记录说明文本。
+
+Human list 输出示例：
+
+```text
+Execution plan: planned
+Required steps: 1/2 done-or-skipped
+Optional steps: 1
+
+S1 st_01HX... [done] required pos=1024 Write tests
+S2 st_01HY... [todo] required pos=2048 link=default#13 Verify desktop UI
+S3 st_01HZ... [todo] optional pos=3072 Release notes
+```
+
+`task step not-required` 只在没有 steps 时可用；它记录 reason 并解除 ready/claim 的
+execution-plan gate。已有 step 的 task 不能标记为 `not_required`。
 
 ---
 
@@ -1529,7 +1575,7 @@ kanban vector sync [--vector-config <toml>]
 kanban context build t_... [--lexical-limit 5] [--vector-config <toml>]
 ```
 
-`kanban stats --json` 返回 status counts、过期 running claim 列表、blocked reason 聚合、unplanned active task 数量，以及 required subtasks 未完成的 active parent 数量，用于本地 operator recovery。
+`kanban stats --json` 返回 status counts、过期 running claim 列表、blocked reason 聚合、unplanned active task 数量，以及 required steps 未完成的 active parent 数量，用于本地 operator recovery。
 
 `kanban backup` 使用 SQLite `VACUUM INTO` 创建一致备份；目标文件已存在时失败，避免覆盖。
 `kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kanban backup`。JSONL export 包含 label ontology ledger record types：`label_ontology_observation`、`label_ontology_signal`、`label_ontology_action`、`label_ontology_action_atom_effect` 和 `label_ontology_action_signal`；因此 portable JSONL 与 SQLite backup 都会保留 ontology observation/signal/action/effect provenance。
@@ -1568,7 +1614,7 @@ semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
 检查：
 
 - DB 文件存在。
-- migrations 完整；当前 schema user_version 为 22。
+- migrations 完整；当前 schema user_version 为 23。
 - `PRAGMA integrity_check`。
 - orphan active run。
 - running task 是否缺 claim。
@@ -1584,8 +1630,7 @@ semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
   `task_comments`、`task_events`、`task_attachments` 的 row board 必须和 referenced
   task / label / run board 一致。当前 schema 用 board-scoped composite FK 保护
   `task_labels`、`task_dependencies`、`task_runs`、`task_comments` 和
-  `task_attachments`；v22+ 还检查 `task_subtasks` parent/child board scope 和
-  `task_execution_plans` task board scope，并报告 `task_subtask_cycle`。`task_events` 保留 nullable task/run refs 与 `ON DELETE SET NULL`
+  `task_attachments`；v22+ 还检查 `task_execution_plans` task board scope，v23+ 还检查 `task_steps` parent/linked task board scope。`task_events` 保留 nullable task/run refs 与 `ON DELETE SET NULL`
   语义，通过 INSERT/UPDATE triggers 校验非空 refs 的 board scope。
 - SQLite `PRAGMA foreign_key_check`：doctor 将每条 violation 转换为 hard-error issue；
   JSONL import final gate 也会在 commit 前运行同一检查，失败时回滚整个 replace

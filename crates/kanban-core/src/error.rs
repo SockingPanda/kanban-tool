@@ -10,8 +10,8 @@ pub enum KanbanError {
     InvalidTransition(String),
     #[error("execution_plan_required: {0}")]
     ExecutionPlanRequired(String),
-    #[error("subtasks_incomplete: {0}")]
-    SubtasksIncomplete(String),
+    #[error("steps_incomplete: {0}")]
+    StepsIncomplete(String),
     #[error("invalid input: {0}")]
     InvalidInput(String),
     #[error("conflict: {0}")]

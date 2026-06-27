@@ -8,7 +8,7 @@ fn mark_ready_fixture(db_path: &std::path::Path, task_id: &str) -> anyhow::Resul
         "default",
         "tantivy-search-test",
         task_id,
-        "search fixture does not need subtasks",
+        "search fixture does not need steps",
     )?;
     Ok(())
 }

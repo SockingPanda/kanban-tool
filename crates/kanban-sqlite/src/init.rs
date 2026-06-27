@@ -51,7 +51,8 @@ const BOARD_ISOLATION_ONTOLOGY_LINKS_MIGRATION: &str =
     include_str!("../../../migrations/021_board_isolation_ontology_links.sql");
 const TASK_SUBTASKS_EXECUTION_PLANS_MIGRATION: &str =
     include_str!("../../../migrations/022_task_subtasks_execution_plans.sql");
-const LATEST_MIGRATION_VERSION: i64 = 22;
+const TASK_STEPS_MIGRATION: &str = include_str!("../../../migrations/023_task_steps.sql");
+const LATEST_MIGRATION_VERSION: i64 = 23;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &[
     "fnv64:0ca871be950fc8a6",
     "fnv64:3b08da4e2b6041f5",
@@ -175,6 +176,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 22,
         name: "022_task_subtasks_execution_plans",
         sql: TASK_SUBTASKS_EXECUTION_PLANS_MIGRATION,
+    },
+    Migration {
+        version: 23,
+        name: "023_task_steps",
+        sql: TASK_STEPS_MIGRATION,
     },
 ];
 
@@ -541,15 +547,20 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
             &["board_id", "parent_task_id", "child_task_id"][..],
         ),
         (
-            "task_subtasks",
+            "task_steps",
             &[
+                "id",
                 "board_id",
                 "parent_task_id",
-                "child_task_id",
                 "position",
+                "title",
+                "linked_task_id",
                 "required",
+                "status",
                 "created_by",
                 "created_at",
+                "updated_by",
+                "updated_at",
             ][..],
         ),
         (

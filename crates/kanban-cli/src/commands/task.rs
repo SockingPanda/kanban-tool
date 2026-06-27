@@ -1,14 +1,16 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use kanban_sqlite::{
-    CreateTask, MAX_TASK_LIST_LIMIT, TaskListOptions, TaskListSort, TaskPatch, archive_task,
-    block_task, claim_task, complete_task, get_task, heartbeat_task, list_tasks, list_tasks_page,
-    promote_task, reclaim_expired, submit_review_task, task_ontology_summary, unblock_task,
-    update_task,
+    CreateStepInput, CreateTask, MAX_TASK_LIST_LIMIT, TaskExecutionPlanRecord, TaskListOptions,
+    TaskListSort, TaskPatch, TaskPlanFilter, TaskStepRecord, UpdateStepInput, archive_task,
+    block_task, claim_task, complete_step, complete_task, create_step, execution_plan, get_task,
+    heartbeat_task, list_steps, list_tasks, list_tasks_page, mark_execution_plan_not_required,
+    promote_task, reclaim_expired, remove_step, reopen_step, skip_step, submit_review_task,
+    task_ontology_summary, unblock_task, update_step, update_task,
 };
 
-use crate::args::TaskCommand;
+use crate::args::{ListArgs, TaskCommand, TaskPlanFilterArg, TaskStepCommand};
 use crate::commands::common::{
     optional_clearable, parse_status, parse_task_list_sort, validate_page_bounds,
 };
@@ -53,12 +55,14 @@ pub(crate) fn handle_task(
                 .iter()
                 .map(|s| parse_status(s))
                 .collect::<Result<Vec<_>>>()?;
+            let plan_filters = task_plan_filters(&args)?;
             let uses_page_options = args.search.is_some()
                 || args.assignee.is_some()
                 || !args.labels.is_empty()
                 || args.limit.is_some()
                 || args.offset.is_some()
-                || args.sort.is_some();
+                || args.sort.is_some()
+                || !plan_filters.is_empty();
             let tasks = if uses_page_options {
                 list_tasks_page(
                     db_path,
@@ -67,7 +71,7 @@ pub(crate) fn handle_task(
                         statuses,
                         priorities: vec![],
                         labels: args.labels,
-                        plan_filters: vec![],
+                        plan_filters,
                         include_archived: args.include_archived,
                         assignee: args.assignee,
                         search: args.search,
@@ -200,6 +204,255 @@ pub(crate) fn handle_task(
             json,
             &archive_task(db_path, board, actor, &task_ref, force)?,
         )?,
+        TaskCommand::Step { command } => handle_task_step(command, db_path, board, actor, json)?,
     }
     Ok(())
+}
+
+#[derive(serde::Serialize)]
+struct TaskStepsOutput {
+    task_id: String,
+    execution_plan: TaskExecutionPlanRecord,
+    steps: Vec<TaskStepRecord>,
+}
+
+fn handle_task_step(
+    command: TaskStepCommand,
+    db_path: &PathBuf,
+    board: &str,
+    actor: &str,
+    json: bool,
+) -> Result<()> {
+    match command {
+        TaskStepCommand::List { task_ref } => {
+            let output = task_steps_output(db_path, board, &task_ref)?;
+            print_or_json(json, &output, || task_steps_lines(&output))?;
+        }
+        TaskStepCommand::Add(args) => {
+            let required = step_required_for_add(args.required, args.optional)?;
+            let step = create_step(
+                db_path,
+                board,
+                actor,
+                &args.task_ref,
+                CreateStepInput {
+                    title: args.title,
+                    body: args.body,
+                    linked_task_ref: args.linked_task_ref,
+                    position: args.position,
+                    required,
+                },
+            )?;
+            print_step(json, &step, "Created")?;
+        }
+        TaskStepCommand::Update(args) => {
+            if args.linked_task_ref.is_some() && args.unlink_task {
+                bail!("--link-task and --unlink-task are mutually exclusive");
+            }
+            if args.body.is_some() && args.clear_body {
+                bail!("--body and --clear-body are mutually exclusive");
+            }
+            let step = update_step(
+                db_path,
+                board,
+                actor,
+                &args.task_ref,
+                &args.step_ref,
+                UpdateStepInput {
+                    title: args.title,
+                    body: if args.clear_body {
+                        Some(None)
+                    } else {
+                        args.body.map(Some)
+                    },
+                    linked_task_ref: args.linked_task_ref,
+                    unlink_task: args.unlink_task,
+                    position: args.position,
+                    required: step_required_for_update(args.required, args.optional)?,
+                },
+            )?;
+            print_step(json, &step, "Updated")?;
+        }
+        TaskStepCommand::Done(args) => {
+            let step = complete_step(
+                db_path,
+                board,
+                actor,
+                &args.task_ref,
+                &args.step_ref,
+                &args.note,
+            )?;
+            print_step(json, &step, "Completed")?;
+        }
+        TaskStepCommand::Skip(args) => {
+            let step = skip_step(
+                db_path,
+                board,
+                actor,
+                &args.task_ref,
+                &args.step_ref,
+                &args.reason,
+            )?;
+            print_step(json, &step, "Skipped")?;
+        }
+        TaskStepCommand::Reopen(args) => {
+            let step = reopen_step(
+                db_path,
+                board,
+                actor,
+                &args.task_ref,
+                &args.step_ref,
+                &args.reason,
+            )?;
+            print_step(json, &step, "Reopened")?;
+        }
+        TaskStepCommand::Remove { task_ref, step_ref } => {
+            remove_step(db_path, board, actor, &task_ref, &step_ref)?;
+            print_or_json(
+                json,
+                &serde_json::json!({"task_ref": task_ref, "step_ref": step_ref, "removed": true}),
+                || format!("Removed step relation {step_ref} from {task_ref}"),
+            )?;
+        }
+        TaskStepCommand::NotRequired(args) => {
+            let plan = mark_execution_plan_not_required(
+                db_path,
+                board,
+                actor,
+                &args.task_ref,
+                &args.reason,
+            )?;
+            print_or_json(json, &plan, || execution_plan_line(&plan))?;
+        }
+    }
+    Ok(())
+}
+
+fn task_steps_output(db_path: &PathBuf, board: &str, task_ref: &str) -> Result<TaskStepsOutput> {
+    let execution_plan = execution_plan(db_path, board, task_ref)?;
+    let task_id = execution_plan.task_id.clone();
+    let steps = list_steps(db_path, board, task_ref)?;
+    Ok(TaskStepsOutput {
+        task_id,
+        execution_plan,
+        steps,
+    })
+}
+
+fn print_step(json: bool, step: &TaskStepRecord, verb: &str) -> Result<()> {
+    print_or_json(json, step, || format!("{verb} {}", step_line(1, step)))
+}
+
+fn task_steps_lines(output: &TaskStepsOutput) -> String {
+    let required_total = output.steps.iter().filter(|step| step.required).count();
+    let required_done = output
+        .steps
+        .iter()
+        .filter(|step| {
+            step.required
+                && matches!(
+                    step.status,
+                    kanban_sqlite::StepStatus::Done | kanban_sqlite::StepStatus::Skipped
+                )
+        })
+        .count();
+    let optional_total = output.steps.iter().filter(|step| !step.required).count();
+    let mut lines = vec![execution_plan_line(&output.execution_plan)];
+    lines.push(format!(
+        "Required steps: {required_done}/{required_total} done-or-skipped"
+    ));
+    lines.push(format!("Optional steps: {optional_total}"));
+    if !output.steps.is_empty() {
+        lines.push(String::new());
+        lines.extend(
+            output
+                .steps
+                .iter()
+                .enumerate()
+                .map(|(index, step)| step_line(index + 1, step)),
+        );
+    }
+    lines.join("\n")
+}
+
+fn execution_plan_line(plan: &TaskExecutionPlanRecord) -> String {
+    match plan.reason.as_deref() {
+        Some(reason) if !reason.is_empty() => {
+            format!("Execution plan: {} reason={reason}", plan.state.as_str())
+        }
+        _ => format!("Execution plan: {}", plan.state.as_str()),
+    }
+}
+
+fn step_line(index: usize, step: &TaskStepRecord) -> String {
+    let required = if step.required {
+        "required"
+    } else {
+        "optional"
+    };
+    let linked = step
+        .linked_task
+        .as_ref()
+        .map(|task| format!(" link={}", task.task_ref))
+        .unwrap_or_default();
+    format!(
+        "S{index} {} [{}] {required} pos={}{} {}",
+        step.id,
+        step.status.as_str(),
+        step.position,
+        linked,
+        step.title
+    )
+}
+
+fn task_plan_filters(args: &ListArgs) -> Result<Vec<TaskPlanFilter>> {
+    let mut filters = Vec::new();
+    for filter in &args.plan_filters {
+        push_task_plan_filter(
+            &mut filters,
+            match filter {
+                TaskPlanFilterArg::PlanNeeded => TaskPlanFilter::PlanNeeded,
+                TaskPlanFilterArg::HasSteps => TaskPlanFilter::HasSteps,
+                TaskPlanFilterArg::IncompleteRequiredSteps => {
+                    TaskPlanFilter::IncompleteRequiredSteps
+                }
+            },
+        );
+    }
+    if args.plan_needed {
+        push_task_plan_filter(&mut filters, TaskPlanFilter::PlanNeeded);
+    }
+    if args.has_steps {
+        push_task_plan_filter(&mut filters, TaskPlanFilter::HasSteps);
+    }
+    if args.incomplete_required_steps {
+        push_task_plan_filter(&mut filters, TaskPlanFilter::IncompleteRequiredSteps);
+    }
+    Ok(filters)
+}
+
+fn push_task_plan_filter(filters: &mut Vec<TaskPlanFilter>, filter: TaskPlanFilter) {
+    if !filters.contains(&filter) {
+        filters.push(filter);
+    }
+}
+
+fn step_required_for_add(required: bool, optional: bool) -> Result<bool> {
+    if required && optional {
+        bail!("--required and --optional are mutually exclusive");
+    }
+    Ok(!optional)
+}
+
+fn step_required_for_update(required: bool, optional: bool) -> Result<Option<bool>> {
+    if required && optional {
+        bail!("--required and --optional are mutually exclusive");
+    }
+    Ok(if required {
+        Some(true)
+    } else if optional {
+        Some(false)
+    } else {
+        None
+    })
 }

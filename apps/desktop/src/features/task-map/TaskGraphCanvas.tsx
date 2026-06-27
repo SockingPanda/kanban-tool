@@ -49,7 +49,7 @@ type TaskFlowEdgeData = {
 } & Record<string, unknown>
 
 type TaskFlowNode = Node<TaskFlowNodeData, "taskNode" | "centerTaskNode" | "contextTaskNode">
-type TaskFlowEdge = Edge<TaskFlowEdgeData, "dependencyEdge" | "subtaskEdge">
+type TaskFlowEdge = Edge<TaskFlowEdgeData, "dependencyEdge" | "stepEdge">
 
 export function TaskGraphCanvas(props: TaskGraphCanvasProps) {
   return (
@@ -74,8 +74,8 @@ function TaskGraphCanvasInner({ graph, selectedTaskId, onSelectTask, mode = "det
           data: { node, selected, onSelectTask },
           draggable: false,
           selectable: true,
-          sourcePosition: mode === "detail" && node.role === "subtask_child" ? Position.Top : Position.Right,
-          targetPosition: mode === "detail" && node.role === "subtask_child" ? Position.Top : Position.Left,
+          sourcePosition: mode === "detail" && node.role === "step_child" ? Position.Top : Position.Right,
+          targetPosition: mode === "detail" && node.role === "step_child" ? Position.Top : Position.Left,
           ariaLabel: `Task graph node ${node.ref} ${node.title}`,
         }
       }),
@@ -89,10 +89,10 @@ function TaskGraphCanvasInner({ graph, selectedTaskId, onSelectTask, mode = "det
           id: edge.id,
           source: edge.sourceTaskId,
           target: edge.targetTaskId,
-          type: edge.kind === "subtask" ? "subtaskEdge" : "dependencyEdge",
+          type: edge.kind === "step" ? "stepEdge" : "dependencyEdge",
           data: { kind: edge.kind, blocking: edge.blocking, required: edge.required },
           markerEnd: { type: MarkerType.ArrowClosed, color },
-          style: { stroke: color, strokeWidth: edge.kind === "subtask" ? 2.5 : 2 },
+          style: { stroke: color, strokeWidth: edge.kind === "step" ? 2.5 : 2 },
           selectable: true,
         }
       }),
@@ -167,11 +167,11 @@ function TaskGraphFlowEdge(props: EdgeProps<TaskFlowEdge>) {
   const kind = props.data?.kind ?? "dependency"
   const blocking = props.data?.blocking
   const color = graphEdgeStroke(kind, blocking)
-  const label = kind === "subtask" ? (props.data?.required ? "required step" : "optional step") : blocking ? "blocks" : "unlocks"
+  const label = kind === "step" ? (props.data?.required ? "required step" : "optional step") : blocking ? "blocks" : "unlocks"
 
   return (
     <>
-      <BaseEdge id={props.id} path={edgePath} markerEnd={props.markerEnd} style={{ stroke: color, strokeWidth: kind === "subtask" ? 2.5 : 2 }} />
+      <BaseEdge id={props.id} path={edgePath} markerEnd={props.markerEnd} style={{ stroke: color, strokeWidth: kind === "step" ? 2.5 : 2 }} />
       <EdgeLabelRenderer>
         <span
           className="pointer-events-none absolute rounded-full border border-border bg-background/90 px-1.5 py-0.5 text-[10px] text-muted-foreground shadow-sm"
@@ -192,7 +192,7 @@ const nodeTypes: NodeTypes = {
 
 const edgeTypes: EdgeTypes = {
   dependencyEdge: TaskGraphFlowEdge,
-  subtaskEdge: TaskGraphFlowEdge,
+  stepEdge: TaskGraphFlowEdge,
 }
 
 function flowNodeType(role: TaskGraphLayoutNode["role"], contextOnly?: boolean): TaskFlowNode["type"] {
@@ -202,7 +202,7 @@ function flowNodeType(role: TaskGraphLayoutNode["role"], contextOnly?: boolean):
 }
 
 function graphEdgeStroke(kind: TaskGraphEdgeKind, blocking?: boolean) {
-  if (kind === "subtask") return "#7c3aed"
+  if (kind === "step") return "#7c3aed"
   return blocking ? "#dc2626" : "#059669"
 }
 
@@ -212,6 +212,6 @@ function miniMapNodeColor(node: Node) {
   if (data.node?.contextOnly) return "#9ca3af"
   if (data.node?.role === "dependency_parent") return "#dc2626"
   if (data.node?.role === "dependency_child") return "#059669"
-  if (data.node?.role === "subtask_child" || data.node?.role === "subtask_parent") return "#7c3aed"
+  if (data.node?.role === "step_child" || data.node?.role === "step_parent") return "#7c3aed"
   return "#64748b"
 }

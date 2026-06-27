@@ -119,7 +119,7 @@ scheduled -> ready
 Guard：
 
 - 所有 parent dependency 都是 `done` 或 `archived`。
-- execution plan 不是 `unplanned`：必须有 required subtask 形成 `planned`，或显式标记 `not_required` 并填写 reason。
+- execution plan 不是 `unplanned`：必须有 step 形成 `planned`，或显式标记 `not_required` 并填写 reason。
 - task 未 archived。
 - 对 `scheduled`，必须 `scheduled_at <= now`。
 
@@ -207,7 +207,7 @@ Guard：
 
 - `running -> done` 必须 claim token 匹配，除非 `force=true`。
 - `review -> done` 不需要 claim token。
-- 如果存在 required direct subtasks，它们必须全部为 `done` 或 `archived`；optional subtasks 不阻塞 parent complete。
+- 如果存在 required steps，它们必须全部为 `done` 或 `skipped`；optional steps 不阻塞 parent complete。
 
 Side effects：
 
@@ -440,5 +440,5 @@ UI column 不是状态真相，只是展示配置。
 6. completion 后 child 保持 `todo`，并清除 derived dependency-blocked state。
 7. archived task 不被 dispatcher 处理。
 8. `unplanned` task 不能 promote/claim，dispatcher 也不能 claim。
-9. required subtask 未完成时 parent 不能 complete。
+9. required step 未完成时 parent 不能 complete。
 10. illegal direct transition 返回 `invalid_transition`。

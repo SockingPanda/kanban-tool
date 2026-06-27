@@ -170,16 +170,24 @@ pub fn build_router(state: AppState) -> Router {
             delete(remove_dependency),
         )
         .route(
-            "/api/v1/tasks/:task_id/subtasks",
-            get(list_subtasks).post(create_subtask),
+            "/api/v1/tasks/:task_id/steps",
+            get(list_steps).post(create_step),
         )
         .route(
-            "/api/v1/tasks/:task_id/subtasks/attach",
-            post(attach_subtask),
+            "/api/v1/tasks/:task_id/steps/:step_id",
+            patch(update_step).delete(remove_step),
         )
         .route(
-            "/api/v1/tasks/:task_id/subtasks/:child_task_id",
-            patch(update_subtask).delete(remove_subtask),
+            "/api/v1/tasks/:task_id/steps/:step_id/done",
+            post(complete_step),
+        )
+        .route(
+            "/api/v1/tasks/:task_id/steps/:step_id/skip",
+            post(skip_step),
+        )
+        .route(
+            "/api/v1/tasks/:task_id/steps/:step_id/reopen",
+            post(reopen_step),
         )
         .route(
             "/api/v1/tasks/:task_id/execution-plan/not-required",

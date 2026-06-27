@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use kanban_derived_io::{
     board_id, connect_file, current_last_event_id, derived_status_by_name,
-    graph_relation_snapshot_for_board, has_pending_vector_outbox_for_board,
+    graph_relation_snapshot_for_board, has_pending_vector_outbox_for_board, maintenance_lock_path,
     rebuild_lancedb_chunks_with_store, sync_oxigraph_with_store, vector_chunks_for_board,
 };
 use kanban_entity::{EntityUri, Predicate, Relation};
@@ -47,6 +47,31 @@ fn db_status_and_vector_rebuild_use_narrow_sqlite_io() {
         )
         .unwrap();
     assert_eq!(pending, 0);
+}
+
+#[test]
+fn connect_file_rejects_active_maintenance_lock() {
+    let file = NamedTempFile::new().unwrap();
+    let lock_path = maintenance_lock_path(file.path());
+    std::fs::write(&lock_path, "pid=\n").unwrap();
+
+    let error = connect_file(file.path()).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("database is locked for maintenance")
+    );
+    assert!(lock_path.exists());
+}
+
+#[test]
+fn connect_file_removes_stale_maintenance_lock_and_opens() {
+    let file = NamedTempFile::new().unwrap();
+    let lock_path = maintenance_lock_path(file.path());
+    std::fs::write(&lock_path, "pid=999999999\n").unwrap();
+
+    let _conn = connect_file(file.path()).unwrap();
+    assert!(!lock_path.exists());
 }
 
 #[test]

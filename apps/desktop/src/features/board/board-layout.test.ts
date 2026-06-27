@@ -57,4 +57,17 @@ describe("board layout", () => {
     expect(boardView).toContain('className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", statusAccent[task.status])}')
     expect(boardView).toContain('className="min-w-0 flex-1"')
   })
+
+  it("keeps board card rendering behind stable selection and memo boundaries", () => {
+    const boardView = source("features/board/BoardView.tsx")
+
+    expect(boardView).toContain("memo(function TaskCard")
+    expect(boardView).toContain("taskId={task.id}")
+    expect(boardView).toContain("onSelectTask={onSelect}")
+    expect(boardView).toContain("selectedId={selectedIdForColumn(tasks, selectedId)}")
+    expect(boardView).toContain("const requiredStepProgress = requiredStepProgressLabel(task)")
+    expect(boardView).toContain("{requiredStepProgress ? <span>{requiredStepProgress}</span> : null}")
+    expect(boardView).not.toContain("onSelect={() => onSelect(task.id)}")
+    expect(boardView).not.toContain("requiredStepProgressLabel(task) ? <span>{requiredStepProgressLabel(task)}</span> : null")
+  })
 })

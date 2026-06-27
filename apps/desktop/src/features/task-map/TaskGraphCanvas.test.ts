@@ -11,7 +11,7 @@ describe("TaskGraphCanvas interactions", () => {
     expect(interaction.showMiniMap).toBe(false)
     expect(interaction.panOnDrag).toBe(true)
     expect(interaction.zoomOnPinch).toBe(true)
-    expect(interaction.zoomOnScroll).toBe(false)
+    expect(interaction.zoomOnScroll).toBe(true)
     expect(interaction.zoomOnDoubleClick).toBe(false)
     expect(interaction.maxZoom).toBeGreaterThan(1.75)
   })

@@ -37,7 +37,7 @@ export function TaskGraphNodeCard({ node, selected, onSelectTask, onOpenTask, cl
       </div>
       {node.stepCounts ? (
         <span className="mt-auto text-[10px] text-muted-foreground">
-          {node.stepCounts.incomplete}/{node.stepCounts.total} open
+          {node.stepCounts.completed}/{node.stepCounts.total} step
         </span>
       ) : null}
     </button>

@@ -12,7 +12,7 @@ use oxigraph::{
     store::Store,
 };
 
-use crate::{GraphError, GraphQueryBinding, GraphQueryRow, GraphStoreStatus, RelationGraph};
+use kanban_graph::{GraphError, GraphQueryBinding, GraphQueryRow, GraphStoreStatus, RelationGraph};
 
 const PREDICATE_BASE: &str = "kb://predicate/";
 
@@ -113,7 +113,7 @@ impl RelationGraph for OxigraphStore {
         let mut stored = self.relations.lock().map_err(lock_error)?;
         let subjects = incoming.keys().cloned().collect::<Vec<_>>();
         for subject in &subjects {
-            self.clear_entity_graph(&EntityUri::new(subject.clone())?)?;
+            self.clear_entity_graph(&EntityUri::new(subject.clone()).map_err(store_error)?)?;
         }
         for relation in relations {
             let quad = Self::relation_quad(relation)?;
@@ -167,13 +167,17 @@ impl RelationGraph for OxigraphStore {
         {
             let quad = quad.map_err(store_error)?;
             let object = match quad.object {
-                Term::NamedNode(node) => EntityUri::new(node.as_str().to_owned())?,
+                Term::NamedNode(node) => {
+                    EntityUri::new(node.as_str().to_owned()).map_err(store_error)?
+                }
                 _ => continue,
             };
             let graph_uri = match quad.graph_name {
-                GraphName::NamedNode(node) => EntityUri::new(node.as_str().to_owned())?,
+                GraphName::NamedNode(node) => {
+                    EntityUri::new(node.as_str().to_owned()).map_err(store_error)?
+                }
                 GraphName::BlankNode(_) | GraphName::DefaultGraph => {
-                    EntityUri::new("kb://graph/indexed")?
+                    EntityUri::new("kb://graph/indexed").map_err(store_error)?
                 }
             };
             out.push(Relation {
@@ -244,9 +248,9 @@ impl RelationGraph for OxigraphStore {
 impl OxigraphStore {
     fn clear_entity_graph(&self, entity_uri: &EntityUri) -> Result<(), GraphError> {
         self.store
-            .clear_graph(GraphNameRef::NamedNode(NamedNodeRef::new(
-                &entity_graph_uri(entity_uri),
-            )?))
+            .clear_graph(GraphNameRef::NamedNode(
+                NamedNodeRef::new(&entity_graph_uri(entity_uri)).map_err(store_error)?,
+            ))
             .map_err(store_error)?;
         Ok(())
     }
@@ -367,23 +371,12 @@ fn lock_error(error: impl std::fmt::Display) -> GraphError {
     GraphError::Store(error.to_string())
 }
 
-impl From<kanban_entity::EntityUriError> for GraphError {
-    fn from(value: kanban_entity::EntityUriError) -> Self {
-        Self::Store(value.to_string())
-    }
-}
-
-impl From<oxigraph::model::IriParseError> for GraphError {
-    fn from(value: oxigraph::model::IriParseError) -> Self {
-        Self::Store(value.to_string())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use kanban_entity::{EntityUri, Predicate, Provenance, Relation};
 
-    use crate::{OxigraphStore, RelationGraph};
+    use crate::OxigraphStore;
+    use kanban_graph::RelationGraph;
 
     fn relation(subject: &str, predicate: Predicate, object: &str) -> Relation {
         Relation {

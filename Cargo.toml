@@ -6,6 +6,9 @@ members = [
   "crates/kanban-search",
   "crates/kanban-graph",
   "crates/kanban-vector",
+  "crates/kanban-derived-io",
+  "crates/kanban-vector-lancedb",
+  "crates/kanban-graph-oxigraph",
   "crates/kanban-labels",
   "crates/kanban-context",
   "crates/kanban-sqlite",
@@ -21,6 +24,7 @@ default-members = [
   "crates/kanban-search",
   "crates/kanban-graph",
   "crates/kanban-vector",
+  "crates/kanban-derived-io",
   "crates/kanban-labels",
   "crates/kanban-context",
   "crates/kanban-sqlite",
@@ -67,6 +71,9 @@ kanban-indexer = { path = "crates/kanban-indexer" }
 kanban-search = { path = "crates/kanban-search" }
 kanban-graph = { path = "crates/kanban-graph" }
 kanban-vector = { path = "crates/kanban-vector" }
+kanban-derived-io = { path = "crates/kanban-derived-io" }
+kanban-vector-lancedb = { path = "crates/kanban-vector-lancedb" }
+kanban-graph-oxigraph = { path = "crates/kanban-graph-oxigraph" }
 kanban-labels = { path = "crates/kanban-labels" }
 kanban-context = { path = "crates/kanban-context" }
 kanban-sqlite = { path = "crates/kanban-sqlite" }

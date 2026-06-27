@@ -2,12 +2,6 @@ use kanban_entity::{EntityUri, Predicate, Relation};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[cfg(feature = "graph-oxigraph")]
-mod oxigraph_backend;
-
-#[cfg(feature = "graph-oxigraph")]
-pub use oxigraph_backend::OxigraphStore;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GraphStoreStatus {
     pub backend: String,

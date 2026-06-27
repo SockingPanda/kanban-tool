@@ -3768,11 +3768,13 @@ dependencies = [
  "kanban-core",
  "kanban-entity",
  "kanban-graph",
+ "kanban-graph-oxigraph",
  "kanban-local",
  "kanban-search",
  "kanban-server",
  "kanban-sqlite",
  "kanban-vector",
+ "kanban-vector-lancedb",
  "predicates",
  "pretty_assertions",
  "serde",
@@ -3805,6 +3807,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kanban-derived-io"
+version = "1.4.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "kanban-desktop"
 version = "1.4.1"
 dependencies = [
@@ -3833,6 +3844,17 @@ name = "kanban-graph"
 version = "1.4.1"
 dependencies = [
  "kanban-entity",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "kanban-graph-oxigraph"
+version = "1.4.1"
+dependencies = [
+ "kanban-entity",
+ "kanban-graph",
  "oxigraph",
  "serde",
  "serde_json",
@@ -3891,10 +3913,12 @@ dependencies = [
  "kanban-core",
  "kanban-entity",
  "kanban-graph",
+ "kanban-graph-oxigraph",
  "kanban-local",
  "kanban-search",
  "kanban-sqlite",
  "kanban-vector",
+ "kanban-vector-lancedb",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -3913,11 +3937,13 @@ dependencies = [
  "kanban-core",
  "kanban-entity",
  "kanban-graph",
+ "kanban-graph-oxigraph",
  "kanban-indexer",
  "kanban-labels",
  "kanban-local",
  "kanban-search",
  "kanban-vector",
+ "kanban-vector-lancedb",
  "rusqlite",
  "serde",
  "serde_json",
@@ -3931,10 +3957,21 @@ dependencies = [
 name = "kanban-vector"
 version = "1.4.1"
 dependencies = [
+ "kanban-entity",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "kanban-vector-lancedb"
+version = "1.4.1"
+dependencies = [
  "arrow-array",
  "arrow-schema",
  "futures",
  "kanban-entity",
+ "kanban-vector",
  "lancedb",
  "serde",
  "serde_json",

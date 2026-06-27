@@ -5,7 +5,8 @@ use crate::common::*;
 #[test]
 fn graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() -> anyhow::Result<()> {
     use kanban_entity::{EntityUri, Predicate};
-    use kanban_graph::{OxigraphStore, RelationGraph};
+    use kanban_graph::RelationGraph;
+    use kanban_graph_oxigraph::OxigraphStore;
 
     let temp = TempDb::new("graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending")?;
     init_database(&temp.path, "tester")?;
@@ -97,7 +98,8 @@ fn graph_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() -> anyh
 #[test]
 fn graph_rebuild_persists_board_and_dependency_relations() -> anyhow::Result<()> {
     use kanban_entity::{EntityUri, Predicate};
-    use kanban_graph::{OxigraphStore, RelationGraph};
+    use kanban_graph::RelationGraph;
+    use kanban_graph_oxigraph::OxigraphStore;
 
     let temp = TempDb::new("graph_rebuild_persists_board_and_dependency_relations")?;
     init_database(&temp.path, "tester")?;
@@ -148,7 +150,8 @@ fn graph_rebuild_persists_board_and_dependency_relations() -> anyhow::Result<()>
 #[test]
 fn graph_store_can_be_deleted_and_recreated_from_sqlite_snapshot() -> anyhow::Result<()> {
     use kanban_entity::{EntityUri, Predicate};
-    use kanban_graph::{OxigraphStore, RelationGraph};
+    use kanban_graph::RelationGraph;
+    use kanban_graph_oxigraph::OxigraphStore;
 
     let temp = TempDb::new("graph_store_can_be_deleted_and_recreated_from_sqlite_snapshot")?;
     init_database(&temp.path, "tester")?;
@@ -292,7 +295,8 @@ fn assert_graph_contains_relation_keys(
     expected: &[(String, String, String)],
 ) -> anyhow::Result<()> {
     use kanban_entity::{EntityUri, Predicate};
-    use kanban_graph::{OxigraphStore, RelationGraph};
+    use kanban_graph::RelationGraph;
+    use kanban_graph_oxigraph::OxigraphStore;
 
     let graph = OxigraphStore::open(graph_path)?;
     let mut actual = Vec::new();

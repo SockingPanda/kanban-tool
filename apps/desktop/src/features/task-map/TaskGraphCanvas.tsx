@@ -18,13 +18,13 @@ import {
   type NodeProps,
   type NodeTypes,
 } from "@xyflow/react"
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { cn } from "@/lib/utils"
 
 import { TaskGraphNodeCard } from "./TaskGraphNodeCard"
 import { clampTaskGraphScale } from "./task-graph-scale"
-import { layoutTaskGraphFallback, layoutTaskGraphWithElk } from "./task-graph-layout"
+import { layoutTaskGraphFallback, layoutTaskGraphWithElk, shouldUseFallbackLayout } from "./task-graph-layout"
 import { graphNodeStatusMiniMapColor } from "./task-map-colors"
 import type { TaskGraph, TaskGraphEdgeKind, TaskGraphLayout, TaskGraphLayoutNode, TaskGraphMode } from "./task-graph-types"
 
@@ -77,8 +77,12 @@ function TaskGraphCanvasInner({
   const selectedTaskIdRef = useRef<string | null>(selectedTaskId ?? null)
   const latestGraphRef = useRef(graph)
   const initialLayoutRef = useRef<TaskGraphLayout | null>(null)
-  if (!initialLayoutRef.current) initialLayoutRef.current = layoutTaskGraphFallback(graph, { mode })
+  if (!initialLayoutRef.current) {
+    const initialKey = taskGraphLayoutKey(graph, mode)
+    initialLayoutRef.current = getCachedTaskGraphLayout(initialKey) ?? layoutTaskGraphFallback(graph, { mode })
+  }
   const initialLayout = initialLayoutRef.current
+  const fittedLayoutKeyRef = useRef<string | null>(null)
   const handleSelectTask = useCallback((taskId: string) => {
     onSelectTaskRef.current?.(taskId)
   }, [])
@@ -91,6 +95,7 @@ function TaskGraphCanvasInner({
   )
   const [edges, setEdges] = useState<TaskFlowEdge[]>(() => buildTaskFlowEdges(initialLayout))
   const safeScale = clampTaskGraphScale(scale)
+  const previousScaleRef = useRef(safeScale)
   const interaction = taskGraphInteraction(mode)
   const layoutKey = useMemo(() => taskGraphLayoutKey(graph, mode), [graph, mode])
   const graphDataKey = useMemo(() => taskGraphDataKey(graph), [graph])
@@ -102,11 +107,31 @@ function TaskGraphCanvasInner({
   useEffect(() => {
     let cancelled = false
     const layoutGraph = latestGraphRef.current
+    const cached = getCachedTaskGraphLayout(layoutKey)
+    if (cached) {
+      setLayout(cached)
+      return () => {
+        cancelled = true
+      }
+    }
     const fallback = layoutTaskGraphFallback(layoutGraph, { mode })
+    setCachedTaskGraphLayout(layoutKey, fallback)
     setLayout(fallback)
+    if (shouldUseFallbackLayout(layoutGraph)) {
+      markReactFlowLayoutCommit(layoutGraph, "fallback-only")
+      return () => {
+        cancelled = true
+      }
+    }
     void layoutTaskGraphWithElk(layoutGraph, { mode })
       .then((nextLayout) => {
-        if (!cancelled) setLayout(nextLayout)
+        if (!cancelled) {
+          setCachedTaskGraphLayout(layoutKey, nextLayout)
+          startTransition(() => {
+            markReactFlowLayoutCommit(layoutGraph, "elk")
+            setLayout(nextLayout)
+          })
+        }
       })
       .catch(() => {
         if (!cancelled) setLayout(fallback)
@@ -132,14 +157,18 @@ function TaskGraphCanvasInner({
 
   useEffect(() => {
     if (!nodes.length) return
+    if (fittedLayoutKeyRef.current === layoutKey) return
+    fittedLayoutKeyRef.current = layoutKey
     const frame = window.requestAnimationFrame(() => {
       void reactFlow.fitView({ padding: interaction.fitViewPadding, duration: 160 })
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [interaction.fitViewPadding, layout.height, layout.width, nodes.length, reactFlow])
+  }, [interaction.fitViewPadding, layoutKey, nodes.length, reactFlow])
 
   useEffect(() => {
     if (mode !== "board-map") return
+    if (previousScaleRef.current === safeScale) return
+    previousScaleRef.current = safeScale
     void reactFlow.setViewport({ x: 24, y: 24, zoom: safeScale }, { duration: 120 })
   }, [mode, reactFlow, safeScale])
 
@@ -240,12 +269,20 @@ function graphEdgeStroke(kind: TaskGraphEdgeKind, blocking?: boolean) {
 }
 
 function taskGraphLayoutKey(graph: TaskGraph, mode: TaskGraphMode) {
+  const metaKey = taskGraphMetaLayoutKey(graph)
+  if (metaKey) return `${mode}|${metaKey}`
   const nodes = graph.nodes.map((node) => node.id).sort().join(",")
   const edges = graph.edges
     .map((edge) => `${edge.sourceTaskId}>${edge.targetTaskId}:${edge.kind}:${edge.id}`)
     .sort()
     .join(",")
   return `${mode}|${nodes}|${edges}`
+}
+
+function taskGraphMetaLayoutKey(graph: TaskGraph) {
+  if (graph.meta?.contentHash) return `hash:${graph.meta.contentHash}`
+  if (graph.meta?.version) return `version:${graph.meta.version}`
+  return null
 }
 
 function taskGraphDataKey(graph: TaskGraph) {
@@ -353,11 +390,46 @@ function miniMapNodeColor(node: Node) {
   return graphNodeStatusMiniMapColor(data.node?.status)
 }
 
+const TASK_GRAPH_LAYOUT_CACHE_LIMIT = 16
+const taskGraphLayoutCache = new Map<string, TaskGraphLayout>()
+
+function getCachedTaskGraphLayout(layoutKey: string) {
+  const cached = taskGraphLayoutCache.get(layoutKey)
+  if (!cached) return null
+  taskGraphLayoutCache.delete(layoutKey)
+  taskGraphLayoutCache.set(layoutKey, cached)
+  return cached
+}
+
+function setCachedTaskGraphLayout(layoutKey: string, layout: TaskGraphLayout) {
+  taskGraphLayoutCache.delete(layoutKey)
+  taskGraphLayoutCache.set(layoutKey, layout)
+  while (taskGraphLayoutCache.size > TASK_GRAPH_LAYOUT_CACHE_LIMIT) {
+    const oldestKey = taskGraphLayoutCache.keys().next().value
+    if (!oldestKey) return
+    taskGraphLayoutCache.delete(oldestKey)
+  }
+}
+
+function markReactFlowLayoutCommit(graph: TaskGraph, source: "fallback-only" | "elk") {
+  if (!import.meta.env.DEV || typeof performance === "undefined") return
+  performance.mark("task-graph-reactflow-layout", {
+    detail: {
+      source,
+      nodes: graph.nodes.length,
+      edges: graph.edges.length,
+    },
+  })
+}
+
 export const __test = {
   buildTaskFlowNodes,
+  getCachedTaskGraphLayout,
   layoutTaskGraphFallback,
   patchTaskFlowNodeSelection,
+  setCachedTaskGraphLayout,
   taskGraphDataKey,
   taskGraphLayoutKey,
+  taskGraphMetaLayoutKey,
   taskGraphInteraction,
 }

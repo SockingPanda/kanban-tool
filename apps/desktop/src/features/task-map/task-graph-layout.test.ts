@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { layoutTaskGraphFallback, layoutTaskGraphWithElk } from "./task-graph-layout"
+import { layoutTaskGraphFallback, layoutTaskGraphWithElk, shouldUseFallbackLayout } from "./task-graph-layout"
 import type { TaskGraph } from "./task-graph-types"
 
 const graph: TaskGraph = {
@@ -47,6 +47,21 @@ describe("layoutTaskGraphWithElk", () => {
     expect(Number.isFinite(layout.height)).toBe(true)
     expect(layout.width).toBeGreaterThan(0)
     expect(layout.height).toBeGreaterThan(0)
+  })
+
+  it("uses fallback layout for tiny graphs", async () => {
+    const tinyGraph: TaskGraph = {
+      nodes: [
+        { id: "parent", ref: "kanban-tool#1", title: "Parent", status: "ready" },
+        { id: "child", ref: "kanban-tool#2", title: "Child", status: "todo" },
+      ],
+      edges: [{ id: "dep:parent:child", sourceTaskId: "parent", targetTaskId: "child", kind: "dependency", blocking: true }],
+    }
+
+    expect(shouldUseFallbackLayout(tinyGraph)).toBe(true)
+    await expect(layoutTaskGraphWithElk(tinyGraph, { mode: "board-map" })).resolves.toEqual(
+      layoutTaskGraphFallback(tinyGraph, { mode: "board-map" }),
+    )
   })
 
   it("uses graph topology instead of status buckets for board-map layers", async () => {

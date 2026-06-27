@@ -1,5 +1,5 @@
 import { AlertTriangle, EyeOff, ListFilter, Loader2, Minus, Network, Plus, RefreshCcw, RotateCcw } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -8,9 +8,10 @@ import { Card } from "@/components/ui/card"
 import { MetricStrip, PageToolbar, PriorityBadge, SectionCard, TaskIdentityLine, TaskStatusBadge } from "@/components/ui/composites"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import type { BoardTaskMap, KanbanApi, Task, TaskGraphNode as ApiTaskGraphNode } from "@/lib/api"
+import { cn } from "@/lib/utils"
 
-import { TaskGraphCanvas } from "./TaskGraphCanvas"
 import { apiTaskGraphToCanvasGraph } from "./task-graph-adapter"
 import { useBoardTaskMap } from "./useBoardTaskMap"
 
@@ -19,6 +20,7 @@ type BoardMapFilter = "all" | "blocked" | "ready" | "running" | "unplanned" | "i
 const MIN_MAP_ZOOM = 0.65
 const MAX_MAP_ZOOM = 1.5
 const MAP_ZOOM_STEP = 0.15
+const TaskGraphCanvas = lazy(() => import("./TaskGraphCanvas").then((module) => ({ default: module.TaskGraphCanvas })))
 
 const filterOptions: { value: BoardMapFilter; label: string }[] = [
   { value: "all", label: "All active" },
@@ -54,6 +56,7 @@ export function BoardTaskMapView({
     selectedTaskId,
     sourceGraph,
   ])
+  const relationCountByTaskId = useMemo(() => buildRelationCountIndex(sourceGraph), [sourceGraph])
   const inspectTask = useCallback((taskId: string) => setInspectedTaskId(taskId), [])
   const hiddenSelection = Boolean(selectedNode && !visibleGraph.nodes.some((node) => node.id === selectedNode.task.id))
   const zoomLabel = `${Math.round(zoom * 100)}%`
@@ -169,15 +172,17 @@ export function BoardTaskMapView({
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading task map
               </Card>
             ) : visibleGraph.nodes.length ? (
-              <TaskGraphCanvas
-                graph={visibleGraph}
-                selectedTaskId={selectedNode?.task.id ?? inspectedTaskId ?? selectedTaskId}
-                onSelectTask={inspectTask}
-                onOpenTask={onSelectTask}
-                mode="board-map"
-                scale={zoom}
-                className="h-full min-h-[520px]"
-              />
+              <Suspense fallback={<TaskMapSkeleton label="Loading graph renderer" className="h-full min-h-[520px]" />}>
+                <TaskGraphCanvas
+                  graph={visibleGraph}
+                  selectedTaskId={selectedNode?.task.id ?? inspectedTaskId ?? selectedTaskId}
+                  onSelectTask={inspectTask}
+                  onOpenTask={onSelectTask}
+                  mode="board-map"
+                  scale={zoom}
+                  className="h-full min-h-[520px]"
+                />
+              </Suspense>
             ) : (
               <Empty className="h-full min-h-[420px] rounded-md border border-border bg-muted/20">
                 <EmptyDescription>No tasks match the current map filter.</EmptyDescription>
@@ -186,7 +191,12 @@ export function BoardTaskMapView({
           </div>
         </section>
 
-        <MapInspector node={selectedNode} graph={sourceGraph} hiddenSelection={hiddenSelection} onOpenTask={onSelectTask} />
+        <MapInspector
+          node={selectedNode}
+          relationCountByTaskId={relationCountByTaskId}
+          hiddenSelection={hiddenSelection}
+          onOpenTask={onSelectTask}
+        />
       </div>
     </div>
   )
@@ -241,17 +251,17 @@ function clampMapZoom(value: number) {
 
 function MapInspector({
   node,
-  graph,
+  relationCountByTaskId,
   hiddenSelection,
   onOpenTask,
 }: {
   node: ApiTaskGraphNode | null
-  graph: BoardTaskMap | null
+  relationCountByTaskId: Map<string, RelationCounts>
   hiddenSelection: boolean
   onOpenTask: (taskId: string) => void
 }) {
   const task = node?.task ?? null
-  const counts = task && graph ? relationCounts(graph, task.id) : { parents: 0, children: 0, steps: 0 }
+  const counts = (task ? relationCountByTaskId.get(task.id) : null) ?? emptyRelationCounts()
   return (
     <aside className="min-w-0 shrink-0 lg:w-80">
       <SectionCard title="Inspector" icon={Network}>
@@ -296,15 +306,42 @@ function MapInspector({
   )
 }
 
-function relationCounts(graph: BoardTaskMap, taskId: string) {
-  return graph.edges.reduce(
-    (counts, edge) => {
-      if (edge.kind === "step" && edge.source_task_id === taskId) counts.steps += 1
-      if (edge.kind === "dependency" && edge.target_task_id === taskId) counts.parents += 1
-      if (edge.kind === "dependency" && edge.source_task_id === taskId) counts.children += 1
-      return counts
-    },
-    { parents: 0, children: 0, steps: 0 },
+type RelationCounts = { parents: number; children: number; steps: number }
+
+function buildRelationCountIndex(graph: BoardTaskMap | null) {
+  const countsByTaskId = new Map<string, RelationCounts>()
+  if (!graph) return countsByTaskId
+  for (const edge of graph.edges) {
+    if (edge.kind === "step") {
+      relationCountsFor(countsByTaskId, edge.source_task_id).steps += 1
+    } else {
+      relationCountsFor(countsByTaskId, edge.target_task_id).parents += 1
+      relationCountsFor(countsByTaskId, edge.source_task_id).children += 1
+    }
+  }
+  return countsByTaskId
+}
+
+function relationCountsFor(countsByTaskId: Map<string, RelationCounts>, taskId: string) {
+  const existing = countsByTaskId.get(taskId)
+  if (existing) return existing
+  const counts = emptyRelationCounts()
+  countsByTaskId.set(taskId, counts)
+  return counts
+}
+
+function emptyRelationCounts(): RelationCounts {
+  return { parents: 0, children: 0, steps: 0 }
+}
+
+function TaskMapSkeleton({ label, className }: { label: string; className?: string }) {
+  return (
+    <Card className={cn("space-y-3 p-4", className)}>
+      <div className="text-sm text-muted-foreground">{label}</div>
+      <Skeleton className="h-24 w-3/4" />
+      <Skeleton className="ml-auto h-24 w-2/3" />
+      <Skeleton className="h-24 w-1/2" />
+    </Card>
   )
 }
 
@@ -316,4 +353,4 @@ function errorMessage(err: unknown) {
   return err instanceof Error ? err.message : String(err)
 }
 
-export const __test = { clampMapZoom, filterBoardMap, resolveBoardMapSelectedNode, stepMapZoom }
+export const __test = { buildRelationCountIndex, clampMapZoom, filterBoardMap, resolveBoardMapSelectedNode, stepMapZoom }

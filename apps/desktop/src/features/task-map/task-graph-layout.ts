@@ -1,4 +1,4 @@
-import ELK, { type ElkExtendedEdge, type ElkNode } from "elkjs/lib/elk.bundled.js"
+import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk.bundled.js"
 
 import type { TaskGraph, TaskGraphLayout, TaskGraphLayoutEdge, TaskGraphLayoutNode, TaskGraphMode, TaskGraphNode } from "./task-graph-types"
 
@@ -9,8 +9,14 @@ const DETAIL_ROW_GAP = 28
 const BOARD_LAYER_GAP = 96
 const BOARD_ROW_GAP = 24
 const LAYOUT_PADDING = 24
+const FALLBACK_ONLY_MAX_NODES = 2
+const FALLBACK_ONLY_MAX_EDGES = 1
 
-const elk = new ELK()
+type ElkInstance = {
+  layout(graph: ElkNode): Promise<ElkNode>
+}
+
+let elkPromise: Promise<ElkInstance> | null = null
 
 type LayoutOptions = {
   mode: TaskGraphMode
@@ -23,6 +29,7 @@ export async function layoutTaskGraph(graph: TaskGraph, options: LayoutOptions):
 
 export async function layoutTaskGraphWithElk(graph: TaskGraph, options: LayoutOptions): Promise<TaskGraphLayout> {
   if (!graph.nodes.length) return emptyLayout()
+  if (shouldUseFallbackLayout(graph)) return layoutTaskGraphFallback(graph, options)
   const sortedNodes = [...graph.nodes].sort(compareNodes)
   const visibleNodeIds = new Set(sortedNodes.map((node) => node.id))
   const visibleEdges = graph.edges.filter((edge) => visibleNodeIds.has(edge.sourceTaskId) && visibleNodeIds.has(edge.targetTaskId))
@@ -48,7 +55,11 @@ export async function layoutTaskGraphWithElk(graph: TaskGraph, options: LayoutOp
     })),
   }
 
+  markTaskGraphLayout("task-graph-layout-start", graph)
+  const elk = await loadElk()
+  const start = devPerformanceNow()
   const result = await elk.layout(elkGraph)
+  markTaskGraphLayout("task-graph-layout-end", graph, start)
   const children = result.children ?? []
   const minX = children.length ? Math.min(...children.map((child) => child.x ?? 0)) : 0
   const minY = children.length ? Math.min(...children.map((child) => child.y ?? 0)) : 0
@@ -59,6 +70,34 @@ export async function layoutTaskGraphWithElk(graph: TaskGraph, options: LayoutOp
   })
 
   return finalizeLayout(layoutNodes, graph.edges)
+}
+
+function loadElk() {
+  elkPromise ??= import("elkjs/lib/elk.bundled.js").then((module) => {
+    const ELK = module.default
+    return new ELK()
+  })
+  return elkPromise
+}
+
+export function shouldUseFallbackLayout(graph: TaskGraph) {
+  return graph.nodes.length <= FALLBACK_ONLY_MAX_NODES && graph.edges.length <= FALLBACK_ONLY_MAX_EDGES
+}
+
+function markTaskGraphLayout(name: string, graph: TaskGraph, start?: number | null) {
+  if (!import.meta.env.DEV || typeof performance === "undefined") return
+  performance.mark(name, {
+    detail: {
+      nodes: graph.nodes.length,
+      edges: graph.edges.length,
+      durationMs: start == null ? undefined : Math.round((performance.now() - start) * 100) / 100,
+    },
+  })
+}
+
+function devPerformanceNow() {
+  if (!import.meta.env.DEV || typeof performance === "undefined") return null
+  return performance.now()
 }
 
 export function layoutTaskGraphFallback(graph: TaskGraph, options: LayoutOptions): TaskGraphLayout {

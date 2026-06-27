@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 
@@ -6,6 +6,16 @@ const sourceRoot = fileURLToPath(new URL("../", import.meta.url))
 
 function source(relativePath: string) {
   return readFileSync(new URL(relativePath, `file://${sourceRoot}`), "utf8")
+}
+
+function taskDetailSource() {
+  const directory = new URL("features/task-detail/", `file://${sourceRoot}`)
+
+  return readdirSync(directory)
+    .filter((name) => name.endsWith(".tsx"))
+    .sort()
+    .map((name) => readFileSync(new URL(name, directory), "utf8"))
+    .join("\n")
 }
 
 describe("desktop input accessibility contracts", () => {
@@ -17,7 +27,7 @@ describe("desktop input accessibility contracts", () => {
 
   it("names shell and Add task dialog fields without browser autocomplete noise", () => {
     const appShell = source("app/AppShell.tsx")
-    const taskDetail = source("features/task-detail/TaskDetail.tsx")
+    const taskDetail = taskDetailSource()
     const addTaskDialog = appShell.slice(
       appShell.indexOf("function AddTaskDialog"),
       appShell.indexOf("function MainView"),
@@ -49,7 +59,7 @@ describe("desktop input accessibility contracts", () => {
 
   it("announces async errors and uses typographic ellipsis in touched UI", () => {
     const appShell = source("app/AppShell.tsx")
-    const taskDetail = source("features/task-detail/TaskDetail.tsx")
+    const taskDetail = taskDetailSource()
 
     expect(appShell).toContain('role="alert"')
     expect(appShell).toContain('aria-live="assertive"')

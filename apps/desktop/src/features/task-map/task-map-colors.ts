@@ -26,15 +26,22 @@ const miniMapStatusColors: Record<TaskStatus, string> = {
   archived: "#9ca3af",
 }
 
-export function graphNodeStatusClass(status: TaskStatus | undefined, selected: boolean, contextOnly: boolean | undefined) {
+export function graphNodeStatusClass(
+  status: TaskStatus | undefined,
+  selected: boolean,
+  contextOnly: boolean | undefined,
+  dependencyBlocked = false,
+) {
+  const visualStatus = dependencyBlocked ? "blocked" : status
   return [
-    status ? statusNodeClasses[status] : "border-border bg-card text-card-foreground",
+    visualStatus ? statusNodeClasses[visualStatus] : "border-border bg-card text-card-foreground",
     contextOnly ? "border-dashed opacity-75 saturate-75" : "",
     selected ? "shadow-sm ring-2 ring-ring ring-offset-1 ring-offset-background" : "",
   ].filter(Boolean).join(" ")
 }
 
-export function graphNodeStatusMiniMapColor(status: TaskStatus | undefined) {
+export function graphNodeStatusMiniMapColor(status: TaskStatus | undefined, dependencyBlocked = false) {
+  if (dependencyBlocked) return miniMapStatusColors.blocked
   if (!status) return "#64748b"
   return miniMapStatusColors[status]
 }

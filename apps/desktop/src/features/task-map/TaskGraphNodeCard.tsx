@@ -22,7 +22,7 @@ export function TaskGraphNodeCard({ node, selected, onSelectTask, onOpenTask, cl
       aria-pressed={selected}
       className={cn(
         "relative flex h-[72px] w-44 flex-col overflow-hidden rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        graphNodeStatusClass(node.status, selected, node.contextOnly),
+        graphNodeStatusClass(node.status, selected, node.contextOnly, node.dependencyBlocked),
         className,
       )}
       onClick={() => onSelectTask?.(node.id)}

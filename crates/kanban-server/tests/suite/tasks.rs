@@ -2707,7 +2707,7 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
         json["error"]["message"]
             .as_str()
             .context("error message")?
-            .contains("server helper adapter")
+            .contains("vector helper")
     );
 
     let (status, json) = get_json(

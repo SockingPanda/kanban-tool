@@ -619,8 +619,9 @@ Bootstrap 默认不会覆盖已有 `label_semantics`。如果同名 label 已经
 返回 `{ "task": <TaskRecord>, "semantics": <LabelSemanticsRecord>, "verification": null|<Verification> }`。
 
 当前 no-heavy CLI build 已把 label suggestion/proposal、bootstrap staged verification 和
-label atom query 接到 vector helper subprocess adapter；`kanban vector ...` 仍保留 raw chunk /
-label-atom 查询入口，`label atom-index rebuild` 仍是独立 rebuild 能力。
+label atom status/rebuild/query 接到 vector helper subprocess adapter；`kanban vector ...` 仍保留
+raw chunk / label-atom 查询入口，helper 内部用 label atom 专用 command 处理
+`lancedb_label_atoms`，不复用 chunk store status 伪装 label atom 状态。
 
 传入 `--verify` 或 `--vector-config <toml>` 时，CLI 使用 pre-commit staged
 verification：先在 canonical DB transaction 外读取当前 task、target label state 和
@@ -783,10 +784,12 @@ ordinal，semantics rebuild 后同语义 atom 的 id 改变时仍可用 content 
 `label atom-index status` 返回 label atom vector index 的状态。未配置 provider 或 helper
 不可用时仍成功返回 disabled/degraded 状态。JSON 保留兼容字段 `message`，并返回结构化
 `diagnostics: string[]`、`dirty: boolean | null`、`board_dirty: boolean | null`；调用方应使用
-结构化字段判断 dirty/error，而不要解析 `message` 文案。`query` 通过 helper adapter 查询
-label atom vector index，`--polarity` 只接受 `positive` 或 `negative`，human 输出和 JSON hit
-都把 LanceDB `_distance` 暴露为 `distance`。`rebuild` 仍需要可用的 rebuild-capable vector
-store/helper 路径；默认 no-heavy CLI 对 rebuild 返回显式 unavailable，不修改 SQLite truth。
+结构化字段判断 dirty/error，而不要解析 `message` 文案。`status` 通过 helper 的
+`label-atoms-status` command 读取 `LANCEDB_LABEL_ATOMS_STORE` 与 `label_atom_index_boards` 语义；
+`query` 通过 helper adapter 查询 label atom vector index，`--polarity` 只接受 `positive` 或
+`negative`，human 输出和 JSON hit 都把 LanceDB `_distance` 暴露为 `distance`。`rebuild` 通过
+helper 的 `rebuild-label-atoms` command 重建 label atom 派生索引；helper/provider 不可用时返回显式
+error，不修改 SQLite canonical label truth，也不标记 chunk store success。
 
 `kanban vector query-label-atoms` 是公开 raw helper 查询入口，支持 text 查询和 raw vector 查询：
 `kanban vector query-label-atoms <text> [--polarity positive|negative] [--limit N] [--embedding-model MODEL] [--vector-config <toml>]`，或

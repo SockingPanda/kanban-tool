@@ -16,9 +16,8 @@ use kanban_sqlite::{
     apply_label_ontology_atom_with_options, bootstrap_task_label,
     bootstrap_task_label_with_staged_verification, clear_label_semantics_with_options,
     create_label_ontology_action, delete_label, explain_label_atom, get_label_ontology_signal,
-    get_label_proposal, get_label_semantics, label_atom_index_status_with,
-    label_ontology_quality_report, list_label_atoms, list_label_ontology_signals,
-    list_label_proposals, list_label_semantics, list_labels,
+    get_label_proposal, get_label_semantics, label_ontology_quality_report, list_label_atoms,
+    list_label_ontology_signals, list_label_proposals, list_label_semantics, list_labels,
     propose_task_label_with_store_and_create_options, record_label_ontology_observation,
     reject_label_proposal, remove_task_label, revert_label_ontology_mutation,
     review_label_ontology, suggest_task_labels_with, upsert_label_semantics_with_options,
@@ -1404,7 +1403,7 @@ fn label_atom_index_status_optional_config(
     vector_config_path: Option<&std::path::Path>,
 ) -> Result<kanban_vector::VectorStoreStatus> {
     let store = subprocess_vector_store(db_path, board, vector_config_path)?;
-    label_atom_index_status_with(db_path, board, &store).map_err(Into::into)
+    Ok(store.label_atom_status())
 }
 
 fn rebuild_configured_label_atom_index(
@@ -1420,16 +1419,8 @@ fn rebuild_configured_label_atom_index_optional(
     board: &str,
     vector_config_path: Option<&std::path::Path>,
 ) -> Result<kanban_vector::VectorStoreStatus> {
-    #[cfg(any())]
-    {
-        if let Some(store) = configured_lancedb_store(db_path, vector_config_path)? {
-            return rebuild_label_atom_index_with(db_path, board, &store).map_err(Into::into);
-        }
-    }
-    let _ = (db_path, board, vector_config_path);
-    bail!(
-        "{LABEL_VECTOR_HELPER_ADAPTER_UNAVAILABLE}; use `kanban vector query-label-atoms` for raw helper queries after a separately rebuilt helper index"
-    )
+    let store = subprocess_vector_store(db_path, board, vector_config_path)?;
+    store.rebuild_label_atoms().map_err(Into::into)
 }
 
 fn ensure_label_bootstrap_verification_available(

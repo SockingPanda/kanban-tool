@@ -10,8 +10,9 @@ use std::path::Path;
 
 use kanban_core::{
     Clock, KanbanError, ReadinessFacts, Result, SystemClock, TaskStatus, can_complete_from,
-    can_finish_to, can_promote_from, completed_at_for_finish, is_claimable_task, new_run_id,
-    new_typed_id, recompute_ready_status as core_recompute_ready_status, retry_decision,
+    can_finish_to, can_promote_from, can_reopen_from, completed_at_for_finish,
+    is_active_recomputable_status, is_claimable_task, new_run_id, new_typed_id,
+    recompute_ready_status as core_recompute_ready_status, retry_decision,
     running_claim_is_present,
 };
 
@@ -678,6 +679,71 @@ pub fn unblock_task(
     })
 }
 
+pub fn reopen_task(
+    path: impl AsRef<Path>,
+    board: &str,
+    actor: &str,
+    task_ref: &str,
+    reason: &str,
+) -> Result<TaskRecord> {
+    let reason = reason.trim();
+    if reason.is_empty() {
+        return Err(KanbanError::InvalidInput(
+            "reopen reason is required".into(),
+        ));
+    }
+    let conn = connect_file(path.as_ref())?;
+    let now = SystemClock.now_ms();
+    let board_id = board_id(&conn, board)?;
+    with_immediate_tx(&conn, || {
+        ensure_board_active(&conn, &board_id)?;
+        let task = resolve_task(&conn, &board_id, task_ref)?;
+        if !can_reopen_from(task.status) {
+            return Err(KanbanError::InvalidTransition(
+                "reopen requires done".into(),
+            ));
+        }
+        let target = recompute_ready_status(&conn, &task, now)?;
+        let original_completed_at = task.completed_at;
+        let changed = conn
+            .execute(
+                "UPDATE tasks
+                 SET status=?1,
+                     completed_at=NULL,
+                     updated_at=?2,
+                     lock_version=lock_version+1
+                 WHERE id=?3
+                   AND board_id=?4
+                   AND status='done'
+                   AND lock_version=?5",
+                params![target.as_str(), now, task.id, board_id, task.lock_version],
+            )
+            .map_err(storage)?;
+        ensure_changed_one(changed, || {
+            KanbanError::InvalidTransition("reopen requires matching fresh done task".into())
+        })?;
+        let payload = json!({
+            "from": task.status.as_str(),
+            "to": target.as_str(),
+            "reason": reason,
+            "original_completed_at": original_completed_at,
+        })
+        .to_string();
+        insert_event(
+            &conn,
+            &board_id,
+            Some(&task.id),
+            None,
+            "task.reopened",
+            actor,
+            &payload,
+            now,
+        )?;
+        recompute_direct_children_after_parent_reopen(&conn, &board_id, actor, &task.id, now)?;
+        get_task_by_id(&conn, &board_id, &task.id)
+    })
+}
+
 pub fn reclaim_expired(path: impl AsRef<Path>, board: &str, actor: &str) -> Result<usize> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
@@ -1296,6 +1362,54 @@ pub(crate) fn guarded_set_status_with_reason(
         &payload,
         update.now,
     )
+}
+
+fn recompute_direct_children_after_parent_reopen(
+    conn: &Connection,
+    board_id: &str,
+    actor: &str,
+    parent_task_id: &str,
+    now: i64,
+) -> Result<()> {
+    let child_ids = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT child_task_id
+                 FROM task_dependencies
+                 WHERE board_id=?1 AND parent_task_id=?2",
+            )
+            .map_err(storage)?;
+        let rows = stmt
+            .query_map(params![board_id, parent_task_id], |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(storage)?;
+        let mut child_ids = Vec::new();
+        for row in rows {
+            child_ids.push(row.map_err(storage)?);
+        }
+        child_ids
+    };
+
+    for child_id in child_ids {
+        let child = get_task_by_id(conn, board_id, &child_id)?;
+        if !is_active_recomputable_status(child.status) {
+            continue;
+        }
+        let target = recompute_ready_status(conn, &child, now)?;
+        if target != child.status {
+            guarded_set_status(
+                conn,
+                board_id,
+                &child,
+                target,
+                actor,
+                "task.recomputed",
+                now,
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn recompute_core_ready_status(

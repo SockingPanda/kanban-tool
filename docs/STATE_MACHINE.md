@@ -353,12 +353,30 @@ Rules：
 ### 3.12 Reopen
 
 ```text
-done -> ready | todo | scheduled
-archived -> previous non-archived status or triage
-review -> ready
+done -> triage | todo | scheduled | ready
 ```
 
-MVP 可不实现 reopen。若实现，必须写 event，并重新检查依赖和 schedule。
+Guard：
+
+- 只允许 `done` task reopen；`review`、`archived` 和非 done task 必须拒绝。
+- `reason` 必须非空。
+
+目标状态由服务端重新计算，不由调用方指定：
+
+```text
+if spec incomplete -> triage
+else if scheduled_at > now -> scheduled
+else if parent dependencies not all done/archived -> todo
+else if execution plan is not ready -> todo
+else -> ready
+```
+
+Side effects：
+
+- clear `completed_at`。
+- preserve `result_summary` / `result_json`。
+- insert `task_events(kind='task.reopened')`，payload 包含 `from`、`to`、`reason`、`original_completed_at`。
+- 直接依赖该 task 的 child 中，仅 `triage|todo|scheduled|ready` 会按 readiness 重新计算；`running|blocked|review|done|archived` 不隐式改写。
 
 ---
 
@@ -373,11 +391,11 @@ MVP 可不实现 reopen。若实现，必须写 event，并重新检查依赖和
 | ready | - | demote | schedule | - | claim | block | - | - | archive |
 | running | - | - | - | reclaim | - | block | submit_review | complete | force_archive |
 | blocked | unblock | unblock | unblock | unblock | - | - | - | - | archive |
-| review | - | - | - | reopen | - | block | - | complete | archive |
-| done | - | - | - | reopen | - | - | - | - | archive |
+| review | - | - | - | - | - | block | - | complete | archive |
+| done | reopen | reopen | reopen | reopen | - | - | - | - | archive |
 | archived | restore | restore | restore | restore | - | - | - | - | - |
 
-`demote`、`schedule`、`reopen`、`restore` 可作为 v1+ 命令；MVP 可以只实现 create/specify/promote/claim/heartbeat/complete/block/unblock/reclaim/archive。
+`demote`、`schedule`、`restore` 可作为 v1+ 命令；task-level `reopen` 当前只实现 `done -> recomputed active status`。
 
 ---
 
@@ -396,7 +414,7 @@ parent_task_id -> child_task_id
 1. parent != child。
 2. 新增依赖不能产生环。
 3. 如果给一个 `ready` child 增加未完成 parent（不是 `done` 或 `archived`），child 必须降级为 `todo`。
-4. 如果 parent 从 `done` 被 reopen，所有依赖它的 child 必须重新评估；若 child 不是 terminal/running，可降级为 `todo`。
+4. 如果 parent 从 `done` 被 reopen，仅直接 child 中的 active recomputable 状态（`triage|todo|scheduled|ready`）按 readiness 重新计算；`blocked|review|running|done|archived` 不隐式改写。
 5. `running` child 不应被新增未完成依赖；除非 force，并且需要 block/reclaim。
 
 ---

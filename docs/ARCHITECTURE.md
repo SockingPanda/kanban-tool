@@ -352,7 +352,22 @@ Worker/CLI/Web
   -> COMMIT
 ```
 
-### 3.4 Web live update
+### 3.4 Reopen task
+
+```text
+CLI/Web
+  -> ReopenTask command
+  -> BEGIN IMMEDIATE
+  -> verify task.status == done
+  -> verify reason is non-empty
+  -> recompute target from spec, schedule, dependencies, and execution plan
+  -> clear completed_at while preserving result_summary/result_json
+  -> insert task_events(kind='task.reopened')
+  -> recompute direct active children; leave running/blocked/review/done/archived children unchanged
+  -> COMMIT
+```
+
+### 3.5 Web live update
 
 ```text
 State-changing command

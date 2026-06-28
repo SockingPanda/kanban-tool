@@ -89,6 +89,10 @@ pub const fn can_complete_from(status: TaskStatus) -> bool {
     matches!(status, TaskStatus::Running | TaskStatus::Review)
 }
 
+pub const fn can_reopen_from(status: TaskStatus) -> bool {
+    matches!(status, TaskStatus::Done)
+}
+
 pub const fn can_finish_to(current: TaskStatus, target: TaskStatus) -> bool {
     matches!(current, TaskStatus::Running)
         || matches!((current, target), (TaskStatus::Review, TaskStatus::Done))
@@ -217,6 +221,8 @@ mod tests {
         assert!(is_claimable_task(TaskStatus::Ready, false));
         assert!(!is_claimable_task(TaskStatus::Ready, true));
         assert!(can_complete_from(TaskStatus::Review));
+        assert!(can_reopen_from(TaskStatus::Done));
+        assert!(!can_reopen_from(TaskStatus::Review));
         assert!(can_finish_to(TaskStatus::Review, TaskStatus::Done));
         assert!(!can_finish_to(TaskStatus::Review, TaskStatus::Blocked));
     }

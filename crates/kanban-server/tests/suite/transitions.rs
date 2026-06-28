@@ -84,6 +84,7 @@ async fn transitions_reject_unknown_json_fields_in_mutation_bodies() -> anyhow::
             json!({"actor":"tester","description":"ready","descripton":"typo"}),
         ),
         ("complete", json!({"force":true,"summmary":"typo"})),
+        ("reopen", json!({"reason":"retry","reeason":"typo"})),
         ("block", json!({"reason":"waiting","reeason":"typo"})),
         ("archive", json!({"force":true,"froce":"typo"})),
     ];
@@ -101,6 +102,57 @@ async fn transitions_reject_unknown_json_fields_in_mutation_bodies() -> anyhow::
             "{transition}: {json}"
         );
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn transitions_reopen_done_task_requires_reason_and_recomputes_children() -> anyhow::Result<()>
+{
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let parent = create_ready_task_for_test(&db_path, "default", "seed", "reopen parent")
+        .context("parent")?;
+    let child =
+        create_ready_task_for_test(&db_path, "default", "seed", "reopen child").context("child")?;
+    kanban_sqlite::add_dependency(&db_path, "default", "seed", &parent.id, &child.id)?;
+    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &parent.id, 60_000)?;
+    kanban_sqlite::complete_task_with_summary_and_result(
+        &db_path,
+        "default",
+        "worker",
+        &parent.id,
+        Some(&claim.claim_token),
+        false,
+        Some("api done"),
+        Some(r#"{"api":true}"#),
+    )?;
+    kanban_sqlite::promote_task(&db_path, "default", "seed", &child.id)?;
+    let app = test.router();
+
+    let (status, json) = post_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}/transitions/reopen", parent.id),
+        json!({"reason":""}),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json["error"]["code"], "invalid_input");
+
+    let (status, json) = post_json(
+        app,
+        &format!("/api/v1/tasks/{}/transitions/reopen", parent.id),
+        json!({"actor":"api-user","reason":"run again"}),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["status"], "ready");
+    assert_eq!(json["data"]["completed_at"], serde_json::Value::Null);
+    assert_eq!(json["data"]["result_summary"], "api done");
+    assert_eq!(json["data"]["result_json"], r#"{"api":true}"#);
+    let child = kanban_sqlite::get_task_by_id_global(&db_path, &child.id)?;
+    assert_eq!(child.status, kanban_core::TaskStatus::Todo);
+    assert!(child.dependency_blocked);
     Ok(())
 }
 

@@ -1,6 +1,6 @@
 use std::{env, fmt, io, path::PathBuf, process::Command};
 
-use kanban_derived_io::HelperEnvelope;
+use kanban_helper_protocol::HelperEnvelope;
 use serde::de::DeserializeOwned;
 
 use crate::{error::ApiError, state::AppState};

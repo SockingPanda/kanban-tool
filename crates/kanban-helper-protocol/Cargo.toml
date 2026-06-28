@@ -1,16 +1,11 @@
 [package]
-name = "kanban-vector"
+name = "kanban-helper-protocol"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 
-[features]
-default = []
-
 [dependencies]
-kanban-entity.workspace = true
-kanban-helper-protocol.workspace = true
+kanban-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-thiserror.workspace = true

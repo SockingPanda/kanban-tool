@@ -19,6 +19,7 @@ axum.workspace = true
 futures-util = "0.3"
 kanban-core.workspace = true
 kanban-derived-io.workspace = true
+kanban-helper-protocol.workspace = true
 kanban-context.workspace = true
 kanban-entity.workspace = true
 kanban-graph.workspace = true

@@ -1,4 +1,5 @@
 use kanban_entity::ChunkRef;
+use kanban_helper_protocol::HelperEnvelope;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -357,7 +358,7 @@ impl SubprocessVectorStore {
             })?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         if !output.status.success() {
-            if let Ok(envelope) = HelperEnvelopePayload::from_json(stdout.trim())
+            if let Ok(envelope) = HelperEnvelope::from_json(stdout.trim())
                 && let Ok(error) = envelope.decode::<HelperErrorPayload>()
             {
                 return Err(VectorError::Store(format!(
@@ -373,7 +374,7 @@ impl SubprocessVectorStore {
                 bounded_helper_message(stderr.trim())
             )));
         }
-        let envelope = HelperEnvelopePayload::from_json(stdout.trim()).map_err(|error| {
+        let envelope = HelperEnvelope::from_json(stdout.trim()).map_err(|error| {
             VectorError::Store(format!(
                 "vector helper {} returned invalid JSON envelope: {}",
                 self.helper_path.display(),
@@ -387,26 +388,6 @@ impl SubprocessVectorStore {
                 error
             ))
         })
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct HelperEnvelopePayload {
-    protocol: String,
-    payload_json: String,
-}
-
-impl HelperEnvelopePayload {
-    fn from_json(raw: &str) -> std::result::Result<Self, serde_json::Error> {
-        let envelope: Self = serde_json::from_str(raw)?;
-        if envelope.protocol != "kanban-derived-helper.v1" {
-            return serde_json::from_str("null");
-        }
-        Ok(envelope)
-    }
-
-    fn decode<T: DeserializeOwned>(&self) -> std::result::Result<T, serde_json::Error> {
-        serde_json::from_str(&self.payload_json)
     }
 }
 

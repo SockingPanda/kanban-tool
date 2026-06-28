@@ -24,12 +24,12 @@ export type TaskDetailQueryOptions = {
 export function resolveTaskDetailQueryEnablement(options: TaskDetailQueryOptions = {}) {
   return {
     task: options.enabled ?? true,
-    dependencies: Boolean(options.dependenciesEnabled),
-    neighborhood: Boolean(options.neighborhoodEnabled),
-    steps: Boolean(options.stepsEnabled),
+    dependencies: options.dependenciesEnabled ?? true,
+    neighborhood: options.neighborhoodEnabled ?? true,
+    steps: options.stepsEnabled ?? true,
     runs: Boolean(options.runsEnabled),
     events: Boolean(options.eventsEnabled),
-    comments: Boolean(options.commentsEnabled),
+    comments: options.commentsEnabled ?? true,
     runLog: Boolean(options.runLogEnabled),
   }
 }

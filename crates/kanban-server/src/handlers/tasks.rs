@@ -806,8 +806,7 @@ pub(crate) async fn rebuild_label_atom_index(
     State(state): State<AppState>,
     Path(board): Path<String>,
 ) -> Result<Json<Envelope<kanban_vector::VectorStoreStatus>>, ApiError> {
-    let _ = (state, board);
-    let result = rebuild_label_atom_index_for_state()?;
+    let result = rebuild_label_atom_index_for_state(state, board).await?;
     Ok(Json(Envelope {
         data: result,
         meta: None,
@@ -1891,7 +1890,8 @@ async fn label_atom_index_status_for_state(
     state: AppState,
     board: String,
 ) -> Result<kanban_vector::VectorStoreStatus, ApiError> {
-    let args = super::vector::vector_helper_args(&state, &board, &["status".to_owned()]);
+    let args =
+        super::vector::vector_helper_args(&state, &board, &["label-atoms-status".to_owned()]);
     match run_helper_json::<kanban_vector::VectorStoreStatus>(state, HelperKind::Vector, args).await
     {
         Ok(status) => Ok(status),
@@ -1902,10 +1902,21 @@ async fn label_atom_index_status_for_state(
     }
 }
 
-fn rebuild_label_atom_index_for_state() -> Result<kanban_vector::VectorStoreStatus, ApiError> {
-    Err(invalid_input(
-        "label atom index rebuild is not available through the server helper adapter; run the vector helper/CLI rebuild path outside the server",
-    ))
+async fn rebuild_label_atom_index_for_state(
+    state: AppState,
+    board: String,
+) -> Result<kanban_vector::VectorStoreStatus, ApiError> {
+    let args =
+        super::vector::vector_helper_args(&state, &board, &["rebuild-label-atoms".to_owned()]);
+    match run_helper_json::<kanban_vector::VectorStoreStatus>(state, HelperKind::Vector, args).await
+    {
+        Ok(status) => Ok(status),
+        Err(error) if error.is_helper_missing() => Err(invalid_input(helper_degraded_message(
+            HelperKind::Vector,
+            &error,
+        ))),
+        Err(error) => Err(error.into()),
+    }
 }
 
 async fn query_label_atom_index_for_state(

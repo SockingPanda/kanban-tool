@@ -1,5 +1,6 @@
 mod db;
 mod graph_io;
+mod label_atom_io;
 mod status;
 mod vector_io;
 
@@ -13,6 +14,12 @@ pub use graph_io::{
     rebuild_oxigraph_with_store, sync_oxigraph_with_store,
 };
 pub use kanban_helper_protocol::{HELPER_PROTOCOL, HelperEnvelope};
+pub use label_atom_io::{
+    label_atom_index_status_from_base, label_atom_index_status_with_conn,
+    label_atom_vectors_for_board, mark_label_atom_store_dirty, mark_label_atom_store_failure,
+    mark_label_atom_store_success, rebuild_lancedb_label_atoms_with_store,
+    sync_lancedb_label_atoms_with_store,
+};
 pub use status::{
     DerivedStoreStatusRecord, IndexOutboxRecord, derived_status_by_name,
     has_pending_outbox_for_target, mark_derived_store_failure, mark_derived_store_success,

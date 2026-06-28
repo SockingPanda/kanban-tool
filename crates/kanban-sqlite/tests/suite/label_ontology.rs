@@ -4572,7 +4572,6 @@ fn label_ontology_external_validation_rejects_handwritten_dirty_trusted_index() 
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[test]
 fn label_ontology_trusted_collector_runs_suggest_and_resolves_signal() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_trusted_collector_runs_suggest_and_resolves_signal")?;
@@ -4661,7 +4660,6 @@ fn label_ontology_trusted_collector_runs_suggest_and_resolves_signal() -> anyhow
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[test]
 fn label_ontology_trusted_negative_collector_requires_control_or_user_waiver() -> anyhow::Result<()>
 {
@@ -4770,7 +4768,6 @@ fn label_ontology_trusted_negative_collector_requires_control_or_user_waiver() -
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[test]
 fn label_ontology_trusted_controls_are_negative_atom_only() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_trusted_controls_are_negative_atom_only")?;
@@ -4819,7 +4816,6 @@ fn label_ontology_trusted_controls_are_negative_atom_only() -> anyhow::Result<()
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[test]
 fn label_ontology_trusted_negative_collector_records_positive_controls() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_trusted_negative_collector_records_positive_controls")?;
@@ -4879,7 +4875,6 @@ fn label_ontology_trusted_negative_collector_records_positive_controls() -> anyh
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[test]
 fn label_ontology_public_validation_rejects_forged_trusted_generation_evidence()
 -> anyhow::Result<()> {
@@ -6773,7 +6768,6 @@ fn seed_negative_validation_fixture(
     })
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn seed_negative_validation_fixture_with_positive_control(
     temp: &TempDb,
     title: &str,

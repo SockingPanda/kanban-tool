@@ -9,7 +9,6 @@ mod suite {
     mod dependencies;
     mod derived_outbox;
     mod dispatch;
-    mod graph_oxigraph;
     mod init;
     mod label_longitudinal_regression;
     mod label_ontology;
@@ -22,5 +21,4 @@ mod suite {
     mod tasks;
     mod transaction_guards;
     mod transitions;
-    mod vector_lancedb;
 }

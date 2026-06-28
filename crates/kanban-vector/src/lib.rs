@@ -389,6 +389,32 @@ impl SubprocessVectorStore {
             ))
         })
     }
+
+    pub fn label_atom_status(&self) -> VectorStoreStatus {
+        match self.run_helper::<VectorStoreStatus>(&["label-atoms-status".to_owned()]) {
+            Ok(status) => status,
+            Err(error) => {
+                let mut status = VectorStoreStatus::new(
+                    "helper-missing",
+                    false,
+                    format!("vector helper unavailable: {error}"),
+                );
+                status.diagnostics.push("helper_missing".to_owned());
+                status
+                    .diagnostics
+                    .push("label_atom_helper_missing".to_owned());
+                status
+            }
+        }
+    }
+
+    pub fn rebuild_label_atoms(&self) -> Result<VectorStoreStatus, VectorError> {
+        self.run_helper(&["rebuild-label-atoms".to_owned()])
+    }
+
+    pub fn sync_label_atoms(&self) -> Result<VectorStoreStatus, VectorError> {
+        self.run_helper(&["sync-label-atoms".to_owned()])
+    }
 }
 
 #[derive(Debug, Deserialize)]

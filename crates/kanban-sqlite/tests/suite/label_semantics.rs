@@ -630,7 +630,6 @@ fn label_bootstrap_rejects_empty_semantics_without_partial_writes() -> anyhow::R
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[test]
 fn label_bootstrap_staged_verify_threshold_failure_leaves_canonical_state_clean()
 -> anyhow::Result<()> {
@@ -680,7 +679,6 @@ fn label_bootstrap_staged_verify_threshold_failure_leaves_canonical_state_clean(
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[test]
 fn label_bootstrap_staged_verify_success_writes_single_root_action() -> anyhow::Result<()> {
     let temp = TempDb::new("label_bootstrap_staged_verify_success_writes_single_root_action")?;
@@ -1770,7 +1768,6 @@ fn table_count(conn: &Connection, table: &str) -> anyhow::Result<i64> {
     )
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct BootstrapCanonicalCounts {
     labels: i64,
@@ -1782,7 +1779,6 @@ struct BootstrapCanonicalCounts {
     label_ontology_action_atom_effects: i64,
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn bootstrap_canonical_counts(conn: &Connection) -> anyhow::Result<BootstrapCanonicalCounts> {
     Ok(BootstrapCanonicalCounts {
         labels: table_count(conn, "labels")?,
@@ -1798,7 +1794,6 @@ fn bootstrap_canonical_counts(conn: &Connection) -> anyhow::Result<BootstrapCano
     })
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn bootstrap_action_count(conn: &Connection) -> anyhow::Result<i64> {
     Ok(conn.query_row(
         "SELECT COUNT(*) FROM label_ontology_actions WHERE action_type='bootstrap_label'",
@@ -1807,7 +1802,6 @@ fn bootstrap_action_count(conn: &Connection) -> anyhow::Result<i64> {
     )?)
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn bootstrap_compensation_event_count(conn: &Connection) -> anyhow::Result<i64> {
     Ok(conn.query_row(
         "SELECT COUNT(*) FROM task_events WHERE payload_json LIKE '%bootstrap verification compensation%'",
@@ -3096,13 +3090,11 @@ fn mark_label_atom_index_clean_for_default_board(path: &std::path::Path) -> anyh
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[derive(Clone, Copy)]
 struct BootstrapStagedVerificationStore {
     low_score: bool,
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl BootstrapStagedVerificationStore {
     fn pass() -> Self {
         Self { low_score: false }
@@ -3113,7 +3105,6 @@ impl BootstrapStagedVerificationStore {
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl kanban_vector::VectorStoreBackend for BootstrapStagedVerificationStore {
     fn embedding_model(&self) -> &str {
         "bootstrap-test-model"
@@ -3132,7 +3123,6 @@ impl kanban_vector::VectorStoreBackend for BootstrapStagedVerificationStore {
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl kanban_vector::QueryEmbeddingProvider for BootstrapStagedVerificationStore {
     fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, kanban_vector::VectorError> {
         if !self.low_score || text.contains("bootstrap staged verify target") {
@@ -3142,7 +3132,6 @@ impl kanban_vector::QueryEmbeddingProvider for BootstrapStagedVerificationStore 
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl kanban_vector::LabelAtomVectorStore for BootstrapStagedVerificationStore {
     fn query_label_atoms_by_vector(
         &self,
@@ -4971,7 +4960,6 @@ fn label_atom_store_is_seeded_and_not_dirtied_by_task_outbox() -> anyhow::Result
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[test]
 fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Result<()> {
     let temp = TempDb::new("label_atom_rebuild_status_query_and_failure_are_independent")?;
@@ -5105,7 +5093,6 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[test]
 fn label_atom_rebuild_keeps_global_dirty_until_all_dirty_boards_rebuild() -> anyhow::Result<()> {
     let temp = TempDb::new("label_atom_rebuild_keeps_global_dirty_until_all_dirty_boards_rebuild")?;
@@ -5164,7 +5151,6 @@ fn label_atom_rebuild_keeps_global_dirty_until_all_dirty_boards_rebuild() -> any
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[test]
 fn label_semantics_jsonl_import_marks_label_atom_boards_dirty_and_rebuild_clears_per_board()
 -> anyhow::Result<()> {

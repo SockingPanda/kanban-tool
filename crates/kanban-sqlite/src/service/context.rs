@@ -1,12 +1,10 @@
 use crate::connect_file;
 
-#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
 use super::store_target;
 use super::{
     MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT, board_id, context_graph_items, context_vector_items,
     context_vector_status, get_task, graph_store_status, search_tasks, validate_page_bounds,
 };
-#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
 use super::{current_last_event_id, derived_status_by_name, has_pending_outbox_for_target};
 
 use std::path::Path;
@@ -21,10 +19,7 @@ use kanban_entity::EntityUri;
 
 use kanban_graph::GraphStoreStatus;
 
-#[cfg(feature = "vector-lancedb")]
-use kanban_indexer::LANCEDB_CHUNKS_STORE;
-#[cfg(feature = "graph-oxigraph")]
-use kanban_indexer::OXIGRAPH_RELATIONS_STORE;
+use kanban_indexer::{LANCEDB_CHUNKS_STORE, OXIGRAPH_RELATIONS_STORE};
 
 use kanban_search::SearchQuery;
 
@@ -56,9 +51,7 @@ fn build_context_pack_inner(
     board: &str,
     task_ref: &str,
     policy: ContextPolicy,
-    #[cfg_attr(not(feature = "vector-lancedb"), allow(unused_variables))] vector_store: Option<
-        &dyn ChunkVectorStore,
-    >,
+    vector_store: Option<&dyn ChunkVectorStore>,
 ) -> Result<ContextPack> {
     validate_page_bounds(policy.lexical_limit, MAX_SEARCH_LIMIT, 0)?;
     validate_page_bounds(policy.graph_limit, MAX_TASK_LIST_LIMIT, 0)?;
@@ -92,7 +85,7 @@ fn build_context_pack_inner(
             push_context_diagnostic(&mut diagnostics, "graph", "graph_error", &error);
             GraphStoreStatus {
                 backend: graph_backend_name(),
-                enabled: cfg!(feature = "graph-oxigraph"),
+                enabled: false,
                 message: error.to_string(),
             }
         }
@@ -198,24 +191,8 @@ fn context_error(error: ContextError) -> KanbanError {
     }
 }
 
-fn context_derived_degraded_markers(
-    #[cfg_attr(
-        not(any(feature = "graph-oxigraph", feature = "vector-lancedb")),
-        allow(unused_variables)
-    )]
-    conn: &Connection,
-    #[cfg_attr(
-        not(any(feature = "graph-oxigraph", feature = "vector-lancedb")),
-        allow(unused_variables)
-    )]
-    board_id: &str,
-) -> Result<Vec<String>> {
-    #[cfg_attr(
-        not(any(feature = "graph-oxigraph", feature = "vector-lancedb")),
-        allow(unused_mut)
-    )]
+fn context_derived_degraded_markers(conn: &Connection, board_id: &str) -> Result<Vec<String>> {
     let mut degraded = Vec::new();
-    #[cfg(feature = "graph-oxigraph")]
     push_store_state_markers(
         conn,
         board_id,
@@ -223,7 +200,6 @@ fn context_derived_degraded_markers(
         "graph",
         &mut degraded,
     )?;
-    #[cfg(feature = "vector-lancedb")]
     push_store_state_markers(
         conn,
         board_id,
@@ -234,7 +210,6 @@ fn context_derived_degraded_markers(
     Ok(degraded)
 }
 
-#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
 fn push_store_state_markers(
     conn: &Connection,
     board_id: &str,
@@ -258,12 +233,6 @@ fn push_store_state_markers(
     Ok(())
 }
 
-#[cfg(feature = "graph-oxigraph")]
-fn graph_backend_name() -> String {
-    "oxigraph".to_owned()
-}
-
-#[cfg(not(feature = "graph-oxigraph"))]
 fn graph_backend_name() -> String {
     "disabled".to_owned()
 }

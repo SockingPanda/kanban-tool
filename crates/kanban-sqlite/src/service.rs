@@ -79,7 +79,6 @@ pub(crate) use label_ontology::{
     label_ontology_semantics_snapshot_for_definition, label_ontology_semantics_snapshot_in_tx,
     record_label_ontology_semantics_mutation_in_tx,
 };
-#[cfg(feature = "vector-lancedb")]
 pub(crate) use label_semantics::{label_atom_vectors_for_board, label_atom_vectors_for_definition};
 pub(crate) use label_semantics::{
     mark_label_atom_store_dirty, rebuild_label_atoms_for_stable_hash_migration,
@@ -93,11 +92,8 @@ pub(crate) use sql::{
     SqlFilter, all, all_values, ensure_changed_one, exec, exec_named, exec_one, exec_one_named,
     exists, optional, required_row, scalar,
 };
-#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
 pub(crate) use vector::has_pending_outbox_for_target;
-pub(crate) use vector::vector_storage;
-#[cfg(feature = "vector-lancedb")]
-pub(crate) use vector::{vector_store_path, vector_store_status_with_conn};
+pub(crate) use vector::{vector_storage, vector_store_status_with_conn};
 
 pub(crate) const fn dependency_parent_is_satisfied(status: kanban_core::TaskStatus) -> bool {
     matches!(

@@ -3,12 +3,13 @@ use std::{path::PathBuf, process};
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use kanban_derived_io::{
-    HelperEnvelope, board_id, connect_file, current_last_event_id, derived_status_by_name,
+    board_id, connect_file, current_last_event_id, derived_status_by_name,
     has_pending_graph_outbox_for_board, rebuild_oxigraph_with_store, sync_oxigraph_with_store,
 };
 use kanban_entity::{EntityUri, Predicate};
 use kanban_graph::{GraphStoreStatus, RelationGraph};
 use kanban_graph_oxigraph::OxigraphStore;
+use kanban_helper_protocol::HelperEnvelope;
 use kanban_indexer::OXIGRAPH_RELATIONS_STORE;
 use serde::Serialize;
 use serde_json::json;

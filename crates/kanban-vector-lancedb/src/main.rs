@@ -3,10 +3,11 @@ use std::{path::PathBuf, process};
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use kanban_derived_io::{
-    HelperEnvelope, board_id, connect_file, current_last_event_id, derived_status_by_name,
+    board_id, connect_file, current_last_event_id, derived_status_by_name,
     has_pending_vector_outbox_for_board, rebuild_lancedb_chunks_with_store,
     sync_lancedb_chunks_with_store,
 };
+use kanban_helper_protocol::HelperEnvelope;
 use kanban_indexer::LANCEDB_CHUNKS_STORE;
 use kanban_vector::{
     ChunkVectorStore, EmbeddingProvider, LabelAtomQuery, LabelAtomVectorQuery,

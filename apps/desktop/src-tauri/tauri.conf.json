@@ -25,7 +25,15 @@
   },
   "bundle": {
     "active": true,
-    "icon": ["icons/icon.png"],
-    "targets": ["deb"]
+    "icon": [
+      "icons/icon.png"
+    ],
+    "targets": [
+      "deb"
+    ],
+    "externalBin": [
+      "binaries/kanban-vector-lancedb",
+      "binaries/kanban-graph-oxigraph"
+    ]
   }
 }

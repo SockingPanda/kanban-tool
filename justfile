@@ -68,6 +68,7 @@ web-build:
     pnpm --dir apps/desktop build
 
 desktop-check:
+    scripts/prepare-desktop-helper-binaries.sh
     scripts/cargo-build-lock.sh -- cargo check -p kanban-desktop --tests
     pnpm --dir apps/desktop typecheck
     pnpm --dir apps/desktop test
@@ -76,6 +77,7 @@ desktop-build:
     pnpm --dir apps/desktop build
 
 desktop-package:
+    scripts/prepare-desktop-helper-binaries.sh
     scripts/cargo-build-lock.sh -- pnpm --dir apps/desktop tauri build
 
 cli-package:
@@ -83,6 +85,9 @@ cli-package:
 
 cli-package-layout:
     scripts/test-cli-package-layout.sh
+
+desktop-package-layout:
+    scripts/test-desktop-package-layout.sh
 
 smoke:
     scripts/smoke-v1-local.sh
@@ -116,6 +121,7 @@ release:
     just target-tools
     just cli-package
     just cli-package-layout
+    just desktop-package-layout
     just desktop-package
     just smoke
     just diff-check

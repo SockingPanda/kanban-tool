@@ -19,7 +19,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 axum.workspace = true
 kanban-local.workspace = true
-kanban-server = { workspace = true, features = ["vector-lancedb"] }
+kanban-server.workspace = true
 kanban-sqlite.workspace = true
 serde.workspace = true
 tauri = { version = "2", features = ["tray-icon"] }

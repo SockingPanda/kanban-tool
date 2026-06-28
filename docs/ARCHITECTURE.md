@@ -100,6 +100,11 @@ apps/
   desktop/
 ```
 
+Desktop package 由 Tauri 构建，内置 `kanban-vector-lancedb` 与
+`kanban-graph-oxigraph` helper sidecars。Desktop 启动 embedded server 时把已存在的
+bundled helper path 注入 `kanban-server::AppState`；CLI `.deb` 仍由
+`scripts/package-cli-linux.sh` 独立安装 `/usr/bin/kanban` 与 `/usr/lib/kanban/` helpers。
+
 ### 2.1 `kanban-core`
 
 职责：
@@ -178,6 +183,8 @@ CLI 可以直接打开 SQLite DB 调用 service，不需要 server 常驻。
 - SSE event stream。
 - 请求 DTO 转 command input。
 - 错误格式统一。
+- 通过 `AppState` 接收可选 graph/vector helper binary path；缺失时 graph/vector
+  status endpoint 返回 degraded diagnostics，而不是把 helper-heavy crates 编进 server。
 
 默认只监听：
 

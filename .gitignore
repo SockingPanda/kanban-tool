@@ -13,3 +13,4 @@ apps/desktop/src-tauri/gen/
 # Local browser automation artifacts
 .playwright-cli/
 output/playwright/
+apps/desktop/src-tauri/binaries/

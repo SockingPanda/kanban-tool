@@ -18,6 +18,19 @@ describe("TaskGraphNodeCard", () => {
     expect(onSelectTask).toHaveBeenCalledWith("t_center")
   })
 
+  it("uses dependency blocked styling for non-blocked nodes", () => {
+    const node = nodeFixture({ id: "t_blocked_by_dependency", ref: "kanban-tool#304", title: "Blocked by dependency" })
+    const tree = TaskGraphNodeCard({
+      node: { ...node, status: "ready", dependencyBlocked: true },
+      selected: false,
+    })
+    const button = findButton(tree)
+
+    expect(button?.props.className).toContain("red")
+    expect(button?.props.className).not.toContain("emerald")
+    expect(textContent(tree)).toContain("ready")
+  })
+
   it("shows completed step progress instead of open step counts", () => {
     const node = nodeFixture({ id: "t_center", ref: "kanban-tool#286", title: "Graph base" })
     const tree = TaskGraphNodeCard({
@@ -76,6 +89,7 @@ type ButtonProps = {
   "aria-label"?: string
   "aria-pressed"?: boolean
   type?: "button" | "submit" | "reset"
+  className?: string
   onClick?: () => void
   children?: ReactNode
 }

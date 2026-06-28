@@ -46,6 +46,13 @@ describe("desktop shell state boundaries", () => {
     expect(shellSource).toContain("<MemoStatusBar")
   })
 
+  it("does not render the task detail sheet content without a selected task", () => {
+    const shellSource = readFileSync(new URL("./AppShell.tsx", import.meta.url), "utf8")
+
+    expect(shellSource).toContain("if (!open || !selectedTask) return null")
+    expect(shellSource).not.toContain("task={selectedTask}")
+  })
+
   it("keeps App command callbacks stable before composing the command group", () => {
     const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8")
 

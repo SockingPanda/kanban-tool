@@ -5,15 +5,15 @@ import type { KanbanApi } from "@/lib/api"
 import { fetchTaskDetail, requestTaskLabelSuggestions, resolveTaskDetailQueryEnablement } from "./useTaskDetail"
 
 describe("task detail loading", () => {
-  it("enables only the selected task query by default", () => {
+  it("eagerly enables primary detail panels by default", () => {
     expect(resolveTaskDetailQueryEnablement()).toEqual({
       task: true,
-      dependencies: false,
-      neighborhood: false,
-      steps: false,
+      dependencies: true,
+      neighborhood: true,
+      steps: true,
       runs: false,
       events: false,
-      comments: false,
+      comments: true,
       runLog: false,
     })
   })
@@ -45,12 +45,12 @@ describe("task detail loading", () => {
   it("can disable the selected task query while preserving panel intent", () => {
     expect(resolveTaskDetailQueryEnablement({ enabled: false, runsEnabled: true, runLogEnabled: true })).toEqual({
       task: false,
-      dependencies: false,
-      neighborhood: false,
-      steps: false,
+      dependencies: true,
+      neighborhood: true,
+      steps: true,
       runs: true,
       events: false,
-      comments: false,
+      comments: true,
       runLog: true,
     })
   })

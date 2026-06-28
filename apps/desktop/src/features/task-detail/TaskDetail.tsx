@@ -92,7 +92,7 @@ export function TaskDetail({
   onStepsExpandedChange = () => {},
 }: {
   api: KanbanApi | null
-  task: Task | null
+  task: Task
   detail: DetailState
   labelSuggestions?: LabelSuggestionResult | null
   labelSuggestionsRequested?: boolean
@@ -152,22 +152,20 @@ export function TaskDetail({
     setAttachStepId("")
     setNotRequiredReason("")
     setConfirmAction(null)
-  }, [task?.id])
+  }, [task.id])
 
   const graph = useMemo(() => apiTaskGraphToCanvasGraph(detail.neighborhood), [detail.neighborhood])
-  const actions = useMemo(() => (task ? legalActions(task, claimToken, blockReason) : []), [blockReason, claimToken, task])
-  const longDescription = useMemo(() => Boolean(task && isLongDescription(task.description)), [task])
+  const actions = useMemo(() => legalActions(task, claimToken, blockReason), [blockReason, claimToken, task])
+  const longDescription = useMemo(() => isLongDescription(task.description), [task.description])
   const renderedDescription = useMemo(
-    () => (task ? visibleDescription(task.description, descriptionExpanded) : ""),
-    [descriptionExpanded, task],
+    () => visibleDescription(task.description, descriptionExpanded),
+    [descriptionExpanded, task.description],
   )
   const commentsPage = useMemo(
     () => commentPageState({ comments: detail.comments, page: commentPage, sortOrder: commentSortOrder }),
     [commentPage, commentSortOrder, detail.comments],
   )
-  const actionView = useMemo(() => (task ? taskActionView(task, actions) : null), [actions, task])
-
-  if (!task || !actionView) return null
+  const actionView = useMemo(() => taskActionView(task, actions), [actions, task])
   const currentTask = task
 
   const saveAndClose = useCallback(async () => {

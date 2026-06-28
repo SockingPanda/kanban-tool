@@ -21,4 +21,5 @@ mod suite {
     mod tasks;
     mod transaction_guards;
     mod transitions;
+    mod vector_adapter;
 }

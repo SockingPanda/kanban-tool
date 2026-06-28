@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Result, bail};
 use kanban_sqlite::{
@@ -23,10 +23,6 @@ use kanban_sqlite::{
     review_label_ontology, suggest_task_labels_with, upsert_label_semantics_with_options,
     validate_label_ontology_action,
 };
-#[cfg(any())]
-use kanban_sqlite::{
-    LabelOntologyTrustedValidationInput, validate_label_ontology_action_with_trusted_suggestions,
-};
 use kanban_vector::{SubprocessVectorStore, VectorStoreBackend};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -42,7 +38,7 @@ use crate::output::{label_line, print_or_json, print_task};
 
 pub(crate) fn handle_label(
     command: LabelCommand,
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     actor: &str,
     json: bool,
@@ -314,7 +310,7 @@ pub(crate) fn handle_label(
 
 fn handle_label_semantics(
     command: crate::args::LabelSemanticsCommand,
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     actor: &str,
     json: bool,
@@ -375,7 +371,7 @@ fn handle_label_semantics(
 
 fn handle_label_atom_index(
     command: crate::args::LabelAtomIndexCommand,
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     json: bool,
 ) -> Result<()> {
@@ -435,7 +431,7 @@ fn handle_label_atom_index(
 
 fn handle_label_ontology(
     command: crate::args::LabelOntologyCommand,
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     actor: &str,
     json: bool,
@@ -691,7 +687,7 @@ fn label_ontology_list_options(
 }
 
 fn read_label_ontology_record_input(
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     args: &crate::args::LabelOntologyRecordArgs,
 ) -> Result<LabelOntologyRecordInput> {
@@ -892,7 +888,7 @@ impl LabelOntologyCaptureSignalInput {
 }
 
 fn captured_or_supplied_suggestion_snapshot(
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     args: &crate::args::LabelOntologyRecordArgs,
 ) -> Result<Option<JsonValue>> {
@@ -1338,7 +1334,7 @@ fn label_bootstrap_lines(result: &LabelBootstrapCommandOutput) -> String {
 
 #[allow(clippy::too_many_arguments)]
 fn validate_label_ontology_action_with_trusted_cli_evidence(
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     actor: &str,
     actor_args: &LabelOntologyActorArgs,
@@ -1351,31 +1347,6 @@ fn validate_label_ontology_action_with_trusted_cli_evidence(
     vector_config_path: Option<&std::path::Path>,
     options: LabelSuggestionOptions,
 ) -> Result<LabelOntologyActionRecord> {
-    #[cfg(any())]
-    {
-        let Some(store) = configured_lancedb_store(db_path, vector_config_path)? else {
-            bail!(
-                "trusted ontology validation requires a configured label atom vector store; pass --vector-config <path>"
-            );
-        };
-        rebuild_label_atom_index_with(db_path, board, &store)?;
-        validate_label_ontology_action_with_trusted_suggestions(
-            db_path,
-            board,
-            LabelOntologyTrustedValidationInput {
-                actor: label_ontology_cli_actor(actor, actor_args),
-                parent_action_id,
-                signal_ids,
-                reason,
-                validation_status,
-                positive_control_task_refs,
-                positive_control_waiver_reason,
-            },
-            &store,
-            options,
-        )
-        .map_err(Into::into)
-    }
     {
         let _ = (
             db_path,
@@ -1398,7 +1369,7 @@ fn validate_label_ontology_action_with_trusted_cli_evidence(
 }
 
 fn label_atom_index_status_optional_config(
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     vector_config_path: Option<&std::path::Path>,
 ) -> Result<kanban_vector::VectorStoreStatus> {
@@ -1407,7 +1378,7 @@ fn label_atom_index_status_optional_config(
 }
 
 fn rebuild_configured_label_atom_index(
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     vector_config_path: &std::path::Path,
 ) -> Result<kanban_vector::VectorStoreStatus> {
@@ -1415,7 +1386,7 @@ fn rebuild_configured_label_atom_index(
 }
 
 fn rebuild_configured_label_atom_index_optional(
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     vector_config_path: Option<&std::path::Path>,
 ) -> Result<kanban_vector::VectorStoreStatus> {
@@ -1440,7 +1411,7 @@ fn ensure_label_bootstrap_verification_available(
 }
 
 fn query_configured_label_atom_index(
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     text: &str,
     polarity: Option<LabelAtomPolarityArg>,
@@ -1541,7 +1512,7 @@ fn proposal_line(proposal: &LabelSemanticProposalRecord) -> String {
 }
 
 fn suggest_with_optional_vector_config(
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     task_ref: &str,
     options: LabelSuggestionOptions,
@@ -1552,7 +1523,7 @@ fn suggest_with_optional_vector_config(
 }
 
 fn propose_with_optional_vector_config(
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     actor: &str,
     task_ref: &str,

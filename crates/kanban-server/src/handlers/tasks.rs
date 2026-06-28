@@ -806,8 +806,7 @@ pub(crate) async fn rebuild_label_atom_index(
     State(state): State<AppState>,
     Path(board): Path<String>,
 ) -> Result<Json<Envelope<kanban_vector::VectorStoreStatus>>, ApiError> {
-    let _ = (state, board);
-    let result = rebuild_label_atom_index_for_state()?;
+    let result = rebuild_label_atom_index_for_state(state, board).await?;
     Ok(Json(Envelope {
         data: result,
         meta: None,
@@ -846,12 +845,14 @@ pub(crate) async fn query_label_atom_index(
     let result = query_label_atom_index_for_state(
         state,
         board,
-        text.map(str::to_owned),
-        vector_json.map(str::to_owned),
-        query.embedding_model,
-        query.include_vector,
-        polarity,
-        query.limit,
+        LabelAtomIndexHelperQuery {
+            text: text.map(str::to_owned),
+            vector_json: vector_json.map(str::to_owned),
+            embedding_model: query.embedding_model,
+            include_vector: query.include_vector,
+            polarity,
+            limit: query.limit,
+        },
     )
     .await?;
     Ok(Json(Envelope {
@@ -1891,7 +1892,8 @@ async fn label_atom_index_status_for_state(
     state: AppState,
     board: String,
 ) -> Result<kanban_vector::VectorStoreStatus, ApiError> {
-    let args = super::vector::vector_helper_args(&state, &board, &["status".to_owned()]);
+    let args =
+        super::vector::vector_helper_args(&state, &board, &["label-atoms-status".to_owned()]);
     match run_helper_json::<kanban_vector::VectorStoreStatus>(state, HelperKind::Vector, args).await
     {
         Ok(status) => Ok(status),
@@ -1902,41 +1904,56 @@ async fn label_atom_index_status_for_state(
     }
 }
 
-fn rebuild_label_atom_index_for_state() -> Result<kanban_vector::VectorStoreStatus, ApiError> {
-    Err(invalid_input(
-        "label atom index rebuild is not available through the server helper adapter; run the vector helper/CLI rebuild path outside the server",
-    ))
-}
-
-async fn query_label_atom_index_for_state(
+async fn rebuild_label_atom_index_for_state(
     state: AppState,
     board: String,
+) -> Result<kanban_vector::VectorStoreStatus, ApiError> {
+    let args =
+        super::vector::vector_helper_args(&state, &board, &["rebuild-label-atoms".to_owned()]);
+    match run_helper_json::<kanban_vector::VectorStoreStatus>(state, HelperKind::Vector, args).await
+    {
+        Ok(status) => Ok(status),
+        Err(error) if error.is_helper_missing() => Err(invalid_input(helper_degraded_message(
+            HelperKind::Vector,
+            &error,
+        ))),
+        Err(error) => Err(error.into()),
+    }
+}
+
+struct LabelAtomIndexHelperQuery {
     text: Option<String>,
     vector_json: Option<String>,
     embedding_model: Option<String>,
     include_vector: bool,
     polarity: Option<String>,
     limit: usize,
+}
+
+async fn query_label_atom_index_for_state(
+    state: AppState,
+    board: String,
+    query: LabelAtomIndexHelperQuery,
 ) -> Result<JsonValue, ApiError> {
     let mut command_args = vec!["query-label-atoms".to_owned()];
-    if let Some(text) = text {
+    if let Some(text) = query.text {
         command_args.push("--text".to_owned());
         command_args.push(text);
-    } else if let Some(vector_json) = vector_json {
+    } else if let Some(vector_json) = query.vector_json {
         command_args.push("--vector-json".to_owned());
         command_args.push(vector_json);
     }
     command_args.push("--limit".to_owned());
-    command_args.push(limit.to_string());
-    if let Some(embedding_model) = embedding_model {
+    command_args.push(query.limit.to_string());
+    if let Some(embedding_model) = query.embedding_model {
         command_args.push("--embedding-model".to_owned());
         command_args.push(embedding_model);
     }
-    if let Some(polarity) = polarity {
+    if let Some(polarity) = query.polarity {
         command_args.push("--polarity".to_owned());
         command_args.push(polarity);
     }
-    if include_vector {
+    if query.include_vector {
         command_args.push("--include-vector".to_owned());
     }
     let args = super::vector::vector_helper_args(&state, &board, &command_args);

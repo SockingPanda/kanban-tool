@@ -315,7 +315,7 @@ async fn derived_adapter_contract_does_not_write_canonical_label_truth() -> anyh
         rebuild_json["error"]["message"]
             .as_str()
             .context("error message")?
-            .contains("server helper adapter")
+            .contains("vector helper")
     );
     assert_eq!(
         canonical_counts(&db_path)?,

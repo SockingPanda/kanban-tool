@@ -1329,10 +1329,10 @@ adapter 不可用或 helper 缺失时仍返回 `200` disabled 状态。JSON 保�
 `diagnostics: string[]`、`dirty: boolean | null`、`board_dirty: boolean | null`；调用方应使用结构化字段判断 dirty/error，
 而不要解析 `message` 文案。同一 `VectorStoreStatus` shape 也用于 `/api/v1/vector/status`。
 
-`POST /api/v1/boards/{board}/labels/atom-index/rebuild` 在当前 server helper adapter
-下不可用，返回 `400 invalid_input`；server 不调用 helper `status`，也不把 helper
-缺失或 malformed output fallback 成 `200` degraded success。真实 rebuild 仍应走 CLI/helper
-重建路径，或由后续 #330/相关任务补齐 server adapter support。
+`POST /api/v1/boards/{board}/labels/atom-index/rebuild` 通过 vector helper adapter 调用
+label atom 专用 `rebuild-label-atoms` helper command，重建 `lancedb_label_atoms` 派生索引并更新
+`label_atom_index_boards` / `lancedb_label_atoms` status。helper/provider 缺失返回显式 API error，
+不得写 canonical label truth，也不得把 chunk store status 当作 label atom rebuild success。
 `GET /api/v1/boards/{board}/labels/atom-index/query` 通过 vector helper adapter 查询派生的
 `lancedb_label_atoms` 索引。请求必须提供 `q=<text>` 或 `vector_json=<json-array>` 之一，二者互斥；
 `embedding_model` 可选，`include_vector=true` 可要求 raw vector hit 返回向量，`polarity` 可选且只接受

@@ -29,6 +29,10 @@ if cmd == "status":
         payload = {{"backend":"test-vector-helper","enabled":True,"message":"vector helper ok","diagnostics":["test_helper"],"dirty":False,"board_dirty":False}}
     else:
         payload = {{"backend":"test-graph-helper","enabled":True,"message":"graph helper ok"}}
+elif cmd == "label-atoms-status":
+    payload = {{"backend":"test-label-atom-helper","enabled":True,"message":"label atom helper ok","diagnostics":["label_atom_helper"],"dirty":False,"board_dirty":False}}
+elif cmd == "rebuild-label-atoms":
+    payload = {{"backend":"test-label-atom-helper","enabled":True,"message":"rebuilt label atoms","diagnostics":["label_atom_helper"],"dirty":False,"board_dirty":False}}
 elif cmd == "neighbors":
     payload = []
 elif cmd == "query-label-atoms":
@@ -113,6 +117,16 @@ async fn vector_and_label_atom_endpoints_use_vector_helper() -> anyhow::Result<(
 
     let (status, json) = get_json(
         app.clone(),
+        "/api/v1/boards/default/labels/atom-index/status",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["backend"], "test-label-atom-helper");
+    let args: Vec<String> = serde_json::from_str(&std::fs::read_to_string(&log)?)?;
+    assert_eq!(args[0], "label-atoms-status");
+
+    let (status, json) = get_json(
+        app.clone(),
         "/api/v1/boards/default/labels/atom-index/query?q=hello&polarity=positive&limit=3",
     )
     .await?;
@@ -153,14 +167,10 @@ async fn vector_and_label_atom_endpoints_use_vector_helper() -> anyhow::Result<(
         json!({}),
     )
     .await?;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(json["error"]["code"], "invalid_input");
-    assert!(
-        json["error"]["message"]
-            .as_str()
-            .context("error message")?
-            .contains("server helper adapter")
-    );
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json["data"]["backend"], "test-label-atom-helper");
+    let args: Vec<String> = serde_json::from_str(&std::fs::read_to_string(&log)?)?;
+    assert_eq!(args[0], "rebuild-label-atoms");
     Ok(())
 }
 
@@ -351,13 +361,13 @@ async fn label_atom_rebuild_does_not_treat_malformed_helper_output_as_degraded_s
     )
     .await?;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(json["error"]["code"], "invalid_input");
+    assert_ne!(status, StatusCode::OK, "{json}");
+    assert_eq!(json["error"]["code"], "internal");
     assert!(
         json["error"]["message"]
             .as_str()
             .context("error message")?
-            .contains("server helper adapter")
+            .contains("invalid JSON envelope")
     );
     Ok(())
 }

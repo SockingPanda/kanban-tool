@@ -227,10 +227,12 @@ kanban dispatch --once
 
 - chunk context/rebuild 路径只依赖 `ChunkVectorStore`。
 - label suggestion/proposal/atom-index 路径只依赖 `LabelAtomVectorStore`，不依赖 chunk store 语义。
-- CLI/server no-heavy 路径通过 subprocess helper adapter 连接 graph/vector 读路径；
-  context chunk 查询、label suggestion/proposal、bootstrap staged verification 和 label atom
-  text/raw-vector query 都走同一 `SubprocessVectorStore` / helper envelope。label atom
-  rebuild/upsert 仍是显式 rebuild 能力，不由 server 直接写入 derived index。
+- CLI/server no-heavy 路径通过 subprocess helper adapter 连接 graph/vector 派生层；
+  context chunk 查询走 chunk commands，label suggestion/proposal、bootstrap staged verification
+  和 label atom status/rebuild/query 走 label atom 专用 helper commands。label atom helper 在
+  helper 进程内使用真实 `LanceDbStore` 写 `lancedb_label_atoms`，并通过 `kanban-derived-io` 的窄
+  SQLite IO 更新 `LANCEDB_LABEL_ATOMS_STORE` / `label_atom_index_boards` 状态；server/CLI 不把
+  chunk store `status` 当作 label atom 状态。
 - label atom 场景获取 model 名称时使用通用 `VectorStoreBackend::embedding_model()`；`chunk_embedding_model()` 仅作为 chunk 路径的兼容入口。
 - LanceDB 表仍按 derived store 隔离：task chunks 写入 `kb_chunks`，label atoms 写入 `kb_label_atoms`。
 

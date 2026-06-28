@@ -86,6 +86,13 @@ pub(crate) struct BlockBody {
     pub(crate) force: bool,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ReopenBody {
+    pub(crate) actor: Option<String>,
+    pub(crate) reason: String,
+}
+
 #[derive(Debug, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ArchiveBody {

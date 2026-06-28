@@ -6,8 +6,8 @@ use kanban_sqlite::{
     TaskListSort, TaskPatch, TaskPlanFilter, TaskStepRecord, UpdateStepInput, archive_task,
     block_task, claim_task, complete_step, complete_task, create_step, execution_plan, get_task,
     heartbeat_task, list_steps, list_tasks, list_tasks_page, mark_execution_plan_not_required,
-    promote_task, reclaim_expired, remove_step, reopen_step, skip_step, submit_review_task,
-    task_ontology_summary, unblock_task, update_step, update_task,
+    promote_task, reclaim_expired, remove_step, reopen_step, reopen_task, skip_step,
+    submit_review_task, task_ontology_summary, unblock_task, update_step, update_task,
 };
 
 use crate::args::{ListArgs, TaskCommand, TaskPlanFilterArg, TaskStepCommand};
@@ -137,6 +137,10 @@ pub(crate) fn handle_task(
         TaskCommand::Promote { task_ref } => {
             print_task(json, &promote_task(db_path, board, actor, &task_ref)?)?
         }
+        TaskCommand::Reopen(args) => print_task(
+            json,
+            &reopen_task(db_path, board, actor, &args.task_ref, &args.reason)?,
+        )?,
         TaskCommand::Start(args) | TaskCommand::Claim(args) => {
             let claim = claim_task(db_path, board, actor, &args.task_ref, args.ttl_ms)?;
             print_or_json(json, &claim, || {

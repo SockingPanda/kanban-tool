@@ -446,7 +446,17 @@ kanban task unblock <task_ref>
 
 不会盲目进入 ready，而是根据 spec、schedule、dependencies 重新计算目标状态。
 
-### 6.8 Reclaim
+### 6.8 Reopen
+
+```bash
+kanban task reopen <task_ref> --reason <text>
+```
+
+只允许 reopen `done` task，`--reason` 必填且不能为空。Reopen 会清空 `completed_at`，保留 `result_summary` / `result_json`，并按 spec、schedule、dependency 和 execution plan readiness 重新计算目标状态。
+
+如果被 reopen 的 task 是其他 task 的 dependency parent，直接 child 中仅 `triage|todo|scheduled|ready` 会重新计算；`running|blocked|review|done|archived` 不隐式改写。
+
+### 6.9 Reclaim
 
 ```bash
 kanban task reclaim --expired
@@ -455,7 +465,7 @@ kanban task reclaim
 
 当前 CLI reclaim 处理 active board 内 expired claims；裸 `kanban task reclaim` 与 `kanban task reclaim --expired` 等价。
 
-### 6.9 Archive
+### 6.10 Archive
 
 ```bash
 kanban task archive <task_ref>
@@ -528,6 +538,7 @@ Human output for add/remove is Chinese-first:
 
 - 如果 child 当前是 `ready` 且 parent 未完成（不是 `done` 或 `archived`），child 降级为 `todo`。
 - parent 完成、归档或 dependency 移除后，child 保持 `todo`；需要 `kanban task promote <task_ref>` 才显式进入 `ready`。归档 parent 不会删除 dependency edge。
+- parent 从 `done` reopen 后，直接 child 中仅 `triage|todo|scheduled|ready` 会按 readiness 重算；`running|blocked|review|done|archived` 不隐式改写。
 - 重复添加同一 parent/child edge 是 idempotent no-op：不追加新的
   `dependency.added` event，也不再次触发 child 状态重算。
 - 如果产生环，返回 exit code 6 或 invalid input。

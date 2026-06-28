@@ -10,8 +10,8 @@ use crate::error::{ApiError, extractor_error, invalid_input};
 use crate::state::AppState;
 
 use super::shared::{
-    ActorBody, ArchiveBody, BlockBody, ClaimBody, HeartbeatBody, ReclaimBody, SpecifyBody,
-    TokenBody, actor, metadata_json, optional_json_body,
+    ActorBody, ArchiveBody, BlockBody, ClaimBody, HeartbeatBody, ReclaimBody, ReopenBody,
+    SpecifyBody, TokenBody, actor, metadata_json, optional_json_body,
 };
 
 pub(crate) async fn specify_task(
@@ -110,6 +110,30 @@ pub(crate) async fn reclaim_task(
             body.force,
             body.to_status.unwrap_or(TaskStatus::Ready),
             body.reason.as_deref(),
+        )?),
+        meta: None,
+    }))
+}
+
+pub(crate) async fn reopen_task(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+    headers: HeaderMap,
+    body: Result<Json<ReopenBody>, JsonRejection>,
+) -> Result<Json<Envelope<TaskDto>>, ApiError> {
+    let Json(body) = body.map_err(extractor_error)?;
+    if body.reason.trim().is_empty() {
+        return Err(invalid_input("reopen reason is required"));
+    }
+    let actor = actor(body.actor.as_deref(), &headers, &state);
+    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    Ok(Json(Envelope {
+        data: TaskDto::from(kanban_sqlite::reopen_task(
+            state.db_path(),
+            &task.board_id,
+            &actor,
+            &task_id,
+            &body.reason,
         )?),
         meta: None,
     }))

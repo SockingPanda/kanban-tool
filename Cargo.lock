@@ -3758,7 +3758,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-cli"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -3785,7 +3785,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-context"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "kanban-entity",
  "kanban-graph",
@@ -3797,7 +3797,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-core"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "serde",
  "strum 0.26.3",
@@ -3808,7 +3808,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-derived-io"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "kanban-core",
  "kanban-entity",
@@ -3825,7 +3825,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-desktop"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "axum",
  "kanban-local",
@@ -3841,7 +3841,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-entity"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -3849,7 +3849,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-graph"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "kanban-entity",
  "serde",
@@ -3859,7 +3859,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-graph-oxigraph"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3878,7 +3878,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-helper-protocol"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "kanban-core",
  "serde",
@@ -3887,7 +3887,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-indexer"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "kanban-entity",
  "serde",
@@ -3897,7 +3897,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-labels"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -3905,7 +3905,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-local"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "dirs-next",
  "serde",
@@ -3916,7 +3916,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-search"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "kanban-core",
  "serde",
@@ -3926,7 +3926,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-server"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -3953,7 +3953,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-sqlite"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "anyhow",
  "kanban-context",
@@ -3976,7 +3976,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-vector"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "kanban-entity",
  "kanban-helper-protocol",
@@ -3987,7 +3987,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-vector-lancedb"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "anyhow",
  "arrow-array",

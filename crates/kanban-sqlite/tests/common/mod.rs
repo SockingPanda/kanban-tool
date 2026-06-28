@@ -42,7 +42,8 @@ pub use kanban_sqlite::{
 pub use kanban_sqlite::{
     LabelOntologyTrustedValidationInput, LabelSuggestionOptions, label_atom_index_status_with,
     query_label_atom_index_by_vector_with, query_label_atom_index_with,
-    rebuild_label_atom_index_with, validate_label_ontology_action_with_trusted_suggestions,
+    rebuild_label_atom_index_with, rebuild_vector_store_with, sync_vector_store_with,
+    validate_label_ontology_action_with_trusted_suggestions,
 };
 pub use kanban_vector::{
     ChunkVectorStore, EmbeddingChunk, LabelAtomHit, LabelAtomQuery, LabelAtomVector,
@@ -114,7 +115,6 @@ impl AsRef<Path> for TempDb {
     }
 }
 
-#[cfg(feature = "tantivy-backend")]
 pub fn insert_board(path: &Path, slug: &str, id: &str) -> anyhow::Result<()> {
     connect_file(path)?
         .execute(
@@ -149,6 +149,48 @@ impl RecordingVectorStore {
         self.embedding_model
             .as_deref()
             .unwrap_or(kanban_vector::DEFAULT_EMBEDDING_MODEL)
+    }
+
+    pub fn upserted_texts(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .upserted
+            .lock()
+            .map_err(|err| test_error(format!("upserted mutex poisoned: {err}")))?
+            .clone())
+    }
+
+    pub fn upserted_models(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .upserted_models
+            .lock()
+            .map_err(|err| test_error(format!("upserted_models mutex poisoned: {err}")))?
+            .clone())
+    }
+
+    pub fn deleted_entity_uris(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .deleted
+            .lock()
+            .map_err(|err| test_error(format!("deleted mutex poisoned: {err}")))?
+            .clone())
+    }
+
+    pub fn deleted_board_ids(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .deleted_boards
+            .lock()
+            .map_err(|err| test_error(format!("deleted_boards mutex poisoned: {err}")))?
+            .clone())
+    }
+
+    pub fn live_texts(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .live_chunks
+            .lock()
+            .map_err(|err| test_error(format!("live_chunks mutex poisoned: {err}")))?
+            .iter()
+            .map(|chunk| chunk.text.clone())
+            .collect())
     }
 
     pub fn upserted_label_atoms(&self) -> anyhow::Result<Vec<LabelAtomVector>> {
@@ -482,6 +524,19 @@ pub fn tantivy_outbox_statuses_for_board(
             "SELECT io.status              FROM index_outbox io              JOIN task_events e ON e.id=io.source_event_id              JOIN boards b ON b.id=e.board_id              WHERE b.slug=?1 AND io.target='tantivy'              ORDER BY io.id ASC",
         )
         ?;
+    Ok(stmt
+        .query_map([board_slug], |row| row.get::<_, String>(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?)
+}
+
+pub fn lancedb_outbox_statuses_for_board(
+    path: &Path,
+    board_slug: &str,
+) -> anyhow::Result<Vec<String>> {
+    let conn = connect_file(path)?;
+    let mut stmt = conn.prepare(
+        "SELECT io.status              FROM index_outbox io              JOIN task_events e ON e.id=io.source_event_id              JOIN boards b ON b.id=e.board_id              WHERE b.slug=?1 AND io.target='lancedb'              ORDER BY io.id ASC",
+    )?;
     Ok(stmt
         .query_map([board_slug], |row| row.get::<_, String>(0))?
         .collect::<std::result::Result<Vec<_>, _>>()?)

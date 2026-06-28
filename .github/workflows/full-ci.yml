@@ -44,12 +44,6 @@ jobs:
         include:
           - package: kanban-sqlite
             features: tantivy-backend
-          - package: kanban-sqlite
-            features: graph-oxigraph
-          - package: kanban-sqlite
-            features: vector-lancedb
-          - package: kanban-sqlite
-            features: tantivy-backend,graph-oxigraph,vector-lancedb
           - package: kanban-search
             features: tantivy-backend
           - package: kanban-graph

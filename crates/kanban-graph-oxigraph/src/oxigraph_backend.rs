@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -50,11 +50,25 @@ impl OxigraphStore {
         entity_uris: &[EntityUri],
         relations: &[Relation],
     ) -> Result<(), GraphError> {
+        self.replace_entities_optimized(entity_uris, relations)
+    }
+
+    fn replace_entities_optimized(
+        &self,
+        entity_uris: &[EntityUri],
+        relations: &[Relation],
+    ) -> Result<(), GraphError> {
         let incoming = group_relations_by_subject(relations.to_vec());
+        let mut clear_subjects = entity_uris
+            .iter()
+            .map(|entity_uri| entity_uri.as_str().to_owned())
+            .collect::<BTreeSet<_>>();
+        clear_subjects.extend(incoming.keys().cloned());
+
         let mut stored = self.relations.lock().map_err(lock_error)?;
-        for entity_uri in entity_uris {
-            self.clear_entity_graph(entity_uri)?;
-            stored.remove(entity_uri.as_str());
+        for subject in clear_subjects {
+            self.clear_entity_graph(&EntityUri::new(subject.clone()).map_err(store_error)?)?;
+            stored.remove(&subject);
         }
         for relation in relations {
             let quad = Self::relation_quad(relation)?;
@@ -144,6 +158,14 @@ impl RelationGraph for OxigraphStore {
         *stored = group_relations_by_subject(relations.to_vec());
         self.write_snapshot(&stored)?;
         Ok(())
+    }
+
+    fn replace_entities(
+        &self,
+        entity_uris: &[EntityUri],
+        relations: &[Relation],
+    ) -> Result<(), GraphError> {
+        self.replace_entities_optimized(entity_uris, relations)
     }
 
     fn neighbors(
@@ -435,6 +457,38 @@ mod tests {
                 .graph_uri
                 .as_str()
                 .starts_with("kb://graph/entity/kb%3A%2F%2Ftask%2Fchild")
+        );
+    }
+
+    #[test]
+    fn trait_replace_entities_replaces_incoming_subjects_not_listed_for_delete() {
+        let graph = OxigraphStore::in_memory().unwrap();
+        let child = EntityUri::new("kb://task/child").unwrap();
+        graph
+            .upsert(&[relation(
+                "kb://task/child",
+                Predicate::DependsOn,
+                "kb://task/old-parent",
+            )])
+            .unwrap();
+
+        let graph_trait: &dyn RelationGraph = &graph;
+        graph_trait
+            .replace_entities(
+                &[],
+                &[relation(
+                    "kb://task/child",
+                    Predicate::DependsOn,
+                    "kb://task/new-parent",
+                )],
+            )
+            .unwrap();
+
+        let neighbors = graph.neighbors(&child, None, 10).unwrap();
+        assert_eq!(neighbors.len(), 1);
+        assert_eq!(
+            neighbors[0].object_uri,
+            EntityUri::new("kb://task/new-parent").unwrap()
         );
     }
 

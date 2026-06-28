@@ -9,6 +9,7 @@ authors.workspace = true
 kanban-core.workspace = true
 kanban-entity.workspace = true
 kanban-graph.workspace = true
+kanban-helper-protocol.workspace = true
 kanban-indexer.workspace = true
 kanban-vector.workspace = true
 rusqlite.workspace = true

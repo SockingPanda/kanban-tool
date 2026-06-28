@@ -2,50 +2,38 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TAURI_CONF="$ROOT/apps/desktop/src-tauri/tauri.conf.json"
-DESKTOP_MANIFEST="$ROOT/apps/desktop/src-tauri/Cargo.toml"
-JUSTFILE="$ROOT/justfile"
-PREPARE_SCRIPT="$ROOT/scripts/prepare-desktop-helper-binaries.sh"
+TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-/media/kanban-user/Data/cargo-targets/kanban-tool}"
+DEB_DIR="$TARGET_ROOT/release/bundle/deb"
+HELPERS=("kanban-vector-lancedb" "kanban-graph-oxigraph")
 
-for path in "$TAURI_CONF" "$DESKTOP_MANIFEST" "$JUSTFILE" "$PREPARE_SCRIPT"; do
-  [[ -f "$path" ]] || { echo "error: missing expected file: $path" >&2; exit 1; }
+deb_path="${1:-}"
+if [[ -z "$deb_path" ]]; then
+  deb_path="$(find "$DEB_DIR" -maxdepth 1 -name 'Kanban Tool_*.deb' -type f -printf '%T@ %p\n' 2>/dev/null | sort -nr | awk 'NR == 1 { sub(/^[^ ]+ /, ""); print }')"
+fi
+
+[[ -n "$deb_path" && -f "$deb_path" ]] || {
+  echo "error: no Desktop deb found; run just desktop-package first" >&2
+  exit 1
+}
+
+command -v dpkg-deb >/dev/null 2>&1 || { echo "error: dpkg-deb is required" >&2; exit 1; }
+contents="$(dpkg-deb -c "$deb_path")"
+
+grep -Eq '(^|[[:space:]])(\./)?usr/bin/kanban-desktop$' <<<"$contents" || {
+  echo "error: Desktop deb is missing usr/bin/kanban-desktop: $deb_path" >&2
+  exit 1
+}
+
+for helper in "${HELPERS[@]}"; do
+  grep -Eq "(^|[[:space:]])(\\./)?usr/bin/$helper$" <<<"$contents" || {
+    echo "error: Desktop deb is missing usr/bin/$helper: $deb_path" >&2
+    exit 1
+  }
 done
 
-python3 - "$TAURI_CONF" <<'PYCONF'
-import json, pathlib, sys
-conf = json.loads(pathlib.Path(sys.argv[1]).read_text())
-external = conf.get("bundle", {}).get("externalBin")
-expected = [
-    "binaries/kanban-vector-lancedb",
-    "binaries/kanban-graph-oxigraph",
-]
-if external != expected:
-    raise SystemExit(f"error: unexpected bundle.externalBin: {external!r}")
-PYCONF
-
-if grep -Fq 'kanban-server = { workspace = true, features = ["vector-lancedb"] }' "$DESKTOP_MANIFEST"; then
-  echo "error: desktop manifest still enables kanban-server vector-lancedb feature" >&2
+if grep -Eq '(^|[[:space:]])(\./)?usr/bin/kanban$' <<<"$contents"; then
+  echo "error: Desktop deb unexpectedly contains standalone CLI usr/bin/kanban" >&2
   exit 1
 fi
 
-grep -Fq 'kanban-server.workspace = true' "$DESKTOP_MANIFEST" || {
-  echo "error: desktop manifest should depend on kanban-server without helper feature flags" >&2
-  exit 1
-}
-
-for helper in kanban-vector-lancedb kanban-graph-oxigraph; do
-  grep -Fq "$helper" "$TAURI_CONF" || { echo "error: tauri config missing $helper externalBin" >&2; exit 1; }
-  grep -Fq "$helper" "$PREPARE_SCRIPT" || { echo "error: prepare script missing $helper" >&2; exit 1; }
-done
-
-grep -A2 '^desktop-check:' "$JUSTFILE" | grep -Fq 'scripts/prepare-desktop-helper-binaries.sh' || {
-  echo "error: desktop-check must prepare helper sidecars before cargo check" >&2
-  exit 1
-}
-
-grep -A2 '^desktop-package:' "$JUSTFILE" | grep -Fq 'scripts/prepare-desktop-helper-binaries.sh' || {
-  echo "error: desktop-package must prepare helper sidecars before tauri build" >&2
-  exit 1
-}
-
-echo "ok: desktop package layout includes bundled helper sidecars"
+echo "ok: $deb_path contains Desktop app and bundled helper binaries"

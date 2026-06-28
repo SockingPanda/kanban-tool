@@ -192,16 +192,20 @@ just check-full     # check-core followed by check-helpers
 ```
 
 Desktop validation and packaging prepare Tauri sidecar binaries before checking
-or building the app:
+or building the app. The static config/sidecar check is separate from the
+post-package `.deb` layout check:
 
 ```bash
 just desktop-check
-just desktop-package-layout
+just desktop-package-config
 just desktop-package
+just desktop-package-layout
 ```
 
 `just desktop-package` keeps the Desktop `.deb` separate from the CLI `.deb`,
-while bundling helper binaries used by the embedded server.
+while bundling helper binaries used by the embedded server. `just
+desktop-package-layout` must run after `just desktop-package`; it inspects the
+generated Desktop `.deb` with `dpkg-deb -c`.
 
 Rust validation recipes run target-writing Cargo/Tauri commands through
 `scripts/cargo-build-lock.sh`. The wrapper serializes shared target writes and

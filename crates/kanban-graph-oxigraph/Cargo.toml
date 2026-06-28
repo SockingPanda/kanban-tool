@@ -12,6 +12,7 @@ clap.workspace = true
 anyhow.workspace = true
 kanban-entity.workspace = true
 kanban-derived-io.workspace = true
+kanban-helper-protocol.workspace = true
 kanban-graph.workspace = true
 oxigraph.workspace = true
 serde.workspace = true

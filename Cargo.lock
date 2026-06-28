@@ -3769,6 +3769,7 @@ dependencies = [
  "kanban-derived-io",
  "kanban-entity",
  "kanban-graph",
+ "kanban-helper-protocol",
  "kanban-local",
  "kanban-search",
  "kanban-server",
@@ -3812,6 +3813,7 @@ dependencies = [
  "kanban-core",
  "kanban-entity",
  "kanban-graph",
+ "kanban-helper-protocol",
  "kanban-indexer",
  "kanban-vector",
  "rusqlite",
@@ -3864,6 +3866,7 @@ dependencies = [
  "kanban-derived-io",
  "kanban-entity",
  "kanban-graph",
+ "kanban-helper-protocol",
  "kanban-indexer",
  "kanban-local",
  "oxigraph",
@@ -3871,6 +3874,15 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "kanban-helper-protocol"
+version = "1.4.1"
+dependencies = [
+ "kanban-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -3925,6 +3937,7 @@ dependencies = [
  "kanban-derived-io",
  "kanban-entity",
  "kanban-graph",
+ "kanban-helper-protocol",
  "kanban-local",
  "kanban-search",
  "kanban-sqlite",
@@ -3966,6 +3979,7 @@ name = "kanban-vector"
 version = "1.4.1"
 dependencies = [
  "kanban-entity",
+ "kanban-helper-protocol",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -3982,6 +3996,7 @@ dependencies = [
  "futures",
  "kanban-derived-io",
  "kanban-entity",
+ "kanban-helper-protocol",
  "kanban-indexer",
  "kanban-local",
  "kanban-vector",

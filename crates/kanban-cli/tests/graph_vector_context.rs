@@ -720,3 +720,90 @@ fn context_build_command_rejects_zero_max_items() -> anyhow::Result<()> {
     .failure_containing("max_items must be >= 1")?;
     Ok(())
 }
+
+#[cfg(unix)]
+#[test]
+fn label_atom_index_status_and_rebuild_use_label_atom_helper_commands() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_atom_index_status_and_rebuild_use_label_atom_helper_commands")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let vector_config = temp.dir.join("vector.toml");
+    std::fs::write(
+        &vector_config,
+        r#"[vector]
+provider = "ollama"
+endpoint = "http://127.0.0.1:1"
+model = "label-helper-test"
+dimensions = 3
+"#,
+    )?;
+    let log = temp.dir.join("label-helper-calls.jsonl");
+    let helper = temp.dir.join("vector-helper.py");
+    write_executable(
+        &helper,
+        &format!(
+            r#"#!/usr/bin/env python3
+import json, pathlib, sys
+log = pathlib.Path({:?})
+args = sys.argv[1:]
+with log.open("a") as handle:
+    handle.write(json.dumps(args) + "\n")
+cmd = args[0]
+if cmd == "status":
+    raise SystemExit("chunk status must not be used for label atom status")
+if cmd == "label-atoms-status":
+    payload = {{"backend":"label-helper","enabled":True,"message":"label status","diagnostics":["label_atom_helper"],"dirty":False,"board_dirty":False}}
+elif cmd == "rebuild-label-atoms":
+    assert "--vector-config" in args, args
+    payload = {{"backend":"label-helper","enabled":True,"message":"rebuilt labels","diagnostics":["label_atom_helper"],"dirty":False,"board_dirty":False}}
+else:
+    raise SystemExit("unexpected command " + cmd)
+print(json.dumps({{"protocol":"kanban-derived-helper.v1","payload_json":json.dumps(payload)}}))
+"#,
+            log.display().to_string()
+        ),
+    )?;
+
+    let status = kanban_in_dir_envs(
+        &temp.path,
+        &["--json", "label", "atom-index", "status"],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", helper.as_path())],
+    )?
+    .success_json()?;
+    assert_eq!(status["data"]["backend"], "label-helper");
+
+    let rebuilt = kanban_in_dir_envs(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "atom-index",
+            "rebuild",
+            "--vector-config",
+            vector_config.to_str().context("vector config")?,
+        ],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", helper.as_path())],
+    )?
+    .success_json()?;
+    assert_eq!(rebuilt["data"]["message"], "rebuilt labels");
+
+    let calls = std::fs::read_to_string(&log)?;
+    assert!(
+        calls
+            .lines()
+            .any(|line| line.contains("label-atoms-status")),
+        "{calls}"
+    );
+    assert!(
+        calls
+            .lines()
+            .any(|line| line.contains("rebuild-label-atoms")),
+        "{calls}"
+    );
+    assert!(
+        !calls.lines().any(|line| line.contains("\"status\"")),
+        "{calls}"
+    );
+    Ok(())
+}

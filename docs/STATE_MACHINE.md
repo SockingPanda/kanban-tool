@@ -412,7 +412,7 @@ parent_task_id -> child_task_id
 1. parent != child。
 2. 新增依赖不能产生环。
 3. 如果给一个 `ready` child 增加未完成 parent（不是 `done` 或 `archived`），child 必须降级为 `todo`。
-4. 如果 parent 从 `done` 被 reopen，所有依赖它的 child 必须重新评估；若 child 不是 terminal/running，可降级为 `todo`。
+4. 如果 parent 从 `done` 被 reopen，仅直接 child 中的 active recomputable 状态（`triage|todo|scheduled|ready`）按 readiness 重新计算；`blocked|review|running|done|archived` 不隐式改写。
 5. `running` child 不应被新增未完成依赖；除非 force，并且需要 block/reclaim。
 
 ---

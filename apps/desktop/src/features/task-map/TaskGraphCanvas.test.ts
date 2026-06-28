@@ -43,6 +43,14 @@ describe("TaskGraphCanvas interactions", () => {
     expect(__test.taskGraphLayoutKey(changedTopologyGraph, "board-map")).not.toBe(__test.taskGraphLayoutKey(graph, "board-map"))
   })
 
+  it("uses blocked minimap color for dependency blocked nodes", () => {
+    const color = __test.miniMapNodeColor({
+      data: { node: { id: "child", ref: "#2", title: "Child", status: "ready", dependencyBlocked: true } },
+    } as never)
+
+    expect(color).toBe("#dc2626")
+  })
+
   it("tracks task card data changes separately from topology layout", () => {
     const graph = graphFixture()
     const updatedGraph: TaskGraph = {

@@ -387,7 +387,7 @@ function taskGraphInteraction(mode: TaskGraphMode) {
 
 function miniMapNodeColor(node: Node) {
   const data = node.data as Partial<TaskFlowNodeData>
-  return graphNodeStatusMiniMapColor(data.node?.status)
+  return graphNodeStatusMiniMapColor(data.node?.status, data.node?.dependencyBlocked)
 }
 
 const TASK_GRAPH_LAYOUT_CACHE_LIMIT = 16
@@ -432,4 +432,5 @@ export const __test = {
   taskGraphLayoutKey,
   taskGraphMetaLayoutKey,
   taskGraphInteraction,
+  miniMapNodeColor,
 }

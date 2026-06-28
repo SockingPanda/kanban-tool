@@ -20,10 +20,21 @@ describe("task map colors", () => {
     expect(context).toContain("border-dashed")
   })
 
+  it("uses dependency blocked colors for non-blocked graph nodes", () => {
+    expect(graphNodeStatusClass("ready", false, false, true)).toContain("red")
+    expect(graphNodeStatusClass("ready", false, false, true)).not.toContain("emerald")
+    expect(graphNodeStatusClass("blocked", false, false, false)).toContain("red")
+  })
+
   it("uses status colors in the minimap", () => {
     expect(graphNodeStatusMiniMapColor("ready")).not.toBe(graphNodeStatusMiniMapColor("blocked"))
     expect(graphNodeStatusMiniMapColor("running")).toBe("#0284c7")
     expect(graphNodeStatusMiniMapColor("done")).toBe("#65a30d")
+  })
+
+  it("uses blocked minimap color for dependency blocked graph nodes", () => {
+    expect(graphNodeStatusMiniMapColor("ready", true)).toBe(graphNodeStatusMiniMapColor("blocked"))
+    expect(graphNodeStatusMiniMapColor("done", false)).toBe("#65a30d")
   })
 
   it("uses done colors for graph node step progress fill", () => {

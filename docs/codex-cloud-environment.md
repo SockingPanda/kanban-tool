@@ -58,19 +58,26 @@ Maintenance script 在 cached container 恢复后刷新：
 
 ## Recommended Cloud Tasks
 
-Focused validation:
+Focused validation from the current diff:
 
 ```bash
 just affected base=main
 ```
 
-Rust backend / CLI / SQLite / server API:
+Daily Rust backend / CLI / SQLite / server API validation excludes the
+helper-heavy LanceDB and Oxigraph backend crates:
+
+```bash
+just rust-fast
+```
+
+Equivalent expanded core steps:
 
 ```bash
 just fmt
-just check
-just test
-just clippy
+just check-core
+just test-core
+just clippy-core
 ```
 
 Single package:
@@ -80,6 +87,17 @@ just check-p kanban-cli
 just test-p kanban-cli
 just clippy-p kanban-cli
 ```
+
+Helper-heavy backend validation:
+
+```bash
+just check-helpers
+just test-helpers
+just clippy-helpers
+```
+
+Use `just rust-full` when a branch touches helper backends or release-sensitive
+Rust validation boundaries but does not need desktop/package smoke coverage.
 
 Desktop frontend and Tauri check:
 
@@ -97,6 +115,8 @@ just release
 ```
 
 `just release` is intentionally heavy. Use it when the branch touches release-sensitive packaging, desktop package behavior, or cross-surface integration.
+It includes `just rust-full`, so helper-heavy crates are checked, tested, and
+linted before packaging and smoke checks.
 
 ## Prompt Template
 
@@ -114,7 +134,7 @@ For backend-only work:
 
 ```text
 Verify backend/CLI/SQLite behavior for this branch using AGENTS.md.
-Run `just fmt`, `just check`, `just test`, and `just clippy`.
+Run `just rust-fast` for daily core validation, or `just rust-full` if helper-heavy crates are affected.
 Fix only branch-caused failures and report command evidence.
 ```
 

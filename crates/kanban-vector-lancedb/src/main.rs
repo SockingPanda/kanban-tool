@@ -196,11 +196,11 @@ fn run() -> Result<()> {
 fn provider_from_store_args(args: &StoreArgs) -> Result<OllamaEmbeddingProvider> {
     let config = kanban_local::resolved_vector_config(args.vector_config.as_deref())?
         .context("vector config is required")?;
-    Ok(provider(&ProviderArgs {
+    provider(&ProviderArgs {
         endpoint: config.endpoint,
         model: config.model,
         dimensions: config.dimensions,
-    })?)
+    })
 }
 
 fn vector_status(args: &StoreArgs) -> Result<VectorStoreStatus> {

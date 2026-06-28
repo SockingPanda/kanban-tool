@@ -114,7 +114,7 @@ pub(crate) fn handle_derived(command: DerivedCommand, db_path: &PathBuf, json: b
 
 pub(crate) fn handle_graph(
     command: GraphCommand,
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     json: bool,
 ) -> Result<()> {
@@ -272,7 +272,7 @@ fn graph_degraded_status(
 
 pub(crate) fn handle_vector(
     command: VectorCommand,
-    db_path: &PathBuf,
+    db_path: &Path,
     board: &str,
     json: bool,
 ) -> Result<()> {

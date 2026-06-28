@@ -107,7 +107,10 @@ kanban --help
 ```
 
 Desktop packages are installed separately from the CLI package. Install both only if
-you want both the graphical desktop app and the `kanban` command.
+you want both the graphical desktop app and the `kanban` command. The Desktop
+package bundles the `kanban-vector-lancedb` and `kanban-graph-oxigraph` helper
+binaries for its embedded localhost API; it does not install the standalone
+`kanban` CLI.
 
 ### Build the CLI package from source
 
@@ -202,6 +205,22 @@ just rust-full        # fmt + core/helper check, test, and clippy
 Use `just rust-fast` for daily Rust feedback when the branch does not touch
 helper-heavy backends. Use `just rust-full` or `just release` for helper backend,
 packaging, release-sensitive, or cross-surface changes.
+
+Desktop validation and packaging prepare Tauri sidecar binaries before checking
+or building the app. The static config/sidecar check is separate from the
+post-package `.deb` layout check:
+
+```bash
+just desktop-check
+just desktop-package-config
+just desktop-package
+just desktop-package-layout
+```
+
+`just desktop-package` keeps the Desktop `.deb` separate from the CLI `.deb`,
+while bundling helper binaries used by the embedded server. `just
+desktop-package-layout` must run after `just desktop-package`; it inspects the
+generated Desktop `.deb` with `dpkg-deb -c`.
 
 Rust validation recipes run target-writing Cargo/Tauri commands through
 `scripts/cargo-build-lock.sh`. The wrapper serializes shared target writes and

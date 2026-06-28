@@ -1,4 +1,5 @@
 use std::{
+    env,
     net::SocketAddr,
     path::PathBuf,
     sync::{Mutex, mpsc},
@@ -11,6 +12,7 @@ use serde::Serialize;
 use tauri::{
     Manager, State,
     menu::{Menu, MenuItem},
+    path::BaseDirectory,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 use tokio::sync::oneshot;
@@ -101,7 +103,7 @@ pub fn run() {
             }
         }))
         .setup(|app| {
-            let runtime = start_embedded_api().map_err(|error| error.to_string())?;
+            let runtime = start_embedded_api(app).map_err(|error| error.to_string())?;
             app.manage(runtime);
             setup_tray(app).map_err(|error| error.to_string())?;
             Ok(())
@@ -289,14 +291,49 @@ fn quit_app(app: &tauri::AppHandle) {
     app.exit(0);
 }
 
-fn start_embedded_api() -> Result<EmbeddedApiRuntime, String> {
+fn embedded_app_state(
+    app: &tauri::App,
+    db_path: PathBuf,
+    actor: String,
+) -> kanban_server::AppState {
+    let mut state = kanban_server::AppState::new(db_path, actor);
+    if let Some(path) = bundled_helper_path(app, "kanban-vector-lancedb") {
+        state = state.with_vector_helper_path(path);
+    }
+    if let Some(path) = bundled_helper_path(app, "kanban-graph-oxigraph") {
+        state = state.with_graph_helper_path(path);
+    }
+    state
+}
+
+fn bundled_helper_path(app: &tauri::App, binary_name: &str) -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Ok(path) = app.path().resolve(binary_name, BaseDirectory::Resource) {
+        candidates.push(path);
+    }
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        candidates.push(resource_dir.join(binary_name));
+    }
+    if let Ok(current_exe) = env::current_exe() {
+        if let Some(dir) = current_exe.parent() {
+            candidates.push(dir.join(binary_name));
+        }
+    }
+    first_existing_path(candidates)
+}
+
+fn first_existing_path(paths: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
+    paths.into_iter().find(|path| path.is_file())
+}
+
+fn start_embedded_api(app: &tauri::App) -> Result<EmbeddedApiRuntime, String> {
     let db_path = kanban_local::default_db_path();
     let actor = kanban_local::default_actor();
     let runtime_guard =
         kanban_sqlite::begin_database_runtime(&db_path).map_err(|error| error.to_string())?;
     kanban_sqlite::init_database(&db_path, &actor).map_err(|error| error.to_string())?;
 
-    let state = kanban_server::AppState::new(db_path.clone(), actor.clone());
+    let state = embedded_app_state(app, db_path.clone(), actor.clone());
     let router = kanban_server::build_desktop_router(state);
     let (tx, rx) = mpsc::channel::<Result<SocketAddr, String>>();
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
@@ -348,4 +385,57 @@ fn start_embedded_api() -> Result<EmbeddedApiRuntime, String> {
         _runtime_guard: runtime_guard,
         shutdown_tx: Mutex::new(Some(shutdown_tx)),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::first_existing_path;
+
+    struct TempDir {
+        path: PathBuf,
+    }
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "kanban-desktop-{name}-{}-{}",
+                std::process::id(),
+                std::thread::current().name().unwrap_or("test")
+            ));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(&path).expect("create temp dir");
+            Self { path }
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    #[test]
+    fn first_existing_path_prefers_first_existing_regular_file() {
+        let dir = TempDir::new("first-existing");
+        let missing = dir.path.join("missing-helper");
+        let first = dir.path.join("kanban-vector-lancedb");
+        let second = dir.path.join("kanban-graph-oxigraph");
+        std::fs::write(&first, b"vector").expect("write first");
+        std::fs::write(&second, b"graph").expect("write second");
+
+        let path = first_existing_path([missing, first.clone(), second]).expect("helper path");
+
+        assert_eq!(path, first);
+    }
+
+    #[test]
+    fn first_existing_path_ignores_directories_and_missing_candidates() {
+        let dir = TempDir::new("ignore-directories");
+        let directory = dir.path.join("kanban-vector-lancedb");
+        std::fs::create_dir(&directory).expect("helper directory");
+
+        assert!(first_existing_path([directory, dir.path.join("missing")]).is_none());
+    }
 }

@@ -1,5 +1,3 @@
-#![cfg(feature = "vector-lancedb")]
-
 use crate::common::*;
 
 #[test]

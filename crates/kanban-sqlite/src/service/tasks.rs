@@ -2107,7 +2107,7 @@ fn remove_task_label_in_current_tx(
     Ok(())
 }
 
-#[cfg(all(test, feature = "vector-lancedb"))]
+#[cfg(test)]
 mod bootstrap_staged_verification_tests {
     use super::*;
     use crate::init::init_database;

@@ -39,14 +39,12 @@ pub use kanban_sqlite::{
     submit_review_task, task_ontology_summary, unblock_task, update_step, update_task,
     upsert_label_semantics, validate_label_ontology_action,
 };
-#[cfg(feature = "vector-lancedb")]
 pub use kanban_sqlite::{
     LabelOntologyTrustedValidationInput, LabelSuggestionOptions, label_atom_index_status_with,
     query_label_atom_index_by_vector_with, query_label_atom_index_with,
     rebuild_label_atom_index_with, rebuild_vector_store_with, sync_vector_store_with,
     validate_label_ontology_action_with_trusted_suggestions,
 };
-#[cfg(feature = "vector-lancedb")]
 pub use kanban_vector::{
     ChunkVectorStore, EmbeddingChunk, LabelAtomHit, LabelAtomQuery, LabelAtomVector,
     LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore, QueryEmbeddingProvider,
@@ -117,11 +115,6 @@ impl AsRef<Path> for TempDb {
     }
 }
 
-#[cfg(any(
-    feature = "graph-oxigraph",
-    feature = "tantivy-backend",
-    feature = "vector-lancedb"
-))]
 pub fn insert_board(path: &Path, slug: &str, id: &str) -> anyhow::Result<()> {
     connect_file(path)?
         .execute(
@@ -131,7 +124,6 @@ pub fn insert_board(path: &Path, slug: &str, id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "vector-lancedb")]
 #[derive(Default)]
 pub struct RecordingVectorStore {
     embedding_model: Option<String>,
@@ -145,7 +137,6 @@ pub struct RecordingVectorStore {
     deleted_boards: std::sync::Mutex<Vec<String>>,
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl RecordingVectorStore {
     pub fn with_embedding_model(embedding_model: &str) -> Self {
         Self {
@@ -219,7 +210,6 @@ impl RecordingVectorStore {
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl VectorStoreBackend for RecordingVectorStore {
     fn embedding_model(&self) -> &str {
         self.expected_model()
@@ -230,14 +220,12 @@ impl VectorStoreBackend for RecordingVectorStore {
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl QueryEmbeddingProvider for RecordingVectorStore {
     fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
         Ok(vec![1.0, 1.0, 1.0])
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl ChunkVectorStore for RecordingVectorStore {
     fn upsert(&self, chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
         if let Some(chunk) = chunks
@@ -305,7 +293,6 @@ impl ChunkVectorStore for RecordingVectorStore {
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl LabelAtomVectorStore for RecordingVectorStore {
     fn delete_label_atoms_for_board(&self, board_id: &str) -> Result<(), VectorError> {
         self.live_label_atoms
@@ -436,20 +423,16 @@ impl LabelAtomVectorStore for RecordingVectorStore {
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 pub struct FailingVectorStore;
 
-#[cfg(feature = "vector-lancedb")]
 impl VectorStoreBackend for FailingVectorStore {
     fn status(&self) -> VectorStoreStatus {
         VectorStoreStatus::new("test-vector", true, "test vector store")
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl QueryEmbeddingProvider for FailingVectorStore {}
 
-#[cfg(feature = "vector-lancedb")]
 impl ChunkVectorStore for FailingVectorStore {
     fn upsert(&self, _chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
         Err(VectorError::DimensionMismatch {
@@ -471,7 +454,6 @@ impl ChunkVectorStore for FailingVectorStore {
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl LabelAtomVectorStore for FailingVectorStore {
     fn delete_label_atoms_for_board(&self, _board_id: &str) -> Result<(), VectorError> {
         Ok(())
@@ -485,24 +467,20 @@ impl LabelAtomVectorStore for FailingVectorStore {
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 pub struct QueryFailingVectorStore;
 
-#[cfg(feature = "vector-lancedb")]
 impl VectorStoreBackend for QueryFailingVectorStore {
     fn status(&self) -> VectorStoreStatus {
         VectorStoreStatus::new("test-vector", true, "test vector store")
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl QueryEmbeddingProvider for QueryFailingVectorStore {
     fn embed_query_text(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
         Ok(vec![1.0, 0.0, 0.0])
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl ChunkVectorStore for QueryFailingVectorStore {
     fn upsert(&self, _chunks: &[EmbeddingChunk]) -> Result<(), VectorError> {
         Ok(())
@@ -521,7 +499,6 @@ impl ChunkVectorStore for QueryFailingVectorStore {
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 impl LabelAtomVectorStore for QueryFailingVectorStore {
     fn query_label_atoms_by_vector(
         &self,
@@ -531,7 +508,6 @@ impl LabelAtomVectorStore for QueryFailingVectorStore {
     }
 }
 
-#[cfg(feature = "vector-lancedb")]
 fn vector_for_label_atom(atom: &LabelAtomVector) -> Vec<f32> {
     let _ = atom;
     vec![1.0, 0.0, 0.0]
@@ -553,33 +529,14 @@ pub fn tantivy_outbox_statuses_for_board(
         .collect::<std::result::Result<Vec<_>, _>>()?)
 }
 
-#[cfg(feature = "graph-oxigraph")]
-pub fn graph_outbox_statuses_for_board(
-    path: &Path,
-    board_slug: &str,
-) -> anyhow::Result<Vec<String>> {
-    let conn = connect_file(path)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT io.status              FROM index_outbox io              JOIN task_events e ON e.id=io.source_event_id              JOIN boards b ON b.id=e.board_id              WHERE b.slug=?1 AND io.target='oxigraph'              ORDER BY io.id ASC",
-        )
-        ?;
-    Ok(stmt
-        .query_map([board_slug], |row| row.get::<_, String>(0))?
-        .collect::<std::result::Result<Vec<_>, _>>()?)
-}
-
-#[cfg(feature = "vector-lancedb")]
 pub fn lancedb_outbox_statuses_for_board(
     path: &Path,
     board_slug: &str,
 ) -> anyhow::Result<Vec<String>> {
     let conn = connect_file(path)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT io.status              FROM index_outbox io              JOIN task_events e ON e.id=io.source_event_id              JOIN boards b ON b.id=e.board_id              WHERE b.slug=?1 AND io.target='lancedb'              ORDER BY io.id ASC",
-        )
-        ?;
+    let mut stmt = conn.prepare(
+        "SELECT io.status              FROM index_outbox io              JOIN task_events e ON e.id=io.source_event_id              JOIN boards b ON b.id=e.board_id              WHERE b.slug=?1 AND io.target='lancedb'              ORDER BY io.id ASC",
+    )?;
     Ok(stmt
         .query_map([board_slug], |row| row.get::<_, String>(0))?
         .collect::<std::result::Result<Vec<_>, _>>()?)

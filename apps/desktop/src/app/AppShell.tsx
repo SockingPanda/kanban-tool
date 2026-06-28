@@ -55,7 +55,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar"
-import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -430,6 +430,10 @@ function TaskDetailSheet({
     taskStepsExpanded,
   } = taskDetail
 
+  if (!open || !selectedTask) return null
+
+  const selectedTaskForDetail = selectedTask
+
   return (
     <Sheet
       open={open}
@@ -438,10 +442,12 @@ function TaskDetailSheet({
       }}
     >
       <SheetContent side="right" className="w-[min(1100px,calc(100vw-24px))] p-0">
+        <SheetTitle className="sr-only">Task detail</SheetTitle>
+        <SheetDescription className="sr-only">Task workbench with one-hop map, description, execution plan, discussion, runs, events, and metadata.</SheetDescription>
         <Suspense fallback={<LazyViewFallback label="Loading task detail" />}>
           <TaskDetail
             api={api}
-            task={selectedTask}
+            task={selectedTaskForDetail}
             detail={detail}
             labelSuggestions={labelSuggestions}
             labelSuggestionsRequested={labelSuggestionsRequested}

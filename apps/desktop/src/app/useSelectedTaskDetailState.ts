@@ -24,22 +24,22 @@ export function useSelectedTaskDetailState(
   const [draftState, setDraftState] = useState<TaskDraftState | null>(null)
   const [claimTokens, setClaimTokens] = useState<Record<string, string>>({})
   const [labelSuggestionsRequested, setLabelSuggestionsRequested] = useState(false)
-  const [taskDependenciesExpanded, setTaskDependenciesExpanded] = useState(false)
-  const [taskGraphExpanded, setTaskGraphExpanded] = useState(false)
-  const [taskStepsExpanded, setTaskStepsExpanded] = useState(false)
+  const [taskDependenciesExpanded, setTaskDependenciesExpanded] = useState(true)
+  const [taskGraphExpanded, setTaskGraphExpanded] = useState(true)
+  const [taskStepsExpanded, setTaskStepsExpanded] = useState(true)
   const [taskRunsExpanded, setTaskRunsExpanded] = useState(false)
   const [taskEventsExpanded, setTaskEventsExpanded] = useState(false)
-  const [taskCommentsExpanded, setTaskCommentsExpanded] = useState(false)
+  const [taskCommentsExpanded, setTaskCommentsExpanded] = useState(true)
 
   const enabled = shouldLoadTaskDetail(view, selectedId)
   const detailQuery = useTaskDetail(api, selectedId, {
     enabled,
-    dependenciesEnabled: taskDependenciesExpanded,
-    neighborhoodEnabled: taskGraphExpanded,
-    stepsEnabled: taskStepsExpanded,
+    dependenciesEnabled: enabled,
+    neighborhoodEnabled: enabled,
+    stepsEnabled: enabled,
     runsEnabled: view === "runs" || taskRunsExpanded,
     eventsEnabled: taskEventsExpanded,
-    commentsEnabled: taskCommentsExpanded,
+    commentsEnabled: enabled,
     runLogEnabled: view === "runs" || taskRunsExpanded,
   })
   const labelSuggestionsQuery = useQuery({
@@ -85,12 +85,12 @@ export function useSelectedTaskDetailState(
 
   useEffect(() => {
     setLabelSuggestionsRequested(false)
-    setTaskDependenciesExpanded(false)
-    setTaskGraphExpanded(false)
-    setTaskStepsExpanded(false)
+    setTaskDependenciesExpanded(true)
+    setTaskGraphExpanded(true)
+    setTaskStepsExpanded(true)
     setTaskRunsExpanded(false)
     setTaskEventsExpanded(false)
-    setTaskCommentsExpanded(false)
+    setTaskCommentsExpanded(true)
   }, [selectedId])
 
   useEffect(() => {

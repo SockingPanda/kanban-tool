@@ -50,6 +50,14 @@ impl OxigraphStore {
         entity_uris: &[EntityUri],
         relations: &[Relation],
     ) -> Result<(), GraphError> {
+        self.replace_entities_optimized(entity_uris, relations)
+    }
+
+    fn replace_entities_optimized(
+        &self,
+        entity_uris: &[EntityUri],
+        relations: &[Relation],
+    ) -> Result<(), GraphError> {
         let incoming = group_relations_by_subject(relations.to_vec());
         let mut stored = self.relations.lock().map_err(lock_error)?;
         for entity_uri in entity_uris {
@@ -144,6 +152,14 @@ impl RelationGraph for OxigraphStore {
         *stored = group_relations_by_subject(relations.to_vec());
         self.write_snapshot(&stored)?;
         Ok(())
+    }
+
+    fn replace_entities(
+        &self,
+        entity_uris: &[EntityUri],
+        relations: &[Relation],
+    ) -> Result<(), GraphError> {
+        self.replace_entities_optimized(entity_uris, relations)
     }
 
     fn neighbors(

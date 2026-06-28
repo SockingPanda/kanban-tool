@@ -559,7 +559,26 @@ Request：
 
 Response target 由服务端计算，不由客户端指定。
 
-### 5.9 Reclaim
+### 5.9 Reopen
+
+```http
+POST /api/v1/tasks/{task_id}/transitions/reopen
+```
+
+Request：
+
+```json
+{
+  "reason": "重新执行修正验证失败",
+  "actor": "alice"
+}
+```
+
+只允许 reopen `done` task，`reason` 必填且不能为空。Response target 由服务端按 spec、schedule、dependency 和 execution plan readiness 重新计算；`completed_at` 会清空，`result_summary` / `result_json` 保留。事件 `task.reopened` 的 payload 包含 `from`、`to`、`reason` 和 `original_completed_at`。
+
+直接依赖该 task 的 child 中，仅 `triage|todo|scheduled|ready` 会重新计算；`running|blocked|review|done|archived` 不隐式改写。
+
+### 5.10 Reclaim
 
 ```http
 POST /api/v1/tasks/{task_id}/transitions/reclaim
@@ -576,7 +595,7 @@ Request：
 }
 ```
 
-### 5.10 Archive
+### 5.11 Archive
 
 ```http
 POST /api/v1/tasks/{task_id}/transitions/archive
@@ -615,7 +634,7 @@ same parent/child edge is idempotent and returns `200 OK` with the same
 dependency envelope; it does not write another `dependency.added` event or
 recompute the child status again. Dependency changes may demote an invalid
 `ready` child to `todo`, but they do not auto-promote `todo` children to
-`ready`.
+`ready`. Reopening a `done` parent recomputes direct children only when the child is `triage|todo|scheduled|ready`; it leaves `running|blocked|review|done|archived` children unchanged.
 
 ### 6.2 Remove dependency
 

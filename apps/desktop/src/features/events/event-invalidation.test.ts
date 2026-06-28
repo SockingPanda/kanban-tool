@@ -101,7 +101,7 @@ describe("event invalidation helpers", () => {
 
   it("invalidates status counters for status-changing task events", () => {
     expect(
-      affectedQueriesForEvents([eventRecord({ task_id: "t_2", kind: "task.completed" })]),
+      affectedQueriesForEvents([eventRecord({ task_id: "t_2", kind: "task.reopened" })]),
     ).toEqual(affected({
       taskIds: new Set(["t_2"]),
       taskDetailIds: new Set(["t_2"]),
@@ -144,7 +144,7 @@ describe("event invalidation helpers", () => {
     },
   )
 
-  it.each(["task.blocked", "task.unblocked", "task.archived", "task.restored"])(
+  it.each(["task.completed", "task.blocked", "task.unblocked", "task.archived", "task.restored"])(
     "invalidates status counters for lifecycle event %s",
     (kind) => {
       expect(

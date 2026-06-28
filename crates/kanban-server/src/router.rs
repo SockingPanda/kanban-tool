@@ -141,6 +141,10 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/tasks/:task_id/transitions/claim", post(claim_task))
         .route(
+            "/api/v1/tasks/:task_id/transitions/reopen",
+            post(reopen_task),
+        )
+        .route(
             "/api/v1/tasks/:task_id/transitions/reclaim",
             post(reclaim_task),
         )

@@ -6,8 +6,9 @@ use kanban_sqlite::{
     CreateLabel, CreateTask, LabelOntologyActionInput, LabelOntologyActionType, LabelOntologyActor,
     LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput, LabelOntologyProposedAction,
     LabelOntologyRecordInput, LabelOntologySignalInput, LabelOntologySignalKind,
-    LabelOntologySuggestState, LabelProposalCandidate, UpsertLabelSemantics, get_label_semantics,
-    get_task, list_label_atoms, list_labels,
+    LabelOntologySuggestState, LabelProposalCandidate, UpsertLabelSemantics,
+    complete_task_with_summary_and_result, get_label_semantics, get_task, list_label_atoms,
+    list_labels,
 };
 use pretty_assertions::assert_eq;
 use serde_json::json;
@@ -124,6 +125,60 @@ fn task_show_details_prints_full_readable_record() -> anyhow::Result<()> {
         stdout.contains("description:\n  first detail line\n  second detail line"),
         "{stdout}"
     );
+    Ok(())
+}
+
+#[test]
+fn task_reopen_requires_reason_and_returns_reopened_task() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_reopen_requires_reason_and_returns_reopened_task")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "reopen cli task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    mark_no_plan_required(&temp.path, task_id)?;
+    let claim = kanban(&temp.path, &["--json", "task", "claim", task_id])?.success_json()?;
+    let token = claim["data"]["claim_token"]
+        .as_str()
+        .context("claim token")?;
+    complete_task_with_summary_and_result(
+        &temp.path,
+        "default",
+        "cli-task-test",
+        task_id,
+        Some(token),
+        false,
+        Some("done once"),
+        Some(r#"{"cli":true}"#),
+    )?;
+
+    kanban(&temp.path, &["task", "reopen", task_id])?.failure_containing("required")?;
+    let reopened = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "reopen",
+            task_id,
+            "--reason",
+            "operator retry",
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(reopened["data"]["status"], "ready");
+    assert_eq!(reopened["data"]["completed_at"], serde_json::Value::Null);
+    assert_eq!(reopened["data"]["result_summary"], "done once");
+    assert_eq!(reopened["data"]["result_json"], r#"{"cli":true}"#);
     Ok(())
 }
 

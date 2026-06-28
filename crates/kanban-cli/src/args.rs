@@ -139,6 +139,7 @@ pub(crate) enum TaskCommand {
     Promote {
         task_ref: String,
     },
+    Reopen(TaskReopenArgs),
     Start(ClaimArgs),
     Claim(ClaimArgs),
     Heartbeat(HeartbeatArgs),
@@ -159,6 +160,13 @@ pub(crate) enum TaskCommand {
         #[command(subcommand)]
         command: TaskStepCommand,
     },
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct TaskReopenArgs {
+    pub(crate) task_ref: String,
+    #[arg(long)]
+    pub(crate) reason: String,
 }
 
 #[derive(Debug, Subcommand)]

@@ -289,6 +289,214 @@ fn block_reason_with_control_chars_writes_valid_event_json() -> anyhow::Result<(
 }
 
 #[test]
+fn reopen_done_task_recomputes_target_and_preserves_result() -> anyhow::Result<()> {
+    let temp = TempDb::new("reopen_done_task_recomputes_target_and_preserves_result")?;
+    init_database(&temp.path, "tester")?;
+    let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("parent"))?;
+    let child = create_task(&temp.path, "default", "tester", CreateTask::ready("child"))?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &parent.id)?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &child.id)?;
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+
+    let claim = claim_task(&temp.path, "default", "worker", &parent.id, 300_000)?;
+    let completed = kanban_sqlite::complete_task_with_summary_and_result(
+        &temp.path,
+        "default",
+        "worker",
+        &parent.id,
+        Some(&claim.claim_token),
+        false,
+        Some("finished once"),
+        Some(r#"{"ok":true}"#),
+    )?;
+    assert_eq!(completed.status, TaskStatus::Done);
+    let original_completed_at = completed
+        .completed_at
+        .ok_or_else(|| test_error("expected completed_at"))?;
+    let child = promote_task(&temp.path, "default", "tester", &child.id)?;
+    assert_eq!(child.status, TaskStatus::Ready);
+
+    let reopened = reopen_task(
+        &temp.path,
+        "default",
+        "tester",
+        &parent.id,
+        "retry with fix",
+    )?;
+
+    assert_eq!(reopened.status, TaskStatus::Ready);
+    assert!(reopened.completed_at.is_none());
+    assert_eq!(reopened.result_summary.as_deref(), Some("finished once"));
+    assert_eq!(reopened.result_json.as_deref(), Some(r#"{"ok":true}"#));
+    let child = get_task(&temp.path, "default", &child.id)?;
+    assert_eq!(child.status, TaskStatus::Todo);
+    assert!(child.dependency_blocked);
+    let events = list_events(&temp.path, "default", Some(&parent.id))?;
+    let event = events
+        .iter()
+        .find(|event| event.kind == "task.reopened")
+        .ok_or_else(|| test_error("expected task.reopened event"))?;
+    let payload: serde_json::Value = serde_json::from_str(&event.payload_json)?;
+    assert_eq!(payload["from"], "done");
+    assert_eq!(payload["to"], "ready");
+    assert_eq!(payload["reason"], "retry with fix");
+    assert_eq!(payload["original_completed_at"], original_completed_at);
+    Ok(())
+}
+
+#[test]
+fn reopen_skips_running_blocked_review_done_and_archived_children() -> anyhow::Result<()> {
+    let temp = TempDb::new("reopen_skips_running_blocked_review_done_and_archived_children")?;
+    init_database(&temp.path, "tester")?;
+    let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("parent"))?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &parent.id)?;
+    let parent_claim = claim_task(&temp.path, "default", "worker", &parent.id, 300_000)?;
+    complete_task(
+        &temp.path,
+        "default",
+        "worker",
+        &parent.id,
+        Some(&parent_claim.claim_token),
+        false,
+    )?;
+
+    let running = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("running child"),
+    )?;
+    let blocked = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("blocked child"),
+    )?;
+    let review = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("review child"),
+    )?;
+    let done = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("done child"),
+    )?;
+    let archived = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("archived child"),
+    )?;
+    for child in [&running, &blocked, &review, &done, &archived] {
+        mark_plan_not_required_for_test(&temp.path, "default", "tester", &child.id)?;
+        add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+    }
+    claim_task(&temp.path, "default", "worker", &running.id, 300_000)?;
+    block_task(
+        &temp.path,
+        "default",
+        "tester",
+        &blocked.id,
+        "waiting",
+        None,
+        false,
+    )?;
+    let review_claim = claim_task(&temp.path, "default", "worker", &review.id, 300_000)?;
+    submit_review_task(
+        &temp.path,
+        "default",
+        "worker",
+        &review.id,
+        Some(&review_claim.claim_token),
+        false,
+    )?;
+    let done_claim = claim_task(&temp.path, "default", "worker", &done.id, 300_000)?;
+    complete_task(
+        &temp.path,
+        "default",
+        "worker",
+        &done.id,
+        Some(&done_claim.claim_token),
+        false,
+    )?;
+    archive_task(&temp.path, "default", "tester", &archived.id, false)?;
+
+    reopen_task(&temp.path, "default", "tester", &parent.id, "retry parent")?;
+
+    assert_eq!(
+        get_task(&temp.path, "default", &running.id)?.status,
+        TaskStatus::Running
+    );
+    assert_eq!(
+        get_task(&temp.path, "default", &blocked.id)?.status,
+        TaskStatus::Blocked
+    );
+    assert_eq!(
+        get_task(&temp.path, "default", &review.id)?.status,
+        TaskStatus::Review
+    );
+    assert_eq!(
+        get_task(&temp.path, "default", &done.id)?.status,
+        TaskStatus::Done
+    );
+    assert_eq!(
+        get_task(&temp.path, "default", &archived.id)?.status,
+        TaskStatus::Archived
+    );
+    Ok(())
+}
+
+#[test]
+fn reopen_rejects_non_done_and_blank_reason_without_mutation() -> anyhow::Result<()> {
+    let temp = TempDb::new("reopen_rejects_non_done_and_blank_reason_without_mutation")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("not done"),
+    )?;
+
+    let non_done = result_err(reopen_task(
+        &temp.path,
+        "default",
+        "tester",
+        &task.id,
+        "try anyway",
+    ))?;
+    assert!(non_done.to_string().contains("reopen requires done"));
+
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &task.id)?;
+    let claim = claim_task(&temp.path, "default", "worker", &task.id, 300_000)?;
+    let completed = complete_task(
+        &temp.path,
+        "default",
+        "worker",
+        &task.id,
+        Some(&claim.claim_token),
+        false,
+    )?;
+    let before = completed.lock_version;
+    let blank = result_err(reopen_task(
+        &temp.path, "default", "tester", &task.id, "  \t",
+    ))?;
+    assert!(blank.to_string().contains("reopen reason is required"));
+    assert_eq!(
+        get_task(&temp.path, "default", &task.id)?.lock_version,
+        before
+    );
+    assert!(
+        list_events(&temp.path, "default", Some(&task.id))?
+            .iter()
+            .all(|event| event.kind != "task.reopened")
+    );
+    Ok(())
+}
+
+#[test]
 fn updating_ready_task_to_future_schedule_makes_it_unclaimable_until_due() -> anyhow::Result<()> {
     let temp =
         TempDb::new("updating_ready_task_to_future_schedule_makes_it_unclaimable_until_due")?;

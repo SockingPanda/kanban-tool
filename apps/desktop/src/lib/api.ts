@@ -1220,7 +1220,7 @@ export class KanbanApi {
     return { events: envelope.data, meta: envelope.meta ?? {} } satisfies EventPage
   }
 
-  async transition(task: Task, action: "specify" | "promote" | "claim" | "heartbeat" | "complete" | "submit-review" | "block" | "unblock" | "archive", body: Record<string, unknown> = {}, options: RequestOptions = {}) {
+  async transition(task: Task, action: "specify" | "promote" | "claim" | "heartbeat" | "complete" | "reopen" | "submit-review" | "block" | "unblock" | "archive", body: Record<string, unknown> = {}, options: RequestOptions = {}) {
     const payload = { actor: this.actor, ...body }
     return this.request<Task | ClaimResponse>(`/api/v1/tasks/${task.id}/transitions/${action}`, {
       method: "POST",

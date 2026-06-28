@@ -34,7 +34,7 @@ pub use kanban_sqlite::{
     list_runs, list_steps, list_tasks, mark_execution_plan_not_required, promote_task,
     propose_task_label, propose_task_label_with, propose_task_label_with_store,
     propose_task_label_with_store_and_create_options, record_label_ontology_observation,
-    reject_label_proposal, remove_step, reopen_step, revert_label_ontology_mutation,
+    reject_label_proposal, remove_step, reopen_step, reopen_task, revert_label_ontology_mutation,
     review_label_ontology, search_tasks, set_task_retry_policy_by_id, skip_step, specify_task,
     submit_review_task, task_ontology_summary, unblock_task, update_step, update_task,
     upsert_label_semantics, validate_label_ontology_action,

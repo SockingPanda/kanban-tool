@@ -237,6 +237,8 @@ parent neither done nor archived => child cannot be ready/running
 
 添加依赖时必须做环检测。归档 parent 会满足 hard dependency guard，但 dependency edge 保留为历史，不会自动 promote child。
 
+parent 从 `done` reopen 后，直接 child 中仅 `triage|todo|scheduled|ready` 会按 readiness 重算；`running|blocked|review|done|archived` 不隐式改写。
+
 
 ---
 
@@ -399,6 +401,7 @@ task.promoted
 task.claimed
 task.heartbeat
 task.completed
+task.reopened
 task.submitted_for_review
 task.blocked
 task.unblocked

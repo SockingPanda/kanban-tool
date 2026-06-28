@@ -6,58 +6,31 @@ use super::{
 };
 
 use std::path::Path;
-#[cfg(feature = "vector-lancedb")]
-use std::path::PathBuf;
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock};
 
-use kanban_indexer::LANCEDB_CHUNKS_STORE;
-#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
-use kanban_indexer::OutboxTarget;
+use kanban_indexer::{LANCEDB_CHUNKS_STORE, OutboxTarget};
 
 use kanban_vector::{
     ChunkBuilder, ChunkVectorStore, TaskChunkSource, VectorStoreBackend, VectorStoreStatus,
 };
-#[cfg(feature = "vector-lancedb")]
-use kanban_vector_lancedb::{LanceDbConfig, LanceDbStore};
-
 use rusqlite::{Connection, Row, params, params_from_iter, types::Value};
 
-#[cfg(feature = "vector-lancedb")]
 pub fn vector_store_status(path: impl AsRef<Path>, board: &str) -> Result<VectorStoreStatus> {
     let path_ref = path.as_ref();
     let conn = connect_file(path_ref)?;
     let board_id = board_id(&conn, board)?;
-    vector_store_status_without_provider(&conn, &board_id)
+    vector_store_status_from_base(
+        &conn,
+        &board_id,
+        kanban_vector::DisabledVectorStore.status(),
+    )
 }
 
-#[cfg(not(feature = "vector-lancedb"))]
-pub fn vector_store_status(_path: impl AsRef<Path>, _board: &str) -> Result<VectorStoreStatus> {
-    Ok(kanban_vector::DisabledVectorStore.status())
-}
-
-#[cfg(feature = "vector-lancedb")]
-pub fn rebuild_vector_store(path: impl AsRef<Path>, board: &str) -> Result<VectorStoreStatus> {
-    let path_ref = path.as_ref();
-    let store = LanceDbStore::connect(LanceDbConfig::degraded(vector_store_path(path_ref)))
-        .map_err(vector_storage)?;
-    rebuild_vector_store_with(path_ref, board, &store)
-}
-
-#[cfg(not(feature = "vector-lancedb"))]
 pub fn rebuild_vector_store(path: impl AsRef<Path>, board: &str) -> Result<VectorStoreStatus> {
     vector_store_status(path, board)
 }
 
-#[cfg(feature = "vector-lancedb")]
-pub fn sync_vector_store(path: impl AsRef<Path>, board: &str) -> Result<VectorStoreStatus> {
-    let path_ref = path.as_ref();
-    let store = LanceDbStore::connect(LanceDbConfig::degraded(vector_store_path(path_ref)))
-        .map_err(vector_storage)?;
-    sync_vector_store_with(path_ref, board, &store)
-}
-
-#[cfg(not(feature = "vector-lancedb"))]
 pub fn sync_vector_store(path: impl AsRef<Path>, board: &str) -> Result<VectorStoreStatus> {
     vector_store_status(path, board)
 }
@@ -200,7 +173,6 @@ pub fn vector_store_status_with(
     vector_store_status_with_conn(&conn, &board_id, store)
 }
 
-#[cfg(feature = "vector-lancedb")]
 pub fn configured_vector_store_status(
     path: impl AsRef<Path>,
     board: &str,
@@ -229,22 +201,6 @@ pub(crate) fn vector_store_status_with_conn(
     store: &(impl VectorStoreBackend + ?Sized),
 ) -> Result<VectorStoreStatus> {
     vector_store_status_from_base(conn, board_id, store.status())
-}
-
-#[cfg(feature = "vector-lancedb")]
-fn vector_store_status_without_provider(
-    conn: &Connection,
-    board_id: &str,
-) -> Result<VectorStoreStatus> {
-    vector_store_status_from_base(
-        conn,
-        board_id,
-        VectorStoreStatus::new(
-            "lancedb",
-            false,
-            "LanceDB configured without an embedding provider; vector retrieval degraded",
-        ),
-    )
 }
 
 fn vector_store_status_from_base(
@@ -292,7 +248,6 @@ fn push_status_diagnostic(diagnostics: &mut Vec<String>, code: &str) {
     }
 }
 
-#[cfg(any(feature = "graph-oxigraph", feature = "vector-lancedb"))]
 pub(crate) fn has_pending_outbox_for_target(
     conn: &Connection,
     target: OutboxTarget,
@@ -444,11 +399,6 @@ fn build_vector_chunks(
         chunks.extend(builder.build_task_chunks(source).map_err(vector_storage)?);
     }
     Ok(chunks)
-}
-
-#[cfg(feature = "vector-lancedb")]
-pub(crate) fn vector_store_path(db_path: &Path) -> PathBuf {
-    kanban_local::vector_store_path(db_path.to_path_buf())
 }
 
 pub(crate) fn vector_storage(error: impl std::fmt::Display) -> KanbanError {

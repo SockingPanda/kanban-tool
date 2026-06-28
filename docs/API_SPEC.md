@@ -101,7 +101,7 @@ Response：
   "data": {
     "ok": true,
     "db": "ok",
-    "version": "1.5.0",
+    "version": "1.5.1",
     "db_path": "/home/alice/.local/share/kb/kb.db",
     "db_fingerprint": "sqlite:131072:1717520000000"
   }

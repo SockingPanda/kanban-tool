@@ -26,6 +26,12 @@ struct ExecutionPlanUpdate<'a> {
     emit_event: bool,
 }
 
+struct StepResolution<'a> {
+    status: StepStatus,
+    note: &'a str,
+    event_kind: &'a str,
+}
+
 pub fn create_step(
     path: impl AsRef<Path>,
     board: &str,
@@ -202,9 +208,11 @@ pub fn complete_step(
         actor,
         parent_ref,
         step_ref,
-        StepStatus::Done,
-        note,
-        "task.step.done",
+        StepResolution {
+            status: StepStatus::Done,
+            note,
+            event_kind: "task.step.done",
+        },
     )
 }
 
@@ -222,9 +230,11 @@ pub fn skip_step(
         actor,
         parent_ref,
         step_ref,
-        StepStatus::Skipped,
-        reason,
-        "task.step.skipped",
+        StepResolution {
+            status: StepStatus::Skipped,
+            note: reason,
+            event_kind: "task.step.skipped",
+        },
     )
 }
 
@@ -242,9 +252,11 @@ pub fn reopen_step(
         actor,
         parent_ref,
         step_ref,
-        StepStatus::Todo,
-        reason,
-        "task.step.reopened",
+        StepResolution {
+            status: StepStatus::Todo,
+            note: reason,
+            event_kind: "task.step.reopened",
+        },
     )
 }
 
@@ -313,14 +325,12 @@ fn resolve_step(
     actor: &str,
     parent_ref: &str,
     step_ref: &str,
-    status: StepStatus,
-    note: &str,
-    event_kind: &str,
+    resolution: StepResolution<'_>,
 ) -> Result<TaskStepRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
-    let note = note.trim().to_owned();
+    let note = resolution.note.trim().to_owned();
     if note.is_empty() {
         return Err(KanbanError::InvalidInput(
             "step resolution note/reason is required".into(),
@@ -330,19 +340,25 @@ fn resolve_step(
         ensure_board_active(&conn, &board_id)?;
         let parent = resolve_task(&conn, &board_id, parent_ref)?;
         let step_id = resolve_step_id(&conn, &board_id, &parent.id, step_ref)?;
-        let (resolution_note, resolved_by, resolved_at) = if status == StepStatus::Todo {
+        let (resolution_note, resolved_by, resolved_at) = if resolution.status == StepStatus::Todo {
             (None, None, None)
         } else {
             (Some(note), Some(actor.to_owned()), Some(now))
         };
         conn.execute(
             "UPDATE task_steps SET status=?1, resolution_note=?2, resolved_by=?3, resolved_at=?4, updated_by=?5, updated_at=?6 WHERE board_id=?7 AND parent_task_id=?8 AND id=?9",
-            params![status.as_str(), resolution_note, resolved_by, resolved_at, actor, now, board_id, parent.id, step_id],
+            params![resolution.status.as_str(), resolution_note, resolved_by, resolved_at, actor, now, board_id, parent.id, step_id],
         )
         .map_err(storage)?;
         let updated = step_record(&conn, &board_id, &parent.id, &step_id)?;
         insert_step_event(
-            &conn, &board_id, &parent.id, event_kind, actor, &updated, now,
+            &conn,
+            &board_id,
+            &parent.id,
+            resolution.event_kind,
+            actor,
+            &updated,
+            now,
         )?;
         Ok(updated)
     })
@@ -412,23 +428,24 @@ fn resolve_step_id(
     step_ref: &str,
 ) -> Result<String> {
     let trimmed = step_ref.trim();
-    if trimmed.len() > 1 && matches!(trimmed.as_bytes()[0], b's' | b'S') {
-        if let Ok(ordinal) = trimmed[1..].parse::<usize>() {
-            if ordinal == 0 {
-                return Err(KanbanError::InvalidInput(
-                    "step ordinal starts at S1".into(),
-                ));
-            }
-            return conn
-                .query_row(
-                    "SELECT id FROM task_steps WHERE board_id=?1 AND parent_task_id=?2 ORDER BY position ASC, created_at ASC, id ASC LIMIT 1 OFFSET ?3",
-                    params![board_id, parent_task_id, (ordinal - 1) as i64],
-                    |row| row.get(0),
-                )
-                .optional()
-                .map_err(storage)?
-                .ok_or_else(|| KanbanError::NotFound(format!("step {trimmed}")));
+    if trimmed.len() > 1
+        && matches!(trimmed.as_bytes()[0], b's' | b'S')
+        && let Ok(ordinal) = trimmed[1..].parse::<usize>()
+    {
+        if ordinal == 0 {
+            return Err(KanbanError::InvalidInput(
+                "step ordinal starts at S1".into(),
+            ));
         }
+        return conn
+            .query_row(
+                "SELECT id FROM task_steps WHERE board_id=?1 AND parent_task_id=?2 ORDER BY position ASC, created_at ASC, id ASC LIMIT 1 OFFSET ?3",
+                params![board_id, parent_task_id, (ordinal - 1) as i64],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage)?
+            .ok_or_else(|| KanbanError::NotFound(format!("step {trimmed}")));
     }
     let exists: bool = conn
         .query_row(

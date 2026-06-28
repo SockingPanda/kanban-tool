@@ -182,18 +182,18 @@ where
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     if !output.status.success() {
-        if let Ok(envelope) = HelperEnvelope::from_json(stdout.trim()) {
-            if let Ok(error) = envelope.decode::<HelperErrorPayload>() {
-                return Err(HelperRunError::new(
-                    HelperRunErrorKind::HelperError,
-                    format!(
-                        "{} helper failed: {} ({})",
-                        kind.label(),
-                        error.message,
-                        error.code
-                    ),
-                ));
-            }
+        if let Ok(envelope) = HelperEnvelope::from_json(stdout.trim())
+            && let Ok(error) = envelope.decode::<HelperErrorPayload>()
+        {
+            return Err(HelperRunError::new(
+                HelperRunErrorKind::HelperError,
+                format!(
+                    "{} helper failed: {} ({})",
+                    kind.label(),
+                    error.message,
+                    error.code
+                ),
+            ));
         }
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(HelperRunError::new(
@@ -246,12 +246,12 @@ pub(crate) fn resolve_helper(state: &AppState, kind: HelperKind) -> PathBuf {
     if installed.exists() {
         return installed;
     }
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(dir) = current_exe.parent() {
-            let sibling = dir.join(kind.binary_name());
-            if sibling.exists() {
-                return sibling;
-            }
+    if let Ok(current_exe) = env::current_exe()
+        && let Some(dir) = current_exe.parent()
+    {
+        let sibling = dir.join(kind.binary_name());
+        if sibling.exists() {
+            return sibling;
         }
     }
     PathBuf::from(kind.binary_name())

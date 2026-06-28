@@ -257,27 +257,6 @@ fn predicate_from_str(value: &str) -> Result<Predicate> {
     }
 }
 
-trait RelationGraphExt {
-    fn replace_entities(
-        &self,
-        entity_uris: &[EntityUri],
-        relations: &[Relation],
-    ) -> std::result::Result<(), kanban_graph::GraphError>;
-}
-
-impl<T: RelationGraph + ?Sized> RelationGraphExt for T {
-    fn replace_entities(
-        &self,
-        entity_uris: &[EntityUri],
-        relations: &[Relation],
-    ) -> std::result::Result<(), kanban_graph::GraphError> {
-        for entity_uri in entity_uris {
-            self.delete(entity_uri)?;
-        }
-        self.upsert(relations)
-    }
-}
-
 fn sql_from_display(error: impl std::fmt::Display) -> rusqlite::Error {
     rusqlite::Error::ToSqlConversionFailure(Box::new(KanbanError::Storage(error.to_string())))
 }

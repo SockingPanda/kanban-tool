@@ -183,13 +183,28 @@ scripts/packaging/release-sensitive groups, then emits matching `just` commands.
 Release-sensitive diffs set `full_gate_recommended=true`; `just release` remains
 the authoritative full gate.
 
-Rust check gates are split by helper architecture:
+Rust validation gates are split by helper architecture. The core set covers the
+main CLI/server/SQLite/local crates plus lightweight helper protocol/shared
+crates. The helper set covers helper-heavy backend crates
+`kanban-vector-lancedb` and `kanban-graph-oxigraph`.
 
 ```bash
-just check-core     # default `just check`; excludes helper-heavy crates
-just check-helpers  # checks kanban-vector-lancedb and kanban-graph-oxigraph
-just check-full     # check-core followed by check-helpers
+just check-core       # default `just check`; excludes helper-heavy crates
+just test-core        # tests the daily core Rust set
+just clippy-core      # clippy for the daily core Rust set
+just rust-fast        # fmt + check-core + test-core + clippy-core
+
+just check-helpers    # checks kanban-vector-lancedb and kanban-graph-oxigraph
+just test-helpers     # tests helper-heavy backend crates
+just clippy-helpers   # clippy for helper-heavy backend crates
+
+just check-full       # check-core followed by check-helpers
+just rust-full        # fmt + core/helper check, test, and clippy
 ```
+
+Use `just rust-fast` for daily Rust feedback when the branch does not touch
+helper-heavy backends. Use `just rust-full` or `just release` for helper backend,
+packaging, release-sensitive, or cross-surface changes.
 
 Desktop validation and packaging prepare Tauri sidecar binaries before checking
 or building the app. The static config/sidecar check is separate from the

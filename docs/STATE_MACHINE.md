@@ -193,6 +193,8 @@ Side effects：
 
 - 默认每次 heartbeat 更新 run/task。
 - event 可每 N 次或每 60s 写一次。
+- 对 `running` task，后续有效 task-scoped event（例如 comment、step、label 变更）也可作为 implicit liveness signal：服务层刷新 task `claim_expires_at`、`last_heartbeat_at` 和 active run `last_heartbeat_at`，但不额外写 `task.heartbeat` event，避免递归和轮询噪音。
+- board-level event 或没有 `task_id` 的 event 不刷新 running lease。
 
 ---
 

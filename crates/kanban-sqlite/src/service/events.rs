@@ -2,7 +2,7 @@ use crate::connect_file;
 
 use super::{
     EventListOptions, EventRecord, SqlFilter, all_values, board_id_any, enqueue_index_outbox,
-    exec_named, resolve_task_any, scalar, upsert_board_entity, upsert_event_entity,
+    exec_named, resolve_task_any, scalar, storage, upsert_board_entity, upsert_event_entity,
     upsert_run_entity, upsert_task_entity,
 };
 
@@ -121,6 +121,9 @@ pub(crate) fn insert_event(
         },
     )?;
     let source_event_id = conn.last_insert_rowid();
+    if let Some(task_id) = task_id {
+        touch_running_task_lease_from_activity_event(conn, board_id, task_id, kind, now)?;
+    }
     upsert_board_entity(conn, board_id)?;
     upsert_event_entity(conn, &event_id, board_id, task_id, kind, payload, now)?;
     if let Some(task_id) = task_id {
@@ -134,5 +137,60 @@ pub(crate) fn insert_event(
         .or_else(|| run_id.map(|run_id| format!("kb://run/{run_id}")))
         .unwrap_or_else(|| format!("kb://board/{board_id}"));
     enqueue_index_outbox(conn, source_event_id, &entity_uri, "upsert", now)?;
+    Ok(())
+}
+
+fn touch_running_task_lease_from_activity_event(
+    conn: &Connection,
+    board_id: &str,
+    task_id: &str,
+    kind: &str,
+    now: i64,
+) -> Result<()> {
+    if kind == "task.heartbeat" {
+        return Ok(());
+    }
+    let changed = exec_named(
+        conn,
+        "UPDATE tasks
+         SET claim_expires_at=:now + MAX(1, claim_expires_at - COALESCE(last_heartbeat_at, :now)),
+             last_heartbeat_at=:now,
+             updated_at=:now,
+             lock_version=lock_version+1
+         WHERE board_id=:board_id
+           AND id=:task_id
+           AND status='running'
+           AND claim_token IS NOT NULL
+           AND claim_expires_at IS NOT NULL
+           AND current_run_id IS NOT NULL
+           AND EXISTS (
+               SELECT 1 FROM task_runs r
+               WHERE r.id=tasks.current_run_id
+                 AND r.board_id=tasks.board_id
+                 AND r.task_id=tasks.id
+                 AND r.status='running'
+                 AND r.claim_token=tasks.claim_token
+           )",
+        named_params! {
+            ":now": now,
+            ":board_id": board_id,
+            ":task_id": task_id,
+        },
+    )?;
+    if changed == 0 {
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE task_runs
+         SET claim_expires_at=(SELECT claim_expires_at FROM tasks WHERE board_id=?1 AND id=?2),
+             last_heartbeat_at=?3
+         WHERE id=(SELECT current_run_id FROM tasks WHERE board_id=?1 AND id=?2)
+           AND board_id=?1
+           AND task_id=?2
+           AND status='running'
+           AND claim_token=(SELECT claim_token FROM tasks WHERE board_id=?1 AND id=?2)",
+        params![board_id, task_id, now],
+    )
+    .map_err(storage)?;
     Ok(())
 }

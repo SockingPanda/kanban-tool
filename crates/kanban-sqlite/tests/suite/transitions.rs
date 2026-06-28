@@ -128,6 +128,103 @@ fn heartbeat_rejects_nonpositive_ttl_without_shortening_claim() -> anyhow::Resul
 }
 
 #[test]
+fn running_task_scoped_activity_event_renews_claim_without_heartbeat_event() -> anyhow::Result<()> {
+    let temp = TempDb::new("running_task_scoped_activity_event_renews_claim")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("implicit activity lease"),
+    )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
+    let claim = claim_task(&temp.path, "default", "worker", &task.id, 60_000)?;
+    let before = get_task(&temp.path, "default", &task.id)?;
+    let before_run_heartbeat = run_last_heartbeat(&temp.path, &claim.run_id)?;
+
+    thread::sleep(Duration::from_millis(20));
+    create_comment(&temp.path, &task.id, "operator", "progress activity", None)?;
+
+    let after = get_task(&temp.path, "default", &task.id)?;
+    assert_eq!(after.status, TaskStatus::Running);
+    assert_eq!(after.claim_token, before.claim_token);
+    assert!(
+        after.claim_expires_at > before.claim_expires_at,
+        "activity should extend the task claim: before={:?} after={:?}",
+        before.claim_expires_at,
+        after.claim_expires_at
+    );
+    assert!(
+        after.last_heartbeat_at > before.last_heartbeat_at,
+        "activity should refresh task heartbeat: before={:?} after={:?}",
+        before.last_heartbeat_at,
+        after.last_heartbeat_at
+    );
+    assert!(
+        run_last_heartbeat(&temp.path, &claim.run_id)? > before_run_heartbeat,
+        "activity should refresh active run heartbeat"
+    );
+    let heartbeat_events = list_events(&temp.path, "default", Some(&task.id))?
+        .into_iter()
+        .filter(|event| event.kind == "task.heartbeat")
+        .count();
+    assert_eq!(heartbeat_events, 0);
+    Ok(())
+}
+
+#[test]
+fn non_running_task_scoped_activity_event_does_not_touch_claim_fields() -> anyhow::Result<()> {
+    let temp = TempDb::new("non_running_activity_event_does_not_touch_claim")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("non running activity"),
+    )?;
+    let before = get_task(&temp.path, "default", &task.id)?;
+
+    thread::sleep(Duration::from_millis(20));
+    create_comment(&temp.path, &task.id, "operator", "not running", None)?;
+
+    let after = get_task(&temp.path, "default", &task.id)?;
+    assert_eq!(after.status, before.status);
+    assert_eq!(after.claim_expires_at, before.claim_expires_at);
+    assert_eq!(after.last_heartbeat_at, before.last_heartbeat_at);
+    Ok(())
+}
+
+#[test]
+fn board_level_event_does_not_renew_running_task_claim() -> anyhow::Result<()> {
+    let temp = TempDb::new("board_level_event_does_not_renew_running_claim")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("board activity should not renew"),
+    )?;
+    mark_execution_plan_not_required(&temp.path, "default", "tester", &task.id, "small task")?;
+    claim_task(&temp.path, "default", "worker", &task.id, 60_000)?;
+    let before = get_task(&temp.path, "default", &task.id)?;
+
+    thread::sleep(Duration::from_millis(20));
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "board-activity".into(),
+            color: None,
+        },
+    )?;
+
+    let after = get_task(&temp.path, "default", &task.id)?;
+    assert_eq!(after.claim_expires_at, before.claim_expires_at);
+    assert_eq!(after.last_heartbeat_at, before.last_heartbeat_at);
+    Ok(())
+}
+
+#[test]
 fn force_archive_running_task_closes_active_run() -> anyhow::Result<()> {
     let temp = TempDb::new("force_archive_running_task_closes_active_run")?;
     init_database(&temp.path, "tester")?;
@@ -822,4 +919,14 @@ fn required_steps_gate_complete_and_archive_parent() -> anyhow::Result<()> {
     let archived = archive_task(&temp.path, "default", "tester", &force_parent.id, true)?;
     assert_eq!(archived.status, TaskStatus::Archived);
     Ok(())
+}
+
+fn run_last_heartbeat(path: &Path, run_id: &str) -> anyhow::Result<i64> {
+    connect_file(path)?
+        .query_row(
+            "SELECT last_heartbeat_at FROM task_runs WHERE id=?1",
+            params![run_id],
+            |row| row.get(0),
+        )
+        .map_err(Into::into)
 }

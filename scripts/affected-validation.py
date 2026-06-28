@@ -91,11 +91,19 @@ def is_core(path: str) -> bool:
 
 
 def is_vector_helper(path: str) -> bool:
-    return path.startswith("crates/kanban-vector-lancedb/")
+    return path.startswith((
+        "crates/kanban-vector/",
+        "crates/kanban-vector-lancedb/",
+        "crates/kanban-derived-io/",
+    ))
 
 
 def is_graph_helper(path: str) -> bool:
-    return path.startswith("crates/kanban-graph-oxigraph/")
+    return path.startswith((
+        "crates/kanban-graph/",
+        "crates/kanban-graph-oxigraph/",
+        "crates/kanban-derived-io/",
+    ))
 
 
 def is_cli(path: str) -> bool:
@@ -445,6 +453,42 @@ def self_test() -> None:
                 ["just", "check-p", "kanban-context"],
                 ["just", "check-p", "kanban-indexer"],
                 ["just", "check-p", "kanban-entity"],
+            ],
+            False,
+        ),
+        (
+            "vector base crate propagates to helper",
+            ["crates/kanban-vector/src/lib.rs"],
+            {"core", "search/graph/vector/context", "vector-helper"},
+            [
+                ["just", "check-core"],
+                ["just", "check-p", "kanban-vector"],
+                ["just", "check-p", "kanban-vector-lancedb"],
+                ["just", "diff-check"],
+            ],
+            False,
+        ),
+        (
+            "graph base crate propagates to helper",
+            ["crates/kanban-graph/src/lib.rs"],
+            {"core", "search/graph/vector/context", "graph-helper"},
+            [
+                ["just", "check-core"],
+                ["just", "check-p", "kanban-graph"],
+                ["just", "check-p", "kanban-graph-oxigraph"],
+                ["just", "diff-check"],
+            ],
+            False,
+        ),
+        (
+            "derived io propagates to both helpers",
+            ["crates/kanban-derived-io/src/lib.rs"],
+            {"core", "vector-helper", "graph-helper"},
+            [
+                ["just", "check-core"],
+                ["just", "check-p", "kanban-vector-lancedb"],
+                ["just", "check-p", "kanban-graph-oxigraph"],
+                ["just", "diff-check"],
             ],
             False,
         ),

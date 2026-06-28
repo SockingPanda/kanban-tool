@@ -27,6 +27,7 @@ check-core:
         -p kanban-graph \
         -p kanban-vector \
         -p kanban-derived-io \
+        -p kanban-helper-protocol \
         -p kanban-labels \
         -p kanban-context \
         -p kanban-sqlite \
@@ -53,10 +54,58 @@ check-p package:
     scripts/cargo-build-lock.sh -- cargo check -p {{package}} --tests
 
 rust-fast:
-    cargo fmt -- --check
+    just fmt
     just check-core
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop; fi
-    scripts/cargo-build-lock.sh -- cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings
+    just test-core
+    just clippy-core
+
+test-core *args:
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run \
+        -p kanban-core \
+        -p kanban-entity \
+        -p kanban-indexer \
+        -p kanban-search \
+        -p kanban-graph \
+        -p kanban-vector \
+        -p kanban-derived-io \
+        -p kanban-helper-protocol \
+        -p kanban-labels \
+        -p kanban-context \
+        -p kanban-sqlite \
+        -p kanban-local \
+        -p kanban-server \
+        -p kanban-cli \
+        --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test \
+        -p kanban-core -p kanban-entity -p kanban-indexer -p kanban-search \
+        -p kanban-graph -p kanban-vector -p kanban-derived-io \
+        -p kanban-helper-protocol -p kanban-labels -p kanban-context \
+        -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli "$@"; fi
+
+test-helpers *args:
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run \
+        -p kanban-vector-lancedb \
+        -p kanban-graph-oxigraph \
+        --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test \
+        -p kanban-vector-lancedb -p kanban-graph-oxigraph "$@"; fi
+
+clippy-core *args:
+    scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
+        -p kanban-core -p kanban-entity -p kanban-indexer -p kanban-search \
+        -p kanban-graph -p kanban-vector -p kanban-derived-io \
+        -p kanban-helper-protocol -p kanban-labels -p kanban-context \
+        -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli "$@" -- -D warnings
+
+clippy-helpers *args:
+    scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
+        -p kanban-vector-lancedb -p kanban-graph-oxigraph "$@" -- -D warnings
+
+rust-full:
+    just fmt
+    just check-full
+    just test-core
+    just test-helpers
+    just clippy-core
+    just clippy-helpers
 
 web-test:
     pnpm --dir apps/desktop test
@@ -112,7 +161,7 @@ feature-p package features:
 
 release:
     just affected-self-test
-    just check-full
+    just rust-full
     just target-tools
     just cli-package
     just cli-package-layout

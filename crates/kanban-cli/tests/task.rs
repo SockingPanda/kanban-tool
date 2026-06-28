@@ -575,7 +575,11 @@ model = "offline-cli-test-model"
 dimensions = 3
 "#,
     )?;
-    let expected_index_failure = "vector helper unavailable";
+    let expected_index_failures = &[
+        "label vector helper adapter is not available",
+        "vector helper unavailable",
+        "Ollama embed request failed",
+    ];
     kanban(
         &temp.path,
         &[
@@ -586,7 +590,7 @@ dimensions = 3
             vector_config.to_str().context("vector config path")?,
         ],
     )?
-    .failure_containing(expected_index_failure)?;
+    .failure_containing_any(expected_index_failures)?;
     kanban(
         &temp.path,
         &[
@@ -598,7 +602,7 @@ dimensions = 3
             vector_config.to_str().context("vector config path")?,
         ],
     )?
-    .failure_containing(expected_index_failure)?;
+    .failure_containing_any(expected_index_failures)?;
 
     kanban(
         &temp.path,

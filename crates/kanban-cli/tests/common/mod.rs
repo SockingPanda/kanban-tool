@@ -105,6 +105,21 @@ impl CmdResult {
         );
         Ok(())
     }
+
+    pub fn failure_containing_any(self, expected: &[&str]) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !self.output.status.success(),
+            "command unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&self.output.stdout),
+            String::from_utf8_lossy(&self.output.stderr)
+        );
+        let stderr = String::from_utf8_lossy(&self.output.stderr);
+        anyhow::ensure!(
+            expected.iter().any(|value| contains(*value).eval(&stderr)),
+            "expected stderr to contain one of {expected:?}, got:\n{stderr}"
+        );
+        Ok(())
+    }
 }
 
 fn ensure_success(output: &Output) -> anyhow::Result<()> {

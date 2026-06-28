@@ -403,6 +403,8 @@ Options：
 |---|---|
 | `--ttl-ms <ms>` | 延长 TTL。 |
 
+显式 heartbeat API 保持兼容。除此之外，`running` task 的有效 task-scoped activity event 也会隐式刷新 lease，可作为 liveness signal；该隐式刷新不会再写 `task.heartbeat` event。board-level event 或没有 `task_id` 的 event 不触发续租。
+
 ### 6.4 Done / Complete
 
 ```bash

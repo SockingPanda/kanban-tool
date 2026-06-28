@@ -492,6 +492,8 @@ Request：
 }
 ```
 
+Explicit heartbeat remains supported. For a `running` task, a later valid task-scoped activity event also refreshes the task lease and active run heartbeat as an implicit liveness signal; that implicit renewal does not emit an extra `task.heartbeat` event. Board-level events and events without `task_id` do not renew a task.
+
 ### 5.5 Complete
 
 ```http

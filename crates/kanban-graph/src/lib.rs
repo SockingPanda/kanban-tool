@@ -15,6 +15,16 @@ pub trait RelationGraph {
     fn upsert(&self, relations: &[Relation]) -> Result<(), GraphError>;
     fn delete(&self, entity_uri: &EntityUri) -> Result<(), GraphError>;
     fn rebuild(&self, relations: &[Relation]) -> Result<(), GraphError>;
+    fn replace_entities(
+        &self,
+        entity_uris: &[EntityUri],
+        relations: &[Relation],
+    ) -> Result<(), GraphError> {
+        for entity_uri in entity_uris {
+            self.delete(entity_uri)?;
+        }
+        self.upsert(relations)
+    }
     fn neighbors(
         &self,
         entity_uri: &EntityUri,

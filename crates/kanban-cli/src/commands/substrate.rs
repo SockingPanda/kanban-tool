@@ -1,11 +1,7 @@
 use std::path::{Path, PathBuf};
-#[cfg(any())]
-use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use kanban_context::ContextPolicy;
-#[cfg(any())]
-use kanban_context::{ContextDiagnostic, ContextPack};
 use kanban_sqlite::{
     EntityListOptions, MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT, OutboxListOptions,
     derived_store_statuses, get_entity, list_entities, list_outbox,
@@ -565,38 +561,6 @@ fn vector_config_from_args(args: &VectorConfigureArgs) -> Result<kanban_local::V
     })
 }
 
-#[cfg(any())]
-fn ollama_provider_from_config(
-    config: &kanban_local::VectorConfig,
-) -> Result<kanban_vector_lancedb::OllamaEmbeddingProvider> {
-    if config.provider != "ollama" {
-        bail!("unsupported vector provider in config: {}", config.provider);
-    }
-    kanban_vector_lancedb::OllamaEmbeddingProvider::new(
-        config.endpoint.clone(),
-        config.model.clone(),
-        config.dimensions,
-    )
-    .map_err(Into::into)
-}
-
-#[cfg(any())]
-fn configured_lancedb_store(
-    db_path: &Path,
-    vector_config_path: Option<&Path>,
-) -> Result<Option<kanban_vector_lancedb::LanceDbStore>> {
-    let Some(config) = kanban_local::resolved_vector_config(vector_config_path)? else {
-        return Ok(None);
-    };
-    let provider = Arc::new(ollama_provider_from_config(&config)?);
-    kanban_vector_lancedb::LanceDbStore::connect(kanban_vector_lancedb::LanceDbConfig::new(
-        kanban_local::vector_store_path(db_path.to_path_buf()),
-        provider,
-    ))
-    .map(Some)
-    .map_err(Into::into)
-}
-
 fn build_configured_context_pack(
     db_path: &PathBuf,
     board: &str,
@@ -615,31 +579,4 @@ fn build_configured_context_pack(
     }
     kanban_sqlite::build_context_pack_with_vector_store(db_path, board, task_ref, policy, &store)
         .map_err(Into::into)
-}
-
-#[cfg(any())]
-fn mark_vector_store_construction_error(
-    mut pack: ContextPack,
-    error: &impl std::fmt::Display,
-) -> ContextPack {
-    if !pack.degraded.iter().any(|marker| marker == "vector_error") {
-        pack.degraded.push("vector_error".to_owned());
-    }
-    pack.diagnostics.push(ContextDiagnostic {
-        source: "vector".to_owned(),
-        code: "vector_error".to_owned(),
-        message: bounded_diagnostic_message(error),
-    });
-    pack
-}
-
-#[cfg(any())]
-fn bounded_diagnostic_message(error: &impl std::fmt::Display) -> String {
-    const MAX_DIAGNOSTIC_MESSAGE_LEN: usize = 240;
-    let mut message = error.to_string().replace(['\r', '\n'], " ");
-    if message.len() > MAX_DIAGNOSTIC_MESSAGE_LEN {
-        message.truncate(MAX_DIAGNOSTIC_MESSAGE_LEN);
-        message.push_str("...");
-    }
-    message
 }

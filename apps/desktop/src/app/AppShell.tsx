@@ -41,7 +41,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
 import {
   Sidebar,
   SidebarContent,
@@ -106,12 +105,6 @@ const viewMetadata: Record<OperatorView, { label: string; icon: ElementType }> =
   health: { label: "Health", icon: HeartPulse },
   settings: { label: "Settings", icon: Settings },
 }
-
-const themeModeOptions: MenuSelectOption<ThemeMode>[] = [
-  { value: "system", label: "system" },
-  { value: "light", label: "light" },
-  { value: "dark", label: "dark" },
-]
 
 const BoardTaskMapView = lazy(() => import("@/features/task-map/BoardTaskMapView").then((module) => ({ default: module.BoardTaskMapView })))
 const MaintenanceView = lazy(() => import("@/features/maintenance/MaintenanceView").then((module) => ({ default: module.MaintenanceView })))
@@ -195,7 +188,6 @@ export type AppShellCommandProps = {
   addDependency: () => Promise<void>
   cancelTaskEdit: () => void
   changeBoard: (board: string) => void
-  changeThemeMode: (value: ThemeMode) => void
   closeTaskDetail: () => void
   createTask: () => Promise<boolean>
   cycleThemeMode: () => void
@@ -296,7 +288,6 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
 
       <SidebarInset className="flex flex-col overflow-hidden bg-background">
         <MemoShellHeader
-          config={config}
           view={view}
           canCreateTask={Boolean(api)}
           themeMode={themeMode}
@@ -313,7 +304,6 @@ export function AppShell({ runtime, navigation, taskCollection, taskDetail, task
           taskCreationOpen={taskCreationOpen}
           onSearchChange={commands.setSearch}
           onViewChange={commands.setView}
-          onThemeModeChange={commands.changeThemeMode}
           onCycleThemeMode={commands.cycleThemeMode}
           onSidebarOpenChange={commands.setSidebarOpen}
           onShowArchivedChange={commands.setShowArchived}
@@ -672,7 +662,6 @@ function BoardSwitcher({
 }
 
 function ShellHeader({
-  config,
   view,
   canCreateTask,
   themeMode,
@@ -689,7 +678,6 @@ function ShellHeader({
   taskCreationOpen,
   onSearchChange,
   onViewChange,
-  onThemeModeChange,
   onCycleThemeMode,
   onSidebarOpenChange,
   onShowArchivedChange,
@@ -700,7 +688,6 @@ function ShellHeader({
   onNewFirstStepTitleChange,
   onTaskCreationOpenChange,
 }: {
-  config: RuntimeConfig | null
   view: OperatorView
   canCreateTask: boolean
   themeMode: ThemeMode
@@ -717,7 +704,6 @@ function ShellHeader({
   taskCreationOpen: boolean
   onSearchChange: (value: string) => void
   onViewChange: (value: OperatorView) => void
-  onThemeModeChange: (value: ThemeMode) => void
   onCycleThemeMode: () => void
   onSidebarOpenChange: (value: boolean) => void
   onShowArchivedChange: (value: boolean) => void
@@ -799,17 +785,6 @@ function ShellHeader({
             onNewFirstStepTitleChange={onNewFirstStepTitleChange}
           />
         ) : null}
-        <Badge variant="secondary">actor {config?.actor ?? "-"}</Badge>
-        <Badge variant="ready">local dispatcher</Badge>
-        <MenuSelect
-          ariaLabel="Theme mode"
-          prefix="Theme"
-          options={themeModeOptions}
-          value={themeMode}
-          onValueChange={onThemeModeChange}
-          triggerClassName="min-w-28"
-          align="end"
-        />
         <Button variant="ghost" size="icon" aria-label="Cycle theme mode" title={`Theme: ${themeMode}`} onClick={onCycleThemeMode}>
           <ThemeIcon className="h-4 w-4" />
         </Button>

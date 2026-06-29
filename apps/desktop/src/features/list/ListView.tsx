@@ -40,6 +40,7 @@ import {
   listColumnLabels,
   selectedRowCount,
   sortForColumn,
+  stepProgressForTask,
   togglePlanFilter,
   togglePriorityFilter,
   type ListColumnId,
@@ -228,14 +229,9 @@ export function ListView({
         cell: ({ row }) => <ExecutionPlanBadge task={row.original} />,
       },
       {
-        id: "required_steps",
-        header: ({ column }) => <StaticHeader columnId="required_steps" onHide={() => column.toggleVisibility(false)} />,
-        cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.required_step_count}</span>,
-      },
-      {
-        id: "done_required_steps",
-        header: ({ column }) => <StaticHeader columnId="done_required_steps" onHide={() => column.toggleVisibility(false)} />,
-        cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.completed_required_step_count}</span>,
+        id: "step_progress",
+        header: ({ column }) => <StaticHeader columnId="step_progress" onHide={() => column.toggleVisibility(false)} />,
+        cell: ({ row }) => <StepProgressCell task={row.original} />,
       },
       {
         id: "dependency_blocked",
@@ -509,6 +505,41 @@ function ExecutionPlanBadge({ task }: { task: Task }) {
   }
   if (task.execution_plan_state === "not_required") return <Badge variant="secondary">not required</Badge>
   return <Badge variant="blocked">plan needed</Badge>
+}
+
+function StepProgressCell({ task }: { task: Task }) {
+  const progress = stepProgressForTask(task)
+  if (!progress) return <span className="text-xs text-muted-foreground">-</span>
+
+  const label = `${progress.completed}/${progress.total} required steps`
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          aria-label={`Required step progress: ${label}`}
+          aria-valuemax={100}
+          aria-valuemin={0}
+          aria-valuenow={progress.percent}
+          className="inline-flex w-28 items-center gap-2 rounded-sm text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          role="progressbar"
+          tabIndex={0}
+        >
+          <span
+            aria-hidden="true"
+            className="relative h-7 w-7 shrink-0 rounded-full border border-border shadow-sm"
+            style={{
+              background: `conic-gradient(var(--status-ready-fg) ${progress.percent}%, var(--muted) ${progress.percent}% 100%)`,
+            }}
+          >
+            <span className="absolute inset-1.5 rounded-full bg-card" />
+          </span>
+          <span className="font-medium text-foreground">{progress.completed}/{progress.total}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
 }
 
 function DependencyBlockedBadge({ task }: { task: Task }) {

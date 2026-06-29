@@ -391,7 +391,7 @@ fn handle_label_atom_index(
         }
         crate::args::LabelAtomIndexCommand::Rebuild(args) => {
             let status =
-                rebuild_configured_label_atom_index(db_path, board, args.vector_config.as_path())?;
+                rebuild_configured_label_atom_index(db_path, board, args.vector_config.as_deref())?;
             print_or_json(json, &status, || {
                 format!(
                     "label atom index backend={} enabled={}: {}",
@@ -407,7 +407,7 @@ fn handle_label_atom_index(
                 &args.text,
                 args.polarity,
                 args.limit,
-                args.vector_config.as_path(),
+                args.vector_config.as_deref(),
             )?;
             print_or_json(json, &hits, || {
                 if hits.is_empty() {
@@ -1380,14 +1380,6 @@ fn label_atom_index_status_optional_config(
 fn rebuild_configured_label_atom_index(
     db_path: &Path,
     board: &str,
-    vector_config_path: &std::path::Path,
-) -> Result<kanban_vector::VectorStoreStatus> {
-    rebuild_configured_label_atom_index_optional(db_path, board, Some(vector_config_path))
-}
-
-fn rebuild_configured_label_atom_index_optional(
-    db_path: &Path,
-    board: &str,
     vector_config_path: Option<&std::path::Path>,
 ) -> Result<kanban_vector::VectorStoreStatus> {
     let store = subprocess_vector_store(db_path, board, vector_config_path)?;
@@ -1416,9 +1408,9 @@ fn query_configured_label_atom_index(
     text: &str,
     polarity: Option<LabelAtomPolarityArg>,
     limit: usize,
-    vector_config_path: &std::path::Path,
+    vector_config_path: Option<&std::path::Path>,
 ) -> Result<Vec<kanban_vector::LabelAtomHit>> {
-    let store = subprocess_vector_store(db_path, board, Some(vector_config_path))?;
+    let store = subprocess_vector_store(db_path, board, vector_config_path)?;
     kanban_sqlite::query_label_atom_index_with(
         db_path,
         board,

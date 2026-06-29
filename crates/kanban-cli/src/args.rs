@@ -428,7 +428,7 @@ pub(crate) struct LabelAtomIndexStatusArgs {
 #[derive(Debug, Args)]
 pub(crate) struct LabelAtomIndexRebuildArgs {
     #[arg(long = "vector-config", alias = "config")]
-    pub(crate) vector_config: std::path::PathBuf,
+    pub(crate) vector_config: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -439,7 +439,7 @@ pub(crate) struct LabelAtomIndexQueryArgs {
     #[arg(long, default_value_t = 24)]
     pub(crate) limit: usize,
     #[arg(long = "vector-config", alias = "config")]
-    pub(crate) vector_config: std::path::PathBuf,
+    pub(crate) vector_config: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]

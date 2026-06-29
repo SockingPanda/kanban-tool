@@ -31,8 +31,7 @@ export type ListColumnId =
   | "priority"
   | "assignee"
   | "execution_plan"
-  | "required_steps"
-  | "done_required_steps"
+  | "step_progress"
   | "dependency_blocked"
   | "schedule"
   | "updated"
@@ -46,8 +45,7 @@ export const listColumnLabels: Record<ListColumnId, string> = {
   priority: "Priority",
   assignee: "Assignee",
   execution_plan: "Execution plan",
-  required_steps: "Required steps",
-  done_required_steps: "Done required steps",
+  step_progress: "Step progress",
   dependency_blocked: "Dependency blocked",
   schedule: "Scheduled / due",
   updated: "Updated",
@@ -62,8 +60,7 @@ export const defaultListColumnVisibility: Record<ListColumnId, boolean> = {
   priority: true,
   assignee: true,
   execution_plan: true,
-  required_steps: true,
-  done_required_steps: true,
+  step_progress: true,
   dependency_blocked: true,
   schedule: true,
   updated: true,
@@ -107,6 +104,16 @@ export function filterListTasks(tasks: Task[], status: TaskStatus | "all", prior
 
 export function selectedRowCount(selection: Record<string, boolean>) {
   return Object.values(selection).filter(Boolean).length
+}
+
+export function stepProgressForTask(task: Task) {
+  if (task.required_step_count <= 0) return null
+
+  return {
+    completed: task.completed_required_step_count,
+    percent: Math.min(100, Math.max(0, Math.round((task.completed_required_step_count / task.required_step_count) * 100))),
+    total: task.required_step_count,
+  }
 }
 
 function matchesStatus(task: Task, status: TaskStatus | "all") {

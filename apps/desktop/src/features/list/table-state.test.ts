@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest"
 import type { Task } from "@/lib/api"
 
 import {
+  defaultListColumnVisibility,
   defaultListSort,
   filterListTasks,
   hasActiveListFilters,
+  listColumnLabels,
   listSortToApiSort,
   selectedRowCount,
   sortForColumn,
+  stepProgressForTask,
   togglePlanFilter,
   togglePriorityFilter,
 } from "./table-state"
@@ -82,6 +85,34 @@ describe("list table state helpers", () => {
     expect(sortForColumn("ref")).toBe("seq")
     expect(sortForColumn("schedule")).toBe("scheduled_at")
     expect(sortForColumn("select")).toBeNull()
+  })
+
+  it("exposes one step progress column instead of separate required counters", () => {
+    expect(listColumnLabels.step_progress).toBe("Step progress")
+    expect(defaultListColumnVisibility.step_progress).toBe(true)
+    expect(Object.keys(listColumnLabels)).not.toContain("required_steps")
+    expect(Object.keys(listColumnLabels)).not.toContain("done_required_steps")
+    expect(Object.keys(defaultListColumnVisibility)).not.toContain("required_steps")
+    expect(Object.keys(defaultListColumnVisibility)).not.toContain("done_required_steps")
+  })
+
+  it("derives clamped required step progress metrics", () => {
+    expect(stepProgressForTask(task("t_1", "ready", 1, { required_step_count: 4, completed_required_step_count: 3 }))).toEqual({
+      completed: 3,
+      percent: 75,
+      total: 4,
+    })
+    expect(stepProgressForTask(task("t_2", "ready", 1, { required_step_count: 4, completed_required_step_count: 8 }))).toEqual({
+      completed: 8,
+      percent: 100,
+      total: 4,
+    })
+    expect(stepProgressForTask(task("t_3", "ready", 1, { required_step_count: 4, completed_required_step_count: -1 }))).toEqual({
+      completed: -1,
+      percent: 0,
+      total: 4,
+    })
+    expect(stepProgressForTask(task("t_4", "ready", 1, { required_step_count: 0, completed_required_step_count: 0 }))).toBeNull()
   })
 
   it("toggles a multi-priority filter in stable order", () => {

@@ -11,3 +11,6 @@ strum.workspace = true
 thiserror.workspace = true
 time.workspace = true
 ulid.workspace = true
+
+[dev-dependencies]
+proptest = "1.11.0"

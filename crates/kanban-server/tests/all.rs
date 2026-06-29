@@ -10,6 +10,7 @@ mod suite {
     mod events;
     mod health;
     mod maintenance;
+    mod observability;
     mod runs;
     mod search;
     mod server_helpers;

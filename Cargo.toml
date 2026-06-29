@@ -65,6 +65,8 @@ thiserror = "2.0"
 time = { version = "0.3", features = ["formatting", "parsing"] }
 tokio = { version = "1.38", features = ["macros", "rt-multi-thread", "net"] }
 tower = { version = "0.5", features = ["util"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 ulid = "1.1"
 
 kanban-core = { path = "crates/kanban-core" }

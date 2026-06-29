@@ -201,7 +201,7 @@ just test-helpers     # tests helper-heavy backend crates
 just clippy-helpers   # clippy for helper-heavy backend crates
 
 just check-full       # check-core followed by check-helpers
-just test-full        # test-core followed by test-helpers
+just test-full        # full workspace Rust tests excluding desktop
 just clippy-full      # clippy-core followed by clippy-helpers
 just rust-full        # fmt + core/helper check, test, and clippy
 ```

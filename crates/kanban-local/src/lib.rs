@@ -177,7 +177,12 @@ pub fn project_config_path_for_write() -> io::Result<PathBuf> {
 
 pub fn read_project_config(path: &Path) -> Result<ProjectConfig, ConfigError> {
     let text = fs::read_to_string(path)?;
-    Ok(toml::from_str(&text)?)
+    let deserializer = toml::Deserializer::new(&text);
+    serde_path_to_error::deserialize(deserializer).map_err(|err| ConfigError::FileParse {
+        path: path.to_path_buf(),
+        field_path: err.path().to_string(),
+        source: err.into_inner(),
+    })
 }
 
 pub fn write_project_config(path: &Path, config: &ProjectConfig) -> Result<(), ConfigError> {
@@ -249,6 +254,13 @@ pub fn nearest_active_board_config() -> Result<Option<String>, ConfigError> {
 pub enum ConfigError {
     #[error("{0}")]
     Io(#[from] io::Error),
+    #[error("failed to parse config {path} at {field_path}: {source}")]
+    FileParse {
+        path: PathBuf,
+        field_path: String,
+        #[source]
+        source: toml::de::Error,
+    },
     #[error("{0}")]
     Parse(#[from] toml::de::Error),
     #[error("{0}")]
@@ -338,6 +350,29 @@ mod tests {
             read_project_config(&global).unwrap().vector.unwrap().model,
             "global"
         );
+    }
+
+    #[test]
+    fn project_config_parse_error_includes_file_and_field_path() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join(".kb").join("config.toml");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            &path,
+            r#"
+[vector]
+provider = "ollama"
+endpoint = "http://127.0.0.1:11434"
+model = "qwen3-embedding:0.6b"
+dimensions = "large"
+"#,
+        )
+        .unwrap();
+
+        let error = read_project_config(&path).unwrap_err().to_string();
+
+        assert!(error.contains(path.to_string_lossy().as_ref()), "{error}");
+        assert!(error.contains("vector.dimensions"), "{error}");
     }
 
     #[test]

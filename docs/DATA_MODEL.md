@@ -190,8 +190,7 @@ Task public identity 有两层：
 ### 5.2 Priority 语义
 
 `priority` 表示任务的相对重要性和排序权重，不表示状态机可执行性。`ready`
-表示任务已经被人工或服务显式放入可 claim 队列；P0-P3 只影响列表、DAG/frontier
-和 dispatcher 在可选任务之间的排序。
+表示任务已经被人工或服务显式放入可 claim 队列；P0-P3 只影响列表和 dispatcher 在可选任务之间的排序。
 
 优先级约定：
 

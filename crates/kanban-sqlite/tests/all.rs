@@ -5,7 +5,6 @@ mod suite {
     mod comments;
     mod concurrency;
     mod context;
-    mod dag;
     mod dependencies;
     mod derived_outbox;
     mod dispatch;

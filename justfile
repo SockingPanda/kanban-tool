@@ -89,8 +89,7 @@ test-helpers *args:
         -p kanban-vector-lancedb -p kanban-graph-oxigraph "$@"; fi
 
 test-full *args:
-    just test-core "$@"
-    just test-helpers "$@"
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop "$@"; fi
 
 clippy-core *args:
     scripts/cargo-build-lock.sh -- cargo clippy --all-targets \

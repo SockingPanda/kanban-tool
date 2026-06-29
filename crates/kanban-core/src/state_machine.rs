@@ -142,6 +142,23 @@ pub const fn retry_decision(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+
+    const PROPTEST_CASES: u32 = 64;
+
+    fn task_status_strategy() -> impl Strategy<Value = TaskStatus> {
+        prop_oneof![
+            Just(TaskStatus::Triage),
+            Just(TaskStatus::Todo),
+            Just(TaskStatus::Scheduled),
+            Just(TaskStatus::Ready),
+            Just(TaskStatus::Running),
+            Just(TaskStatus::Blocked),
+            Just(TaskStatus::Review),
+            Just(TaskStatus::Done),
+            Just(TaskStatus::Archived),
+        ]
+    }
 
     fn ready_facts() -> ReadinessFacts<'static> {
         ReadinessFacts {
@@ -210,6 +227,109 @@ mod tests {
             TaskStatus::Todo
         );
         assert_eq!(recompute_ready_status(ready_facts(), 10), TaskStatus::Ready);
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig { cases: PROPTEST_CASES, .. ProptestConfig::default() })]
+
+        #[test]
+        fn recompute_ready_status_preserves_priority_order(
+            title_present in any::<bool>(),
+            description_present in any::<bool>(),
+            schedule_delta in -8_i64..=8,
+            dependencies_done in any::<bool>(),
+            now in -1_000_i64..=1_000,
+        ) {
+            let facts = ReadinessFacts {
+                title: if title_present { "ship" } else { "   " },
+                description: description_present.then_some("ready spec"),
+                scheduled_at: Some(now + schedule_delta),
+                dependencies_done,
+            };
+
+            let expected = if !title_present || !description_present {
+                TaskStatus::Triage
+            } else if schedule_delta > 0 {
+                TaskStatus::Scheduled
+            } else if !dependencies_done {
+                TaskStatus::Todo
+            } else {
+                TaskStatus::Ready
+            };
+
+            prop_assert_eq!(recompute_ready_status(facts, now), expected);
+        }
+
+        #[test]
+        fn initial_status_explicit_guard_invariants(
+            explicit in task_status_strategy(),
+            title_present in any::<bool>(),
+            description_present in any::<bool>(),
+            scheduled in prop::option::of(-8_i64..=8),
+            dependencies_done in any::<bool>(),
+            now in -1_000_i64..=1_000,
+        ) {
+            let facts = ReadinessFacts {
+                title: if title_present { "ship" } else { "" },
+                description: description_present.then_some("ready spec"),
+                scheduled_at: scheduled.map(|delta| now + delta),
+                dependencies_done,
+            };
+
+            let result = initial_status(Some(explicit), facts, now);
+            let ready_guard_allows = title_present
+                && description_present
+                && scheduled.is_none_or(|delta| delta <= 0);
+            let should_accept = match explicit {
+                TaskStatus::Triage | TaskStatus::Todo => true,
+                TaskStatus::Scheduled => scheduled.is_some(),
+                TaskStatus::Ready => ready_guard_allows,
+                TaskStatus::Running
+                | TaskStatus::Blocked
+                | TaskStatus::Review
+                | TaskStatus::Done
+                | TaskStatus::Archived => false,
+            };
+
+            if should_accept {
+                prop_assert_eq!(result.unwrap(), explicit);
+            } else {
+                prop_assert!(matches!(result, Err(KanbanError::InvalidInput(_))));
+            }
+        }
+
+        #[test]
+        fn transition_helper_semantics_are_stable(
+            current in task_status_strategy(),
+            target in task_status_strategy(),
+            has_claim_token in any::<bool>(),
+            has_current_run in any::<bool>(),
+            existing_completed_at in prop::option::of(-1_000_i64..=1_000),
+            now in -1_000_i64..=1_000,
+        ) {
+            prop_assert_eq!(
+                is_claimable_task(current, has_claim_token),
+                matches!(current, TaskStatus::Ready) && !has_claim_token
+            );
+            prop_assert_eq!(
+                can_complete_from(current),
+                matches!(current, TaskStatus::Running | TaskStatus::Review)
+            );
+            prop_assert_eq!(can_reopen_from(current), matches!(current, TaskStatus::Done));
+            prop_assert_eq!(
+                can_finish_to(current, target),
+                matches!(current, TaskStatus::Running)
+                    || matches!((current, target), (TaskStatus::Review, TaskStatus::Done))
+            );
+            prop_assert_eq!(
+                running_claim_is_present(current, has_claim_token, has_current_run),
+                matches!(current, TaskStatus::Running) && has_claim_token && has_current_run
+            );
+            prop_assert_eq!(
+                completed_at_for_finish(target, now, existing_completed_at),
+                if matches!(target, TaskStatus::Done) { Some(now) } else { existing_completed_at }
+            );
+        }
     }
 
     #[test]

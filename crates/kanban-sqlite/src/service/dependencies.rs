@@ -1,9 +1,10 @@
 use crate::connect_file;
 
 use super::{
-    TaskRecord, board_id, delete_dependency_relation, dependency_parent_is_satisfied,
-    ensure_board_active, get_task_by_id, guarded_set_status, insert_event, recompute_ready_status,
-    resolve_task, storage, upsert_dependency_relation, with_immediate_tx,
+    DependencyEdgeRecord, DependencySnapshot, DependencyTaskRecord, TaskRecord, board_id,
+    delete_dependency_relation, dependency_parent_is_satisfied, ensure_board_active,
+    get_task_by_id, guarded_set_status, insert_event, recompute_ready_status, resolve_task,
+    storage, upsert_dependency_relation, with_immediate_tx,
 };
 
 use std::{
@@ -172,6 +173,27 @@ pub fn remove_dependency(
     })
 }
 
+pub fn dependency_edge(
+    path: impl AsRef<Path>,
+    board: &str,
+    parent_ref: &str,
+    child_ref: &str,
+) -> Result<DependencyEdgeRecord> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    dependency_edge_conn(&conn, &board_id, parent_ref, child_ref)
+}
+
+pub fn dependency_snapshot(
+    path: impl AsRef<Path>,
+    board: &str,
+    task_ref: &str,
+) -> Result<DependencySnapshot> {
+    let conn = connect_file(path.as_ref())?;
+    let board_id = board_id(&conn, board)?;
+    dependency_snapshot_conn(&conn, &board_id, task_ref)
+}
+
 pub fn list_dependencies(
     path: impl AsRef<Path>,
     board: &str,
@@ -180,9 +202,78 @@ pub fn list_dependencies(
     let conn = connect_file(path.as_ref())?;
     let board_id = board_id(&conn, board)?;
     let task = resolve_task(&conn, &board_id, task_ref)?;
-    let mut stmt = conn.prepare("SELECT parent_task_id, child_task_id FROM task_dependencies WHERE parent_task_id=?1 OR child_task_id=?1 ORDER BY created_at ASC").map_err(storage)?;
+    list_dependency_ids_conn(&conn, &task.id)
+}
+
+fn dependency_edge_conn(
+    conn: &Connection,
+    board_id: &str,
+    parent_ref: &str,
+    child_ref: &str,
+) -> Result<DependencyEdgeRecord> {
+    let parent = resolve_task(conn, board_id, parent_ref)?;
+    let child = resolve_task(conn, board_id, child_ref)?;
+    Ok(edge_record(parent, child))
+}
+
+fn dependency_snapshot_conn(
+    conn: &Connection,
+    board_id: &str,
+    task_ref: &str,
+) -> Result<DependencySnapshot> {
+    let task = resolve_task(conn, board_id, task_ref)?;
+    let task_id = task.id.clone();
+    let edges = dependency_edges_for_task_conn(conn, board_id, &task_id)?;
+    let mut parents = Vec::new();
+    let mut children = Vec::new();
+    for edge in &edges {
+        if edge.child.id == task_id {
+            parents.push(edge.parent.clone());
+        }
+        if edge.parent.id == task_id {
+            children.push(edge.child.clone());
+        }
+    }
+    Ok(DependencySnapshot {
+        task: DependencyTaskRecord::from(task),
+        parents,
+        children,
+        edges,
+    })
+}
+
+fn dependency_edges_for_task_conn(
+    conn: &Connection,
+    board_id: &str,
+    task_id: &str,
+) -> Result<Vec<DependencyEdgeRecord>> {
+    list_dependency_ids_conn(conn, task_id)?
+        .into_iter()
+        .map(|(parent_id, child_id)| {
+            let parent = get_task_by_id(conn, board_id, &parent_id)?;
+            let child = get_task_by_id(conn, board_id, &child_id)?;
+            Ok(edge_record(parent, child))
+        })
+        .collect()
+}
+
+fn edge_record(parent: TaskRecord, child: TaskRecord) -> DependencyEdgeRecord {
+    DependencyEdgeRecord {
+        parent: DependencyTaskRecord::from(parent),
+        child: DependencyTaskRecord::from(child),
+    }
+}
+
+fn list_dependency_ids_conn(conn: &Connection, task_id: &str) -> Result<Vec<(String, String)>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT parent_task_id, child_task_id FROM task_dependencies \
+             WHERE parent_task_id=?1 OR child_task_id=?1 \
+             ORDER BY created_at ASC, parent_task_id ASC, child_task_id ASC",
+        )
+        .map_err(storage)?;
     let rows = stmt
-        .query_map([task.id], |row| Ok((row.get(0)?, row.get(1)?)))
+        .query_map([task_id], |row| Ok((row.get(0)?, row.get(1)?)))
         .map_err(storage)?;
     rows.collect::<std::result::Result<Vec<_>, _>>()
         .map_err(storage)

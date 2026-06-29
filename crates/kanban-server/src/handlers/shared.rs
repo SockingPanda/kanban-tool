@@ -175,24 +175,33 @@ pub(crate) fn dependencies_dto(
     task_id: &str,
 ) -> Result<DependenciesDto, ApiError> {
     let task = kanban_sqlite::get_task_by_id_global(state.db_path(), task_id)?;
-    let edges = kanban_sqlite::list_dependencies(state.db_path(), &task.board_id, task_id)?;
+    let snapshot = kanban_sqlite::dependency_snapshot(state.db_path(), &task.board_id, task_id)?;
     let mut parents = Vec::new();
     let mut children = Vec::new();
-    for (parent_id, child_id) in edges {
-        if child_id == task_id {
+    for edge in &snapshot.edges {
+        if edge.child.id == task_id {
             parents.push(TaskDto::from(kanban_sqlite::get_task_by_id_global(
                 state.db_path(),
-                &parent_id,
+                &edge.parent.id,
             )?));
         }
-        if parent_id == task_id {
+        if edge.parent.id == task_id {
             children.push(TaskDto::from(kanban_sqlite::get_task_by_id_global(
                 state.db_path(),
-                &child_id,
+                &edge.child.id,
             )?));
         }
     }
-    Ok(DependenciesDto { parents, children })
+    Ok(DependenciesDto {
+        task: DependencyTaskDto::from(snapshot.task),
+        parents,
+        children,
+        edges: snapshot
+            .edges
+            .into_iter()
+            .map(DependencyEdgeDto::from)
+            .collect(),
+    })
 }
 
 pub(crate) fn optional_json_body<T: Default>(

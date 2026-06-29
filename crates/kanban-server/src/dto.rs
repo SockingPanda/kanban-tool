@@ -226,9 +226,50 @@ pub(super) struct ClaimDto {
 }
 
 #[derive(Debug, Serialize)]
+pub(super) struct DependencyTaskDto {
+    pub(super) id: String,
+    pub(super) board_id: String,
+    pub(super) board_slug: String,
+    #[serde(rename = "ref")]
+    pub(super) task_ref: String,
+    pub(super) title: String,
+    pub(super) status: TaskStatus,
+}
+
+impl From<kanban_sqlite::DependencyTaskRecord> for DependencyTaskDto {
+    fn from(task: kanban_sqlite::DependencyTaskRecord) -> Self {
+        Self {
+            id: task.id,
+            board_id: task.board_id,
+            board_slug: task.board_slug,
+            task_ref: task.task_ref,
+            title: task.title,
+            status: task.status,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct DependencyEdgeDto {
+    pub(super) parent: DependencyTaskDto,
+    pub(super) child: DependencyTaskDto,
+}
+
+impl From<kanban_sqlite::DependencyEdgeRecord> for DependencyEdgeDto {
+    fn from(edge: kanban_sqlite::DependencyEdgeRecord) -> Self {
+        Self {
+            parent: DependencyTaskDto::from(edge.parent),
+            child: DependencyTaskDto::from(edge.child),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub(super) struct DependenciesDto {
+    pub(super) task: DependencyTaskDto,
     pub(super) parents: Vec<TaskDto>,
     pub(super) children: Vec<TaskDto>,
+    pub(super) edges: Vec<DependencyEdgeDto>,
 }
 
 #[derive(Debug, Serialize)]

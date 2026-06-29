@@ -3877,6 +3877,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "clap_complete",
+ "insta",
  "kanban-context",
  "kanban-core",
  "kanban-derived-io",

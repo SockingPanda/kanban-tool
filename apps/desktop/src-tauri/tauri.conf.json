@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Kanban Tool",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "identifier": "dev.kanban-user.kanban",
   "build": {
     "beforeDevCommand": "pnpm dev --host 127.0.0.1",

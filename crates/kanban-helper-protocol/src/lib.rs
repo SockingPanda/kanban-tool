@@ -26,8 +26,11 @@ impl HelperEnvelope {
 
     pub fn decode<T: DeserializeOwned>(&self) -> Result<T> {
         self.ensure_supported_protocol()?;
-        serde_json::from_str(&self.payload_json)
-            .map_err(|err| KanbanError::InvalidInput(err.to_string()))
+        let mut deserializer = serde_json::Deserializer::from_str(&self.payload_json);
+        serde_path_to_error::deserialize(&mut deserializer).map_err(|err| {
+            let path = json_path("payload_json", &err.path().to_string());
+            invalid_json_with_path("payload_json", path, err.into_inner())
+        })
     }
 
     pub fn to_json(&self) -> Result<String> {
@@ -35,8 +38,12 @@ impl HelperEnvelope {
     }
 
     pub fn from_json(json: &str) -> Result<Self> {
+        let mut deserializer = serde_json::Deserializer::from_str(json);
         let envelope: Self =
-            serde_json::from_str(json).map_err(|err| KanbanError::InvalidInput(err.to_string()))?;
+            serde_path_to_error::deserialize(&mut deserializer).map_err(|err| {
+                let path = json_path("helper envelope", &err.path().to_string());
+                invalid_json_with_path("helper envelope", path, err.into_inner())
+            })?;
         envelope.ensure_supported_protocol()?;
         Ok(envelope)
     }
@@ -49,6 +56,20 @@ impl HelperEnvelope {
             )));
         }
         Ok(())
+    }
+}
+
+fn invalid_json_with_path(context: &str, path: String, source: serde_json::Error) -> KanbanError {
+    KanbanError::InvalidInput(format!("{context} parse error at {path}: {source}"))
+}
+
+fn json_path(context: &str, path: &str) -> String {
+    if path == "." {
+        context.to_owned()
+    } else if context == "payload_json" {
+        format!("payload_json.{path}")
+    } else {
+        path.to_owned()
     }
 }
 
@@ -94,5 +115,38 @@ mod tests {
 
         let error = HelperEnvelope::from_json(&envelope.to_json().unwrap()).unwrap_err();
         assert!(error.to_string().contains("unsupported helper protocol"));
+    }
+
+    #[test]
+    fn decode_error_includes_payload_json_path() {
+        #[allow(dead_code)]
+        #[derive(Debug, Deserialize)]
+        struct NestedPayload {
+            nested: Nested,
+        }
+
+        #[allow(dead_code)]
+        #[derive(Debug, Deserialize)]
+        struct Nested {
+            count: usize,
+        }
+
+        let envelope = HelperEnvelope {
+            protocol: HELPER_PROTOCOL.to_owned(),
+            payload_json: r#"{"nested":{"count":"many"}}"#.to_owned(),
+        };
+
+        let error = envelope.decode::<NestedPayload>().unwrap_err().to_string();
+
+        assert!(error.contains("payload_json.nested.count"), "{error}");
+    }
+
+    #[test]
+    fn from_json_error_includes_envelope_json_path() {
+        let error = HelperEnvelope::from_json(r#"{"protocol":7,"payload_json":"{}"}"#)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("protocol"), "{error}");
     }
 }

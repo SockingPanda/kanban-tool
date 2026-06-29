@@ -1,6 +1,6 @@
 use std::{path::PathBuf, process};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::{Parser, Subcommand};
 use kanban_derived_io::{
     board_id, connect_file, current_last_event_id, derived_status_by_name,
@@ -169,10 +169,9 @@ fn run() -> Result<()> {
             print_payload(hits)
         }
         Command::QueryLabelAtoms(args) => {
-            let store = configured_store(&args.store)?;
             if let Some(vector_json) = args.vector_json {
-                let vector: Vec<f32> =
-                    serde_json::from_str(&vector_json).context("invalid --vector-json payload")?;
+                let vector = parse_vector_json(&vector_json)?;
+                let store = configured_store(&args.store)?;
                 let hits = store.query_label_atoms_by_vector(&LabelAtomVectorQuery {
                     vector,
                     limit: args.limit,
@@ -183,6 +182,7 @@ fn run() -> Result<()> {
                 })?;
                 print_payload(hits)
             } else {
+                let store = configured_store(&args.store)?;
                 let hits = store.query_label_atoms(&LabelAtomQuery {
                     text: args.text.unwrap_or_default(),
                     limit: args.limit,
@@ -215,6 +215,22 @@ fn run() -> Result<()> {
             print_payload(provider.embed(&args.text)?)
         }
     }
+}
+
+fn parse_vector_json(vector_json: &str) -> Result<Vec<f32>> {
+    let mut deserializer = serde_json::Deserializer::from_str(vector_json);
+    serde_path_to_error::deserialize(&mut deserializer).map_err(|err| {
+        let path = err.path().to_string();
+        let path = if path == "." {
+            "<root>".to_owned()
+        } else {
+            path
+        };
+        anyhow!(
+            "invalid --vector-json payload at {path}: {}",
+            err.into_inner()
+        )
+    })
 }
 
 fn label_atom_status(args: &StoreArgs) -> Result<VectorStoreStatus> {

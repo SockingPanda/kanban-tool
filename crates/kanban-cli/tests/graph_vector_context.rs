@@ -473,8 +473,8 @@ fn context_build_command_rejects_zero_max_items() -> anyhow::Result<()> {
 
 #[cfg(unix)]
 #[test]
-fn label_atom_index_status_and_rebuild_use_label_atom_helper_commands() -> anyhow::Result<()> {
-    let temp = TempDb::new("label_atom_index_status_and_rebuild_use_label_atom_helper_commands")?;
+fn label_atom_index_commands_use_label_atom_helper_commands() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_atom_index_commands_use_label_atom_helper_commands")?;
     kanban(&temp.path, &["init"])?.success()?;
     let vector_config = temp.dir.join("vector.toml");
     std::fs::write(
@@ -503,8 +503,23 @@ if cmd == "status":
 if cmd == "label-atoms-status":
     payload = {{"backend":"label-helper","enabled":True,"message":"label status","diagnostics":["label_atom_helper"],"dirty":False,"board_dirty":False}}
 elif cmd == "rebuild-label-atoms":
-    assert "--vector-config" in args, args
     payload = {{"backend":"label-helper","enabled":True,"message":"rebuilt labels","diagnostics":["label_atom_helper"],"dirty":False,"board_dirty":False}}
+elif cmd == "query-label-atoms":
+    payload = [{{
+        "hit": {{
+            "atom_id":"atom_backend_positive",
+            "label_id":"label_backend",
+            "label_name":"backend",
+            "board_id":"b_default",
+            "polarity":"positive",
+            "kind":"applies_when",
+            "text":"touches rust service code",
+            "ordinal":0,
+            "content_hash":"hash",
+            "embedding_model":"review-model",
+            "distance":0.0
+        }}
+    }}]
 else:
     raise SystemExit("unexpected command " + cmd)
 print(json.dumps({{"protocol":"kanban-derived-helper.v1","payload_json":json.dumps(payload)}}))
@@ -522,7 +537,25 @@ print(json.dumps({{"protocol":"kanban-derived-helper.v1","payload_json":json.dum
     .success_json()?;
     assert_eq!(status["data"]["backend"], "label-helper");
 
-    let rebuilt = kanban_in_dir_envs(
+    let rebuilt_without_config = kanban_in_dir_envs(
+        &temp.path,
+        &["--json", "label", "atom-index", "rebuild"],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", helper.as_path())],
+    )?
+    .success_json()?;
+    assert_eq!(rebuilt_without_config["data"]["message"], "rebuilt labels");
+
+    let query_without_config = kanban_in_dir_envs(
+        &temp.path,
+        &["--json", "label", "atom-index", "query", "backend"],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", helper.as_path())],
+    )?
+    .success_json()?;
+    assert_eq!(query_without_config["data"][0]["label_name"], "backend");
+
+    let rebuilt_with_config = kanban_in_dir_envs(
         &temp.path,
         &[
             "--json",
@@ -536,9 +569,30 @@ print(json.dumps({{"protocol":"kanban-derived-helper.v1","payload_json":json.dum
         &[("KANBAN_VECTOR_HELPER", helper.as_path())],
     )?
     .success_json()?;
-    assert_eq!(rebuilt["data"]["message"], "rebuilt labels");
+    assert_eq!(rebuilt_with_config["data"]["message"], "rebuilt labels");
+
+    let query_with_config = kanban_in_dir_envs(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "atom-index",
+            "query",
+            "backend",
+            "--vector-config",
+            vector_config.to_str().context("vector config")?,
+        ],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", helper.as_path())],
+    )?
+    .success_json()?;
+    assert_eq!(query_with_config["data"][0]["label_name"], "backend");
 
     let calls = std::fs::read_to_string(&log)?;
+    let parsed_calls = calls
+        .lines()
+        .map(serde_json::from_str::<Vec<String>>)
+        .collect::<Result<Vec<_>, _>>()?;
     assert!(
         calls
             .lines()
@@ -549,6 +603,32 @@ print(json.dumps({{"protocol":"kanban-derived-helper.v1","payload_json":json.dum
         calls
             .lines()
             .any(|line| line.contains("rebuild-label-atoms")),
+        "{calls}"
+    );
+    let rebuild_calls: Vec<_> = parsed_calls
+        .iter()
+        .filter(|args| args.first().is_some_and(|arg| arg == "rebuild-label-atoms"))
+        .collect();
+    assert_eq!(rebuild_calls.len(), 2, "{calls}");
+    assert!(
+        !rebuild_calls[0].iter().any(|arg| arg == "--vector-config"),
+        "{calls}"
+    );
+    assert!(
+        rebuild_calls[1].iter().any(|arg| arg == "--vector-config"),
+        "{calls}"
+    );
+    let query_calls: Vec<_> = parsed_calls
+        .iter()
+        .filter(|args| args.first().is_some_and(|arg| arg == "query-label-atoms"))
+        .collect();
+    assert_eq!(query_calls.len(), 2, "{calls}");
+    assert!(
+        !query_calls[0].iter().any(|arg| arg == "--vector-config"),
+        "{calls}"
+    );
+    assert!(
+        query_calls[1].iter().any(|arg| arg == "--vector-config"),
         "{calls}"
     );
     assert!(

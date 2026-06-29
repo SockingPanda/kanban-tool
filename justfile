@@ -1,6 +1,8 @@
 set positional-arguments
 set shell := ["bash", "-cu"]
 
+audit-ignore-flags := "--ignore RUSTSEC-2024-0370 --ignore RUSTSEC-2024-0411 --ignore RUSTSEC-2024-0412 --ignore RUSTSEC-2024-0413 --ignore RUSTSEC-2024-0414 --ignore RUSTSEC-2024-0415 --ignore RUSTSEC-2024-0416 --ignore RUSTSEC-2024-0417 --ignore RUSTSEC-2024-0418 --ignore RUSTSEC-2024-0419 --ignore RUSTSEC-2024-0420 --ignore RUSTSEC-2024-0429 --ignore RUSTSEC-2024-0436 --ignore RUSTSEC-2025-0075 --ignore RUSTSEC-2025-0080 --ignore RUSTSEC-2025-0081 --ignore RUSTSEC-2025-0098 --ignore RUSTSEC-2025-0100 --ignore RUSTSEC-2026-0186"
+
 fmt:
     cargo fmt -- --check
 
@@ -151,6 +153,10 @@ desktop-package-layout:
 smoke:
     scripts/smoke-v1-local.sh
 
+audit:
+    cargo deny check
+    cargo audit -D warnings {{audit-ignore-flags}}
+
 target-tools:
     scripts/test-cargo-target-tools.sh
     scripts/test-helper-cargo-tree.sh
@@ -176,6 +182,7 @@ feature-p package features:
 
 release:
     just affected-self-test
+    just audit
     just rust-full
     just target-tools
     just cli-package

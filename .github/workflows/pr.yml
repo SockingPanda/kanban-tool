@@ -18,6 +18,7 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       desktop: ${{ steps.filter.outputs.desktop }}
       desktop-rust: ${{ steps.filter.outputs.desktop-rust }}
+      dependency_audit: ${{ steps.filter.outputs.dependency_audit }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,6 +39,13 @@ jobs:
               - 'rust-toolchain.toml'
               - 'scripts/*.sh'
               - 'scripts/**/*.sh'
+            dependency_audit:
+              - '.github/workflows/**'
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+              - 'deny.toml'
+              - 'justfile'
+              - 'Justfile'
             rust:
               - '.github/workflows/**'
               - '.config/nextest.toml'
@@ -188,6 +196,25 @@ jobs:
       - name: Check Tauri Rust
         run: cargo check -p kanban-desktop --tests
 
+  dependency-audit:
+    name: Dependency audit
+    needs: changes
+    if: needs.changes.outputs.dependency_audit == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install audit tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-deny,cargo-audit
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Audit dependencies
+        run: just audit
+
   pr-result:
     name: PR result
     needs:
@@ -196,6 +223,7 @@ jobs:
       - rust-default
       - desktop
       - desktop-rust
+      - dependency-audit
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -206,11 +234,12 @@ jobs:
           rust_result='${{ needs.rust-default.result }}'
           desktop_result='${{ needs.desktop.result }}'
           desktop_rust_result='${{ needs.desktop-rust.result }}'
+          dependency_audit_result='${{ needs.dependency-audit.result }}'
           if [[ "$changes_result" != "success" ]]; then
             echo "Changed-path detection finished with result: $changes_result"
             exit 1
           fi
-          for result in "$repo_meta_result" "$rust_result" "$desktop_result" "$desktop_rust_result"; do
+          for result in "$repo_meta_result" "$rust_result" "$desktop_result" "$desktop_rust_result" "$dependency_audit_result"; do
             case "$result" in
               success|skipped) ;;
               *) echo "A gated PR job finished with result: $result"; exit 1 ;;

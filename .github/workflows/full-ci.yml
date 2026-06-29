@@ -140,6 +140,23 @@ jobs:
         if: ${{ hashFiles('scripts/smoke-v1-local.sh') == '' }}
         run: echo "No smoke script found"
 
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install audit tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-deny,cargo-audit
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Audit dependencies
+        run: just audit
+
   full-ci-result:
     name: Full CI result
     needs:
@@ -147,6 +164,7 @@ jobs:
       - rust-features
       - desktop
       - smoke
+      - dependency-audit
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -156,7 +174,8 @@ jobs:
             '${{ needs.rust-default.result }}' \
             '${{ needs.rust-features.result }}' \
             '${{ needs.desktop.result }}' \
-            '${{ needs.smoke.result }}'
+            '${{ needs.smoke.result }}' \
+            '${{ needs.dependency-audit.result }}'
           do
             case "$result" in
               success) ;;

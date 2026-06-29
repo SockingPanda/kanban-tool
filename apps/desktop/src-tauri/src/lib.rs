@@ -107,6 +107,7 @@ pub fn run() {
         .setup(|app| {
             let runtime = start_embedded_api(app).map_err(|error| error.to_string())?;
             app.manage(runtime);
+            set_main_window_title(app).map_err(|error| error.to_string())?;
             setup_tray(app).map_err(|error| error.to_string())?;
             Ok(())
         })
@@ -123,6 +124,17 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running kanban desktop");
+}
+
+fn desktop_window_title() -> String {
+    concat!("kanban ", env!("CARGO_PKG_VERSION")).to_owned()
+}
+
+fn set_main_window_title(app: &tauri::App) -> tauri::Result<()> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or(tauri::Error::WindowNotFound)?;
+    window.set_title(&desktop_window_title())
 }
 
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
@@ -316,10 +328,10 @@ fn bundled_helper_path(app: &tauri::App, binary_name: &str) -> Option<PathBuf> {
     if let Ok(resource_dir) = app.path().resource_dir() {
         candidates.push(resource_dir.join(binary_name));
     }
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(dir) = current_exe.parent() {
-            candidates.push(dir.join(binary_name));
-        }
+    if let Ok(current_exe) = env::current_exe()
+        && let Some(dir) = current_exe.parent()
+    {
+        candidates.push(dir.join(binary_name));
     }
     first_existing_path(candidates)
 }
@@ -393,7 +405,7 @@ fn start_embedded_api(app: &tauri::App) -> Result<EmbeddedApiRuntime, String> {
 mod tests {
     use std::path::PathBuf;
 
-    use super::first_existing_path;
+    use super::{desktop_window_title, first_existing_path};
 
     struct TempDir {
         path: PathBuf,
@@ -430,6 +442,14 @@ mod tests {
         let path = first_existing_path([missing, first.clone(), second]).expect("helper path");
 
         assert_eq!(path, first);
+    }
+
+    #[test]
+    fn desktop_window_title_includes_package_version() {
+        assert_eq!(
+            desktop_window_title(),
+            format!("kanban {}", env!("CARGO_PKG_VERSION"))
+        );
     }
 
     #[test]

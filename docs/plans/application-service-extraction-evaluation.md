@@ -25,7 +25,7 @@ dispatcher CLI path
 
 Adapter 证据：
 
-- `kanban-cli` 的 task、label、dispatch、search、maintenance、board、comment、run、index、dag、context、serve 等命令调用 `kanban_sqlite::*`。
+- `kanban-cli` 的 task、label、dispatch、search、maintenance、board、comment、run、index、context、serve 等命令调用 `kanban_sqlite::*`。
 - `kanban-server` handlers 负责 HTTP DTO 转换，然后调用同一组 `kanban_sqlite::*` use cases。
 - `apps/desktop/src-tauri` 通过 `kanban_sqlite` 初始化 DB runtime，并通过同一 service layer 读取 boards。
 - `kanban dispatch` 是 CLI 入口，调用同一 SQLite dispatch service；当前没有独立 dispatcher business-logic crate。

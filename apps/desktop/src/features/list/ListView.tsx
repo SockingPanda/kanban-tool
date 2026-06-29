@@ -17,6 +17,7 @@ import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Label } from "@/components/ui/label"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
 import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination"
+import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
@@ -518,22 +519,18 @@ function StepProgressCell({ task }: { task: Task }) {
       <TooltipTrigger asChild>
         <span
           aria-label={`Required step progress: ${label}`}
-          aria-valuemax={100}
-          aria-valuemin={0}
-          aria-valuenow={progress.percent}
-          className="inline-flex w-28 items-center gap-2 rounded-sm text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          role="progressbar"
+          className="inline-flex w-32 items-center gap-2 rounded-sm text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           tabIndex={0}
         >
-          <span
-            aria-hidden="true"
-            className="relative h-7 w-7 shrink-0 rounded-full border border-border shadow-sm"
-            style={{
-              background: `conic-gradient(var(--status-ready-fg) ${progress.percent}%, var(--muted) ${progress.percent}% 100%)`,
-            }}
-          >
-            <span className="absolute inset-1.5 rounded-full bg-card" />
-          </span>
+          <Progress
+            aria-label={`Required step progress: ${label}`}
+            aria-valuemax={100}
+            aria-valuemin={0}
+            aria-valuenow={progress.percent}
+            className="h-2 w-20 shrink-0 bg-muted"
+            role="progressbar"
+            value={progress.percent}
+          />
           <span className="font-medium text-foreground">{progress.completed}/{progress.total}</span>
         </span>
       </TooltipTrigger>

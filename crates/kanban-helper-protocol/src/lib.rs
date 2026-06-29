@@ -26,11 +26,7 @@ impl HelperEnvelope {
 
     pub fn decode<T: DeserializeOwned>(&self) -> Result<T> {
         self.ensure_supported_protocol()?;
-        let mut deserializer = serde_json::Deserializer::from_str(&self.payload_json);
-        serde_path_to_error::deserialize(&mut deserializer).map_err(|err| {
-            let path = json_path("payload_json", &err.path().to_string());
-            invalid_json_with_path("payload_json", path, err.into_inner())
-        })
+        deserialize_json_with_path(&self.payload_json, "payload_json")
     }
 
     pub fn to_json(&self) -> Result<String> {
@@ -38,12 +34,7 @@ impl HelperEnvelope {
     }
 
     pub fn from_json(json: &str) -> Result<Self> {
-        let mut deserializer = serde_json::Deserializer::from_str(json);
-        let envelope: Self =
-            serde_path_to_error::deserialize(&mut deserializer).map_err(|err| {
-                let path = json_path("helper envelope", &err.path().to_string());
-                invalid_json_with_path("helper envelope", path, err.into_inner())
-            })?;
+        let envelope: Self = deserialize_json_with_path(json, "helper envelope")?;
         envelope.ensure_supported_protocol()?;
         Ok(envelope)
     }
@@ -57,6 +48,18 @@ impl HelperEnvelope {
         }
         Ok(())
     }
+}
+
+fn deserialize_json_with_path<T: DeserializeOwned>(json: &str, context: &str) -> Result<T> {
+    let mut deserializer = serde_json::Deserializer::from_str(json);
+    let value = serde_path_to_error::deserialize(&mut deserializer).map_err(|err| {
+        let path = json_path(context, &err.path().to_string());
+        invalid_json_with_path(context, path, err.into_inner())
+    })?;
+    deserializer
+        .end()
+        .map_err(|err| invalid_json_with_path(context, json_path(context, "."), err))?;
+    Ok(value)
 }
 
 fn invalid_json_with_path(context: &str, path: String, source: serde_json::Error) -> KanbanError {
@@ -139,6 +142,35 @@ mod tests {
         let error = envelope.decode::<NestedPayload>().unwrap_err().to_string();
 
         assert!(error.contains("payload_json.nested.count"), "{error}");
+    }
+
+    #[test]
+    fn from_json_rejects_trailing_characters() {
+        let envelope = HelperEnvelope::new(Payload {
+            value: "ok".to_owned(),
+        })
+        .unwrap()
+        .to_json()
+        .unwrap();
+        let json = format!("{envelope} trailing");
+
+        let error = HelperEnvelope::from_json(&json).unwrap_err().to_string();
+
+        assert!(error.contains("helper envelope"), "{error}");
+        assert!(error.contains("trailing"), "{error}");
+    }
+
+    #[test]
+    fn decode_rejects_payload_trailing_characters() {
+        let envelope = HelperEnvelope {
+            protocol: HELPER_PROTOCOL.to_owned(),
+            payload_json: r#"{"value":"ok"} trailing"#.to_owned(),
+        };
+
+        let error = envelope.decode::<Payload>().unwrap_err().to_string();
+
+        assert!(error.contains("payload_json"), "{error}");
+        assert!(error.contains("trailing"), "{error}");
     }
 
     #[test]

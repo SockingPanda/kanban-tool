@@ -680,6 +680,7 @@ enum BootstrapStagedVerificationStage {
     AfterCommit,
 }
 
+#[cfg(debug_assertions)]
 impl BootstrapStagedVerificationStage {
     fn as_str(self) -> &'static str {
         match self {

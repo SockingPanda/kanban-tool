@@ -190,6 +190,8 @@ crates. The helper set covers helper-heavy backend crates
 
 ```bash
 just check-core       # default `just check`; excludes helper-heavy crates
+just test             # default core Rust tests; equivalent to test-core
+just clippy           # default core Rust clippy; equivalent to clippy-core
 just test-core        # tests the daily core Rust set
 just clippy-core      # clippy for the daily core Rust set
 just rust-fast        # fmt + check-core + test-core + clippy-core
@@ -199,11 +201,14 @@ just test-helpers     # tests helper-heavy backend crates
 just clippy-helpers   # clippy for helper-heavy backend crates
 
 just check-full       # check-core followed by check-helpers
+just test-full        # test-core followed by test-helpers
+just clippy-full      # clippy-core followed by clippy-helpers
 just rust-full        # fmt + core/helper check, test, and clippy
 ```
 
-Use `just rust-fast` for daily Rust feedback when the branch does not touch
-helper-heavy backends. Use `just rust-full` or `just release` for helper backend,
+Use `just test`, `just clippy`, or `just rust-fast` for daily Rust feedback when
+the branch does not touch helper-heavy backends. Use `just test-full`,
+`just clippy-full`, `just rust-full`, or `just release` for helper backend,
 packaging, release-sensitive, or cross-surface changes.
 
 Desktop validation and packaging prepare Tauri sidecar binaries before checking

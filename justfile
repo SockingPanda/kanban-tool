@@ -11,7 +11,7 @@ fix *args:
     scripts/cargo-build-lock.sh -- cargo clippy --fix --tests --allow-dirty "$@"
 
 clippy:
-    scripts/cargo-build-lock.sh -- cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings
+    just clippy-core
 
 clippy-p package:
     scripts/cargo-build-lock.sh -- cargo clippy -p {{package}} --tests -- -D warnings
@@ -45,7 +45,7 @@ check-full:
     just check-helpers
 
 test *args:
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop "$@"; fi
+    just test-core "$@"
 
 test-p package *args:
     shift; if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run -p {{package}} --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test -p {{package}} "$@"; fi
@@ -88,6 +88,10 @@ test-helpers *args:
         --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test \
         -p kanban-vector-lancedb -p kanban-graph-oxigraph "$@"; fi
 
+test-full *args:
+    just test-core "$@"
+    just test-helpers "$@"
+
 clippy-core *args:
     scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
         -p kanban-core -p kanban-entity -p kanban-indexer -p kanban-search \
@@ -99,13 +103,15 @@ clippy-helpers *args:
     scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
         -p kanban-vector-lancedb -p kanban-graph-oxigraph "$@" -- -D warnings
 
+clippy-full *args:
+    just clippy-core "$@"
+    just clippy-helpers "$@"
+
 rust-full:
     just fmt
     just check-full
-    just test-core
-    just test-helpers
-    just clippy-core
-    just clippy-helpers
+    just test-full
+    just clippy-full
 
 web-test:
     pnpm --dir apps/desktop test

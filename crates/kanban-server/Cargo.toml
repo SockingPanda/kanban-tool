@@ -11,8 +11,6 @@ tantivy-backend = [
   "kanban-search/tantivy-backend",
   "kanban-sqlite/tantivy-backend",
 ]
-graph-oxigraph = []
-vector-lancedb = []
 
 [dependencies]
 axum.workspace = true

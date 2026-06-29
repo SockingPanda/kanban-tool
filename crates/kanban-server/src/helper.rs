@@ -278,7 +278,7 @@ fn cargo_target_helper(kind: HelperKind) -> Option<PathBuf> {
             let helper = PathBuf::from(trimmed)
                 .join("release")
                 .join(kind.binary_name());
-            helper.exists().then_some(helper)
+            helper.is_file().then_some(helper)
         })
         .next()
 }

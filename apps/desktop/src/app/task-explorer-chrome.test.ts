@@ -22,6 +22,9 @@ describe("task explorer chrome", () => {
     expect(shellHeader).not.toContain("statusFilterOptions")
     expect(shellHeader).not.toContain("onStatusFilterChange")
     expect(shellHeader).not.toContain("<Command")
+    expect(shellHeader).not.toContain("actor {config")
+    expect(shellHeader).not.toContain("local dispatcher")
+    expect(shellHeader).not.toContain('prefix="Theme"')
   })
 
   it("moves task creation into a shell-header Add task dialog without the inline row", () => {

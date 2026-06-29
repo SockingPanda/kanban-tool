@@ -64,6 +64,18 @@ describe("task explorer chrome", () => {
     expect(content).toContain("Next")
   })
 
+  it("renders List required step counts through one accessible progress column", () => {
+    const content = source("features/list/ListView.tsx")
+
+    expect(content).toContain('id: "step_progress"')
+    expect(content).toContain("<StepProgressCell")
+    expect(content).toContain('role="progressbar"')
+    expect(content).toContain("conic-gradient")
+    expect(content).toContain("Required step progress")
+    expect(content).not.toContain('id: "required_steps"')
+    expect(content).not.toContain('id: "done_required_steps"')
+  })
+
   it("keeps global search out of List reset while sizing Board by column status", () => {
     const collection = source("app/useTaskCollectionState.ts")
     const app = source("App.tsx")

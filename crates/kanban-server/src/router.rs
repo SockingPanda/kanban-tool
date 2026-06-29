@@ -8,7 +8,10 @@ use axum::{
     response::Response,
     routing::{delete, get, patch, post},
 };
-use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::{
+    cors::{AllowOrigin, CorsLayer},
+    trace::TraceLayer,
+};
 
 use crate::error::invalid_input;
 use crate::handlers::api::*;
@@ -223,6 +226,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/stream/events", get(stream_events))
         .route("/api/v1/maintenance/doctor", post(doctor))
         .route("/api/v1/maintenance/checkpoint", post(checkpoint))
+        .layer(TraceLayer::new_for_http())
         .layer(from_fn_with_state(state.clone(), require_existing_database))
         .with_state(state)
 }

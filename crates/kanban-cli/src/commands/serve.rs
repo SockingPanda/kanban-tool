@@ -2,6 +2,7 @@ use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result, bail};
 use kanban_sqlite::{begin_database_runtime, init_database};
+use tracing_subscriber::EnvFilter;
 
 use crate::args::ServeArgs;
 
@@ -12,6 +13,7 @@ pub(crate) fn serve(args: ServeArgs, db_path: PathBuf, board: &str, actor: Strin
     if !addr.ip().is_loopback() {
         bail!("kanban serve only supports loopback hosts; use 127.0.0.1 or ::1");
     }
+    init_serve_tracing();
     let _runtime_guard = begin_database_runtime(&db_path)?;
     let _init = init_database(&db_path, &actor)
         .with_context(|| format!("failed to initialize/open {}", db_path.display()))?;
@@ -30,4 +32,13 @@ pub(crate) fn serve(args: ServeArgs, db_path: PathBuf, board: &str, actor: Strin
             ),
         ))
         .context("kanban server failed")
+}
+
+fn init_serve_tracing() {
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("kanban_server=info,tower_http=info"));
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .try_init();
 }

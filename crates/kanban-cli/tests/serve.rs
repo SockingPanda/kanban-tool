@@ -26,8 +26,13 @@ fn serve_help_shows_localhost_bind_defaults() -> anyhow::Result<()> {
 fn serve_rejects_non_loopback_host_before_opening_database() -> anyhow::Result<()> {
     let temp = TempDb::new("serve_rejects_non_loopback_host_without_creating_database")?;
 
-    kanban(&temp.path, &["serve", "--host", "0.0.0.0", "--port", "0"])?
-        .failure_containing("kanban serve only supports loopback hosts")?;
+    let result = kanban(&temp.path, &["serve", "--host", "0.0.0.0", "--port", "0"])?;
+    assert!(
+        result.output.stdout.is_empty(),
+        "serve failure must not write logging to stdout, got: {}",
+        String::from_utf8_lossy(&result.output.stdout)
+    );
+    result.failure_containing("kanban serve only supports loopback hosts")?;
     assert!(!temp.path.exists());
     Ok(())
 }

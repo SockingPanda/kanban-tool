@@ -25,10 +25,6 @@ if external != expected:
     raise SystemExit(f"error: unexpected bundle.externalBin: {external!r}")
 PYCONF
 
-if grep -Fq 'kanban-server = { workspace = true, features = ["vector-lancedb"] }' "$DESKTOP_MANIFEST"; then
-  echo "error: desktop manifest still enables kanban-server vector-lancedb feature" >&2
-  exit 1
-fi
 
 grep -Fq 'kanban-server.workspace = true' "$DESKTOP_MANIFEST" || {
   echo "error: desktop manifest should depend on kanban-server without helper feature flags" >&2

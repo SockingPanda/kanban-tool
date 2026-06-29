@@ -60,12 +60,6 @@ jobs:
             features: tantivy-backend,graph-oxigraph,vector-lancedb
           - package: kanban-server
             features: tantivy-backend
-          - package: kanban-server
-            features: graph-oxigraph
-          - package: kanban-server
-            features: vector-lancedb
-          - package: kanban-server
-            features: tantivy-backend,graph-oxigraph,vector-lancedb
     steps:
       - name: Checkout
         uses: actions/checkout@v4

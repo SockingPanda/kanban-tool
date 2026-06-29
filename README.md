@@ -194,6 +194,7 @@ just test             # default core Rust tests; equivalent to test-core
 just clippy           # default core Rust clippy; equivalent to clippy-core
 just test-core        # tests the daily core Rust set
 just clippy-core      # clippy for the daily core Rust set
+just bench-check      # compiles criterion benchmark baselines without running measurements
 just rust-fast        # fmt + check-core + test-core + clippy-core
 
 just check-helpers    # checks kanban-vector-lancedb and kanban-graph-oxigraph
@@ -207,9 +208,12 @@ just rust-full        # fmt + core/helper check, test, and clippy
 ```
 
 Use `just test`, `just clippy`, or `just rust-fast` for daily Rust feedback when
-the branch does not touch helper-heavy backends. Use `just test-full`,
+the branch does not touch helper-heavy backends. Use `just bench-check` when
+benchmark harnesses change; it compiles criterion baselines with `cargo bench
+--no-run` and does not collect benchmark measurements. Use `just test-full`,
 `just clippy-full`, `just rust-full`, or `just release` for helper backend,
-packaging, release-sensitive, or cross-surface changes.
+packaging, release-sensitive, or cross-surface changes. `just release` includes
+`just bench-check`; `just rust-fast` intentionally does not.
 
 Desktop validation and packaging prepare Tauri sidecar binaries before checking
 or building the app. The static config/sidecar check is separate from the

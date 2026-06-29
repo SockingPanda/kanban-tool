@@ -506,19 +506,17 @@ elif cmd == "rebuild-label-atoms":
     payload = {{"backend":"label-helper","enabled":True,"message":"rebuilt labels","diagnostics":["label_atom_helper"],"dirty":False,"board_dirty":False}}
 elif cmd == "query-label-atoms":
     payload = [{{
-        "hit": {{
-            "atom_id":"atom_backend_positive",
-            "label_id":"label_backend",
-            "label_name":"backend",
-            "board_id":"b_default",
-            "polarity":"positive",
-            "kind":"applies_when",
-            "text":"touches rust service code",
-            "ordinal":0,
-            "content_hash":"hash",
-            "embedding_model":"review-model",
-            "distance":0.0
-        }}
+        "atom_id":"atom_backend_positive",
+        "label_id":"label_backend",
+        "label_name":"backend",
+        "board_id":"b_default",
+        "polarity":"positive",
+        "kind":"applies_when",
+        "text":"touches rust service code",
+        "ordinal":0,
+        "content_hash":"hash",
+        "embedding_model":"review-model",
+        "distance":0.0
     }}]
 else:
     raise SystemExit("unexpected command " + cmd)

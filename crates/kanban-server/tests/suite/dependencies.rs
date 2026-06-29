@@ -27,6 +27,12 @@ async fn dependencies_add_remove_list_and_cycle_error() -> anyhow::Result<()> {
     )
     .await?;
     assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(json["data"]["task"]["id"], child.id);
+    assert_eq!(json["data"]["edges"][0]["parent"]["id"], parent.id);
+    assert_eq!(json["data"]["edges"][0]["parent"]["ref"], parent.task_ref);
+    assert_eq!(json["data"]["edges"][0]["parent"]["title"], "parent");
+    assert_eq!(json["data"]["edges"][0]["parent"]["status"], "todo");
+    assert_eq!(json["data"]["edges"][0]["child"]["id"], child.id);
     assert_eq!(json["data"]["parents"][0]["id"], parent.id);
     assert_eq!(
         json["data"]["children"].as_array().context("value")?.len(),
@@ -46,6 +52,7 @@ async fn dependencies_add_remove_list_and_cycle_error() -> anyhow::Result<()> {
     .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["parents"][0]["id"], parent.id);
+    assert_eq!(json["data"]["edges"][0]["parent"]["id"], parent.id);
     let event_count_after_duplicate =
         kanban_sqlite::list_events(&db_path, "default", Some(&child.id))?
             .into_iter()
@@ -60,6 +67,7 @@ async fn dependencies_add_remove_list_and_cycle_error() -> anyhow::Result<()> {
     .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["children"][0]["id"], child.id);
+    assert_eq!(json["data"]["edges"][0]["child"]["id"], child.id);
 
     let (status, json) = post_json(
         app.clone(),
@@ -78,6 +86,12 @@ async fn dependencies_add_remove_list_and_cycle_error() -> anyhow::Result<()> {
     assert_eq!(status, StatusCode::OK);
     assert!(
         json["data"]["parents"]
+            .as_array()
+            .context("value")?
+            .is_empty()
+    );
+    assert!(
+        json["data"]["edges"]
             .as_array()
             .context("value")?
             .is_empty()

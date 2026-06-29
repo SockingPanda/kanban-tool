@@ -167,7 +167,7 @@ pub fn remove_step(
     actor: &str,
     parent_ref: &str,
     step_ref: &str,
-) -> Result<()> {
+) -> Result<TaskStepRecord> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     let board_id = board_id(&conn, board)?;
@@ -190,7 +190,8 @@ pub fn remove_step(
             &existing,
             now,
         )?;
-        recompute_parent_after_plan_change(&conn, &board_id, actor, &parent.id, now)
+        recompute_parent_after_plan_change(&conn, &board_id, actor, &parent.id, now)?;
+        Ok(existing)
     })
 }
 

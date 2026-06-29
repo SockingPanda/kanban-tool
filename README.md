@@ -211,6 +211,12 @@ the branch does not touch helper-heavy backends. Use `just test-full`,
 `just clippy-full`, `just rust-full`, or `just release` for helper backend,
 packaging, release-sensitive, or cross-surface changes.
 
+Use `just audit` to run the dependency gate. It executes `cargo deny check`
+and `cargo audit -D warnings`; these tools inspect Cargo metadata and
+`Cargo.lock` without writing the shared Cargo target directory. `just release`
+includes this audit gate before the full Rust, packaging, desktop, and smoke
+checks.
+
 Desktop validation and packaging prepare Tauri sidecar binaries before checking
 or building the app. The static config/sidecar check is separate from the
 post-package `.deb` layout check:

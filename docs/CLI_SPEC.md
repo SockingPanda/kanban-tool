@@ -1607,7 +1607,8 @@ kanban context build t_... [--lexical-limit 5] [--vector-config <toml>]
 `kanban entity`、`kanban outbox`、`kanban derived` 是 Knowledge Substrate 的只读维护入口。SQLite 仍是事实源；这些命令只报告统一 entity registry、派生索引 outbox 和 derived store 状态，不改变 task 状态或 claim。
 `kanban graph` 和 `kanban vector` 是 helper subprocess 派生层入口。默认 CLI 不链接
 Oxigraph/LanceDB heavy deps；它解析 `KANBAN_GRAPH_HELPER` / `KANBAN_VECTOR_HELPER`、
-`/usr/lib/kanban/<helper>`、CLI sibling binary 或 `PATH` 中的 helper。helper 缺失或
+`/usr/lib/kanban/<helper>`、CLI sibling binary、`KANBAN_CARGO_TARGET_ROOT` 或
+`CARGO_TARGET_DIR` 的 `release/<helper>`，最后回退到 `PATH` 中的 helper。helper 缺失或
 返回非法 envelope 时，`status` 返回 disabled/degraded status；helper error envelope、
 坏 board/db/config 或 payload/domain 错误会作为命令错误返回。启用后仍只作为可重建
 relation/vector store，不参与 task 状态事务。

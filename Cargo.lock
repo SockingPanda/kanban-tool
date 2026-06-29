@@ -3781,8 +3781,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -3952,6 +3950,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

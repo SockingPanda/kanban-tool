@@ -8,17 +8,19 @@ use axum::{
     response::Response,
     routing::{delete, get, patch, post},
 };
-use tower_http::{
-    cors::{AllowOrigin, CorsLayer},
-    trace::TraceLayer,
-};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::error::invalid_input;
 use crate::handlers::api::*;
 use crate::handlers::health::health;
+use crate::observability::http_trace_layer;
 use crate::state::{AppState, SearchSyncConfig, spawn_search_sync_task};
 
 pub fn build_router(state: AppState) -> Router {
+    build_api_router(state).layer(http_trace_layer())
+}
+
+fn build_api_router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/api/v1/boards", get(list_boards).post(create_board))
@@ -226,17 +228,18 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/stream/events", get(stream_events))
         .route("/api/v1/maintenance/doctor", post(doctor))
         .route("/api/v1/maintenance/checkpoint", post(checkpoint))
-        .layer(TraceLayer::new_for_http())
         .layer(from_fn_with_state(state.clone(), require_existing_database))
         .with_state(state)
 }
 
 pub fn build_desktop_router(state: AppState) -> Router {
-    build_router(state).layer(desktop_cors_layer())
+    build_api_router(state)
+        .layer(desktop_cors_layer())
+        .layer(http_trace_layer())
 }
 
 pub fn build_serve_router(state: AppState) -> Router {
-    build_router(state)
+    build_api_router(state).layer(http_trace_layer())
 }
 
 fn desktop_cors_layer() -> CorsLayer {

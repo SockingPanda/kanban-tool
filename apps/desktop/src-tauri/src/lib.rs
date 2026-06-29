@@ -96,6 +96,8 @@ fn set_runtime_board(
 }
 
 pub fn run() {
+    kanban_server::init_tracing();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             match single_instance_launch_action() {

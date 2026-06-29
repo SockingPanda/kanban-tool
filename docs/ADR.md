@@ -410,13 +410,13 @@ Proposed
 
 ### Field Responsibilities
 
-| Field / Model | 责任 | 是否影响状态机 | 是否影响 dispatcher | 是否影响 DAG/frontier | 是否用于 search/context/UI |
+| Field / Model | 责任 | 是否影响状态机 | 是否影响 dispatcher | 是否影响 dependency/search/context 展示 | 是否用于 search/context/UI |
 |---|---|---:|---:|---:|---:|
 | `status` | canonical workflow state | 是 | 是 | 是 | 是 |
-| `priority` | ready/frontier/dispatcher 的排序权重 | 否 | 是，排序 | 是，排序 | 是 |
-| `scheduled_at` | 计划时间，参与 scheduled/ready guard | 是 | 是 | 是 | 是 |
+| `priority` | ready/dispatcher 的排序权重 | 否 | 是，排序 | 是，列表和推荐排序 | 是 |
+| `scheduled_at` | 计划时间，参与 scheduled/ready guard | 是 | 是 | 是，列表和上下文排序 | 是 |
 | `due_at` | 截止时间，只展示、筛选、排序 | 否 | 可排序 | 可排序 | 是 |
-| `task_type` | 任务类别，例如 bug/feature/research/ops/follow_up | 否 | 否 | 可用于解释/排序，不改变 eligibility | 是 |
+| `task_type` | 任务类别，例如 bug/feature/research/ops/follow_up | 否 | 否 | 可用于展示/排序，不改变 eligibility | 是 |
 | labels | 多标签分类、搜索、推荐和 UI grouping | 否 | 否 | 否，除非未来显式配置排序策略 | 是 |
 | `dependency_type` | 依赖边语义，区分 hard block 和 soft relation | 仅 hard block | 仅 hard block | 是，但必须区分 hard/soft | 是 |
 | `comment.author_type` | 评论作者角色：`user` 或 `agent` | 否 | 否 | 否 | 是 |
@@ -453,7 +453,7 @@ bug | feature | research | ops | docs | refactor | test | follow_up
 
 - Desktop/List/Board 筛选。
 - Search/context 过滤。
-- DAG/frontier 解释。
+- 依赖、search 和 context 解释。
 - 未来排序加权。
 
 `task_type` 不用于：
@@ -516,9 +516,9 @@ parent neither done nor archived => child cannot be ready/running
 - promote guard
 - claim guard
 - dispatcher eligibility
-- hard DAG blocking
+- hard dependency blocking
 
-soft dependency 可以进入 DAG 可视化、Desktop 展示和 context，但不能让任务变成 blocked，也不能阻止 claim。
+soft dependency 可以进入 Desktop 展示、search 和 context，但不能让任务变成 blocked，也不能阻止 claim。
 
 ### Comment Author Model
 

@@ -650,13 +650,46 @@ DELETE /api/v1/tasks/{child_task_id}/dependencies/{parent_task_id}
 GET /api/v1/tasks/{task_id}/dependencies
 ```
 
+Add/remove/list dependency endpoints return the same dependency envelope. For
+compatibility, `parents` and `children` remain full `TaskDto` arrays. The
+additional `task` and `edges` fields provide a compact hydrated relationship
+view with stable named parent/child objects.
+
 Response：
 
 ```json
 {
   "data": {
+    "task": {
+      "id": "t_child",
+      "board_id": "b_default",
+      "board_slug": "default",
+      "ref": "default#2",
+      "title": "child",
+      "status": "todo"
+    },
     "parents": [],
-    "children": []
+    "children": [],
+    "edges": [
+      {
+        "parent": {
+          "id": "t_parent",
+          "board_id": "b_default",
+          "board_slug": "default",
+          "ref": "default#1",
+          "title": "parent",
+          "status": "done"
+        },
+        "child": {
+          "id": "t_child",
+          "board_id": "b_default",
+          "board_slug": "default",
+          "ref": "default#2",
+          "title": "child",
+          "status": "todo"
+        }
+      }
+    ]
   }
 }
 ```

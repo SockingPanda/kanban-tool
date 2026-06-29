@@ -44,7 +44,7 @@ fn board_create_list_show_archive_and_current_use_round_trip() -> anyhow::Result
 
     let current =
         kanban_in_dir(&temp.path, &["--json", "board", "current"], &project_dir)?.success_json()?;
-    assert_eq!(current["data"]["board"], "project");
+    assert_eq!(current["data"]["board"]["slug"], "project");
 
     kanban(&temp.path, &["board", "archive", "project"])?.success()?;
     let list = kanban(&temp.path, &["--json", "board", "list"])?.success_json()?;
@@ -91,7 +91,7 @@ fn active_board_priority_is_flag_then_env_then_nearest_config_then_default() -> 
 
     let from_config =
         kanban_in_dir(&temp.path, &["--json", "board", "current"], &nested)?.success_json()?;
-    assert_eq!(from_config["data"]["board"], "configboard");
+    assert_eq!(from_config["data"]["board"]["slug"], "configboard");
 
     let from_env = kanban_in_dir_env(
         &temp.path,
@@ -100,7 +100,7 @@ fn active_board_priority_is_flag_then_env_then_nearest_config_then_default() -> 
         Some("envboard"),
     )?
     .success_json()?;
-    assert_eq!(from_env["data"]["board"], "envboard");
+    assert_eq!(from_env["data"]["board"]["slug"], "envboard");
 
     let from_flag = kanban_in_dir_env(
         &temp.path,
@@ -109,7 +109,7 @@ fn active_board_priority_is_flag_then_env_then_nearest_config_then_default() -> 
         Some("envboard"),
     )?
     .success_json()?;
-    assert_eq!(from_flag["data"]["board"], "flagboard");
+    assert_eq!(from_flag["data"]["board"]["slug"], "flagboard");
     Ok(())
 }
 

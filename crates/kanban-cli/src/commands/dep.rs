@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use kanban_sqlite::{add_dependency, list_dependencies, remove_dependency};
+use kanban_sqlite::{
+    DependencyMutation, add_dependency, dependency_edge, dependency_snapshot, remove_dependency,
+};
 
 use crate::args::DepCommand;
 use crate::output::print_or_json;
@@ -19,28 +21,32 @@ pub(crate) fn handle_dep(
             child_ref,
         } => {
             add_dependency(db_path, board, actor, &parent_ref, &child_ref)?;
-            print_or_json(
-                json,
-                &serde_json::json!({"parent": parent_ref, "child": child_ref}),
-                || format!("已添加依赖：{parent_ref} -> {child_ref}"),
-            )?;
+            let edge = dependency_edge(db_path, board, &parent_ref, &child_ref)?;
+            let dependencies = dependency_snapshot(db_path, board, &child_ref)?;
+            let output = DependencyMutation { edge, dependencies };
+            print_or_json(json, &output, || {
+                format!("已添加依赖：{parent_ref} -> {child_ref}")
+            })?;
         }
         DepCommand::Remove {
             parent_ref,
             child_ref,
         } => {
+            let edge = dependency_edge(db_path, board, &parent_ref, &child_ref)?;
             remove_dependency(db_path, board, actor, &parent_ref, &child_ref)?;
-            print_or_json(
-                json,
-                &serde_json::json!({"parent": parent_ref, "child": child_ref}),
-                || format!("已移除依赖：{parent_ref} -> {child_ref}"),
-            )?;
+            let dependencies = dependency_snapshot(db_path, board, &child_ref)?;
+            let output = DependencyMutation { edge, dependencies };
+            print_or_json(json, &output, || {
+                format!("已移除依赖：{parent_ref} -> {child_ref}")
+            })?;
         }
         DepCommand::List { task_ref } => {
-            let deps = list_dependencies(db_path, board, &task_ref)?;
-            print_or_json(json, &deps, || {
-                deps.iter()
-                    .map(|(p, c)| format!("{} -> {}", p, c))
+            let snapshot = dependency_snapshot(db_path, board, &task_ref)?;
+            print_or_json(json, &snapshot, || {
+                snapshot
+                    .edges
+                    .iter()
+                    .map(|edge| format!("{} -> {}", edge.parent.task_ref, edge.child.task_ref))
                     .collect::<Vec<_>>()
                     .join("\n")
             })?;

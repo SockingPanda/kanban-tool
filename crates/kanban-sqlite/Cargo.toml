@@ -25,7 +25,12 @@ serde_json.workspace = true
 tantivy = { workspace = true, optional = true }
 thiserror.workspace = true
 
+[[bench]]
+name = "sqlite_service"
+harness = false
+
 [dev-dependencies]
 anyhow.workspace = true
+criterion = "0.8.2"
 tempfile.workspace = true
 trybuild = "1.0"

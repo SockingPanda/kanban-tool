@@ -13,6 +13,7 @@ mod suite {
     mod runs;
     mod search;
     mod server_helpers;
+    mod snapshots;
     mod sse;
     mod steps;
     mod task_graph;

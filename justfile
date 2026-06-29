@@ -13,6 +13,9 @@ fix *args:
 clippy:
     just clippy-core
 
+bench-check *args:
+    scripts/cargo-build-lock.sh -- cargo bench --no-run -p kanban-sqlite "$@"
+
 clippy-p package:
     scripts/cargo-build-lock.sh -- cargo clippy -p {{package}} --tests -- -D warnings
 
@@ -177,6 +180,7 @@ feature-p package features:
 release:
     just affected-self-test
     just rust-full
+    just bench-check
     just target-tools
     just cli-package
     just cli-package-layout

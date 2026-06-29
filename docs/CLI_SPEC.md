@@ -570,6 +570,8 @@ kanban label atom explain <atom-id-or-content-hash> [--json]
 kanban label atom-index status [--vector-config <toml>] [--json]
 kanban label atom-index rebuild [--vector-config <toml>] [--json]
 kanban label atom-index query <text> [--polarity positive|negative] [--limit 24] [--vector-config <toml>] [--json]
+
+`label atom-index status`、`rebuild` 和 `query` 复用 vector TOML 解析规则：显式 `--vector-config`/`--config` 优先，其次是最近项目 `.kb/config.toml`，最后是全局 config。helper argv 只在显式传入 `--vector-config` 时附带该参数；省略时由 helper 按默认配置解析。
 kanban label suggest <task_ref> [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label propose <task_ref> [--proposal-json <path>] [--source-signal <signal_id>]... [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]

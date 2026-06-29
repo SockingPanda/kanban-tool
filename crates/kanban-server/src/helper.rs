@@ -112,7 +112,13 @@ impl std::error::Error for HelperRunError {}
 
 impl From<HelperRunError> for ApiError {
     fn from(value: HelperRunError) -> Self {
-        ApiError(kanban_core::KanbanError::Storage(value.to_string()))
+        let message = value.to_string();
+        if value.kind() == HelperRunErrorKind::HelperError
+            && message.contains("requires a configured embedding provider")
+        {
+            return ApiError(kanban_core::KanbanError::InvalidInput(message));
+        }
+        ApiError(kanban_core::KanbanError::Storage(message))
     }
 }
 
@@ -254,7 +260,27 @@ pub(crate) fn resolve_helper(state: &AppState, kind: HelperKind) -> PathBuf {
             return sibling;
         }
     }
+    if let Some(helper) = cargo_target_helper(kind) {
+        return helper;
+    }
     PathBuf::from(kind.binary_name())
+}
+
+fn cargo_target_helper(kind: HelperKind) -> Option<PathBuf> {
+    ["KANBAN_CARGO_TARGET_ROOT", "CARGO_TARGET_DIR"]
+        .into_iter()
+        .filter_map(|key| {
+            let value = env::var(key).ok()?;
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            let helper = PathBuf::from(trimmed)
+                .join("release")
+                .join(kind.binary_name());
+            helper.exists().then_some(helper)
+        })
+        .next()
 }
 
 fn bounded(value: &str) -> String {
@@ -265,4 +291,115 @@ fn bounded(value: &str) -> String {
         value.push_str("...");
     }
     value
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex, MutexGuard};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct EnvRestore {
+        key: &'static str,
+        value: Option<String>,
+    }
+
+    impl EnvRestore {
+        fn capture(key: &'static str) -> Self {
+            Self {
+                key,
+                value: env::var(key).ok(),
+            }
+        }
+    }
+
+    impl Drop for EnvRestore {
+        fn drop(&mut self) {
+            unsafe {
+                match &self.value {
+                    Some(value) => env::set_var(self.key, value),
+                    None => env::remove_var(self.key),
+                }
+            }
+        }
+    }
+
+    fn clean_helper_env() -> (MutexGuard<'static, ()>, Vec<EnvRestore>) {
+        let guard = ENV_LOCK.lock().expect("env lock poisoned");
+        let restores = vec![
+            EnvRestore::capture("KANBAN_VECTOR_HELPER"),
+            EnvRestore::capture("KANBAN_GRAPH_HELPER"),
+            EnvRestore::capture("KANBAN_CARGO_TARGET_ROOT"),
+            EnvRestore::capture("CARGO_TARGET_DIR"),
+        ];
+        unsafe {
+            env::remove_var("KANBAN_VECTOR_HELPER");
+            env::remove_var("KANBAN_GRAPH_HELPER");
+            env::remove_var("KANBAN_CARGO_TARGET_ROOT");
+            env::remove_var("CARGO_TARGET_DIR");
+        }
+        (guard, restores)
+    }
+
+    fn state() -> AppState {
+        AppState::new("/tmp/kanban-test.db", "api-test")
+    }
+
+    #[test]
+    fn resolve_helper_uses_kanban_cargo_target_root_release_helper() {
+        let (_guard, _restore) = clean_helper_env();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let helper = temp
+            .path()
+            .join("release")
+            .join(HelperKind::Vector.binary_name());
+        std::fs::create_dir_all(helper.parent().expect("helper parent")).expect("create release");
+        std::fs::write(&helper, "").expect("write helper");
+
+        unsafe {
+            env::set_var("KANBAN_CARGO_TARGET_ROOT", temp.path());
+        }
+
+        assert_eq!(resolve_helper(&state(), HelperKind::Vector), helper);
+    }
+
+    #[test]
+    fn resolve_helper_uses_cargo_target_dir_release_helper() {
+        let (_guard, _restore) = clean_helper_env();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let helper = temp
+            .path()
+            .join("release")
+            .join(HelperKind::Graph.binary_name());
+        std::fs::create_dir_all(helper.parent().expect("helper parent")).expect("create release");
+        std::fs::write(&helper, "").expect("write helper");
+
+        unsafe {
+            env::set_var("CARGO_TARGET_DIR", temp.path());
+        }
+
+        assert_eq!(resolve_helper(&state(), HelperKind::Graph), helper);
+    }
+
+    #[test]
+    fn resolve_helper_env_overrides_target_root_fallback() {
+        let (_guard, _restore) = clean_helper_env();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let target_helper = temp
+            .path()
+            .join("release")
+            .join(HelperKind::Vector.binary_name());
+        std::fs::create_dir_all(target_helper.parent().expect("helper parent"))
+            .expect("create release");
+        std::fs::write(&target_helper, "").expect("write target helper");
+        let env_helper = temp.path().join("env-helper");
+
+        unsafe {
+            env::set_var("KANBAN_CARGO_TARGET_ROOT", temp.path());
+            env::set_var("KANBAN_VECTOR_HELPER", &env_helper);
+        }
+
+        assert_eq!(resolve_helper(&state(), HelperKind::Vector), env_helper);
+    }
 }

@@ -80,6 +80,16 @@ just test
 just clippy
 ```
 
+Dependency audit gate:
+
+```bash
+just audit
+```
+
+`just audit` runs `cargo deny check` and `cargo audit -D warnings`. These
+commands do not write the shared Cargo target directory, so they run directly
+without `scripts/cargo-build-lock.sh`.
+
 Single package:
 
 ```bash
@@ -117,8 +127,7 @@ just release
 ```
 
 `just release` is intentionally heavy. Use it when the branch touches release-sensitive packaging, desktop package behavior, or cross-surface integration.
-It includes `just rust-full`, so helper-heavy crates are checked, tested, and
-linted before packaging and smoke checks.
+It includes `just audit` and `just rust-full`, so dependency advisories, helper-heavy crates, tests, and lints run before packaging and smoke checks.
 
 ## Prompt Template
 

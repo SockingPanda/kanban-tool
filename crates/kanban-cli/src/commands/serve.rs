@@ -12,6 +12,7 @@ pub(crate) fn serve(args: ServeArgs, db_path: PathBuf, board: &str, actor: Strin
     if !addr.ip().is_loopback() {
         bail!("kanban serve only supports loopback hosts; use 127.0.0.1 or ::1");
     }
+    kanban_server::init_tracing();
     let _runtime_guard = begin_database_runtime(&db_path)?;
     let _init = init_database(&db_path, &actor)
         .with_context(|| format!("failed to initialize/open {}", db_path.display()))?;

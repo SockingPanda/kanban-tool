@@ -219,18 +219,28 @@ fn run() -> Result<()> {
 
 fn parse_vector_json(vector_json: &str) -> Result<Vec<f32>> {
     let mut deserializer = serde_json::Deserializer::from_str(vector_json);
-    serde_path_to_error::deserialize(&mut deserializer).map_err(|err| {
-        let path = err.path().to_string();
-        let path = if path == "." {
-            "<root>".to_owned()
-        } else {
-            path
-        };
+    let vector = serde_path_to_error::deserialize(&mut deserializer).map_err(|err| {
+        let path = vector_json_path(&err.path().to_string());
         anyhow!(
             "invalid --vector-json payload at {path}: {}",
             err.into_inner()
         )
-    })
+    })?;
+    deserializer.end().map_err(|err| {
+        anyhow!(
+            "invalid --vector-json payload at {}: {err}",
+            vector_json_path(".")
+        )
+    })?;
+    Ok(vector)
+}
+
+fn vector_json_path(path: &str) -> String {
+    if path == "." {
+        "<root>".to_owned()
+    } else {
+        path.to_owned()
+    }
 }
 
 fn label_atom_status(args: &StoreArgs) -> Result<VectorStoreStatus> {

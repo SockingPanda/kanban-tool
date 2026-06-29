@@ -133,7 +133,13 @@ assert_package_help_output_path() {
 assert_resource_limit_defaults() {
   local nested_marker="$TMPDIR/resource-nested-marker"
 
-  KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '
+  env \
+    -u CARGO_BUILD_JOBS \
+    -u NEXTEST_TEST_THREADS \
+    -u RUST_TEST_THREADS \
+    -u KANBAN_CARGO_BUILD_JOBS \
+    -u KANBAN_TEST_THREADS \
+    KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '
     [[ "${CARGO_BUILD_JOBS:-}" == "2" ]]
     [[ "${NEXTEST_TEST_THREADS:-}" == "2" ]]
     [[ "${RUST_TEST_THREADS:-}" == "2" ]]
@@ -148,7 +154,11 @@ assert_resource_limit_defaults() {
       [[ "${RUST_TEST_THREADS:-}" == "3" ]]
     '
 
-  KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+  env \
+    -u CARGO_BUILD_JOBS \
+    -u NEXTEST_TEST_THREADS \
+    -u RUST_TEST_THREADS \
+    KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
     KANBAN_CARGO_BUILD_JOBS=auto \
     KANBAN_TEST_THREADS=auto \
     "$LOCK_SCRIPT" -- bash -c '
@@ -169,7 +179,13 @@ assert_resource_limit_defaults() {
       [[ "${RUST_TEST_THREADS:-}" == "6" ]]
     '
 
-  KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash -c '
+  env \
+    -u CARGO_BUILD_JOBS \
+    -u NEXTEST_TEST_THREADS \
+    -u RUST_TEST_THREADS \
+    -u KANBAN_CARGO_BUILD_JOBS \
+    -u KANBAN_TEST_THREADS \
+    KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash -c '
     [[ "${CARGO_BUILD_JOBS:-}" == "2" ]]
     [[ "${NEXTEST_TEST_THREADS:-}" == "2" ]]
     [[ "${RUST_TEST_THREADS:-}" == "2" ]]

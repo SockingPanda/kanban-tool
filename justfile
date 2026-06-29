@@ -1,6 +1,17 @@
 set positional-arguments
 set shell := ["bash", "-cu"]
 
+# cargo audit runs with `-D warnings`; these exact IDs are the current
+# transitive advisory baseline and are tracked by kanban-tool#356.
+# - RUSTSEC-2024-0370: proc-macro-error via GTK3/glib macro dependencies.
+# - RUSTSEC-2024-0411..0420: gtk-rs GTK3 binding advisories via Tauri/wry.
+# - RUSTSEC-2024-0429: glib unsound advisory via GTK3 stack; cargo audit still
+#   reports it even though cargo-deny does not encounter it in this graph.
+# - RUSTSEC-2024-0436: paste unmaintained warning from transitive macro usage.
+# - RUSTSEC-2025-0075/0080/0081/0098/0100: rust-unic crates via
+#   urlpattern/tauri-utils.
+audit-ignore-flags := "--ignore RUSTSEC-2024-0370 --ignore RUSTSEC-2024-0411 --ignore RUSTSEC-2024-0412 --ignore RUSTSEC-2024-0413 --ignore RUSTSEC-2024-0414 --ignore RUSTSEC-2024-0415 --ignore RUSTSEC-2024-0416 --ignore RUSTSEC-2024-0417 --ignore RUSTSEC-2024-0418 --ignore RUSTSEC-2024-0419 --ignore RUSTSEC-2024-0420 --ignore RUSTSEC-2024-0429 --ignore RUSTSEC-2024-0436 --ignore RUSTSEC-2025-0075 --ignore RUSTSEC-2025-0080 --ignore RUSTSEC-2025-0081 --ignore RUSTSEC-2025-0098 --ignore RUSTSEC-2025-0100"
+
 fmt:
     cargo fmt -- --check
 
@@ -151,6 +162,10 @@ desktop-package-layout:
 smoke:
     scripts/smoke-v1-local.sh
 
+audit:
+    cargo deny check
+    cargo audit -D warnings {{audit-ignore-flags}}
+
 target-tools:
     scripts/test-cargo-target-tools.sh
     scripts/test-helper-cargo-tree.sh
@@ -176,6 +191,7 @@ feature-p package features:
 
 release:
     just affected-self-test
+    just audit
     just rust-full
     just target-tools
     just cli-package

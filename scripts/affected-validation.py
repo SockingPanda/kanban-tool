@@ -56,6 +56,7 @@ CORE_CRATES = {
     "kanban-core",
     "kanban-entity",
     "kanban-indexer",
+    "kanban-helper-protocol",
     "kanban-search",
     "kanban-graph",
     "kanban-vector",
@@ -95,6 +96,7 @@ def is_vector_helper(path: str) -> bool:
         "crates/kanban-vector/",
         "crates/kanban-vector-lancedb/",
         "crates/kanban-derived-io/",
+        "crates/kanban-helper-protocol/",
     ))
 
 
@@ -103,6 +105,7 @@ def is_graph_helper(path: str) -> bool:
         "crates/kanban-graph/",
         "crates/kanban-graph-oxigraph/",
         "crates/kanban-derived-io/",
+        "crates/kanban-helper-protocol/",
     ))
 
 
@@ -483,6 +486,18 @@ def self_test() -> None:
         (
             "derived io propagates to both helpers",
             ["crates/kanban-derived-io/src/lib.rs"],
+            {"core", "vector-helper", "graph-helper"},
+            [
+                ["just", "check-core"],
+                ["just", "check-p", "kanban-vector-lancedb"],
+                ["just", "check-p", "kanban-graph-oxigraph"],
+                ["just", "diff-check"],
+            ],
+            False,
+        ),
+        (
+            "helper protocol propagates to core and both helpers",
+            ["crates/kanban-helper-protocol/src/lib.rs"],
             {"core", "vector-helper", "graph-helper"},
             [
                 ["just", "check-core"],

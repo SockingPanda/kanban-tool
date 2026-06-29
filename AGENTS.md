@@ -45,6 +45,13 @@
 - 生产代码遵循 TDD：先写失败测试，运行看到 RED，再写最小实现，运行 GREEN。
 - 提交语义使用 Conventional Commits。
 
+## 开发执行位置
+
+- 后端开发默认在 `remote-build-host` 云服务器执行，包括 Rust workspace、CLI/server/helper、SQLite/service、Tauri Rust side、release/package、Rust check/test/clippy/build 和发布打包验证。
+- 前端开发默认在本地执行，包括 `apps/desktop` 的 React/Vite/TypeScript/CSS/UI 层、前端测试、typecheck 和 UI 预览。
+- 不要用本地 Rust build/test/check/clippy/release 结果替代后端云端验证；如果一次变更同时涉及前端和后端，分别记录本地前端验证和 `remote-build-host` 后端验证的 evidence origin。
+- 后端云端任务结束、失败或阻塞后，按云服务流程清理多余远端 worktree，并停止 `remote-build-host`，除非用户在同一轮明确要求保持运行。
+
 ## 全局 skill 同步
 
 - 任何改动如果改变了用户可见的 kanban CLI、API、data model、workflow、status、task、dependency、comment、JSON、help 或 documentation 使用行为，implementer 必须检查全局 Codex skill `kanban-tool` 是否需要同步。
@@ -58,7 +65,7 @@
 
 ### 默认使用 just
 
-- 本仓库本地验证优先使用 `just`；会写 Cargo target 的 recipes 已经内置共享 target root 与构建锁。
+- 本仓库验证优先使用 `just`；后端/Rust 验证在 `remote-build-host` 执行，前端验证按“开发执行位置”在本地执行。会写 Cargo target 的 recipes 已经内置共享 target root 与构建锁。
 - 不要直接运行会写 Cargo target 的 raw `cargo build/test/check/clippy/nextest/run`；需要新验证入口时，先加 `just` recipe。
 - 验证、review、acceptance gate 必须在用户指定的工作树 / 目录中执行；不要为验证擅自切换到额外 worktree、临时 clone、新路径或隔离目录。
 - 不要额外设置 `KANBAN_CARGO_TARGET_ROOT`、`CARGO_TARGET_DIR` 或其它自定义 target/cache 隔离变量；使用本仓库 `just` recipes 内置的共享 target root 与构建锁。

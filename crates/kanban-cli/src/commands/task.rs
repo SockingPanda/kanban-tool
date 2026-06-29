@@ -311,10 +311,10 @@ fn handle_task_step(
             print_step(json, &step, "Reopened")?;
         }
         TaskStepCommand::Remove { task_ref, step_ref } => {
-            remove_step(db_path, board, actor, &task_ref, &step_ref)?;
+            let step = remove_step(db_path, board, actor, &task_ref, &step_ref)?;
             print_or_json(
                 json,
-                &serde_json::json!({"task_ref": task_ref, "step_ref": step_ref, "removed": true}),
+                &serde_json::json!({"removed": true, "step": step}),
                 || format!("Removed step relation {step_ref} from {task_ref}"),
             )?;
         }

@@ -4,10 +4,16 @@ use anyhow::Result;
 use kanban_sqlite::{
     BoardListOptions, CreateBoard, archive_board, create_board, get_board, list_boards,
 };
+use serde::Serialize;
 
 use crate::args::BoardCommand;
 use crate::commands::common::write_board_config;
 use crate::output::print_or_json;
+
+#[derive(Debug, Serialize)]
+struct ActiveBoardOutput {
+    board: kanban_sqlite::BoardRecord,
+}
 
 pub(crate) fn handle_board(
     command: BoardCommand,
@@ -55,14 +61,15 @@ pub(crate) fn handle_board(
         BoardCommand::Use { board } => {
             let board = get_board(db_path, &board)?;
             write_board_config(&board.slug)?;
-            print_or_json(json, &serde_json::json!({ "board": board.slug }), || {
-                format!("Current board: {}", board.slug)
+            let output = ActiveBoardOutput { board };
+            print_or_json(json, &output, || {
+                format!("Current board: {}", output.board.slug)
             })?;
         }
         BoardCommand::Current => {
-            print_or_json(json, &serde_json::json!({ "board": active_board }), || {
-                active_board.to_owned()
-            })?;
+            let board = get_board(db_path, active_board)?;
+            let output = ActiveBoardOutput { board };
+            print_or_json(json, &output, || output.board.slug.clone())?;
         }
         BoardCommand::Archive { board } => {
             let board = archive_board(db_path, &board, actor)?;

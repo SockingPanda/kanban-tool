@@ -29,7 +29,22 @@ Active board 解析顺序：
 
 `kanban board use <board>` 会把当前目录写成项目级 `.kb/config.toml`；后续子目录自动继承该 active board。该配置只选择本地项目的 board，不创建新 DB。
 
-### 1.1 Shell completions
+### 1.1 JSON output contract
+
+所有公开 `--json` 输出使用顶层 envelope：
+
+```json
+{
+  "data": {},
+  "meta": {}
+}
+```
+
+`meta` 只在需要分页、details 或 diagnostics 时出现。`data` 可以是一个对象，也可以是对象数组；公共输出不得依赖裸 tuple、未命名数组位置、只有内部 id 的临时数组，或只回显输入参数。命令需要表达关系、删除或当前选择时，应返回命名 DTO，例如 `edge.parent`/`edge.child`、`step`、`board`。Task-like DTO 必须带可复制的 `ref`、`id`、`board_id` 或 `board_slug` 中的必要身份字段。
+
+`board current --json` 和 `board use --json` 的 `data.board` 是完整 board 对象；调用方应读取 `data.board.slug`，不要把 `data.board` 当字符串。
+
+### 1.2 Shell completions
 
 ```bash
 kanban completions <shell>
@@ -527,6 +542,71 @@ execution-plan gate。已有 step 的 task 不能标记为 `not_required`。
 kanban dep add <parent_ref> <child_ref>
 kanban dep remove <parent_ref> <child_ref>
 kanban dep list <task_ref>
+```
+
+`--json` 输出使用 hydrated dependency DTO。`dep list --json` 返回以查询 task 为中心的 snapshot：
+
+```json
+{
+  "data": {
+    "task": {
+      "id": "t_child",
+      "board_id": "b_default",
+      "board_slug": "default",
+      "ref": "default#2",
+      "title": "child",
+      "status": "todo"
+    },
+    "parents": [
+      {
+        "id": "t_parent",
+        "board_id": "b_default",
+        "board_slug": "default",
+        "ref": "default#1",
+        "title": "parent",
+        "status": "done"
+      }
+    ],
+    "children": [],
+    "edges": [
+      {
+        "parent": {
+          "id": "t_parent",
+          "board_id": "b_default",
+          "board_slug": "default",
+          "ref": "default#1",
+          "title": "parent",
+          "status": "done"
+        },
+        "child": {
+          "id": "t_child",
+          "board_id": "b_default",
+          "board_slug": "default",
+          "ref": "default#2",
+          "title": "child",
+          "status": "todo"
+        }
+      }
+    ]
+  }
+}
+```
+
+`dep add --json` 和 `dep remove --json` 返回：
+
+```json
+{
+  "data": {
+    "edge": { "parent": {}, "child": {} },
+    "dependencies": { "task": {}, "parents": [], "children": [], "edges": [] }
+  }
+}
+```
+
+常用 jq：
+
+```bash
+kanban dep list default#2 --json | jq -r '.data.edges[] | "\(.parent.ref) -> \(.child.ref)"'
 ```
 
 Human output for add/remove is Chinese-first:

@@ -66,6 +66,50 @@ pub struct TaskRecord {
     pub labels: Vec<LabelRecord>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DependencyTaskRecord {
+    pub id: String,
+    pub board_id: String,
+    pub board_slug: String,
+    #[serde(rename = "ref")]
+    pub task_ref: String,
+    pub title: String,
+    pub status: TaskStatus,
+}
+
+impl From<TaskRecord> for DependencyTaskRecord {
+    fn from(task: TaskRecord) -> Self {
+        Self {
+            id: task.id,
+            board_id: task.board_id,
+            board_slug: task.board_slug,
+            task_ref: task.task_ref,
+            title: task.title,
+            status: task.status,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DependencyEdgeRecord {
+    pub parent: DependencyTaskRecord,
+    pub child: DependencyTaskRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DependencySnapshot {
+    pub task: DependencyTaskRecord,
+    pub parents: Vec<DependencyTaskRecord>,
+    pub children: Vec<DependencyTaskRecord>,
+    pub edges: Vec<DependencyEdgeRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DependencyMutation {
+    pub edge: DependencyEdgeRecord,
+    pub dependencies: DependencySnapshot,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskOntologySummary {
     pub task_id: String,

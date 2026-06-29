@@ -43,7 +43,7 @@ Setup script 会准备：
 
 - Rust stable、`rustfmt`、`clippy`。
 - `just`。
-- `cargo-nextest`，供 `just test` 和 `just rust-fast` 优先使用。
+- `cargo-nextest`，供 `just test`、`just test-full` 和 `just rust-fast` 优先使用。
 - Node.js / pnpm 10 / `apps/desktop` dependencies。
 - Debian/Ubuntu 上的 protobuf compiler / well-known types，以及 Tauri Linux build dependencies，包括 WebKitGTK、GTK、ayatana appindicator、xdo、rsvg、OpenSSL 和 Debian packaging tools。
 - Rust crate cache，通过 `cargo fetch --locked` 预热。
@@ -76,8 +76,8 @@ Equivalent expanded core steps:
 ```bash
 just fmt
 just check-core
-just test-core
-just clippy-core
+just test
+just clippy
 ```
 
 Single package:
@@ -94,6 +94,8 @@ Helper-heavy backend validation:
 just check-helpers
 just test-helpers
 just clippy-helpers
+just test-full
+just clippy-full
 ```
 
 Use `just rust-full` when a branch touches helper backends or release-sensitive
@@ -134,7 +136,7 @@ For backend-only work:
 
 ```text
 Verify backend/CLI/SQLite behavior for this branch using AGENTS.md.
-Run `just rust-fast` for daily core validation, or `just rust-full` if helper-heavy crates are affected.
+Run `just rust-fast` for daily core validation, or `just rust-full` if helper-heavy crates are affected. `just test` and `just clippy` are core defaults; use `just test-full` and `just clippy-full` when helper-heavy crates need explicit coverage.
 Fix only branch-caused failures and report command evidence.
 ```
 
@@ -167,7 +169,7 @@ If `desktop-package` fails with missing `webkit2gtk`, reset the environment cach
 
 If `pnpm --dir apps/desktop install --frozen-lockfile` fails because of the pnpm version, keep Node pinned to 22 and rerun setup; the script activates pnpm 10, which supports this lockfile format.
 
-If `cargo-nextest` install is too slow for a temporary environment, set `CODEX_CLOUD_INSTALL_NEXTEST=0`; `just test` will fall back to `cargo test`.
+If `cargo-nextest` install is too slow for a temporary environment, set `CODEX_CLOUD_INSTALL_NEXTEST=0`; `just test` and `just test-full` will fall back to `cargo test`.
 
 ## References
 

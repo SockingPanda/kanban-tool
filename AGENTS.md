@@ -67,7 +67,7 @@
 
 常用验证：
 
-- Rust 快速检查：`just fmt`、`just check`、`just test`、`just clippy`、`just rust-fast`。
+- Rust 快速检查：`just fmt`、`just check`、`just test`、`just clippy`、`just rust-fast`。其中 `just test` / `just clippy` 默认覆盖 core set；需要 helper-heavy backend 时使用 `just test-full` / `just clippy-full` 或 `just rust-full`。
 - 单 crate：`just check-p kanban-cli`、`just test-p kanban-cli`、`just clippy-p kanban-cli`。
 - feature 组合：`just feature-p kanban-cli tantivy-backend`。
 - Desktop / Web：`just desktop-check`、`just desktop-package`、`just web-test`、`just web-typecheck`、`just web-build`。

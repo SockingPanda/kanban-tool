@@ -1,6 +1,6 @@
 use std::{path::PathBuf, process};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::{Parser, Subcommand};
 use kanban_derived_io::{
     board_id, connect_file, current_last_event_id, derived_status_by_name,
@@ -169,10 +169,9 @@ fn run() -> Result<()> {
             print_payload(hits)
         }
         Command::QueryLabelAtoms(args) => {
-            let store = configured_store(&args.store)?;
             if let Some(vector_json) = args.vector_json {
-                let vector: Vec<f32> =
-                    serde_json::from_str(&vector_json).context("invalid --vector-json payload")?;
+                let vector = parse_vector_json(&vector_json)?;
+                let store = configured_store(&args.store)?;
                 let hits = store.query_label_atoms_by_vector(&LabelAtomVectorQuery {
                     vector,
                     limit: args.limit,
@@ -183,6 +182,7 @@ fn run() -> Result<()> {
                 })?;
                 print_payload(hits)
             } else {
+                let store = configured_store(&args.store)?;
                 let hits = store.query_label_atoms(&LabelAtomQuery {
                     text: args.text.unwrap_or_default(),
                     limit: args.limit,
@@ -214,6 +214,32 @@ fn run() -> Result<()> {
             let provider = provider_from_store_args(&args.store)?;
             print_payload(provider.embed(&args.text)?)
         }
+    }
+}
+
+fn parse_vector_json(vector_json: &str) -> Result<Vec<f32>> {
+    let mut deserializer = serde_json::Deserializer::from_str(vector_json);
+    let vector = serde_path_to_error::deserialize(&mut deserializer).map_err(|err| {
+        let path = vector_json_path(&err.path().to_string());
+        anyhow!(
+            "invalid --vector-json payload at {path}: {}",
+            err.into_inner()
+        )
+    })?;
+    deserializer.end().map_err(|err| {
+        anyhow!(
+            "invalid --vector-json payload at {}: {err}",
+            vector_json_path(".")
+        )
+    })?;
+    Ok(vector)
+}
+
+fn vector_json_path(path: &str) -> String {
+    if path == "." {
+        "<root>".to_owned()
+    } else {
+        path.to_owned()
     }
 }
 

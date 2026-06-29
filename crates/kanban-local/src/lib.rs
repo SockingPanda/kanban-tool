@@ -181,7 +181,7 @@ pub fn read_project_config(path: &Path) -> Result<ProjectConfig, ConfigError> {
     serde_path_to_error::deserialize(deserializer).map_err(|err| ConfigError::FileParse {
         path: path.to_path_buf(),
         field_path: err.path().to_string(),
-        source: err.into_inner(),
+        source: Box::new(err.into_inner()),
     })
 }
 
@@ -259,12 +259,18 @@ pub enum ConfigError {
         path: PathBuf,
         field_path: String,
         #[source]
-        source: toml::de::Error,
+        source: Box<toml::de::Error>,
     },
     #[error("{0}")]
-    Parse(#[from] toml::de::Error),
+    Parse(#[source] Box<toml::de::Error>),
     #[error("{0}")]
     Serialize(#[from] toml::ser::Error),
+}
+
+impl From<toml::de::Error> for ConfigError {
+    fn from(source: toml::de::Error) -> Self {
+        Self::Parse(Box::new(source))
+    }
 }
 
 pub fn default_actor() -> String {

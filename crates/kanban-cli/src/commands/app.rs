@@ -12,7 +12,6 @@ use crate::commands::{
     board::handle_board,
     comment::handle_comment,
     common::{active_board, default_actor, default_db_path},
-    dag::handle_dag,
     dep::handle_dep,
     dispatch::{dispatch_loop, dispatch_options},
     index::handle_index,
@@ -74,7 +73,6 @@ pub(crate) fn run() -> Result<()> {
         }
         Command::Label { command } => handle_label(command, &db_path, &board, &actor, cli.json)?,
         Command::Dep { command } => handle_dep(command, &db_path, &board, &actor, cli.json)?,
-        Command::Dag { command } => handle_dag(command, &db_path, &board, cli.json)?,
         Command::Events { task_ref } => {
             let events = list_events(&db_path, &board, task_ref.as_deref())?;
             print_or_json(cli.json, &events, || {

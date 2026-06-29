@@ -9,7 +9,6 @@ mod comment_metadata;
 mod comments;
 mod completions;
 mod context;
-mod dag;
 mod dependencies;
 mod dispatch;
 mod entities;
@@ -39,7 +38,6 @@ pub use boards::*;
 pub use comments::*;
 pub use completions::*;
 pub use context::*;
-pub use dag::*;
 pub use dependencies::*;
 pub use dispatch::*;
 pub use entities::{

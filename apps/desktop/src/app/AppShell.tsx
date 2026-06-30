@@ -93,6 +93,7 @@ import type {
   PageMeta,
 } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/i18n"
 
 const viewMetadata: Record<OperatorView, { label: string; icon: ElementType }> = {
   board: { label: "Board", icon: SquareKanban },
@@ -397,6 +398,7 @@ function TaskDetailSheet({
   pendingAction: string | null
   taskDetail: AppShellTaskDetailProps
 }) {
+  const { t } = useI18n()
   const {
     activeRun,
     blockReason,
@@ -432,8 +434,8 @@ function TaskDetailSheet({
       }}
     >
       <SheetContent side="right" className="w-[min(1100px,calc(100vw-24px))] p-0">
-        <SheetTitle className="sr-only">Task detail</SheetTitle>
-        <SheetDescription className="sr-only">Task workbench with one-hop map, description, execution plan, discussion, runs, events, and metadata.</SheetDescription>
+        <SheetTitle className="sr-only">{t("Task detail")}</SheetTitle>
+        <SheetDescription className="sr-only">{t("Task workbench with one-hop map, description, execution plan, discussion, runs, events, and metadata.")}</SheetDescription>
         <Suspense fallback={<LazyViewFallback label="Loading task detail" />}>
           <TaskDetail
             api={api}
@@ -504,6 +506,7 @@ function ShellSidebar({
   onBoardChange: (value: string) => void
   onViewChange: (value: OperatorView) => void
 }) {
+  const { t } = useI18n()
   const [contentOpen, setContentOpen] = useState(open)
 
   useEffect(() => {
@@ -538,29 +541,29 @@ function ShellSidebar({
           kb
         </div>
         <div className={cn("min-w-0 max-sm:hidden", !contentOpen && "hidden")}>
-          <div className="text-sm font-semibold">Kanban Tool</div>
-          <div className="text-xs text-muted-foreground">local queue</div>
+          <div className="text-sm font-semibold">{t("Kanban Tool")}</div>
+          <div className="text-xs text-muted-foreground">{t("local queue")}</div>
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarNavGroup label="Task Explorer" open={contentOpen}>
+        <SidebarNavGroup label={t("Task Explorer")} open={contentOpen}>
           {sidebarViews.filter((item) => ["board", "list", "map", "runs", "events", "ontology"].includes(item)).map((item) => (
             <SidebarNavItem
               key={item}
               icon={viewIcon(item)}
-              label={viewLabel(item)}
+              label={viewLabel(item, t)}
               active={view === item}
               open={contentOpen}
               onClick={() => onViewChange(item)}
             />
           ))}
         </SidebarNavGroup>
-        <SidebarNavGroup label="System" open={contentOpen}>
+        <SidebarNavGroup label={t("System")} open={contentOpen}>
           {sidebarViews.filter((item) => ["maintenance", "health", "settings"].includes(item)).map((item) => (
             <SidebarNavItem
               key={item}
               icon={viewIcon(item)}
-              label={viewLabel(item)}
+              label={viewLabel(item, t)}
               active={view === item}
               open={contentOpen}
               onClick={() => onViewChange(item)}
@@ -579,12 +582,12 @@ function ShellSidebar({
         />
         <div className="flex items-center gap-2">
           <Database className="h-3.5 w-3.5" />
-          <span className="truncate">{config?.dbPath ?? "loading db"}</span>
+          <span className="truncate">{config?.dbPath ?? t("loading db")}</span>
         </div>
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-2">
             <Server className="h-3.5 w-3.5" />
-            API
+            {t("API")}
           </span>
           <span>{config ? apiEndpointLabel(config.apiBaseUrl) : "-"}</span>
         </div>
@@ -608,8 +611,9 @@ function BoardSwitcher({
   switching: boolean
   onBoardChange: (value: string) => void
 }) {
+  const { t } = useI18n()
   const activeBoard = boards.find((board) => board.slug === config?.board || board.id === config?.board)
-  const activeLabel = activeBoard?.name ?? config?.board ?? "loading board"
+  const activeLabel = activeBoard?.name ?? config?.board ?? t("loading board")
 
   if (!config || loading) {
     return (
@@ -633,7 +637,7 @@ function BoardSwitcher({
             <SquareKanban className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs font-medium text-foreground">{activeLabel}</span>
-              <span className="block truncate text-[11px] text-muted-foreground">board {config.board}</span>
+              <span className="block truncate text-[11px] text-muted-foreground">{t("board {board}", { board: config.board })}</span>
             </span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           </Button>
@@ -646,7 +650,7 @@ function BoardSwitcher({
                   <span className="block truncate">{board.name}</span>
                   <span className="block truncate text-xs text-muted-foreground">{board.slug}</span>
                 </span>
-                {board.slug === config.board ? <Badge variant="secondary">active</Badge> : null}
+                {board.slug === config.board ? <Badge variant="secondary">{t("Active")}</Badge> : null}
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
@@ -714,15 +718,18 @@ function ShellHeader({
   onNewFirstStepTitleChange: (value: string) => void
   onTaskCreationOpenChange: (value: boolean) => void
 }) {
+  const { t } = useI18n()
   const ThemeIcon = themeMode === "dark" ? Moon : themeMode === "light" ? Sun : Monitor
   const showAddTask = shouldShowTaskExplorerToolbar(view)
+  const sidebarLabel = sidebarOpen ? t("Collapse sidebar") : t("Expand sidebar")
+  const refreshLabel = tasksRefreshing ? t("Refreshing tasks") : t("Refresh tasks")
   return (
     <header className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 sm:flex-nowrap sm:gap-3 sm:px-4">
       <Button
         variant="ghost"
         size="icon"
-        aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-        title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+        aria-label={sidebarLabel}
+        title={sidebarLabel}
         onClick={() => onSidebarOpenChange(!sidebarOpen)}
       >
         <PanelLeft className="h-4 w-4" />
@@ -731,10 +738,10 @@ function ShellHeader({
         <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
         <Input
           className="pl-8"
-          aria-label="Search tasks"
+          aria-label={t("Search tasks")}
           name="task-search"
           autoComplete="off"
-          placeholder="Search tasks"
+          placeholder={t("Search tasks")}
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
         />
@@ -743,8 +750,8 @@ function ShellHeader({
       <Button
         variant="secondary"
         size="icon"
-        aria-label={tasksRefreshing ? "Refreshing tasks" : "Refresh tasks"}
-        title={tasksRefreshing ? "Refreshing tasks" : "Refresh tasks"}
+        aria-label={refreshLabel}
+        title={refreshLabel}
         onClick={onRefreshTasks}
         disabled={tasksRefreshing}
       >
@@ -754,7 +761,7 @@ function ShellHeader({
         <TabsList>
           {primaryViews.map((item) => (
             <TabsTrigger key={item} value={item}>
-              {viewLabel(item)}
+              {viewLabel(item, t)}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -764,10 +771,10 @@ function ShellHeader({
         variant={showArchived ? "secondary" : "outline"}
         size="sm"
         aria-pressed={showArchived}
-        aria-label={showArchived ? "Archived tasks included" : "Archived tasks hidden"}
+        aria-label={showArchived ? t("Archived tasks included") : t("Archived tasks hidden")}
         onClick={() => onShowArchivedChange(!showArchived)}
       >
-        Archived
+        {t("Archived")}
       </Button>
       <div className="ml-auto flex items-center gap-2">
         {showAddTask ? (
@@ -785,7 +792,7 @@ function ShellHeader({
             onNewFirstStepTitleChange={onNewFirstStepTitleChange}
           />
         ) : null}
-        <Button variant="ghost" size="icon" aria-label="Cycle theme mode" title={`Theme: ${themeMode}`} onClick={onCycleThemeMode}>
+        <Button variant="ghost" size="icon" aria-label={t("Cycle theme mode")} title={t("Theme: {mode}", { mode: themeMode })} onClick={onCycleThemeMode}>
           <ThemeIcon className="h-4 w-4" />
         </Button>
       </div>
@@ -818,6 +825,7 @@ function AddTaskDialog({
   onNewDescriptionChange: (value: string) => void
   onNewFirstStepTitleChange: (value: string) => void
 }) {
+  const { t } = useI18n()
   const creating = pendingAction === "create"
 
   async function submitTask(event: FormEvent) {
@@ -829,48 +837,48 @@ function AddTaskDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Button type="button" aria-label="Add task" onClick={() => onOpenChange(true)}>
+      <Button type="button" aria-label={t("Add task")} onClick={() => onOpenChange(true)}>
         <Plus className="h-4 w-4" />
-        Add task
+        {t("Add task")}
       </Button>
       <DialogContent>
         <form onSubmit={submitTask} className="space-y-4">
           <DialogHeader>
-            <DialogTitle>Add task</DialogTitle>
-            <DialogDescription>Create a task on the active board.</DialogDescription>
+            <DialogTitle>{t("Add task")}</DialogTitle>
+            <DialogDescription>{t("Create a task on the active board.")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <Input
-              aria-label="New task title"
+              aria-label={t("New task title")}
               name="new-task-title"
               autoComplete="off"
               value={newTitle}
               onChange={(event) => onNewTitleChange(event.target.value)}
-              placeholder="Title"
+              placeholder={t("Title")}
             />
             <Textarea
-              aria-label="New task description"
+              aria-label={t("New task description")}
               name="new-task-description"
               autoComplete="off"
               value={newDescription}
               onChange={(event) => onNewDescriptionChange(event.target.value)}
-              placeholder="Optional spec or description"
+              placeholder={t("Optional spec or description")}
             />
             <Input
-              aria-label="First step title"
+              aria-label={t("First step title")}
               name="new-first-step-title"
               autoComplete="off"
               value={newFirstStepTitle}
               onChange={(event) => onNewFirstStepTitleChange(event.target.value)}
-              placeholder="Optional first required step"
+              placeholder={t("Optional first required step")}
             />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button type="submit" disabled={!canCreateTask || !newTitle.trim() || creating}>
-              {creating ? "Creating…" : "Create task"}
+              {creating ? t("Creating…") : t("Create task")}
             </Button>
           </DialogFooter>
         </form>
@@ -1016,9 +1024,10 @@ function MainView({
 }
 
 function LazyViewFallback({ label }: { label: string }) {
+  const { t } = useI18n()
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
-      <div className="text-sm text-muted-foreground">{label}</div>
+      <div className="text-sm text-muted-foreground">{t(label)}</div>
       <Skeleton className="h-10 w-72" />
       <Skeleton className="h-48 w-full" />
       <Skeleton className="h-32 w-2/3" />
@@ -1033,21 +1042,23 @@ function StatusBar({
   lastRefreshAt: number | null
   queueCounts: { ready: number; running: number; blocked: number }
 }) {
+  const { t } = useI18n()
   return (
     <footer className="flex h-8 items-center justify-between border-t border-border bg-card px-4 text-xs text-muted-foreground">
-      <span>Last refresh {lastRefreshAt ? new Date(lastRefreshAt).toLocaleTimeString() : "-"}</span>
+      <span>{t("Last refresh")} {lastRefreshAt ? new Date(lastRefreshAt).toLocaleTimeString() : "-"}</span>
       <span>
-        ready {queueCounts.ready} / running {queueCounts.running} / blocked {queueCounts.blocked}
+        {t("ready")} {queueCounts.ready} / {t("running")} {queueCounts.running} / {t("blocked")} {queueCounts.blocked}
       </span>
     </footer>
   )
 }
 
 function SearchBackendBadge({ meta }: { meta: SearchTasksMeta }) {
+  const { t } = useI18n()
   return (
     <Badge variant={meta.stale ? "review" : "secondary"}>
-      search {meta.backend}
-      {meta.stale ? " stale/degraded" : ""}
+      {t("search")} {meta.backend}
+      {meta.stale ? ` ${t("stale/degraded")}` : ""}
       {meta.index_lag_events && meta.index_lag_events > 0 ? ` +${meta.index_lag_events}` : ""}
     </Badge>
   )
@@ -1093,8 +1104,8 @@ function SidebarNavGroup({ label, open, children }: { label: string; open: boole
   )
 }
 
-function viewLabel(view: OperatorView): string {
-  return viewMetadata[view].label
+function viewLabel(view: OperatorView, t: (key: string) => string): string {
+  return t(viewMetadata[view].label)
 }
 
 function viewIcon(view: OperatorView): ElementType {

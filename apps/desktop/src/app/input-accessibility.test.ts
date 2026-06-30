@@ -33,13 +33,13 @@ describe("desktop input accessibility contracts", () => {
       appShell.indexOf("function MainView"),
     )
 
-    expect(appShell).toContain('aria-label="Search tasks"')
+    expect(appShell).toContain('aria-label={t("Search tasks")}')
     expect(appShell).toContain('name="task-search"')
     expect(appShell).toContain('autoComplete="off"')
-    expect(addTaskDialog).toContain('aria-label="Add task"')
-    expect(addTaskDialog).toContain('aria-label="New task title"')
+    expect(addTaskDialog).toContain('aria-label={t("Add task")}')
+    expect(addTaskDialog).toContain('aria-label={t("New task title")}')
     expect(addTaskDialog).toContain('name="new-task-title"')
-    expect(addTaskDialog).toContain('aria-label="New task description"')
+    expect(addTaskDialog).toContain('aria-label={t("New task description")}')
     expect(addTaskDialog).toContain('name="new-task-description"')
     expect(addTaskDialog).toContain('autoComplete="off"')
 

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { InputGroup, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
+import { useI18n } from "@/i18n"
 import type { KanbanApi, LabelSuggestionResult, Task } from "@/lib/api"
 
 export function TaskLabelsPanel({
@@ -36,6 +37,7 @@ export function TaskLabelsPanel({
   onRequestLabelSuggestions?: () => void
   onApplySuggestedLabel: (labelName: string) => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="min-w-0 space-y-3">
       <div className="flex min-w-0 max-w-full flex-wrap gap-1.5">
@@ -50,7 +52,7 @@ export function TaskLabelsPanel({
                 variant="ghost"
                 className="h-6 rounded-none px-1.5 text-muted-foreground hover:text-destructive"
                 disabled={!api || pending}
-                aria-label={`Remove label ${label.name}`}
+                aria-label={t("Remove label {name}", { name: label.name })}
                 onClick={() => onRemoveLabel(label.id)}
               >
                 <X className="h-3.5 w-3.5" />
@@ -58,7 +60,7 @@ export function TaskLabelsPanel({
             </span>
           ))
         ) : (
-          <span className="text-sm text-muted-foreground">none</span>
+          <span className="text-sm text-muted-foreground">{t("none")}</span>
         )}
       </div>
       <LabelSuggestionsPanel
@@ -72,10 +74,10 @@ export function TaskLabelsPanel({
         onApply={onApplySuggestedLabel}
       />
       <Field>
-        <FieldLabel>Label name</FieldLabel>
+        <FieldLabel>{t("Label name")}</FieldLabel>
         <InputGroup>
-          <InputGroupInput aria-label="Label name" name="label-name" autoComplete="off" value={labelInput} onChange={(event) => setLabelInput(event.target.value)} placeholder="Label name" />
-          <InputGroupButton variant="outline" aria-label="Add label" disabled={!api || !labelInput.trim() || pending} onClick={onAddLabel}>
+          <InputGroupInput aria-label={t("Label name")} name="label-name" autoComplete="off" value={labelInput} onChange={(event) => setLabelInput(event.target.value)} placeholder={t("Label name")} />
+          <InputGroupButton variant="outline" aria-label={t("Add label")} disabled={!api || !labelInput.trim() || pending} onClick={onAddLabel}>
             <Plus className="h-4 w-4" />
           </InputGroupButton>
         </InputGroup>
@@ -94,34 +96,34 @@ export async function applySuggestedTaskLabel(
   return onAction(() => api.addTaskLabel(taskId, labelName), { fallbackTaskId: taskId, label: "label", invalidate: "task" })
 }
 
-function labelSuggestionReasonLabel(code: string) {
+function labelSuggestionReasonLabel(code: string, t: (key: string) => string) {
   switch (code) {
     case "coverage_below_threshold":
-      return "coverage gap"
+      return t("coverage gap")
     case "degraded_result":
-      return "degraded result"
+      return t("degraded result")
     case "label_atom_index_dirty":
-      return "index dirty"
+      return t("index dirty")
     case "label_atom_index_empty":
-      return "index empty"
+      return t("index empty")
     case "label_atom_index_error":
-      return "index error"
+      return t("index error")
     case "no_selected_labels":
-      return "no selected labels"
+      return t("no selected labels")
     case "residual_above_threshold":
-      return "unexplained residual"
+      return t("unexplained residual")
     case "vector_query_error":
-      return "vector query error"
+      return t("vector query error")
     case "vector_store_disabled":
-      return "vector store disabled"
+      return t("vector store disabled")
     default:
       return code.replace(/_/g, " ")
   }
 }
 
-function labelSuggestionReasonText(reasonCodes: string[]) {
-  if (!reasonCodes.length) return "review required"
-  return reasonCodes.map(labelSuggestionReasonLabel).join(", ")
+function labelSuggestionReasonText(reasonCodes: string[], t: (key: string) => string) {
+  if (!reasonCodes.length) return t("review required")
+  return reasonCodes.map((code) => labelSuggestionReasonLabel(code, t)).join(", ")
 }
 
 function LabelSuggestionsPanel({
@@ -143,12 +145,13 @@ function LabelSuggestionsPanel({
   onRequest?: () => void
   onApply: (labelName: string) => void
 }) {
+  const { t } = useI18n()
   const requestDisabled = disabled || loading || !onRequest
-  const reasonText = suggestions ? labelSuggestionReasonText(suggestions.reason_codes) : null
+  const reasonText = suggestions ? labelSuggestionReasonText(suggestions.reason_codes, t) : null
   const requestButton = (
-    <Button type="button" variant="outline" size="sm" disabled={requestDisabled} aria-label="Suggest labels" onClick={onRequest}>
+    <Button type="button" variant="outline" size="sm" disabled={requestDisabled} aria-label={t("Suggest labels")} onClick={onRequest}>
       {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-      {loading ? "Suggesting…" : requested || suggestions ? "Refresh suggestions" : "Suggest labels"}
+      {loading ? t("Suggesting…") : requested || suggestions ? t("Refresh suggestions") : t("Suggest labels")}
     </Button>
   )
 
@@ -160,32 +163,35 @@ function LabelSuggestionsPanel({
   return (
     <div className="min-w-0 w-full max-w-full space-y-2 overflow-hidden rounded-md border border-border p-2">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-xs">
-        <span className="min-w-0 font-medium text-muted-foreground">Suggestions</span>
+        <span className="min-w-0 font-medium text-muted-foreground">{t("Suggestions")}</span>
         <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
           {suggestions ? (
             <span className="min-w-0 max-w-full break-words text-right text-muted-foreground">
-              coverage {(suggestions.coverage * 100).toFixed(0)}% / cosine {(suggestions.coverage_cosine * 100).toFixed(0)}% / residual{" "}
-              {suggestions.residual_norm.toFixed(3)}
+              {t("coverage {coverage}% / cosine {cosine}% / residual {residual}", {
+                coverage: (suggestions.coverage * 100).toFixed(0),
+                cosine: (suggestions.coverage_cosine * 100).toFixed(0),
+                residual: suggestions.residual_norm.toFixed(3),
+              })}
             </span>
           ) : null}
           {requestButton}
         </div>
       </div>
-      {loading && !suggestions ? <div className="text-xs text-muted-foreground">Finding label suggestions…</div> : null}
+      {loading && !suggestions ? <div className="text-xs text-muted-foreground">{t("Finding label suggestions…")}</div> : null}
       {error ? (
         <Alert className="border-destructive/50 bg-destructive/5 py-2">
-          <AlertTitle className="text-xs text-destructive">Suggestions failed</AlertTitle>
+          <AlertTitle className="text-xs text-destructive">{t("Suggestions failed")}</AlertTitle>
           <AlertDescription className="break-words text-xs text-destructive">{error}</AlertDescription>
         </Alert>
       ) : null}
       {suggestions?.needs_new_label ? (
         <div className="max-w-full rounded-sm border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800">
-          Existing label coverage needs review: {reasonText}
+          {t("Existing label coverage needs review: {reason}", { reason: reasonText ?? "" })}
         </div>
       ) : null}
       {suggestions?.degraded ? (
         <Alert className="py-2">
-          <AlertTitle className="text-xs">Degraded</AlertTitle>
+          <AlertTitle className="text-xs">{t("Degraded")}</AlertTitle>
           <AlertDescription className="break-words text-xs">{suggestions.diagnostics.join(", ")}</AlertDescription>
         </Alert>
       ) : null}
@@ -195,7 +201,7 @@ function LabelSuggestionsPanel({
             <div key={suggestion.label_id} className="flex min-w-0 max-w-full items-start justify-between gap-2">
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="min-w-0 max-w-full truncate text-sm font-medium">{suggestion.label_name}</div>
-                <div className="text-xs text-muted-foreground">score {suggestion.score.toFixed(3)}</div>
+                <div className="text-xs text-muted-foreground">{t("score {score}", { score: suggestion.score.toFixed(3) })}</div>
                 {suggestion.evidence_atoms.length ? (
                   <div className="min-w-0 max-w-full space-y-0.5">
                     {suggestion.evidence_atoms.slice(0, 2).map((atom) => (
@@ -205,17 +211,17 @@ function LabelSuggestionsPanel({
                     ))}
                   </div>
                 ) : null}
-                {suggestion.negative_evidence_atoms.length ? <div className="text-xs text-muted-foreground">negative evidence {suggestion.negative_evidence_atoms.length}</div> : null}
+                {suggestion.negative_evidence_atoms.length ? <div className="text-xs text-muted-foreground">{t("negative evidence {count}", { count: suggestion.negative_evidence_atoms.length })}</div> : null}
               </div>
               <Button type="button" variant="outline" size="sm" disabled={disabled || pending || suggestion.already_applied} className="shrink-0" onClick={() => onApply(suggestion.label_name)}>
                 <Plus className="h-3.5 w-3.5" />
-                {suggestion.already_applied ? "Applied" : "Apply"}
+                {suggestion.already_applied ? t("Applied") : t("Apply")}
               </Button>
             </div>
           ))}
         </div>
       ) : !loading && !error ? (
-        <div className="text-xs text-muted-foreground">No label suggestions.</div>
+        <div className="text-xs text-muted-foreground">{t("No label suggestions.")}</div>
       ) : null}
     </div>
   )

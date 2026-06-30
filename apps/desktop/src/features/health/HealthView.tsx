@@ -8,6 +8,7 @@ import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useI18n } from "@/i18n"
 import type { HealthStatus, KanbanApi, RuntimeConfig } from "@/lib/api"
 
 type MetricTone = "ready" | "blocked" | "secondary"
@@ -24,43 +25,52 @@ type RuntimeWarning = {
   message: string
 }
 
-export function buildHealthRuntimeModel(health: HealthStatus, config: RuntimeConfig | null) {
+type Translate = (key: string, values?: Record<string, string | number>) => string
+
+const identityTranslate: Translate = (key, values = {}) =>
+  key.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => {
+    const value = values[name]
+    return value === undefined ? match : String(value)
+  })
+
+export function buildHealthRuntimeModel(health: HealthStatus, config: RuntimeConfig | null, t: Translate = identityTranslate) {
   const metrics: HealthMetric[] = [
-    { id: "ok", label: "ok", value: String(health.ok), tone: health.ok ? "ready" : "blocked" },
-    { id: "db", label: "db", value: health.db, tone: health.db === "ok" ? "ready" : "blocked" },
-    { id: "version", label: "version", value: health.version, tone: "secondary" },
-    { id: "db-path", label: "db_path", value: reportedValue(health.db_path), tone: "secondary" },
-    { id: "db-fingerprint", label: "db_fingerprint", value: reportedValue(health.db_fingerprint), tone: "secondary" },
+    { id: "ok", label: t("ok"), value: String(health.ok), tone: health.ok ? "ready" : "blocked" },
+    { id: "db", label: t("db"), value: health.db, tone: health.db === "ok" ? "ready" : "blocked" },
+    { id: "version", label: t("version"), value: health.version, tone: "secondary" },
+    { id: "db-path", label: t("db_path"), value: reportedValue(health.db_path, t), tone: "secondary" },
+    { id: "db-fingerprint", label: t("db_fingerprint"), value: reportedValue(health.db_fingerprint, t), tone: "secondary" },
   ]
 
   return {
     metrics,
-    warning: runtimeMismatchWarning(health.db_path, config?.dbPath),
+    warning: runtimeMismatchWarning(health.db_path, config?.dbPath, t),
   }
 }
 
 export function HealthView({ api, config }: { api: KanbanApi | null; config: RuntimeConfig | null }) {
+  const { t } = useI18n()
   const healthQuery = useQuery({
     enabled: Boolean(api),
     queryKey: ["health", config?.apiBaseUrl ?? "pending", config?.dbPath ?? "pending"],
     queryFn: ({ signal }) => {
-      if (!api) throw new Error("API client is not ready")
+      if (!api) throw new Error(t("API client is not ready."))
       return api.health({ signal })
     },
     placeholderData: keepPreviousData,
   })
 
-  const runtimeModel = healthQuery.data ? buildHealthRuntimeModel(healthQuery.data, config) : null
+  const runtimeModel = healthQuery.data ? buildHealthRuntimeModel(healthQuery.data, config, t) : null
 
   return (
     <ScrollArea className="flex-1 bg-card p-4">
       <SectionCard
-        title="Runtime health"
+        title={t("Runtime health")}
         icon={Activity}
         actions={
           <Button variant="ghost" size="sm" disabled={healthQuery.isFetching} onClick={() => void healthQuery.refetch()}>
             <RefreshCcw className="h-4 w-4" />
-            Refresh
+            {t("Refresh")}
           </Button>
         }
       >
@@ -73,7 +83,7 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
         ) : (
           healthQuery.isLoading ? <Skeleton className="h-16" /> : (
             <Empty className="p-0">
-              <EmptyDescription>No health response.</EmptyDescription>
+              <EmptyDescription>{t("No health response.")}</EmptyDescription>
             </Empty>
           )
         )}
@@ -90,7 +100,7 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
         ) : null}
       </SectionCard>
 
-      <SectionCard title="Runtime config" icon={Database} className="mt-4">
+      <SectionCard title={t("Runtime config")} icon={Database} className="mt-4">
         <div className="space-y-2 text-sm">
           <InfoRow label="board" value={config?.board ?? "-"} />
           <InfoRow label="actor" value={config?.actor ?? "-"} />
@@ -115,21 +125,22 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function reportedValue(value: string | undefined) {
+function reportedValue(value: string | undefined, t: Translate = identityTranslate) {
   const trimmed = value?.trim()
-  return trimmed || "not reported"
+  return trimmed || t("not reported")
 }
 
-function runtimeMismatchWarning(healthDbPath: string | undefined, configDbPath: string | undefined): RuntimeWarning | null {
+function runtimeMismatchWarning(healthDbPath: string | undefined, configDbPath: string | undefined, t: Translate = identityTranslate): RuntimeWarning | null {
   const healthPath = normalizedConcretePath(healthDbPath)
   const configPath = normalizedConcretePath(configDbPath)
   if (!healthPath || !configPath || healthPath === configPath) return null
 
   return {
-    title: "Runtime database mismatch",
-    message:
-      `Health is responding from ${healthPath}, but the desktop runtime is configured for ${configPath}. ` +
-      "Restart kanban serve, check that this window is using the intended port, and verify VITE_KB_API_BASE_URL / VITE_KB_DEV_PROXY_TARGET.",
+    title: t("Runtime database mismatch"),
+    message: t(
+      "Health is responding from {healthPath}, but the desktop runtime is configured for {configPath}. Restart kanban serve, check that this window is using the intended port, and verify VITE_KB_API_BASE_URL / VITE_KB_DEV_PROXY_TARGET.",
+      { healthPath, configPath },
+    ),
   }
 }
 

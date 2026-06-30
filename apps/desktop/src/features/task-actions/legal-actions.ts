@@ -22,13 +22,14 @@ import {
   requiresForceConfirmation,
   specifyTaskBody,
 } from "@/lib/action-policy"
+import type { I18nMessage } from "@/i18n"
 
 export type LegalTaskAction = {
   label: string
   icon: LucideIcon
   enabled: boolean
   danger?: boolean
-  confirmation?: string
+  confirmation?: I18nMessage
   run: (api: KanbanApi, task: Task) => Promise<unknown>
 }
 
@@ -63,7 +64,7 @@ export function legalActions(task: Task, claimToken: string | null, blockReason:
       icon: CheckCircle2,
       enabled: canCompleteTask(task.status),
       confirmation: requiresForceConfirmation(task.status, "complete", claimToken)
-        ? `Force complete running task #${task.seq} without a claim token?`
+        ? message("Force complete running task #{seq} without a claim token?", { seq: task.seq })
         : undefined,
       run: (api, item) => api.transition(item, "complete", completeTaskBody(item.status, claimToken)),
     },
@@ -78,7 +79,7 @@ export function legalActions(task: Task, claimToken: string | null, blockReason:
       icon: XCircle,
       enabled: canBlockTask(task.status, claimToken, blockReason),
       confirmation: requiresForceConfirmation(task.status, "block", claimToken)
-        ? `Force block running task #${task.seq} without a claim token?`
+        ? message("Force block running task #{seq} without a claim token?", { seq: task.seq })
         : undefined,
       danger: true,
       run: (api, item) => api.transition(item, "block", blockTaskBody(item.status, claimToken, blockReason)),
@@ -94,10 +95,14 @@ export function legalActions(task: Task, claimToken: string | null, blockReason:
       icon: Archive,
       enabled: canArchiveTask(task.status),
       confirmation: requiresForceConfirmation(task.status, "archive", claimToken)
-        ? `Force archive running task #${task.seq}?`
+        ? message("Force archive running task #{seq}?", { seq: task.seq })
         : undefined,
       danger: true,
       run: (api, item) => api.transition(item, "archive", archiveTaskBody(item.status)),
     },
   ]
+}
+
+function message(key: string, values?: Record<string, string | number>): I18nMessage {
+  return values ? { key, values } : { key }
 }

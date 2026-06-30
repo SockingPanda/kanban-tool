@@ -10,16 +10,12 @@ import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { InputGroup, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
+import { useI18n } from "@/i18n"
 import type { CommentRecord } from "@/lib/api"
 import { cn, formatRelativeTime } from "@/lib/utils"
 
 import { commentPageState, type CommentSortOrder } from "./comment-list-state"
 import { MarkdownDescription } from "./markdown"
-
-const commentSortOptions: MenuSelectOption<CommentSortOrder>[] = [
-  { value: "newest", label: "Newest first" },
-  { value: "oldest", label: "Oldest first" },
-]
 
 export function TaskCommentsPanel({
   commentsPage,
@@ -40,15 +36,24 @@ export function TaskCommentsPanel({
   pendingAction: string | null
   onAddComment: () => Promise<void>
 }) {
+  const { t } = useI18n()
+  const commentSortOptions = useMemo<MenuSelectOption<CommentSortOrder>[]>(
+    () => [
+      { value: "newest", label: t("Newest first") },
+      { value: "oldest", label: t("Oldest first") },
+    ],
+    [t],
+  )
+
   return (
     <div className="space-y-3">
       {commentsPage.total ? (
         <div className="flex items-center justify-between gap-2">
           <div className="text-xs text-muted-foreground">
-            {commentsPage.total} comment{commentsPage.total === 1 ? "" : "s"}
+            {t(commentsPage.total === 1 ? "{count} comment" : "{count} comments", { count: commentsPage.total })}
           </div>
           <MenuSelect
-            ariaLabel="Comment sort order"
+            ariaLabel={t("Comment sort order")}
             options={commentSortOptions}
             value={commentSortOrder}
             onValueChange={(value) => {
@@ -62,21 +67,21 @@ export function TaskCommentsPanel({
       <CommentRows commentsPage={commentsPage} />
       {commentsPage.pageCount > 1 ? <CommentPager commentsPage={commentsPage} setCommentPage={setCommentPage} /> : null}
       <Field>
-        <FieldLabel>Comment body</FieldLabel>
+        <FieldLabel>{t("Comment body")}</FieldLabel>
         <InputGroup>
           <InputGroupTextarea
             className="min-h-20 resize-y py-2"
-            aria-label="Comment body"
+            aria-label={t("Comment body")}
             name="comment-body"
             autoComplete="off"
             value={commentBody}
             onChange={(event) => setCommentBody(event.target.value)}
-            placeholder="Add handoff note"
+            placeholder={t("Add handoff note")}
           />
           <InputGroupButton
             className="h-auto self-stretch"
             variant="outline"
-            aria-label="Add comment"
+            aria-label={t("Add comment")}
             disabled={!commentBody.trim() || pendingAction === "comment"}
             onClick={() => void onAddComment()}
           >
@@ -89,6 +94,7 @@ export function TaskCommentsPanel({
 }
 
 function CommentRows({ commentsPage }: { commentsPage: ReturnType<typeof commentPageState> }) {
+  const { t } = useI18n()
   return (
     <div className="space-y-2">
       {commentsPage.total ? (
@@ -97,7 +103,7 @@ function CommentRows({ commentsPage }: { commentsPage: ReturnType<typeof comment
             <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 {comment.author}
-                {comment.kind === "decision" ? <Badge variant="secondary">decision</Badge> : null}
+                {comment.kind === "decision" ? <Badge variant="secondary">{t("decision")}</Badge> : null}
               </span>
               <span>{formatRelativeTime(comment.created_at)}</span>
             </div>
@@ -107,7 +113,7 @@ function CommentRows({ commentsPage }: { commentsPage: ReturnType<typeof comment
         ))
       ) : (
         <Empty className="items-start p-0 text-left">
-          <EmptyDescription>No comments yet.</EmptyDescription>
+          <EmptyDescription>{t("No comments yet.")}</EmptyDescription>
         </Empty>
       )}
     </div>
@@ -121,16 +127,17 @@ function CommentPager({
   commentsPage: ReturnType<typeof commentPageState>
   setCommentPage: (value: number | ((current: number) => number)) => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-      <Button variant="outline" size="sm" aria-label="Previous comments" disabled={!commentsPage.hasPreviousPage} onClick={() => setCommentPage((current) => Math.max(0, current - 1))}>
-        Previous
+      <Button variant="outline" size="sm" aria-label={t("Previous comments")} disabled={!commentsPage.hasPreviousPage} onClick={() => setCommentPage((current) => Math.max(0, current - 1))}>
+        {t("Previous")}
       </Button>
       <span>
-        Page {commentsPage.page + 1} of {commentsPage.pageCount}
+        {t("Page {current} of {total}", { current: commentsPage.page + 1, total: commentsPage.pageCount })}
       </span>
-      <Button variant="outline" size="sm" aria-label="Next comments" disabled={!commentsPage.hasNextPage} onClick={() => setCommentPage((current) => current + 1)}>
-        Next
+      <Button variant="outline" size="sm" aria-label={t("Next comments")} disabled={!commentsPage.hasNextPage} onClick={() => setCommentPage((current) => current + 1)}>
+        {t("Next")}
       </Button>
     </div>
   )
@@ -153,11 +160,12 @@ type DecisionMetadata = {
 type ParsedDecision = { ok: true; metadata: DecisionMetadata } | { ok: false; error: string }
 
 export const DecisionComment = memo(function DecisionComment({ comment }: { comment: CommentRecord }) {
+  const { t } = useI18n()
   const decision = useMemo(() => parseDecisionMetadata(comment.metadata_json), [comment.metadata_json])
   if (!decision.ok) {
     return (
       <Alert className="mt-2 border-destructive/50 bg-destructive/5">
-        <AlertTitle className="text-destructive">Invalid decision metadata</AlertTitle>
+        <AlertTitle className="text-destructive">{t("Invalid decision metadata")}</AlertTitle>
         <AlertDescription className="text-destructive">{decision.error}</AlertDescription>
       </Alert>
     )
@@ -180,7 +188,7 @@ export const DecisionComment = memo(function DecisionComment({ comment }: { comm
                     "text-muted-foreground hover:bg-background",
                     selected && "border-[var(--status-ready-ring)] bg-[var(--status-ready-bg)] text-[var(--status-ready-fg)]",
                   )}
-                  aria-label={`Show decision option ${option.slug}`}
+                  aria-label={t("Show decision option {slug}", { slug: option.slug })}
                 >
                   {option.slug}
                   <ChevronDown className="h-3 w-3" />
@@ -199,9 +207,9 @@ export const DecisionComment = memo(function DecisionComment({ comment }: { comm
           )
         })}
       </div>
-      <DecisionField label="reason" value={metadata.reason} />
-      {metadata.risk ? <DecisionField label="risk" value={metadata.risk} /> : null}
-      {metadata.verification ? <DecisionField label="verification" value={metadata.verification} /> : null}
+      <DecisionField label={t("reason")} value={metadata.reason} />
+      {metadata.risk ? <DecisionField label={t("risk")} value={metadata.risk} /> : null}
+      {metadata.verification ? <DecisionField label={t("verification")} value={metadata.verification} /> : null}
     </div>
   )
 })

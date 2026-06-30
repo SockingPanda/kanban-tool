@@ -19,6 +19,7 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { legalActions, type LegalTaskAction } from "@/features/task-actions/legal-actions"
 import { apiTaskGraphToCanvasGraph } from "@/features/task-map/task-graph-adapter"
+import { useI18n } from "@/i18n"
 import type { KanbanApi, LabelSuggestionResult, Run, Task } from "@/lib/api"
 
 import { commentPageState, type CommentSortOrder } from "./comment-list-state"
@@ -132,6 +133,7 @@ export function TaskDetail({
   onRunsExpandedChange?: (value: boolean) => void
   onStepsExpandedChange?: (value: boolean) => void
 }) {
+  const { t } = useI18n()
   const [descriptionExpanded, setDescriptionExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [labelInput, setLabelInput] = useState("")
@@ -269,10 +271,10 @@ export function TaskDetail({
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(260px,320px)_minmax(420px,1fr)_minmax(220px,260px)] lg:grid-cols-[minmax(260px,320px)_minmax(420px,1fr)]">
             <aside className="min-w-0 space-y-4">
               <TaskDetailPanel
-                title="One-hop map"
+                title={t("One-hop map")}
                 icon={<Map className="h-4 w-4" />}
                 open={graphExpanded}
-                summary={graphExpanded ? `${graph.nodes.length} node${graph.nodes.length === 1 ? "" : "s"}` : "Load map"}
+                summary={graphExpanded ? t(graph.nodes.length === 1 ? "{count} node" : "{count} nodes", { count: graph.nodes.length }) : t("Load map")}
                 onOpenChange={onGraphExpandedChange}
               >
                 {graph.nodes.length ? (
@@ -281,20 +283,21 @@ export function TaskDetail({
                   </Suspense>
                 ) : (
                   <Empty className="items-start rounded-md border border-border bg-muted/20 p-3 text-left">
-                    <EmptyDescription>No task context graph yet.</EmptyDescription>
+                    <EmptyDescription>{t("No task context graph yet.")}</EmptyDescription>
                   </Empty>
                 )}
               </TaskDetailPanel>
               <TaskDetailPanel
-                title="Dependencies"
+                title={t("Dependencies")}
                 icon={<Network className="h-4 w-4" />}
                 open={dependenciesExpanded}
                 summary={
                   dependenciesExpanded
-                    ? `${detail.dependencies.parents.length + detail.dependencies.children.length} link${
-                        detail.dependencies.parents.length + detail.dependencies.children.length === 1 ? "" : "s"
-                      }`
-                    : "Load dependencies"
+                    ? t(
+                        detail.dependencies.parents.length + detail.dependencies.children.length === 1 ? "{count} link" : "{count} links",
+                        { count: detail.dependencies.parents.length + detail.dependencies.children.length },
+                      )
+                    : t("Load dependencies")
                 }
                 onOpenChange={onDependenciesExpandedChange}
               >
@@ -312,20 +315,24 @@ export function TaskDetail({
             </aside>
 
             <main className="min-w-0 space-y-4">
-              <Section title="Description">
+              <Section title={t("Description")}>
                 <MarkdownDescription>{renderedDescription}</MarkdownDescription>
                 {longDescription ? (
                   <Button className="mt-2 px-0" variant="ghost" size="sm" onClick={() => setDescriptionExpanded((current) => !current)}>
-                    {descriptionExpanded ? "Show less" : "Show more"}
+                    {descriptionExpanded ? t("Show less") : t("Show more")}
                   </Button>
                 ) : null}
               </Section>
               <Separator />
               <TaskDetailPanel
-                title="Execution plan"
+                title={t("Execution plan")}
                 icon={<ListChecks className="h-4 w-4" />}
                 open={stepsExpanded}
-                summary={stepsExpanded ? `${detail.steps?.steps.length ?? 0} step${detail.steps?.steps.length === 1 ? "" : "s"}` : "Load steps"}
+                summary={
+                  stepsExpanded
+                    ? t((detail.steps?.steps.length ?? 0) === 1 ? "{count} step" : "{count} steps", { count: detail.steps?.steps.length ?? 0 })
+                    : t("Load steps")
+                }
                 onOpenChange={onStepsExpandedChange}
               >
                 <TaskExecutionPlanPanel
@@ -345,7 +352,7 @@ export function TaskDetail({
                 />
               </TaskDetailPanel>
               <Separator />
-              <Section title="Primary action">
+              <Section title={t("Primary action")}>
                 <TaskActionPanel
                   api={api}
                   task={task}
@@ -359,10 +366,10 @@ export function TaskDetail({
               </Section>
               <Separator />
               <TaskDetailPanel
-                title="Discussion"
+                title={t("Discussion")}
                 icon={<MessageSquare className="h-4 w-4" />}
                 open={commentsExpanded}
-                summary={commentsExpanded ? `${commentsPage.total} comment${commentsPage.total === 1 ? "" : "s"}` : "Load comments"}
+                summary={commentsExpanded ? t(commentsPage.total === 1 ? "{count} comment" : "{count} comments", { count: commentsPage.total }) : t("Load comments")}
                 onOpenChange={onCommentsExpandedChange}
               >
                 <TaskCommentsPanel
@@ -383,7 +390,7 @@ export function TaskDetail({
 
             <aside className="min-w-0 space-y-4 lg:col-span-2 xl:col-span-1">
               <TaskMetadataPanel task={task} />
-              <Section title="Labels">
+              <Section title={t("Labels")}>
                 <TaskLabelsPanel
                   api={api}
                   task={task}
@@ -408,11 +415,13 @@ export function TaskDetail({
       <AlertDialog open={Boolean(confirmAction)} onOpenChange={(open) => !open && setConfirmAction(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm action</AlertDialogTitle>
-            <AlertDialogDescription>{confirmAction?.confirmation}</AlertDialogDescription>
+            <AlertDialogTitle>{t("Confirm action")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmAction?.confirmation ? t(confirmAction.confirmation.key, confirmAction.confirmation.values) : null}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
             <AlertDialogAction
               variant={confirmAction?.danger ? "destructive" : "default"}
               onClick={() => {
@@ -420,7 +429,7 @@ export function TaskDetail({
                 setConfirmAction(null)
               }}
             >
-              Continue
+              {t("Continue")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

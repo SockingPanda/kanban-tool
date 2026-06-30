@@ -8,6 +8,7 @@ import { PriorityBadge, TaskStatusBadge } from "@/components/ui/composites"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { BoardColumn as ApiBoardColumn, Task, TaskStatus } from "@/lib/api"
 import { cn, formatRelativeTime } from "@/lib/utils"
+import { useI18n } from "@/i18n"
 
 import {
   dependencyBlockedTodoClass,
@@ -142,6 +143,7 @@ const BoardColumn = memo(function BoardColumn({
   dependencySnapshot: SelectedDependencySnapshot
   onSelect: (taskId: string) => void
 }) {
+  const { t } = useI18n()
   const parentRef = useRef<HTMLDivElement | null>(null)
   const { ref, isDropTarget } = useDroppable({
     id: `column:${column.status}`,
@@ -168,11 +170,11 @@ const BoardColumn = memo(function BoardColumn({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className={cn("h-2 w-2 rounded-full", statusAccent[column.status])} />
-            <span className="text-sm font-semibold">{column.title}</span>
+            <span className="text-sm font-semibold">{t(column.title)}</span>
           </div>
           <span className="text-xs text-muted-foreground">{tasks.length}</span>
         </div>
-        <div className="mt-0.5 text-xs text-muted-foreground">{columnHints[column.status]}</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">{t(columnHints[column.status])}</div>
       </div>
       <ScrollArea className="flex-1" viewportRef={parentRef} viewportClassName="p-2 pb-8 scroll-pb-8">
         <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
@@ -255,6 +257,7 @@ const TaskCard = memo(function TaskCard({
   unlockCount?: number
   onSelectTask: (taskId: string) => void
 }) {
+  const { t } = useI18n()
   const { ref, isDragging } = useDraggable({
     id: taskId,
     data: { type: "task", taskId },
@@ -282,14 +285,14 @@ const TaskCard = memo(function TaskCard({
           <div className="mt-1 flex flex-wrap gap-1 text-xs text-muted-foreground">
             <TaskStatusBadge status={task.status} className="px-1.5 py-0 text-[11px] leading-5" />
             <PriorityBadge priority={task.priority} className="px-1.5 py-0 text-[11px] leading-5" />
-            {task.due_at ? <span>due {formatRelativeTime(task.due_at)}</span> : null}
-            {task.scheduled_at ? <span>scheduled {formatRelativeTime(task.scheduled_at)}</span> : null}
-            {task.status === "running" ? <span>heartbeat {formatRelativeTime(task.last_heartbeat_at)}</span> : null}
+            {task.due_at ? <span>{t("due {time}", { time: formatRelativeTime(task.due_at) })}</span> : null}
+            {task.scheduled_at ? <span>{t("scheduled {time}", { time: formatRelativeTime(task.scheduled_at) })}</span> : null}
+            {task.status === "running" ? <span>{t("heartbeat {time}", { time: formatRelativeTime(task.last_heartbeat_at) })}</span> : null}
             {requiredStepProgress ? <span>{requiredStepProgress}</span> : null}
-            {taskNeedsExecutionPlan(task) ? <Badge variant="blocked" className="px-1.5 py-0 text-[11px] leading-5">plan needed</Badge> : null}
-            {task.dependency_blocked ? <span>blocked by {task.unfinished_parent_count}</span> : null}
-            {typeof unlockCount === "number" && unlockCount > 0 ? <span>unlocks {unlockCount}</span> : null}
-            {typeof dependencyCount === "number" ? <span>{dependencyCount} deps</span> : null}
+            {taskNeedsExecutionPlan(task) ? <Badge variant="blocked" className="px-1.5 py-0 text-[11px] leading-5">{t("plan needed")}</Badge> : null}
+            {task.dependency_blocked ? <span>{t("blocked by {count}", { count: task.unfinished_parent_count })}</span> : null}
+            {typeof unlockCount === "number" && unlockCount > 0 ? <span>{t("unlocks {count}", { count: unlockCount })}</span> : null}
+            {typeof dependencyCount === "number" ? <span>{t("{count} deps", { count: dependencyCount })}</span> : null}
           </div>
           {task.labels.length ? (
             <div className="mt-1 flex flex-wrap gap-1">

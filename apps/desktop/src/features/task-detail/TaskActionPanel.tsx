@@ -11,6 +11,7 @@ import {
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Textarea } from "@/components/ui/textarea"
 import { isBlockableStatus } from "@/lib/action-policy"
+import { useI18n } from "@/i18n"
 import type { KanbanApi, Task } from "@/lib/api"
 import type { LegalTaskAction } from "@/features/task-actions/legal-actions"
 
@@ -48,6 +49,7 @@ export function TaskActionPanel({
   onRun: (action: LegalTaskAction) => void
   onConfirm: (action: LegalTaskAction) => void
 }) {
+  const { t } = useI18n()
   const primary = actionView.primary
   const busy = Boolean(pendingAction)
   return (
@@ -56,28 +58,33 @@ export function TaskActionPanel({
         {actionView.planBlocked ? (
           <Button disabled>
             <ListChecks className="h-4 w-4" />
-            Plan steps first
+            {t("Plan steps first")}
           </Button>
         ) : primary ? (
           <ActionButton item={primary} api={api} busy={busy} onRun={onRun} onConfirm={onConfirm} />
         ) : (
           <Button disabled>
             <CheckCircle2 className="h-4 w-4" />
-            No primary action
+            {t("No primary action")}
           </Button>
         )}
         <MoreActionsMenu items={actionView.items} api={api} busy={busy} onRun={onRun} onConfirm={onConfirm} />
       </div>
       {actionView.incompleteRequiredSteps > 0 ? (
         <div className="text-xs text-muted-foreground">
-          {actionView.incompleteRequiredSteps} required step{actionView.incompleteRequiredSteps === 1 ? "" : "s"} must finish before Complete.
+          {t(
+            actionView.incompleteRequiredSteps === 1
+              ? "{count} required step must finish before Complete."
+              : "{count} required steps must finish before Complete.",
+            { count: actionView.incompleteRequiredSteps },
+          )}
         </div>
       ) : null}
-      {task.status === "blocked" ? <div className="text-xs text-muted-foreground">Unblock asks the service to recompute schedule and dependency state.</div> : null}
+      {task.status === "blocked" ? <div className="text-xs text-muted-foreground">{t("Unblock asks the service to recompute schedule and dependency state.")}</div> : null}
       {isBlockableStatus(task.status) ? (
         <Field>
-          <FieldLabel>Block reason</FieldLabel>
-          <Textarea aria-label="Block reason" name="block-reason" autoComplete="off" placeholder="Block reason" value={blockReason} onChange={(event) => setBlockReason(event.target.value)} />
+          <FieldLabel>{t("Block reason")}</FieldLabel>
+          <Textarea aria-label={t("Block reason")} name="block-reason" autoComplete="off" placeholder={t("Block reason")} value={blockReason} onChange={(event) => setBlockReason(event.target.value)} />
         </Field>
       ) : null}
     </div>
@@ -111,19 +118,20 @@ function ActionButton({
   onRun: (action: LegalTaskAction) => void
   onConfirm: (action: LegalTaskAction) => void
 }) {
+  const { t } = useI18n()
   const Icon = item.action.icon
   return (
     <Button
       variant={item.action.danger ? "destructive" : "default"}
       disabled={!api || busy || !item.enabled}
-      title={item.disabledReason ?? undefined}
+      title={item.disabledReason ? t(item.disabledReason) : undefined}
       onClick={() => {
         if (item.action.confirmation) onConfirm(item.action)
         else onRun(item.action)
       }}
     >
       <Icon className="h-4 w-4" />
-      {item.action.label}
+      {t(item.action.label)}
     </Button>
   )
 }
@@ -141,12 +149,13 @@ function MoreActionsMenu({
   onRun: (action: LegalTaskAction) => void
   onConfirm: (action: LegalTaskAction) => void
 }) {
+  const { t } = useI18n()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" disabled={!api || busy}>
           <MoreHorizontal className="h-4 w-4" />
-          More actions
+          {t("More actions")}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-56">
@@ -157,7 +166,7 @@ function MoreActionsMenu({
               {index === 6 ? <DropdownMenuSeparator /> : null}
               <DropdownMenuItem
                 disabled={!item.enabled}
-                title={item.disabledReason ?? undefined}
+                title={item.disabledReason ? t(item.disabledReason) : undefined}
                 onSelect={(event) => {
                   event.preventDefault()
                   if (!item.enabled) return
@@ -166,8 +175,8 @@ function MoreActionsMenu({
                 }}
               >
                 <Icon className="h-4 w-4" />
-                <span>{item.action.label}</span>
-                {item.disabledReason ? <span className="ml-auto text-xs text-muted-foreground">blocked</span> : null}
+                <span>{t(item.action.label)}</span>
+                {item.disabledReason ? <span className="ml-auto text-xs text-muted-foreground">{t("blocked")}</span> : null}
               </DropdownMenuItem>
             </div>
           )

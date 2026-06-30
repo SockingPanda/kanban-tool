@@ -2,7 +2,7 @@ import type { ElementType, ReactNode } from "react"
 
 import { Badge, type BadgeProps } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
+import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item"
 import type { TaskStatus } from "@/lib/api"
 import { priorityBadgeClass, priorityLabel } from "@/lib/priority"
 import { cn, shortId } from "@/lib/utils"

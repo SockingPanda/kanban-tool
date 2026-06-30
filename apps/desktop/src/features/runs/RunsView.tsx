@@ -6,6 +6,7 @@ import { PageToolbar, TaskIdentityLine } from "@/components/ui/composites"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { useI18n } from "@/i18n"
 import type { Run, Task } from "@/lib/api"
 import { formatRelativeTime, shortId } from "@/lib/utils"
 
@@ -18,21 +19,22 @@ export function RunsView({
   selectedTask: Task | null
   detail: DetailState
 }) {
+  const { t } = useI18n()
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
       <PageToolbar
-        title="Runs"
+        title={t("Runs")}
         description={
           selectedTask ? (
             <TaskIdentityLine id={selectedTask.id} ref={selectedTask.ref} seq={selectedTask.seq} />
-          ) : "Select a task to inspect runs."
+          ) : t("Select a task to inspect runs.")
         }
       />
       <div className="grid min-h-0 flex-1 grid-cols-[360px_1fr]">
         <ScrollArea className="border-r border-border p-3">
           {detail.runs.length ? detail.runs.map((run) => <RunRow key={run.id} run={run} />) : (
             <Empty>
-              <EmptyDescription>No runs for the selected task.</EmptyDescription>
+              <EmptyDescription>{t("No runs for the selected task.")}</EmptyDescription>
             </Empty>
           )}
         </ScrollArea>
@@ -44,13 +46,13 @@ export function RunsView({
                   <FileText className="h-3.5 w-3.5" />
                   {shortId(detail.runLog.run_id)}
                 </span>
-                {detail.runLog.truncated ? <span>truncated</span> : null}
+                {detail.runLog.truncated ? <span>{t("truncated")}</span> : null}
               </div>
-              <pre className="whitespace-pre-wrap font-mono leading-relaxed">{detail.runLog.content || "(empty)"}</pre>
+              <pre className="whitespace-pre-wrap font-mono leading-relaxed">{detail.runLog.content || t("(empty)")}</pre>
             </div>
           ) : (
             <Empty>
-              <EmptyDescription>No log available for the selected task.</EmptyDescription>
+              <EmptyDescription>{t("No log available for the selected task.")}</EmptyDescription>
             </Empty>
           )}
         </ScrollArea>
@@ -60,17 +62,18 @@ export function RunsView({
 }
 
 function RunRow({ run }: { run: Run }) {
+  const { t } = useI18n()
   return (
     <Card className="mb-2 p-3 text-sm">
       <div className="mb-2 flex items-center justify-between">
         <span className="font-medium">{shortId(run.id)}</span>
         <Badge variant={runBadgeVariant(run.status)}>{run.status}</Badge>
       </div>
-      <InfoRow label="worker" value={run.worker_profile ?? "manual"} />
-      <InfoRow label="owner" value={run.claim_owner} />
-      <InfoRow label="started" value={formatRelativeTime(run.started_at)} />
-      <InfoRow label="finished" value={run.finished_at ? formatRelativeTime(run.finished_at) : "-"} />
-      <InfoRow label="exit" value={run.exit_code === null ? "-" : String(run.exit_code)} />
+      <InfoRow label={t("worker")} value={run.worker_profile ?? t("manual")} />
+      <InfoRow label={t("owner")} value={run.claim_owner} />
+      <InfoRow label={t("started")} value={formatRelativeTime(run.started_at)} />
+      <InfoRow label={t("finished")} value={run.finished_at ? formatRelativeTime(run.finished_at) : "-"} />
+      <InfoRow label={t("exit")} value={run.exit_code === null ? "-" : String(run.exit_code)} />
       {run.error ? <div className="mt-2 text-xs text-destructive">{run.error}</div> : null}
     </Card>
   )

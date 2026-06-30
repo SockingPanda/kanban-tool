@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { setCurrentDesktopLocale } from "@/i18n"
 import { KanbanApi, loadRuntimeConfig, type ApiError, type Board, type SearchIndexStatus, type SearchTasksMeta, type Task } from "./api"
 
 const runtimeConfig = {
@@ -15,6 +16,7 @@ const apiSource = readFileSync(new URL("./api.ts", import.meta.url), "utf8")
 describe("KanbanApi task search", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    setCurrentDesktopLocale("en")
   })
 
   it("keeps the task list endpoint query-free for empty search flows", async () => {
@@ -114,6 +116,7 @@ describe("KanbanApi task search", () => {
   })
 
   it("uses batch task windows by status", async () => {
+    setCurrentDesktopLocale("zh-CN")
     const ready = task({ id: "t_ready", status: "ready" })
     const blocked = task({ id: "t_blocked", status: "blocked" })
     const fetchMock = mockFetch({
@@ -135,7 +138,29 @@ describe("KanbanApi task search", () => {
     expect(url.pathname).toBe("/api/v1/boards/default/tasks/by-status")
     expect(url.searchParams.getAll("status")).toEqual(["ready", "blocked"])
     expect(url.searchParams.get("limit")).toBe("50")
-    expect(calledInit(fetchMock).headers).toEqual({})
+    expect(calledInit(fetchMock).headers).toEqual({ "Accept-Language": "zh-CN" })
+  })
+
+  it("sends the configured locale on API requests", async () => {
+    const fetchMock = mockFetch({ data: [task({ id: "t_list", title: "localized list" })] })
+    const api = new KanbanApi(runtimeConfig, { locale: "en" })
+
+    await api.listTasks({ includeArchived: false, limit: 10 })
+
+    expect(calledInit(fetchMock).headers).toEqual({ "Accept-Language": "en" })
+  })
+
+  it("keeps actor and content headers while sending locale on mutations", async () => {
+    const fetchMock = mockFetch({ data: task({ id: "t_created", title: "Created" }) })
+    const api = new KanbanApi(runtimeConfig, { locale: "zh-CN" })
+
+    await api.createTask({ title: "Created" })
+
+    expect(calledInit(fetchMock).headers).toEqual({
+      "Accept-Language": "zh-CN",
+      "Content-Type": "application/json",
+      "X-KB-Actor": "desktop-test",
+    })
   })
 
   it("uses batch search windows by status", async () => {

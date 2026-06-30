@@ -3,6 +3,7 @@ import { ChevronDown, CircleDot, FileText, Route } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
+import { useI18n } from "@/i18n"
 import type { Run } from "@/lib/api"
 import { formatRelativeTime, shortId } from "@/lib/utils"
 
@@ -20,13 +21,14 @@ export function TaskRunsPanel({
   open: boolean
   onOpenChange: (value: boolean) => void
 }) {
+  const { t } = useI18n()
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <Section title="Runs">
+      <Section title={t("Runs")}>
         <CollapsibleTrigger asChild>
           <Button variant="outline" size="sm" className="mb-3">
             <Route className="h-4 w-4" />
-            {detail.runs.length} run{detail.runs.length === 1 ? "" : "s"}
+            {t(detail.runs.length === 1 ? "{count} run" : "{count} runs", { count: detail.runs.length })}
             <ChevronDown className="h-4 w-4" />
           </Button>
         </CollapsibleTrigger>
@@ -47,13 +49,14 @@ export function TaskEventsPanel({
   open: boolean
   onOpenChange: (value: boolean) => void
 }) {
+  const { t } = useI18n()
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <Section title="Events">
+      <Section title={t("Events")}>
         <CollapsibleTrigger asChild>
           <Button variant="outline" size="sm" className="mb-3">
             <CircleDot className="h-4 w-4" />
-            {events.length} event{events.length === 1 ? "" : "s"}
+            {t(events.length === 1 ? "{count} event" : "{count} events", { count: events.length })}
             <ChevronDown className="h-4 w-4" />
           </Button>
         </CollapsibleTrigger>
@@ -66,32 +69,33 @@ export function TaskEventsPanel({
 }
 
 function RunSummary({ activeRun, detail }: { activeRun?: Run; detail: DetailState }) {
+  const { t } = useI18n()
   if (!activeRun) {
     return (
       <Empty className="items-start p-0 text-left">
-        <EmptyDescription>No runs yet.</EmptyDescription>
+        <EmptyDescription>{t("No runs yet.")}</EmptyDescription>
       </Empty>
     )
   }
 
   return (
     <div className="space-y-2 text-sm">
-      <InfoRow label="run" value={shortId(activeRun.id)} />
-      <InfoRow label="status" value={activeRun.status} />
-      <InfoRow label="worker" value={activeRun.worker_profile ?? "manual"} />
-      <InfoRow label="owner" value={activeRun.claim_owner} />
-      <InfoRow label="started" value={formatRelativeTime(activeRun.started_at)} />
-      <InfoRow label="log" value={activeRun.log_path ?? "-"} />
+      <InfoRow label={t("run")} value={shortId(activeRun.id)} />
+      <InfoRow label={t("status")} value={activeRun.status} />
+      <InfoRow label={t("worker")} value={activeRun.worker_profile ?? t("manual")} />
+      <InfoRow label={t("owner")} value={activeRun.claim_owner} />
+      <InfoRow label={t("started")} value={formatRelativeTime(activeRun.started_at)} />
+      <InfoRow label={t("log")} value={activeRun.log_path ?? "-"} />
       {detail.runLog ? (
         <div className="mt-3 rounded-md border border-border bg-terminal-bg p-2 text-xs text-terminal-fg">
           <div className="mb-2 flex items-center justify-between text-terminal-muted-foreground">
             <span className="flex items-center gap-1">
               <FileText className="h-3.5 w-3.5" />
-              log
+              {t("log")}
             </span>
-            {detail.runLog.truncated ? <span>truncated</span> : null}
+            {detail.runLog.truncated ? <span>{t("truncated")}</span> : null}
           </div>
-          <pre className="whitespace-pre-wrap font-mono leading-relaxed">{detail.runLog.content || "(empty)"}</pre>
+          <pre className="whitespace-pre-wrap font-mono leading-relaxed">{detail.runLog.content || t("(empty)")}</pre>
         </div>
       ) : null}
     </div>
@@ -99,6 +103,7 @@ function RunSummary({ activeRun, detail }: { activeRun?: Run; detail: DetailStat
 }
 
 function EventTimeline({ events }: { events: DetailState["events"] }) {
+  const { t } = useI18n()
   return (
     <div className="space-y-2">
       {events.length ? (
@@ -111,14 +116,14 @@ function EventTimeline({ events }: { events: DetailState["events"] }) {
               <div>
                 <div className="font-medium">{event.kind}</div>
                 <div className="text-xs text-muted-foreground">
-                  {formatRelativeTime(event.created_at)} by {event.actor ?? "system"}
+                  {t("{time} by {actor}", { time: formatRelativeTime(event.created_at), actor: event.actor ?? t("system") })}
                 </div>
               </div>
             </div>
           ))
       ) : (
         <Empty className="items-start p-0 text-left">
-          <EmptyDescription>No events yet.</EmptyDescription>
+          <EmptyDescription>{t("No events yet.")}</EmptyDescription>
         </Empty>
       )}
     </div>

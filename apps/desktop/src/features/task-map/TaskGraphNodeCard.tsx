@@ -6,19 +6,28 @@ import { cn } from "@/lib/utils"
 import { graphNodeStatusClass, graphNodeStepProgressClass } from "./task-map-colors"
 import type { TaskGraphLayoutNode } from "./task-graph-types"
 
-export function TaskGraphNodeCard({ node, selected, onSelectTask, onOpenTask, className }: {
+type Translate = (key: string, values?: Record<string, string | number>) => string
+
+const englishT: Translate = (key, values = {}) =>
+  key.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => {
+    const value = values[name]
+    return value === undefined ? match : String(value)
+  })
+
+export function TaskGraphNodeCard({ node, selected, onSelectTask, onOpenTask, className, t = englishT }: {
   node: TaskGraphLayoutNode
   selected: boolean
   onSelectTask?: (taskId: string) => void
   onOpenTask?: (taskId: string) => void
   className?: string
+  t?: Translate
 }) {
   const Icon = node.role === "step_child" || node.role === "step_parent" ? ListChecks : node.role === "dependency_child" ? GitMerge : GitBranch
   const stepProgressPercent = taskGraphNodeStepProgressPercent(node.stepCounts)
   return (
     <button
       type="button"
-      aria-label={`Open task ${node.ref} ${node.title}`}
+      aria-label={t("Open task {ref} {title}", { ref: node.ref, title: node.title })}
       aria-pressed={selected}
       className={cn(
         "relative flex h-[72px] w-44 flex-col overflow-hidden rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -47,7 +56,7 @@ export function TaskGraphNodeCard({ node, selected, onSelectTask, onOpenTask, cl
         </span>
         {node.stepCounts ? (
           <span className="mt-auto text-[10px] text-muted-foreground">
-            {node.stepCounts.completed}/{node.stepCounts.total} step
+            {t("{completed}/{total} steps", { completed: node.stepCounts.completed, total: node.stepCounts.total })}
           </span>
         ) : null}
       </span>

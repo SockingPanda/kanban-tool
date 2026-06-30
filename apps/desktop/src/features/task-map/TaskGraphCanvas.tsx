@@ -20,6 +20,7 @@ import {
 } from "@xyflow/react"
 import { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import { useI18n } from "@/i18n"
 import { cn } from "@/lib/utils"
 
 import { TaskGraphNodeCard } from "./TaskGraphNodeCard"
@@ -38,17 +39,27 @@ type TaskGraphCanvasProps = {
   className?: string
 }
 
+type Translate = (key: string, values?: Record<string, string | number>) => string
+
+const identityT: Translate = (key, values = {}) =>
+  key.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => {
+    const value = values[name]
+    return value === undefined ? match : String(value)
+  })
+
 type TaskFlowNodeData = {
   node: TaskGraphLayoutNode
   selected: boolean
   onSelectTask?: (taskId: string) => void
   onOpenTask?: (taskId: string) => void
+  t: Translate
 } & Record<string, unknown>
 
 type TaskFlowEdgeData = {
   kind: TaskGraphEdgeKind
   blocking?: boolean
   required?: boolean
+  t: Translate
 } & Record<string, unknown>
 
 type TaskFlowNode = Node<TaskFlowNodeData, "taskNode" | "centerTaskNode" | "contextTaskNode">
@@ -71,6 +82,7 @@ function TaskGraphCanvasInner({
   scale = 1,
   className,
 }: TaskGraphCanvasProps) {
+  const { t } = useI18n()
   const reactFlow = useReactFlow<TaskFlowNode, TaskFlowEdge>()
   const onSelectTaskRef = useRef(onSelectTask)
   const onOpenTaskRef = useRef(onOpenTask)
@@ -91,9 +103,9 @@ function TaskGraphCanvasInner({
   }, [])
   const [layout, setLayout] = useState<TaskGraphLayout>(initialLayout)
   const [nodes, setNodes] = useState<TaskFlowNode[]>(() =>
-    buildTaskFlowNodes(initialLayout, graph, selectedTaskId ?? null, handleSelectTask, handleOpenTask),
+    buildTaskFlowNodes(initialLayout, graph, selectedTaskId ?? null, handleSelectTask, handleOpenTask, t),
   )
-  const [edges, setEdges] = useState<TaskFlowEdge[]>(() => buildTaskFlowEdges(initialLayout))
+  const [edges, setEdges] = useState<TaskFlowEdge[]>(() => buildTaskFlowEdges(initialLayout, t))
   const safeScale = clampTaskGraphScale(scale)
   const previousScaleRef = useRef(safeScale)
   const interaction = taskGraphInteraction(mode)
@@ -143,9 +155,9 @@ function TaskGraphCanvasInner({
 
   useEffect(() => {
     const layoutGraph = latestGraphRef.current
-    setNodes(buildTaskFlowNodes(layout, layoutGraph, selectedTaskIdRef.current, handleSelectTask, handleOpenTask))
-    setEdges(buildTaskFlowEdges(layout))
-  }, [graphDataKey, handleOpenTask, handleSelectTask, layout])
+    setNodes(buildTaskFlowNodes(layout, layoutGraph, selectedTaskIdRef.current, handleSelectTask, handleOpenTask, t))
+    setEdges(buildTaskFlowEdges(layout, t))
+  }, [graphDataKey, handleOpenTask, handleSelectTask, layout, t])
 
   useEffect(() => {
     const previousTaskId = selectedTaskIdRef.current
@@ -175,7 +187,7 @@ function TaskGraphCanvasInner({
   return (
     <div
       className={cn("relative h-full min-h-[320px] w-full overflow-hidden rounded-md border border-border bg-muted/20", className)}
-      aria-label={`Task graph with ${layout.nodes.length} nodes and ${layout.edges.length} edges`}
+      aria-label={t("Task graph with {nodes} nodes and {edges} edges", { nodes: layout.nodes.length, edges: layout.edges.length })}
     >
       <ReactFlow<TaskFlowNode, TaskFlowEdge>
         className="task-graph-flow"
@@ -217,6 +229,7 @@ const TaskGraphFlowNode = memo(function TaskGraphFlowNode({ data, selected }: No
         selected={data.selected || selected}
         onSelectTask={data.onSelectTask}
         onOpenTask={data.onOpenTask}
+        t={data.t}
       />
       <Handle type="source" position={Position.Right} isConnectable={false} className="opacity-0" />
       <Handle type="source" position={Position.Bottom} isConnectable={false} className="opacity-0" />
@@ -229,7 +242,8 @@ function TaskGraphFlowEdge(props: EdgeProps<TaskFlowEdge>) {
   const kind = props.data?.kind ?? "dependency"
   const blocking = props.data?.blocking
   const color = graphEdgeStroke(kind, blocking)
-  const label = kind === "step" ? (props.data?.required ? "required step" : "optional step") : blocking ? "blocks" : "unlocks"
+  const t = props.data?.t ?? ((key: string) => key)
+  const label = kind === "step" ? (props.data?.required ? t("required step") : t("optional step")) : blocking ? t("blocks") : t("unlocks")
 
   return (
     <>
@@ -317,6 +331,7 @@ function buildTaskFlowNodes(
   selectedTaskId: string | null,
   onSelectTask?: (taskId: string) => void,
   onOpenTask?: (taskId: string) => void,
+  t: Translate = identityT,
 ) {
   const graphNodeById = new Map(graph.nodes.map((node) => [node.id, node]))
   return layout.nodes.map((layoutNode): TaskFlowNode => {
@@ -327,17 +342,17 @@ function buildTaskFlowNodes(
       id: node.id,
       type: flowNodeType(node.role, node.contextOnly),
       position: { x: node.x, y: node.y },
-      data: { node, selected, onSelectTask, onOpenTask },
+      data: { node, selected, onSelectTask, onOpenTask, t },
       draggable: false,
       selectable: true,
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
-      ariaLabel: `Task graph node ${node.ref} ${node.title}`,
+      ariaLabel: t("Task graph node {ref} {title}", { ref: node.ref, title: node.title }),
     }
   })
 }
 
-function buildTaskFlowEdges(layout: TaskGraphLayout) {
+function buildTaskFlowEdges(layout: TaskGraphLayout, t: Translate = identityT) {
   return layout.edges.map((edge): TaskFlowEdge => {
     const color = graphEdgeStroke(edge.kind, edge.blocking)
     return {
@@ -345,7 +360,7 @@ function buildTaskFlowEdges(layout: TaskGraphLayout) {
       source: edge.sourceTaskId,
       target: edge.targetTaskId,
       type: edge.kind === "step" ? "stepEdge" : "dependencyEdge",
-      data: { kind: edge.kind, blocking: edge.blocking, required: edge.required },
+      data: { kind: edge.kind, blocking: edge.blocking, required: edge.required, t },
       markerEnd: { type: MarkerType.ArrowClosed, color },
       style: { stroke: color, strokeWidth: edge.kind === "step" ? 2.5 : 2 },
       selectable: true,

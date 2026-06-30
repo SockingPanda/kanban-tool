@@ -1,50 +1,51 @@
 import type { KanbanApi, Task, TaskStatus } from "@/lib/api"
 import { archiveTaskBody, canSpecifyTask, isBlockableStatus, specifyTaskBody } from "@/lib/action-policy"
+import type { I18nMessage } from "@/i18n"
 
 export type DragTransitionPlan =
   | {
       ok: true
       action: "specify" | "promote" | "claim" | "complete" | "submit-review" | "block" | "unblock" | "archive"
       body: Record<string, unknown>
-      confirm?: string
+      confirm?: I18nMessage
       promptReason?: boolean
-      message: string
+      message: I18nMessage
     }
-  | { ok: false; reason: string }
+  | { ok: false; reason: I18nMessage }
 
 export function planDragTransition(
   task: Task,
   targetStatus: TaskStatus,
   claimToken: string | null,
 ): DragTransitionPlan {
-  if (task.status === targetStatus) return { ok: false, reason: "Already in that column." }
+  if (task.status === targetStatus) return { ok: false, reason: message("Already in that column.") }
 
   if (targetStatus === "archived") {
-    if (task.status === "archived") return { ok: false, reason: "Already archived." }
+    if (task.status === "archived") return { ok: false, reason: message("Already archived.") }
     if (task.status === "running") {
       return {
         ok: true,
         action: "archive",
         body: archiveTaskBody(task.status),
-        confirm: `Force archive running task #${task.seq}?`,
-        message: "Archive requested.",
+        confirm: message("Force archive running task #{seq}?", { seq: task.seq }),
+        message: message("Archive requested."),
       }
     }
-    return { ok: true, action: "archive", body: archiveTaskBody(task.status), message: "Archive requested." }
+    return { ok: true, action: "archive", body: archiveTaskBody(task.status), message: message("Archive requested.") }
   }
 
   if (task.status === "triage" && targetStatus === "todo") {
-    if (!canSpecifyTask(task.status, task.description)) return { ok: false, reason: "Triage tasks need a description before specify." }
+    if (!canSpecifyTask(task.status, task.description)) return { ok: false, reason: message("Triage tasks need a description before specify.") }
     return {
       ok: true,
       action: "specify",
       body: specifyTaskBody(task.description),
-      message: "Specify requested.",
+      message: message("Specify requested."),
     }
   }
 
   if ((task.status === "todo" || task.status === "scheduled") && targetStatus === "ready") {
-    return { ok: true, action: "promote", body: {}, message: "Promote requested." }
+    return { ok: true, action: "promote", body: {}, message: message("Promote requested.") }
   }
 
   if (task.status === "ready" && targetStatus === "running") {
@@ -52,7 +53,7 @@ export function planDragTransition(
       ok: true,
       action: "claim",
       body: { ttl_ms: 300_000, worker_profile: "manual" },
-      message: "Claim requested.",
+      message: message("Claim requested."),
     }
   }
 
@@ -62,24 +63,24 @@ export function planDragTransition(
           ok: true,
           action: "complete",
           body: { claim_token: claimToken },
-          message: "Complete requested.",
+          message: message("Complete requested."),
         }
       : {
           ok: true,
           action: "complete",
           body: { force: true },
-          confirm: `Force complete running task #${task.seq} without a claim token?`,
-          message: "Force complete requested.",
+          confirm: message("Force complete running task #{seq} without a claim token?", { seq: task.seq }),
+          message: message("Force complete requested."),
         }
   }
 
   if (task.status === "running" && targetStatus === "review") {
-    if (!claimToken) return { ok: false, reason: "Submit for review requires a claim token." }
+    if (!claimToken) return { ok: false, reason: message("Submit for review requires a claim token.") }
     return {
       ok: true,
       action: "submit-review",
       body: { claim_token: claimToken },
-      message: "Submit for review requested.",
+      message: message("Submit for review requested."),
     }
   }
 
@@ -88,7 +89,7 @@ export function planDragTransition(
       ok: true,
       action: "complete",
       body: {},
-      message: "Complete requested.",
+      message: message("Complete requested."),
     }
   }
 
@@ -99,16 +100,16 @@ export function planDragTransition(
         action: "block",
         body: { claim_token: claimToken },
         promptReason: true,
-        message: "Block requested.",
+        message: message("Block requested."),
       }
     }
     return {
       ok: true,
       action: "block",
       body: { force: true },
-      confirm: `Force block running task #${task.seq} without a claim token?`,
+      confirm: message("Force block running task #{seq} without a claim token?", { seq: task.seq }),
       promptReason: true,
-      message: "Force block requested.",
+      message: message("Force block requested."),
     }
   }
 
@@ -118,7 +119,7 @@ export function planDragTransition(
       action: "block",
       body: {},
       promptReason: true,
-      message: "Block requested.",
+      message: message("Block requested."),
     }
   }
 
@@ -127,11 +128,11 @@ export function planDragTransition(
       ok: true,
       action: "unblock",
       body: {},
-      message: "Unblock requested; the service will recompute the target state.",
+      message: message("Unblock requested; the service will recompute the target state."),
     }
   }
 
-  return { ok: false, reason: `${task.status} cannot be dropped on ${targetStatus}.` }
+  return { ok: false, reason: message("{status} cannot be dropped on {targetStatus}.", { status: task.status, targetStatus }) }
 }
 
 export async function executeDragTransition(
@@ -144,4 +145,8 @@ export async function executeDragTransition(
 
 function isExecutableTarget(status: TaskStatus) {
   return status === "todo" || status === "scheduled" || status === "ready" || status === "running"
+}
+
+function message(key: string, values?: Record<string, string | number>): I18nMessage {
+  return values ? { key, values } : { key }
 }

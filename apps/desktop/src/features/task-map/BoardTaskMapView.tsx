@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { MetricStrip, PageToolbar, PriorityBadge, SectionCard, TaskIdentityLine, TaskStatusBadge } from "@/components/ui/composites"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
+import { useI18n } from "@/i18n"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { BoardTaskMap, KanbanApi, Task, TaskGraphNode as ApiTaskGraphNode } from "@/lib/api"
@@ -22,15 +23,6 @@ const MAX_MAP_ZOOM = 1.5
 const MAP_ZOOM_STEP = 0.15
 const TaskGraphCanvas = lazy(() => import("./TaskGraphCanvas").then((module) => ({ default: module.TaskGraphCanvas })))
 
-const filterOptions: { value: BoardMapFilter; label: string }[] = [
-  { value: "all", label: "All active" },
-  { value: "blocked", label: "Blocked" },
-  { value: "ready", label: "Ready now" },
-  { value: "running", label: "Running" },
-  { value: "unplanned", label: "Unplanned steps" },
-  { value: "incomplete-steps", label: "Incomplete steps" },
-]
-
 export function BoardTaskMapView({
   api,
   selectedTaskId,
@@ -40,6 +32,7 @@ export function BoardTaskMapView({
   selectedTaskId: string | null
   onSelectTask: (taskId: string) => void
 }) {
+  const { t } = useI18n()
   const [filter, setFilter] = useState<BoardMapFilter>("all")
   const [showDoneContext, setShowDoneContext] = useState(false)
   const [hideIsolated, setHideIsolated] = useState(false)
@@ -60,6 +53,17 @@ export function BoardTaskMapView({
   const inspectTask = useCallback((taskId: string) => setInspectedTaskId(taskId), [])
   const hiddenSelection = Boolean(selectedNode && !visibleGraph.nodes.some((node) => node.id === selectedNode.task.id))
   const zoomLabel = `${Math.round(zoom * 100)}%`
+  const filterOptions = useMemo<{ value: BoardMapFilter; label: string }[]>(
+    () => [
+      { value: "all", label: t("All active") },
+      { value: "blocked", label: t("Blocked") },
+      { value: "ready", label: t("Ready now") },
+      { value: "running", label: t("Running") },
+      { value: "unplanned", label: t("Unplanned steps") },
+      { value: "incomplete-steps", label: t("Incomplete steps") },
+    ],
+    [t],
+  )
 
   useEffect(() => {
     if (selectedTaskId) setInspectedTaskId(selectedTaskId)
@@ -69,7 +73,7 @@ export function BoardTaskMapView({
     return (
       <div className="p-4">
         <Empty>
-          <EmptyDescription>API client is not ready.</EmptyDescription>
+          <EmptyDescription>{t("API client is not ready.")}</EmptyDescription>
         </Empty>
       </div>
     )
@@ -103,7 +107,7 @@ export function BoardTaskMapView({
               onClick={() => setHideIsolated((current) => !current)}
             >
               <EyeOff className="h-4 w-4" />
-              Hide isolated
+              {t("Hide isolated")}
             </Button>
             <Button
               type="button"
@@ -112,7 +116,7 @@ export function BoardTaskMapView({
               aria-pressed={showDoneContext}
               onClick={() => setShowDoneContext((current) => !current)}
             >
-              Show done context
+              {t("Show done context")}
             </Button>
             <Separator orientation="vertical" className="hidden h-6 sm:block" />
             <div className="flex items-center gap-1 rounded-md border border-border bg-background p-0.5">
@@ -120,8 +124,8 @@ export function BoardTaskMapView({
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label="Zoom out task map"
-                title="Zoom out"
+                aria-label={t("Zoom out task map")}
+                title={t("Zoom out")}
                 disabled={zoom <= MIN_MAP_ZOOM}
                 onClick={() => setZoom((current) => stepMapZoom(current, -1))}
               >
@@ -132,36 +136,39 @@ export function BoardTaskMapView({
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label="Zoom in task map"
-                title="Zoom in"
+                aria-label={t("Zoom in task map")}
+                title={t("Zoom in")}
                 disabled={zoom >= MAX_MAP_ZOOM}
                 onClick={() => setZoom((current) => stepMapZoom(current, 1))}
               >
                 <Plus className="h-4 w-4" />
               </Button>
-              <Button type="button" variant="ghost" size="icon" aria-label="Reset task map zoom" title="Reset zoom" onClick={() => setZoom(1)}>
+              <Button type="button" variant="ghost" size="icon" aria-label={t("Reset task map zoom")} title={t("Reset zoom")} onClick={() => setZoom(1)}>
                 <RotateCcw className="h-4 w-4" />
               </Button>
             </div>
             <Button type="button" variant="outline" size="sm" disabled={mapQuery.isFetching} onClick={() => void mapQuery.refetch()}>
               {mapQuery.isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-              Refresh
+              {t("Refresh")}
             </Button>
           </PageToolbar>
 
           {mapQuery.error ? (
             <Alert className="border-destructive/50 bg-destructive/5">
               <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Map failed</AlertTitle>
+              <AlertTitle>{t("Map failed")}</AlertTitle>
               <AlertDescription>{errorMessage(mapQuery.error)}</AlertDescription>
             </Alert>
           ) : null}
           {sourceGraph?.meta.truncated ? (
             <Alert>
               <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Graph truncated</AlertTitle>
+              <AlertTitle>{t("Graph truncated")}</AlertTitle>
               <AlertDescription>
-                Showing {sourceGraph.meta.node_count} nodes and {sourceGraph.meta.edge_count} edges within the current node cap.
+                {t("Showing {nodes} nodes and {edges} edges within the current node cap.", {
+                  nodes: sourceGraph.meta.node_count,
+                  edges: sourceGraph.meta.edge_count,
+                })}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -169,10 +176,10 @@ export function BoardTaskMapView({
           <div className="min-h-0 flex-1">
             {mapQuery.isLoading ? (
               <Card className="flex h-full min-h-[420px] items-center justify-center p-6 text-sm text-muted-foreground">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading task map
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("Loading task map")}
               </Card>
             ) : visibleGraph.nodes.length ? (
-              <Suspense fallback={<TaskMapSkeleton label="Loading graph renderer" className="h-full min-h-[520px]" />}>
+              <Suspense fallback={<TaskMapSkeleton label={t("Loading graph renderer")} className="h-full min-h-[520px]" />}>
                 <TaskGraphCanvas
                   graph={visibleGraph}
                   selectedTaskId={selectedNode?.task.id ?? inspectedTaskId ?? selectedTaskId}
@@ -185,7 +192,7 @@ export function BoardTaskMapView({
               </Suspense>
             ) : (
               <Empty className="h-full min-h-[420px] rounded-md border border-border bg-muted/20">
-                <EmptyDescription>No tasks match the current map filter.</EmptyDescription>
+                <EmptyDescription>{t("No tasks match the current map filter.")}</EmptyDescription>
               </Empty>
             )}
           </div>
@@ -260,20 +267,21 @@ function MapInspector({
   hiddenSelection: boolean
   onOpenTask: (taskId: string) => void
 }) {
+  const { t } = useI18n()
   const task = node?.task ?? null
   const counts = (task ? relationCountByTaskId.get(task.id) : null) ?? emptyRelationCounts()
   return (
     <aside className="min-w-0 shrink-0 lg:w-80">
-      <SectionCard title="Inspector" icon={Network}>
+      <SectionCard title={t("Inspector")} icon={Network}>
         {!task ? (
           <Empty className="items-start p-0 text-left">
-            <EmptyDescription>Select a map node to inspect it.</EmptyDescription>
+            <EmptyDescription>{t("Select a map node to inspect it.")}</EmptyDescription>
           </Empty>
         ) : (
           <div className="space-y-4">
             {hiddenSelection ? (
               <Badge variant="secondary">
-                <ListFilter className="h-3.5 w-3.5" /> hidden by filter
+                <ListFilter className="h-3.5 w-3.5" /> {t("hidden by filter")}
               </Badge>
             ) : null}
             <div className="space-y-2">
@@ -281,23 +289,23 @@ function MapInspector({
               <div className="flex flex-wrap gap-1.5">
                 <TaskStatusBadge status={task.status} />
                 <PriorityBadge priority={task.priority} />
-                {node?.context_only ? <Badge variant="secondary">context</Badge> : null}
+                {node?.context_only ? <Badge variant="secondary">{t("context")}</Badge> : null}
               </div>
             </div>
             <Separator />
             <MetricStrip
               className="grid-cols-2 text-sm"
               items={[
-                { id: "plan", label: "Plan", value: task.execution_plan_state },
-                { id: "required-open", label: "Required open", value: String(incompleteRequiredSteps(task)) },
-                { id: "parents", label: "Parents", value: String(counts.parents) },
-                { id: "children", label: "Children", value: String(counts.children) },
-                { id: "steps", label: "Steps", value: String(counts.steps) },
-                { id: "blocked-by", label: "Blocked by", value: String(task.unfinished_parent_count) },
+                { id: "plan", label: t("Plan"), value: task.execution_plan_state },
+                { id: "required-open", label: t("Required open"), value: String(incompleteRequiredSteps(task)) },
+                { id: "parents", label: t("Parents"), value: String(counts.parents) },
+                { id: "children", label: t("Children"), value: String(counts.children) },
+                { id: "steps", label: t("Steps"), value: String(counts.steps) },
+                { id: "blocked-by", label: t("Blocked by"), value: String(task.unfinished_parent_count) },
               ]}
             />
             <Button type="button" className="w-full" onClick={() => onOpenTask(task.id)}>
-              Open detail
+              {t("Open detail")}
             </Button>
           </div>
         )}

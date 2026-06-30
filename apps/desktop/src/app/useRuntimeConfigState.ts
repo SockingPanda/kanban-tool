@@ -10,8 +10,9 @@ import {
 } from "@/app/theme"
 import { parseSidebarOpen, serializeSidebarOpen, SIDEBAR_OPEN_STORAGE_KEY } from "@/app/sidebar-state"
 import { ApiError, KanbanApi, RuntimeConfig, loadRuntimeConfig } from "@/lib/api"
+import type { DesktopLocale } from "@/i18n"
 
-export function useRuntimeConfigState() {
+export function useRuntimeConfigState(locale: DesktopLocale) {
   const [config, setConfig] = useState<RuntimeConfig | null>(null)
   const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
     typeof window === "undefined" ? "system" : parseThemeMode(window.localStorage.getItem(THEME_STORAGE_KEY)),
@@ -42,7 +43,7 @@ export function useRuntimeConfigState() {
     window.localStorage.setItem(SIDEBAR_OPEN_STORAGE_KEY, serializeSidebarOpen(sidebarOpen))
   }, [sidebarOpen])
 
-  const api = useMemo(() => (config ? new KanbanApi(config) : null), [config])
+  const api = useMemo(() => (config ? new KanbanApi(config, { locale }) : null), [config, locale])
   const cycleThemeMode = useCallback(() => setThemeMode((current) => nextThemeMode(current)), [])
 
   return useMemo(

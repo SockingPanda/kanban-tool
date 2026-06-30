@@ -16,11 +16,11 @@ describe("drag transition policy", () => {
   it("requires viable triage spec before specifying to todo", () => {
     expect(planDragTransition(task({ status: "triage", description: "" }), "todo", null)).toEqual({
       ok: false,
-      reason: "Triage tasks need a description before specify.",
+      reason: { key: "Triage tasks need a description before specify." },
     })
     expect(planDragTransition(task({ status: "triage", description: null }), "todo", null)).toEqual({
       ok: false,
-      reason: "Triage tasks need a description before specify.",
+      reason: { key: "Triage tasks need a description before specify." },
     })
     expect(planDragTransition(task({ status: "triage", description: "ready enough" }), "todo", null)).toMatchObject({
       ok: true,
@@ -34,13 +34,13 @@ describe("drag transition policy", () => {
       ok: true,
       action: "complete",
       body: { force: true },
-      confirm: expect.stringContaining("Force complete"),
+      confirm: { key: "Force complete running task #{seq} without a claim token?", values: { seq: 1 } },
     })
     expect(planDragTransition(task({ status: "running" }), "blocked", null)).toMatchObject({
       ok: true,
       action: "block",
       body: { force: true },
-      confirm: expect.stringContaining("Force block"),
+      confirm: { key: "Force block running task #{seq} without a claim token?", values: { seq: 1 } },
       promptReason: true,
     })
   })
@@ -74,14 +74,14 @@ describe("drag transition policy", () => {
       ok: true,
       action: "submit-review",
       body: { claim_token: "claim_123" },
-      message: "Submit for review requested.",
+      message: { key: "Submit for review requested." },
     })
   })
 
   it("rejects running drops on review without a claim token", () => {
     expect(planDragTransition(task({ status: "running" }), "review", null)).toEqual({
       ok: false,
-      reason: "Submit for review requires a claim token.",
+      reason: { key: "Submit for review requires a claim token." },
     })
   })
 
@@ -96,15 +96,15 @@ describe("drag transition policy", () => {
   it("does not route already blocked or terminal tasks through block", () => {
     expect(planDragTransition(task({ status: "blocked" }), "blocked", null)).toEqual({
       ok: false,
-      reason: "Already in that column.",
+      reason: { key: "Already in that column." },
     })
     expect(planDragTransition(task({ status: "done" }), "blocked", null)).toEqual({
       ok: false,
-      reason: "done cannot be dropped on blocked.",
+      reason: { key: "{status} cannot be dropped on {targetStatus}.", values: { status: "done", targetStatus: "blocked" } },
     })
     expect(planDragTransition(task({ status: "archived" }), "blocked", null)).toEqual({
       ok: false,
-      reason: "archived cannot be dropped on blocked.",
+      reason: { key: "{status} cannot be dropped on {targetStatus}.", values: { status: "archived", targetStatus: "blocked" } },
     })
   })
 
@@ -113,13 +113,13 @@ describe("drag transition policy", () => {
       ok: true,
       action: "archive",
       body: { force: true },
-      confirm: expect.stringContaining("Force archive"),
+      confirm: { key: "Force archive running task #{seq}?", values: { seq: 1 } },
     })
     expect(planDragTransition(task({ status: "running" }), "archived", null)).toMatchObject({
       ok: true,
       action: "archive",
       body: { force: true },
-      confirm: expect.stringContaining("Force archive"),
+      confirm: { key: "Force archive running task #{seq}?", values: { seq: 1 } },
     })
   })
 

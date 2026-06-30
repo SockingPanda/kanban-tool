@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use kanban_core::i18n::{current_locale, dep_added, dep_removed};
 use kanban_sqlite::{
     DependencyMutation, add_dependency, dependency_edge, dependency_snapshot, remove_dependency,
 };
@@ -25,7 +26,7 @@ pub(crate) fn handle_dep(
             let dependencies = dependency_snapshot(db_path, board, &child_ref)?;
             let output = DependencyMutation { edge, dependencies };
             print_or_json(json, &output, || {
-                format!("已添加依赖：{parent_ref} -> {child_ref}")
+                dep_added(current_locale(), &parent_ref, &child_ref)
             })?;
         }
         DepCommand::Remove {
@@ -37,7 +38,7 @@ pub(crate) fn handle_dep(
             let dependencies = dependency_snapshot(db_path, board, &child_ref)?;
             let output = DependencyMutation { edge, dependencies };
             print_or_json(json, &output, || {
-                format!("已移除依赖：{parent_ref} -> {child_ref}")
+                dep_removed(current_locale(), &parent_ref, &child_ref)
             })?;
         }
         DepCommand::List { task_ref } => {

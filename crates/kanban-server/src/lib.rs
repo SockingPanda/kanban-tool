@@ -2,6 +2,7 @@ mod dto;
 mod error;
 mod handlers;
 mod helper;
+mod i18n;
 mod observability;
 mod router;
 mod state;

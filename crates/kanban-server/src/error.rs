@@ -6,6 +6,7 @@ use axum::{
 use kanban_core::KanbanError;
 
 use crate::dto::{ErrorBody, ErrorEnvelope};
+use crate::i18n::current_request_locale;
 
 pub(super) fn extractor_error(error: impl std::fmt::Display) -> ApiError {
     invalid_input(error.to_string())
@@ -47,7 +48,7 @@ impl From<KanbanError> for ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let message = self.0.to_string();
-        let (status, code) = match self.0 {
+        let (status, code) = match &self.0 {
             KanbanError::NotFound(_) => (StatusCode::NOT_FOUND, "not_found"),
             KanbanError::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
             KanbanError::InvalidInput(_) if message.contains("dependency cycle") => {
@@ -72,6 +73,7 @@ impl IntoResponse for ApiError {
             KanbanError::InvalidTransition(_) => (StatusCode::CONFLICT, "invalid_transition"),
             KanbanError::Storage(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
         };
+        let message = kanban_core::i18n::render_error(current_request_locale(), &self.0);
         (
             status,
             Json(ErrorEnvelope {

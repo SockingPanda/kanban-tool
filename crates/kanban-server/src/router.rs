@@ -13,6 +13,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use crate::error::invalid_input;
 use crate::handlers::api::*;
 use crate::handlers::health::health;
+use crate::i18n::request_locale;
 use crate::observability::http_trace_layer;
 use crate::state::{AppState, SearchSyncConfig, spawn_search_sync_task};
 
@@ -229,6 +230,7 @@ fn build_api_router(state: AppState) -> Router {
         .route("/api/v1/maintenance/doctor", post(doctor))
         .route("/api/v1/maintenance/checkpoint", post(checkpoint))
         .layer(from_fn_with_state(state.clone(), require_existing_database))
+        .layer(from_fn_with_state(state.clone(), request_locale))
         .with_state(state)
 }
 

@@ -1,9 +1,12 @@
 use std::{path::PathBuf, time::Duration};
 
+use kanban_core::Locale;
+
 #[derive(Debug, Clone)]
 pub struct AppState {
     db_path: PathBuf,
     default_actor: String,
+    locale: Locale,
     vector_config_path: Option<PathBuf>,
     vector_helper_path: Option<PathBuf>,
     graph_helper_path: Option<PathBuf>,
@@ -14,6 +17,7 @@ impl AppState {
         Self {
             db_path: db_path.into(),
             default_actor: default_actor.into(),
+            locale: Locale::En,
             vector_config_path: None,
             vector_helper_path: None,
             graph_helper_path: None,
@@ -35,12 +39,21 @@ impl AppState {
         self
     }
 
+    pub fn with_locale(mut self, locale: Locale) -> Self {
+        self.locale = locale;
+        self
+    }
+
     pub fn db_path(&self) -> &PathBuf {
         &self.db_path
     }
 
     pub fn default_actor(&self) -> &str {
         &self.default_actor
+    }
+
+    pub fn locale(&self) -> Locale {
+        self.locale
     }
 
     pub fn vector_config_path(&self) -> Option<&std::path::Path> {

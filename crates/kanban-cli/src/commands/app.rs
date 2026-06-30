@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use clap_complete::Shell;
+use kanban_core::{Locale, set_current_locale};
 use kanban_sqlite::{
     CompletionCandidateKind, begin_database_runtime, completion_candidates, dispatch_once,
     init_database, list_events, list_runs,
@@ -54,6 +55,8 @@ pub(crate) fn run() -> Result<()> {
     let db_path = cli.db.clone().unwrap_or_else(default_db_path);
     let actor = cli.actor.clone().unwrap_or_else(default_actor);
     let board = active_board(cli.board.as_deref())?;
+    let locale = cli_locale(cli.locale.as_deref())?;
+    set_current_locale(locale);
     match cli.command {
         Command::Init { force: _ } => {
             let result = init_database(&db_path, &actor)
@@ -145,6 +148,11 @@ pub(crate) fn run() -> Result<()> {
         Command::Vacuum => handle_vacuum(&db_path, cli.json)?,
     }
     Ok(())
+}
+
+fn cli_locale(flag: Option<&str>) -> Result<Locale> {
+    let env_locale = std::env::var("KANBAN_LOCALE").ok();
+    Locale::explicit_or_system(flag.or(env_locale.as_deref())).map_err(anyhow::Error::msg)
 }
 
 fn completion_kind(kind: CompleteKind) -> CompletionCandidateKind {

@@ -89,6 +89,39 @@ async fn tasks_by_status_returns_per_status_windows() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn task_list_error_message_uses_accept_language_without_changing_code() -> anyhow::Result<()>
+{
+    let test = TestApp::new()?;
+
+    let (zh_status, zh_json) = get_json_with_accept_language(
+        test.router(),
+        "/api/v1/boards/default/tasks?limit=1001",
+        "zh-CN,zh;q=0.9",
+    )
+    .await?;
+    assert_eq!(zh_status, StatusCode::BAD_REQUEST);
+    assert_eq!(zh_json["error"]["code"], "invalid_input");
+    assert_eq!(
+        zh_json["error"]["message"],
+        "输入无效：limit 必须小于等于 1000"
+    );
+
+    let (en_status, en_json) = get_json_with_accept_language(
+        test.router(),
+        "/api/v1/boards/default/tasks?limit=1001",
+        "en-US,en;q=0.8",
+    )
+    .await?;
+    assert_eq!(en_status, StatusCode::BAD_REQUEST);
+    assert_eq!(en_json["error"]["code"], "invalid_input");
+    assert_eq!(
+        en_json["error"]["message"],
+        "invalid input: limit must be <= 1000"
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn tasks_creates_task_and_event_with_body_actor_priority() -> anyhow::Result<()> {
     let test = TestApp::with_actor("default-actor")?;
     let db_path = test.db_path().to_path_buf();

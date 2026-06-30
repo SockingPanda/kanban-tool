@@ -18,6 +18,7 @@ kanban [GLOBAL_OPTIONS] <COMMAND>
 | `--db <path>` | 指定 SQLite DB。默认从 config 读取。 |
 | `--board <slug-or-id>` | 显式指定 active board，优先级最高。 |
 | `--actor <name>` | 操作 actor。默认 OS username。 |
+| `--locale <auto|zh-CN|en>` | human 输出语言。默认 `zh-CN`；`auto`/`system` 使用系统 locale。 |
 | `--json` | JSON 输出。 |
 
 Active board 解析顺序：
@@ -28,6 +29,14 @@ Active board 解析顺序：
 4. fallback 到 `default`。
 
 `kanban board use <board>` 会把当前目录写成项目级 `.kb/config.toml`；后续子目录自动继承该 active board。该配置只选择本地项目的 board，不创建新 DB。
+
+Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状态枚举、task ref、ID、exit code 或机器可读 diagnostics。选择顺序：
+
+1. `--locale <auto|zh-CN|en>`。
+2. `KANBAN_LOCALE`。
+3. 默认 `zh-CN`。
+
+`auto` / `system` 会按 `LC_ALL`、`LC_MESSAGES`、`LANG` 解析系统 locale；当前只支持中文和英文。脚本和自动化应优先使用 `--json`，不要依赖 human 文案。
 
 ### 1.1 JSON output contract
 

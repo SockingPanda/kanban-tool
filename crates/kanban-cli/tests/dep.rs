@@ -1,7 +1,7 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kanban};
+use common::{TempDb, kanban, kanban_in_dir_str_envs};
 use serde_json::Value;
 
 #[test]
@@ -40,6 +40,36 @@ fn dep_add_remove_human_output_is_chinese() -> anyhow::Result<()> {
     let removed =
         kanban(&temp.path, &["dep", "remove", &parent.id, &child.id])?.success_stdout()?;
     assert!(removed.contains("已移除依赖"));
+    assert!(removed.contains(&parent.id));
+    assert!(removed.contains(&child.id));
+    Ok(())
+}
+
+#[test]
+fn dep_human_output_can_be_rendered_in_english() -> anyhow::Result<()> {
+    let temp = TempDb::new("dep_human_output_can_be_rendered_in_english")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    let parent = create_task(&temp, "parent", "ready")?;
+    let child = create_task(&temp, "child", "ready")?;
+
+    let added = kanban(
+        &temp.path,
+        &["--locale", "en", "dep", "add", &parent.id, &child.id],
+    )?
+    .success_stdout()?;
+    assert!(added.contains("Added dependency"));
+    assert!(added.contains(&parent.id));
+    assert!(added.contains(&child.id));
+
+    let removed = kanban_in_dir_str_envs(
+        &temp.path,
+        &["dep", "remove", &parent.id, &child.id],
+        &temp.dir,
+        &[("KANBAN_LOCALE", "en")],
+    )?
+    .success_stdout()?;
+    assert!(removed.contains("Removed dependency"));
     assert!(removed.contains(&parent.id));
     assert!(removed.contains(&child.id));
     Ok(())

@@ -3038,12 +3038,22 @@ fn label_suggest_rejects_out_of_bounds_limits() -> anyhow::Result<()> {
 
     kanban(
         &temp.path,
-        &["label", "suggest", task_id, "--limit", "1001"],
+        &[
+            "--locale", "en", "label", "suggest", task_id, "--limit", "1001",
+        ],
     )?
     .failure_containing("limit must be <= 1000")?;
     kanban(
         &temp.path,
-        &["label", "suggest", task_id, "--atom-limit", "1001"],
+        &[
+            "--locale",
+            "en",
+            "label",
+            "suggest",
+            task_id,
+            "--atom-limit",
+            "1001",
+        ],
     )?
     .failure_containing("limit must be <= 1000")?;
     kanban(
@@ -3120,7 +3130,15 @@ fn label_commands_reject_archived_tasks() -> anyhow::Result<()> {
     kanban(&temp.path, &["--json", "task", "archive", add_task_id])?.success_json()?;
     kanban(
         &temp.path,
-        &["--json", "label", "add", add_task_id, "backend"],
+        &[
+            "--locale",
+            "en",
+            "--json",
+            "label",
+            "add",
+            add_task_id,
+            "backend",
+        ],
     )?
     .failure_containing("not found: task")?;
 
@@ -3142,7 +3160,15 @@ fn label_commands_reject_archived_tasks() -> anyhow::Result<()> {
     kanban(&temp.path, &["--json", "task", "archive", remove_task_id])?.success_json()?;
     kanban(
         &temp.path,
-        &["--json", "label", "remove", remove_task_id, "backend"],
+        &[
+            "--locale",
+            "en",
+            "--json",
+            "label",
+            "remove",
+            remove_task_id,
+            "backend",
+        ],
     )?
     .failure_containing("not found: task")?;
 

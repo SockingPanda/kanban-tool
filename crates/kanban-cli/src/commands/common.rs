@@ -1,15 +1,15 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
-use kanban_core::TaskStatus;
+use kanban_core::{KanbanError, TaskStatus};
 use kanban_sqlite::TaskListSort;
 
 pub(crate) fn validate_page_bounds(limit: usize, max_limit: usize, offset: usize) -> Result<()> {
     if limit > max_limit {
-        bail!("limit must be <= {max_limit}");
+        return Err(KanbanError::InvalidInput(format!("limit must be <= {max_limit}")).into());
     }
     if offset > i64::MAX as usize {
-        bail!("offset must be <= {}", i64::MAX);
+        return Err(KanbanError::InvalidInput(format!("offset must be <= {}", i64::MAX)).into());
     }
     Ok(())
 }

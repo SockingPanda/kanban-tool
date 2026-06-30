@@ -192,7 +192,7 @@ _kanban_dynamic_completions() {
 
     for ((i = 1; i < COMP_CWORD; i++)); do
         case "${COMP_WORDS[i]}" in
-            --db|--board)
+            --db|--board|--locale)
                 if (( i + 1 < COMP_CWORD )); then
                     cmd+=("${COMP_WORDS[i]}" "${COMP_WORDS[i + 1]}")
                     ((i++))
@@ -274,7 +274,7 @@ _kanban_dynamic_completions() {
   cmd=(kanban)
   for ((i = 2; i < CURRENT; i++)); do
     case "${words[i]}" in
-      --db|--board)
+      --db|--board|--locale)
         if (( i + 1 < CURRENT )); then
           cmd+=("${words[i]}" "${words[i + 1]}")
           ((i++))

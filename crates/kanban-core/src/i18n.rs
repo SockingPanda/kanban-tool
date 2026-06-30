@@ -151,7 +151,8 @@ fn detail_zh(detail: &str) -> Cow<'_, str> {
 fn parse_accept_language(header: &str) -> Option<Locale> {
     header
         .split(',')
-        .filter_map(|part| {
+        .enumerate()
+        .filter_map(|(index, part)| {
             let mut sections = part.trim().split(';');
             let tag = sections.next()?.trim();
             let q = sections
@@ -162,14 +163,18 @@ fn parse_accept_language(header: &str) -> Option<Locale> {
                         .and_then(|raw| raw.parse::<f32>().ok())
                 })
                 .unwrap_or(1.0);
-            Locale::parse(tag).map(|locale| (locale, q))
+            if q <= 0.0 {
+                return None;
+            }
+            Locale::parse(tag).map(|locale| (locale, q, index))
         })
         .max_by(|left, right| {
             left.1
                 .partial_cmp(&right.1)
                 .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| right.2.cmp(&left.2))
         })
-        .map(|(locale, _)| locale)
+        .map(|(locale, _, _)| locale)
 }
 
 #[cfg(test)]
@@ -214,6 +219,30 @@ mod tests {
         );
         assert_eq!(
             Locale::from_accept_language(Some("fr-FR"), Locale::En),
+            Locale::En
+        );
+    }
+
+    #[test]
+    fn accept_language_ignores_zero_q_values() {
+        assert_eq!(
+            Locale::from_accept_language(Some("en;q=0,zh-CN;q=0.5"), Locale::En),
+            Locale::ZhCn
+        );
+        assert_eq!(
+            Locale::from_accept_language(Some("zh-CN;q=0,en;q=0"), Locale::En),
+            Locale::En
+        );
+    }
+
+    #[test]
+    fn accept_language_preserves_header_order_when_q_ties() {
+        assert_eq!(
+            Locale::from_accept_language(Some("zh-CN;q=0.7,en;q=0.7"), Locale::En),
+            Locale::ZhCn
+        );
+        assert_eq!(
+            Locale::from_accept_language(Some("en;q=0.7,zh-CN;q=0.7"), Locale::ZhCn),
             Locale::En
         );
     }

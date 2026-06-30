@@ -26,7 +26,7 @@ describe("legal task actions", () => {
     const action = actionFor(item, "Archive", "claim_123")
 
     expect(action.enabled).toBe(true)
-    expect(action.confirmation).toContain("Force archive")
+    expect(action.confirmation).toEqual({ key: "Force archive running task #{seq}?", values: { seq: 1 } })
 
     await action.run(api, item)
 

@@ -34,6 +34,7 @@ import type { PageMeta, Task, TaskStatus } from "@/lib/api"
 import { pageRangeLabel } from "@/lib/pagination"
 import { priorityLabel, priorityLevels } from "@/lib/priority"
 import { cn, formatRelativeTime } from "@/lib/utils"
+import { useI18n } from "@/i18n"
 
 import {
   defaultListColumnVisibility,
@@ -50,21 +51,10 @@ import {
   type ListSortState,
 } from "./table-state"
 
-const statusFilterOptions: MenuSelectOption<TaskStatus | "all">[] = [
-  { value: "all", label: "all active" },
-  ...filterStatuses.map((status) => ({ value: status, label: status })),
-]
-
 const rowsPerPageOptions: MenuSelectOption<string>[] = [25, 50, 100, 200].map((value) => ({
   value: String(value),
   label: String(value),
 }))
-
-const planFilterOptions: { value: TaskPlanFilter; label: string }[] = [
-  { value: "plan_needed", label: "Plan needed" },
-  { value: "has_steps", label: "Has steps" },
-  { value: "incomplete_required_steps", label: "Incomplete required" },
-]
 
 export function ListView({
   tasks,
@@ -115,10 +105,26 @@ export function ListView({
   onLastPage: () => void
   onRowsPerPageChange: (value: number) => void
 }) {
+  const { t } = useI18n()
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(defaultListColumnVisibility)
   const selectTaskRef = useRef(onSelectTask)
   selectTaskRef.current = onSelectTask
+  const statusFilterOptions = useMemo<MenuSelectOption<TaskStatus | "all">[]>(
+    () => [
+      { value: "all", label: t("all active") },
+      ...filterStatuses.map((status) => ({ value: status, label: t(status) })),
+    ],
+    [t],
+  )
+  const planFilterOptions = useMemo<{ value: TaskPlanFilter; label: string }[]>(
+    () => [
+      { value: "plan_needed", label: t("Plan needed") },
+      { value: "has_steps", label: t("Has steps") },
+      { value: "incomplete_required_steps", label: t("Incomplete required") },
+    ],
+    [t],
+  )
 
   useEffect(() => {
     const taskIds = new Set(tasks.map((task) => task.id))
@@ -142,14 +148,14 @@ export function ListView({
         id: "select",
         header: ({ table }) => (
           <Checkbox
-            aria-label="Select all visible rows"
+            aria-label={t("Select all visible rows")}
             checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
             onCheckedChange={(value) => table.toggleAllPageRowsSelected(Boolean(value))}
           />
         ),
         cell: ({ row }) => (
           <Checkbox
-            aria-label={`Select ${row.original.ref}`}
+            aria-label={t("Select {ref}", { ref: row.original.ref })}
             checked={row.getIsSelected()}
             onCheckedChange={(value) => row.toggleSelected(Boolean(value))}
             onClick={(event) => event.stopPropagation()}
@@ -271,7 +277,7 @@ export function ListView({
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label={`Actions for ${row.original.ref}`}
+                aria-label={t("Actions for {ref}", { ref: row.original.ref })}
                 onClick={(event) => event.stopPropagation()}
               >
                 <MoreHorizontal className="h-4 w-4" />
@@ -280,14 +286,14 @@ export function ListView({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => selectTaskRef.current(row.original.id)}>
                 <Eye className="h-4 w-4" />
-                Open detail
+                {t("Open detail")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ),
       },
     ],
-    [listSort, onListSortChange],
+    [listSort, onListSortChange, t],
   )
 
   const table = useReactTable({
@@ -310,9 +316,9 @@ export function ListView({
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-card">
       <PageToolbar>
         <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground">Status</Label>
+          <Label className="text-xs text-muted-foreground">{t("Status")}</Label>
           <MenuSelect
-            ariaLabel="List status filter"
+            ariaLabel={t("List status filter")}
             value={statusFilter}
             options={statusFilterOptions}
             onValueChange={onStatusFilterChange}
@@ -322,7 +328,7 @@ export function ListView({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
-              Priority
+              {t("Priority")}
               {priorityFilters.length ? ` (${priorityFilters.length})` : ""}
             </Button>
           </DropdownMenuTrigger>
@@ -341,7 +347,7 @@ export function ListView({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
-              Plan
+              {t("Plan")}
               {planFilters.length ? ` (${planFilters.length})` : ""}
             </Button>
           </DropdownMenuTrigger>
@@ -359,13 +365,13 @@ export function ListView({
         </DropdownMenu>
         <Button variant="ghost" size="sm" disabled={!activeFilters} onClick={onResetListFilters}>
           <X className="h-3.5 w-3.5" />
-          Reset
+          {t("Reset")}
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
               <Rows3 className="h-3.5 w-3.5" />
-              View
+              {t("View")}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
@@ -378,21 +384,21 @@ export function ListView({
                   checked={column.getIsVisible()}
                   onCheckedChange={(value) => column.toggleVisibility(Boolean(value))}
                 >
-                  {listColumnLabels[column.id as ListColumnId] ?? column.id}
+                  {t(listColumnLabels[column.id as ListColumnId] ?? column.id)}
                 </DropdownMenuCheckboxItem>
               ))}
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => setColumnVisibility(defaultListColumnVisibility)}>
-              Reset columns
+              {t("Reset columns")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="text-xs text-muted-foreground">
-          {selectedCount} selected · {tasks.length} rows
+          {t("{count} selected", { count: selectedCount })} · {t("{count} rows", { count: tasks.length })}
         </div>
         <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
           <span>{pageRangeLabel(page, tasks.length)}</span>
-          {tasksRefreshing ? <span>refreshing</span> : null}
+          {tasksRefreshing ? <span>{t("refreshing")}</span> : null}
         </div>
       </PageToolbar>
 
@@ -429,7 +435,7 @@ export function ListView({
               <TableRow>
                 <TableCell className="px-4 py-10" colSpan={table.getAllLeafColumns().length}>
                   <Empty className="p-0">
-                    <EmptyDescription>No tasks match the current filters.</EmptyDescription>
+                    <EmptyDescription>{t("No tasks match the current filters.")}</EmptyDescription>
                   </Empty>
                 </TableCell>
               </TableRow>
@@ -440,10 +446,10 @@ export function ListView({
 
       <div className="flex h-10 items-center gap-2 border-t border-border bg-card px-4 text-xs text-muted-foreground">
         <Label className="flex items-center gap-2" id="rows-per-page-label">
-          Rows
+          {t("Rows")}
         </Label>
         <MenuSelect
-          ariaLabel="Rows per page"
+          ariaLabel={t("Rows per page")}
           value={String(rowsPerPage)}
           options={rowsPerPageOptions}
           onValueChange={(value) => onRowsPerPageChange(Number(value))}
@@ -457,24 +463,24 @@ export function ListView({
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="First page"
+                    aria-label={t("First page")}
                     disabled={!hasPreviousPage || tasksRefreshing}
                     onClick={onFirstPage}
                   >
                     <ChevronsLeft className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>First page</TooltipContent>
+                <TooltipContent>{t("First page")}</TooltipContent>
               </Tooltip>
             </PaginationItem>
             <PaginationItem>
               <Button variant="ghost" size="sm" disabled={!hasPreviousPage || tasksRefreshing} onClick={onPreviousPage}>
-                Previous
+                {t("Previous")}
               </Button>
             </PaginationItem>
             <PaginationItem>
               <Button variant="ghost" size="sm" disabled={!hasNextPage || tasksRefreshing} onClick={onNextPage}>
-                Next
+                {t("Next")}
               </Button>
             </PaginationItem>
             <PaginationItem>
@@ -483,14 +489,14 @@ export function ListView({
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="Last page"
+                    aria-label={t("Last page")}
                     disabled={!canGoLastPage || tasksRefreshing}
                     onClick={onLastPage}
                   >
                     <ChevronsRight className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Last page</TooltipContent>
+                <TooltipContent>{t("Last page")}</TooltipContent>
               </Tooltip>
             </PaginationItem>
           </PaginationContent>
@@ -501,29 +507,31 @@ export function ListView({
 }
 
 function ExecutionPlanBadge({ task }: { task: Task }) {
+  const { t } = useI18n()
   if (task.execution_plan_state === "planned") {
-    return <Badge variant="secondary">steps {task.completed_required_step_count}/{task.required_step_count}</Badge>
+    return <Badge variant="secondary">{t("steps {completed}/{total}", { completed: task.completed_required_step_count, total: task.required_step_count })}</Badge>
   }
-  if (task.execution_plan_state === "not_required") return <Badge variant="secondary">not required</Badge>
-  return <Badge variant="blocked">plan needed</Badge>
+  if (task.execution_plan_state === "not_required") return <Badge variant="secondary">{t("not required")}</Badge>
+  return <Badge variant="blocked">{t("plan needed")}</Badge>
 }
 
 function StepProgressCell({ task }: { task: Task }) {
+  const { t } = useI18n()
   const progress = stepProgressForTask(task)
   if (!progress) return <span className="text-xs text-muted-foreground">-</span>
 
-  const label = `${progress.completed}/${progress.total} required steps`
+  const label = t("{completed}/{total} required steps", { completed: progress.completed, total: progress.total })
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          aria-label={`Required step progress: ${label}`}
+          aria-label={t("Required step progress: {label}", { label })}
           className="inline-flex w-32 items-center gap-2 rounded-sm text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           tabIndex={0}
         >
           <Progress
-            aria-label={`Required step progress: ${label}`}
+            aria-label={t("Required step progress: {label}", { label })}
             aria-valuemax={100}
             aria-valuemin={0}
             aria-valuenow={progress.percent}
@@ -540,8 +548,9 @@ function StepProgressCell({ task }: { task: Task }) {
 }
 
 function DependencyBlockedBadge({ task }: { task: Task }) {
+  const { t } = useI18n()
   if (!task.dependency_blocked) return <span className="text-xs text-muted-foreground">-</span>
-  return <Badge variant="blocked">blocked by {task.unfinished_parent_count}</Badge>
+  return <Badge variant="blocked">{t("blocked by {count}", { count: task.unfinished_parent_count })}</Badge>
 }
 
 function DateLine({ label, value }: { label: string; value: number | null }) {
@@ -555,15 +564,16 @@ function DateLine({ label, value }: { label: string; value: number | null }) {
 }
 
 function StaticHeader({ columnId, onHide }: { columnId: ListColumnId; onHide: () => void }) {
+  const { t } = useI18n()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="h-7 px-1.5 text-xs uppercase">
-          {listColumnLabels[columnId]}
+          {t(listColumnLabels[columnId])}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        <DropdownMenuItem onSelect={onHide}>Hide</DropdownMenuItem>
+        <DropdownMenuItem onSelect={onHide}>{t("Hide")}</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -580,9 +590,10 @@ function SortableHeader({
   onListSortChange: (value: ListSortState) => void
   onHide: () => void
 }) {
+  const { t } = useI18n()
   const field = sortForColumn(columnId)
   const active = field ? listSort.field === field : false
-  const label = listColumnLabels[columnId]
+  const label = t(listColumnLabels[columnId])
 
   function setDirection(direction: ListSortDirection) {
     if (!field) return
@@ -601,14 +612,14 @@ function SortableHeader({
       <DropdownMenuContent align="start">
         <DropdownMenuItem disabled={!field} onSelect={() => setDirection("asc")}>
           <ArrowUp className="h-4 w-4" />
-          Asc
+          {t("Asc")}
         </DropdownMenuItem>
         <DropdownMenuItem disabled={!field} onSelect={() => setDirection("desc")}>
           <ArrowDown className="h-4 w-4" />
-          Desc
+          {t("Desc")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onHide}>Hide</DropdownMenuItem>
+        <DropdownMenuItem onSelect={onHide}>{t("Hide")}</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

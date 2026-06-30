@@ -6,6 +6,7 @@ import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { InputGroup, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { TaskStatusBadge } from "@/components/ui/composites"
+import { useI18n } from "@/i18n"
 import type { Task, TaskStep, TaskSteps } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
@@ -38,6 +39,7 @@ export function TaskExecutionPlanPanel({
   onMarkNotRequired: () => void
   onSelectTask: (taskId: string) => void
 }) {
+  const { t } = useI18n()
   const items = steps?.steps ?? []
   const required = items.filter((item) => item.required)
   const doneRequired = required.filter((item) => item.status === "done" || item.status === "skipped").length
@@ -51,43 +53,43 @@ export function TaskExecutionPlanPanel({
           {task.execution_plan_state}
         </Badge>
         <span>
-          {doneRequired}/{required.length} steps
+          {t("{completed}/{total} steps", { completed: doneRequired, total: required.length })}
         </span>
-        <span>{running} linked running</span>
-        <span>{blocked} linked blocked</span>
+        <span>{t("{count} linked running", { count: running })}</span>
+        <span>{t("{count} linked blocked", { count: blocked })}</span>
       </div>
       {items.length ? <TaskStepRows items={items} onSelectTask={onSelectTask} /> : <EmptyExecutionPlan />}
       <div className="grid gap-2 md:grid-cols-2">
         <Field>
-          <FieldLabel>New step title</FieldLabel>
+          <FieldLabel>{t("New step title")}</FieldLabel>
           <InputGroup>
             <InputGroupInput
-              aria-label="New step title"
+              aria-label={t("New step title")}
               name="new-step-title"
               autoComplete="off"
               value={stepTitle}
               onChange={(event) => setStepTitle(event.target.value)}
-              placeholder="Add text step"
+              placeholder={t("Add text step")}
             />
-            <InputGroupButton variant="outline" aria-label="Add step" disabled={pending || !stepTitle.trim()} onClick={onCreateStep}>
+            <InputGroupButton variant="outline" aria-label={t("Add step")} disabled={pending || !stepTitle.trim()} onClick={onCreateStep}>
               <Plus className="h-4 w-4" />
             </InputGroupButton>
           </InputGroup>
         </Field>
         <Field>
-          <FieldLabel>Linked task ref</FieldLabel>
+          <FieldLabel>{t("Linked task ref")}</FieldLabel>
           <InputGroup>
             <InputGroupInput
-              aria-label="Linked task ref"
+              aria-label={t("Linked task ref")}
               name="linked-task-ref"
               autoComplete="off"
               value={attachStepId}
               onChange={(event) => setAttachStepId(event.target.value)}
-              placeholder="Task ref or id"
+              placeholder={t("Task ref or id")}
             />
             <InputGroupButton
               variant="outline"
-              aria-label="Add linked step"
+              aria-label={t("Add linked step")}
               disabled={pending || !attachStepId.trim()}
               onClick={onAttachStep}
             >
@@ -97,19 +99,19 @@ export function TaskExecutionPlanPanel({
         </Field>
       </div>
       <Field>
-        <FieldLabel>Not required reason</FieldLabel>
+        <FieldLabel>{t("Not required reason")}</FieldLabel>
         <InputGroup>
           <InputGroupInput
-            aria-label="Not required reason"
+            aria-label={t("Not required reason")}
             name="not-required-reason"
             autoComplete="off"
             value={notRequiredReason}
             onChange={(event) => setNotRequiredReason(event.target.value)}
-            placeholder="Reason this task does not need steps"
+            placeholder={t("Reason this task does not need steps")}
           />
           <InputGroupButton
             variant="outline"
-            aria-label="Mark execution plan not required"
+            aria-label={t("Mark execution plan not required")}
             disabled={pending || !notRequiredReason.trim()}
             onClick={onMarkNotRequired}
           >
@@ -122,6 +124,7 @@ export function TaskExecutionPlanPanel({
 }
 
 function TaskStepRows({ items, onSelectTask }: { items: TaskStep[]; onSelectTask: (taskId: string) => void }) {
+  const { t } = useI18n()
   return (
     <div className="space-y-1.5">
       {items.map((item, index) => {
@@ -139,7 +142,7 @@ function TaskStepRows({ items, onSelectTask }: { items: TaskStep[]; onSelectTask
                   <Network className="h-3.5 w-3.5" />#{linkedTask.seq} {linkedTask.title}
                 </Button>
               ) : (
-                <div className="mt-1 text-xs text-muted-foreground">Text step</div>
+                <div className="mt-1 text-xs text-muted-foreground">{t("Text step")}</div>
               )}
             </div>
             {linkedTask ? (
@@ -155,9 +158,10 @@ function TaskStepRows({ items, onSelectTask }: { items: TaskStep[]; onSelectTask
 }
 
 function EmptyExecutionPlan() {
+  const { t } = useI18n()
   return (
     <Empty className="items-start rounded-md border border-border bg-muted/20 p-3 text-left">
-      <EmptyDescription>Execution plan is not planned. Add steps before starting, or record why this task does not need them.</EmptyDescription>
+      <EmptyDescription>{t("Execution plan is not planned. Add steps before starting, or record why this task does not need them.")}</EmptyDescription>
     </Empty>
   )
 }

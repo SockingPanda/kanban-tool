@@ -33,6 +33,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { useI18n } from "@/i18n"
 
 type PlannedDragTransition = {
   task: Task
@@ -41,12 +42,13 @@ type PlannedDragTransition = {
 
 function App() {
   const queryClient = useQueryClient()
+  const { locale, t } = useI18n()
   const [view, setView] = useState<OperatorView>("board")
   const [dragReasonRequest, setDragReasonRequest] = useState<PlannedDragTransition | null>(null)
   const [dragConfirmRequest, setDragConfirmRequest] = useState<PlannedDragTransition | null>(null)
   const [dragReasonDraft, setDragReasonDraft] = useState("")
 
-  const runtimeState = useRuntimeConfigState()
+  const runtimeState = useRuntimeConfigState(locale)
   const { api, config, error, setConfig, setError } = runtimeState
   const reportError = useCallback((err: unknown) => setError(errorMessage(err)), [setError])
 
@@ -183,7 +185,7 @@ function App() {
       const token = claimTokens[task.id] ?? null
       const plan = planDragTransition(task, targetStatus, token)
       if (!plan.ok) {
-        setError(plan.reason)
+        setError(t(plan.reason.key, plan.reason.values))
         return
       }
       if (plan.promptReason) {
@@ -193,7 +195,7 @@ function App() {
       }
       requestDragExecution({ task, plan })
     },
-    [api, claimTokens, tasksById, setError],
+    [api, claimTokens, tasksById, setError, t],
   )
 
   const executePlannedDrag = useCallback(
@@ -225,7 +227,7 @@ function App() {
       if (!dragReasonRequest) return
       const reason = dragReasonDraft.trim()
       if (!reason) {
-        setError("A block reason is required.")
+        setError(t("A block reason is required."))
         return
       }
       const request = {
@@ -240,7 +242,7 @@ function App() {
       setDragReasonDraft("")
       requestDragExecution(request)
     },
-    [dragReasonDraft, dragReasonRequest, requestDragExecution, setError],
+    [dragReasonDraft, dragReasonRequest, requestDragExecution, setError, t],
   )
 
   const switchBoard = useCallback(
@@ -588,16 +590,16 @@ function App() {
         <DialogContent>
           <form onSubmit={submitDragReason} className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Block reason</DialogTitle>
-              <DialogDescription>Record why this task is being moved to blocked.</DialogDescription>
+              <DialogTitle>{t("Block reason")}</DialogTitle>
+              <DialogDescription>{t("Record why this task is being moved to blocked.")}</DialogDescription>
             </DialogHeader>
             <Textarea
-              aria-label="Block reason"
+              aria-label={t("Block reason")}
               name="block-reason"
               autoComplete="off"
               value={dragReasonDraft}
               onChange={(event) => setDragReasonDraft(event.target.value)}
-              placeholder="Block reason"
+              placeholder={t("Block reason")}
             />
             <DialogFooter>
               <Button
@@ -608,10 +610,10 @@ function App() {
                   setDragReasonDraft("")
                 }}
               >
-                Cancel
+                {t("Cancel")}
               </Button>
               <Button type="submit" disabled={!dragReasonDraft.trim()}>
-                Continue
+                {t("Continue")}
               </Button>
             </DialogFooter>
           </form>
@@ -625,11 +627,13 @@ function App() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm transition</AlertDialogTitle>
-            <AlertDialogDescription>{dragConfirmRequest?.plan.confirm}</AlertDialogDescription>
+            <AlertDialogTitle>{t("Confirm transition")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {dragConfirmRequest?.plan.confirm ? t(dragConfirmRequest.plan.confirm.key, dragConfirmRequest.plan.confirm.values) : null}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
@@ -638,7 +642,7 @@ function App() {
                 if (request) void executePlannedDrag(request)
               }}
             >
-              Continue
+              {t("Continue")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

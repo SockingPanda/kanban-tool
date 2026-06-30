@@ -517,7 +517,6 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   )
   const [systemLocale, setSystemLocale] = useState<DesktopLocale>(() => detectSystemLocale())
   const locale = resolveLocale(mode, [systemLocale])
-  setCurrentDesktopLocale(locale)
 
   useEffect(() => {
     setCurrentDesktopLocale(locale)

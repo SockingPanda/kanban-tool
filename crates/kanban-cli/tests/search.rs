@@ -237,7 +237,14 @@ fn search_command_rejects_unbounded_limit() -> anyhow::Result<()> {
 
     kanban(
         &temp.path,
-        &["search", "needle", "--limit", &usize::MAX.to_string()],
+        &[
+            "--locale",
+            "en",
+            "search",
+            "needle",
+            "--limit",
+            &usize::MAX.to_string(),
+        ],
     )?
     .failure_containing("limit must be <= 1000")?;
     Ok(())

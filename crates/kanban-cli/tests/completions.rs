@@ -249,6 +249,7 @@ fn generated_bash_and_zsh_completions_include_dynamic_helper_hook() -> anyhow::R
             "dep list",
             "\"$cur\" == -*",
             "comment-kind",
+            "--db|--board|--locale",
         ] {
             anyhow::ensure!(
                 stdout.contains(expected),

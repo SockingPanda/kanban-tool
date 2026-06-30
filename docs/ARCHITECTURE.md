@@ -36,7 +36,7 @@ interface crate，也不拥有持久化 records。
 
 | 平面 | 当前内容 | 写权限边界 |
 |---|---|---|
-| Interaction/adapters | `kanban-cli`、`kanban-server`、desktop、dispatcher 入口 | 转换输入/输出，不直接写 SQLite truth |
+| Interaction/adapters | `kanban-cli`、`kanban-server`、desktop、dispatcher 入口 | 转换输入/输出和 locale/message 渲染，不直接写 SQLite truth |
 | Application orchestration | 当前主要在 `kanban-sqlite::service` | 统一 transaction、use case 和 query 语义 |
 | Domain/state machine | `kanban-core` 的 status、guard 和 recompute helper | 纯逻辑，不访问 SQLite/HTTP/CLI |
 | Canonical SQLite truth | tasks/status、dependencies、labels、semantics、proposals、ontology ledger | 只能由 service path 写入 |
@@ -112,6 +112,7 @@ bundled helper path 注入 `kanban-server::AppState`；CLI `.deb` 仍由
 - 定义基础领域类型：`Board`、`BoardColumn`、`TaskStatus`。
 - 提供 typed ID、clock 和统一错误类型。
 - 实现纯状态机、readiness recompute 与 transition guard helper。
+- 提供轻量 locale 与 message rendering helper；只渲染用户可见文案，不翻译 canonical status、ID、JSON key 或数据库值。
 - 不依赖 SQLite、HTTP、CLI、前端。
 - 当前不定义完整 command input/output，也不定义 application service interface。
   这些 use-case orchestration 和持久化 records 主要在 `kanban-sqlite::service`。
@@ -171,6 +172,7 @@ pub fn can_complete_from(status: TaskStatus) -> bool;
   `kanban-core` 的纯状态机 helper。
 - 输出 human table 或 JSON。
 - 返回稳定 exit code。
+- `--locale` / `KANBAN_LOCALE` 只选择 human 输出语言；脚本契约仍以 `--json` 为准。
 
 CLI 可以直接打开 SQLite DB 调用 service，不需要 server 常驻。
 
@@ -183,6 +185,7 @@ CLI 可以直接打开 SQLite DB 调用 service，不需要 server 常驻。
 - SSE event stream。
 - 请求 DTO 转 command input。
 - 错误格式统一。
+- 根据 `Accept-Language` 渲染 `error.message`；`error.code` 和 JSON shape 保持稳定。
 - 通过 `AppState` 接收可选 graph/vector helper binary path；缺失时 graph/vector
   status endpoint 返回 degraded diagnostics，而不是把 helper-heavy crates 编进 server。
 

@@ -72,6 +72,14 @@ pub async fn get_json(app: axum::Router, uri: &str) -> Result<(StatusCode, Value
     request_json(app, "GET", uri, None, None).await
 }
 
+pub async fn get_json_with_accept_language(
+    app: axum::Router,
+    uri: &str,
+    accept_language: &str,
+) -> Result<(StatusCode, Value)> {
+    request_json_with_accept_language(app, "GET", uri, None, accept_language).await
+}
+
 pub async fn post_json(app: axum::Router, uri: &str, body: Value) -> Result<(StatusCode, Value)> {
     request_json(app, "POST", uri, Some(body), None).await
 }
@@ -102,6 +110,30 @@ pub async fn request_json(
     }
     if let Some(actor) = actor_header {
         builder = builder.header("X-KB-Actor", actor);
+    }
+    let body = body
+        .map(|value| Body::from(value.to_string()))
+        .unwrap_or_else(Body::empty);
+    let response = app
+        .oneshot(builder.body(body).context("request")?)
+        .await
+        .context("response")?;
+    response_json(response).await
+}
+
+pub async fn request_json_with_accept_language(
+    app: axum::Router,
+    method: &str,
+    uri: &str,
+    body: Option<Value>,
+    accept_language: &str,
+) -> Result<(StatusCode, Value)> {
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(header::ACCEPT_LANGUAGE, accept_language);
+    if body.is_some() {
+        builder = builder.header("Content-Type", "application/json");
     }
     let body = body
         .map(|value| Body::from(value.to_string()))

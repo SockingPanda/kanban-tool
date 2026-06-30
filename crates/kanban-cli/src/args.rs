@@ -17,6 +17,8 @@ pub(crate) struct Cli {
     pub(crate) board: Option<String>,
     #[arg(long, global = true)]
     pub(crate) actor: Option<String>,
+    #[arg(long, global = true, value_name = "auto|zh-CN|en")]
+    pub(crate) locale: Option<String>,
     #[arg(long, global = true)]
     pub(crate) json: bool,
     #[command(subcommand)]

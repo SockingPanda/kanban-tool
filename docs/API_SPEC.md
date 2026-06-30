@@ -73,6 +73,10 @@ Content-Type: text/event-stream
 }
 ```
 
+`error.code` 是稳定机器契约。`error.message` 是 human-readable 文案，会根据
+`Accept-Language` 在 `zh-CN` 和 `en` 之间选择；未传 header 时保持既有默认 `en`。
+客户端逻辑必须读取 `error.code`，不要解析 `error.message`。
+
 ### 1.5 HTTP Status Mapping
 
 | Error code | HTTP status |

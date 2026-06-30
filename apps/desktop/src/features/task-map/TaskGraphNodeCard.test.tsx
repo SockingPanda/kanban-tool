@@ -40,7 +40,7 @@ describe("TaskGraphNodeCard", () => {
 
     const text = textContent(tree)
 
-    expect(text).toContain("3/4 step")
+    expect(text).toContain("3/4 steps")
     expect(text).not.toContain("open")
   })
 

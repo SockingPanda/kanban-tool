@@ -22,15 +22,17 @@ import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useI18n } from "@/i18n"
 import type { BoardStats, CheckpointReport, DoctorDerivedStore, DoctorReport, KanbanApi, SearchIndexStatus, StaleClaim } from "@/lib/api"
 import { queryKeys } from "@/lib/query-keys"
 
 export function MaintenanceView({ api }: { api: KanbanApi | null }) {
+  const { t } = useI18n()
   const statsQuery = useQuery({
     enabled: Boolean(api),
     queryKey: queryKeys.stats(api?.board ?? "pending"),
     queryFn: ({ signal }) => {
-      if (!api) throw new Error("API client is not ready")
+      if (!api) throw new Error(t("API client is not ready."))
       return api.stats({ signal })
     },
   })
@@ -38,19 +40,19 @@ export function MaintenanceView({ api }: { api: KanbanApi | null }) {
     enabled: Boolean(api),
     queryKey: queryKeys.searchStatus(api?.board ?? "pending"),
     queryFn: ({ signal }) => {
-      if (!api) throw new Error("API client is not ready")
+      if (!api) throw new Error(t("API client is not ready."))
       return api.searchStatus({ signal })
     },
   })
   const doctorMutation = useMutation({
     mutationFn: () => {
-      if (!api) throw new Error("API client is not ready")
+      if (!api) throw new Error(t("API client is not ready."))
       return api.doctor()
     },
   })
   const checkpointMutation = useMutation({
     mutationFn: () => {
-      if (!api) throw new Error("API client is not ready")
+      if (!api) throw new Error(t("API client is not ready."))
       return api.checkpoint()
     },
   })
@@ -58,34 +60,34 @@ export function MaintenanceView({ api }: { api: KanbanApi | null }) {
   return (
     <ScrollArea className="flex-1 bg-card p-4">
       <div className="grid grid-cols-2 gap-4">
-        <Panel title="Stats" icon={Activity}>
+        <Panel title={t("Stats")} icon={Activity}>
           <StatsGrid stats={statsQuery.data} />
         </Panel>
-        <Panel title="Search status" icon={SearchCheck}>
+        <Panel title={t("Search status")} icon={SearchCheck}>
           <SearchStatus meta={searchStatusQuery.data} />
         </Panel>
-        <Panel title="Doctor" icon={Stethoscope}>
+        <Panel title={t("Doctor")} icon={Stethoscope}>
           <Button variant="secondary" disabled={!api || doctorMutation.isPending} onClick={() => doctorMutation.mutate()}>
-            Run doctor
+            {t("Run doctor")}
           </Button>
           {doctorMutation.data ? <DoctorReportView report={doctorMutation.data} /> : null}
           {doctorMutation.error ? <ErrorText error={doctorMutation.error} /> : null}
         </Panel>
-        <Panel title="Checkpoint" icon={DatabaseBackup}>
+        <Panel title={t("Checkpoint")} icon={DatabaseBackup}>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="secondary" disabled={!api || checkpointMutation.isPending}>
-                Create checkpoint
+                {t("Create checkpoint")}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Run WAL checkpoint?</AlertDialogTitle>
-                <AlertDialogDescription>Run WAL checkpoint now?</AlertDialogDescription>
+                <AlertDialogTitle>{t("Run WAL checkpoint?")}</AlertDialogTitle>
+                <AlertDialogDescription>{t("Run WAL checkpoint now?")}</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={() => checkpointMutation.mutate()}>Continue</AlertDialogAction>
+                <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
+                <AlertDialogAction onClick={() => checkpointMutation.mutate()}>{t("Continue")}</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -102,6 +104,7 @@ function Panel({ title, icon: Icon, children }: { title: string; icon: ElementTy
 }
 
 function StatsGrid({ stats }: { stats?: BoardStats }) {
+  const { t } = useI18n()
   if (!stats) return <Skeleton className="h-24" />
   return (
     <div className="space-y-4 text-sm">
@@ -109,32 +112,32 @@ function StatsGrid({ stats }: { stats?: BoardStats }) {
         <MetricStrip
           className="contents"
           items={[
-            { id: "board", label: "board", value: stats.board_id },
-            { id: "generated", label: "generated", value: String(stats.generated_at) },
+            { id: "board", label: t("board"), value: stats.board_id },
+            { id: "generated", label: t("generated"), value: String(stats.generated_at) },
           ]}
         />
       </div>
       <div>
-        <Subheading>Status counts</Subheading>
+        <Subheading>{t("Status counts")}</Subheading>
         <div className="grid grid-cols-3 gap-2">
           <MetricStrip
             className="contents"
             items={stats.status_counts.map((entry) => ({ id: `status-${entry.status}`, label: entry.status, value: String(entry.count) }))}
           />
-          {stats.status_counts.length === 0 ? <EmptyText>No status counts returned.</EmptyText> : null}
+          {stats.status_counts.length === 0 ? <EmptyText>{t("No status counts returned.")}</EmptyText> : null}
         </div>
       </div>
       <div>
-        <Subheading>Stale claims</Subheading>
+        <Subheading>{t("Stale claims")}</Subheading>
         <StaleClaimList claims={stats.stale_claims} />
       </div>
       <div>
-        <Subheading>Blocked reasons</Subheading>
+        <Subheading>{t("Blocked reasons")}</Subheading>
         <div className="space-y-1">
           {stats.blocked_reasons.map((entry) => (
-            <InfoRow key={entry.reason} label={entry.reason || "unspecified"} value={String(entry.count)} />
+            <InfoRow key={entry.reason} label={entry.reason || t("unspecified")} value={String(entry.count)} />
           ))}
-          {stats.blocked_reasons.length === 0 ? <EmptyText>No blocked reasons returned.</EmptyText> : null}
+          {stats.blocked_reasons.length === 0 ? <EmptyText>{t("No blocked reasons returned.")}</EmptyText> : null}
         </div>
       </div>
     </div>
@@ -142,21 +145,23 @@ function StatsGrid({ stats }: { stats?: BoardStats }) {
 }
 
 function SearchStatus({ meta }: { meta?: SearchIndexStatus }) {
+  const { t } = useI18n()
   if (!meta) return <Skeleton className="h-24" />
   return (
     <div className="space-y-2 text-sm">
-      <InfoRow label="backend" value={meta.backend} />
-      <InfoRow label="derived index" value={String(meta.derived_index)} />
-      <InfoRow label="stale" value={String(meta.stale)} />
-      <InfoRow label="index version" value={meta.index_version ?? "-"} />
-      <InfoRow label="last event" value={meta.last_event_id === null ? "-" : String(meta.last_event_id)} />
-      <InfoRow label="lag events" value={meta.index_lag_events === null ? "-" : String(meta.index_lag_events)} />
+      <InfoRow label={t("backend")} value={meta.backend} />
+      <InfoRow label={t("derived index")} value={String(meta.derived_index)} />
+      <InfoRow label={t("stale")} value={String(meta.stale)} />
+      <InfoRow label={t("index version")} value={meta.index_version ?? "-"} />
+      <InfoRow label={t("last event")} value={meta.last_event_id === null ? "-" : String(meta.last_event_id)} />
+      <InfoRow label={t("lag events")} value={meta.index_lag_events === null ? "-" : String(meta.index_lag_events)} />
       <div className="text-muted-foreground">{meta.message}</div>
     </div>
   )
 }
 
 function DoctorReportView({ report }: { report: DoctorReport }) {
+  const { t } = useI18n()
   const findings = [
     ["integrity", report.integrity_check],
     ["migration version", nullableNumber(report.migration_version)],
@@ -183,15 +188,15 @@ function DoctorReportView({ report }: { report: DoctorReport }) {
   ] as const
   return (
     <div className="mt-3 space-y-3 text-sm">
-      <Badge variant={report.ok ? "ready" : "blocked"}>{report.ok ? "ok" : "findings"}</Badge>
+      <Badge variant={report.ok ? "ready" : "blocked"}>{report.ok ? t("ok") : t("findings")}</Badge>
       <div className="grid grid-cols-2 gap-2">
         <MetricStrip
           className="contents"
-          items={findings.map(([label, value]) => ({ id: label.replace(/ /g, "-"), label, value: String(value) }))}
+          items={findings.map(([label, value]) => ({ id: label.replace(/ /g, "-"), label: t(label), value: String(value) }))}
         />
       </div>
       <div>
-        <Subheading>Derived stores</Subheading>
+        <Subheading>{t("Derived stores")}</Subheading>
         <DerivedStoreList stores={report.derived_stores} />
       </div>
     </div>
@@ -199,20 +204,21 @@ function DoctorReportView({ report }: { report: DoctorReport }) {
 }
 
 function StaleClaimList({ claims }: { claims: StaleClaim[] }) {
-  if (claims.length === 0) return <EmptyText>No stale claims returned.</EmptyText>
+  const { t } = useI18n()
+  if (claims.length === 0) return <EmptyText>{t("No stale claims returned.")}</EmptyText>
   return (
     <div className="space-y-2">
       {claims.map((claim) => (
         <Card key={claim.task_id} className="p-2">
           <div className="flex justify-between gap-3">
             <span className="truncate font-medium">#{claim.seq} {claim.title}</span>
-            <span className="shrink-0 text-muted-foreground">{claim.claim_owner ?? "no owner"}</span>
+            <span className="shrink-0 text-muted-foreground">{claim.claim_owner ?? t("no owner")}</span>
           </div>
           <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>expires {nullableNumber(claim.claim_expires_at)}</span>
-            <span>heartbeat {nullableNumber(claim.last_heartbeat_at)}</span>
-            <span>run {claim.current_run_id ?? "-"}</span>
-            <span>retry {claim.retry_count}/{nullableNumber(claim.max_retries)}</span>
+            <span>{t("expires {value}", { value: nullableNumber(claim.claim_expires_at) })}</span>
+            <span>{t("heartbeat {value}", { value: nullableNumber(claim.last_heartbeat_at) })}</span>
+            <span>{t("run {value}", { value: claim.current_run_id ?? "-" })}</span>
+            <span>{t("retry {current}/{max}", { current: claim.retry_count, max: nullableNumber(claim.max_retries) })}</span>
           </div>
         </Card>
       ))}
@@ -221,7 +227,8 @@ function StaleClaimList({ claims }: { claims: StaleClaim[] }) {
 }
 
 function DerivedStoreList({ stores }: { stores: DoctorDerivedStore[] }) {
-  if (stores.length === 0) return <EmptyText>No derived stores returned.</EmptyText>
+  const { t } = useI18n()
+  if (stores.length === 0) return <EmptyText>{t("No derived stores returned.")}</EmptyText>
   return (
     <div className="space-y-2">
       {stores.map((store) => (
@@ -229,16 +236,16 @@ function DerivedStoreList({ stores }: { stores: DoctorDerivedStore[] }) {
           <div className="flex justify-between gap-3">
             <span className="truncate font-medium">{store.store_name}</span>
             <span className={store.dirty || store.last_error ? "shrink-0 text-amber-700" : "shrink-0 text-emerald-700"}>
-              {store.dirty ? "dirty" : "clean"}
+              {store.dirty ? t("dirty") : t("clean")}
             </span>
           </div>
           <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>schema {store.schema_version}</span>
-            <span>event {store.last_event_id}</span>
-            <span>pending {store.pending_outbox}</span>
-            <span>running {store.running_outbox}</span>
-            <span>failed {store.failed_outbox}</span>
-            <span className="truncate">error {store.last_error ?? "-"}</span>
+            <span>{t("schema {value}", { value: store.schema_version })}</span>
+            <span>{t("event {value}", { value: store.last_event_id })}</span>
+            <span>{t("pending {value}", { value: store.pending_outbox })}</span>
+            <span>{t("running {value}", { value: store.running_outbox })}</span>
+            <span>{t("failed {value}", { value: store.failed_outbox })}</span>
+            <span className="truncate">{t("error {value}", { value: store.last_error ?? "-" })}</span>
           </div>
         </Card>
       ))}
@@ -247,12 +254,13 @@ function DerivedStoreList({ stores }: { stores: DoctorDerivedStore[] }) {
 }
 
 function CheckpointResultView({ result }: { result: CheckpointReport }) {
+  const { t } = useI18n()
   return (
     <div className="mt-3 space-y-2 text-sm">
-      <Badge variant={result.busy === 0 ? "ready" : "blocked"}>{result.busy === 0 ? "checkpointed" : "busy"}</Badge>
-      <InfoRow label="busy" value={String(result.busy)} />
-      <InfoRow label="log frames" value={String(result.log_frames)} />
-      <InfoRow label="checkpointed frames" value={String(result.checkpointed_frames)} />
+      <Badge variant={result.busy === 0 ? "ready" : "blocked"}>{result.busy === 0 ? t("checkpointed") : t("busy")}</Badge>
+      <InfoRow label={t("busy")} value={String(result.busy)} />
+      <InfoRow label={t("log frames")} value={String(result.log_frames)} />
+      <InfoRow label={t("checkpointed frames")} value={String(result.checkpointed_frames)} />
     </div>
   )
 }

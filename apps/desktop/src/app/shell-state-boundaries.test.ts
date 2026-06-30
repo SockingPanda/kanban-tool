@@ -17,7 +17,8 @@ describe("desktop shell state boundaries", () => {
   it("routes App controller state through focused hooks before composing shell props", () => {
     const appSource = readFileSync(new URL("../App.tsx", import.meta.url), "utf8")
 
-    expect(appSource).toContain("useRuntimeConfigState()")
+    expect(appSource).toContain("useI18n()")
+    expect(appSource).toContain("useRuntimeConfigState(locale)")
     expect(appSource).toContain("useTaskCollectionState(")
     expect(appSource).toContain("useSelectedTaskDetailState(")
     expect(appSource).toContain("useTaskCreationDialogState()")

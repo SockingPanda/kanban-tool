@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Field } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { MenuSelect } from "@/components/ui/menu-select"
+import { useI18n } from "@/i18n"
 import type { KanbanApi } from "@/lib/api"
 
 import { AutosizeDescriptionTextarea, priorityOptions, Section } from "./task-detail-shared"
@@ -26,12 +27,13 @@ export function TaskEditForm({
   onSave: () => void
   onCancel: () => void
 }) {
+  const { t } = useI18n()
   return (
-    <Section title="Task detail">
+    <Section title={t("Task detail")}>
       <div className="max-w-3xl space-y-2">
-        {draftDirty ? <div className="text-xs font-medium text-amber-700">Unsaved changes</div> : null}
+        {draftDirty ? <div className="text-xs font-medium text-amber-700">{t("Unsaved changes")}</div> : null}
         <Input
-          aria-label="Task title"
+          aria-label={t("Task title")}
           name="task-title"
           autoComplete="off"
           value={editDraft.title}
@@ -40,19 +42,19 @@ export function TaskEditForm({
         <AutosizeDescriptionTextarea
           value={editDraft.description}
           onChange={(value) => setEditDraft({ ...editDraft, description: value })}
-          placeholder="Description"
+          placeholder={t("Description")}
         />
         <div className="grid grid-cols-2 gap-2 max-sm:grid-cols-1">
           <Input
-            aria-label="Task assignee"
+            aria-label={t("Task assignee")}
             name="task-assignee"
             autoComplete="off"
             value={editDraft.assignee}
             onChange={(event) => setEditDraft({ ...editDraft, assignee: event.target.value })}
-            placeholder="Assignee"
+            placeholder={t("Assignee")}
           />
           <MenuSelect
-            ariaLabel="Task priority"
+            ariaLabel={t("Task priority")}
             options={priorityOptions}
             value={editDraft.priority}
             onValueChange={(priority) => setEditDraft({ ...editDraft, priority })}
@@ -60,7 +62,7 @@ export function TaskEditForm({
           />
           <Input
             type="datetime-local"
-            aria-label="Scheduled at"
+            aria-label={t("Scheduled at")}
             name="task-scheduled-at"
             autoComplete="off"
             value={editDraft.scheduledAt}
@@ -68,7 +70,7 @@ export function TaskEditForm({
           />
           <Input
             type="datetime-local"
-            aria-label="Due at"
+            aria-label={t("Due at")}
             name="task-due-at"
             autoComplete="off"
             value={editDraft.dueAt}
@@ -78,11 +80,11 @@ export function TaskEditForm({
         <Field className="flex flex-wrap gap-2">
           <Button disabled={!api || pendingAction === "save" || !editDraft.title.trim()} onClick={onSave}>
             <Save className="h-4 w-4" />
-            {pendingAction === "save" ? "Saving…" : "Save"}
+            {pendingAction === "save" ? t("Saving…") : t("Save")}
           </Button>
           <Button variant="outline" disabled={pendingAction === "save"} onClick={onCancel}>
             <X className="h-4 w-4" />
-            Cancel
+            {t("Cancel")}
           </Button>
         </Field>
       </div>

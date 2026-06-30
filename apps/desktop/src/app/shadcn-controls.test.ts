@@ -88,9 +88,9 @@ describe("desktop shadcn control convergence", () => {
   it("keeps List filters, rows-per-page, and button pagination controls", () => {
     const content = source("features/list/ListView.tsx")
 
-    expect(content).toContain('ariaLabel="List status filter"')
+    expect(content).toContain('ariaLabel={t("List status filter")}')
     expect(content).toContain("Priority")
-    expect(content).toContain('ariaLabel="Rows per page"')
+    expect(content).toContain('ariaLabel={t("Rows per page")}')
     expect(content).toContain("Pagination")
     expect(content).toContain("PaginationContent")
     expect(content).toContain("onFirstPage")
@@ -237,7 +237,7 @@ describe("desktop shadcn control convergence", () => {
     expect(source("components/ui/input-group.tsx")).toContain("InputGroupTextarea")
     expect(detail).toContain("InputGroupTextarea")
     expect(detail).toContain('name="comment-body"')
-    expect(detail).toContain('aria-label="Comment body"')
+    expect(detail).toContain('aria-label={t("Comment body")}')
     expect(detail).toContain('autoComplete="off"')
   })
 

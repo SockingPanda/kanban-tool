@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core"
+import { getCurrentDesktopLocale, type DesktopLocale } from "@/i18n"
 
 export type TaskStatus =
   | "triage"
@@ -776,7 +777,10 @@ function normalizeApiBaseUrl(value: string | undefined) {
 }
 
 export class KanbanApi {
-  constructor(private config: RuntimeConfig) {}
+  constructor(
+    private config: RuntimeConfig,
+    private options: { locale?: DesktopLocale } = {},
+  ) {}
 
   get actor() {
     return this.config.actor
@@ -1231,7 +1235,9 @@ export class KanbanApi {
 
   async requestEnvelope<T, M = Record<string, unknown>>(path: string, init: RequestOptions = {}) {
     const method = init.method ?? "GET"
-    const headers: Record<string, string> = {}
+    const headers: Record<string, string> = {
+      "Accept-Language": this.options.locale ?? getCurrentDesktopLocale(),
+    }
     if (init.body !== undefined) headers["Content-Type"] = "application/json"
     if (method.toUpperCase() !== "GET") headers["X-KB-Actor"] = this.actor
     const response = await fetch(`${this.config.apiBaseUrl}${path}`, {

@@ -70,6 +70,32 @@ pub fn kanban_in_dir_envs(
     Ok(CmdResult { output })
 }
 
+pub fn kanban_in_dir_str_envs(
+    db_path: &Path,
+    args: &[&str],
+    current_dir: &Path,
+    envs: &[(&str, &str)],
+) -> anyhow::Result<CmdResult> {
+    let mut command =
+        Command::cargo_bin("kanban").context("failed to locate kanban test binary")?;
+    command
+        .current_dir(current_dir)
+        .arg("--db")
+        .arg(db_path)
+        .args(args)
+        .env_remove("KB_BOARD");
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    if !envs.iter().any(|(key, _)| *key == "XDG_CONFIG_HOME") {
+        command.env("XDG_CONFIG_HOME", current_dir.join(".xdg-config"));
+    }
+    let output = command
+        .output()
+        .context("failed to execute kanban command")?;
+    Ok(CmdResult { output })
+}
+
 pub struct CmdResult {
     pub output: Output,
 }

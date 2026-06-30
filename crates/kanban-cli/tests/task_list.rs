@@ -256,8 +256,41 @@ fn task_list_command_rejects_unbounded_limit() -> anyhow::Result<()> {
 
     kanban(
         &temp.path,
-        &["task", "list", "--limit", &usize::MAX.to_string()],
+        &[
+            "--locale",
+            "en",
+            "task",
+            "list",
+            "--limit",
+            &usize::MAX.to_string(),
+        ],
     )?
     .failure_containing("limit must be <= 1000")?;
+    Ok(())
+}
+
+#[test]
+fn task_list_error_is_localized_by_cli_error_boundary() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_list_error_is_localized_by_cli_error_boundary")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    kanban(
+        &temp.path,
+        &["task", "list", "--limit", &usize::MAX.to_string()],
+    )?
+    .failure_containing("输入无效：limit 必须小于等于 1000")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "--locale",
+            "en",
+            "task",
+            "list",
+            "--limit",
+            &usize::MAX.to_string(),
+        ],
+    )?
+    .failure_containing("invalid input: limit must be <= 1000")?;
     Ok(())
 }

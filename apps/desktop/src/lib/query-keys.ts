@@ -2,6 +2,7 @@ import type {
   LabelOntologyReviewGroupBy,
   LabelOntologySignalKind,
   LabelOntologySignalStatus,
+  SignalStatus,
   TaskListSort,
   TaskPlanFilter,
   TaskStatus,
@@ -32,6 +33,15 @@ export type LabelOntologySignalsQuery = {
 export type LabelOntologyReviewQuery = {
   board: string
   groupBy: LabelOntologyReviewGroupBy
+  includeAll: boolean
+  limit: number
+}
+
+export type SignalsQuery = {
+  board: string
+  statuses: SignalStatus[]
+  kinds: string[]
+  task: string
   includeAll: boolean
   limit: number
 }
@@ -71,6 +81,19 @@ export const queryKeys = {
   boardTaskMap: (board: string, options?: { includeDoneContext?: boolean; hideIsolated?: boolean }) =>
     [...queryKeys.boardTaskMapRoot(board), options ?? {}] as const,
   taskLabelSuggestions: (taskId: string) => ["task-label-suggestions", taskId] as const,
+  signalsRoot: (board: string) => ["signals", board] as const,
+  signals: (query: SignalsQuery) =>
+    [
+      ...queryKeys.signalsRoot(query.board),
+      {
+        statuses: query.statuses,
+        kinds: query.kinds,
+        task: query.task,
+        includeAll: query.includeAll,
+        limit: query.limit,
+      },
+    ] as const,
+  signal: (signalId: string) => ["signal", signalId] as const,
   ontologyRoot: (board: string) => ["label-ontology", board] as const,
   ontologySignals: (query: LabelOntologySignalsQuery) =>
     [

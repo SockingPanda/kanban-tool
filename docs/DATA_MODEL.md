@@ -577,7 +577,59 @@ query/residual cosine similarity，不把 distance 当作 solver score。派生�
 provider 时只让 label atom index degraded，不影响普通 label CRUD、`task_labels` 绑定
 或 task 状态机。
 
-### 11.2 Label ontology ledger
+### 11.2 Generic signal ledger
+
+Generic signal ledger 保存 agent/product 在 kanban 工作流中发现的通用问题信号，
+例如 CLI 参数摩擦、提示误导、参数设计不符合 agent 惯用方式，或 operator 发现的
+产品反馈。它是 board-scoped 审计账本和只读 inbox 数据源，不替代 `tasks.status`、
+task comments、runs、events 或 label ontology ledger。
+
+- `signal_observations` 保存一次观察的来源、actor、task/run/comment 关联和原始证据。
+- `signals` 保存一个可独立 review 的通用 signal，并指向对应 observation。
+- 通用 signal 与 `label_ontology_signals` 分离；ontology signals 仍只服务 label
+  semantics/atom/proposal review 和 mutation provenance。
+- 当前 public HTTP surface 只读取通用 signal；lifecycle 写操作仍由 CLI/runtime
+  signal record 流程负责。
+
+表：`signal_observations`
+
+一行表示一次 agent 或 operator 观察。Observation 可关联 task、run 或 comment；
+这些关联用于定位来源，不改变对应实体状态。
+
+| 字段 | 说明 |
+|---|---|
+| `id` | `obs_...` observation id。 |
+| `board_id` | 来源 board scope。 |
+| `task_id` / `task_ref_snapshot` | 可空。来源 task 与捕获时的人类 ref 快照；task 后续改动不影响快照。 |
+| `run_id` | 可空。来源 execution run。 |
+| `comment_id` | 可空。来源 comment。 |
+| `actor` / `agent_type` | 捕获者名称与可选 agent type。 |
+| `source` | 可空。信号来源，例如 `codex-hook`、`cli` 或 `operator`。 |
+| `evidence_json` | JSON object 字符串，保存命令、stderr、上下文片段、hook 提示等原始证据。 |
+| `created_at` | 创建时间。 |
+
+表：`signals`
+
+一行表示一个可独立进入 operator inbox 的通用 signal。它只描述发现的问题和 review
+lifecycle，不直接触发修复或修改 canonical workflow。
+
+| 字段 | 说明 |
+|---|---|
+| `id` | `sig_...` signal id。 |
+| `board_id` / `observation_id` | board scope 与来源 observation。 |
+| `kind` | 通用 signal 类型，例如 `agent_cli_friction`。 |
+| `title` / `summary` | 面向 operator 的短标题与摘要。 |
+| `severity` | 文本严重度，例如 `info`、`medium` 或 `high`。 |
+| `status` | `open`、`confirmed`、`resolved`、`rejected`、`superseded`。 |
+| `dedupe_key` | 可空。用于调用方聚合相似 signal。 |
+| `superseded_by_signal_id` | 可空。指向同 board 的替代 signal。 |
+| `reviewed_by` / `reviewed_at` / `review_reason` | lifecycle review 记录。 |
+| `created_at` / `updated_at` | 创建与更新时间。 |
+
+默认 review queue 只读取 `open` 与 `confirmed` signals；完整历史需显式
+`include_all` 或指定 status。
+
+### 11.3 Label ontology ledger
 
 Label ontology ledger 记录 task 标注过程里的证据、分歧 signal、review/action 历史
 和 validation 结果。它是可查询的审计账本，不替代 canonical truth：
@@ -1009,6 +1061,13 @@ kanban import --input board.jsonl --replace
 {"type":"dependency","data":{...}}
 ```
 
+Generic signal ledger 使用稳定 record types：
+
+```json
+{"type":"signal_observation","data":{...}}
+{"type":"signal","data":{...}}
+```
+
 Label ontology ledger 使用稳定 record types：
 
 ```json
@@ -1021,8 +1080,9 @@ Label ontology ledger 使用稳定 record types：
 
 导入时会在同一 transaction 中先插入 rows，再运行 final consistency gate。基础关系表
 会检查 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、
-`task_events`、`task_attachments` 的 row board 与 referenced task / label / run board
-是否一致；失败时整个 `--replace` import transaction 回滚，不提交部分数据。
+`signal_observations`、`signals`、`task_events`、`task_attachments` 的 row board 与
+referenced task / label / run / comment / observation board 是否一致；失败时整个
+`--replace` import transaction 回滚，不提交部分数据。
 
 Ontology rows 也在同一 transaction 中插入，并延迟回填
 `label_ontology_signals.superseded_by_signal_id` 与
@@ -1030,6 +1090,8 @@ Ontology rows 也在同一 transaction 中插入，并延迟回填
 parent board、action-signal link board、label/proposal soft reference board 必须一致；
 orphan action-signal links、supersede cycles 和 action parent cycles 会导致 import
 失败。
+
+Generic `signals.superseded_by_signal_id` 同样会延迟回填，避免依赖同表自引用 rows 的文件顺序。
 
 `kanban doctor --json` 对上述基础关系表、SQLite `PRAGMA foreign_key_check` 和 ontology
 ledger consistency 规则做只读巡检。

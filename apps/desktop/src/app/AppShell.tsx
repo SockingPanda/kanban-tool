@@ -1,6 +1,7 @@
 import { lazy, memo, Suspense, useEffect, useState, type ElementType, type FormEvent, type ReactNode, type TransitionEvent } from "react"
 import {
   Activity,
+  Bell,
   ChevronDown,
   Database,
   DatabaseBackup,
@@ -101,6 +102,7 @@ const viewMetadata: Record<OperatorView, { label: string; icon: ElementType }> =
   map: { label: "Map", icon: Map },
   events: { label: "Events", icon: Activity },
   runs: { label: "Runs", icon: TerminalSquare },
+  signals: { label: "Signals", icon: Bell },
   ontology: { label: "Review", icon: Network },
   maintenance: { label: "Maintenance", icon: DatabaseBackup },
   health: { label: "Health", icon: HeartPulse },
@@ -111,6 +113,9 @@ const BoardTaskMapView = lazy(() => import("@/features/task-map/BoardTaskMapView
 const MaintenanceView = lazy(() => import("@/features/maintenance/MaintenanceView").then((module) => ({ default: module.MaintenanceView })))
 const OntologyReviewWorkbench = lazy(() =>
   import("@/features/ontology/OntologyReviewWorkbench").then((module) => ({ default: module.OntologyReviewWorkbench })),
+)
+const SignalsWorkbench = lazy(() =>
+  import("@/features/signals/SignalsWorkbench").then((module) => ({ default: module.SignalsWorkbench })),
 )
 const TaskDetail = lazy(() => import("@/features/task-detail/TaskDetail").then((module) => ({ default: module.TaskDetail })))
 
@@ -547,7 +552,7 @@ function ShellSidebar({
       </SidebarHeader>
       <SidebarContent>
         <SidebarNavGroup label={t("Task Explorer")} open={contentOpen}>
-          {sidebarViews.filter((item) => ["board", "list", "map", "runs", "events", "ontology"].includes(item)).map((item) => (
+          {sidebarViews.filter((item) => ["board", "list", "map", "runs", "events", "signals", "ontology"].includes(item)).map((item) => (
             <SidebarNavItem
               key={item}
               icon={viewIcon(item)}
@@ -1005,6 +1010,13 @@ function MainView({
   }
   if (view === "events") return <EventsView api={api} />
   if (view === "runs") return <RunsView selectedTask={selectedTask} detail={detail} />
+  if (view === "signals") {
+    return (
+      <Suspense fallback={<LazyViewFallback label="Loading signals" />}>
+        <SignalsWorkbench api={api} />
+      </Suspense>
+    )
+  }
   if (view === "ontology") {
     return (
       <Suspense fallback={<LazyViewFallback label="Loading review workbench" />}>

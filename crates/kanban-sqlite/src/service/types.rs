@@ -110,6 +110,62 @@ pub struct DependencyMutation {
     pub dependencies: DependencySnapshot,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignalObservationRecord {
+    pub id: String,
+    pub board_id: String,
+    pub task_id: Option<String>,
+    pub task_ref_snapshot: Option<String>,
+    pub run_id: Option<String>,
+    pub comment_id: Option<String>,
+    pub actor: String,
+    pub agent_type: Option<String>,
+    pub source: Option<String>,
+    pub evidence_json: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignalRecord {
+    pub id: String,
+    pub board_id: String,
+    pub observation_id: String,
+    pub kind: String,
+    pub title: String,
+    pub summary: String,
+    pub severity: String,
+    pub status: String,
+    pub dedupe_key: Option<String>,
+    pub superseded_by_signal_id: Option<String>,
+    pub reviewed_by: Option<String>,
+    pub reviewed_at: Option<i64>,
+    pub review_reason: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub observation: SignalObservationRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignalListOptions {
+    pub statuses: Vec<String>,
+    pub kinds: Vec<String>,
+    pub task_ref: Option<String>,
+    pub include_all: bool,
+    pub limit: usize,
+}
+
+impl Default for SignalListOptions {
+    fn default() -> Self {
+        Self {
+            statuses: Vec::new(),
+            kinds: Vec::new(),
+            task_ref: None,
+            include_all: false,
+            limit: 100,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskOntologySummary {
     pub task_id: String,

@@ -1273,8 +1273,11 @@ kanban comment list <task_ref>
 `--actor` supplies the comment author display identity. If `--kind` is omitted,
 the service default is `note`. If `--author-type` is omitted, the service default
 is `user`; pass `--author-type agent --agent-type <type>` for Codex/dispatcher or
-other automated writers. `--metadata-json` defaults to `{}` and must be a JSON
-object. For `--kind decision`, it is required to satisfy the structured
+other automated writers. `signal` is a persisted comment kind, but users should
+create signal backlink comments through `kanban signal record` rather than
+manually using `comment add --kind signal`; this keeps the signal ledger and
+backlink comment in one transaction. `--metadata-json` defaults to `{}` and must
+be a JSON object. For `--kind decision`, it is required to satisfy the structured
 decision schema: non-empty `options`, unique lowercase ASCII option `slug`
 values, `selected` matching one slug, non-empty `reason`, and optional
 non-empty `risk` / `verification`.

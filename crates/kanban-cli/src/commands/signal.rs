@@ -36,7 +36,7 @@ pub(crate) fn handle_signal(
             print_or_json(json, &signals, || signal_lines(&signals))?;
         }
         SignalCommand::Show { signal_id } => {
-            let signal = get_signal(db_path, &signal_id)?;
+            let signal = get_signal(db_path, board, &signal_id)?;
             print_or_json(json, &signal, || signal_line(&signal))?;
         }
         SignalCommand::Review(args) => {
@@ -49,39 +49,51 @@ pub(crate) fn handle_signal(
         }
         SignalCommand::Confirm(args) => lifecycle(
             db_path,
+            board,
             actor,
-            SignalLifecycle::Confirm,
-            args.signal_ids,
-            None,
-            args.reason,
             json,
+            LifecycleCommandInput {
+                lifecycle: SignalLifecycle::Confirm,
+                signal_ids: args.signal_ids,
+                replacement_signal_id: None,
+                reason: args.reason,
+            },
         )?,
         SignalCommand::Reject(args) => lifecycle(
             db_path,
+            board,
             actor,
-            SignalLifecycle::Reject,
-            args.signal_ids,
-            None,
-            args.reason,
             json,
+            LifecycleCommandInput {
+                lifecycle: SignalLifecycle::Reject,
+                signal_ids: args.signal_ids,
+                replacement_signal_id: None,
+                reason: args.reason,
+            },
         )?,
         SignalCommand::Resolve(args) => lifecycle(
             db_path,
+            board,
             actor,
-            SignalLifecycle::Resolve,
-            args.signal_ids,
-            None,
-            args.reason,
             json,
+            LifecycleCommandInput {
+                lifecycle: SignalLifecycle::Resolve,
+                signal_ids: args.signal_ids,
+                replacement_signal_id: None,
+                reason: args.reason,
+            },
         )?,
         SignalCommand::Supersede(args) => lifecycle(
             db_path,
+            board,
             actor,
-            SignalLifecycle::Supersede,
-            args.signal_ids,
-            Some(args.by),
-            args.reason,
             json,
+            LifecycleCommandInput {
+                lifecycle: SignalLifecycle::Supersede,
+                signal_ids: args.signal_ids,
+                replacement_signal_id: Some(args.by),
+                reason: args.reason,
+            },
         )?,
     }
     Ok(())
@@ -116,23 +128,29 @@ fn list_options(
     })
 }
 
-fn lifecycle(
-    db_path: &PathBuf,
-    actor: &str,
+struct LifecycleCommandInput {
     lifecycle: SignalLifecycle,
     signal_ids: Vec<String>,
     replacement_signal_id: Option<String>,
     reason: String,
+}
+
+fn lifecycle(
+    db_path: &PathBuf,
+    board: &str,
+    actor: &str,
     json: bool,
+    input: LifecycleCommandInput,
 ) -> Result<()> {
     let signals = update_signal_status(
         db_path,
+        board,
         actor,
         SignalReviewInput {
-            signal_ids,
-            lifecycle,
-            replacement_signal_id,
-            reason,
+            signal_ids: input.signal_ids,
+            lifecycle: input.lifecycle,
+            replacement_signal_id: input.replacement_signal_id,
+            reason: input.reason,
         },
     )?;
     print_or_json(json, &signals, || signal_lines(&signals))

@@ -871,6 +871,7 @@ fn normalize_imported_comment_author_type(author_type: &str) -> &'static str {
 fn normalize_imported_comment_kind(kind: &str, has_metadata_json: bool) -> &'static str {
     match (kind, has_metadata_json) {
         ("decision", true) => "decision",
+        ("signal", true) => "signal",
         _ => "note",
     }
 }

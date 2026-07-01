@@ -191,8 +191,8 @@ where
 
 fn parse_bool_literal(value: &str) -> Option<bool> {
     match value {
-        "true" | "TRUE" | "True" => Some(true),
-        "false" | "FALSE" | "False" => Some(false),
+        "true" => Some(true),
+        "false" => Some(false),
         _ => None,
     }
 }

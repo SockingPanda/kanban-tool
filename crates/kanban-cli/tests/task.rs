@@ -3815,6 +3815,38 @@ fn task_step_required_accepts_bounded_boolean_value_forms() -> anyhow::Result<()
     );
     assert_eq!(title_after_flag["data"]["required"], true);
 
+    let uppercase_title_after_flag = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "add",
+            task_id,
+            "--required",
+            "True",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(uppercase_title_after_flag["data"]["title"], "True");
+    assert_eq!(uppercase_title_after_flag["data"]["required"], true);
+
+    let uppercase_false_title_after_flag = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "add",
+            task_id,
+            "--required",
+            "FALSE",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(uppercase_false_title_after_flag["data"]["title"], "FALSE");
+    assert_eq!(uppercase_false_title_after_flag["data"]["required"], true);
+
     kanban(
         &temp.path,
         &[

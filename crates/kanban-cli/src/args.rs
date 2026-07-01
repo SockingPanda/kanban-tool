@@ -191,6 +191,12 @@ pub(crate) struct TaskStepAddArgs {
     pub(crate) title: String,
     #[arg(long)]
     pub(crate) body: Option<String>,
+    #[arg(
+        long = "body-file",
+        value_name = "PATH|-",
+        help = "Read body text from PATH, or stdin with -"
+    )]
+    pub(crate) body_file: Option<PathBuf>,
     #[arg(long = "link-task")]
     pub(crate) linked_task_ref: Option<String>,
     #[arg(long)]
@@ -209,6 +215,12 @@ pub(crate) struct TaskStepUpdateArgs {
     pub(crate) title: Option<String>,
     #[arg(long)]
     pub(crate) body: Option<String>,
+    #[arg(
+        long = "body-file",
+        value_name = "PATH|-",
+        help = "Read body text from PATH, or stdin with -"
+    )]
+    pub(crate) body_file: Option<PathBuf>,
     #[arg(long = "clear-body")]
     pub(crate) clear_body: bool,
     #[arg(long = "link-task")]
@@ -754,7 +766,13 @@ pub(crate) enum LabelOntologyValidationStatusArg {
 #[derive(Debug, Args)]
 pub(crate) struct CommentAddArgs {
     pub(crate) task_ref: String,
-    pub(crate) body: String,
+    pub(crate) body: Option<String>,
+    #[arg(
+        long = "body-file",
+        value_name = "PATH|-",
+        help = "Read body text from PATH, or stdin with -"
+    )]
+    pub(crate) body_file: Option<PathBuf>,
     #[arg(long)]
     pub(crate) kind: Option<String>,
     #[arg(long)]
@@ -763,6 +781,12 @@ pub(crate) struct CommentAddArgs {
     pub(crate) agent_type: Option<String>,
     #[arg(long)]
     pub(crate) metadata_json: Option<String>,
+    #[arg(
+        long = "metadata-json-file",
+        value_name = "PATH|-",
+        help = "Read comment metadata JSON from PATH, or stdin with -"
+    )]
+    pub(crate) metadata_json_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -779,6 +803,12 @@ pub(crate) struct CreateArgs {
     pub(crate) title: String,
     #[arg(long)]
     pub(crate) description: Option<String>,
+    #[arg(
+        long = "description-file",
+        value_name = "PATH|-",
+        help = "Read description text from PATH, or stdin with -"
+    )]
+    pub(crate) description_file: Option<PathBuf>,
     #[arg(long)]
     pub(crate) status: Option<String>,
     #[arg(long)]
@@ -791,8 +821,14 @@ pub(crate) struct CreateArgs {
     pub(crate) due_at: Option<i64>,
     #[arg(long)]
     pub(crate) max_retries: Option<i64>,
-    #[arg(long, default_value = "{}")]
-    pub(crate) metadata: String,
+    #[arg(long)]
+    pub(crate) metadata: Option<String>,
+    #[arg(
+        long = "metadata-file",
+        value_name = "PATH|-",
+        help = "Read task metadata JSON from PATH, or stdin with -"
+    )]
+    pub(crate) metadata_file: Option<PathBuf>,
     #[arg(long = "label")]
     pub(crate) labels: Vec<String>,
 }
@@ -1008,6 +1044,12 @@ pub(crate) struct UpdateArgs {
     pub(crate) title: Option<String>,
     #[arg(long)]
     pub(crate) description: Option<String>,
+    #[arg(
+        long = "description-file",
+        value_name = "PATH|-",
+        help = "Read description text from PATH, or stdin with -"
+    )]
+    pub(crate) description_file: Option<PathBuf>,
     #[arg(long)]
     pub(crate) assignee: Option<String>,
     #[arg(long)]
@@ -1028,6 +1070,12 @@ pub(crate) struct UpdateArgs {
     pub(crate) clear_max_retries: bool,
     #[arg(long)]
     pub(crate) metadata: Option<String>,
+    #[arg(
+        long = "metadata-file",
+        value_name = "PATH|-",
+        help = "Read task metadata JSON from PATH, or stdin with -"
+    )]
+    pub(crate) metadata_file: Option<PathBuf>,
     #[arg(long)]
     pub(crate) expected_lock_version: Option<i64>,
 }

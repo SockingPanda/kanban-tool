@@ -3717,6 +3717,122 @@ fn task_step_commands_manage_text_steps() -> anyhow::Result<()> {
 }
 
 #[test]
+fn task_step_required_accepts_bounded_boolean_value_forms() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_step_required_accepts_bounded_boolean_value_forms")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "step boolean parent",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+
+    let explicit_true = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "add",
+            task_id,
+            "Explicit true required",
+            "--required",
+            "true",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(explicit_true["data"]["required"], true);
+
+    let explicit_false = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "add",
+            task_id,
+            "Explicit false optional",
+            "--required=false",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(explicit_false["data"]["required"], false);
+
+    let updated_false = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "update",
+            task_id,
+            "S1",
+            "--required",
+            "false",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(updated_false["data"]["required"], false);
+
+    let updated_true = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "update",
+            task_id,
+            "S1",
+            "--required=true",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(updated_true["data"]["required"], true);
+
+    let title_after_flag = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "add",
+            task_id,
+            "--required",
+            "Title after flag remains positional",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(
+        title_after_flag["data"]["title"],
+        "Title after flag remains positional"
+    );
+    assert_eq!(title_after_flag["data"]["required"], true);
+
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "step",
+            "add",
+            task_id,
+            "Invalid boolean value",
+            "--required",
+            "maybe",
+        ],
+    )?
+    .failure_containing("unexpected argument 'maybe'")?;
+
+    Ok(())
+}
+
+#[test]
 fn task_step_linked_task_is_context_only() -> anyhow::Result<()> {
     let temp = TempDb::new("task_step_linked_task_is_context_only")?;
     kanban(&temp.path, &["init"])?.success()?;

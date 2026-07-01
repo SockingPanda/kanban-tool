@@ -209,6 +209,7 @@ Options：
 | Option | 说明 |
 |---|---|
 | `--description <text>` | Markdown 描述。 |
+| `--description-file <PATH|->` | 从文件或 stdin (`-`) 读取 Markdown 描述；与 `--description` 互斥。 |
 | `--status <status>` | 显式初始状态：triage/todo/scheduled/ready。 |
 | `--assignee <name>` | assignee/worker profile。 |
 | `--priority <int>` | Priority level `0..3`: `0` = P0 incident/blocker/must-handle-immediately, `1` = P1 near-term focus, `2` = P2 important follow-up, `3` = P3 ordinary backlog/low/default. Invalid values are rejected. |
@@ -217,6 +218,7 @@ Options：
 | `--max-retries <n>` | worker 失败或 reclaim 后最多重试次数。 |
 | `--label <name>` | 创建时附加已存在 label，可重复；缺失的 board label 会拒绝整个 create。 |
 | `--metadata <json>` | 扩展 JSON。 |
+| `--metadata-file <PATH|->` | 从文件或 stdin (`-`) 读取扩展 JSON；与 `--metadata` 互斥。 |
 
 Priority 只表达相对重要性和排序，不表达可 claim 状态。`ready` 才表示任务已被显式放入可执行队列；普通 ready 任务通常仍应是 P1/P2/P3，不能为了表示“下一批可做”全部标成 P0。P0 只用于 incident、当前目标 blocker 或必须立即处理的任务；若 P0 task 仍缺规格、排期未到或依赖未完成，它仍保持 `triage` / `scheduled` / `todo`，不能被 claim。
 
@@ -365,6 +367,9 @@ Examples：
 ```bash
 kanban task update 12 --priority 1
 kanban task update t_01HX --description "新的规格"
+kanban task update t_01HX --description-file - <<'EOF'
+新的多行规格，保留 $VAR、$(command)、反引号和 JSON 字面量。
+EOF
 kanban task update t_01HX --max-retries 2
 kanban task update t_01HX --clear-max-retries
 ```
@@ -509,8 +514,8 @@ Options：
 
 ```bash
 kanban task step list <task_ref>
-kanban task step add <task_ref> <title> [--body <text>] [--link-task <task_ref>] [--position <n>] [--required|--optional]
-kanban task step update <task_ref> <step_ref> [--title <text>] [--body <text>|--clear-body] [--link-task <task_ref>|--unlink-task] [--position <n>] [--required|--optional]
+kanban task step add <task_ref> <title> [--body <text>|--body-file <PATH|->] [--link-task <task_ref>] [--position <n>] [--required|--optional]
+kanban task step update <task_ref> <step_ref> [--title <text>] [--body <text>|--body-file <PATH|->|--clear-body] [--link-task <task_ref>|--unlink-task] [--position <n>] [--required|--optional]
 kanban task step done <task_ref> <step_ref> --note <text>
 kanban task step skip <task_ref> <step_ref> --reason <text>
 kanban task step reopen <task_ref> <step_ref> --reason <text>
@@ -524,9 +529,10 @@ Step 是 execution plan 的一等结构化项目。它可以是纯文本步骤�
 `skipped`。
 
 `step_ref` 支持 step id，也支持父任务列表里的 `S<n>` 序号。`add` 默认创建
-required step；`--required` / `--optional` 互斥。`update` 只有在显式传
-`--required` 或 `--optional` 时才改变 required flag。`done`、`skip` 和 `reopen`
-必须记录说明文本。
+required step；`--required` / `--optional` 互斥。`--body-file <PATH|->` 从文件或
+stdin 读取长正文，与 `--body` 互斥；`update --clear-body` 也与 `--body-file` 互斥。
+`update` 只有在显式传 `--required` 或 `--optional` 时才改变 required flag。
+`done`、`skip` 和 `reopen` 必须记录说明文本。
 
 Human list 输出示例：
 
@@ -1266,18 +1272,29 @@ use case.
 ## 10. Comment Commands
 
 ```bash
-kanban comment add <task_ref> <body> [--kind note|decision] [--author-type user|agent] [--agent-type <type>] [--metadata-json <json>]
+kanban comment add <task_ref> [<body>|--body-file <PATH|->] [--kind note|decision] [--author-type user|agent] [--agent-type <type>] [--metadata-json <json>|--metadata-json-file <PATH|->]
 kanban comment list <task_ref>
 ```
 
 `--actor` supplies the comment author display identity. If `--kind` is omitted,
 the service default is `note`. If `--author-type` is omitted, the service default
 is `user`; pass `--author-type agent --agent-type <type>` for Codex/dispatcher or
-other automated writers. `--metadata-json` defaults to `{}` and must be a JSON
-object. For `--kind decision`, it is required to satisfy the structured
+other automated writers. `--body-file <PATH|->` reads long comment bodies from
+files or stdin and is mutually exclusive with inline `<body>`. `--metadata-json`
+defaults to `{}` and must be a JSON object; `--metadata-json-file <PATH|->` reads
+the same JSON payload from a file or stdin and is mutually exclusive with
+`--metadata-json`. For `--kind decision`, metadata is required to satisfy the structured
 decision schema: non-empty `options`, unique lowercase ASCII option `slug`
 values, `selected` matching one slug, non-empty `reason`, and optional
 non-empty `risk` / `verification`.
+
+Agent-facing rich input example:
+
+```bash
+kanban comment add default#12 --body-file - <<'EOF'
+正文可以安全包含 $VAR、$(command)、`code`、JSON 和多行文本。
+EOF
+```
 
 Use `--kind decision` for meaningful multi-option choices. Body remains the
 human-readable fallback summary, while structured options and selection data

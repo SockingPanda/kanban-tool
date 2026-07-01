@@ -496,6 +496,145 @@ pub struct CreateComment {
     pub metadata_json: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SignalStatus {
+    Open,
+    Confirmed,
+    Rejected,
+    Superseded,
+    Resolved,
+}
+
+impl std::fmt::Display for SignalStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Open => "open",
+            Self::Confirmed => "confirmed",
+            Self::Rejected => "rejected",
+            Self::Superseded => "superseded",
+            Self::Resolved => "resolved",
+        })
+    }
+}
+
+impl std::str::FromStr for SignalStatus {
+    type Err = kanban_core::KanbanError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "open" => Ok(Self::Open),
+            "confirmed" => Ok(Self::Confirmed),
+            "rejected" => Ok(Self::Rejected),
+            "superseded" => Ok(Self::Superseded),
+            "resolved" => Ok(Self::Resolved),
+            _ => Err(kanban_core::KanbanError::InvalidInput(format!(
+                "invalid signal status: {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignalLifecycle {
+    Confirm,
+    Reject,
+    Resolve,
+    Supersede,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignalCommentInput {
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SignalRecordInput {
+    pub kind: String,
+    pub title: String,
+    pub summary: String,
+    pub severity: Option<String>,
+    pub task_ref: Option<String>,
+    pub task_id: Option<String>,
+    pub run_id: Option<String>,
+    pub comment_id: Option<String>,
+    pub actor: Option<String>,
+    pub agent_type: Option<String>,
+    pub dedupe_key: Option<String>,
+    pub source: Option<String>,
+    pub evidence: Option<serde_json::Value>,
+    pub comment: Option<SignalCommentInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignalObservationRecord {
+    pub id: String,
+    pub task_id: Option<String>,
+    pub task_ref_snapshot: Option<String>,
+    pub run_id: Option<String>,
+    pub comment_id: Option<String>,
+    pub actor: String,
+    pub agent_type: Option<String>,
+    pub source: Option<String>,
+    pub evidence_json: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignalRecord {
+    pub id: String,
+    pub board_id: String,
+    pub observation_id: String,
+    pub kind: String,
+    pub title: String,
+    pub summary: String,
+    pub severity: String,
+    pub status: String,
+    pub dedupe_key: Option<String>,
+    pub superseded_by_signal_id: Option<String>,
+    pub reviewed_by: Option<String>,
+    pub reviewed_at: Option<i64>,
+    pub review_reason: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub observation: SignalObservationRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignalRecordResult {
+    pub signal: SignalRecord,
+    pub backlink_comment: Option<CommentRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignalListOptions {
+    pub statuses: Vec<SignalStatus>,
+    pub kinds: Vec<String>,
+    pub task_ref: Option<String>,
+    pub include_all: bool,
+    pub limit: usize,
+}
+
+impl Default for SignalListOptions {
+    fn default() -> Self {
+        Self {
+            statuses: Vec::new(),
+            kinds: Vec::new(),
+            task_ref: None,
+            include_all: false,
+            limit: 100,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignalReviewInput {
+    pub signal_ids: Vec<String>,
+    pub lifecycle: SignalLifecycle,
+    pub replacement_signal_id: Option<String>,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateTask {
     pub title: String,

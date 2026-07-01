@@ -51,13 +51,14 @@
 | Task | 看板卡片，也是可执行工作单元。 |
 | Status | canonical 状态。UI column 只是状态的展示映射。 |
 | Dependency | parent task 阻塞 child task。 |
-| Comment | 人或自动化留下的协作文本。 |
+| Comment | 人或自动化留下的协作文本；`kind=signal` 用作 signal ledger backlink。 |
 | Event | append-only 事件流，用于审计、SSE、调试。 |
 | Run | 一次执行 attempt。只有 claim/start 后才产生。 |
 | Attachment | 附件元数据，blob 存文件系统。 |
 | Label | 本地标签。 |
 | Label Semantics / Atoms | Label 的 canonical ontology truth，用于本地 suggest 与 review。 |
 | Label Proposal / Ontology Ledger | 新 label 候选 lifecycle 与 append-only provenance；它们解释 ontology 演化，但不替代当前 label truth。 |
+| Signal Observation / Signal | 通用 Agent/Product signal ledger；记录产品或 agent 操作信号、review lifecycle 和可选 task/run/comment context。 |
 | Column | UI 展示配置，映射到 status。 |
 
 ---

@@ -67,6 +67,9 @@ fn build_api_router(state: AppState) -> Router {
             "/api/v1/boards/:board/tasks/by-status",
             get(list_tasks_by_status),
         )
+        .route("/api/v1/boards/:board/signals", get(list_signals))
+        .route("/api/v1/boards/:board/signals/review", get(review_signals))
+        .route("/api/v1/signals/:signal_id", get(get_signal))
         .route("/api/v1/boards/:board/task-map", get(board_task_map))
         .route("/api/v1/tasks/:task_id", get(get_task).patch(update_task))
         .route(

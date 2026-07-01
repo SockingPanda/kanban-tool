@@ -1135,6 +1135,9 @@ GET /api/v1/tasks/{task_id}/labels
 POST /api/v1/tasks/{task_id}/labels
 POST /api/v1/tasks/{task_id}/labels/bootstrap
 DELETE /api/v1/tasks/{task_id}/labels/{label_id}
+GET /api/v1/boards/{board}/signals
+GET /api/v1/boards/{board}/signals/review
+GET /api/v1/signals/{signal_id}
 POST /api/v1/tasks/{task_id}/label-ontology/observations
 GET /api/v1/boards/{board}/label-ontology/signals
 GET /api/v1/boards/{board}/label-ontology/review
@@ -1617,7 +1620,75 @@ creation action。Override 不放宽 board/status 要求。Reject 标记为
 `rejected`，不接受 `source_signal_ids`、`ontology_actor` 或 retarget options。
 accepted/rejected proposal 再次决策返回普通 `400 invalid_input` error envelope。
 
-### 12.4 Label ontology ledger
+### 12.4 Generic signal ledger
+
+Generic signal ledger API 提供 board-scoped 只读 inbox，用于展示 agent/product
+在 kanban 工作流中记录的通用 signal，例如 CLI 参数摩擦、提示误导、参数设计问题或
+operator 发现。它独立于 label ontology ledger；这些 endpoint 不创建、确认、拒绝、
+resolve 或 supersede signal，也不会把通用 signal 混入 ontology review groups。
+
+```http
+GET /api/v1/boards/{board}/signals?status=open&kind=agent_cli_friction&task=default%23123&include_all=false&limit=100
+GET /api/v1/boards/{board}/signals/review?status=confirmed&kind=agent_cli_friction&task=default%23123&include_all=false&limit=100
+GET /api/v1/signals/{signal_id}
+```
+
+`GET /api/v1/boards/{board}/signals` 和 `/signals/review` 返回同一只读 DTO；
+`review` endpoint 是 Desktop / operator console 的语义化入口。默认只返回 `open`
+和 `confirmed`。可重复传 `status` 和 `kind`，并按 `task` 或 `task_ref` 过滤。
+`include_all=true` 且没有显式 `status` 时返回完整历史；`limit` 使用普通列表上限。
+
+响应：
+
+```json
+{
+  "data": [
+    {
+      "id": "sig_...",
+      "board_id": "b_...",
+      "observation_id": "obs_...",
+      "kind": "agent_cli_friction",
+      "title": "--require 参数命名不符合 agent 惯用预期",
+      "summary": "agent 尝试使用 --required/--requires，实际 CLI 只接受 --require。",
+      "severity": "medium",
+      "status": "open",
+      "dedupe_key": "kanban-task-create-require",
+      "superseded_by_signal_id": null,
+      "reviewed_by": null,
+      "reviewed_at": null,
+      "review_reason": null,
+      "created_at": 1782930000000,
+      "updated_at": 1782930000000,
+      "observation": {
+        "id": "obs_...",
+        "board_id": "b_...",
+        "task_id": "t_...",
+        "task_ref_snapshot": "default#123",
+        "run_id": "r_...",
+        "comment_id": null,
+        "actor": "codex",
+        "agent_type": "codex",
+        "source": "codex-hook",
+        "evidence_json": "{\"command\":\"kanban task create --required ...\"}",
+        "created_at": 1782930000000
+      }
+    }
+  ]
+}
+```
+
+`GET /api/v1/signals/{signal_id}` 返回单条 signal：
+
+```json
+{
+  "data": {
+    "id": "sig_...",
+    "observation": {}
+  }
+}
+```
+
+### 12.5 Label ontology ledger
 
 Label ontology ledger API 记录 task 标注过程、review queue、ontology mutation
 provenance 和 validation history。Ledger 不会自动修改 task labels；canonical
@@ -2124,9 +2195,10 @@ Foundation relationship diagnostics are read-only:
 
 - `consistency_errors` / `consistency_warnings` summarize board consistency findings for base relationship rows.
 - `consistency_issues[]` reports structured findings with `severity`, `code`, `message`, and `record_ids`.
-- Covered tables: `task_labels`, `task_dependencies`, `task_steps`, `task_execution_plans`, `task_runs`, `task_comments`, `task_events`, and `task_attachments`.
-- Hard errors mean a row's `board_id` differs from a referenced task / label / run board. The message includes `table`, `row`, `row_board`, `referenced`, and `referenced_board`.
-- These checks complement service-layer board-scoped writes. `task_labels`, `task_dependencies`, `task_steps`, `task_execution_plans`, `task_runs`, `task_comments`, and `task_attachments` are protected by board-scoped composite FKs in current schema. `task_events` retains nullable task/run references and `ON DELETE SET NULL`; INSERT/UPDATE triggers enforce board scope whenever those refs are present. Corrupted JSONL/raw-SQL inputs are still checked by doctor/import as a hard-error diagnostic layer.
+- Covered tables: `task_labels`, `task_dependencies`, `task_steps`, `task_execution_plans`, `task_runs`, `task_comments`, `signal_observations`, `signals`, `task_events`, and `task_attachments`.
+- v24+ databases require `signal_observations` and `signals` for the generic signal ledger.
+- Hard errors mean a row's `board_id` differs from a referenced task / label / run / comment / observation board. The message includes `table`, `row`, `row_board`, `referenced`, and `referenced_board`.
+- These checks complement service-layer board-scoped writes. `task_labels`, `task_dependencies`, `task_steps`, `task_execution_plans`, `task_runs`, `task_comments`, `signals`, and `task_attachments` are protected by board-scoped composite FKs in current schema. `signal_observations` and `task_events` retain nullable source references; doctor/import still check those board relationships as a hard-error diagnostic layer for corrupted JSONL/raw-SQL inputs.
 - `PRAGMA foreign_key_check` results are surfaced as hard-error `consistency_issues[]` with table, rowid, parent table, and FK index. Import runs the same gate before commit and rolls back on violation.
 - Nonzero `consistency_errors` make `ok=false`.
 

@@ -52,7 +52,9 @@ const BOARD_ISOLATION_ONTOLOGY_LINKS_MIGRATION: &str =
 const TASK_SUBTASKS_EXECUTION_PLANS_MIGRATION: &str =
     include_str!("../../../migrations/022_task_subtasks_execution_plans.sql");
 const TASK_STEPS_MIGRATION: &str = include_str!("../../../migrations/023_task_steps.sql");
-const LATEST_MIGRATION_VERSION: i64 = 23;
+const GENERIC_SIGNAL_LEDGER_MIGRATION: &str =
+    include_str!("../../../migrations/024_generic_signal_ledger.sql");
+const LATEST_MIGRATION_VERSION: i64 = 24;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &[
     "fnv64:0ca871be950fc8a6",
     "fnv64:3b08da4e2b6041f5",
@@ -181,6 +183,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 23,
         name: "023_task_steps",
         sql: TASK_STEPS_MIGRATION,
+    },
+    Migration {
+        version: 24,
+        name: "024_generic_signal_ledger",
+        sql: GENERIC_SIGNAL_LEDGER_MIGRATION,
     },
 ];
 

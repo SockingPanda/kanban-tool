@@ -120,6 +120,16 @@ pub(crate) struct LabelOntologySignalQuery {
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct SignalQuery {
+    #[serde(default)]
+    include_all: bool,
+    #[serde(default = "default_limit")]
+    limit: usize,
+    #[serde(alias = "task")]
+    task_ref: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct LabelOntologyReviewQuery {
     #[serde(default = "default_label_ontology_review_group_by")]
     group_by: String,
@@ -1106,6 +1116,72 @@ pub(crate) async fn record_label_ontology_observation(
     ))
 }
 
+pub(crate) async fn list_signals(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+    RawQuery(raw_query): RawQuery,
+    query: Result<Query<SignalQuery>, QueryRejection>,
+) -> Result<Json<Envelope<Vec<kanban_sqlite::SignalRecord>>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
+    let signals = kanban_sqlite::list_signals(
+        state.db_path(),
+        &board,
+        kanban_sqlite::SignalListOptions {
+            statuses: parse_string_filters(raw_query.as_deref(), "status")?,
+            kinds: parse_string_filters(raw_query.as_deref(), "kind")?,
+            task_ref: query.task_ref,
+            include_all: query.include_all,
+            limit: query.limit,
+        },
+    )?;
+    Ok(Json(Envelope {
+        data: signals,
+        meta: Some(json!({
+            "include_all": query.include_all,
+            "limit": query.limit
+        })),
+    }))
+}
+
+pub(crate) async fn review_signals(
+    State(state): State<AppState>,
+    Path(board): Path<String>,
+    RawQuery(raw_query): RawQuery,
+    query: Result<Query<SignalQuery>, QueryRejection>,
+) -> Result<Json<Envelope<Vec<kanban_sqlite::SignalRecord>>>, ApiError> {
+    let Query(query) = query.map_err(extractor_error)?;
+    validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
+    let signals = kanban_sqlite::review_signals(
+        state.db_path(),
+        &board,
+        kanban_sqlite::SignalListOptions {
+            statuses: parse_string_filters(raw_query.as_deref(), "status")?,
+            kinds: parse_string_filters(raw_query.as_deref(), "kind")?,
+            task_ref: query.task_ref,
+            include_all: query.include_all,
+            limit: query.limit,
+        },
+    )?;
+    Ok(Json(Envelope {
+        data: signals,
+        meta: Some(json!({
+            "include_all": query.include_all,
+            "limit": query.limit
+        })),
+    }))
+}
+
+pub(crate) async fn get_signal(
+    State(state): State<AppState>,
+    Path(signal_id): Path<String>,
+) -> Result<Json<Envelope<kanban_sqlite::SignalRecord>>, ApiError> {
+    Ok(Json(Envelope {
+        data: kanban_sqlite::get_signal(state.db_path(), &signal_id)?,
+        meta: None,
+    }))
+}
+
 pub(crate) async fn list_label_ontology_signals(
     State(state): State<AppState>,
     Path(board): Path<String>,
@@ -1774,6 +1850,23 @@ fn empty_json_array() -> JsonValue {
 
 fn empty_json_object() -> JsonValue {
     JsonValue::Object(serde_json::Map::new())
+}
+
+fn parse_string_filters(
+    raw_query: Option<&str>,
+    filter_name: &str,
+) -> Result<Vec<String>, ApiError> {
+    let Some(raw_query) = raw_query else {
+        return Ok(Vec::new());
+    };
+    let pairs = serde_urlencoded::from_str::<Vec<(String, String)>>(raw_query)
+        .map_err(|error| invalid_input(error.to_string()))?;
+    Ok(pairs
+        .into_iter()
+        .filter_map(|(key, value)| (key == filter_name).then_some(value))
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .collect())
 }
 
 fn parse_label_ontology_status_filters(

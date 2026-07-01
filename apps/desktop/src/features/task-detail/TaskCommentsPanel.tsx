@@ -104,6 +104,7 @@ function CommentRows({ commentsPage }: { commentsPage: ReturnType<typeof comment
               <span className="flex items-center gap-1.5">
                 {comment.author}
                 {comment.kind === "decision" ? <Badge variant="secondary">{t("decision")}</Badge> : null}
+                {comment.kind === "signal" ? <Badge variant="secondary">{t("signal")}</Badge> : null}
               </span>
               <span>{formatRelativeTime(comment.created_at)}</span>
             </div>

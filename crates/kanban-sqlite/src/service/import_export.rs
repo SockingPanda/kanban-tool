@@ -150,6 +150,8 @@ pub(crate) const BOARD_SCOPED_EXPORT_TABLES: &[(&str, &str)] = &[
     ("dependency", "task_dependencies"),
     ("run", "task_runs"),
     ("comment", "task_comments"),
+    ("signal_observation", "signal_observations"),
+    ("signal", "signals"),
     ("event", "task_events"),
     ("attachment", "task_attachments"),
     ("label", "labels"),
@@ -176,6 +178,8 @@ pub(crate) const IMPORT_DELETE_ORDER: &[&str] = &[
     "label_ontology_actions",
     "label_ontology_signals",
     "label_ontology_observations",
+    "signals",
+    "signal_observations",
     "task_labels",
     "label_semantic_proposals",
     "label_atoms",
@@ -867,6 +871,7 @@ fn normalize_imported_comment_author_type(author_type: &str) -> &'static str {
 fn normalize_imported_comment_kind(kind: &str, has_metadata_json: bool) -> &'static str {
     match (kind, has_metadata_json) {
         ("decision", true) => "decision",
+        ("signal", true) => "signal",
         _ => "note",
     }
 }
@@ -887,6 +892,8 @@ pub(crate) fn import_table_for_type(record_type: &str) -> Result<&'static str> {
         "dependency" => Ok("task_dependencies"),
         "run" => Ok("task_runs"),
         "comment" => Ok("task_comments"),
+        "signal_observation" => Ok("signal_observations"),
+        "signal" => Ok("signals"),
         "event" => Ok("task_events"),
         "attachment" => Ok("task_attachments"),
         "label" => Ok("labels"),

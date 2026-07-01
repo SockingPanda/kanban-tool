@@ -389,6 +389,7 @@ const zhMessages: Messages = {
   "coverage gap": "覆盖不足",
   "created": "创建",
   "decision": "decision",
+  "signal": "signal",
   "degraded result": "降级结果",
   "index dirty": "索引脏数据",
   "index empty": "索引为空",

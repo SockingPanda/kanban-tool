@@ -49,7 +49,7 @@ fn status_candidates() -> Vec<String> {
 }
 
 fn comment_kind_candidates() -> Vec<String> {
-    ["note", "decision"]
+    ["note", "decision", "signal"]
         .into_iter()
         .map(str::to_owned)
         .collect()

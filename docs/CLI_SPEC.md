@@ -74,7 +74,7 @@ internal `kanban __complete` helper for DB-backed candidates:
 - task refs for task, comment, event, run, and dependency commands;
 - board slugs for `--board` and board identity arguments;
 - status values for `--status`;
-- comment kind values for `comment add --kind`.
+- comment kind values for `comment add --kind` (`note`, `decision`, `signal`).
 
 `kanban __complete` is an internal newline-delimited helper for shell scripts
 and tests. It accepts:
@@ -1475,6 +1475,23 @@ Background sync errors do not make search fail open to stale Tantivy results; th
 
 ---
 
+### Signal Ledger
+
+```bash
+kanban signal record --board <slug> --input <path|-> --json
+kanban signal list --board <slug> [--status open] [--kind <kind>] [--task <task-ref>] [--include-all] --json
+kanban signal show --board <slug> <signal-id> --json
+kanban signal review --board <slug> [--status open] [--kind <kind>] [--task <task-ref>] --json
+kanban signal confirm --board <slug> <signal-id>... --reason <reason> --json
+kanban signal reject --board <slug> <signal-id>... --reason <reason> --json
+kanban signal resolve --board <slug> <signal-id>... --reason <reason> --json
+kanban signal supersede --board <slug> <signal-id>... --by <replacement-signal-id> --reason <reason> --json
+```
+
+`record` input JSON supports `kind`, `title`, `summary`, `severity`, optional `task_ref` / `task_id` / `run_id` / `comment_id`, `actor`, `agent_type`, `dedupe_key`, `source`, `evidence`, and optional `comment.body`. When task context is present, the service writes the signal ledger rows and a `comment.kind = "signal"` backlink in one SQLite transaction. Signal backlink metadata includes `type:"signal_link"`, `signal_id`, `observation_id`, `signal_kind`, and `signal_status`. V1 does not create follow-up tasks automatically.
+
+Lifecycle transitions are `open -> confirmed|rejected|superseded|resolved` and `confirmed -> resolved`. `supersede` requires a same-board replacement signal and rejects cycles.
+
 ## 15. Maintenance Commands
 
 ```bash
@@ -1502,8 +1519,8 @@ kanban context build t_... [--lexical-limit 5] [--vector-config <toml>]
 `kanban stats --json` 返回 status counts、过期 running claim 列表、blocked reason 聚合、unplanned active task 数量，以及 required steps 未完成的 active parent 数量，用于本地 operator recovery。
 
 `kanban backup` 使用 SQLite `VACUUM INTO` 创建一致备份；目标文件已存在时失败，避免覆盖。
-`kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kanban backup`。JSONL export 包含 label ontology ledger record types：`label_ontology_observation`、`label_ontology_signal`、`label_ontology_action`、`label_ontology_action_atom_effect` 和 `label_ontology_action_signal`；因此 portable JSONL 与 SQLite backup 都会保留 ontology observation/signal/action/effect provenance。
-`kanban import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kanban import --replace` 是 offline-only 操作；运行前必须停止 `kanban serve` 和常驻 `kanban dispatch`，如果检测到 active runtime lock 会直接拒绝。Import 在同一 SQLite transaction 内执行插入与 final doctor gate：基础关系表会校验 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、`task_events`、`task_attachments` 的 row board 与 referenced task / label / run board 一致；失败时整个 replace transaction 回滚，不提交部分数据。Ontology import 会延迟回填 `label_ontology_signals.superseded_by_signal_id` 与 `label_ontology_actions.parent_action_id`，因此不依赖 JSONL 中同表自引用 rows 的偶然顺序；导入后会拒绝跨 board ontology links、orphan action-signal links、supersede cycles 和 action parent cycles。
+`kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kanban backup`。JSONL export 包含 generic signal ledger record types：`signal_observation`、`signal`，以及 label ontology ledger record types：`label_ontology_observation`、`label_ontology_signal`、`label_ontology_action`、`label_ontology_action_atom_effect` 和 `label_ontology_action_signal`；因此 portable JSONL 与 SQLite backup 都会保留 signal、ontology observation/signal/action/effect provenance。
+`kanban import` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kanban import --replace` 是 offline-only 操作；运行前必须停止 `kanban serve` 和常驻 `kanban dispatch`，如果检测到 active runtime lock 会直接拒绝。Import 在同一 SQLite transaction 内执行插入与 final doctor gate：基础关系表会校验 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、`task_events`、`task_attachments` 的 row board 与 referenced task / label / run board 一致；失败时整个 replace transaction 回滚，不提交部分数据。Ontology import 会延迟回填 `label_ontology_signals.superseded_by_signal_id` 与 `label_ontology_actions.parent_action_id`，因此不依赖 JSONL 中同表自引用 rows 的偶然顺序；导入后会拒绝跨 board / orphan generic signal context、generic signal supersede cycles、跨 board ontology links、orphan action-signal links、ontology supersede cycles 和 action parent cycles。
 `kanban entity`、`kanban outbox`、`kanban derived` 是 Knowledge Substrate 的只读维护入口。SQLite 仍是事实源；这些命令只报告统一 entity registry、派生索引 outbox 和 derived store 状态，不改变 task 状态或 claim。
 `kanban graph` 和 `kanban vector` 是 helper subprocess 派生层入口。默认 CLI 不链接
 Oxigraph/LanceDB heavy deps；它解析 `KANBAN_GRAPH_HELPER` / `KANBAN_VECTOR_HELPER`、

@@ -955,3 +955,21 @@ collector，bootstrap verify 曾依赖 post-commit compensation。
 - 不新增 action type、signal type、validation status 或 graph/dashboard projection。
 - 不回写或压缩历史 per-atom actions。
 - 不实现 rename/split/merge canonical mutation。
+
+## ADR-0013: Generic Signal Ledger
+
+### Status
+
+Accepted
+
+### Context
+
+Agent/Product failures and observations need a durable review lifecycle that is not label-specific and is not just free-form comment metadata.
+
+### Decision
+
+Add board-scoped `signal_observations` and `signals` tables. `kanban signal record` writes observation and signal rows, and when task context exists it writes a short `task_comments.kind = signal` backlink in the same SQLite transaction. Lifecycle review supports `open -> confirmed|rejected|superseded|resolved` and `confirmed -> resolved`; supersede requires same-board replacement and cycle prevention. V1 does not automatically create follow-up tasks.
+
+### Consequences
+
+Signal ledger becomes the canonical place for generic agent/product signals. Label ontology ledger remains label-specific and is not reused for generic product signals.

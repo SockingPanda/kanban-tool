@@ -162,6 +162,29 @@ fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() -> anyhow::Resu
 }
 
 #[test]
+fn doctor_reports_missing_signal_ledger_tables_unhealthy() -> anyhow::Result<()> {
+    for table in ["signal_observations", "signals"] {
+        let temp = TempDb::new(&format!(
+            "doctor_reports_missing_signal_ledger_tables_unhealthy_{table}"
+        ))?;
+        init_database(&temp.path, "tester")?;
+        connect_file(&temp.path)?.execute_batch(&format!("DROP TABLE {table};"))?;
+
+        let report = doctor_database(&temp.path)?;
+
+        assert_eq!(report.migration_version, Some(24));
+        assert_eq!(report.user_version, 24);
+        assert!(!report.ok, "{table} missing should make doctor unhealthy");
+        assert_eq!(report.consistency_errors, 1);
+        assert!(report.consistency_issues.iter().any(|issue| {
+            issue.code == "signal_ledger_missing_table"
+                && issue.record_ids == vec![table.to_owned()]
+        }));
+    }
+    Ok(())
+}
+
+#[test]
 fn doctor_ontology_reports_missing_v12_tables_unhealthy() -> anyhow::Result<()> {
     for table in [
         "label_ontology_observations",

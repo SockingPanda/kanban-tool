@@ -165,9 +165,10 @@ pub fn list_signals(
     )
 }
 
-pub fn get_signal(path: impl AsRef<Path>, signal_id: &str) -> Result<SignalRecord> {
+pub fn get_signal(path: impl AsRef<Path>, board: &str, signal_id: &str) -> Result<SignalRecord> {
     let conn = connect_file(path.as_ref())?;
-    get_signal_in_tx(&conn, signal_id)
+    let board_id = board_id(&conn, board)?;
+    get_signal_for_board_in_tx(&conn, &board_id, signal_id)
 }
 
 pub fn review_signals(
@@ -184,12 +185,14 @@ pub fn review_signals(
 
 pub fn update_signal_status(
     path: impl AsRef<Path>,
+    board: &str,
     actor: &str,
     input: SignalReviewInput,
 ) -> Result<Vec<SignalRecord>> {
     let conn = connect_file(path.as_ref())?;
     let now = SystemClock.now_ms();
     with_immediate_tx(&conn, || {
+        let board_id = board_id(&conn, board)?;
         if input.signal_ids.is_empty() {
             return Err(KanbanError::InvalidInput(
                 "at least one signal id is required".into(),
@@ -206,11 +209,11 @@ pub fn update_signal_status(
         }
         let mut out = Vec::new();
         for signal_id in &input.signal_ids {
-            let current = get_signal_in_tx(&conn, signal_id)?;
+            let current = get_signal_for_board_in_tx(&conn, &board_id, signal_id)?;
             let target = target_status(input.lifecycle);
             validate_signal_transition(&current, target)?;
             let replacement = if let Some(replacement) = input.replacement_signal_id.as_deref() {
-                let replacement_signal = get_signal_in_tx(&conn, replacement)?;
+                let replacement_signal = get_signal_for_board_in_tx(&conn, &board_id, replacement)?;
                 if replacement_signal.board_id != current.board_id {
                     return Err(KanbanError::InvalidInput(
                         "replacement signal must be on the same board".into(),
@@ -229,8 +232,8 @@ pub fn update_signal_status(
             };
             ensure_changed_one(
                 conn.execute(
-                    "UPDATE signals SET status=?1, superseded_by_signal_id=?2, reviewed_by=?3, reviewed_at=?4, review_reason=?5, updated_at=?4 WHERE id=?6",
-                    params![target.to_string(), replacement, actor, now, reason, signal_id],
+                    "UPDATE signals SET status=?1, superseded_by_signal_id=?2, reviewed_by=?3, reviewed_at=?4, review_reason=?5, updated_at=?4 WHERE id=?6 AND board_id=?7",
+                    params![target.to_string(), replacement, actor, now, reason, signal_id, board_id],
                 )
                 .map_err(|err| KanbanError::Storage(err.to_string()))?,
                 || KanbanError::NotFound(format!("signal not found: {signal_id}")),
@@ -245,7 +248,7 @@ pub fn update_signal_status(
                 &json!({"signal_id": signal_id, "status": target, "reason": reason}).to_string(),
                 now,
             )?;
-            out.push(get_signal_in_tx(&conn, signal_id)?);
+            out.push(get_signal_for_board_in_tx(&conn, &board_id, signal_id)?);
         }
         Ok(out)
     })
@@ -324,6 +327,21 @@ fn get_signal_in_tx(conn: &Connection, signal_id: &str) -> Result<SignalRecord> 
     .optional()
     .map_err(|err| KanbanError::Storage(err.to_string()))?
     .ok_or_else(|| KanbanError::NotFound(format!("signal not found: {signal_id}")))
+}
+
+fn get_signal_for_board_in_tx(
+    conn: &Connection,
+    board_id: &str,
+    signal_id: &str,
+) -> Result<SignalRecord> {
+    conn.query_row(
+        "SELECT s.id,s.board_id,s.observation_id,s.kind,s.title,s.summary,s.severity,s.status,s.dedupe_key,s.superseded_by_signal_id,s.reviewed_by,s.reviewed_at,s.review_reason,s.created_at,s.updated_at,o.id,o.task_id,o.task_ref_snapshot,o.run_id,o.comment_id,o.actor,o.agent_type,o.source,o.evidence_json,o.created_at FROM signals s JOIN signal_observations o ON o.id=s.observation_id WHERE s.id=?1 AND s.board_id=?2",
+        params![signal_id, board_id],
+        signal_from_row,
+    )
+    .optional()
+    .map_err(|err| KanbanError::Storage(err.to_string()))?
+    .ok_or_else(|| KanbanError::NotFound(format!("signal not found on board: {signal_id}")))
 }
 
 fn signal_from_row(row: &Row<'_>) -> rusqlite::Result<SignalRecord> {

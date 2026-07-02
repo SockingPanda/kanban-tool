@@ -104,6 +104,14 @@ feedback. Hooks are installed at the Codex user config path:
 There is no project-scope install mode, because kanban is intended to provide
 the same CLI-aware behavior across workspaces.
 
+Hook prompt text is read from the user kanban config path:
+`$XDG_CONFIG_HOME/kb/codex-hooks.json`, normally `~/.config/kb/codex-hooks.json`.
+`install` creates this file with Chinese default prompts when it is missing, and
+never overwrites an existing file. If the prompt file is missing, malformed, has
+an unsupported `version`, or points a binding at a missing prompt alias, the
+handler falls back to the embedded Chinese defaults instead of failing the Codex
+hook.
+
 `install` adds two managed `PostToolUse` command hooks under matcher `^Bash$`:
 one for failed `kanban ...` command traces and one for successful
 `kanban task create ...` follow-up advice. The managed command prefix defaults
@@ -124,7 +132,7 @@ Codex hook JSON from stdin and emit either no output or a raw Codex hook
 response object such as:
 
 ```json
-{"systemMessage":"kanban CLI command failed (exit 2): `kanban task list --bad-flag`."}
+{"systemMessage":"检测到 kanban CLI 命令失败。\n\n命令：kanban task list --bad-flag\n退出码：2\n\n继续调整。调整成功后，视情况 记录必要的后续工作。"}
 ```
 
 The `handle` subcommands deliberately do not use the normal `{ "data": ... }`
@@ -132,16 +140,44 @@ JSON envelope, because Codex consumes hook stdout directly. The public
 management commands `install`, `status`, and `uninstall` do use the normal
 `--json` envelope.
 
+Prompt config schema:
+
+```json
+{
+  "version": 1,
+  "codex_hooks": {
+    "bindings": {
+      "failure": "failure.zh-default",
+      "task_create": "task_create.zh-default"
+    },
+    "prompts": {
+      "failure.zh-default": "检测到 kanban CLI 命令失败。\n\n命令：{{command}}\n退出码：{{exit_code}}\n\n继续调整。调整成功后，视情况 记录必要的后续工作。",
+      "task_create.zh-default": "检测到 kanban task 创建成功。\n\n命令：{{command}}\n任务：{{task_ref}}\n\n请考虑为该 task 执行 label/signal follow-up；需要标签时先运行 `kanban label suggest {{task_ref}} --json`。不要自动写 label ontology，除非已有完整 suggestion snapshot 和明确 decision payload。"
+    }
+  }
+}
+```
+
+Supported placeholders are deliberately small:
+
+- `failure`: `{{command}}`, `{{exit_code}}`;
+- `task_create`: `{{command}}`, `{{task_ref}}`.
+
+`stderr` and `stdout` are not prompt placeholders. For `handle failure
+--record-signals`, they remain bounded internal evidence in the recorded generic
+signal.
+
 V1 behavior:
 
 - non-`Bash` tools and Bash commands that do not invoke `kanban` are no-op;
-- `handle failure` only reports failed `kanban ...` commands with a bounded
-  `systemMessage` containing the command and short stderr/stdout excerpt;
+- `handle failure` only reports failed `kanban ...` commands with a prompt
+  rendered from `codex-hooks.json` or the embedded Chinese default;
 - `handle failure --record-signals` also records a generic signal with
   `kind="agent_cli_failure"`, `source="kanban-hook-codex"`, and bounded command
   evidence;
 - `handle task-create` only reports successful `kanban task create ...` commands
-  with a label/signal follow-up advisory;
+  with a label/signal follow-up prompt rendered from `codex-hooks.json` or the
+  embedded Chinese default;
 - the hook never silently starts a Codex native subagent and never writes label
   ontology automatically. It only injects advice; the active Codex session must
   decide whether to spawn a native agent or record ontology observations.

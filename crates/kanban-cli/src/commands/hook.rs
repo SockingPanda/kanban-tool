@@ -20,8 +20,13 @@ use crate::{
 const MANAGED_MARKER: &str = "kanban-hook-codex";
 const POST_TOOL_USE: &str = "PostToolUse";
 const BASH_MATCHER: &str = "^Bash$";
-const FAILURE_STATUS_MESSAGE: &str = "Inspecting kanban CLI failure trace";
-const TASK_CREATE_STATUS_MESSAGE: &str = "Inspecting kanban task create trace";
+const FAILURE_STATUS_MESSAGE: &str = "检查 kanban CLI 失败 trace";
+const TASK_CREATE_STATUS_MESSAGE: &str = "检查 kanban task 创建 trace";
+const PROMPT_CONFIG_FILE_NAME: &str = "codex-hooks.json";
+const DEFAULT_FAILURE_PROMPT_ALIAS: &str = "failure.zh-default";
+const DEFAULT_TASK_CREATE_PROMPT_ALIAS: &str = "task_create.zh-default";
+const DEFAULT_FAILURE_PROMPT_TEMPLATE: &str = "检测到 kanban CLI 命令失败。\n\n命令：{{command}}\n退出码：{{exit_code}}\n\n继续调整。调整成功后，视情况 spawn fork_turns=3 的 kanban-signal-recorder native agent。";
+const DEFAULT_TASK_CREATE_PROMPT_TEMPLATE: &str = "检测到 kanban task 创建成功。\n\n命令：{{command}}\n任务：{{task_ref}}\n\n请考虑为该 task 执行 label/signal follow-up；需要标签时先运行 `kanban label suggest {{task_ref}} --json`。不要自动写 label ontology，除非已有完整 suggestion snapshot 和明确 decision payload。";
 
 pub(crate) fn handle_hook(
     command: &HookCommand,
@@ -58,11 +63,14 @@ pub(crate) fn handle_hook(
 
 fn install_codex_hook(args: &CodexHookInstallArgs, json_output: bool) -> Result<()> {
     let path = hooks_config_path()?;
+    let prompt_config_path = prompt_config_path()?;
     let mut config = read_hooks_config(&path)?;
     remove_managed_hooks(&mut config)?;
     let managed_hooks = managed_hook_specs(&args.handler_command, args.record_signals);
     install_managed_hooks(&mut config, &managed_hooks, args.timeout)?;
     write_hooks_config(&path, &config)?;
+    let prompt_config_created = ensure_prompt_config_exists(&prompt_config_path)?;
+    let prompt_config = inspect_prompt_config(&prompt_config_path);
 
     let status = inspect_hooks_config(&path, Some(&config))?;
     let output = CodexHookInstallOutput {
@@ -74,31 +82,37 @@ fn install_codex_hook(args: &CodexHookInstallArgs, json_output: bool) -> Result<
             .map(|hook| hook.command.clone())
             .collect(),
         managed_hook_count: status.managed_hook_count,
+        prompt_config_created,
+        prompt_config,
     };
     print_or_json(json_output, &output, || {
         format!(
-            "Installed {} managed kanban Codex hooks at {}",
+            "Installed {} managed kanban Codex hooks at {}; prompt config at {}",
             output.managed_hook_count,
             output.path.display(),
+            output.prompt_config.path.display(),
         )
     })
 }
 
 fn status_codex_hook(json_output: bool) -> Result<()> {
     let path = hooks_config_path()?;
-    let status = inspect_hooks_config(&path, None)?;
+    let mut status = inspect_hooks_config(&path, None)?;
+    status.prompt_config = inspect_prompt_config(&prompt_config_path()?);
     print_or_json(json_output, &status, || {
         if status.installed {
             format!(
-                "kanban Codex hook installed at {} ({} managed hook{})",
+                "kanban Codex hook installed at {} ({} managed hook{}); prompt config at {}",
                 status.path.display(),
                 status.managed_hook_count,
-                plural(status.managed_hook_count)
+                plural(status.managed_hook_count),
+                status.prompt_config.path.display()
             )
         } else {
             format!(
-                "kanban Codex hook not installed at {}",
-                status.path.display()
+                "kanban Codex hook not installed at {}; prompt config at {}",
+                status.path.display(),
+                status.prompt_config.path.display()
             )
         }
     })
@@ -214,6 +228,157 @@ fn write_hooks_config(path: &Path, config: &Value) -> Result<()> {
     let content = serde_json::to_string_pretty(config)?;
     fs::write(path, format!("{content}\n"))
         .with_context(|| format!("failed to write {}", path.display()))
+}
+
+fn prompt_config_path() -> Result<PathBuf> {
+    let base = kanban_local::default_config_dir()
+        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
+        .context("failed to resolve user config dir for kanban Codex hook prompts")?;
+    Ok(base.join("kb").join(PROMPT_CONFIG_FILE_NAME))
+}
+
+fn read_prompt_config(path: &Path) -> Result<Value> {
+    let content =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let value: Value = serde_json::from_str(&content)
+        .with_context(|| format!("failed to parse {} as JSON", path.display()))?;
+    if !value.is_object() {
+        bail!("{} must contain a JSON object", path.display());
+    }
+    Ok(value)
+}
+
+fn ensure_prompt_config_exists(path: &Path) -> Result<bool> {
+    if path.exists() {
+        return Ok(false);
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+    let content = serde_json::to_string_pretty(&default_prompt_config())?;
+    fs::write(path, format!("{content}\n"))
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(true)
+}
+
+fn default_prompt_config() -> Value {
+    json!({
+        "version": 1,
+        "codex_hooks": {
+            "bindings": {
+                "failure": DEFAULT_FAILURE_PROMPT_ALIAS,
+                "task_create": DEFAULT_TASK_CREATE_PROMPT_ALIAS
+            },
+            "prompts": {
+                "failure.zh-default": DEFAULT_FAILURE_PROMPT_TEMPLATE,
+                "task_create.zh-default": DEFAULT_TASK_CREATE_PROMPT_TEMPLATE
+            }
+        }
+    })
+}
+
+fn inspect_prompt_config(path: &Path) -> CodexHookPromptConfigStatus {
+    if !path.exists() {
+        return CodexHookPromptConfigStatus {
+            path: path.to_path_buf(),
+            exists: false,
+            valid: false,
+            error: None,
+            bindings: default_prompt_bindings(),
+        };
+    }
+    let value = match read_prompt_config(path) {
+        Ok(value) => value,
+        Err(error) => {
+            return CodexHookPromptConfigStatus {
+                path: path.to_path_buf(),
+                exists: true,
+                valid: false,
+                error: Some(error.to_string()),
+                bindings: default_prompt_bindings(),
+            };
+        }
+    };
+    match prompt_bindings_from_config(&value)
+        .and_then(|bindings| validate_prompt_templates(&value, &bindings).map(|()| bindings))
+    {
+        Ok(bindings) => CodexHookPromptConfigStatus {
+            path: path.to_path_buf(),
+            exists: true,
+            valid: true,
+            error: None,
+            bindings,
+        },
+        Err(error) => CodexHookPromptConfigStatus {
+            path: path.to_path_buf(),
+            exists: true,
+            valid: false,
+            error: Some(error.to_string()),
+            bindings: prompt_bindings_from_config(&value)
+                .unwrap_or_else(|_| default_prompt_bindings()),
+        },
+    }
+}
+
+fn prompt_bindings_from_config(value: &Value) -> Result<CodexHookPromptBindings> {
+    validate_prompt_config_version(value)?;
+    Ok(CodexHookPromptBindings {
+        failure: prompt_binding_alias(value, CodexHookPromptKind::Failure)?,
+        task_create: prompt_binding_alias(value, CodexHookPromptKind::TaskCreate)?,
+    })
+}
+
+fn validate_prompt_templates(value: &Value, bindings: &CodexHookPromptBindings) -> Result<()> {
+    prompt_template_by_alias(value, &bindings.failure)?;
+    prompt_template_by_alias(value, &bindings.task_create)?;
+    Ok(())
+}
+
+fn validate_prompt_config_version(value: &Value) -> Result<()> {
+    if value.get("version").and_then(Value::as_i64) != Some(1) {
+        bail!("codex hook prompt config version must be 1");
+    }
+    Ok(())
+}
+
+fn prompt_binding_alias(value: &Value, kind: CodexHookPromptKind) -> Result<String> {
+    let hooks = value
+        .get("codex_hooks")
+        .and_then(Value::as_object)
+        .context("codex_hooks must be an object")?;
+    let alias = hooks
+        .get("bindings")
+        .and_then(|bindings| bindings.get(kind.binding_key()))
+        .and_then(Value::as_str)
+        .unwrap_or_else(|| kind.default_alias());
+    if alias.trim().is_empty() {
+        bail!(
+            "codex_hooks.bindings.{} must not be empty",
+            kind.binding_key()
+        );
+    }
+    Ok(alias.to_owned())
+}
+
+fn prompt_template_by_alias<'a>(value: &'a Value, alias: &str) -> Result<&'a str> {
+    let template = value
+        .get("codex_hooks")
+        .and_then(|hooks| hooks.get("prompts"))
+        .and_then(|prompts| prompts.get(alias))
+        .and_then(Value::as_str)
+        .with_context(|| format!("codex_hooks.prompts.{alias} must be a string"))?;
+    if template.trim().is_empty() {
+        bail!("codex_hooks.prompts.{alias} must not be empty");
+    }
+    Ok(template)
+}
+
+fn default_prompt_bindings() -> CodexHookPromptBindings {
+    CodexHookPromptBindings {
+        failure: DEFAULT_FAILURE_PROMPT_ALIAS.to_owned(),
+        task_create: DEFAULT_TASK_CREATE_PROMPT_ALIAS.to_owned(),
+    }
 }
 
 fn hooks_object_mut(config: &mut Value) -> Result<&mut Map<String, Value>> {
@@ -344,6 +509,7 @@ fn inspect_hooks_config(path: &Path, config: Option<&Value>) -> Result<CodexHook
         managed_hook_count: managed_commands.len(),
         post_tool_use_group_count: group_count,
         managed_commands,
+        prompt_config: inspect_prompt_config(&prompt_config_path()?),
     })
 }
 
@@ -587,50 +753,79 @@ fn failure_system_message(
     normalized: &NormalizedPostToolUse,
     record_result: Option<&RecordSignalResult>,
 ) -> String {
-    let exit = normalized
+    let command = truncate(&normalized.command, 240);
+    let exit_code = normalized
         .exit_code
-        .map(|code| format!("exit {code}"))
-        .unwrap_or_else(|| "non-zero result".to_owned());
-    let mut lines = vec![format!(
-        "kanban CLI command failed ({exit}): `{}`.",
-        truncate(&normalized.command, 240)
-    )];
-    if !normalized.stderr.trim().is_empty() {
-        lines.push(format!(
-            "stderr: {}",
-            truncate(normalized.stderr.trim(), 900)
-        ));
-    } else if !normalized.stdout.trim().is_empty() {
-        lines.push(format!(
-            "stdout: {}",
-            truncate(normalized.stdout.trim(), 900)
-        ));
-    }
+        .map(|code| code.to_string())
+        .unwrap_or_else(|| "未知".to_owned());
+    let mut message = render_hook_prompt(
+        CodexHookPromptKind::Failure,
+        &[("command", &command), ("exit_code", &exit_code)],
+    );
     match record_result {
         Some(RecordSignalResult::Recorded(signal_id)) => {
-            lines.push(format!("Recorded generic signal `{signal_id}` for this trace."));
+            message.push_str(&format!("\n\n已记录 generic signal：`{signal_id}`。"));
         }
         Some(RecordSignalResult::Failed(error)) => {
-            lines.push(format!(
-                "Tried to record a generic signal but it failed: {}.",
+            message.push_str(&format!(
+                "\n\n尝试记录 generic signal 失败：{}。",
                 truncate(error, 240)
             ));
         }
-        None => lines.push(
-            "If this affects task state, record durable trace with `kanban signal record --input - --json`; if root cause is unclear, ask Codex to spawn a native debugger agent for this failure."
-                .to_owned(),
-        ),
+        None => {}
     }
-    lines.join("\n")
+    message
 }
 
 fn task_create_system_message(normalized: &NormalizedPostToolUse) -> String {
-    let task_ref = task_ref_from_create_stdout(&normalized.stdout)
-        .map(|value| format!(" for `{value}`"))
-        .unwrap_or_default();
-    format!(
-        "kanban task create succeeded{task_ref}. Consider a label/signal follow-up before execution: run `kanban label suggest <task_ref> --json` when labels matter, and record durable disagreement or CLI trace with `kanban signal record --input - --json`. Do not write label ontology automatically unless you have a complete suggestion snapshot and explicit decision payload."
+    let task_ref =
+        task_ref_from_create_stdout(&normalized.stdout).unwrap_or_else(|| "<task_ref>".to_owned());
+    let command = truncate(&normalized.command, 240);
+    render_hook_prompt(
+        CodexHookPromptKind::TaskCreate,
+        &[("command", &command), ("task_ref", &task_ref)],
     )
+}
+
+fn render_hook_prompt(kind: CodexHookPromptKind, variables: &[(&str, &str)]) -> String {
+    let (template, warning) = load_hook_prompt_template(kind);
+    let mut message = render_template(&template, variables);
+    if let Some(warning) = warning {
+        message.push_str(&format!(
+            "\n\n提示：Codex hook prompt 配置不可用，已使用内置默认提示。原因：{}。",
+            truncate(&warning, 240)
+        ));
+    }
+    message
+}
+
+fn load_hook_prompt_template(kind: CodexHookPromptKind) -> (String, Option<String>) {
+    let path = match prompt_config_path() {
+        Ok(path) => path,
+        Err(error) => return (kind.default_template().to_owned(), Some(error.to_string())),
+    };
+    if !path.exists() {
+        return (kind.default_template().to_owned(), None);
+    }
+    let value = match read_prompt_config(&path) {
+        Ok(value) => value,
+        Err(error) => return (kind.default_template().to_owned(), Some(error.to_string())),
+    };
+    match validate_prompt_config_version(&value)
+        .and_then(|()| prompt_binding_alias(&value, kind))
+        .and_then(|alias| prompt_template_by_alias(&value, &alias).map(str::to_owned))
+    {
+        Ok(template) => (template, None),
+        Err(error) => (kind.default_template().to_owned(), Some(error.to_string())),
+    }
+}
+
+fn render_template(template: &str, variables: &[(&str, &str)]) -> String {
+    let mut rendered = template.to_owned();
+    for (name, value) in variables {
+        rendered = rendered.replace(&format!("{{{{{name}}}}}"), value);
+    }
+    rendered
 }
 
 fn task_ref_from_create_stdout(stdout: &str) -> Option<String> {
@@ -673,6 +868,8 @@ struct CodexHookInstallOutput {
     matcher: String,
     handler_commands: Vec<String>,
     managed_hook_count: usize,
+    prompt_config_created: bool,
+    prompt_config: CodexHookPromptConfigStatus,
 }
 
 #[derive(Debug, Serialize)]
@@ -683,6 +880,7 @@ struct CodexHookStatusOutput {
     managed_hook_count: usize,
     post_tool_use_group_count: usize,
     managed_commands: Vec<String>,
+    prompt_config: CodexHookPromptConfigStatus,
 }
 
 #[derive(Debug, Serialize)]
@@ -702,6 +900,50 @@ struct ManagedHookSpec {
 enum CodexHookPostHandler {
     Failure { record_signals: bool },
     TaskCreate,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum CodexHookPromptKind {
+    Failure,
+    TaskCreate,
+}
+
+impl CodexHookPromptKind {
+    fn binding_key(self) -> &'static str {
+        match self {
+            Self::Failure => "failure",
+            Self::TaskCreate => "task_create",
+        }
+    }
+
+    fn default_alias(self) -> &'static str {
+        match self {
+            Self::Failure => DEFAULT_FAILURE_PROMPT_ALIAS,
+            Self::TaskCreate => DEFAULT_TASK_CREATE_PROMPT_ALIAS,
+        }
+    }
+
+    fn default_template(self) -> &'static str {
+        match self {
+            Self::Failure => DEFAULT_FAILURE_PROMPT_TEMPLATE,
+            Self::TaskCreate => DEFAULT_TASK_CREATE_PROMPT_TEMPLATE,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct CodexHookPromptConfigStatus {
+    path: PathBuf,
+    exists: bool,
+    valid: bool,
+    error: Option<String>,
+    bindings: CodexHookPromptBindings,
+}
+
+#[derive(Debug, Serialize)]
+struct CodexHookPromptBindings {
+    failure: String,
+    task_create: String,
 }
 
 #[derive(Debug)]

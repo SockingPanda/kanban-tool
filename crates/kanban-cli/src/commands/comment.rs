@@ -6,6 +6,7 @@ use kanban_sqlite::{
 };
 
 use crate::args::CommentCommand;
+use crate::commands::common::resolve_required_text_input;
 use crate::output::print_or_json;
 
 pub(crate) fn handle_comment(
@@ -17,17 +18,30 @@ pub(crate) fn handle_comment(
 ) -> Result<()> {
     match command {
         CommentCommand::Add(args) => {
+            let body = resolve_required_text_input(
+                args.body,
+                args.body_file,
+                "<body>",
+                "--body-file",
+                "comment add",
+            )?;
+            let metadata_json = crate::commands::common::resolve_optional_text_input(
+                args.metadata_json,
+                args.metadata_json_file,
+                "--metadata-json",
+                "--metadata-json-file",
+            )?;
             let task = get_task(db_path, board, &args.task_ref)?;
             let comment = create_comment_with_options(
                 db_path,
                 &task.id,
                 CreateComment {
                     author: actor.to_owned(),
-                    body: args.body,
+                    body,
                     kind: args.kind,
                     author_type: args.author_type,
                     agent_type: args.agent_type,
-                    metadata_json: args.metadata_json,
+                    metadata_json,
                 },
             )?;
             print_or_json(json, &comment, || comment_line(&comment))?;

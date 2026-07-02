@@ -1,8 +1,49 @@
-use std::path::PathBuf;
+use std::{
+    fs,
+    io::{self, Read},
+    path::PathBuf,
+};
 
 use anyhow::{Context, Result, bail};
 use kanban_core::{KanbanError, TaskStatus};
 use kanban_sqlite::TaskListSort;
+
+pub(crate) fn resolve_optional_text_input(
+    inline: Option<String>,
+    file: Option<PathBuf>,
+    inline_name: &str,
+    file_name: &str,
+) -> Result<Option<String>> {
+    if inline.is_some() && file.is_some() {
+        bail!("{inline_name} and {file_name} are mutually exclusive");
+    }
+    if let Some(path) = file {
+        return Ok(Some(read_text_input(&path)?));
+    }
+    Ok(inline)
+}
+
+pub(crate) fn resolve_required_text_input(
+    inline: Option<String>,
+    file: Option<PathBuf>,
+    inline_name: &str,
+    file_name: &str,
+    value_name: &str,
+) -> Result<String> {
+    resolve_optional_text_input(inline, file, inline_name, file_name)?
+        .ok_or_else(|| anyhow::anyhow!("{value_name} requires either {inline_name} or {file_name}"))
+}
+
+fn read_text_input(path: &PathBuf) -> Result<String> {
+    if path.as_os_str() == "-" {
+        let mut value = String::new();
+        io::stdin()
+            .read_to_string(&mut value)
+            .with_context(|| "failed to read stdin")?;
+        return Ok(value);
+    }
+    fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))
+}
 
 pub(crate) fn validate_page_bounds(limit: usize, max_limit: usize, offset: usize) -> Result<()> {
     if limit > max_limit {

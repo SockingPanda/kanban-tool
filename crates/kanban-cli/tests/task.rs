@@ -1,7 +1,7 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kanban, kanban_in_dir_envs};
+use common::{TempDb, kanban, kanban_in_dir_envs, kanban_with_stdin};
 use kanban_sqlite::{
     CreateLabel, CreateTask, LabelOntologyActionInput, LabelOntologyActionType, LabelOntologyActor,
     LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput, LabelOntologyProposedAction,
@@ -3926,5 +3926,232 @@ fn task_step_linked_task_is_context_only() -> anyhow::Result<()> {
         kanban(&temp.path, &["--json", "task", "step", "list", parent_id])?.success_json()?;
     assert_eq!(listed["data"]["steps"][0]["linked_task"]["status"], "done");
     assert_eq!(listed["data"]["steps"][0]["status"], "todo");
+    Ok(())
+}
+
+#[test]
+fn task_create_description_file_preserves_shell_sensitive_text() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_create_description_file_preserves_shell_sensitive_text")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let description = "`code` $VAR $(date) {\"json\":true}\nline \\\\ slash 'single' \"double\" \"nested 'quote'\"";
+    let description_path = temp.dir.join("description.md");
+    fs::write(&description_path, description)?;
+
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "file description",
+            "--description-file",
+            description_path.to_str().context("utf-8 path")?,
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(created["data"]["description"], description);
+    Ok(())
+}
+
+#[test]
+fn task_update_description_stdin_preserves_shell_sensitive_text() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_update_description_stdin_preserves_shell_sensitive_text")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "stdin description",
+            "--description",
+            "initial",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("expected task id")?;
+    let description =
+        "stdin `code` $VAR $(date) {\"json\":true}\nline \\\\ slash 'single' \"double\"";
+
+    let updated = kanban_with_stdin(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "update",
+            task_id,
+            "--description-file",
+            "-",
+        ],
+        description,
+    )?
+    .success_json()?;
+
+    assert_eq!(updated["data"]["description"], description);
+    Ok(())
+}
+
+#[test]
+fn task_create_rejects_inline_description_with_description_file() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_create_rejects_inline_description_with_description_file")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let description_path = temp.dir.join("description.md");
+    fs::write(&description_path, "from file")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "create",
+            "bad description",
+            "--description",
+            "inline",
+            "--description-file",
+            description_path.to_str().context("utf-8 path")?,
+        ],
+    )?
+    .failure_containing("mutually exclusive")?;
+    Ok(())
+}
+
+#[test]
+fn task_step_body_file_and_stdin_preserve_shell_sensitive_text() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_step_body_file_and_stdin_preserve_shell_sensitive_text")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "step body",
+            "--description",
+            "spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("expected task id")?;
+    let file_body = "file `code` $VAR $(date) {\"json\":true}\nline \\\\ slash 'single' \"double\"";
+    let body_path = temp.dir.join("step-body.md");
+    fs::write(&body_path, file_body)?;
+
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "add",
+            task_id,
+            "file step",
+            "--body-file",
+            body_path.to_str().context("utf-8 path")?,
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(added["data"]["body"], file_body);
+    let step_id = added["data"]["id"].as_str().context("expected step id")?;
+
+    let stdin_body =
+        "stdin `code` $VAR $(date) {\"json\":true}\nline \\\\ slash 'single' \"double\"";
+    let updated = kanban_with_stdin(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "update",
+            task_id,
+            step_id,
+            "--body-file",
+            "-",
+        ],
+        stdin_body,
+    )?
+    .success_json()?;
+
+    assert_eq!(updated["data"]["body"], stdin_body);
+    Ok(())
+}
+
+#[test]
+fn task_step_update_rejects_inline_body_with_body_file() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_step_update_rejects_inline_body_with_body_file")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "step body conflict",
+            "--description",
+            "spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("expected task id")?;
+    let added = kanban(
+        &temp.path,
+        &["--json", "task", "step", "add", task_id, "conflict step"],
+    )?
+    .success_json()?;
+    let step_id = added["data"]["id"].as_str().context("expected step id")?;
+    let body_path = temp.dir.join("step-body.md");
+    fs::write(&body_path, "from file")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "step",
+            "update",
+            task_id,
+            step_id,
+            "--body",
+            "inline",
+            "--body-file",
+            body_path.to_str().context("utf-8 path")?,
+        ],
+    )?
+    .failure_containing("mutually exclusive")?;
+    Ok(())
+}
+
+#[test]
+fn task_metadata_file_and_stdin_preserve_shell_sensitive_json() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_metadata_file_and_stdin_preserve_shell_sensitive_json")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let metadata =
+        r#"{"source":"file","literal":"$VAR $(date)","nested":{"quote":"'single' \"double\""}}"#;
+    let metadata_path = temp.dir.join("task-metadata.json");
+    fs::write(&metadata_path, metadata)?;
+
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "metadata file task",
+            "--metadata-file",
+            metadata_path.to_str().context("utf-8 path")?,
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(created["data"]["metadata_json"], metadata);
+    let task_id = created["data"]["id"].as_str().context("expected task id")?;
+
+    let stdin_metadata =
+        r#"{"source":"stdin","literal":"$VAR $(date)","array":["back\\slash","nested 'quote'"]}"#;
+    let updated = kanban_with_stdin(
+        &temp.path,
+        &["--json", "task", "update", task_id, "--metadata-file", "-"],
+        stdin_metadata,
+    )?
+    .success_json()?;
+
+    assert_eq!(updated["data"]["metadata_json"], stdin_metadata);
     Ok(())
 }

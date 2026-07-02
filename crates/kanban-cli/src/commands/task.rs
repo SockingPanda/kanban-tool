@@ -12,7 +12,8 @@ use kanban_sqlite::{
 
 use crate::args::{ListArgs, TaskCommand, TaskPlanFilterArg, TaskStepCommand};
 use crate::commands::common::{
-    optional_clearable, parse_status, parse_task_list_sort, validate_page_bounds,
+    optional_clearable, parse_status, parse_task_list_sort, resolve_optional_text_input,
+    validate_page_bounds,
 };
 use crate::output::{print_or_json, print_task, print_task_with_details, task_line};
 
@@ -25,20 +26,33 @@ pub(crate) fn handle_task(
 ) -> Result<()> {
     match command {
         TaskCommand::Create(args) => {
+            let description = resolve_optional_text_input(
+                args.description,
+                args.description_file,
+                "--description",
+                "--description-file",
+            )?;
+            let metadata_json = resolve_optional_text_input(
+                args.metadata,
+                args.metadata_file,
+                "--metadata",
+                "--metadata-file",
+            )?
+            .unwrap_or_else(|| "{}".to_owned());
             let task = kanban_sqlite::create_task_with_labels(
                 db_path,
                 board,
                 actor,
                 CreateTask {
                     title: args.title,
-                    description: args.description,
+                    description,
                     status: args.status.as_deref().map(parse_status).transpose()?,
                     assignee: args.assignee,
                     priority: args.priority,
                     scheduled_at: args.scheduled_at,
                     due_at: args.due_at,
                     max_retries: args.max_retries,
-                    metadata_json: args.metadata,
+                    metadata_json,
                 },
                 &args.labels,
             )?;
@@ -103,6 +117,18 @@ pub(crate) fn handle_task(
             print_task_with_details(json, details, &task, ontology_summary.as_ref())?
         }
         TaskCommand::Update(args) => {
+            let description = resolve_optional_text_input(
+                args.description,
+                args.description_file,
+                "--description",
+                "--description-file",
+            )?;
+            let metadata_json = resolve_optional_text_input(
+                args.metadata,
+                args.metadata_file,
+                "--metadata",
+                "--metadata-file",
+            )?;
             let task = update_task(
                 db_path,
                 board,
@@ -110,7 +136,7 @@ pub(crate) fn handle_task(
                 &args.task_ref,
                 TaskPatch {
                     title: args.title,
-                    description: args.description.map(Some),
+                    description: description.map(Some),
                     assignee: if args.clear_assignee {
                         Some(None)
                     } else {
@@ -128,7 +154,7 @@ pub(crate) fn handle_task(
                     } else {
                         None
                     },
-                    metadata_json: args.metadata,
+                    metadata_json,
                     expected_lock_version: args.expected_lock_version,
                 },
             )?;
@@ -234,6 +260,8 @@ fn handle_task_step(
         }
         TaskStepCommand::Add(args) => {
             let required = step_required_for_add(args.required, args.optional)?;
+            let body =
+                resolve_optional_text_input(args.body, args.body_file, "--body", "--body-file")?;
             let step = create_step(
                 db_path,
                 board,
@@ -241,7 +269,7 @@ fn handle_task_step(
                 &args.task_ref,
                 CreateStepInput {
                     title: args.title,
-                    body: args.body,
+                    body,
                     linked_task_ref: args.linked_task_ref,
                     position: args.position,
                     required,
@@ -253,7 +281,12 @@ fn handle_task_step(
             if args.linked_task_ref.is_some() && args.unlink_task {
                 bail!("--link-task and --unlink-task are mutually exclusive");
             }
-            if args.body.is_some() && args.clear_body {
+            if args.clear_body && args.body_file.is_some() {
+                bail!("--body-file and --clear-body are mutually exclusive");
+            }
+            let body =
+                resolve_optional_text_input(args.body, args.body_file, "--body", "--body-file")?;
+            if body.is_some() && args.clear_body {
                 bail!("--body and --clear-body are mutually exclusive");
             }
             let step = update_step(
@@ -267,7 +300,7 @@ fn handle_task_step(
                     body: if args.clear_body {
                         Some(None)
                     } else {
-                        args.body.map(Some)
+                        body.map(Some)
                     },
                     linked_task_ref: args.linked_task_ref,
                     unlink_task: args.unlink_task,

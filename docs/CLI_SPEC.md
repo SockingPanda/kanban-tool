@@ -88,6 +88,52 @@ DBs, missing board config, or read/query failures return success with no
 candidates and no stderr. Static completion generation itself does not open or
 create the SQLite database.
 
+### 1.3 Codex hooks
+
+```bash
+kanban hook codex install [--scope project|user] [--handler-command <command>] [--timeout 30] [--record-signals] [--json]
+kanban hook codex status [--scope project|user] [--json]
+kanban hook codex uninstall [--scope project|user] [--json]
+kanban hook codex handle [--record-signals]
+```
+
+`kanban hook codex` manages a Codex lifecycle hook for kanban-aware agent
+feedback. The default `project` scope writes `<project-root>/.codex/hooks.json`,
+where `<project-root>` is the nearest ancestor containing `.git`, or the current
+directory when no git root is found. The `user` scope writes
+`$CODEX_HOME/hooks.json`, or `~/.codex/hooks.json` when `CODEX_HOME` is not set.
+
+`install` adds one managed `PostToolUse` hook group with matcher `^Bash$`. The
+managed command defaults to `kanban hook codex handle` and is stored with the
+hidden marker `--installed-by kanban-hook-codex`; `uninstall` removes only hooks
+with that marker and preserves unrelated user hooks. Re-running `install` is
+idempotent: it replaces the previous managed hook before writing the new one.
+
+`handle` is the internal hook command. It reads Codex hook JSON from stdin and
+emits either no output or a raw Codex hook response object such as:
+
+```json
+{"systemMessage":"kanban CLI command failed (exit 2): `kanban task list --bad-flag`."}
+```
+
+`handle` deliberately does not use the normal `{ "data": ... }` JSON envelope,
+because Codex consumes hook stdout directly. The public management commands
+`install`, `status`, and `uninstall` do use the normal `--json` envelope.
+
+V1 behavior:
+
+- non-`Bash` tools and Bash commands that do not invoke `kanban` are no-op;
+- failed `kanban ...` commands produce a bounded `systemMessage` with the command
+  and short stderr/stdout excerpt;
+- failed commands with `--record-signals` also record a generic signal with
+  `kind="agent_cli_failure"`, `source="kanban-hook-codex"`, and bounded command
+  evidence;
+- successful `kanban task create ...` commands produce a label/signal follow-up
+  advisory;
+- the hook never silently starts a Codex native subagent and never writes label
+  ontology automatically. It only injects advice; the active Codex session must
+  decide whether to spawn a native agent or record ontology observations.
+
 ---
 
 ## 2. Exit Codes

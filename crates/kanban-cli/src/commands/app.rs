@@ -15,6 +15,7 @@ use crate::commands::{
     common::{active_board, default_actor, default_db_path},
     dep::handle_dep,
     dispatch::{dispatch_loop, dispatch_options},
+    hook::handle_hook,
     index::handle_index,
     label::handle_label,
     maintenance::{
@@ -50,6 +51,12 @@ pub(crate) fn run() -> Result<()> {
         for candidate in candidates {
             println!("{candidate}");
         }
+        return Ok(());
+    }
+    if let Command::Hook { command } = &cli.command {
+        let db_path = cli.db.clone().unwrap_or_else(default_db_path);
+        let actor = cli.actor.clone().unwrap_or_else(default_actor);
+        handle_hook(command, &db_path, cli.board.as_deref(), &actor, cli.json)?;
         return Ok(());
     }
 
@@ -105,6 +112,7 @@ pub(crate) fn run() -> Result<()> {
         Command::Search(args) => handle_search(args, &db_path, &board, cli.json)?,
         Command::Signal { command } => handle_signal(command, &db_path, &board, &actor, cli.json)?,
         Command::Index { command } => handle_index(command, &db_path, &board, cli.json)?,
+        Command::Hook { .. } => unreachable!("handled before database initialization"),
         Command::Entity { command } => handle_entity(command, &db_path, cli.json)?,
         Command::Outbox { command } => handle_outbox(command, &db_path, cli.json)?,
         Command::Derived { command } => handle_derived(command, &db_path, cli.json)?,

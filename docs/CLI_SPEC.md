@@ -105,7 +105,7 @@ There is no project-scope install mode, because kanban is intended to provide
 the same CLI-aware behavior across workspaces.
 
 Hook prompt text is read from the user kanban config path:
-`$XDG_CONFIG_HOME/kb/codex-hooks.json`, normally `~/.config/kb/codex-hooks.json`.
+`$XDG_CONFIG_HOME/kanban/codex-hooks.json`, normally `~/.config/kanban/codex-hooks.json`.
 `install` creates this file with Chinese default prompts when it is missing, and
 never overwrites an existing file. If the prompt file is missing, malformed, has
 an unsupported `version`, or points a binding at a missing prompt alias, the
@@ -1675,7 +1675,7 @@ relation/vector store，不参与 task 状态事务。
 `kanban vector status --json` 保留 `message` 兼容字段，同时返回结构化
 `diagnostics`、`dirty`、`board_dirty` 字段；dirty/error 判断应使用这些字段，不解析
 `message` 文案。
-`kanban vector configure` 默认写入全局 config：`$XDG_CONFIG_HOME/kb/config.toml`（平台默认通常为 `~/.config/kb/config.toml`），并默认配置本机 Ollama embedding provider。传 `--vector-config <toml>`（别名 `--config`）时写入指定 TOML。configure 默认调用 `/api/embed` 做短文本维度校验；校验失败时不写配置；`--skip-check` 只跳过这次连通性/维度检查。配置格式：
+`kanban vector configure` 默认写入全局 config：`$XDG_CONFIG_HOME/kanban/config.toml`（平台默认通常为 `~/.config/kanban/config.toml`），并默认配置本机 Ollama embedding provider。传 `--vector-config <toml>`（别名 `--config`）时写入指定 TOML。configure 默认调用 `/api/embed` 做短文本维度校验；校验失败时不写配置；`--skip-check` 只跳过这次连通性/维度检查。配置格式：
 
 ```toml
 board = "kanban-tool"

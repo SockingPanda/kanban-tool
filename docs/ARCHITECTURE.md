@@ -423,7 +423,7 @@ kanban dispatch
 默认配置文件：
 
 ```text
-~/.config/kb/config.toml
+~/.config/kanban/config.toml
 ```
 
 示例：

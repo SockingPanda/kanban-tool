@@ -200,7 +200,7 @@ triage | todo | scheduled | ready | running | blocked | review | done | archived
 ~/.local/share/kb/kb.db
 ~/.local/share/kb/attachments/
 ~/.local/state/kb/logs/
-~/.config/kb/config.toml
+~/.config/kanban/config.toml
 ```
 
 也支持项目本地模式：
@@ -661,7 +661,7 @@ kanban dispatch
 默认配置文件：
 
 ```text
-~/.config/kb/config.toml
+~/.config/kanban/config.toml
 ```
 
 示例：

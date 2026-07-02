@@ -13,8 +13,7 @@ use serde_json::{Map, Value, json};
 
 use crate::{
     args::{
-        CodexHookCommand, CodexHookHandleArgs, CodexHookInstallArgs, CodexHookScope,
-        CodexHookStatusArgs, CodexHookUninstallArgs, HookCommand,
+        CodexHookCommand, CodexHookHandleCommand, CodexHookInstallArgs, HookCommand,
     },
     commands::common::active_board,
     output::print_or_json,
@@ -23,7 +22,8 @@ use crate::{
 const MANAGED_MARKER: &str = "kanban-hook-codex";
 const POST_TOOL_USE: &str = "PostToolUse";
 const BASH_MATCHER: &str = "^Bash$";
-const STATUS_MESSAGE: &str = "Inspecting kanban CLI trace";
+const FAILURE_STATUS_MESSAGE: &str = "Inspecting kanban CLI failure trace";
+const TASK_CREATE_STATUS_MESSAGE: &str = "Inspecting kanban task create trace";
 
 pub(crate) fn handle_hook(
     command: &HookCommand,
@@ -35,42 +35,60 @@ pub(crate) fn handle_hook(
     match command {
         HookCommand::Codex { command } => match command {
             CodexHookCommand::Install(args) => install_codex_hook(args, json),
-            CodexHookCommand::Status(args) => status_codex_hook(args, json),
-            CodexHookCommand::Uninstall(args) => uninstall_codex_hook(args, json),
-            CodexHookCommand::Handle(args) => handle_codex_payload(args, db_path, board, actor),
+            CodexHookCommand::Status => status_codex_hook(json),
+            CodexHookCommand::Uninstall => uninstall_codex_hook(json),
+            CodexHookCommand::Handle { command } => match command {
+                CodexHookHandleCommand::Failure(args) => {
+                    let _installed_by = args.installed_by.as_deref();
+                    handle_codex_payload(
+                        CodexHookPostHandler::Failure {
+                            record_signals: args.record_signals,
+                        },
+                        db_path,
+                        board,
+                        actor,
+                    )
+                }
+                CodexHookHandleCommand::TaskCreate(args) => {
+                    let _installed_by = args.installed_by.as_deref();
+                    handle_codex_payload(CodexHookPostHandler::TaskCreate, db_path, board, actor)
+                }
+            },
         },
     }
 }
 
 fn install_codex_hook(args: &CodexHookInstallArgs, json_output: bool) -> Result<()> {
-    let path = hooks_config_path(args.scope)?;
+    let path = hooks_config_path()?;
     let mut config = read_hooks_config(&path)?;
     remove_managed_hooks(&mut config)?;
-    let handler_command = managed_handler_command(&args.handler_command, args.record_signals);
-    install_managed_hook(&mut config, &handler_command, args.timeout)?;
+    let managed_hooks = managed_hook_specs(&args.handler_command, args.record_signals);
+    install_managed_hooks(&mut config, &managed_hooks, args.timeout)?;
     write_hooks_config(&path, &config)?;
 
-    let status = inspect_hooks_config(args.scope, &path, Some(&config))?;
+    let status = inspect_hooks_config(&path, Some(&config))?;
     let output = CodexHookInstallOutput {
-        scope: args.scope.as_str().to_owned(),
         path,
         installed: status.installed,
         matcher: BASH_MATCHER.to_owned(),
-        handler_command,
+        handler_commands: managed_hooks
+            .iter()
+            .map(|hook| hook.command.clone())
+            .collect(),
         managed_hook_count: status.managed_hook_count,
     };
     print_or_json(json_output, &output, || {
         format!(
-            "Installed kanban Codex hook at {} ({})",
+            "Installed {} managed kanban Codex hooks at {}",
+            output.managed_hook_count,
             output.path.display(),
-            output.handler_command
         )
     })
 }
 
-fn status_codex_hook(args: &CodexHookStatusArgs, json_output: bool) -> Result<()> {
-    let path = hooks_config_path(args.scope)?;
-    let status = inspect_hooks_config(args.scope, &path, None)?;
+fn status_codex_hook(json_output: bool) -> Result<()> {
+    let path = hooks_config_path()?;
+    let status = inspect_hooks_config(&path, None)?;
     print_or_json(json_output, &status, || {
         if status.installed {
             format!(
@@ -88,13 +106,12 @@ fn status_codex_hook(args: &CodexHookStatusArgs, json_output: bool) -> Result<()
     })
 }
 
-fn uninstall_codex_hook(args: &CodexHookUninstallArgs, json_output: bool) -> Result<()> {
-    let path = hooks_config_path(args.scope)?;
+fn uninstall_codex_hook(json_output: bool) -> Result<()> {
+    let path = hooks_config_path()?;
     let mut config = read_hooks_config(&path)?;
     let removed_hook_count = remove_managed_hooks(&mut config)?;
     write_hooks_config(&path, &config)?;
     let output = CodexHookUninstallOutput {
-        scope: args.scope.as_str().to_owned(),
         path,
         removed_hook_count,
         installed: false,
@@ -110,12 +127,11 @@ fn uninstall_codex_hook(args: &CodexHookUninstallArgs, json_output: bool) -> Res
 }
 
 fn handle_codex_payload(
-    args: &CodexHookHandleArgs,
+    handler: CodexHookPostHandler,
     db_path: &PathBuf,
     board_arg: Option<&str>,
     actor: &str,
 ) -> Result<()> {
-    let _installed_by = args.installed_by.as_deref();
     let mut raw = String::new();
     io::stdin()
         .read_to_string(&mut raw)
@@ -135,50 +151,44 @@ fn handle_codex_payload(
         return Ok(());
     }
 
-    if normalized.failed() {
-        let record_result = if args.record_signals {
-            Some(record_failure_signal(
-                db_path,
-                board_arg,
-                actor,
-                &payload,
-                &normalized,
-            ))
-        } else {
-            None
-        };
-        write_hook_response(&HookResponse {
-            system_message: failure_system_message(&normalized, record_result.as_ref()),
-        })?;
-    } else if is_task_create_command(&normalized.command) {
-        write_hook_response(&HookResponse {
-            system_message: task_create_system_message(&normalized),
-        })?;
+    match handler {
+        CodexHookPostHandler::Failure { record_signals } => {
+            if !normalized.failed() {
+                return Ok(());
+            }
+            let record_result = if record_signals {
+                Some(record_failure_signal(
+                    db_path,
+                    board_arg,
+                    actor,
+                    &payload,
+                    &normalized,
+                ))
+            } else {
+                None
+            };
+            write_hook_response(&HookResponse {
+                system_message: failure_system_message(&normalized, record_result.as_ref()),
+            })?;
+        }
+        CodexHookPostHandler::TaskCreate => {
+            if normalized.failed() || !is_task_create_command(&normalized.command) {
+                return Ok(());
+            }
+            write_hook_response(&HookResponse {
+                system_message: task_create_system_message(&normalized),
+            })?;
+        }
     }
     Ok(())
 }
 
-fn hooks_config_path(scope: CodexHookScope) -> Result<PathBuf> {
-    match scope {
-        CodexHookScope::Project => Ok(project_root()?.join(".codex/hooks.json")),
-        CodexHookScope::User => {
-            if let Some(home) = env::var_os("CODEX_HOME") {
-                return Ok(PathBuf::from(home).join("hooks.json"));
-            }
-            let home = env::var_os("HOME").context("HOME is not set; set CODEX_HOME")?;
-            Ok(PathBuf::from(home).join(".codex/hooks.json"))
-        }
+fn hooks_config_path() -> Result<PathBuf> {
+    if let Some(home) = env::var_os("CODEX_HOME") {
+        return Ok(PathBuf::from(home).join("hooks.json"));
     }
-}
-
-fn project_root() -> Result<PathBuf> {
-    let cwd = env::current_dir().context("failed to resolve current directory")?;
-    for ancestor in cwd.ancestors() {
-        if ancestor.join(".git").exists() {
-            return Ok(ancestor.to_path_buf());
-        }
-    }
-    Ok(cwd)
+    let home = env::var_os("HOME").context("HOME is not set; set CODEX_HOME")?;
+    Ok(PathBuf::from(home).join(".codex/hooks.json"))
 }
 
 fn read_hooks_config(path: &Path) -> Result<Value> {
@@ -220,7 +230,11 @@ fn hooks_object_mut(config: &mut Value) -> Result<&mut Map<String, Value>> {
         .context("hooks config field `hooks` must be a JSON object")
 }
 
-fn install_managed_hook(config: &mut Value, command: &str, timeout: u64) -> Result<()> {
+fn install_managed_hooks(
+    config: &mut Value,
+    managed_hooks: &[ManagedHookSpec],
+    timeout: u64,
+) -> Result<()> {
     let hooks = hooks_object_mut(config)?;
     let post_tool_use = hooks
         .entry(POST_TOOL_USE)
@@ -228,16 +242,20 @@ fn install_managed_hook(config: &mut Value, command: &str, timeout: u64) -> Resu
     let groups = post_tool_use
         .as_array_mut()
         .context("hooks.PostToolUse must be an array")?;
+    let hooks = managed_hooks
+        .iter()
+        .map(|hook| {
+            json!({
+                "type": "command",
+                "command": hook.command.clone(),
+                "timeout": timeout,
+                "statusMessage": hook.status_message
+            })
+        })
+        .collect::<Vec<_>>();
     groups.push(json!({
         "matcher": BASH_MATCHER,
-        "hooks": [
-            {
-                "type": "command",
-                "command": command,
-                "timeout": timeout,
-                "statusMessage": STATUS_MESSAGE
-            }
-        ]
+        "hooks": hooks
     }));
     Ok(())
 }
@@ -281,15 +299,10 @@ fn is_managed_hook(hook: &Value) -> bool {
         return false;
     };
     object.get("type").and_then(Value::as_str) == Some("command")
-        && command.contains("kanban hook codex handle")
         && command.contains(MANAGED_MARKER)
 }
 
-fn inspect_hooks_config(
-    scope: CodexHookScope,
-    path: &Path,
-    config: Option<&Value>,
-) -> Result<CodexHookStatusOutput> {
+fn inspect_hooks_config(path: &Path, config: Option<&Value>) -> Result<CodexHookStatusOutput> {
     let owned;
     let config = if let Some(config) = config {
         Some(config)
@@ -327,7 +340,6 @@ fn inspect_hooks_config(
     }
 
     Ok(CodexHookStatusOutput {
-        scope: scope.as_str().to_owned(),
         path: path.to_path_buf(),
         installed: !managed_commands.is_empty(),
         matcher: BASH_MATCHER.to_owned(),
@@ -337,8 +349,26 @@ fn inspect_hooks_config(
     })
 }
 
-fn managed_handler_command(base: &str, record_signals: bool) -> String {
+fn managed_hook_specs(base: &str, record_signals: bool) -> Vec<ManagedHookSpec> {
+    vec![
+        ManagedHookSpec {
+            command: managed_handler_command(base, "failure", record_signals),
+            status_message: FAILURE_STATUS_MESSAGE,
+        },
+        ManagedHookSpec {
+            command: managed_handler_command(base, "task-create", false),
+            status_message: TASK_CREATE_STATUS_MESSAGE,
+        },
+    ]
+}
+
+fn managed_handler_command(base: &str, handler: &str, record_signals: bool) -> String {
     let mut command = base.trim().to_owned();
+    if command.is_empty() {
+        command.push_str("kanban hook codex handle");
+    }
+    command.push(' ');
+    command.push_str(handler);
     if !command.contains("--installed-by") {
         command.push_str(" --installed-by ");
         command.push_str(MANAGED_MARKER);
@@ -640,17 +670,15 @@ fn plural(count: usize) -> &'static str {
 
 #[derive(Debug, Serialize)]
 struct CodexHookInstallOutput {
-    scope: String,
     path: PathBuf,
     installed: bool,
     matcher: String,
-    handler_command: String,
+    handler_commands: Vec<String>,
     managed_hook_count: usize,
 }
 
 #[derive(Debug, Serialize)]
 struct CodexHookStatusOutput {
-    scope: String,
     path: PathBuf,
     installed: bool,
     matcher: String,
@@ -661,10 +689,21 @@ struct CodexHookStatusOutput {
 
 #[derive(Debug, Serialize)]
 struct CodexHookUninstallOutput {
-    scope: String,
     path: PathBuf,
     removed_hook_count: usize,
     installed: bool,
+}
+
+#[derive(Debug)]
+struct ManagedHookSpec {
+    command: String,
+    status_message: &'static str,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum CodexHookPostHandler {
+    Failure { record_signals: bool },
+    TaskCreate,
 }
 
 #[derive(Debug)]

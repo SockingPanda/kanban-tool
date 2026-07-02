@@ -143,16 +143,17 @@ pub(crate) enum HookCommand {
 #[derive(Debug, Subcommand)]
 pub(crate) enum CodexHookCommand {
     Install(CodexHookInstallArgs),
-    Status(CodexHookStatusArgs),
-    Uninstall(CodexHookUninstallArgs),
-    Handle(CodexHookHandleArgs),
+    Status,
+    Uninstall,
+    Handle {
+        #[command(subcommand)]
+        command: CodexHookHandleCommand,
+    },
 }
 
 #[derive(Debug, Args)]
 pub(crate) struct CodexHookInstallArgs {
-    #[arg(long, value_enum, default_value_t = CodexHookScope::Project)]
-    pub(crate) scope: CodexHookScope,
-    #[arg(long, default_value = "kanban hook codex handle")]
+    #[arg(long, value_name = "command-prefix", default_value = "kanban hook codex handle")]
     pub(crate) handler_command: String,
     #[arg(long, default_value_t = 30)]
     pub(crate) timeout: u64,
@@ -160,39 +161,25 @@ pub(crate) struct CodexHookInstallArgs {
     pub(crate) record_signals: bool,
 }
 
-#[derive(Debug, Args)]
-pub(crate) struct CodexHookStatusArgs {
-    #[arg(long, value_enum, default_value_t = CodexHookScope::Project)]
-    pub(crate) scope: CodexHookScope,
+#[derive(Debug, Subcommand)]
+pub(crate) enum CodexHookHandleCommand {
+    Failure(CodexHookFailureHandleArgs),
+    #[command(name = "task-create")]
+    TaskCreate(CodexHookTaskCreateHandleArgs),
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct CodexHookUninstallArgs {
-    #[arg(long, value_enum, default_value_t = CodexHookScope::Project)]
-    pub(crate) scope: CodexHookScope,
-}
-
-#[derive(Debug, Args)]
-pub(crate) struct CodexHookHandleArgs {
+pub(crate) struct CodexHookFailureHandleArgs {
     #[arg(long, hide = true)]
     pub(crate) installed_by: Option<String>,
     #[arg(long)]
     pub(crate) record_signals: bool,
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
-pub(crate) enum CodexHookScope {
-    Project,
-    User,
-}
-
-impl CodexHookScope {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            CodexHookScope::Project => "project",
-            CodexHookScope::User => "user",
-        }
-    }
+#[derive(Debug, Args)]
+pub(crate) struct CodexHookTaskCreateHandleArgs {
+    #[arg(long, hide = true)]
+    pub(crate) installed_by: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]

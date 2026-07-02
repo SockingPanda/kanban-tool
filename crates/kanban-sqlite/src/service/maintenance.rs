@@ -24,6 +24,8 @@ use kanban_indexer::{OUTBOX_DERIVED_STORE_SEEDS, OutboxTarget, derived_store_for
 
 use rusqlite::{Connection, OptionalExtension, params};
 
+const SIGNAL_LEDGER_TABLES: [&str; 2] = ["signal_observations", "signals"];
+
 const LABEL_ONTOLOGY_LEDGER_TABLES: [&str; 5] = [
     "label_ontology_observations",
     "label_ontology_signals",
@@ -139,7 +141,7 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
     let ontology_ledger_issues = doctor_missing_ontology_table_issues(&missing_tables);
     let (ontology_ledger_errors, ontology_ledger_warnings) =
         doctor_issue_counts(&ontology_ledger_issues);
-    let consistency_issues = Vec::new();
+    let consistency_issues = doctor_missing_signal_table_issues(&missing_tables);
     let (consistency_errors, consistency_warnings) = doctor_issue_counts(&consistency_issues);
     if migration_version != Some(user_version) || !missing_tables.is_empty() {
         return Ok(DoctorReport {
@@ -688,6 +690,9 @@ fn doctor_missing_required_tables(
     if migration_version.unwrap_or(0) >= 23 || user_version >= 23 {
         required_tables.push("task_steps");
     }
+    if migration_version.unwrap_or(0) >= 24 || user_version >= 24 {
+        required_tables.extend(SIGNAL_LEDGER_TABLES);
+    }
     let mut missing = Vec::new();
     for table in required_tables {
         if !table_exists(conn, table)? {
@@ -706,6 +711,21 @@ fn doctor_missing_ontology_table_issues(missing_tables: &[&'static str]) -> Vec<
                 "error",
                 "label_ontology_missing_table",
                 format!("required label ontology ledger table is missing: {table}"),
+                vec![(*table).to_owned()],
+            )
+        })
+        .collect()
+}
+
+fn doctor_missing_signal_table_issues(missing_tables: &[&'static str]) -> Vec<DoctorIssue> {
+    missing_tables
+        .iter()
+        .filter(|table| SIGNAL_LEDGER_TABLES.contains(table))
+        .map(|table| {
+            doctor_issue(
+                "error",
+                "signal_ledger_missing_table",
+                format!("required signal ledger table is missing: {table}"),
                 vec![(*table).to_owned()],
             )
         })
@@ -910,6 +930,123 @@ fn doctor_consistency_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> {
                 referenced_board,
             ))
         },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT o.id, o.task_id, o.board_id, t.board_id \
+         FROM signal_observations o \
+         JOIN tasks t ON t.id=o.task_id \
+         WHERE o.task_id IS NOT NULL AND o.board_id<>t.board_id",
+        |row| {
+            let observation_id: String = row.get(0)?;
+            let task_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "signal_observation_task_board_mismatch",
+                "signal_observations",
+                observation_id,
+                row_board,
+                "tasks",
+                task_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT o.id, o.run_id, o.board_id, r.board_id \
+         FROM signal_observations o \
+         JOIN task_runs r ON r.id=o.run_id \
+         WHERE o.run_id IS NOT NULL AND o.board_id<>r.board_id",
+        |row| {
+            let observation_id: String = row.get(0)?;
+            let run_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "signal_observation_run_board_mismatch",
+                "signal_observations",
+                observation_id,
+                row_board,
+                "task_runs",
+                run_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT o.id, o.comment_id, o.board_id, c.board_id \
+         FROM signal_observations o \
+         JOIN task_comments c ON c.id=o.comment_id \
+         WHERE o.comment_id IS NOT NULL AND o.board_id<>c.board_id",
+        |row| {
+            let observation_id: String = row.get(0)?;
+            let comment_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "signal_observation_comment_board_mismatch",
+                "signal_observations",
+                observation_id,
+                row_board,
+                "task_comments",
+                comment_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT s.id, s.observation_id, s.board_id, o.board_id \
+         FROM signals s \
+         JOIN signal_observations o ON o.id=s.observation_id \
+         WHERE s.board_id<>o.board_id",
+        |row| {
+            let signal_id: String = row.get(0)?;
+            let observation_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "signal_observation_board_mismatch",
+                "signals",
+                signal_id,
+                row_board,
+                "signal_observations",
+                observation_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(query_doctor_issue_rows(
+        conn,
+        "SELECT s.id, s.superseded_by_signal_id, s.board_id, replacement.board_id \
+         FROM signals s \
+         JOIN signals replacement ON replacement.id=s.superseded_by_signal_id \
+         WHERE s.superseded_by_signal_id IS NOT NULL AND s.board_id<>replacement.board_id",
+        |row| {
+            let signal_id: String = row.get(0)?;
+            let replacement_id: String = row.get(1)?;
+            let row_board: String = row.get(2)?;
+            let referenced_board: String = row.get(3)?;
+            Ok(relationship_board_mismatch_issue(
+                "signal_supersede_board_mismatch",
+                "signals",
+                signal_id,
+                row_board,
+                "signals",
+                replacement_id,
+                referenced_board,
+            ))
+        },
+    )?);
+    issues.extend(doctor_link_cycle_issues(
+        conn,
+        "SELECT id, superseded_by_signal_id FROM signals \
+         WHERE superseded_by_signal_id IS NOT NULL",
+        "signal_supersede_cycle",
+        "signal supersede cycle",
     )?);
     issues.extend(query_doctor_issue_rows(
         conn,

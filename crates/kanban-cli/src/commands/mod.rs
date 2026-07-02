@@ -11,5 +11,6 @@ pub(crate) mod maintenance;
 pub(crate) mod run;
 pub(crate) mod search;
 pub(crate) mod serve;
+pub(crate) mod signal;
 pub(crate) mod substrate;
 pub(crate) mod task;

@@ -933,7 +933,7 @@ Request：
 
 Notes：
 
-- `kind` 默认为 `note`，当前允许 `note|decision`。
+- `kind` 默认为 `note`，当前允许 `note|decision|signal`。
 - `decision` records meaningful multi-option choices; body remains the readable fallback, and structured decision metadata is carried by `metadata`.
 - `author_type` marks who produced the comment and allows `user|agent`. If omitted, the service defaults to `user`.
 - `agent_type` is optional open text for `author_type=agent` comments, such as `executor` or `reviewer`. Non-empty `agent_type` with `author_type=user` is rejected as `400 invalid_input`.
@@ -2126,7 +2126,7 @@ Foundation relationship diagnostics are read-only:
 - `consistency_issues[]` reports structured findings with `severity`, `code`, `message`, and `record_ids`.
 - Covered tables: `task_labels`, `task_dependencies`, `task_steps`, `task_execution_plans`, `task_runs`, `task_comments`, `task_events`, and `task_attachments`.
 - Hard errors mean a row's `board_id` differs from a referenced task / label / run board. The message includes `table`, `row`, `row_board`, `referenced`, and `referenced_board`.
-- These checks complement service-layer board-scoped writes. `task_labels`, `task_dependencies`, `task_steps`, `task_execution_plans`, `task_runs`, `task_comments`, and `task_attachments` are protected by board-scoped composite FKs in current schema. `task_events` retains nullable task/run references and `ON DELETE SET NULL`; INSERT/UPDATE triggers enforce board scope whenever those refs are present. Corrupted JSONL/raw-SQL inputs are still checked by doctor/import as a hard-error diagnostic layer.
+- These checks complement service-layer board-scoped writes. `task_labels`, `task_dependencies`, `task_steps`, `task_execution_plans`, `task_runs`, `task_comments`, and `task_attachments` are protected by board-scoped composite FKs in current schema. `task_events` retains nullable task/run references and `ON DELETE SET NULL`; INSERT/UPDATE triggers enforce board scope whenever those refs are present. Generic signal ledger rows also keep nullable task/run/comment/replacement context and are board-validated by the command service plus doctor/import consistency gates. Corrupted JSONL/raw-SQL inputs are still checked by doctor/import as a hard-error diagnostic layer.
 - `PRAGMA foreign_key_check` results are surfaced as hard-error `consistency_issues[]` with table, rowid, parent table, and FK index. Import runs the same gate before commit and rolls back on violation.
 - Nonzero `consistency_errors` make `ok=false`.
 
@@ -2171,3 +2171,7 @@ MVP 建议只提供 CLI backup，不开放 HTTP backup。
 4. running task 的 complete/block 操作，若无 token，则 UI 走 `force=true` 并要求确认。
 5. blocked task unblock 后目标列由服务端返回，前端不要预设。
 6. SSE 收到 event 后，优先 refetch affected task，避免客户端状态机漂移。
+
+### Signal Comments
+
+API comment DTOs use `kind: "signal"` for signal ledger backlink comments. The `metadata_json` string remains the structured payload carrier and contains `type:"signal_link"`, `signal_id`, `observation_id`, `signal_kind`, and `signal_status`. Clients should render the body as a readable fallback and may link to the signal detail using `signal_id`.

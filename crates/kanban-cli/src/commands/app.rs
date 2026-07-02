@@ -24,6 +24,7 @@ use crate::commands::{
     run::handle_run,
     search::handle_search,
     serve::serve,
+    signal::handle_signal,
     substrate::{
         handle_context, handle_derived, handle_entity, handle_graph, handle_outbox, handle_vector,
     },
@@ -102,6 +103,7 @@ pub(crate) fn run() -> Result<()> {
         }
         Command::Run { command } => handle_run(command, &db_path, cli.json)?,
         Command::Search(args) => handle_search(args, &db_path, &board, cli.json)?,
+        Command::Signal { command } => handle_signal(command, &db_path, &board, &actor, cli.json)?,
         Command::Index { command } => handle_index(command, &db_path, &board, cli.json)?,
         Command::Entity { command } => handle_entity(command, &db_path, cli.json)?,
         Command::Outbox { command } => handle_outbox(command, &db_path, cli.json)?,

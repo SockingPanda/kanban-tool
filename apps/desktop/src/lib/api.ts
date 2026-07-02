@@ -404,7 +404,7 @@ export type CommentRecord = {
   author_type: string
   agent_type: string | null
   body: string
-  kind: "note" | "decision"
+  kind: "note" | "decision" | "signal"
   metadata_json: string
   created_at: number
 }

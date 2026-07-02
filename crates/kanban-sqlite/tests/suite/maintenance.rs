@@ -154,9 +154,32 @@ fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() -> anyhow::Resu
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(23));
-        assert_eq!(report.user_version, 23);
+        assert_eq!(report.migration_version, Some(24));
+        assert_eq!(report.user_version, 24);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
+    }
+    Ok(())
+}
+
+#[test]
+fn doctor_reports_missing_signal_ledger_tables_unhealthy() -> anyhow::Result<()> {
+    for table in ["signal_observations", "signals"] {
+        let temp = TempDb::new(&format!(
+            "doctor_reports_missing_signal_ledger_tables_unhealthy_{table}"
+        ))?;
+        init_database(&temp.path, "tester")?;
+        connect_file(&temp.path)?.execute_batch(&format!("DROP TABLE {table};"))?;
+
+        let report = doctor_database(&temp.path)?;
+
+        assert_eq!(report.migration_version, Some(24));
+        assert_eq!(report.user_version, 24);
+        assert!(!report.ok, "{table} missing should make doctor unhealthy");
+        assert_eq!(report.consistency_errors, 1);
+        assert!(report.consistency_issues.iter().any(|issue| {
+            issue.code == "signal_ledger_missing_table"
+                && issue.record_ids == vec![table.to_owned()]
+        }));
     }
     Ok(())
 }
@@ -178,8 +201,8 @@ fn doctor_ontology_reports_missing_v12_tables_unhealthy() -> anyhow::Result<()> 
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(23));
-        assert_eq!(report.user_version, 23);
+        assert_eq!(report.migration_version, Some(24));
+        assert_eq!(report.user_version, 24);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
         assert_eq!(report.ontology_ledger_errors, 1);
         assert!(report.ontology_ledger_issues.iter().any(|issue| {
@@ -187,6 +210,47 @@ fn doctor_ontology_reports_missing_v12_tables_unhealthy() -> anyhow::Result<()> 
                 && issue.record_ids == vec![table.to_owned()]
         }));
     }
+    Ok(())
+}
+
+#[test]
+fn doctor_detects_generic_signal_supersede_cycle() -> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_detects_generic_signal_supersede_cycle")?;
+    init_database(&temp.path, "tester")?;
+    let conn = connect_file(&temp.path)?;
+    let board_id: String =
+        conn.query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })?;
+    conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+    conn.execute(
+        "INSERT INTO signal_observations(id, board_id, actor, evidence_json, created_at) VALUES ('obs_cycle_a', ?1, 'tester', '{}', 1)",
+        [&board_id],
+    )?;
+    conn.execute(
+        "INSERT INTO signal_observations(id, board_id, actor, evidence_json, created_at) VALUES ('obs_cycle_b', ?1, 'tester', '{}', 1)",
+        [&board_id],
+    )?;
+    conn.execute(
+        "INSERT INTO signals(id, board_id, observation_id, kind, title, summary, severity, status, superseded_by_signal_id, created_at, updated_at) VALUES ('sig_cycle_a', ?1, 'obs_cycle_a', 'test', 'a', 'a', 'info', 'superseded', 'sig_cycle_b', 1, 1)",
+        [&board_id],
+    )?;
+    conn.execute(
+        "INSERT INTO signals(id, board_id, observation_id, kind, title, summary, severity, status, superseded_by_signal_id, created_at, updated_at) VALUES ('sig_cycle_b', ?1, 'obs_cycle_b', 'test', 'b', 'b', 'info', 'superseded', 'sig_cycle_a', 1, 1)",
+        [&board_id],
+    )?;
+    conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+    drop(conn);
+
+    let report = doctor_database(&temp.path)?;
+
+    assert!(!report.ok);
+    assert!(report.consistency_errors >= 1);
+    assert!(report.consistency_issues.iter().any(|issue| {
+        issue.code == "signal_supersede_cycle"
+            && issue.record_ids.contains(&"sig_cycle_a".to_owned())
+            && issue.record_ids.contains(&"sig_cycle_b".to_owned())
+    }));
     Ok(())
 }
 

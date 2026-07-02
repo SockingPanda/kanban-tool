@@ -385,6 +385,34 @@ describe("KanbanApi task search", () => {
     expect(new URL(String(fetchMock.mock.calls[4]?.[0])).pathname).toBe("/api/v1/boards/default/labels/atoms/hash_1/explain")
   })
 
+  it("uses generic signal HTTP routes for signal inbox data", async () => {
+    const signal = genericSignal({ id: "sig_1", kind: "agent_cli_friction" })
+    const fetchMock = mockFetchSequence([{ data: [signal] }, { data: [signal] }, { data: signal }])
+    const api = new KanbanApi(runtimeConfig)
+
+    await expect(
+      api.listSignals({
+        statuses: ["open", "confirmed"],
+        kinds: ["agent_cli_friction", " cli_help_gap "],
+        task: " default#123 ",
+        includeAll: false,
+        limit: 25,
+      }),
+    ).resolves.toEqual([signal])
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).pathname).toBe("/api/v1/boards/default/signals")
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.getAll("status")).toEqual(["open", "confirmed"])
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.getAll("kind")).toEqual(["agent_cli_friction", "cli_help_gap"])
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams.get("task")).toBe("default#123")
+
+    await api.reviewSignals({ statuses: ["resolved"], includeAll: true, limit: 10 })
+    expect(new URL(String(fetchMock.mock.calls[1]?.[0])).pathname).toBe("/api/v1/boards/default/signals/review")
+    expect(new URL(String(fetchMock.mock.calls[1]?.[0])).searchParams.get("include_all")).toBe("true")
+    expect(new URL(String(fetchMock.mock.calls[1]?.[0])).searchParams.getAll("status")).toEqual(["resolved"])
+
+    await api.getSignal("sig_1")
+    expect(new URL(String(fetchMock.mock.calls[2]?.[0])).pathname).toBe("/api/v1/signals/sig_1")
+  })
+
   it("does not expose Desktop helpers for canonical ontology mutations", () => {
     expect(apiSource).toContain("async createLabelOntologyAction")
     expect(apiSource).not.toMatch(
@@ -862,6 +890,40 @@ function labelOntologySignal(overrides: Partial<import("./api").LabelOntologySig
     updated_at: 1,
     reviewed_at: null,
     closed_at: null,
+    ...overrides,
+  }
+}
+
+function genericSignal(overrides: Partial<import("./api").SignalRecord> = {}): import("./api").SignalRecord {
+  return {
+    id: "sig_1",
+    board_id: "b_1",
+    observation_id: "obs_1",
+    kind: "agent_cli_friction",
+    title: "CLI friction",
+    summary: "Agent observed a CLI argument mismatch.",
+    severity: "info",
+    status: "open",
+    dedupe_key: "dedupe-cli-friction",
+    superseded_by_signal_id: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    review_reason: null,
+    created_at: 1,
+    updated_at: 2,
+    observation: {
+      id: "obs_1",
+      board_id: "b_1",
+      task_id: "t_1",
+      task_ref_snapshot: "default#123",
+      run_id: null,
+      comment_id: null,
+      actor: "codex",
+      agent_type: "codex",
+      source: "api-test",
+      evidence_json: "{}",
+      created_at: 1,
+    },
     ...overrides,
   }
 }

@@ -569,6 +569,7 @@ pub struct SignalRecordInput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SignalObservationRecord {
     pub id: String,
+    pub board_id: String,
     pub task_id: Option<String>,
     pub task_ref_snapshot: Option<String>,
     pub run_id: Option<String>,

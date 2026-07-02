@@ -1291,6 +1291,118 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
 }
 
 #[tokio::test]
+async fn generic_signal_routes_filter_and_show_board_signals() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let task = kanban_sqlite::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::CreateTask::ready("generic signal target"),
+    )?;
+    let conn = kanban_sqlite::connect_file(&db_path)?;
+    for (observation_id, signal_id, status, title, created_at) in [
+        (
+            "obs_generic_open",
+            "sig_generic_open",
+            "open",
+            "Open CLI friction",
+            100_i64,
+        ),
+        (
+            "obs_generic_confirmed",
+            "sig_generic_confirmed",
+            "confirmed",
+            "Confirmed CLI friction",
+            200_i64,
+        ),
+        (
+            "obs_generic_resolved",
+            "sig_generic_resolved",
+            "resolved",
+            "Resolved CLI friction",
+            300_i64,
+        ),
+    ] {
+        let evidence_json = format!(r#"{{"status":"{status}","command":"kanban task create"}}"#);
+        conn.execute(
+            "INSERT INTO signal_observations(id, board_id, task_id, task_ref_snapshot, actor, agent_type, source, evidence_json, created_at) \
+             VALUES (?1, ?2, ?3, ?4, 'codex', 'codex', 'api-test', ?5, ?6)",
+            (
+                observation_id,
+                task.board_id.as_str(),
+                task.id.as_str(),
+                task.task_ref.as_str(),
+                evidence_json.as_str(),
+                created_at,
+            ),
+        )?;
+        conn.execute(
+            "INSERT INTO signals(id, board_id, observation_id, kind, title, summary, severity, status, dedupe_key, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, 'agent_cli_friction', ?4, 'Signal summary', 'info', ?5, ?6, ?7, ?7)",
+            (
+                signal_id,
+                task.board_id.as_str(),
+                observation_id,
+                title,
+                status,
+                format!("dedupe-{signal_id}"),
+                created_at,
+            ),
+        )?;
+    }
+    drop(conn);
+
+    let app = test.router();
+    let (status, json) = get_json(app.clone(), "/api/v1/boards/default/signals?limit=10").await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    assert_eq!(json["meta"]["include_all"], false);
+    let signals = json["data"].as_array().context("signals")?;
+    assert_eq!(
+        signals
+            .iter()
+            .map(|signal| signal["id"].as_str().unwrap_or_default())
+            .collect::<Vec<_>>(),
+        vec!["sig_generic_confirmed", "sig_generic_open"]
+    );
+    assert_eq!(
+        signals[0]["observation"]["task_ref_snapshot"],
+        task.task_ref
+    );
+
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/signals?include_all=true&limit=10",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    assert_eq!(json["data"].as_array().context("all signals")?.len(), 3);
+
+    let (status, json) = get_json(
+        app.clone(),
+        &format!(
+            "/api/v1/boards/default/signals/review?status=resolved&kind=agent_cli_friction&task={}&limit=10",
+            task.id
+        ),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    let resolved = json["data"].as_array().context("resolved signals")?;
+    assert_eq!(resolved.len(), 1);
+    assert_eq!(resolved[0]["id"], "sig_generic_resolved");
+
+    let (status, json) = get_json(app, "/api/v1/signals/sig_generic_open").await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    assert_eq!(json["data"]["title"], "Open CLI friction");
+    assert_eq!(json["data"]["observation"]["actor"], "codex");
+    assert_eq!(
+        json["data"]["observation"]["evidence_json"],
+        r#"{"status":"open","command":"kanban task create"}"#
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn label_ontology_observation_accepts_natural_json_fields() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();

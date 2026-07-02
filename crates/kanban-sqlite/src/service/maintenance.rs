@@ -1114,13 +1114,6 @@ fn doctor_consistency_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> {
             ))
         },
     )?);
-    issues.extend(doctor_link_cycle_issues(
-        conn,
-        "SELECT id, superseded_by_signal_id FROM signals \
-         WHERE superseded_by_signal_id IS NOT NULL",
-        "signal_supersede_cycle",
-        "signal supersede cycle",
-    )?);
     Ok(issues)
 }
 

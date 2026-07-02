@@ -246,11 +246,22 @@ fn doctor_detects_generic_signal_supersede_cycle() -> anyhow::Result<()> {
 
     assert!(!report.ok);
     assert!(report.consistency_errors >= 1);
-    assert!(report.consistency_issues.iter().any(|issue| {
-        issue.code == "signal_supersede_cycle"
-            && issue.record_ids.contains(&"sig_cycle_a".to_owned())
-            && issue.record_ids.contains(&"sig_cycle_b".to_owned())
-    }));
+    let cycle_issues: Vec<_> = report
+        .consistency_issues
+        .iter()
+        .filter(|issue| issue.code == "signal_supersede_cycle")
+        .collect();
+    assert_eq!(cycle_issues.len(), 1);
+    assert!(
+        cycle_issues[0]
+            .record_ids
+            .contains(&"sig_cycle_a".to_owned())
+    );
+    assert!(
+        cycle_issues[0]
+            .record_ids
+            .contains(&"sig_cycle_b".to_owned())
+    );
     Ok(())
 }
 

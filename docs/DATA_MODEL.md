@@ -590,6 +590,15 @@ task comments、runs、events 或 label ontology ledger。
   semantics/atom/proposal review 和 mutation provenance。
 - 当前 public HTTP surface 只读取通用 signal；lifecycle 写操作仍由 CLI/runtime
   signal record 流程负责。
+- Board-scoped list/review surface 只通过 board 路由读取：
+  `/api/v1/boards/{board}/signals*`。单条详情
+  `GET /api/v1/signals/{signal_id}` 是 operator-wide detail lookup，用于从
+  backlink 或 inbox row 直接打开已知 signal；它不改变 signal 的 `board_id`
+  truth，也不把 signal 混入其它 board 的列表。
+- `signal_observations.task_id`、`run_id`、`comment_id` 是 provenance/history
+  soft refs。当前一致性由 service 写入路径、doctor 和 import final gate 维护；
+  这些 refs 允许保留历史来源语义，未来如需把全部来源关系硬化，可迁移为
+  board-composite FK。
 
 表：`signal_observations`
 
@@ -1078,13 +1087,6 @@ Label ontology ledger 使用稳定 record types：
 {"type":"label_ontology_action_signal","data":{...}}
 ```
 
-Generic signal ledger 使用稳定 record types：
-
-```json
-{"type":"signal_observation","data":{...}}
-{"type":"signal","data":{...}}
-```
-
 导入时会在同一 transaction 中先插入 rows，再运行 final consistency gate。基础关系表
 会检查 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、
 `signal_observations`、`signals`、`task_events`、`task_attachments` 的 row board 与
@@ -1113,31 +1115,3 @@ signal orphan/cross-board context、generic signal supersede cycle、parent/supe
 supersede cycle 和 action parent cycle；非零
 error 让 `ok=false`。Warning 保留给仍可解释或可重建的软引用，例如历史 action 的
 `result_atom_id` 已被当前 `label_atoms` rebuild 删除。
-
-## Signal Ledger
-
-表：`signal_observations`
-
-| 字段 | 说明 |
-|---|---|
-| `id` | `obs_...` observation id。 |
-| `board_id` | 所属 board。 |
-| `task_id` / `task_ref_snapshot` | 可选 task context 与记录时的可读 ref snapshot。 |
-| `run_id` / `comment_id` | 可选 run/comment context，必须同 board。 |
-| `actor` / `agent_type` / `source` | 记录来源。 |
-| `evidence_json` | JSON object evidence payload。 |
-| `created_at` | 记录时间。 |
-
-表：`signals`
-
-| 字段 | 说明 |
-|---|---|
-| `id` | `sig_...` signal id。 |
-| `observation_id` | 对应 observation。 |
-| `kind` / `title` / `summary` / `severity` | signal 分类与人类摘要。 |
-| `status` | `open` / `confirmed` / `rejected` / `superseded` / `resolved`。 |
-| `dedupe_key` | 可选去重键。 |
-| `superseded_by_signal_id` | supersede replacement，必须同 board 且无 cycle。 |
-| `reviewed_by` / `reviewed_at` / `review_reason` | lifecycle review 记录。 |
-
-`signal record` 在有 task context 时会在同一 SQLite transaction 写入 `kind=signal` 的 `task_comments` backlink。V1 不自动创建 follow-up task。

@@ -12,6 +12,7 @@ pub const GRAPH_STORE_NAME: &str = "graph";
 pub const VECTOR_STORE_NAME: &str = "vectors";
 pub const BLOBS_DIR_NAME: &str = "blobs";
 pub const ATTACHMENTS_DIR_NAME: &str = "attachments";
+pub const USER_CONFIG_DIR_NAME: &str = "kanban";
 
 pub const DEFAULT_VECTOR_PROVIDER: &str = "ollama";
 pub const DEFAULT_OLLAMA_ENDPOINT: &str = "http://127.0.0.1:11434";
@@ -75,11 +76,16 @@ pub fn default_config_dir() -> Option<PathBuf> {
     dirs_next::config_dir()
 }
 
+pub fn global_config_dir() -> PathBuf {
+    global_config_dir_from_root(default_config_dir().unwrap_or_else(|| PathBuf::from(".")))
+}
+
 pub fn global_config_path() -> PathBuf {
-    default_config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("kb")
-        .join("config.toml")
+    global_config_dir().join("config.toml")
+}
+
+fn global_config_dir_from_root(root: impl Into<PathBuf>) -> PathBuf {
+    root.into().join(USER_CONFIG_DIR_NAME)
 }
 
 fn state_dir_from_parts(
@@ -237,8 +243,12 @@ pub fn resolved_vector_config(
     {
         return Ok(Some(vector));
     }
-    if global_config_path().is_file() {
-        return Ok(read_project_config(&global_config_path())?.vector);
+    resolved_global_vector_config(&global_config_path())
+}
+
+fn resolved_global_vector_config(global_path: &Path) -> Result<Option<VectorConfig>, ConfigError> {
+    if global_path.is_file() {
+        return Ok(read_project_config(global_path)?.vector);
     }
     Ok(None)
 }
@@ -388,6 +398,53 @@ dimensions = "large"
 
         let log_dir = default_log_dir();
         assert!(log_dir.ends_with("kb/logs"));
+    }
+
+    #[test]
+    fn global_config_path_uses_kanban_dir() {
+        let root = PathBuf::from("/home/alice/.config");
+
+        assert_eq!(
+            global_config_dir_from_root(root.clone()),
+            PathBuf::from("/home/alice/.config/kanban")
+        );
+    }
+
+    #[test]
+    fn resolved_global_vector_config_reads_kanban_path() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let global = tempdir.path().join("kanban").join("config.toml");
+        write_vector_config_at(
+            &global,
+            VectorConfig {
+                model: "new-global".to_owned(),
+                ..VectorConfig::default()
+            },
+        )
+        .unwrap();
+
+        let config = resolved_global_vector_config(&global).unwrap().unwrap();
+
+        assert_eq!(config.model, "new-global");
+    }
+
+    #[test]
+    fn resolved_global_vector_config_ignores_legacy_kb_path() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let global = tempdir.path().join("kanban").join("config.toml");
+        let legacy = tempdir.path().join("kb").join("config.toml");
+        write_vector_config_at(
+            &legacy,
+            VectorConfig {
+                model: "legacy-global".to_owned(),
+                ..VectorConfig::default()
+            },
+        )
+        .unwrap();
+
+        let config = resolved_global_vector_config(&global).unwrap();
+
+        assert_eq!(config, None);
     }
 
     #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))]

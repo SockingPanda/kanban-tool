@@ -11,7 +11,7 @@ fn codex_hook_install_status_and_uninstall_preserve_user_hooks() -> anyhow::Resu
     let prompt_config_path = temp
         .dir
         .join(".xdg-config")
-        .join("kb")
+        .join("kanban")
         .join("codex-hooks.json");
     std::fs::create_dir_all(&codex_home)?;
     let hooks_path = codex_home.join("hooks.json");
@@ -108,6 +108,7 @@ fn codex_hook_install_status_and_uninstall_preserve_user_hooks() -> anyhow::Resu
     assert_eq!(reinstalled["data"]["managed_hook_count"], 2);
     assert_eq!(reinstalled["data"]["prompt_config_created"], false);
     assert!(prompt_config_path.exists());
+    assert!(!temp.dir.join(".xdg-config").join("kb").exists());
     let prompt_config: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&prompt_config_path)?)?;
     assert_eq!(
@@ -236,7 +237,7 @@ fn codex_hook_handle_reports_failed_kanban_command() -> anyhow::Result<()> {
 #[test]
 fn codex_hook_handle_uses_prompt_config_for_failure() -> anyhow::Result<()> {
     let temp = TempDb::new("codex_hook_handle_uses_prompt_config_for_failure")?;
-    let prompt_dir = temp.dir.join(".xdg-config").join("kb");
+    let prompt_dir = temp.dir.join(".xdg-config").join("kanban");
     std::fs::create_dir_all(&prompt_dir)?;
     std::fs::write(
         prompt_dir.join("codex-hooks.json"),
@@ -277,7 +278,7 @@ fn codex_hook_handle_uses_prompt_config_for_failure() -> anyhow::Result<()> {
 #[test]
 fn codex_hook_handle_falls_back_when_prompt_config_is_invalid() -> anyhow::Result<()> {
     let temp = TempDb::new("codex_hook_handle_falls_back_when_prompt_config_is_invalid")?;
-    let prompt_dir = temp.dir.join(".xdg-config").join("kb");
+    let prompt_dir = temp.dir.join(".xdg-config").join("kanban");
     std::fs::create_dir_all(&prompt_dir)?;
     std::fs::write(prompt_dir.join("codex-hooks.json"), "{not json")?;
     let payload = json!({
@@ -425,7 +426,7 @@ fn codex_hook_handle_advises_after_task_create() -> anyhow::Result<()> {
 #[test]
 fn codex_hook_handle_uses_prompt_config_for_task_create() -> anyhow::Result<()> {
     let temp = TempDb::new("codex_hook_handle_uses_prompt_config_for_task_create")?;
-    let prompt_dir = temp.dir.join(".xdg-config").join("kb");
+    let prompt_dir = temp.dir.join(".xdg-config").join("kanban");
     std::fs::create_dir_all(&prompt_dir)?;
     std::fs::write(
         prompt_dir.join("codex-hooks.json"),

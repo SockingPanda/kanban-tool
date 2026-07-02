@@ -234,7 +234,9 @@ fn prompt_config_path() -> Result<PathBuf> {
     let base = kanban_local::default_config_dir()
         .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
         .context("failed to resolve user config dir for kanban Codex hook prompts")?;
-    Ok(base.join("kb").join(PROMPT_CONFIG_FILE_NAME))
+    Ok(base
+        .join(kanban_local::USER_CONFIG_DIR_NAME)
+        .join(PROMPT_CONFIG_FILE_NAME))
 }
 
 fn read_prompt_config(path: &Path) -> Result<Value> {

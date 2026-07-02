@@ -47,6 +47,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: SignalCommand,
     },
+    Hook {
+        #[command(subcommand)]
+        command: HookCommand,
+    },
     Label {
         #[command(subcommand)]
         command: LabelCommand,
@@ -126,6 +130,69 @@ pub(crate) enum CompleteKind {
     Status,
     #[value(name = "comment-kind")]
     CommentKind,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum HookCommand {
+    Codex {
+        #[command(subcommand)]
+        command: CodexHookCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum CodexHookCommand {
+    Install(CodexHookInstallArgs),
+    Status(CodexHookStatusArgs),
+    Uninstall(CodexHookUninstallArgs),
+    Handle(CodexHookHandleArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct CodexHookInstallArgs {
+    #[arg(long, value_enum, default_value_t = CodexHookScope::Project)]
+    pub(crate) scope: CodexHookScope,
+    #[arg(long, default_value = "kanban hook codex handle")]
+    pub(crate) handler_command: String,
+    #[arg(long, default_value_t = 30)]
+    pub(crate) timeout: u64,
+    #[arg(long)]
+    pub(crate) record_signals: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct CodexHookStatusArgs {
+    #[arg(long, value_enum, default_value_t = CodexHookScope::Project)]
+    pub(crate) scope: CodexHookScope,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct CodexHookUninstallArgs {
+    #[arg(long, value_enum, default_value_t = CodexHookScope::Project)]
+    pub(crate) scope: CodexHookScope,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct CodexHookHandleArgs {
+    #[arg(long, hide = true)]
+    pub(crate) installed_by: Option<String>,
+    #[arg(long)]
+    pub(crate) record_signals: bool,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum CodexHookScope {
+    Project,
+    User,
+}
+
+impl CodexHookScope {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            CodexHookScope::Project => "project",
+            CodexHookScope::User => "user",
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]

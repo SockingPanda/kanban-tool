@@ -153,7 +153,11 @@ pub(crate) enum CodexHookCommand {
 
 #[derive(Debug, Args)]
 pub(crate) struct CodexHookInstallArgs {
-    #[arg(long, value_name = "command-prefix", default_value = "kanban hook codex handle")]
+    #[arg(
+        long,
+        value_name = "command-prefix",
+        default_value = "kanban hook codex handle"
+    )]
     pub(crate) handler_command: String,
     #[arg(long, default_value_t = 30)]
     pub(crate) timeout: u64,

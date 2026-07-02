@@ -12,9 +12,7 @@ use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 use crate::{
-    args::{
-        CodexHookCommand, CodexHookHandleCommand, CodexHookInstallArgs, HookCommand,
-    },
+    args::{CodexHookCommand, CodexHookHandleCommand, CodexHookInstallArgs, HookCommand},
     commands::common::active_board,
     output::print_or_json,
 };

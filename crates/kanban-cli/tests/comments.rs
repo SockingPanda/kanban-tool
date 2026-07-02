@@ -1,8 +1,9 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kanban};
+use common::{TempDb, kanban, kanban_with_stdin};
 use pretty_assertions::assert_eq;
+use std::fs;
 
 fn create_task(temp: &TempDb, title: &str) -> anyhow::Result<String> {
     let created = kanban(
@@ -523,4 +524,115 @@ fn comment_add_and_list_resolve_board_qualified_refs() -> anyhow::Result<()> {
 
 fn decision_metadata() -> String {
     r#"{"options":[{"slug":"sqlite","title":"Use SQLite","detail":"Keep the decision payload in comment metadata."},{"slug":"table","title":"Add a table","detail":"Store decisions in a separate table."}],"selected":"sqlite","reason":"Keeps decisions local to the discussion.","risk":"Schema drift would make older comments ambiguous.","verification":"CLI tests cover valid and invalid decision comments."}"#.into()
+}
+
+#[test]
+fn comment_add_body_file_preserves_shell_sensitive_text() -> anyhow::Result<()> {
+    let temp = TempDb::new("comment_add_body_file_preserves_shell_sensitive_text")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let task_id = create_task(&temp, "comment body file")?;
+    let body =
+        "`code` $VAR $(date) {\"k\":\"v\"}\nline \\\\ slash 'single' \"double\" \"nested 'quote'\"";
+    let body_path = temp.dir.join("comment-body.md");
+    fs::write(&body_path, body)?;
+
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--board",
+            "default",
+            "comment",
+            "add",
+            &task_id,
+            "--body-file",
+            body_path.to_str().context("utf-8 path")?,
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(added["data"]["body"], body);
+    Ok(())
+}
+
+#[test]
+fn comment_add_body_stdin_preserves_shell_sensitive_text() -> anyhow::Result<()> {
+    let temp = TempDb::new("comment_add_body_stdin_preserves_shell_sensitive_text")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let task_id = create_task(&temp, "comment body stdin")?;
+    let body = "stdin `code` $VAR $(date) {\"k\":\"v\"}\nline \\\\ slash 'single' \"double\"";
+
+    let added = kanban_with_stdin(
+        &temp.path,
+        &[
+            "--json",
+            "--board",
+            "default",
+            "comment",
+            "add",
+            &task_id,
+            "--body-file",
+            "-",
+        ],
+        body,
+    )?
+    .success_json()?;
+
+    assert_eq!(added["data"]["body"], body);
+    Ok(())
+}
+
+#[test]
+fn comment_add_rejects_inline_body_with_body_file() -> anyhow::Result<()> {
+    let temp = TempDb::new("comment_add_rejects_inline_body_with_body_file")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let task_id = create_task(&temp, "comment body mutually exclusive")?;
+    let body_path = temp.dir.join("comment-body.md");
+    fs::write(&body_path, "from file")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "--board",
+            "default",
+            "comment",
+            "add",
+            &task_id,
+            "inline",
+            "--body-file",
+            body_path.to_str().context("utf-8 path")?,
+        ],
+    )?
+    .failure_containing("mutually exclusive")?;
+    Ok(())
+}
+
+#[test]
+fn comment_add_metadata_json_file_preserves_shell_sensitive_json() -> anyhow::Result<()> {
+    let temp = TempDb::new("comment_add_metadata_json_file_preserves_shell_sensitive_json")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let task_id = create_task(&temp, "comment metadata file")?;
+    let metadata =
+        r#"{"source":"file","literal":"$VAR $(date)","nested":{"quote":"'single' \"double\""}}"#;
+    let metadata_path = temp.dir.join("comment-metadata.json");
+    fs::write(&metadata_path, metadata)?;
+
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--board",
+            "default",
+            "comment",
+            "add",
+            &task_id,
+            "metadata file body",
+            "--metadata-json-file",
+            metadata_path.to_str().context("utf-8 path")?,
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(added["data"]["metadata_json"], metadata);
+    Ok(())
 }

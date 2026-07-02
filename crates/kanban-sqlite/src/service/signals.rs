@@ -2,9 +2,9 @@ use crate::connect_file;
 
 use super::{
     CommentRecord, MAX_TASK_LIST_LIMIT, SignalLifecycle, SignalListOptions,
-    SignalObservationRecord, SignalRecord, SignalRecordInput, SignalRecordResult, SignalReviewInput,
-    SignalStatus, all_values, board_id, ensure_changed_one, exec, insert_event, required_row,
-    resolve_task, with_immediate_tx,
+    SignalObservationRecord, SignalRecord, SignalRecordInput, SignalRecordResult,
+    SignalReviewInput, SignalStatus, all_values, board_id, ensure_changed_one, exec, insert_event,
+    required_row, resolve_task, with_immediate_tx,
 };
 
 use std::{collections::HashSet, path::Path, str::FromStr};

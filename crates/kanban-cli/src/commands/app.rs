@@ -6,7 +6,7 @@ use kanban_sqlite::{
     CompletionCandidateKind, begin_database_runtime, completion_candidates, dispatch_once,
     init_database, list_events, list_runs,
 };
-use std::io::Write;
+use std::{ffi::OsString, io::Write};
 
 use crate::args::*;
 use crate::commands::{
@@ -32,7 +32,7 @@ use crate::commands::{
 use crate::output::print_or_json;
 
 pub(crate) fn run() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = Cli::parse_from(normalize_agent_bool_flags(std::env::args_os()));
     if let Command::Completions { shell } = &cli.command {
         generate_completions(*shell)?;
         return Ok(());
@@ -148,6 +148,53 @@ pub(crate) fn run() -> Result<()> {
         Command::Vacuum => handle_vacuum(&db_path, cli.json)?,
     }
     Ok(())
+}
+
+fn normalize_agent_bool_flags<I>(args: I) -> Vec<OsString>
+where
+    I: IntoIterator<Item = OsString>,
+{
+    let mut normalized = Vec::new();
+    let mut args = args.into_iter().peekable();
+    while let Some(arg) = args.next() {
+        if let Some(value) = arg
+            .to_str()
+            .and_then(|value| value.strip_prefix("--required="))
+        {
+            match parse_bool_literal(value) {
+                Some(true) => normalized.push(OsString::from("--required")),
+                Some(false) => normalized.push(OsString::from("--optional")),
+                None => normalized.push(arg),
+            }
+            continue;
+        }
+
+        if arg.to_str() == Some("--required")
+            && let Some(value) = args
+                .peek()
+                .and_then(|next| next.to_str())
+                .and_then(parse_bool_literal)
+        {
+            normalized.push(OsString::from(if value {
+                "--required"
+            } else {
+                "--optional"
+            }));
+            let _ = args.next();
+            continue;
+        }
+
+        normalized.push(arg);
+    }
+    normalized
+}
+
+fn parse_bool_literal(value: &str) -> Option<bool> {
+    match value {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
+    }
 }
 
 fn cli_locale(flag: Option<&str>) -> Result<Locale> {

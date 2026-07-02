@@ -524,7 +524,12 @@ Step 是 execution plan 的一等结构化项目。它可以是纯文本步骤�
 `skipped`。
 
 `step_ref` 支持 step id，也支持父任务列表里的 `S<n>` 序号。`add` 默认创建
-required step；`--required` / `--optional` 互斥。`update` 只有在显式传
+required step；`--required` / `--optional` 互斥。Canonical human form is the bare
+flag form, but the CLI also accepts bounded agent-generated values for this
+specific flag: `--required true`, `--required=false`, and the matching
+`--required=true` / `--required false` forms. Only literal `true` / `false` are
+consumed as boolean values; ordinary positional text after `--required` remains
+positional, and any other extra value remains a parser error. `update` 只有在显式传
 `--required` 或 `--optional` 时才改变 required flag。`done`、`skip` 和 `reopen`
 必须记录说明文本。
 
@@ -1278,6 +1283,29 @@ object. For `--kind decision`, it is required to satisfy the structured
 decision schema: non-empty `options`, unique lowercase ASCII option `slug`
 values, `selected` matching one slug, non-empty `reason`, and optional
 non-empty `risk` / `verification`.
+
+Agent command failure traces should be recorded as comments instead of being
+left only in chat transcripts. Use `comment add --author-type agent --agent-type
+<name> --kind note --metadata-json <json>` with the human-readable body as a
+short summary and the structured trace in metadata. The minimum trace payload is
+an object with these fields:
+
+```json
+{
+  "tool": "kanban-cli",
+  "command": "kanban task step add",
+  "argv": ["kanban", "task", "step", "add", "..."],
+  "intent": "add a required execution-plan step",
+  "why_selected": "agent selected the step command because the task needed execution-plan tracking",
+  "actual_error": "unexpected argument 'true' found",
+  "repair": "retry with canonical bare --required or supported --required true/false form",
+  "product_signal": "agent-facing boolean flag compatibility gap",
+  "followup_task": "kanban-tool#366"
+}
+```
+
+Callers may add extra fields, but these names are the stable minimum contract for
+tooling that mines failed agent commands into parser, docs, skill, or test work.
 
 Use `--kind decision` for meaningful multi-option choices. Body remains the
 human-readable fallback summary, while structured options and selection data

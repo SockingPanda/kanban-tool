@@ -91,45 +91,57 @@ create the SQLite database.
 ### 1.3 Codex hooks
 
 ```bash
-kanban hook codex install [--scope project|user] [--handler-command <command>] [--timeout 30] [--record-signals] [--json]
-kanban hook codex status [--scope project|user] [--json]
-kanban hook codex uninstall [--scope project|user] [--json]
-kanban hook codex handle [--record-signals]
+kanban hook codex install [--handler-command <command-prefix>] [--timeout 30] [--record-signals] [--json]
+kanban hook codex status [--json]
+kanban hook codex uninstall [--json]
+kanban hook codex handle failure [--record-signals]
+kanban hook codex handle task-create
 ```
 
 `kanban hook codex` manages a Codex lifecycle hook for kanban-aware agent
-feedback. The default `project` scope writes `<project-root>/.codex/hooks.json`,
-where `<project-root>` is the nearest ancestor containing `.git`, or the current
-directory when no git root is found. The `user` scope writes
+feedback. Hooks are installed at the Codex user config path:
 `$CODEX_HOME/hooks.json`, or `~/.codex/hooks.json` when `CODEX_HOME` is not set.
+There is no project-scope install mode, because kanban is intended to provide
+the same CLI-aware behavior across workspaces.
 
-`install` adds one managed `PostToolUse` hook group with matcher `^Bash$`. The
-managed command defaults to `kanban hook codex handle` and is stored with the
-hidden marker `--installed-by kanban-hook-codex`; `uninstall` removes only hooks
-with that marker and preserves unrelated user hooks. Re-running `install` is
-idempotent: it replaces the previous managed hook before writing the new one.
+`install` adds two managed `PostToolUse` command hooks under matcher `^Bash$`:
+one for failed `kanban ...` command traces and one for successful
+`kanban task create ...` follow-up advice. The managed command prefix defaults
+to `kanban hook codex handle`; the installed commands are:
 
-`handle` is the internal hook command. It reads Codex hook JSON from stdin and
-emits either no output or a raw Codex hook response object such as:
+```bash
+kanban hook codex handle failure --installed-by kanban-hook-codex [--record-signals]
+kanban hook codex handle task-create --installed-by kanban-hook-codex
+```
+
+`uninstall` removes only hooks with the hidden marker
+`--installed-by kanban-hook-codex` and preserves unrelated user hooks. Re-running
+`install` is idempotent: it replaces the previous managed hooks before writing
+the new ones.
+
+`handle failure` and `handle task-create` are internal hook commands. They read
+Codex hook JSON from stdin and emit either no output or a raw Codex hook
+response object such as:
 
 ```json
 {"systemMessage":"kanban CLI command failed (exit 2): `kanban task list --bad-flag`."}
 ```
 
-`handle` deliberately does not use the normal `{ "data": ... }` JSON envelope,
-because Codex consumes hook stdout directly. The public management commands
-`install`, `status`, and `uninstall` do use the normal `--json` envelope.
+The `handle` subcommands deliberately do not use the normal `{ "data": ... }`
+JSON envelope, because Codex consumes hook stdout directly. The public
+management commands `install`, `status`, and `uninstall` do use the normal
+`--json` envelope.
 
 V1 behavior:
 
 - non-`Bash` tools and Bash commands that do not invoke `kanban` are no-op;
-- failed `kanban ...` commands produce a bounded `systemMessage` with the command
-  and short stderr/stdout excerpt;
-- failed commands with `--record-signals` also record a generic signal with
+- `handle failure` only reports failed `kanban ...` commands with a bounded
+  `systemMessage` containing the command and short stderr/stdout excerpt;
+- `handle failure --record-signals` also records a generic signal with
   `kind="agent_cli_failure"`, `source="kanban-hook-codex"`, and bounded command
   evidence;
-- successful `kanban task create ...` commands produce a label/signal follow-up
-  advisory;
+- `handle task-create` only reports successful `kanban task create ...` commands
+  with a label/signal follow-up advisory;
 - the hook never silently starts a Codex native subagent and never writes label
   ontology automatically. It only injects advice; the active Codex session must
   decide whether to spawn a native agent or record ontology observations.

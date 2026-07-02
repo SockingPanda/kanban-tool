@@ -154,6 +154,8 @@ pub(crate) const BOARD_SCOPED_EXPORT_TABLES: &[(&str, &str)] = &[
     ("signal", "signals"),
     ("event", "task_events"),
     ("attachment", "task_attachments"),
+    ("signal_observation", "signal_observations"),
+    ("signal", "signals"),
     ("label", "labels"),
     ("label_semantics", "label_semantics"),
     ("label_atom", "label_atoms"),
@@ -468,6 +470,8 @@ pub(crate) fn database_has_user_records(conn: &Connection) -> Result<bool> {
         "task_comments",
         "task_events",
         "task_attachments",
+        "signal_observations",
+        "signals",
         "labels",
         "label_semantics",
         "label_atoms",
@@ -494,6 +498,7 @@ pub(crate) fn database_has_user_records(conn: &Connection) -> Result<bool> {
 
 #[derive(Debug, Default)]
 pub(crate) struct DeferredOntologyLinks {
+    generic_signal_supersedes: Vec<(String, String)>,
     signal_supersedes: Vec<(String, String)>,
     action_parents: Vec<(String, String)>,
 }
@@ -548,6 +553,14 @@ fn capture_deferred_ontology_links(
     deferred_ontology_links: &mut DeferredOntologyLinks,
 ) -> Result<()> {
     match record_type {
+        "signal" => {
+            if let Some(target) = take_optional_string_field(data, "superseded_by_signal_id")? {
+                let id = required_import_id(data, "signal")?;
+                deferred_ontology_links
+                    .generic_signal_supersedes
+                    .push((id, target));
+            }
+        }
         "label_ontology_signal" => {
             if let Some(target) = take_optional_string_field(data, "superseded_by_signal_id")? {
                 let id = required_import_id(data, "label ontology signal")?;
@@ -600,6 +613,14 @@ fn restore_deferred_ontology_links(
     conn: &Connection,
     deferred_ontology_links: &DeferredOntologyLinks,
 ) -> Result<()> {
+    for (signal_id, replacement_id) in &deferred_ontology_links.generic_signal_supersedes {
+        validate_generic_signal_supersede_link(conn, signal_id, replacement_id)?;
+        conn.execute(
+            "UPDATE signals SET superseded_by_signal_id=?1 WHERE id=?2",
+            params![replacement_id, signal_id],
+        )
+        .map_err(storage)?;
+    }
     for (signal_id, replacement_id) in &deferred_ontology_links.signal_supersedes {
         validate_signal_supersede_link(conn, signal_id, replacement_id)?;
         conn.execute(
@@ -615,6 +636,38 @@ fn restore_deferred_ontology_links(
             params![parent_action_id, action_id],
         )
         .map_err(storage)?;
+    }
+    Ok(())
+}
+
+fn validate_generic_signal_supersede_link(
+    conn: &Connection,
+    signal_id: &str,
+    replacement_id: &str,
+) -> Result<()> {
+    if signal_id == replacement_id {
+        return Err(KanbanError::InvalidInput(
+            "signal supersede self-reference".into(),
+        ));
+    }
+    let boards = conn
+        .query_row(
+            "SELECT s.board_id, r.board_id \
+             FROM signals s \
+             JOIN signals r ON r.id=?2 \
+             WHERE s.id=?1",
+            params![signal_id, replacement_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(storage)?
+        .ok_or_else(|| {
+            KanbanError::InvalidInput("signal supersede link references missing signal".into())
+        })?;
+    if boards.0 != boards.1 {
+        return Err(KanbanError::InvalidInput(
+            "signal supersede board mismatch".into(),
+        ));
     }
     Ok(())
 }
@@ -900,6 +953,8 @@ pub(crate) fn import_table_for_type(record_type: &str) -> Result<&'static str> {
         "label_semantics" => Ok("label_semantics"),
         "label_atom" => Ok("label_atoms"),
         "label_semantic_proposal" => Ok("label_semantic_proposals"),
+        "signal_observation" => Ok("signal_observations"),
+        "signal" => Ok("signals"),
         "label_ontology_observation" => Ok("label_ontology_observations"),
         "label_ontology_signal" => Ok("label_ontology_signals"),
         "label_ontology_action" => Ok("label_ontology_actions"),

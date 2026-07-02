@@ -154,8 +154,8 @@ fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() -> anyhow::Resu
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(24));
-        assert_eq!(report.user_version, 24);
+        assert_eq!(report.migration_version, Some(25));
+        assert_eq!(report.user_version, 25);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())
@@ -172,8 +172,8 @@ fn doctor_reports_missing_signal_ledger_tables_unhealthy() -> anyhow::Result<()>
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(24));
-        assert_eq!(report.user_version, 24);
+        assert_eq!(report.migration_version, Some(25));
+        assert_eq!(report.user_version, 25);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
         assert_eq!(report.consistency_errors, 1);
         assert!(report.consistency_issues.iter().any(|issue| {
@@ -201,8 +201,8 @@ fn doctor_ontology_reports_missing_v12_tables_unhealthy() -> anyhow::Result<()> 
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(24));
-        assert_eq!(report.user_version, 24);
+        assert_eq!(report.migration_version, Some(25));
+        assert_eq!(report.user_version, 25);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
         assert_eq!(report.ontology_ledger_errors, 1);
         assert!(report.ontology_ledger_issues.iter().any(|issue| {
@@ -417,6 +417,23 @@ fn sqlite_rejects_cross_board_foundation_relationship_rows() -> anyhow::Result<(
             "FOREIGN KEY constraint failed",
         ),
         (
+            "signals_update_observation",
+            conn.execute(
+                "UPDATE signals SET board_id=?1 WHERE id='sig_cross_board'",
+                [&fixture.other_board_id],
+            ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
+            "signals_insert_observation",
+            conn.execute(
+                "INSERT INTO signals(id, board_id, observation_id, kind, title, summary, severity, status, created_at, updated_at) \
+                 VALUES ('sig_cross_board_insert', ?1, 'obs_cross_board_a', 'agent_cli_friction', 'bad signal', 'bad signal', 'info', 'open', 1, 1)",
+                [&fixture.other_board_id],
+            ),
+            "FOREIGN KEY constraint failed",
+        ),
+        (
             "task_events_update_task",
             conn.execute(
                 "UPDATE task_events SET board_id=?1 WHERE event_id='e_cross_board'",
@@ -511,15 +528,25 @@ fn doctor_detects_cross_board_history_relationship_rows() -> anyhow::Result<()> 
         "UPDATE task_attachments SET board_id=?1 WHERE id='a_cross_board'",
         [&fixture.other_board_id],
     )?;
+    conn.execute(
+        "UPDATE signal_observations SET board_id=?1 WHERE id='obs_cross_board_a'",
+        [&fixture.other_board_id],
+    )?;
+    conn.execute(
+        "UPDATE signals SET board_id=?1 WHERE id='sig_cross_board_replacement'",
+        [&fixture.other_board_id],
+    )?;
 
     let report = doctor_database(&temp.path)?;
 
     assert!(!report.ok);
-    assert!(report.consistency_errors >= 3);
+    assert!(report.consistency_errors >= 5);
     for code in [
         "task_comment_task_board_mismatch",
         "task_event_task_board_mismatch",
         "task_attachment_task_board_mismatch",
+        "signal_observation_task_board_mismatch",
+        "signal_observation_board_mismatch",
     ] {
         assert!(
             report
@@ -732,6 +759,17 @@ fn jsonl_import_accepts_legal_foundation_relationship_round_trip() -> anyhow::Re
     assert_eq!(table_count(&conn, "task_comments")?, 1);
     assert_eq!(table_count(&conn, "task_labels")?, 1);
     assert_eq!(table_count(&conn, "task_attachments")?, 1);
+    assert_eq!(table_count(&conn, "signal_observations")?, 2);
+    assert_eq!(table_count(&conn, "signals")?, 2);
+    let superseded_by: Option<String> = conn.query_row(
+        "SELECT superseded_by_signal_id FROM signals WHERE id='sig_cross_board'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        superseded_by.as_deref(),
+        Some("sig_cross_board_replacement")
+    );
     Ok(())
 }
 
@@ -783,6 +821,14 @@ const FOUNDATION_RELATIONSHIP_IMPORT_CASES: &[FoundationRelationshipImportCase] 
         record_type: "attachment",
         rejection: FoundationRelationshipImportRejection::Doctor("task_attachments"),
     },
+    FoundationRelationshipImportCase {
+        record_type: "signal_observation",
+        rejection: FoundationRelationshipImportRejection::Doctor("signal_observations"),
+    },
+    FoundationRelationshipImportCase {
+        record_type: "signal",
+        rejection: FoundationRelationshipImportRejection::Doctor("signals"),
+    },
 ];
 
 fn seed_foundation_relationship_fixture(
@@ -825,7 +871,7 @@ fn seed_foundation_relationship_fixture(
         },
     )?;
     add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
-    create_comment(&temp.path, &task.id, "tester", "relationship note", None)?;
+    let comment = create_comment(&temp.path, &task.id, "tester", "relationship note", None)?;
 
     let conn = connect_file(&temp.path)?;
     conn.execute(
@@ -846,6 +892,26 @@ fn seed_foundation_relationship_fixture(
         "INSERT INTO task_attachments(id, board_id, task_id, filename, rel_path, size_bytes, created_by, created_at) \
          VALUES ('a_cross_board', ?1, ?2, 'artifact.txt', 'attachments/artifact.txt', 0, 'tester', 1)",
         params![task.board_id, task.id],
+    )?;
+    conn.execute(
+        "INSERT INTO signal_observations(id, board_id, task_id, task_ref_snapshot, run_id, comment_id, actor, agent_type, source, evidence_json, created_at) \
+         VALUES ('obs_cross_board_a', ?1, ?2, ?3, 'r_cross_board', ?4, 'tester', 'codex', 'test', '{}', 1)",
+        params![task.board_id, task.id, task.task_ref, comment.id],
+    )?;
+    conn.execute(
+        "INSERT INTO signal_observations(id, board_id, task_id, task_ref_snapshot, run_id, comment_id, actor, agent_type, source, evidence_json, created_at) \
+         VALUES ('obs_cross_board_b', ?1, ?2, ?3, 'r_cross_board', ?4, 'tester', 'codex', 'test', '{}', 2)",
+        params![task.board_id, task.id, task.task_ref, comment.id],
+    )?;
+    conn.execute(
+        "INSERT INTO signals(id, board_id, observation_id, kind, title, summary, severity, status, created_at, updated_at) \
+         VALUES ('sig_cross_board_replacement', ?1, 'obs_cross_board_b', 'agent_cli_friction', 'replacement signal', 'replacement signal', 'info', 'open', 2, 2)",
+        [&task.board_id],
+    )?;
+    conn.execute(
+        "INSERT INTO signals(id, board_id, observation_id, kind, title, summary, severity, status, superseded_by_signal_id, created_at, updated_at) \
+         VALUES ('sig_cross_board', ?1, 'obs_cross_board_a', 'agent_cli_friction', 'cross board signal', 'cross board signal', 'info', 'superseded', 'sig_cross_board_replacement', 1, 2)",
+        [&task.board_id],
     )?;
 
     Ok(FoundationRelationshipFixture {
@@ -868,6 +934,8 @@ fn foundation_relationship_table_counts(path: &Path) -> anyhow::Result<Vec<(&'st
         "task_comments",
         "task_events",
         "task_attachments",
+        "signal_observations",
+        "signals",
         "labels",
         "task_labels",
     ]

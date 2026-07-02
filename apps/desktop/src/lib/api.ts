@@ -129,6 +129,41 @@ export type LabelOntologySignalKind =
 
 export type LabelOntologySignalStatus = "open" | "confirmed" | "resolved" | "rejected" | "superseded"
 
+export type SignalStatus = "open" | "confirmed" | "resolved" | "rejected" | "superseded"
+
+export type SignalObservationRecord = {
+  id: string
+  board_id: string
+  task_id: string | null
+  task_ref_snapshot: string | null
+  run_id: string | null
+  comment_id: string | null
+  actor: string
+  agent_type: string | null
+  source: string | null
+  evidence_json: string
+  created_at: number
+}
+
+export type SignalRecord = {
+  id: string
+  board_id: string
+  observation_id: string
+  kind: string
+  title: string
+  summary: string
+  severity: string
+  status: SignalStatus
+  dedupe_key: string | null
+  superseded_by_signal_id: string | null
+  reviewed_by: string | null
+  reviewed_at: number | null
+  review_reason: string | null
+  created_at: number
+  updated_at: number
+  observation: SignalObservationRecord
+}
+
 export type LabelOntologyProposedAction =
   | "observe"
   | "add_positive_atom"
@@ -1138,6 +1173,28 @@ export class KanbanApi {
     })
   }
 
+  async listSignals(options: SignalListOptions = {}) {
+    const params = signalSearchParams(options)
+    const signals = await this.request<SignalRecord[]>(
+      `/api/v1/boards/${this.board}/signals?${params.toString()}`,
+      { signal: options.signal },
+    )
+    return expectArray<SignalRecord>(signals, "signals response data")
+  }
+
+  async reviewSignals(options: SignalListOptions = {}) {
+    const params = signalSearchParams(options)
+    const signals = await this.request<SignalRecord[]>(
+      `/api/v1/boards/${this.board}/signals/review?${params.toString()}`,
+      { signal: options.signal },
+    )
+    return expectArray<SignalRecord>(signals, "signal review response data")
+  }
+
+  async getSignal(signalId: string, options: RequestOptions = {}) {
+    return this.request<SignalRecord>(`/api/v1/signals/${encodeURIComponent(signalId)}`, options)
+  }
+
   async listLabelOntologySignals(options: LabelOntologySignalListOptions = {}) {
     const params = new URLSearchParams({
       include_all: String(options.includeAll ?? false),
@@ -1325,6 +1382,15 @@ type SearchTaskOptions = TaskListOptions & {
   query: string
 }
 
+type SignalListOptions = {
+  statuses?: SignalStatus[]
+  kinds?: string[]
+  task?: string
+  includeAll?: boolean
+  limit?: number
+  signal?: AbortSignal
+}
+
 type LabelOntologySignalListOptions = {
   statuses?: LabelOntologySignalStatus[]
   kinds?: LabelOntologySignalKind[]
@@ -1351,6 +1417,19 @@ type LabelOntologyActionCreateInput = {
 }
 
 type PageEnvelopeMeta = Partial<PageMeta>
+
+function signalSearchParams(options: SignalListOptions) {
+  const params = new URLSearchParams({
+    include_all: String(options.includeAll ?? false),
+    limit: String(options.limit ?? 100),
+  })
+  for (const status of options.statuses ?? []) params.append("status", status)
+  for (const kind of options.kinds ?? []) {
+    if (kind.trim()) params.append("kind", kind.trim())
+  }
+  if (options.task?.trim()) params.set("task", options.task.trim())
+  return params
+}
 
 function parseJsonEnvelope<T, M>(text: string): ApiEnvelope<T, M> | ErrorEnvelope | null {
   if (!text) return null

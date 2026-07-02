@@ -53,7 +53,9 @@ const TASK_SUBTASKS_EXECUTION_PLANS_MIGRATION: &str =
     include_str!("../../../migrations/022_task_subtasks_execution_plans.sql");
 const TASK_STEPS_MIGRATION: &str = include_str!("../../../migrations/023_task_steps.sql");
 const SIGNAL_LEDGER_MIGRATION: &str = include_str!("../../../migrations/024_signal_ledger.sql");
-const LATEST_MIGRATION_VERSION: i64 = 24;
+const GENERIC_SIGNAL_LEDGER_MIGRATION: &str =
+    include_str!("../../../migrations/025_generic_signal_ledger.sql");
+const LATEST_MIGRATION_VERSION: i64 = 25;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &[
     "fnv64:0ca871be950fc8a6",
     "fnv64:3b08da4e2b6041f5",
@@ -188,6 +190,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "024_signal_ledger",
         sql: SIGNAL_LEDGER_MIGRATION,
     },
+    Migration {
+        version: 25,
+        name: "025_generic_signal_ledger",
+        sql: GENERIC_SIGNAL_LEDGER_MIGRATION,
+    },
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -290,6 +297,9 @@ fn run_migration_preflight(conn: &Connection, migration: &Migration) -> Result<(
     }
     if migration.version == 21 {
         ensure_no_cross_board_rows_for_ontology_links_migration(conn)?;
+    }
+    if migration.version == 25 {
+        ensure_no_cross_board_rows_for_signal_ledger_migration(conn)?;
     }
     Ok(())
 }
@@ -467,6 +477,35 @@ fn ensure_no_cross_board_rows_for_ontology_links_migration(conn: &Connection) ->
         if let Some(mismatch) = first_board_isolation_mismatch(conn, &check)? {
             return Err(KanbanError::Storage(format!(
                 "cannot apply migration 021_board_isolation_ontology_links: {} cross-board or orphan row {} has row board {}, referenced boards {}; run kanban doctor and repair before migrating",
+                check.table, mismatch.row_key, mismatch.row_board, mismatch.referenced_boards
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn ensure_no_cross_board_rows_for_signal_ledger_migration(conn: &Connection) -> Result<()> {
+    for check in [
+        BoardIsolationPreflight {
+            table: "signals",
+            sql: "SELECT s.id, s.board_id, COALESCE(o.board_id, 'missing observation ' || s.observation_id), NULL \
+                  FROM signals s \
+                  LEFT JOIN signal_observations o ON o.id = s.observation_id \
+                  WHERE o.id IS NULL OR s.board_id != o.board_id \
+                  LIMIT 1",
+        },
+        BoardIsolationPreflight {
+            table: "signals",
+            sql: "SELECT s.id, s.board_id, COALESCE(r.board_id, 'missing superseding signal ' || s.superseded_by_signal_id), NULL \
+                  FROM signals s \
+                  LEFT JOIN signals r ON r.id = s.superseded_by_signal_id \
+                  WHERE s.superseded_by_signal_id IS NOT NULL AND (r.id IS NULL OR s.board_id != r.board_id) \
+                  LIMIT 1",
+        },
+    ] {
+        if let Some(mismatch) = first_board_isolation_mismatch(conn, &check)? {
+            return Err(KanbanError::Storage(format!(
+                "cannot apply migration 025_generic_signal_ledger: {} cross-board or orphan row {} has row board {}, referenced boards {}; run kanban doctor and repair before migrating",
                 check.table, mismatch.row_key, mismatch.row_board, mismatch.referenced_boards
             )));
         }

@@ -105,7 +105,7 @@ Response：
   "data": {
     "ok": true,
     "db": "ok",
-    "version": "1.5.3",
+    "version": "1.6.0",
     "db_path": "/home/alice/.local/share/kb/kb.db",
     "db_fingerprint": "sqlite:131072:1717520000000"
   }
@@ -1637,6 +1637,14 @@ GET /api/v1/signals/{signal_id}
 `review` endpoint 是 Desktop / operator console 的语义化入口。默认只返回 `open`
 和 `confirmed`。可重复传 `status` 和 `kind`，并按 `task` 或 `task_ref` 过滤。
 `include_all=true` 且没有显式 `status` 时返回完整历史；`limit` 使用普通列表上限。
+这些 list/review routes 是 board-scoped surface；只返回该 board 的 signal rows。
+`GET /api/v1/signals/{signal_id}` 是 operator-wide detail lookup，用于从 backlink、
+inbox row 或审计记录直接打开已知 signal。该 detail route 不改变 signal 的
+`board_id` truth，也不让 board-scoped list/review 泄漏其它 board 的 signal。
+
+`signal_observations.task_id`、`run_id` 和 `comment_id` 是 provenance/history soft refs。
+当前 service 写入路径、doctor 和 import final gate 维护这些 refs 与 observation board
+的一致性；未来若需要把所有来源关系硬化，可迁移为 board-composite FK。
 
 响应：
 

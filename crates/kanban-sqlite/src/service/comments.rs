@@ -57,7 +57,7 @@ pub fn create_comment_with_options(
             return Err(KanbanError::InvalidInput("comment body is required".into()));
         }
         let kind = input.kind.as_deref().unwrap_or("note").trim();
-        if !matches!(kind, "note" | "decision") {
+        if !matches!(kind, "note" | "decision" | "signal") {
             return Err(KanbanError::InvalidInput("invalid comment kind".into()));
         }
         let author_type = normalize_comment_author_type(input.author_type.as_deref(), kind)?;

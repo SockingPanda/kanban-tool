@@ -52,7 +52,8 @@ const BOARD_ISOLATION_ONTOLOGY_LINKS_MIGRATION: &str =
 const TASK_SUBTASKS_EXECUTION_PLANS_MIGRATION: &str =
     include_str!("../../../migrations/022_task_subtasks_execution_plans.sql");
 const TASK_STEPS_MIGRATION: &str = include_str!("../../../migrations/023_task_steps.sql");
-const LATEST_MIGRATION_VERSION: i64 = 23;
+const SIGNAL_LEDGER_MIGRATION: &str = include_str!("../../../migrations/024_signal_ledger.sql");
+const LATEST_MIGRATION_VERSION: i64 = 24;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &[
     "fnv64:0ca871be950fc8a6",
     "fnv64:3b08da4e2b6041f5",
@@ -181,6 +182,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 23,
         name: "023_task_steps",
         sql: TASK_STEPS_MIGRATION,
+    },
+    Migration {
+        version: 24,
+        name: "024_signal_ledger",
+        sql: SIGNAL_LEDGER_MIGRATION,
     },
 ];
 
@@ -602,6 +608,25 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
                 "kind",
                 "metadata_json",
                 "created_at",
+            ][..],
+        ),
+        (
+            "signal_observations",
+            &["id", "board_id", "actor", "evidence_json", "created_at"][..],
+        ),
+        (
+            "signals",
+            &[
+                "id",
+                "board_id",
+                "observation_id",
+                "kind",
+                "title",
+                "summary",
+                "severity",
+                "status",
+                "created_at",
+                "updated_at",
             ][..],
         ),
         (

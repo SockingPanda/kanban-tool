@@ -43,6 +43,10 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: CommentCommand,
     },
+    Signal {
+        #[command(subcommand)]
+        command: SignalCommand,
+    },
     Label {
         #[command(subcommand)]
         command: LabelCommand,
@@ -281,6 +285,68 @@ pub(crate) enum BoardCommand {
 pub(crate) enum CommentCommand {
     Add(CommentAddArgs),
     List { task_ref: String },
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum SignalCommand {
+    Record(SignalRecordArgs),
+    List(SignalListArgs),
+    Show { signal_id: String },
+    Review(SignalReviewListArgs),
+    Confirm(SignalLifecycleArgs),
+    Reject(SignalLifecycleArgs),
+    Resolve(SignalLifecycleArgs),
+    Supersede(SignalSupersedeArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct SignalRecordArgs {
+    #[arg(long)]
+    pub(crate) input: String,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct SignalListArgs {
+    #[arg(long)]
+    pub(crate) status: Vec<String>,
+    #[arg(long)]
+    pub(crate) kind: Vec<String>,
+    #[arg(long)]
+    pub(crate) task: Option<String>,
+    #[arg(long)]
+    pub(crate) include_all: bool,
+    #[arg(long, default_value_t = 100)]
+    pub(crate) limit: usize,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct SignalReviewListArgs {
+    #[arg(long)]
+    pub(crate) status: Vec<String>,
+    #[arg(long)]
+    pub(crate) kind: Vec<String>,
+    #[arg(long)]
+    pub(crate) task: Option<String>,
+    #[arg(long, default_value_t = 100)]
+    pub(crate) limit: usize,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct SignalLifecycleArgs {
+    #[arg(required = true)]
+    pub(crate) signal_ids: Vec<String>,
+    #[arg(long)]
+    pub(crate) reason: String,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct SignalSupersedeArgs {
+    #[arg(required = true)]
+    pub(crate) signal_ids: Vec<String>,
+    #[arg(long)]
+    pub(crate) by: String,
+    #[arg(long)]
+    pub(crate) reason: String,
 }
 
 #[derive(Debug, Subcommand)]

@@ -453,8 +453,8 @@ run.finished
 | `author_type` | `user` / `agent`，表示评论作者身份；本地操作者是 `user`，其它自动化来源是 `agent`。 |
 | `agent_type` | 可选 open text，仅用于 `author_type=agent`，例如 `executor` / `reviewer`。 |
 | `body` | Markdown 文本。 |
-| `kind` | `note` / `decision`，表示 comment 内容语义，不表示作者身份。 |
-| `metadata_json` | `kind` 对应的结构化 payload；默认 `{}`，必须是合法 JSON object。`kind=decision` 时必须符合 decision schema。 |
+| `kind` | `note` / `decision` / `signal`，表示 comment 内容语义，不表示作者身份。`signal` 是 signal ledger backlink。 |
+| `metadata_json` | `kind` 对应的结构化 payload；默认 `{}`，必须是合法 JSON object。`kind=decision` 时必须符合 decision schema。`kind=signal` backlink metadata 包含 `type:"signal_link"`、`signal_id`、`observation_id`、`signal_kind`、`signal_status`。 |
 | `created_at` | 创建时间。 |
 
 旧 comment rows / JSONL import 会迁移到新语义：旧 `human` 变为 `user`，旧 `agent/system` 或 `worker/system` 来源变为 `agent`，旧 `text/system/worker` 内容变为 `note`。没有结构化 metadata 的旧 `decision` 也按 `note` 保留 body fallback。
@@ -1019,6 +1019,13 @@ Label ontology ledger 使用稳定 record types：
 {"type":"label_ontology_action_signal","data":{...}}
 ```
 
+Generic signal ledger 使用稳定 record types：
+
+```json
+{"type":"signal_observation","data":{...}}
+{"type":"signal","data":{...}}
+```
+
 导入时会在同一 transaction 中先插入 rows，再运行 final consistency gate。基础关系表
 会检查 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、
 `task_events`、`task_attachments` 的 row board 与 referenced task / label / run board
@@ -1031,15 +1038,44 @@ parent board、action-signal link board、label/proposal soft reference board �
 orphan action-signal links、supersede cycles 和 action parent cycles 会导致 import
 失败。
 
-`kanban doctor --json` 对上述基础关系表、SQLite `PRAGMA foreign_key_check` 和 ontology
-ledger consistency 规则做只读巡检。
+`kanban doctor --json` 对上述基础关系表、SQLite `PRAGMA foreign_key_check`、ontology
+ledger consistency 和 generic signal ledger board consistency 规则做只读巡检。
 基础关系表问题返回 `consistency_errors`、`consistency_warnings`、
 `consistency_issues[]`；ontology ledger 问题返回 `ontology_ledger_errors`、
 `ontology_ledger_warnings`、`ontology_ledger_issues[]`。Issue 包含 `severity`、
 `code`、`message`、`record_ids`，用于定位损坏 row；基础关系表 message 包含
 `table`、`row`、`row_board` 和 `referenced_board`，foreign-key issue 会记录 table、
 rowid、parent table 和 FK index。Hard error 覆盖 row board mismatch、
-missing v12 ontology table、跨 board link、orphan action-signal/action-effect link、parent/supersede
-异常、label/proposal/task board mismatch、supersede cycle 和 action parent cycle；非零
+missing v12 ontology table、跨 board link、orphan action-signal/action-effect link、generic
+signal orphan/cross-board context、generic signal supersede cycle、parent/supersede 异常、label/proposal/task board mismatch、
+supersede cycle 和 action parent cycle；非零
 error 让 `ok=false`。Warning 保留给仍可解释或可重建的软引用，例如历史 action 的
 `result_atom_id` 已被当前 `label_atoms` rebuild 删除。
+
+## Signal Ledger
+
+表：`signal_observations`
+
+| 字段 | 说明 |
+|---|---|
+| `id` | `obs_...` observation id。 |
+| `board_id` | 所属 board。 |
+| `task_id` / `task_ref_snapshot` | 可选 task context 与记录时的可读 ref snapshot。 |
+| `run_id` / `comment_id` | 可选 run/comment context，必须同 board。 |
+| `actor` / `agent_type` / `source` | 记录来源。 |
+| `evidence_json` | JSON object evidence payload。 |
+| `created_at` | 记录时间。 |
+
+表：`signals`
+
+| 字段 | 说明 |
+|---|---|
+| `id` | `sig_...` signal id。 |
+| `observation_id` | 对应 observation。 |
+| `kind` / `title` / `summary` / `severity` | signal 分类与人类摘要。 |
+| `status` | `open` / `confirmed` / `rejected` / `superseded` / `resolved`。 |
+| `dedupe_key` | 可选去重键。 |
+| `superseded_by_signal_id` | supersede replacement，必须同 board 且无 cycle。 |
+| `reviewed_by` / `reviewed_at` / `review_reason` | lifecycle review 记录。 |
+
+`signal record` 在有 task context 时会在同一 SQLite transaction 写入 `kind=signal` 的 `task_comments` backlink。V1 不自动创建 follow-up task。

@@ -28,7 +28,10 @@ pub(crate) struct Cli {
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
     Init {
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Deprecated compatibility no-op; init is already idempotent and never resets data"
+        )]
         force: bool,
     },
     Board {

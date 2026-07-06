@@ -8,17 +8,23 @@ use kanban_sqlite::FinishPolicy;
 #[command(
     name = "kanban",
     version,
-    about = "Local SQLite-backed Kanban work queue"
+    about = "Local SQLite-backed Kanban work queue",
+    after_help = "Examples:\n  kanban init\n  kanban task create \"Write spec\" --description-file -\n  kanban task list --status ready --json\n  kanban comment add default#1 --body-file - --kind note"
 )]
 pub(crate) struct Cli {
+    /// Use a specific SQLite database path.
     #[arg(long, global = true)]
     pub(crate) db: Option<PathBuf>,
+    /// Select the active board by slug or id for this command.
     #[arg(long, global = true)]
     pub(crate) board: Option<String>,
+    /// Record this actor name in task events, runs, and comments.
     #[arg(long, global = true)]
     pub(crate) actor: Option<String>,
+    /// Choose human-readable output language; JSON keys and enums stay stable.
     #[arg(long, global = true, value_name = "auto|zh-CN|en")]
     pub(crate) locale: Option<String>,
+    /// Emit machine-readable JSON where the command supports it.
     #[arg(long, global = true)]
     pub(crate) json: bool,
     #[command(subcommand)]
@@ -27,6 +33,7 @@ pub(crate) struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Initialize the SQLite database, default board, and board columns.
     Init {
         #[arg(
             long,
@@ -34,86 +41,108 @@ pub(crate) enum Command {
         )]
         force: bool,
     },
+    /// Manage boards and the project-local active board selection.
     Board {
         #[command(subcommand)]
         command: BoardCommand,
     },
+    /// Create, inspect, transition, claim, and archive tasks.
     Task {
         #[command(subcommand)]
         command: TaskCommand,
     },
+    /// Append and list task comments, decisions, and signal backlinks.
     Comment {
         #[command(subcommand)]
         command: CommentCommand,
     },
+    /// Record and review Agent/Product signals.
     Signal {
         #[command(subcommand)]
         command: SignalCommand,
     },
+    /// Install or inspect Codex hooks that make kanban CLI failures actionable.
     Hook {
         #[command(subcommand)]
         command: HookCommand,
     },
+    /// Manage task labels, suggestions, proposals, and ontology signals.
     Label {
         #[command(subcommand)]
         command: LabelCommand,
     },
+    /// Manage task dependency edges.
     Dep {
         #[command(subcommand)]
         command: DepCommand,
     },
-    Events {
-        task_ref: Option<String>,
-    },
-    Runs {
-        task_ref: Option<String>,
-    },
+    /// List task events, optionally filtered to one task.
+    Events { task_ref: Option<String> },
+    /// List task runs, optionally filtered to one task.
+    Runs { task_ref: Option<String> },
+    /// Inspect individual dispatcher or claim runs.
     Run {
         #[command(subcommand)]
         command: RunCommand,
     },
+    /// Search tasks by text with filters and pagination.
     Search(SearchArgs),
+    /// Inspect and rebuild the local search index.
     Index {
         #[command(subcommand)]
         command: IndexCommand,
     },
+    /// Inspect derived entity records.
     Entity {
         #[command(subcommand)]
         command: EntityCommand,
     },
+    /// Inspect pending derived-store outbox work.
     Outbox {
         #[command(subcommand)]
         command: OutboxCommand,
     },
+    /// Inspect derived store health.
     Derived {
         #[command(subcommand)]
         command: DerivedCommand,
     },
+    /// Query and maintain the local graph index.
     Graph {
         #[command(subcommand)]
         command: GraphCommand,
     },
+    /// Configure, query, and maintain the local vector index.
     Vector {
         #[command(subcommand)]
         command: VectorCommand,
     },
+    /// Build task context from lexical, graph, and vector sources.
     Context {
         #[command(subcommand)]
         command: ContextCommand,
     },
+    /// Run the local dispatcher loop to claim ready tasks and execute a worker command.
     Dispatch(DispatchArgs),
+    /// Start the localhost HTTP API and SSE server.
     Serve(ServeArgs),
-    Completions {
-        shell: Shell,
-    },
+    /// Generate shell completion scripts.
+    Completions { shell: Shell },
     #[command(name = "__complete", hide = true)]
     Complete(CompleteArgs),
+    /// Check database integrity and consistency.
     Doctor,
+    /// Show board task counts and summary statistics.
     Stats,
+    /// Write a SQLite backup copy to a chosen path.
     Backup(BackupArgs),
+    /// Export portable board data, including comments and signals.
     Export(ExportArgs),
+    /// Import portable data into the selected database.
     Import(ImportArgs),
+    /// Run a SQLite WAL checkpoint for the database.
     Checkpoint,
+    /// Run SQLite VACUUM maintenance on the database.
     Vacuum,
 }
 
@@ -137,6 +166,7 @@ pub(crate) enum CompleteKind {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum HookCommand {
+    /// Manage Codex lifecycle hooks for kanban-aware agent feedback.
     Codex {
         #[command(subcommand)]
         command: CodexHookCommand,
@@ -145,9 +175,13 @@ pub(crate) enum HookCommand {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum CodexHookCommand {
+    /// Install managed Codex hooks and default prompt configuration.
     Install(CodexHookInstallArgs),
+    /// Show whether managed Codex hooks and prompt config are installed.
     Status,
+    /// Remove only the managed Codex hook entries.
     Uninstall,
+    /// Internal stdin handlers used by installed Codex hooks.
     Handle {
         #[command(subcommand)]
         command: CodexHookHandleCommand,
@@ -170,8 +204,10 @@ pub(crate) struct CodexHookInstallArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum CodexHookHandleCommand {
+    /// Handle a failed kanban command trace from a Codex hook payload.
     Failure(CodexHookFailureHandleArgs),
     #[command(name = "task-create")]
+    /// Handle a successful kanban task create trace from a Codex hook payload.
     TaskCreate(CodexHookTaskCreateHandleArgs),
 }
 
@@ -191,34 +227,50 @@ pub(crate) struct CodexHookTaskCreateHandleArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum TaskCommand {
+    /// Create a task, preferably with rich description input from a file or stdin.
     Create(CreateArgs),
+    /// List tasks with status, label, plan, search, and pagination filters.
     List(ListArgs),
+    /// Show one task by ref or id.
     Show {
         task_ref: String,
         #[arg(long)]
         details: bool,
     },
+    /// Update selected task fields without replacing unspecified values.
     Update(UpdateArgs),
-    Promote {
-        task_ref: String,
-    },
+    /// Move a todo or scheduled task to ready when guards allow it.
+    Promote { task_ref: String },
+    /// Reopen a completed or reviewed task with a reason.
     Reopen(TaskReopenArgs),
+    /// Start work on a task and create a claim token.
     Start(ClaimArgs),
+    /// Atomically claim a ready task for execution.
     Claim(ClaimArgs),
+    /// Extend an active claim lease.
     Heartbeat(HeartbeatArgs),
+    /// Finish a running task as done when claim and guards allow it.
     Done(FinishArgs),
+    /// Alias for finishing a running task as done.
     Complete(FinishArgs),
+    /// Submit a running task to review instead of completing it.
     Review(FinishArgs),
+    /// Block a task with a reason.
     Block(BlockArgs),
-    Unblock {
-        task_ref: String,
-    },
+    /// Recompute a blocked task and return it to the correct eligible state.
+    Unblock { task_ref: String },
+    /// Reclaim expired running task claims.
     Reclaim(ReclaimArgs),
+    /// Archive a task after normal completion, or with explicit force.
     Archive {
         task_ref: String,
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Archive even when normal archive guards would reject the task"
+        )]
         force: bool,
     },
+    /// Manage task execution steps.
     Step {
         #[command(subcommand)]
         command: TaskStepCommand,
@@ -240,19 +292,22 @@ pub(crate) struct TaskReopenArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum TaskStepCommand {
-    List {
-        task_ref: String,
-    },
+    /// List execution steps for a task.
+    List { task_ref: String },
+    /// Add an execution step to a task.
     Add(TaskStepAddArgs),
+    /// Update a task step title, body, link, position, or requiredness.
     Update(TaskStepUpdateArgs),
+    /// Mark a task step done with a note.
     Done(TaskStepDoneArgs),
+    /// Skip a task step with a reason.
     Skip(TaskStepReasonArgs),
+    /// Reopen a previously done or skipped step.
     Reopen(TaskStepReasonArgs),
-    Remove {
-        task_ref: String,
-        step_ref: String,
-    },
+    /// Remove a task step.
+    Remove { task_ref: String, step_ref: String },
     #[command(name = "not-required")]
+    /// Mark all incomplete required steps as no longer required.
     NotRequired(TaskStepNotRequiredArgs),
 }
 
@@ -265,7 +320,7 @@ pub(crate) struct TaskStepAddArgs {
     #[arg(
         long = "body-file",
         value_name = "PATH|-",
-        help = "Read body text from PATH, or stdin with -"
+        help = "Read body text from PATH, or stdin with -; recommended for multiline or shell-sensitive text"
     )]
     pub(crate) body_file: Option<PathBuf>,
     #[arg(long = "link-task")]
@@ -289,7 +344,7 @@ pub(crate) struct TaskStepUpdateArgs {
     #[arg(
         long = "body-file",
         value_name = "PATH|-",
-        help = "Read body text from PATH, or stdin with -"
+        help = "Read body text from PATH, or stdin with -; recommended for multiline or shell-sensitive text"
     )]
     pub(crate) body_file: Option<PathBuf>,
     #[arg(long = "clear-body")]
@@ -349,42 +404,55 @@ pub(crate) struct TaskStepNotRequiredArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum BoardCommand {
+    /// List boards in this database.
     List {
         #[arg(long)]
         include_archived: bool,
     },
+    /// Create a board in this database.
     Create(BoardCreateArgs),
-    Show {
-        board: String,
-    },
-    Use {
-        board: String,
-    },
+    /// Show one board by slug or id.
+    Show { board: String },
+    /// Persist the active board in project-local .kb/config.toml.
+    Use { board: String },
+    /// Show the resolved active board.
     Current,
-    Archive {
-        board: String,
-    },
+    /// Archive a board.
+    Archive { board: String },
 }
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum CommentCommand {
+    /// Append a note, decision, or signal backlink comment to a task.
     Add(CommentAddArgs),
+    /// List comments for a task.
     List { task_ref: String },
 }
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum SignalCommand {
+    /// Record an Agent/Product signal from JSON input.
     Record(SignalRecordArgs),
+    /// List signals with status, kind, task, and history filters.
     List(SignalListArgs),
+    /// Show one signal by id.
     Show { signal_id: String },
+    /// List signals that need review.
     Review(SignalReviewListArgs),
+    /// Confirm open signals with a reason.
     Confirm(SignalLifecycleArgs),
+    /// Reject signals with a reason.
     Reject(SignalLifecycleArgs),
+    /// Resolve confirmed signals with a reason.
     Resolve(SignalLifecycleArgs),
+    /// Supersede signals with another signal.
     Supersede(SignalSupersedeArgs),
 }
 
 #[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  kanban signal record --input signal.json --json\n  kanban signal record --input - --json < signal.json"
+)]
 pub(crate) struct SignalRecordArgs {
     #[arg(long)]
     pub(crate) input: String,
@@ -448,32 +516,45 @@ pub(crate) struct SignalSupersedeArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum LabelCommand {
+    /// List labels on the active board.
     List,
+    /// Create a label identity.
     Create(LabelCreateArgs),
+    /// Create a label with initial semantics from one task.
     Bootstrap(LabelBootstrapArgs),
+    /// Delete a label identity, optionally removing task bindings with force.
     Delete(LabelDeleteArgs),
+    /// Add one or more labels to a task.
     Add(LabelAddTaskArgs),
+    /// Remove a label from one task.
     Remove(LabelTaskArgs),
+    /// Manage label semantics text and examples.
     Semantics {
         #[command(subcommand)]
         command: LabelSemanticsCommand,
     },
     #[command(alias = "atom")]
+    /// Inspect label ontology atoms.
     Atoms {
         #[command(subcommand)]
         command: LabelAtomsCommand,
     },
     #[command(name = "atom-index")]
+    /// Maintain and query the label atom vector index.
     AtomIndex {
         #[command(subcommand)]
         command: LabelAtomIndexCommand,
     },
+    /// Suggest labels for a task using lexical and optional vector evidence.
     Suggest(LabelSuggestArgs),
+    /// Create a label proposal from task context or JSON input.
     Propose(LabelProposeArgs),
+    /// Review and decide pending label proposals.
     Proposals {
         #[command(subcommand)]
         command: LabelProposalsCommand,
     },
+    /// Record, review, apply, and validate label ontology signals.
     Ontology {
         #[command(subcommand)]
         command: LabelOntologyCommand,
@@ -533,9 +614,13 @@ pub(crate) struct LabelBootstrapArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum LabelSemanticsCommand {
+    /// List labels with semantics metadata.
     List,
+    /// Show semantics for one label.
     Show { label: String },
+    /// Insert or update label semantics with an optional CAS hash.
     Upsert(Box<LabelSemanticsUpsertArgs>),
+    /// Delete label semantics with a required hash and reason.
     Delete(LabelSemanticsDeleteArgs),
 }
 
@@ -593,14 +678,19 @@ pub(crate) struct LabelSemanticsUpsertArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum LabelAtomsCommand {
+    /// List label ontology atoms.
     List,
+    /// Explain one label ontology atom.
     Explain { atom_ref: String },
 }
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum LabelAtomIndexCommand {
+    /// Show label atom vector index status.
     Status(LabelAtomIndexStatusArgs),
+    /// Rebuild an index from current SQLite data.
     Rebuild(LabelAtomIndexRebuildArgs),
+    /// Query an index for matching records.
     Query(LabelAtomIndexQueryArgs),
 }
 
@@ -685,9 +775,13 @@ pub(crate) struct LabelProposeArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum LabelProposalsCommand {
+    /// List label proposals.
     List(LabelProposalsListArgs),
+    /// Show one proposal by id.
     Show { proposal_id: String },
+    /// Accept a proposal and apply its action.
     Accept(LabelProposalAcceptArgs),
+    /// Reject a proposal with an optional reason.
     Reject(LabelProposalDecisionArgs),
 }
 
@@ -741,26 +835,39 @@ pub(crate) struct LabelProposalAcceptArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum LabelOntologyCommand {
+    /// Record a label ontology signal from JSON input.
     Record(LabelOntologyRecordArgs),
+    /// List label ontology signals.
     List(LabelOntologyListArgs),
-    Show {
-        signal_id: String,
-    },
+    /// Show one label ontology signal.
+    Show { signal_id: String },
+    /// Show grouped ontology review queues.
     Review(LabelOntologyReviewArgs),
+    /// Report ontology quality samples and gaps.
     Quality(LabelOntologyQualityArgs),
+    /// Confirm ontology signals with actor attribution.
     Confirm(LabelOntologyActionArgs),
+    /// Reject ontology signals with actor attribution.
     Reject(LabelOntologyActionArgs),
+    /// Supersede ontology signals with another signal.
     Supersede(LabelOntologySupersedeArgs),
+    /// Resolve ontology signals without applying a change.
     Resolve(LabelOntologyResolveArgs),
+    /// Apply approved ontology changes.
     Apply {
         #[command(subcommand)]
         command: LabelOntologyApplyCommand,
     },
+    /// Revert an ontology action with a reason and optional hash guard.
     Revert(LabelOntologyRevertArgs),
+    /// Attach validation evidence to ontology actions.
     Validate(LabelOntologyValidateArgs),
 }
 
 #[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  kanban label ontology record default#1 --input ontology-signal.json --capture-suggest --json\n  kanban label ontology record default#1 --input - --suggestion-snapshot suggest.json"
+)]
 pub(crate) struct LabelOntologyRecordArgs {
     pub(crate) task_ref: String,
     #[arg(long)]
@@ -881,6 +988,7 @@ pub(crate) struct LabelOntologyResolveArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum LabelOntologyApplyCommand {
+    /// Apply atom changes proposed by ontology signals.
     Atom(LabelOntologyApplyAtomArgs),
 }
 
@@ -1018,13 +1126,16 @@ pub(crate) enum LabelOntologyValidationStatusArg {
 }
 
 #[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  kanban comment add default#1 --body-file - --kind note\n  kanban comment add default#1 --body-file note.md --metadata-json-file metadata.json"
+)]
 pub(crate) struct CommentAddArgs {
     pub(crate) task_ref: String,
     pub(crate) body: Option<String>,
     #[arg(
         long = "body-file",
         value_name = "PATH|-",
-        help = "Read body text from PATH, or stdin with -"
+        help = "Read body text from PATH, or stdin with -; recommended for multiline or shell-sensitive text"
     )]
     pub(crate) body_file: Option<PathBuf>,
     #[arg(long)]
@@ -1038,7 +1149,7 @@ pub(crate) struct CommentAddArgs {
     #[arg(
         long = "metadata-json-file",
         value_name = "PATH|-",
-        help = "Read comment metadata JSON from PATH, or stdin with -"
+        help = "Read comment metadata JSON from PATH, or stdin with -; avoids shell quoting issues"
     )]
     pub(crate) metadata_json_file: Option<PathBuf>,
 }
@@ -1053,6 +1164,9 @@ pub(crate) struct BoardCreateArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  kanban task create \"Draft release note\" --description-file -\n  kanban task create \"Fix CLI help\" --status ready --label cli --json\n\nUse --description-file - for multiline or shell-sensitive text containing $, backticks, or JSON."
+)]
 pub(crate) struct CreateArgs {
     pub(crate) title: String,
     #[arg(long)]
@@ -1060,7 +1174,7 @@ pub(crate) struct CreateArgs {
     #[arg(
         long = "description-file",
         value_name = "PATH|-",
-        help = "Read description text from PATH, or stdin with -"
+        help = "Read description text from PATH, or stdin with -; recommended for multiline or shell-sensitive text"
     )]
     pub(crate) description_file: Option<PathBuf>,
     #[arg(long)]
@@ -1080,7 +1194,7 @@ pub(crate) struct CreateArgs {
     #[arg(
         long = "metadata-file",
         value_name = "PATH|-",
-        help = "Read task metadata JSON from PATH, or stdin with -"
+        help = "Read task metadata JSON from PATH, or stdin with -; avoids shell quoting issues"
     )]
     pub(crate) metadata_file: Option<PathBuf>,
     #[arg(long = "label")]
@@ -1144,15 +1258,21 @@ pub(crate) struct SearchArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum IndexCommand {
+    /// Show search index status.
     Status,
+    /// Diagnose search index consistency.
     Doctor,
+    /// Rebuild the search index.
     Rebuild,
+    /// Synchronize pending search index work.
     Sync,
 }
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum EntityCommand {
+    /// List derived entities.
     List(EntityListArgs),
+    /// Show one derived entity by URI.
     Show { uri: String },
 }
 
@@ -1166,6 +1286,7 @@ pub(crate) struct EntityListArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum OutboxCommand {
+    /// List derived outbox items.
     List(OutboxListArgs),
 }
 
@@ -1179,15 +1300,21 @@ pub(crate) struct OutboxListArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum DerivedCommand {
+    /// Show derived-store status.
     Status,
 }
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum GraphCommand {
+    /// Show graph index status.
     Status,
+    /// List graph neighbors for an entity URI.
     Neighbors(GraphNeighborsArgs),
+    /// Rebuild the graph index.
     Rebuild,
+    /// Synchronize pending graph index work.
     Sync,
+    /// Run a bounded SPARQL query against the graph index.
     Query(GraphQueryArgs),
 }
 
@@ -1215,11 +1342,17 @@ pub(crate) struct GraphQueryArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum VectorCommand {
+    /// Show vector index status and configuration.
     Status(VectorConfigPathArgs),
+    /// Write local vector provider configuration.
     Configure(VectorConfigureArgs),
+    /// Rebuild the vector index.
     Rebuild(VectorConfigPathArgs),
+    /// Synchronize pending vector index work.
     Sync(VectorConfigPathArgs),
+    /// Query task/context chunks by text.
     QueryChunks(VectorQueryChunksArgs),
+    /// Query label atoms by text or supplied vector JSON.
     QueryLabelAtoms(VectorQueryLabelAtomsArgs),
 }
 
@@ -1279,6 +1412,7 @@ pub(crate) struct VectorConfigureArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum ContextCommand {
+    /// Build context for one task.
     Build(ContextBuildArgs),
 }
 
@@ -1298,6 +1432,9 @@ pub(crate) struct ContextBuildArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  kanban task update default#1 --description-file updated.md --expected-lock-version 7\n  kanban task update default#1 --clear-assignee --json\n\nUse file inputs for rich text or JSON; unspecified fields are left unchanged."
+)]
 pub(crate) struct UpdateArgs {
     pub(crate) task_ref: String,
     #[arg(long)]
@@ -1307,7 +1444,7 @@ pub(crate) struct UpdateArgs {
     #[arg(
         long = "description-file",
         value_name = "PATH|-",
-        help = "Read description text from PATH, or stdin with -"
+        help = "Read description text from PATH, or stdin with -; recommended for multiline or shell-sensitive text"
     )]
     pub(crate) description_file: Option<PathBuf>,
     #[arg(long)]
@@ -1333,7 +1470,7 @@ pub(crate) struct UpdateArgs {
     #[arg(
         long = "metadata-file",
         value_name = "PATH|-",
-        help = "Read task metadata JSON from PATH, or stdin with -"
+        help = "Read task metadata JSON from PATH, or stdin with -; avoids shell quoting issues"
     )]
     pub(crate) metadata_file: Option<PathBuf>,
     #[arg(long)]
@@ -1342,9 +1479,9 @@ pub(crate) struct UpdateArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum RunCommand {
-    Show {
-        run_id: String,
-    },
+    /// Show one run by id.
+    Show { run_id: String },
+    /// Show stored run logs, optionally tailed by byte count.
     Logs {
         run_id: String,
         #[arg(long)]
@@ -1383,7 +1520,10 @@ pub(crate) struct FinishArgs {
     pub(crate) task_ref: String,
     #[arg(long)]
     pub(crate) claim_token: Option<String>,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Bypass normal finish guards when intentionally closing without an active claim"
+    )]
     pub(crate) force: bool,
 }
 
@@ -1399,7 +1539,10 @@ pub(crate) struct BlockArgs {
     pub(crate) reason_file: Option<PathBuf>,
     #[arg(long)]
     pub(crate) claim_token: Option<String>,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Bypass normal block guards when intentionally blocking without an active claim"
+    )]
     pub(crate) force: bool,
 }
 
@@ -1411,17 +1554,18 @@ pub(crate) struct ReclaimArgs {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum DepCommand {
+    /// Add a dependency edge from parent to child.
     Add {
         parent_ref: String,
         child_ref: String,
     },
+    /// Remove a dependency edge.
     Remove {
         parent_ref: String,
         child_ref: String,
     },
-    List {
-        task_ref: String,
-    },
+    /// List dependencies for one task.
+    List { task_ref: String },
 }
 
 #[derive(Debug, Args)]
@@ -1478,10 +1622,16 @@ pub(crate) struct ExportArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  kanban import --input backup.jsonl --replace\n\n--replace clears existing importable records before loading the input file; use only with an intentional backup/restore flow."
+)]
 pub(crate) struct ImportArgs {
     #[arg(long)]
     pub(crate) input: PathBuf,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Clear existing importable records before loading input; intended for restore flows"
+    )]
     pub(crate) replace: bool,
 }
 

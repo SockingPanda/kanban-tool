@@ -121,10 +121,10 @@ It always builds the release CLI binary first:
 ./scripts/package-cli-linux.sh --format deb
 ```
 
-The `.deb` is written under the shared locked Cargo target root:
+The `.deb` is written under the worktree-specific target directory managed by the build-lock wrapper:
 
 ```bash
-${KANBAN_CARGO_TARGET_ROOT:-/media/kanban-user/Data/cargo-targets/kanban-tool}/release/bundle/cli/deb/
+$(scripts/cargo-build-lock.sh --print-target-dir)/release/bundle/cli/deb/
 ```
 
 Feature flags can be passed through to the cargo build:
@@ -238,7 +238,7 @@ desktop-package-layout` must run after `just desktop-package`; it inspects the
 generated Desktop `.deb` with `dpkg-deb -c`.
 
 Rust validation recipes run target-writing Cargo/Tauri commands through
-`scripts/cargo-build-lock.sh`. The wrapper serializes shared target writes and
+`scripts/cargo-build-lock.sh`. The wrapper serializes target writes with a shared lock and
 defaults local build/test parallelism to two jobs/threads to avoid swap-heavy
 workspace gates. Override with `KANBAN_CARGO_BUILD_JOBS` /
 `KANBAN_TEST_THREADS`, or tool-specific `CARGO_BUILD_JOBS`,

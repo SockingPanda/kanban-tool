@@ -48,6 +48,21 @@ wait_for_grep() {
   fail "timed out waiting for $label"
 }
 
+expected_target_dir() {
+  local target_root="$1"
+  env KANBAN_CARGO_TARGET_ROOT="$target_root" "$LOCK_SCRIPT" --print-target-dir
+}
+
+assert_target_dir_under_root() {
+  local target_root="$1"
+  local actual="$2"
+
+  [[ "$actual" == "$target_root"/worktrees/* ]] || {
+    fail "expected CARGO_TARGET_DIR under $target_root/worktrees, got $actual"
+  }
+  [[ "$actual" != "$target_root" ]] || fail "CARGO_TARGET_DIR must not be the shared target root"
+}
+
 assert_failure() {
   if "$@" >/dev/null 2>&1; then
     fail "expected failure but command succeeded: $*"
@@ -122,8 +137,8 @@ assert_package_help_output_path() {
   local help_output
 
   help_output="$("$ROOT/scripts/package-cli-linux.sh" --help)"
-  [[ "$help_output" == *'${KANBAN_CARGO_TARGET_ROOT:-/media/kanban-user/Data/cargo-targets/kanban-tool}/release/bundle/cli/deb/*.deb'* ]] || {
-    fail "package help does not document the shared target root output path"
+  [[ "$help_output" == *'scripts/cargo-build-lock.sh --print-target-dir'* ]] || {
+    fail "package help does not document the wrapper target-dir output path"
   }
   [[ "$help_output" != *"$REMOVED_HELPER.sh"* ]] || {
     fail "package help still documents the removed target helper"
@@ -196,22 +211,24 @@ assert_resource_limit_defaults() {
 
 [[ ! -e "$ROOT/scripts/$REMOVED_HELPER.sh" ]] || fail "removed target helper still exists"
 
-KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT/" "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$TARGET_ROOT"
+expected_target="$(expected_target_dir "$TARGET_ROOT")"
+KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT/" "$LOCK_SCRIPT" -- bash -c '
+  [[ "$CARGO_TARGET_DIR" == "$1" ]]
+  [[ -e "$2/.build.lock" ]]
+' _ "$expected_target" "$TARGET_ROOT"
+assert_target_dir_under_root "$TARGET_ROOT" "$expected_target"
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TARGET_ROOT/" "$LOCK_SCRIPT" -- true
 home_dir="$TMPDIR/home"
 home_target="$home_dir/.cache/kanban-tool/cargo-target"
 mkdir -p "$home_dir"
-env HOME="$home_dir" \
-  KANBAN_CARGO_TARGET_ROOT='$HOME/.cache/kanban-tool/cargo-target' \
-  "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$home_target"
-env HOME="$home_dir" \
-  KANBAN_CARGO_TARGET_ROOT='${HOME}/.cache/kanban-tool/cargo-target' \
-  CARGO_TARGET_DIR='${HOME}/.cache/kanban-tool/cargo-target' \
-  "$LOCK_SCRIPT" -- true
-env HOME="$home_dir" \
-  KANBAN_CARGO_TARGET_ROOT='~/.cache/kanban-tool/cargo-target' \
-  "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$home_target"
-assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TARGET_ROOT/analysis-123" "$LOCK_SCRIPT" -- true
+home_expected_target="$(HOME="$home_dir" KANBAN_CARGO_TARGET_ROOT='$HOME/.cache/kanban-tool/cargo-target' "$LOCK_SCRIPT" --print-target-dir)"
+env HOME="$home_dir"   KANBAN_CARGO_TARGET_ROOT='$HOME/.cache/kanban-tool/cargo-target'   "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$home_expected_target"
+assert_target_dir_under_root "$home_target" "$home_expected_target"
+env HOME="$home_dir"   KANBAN_CARGO_TARGET_ROOT='${HOME}/.cache/kanban-tool/cargo-target'   CARGO_TARGET_DIR='${HOME}/.cache/kanban-tool/cargo-target'   "$LOCK_SCRIPT" -- true
+tilde_expected_target="$(HOME="$home_dir" KANBAN_CARGO_TARGET_ROOT='~/.cache/kanban-tool/cargo-target' "$LOCK_SCRIPT" --print-target-dir)"
+env HOME="$home_dir"   KANBAN_CARGO_TARGET_ROOT='~/.cache/kanban-tool/cargo-target'   "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$tilde_expected_target"
+assert_target_dir_under_root "$home_target" "$tilde_expected_target"
+assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TMPDIR/outside-target" "$LOCK_SCRIPT" -- true
 assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" "$REMOVED_FLAG" cli -- true
 assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" "$REMOVED_PATH_FLAG" "$TARGET_ROOT" -- true
 

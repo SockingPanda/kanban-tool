@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-/media/kanban-user/Data/cargo-targets/kanban-tool}"
-DEB_DIR="$TARGET_ROOT/release/bundle/deb"
+LOCK="$ROOT/scripts/cargo-build-lock.sh"
+DEB_DIR="$($LOCK --print-target-dir)/release/bundle/deb"
 HELPERS=("kanban-vector-lancedb" "kanban-graph-oxigraph")
 
 deb_path="${1:-}"

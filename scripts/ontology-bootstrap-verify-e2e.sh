@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
-TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-/media/kanban-user/Data/cargo-targets/kanban-tool}"
+TARGET_DIR="$($LOCK --print-target-dir)"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="${RUN_DIR:-$ROOT/.omx/ultragoal/evidence/G004-ontology-bootstrap-verify-e2e-$TIMESTAMP}"
 BOARD="default"
@@ -54,7 +54,7 @@ ensure_kanban_bin() {
   fi
   log "+ $LOCK -- cargo build -q -p kanban-cli --bin kanban"
   "$LOCK" -- cargo build -q -p kanban-cli --bin kanban
-  KANBAN_BIN="$TARGET_ROOT/debug/kanban"
+  KANBAN_BIN="$TARGET_DIR/debug/kanban"
   [[ -x "$KANBAN_BIN" ]] || fail "expected debug kanban binary at $KANBAN_BIN"
 }
 

@@ -10,14 +10,16 @@ usage() {
   cat <<'USAGE'
 Usage:
   scripts/cargo-build-lock.sh -- <command> [args...]
+  scripts/cargo-build-lock.sh --print-target-dir
 
 Run a Cargo build/test/check/clippy/nextest command after acquiring the
-kanban-tool local build lock. The wrapper serializes commands that write to the
-shared Cargo target root and exports CARGO_TARGET_DIR to that root for the
-command.
+kanban-tool local build lock. The wrapper serializes commands that write under
+the shared Cargo target root and exports CARGO_TARGET_DIR to a per-worktree
+subdirectory under that root for the command.
 
 Options:
-  -h, --help  Show this help.
+  --print-target-dir  Print the per-worktree Cargo target directory and exit.
+  -h, --help          Show this help.
 
 Environment:
   CARGO_TARGET_DIR            If set, it must be under the configured shared
@@ -195,10 +197,18 @@ main() {
   local lock_dir
   local status
 
+  target_root_dir="$(target_root)"
+  validate_inherited_target_dir "$target_root_dir"
+  target_dir="$(workspace_target_dir "$target_root_dir")"
+
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -h|--help)
         usage
+        exit 0
+        ;;
+      --print-target-dir)
+        printf '%s\n' "$target_dir"
         exit 0
         ;;
       --)
@@ -228,9 +238,6 @@ main() {
     exit 1
   fi
 
-  target_root_dir="$(target_root)"
-  validate_inherited_target_dir "$target_root_dir"
-  target_dir="$(workspace_target_dir "$target_root_dir")"
   lock_file="$target_root_dir/.build.lock"
 
   lock_dir="$(dirname "$lock_file")"

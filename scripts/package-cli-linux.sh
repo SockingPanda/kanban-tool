@@ -9,7 +9,6 @@ HELPER_INSTALL_DIR="usr/lib/kanban"
 REVISION="1"
 BUILD_ARGS=()
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
-TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-/media/kanban-user/Data/cargo-targets/kanban-tool}"
 
 usage() {
   cat <<'EOF'
@@ -25,7 +24,7 @@ Options:
   -h, --help                   Show this help.
 
 Outputs:
-  ${KANBAN_CARGO_TARGET_ROOT:-/media/kanban-user/Data/cargo-targets/kanban-tool}/release/bundle/cli/deb/*.deb
+  $($ROOT/scripts/cargo-build-lock.sh --print-target-dir)/release/bundle/cli/deb/*.deb
 EOF
 }
 
@@ -66,10 +65,7 @@ command -v cargo >/dev/null 2>&1 || { echo "error: cargo is required" >&2; exit 
 VERSION="$(cargo pkgid -p kanban-cli | sed 's/.*#//')"
 TARGET_TRIPLE="$(rustc -vV | awk '/^host:/ { print $2 }')"
 RUST_ARCH="${TARGET_TRIPLE%%-*}"
-while [[ "$TARGET_ROOT" != "/" && "$TARGET_ROOT" == */ ]]; do
-  TARGET_ROOT="${TARGET_ROOT%/}"
-done
-TARGET_DIR="$TARGET_ROOT/release"
+TARGET_DIR="$($LOCK --print-target-dir)/release"
 BIN_PATH="$TARGET_DIR/$BIN_NAME"
 BUNDLE_DIR="$TARGET_DIR/bundle/cli"
 TMPDIR="$(mktemp -d)"

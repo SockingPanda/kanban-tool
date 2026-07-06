@@ -53,6 +53,38 @@ Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状
 
 `board current --json` 和 `board use --json` 的 `data.board` 是完整 board 对象；调用方应读取 `data.board.slug`，不要把 `data.board` 当字符串。
 
+#### JSON error output
+
+当 `--json` 已被 clap 成功解析，且错误发生在运行期 service/IO 路径时，CLI 输出稳定错误 envelope 到 stdout，并使用对应 exit code：
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "未找到：board missing",
+    "exit_code": 3
+  }
+}
+```
+
+`error.code` 是脚本可依赖的 ASCII 枚举；`message` 是本地化 human-readable 说明；`exit_code` 与进程退出码一致。运行期 `--json` 错误不写 stderr。
+
+参数解析错误发生在 clap 解析阶段，仍由 clap 输出 stderr 并退出 2；这类错误不输出 JSON envelope。没有 `--json` 时，运行期错误继续输出 human-readable stderr。
+
+当前公开错误 code：
+
+| `error.code` | Exit code | 含义 |
+|---|---:|---|
+| `generic_error` | 1 | 未分类通用错误。 |
+| `invalid_input` | 2 | 参数已通过 clap 解析，但业务输入、值域或 validation 无效。 |
+| `not_found` | 3 | board、task、label、step、run 等对象未找到。 |
+| `invalid_transition` | 4 | 状态机拒绝该转换，或 required execution plan / steps 未满足。 |
+| `claim_conflict` | 5 | claim/heartbeat/finish token 或并发 claim 冲突。 |
+| `dependency_blocked` | 6 | 依赖未完成导致任务不能进入 ready/running。 |
+| `sqlite_busy` | 7 | SQLite busy/locked 或维护/runtime lock 阻塞。 |
+| `integrity_check_failed` | 8 | doctor/import/maintenance 发现 integrity 或 consistency hard failure。 |
+| `storage_error` | 1 | 其它存储错误；不保证可按 SQLite lock/integrity 自动恢复。 |
+
 ### 1.2 Shell completions
 
 ```bash
@@ -189,14 +221,14 @@ V1 behavior:
 | Code | 含义 |
 |---:|---|
 | 0 | 成功。 |
-| 1 | 通用错误。 |
-| 2 | 参数错误。 |
+| 1 | 通用错误或未分类 storage error。 |
+| 2 | clap 参数错误，或运行期 validation / invalid input。 |
 | 3 | 未找到对象。 |
-| 4 | 非法状态转换。 |
-| 5 | claim 冲突。 |
+| 4 | 非法状态转换、required execution plan 或 required steps 未满足。 |
+| 5 | claim/token/concurrent claim 冲突。 |
 | 6 | dependency blocked。 |
-| 7 | SQLite busy/locked。 |
-| 8 | integrity check failed。 |
+| 7 | SQLite busy/locked 或 maintenance/runtime lock。 |
+| 8 | integrity check failed 或 consistency hard failure。 |
 
 ---
 

@@ -486,11 +486,16 @@ fn import_replace_rejects_running_work_in_target_database() -> anyhow::Result<()
         String::from_utf8_lossy(&import_result.output.stderr)
     );
     let stderr = String::from_utf8_lossy(&import_result.output.stderr);
+    let stdout = String::from_utf8_lossy(&import_result.output.stdout);
+    let failure_output = format!("{stderr}\n{stdout}");
     assert!(
-        stderr.contains("database has running work; stop kanban serve/dispatch"),
-        "{stderr}"
+        failure_output.contains("database has running work; stop kanban serve/dispatch"),
+        "{failure_output}"
     );
-    assert!(!stderr.contains("stop kb serve/dispatch"), "{stderr}");
+    assert!(
+        !failure_output.contains("stop kb serve/dispatch"),
+        "{failure_output}"
+    );
     let running = kanban(&target.path, &["--json", "task", "show", task_id])?.success_json()?;
     assert_eq!(running["data"]["status"], "running");
     Ok(())

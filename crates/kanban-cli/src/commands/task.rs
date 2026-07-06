@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use kanban_sqlite::{
     CreateStepInput, CreateTask, MAX_TASK_LIST_LIMIT, TaskExecutionPlanRecord, TaskListOptions,
     TaskListSort, TaskPatch, TaskPlanFilter, TaskStepRecord, UpdateStepInput, archive_task,
@@ -12,8 +12,8 @@ use kanban_sqlite::{
 
 use crate::args::{ListArgs, TaskCommand, TaskPlanFilterArg, TaskStepCommand};
 use crate::commands::common::{
-    optional_clearable, parse_status, parse_task_list_sort, resolve_optional_text_input,
-    validate_page_bounds,
+    invalid_input, optional_clearable, parse_status, parse_task_list_sort,
+    resolve_optional_text_input, validate_page_bounds,
 };
 use crate::output::{print_or_json, print_task, print_task_with_details, task_line};
 
@@ -279,15 +279,21 @@ fn handle_task_step(
         }
         TaskStepCommand::Update(args) => {
             if args.linked_task_ref.is_some() && args.unlink_task {
-                bail!("--link-task and --unlink-task are mutually exclusive");
+                return Err(invalid_input(
+                    "--link-task and --unlink-task are mutually exclusive",
+                ));
             }
             if args.clear_body && args.body_file.is_some() {
-                bail!("--body-file and --clear-body are mutually exclusive");
+                return Err(invalid_input(
+                    "--body-file and --clear-body are mutually exclusive",
+                ));
             }
             let body =
                 resolve_optional_text_input(args.body, args.body_file, "--body", "--body-file")?;
             if body.is_some() && args.clear_body {
-                bail!("--body and --clear-body are mutually exclusive");
+                return Err(invalid_input(
+                    "--body and --clear-body are mutually exclusive",
+                ));
             }
             let step = update_step(
                 db_path,
@@ -476,14 +482,18 @@ fn push_task_plan_filter(filters: &mut Vec<TaskPlanFilter>, filter: TaskPlanFilt
 
 fn step_required_for_add(required: bool, optional: bool) -> Result<bool> {
     if required && optional {
-        bail!("--required and --optional are mutually exclusive");
+        return Err(invalid_input(
+            "--required and --optional are mutually exclusive",
+        ));
     }
     Ok(!optional)
 }
 
 fn step_required_for_update(required: bool, optional: bool) -> Result<Option<bool>> {
     if required && optional {
-        bail!("--required and --optional are mutually exclusive");
+        return Err(invalid_input(
+            "--required and --optional are mutually exclusive",
+        ));
     }
     Ok(if required {
         Some(true)

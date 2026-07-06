@@ -184,7 +184,7 @@ fn signal_show_and_lifecycle_reject_cross_board_ids() -> anyhow::Result<()> {
             &default_signal,
         ],
     )?
-    .failure_containing("signal not found")?;
+    .json_failure_containing("signal not found")?;
     kanban(
         &temp.path,
         &[
@@ -198,7 +198,7 @@ fn signal_show_and_lifecycle_reject_cross_board_ids() -> anyhow::Result<()> {
             "wrong board",
         ],
     )?
-    .failure_containing("signal not found")?;
+    .json_failure_containing("signal not found")?;
     kanban(
         &temp.path,
         &[
@@ -214,7 +214,7 @@ fn signal_show_and_lifecycle_reject_cross_board_ids() -> anyhow::Result<()> {
             "cross board replacement",
         ],
     )?
-    .failure_containing("signal not found")?;
+    .json_failure_containing("signal not found")?;
 
     let shown = kanban(
         &temp.path,

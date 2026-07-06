@@ -4,13 +4,14 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use kanban_sqlite::{
     backup_database, begin_database_replace, checkpoint_database, export_jsonl, import_jsonl,
     init_database, queue_stats, vacuum_database,
 };
 
 use crate::args::{BackupArgs, ExportArgs, ImportArgs};
+use crate::commands::common::invalid_input;
 use crate::output::print_or_json;
 
 pub(crate) fn import_command(
@@ -176,7 +177,10 @@ pub(crate) fn handle_export(
     json: bool,
 ) -> Result<()> {
     if args.format != "jsonl" {
-        bail!("unsupported export format: {}", args.format);
+        return Err(invalid_input(format!(
+            "unsupported export format: {}",
+            args.format
+        )));
     }
     let result = export_jsonl(db_path, board, args.out)?;
     print_or_json(json, &result, || {
@@ -195,10 +199,13 @@ pub(crate) fn handle_import(
     json: bool,
 ) -> Result<()> {
     if !args.input.is_file() {
-        bail!("import input does not exist: {}", args.input.display());
+        return Err(invalid_input(format!(
+            "import input does not exist: {}",
+            args.input.display()
+        )));
     }
     if !args.replace {
-        bail!("import requires --replace");
+        return Err(invalid_input("import requires --replace"));
     }
     let result = import_command(db_path, actor, args)?;
     print_or_json(json, &result, || {

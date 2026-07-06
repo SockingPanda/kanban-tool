@@ -1,16 +1,19 @@
 use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use kanban_sqlite::{begin_database_runtime, init_database};
 
 use crate::args::ServeArgs;
+use crate::commands::common::invalid_input;
 
 pub(crate) fn serve(args: ServeArgs, db_path: PathBuf, board: &str, actor: String) -> Result<()> {
     let addr: SocketAddr = format!("{}:{}", args.host, args.port)
         .parse()
         .with_context(|| format!("invalid bind address {}:{}", args.host, args.port))?;
     if !addr.ip().is_loopback() {
-        bail!("kanban serve only supports loopback hosts; use 127.0.0.1 or ::1");
+        return Err(invalid_input(
+            "kanban serve only supports loopback hosts; use 127.0.0.1 or ::1",
+        ));
     }
     kanban_server::init_tracing();
     let _runtime_guard = begin_database_runtime(&db_path)?;

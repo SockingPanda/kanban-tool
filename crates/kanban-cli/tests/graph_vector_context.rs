@@ -443,6 +443,65 @@ exit 1
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn graph_query_sparql_file_preserves_shell_sensitive_query() -> anyhow::Result<()> {
+    let temp = TempDb::new("graph_query_sparql_file_preserves_shell_sensitive_query")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let calls_path = temp.dir.join("graph-helper-calls.json");
+    let helper = temp.dir.join("graph-helper.sh");
+    write_executable(
+        &helper,
+        &format!(
+            r#"#!/usr/bin/env bash
+python3 - "$@" <<'PY'
+import json
+import pathlib
+import sys
+pathlib.Path({calls_path:?}).write_text(json.dumps(sys.argv[1:]))
+print('{{"protocol":"kanban-derived-helper.v1","payload_json":"[]"}}')
+PY
+"#,
+            calls_path = calls_path.to_string_lossy()
+        ),
+    )?;
+    let sparql = "SELECT ?task WHERE {\n  ?task ?p \"literal $VAR $(date) `code`\" .\n}";
+    let sparql_path = temp.dir.join("query.sparql");
+    std::fs::write(&sparql_path, sparql)?;
+
+    let rows = kanban_in_dir_envs(
+        &temp.path,
+        &[
+            "--json",
+            "graph",
+            "query",
+            "--sparql-file",
+            sparql_path.to_str().context("sparql path")?,
+        ],
+        &temp.dir,
+        &[("KANBAN_GRAPH_HELPER", helper.as_path())],
+    )?
+    .success_json()?;
+    assert_eq!(rows["data"].as_array().context("rows")?.len(), 0);
+
+    let args: Vec<String> = serde_json::from_str(&std::fs::read_to_string(&calls_path)?)?;
+    assert_eq!(
+        args,
+        vec![
+            "query".to_owned(),
+            "--sparql".to_owned(),
+            sparql.to_owned(),
+            "--limit".to_owned(),
+            "50".to_owned(),
+            "--db".to_owned(),
+            temp.path.to_string_lossy().into_owned(),
+            "--board".to_owned(),
+            "default".to_owned(),
+        ]
+    );
+    Ok(())
+}
+
 #[test]
 fn context_build_command_rejects_zero_max_items() -> anyhow::Result<()> {
     let temp = TempDb::new("context_build_command_rejects_zero_max_items")?;

@@ -229,7 +229,13 @@ pub(crate) enum TaskCommand {
 pub(crate) struct TaskReopenArgs {
     pub(crate) task_ref: String,
     #[arg(long)]
-    pub(crate) reason: String,
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -305,7 +311,13 @@ pub(crate) struct TaskStepDoneArgs {
     pub(crate) task_ref: String,
     pub(crate) step_ref: String,
     #[arg(long)]
-    pub(crate) note: String,
+    pub(crate) note: Option<String>,
+    #[arg(
+        long = "note-file",
+        value_name = "PATH|-",
+        help = "Read note text from PATH, or stdin with -"
+    )]
+    pub(crate) note_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -313,14 +325,26 @@ pub(crate) struct TaskStepReasonArgs {
     pub(crate) task_ref: String,
     pub(crate) step_ref: String,
     #[arg(long)]
-    pub(crate) reason: String,
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
 pub(crate) struct TaskStepNotRequiredArgs {
     pub(crate) task_ref: String,
     #[arg(long)]
-    pub(crate) reason: String,
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -397,7 +421,13 @@ pub(crate) struct SignalLifecycleArgs {
     #[arg(required = true)]
     pub(crate) signal_ids: Vec<String>,
     #[arg(long)]
-    pub(crate) reason: String,
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -407,7 +437,13 @@ pub(crate) struct SignalSupersedeArgs {
     #[arg(long)]
     pub(crate) by: String,
     #[arg(long)]
-    pub(crate) reason: String,
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -509,7 +545,13 @@ pub(crate) struct LabelSemanticsDeleteArgs {
     #[arg(long = "expected-semantics-hash")]
     pub(crate) expected_semantics_hash: String,
     #[arg(long)]
-    pub(crate) reason: String,
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -521,6 +563,12 @@ pub(crate) struct LabelSemanticsUpsertArgs {
     pub(crate) replace: bool,
     #[arg(long)]
     pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
     #[arg(long = "source-signal")]
     pub(crate) source_signal_ids: Vec<String>,
     #[arg(long)]
@@ -613,6 +661,12 @@ pub(crate) struct LabelProposeArgs {
     pub(crate) allow_retarget: bool,
     #[arg(long = "retarget-reason")]
     pub(crate) retarget_reason: Option<String>,
+    #[arg(
+        long = "retarget-reason-file",
+        value_name = "PATH|-",
+        help = "Read retarget reason text from PATH, or stdin with -"
+    )]
+    pub(crate) retarget_reason_file: Option<PathBuf>,
     #[command(flatten)]
     pub(crate) ontology_actor: LabelOntologyActorArgs,
     #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
@@ -650,6 +704,12 @@ pub(crate) struct LabelProposalDecisionArgs {
     pub(crate) proposal_id: String,
     #[arg(long)]
     pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -657,12 +717,24 @@ pub(crate) struct LabelProposalAcceptArgs {
     pub(crate) proposal_id: String,
     #[arg(long)]
     pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
     #[arg(long = "source-signal")]
     pub(crate) source_signal_ids: Vec<String>,
     #[arg(long)]
     pub(crate) allow_retarget: bool,
     #[arg(long = "retarget-reason")]
     pub(crate) retarget_reason: Option<String>,
+    #[arg(
+        long = "retarget-reason-file",
+        value_name = "PATH|-",
+        help = "Read retarget reason text from PATH, or stdin with -"
+    )]
+    pub(crate) retarget_reason_file: Option<PathBuf>,
     #[command(flatten)]
     pub(crate) ontology_actor: LabelOntologyActorArgs,
 }
@@ -760,7 +832,13 @@ pub(crate) struct LabelOntologyActionArgs {
     #[arg(required = true)]
     pub(crate) signal_ids: Vec<String>,
     #[arg(long)]
-    pub(crate) reason: String,
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
     #[command(flatten)]
     pub(crate) actor: LabelOntologyActorArgs,
 }
@@ -772,7 +850,13 @@ pub(crate) struct LabelOntologySupersedeArgs {
     #[arg(long = "by")]
     pub(crate) superseded_by_signal_id: String,
     #[arg(long)]
-    pub(crate) reason: String,
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
     #[command(flatten)]
     pub(crate) actor: LabelOntologyActorArgs,
 }
@@ -784,7 +868,13 @@ pub(crate) struct LabelOntologyResolveArgs {
     #[arg(long = "no-change")]
     pub(crate) no_change: bool,
     #[arg(long)]
-    pub(crate) reason: String,
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
     #[command(flatten)]
     pub(crate) actor: LabelOntologyActorArgs,
 }
@@ -803,15 +893,33 @@ pub(crate) struct LabelOntologyApplyAtomArgs {
     #[arg(long)]
     pub(crate) kind: LabelOntologyAtomKindArg,
     #[arg(long)]
-    pub(crate) text: String,
+    pub(crate) text: Option<String>,
+    #[arg(
+        long = "text-file",
+        value_name = "PATH|-",
+        help = "Read atom text from PATH, or stdin with -"
+    )]
+    pub(crate) text_file: Option<PathBuf>,
     #[arg(long)]
-    pub(crate) reason: String,
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
     #[command(flatten)]
     pub(crate) actor: LabelOntologyActorArgs,
     #[arg(long)]
     pub(crate) allow_retarget: bool,
     #[arg(long = "retarget-reason")]
     pub(crate) retarget_reason: Option<String>,
+    #[arg(
+        long = "retarget-reason-file",
+        value_name = "PATH|-",
+        help = "Read retarget reason text from PATH, or stdin with -"
+    )]
+    pub(crate) retarget_reason_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -820,7 +928,13 @@ pub(crate) struct LabelOntologyRevertArgs {
     #[arg(long = "expected-current-hash")]
     pub(crate) expected_current_hash: Option<String>,
     #[arg(long)]
-    pub(crate) reason: String,
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
     #[command(flatten)]
     pub(crate) actor: LabelOntologyActorArgs,
 }
@@ -857,7 +971,13 @@ pub(crate) struct LabelOntologyValidateArgs {
     #[arg(long)]
     pub(crate) status: LabelOntologyValidationStatusArg,
     #[arg(long)]
-    pub(crate) reason: String,
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
     #[arg(long)]
     pub(crate) input: Option<String>,
     #[arg(long)]
@@ -866,6 +986,13 @@ pub(crate) struct LabelOntologyValidateArgs {
     pub(crate) positive_controls: Vec<String>,
     #[arg(long = "positive-control-waiver", conflicts_with = "positive_controls")]
     pub(crate) positive_control_waiver: Option<String>,
+    #[arg(
+        long = "positive-control-waiver-file",
+        value_name = "PATH|-",
+        conflicts_with = "positive_controls",
+        help = "Read positive control waiver text from PATH, or stdin with -"
+    )]
+    pub(crate) positive_control_waiver_file: Option<PathBuf>,
     #[arg(long = "vector-config", alias = "config")]
     pub(crate) vector_config: Option<std::path::PathBuf>,
     #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
@@ -1075,7 +1202,13 @@ pub(crate) struct GraphNeighborsArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct GraphQueryArgs {
-    pub(crate) sparql: String,
+    pub(crate) sparql: Option<String>,
+    #[arg(
+        long = "sparql-file",
+        value_name = "PATH|-",
+        help = "Read SPARQL query from PATH, or stdin with -"
+    )]
+    pub(crate) sparql_file: Option<PathBuf>,
     #[arg(long, default_value_t = 50)]
     pub(crate) limit: usize,
 }
@@ -1257,7 +1390,13 @@ pub(crate) struct FinishArgs {
 #[derive(Debug, Args)]
 pub(crate) struct BlockArgs {
     pub(crate) task_ref: String,
-    pub(crate) reason: String,
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
     #[arg(long)]
     pub(crate) claim_token: Option<String>,
     #[arg(long)]

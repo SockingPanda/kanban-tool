@@ -1728,6 +1728,10 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
     let rejected_signal = signals[2]["id"].as_str().context("rejected signal")?;
     let no_change_signal = signals[3]["id"].as_str().context("no-change signal")?;
 
+    let confirm_reason =
+        "Reviewer confirmed the false negative.\nShell-sensitive `$VAR` remains literal.";
+    let confirm_reason_path = temp.dir.join("ontology-confirm-reason.md");
+    fs::write(&confirm_reason_path, confirm_reason)?;
     let confirmed = kanban(
         &temp.path,
         &[
@@ -1736,13 +1740,14 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
             "ontology",
             "confirm",
             primary,
-            "--reason",
-            "Reviewer confirmed the false negative.",
+            "--reason-file",
+            confirm_reason_path.to_str().context("utf-8 path")?,
         ],
     )?
     .success_json()?;
     assert_eq!(confirmed["data"]["action_type"], "confirm");
     assert_eq!(confirmed["data"]["signal_ids"][0], primary);
+    assert_eq!(confirmed["data"]["reason"], confirm_reason);
 
     let rejected = kanban(
         &temp.path,
@@ -1795,6 +1800,13 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
         "resolve_no_change"
     );
 
+    let atom_text = "extends CLI subcommands, arguments, help output, or JSON behavior\nwithout shell expansion of $(date)";
+    let atom_text_path = temp.dir.join("ontology-atom-text.md");
+    fs::write(&atom_text_path, atom_text)?;
+    let apply_reason =
+        "Confirmed false-negative support for CLI surface changes.\nPreserve `code` literally.";
+    let apply_reason_path = temp.dir.join("ontology-apply-reason.md");
+    fs::write(&apply_reason_path, apply_reason)?;
     let applied = kanban(
         &temp.path,
         &[
@@ -1810,10 +1822,10 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
             "cli",
             "--kind",
             "applies-when",
-            "--text",
-            "extends CLI subcommands, arguments, help output, or JSON behavior",
-            "--reason",
-            "Confirmed false-negative support for CLI surface changes.",
+            "--text-file",
+            atom_text_path.to_str().context("utf-8 path")?,
+            "--reason-file",
+            apply_reason_path.to_str().context("utf-8 path")?,
             "--actor-type",
             "agent",
             "--agent-type",
@@ -1822,6 +1834,7 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
     )?
     .success_json()?;
     assert_eq!(applied["data"]["action_type"], "add_positive_atom");
+    assert_eq!(applied["data"]["reason"], apply_reason);
     assert_eq!(applied["data"]["validation_status"], "pending");
     assert_eq!(applied["data"]["created_by"], "apply-agent");
     assert_eq!(applied["data"]["created_by_type"], "agent");
@@ -1879,6 +1892,10 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
     let validation_path = validation_path
         .to_str()
         .context("temp path should be valid UTF-8")?;
+    let validate_reason =
+        "The source task now selects cli with the new atom as evidence.\nValidation from file.";
+    let validate_reason_path = temp.dir.join("ontology-validate-reason.md");
+    fs::write(&validate_reason_path, validate_reason)?;
     kanban(
         &temp.path,
         &[
@@ -1891,8 +1908,8 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
             apply_action_id,
             "--status",
             "passed",
-            "--reason",
-            "The source task now selects cli with the new atom as evidence.",
+            "--reason-file",
+            validate_reason_path.to_str().context("utf-8 path")?,
             "--input",
             validation_path,
             "--actor-type",
@@ -4072,6 +4089,158 @@ fn task_step_body_file_and_stdin_preserve_shell_sensitive_text() -> anyhow::Resu
     .success_json()?;
 
     assert_eq!(updated["data"]["body"], stdin_body);
+    Ok(())
+}
+
+#[test]
+fn task_step_resolution_and_block_reason_files_preserve_shell_sensitive_text() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("task_step_resolution_and_block_reason_files_preserve_shell_sensitive_text")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "step resolution files",
+            "--description",
+            "spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("expected task id")?;
+
+    let done_step = kanban(
+        &temp.path,
+        &["--json", "task", "step", "add", task_id, "done step"],
+    )?
+    .success_json()?;
+    let done_step_id = done_step["data"]["id"]
+        .as_str()
+        .context("expected step id")?;
+    let note = "done from file `code` $VAR $(date)\nsecond line";
+    let note_path = temp.dir.join("step-note.md");
+    fs::write(&note_path, note)?;
+    let completed = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "done",
+            task_id,
+            done_step_id,
+            "--note-file",
+            note_path.to_str().context("utf-8 path")?,
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(completed["data"]["resolution_note"], note);
+
+    let skip_step = kanban(
+        &temp.path,
+        &["--json", "task", "step", "add", task_id, "skip step"],
+    )?
+    .success_json()?;
+    let skip_step_id = skip_step["data"]["id"]
+        .as_str()
+        .context("expected step id")?;
+    let reason = "skip from stdin {\"json\":true}\n$VAR remains literal";
+    let skipped = kanban_with_stdin(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "skip",
+            task_id,
+            skip_step_id,
+            "--reason-file",
+            "-",
+        ],
+        reason,
+    )?
+    .success_json()?;
+    assert_eq!(skipped["data"]["resolution_note"], reason);
+
+    let blocked_task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "block reason file",
+            "--description",
+            "spec",
+        ],
+    )?
+    .success_json()?;
+    let blocked_task_id = blocked_task["data"]["id"]
+        .as_str()
+        .context("expected task id")?;
+    let block_reason = "blocked by shell-sensitive evidence: `cmd` $(date)\nsecond line";
+    let block_reason_path = temp.dir.join("block-reason.md");
+    fs::write(&block_reason_path, block_reason)?;
+    let blocked = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "block",
+            blocked_task_id,
+            "--reason-file",
+            block_reason_path.to_str().context("utf-8 path")?,
+            "--force",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(blocked["data"]["status_reason"], block_reason);
+    Ok(())
+}
+
+#[test]
+fn task_step_done_rejects_inline_note_with_note_file() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_step_done_rejects_inline_note_with_note_file")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "step note conflict",
+            "--description",
+            "spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("expected task id")?;
+    let added = kanban(
+        &temp.path,
+        &["--json", "task", "step", "add", task_id, "conflict step"],
+    )?
+    .success_json()?;
+    let step_id = added["data"]["id"].as_str().context("expected step id")?;
+    let note_path = temp.dir.join("step-note.md");
+    fs::write(&note_path, "from file")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "task",
+            "step",
+            "done",
+            task_id,
+            step_id,
+            "--note",
+            "inline",
+            "--note-file",
+            note_path.to_str().context("utf-8 path")?,
+        ],
+    )?
+    .failure_containing("mutually exclusive")?;
     Ok(())
 }
 

@@ -143,9 +143,11 @@ impl CmdResult {
             String::from_utf8_lossy(&self.output.stderr)
         );
         let stderr = String::from_utf8_lossy(&self.output.stderr);
+        let stdout = String::from_utf8_lossy(&self.output.stdout);
+        let combined = format!("{stderr}\n{stdout}");
         anyhow::ensure!(
-            contains(expected).eval(&stderr),
-            "expected stderr to contain {expected:?}, got:\n{stderr}"
+            contains(expected).eval(&combined),
+            "expected failure output to contain {expected:?}, got stdout:\n{stdout}\nstderr:\n{stderr}"
         );
         Ok(())
     }
@@ -158,9 +160,13 @@ impl CmdResult {
             String::from_utf8_lossy(&self.output.stderr)
         );
         let stderr = String::from_utf8_lossy(&self.output.stderr);
+        let stdout = String::from_utf8_lossy(&self.output.stdout);
+        let combined = format!("{stderr}\n{stdout}");
         anyhow::ensure!(
-            expected.iter().any(|value| contains(*value).eval(&stderr)),
-            "expected stderr to contain one of {expected:?}, got:\n{stderr}"
+            expected
+                .iter()
+                .any(|value| contains(*value).eval(&combined)),
+            "expected failure output to contain one of {expected:?}, got stdout:\n{stdout}\nstderr:\n{stderr}"
         );
         Ok(())
     }

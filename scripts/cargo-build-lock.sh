@@ -20,15 +20,17 @@ Options:
   -h, --help  Show this help.
 
 Environment:
-  CARGO_TARGET_DIR            If set, it must equal the configured shared target
-                              root.
+  CARGO_TARGET_DIR            If set, it must be under the configured shared
+                              target root.
   CARGO_BUILD_JOBS            Cargo build jobs passed through when set.
                               Default: ${KANBAN_CARGO_BUILD_JOBS:-2}
   NEXTEST_TEST_THREADS        cargo-nextest test threads passed through when set.
                               Default: ${KANBAN_TEST_THREADS:-2}
   RUST_TEST_THREADS           libtest threads passed through when set.
                               Default: ${KANBAN_TEST_THREADS:-2}
-  KANBAN_CARGO_TARGET_ROOT    Override target root for local tests.
+  KANBAN_CARGO_TARGET_ROOT    Override target root for local tests. The wrapper
+                              derives a per-worktree target subdirectory under
+                              this root while keeping one shared build lock.
                               Default: /media/kanban-user/Data/cargo-targets/kanban-tool
   KANBAN_CARGO_BUILD_JOBS     Repo-level default for CARGO_BUILD_JOBS.
   KANBAN_TEST_THREADS         Repo-level default for nextest/libtest threads.
@@ -130,6 +132,20 @@ target_root() {
   normalize_path "$(expand_home_path "$RAW_TARGET_ROOT")"
 }
 
+
+workspace_target_dir() {
+  local root="$1"
+  local hash=""
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    hash="$(printf '%s' "$ROOT" | sha256sum | awk '{print substr($1, 1, 16)}')"
+  else
+    hash="$(printf '%s' "$ROOT" | cksum | awk '{print $1}')"
+  fi
+
+  printf '%s/worktrees/%s\n' "$root" "$hash"
+}
+
 validate_inherited_target_dir() {
   local expected="$1"
   local actual
@@ -139,11 +155,16 @@ validate_inherited_target_dir() {
   fi
 
   actual="$(normalize_path "$(expand_home_path "$CARGO_TARGET_DIR")")"
-  if [[ "$actual" != "$expected" ]]; then
-    error "CARGO_TARGET_DIR must be the kanban-tool shared target root: $expected"
-    error "got: $CARGO_TARGET_DIR"
-    return 2
-  fi
+  case "$actual" in
+    "$expected"|"$expected"/*)
+      return 0
+      ;;
+    *)
+      error "CARGO_TARGET_DIR must be inside the kanban-tool shared target root: $expected"
+      error "got: $CARGO_TARGET_DIR"
+      return 2
+      ;;
+  esac
 }
 
 configure_resource_limits() {
@@ -168,6 +189,7 @@ configure_resource_limit() {
 }
 
 main() {
+  local target_root_dir=""
   local target_dir=""
   local lock_file=""
   local lock_dir
@@ -206,9 +228,10 @@ main() {
     exit 1
   fi
 
-  target_dir="$(target_root)"
-  validate_inherited_target_dir "$target_dir"
-  lock_file="$target_dir/.build.lock"
+  target_root_dir="$(target_root)"
+  validate_inherited_target_dir "$target_root_dir"
+  target_dir="$(workspace_target_dir "$target_root_dir")"
+  lock_file="$target_root_dir/.build.lock"
 
   lock_dir="$(dirname "$lock_file")"
   mkdir -p "$lock_dir" "$target_dir"

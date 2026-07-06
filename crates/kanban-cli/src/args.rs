@@ -301,9 +301,9 @@ pub(crate) enum TaskStepCommand {
     /// Mark a task step done with a note.
     Done(TaskStepDoneArgs),
     /// Skip a task step with a reason.
-    Skip(TaskStepReasonArgs),
+    Skip(TaskStepSkipArgs),
     /// Reopen a previously done or skipped step.
-    Reopen(TaskStepReasonArgs),
+    Reopen(TaskStepReopenArgs),
     /// Remove a task step.
     Remove { task_ref: String, step_ref: String },
     #[command(name = "not-required")]
@@ -380,9 +380,26 @@ pub(crate) struct TaskStepDoneArgs {
 
 #[derive(Debug, Args)]
 #[command(
-    after_help = "Examples:\n  kanban task step skip default#1 step_01 --reason-file -\n  kanban task step reopen default#1 step_01 --reason-file reason.md"
+    after_help = "Examples:\n  kanban task step skip default#1 step_01 --reason-file -\n  kanban task step skip default#1 step_01 --reason-file reason.md"
 )]
-pub(crate) struct TaskStepReasonArgs {
+pub(crate) struct TaskStepSkipArgs {
+    pub(crate) task_ref: String,
+    pub(crate) step_ref: String,
+    #[arg(long)]
+    pub(crate) reason: Option<String>,
+    #[arg(
+        long = "reason-file",
+        value_name = "PATH|-",
+        help = "Read reason text from PATH, or stdin with -"
+    )]
+    pub(crate) reason_file: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  kanban task step reopen default#1 step_01 --reason-file -\n  kanban task step reopen default#1 step_01 --reason-file reason.md"
+)]
+pub(crate) struct TaskStepReopenArgs {
     pub(crate) task_ref: String,
     pub(crate) step_ref: String,
     #[arg(long)]

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use kanban_sqlite::{
     BootstrapTaskLabel, CreateLabel, LabelOntologyActionInput, LabelOntologyActionRecord,
     LabelOntologyActionType, LabelOntologyActor, LabelOntologyAtomApplyInput,
@@ -32,7 +32,7 @@ use crate::args::{
     LabelAtomPolarityArg, LabelCommand, LabelOntologyActorArgs, LabelOntologyActorTypeArg,
     LabelOntologyAtomKindArg, LabelOntologyReviewGroupByArg, LabelOntologyValidationStatusArg,
 };
-use crate::commands::common::validate_page_bounds;
+use crate::commands::common::{invalid_input, validate_page_bounds};
 use crate::commands::helper::{HelperKind, resolve_helper};
 use crate::output::{label_line, print_or_json, print_task};
 
@@ -439,7 +439,9 @@ fn handle_label_ontology(
     match command {
         crate::args::LabelOntologyCommand::Record(args) => {
             if args.capture_suggest && args.suggestion_snapshot.is_some() {
-                bail!("--capture-suggest cannot be used with --suggestion-snapshot");
+                return Err(invalid_input(
+                    "--capture-suggest cannot be used with --suggestion-snapshot",
+                ));
             }
             let input = read_label_ontology_record_input(db_path, board, &args)?;
             let observation =
@@ -548,7 +550,7 @@ fn handle_label_ontology(
         }
         crate::args::LabelOntologyCommand::Resolve(args) => {
             if !args.no_change {
-                bail!("resolve currently requires --no-change");
+                return Err(invalid_input("resolve currently requires --no-change"));
             }
             let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
             let action = create_label_ontology_action(
@@ -608,9 +610,9 @@ fn handle_label_ontology(
                     args.max_selected_labels,
                 )?;
                 if args.input.is_some() {
-                    bail!(
-                        "--trusted collects validation evidence from label suggest; do not pass --input"
-                    );
+                    return Err(invalid_input(
+                        "--trusted collects validation evidence from label suggest; do not pass --input",
+                    ));
                 }
                 let options = LabelSuggestionOptions {
                     output_limit: args.limit,
@@ -635,10 +637,14 @@ fn handle_label_ontology(
                 )?
             } else {
                 if !args.positive_controls.is_empty() || args.positive_control_waiver.is_some() {
-                    bail!("--positive-control and --positive-control-waiver require --trusted");
+                    return Err(invalid_input(
+                        "--positive-control and --positive-control-waiver require --trusted",
+                    ));
                 }
                 let Some(input) = args.input.as_deref() else {
-                    bail!("label ontology validate requires --input unless --trusted is used");
+                    return Err(invalid_input(
+                        "label ontology validate requires --input unless --trusted is used",
+                    ));
                 };
                 let validation_json = read_json_input_string(input)?;
                 validate_label_ontology_action(
@@ -779,16 +785,16 @@ impl LabelOntologyRecordCaptureInput {
         )?;
         let suggestion_snapshot = match (input_snapshot, supplied_snapshot) {
             (Some(input), Some(supplied)) if input != supplied => {
-                bail!(
-                    "--suggestion-snapshot/--capture-suggest conflicts with input suggestion_snapshot"
-                )
+                return Err(invalid_input(
+                    "--suggestion-snapshot/--capture-suggest conflicts with input suggestion_snapshot",
+                ));
             }
             (Some(input), _) => input,
             (_, Some(supplied)) => supplied,
             (None, None) => {
-                bail!(
-                    "simplified ontology record input requires suggestion_snapshot, --suggestion-snapshot, or --capture-suggest"
-                )
+                return Err(invalid_input(
+                    "simplified ontology record input requires suggestion_snapshot, --suggestion-snapshot, or --capture-suggest",
+                ));
             }
         };
         let diagnostics = coalesce_json_value(
@@ -929,7 +935,9 @@ fn normalize_suggestion_snapshot_value(value: JsonValue) -> Result<JsonValue> {
     if value.is_object() {
         Ok(value)
     } else {
-        bail!("suggestion snapshot must be a JSON object or an envelope with object data")
+        Err(invalid_input(
+            "suggestion snapshot must be a JSON object or an envelope with object data",
+        ))
     }
 }
 
@@ -946,7 +954,9 @@ fn coalesce_json_value(
     if let (Some(natural), Some(legacy)) = (&natural, &legacy)
         && natural != legacy
     {
-        bail!("{natural_field} conflicts with {legacy_field}");
+        return Err(invalid_input(format!(
+            "{natural_field} conflicts with {legacy_field}"
+        )));
     }
     Ok(natural.or(legacy).or(default))
 }
@@ -1236,16 +1246,16 @@ fn validate_label_suggest_bounds(
     max_selected_labels: usize,
 ) -> Result<()> {
     if limit == 0 {
-        bail!("limit must be >= 1");
+        return Err(invalid_input("limit must be >= 1"));
     }
     if candidate_limit == 0 {
-        bail!("candidate_limit must be >= 1");
+        return Err(invalid_input("candidate_limit must be >= 1"));
     }
     if atom_limit == 0 {
-        bail!("atom_limit must be >= 1");
+        return Err(invalid_input("atom_limit must be >= 1"));
     }
     if max_selected_labels == 0 {
-        bail!("max_selected_labels must be >= 1");
+        return Err(invalid_input("max_selected_labels must be >= 1"));
     }
     validate_page_bounds(limit, MAX_TASK_LIST_LIMIT, 0)?;
     validate_page_bounds(candidate_limit, MAX_TASK_LIST_LIMIT, 0)?;
@@ -1256,7 +1266,7 @@ fn validate_label_suggest_bounds(
 
 fn validate_label_bootstrap_verification_score(min_score: f32) -> Result<()> {
     if !(0.0..=1.0).contains(&min_score) {
-        bail!("min_verify_score must be between 0 and 1");
+        return Err(invalid_input("min_verify_score must be between 0 and 1"));
     }
     Ok(())
 }
@@ -1362,9 +1372,9 @@ fn validate_label_ontology_action_with_trusted_cli_evidence(
             vector_config_path,
             options,
         );
-        bail!(
+        Err(invalid_input(format!(
             "{LABEL_VECTOR_HELPER_ADAPTER_UNAVAILABLE}; use external attestation via --input for this CLI build"
-        )
+        )))
     }
 }
 
@@ -1396,10 +1406,10 @@ fn ensure_label_bootstrap_verification_available(
     if status.enabled {
         return Ok(());
     }
-    bail!(
+    Err(invalid_input(format!(
         "vector helper unavailable for bootstrap verification: {}; omit --verify to bootstrap without vector verification",
         status.message
-    )
+    )))
 }
 
 fn query_configured_label_atom_index(

@@ -1901,7 +1901,7 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
             "codex",
         ],
     )?
-    .failure_containing("trusted evidence collected by the kanban tool")?;
+    .json_failure_containing("trusted evidence collected by the kanban tool")?;
 
     let primary_detail = kanban(
         &temp.path,
@@ -3140,7 +3140,7 @@ fn label_commands_reject_archived_tasks() -> anyhow::Result<()> {
             "backend",
         ],
     )?
-    .failure_containing("not found: task")?;
+    .json_failure_containing("not found: task")?;
 
     let remove_target = kanban(
         &temp.path,
@@ -3170,7 +3170,7 @@ fn label_commands_reject_archived_tasks() -> anyhow::Result<()> {
             "backend",
         ],
     )?
-    .failure_containing("not found: task")?;
+    .json_failure_containing("not found: task")?;
 
     Ok(())
 }

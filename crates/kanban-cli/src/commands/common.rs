@@ -4,9 +4,13 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use kanban_core::{KanbanError, TaskStatus};
 use kanban_sqlite::TaskListSort;
+
+pub(crate) fn invalid_input(message: impl Into<String>) -> anyhow::Error {
+    KanbanError::InvalidInput(message.into()).into()
+}
 
 pub(crate) fn resolve_optional_text_input(
     inline: Option<String>,
@@ -15,7 +19,9 @@ pub(crate) fn resolve_optional_text_input(
     file_name: &str,
 ) -> Result<Option<String>> {
     if inline.is_some() && file.is_some() {
-        bail!("{inline_name} and {file_name} are mutually exclusive");
+        return Err(invalid_input(format!(
+            "{inline_name} and {file_name} are mutually exclusive"
+        )));
     }
     if let Some(path) = file {
         return Ok(Some(read_text_input(&path)?));
@@ -30,8 +36,11 @@ pub(crate) fn resolve_required_text_input(
     file_name: &str,
     value_name: &str,
 ) -> Result<String> {
-    resolve_optional_text_input(inline, file, inline_name, file_name)?
-        .ok_or_else(|| anyhow::anyhow!("{value_name} requires either {inline_name} or {file_name}"))
+    resolve_optional_text_input(inline, file, inline_name, file_name)?.ok_or_else(|| {
+        invalid_input(format!(
+            "{value_name} requires either {inline_name} or {file_name}"
+        ))
+    })
 }
 
 fn read_text_input(path: &PathBuf) -> Result<String> {
@@ -83,7 +92,9 @@ pub(crate) fn parse_task_list_sort(value: &str) -> Result<TaskListSort> {
         "updated_desc" | "updated_at_desc" | "-updated_at" => Ok(TaskListSort::UpdatedAtDesc),
         "due" | "due_at" => Ok(TaskListSort::DueAt),
         "due_desc" | "due_at_desc" | "-due_at" => Ok(TaskListSort::DueAtDesc),
-        _ => bail!("unsupported task list sort: {value}"),
+        _ => Err(invalid_input(format!(
+            "unsupported task list sort: {value}"
+        ))),
     }
 }
 

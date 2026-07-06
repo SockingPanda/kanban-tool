@@ -29,7 +29,8 @@ mod tantivy_backend {
         assert!(temp.dir.join("index/v1/tasks").exists());
 
         let search = kanban(&temp.path, &["--json", "search", "comet"])?.success_json()?;
-        assert_eq!(search["data"]["meta"]["backend"], "tantivy");
+        assert_eq!(search["meta"]["backend"], "tantivy");
+        assert!(search["data"].get("meta").is_none(), "{search}");
         assert_eq!(
             search["data"]["hits"][0]["task"]["title"],
             "cli tantivy comet"
@@ -91,7 +92,8 @@ mod tantivy_backend {
         assert_eq!(synced["data"]["index_lag_events"], 0);
 
         let search = kanban(&temp.path, &["--json", "search", "comet"])?.success_json()?;
-        assert_eq!(search["data"]["meta"]["backend"], "tantivy");
+        assert_eq!(search["meta"]["backend"], "tantivy");
+        assert!(search["data"].get("meta").is_none(), "{search}");
         assert_eq!(search["data"]["hits"][0]["task"]["title"], "cli sync comet");
         Ok(())
     }

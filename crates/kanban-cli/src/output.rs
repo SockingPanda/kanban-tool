@@ -51,6 +51,23 @@ pub(crate) fn print_or_json<T: serde::Serialize>(
     Ok(())
 }
 
+pub(crate) fn print_or_json_with_meta<T: serde::Serialize, M: serde::Serialize>(
+    json: bool,
+    data: &T,
+    meta: &M,
+    human: impl FnOnce() -> String,
+) -> Result<()> {
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({"data": data, "meta": meta}))?
+        );
+    } else {
+        println!("{}", human());
+    }
+    Ok(())
+}
+
 pub(crate) fn task_line(task: &kanban_sqlite::TaskRecord) -> String {
     let labels = task_label_suffix(task);
     format!(

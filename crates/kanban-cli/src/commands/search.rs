@@ -6,7 +6,7 @@ use kanban_sqlite::{MAX_SEARCH_LIMIT, search_tasks};
 
 use crate::args::{SearchArgs, SearchOutput, SearchOutputHit};
 use crate::commands::common::{parse_status, validate_page_bounds};
-use crate::output::{print_or_json, search_hit_line};
+use crate::output::{print_or_json_with_meta, search_hit_line};
 
 pub(crate) fn handle_search(
     args: SearchArgs,
@@ -53,11 +53,8 @@ pub(crate) fn handle_search(
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    let output = SearchOutput {
-        hits,
-        meta: results.meta,
-    };
-    print_or_json(json, &output, || {
+    let output = SearchOutput { hits };
+    print_or_json_with_meta(json, &output, &results.meta, || {
         output
             .hits
             .iter()

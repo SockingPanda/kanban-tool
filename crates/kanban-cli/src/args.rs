@@ -1372,7 +1372,6 @@ pub(crate) struct DispatchLoopSummary {
 #[derive(Debug, serde::Serialize)]
 pub(crate) struct SearchOutput {
     pub(crate) hits: Vec<SearchOutputHit>,
-    pub(crate) meta: kanban_search::SearchMeta,
 }
 
 #[derive(Debug, serde::Serialize)]

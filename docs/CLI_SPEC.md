@@ -1562,7 +1562,7 @@ calls `sync_search_index` every `--search-sync-interval-ms` milliseconds
 kanban search <query> [--status ready] [--status review] [--assignee worker-a] [--label backend] [--include-archived] [--limit 20] [--offset 0] [--json]
 ```
 
-默认 CLI build 启用 `tantivy-backend`。当 `index/v1/tasks/` 存在可读 Tantivy 索引时，`kanban search` 使用 Tantivy；缺失、损坏、过期或二进制显式以 `--no-default-features` 构建时回落 SQLite，并在 meta 中标记 stale。搜索匹配 task title、description、comments、run summary/error、event kind/payload。
+默认 CLI build 启用 `tantivy-backend`。当 `index/v1/tasks/` 存在可读 Tantivy 索引时，`kanban search` 使用 Tantivy；缺失、损坏、过期或二进制显式以 `--no-default-features` 构建时回落 SQLite，并在顶层 `meta` 中标记 stale。搜索匹配 task title、description、comments、run summary/error、event kind/payload。
 
 `--label <name-or-id>` 可重复；多个 label 使用 AND 语义，并在 search
 分页前过滤 task。带 label 过滤的 Tantivy search 会回落到 SQLite fallback，
@@ -1597,14 +1597,14 @@ JSON output:
           "title": "实现状态机"
         }
       }
-    ],
-    "meta": {
-      "backend": "sqlite",
-      "stale": false,
-      "index_version": null,
-      "last_event_id": 42,
-      "index_lag_events": 0
-    }
+    ]
+  },
+  "meta": {
+    "backend": "sqlite",
+    "stale": false,
+    "index_version": null,
+    "last_event_id": 42,
+    "index_lag_events": 0
   }
 }
 ```

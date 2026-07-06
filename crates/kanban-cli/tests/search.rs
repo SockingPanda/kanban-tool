@@ -75,7 +75,8 @@ fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
         ],
     )?
     .success_json()?;
-    assert_eq!(json["data"]["meta"]["backend"], "sqlite");
+    assert_eq!(json["meta"]["backend"], "sqlite");
+    assert!(json["data"].get("meta").is_none(), "{json}");
     let hits = json["data"]["hits"]
         .as_array()
         .context("expected JSON array")?;

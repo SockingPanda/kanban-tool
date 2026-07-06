@@ -143,6 +143,67 @@ assert_package_help_output_path() {
   [[ "$help_output" != *"$REMOVED_HELPER.sh"* ]] || {
     fail "package help still documents the removed target helper"
   }
+  [[ "$help_output" != *'$ROOT'* ]] || {
+    fail "package help should not print a literal \$ROOT placeholder"
+  }
+  [[ "$help_output" != *'$('* ]] || {
+    fail "package help should describe the target-dir probe without shell substitution syntax"
+  }
+  [[ "$help_output" == *'release/bundle/cli/deb/*.deb'* ]] || {
+    fail "package help does not document the CLI deb relative output path"
+  }
+}
+
+assert_target_dir_probe_call_sites_quote_paths() {
+  local file line_number line
+  local files=(
+    "$ROOT/scripts/package-cli-linux.sh"
+    "$ROOT/scripts/prepare-desktop-helper-binaries.sh"
+    "$ROOT/scripts/test-cli-package-layout.sh"
+    "$ROOT/scripts/test-desktop-package-layout.sh"
+    "$ROOT/scripts/ontology-bootstrap-verify-e2e.sh"
+    "$ROOT/scripts/ontology-closure-e2e.sh"
+    "$ROOT/scripts/ontology-negative-atom-e2e.sh"
+  )
+
+  for file in "${files[@]}"; do
+    line_number=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line_number=$((line_number + 1))
+      case "$line" in
+        *'$($LOCK --print-target-dir)'*)
+          fail "unquoted target-dir probe in ${file#$ROOT/}:$line_number: $line"
+          ;;
+        *'$($ROOT/scripts/cargo-build-lock.sh --print-target-dir)'*)
+          fail "unquoted ROOT target-dir probe in ${file#$ROOT/}:$line_number: $line"
+          ;;
+      esac
+    done < "$file"
+  done
+}
+
+assert_target_dir_probe_handles_space_paths() {
+  local space_repo="$TMPDIR/repo root with spaces"
+  local space_target_root="$TMPDIR/target root with spaces"
+  local space_lock="$space_repo/scripts/cargo-build-lock.sh"
+  local expected actual
+
+  mkdir -p "$space_repo/scripts" "$space_target_root"
+  cp "$LOCK_SCRIPT" "$space_lock"
+  chmod +x "$space_lock"
+
+  expected="$(env KANBAN_CARGO_TARGET_ROOT="$space_target_root" "$space_lock" --print-target-dir)"
+  assert_target_dir_under_root "$space_target_root" "$expected"
+  actual="$(env KANBAN_CARGO_TARGET_ROOT="$space_target_root" bash -c '
+    set -euo pipefail
+    LOCK="$1"
+    TARGET_DIR="$("$LOCK" --print-target-dir)/release"
+    printf "%s\n" "$TARGET_DIR"
+  ' _ "$space_lock")"
+
+  [[ "$actual" == "$expected/release" ]] || {
+    fail "quoted target-dir probe failed with spaces: expected $expected/release, got $actual"
+  }
 }
 
 assert_resource_limit_defaults() {
@@ -309,6 +370,8 @@ KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash
 
 assert_resource_limit_defaults
 assert_no_bare_target_writing_cargo
+assert_target_dir_probe_call_sites_quote_paths
+assert_target_dir_probe_handles_space_paths
 assert_package_help_output_path
 
 echo "cargo target root and build lock tests passed"

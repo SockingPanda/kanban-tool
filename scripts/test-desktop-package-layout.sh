@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
-DEB_DIR="$($LOCK --print-target-dir)/release/bundle/deb"
+DEB_DIR="$("$LOCK" --print-target-dir)/release/bundle/deb"
 HELPERS=("kanban-vector-lancedb" "kanban-graph-oxigraph")
 
 deb_path="${1:-}"

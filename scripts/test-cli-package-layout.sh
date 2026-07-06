@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
-DEB_DIR="$($LOCK --print-target-dir)/release/bundle/cli/deb"
+DEB_DIR="$("$LOCK" --print-target-dir)/release/bundle/cli/deb"
 
 deb_path="${1:-}"
 if [[ -z "$deb_path" ]]; then

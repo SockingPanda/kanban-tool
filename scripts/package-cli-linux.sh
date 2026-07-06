@@ -24,7 +24,8 @@ Options:
   -h, --help                   Show this help.
 
 Outputs:
-  $($ROOT/scripts/cargo-build-lock.sh --print-target-dir)/release/bundle/cli/deb/*.deb
+  Under the target directory printed by scripts/cargo-build-lock.sh --print-target-dir:
+  release/bundle/cli/deb/*.deb
 EOF
 }
 
@@ -65,7 +66,7 @@ command -v cargo >/dev/null 2>&1 || { echo "error: cargo is required" >&2; exit 
 VERSION="$(cargo pkgid -p kanban-cli | sed 's/.*#//')"
 TARGET_TRIPLE="$(rustc -vV | awk '/^host:/ { print $2 }')"
 RUST_ARCH="${TARGET_TRIPLE%%-*}"
-TARGET_DIR="$($LOCK --print-target-dir)/release"
+TARGET_DIR="$("$LOCK" --print-target-dir)/release"
 BIN_PATH="$TARGET_DIR/$BIN_NAME"
 BUNDLE_DIR="$TARGET_DIR/bundle/cli"
 TMPDIR="$(mktemp -d)"

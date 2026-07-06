@@ -136,6 +136,100 @@ fn dangerous_flags_explain_their_semantics() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn rich_file_stdin_leaf_commands_advertise_safe_input_examples() -> anyhow::Result<()> {
+    let step_done = kanban_help(&["task", "step", "done"])?;
+    assert_contains_all(
+        &step_done,
+        &[
+            "--note-file <PATH|->",
+            "Read note text from PATH, or stdin with -",
+            "kanban task step done default#1 step_01 --note-file -",
+        ],
+    )?;
+
+    let step_skip = kanban_help(&["task", "step", "skip"])?;
+    assert_contains_all(
+        &step_skip,
+        &[
+            "--reason-file <PATH|->",
+            "Read reason text from PATH, or stdin with -",
+            "kanban task step skip default#1 step_01 --reason-file -",
+        ],
+    )?;
+
+    let step_not_required = kanban_help(&["task", "step", "not-required"])?;
+    assert_contains_all(
+        &step_not_required,
+        &[
+            "--reason-file <PATH|->",
+            "Read reason text from PATH, or stdin with -",
+            "kanban task step not-required default#1 --reason-file reason.md",
+        ],
+    )?;
+
+    let signal_confirm = kanban_help(&["signal", "confirm"])?;
+    assert_contains_all(
+        &signal_confirm,
+        &[
+            "--reason-file <PATH|->",
+            "Read reason text from PATH, or stdin with -",
+            "kanban signal confirm sig_01 --reason-file -",
+        ],
+    )?;
+
+    let signal_resolve = kanban_help(&["signal", "resolve"])?;
+    assert_contains_all(
+        &signal_resolve,
+        &[
+            "--reason-file <PATH|->",
+            "Read reason text from PATH, or stdin with -",
+            "kanban signal resolve sig_01 --reason-file reason.md",
+        ],
+    )?;
+
+    let graph_query = kanban_help(&["graph", "query"])?;
+    assert_contains_all(
+        &graph_query,
+        &[
+            "--sparql-file <PATH|->",
+            "Read SPARQL query from PATH, or stdin with -",
+            "kanban graph query --sparql-file query.rq --limit 100",
+            "kanban graph query --sparql-file -",
+        ],
+    )?;
+
+    Ok(())
+}
+
+#[test]
+fn claim_and_force_leaf_help_explains_guard_boundaries() -> anyhow::Result<()> {
+    let claim = kanban_help(&["task", "claim"])?;
+    assert_contains_all(&claim, &["--ttl-ms <TTL_MS>", "[default: 300000]"])?;
+
+    let done = kanban_help(&["task", "done"])?;
+    assert_contains_all(
+        &done,
+        &[
+            "--claim-token <CLAIM_TOKEN>",
+            "--force",
+            "Bypass normal finish guards when intentionally closing without an active claim",
+        ],
+    )?;
+
+    let block = kanban_help(&["task", "block"])?;
+    assert_contains_all(
+        &block,
+        &[
+            "--reason-file <PATH|->",
+            "--claim-token <CLAIM_TOKEN>",
+            "Bypass normal block guards when intentionally blocking without an active claim",
+        ],
+    )?;
+
+    Ok(())
+}
+
 fn assert_command_descriptions(args: &[&str], stdout: &str) -> anyhow::Result<()> {
     let mut in_commands = false;
     let mut checked = 0usize;

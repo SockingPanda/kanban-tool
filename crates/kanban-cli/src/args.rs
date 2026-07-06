@@ -362,6 +362,9 @@ pub(crate) struct TaskStepUpdateArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  kanban task step done default#1 step_01 --note-file -\n  kanban task step done default#1 step_01 --note-file note.md"
+)]
 pub(crate) struct TaskStepDoneArgs {
     pub(crate) task_ref: String,
     pub(crate) step_ref: String,
@@ -376,6 +379,9 @@ pub(crate) struct TaskStepDoneArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  kanban task step skip default#1 step_01 --reason-file -\n  kanban task step reopen default#1 step_01 --reason-file reason.md"
+)]
 pub(crate) struct TaskStepReasonArgs {
     pub(crate) task_ref: String,
     pub(crate) step_ref: String,
@@ -390,6 +396,9 @@ pub(crate) struct TaskStepReasonArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  kanban task step not-required default#1 --reason-file reason.md\n  kanban task step not-required default#1 --reason-file -"
+)]
 pub(crate) struct TaskStepNotRequiredArgs {
     pub(crate) task_ref: String,
     #[arg(long)]
@@ -485,6 +494,9 @@ pub(crate) struct SignalReviewListArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  kanban signal confirm sig_01 --reason-file -\n  kanban signal resolve sig_01 --reason-file reason.md"
+)]
 pub(crate) struct SignalLifecycleArgs {
     #[arg(required = true)]
     pub(crate) signal_ids: Vec<String>,
@@ -1328,6 +1340,9 @@ pub(crate) struct GraphNeighborsArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(
+    after_help = "Examples:\n  kanban graph query --sparql-file query.rq --limit 100\n  kanban graph query --sparql-file -"
+)]
 pub(crate) struct GraphQueryArgs {
     pub(crate) sparql: Option<String>,
     #[arg(

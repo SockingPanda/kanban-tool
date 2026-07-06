@@ -96,6 +96,12 @@ fn key_agent_facing_help_includes_examples_and_safe_input_guidance() -> anyhow::
         ],
     )?;
 
+    let vector_query_label_atoms = kanban_help(&["vector", "query-label-atoms"])?;
+    assert_contains_all(
+        &vector_query_label_atoms,
+        &["--text-file <PATH|->", "--vector-json-file <PATH|->"],
+    )?;
+
     Ok(())
 }
 

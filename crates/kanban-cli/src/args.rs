@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use kanban_sqlite::FinishPolicy;
 
@@ -1372,14 +1372,32 @@ pub(crate) struct VectorQueryChunksArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(
+    group(
+        ArgGroup::new("query_input")
+            .required(true)
+            .multiple(false)
+            .args(["text", "text_file", "vector_json", "vector_json_file"])
+    ),
+    after_help = "Examples:\n  kanban vector query-label-atoms --text-file query.txt --limit 5\n  kanban vector query-label-atoms --text-file - --polarity positive\n  kanban vector query-label-atoms --vector-json-file vector.json --include-vector\n  kanban vector query-label-atoms --vector-json-file - --include-vector"
+)]
 pub(crate) struct VectorQueryLabelAtomsArgs {
-    #[arg(
-        required_unless_present = "vector_json",
-        conflicts_with = "vector_json"
-    )]
+    #[arg(value_name = "TEXT")]
     pub(crate) text: Option<String>,
-    #[arg(long = "vector-json", required_unless_present = "text")]
+    #[arg(
+        long = "text-file",
+        value_name = "PATH|-",
+        help = "Read query text from PATH, or stdin with -"
+    )]
+    pub(crate) text_file: Option<PathBuf>,
+    #[arg(long = "vector-json", value_name = "JSON")]
     pub(crate) vector_json: Option<String>,
+    #[arg(
+        long = "vector-json-file",
+        value_name = "PATH|-",
+        help = "Read raw vector JSON from PATH, or stdin with -"
+    )]
+    pub(crate) vector_json_file: Option<PathBuf>,
     #[arg(long, default_value_t = 10)]
     pub(crate) limit: usize,
     #[arg(long)]

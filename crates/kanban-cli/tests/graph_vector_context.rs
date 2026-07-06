@@ -1,7 +1,7 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kanban, kanban_in_dir_envs};
+use common::{TempDb, kanban, kanban_in_dir_envs, kanban_in_dir_envs_with_stdin};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
@@ -362,6 +362,138 @@ print(json.dumps({"protocol":"kanban-derived-helper.v1","payload_json":json.dump
 
     assert_eq!(hits["data"][0]["hit"]["label_name"], "backend");
     assert_eq!(hits["data"][0]["vector"], serde_json::json!([1.0, 0.0]));
+    Ok(())
+}
+
+#[test]
+fn vector_query_label_atoms_requires_exactly_one_input() -> anyhow::Result<()> {
+    let temp = TempDb::new("vector_query_label_atoms_requires_exactly_one_input")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    kanban(&temp.path, &["vector", "query-label-atoms"])?.failure_containing("required")?;
+    kanban(
+        &temp.path,
+        &[
+            "vector",
+            "query-label-atoms",
+            "inline text",
+            "--text-file",
+            "query.txt",
+        ],
+    )?
+    .failure_containing("cannot be used with")?;
+    kanban(
+        &temp.path,
+        &[
+            "vector",
+            "query-label-atoms",
+            "--vector-json",
+            "[1.0]",
+            "--vector-json-file",
+            "vector.json",
+        ],
+    )?
+    .failure_containing("cannot be used with")?;
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn vector_query_label_atoms_accepts_file_and_stdin_inputs() -> anyhow::Result<()> {
+    let temp = TempDb::new("vector_query_label_atoms_accepts_file_and_stdin_inputs")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let query_path = temp.dir.join("label-query.txt");
+    std::fs::write(&query_path, "touches $RUST and `service`\n")?;
+    let log = temp.dir.join("vector-helper-calls.jsonl");
+    let helper = temp.dir.join("vector-helper.py");
+    write_executable(
+        &helper,
+        &format!(
+            r#"#!/usr/bin/env python3
+import json, pathlib, sys
+log = pathlib.Path({:?})
+args = sys.argv[1:]
+with log.open("a") as handle:
+    handle.write(json.dumps(args) + "\n")
+cmd = args[0]
+if cmd != "query-label-atoms":
+    raise SystemExit("unexpected command " + cmd)
+payload = [{{
+    "atom_id":"atom_backend_positive",
+    "label_id":"label_backend",
+    "label_name":"backend",
+    "board_id":"b_default",
+    "polarity":"positive",
+    "kind":"applies_when",
+    "text":"touches rust service code",
+    "ordinal":0,
+    "content_hash":"hash",
+    "embedding_model":"review-model",
+    "distance":0.0
+}}]
+print(json.dumps({{"protocol":"kanban-derived-helper.v1","payload_json":json.dumps(payload)}}))
+"#,
+            log.display().to_string()
+        ),
+    )?;
+
+    kanban_in_dir_envs(
+        &temp.path,
+        &[
+            "--json",
+            "vector",
+            "query-label-atoms",
+            "--text-file",
+            query_path.to_str().context("query path")?,
+            "--limit",
+            "3",
+        ],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", helper.as_path())],
+    )?
+    .success_json()?;
+
+    kanban_in_dir_envs_with_stdin(
+        &temp.path,
+        &[
+            "--json",
+            "vector",
+            "query-label-atoms",
+            "--vector-json-file",
+            "-",
+            "--include-vector",
+        ],
+        "[0.25,0.75]",
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", helper.as_path())],
+    )?
+    .success_json()?;
+
+    let calls = std::fs::read_to_string(&log)?;
+    let parsed_calls = calls
+        .lines()
+        .map(serde_json::from_str::<Vec<String>>)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(parsed_calls.len(), 2, "{calls}");
+    let text_value_index = parsed_calls[0]
+        .iter()
+        .position(|arg| arg == "--text")
+        .context("--text")?
+        + 1;
+    assert_eq!(
+        parsed_calls[0][text_value_index],
+        "touches $RUST and `service`\n"
+    );
+    let vector_value_index = parsed_calls[1]
+        .iter()
+        .position(|arg| arg == "--vector-json")
+        .context("--vector-json")?
+        + 1;
+    assert_eq!(parsed_calls[1][vector_value_index], "[0.25,0.75]");
+    assert!(
+        parsed_calls[1].iter().any(|arg| arg == "--include-vector"),
+        "{calls}"
+    );
     Ok(())
 }
 

@@ -32,7 +32,9 @@ use crate::args::{
     LabelAtomPolarityArg, LabelCommand, LabelOntologyActorArgs, LabelOntologyActorTypeArg,
     LabelOntologyAtomKindArg, LabelOntologyReviewGroupByArg, LabelOntologyValidationStatusArg,
 };
-use crate::commands::common::{invalid_input, validate_page_bounds};
+use crate::commands::common::{
+    invalid_input, resolve_optional_text_input, resolve_required_text_input, validate_page_bounds,
+};
 use crate::commands::helper::{HelperKind, resolve_helper};
 use crate::output::{label_line, print_or_json, print_task};
 
@@ -210,7 +212,12 @@ pub(crate) fn handle_label(
                 source_signal_ids: args.source_signal_ids,
                 ontology_actor: Some(label_ontology_cli_actor(actor, &args.ontology_actor)),
                 allow_retarget: args.allow_retarget,
-                retarget_reason: args.retarget_reason,
+                retarget_reason: resolve_optional_text_input(
+                    args.retarget_reason,
+                    args.retarget_reason_file,
+                    "--retarget-reason",
+                    "--retarget-reason-file",
+                )?,
             };
             let propose_options = kanban_sqlite::LabelProposalProposeOptions {
                 suggestion: options,
@@ -281,23 +288,40 @@ pub(crate) fn handle_label(
                 print_or_json(json, &proposal, || proposal_line(&proposal))?;
             }
             crate::args::LabelProposalsCommand::Accept(args) => {
+                let reason = resolve_optional_text_input(
+                    args.reason,
+                    args.reason_file,
+                    "--reason",
+                    "--reason-file",
+                )?;
+                let retarget_reason = resolve_optional_text_input(
+                    args.retarget_reason,
+                    args.retarget_reason_file,
+                    "--retarget-reason",
+                    "--retarget-reason-file",
+                )?;
                 let proposal = accept_label_proposal_with_options(
                     db_path,
                     actor,
                     &args.proposal_id,
-                    args.reason,
+                    reason,
                     LabelProposalDecisionOptions {
                         source_signal_ids: args.source_signal_ids,
                         ontology_actor: Some(label_ontology_cli_actor(actor, &args.ontology_actor)),
                         allow_retarget: args.allow_retarget,
-                        retarget_reason: args.retarget_reason,
+                        retarget_reason,
                     },
                 )?;
                 print_or_json(json, &proposal, || proposal_line(&proposal))?;
             }
             crate::args::LabelProposalsCommand::Reject(args) => {
-                let proposal =
-                    reject_label_proposal(db_path, actor, &args.proposal_id, args.reason)?;
+                let reason = resolve_optional_text_input(
+                    args.reason,
+                    args.reason_file,
+                    "--reason",
+                    "--reason-file",
+                )?;
+                let proposal = reject_label_proposal(db_path, actor, &args.proposal_id, reason)?;
                 print_or_json(json, &proposal, || proposal_line(&proposal))?;
             }
         },
@@ -327,7 +351,12 @@ fn handle_label_semantics(
         crate::args::LabelSemanticsCommand::Upsert(args) => {
             let args = *args;
             let mut options = LabelSemanticsMutationOptions::manual_actor(actor);
-            options.reason = args.reason;
+            options.reason = resolve_optional_text_input(
+                args.reason,
+                args.reason_file,
+                "--reason",
+                "--reason-file",
+            )?;
             options.source_signal_ids = args.source_signal_ids;
             let semantics = upsert_label_semantics_with_options(
                 db_path,
@@ -351,8 +380,15 @@ fn handle_label_semantics(
             print_or_json(json, &semantics, || label_semantics_line(&semantics))?;
         }
         crate::args::LabelSemanticsCommand::Delete(args) => {
+            let reason = resolve_required_text_input(
+                args.reason,
+                args.reason_file,
+                "--reason",
+                "--reason-file",
+                "reason",
+            )?;
             let mut options = LabelSemanticsMutationOptions::manual_actor(actor);
-            options.reason = Some(args.reason.clone());
+            options.reason = Some(reason);
             clear_label_semantics_with_options(
                 db_path,
                 board,
@@ -505,6 +541,13 @@ fn handle_label_ontology(
         }
         crate::args::LabelOntologyCommand::Confirm(args) => {
             let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
+            let reason = resolve_required_text_input(
+                args.reason,
+                args.reason_file,
+                "--reason",
+                "--reason-file",
+                "reason",
+            )?;
             let action = create_label_ontology_action(
                 db_path,
                 board,
@@ -512,7 +555,7 @@ fn handle_label_ontology(
                     ontology_actor,
                     LabelOntologyActionType::Confirm,
                     args.signal_ids,
-                    args.reason,
+                    reason,
                     None,
                 ),
             )?;
@@ -520,6 +563,13 @@ fn handle_label_ontology(
         }
         crate::args::LabelOntologyCommand::Reject(args) => {
             let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
+            let reason = resolve_required_text_input(
+                args.reason,
+                args.reason_file,
+                "--reason",
+                "--reason-file",
+                "reason",
+            )?;
             let action = create_label_ontology_action(
                 db_path,
                 board,
@@ -527,7 +577,7 @@ fn handle_label_ontology(
                     ontology_actor,
                     LabelOntologyActionType::Reject,
                     args.signal_ids,
-                    args.reason,
+                    reason,
                     None,
                 ),
             )?;
@@ -535,6 +585,13 @@ fn handle_label_ontology(
         }
         crate::args::LabelOntologyCommand::Supersede(args) => {
             let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
+            let reason = resolve_required_text_input(
+                args.reason,
+                args.reason_file,
+                "--reason",
+                "--reason-file",
+                "reason",
+            )?;
             let action = create_label_ontology_action(
                 db_path,
                 board,
@@ -542,7 +599,7 @@ fn handle_label_ontology(
                     ontology_actor,
                     LabelOntologyActionType::Supersede,
                     args.signal_ids,
-                    args.reason,
+                    reason,
                     Some(args.superseded_by_signal_id),
                 ),
             )?;
@@ -553,6 +610,13 @@ fn handle_label_ontology(
                 return Err(invalid_input("resolve currently requires --no-change"));
             }
             let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
+            let reason = resolve_required_text_input(
+                args.reason,
+                args.reason_file,
+                "--reason",
+                "--reason-file",
+                "reason",
+            )?;
             let action = create_label_ontology_action(
                 db_path,
                 board,
@@ -560,7 +624,7 @@ fn handle_label_ontology(
                     ontology_actor,
                     LabelOntologyActionType::ResolveNoChange,
                     args.signal_ids,
-                    args.reason,
+                    reason,
                     None,
                 ),
             )?;
@@ -568,6 +632,26 @@ fn handle_label_ontology(
         }
         crate::args::LabelOntologyCommand::Apply { command } => match command {
             crate::args::LabelOntologyApplyCommand::Atom(args) => {
+                let text = resolve_required_text_input(
+                    args.text,
+                    args.text_file,
+                    "--text",
+                    "--text-file",
+                    "text",
+                )?;
+                let reason = resolve_required_text_input(
+                    args.reason,
+                    args.reason_file,
+                    "--reason",
+                    "--reason-file",
+                    "reason",
+                )?;
+                let retarget_reason = resolve_optional_text_input(
+                    args.retarget_reason,
+                    args.retarget_reason_file,
+                    "--retarget-reason",
+                    "--retarget-reason-file",
+                )?;
                 let action = apply_label_ontology_atom_with_options(
                     db_path,
                     board,
@@ -576,18 +660,25 @@ fn handle_label_ontology(
                         signal_ids: args.signal_ids,
                         label_ref: args.label,
                         kind: label_ontology_atom_kind_value(args.kind).to_owned(),
-                        text: args.text,
-                        reason: args.reason,
+                        text,
+                        reason,
                     },
                     LabelOntologyRetargetOptions {
                         allow_retarget: args.allow_retarget,
-                        retarget_reason: args.retarget_reason,
+                        retarget_reason,
                     },
                 )?;
                 print_or_json(json, &action, || label_ontology_action_line(&action))?;
             }
         },
         crate::args::LabelOntologyCommand::Revert(args) => {
+            let reason = resolve_required_text_input(
+                args.reason,
+                args.reason_file,
+                "--reason",
+                "--reason-file",
+                "reason",
+            )?;
             let action = revert_label_ontology_mutation(
                 db_path,
                 board,
@@ -595,12 +686,25 @@ fn handle_label_ontology(
                     actor: label_ontology_cli_actor(actor, &args.actor),
                     target_action_id: args.action_id,
                     expected_current_hash: args.expected_current_hash,
-                    reason: args.reason,
+                    reason,
                 },
             )?;
             print_or_json(json, &action, || label_ontology_action_line(&action))?;
         }
         crate::args::LabelOntologyCommand::Validate(args) => {
+            let reason = resolve_required_text_input(
+                args.reason,
+                args.reason_file,
+                "--reason",
+                "--reason-file",
+                "reason",
+            )?;
+            let positive_control_waiver = resolve_optional_text_input(
+                args.positive_control_waiver,
+                args.positive_control_waiver_file,
+                "--positive-control-waiver",
+                "--positive-control-waiver-file",
+            )?;
             let validation_status = label_ontology_validation_status(args.status);
             let action = if args.trusted {
                 validate_label_suggest_bounds(
@@ -628,15 +732,15 @@ fn handle_label_ontology(
                     &args.actor,
                     args.action_id,
                     args.signal_ids,
-                    args.reason,
+                    reason,
                     validation_status,
                     args.positive_controls,
-                    args.positive_control_waiver,
+                    positive_control_waiver,
                     args.vector_config.as_deref(),
                     options,
                 )?
             } else {
-                if !args.positive_controls.is_empty() || args.positive_control_waiver.is_some() {
+                if !args.positive_controls.is_empty() || positive_control_waiver.is_some() {
                     return Err(invalid_input(
                         "--positive-control and --positive-control-waiver require --trusted",
                     ));
@@ -654,7 +758,7 @@ fn handle_label_ontology(
                         actor: label_ontology_cli_actor(actor, &args.actor),
                         parent_action_id: args.action_id,
                         signal_ids: args.signal_ids,
-                        reason: args.reason,
+                        reason,
                         validation_status,
                         validation_json,
                     },

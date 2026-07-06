@@ -13,7 +13,7 @@ use kanban_sqlite::{
 use crate::args::{ListArgs, TaskCommand, TaskPlanFilterArg, TaskStepCommand};
 use crate::commands::common::{
     invalid_input, optional_clearable, parse_status, parse_task_list_sort,
-    resolve_optional_text_input, validate_page_bounds,
+    resolve_optional_text_input, resolve_required_text_input, validate_page_bounds,
 };
 use crate::output::{print_or_json, print_task, print_task_with_details, task_line};
 
@@ -163,10 +163,19 @@ pub(crate) fn handle_task(
         TaskCommand::Promote { task_ref } => {
             print_task(json, &promote_task(db_path, board, actor, &task_ref)?)?
         }
-        TaskCommand::Reopen(args) => print_task(
-            json,
-            &reopen_task(db_path, board, actor, &args.task_ref, &args.reason)?,
-        )?,
+        TaskCommand::Reopen(args) => {
+            let reason = resolve_required_text_input(
+                args.reason,
+                args.reason_file,
+                "<reason>",
+                "--reason-file",
+                "reason",
+            )?;
+            print_task(
+                json,
+                &reopen_task(db_path, board, actor, &args.task_ref, &reason)?,
+            )?
+        }
         TaskCommand::Start(args) | TaskCommand::Claim(args) => {
             let claim = claim_task(db_path, board, actor, &args.task_ref, args.ttl_ms)?;
             print_or_json(json, &claim, || {
@@ -208,18 +217,27 @@ pub(crate) fn handle_task(
                 args.force,
             )?,
         )?,
-        TaskCommand::Block(args) => print_task(
-            json,
-            &block_task(
-                db_path,
-                board,
-                actor,
-                &args.task_ref,
-                &args.reason,
-                args.claim_token.as_deref(),
-                args.force,
-            )?,
-        )?,
+        TaskCommand::Block(args) => {
+            let reason = resolve_required_text_input(
+                args.reason,
+                args.reason_file,
+                "--reason",
+                "--reason-file",
+                "reason",
+            )?;
+            print_task(
+                json,
+                &block_task(
+                    db_path,
+                    board,
+                    actor,
+                    &args.task_ref,
+                    &reason,
+                    args.claim_token.as_deref(),
+                    args.force,
+                )?,
+            )?
+        }
         TaskCommand::Unblock { task_ref } => {
             print_task(json, &unblock_task(db_path, board, actor, &task_ref)?)?
         }
@@ -317,35 +335,49 @@ fn handle_task_step(
             print_step(json, &step, "Updated")?;
         }
         TaskStepCommand::Done(args) => {
-            let step = complete_step(
-                db_path,
-                board,
-                actor,
-                &args.task_ref,
-                &args.step_ref,
-                &args.note,
+            let note = resolve_required_text_input(
+                args.note,
+                args.note_file,
+                "--note",
+                "--note-file",
+                "note",
             )?;
+            let step = complete_step(db_path, board, actor, &args.task_ref, &args.step_ref, &note)?;
             print_step(json, &step, "Completed")?;
         }
         TaskStepCommand::Skip(args) => {
+            let reason = resolve_required_text_input(
+                args.reason,
+                args.reason_file,
+                "--reason",
+                "--reason-file",
+                "reason",
+            )?;
             let step = skip_step(
                 db_path,
                 board,
                 actor,
                 &args.task_ref,
                 &args.step_ref,
-                &args.reason,
+                &reason,
             )?;
             print_step(json, &step, "Skipped")?;
         }
         TaskStepCommand::Reopen(args) => {
+            let reason = resolve_required_text_input(
+                args.reason,
+                args.reason_file,
+                "--reason",
+                "--reason-file",
+                "reason",
+            )?;
             let step = reopen_step(
                 db_path,
                 board,
                 actor,
                 &args.task_ref,
                 &args.step_ref,
-                &args.reason,
+                &reason,
             )?;
             print_step(json, &step, "Reopened")?;
         }
@@ -358,13 +390,15 @@ fn handle_task_step(
             )?;
         }
         TaskStepCommand::NotRequired(args) => {
-            let plan = mark_execution_plan_not_required(
-                db_path,
-                board,
-                actor,
-                &args.task_ref,
-                &args.reason,
+            let reason = resolve_required_text_input(
+                args.reason,
+                args.reason_file,
+                "--reason",
+                "--reason-file",
+                "reason",
             )?;
+            let plan =
+                mark_execution_plan_not_required(db_path, board, actor, &args.task_ref, &reason)?;
             print_or_json(json, &plan, || execution_plan_line(&plan))?;
         }
     }

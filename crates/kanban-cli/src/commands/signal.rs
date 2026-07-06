@@ -6,6 +6,7 @@ use kanban_sqlite::{
     SignalStatus, get_signal, list_signals, record_signal, review_signals, update_signal_status,
 };
 
+use crate::commands::common::resolve_required_text_input;
 use crate::{args::SignalCommand, output::print_or_json};
 
 pub(crate) fn handle_signal(
@@ -56,7 +57,13 @@ pub(crate) fn handle_signal(
                 lifecycle: SignalLifecycle::Confirm,
                 signal_ids: args.signal_ids,
                 replacement_signal_id: None,
-                reason: args.reason,
+                reason: resolve_required_text_input(
+                    args.reason,
+                    args.reason_file,
+                    "--reason",
+                    "--reason-file",
+                    "reason",
+                )?,
             },
         )?,
         SignalCommand::Reject(args) => lifecycle(
@@ -68,7 +75,13 @@ pub(crate) fn handle_signal(
                 lifecycle: SignalLifecycle::Reject,
                 signal_ids: args.signal_ids,
                 replacement_signal_id: None,
-                reason: args.reason,
+                reason: resolve_required_text_input(
+                    args.reason,
+                    args.reason_file,
+                    "--reason",
+                    "--reason-file",
+                    "reason",
+                )?,
             },
         )?,
         SignalCommand::Resolve(args) => lifecycle(
@@ -80,7 +93,13 @@ pub(crate) fn handle_signal(
                 lifecycle: SignalLifecycle::Resolve,
                 signal_ids: args.signal_ids,
                 replacement_signal_id: None,
-                reason: args.reason,
+                reason: resolve_required_text_input(
+                    args.reason,
+                    args.reason_file,
+                    "--reason",
+                    "--reason-file",
+                    "reason",
+                )?,
             },
         )?,
         SignalCommand::Supersede(args) => lifecycle(
@@ -92,7 +111,13 @@ pub(crate) fn handle_signal(
                 lifecycle: SignalLifecycle::Supersede,
                 signal_ids: args.signal_ids,
                 replacement_signal_id: Some(args.by),
-                reason: args.reason,
+                reason: resolve_required_text_input(
+                    args.reason,
+                    args.reason_file,
+                    "--reason",
+                    "--reason-file",
+                    "reason",
+                )?,
             },
         )?,
     }

@@ -12,7 +12,7 @@ use crate::args::{
     ContextCommand, DerivedCommand, EntityCommand, GraphCommand, OutboxCommand, VectorCommand,
     VectorConfigureArgs,
 };
-use crate::commands::common::{invalid_input, validate_page_bounds};
+use crate::commands::common::{invalid_input, resolve_required_text_input, validate_page_bounds};
 use crate::commands::helper::{
     HelperKind, HelperRunError, helper_degraded_message, resolve_helper, run_helper_json,
     run_helper_json_classified,
@@ -194,10 +194,17 @@ pub(crate) fn handle_graph(
         }
         GraphCommand::Query(args) => {
             validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
+            let sparql = resolve_required_text_input(
+                args.sparql,
+                args.sparql_file,
+                "SPARQL",
+                "--sparql-file",
+                "SPARQL",
+            )?;
             let helper_args = vec![
                 "query".to_owned(),
                 "--sparql".to_owned(),
-                args.sparql,
+                sparql,
                 "--limit".to_owned(),
                 args.limit.to_string(),
             ];

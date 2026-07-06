@@ -1893,7 +1893,7 @@ fn label_for_task_binding_in_current_tx(
     }
     if !create_missing {
         return Err(KanbanError::InvalidInput(format!(
-            "label {name} does not exist; create it first with label create/bootstrap/proposal, or pass --create-missing for an explicit canonical identity"
+            "label {name} does not exist; create it first with label create/bootstrap/proposal, or create the task without this label and run label add --create-missing <task_ref> {name} for an explicit canonical identity"
         )));
     }
     ensure_label_in_current_tx(conn, board_id, &name, None, now).map(|label| (label, true))

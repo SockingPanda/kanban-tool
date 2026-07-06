@@ -201,6 +201,28 @@ fn task_create_label_requires_existing_vocabulary() -> anyhow::Result<()> {
     )?
     .failure_containing("label missing does not exist")?;
 
+    let failed = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "json missing label",
+            "--description",
+            "ready spec",
+            "--label",
+            "missing",
+        ],
+    )?;
+    assert!(!failed.output.status.success());
+    assert!(failed.output.stderr.is_empty());
+    let json: serde_json::Value = serde_json::from_slice(&failed.output.stdout)
+        .context("failed to parse JSON error stdout")?;
+    let message = json["error"]["message"].as_str().context("error message")?;
+    assert!(message.contains("label missing does not exist"));
+    assert!(message.contains("label add --create-missing"));
+    assert!(!message.contains("pass --create-missing"));
+
     let tasks = kanban(&temp.path, &["--json", "task", "list"])?.success_json()?;
     assert!(tasks["data"].as_array().context("tasks")?.is_empty());
     let labels = kanban(&temp.path, &["--json", "label", "list"])?.success_json()?;

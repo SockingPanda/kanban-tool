@@ -476,7 +476,10 @@ fn task_create_with_missing_label_rolls_back_task_vocabulary_bindings_and_events
         &["missing".to_owned()],
     ))?;
 
-    assert!(error.to_string().contains("label missing does not exist"));
+    let message = error.to_string();
+    assert!(message.contains("label missing does not exist"));
+    assert!(message.contains("label add --create-missing"));
+    assert!(!message.contains("pass --create-missing"));
     assert_eq!(task_create_label_counts(&temp.path)?, before);
     assert!(list_tasks(&temp.path, "default", &[], false)?.is_empty());
     assert!(kanban_sqlite::list_labels(&temp.path, "default")?.is_empty());
@@ -507,7 +510,10 @@ fn task_create_with_mixed_existing_and_missing_labels_rolls_back_atomically() ->
         &["backend".to_owned(), "missing".to_owned()],
     ))?;
 
-    assert!(error.to_string().contains("label missing does not exist"));
+    let message = error.to_string();
+    assert!(message.contains("label missing does not exist"));
+    assert!(message.contains("label add --create-missing"));
+    assert!(!message.contains("pass --create-missing"));
     assert_eq!(task_create_label_counts(&temp.path)?, before);
     assert_eq!(
         kanban_sqlite::list_labels(&temp.path, "default")?

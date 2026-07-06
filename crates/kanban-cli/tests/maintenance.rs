@@ -147,7 +147,7 @@ fn maintenance_rejects_missing_database() -> anyhow::Result<()> {
     ];
 
     for args in cases {
-        kanban(&temp.path, &args)?.failure_containing("database does not exist")?;
+        kanban(&temp.path, &args)?.json_failure_containing("database does not exist")?;
         assert!(
             !temp.path.exists(),
             "maintenance command should not create missing DB for args {args:?}"
@@ -172,7 +172,7 @@ fn maintenance_lock_uses_canonical_path() -> anyhow::Result<()> {
     std::fs::write(&lock_path, format!("pid={}", std::process::id()))?;
 
     kanban_in_dir(Path::new("kb.db"), &["--json", "doctor"], &temp.dir)?
-        .failure_containing("database is locked for maintenance")?;
+        .json_failure_containing("database is locked for maintenance")?;
     std::fs::remove_file(lock_path)?;
     Ok(())
 }

@@ -165,7 +165,7 @@ fn dispatch_rejects_untrusted_log_dir() -> anyhow::Result<()> {
             "1",
         ],
     )?
-    .failure_containing("outside allowed run log roots")?;
+    .json_failure_containing("outside allowed run log roots")?;
 
     let task = kanban(
         &temp.path,

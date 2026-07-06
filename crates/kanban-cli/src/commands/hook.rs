@@ -6,14 +6,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use kanban_sqlite::{SignalRecordInput, record_signal};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 use crate::{
     args::{CodexHookCommand, CodexHookHandleCommand, CodexHookInstallArgs, HookCommand},
-    commands::common::active_board,
+    commands::common::{active_board, invalid_input},
     output::print_or_json,
 };
 
@@ -215,7 +215,10 @@ fn read_hooks_config(path: &Path) -> Result<Value> {
     let value: Value = serde_json::from_str(&content)
         .with_context(|| format!("failed to parse {} as JSON", path.display()))?;
     if !value.is_object() {
-        bail!("{} must contain a JSON object", path.display());
+        return Err(invalid_input(format!(
+            "{} must contain a JSON object",
+            path.display()
+        )));
     }
     Ok(value)
 }
@@ -245,7 +248,10 @@ fn read_prompt_config(path: &Path) -> Result<Value> {
     let value: Value = serde_json::from_str(&content)
         .with_context(|| format!("failed to parse {} as JSON", path.display()))?;
     if !value.is_object() {
-        bail!("{} must contain a JSON object", path.display());
+        return Err(invalid_input(format!(
+            "{} must contain a JSON object",
+            path.display()
+        )));
     }
     Ok(value)
 }
@@ -339,7 +345,7 @@ fn validate_prompt_templates(value: &Value, bindings: &CodexHookPromptBindings) 
 
 fn validate_prompt_config_version(value: &Value) -> Result<()> {
     if value.get("version").and_then(Value::as_i64) != Some(1) {
-        bail!("codex hook prompt config version must be 1");
+        return Err(invalid_input("codex hook prompt config version must be 1"));
     }
     Ok(())
 }
@@ -355,10 +361,10 @@ fn prompt_binding_alias(value: &Value, kind: CodexHookPromptKind) -> Result<Stri
         .and_then(Value::as_str)
         .unwrap_or_else(|| kind.default_alias());
     if alias.trim().is_empty() {
-        bail!(
+        return Err(invalid_input(format!(
             "codex_hooks.bindings.{} must not be empty",
             kind.binding_key()
-        );
+        )));
     }
     Ok(alias.to_owned())
 }
@@ -371,7 +377,9 @@ fn prompt_template_by_alias<'a>(value: &'a Value, alias: &str) -> Result<&'a str
         .and_then(Value::as_str)
         .with_context(|| format!("codex_hooks.prompts.{alias} must be a string"))?;
     if template.trim().is_empty() {
-        bail!("codex_hooks.prompts.{alias} must not be empty");
+        return Err(invalid_input(format!(
+            "codex_hooks.prompts.{alias} must not be empty"
+        )));
     }
     Ok(template)
 }

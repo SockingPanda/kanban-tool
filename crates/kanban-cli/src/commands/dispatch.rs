@@ -1,9 +1,10 @@
 use std::{fs, path::PathBuf, thread, time::Duration};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use kanban_sqlite::{DispatchOptions, FinishPolicy, dispatch_once};
 
 use crate::args::{DispatchArgs, DispatchLoopSummary, WorkerProfileConfig};
+use crate::commands::common::invalid_input;
 
 pub(crate) fn dispatch_options(args: &DispatchArgs, actor: String) -> Result<DispatchOptions> {
     let profile = args
@@ -115,25 +116,43 @@ pub(crate) fn load_worker_profile(
             continue;
         }
         let Some((key, value)) = line.split_once('=') else {
-            bail!("invalid worker profile line: {raw_line}");
+            return Err(invalid_input(format!(
+                "invalid worker profile line: {raw_line}"
+            )));
         };
         let key = key.trim();
         let value = unquote(value.trim());
         match key {
             "command" => profile.command = Some(value.to_owned()),
-            "claim_ttl_ms" => profile.claim_ttl_ms = Some(value.parse()?),
-            "heartbeat_interval_ms" => profile.heartbeat_interval_ms = Some(value.parse()?),
+            "claim_ttl_ms" => {
+                profile.claim_ttl_ms = Some(value.parse().map_err(|_| {
+                    invalid_input(format!(
+                        "worker profile claim_ttl_ms must be an integer: {value}"
+                    ))
+                })?)
+            }
+            "heartbeat_interval_ms" => {
+                profile.heartbeat_interval_ms = Some(value.parse().map_err(|_| {
+                    invalid_input(format!(
+                        "worker profile heartbeat_interval_ms must be an integer: {value}"
+                    ))
+                })?)
+            }
             "on_success" => profile.on_success = Some(parse_finish_policy(value)?),
             "on_failure" => profile.on_failure = Some(parse_finish_policy(value)?),
             "log_dir" => profile.log_dir = Some(PathBuf::from(value)),
-            _ => bail!("unsupported worker profile key: {key}"),
+            _ => {
+                return Err(invalid_input(format!(
+                    "unsupported worker profile key: {key}"
+                )));
+            }
         }
     }
     if !found {
-        bail!(
+        return Err(invalid_input(format!(
             "worker profile {profile_name} not found in {}",
             path.display()
-        );
+        )));
     }
     Ok(profile)
 }
@@ -156,6 +175,6 @@ fn parse_finish_policy(value: &str) -> Result<FinishPolicy> {
         "review" => Ok(FinishPolicy::Review),
         "blocked" => Ok(FinishPolicy::Blocked),
         "ready" => Ok(FinishPolicy::Ready),
-        _ => bail!("unsupported finish policy: {value}"),
+        _ => Err(invalid_input(format!("unsupported finish policy: {value}"))),
     }
 }

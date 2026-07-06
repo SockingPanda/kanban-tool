@@ -73,6 +73,34 @@ fn command_layer_validation_errors_exit_2() -> anyhow::Result<()> {
         ],
     )?;
     assert_exit_json(mutually_exclusive.output, 2, "invalid_input")?;
+
+    let worker_profile = temp.dir.join("bad-workers.toml");
+    std::fs::write(&worker_profile, "[workers.default]\nnot-a-key-value-line\n")?;
+    let invalid_worker_profile = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "dispatch",
+            "--profile-config",
+            worker_profile.to_str().context("worker profile path")?,
+            "--max-iterations",
+            "1",
+        ],
+    )?;
+    assert_exit_json(invalid_worker_profile.output, 2, "invalid_input")?;
+
+    let unsupported_vector_provider = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "vector",
+            "configure",
+            "--provider",
+            "not-ollama",
+            "--skip-check",
+        ],
+    )?;
+    assert_exit_json(unsupported_vector_provider.output, 2, "invalid_input")?;
     Ok(())
 }
 

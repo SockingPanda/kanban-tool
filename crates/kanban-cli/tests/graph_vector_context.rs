@@ -151,7 +151,7 @@ fn graph_vector_and_context_commands_report_disabled_fallbacks() -> anyhow::Resu
         &temp.dir,
         &[("KANBAN_GRAPH_HELPER", missing_graph_helper.as_path())],
     )?
-    .failure_containing("failed to run graph helper")?;
+    .json_failure_containing("failed to run graph helper")?;
 
     let vector = kanban_in_dir_envs(
         &temp.path,
@@ -439,7 +439,7 @@ exit 1
         &temp.dir,
         &[("KANBAN_GRAPH_HELPER", helper.as_path())],
     )?
-    .failure_containing("graph helper failed: bad board (bad_board)")?;
+    .json_failure_containing("graph helper failed: bad board (bad_board)")?;
     Ok(())
 }
 

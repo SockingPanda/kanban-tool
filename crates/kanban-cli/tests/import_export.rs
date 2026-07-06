@@ -219,7 +219,7 @@ fn reject_import_with_missing_run_log(source: &TempDb, export_content: &str) -> 
             "--replace",
         ],
     )?
-    .failure_containing("imported data failed doctor checks")?;
+    .json_failure_containing("imported data failed doctor checks")?;
     assert!(!rejected.path.exists());
     Ok(())
 }
@@ -239,7 +239,7 @@ fn import_rejects_missing_input_without_creating_database() -> anyhow::Result<()
             "--replace",
         ],
     )?
-    .failure_containing("import input does not exist")?;
+    .json_failure_containing("import input does not exist")?;
     assert!(!temp.path.exists());
     Ok(())
 }
@@ -269,7 +269,7 @@ fn import_requires_replace_without_creating_database() -> anyhow::Result<()> {
             input_path.to_str().context("expected UTF-8 path")?,
         ],
     )?
-    .failure_containing("import requires --replace")?;
+    .json_failure_containing("import requires --replace")?;
     assert!(!temp.path.exists());
     Ok(())
 }
@@ -389,7 +389,7 @@ fn import_replace_rejects_maintenance_locked_database() -> anyhow::Result<()> {
             "--replace",
         ],
     )?
-    .failure_containing("database is locked for maintenance")?;
+    .json_failure_containing("database is locked for maintenance")?;
     std::fs::remove_file(lock_path)?;
 
     let existing_after =
@@ -428,7 +428,7 @@ fn import_replace_rejects_directory_database_path() -> anyhow::Result<()> {
             "--replace",
         ],
     )?
-    .failure_containing("database path is not a file")?;
+    .json_failure_containing("database path is not a file")?;
     assert!(db_dir.is_dir());
     Ok(())
 }
@@ -601,7 +601,7 @@ fn export_rejects_existing_output_file() -> anyhow::Result<()> {
             export_path.to_str().context("expected UTF-8 path")?,
         ],
     )?
-    .failure_containing("export target already exists")?;
+    .json_failure_containing("export target already exists")?;
     assert_eq!(std::fs::read_to_string(&export_path)?, "keepme");
     Ok(())
 }
@@ -661,7 +661,7 @@ fn import_rejects_executable_status_invariant_violations() -> anyhow::Result<()>
                 "--replace",
             ],
         )?
-        .failure_containing("imported data failed doctor checks")?;
+        .json_failure_containing("imported data failed doctor checks")?;
         assert!(!temp.path.exists(), "{doctor_field}");
     }
     Ok(())
@@ -697,7 +697,7 @@ fn import_rejects_empty_or_unusable_snapshots_without_creating_database() -> any
                 "--replace",
             ],
         )?
-        .failure_containing(error)?;
+        .json_failure_containing(error)?;
         assert!(!temp.path.exists(), "{name}");
     }
     Ok(())

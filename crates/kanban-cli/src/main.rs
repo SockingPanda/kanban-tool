@@ -57,12 +57,10 @@ impl CliErrorReport {
 }
 
 fn classify_kanban_error(error: &KanbanError) -> (&'static str, i32) {
-    if let Some(classified) = classify_error_message(&error.to_string()) {
-        return classified;
-    }
-
     match error {
-        KanbanError::InvalidInput(_) | KanbanError::InvalidStatus(_) => ("invalid_input", 2),
+        KanbanError::InvalidInput(message) | KanbanError::InvalidStatus(message) => {
+            classify_error_message(message).unwrap_or(("invalid_input", 2))
+        }
         KanbanError::NotFound(_) => ("not_found", 3),
         KanbanError::InvalidTransition(message)
             if message.contains("claim conflict") || message.contains("matching running claim") =>
@@ -96,6 +94,24 @@ fn classify_error_message(message: &str) -> Option<(&'static str, i32)> {
         || normalized.contains("failed doctor checks")
     {
         return Some(("integrity_check_failed", 8));
+    }
+    if normalized.contains("unsupported locale")
+        || normalized.contains("only supports loopback hosts")
+        || normalized.contains("mutually exclusive")
+        || normalized.contains("requires either")
+        || normalized.contains("outside allowed run log roots")
+        || normalized.contains("must be >=")
+        || normalized.contains("must be <=")
+        || normalized.contains("must be positive")
+        || normalized.contains("must be a positive")
+        || normalized.contains("must be one of")
+        || normalized.contains("does not exist")
+        || normalized.contains("already exists")
+        || normalized.contains("requires --replace")
+        || normalized.contains("is not a file")
+        || normalized.contains("unsupported task list sort")
+    {
+        return Some(("invalid_input", 2));
     }
     None
 }

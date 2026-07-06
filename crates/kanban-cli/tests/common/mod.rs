@@ -143,11 +143,9 @@ impl CmdResult {
             String::from_utf8_lossy(&self.output.stderr)
         );
         let stderr = String::from_utf8_lossy(&self.output.stderr);
-        let stdout = String::from_utf8_lossy(&self.output.stdout);
-        let combined = format!("{stderr}\n{stdout}");
         anyhow::ensure!(
-            contains(expected).eval(&combined),
-            "expected failure output to contain {expected:?}, got stdout:\n{stdout}\nstderr:\n{stderr}"
+            contains(expected).eval(&stderr),
+            "expected stderr to contain {expected:?}, got:\n{stderr}"
         );
         Ok(())
     }
@@ -160,15 +158,46 @@ impl CmdResult {
             String::from_utf8_lossy(&self.output.stderr)
         );
         let stderr = String::from_utf8_lossy(&self.output.stderr);
-        let stdout = String::from_utf8_lossy(&self.output.stdout);
-        let combined = format!("{stderr}\n{stdout}");
         anyhow::ensure!(
-            expected
-                .iter()
-                .any(|value| contains(*value).eval(&combined)),
-            "expected failure output to contain one of {expected:?}, got stdout:\n{stdout}\nstderr:\n{stderr}"
+            expected.iter().any(|value| contains(*value).eval(&stderr)),
+            "expected stderr to contain one of {expected:?}, got:\n{stderr}"
         );
         Ok(())
+    }
+
+    pub fn json_failure_containing(self, expected: &str) -> anyhow::Result<()> {
+        let json = self.json_failure()?;
+        let message = json["error"]["message"].as_str().unwrap_or_default();
+        anyhow::ensure!(
+            contains(expected).eval(message),
+            "expected JSON error message to contain {expected:?}, got:\n{json}"
+        );
+        Ok(())
+    }
+
+    pub fn json_failure_containing_any(self, expected: &[&str]) -> anyhow::Result<()> {
+        let json = self.json_failure()?;
+        let message = json["error"]["message"].as_str().unwrap_or_default();
+        anyhow::ensure!(
+            expected.iter().any(|value| contains(*value).eval(message)),
+            "expected JSON error message to contain one of {expected:?}, got:\n{json}"
+        );
+        Ok(())
+    }
+
+    fn json_failure(self) -> anyhow::Result<serde_json::Value> {
+        anyhow::ensure!(
+            !self.output.status.success(),
+            "command unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&self.output.stdout),
+            String::from_utf8_lossy(&self.output.stderr)
+        );
+        let stderr = String::from_utf8_lossy(&self.output.stderr);
+        anyhow::ensure!(
+            stderr.is_empty(),
+            "runtime --json errors should not write stderr, got:\n{stderr}"
+        );
+        serde_json::from_slice(&self.output.stdout).context("failed to parse JSON error stdout")
     }
 }
 

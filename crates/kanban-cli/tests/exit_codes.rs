@@ -29,6 +29,7 @@ fn runtime_json_errors_include_stable_code_message_and_exit_code() -> anyhow::Re
 
     let result = kanban(&temp.path, &["--json", "board", "show", "missing-board"])?;
     assert_exit_json(result.output, 3, "not_found")?;
+
     Ok(())
 }
 
@@ -39,6 +40,39 @@ fn validation_errors_exit_2() -> anyhow::Result<()> {
 
     let result = kanban(&temp.path, &["--json", "task", "list", "--limit", "1001"])?;
     assert_exit_json(result.output, 2, "invalid_input")?;
+    Ok(())
+}
+
+#[test]
+fn command_layer_validation_errors_exit_2() -> anyhow::Result<()> {
+    let temp = TempDb::new("command_layer_validation_errors_exit_2")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    let unsupported_locale = kanban(&temp.path, &["--json", "--locale", "fr-FR", "task", "list"])?;
+    assert_exit_json(unsupported_locale.output, 2, "invalid_input")?;
+
+    let serve_non_loopback = kanban(
+        &temp.path,
+        &["--json", "serve", "--host", "0.0.0.0", "--port", "8721"],
+    )?;
+    assert_exit_json(serve_non_loopback.output, 2, "invalid_input")?;
+
+    let description_path = temp.dir.join("description.md");
+    std::fs::write(&description_path, "from file")?;
+    let mutually_exclusive = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "bad description input",
+            "--description",
+            "inline",
+            "--description-file",
+            description_path.to_str().context("description path")?,
+        ],
+    )?;
+    assert_exit_json(mutually_exclusive.output, 2, "invalid_input")?;
     Ok(())
 }
 

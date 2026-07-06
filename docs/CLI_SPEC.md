@@ -38,7 +38,15 @@ Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状
 
 `auto` / `system` 会按 `LC_ALL`、`LC_MESSAGES`、`LANG` 解析系统 locale；当前只支持中文和英文。脚本和自动化应优先使用 `--json`，不要依赖 human 文案。
 
-### 1.1 JSON output contract
+### 1.1 Help output contract
+
+`kanban --help` 和公开 command group 的 `--help` 输出必须为每个公开 command/subcommand 行提供一句简短用途说明；隐藏内部命令（例如 `__complete`）除外。全局 options 的 help 必须说明它们影响的是 SQLite DB、active board、actor、locale 或 JSON 输出，不改变 JSON key、状态枚举或 exit code 契约。
+
+关键 agent-facing 输入面必须在命令 help 中优先展示安全路径：多行或 shell-sensitive 文本使用 `--description-file -`、`--body-file -`、`--metadata-json-file <PATH|->`、`--metadata-file <PATH|->` 或 `--input -`，避免 shell expansion / quoting 污染。危险、破坏性或容易误解的 flag 必须在 help 中说明语义，例如 `task archive --force` 绕过普通 archive guard，`import --replace` 是有意 backup/restore flow 的替换式恢复入口；兼容 no-op flag 必须明确写出 no-op。
+
+顶层 help 和关键 agent-facing 命令可以包含 `Examples:`，但示例必须保持短小、稳定，并与实际命令语义一致；不要把 CLI_SPEC 的完整说明复制进 help。CLI help contract 由 `crates/kanban-cli/tests/help.rs` 覆盖，防止公开 command 行退化为空描述。
+
+### 1.2 JSON output contract
 
 所有公开 `--json` 输出使用顶层 envelope：
 
@@ -85,7 +93,7 @@ Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状
 | `integrity_check_failed` | 8 | doctor/import/maintenance 发现 integrity 或 consistency hard failure。 |
 | `storage_error` | 1 | 其它存储错误；不保证可按 SQLite lock/integrity 自动恢复。 |
 
-### 1.2 Shell completions
+### 1.3 Shell completions
 
 ```bash
 kanban completions <shell>
@@ -120,7 +128,7 @@ DBs, missing board config, or read/query failures return success with no
 candidates and no stderr. Static completion generation itself does not open or
 create the SQLite database.
 
-### 1.3 Codex hooks
+### 1.4 Codex hooks
 
 ```bash
 kanban hook codex install [--handler-command <command-prefix>] [--timeout 30] [--record-signals] [--json]
@@ -236,7 +244,7 @@ V1 behavior:
 
 ### 3.1 `kanban init`
 
-初始化本地 DB、默认 board、默认 columns。该命令是幂等的；重复执行只会应用缺失 migration 并确保默认数据存在，不会重置或覆盖已有任务数据。
+初始化本地 DB、默认 board、默认 columns。该命令是幂等的；重复执行只会应用缺失 migration 并确保默认数据存在，不会重置或覆盖已有任务数据。`--force` 是兼容旧脚本的 no-op，不改变 `init` 行为。
 
 ```bash
 kanban init
@@ -337,7 +345,7 @@ Options：
 | Option | 说明 |
 |---|---|
 | `--description <text>` | Markdown 描述。 |
-| `--description-file <PATH|->` | 从文件或 stdin (`-`) 读取 Markdown 描述；与 `--description` 互斥。 |
+| `--description-file <PATH|->` | 从文件或 stdin (`-`) 读取 Markdown 描述；与 `--description` 互斥。推荐用于多行或包含 `$`、反引号、JSON 等 shell-sensitive 文本。 |
 | `--status <status>` | 显式初始状态：triage/todo/scheduled/ready。 |
 | `--assignee <name>` | assignee/worker profile。 |
 | `--priority <int>` | Priority level `0..3`: `0` = P0 incident/blocker/must-handle-immediately, `1` = P1 near-term focus, `2` = P2 important follow-up, `3` = P3 ordinary backlog/low/default. Invalid values are rejected. |
@@ -346,7 +354,7 @@ Options：
 | `--max-retries <n>` | worker 失败或 reclaim 后最多重试次数。 |
 | `--label <name>` | 创建时附加已存在 label，可重复；缺失的 board label 会拒绝整个 create。 |
 | `--metadata <json>` | 扩展 JSON。 |
-| `--metadata-file <PATH|->` | 从文件或 stdin (`-`) 读取扩展 JSON；与 `--metadata` 互斥。 |
+| `--metadata-file <PATH|->` | 从文件或 stdin (`-`) 读取扩展 JSON；与 `--metadata` 互斥。推荐用于避免 JSON shell quoting 问题。 |
 
 Priority 只表达相对重要性和排序，不表达可 claim 状态。`ready` 才表示任务已被显式放入可执行队列；普通 ready 任务通常仍应是 P1/P2/P3，不能为了表示“下一批可做”全部标成 P0。P0 只用于 incident、当前目标 blocker 或必须立即处理的任务；若 P0 task 仍缺规格、排期未到或依赖未完成，它仍保持 `triage` / `scheduled` / `todo`，不能被 claim。
 
@@ -1429,9 +1437,9 @@ other automated writers. `signal` is a persisted comment kind, but users should
 create signal backlink comments through `kanban signal record` rather than
 manually using `comment add --kind signal`; this keeps the signal ledger and
 backlink comment in one transaction. `--body-file <PATH|->` reads long comment
-bodies from files or stdin and is mutually exclusive with inline `<body>`.
+bodies from files or stdin and is mutually exclusive with inline `<body>`; it is the recommended path for multiline or shell-sensitive comment text.
 `--metadata-json` defaults to `{}` and must be a JSON object;
-`--metadata-json-file <PATH|->` reads the same JSON payload from a file or stdin
+`--metadata-json-file <PATH|->` reads the same JSON payload from a file or stdin, avoids shell quoting issues for structured payloads,
 and is mutually exclusive with `--metadata-json`. For `--kind decision`,
 metadata is required to satisfy the structured
 decision schema: non-empty `options`, unique lowercase ASCII option `slug`

@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
-TARGET_DIR="$($LOCK --print-target-dir)"
+TARGET_DIR="$("$LOCK" --print-target-dir)"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="${RUN_DIR:-$ROOT/.omx/ultragoal/evidence/G004-ontology-bootstrap-verify-e2e-$TIMESTAMP}"
 BOARD="default"

@@ -38,7 +38,7 @@ pub(crate) fn resolve_required_text_input(
 ) -> Result<String> {
     resolve_optional_text_input(inline, file, inline_name, file_name)?.ok_or_else(|| {
         invalid_input(format!(
-            "{value_name} requires either {inline_name} or {file_name}"
+            "{value_name} is required; pass either {inline_name} or {file_name}"
         ))
     })
 }

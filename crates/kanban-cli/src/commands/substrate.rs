@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use kanban_context::ContextPolicy;
 use kanban_sqlite::{
     EntityListOptions, MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT, OutboxListOptions,
@@ -12,7 +12,7 @@ use crate::args::{
     ContextCommand, DerivedCommand, EntityCommand, GraphCommand, OutboxCommand, VectorCommand,
     VectorConfigureArgs,
 };
-use crate::commands::common::validate_page_bounds;
+use crate::commands::common::{invalid_input, validate_page_bounds};
 use crate::commands::helper::{
     HelperKind, HelperRunError, helper_degraded_message, resolve_helper, run_helper_json,
     run_helper_json_classified,
@@ -402,7 +402,9 @@ pub(crate) fn handle_vector(
                 command_args.push("--vector-json".to_owned());
                 command_args.push(vector_json);
             } else {
-                bail!("query-label-atoms requires TEXT or --vector-json");
+                return Err(invalid_input(
+                    "query-label-atoms requires TEXT or --vector-json",
+                ));
             }
             command_args.push("--limit".to_owned());
             command_args.push(args.limit.to_string());
@@ -518,7 +520,9 @@ pub(crate) fn handle_context(
             validate_page_bounds(args.vector_limit, MAX_TASK_LIST_LIMIT, 0)?;
             validate_page_bounds(args.max_items, MAX_TASK_LIST_LIMIT, 0)?;
             if args.max_items == 0 {
-                bail!("max_items must be >= 1 because the subject item is mandatory");
+                return Err(invalid_input(
+                    "max_items must be >= 1 because the subject item is mandatory",
+                ));
             }
             let policy = ContextPolicy {
                 lexical_limit: args.lexical_limit,
@@ -548,10 +552,13 @@ pub(crate) fn handle_context(
 
 fn vector_config_from_args(args: &VectorConfigureArgs) -> Result<kanban_local::VectorConfig> {
     if args.provider != "ollama" {
-        bail!("unsupported vector provider: {}", args.provider);
+        return Err(invalid_input(format!(
+            "unsupported vector provider: {}",
+            args.provider
+        )));
     }
     if args.dimensions == 0 {
-        bail!("dimensions must be greater than zero");
+        return Err(invalid_input("dimensions must be greater than zero"));
     }
     Ok(kanban_local::VectorConfig {
         provider: args.provider.clone(),

@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use clap_complete::Shell;
 use kanban_core::{Locale, set_current_locale};
+
+use crate::commands::common::invalid_input;
 use kanban_sqlite::{
     CompletionCandidateKind, begin_database_runtime, completion_candidates, dispatch_once,
     init_database, list_events, list_runs,
@@ -209,7 +211,7 @@ fn parse_bool_literal(value: &str) -> Option<bool> {
 
 fn cli_locale(flag: Option<&str>) -> Result<Locale> {
     let env_locale = std::env::var("KANBAN_LOCALE").ok();
-    Locale::explicit_or_system(flag.or(env_locale.as_deref())).map_err(anyhow::Error::msg)
+    Locale::explicit_or_system(flag.or(env_locale.as_deref())).map_err(invalid_input)
 }
 
 fn completion_kind(kind: CompleteKind) -> CompletionCandidateKind {

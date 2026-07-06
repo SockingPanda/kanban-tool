@@ -95,23 +95,8 @@ fn classify_error_message(message: &str) -> Option<(&'static str, i32)> {
     {
         return Some(("integrity_check_failed", 8));
     }
-    if normalized.contains("unsupported locale")
-        || normalized.contains("only supports loopback hosts")
-        || normalized.contains("mutually exclusive")
-        || normalized.contains("requires either")
-        || normalized.contains("outside allowed run log roots")
-        || normalized.contains("must be >=")
-        || normalized.contains("must be <=")
-        || normalized.contains("must be positive")
-        || normalized.contains("must be a positive")
-        || normalized.contains("must be one of")
-        || normalized.contains("does not exist")
-        || normalized.contains("already exists")
-        || normalized.contains("requires --replace")
-        || normalized.contains("is not a file")
-        || normalized.contains("unsupported task list sort")
-    {
-        return Some(("invalid_input", 2));
-    }
+    // Only classify external or storage-layer text that cannot carry a structured
+    // KanbanError variant through the command boundary. Business/config validation
+    // must return KanbanError::InvalidInput at the command layer.
     None
 }

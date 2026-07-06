@@ -157,6 +157,24 @@ fn rich_file_stdin_leaf_commands_advertise_safe_input_examples() -> anyhow::Resu
             "kanban task step skip default#1 step_01 --reason-file -",
         ],
     )?;
+    assert_no_line(
+        &step_skip,
+        "  kanban task step reopen default#1 step_01 --reason-file reason.md",
+    )?;
+
+    let step_reopen = kanban_help(&["task", "step", "reopen"])?;
+    assert_contains_all(
+        &step_reopen,
+        &[
+            "--reason-file <PATH|->",
+            "Read reason text from PATH, or stdin with -",
+            "kanban task step reopen default#1 step_01 --reason-file -",
+        ],
+    )?;
+    assert_no_line(
+        &step_reopen,
+        "  kanban task step skip default#1 step_01 --reason-file reason.md",
+    )?;
 
     let step_not_required = kanban_help(&["task", "step", "not-required"])?;
     assert_contains_all(

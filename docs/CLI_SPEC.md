@@ -236,13 +236,15 @@ V1 behavior:
 
 ### 3.1 `kanban init`
 
-初始化本地 DB、默认 board、默认 columns。
+初始化本地 DB、默认 board、默认 columns。该命令是幂等的；重复执行只会应用缺失 migration 并确保默认数据存在，不会重置或覆盖已有任务数据。
 
 ```bash
 kanban init
 kanban init --db .kb/kb.db
 kanban init --force
 ```
+
+`--force` 是 deprecated compatibility no-op：保留用于兼容旧脚本，不改变 `init` 行为，不执行 reset/overwrite，也不会绕过 migration 或 schema 校验。
 
 输出：
 

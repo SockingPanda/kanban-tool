@@ -93,6 +93,8 @@ fn key_agent_facing_help_includes_examples_and_safe_input_guidance() -> anyhow::
         &[
             "kanban signal record --input signal.json --json",
             "kanban signal record --input - --json < signal.json",
+            "source must be a string",
+            "put structured command, cwd, exit_code, and stderr details under evidence",
         ],
     )?;
 

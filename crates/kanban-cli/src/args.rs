@@ -451,7 +451,7 @@ pub(crate) enum SignalCommand {
 
 #[derive(Debug, Args)]
 #[command(
-    after_help = "Examples:\n  kanban signal record --input signal.json --json\n  kanban signal record --input - --json < signal.json"
+    after_help = "Input schema: source must be a string; put structured command, cwd, exit_code, and stderr details under evidence.\n\nExamples:\n  kanban signal record --input signal.json --json\n  kanban signal record --input - --json < signal.json"
 )]
 pub(crate) struct SignalRecordArgs {
     #[arg(long)]

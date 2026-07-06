@@ -1688,7 +1688,7 @@ kanban signal resolve --board <slug> <signal-id>... [--reason <reason>|--reason-
 kanban signal supersede --board <slug> <signal-id>... --by <replacement-signal-id> [--reason <reason>|--reason-file <PATH|->] --json
 ```
 
-`record` input JSON supports `kind`, `title`, `summary`, `severity`, optional `task_ref` / `task_id` / `run_id` / `comment_id`, `actor`, `agent_type`, `dedupe_key`, `source`, `evidence`, and optional `comment.body`. When task context is present, the service writes the signal ledger rows and a `comment.kind = "signal"` backlink in one SQLite transaction. Signal backlink metadata includes `type:"signal_link"`, `signal_id`, `observation_id`, `signal_kind`, and `signal_status`. V1 does not create follow-up tasks automatically.
+`record` input JSON supports `kind`, `title`, `summary`, `severity`, optional `task_ref` / `task_id` / `run_id` / `comment_id`, `actor`, `agent_type`, `dedupe_key`, `source`, `evidence`, and optional `comment.body`. `source` is a string identifier for where the observation came from; structured command details such as `command`, `cwd`, `exit_code`, `stderr`, or related logs belong in the `evidence` object. When task context is present, the service writes the signal ledger rows and a `comment.kind = "signal"` backlink in one SQLite transaction. Signal backlink metadata includes `type:"signal_link"`, `signal_id`, `observation_id`, `signal_kind`, and `signal_status`. V1 does not create follow-up tasks automatically.
 
 Lifecycle transitions are `open -> confirmed|rejected|superseded|resolved` and `confirmed -> resolved`. `supersede` requires a same-board replacement signal and rejects cycles. Lifecycle reason 可用 `--reason-file <PATH|->` 从文件或 stdin 读取，并与 inline `--reason` 互斥。
 

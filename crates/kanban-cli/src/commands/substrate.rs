@@ -402,16 +402,26 @@ pub(crate) fn handle_vector(
         VectorCommand::QueryLabelAtoms(args) => {
             validate_page_bounds(args.limit, MAX_TASK_LIST_LIMIT, 0)?;
             let mut command_args = vec!["query-label-atoms".to_owned()];
-            if let Some(text) = args.text {
+            if args.text.is_some() || args.text_file.is_some() {
+                let text = resolve_required_text_input(
+                    args.text,
+                    args.text_file,
+                    "TEXT",
+                    "--text-file",
+                    "TEXT",
+                )?;
                 command_args.push("--text".to_owned());
                 command_args.push(text);
-            } else if let Some(vector_json) = args.vector_json {
+            } else {
+                let vector_json = resolve_required_text_input(
+                    args.vector_json,
+                    args.vector_json_file,
+                    "--vector-json",
+                    "--vector-json-file",
+                    "--vector-json",
+                )?;
                 command_args.push("--vector-json".to_owned());
                 command_args.push(vector_json);
-            } else {
-                return Err(invalid_input(
-                    "query-label-atoms requires TEXT or --vector-json",
-                ));
             }
             command_args.push("--limit".to_owned());
             command_args.push(args.limit.to_string());

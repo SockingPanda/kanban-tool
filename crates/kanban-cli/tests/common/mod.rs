@@ -29,6 +29,34 @@ pub fn kanban_with_stdin(db_path: &Path, args: &[&str], stdin: &str) -> anyhow::
     Ok(CmdResult { output })
 }
 
+pub fn kanban_in_dir_envs_with_stdin(
+    db_path: &Path,
+    args: &[&str],
+    stdin: &str,
+    current_dir: &Path,
+    envs: &[(&str, &Path)],
+) -> anyhow::Result<CmdResult> {
+    let mut command =
+        Command::cargo_bin("kanban").context("failed to locate kanban test binary")?;
+    command
+        .current_dir(current_dir)
+        .arg("--db")
+        .arg(db_path)
+        .args(args)
+        .env_remove("KB_BOARD");
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    if !envs.iter().any(|(key, _)| *key == "XDG_CONFIG_HOME") {
+        command.env("XDG_CONFIG_HOME", current_dir.join(".xdg-config"));
+    }
+    let output = command
+        .write_stdin(stdin)
+        .output()
+        .context("failed to execute kanban command")?;
+    Ok(CmdResult { output })
+}
+
 pub fn kanban_in_dir(
     db_path: &Path,
     args: &[&str],

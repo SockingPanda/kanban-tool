@@ -1055,9 +1055,11 @@ ordinal，semantics rebuild 后同语义 atom 的 id 改变时仍可用 content 
 helper 的 `rebuild-label-atoms` command 重建 label atom 派生索引；helper/provider 不可用时返回显式
 error，不修改 SQLite canonical label truth，也不标记 chunk store success。
 
-`kanban vector query-label-atoms` 是公开 raw helper 查询入口，支持 text 查询和 raw vector 查询：
-`kanban vector query-label-atoms <text> [--polarity positive|negative] [--limit N] [--embedding-model MODEL] [--vector-config <toml>]`，或
-`kanban vector query-label-atoms --vector-json '[0.1,0.2]' [--include-vector] [--embedding-model MODEL] [--polarity positive|negative] [--limit N]`。
+`kanban vector query-label-atoms` 是公开 raw helper 查询入口，支持 text 查询和 raw vector 查询。
+输入必须且只能选择一种：positional `<text>`、`--text-file <PATH|->`、`--vector-json <JSON>` 或
+`--vector-json-file <PATH|->`。`-` 表示从 stdin 读取。示例：
+`kanban vector query-label-atoms --text-file query.txt [--polarity positive|negative] [--limit N] [--embedding-model MODEL] [--vector-config <toml>]`，或
+`kanban vector query-label-atoms --vector-json-file vector.json [--include-vector] [--embedding-model MODEL] [--polarity positive|negative] [--limit N]`。
 `--include-vector` 只对 helper 支持的 raw vector/vector hit 输出有意义。
 
 `label propose` 是独立的新 label semantics 提案流程，不复用或改变 `label suggest`。

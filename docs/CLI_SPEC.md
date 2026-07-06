@@ -587,7 +587,7 @@ kanban task review <task_ref> --claim-token <token>
 ### 6.6 Block
 
 ```bash
-kanban task block <task_ref> <reason>
+kanban task block <task_ref> [<reason>|--reason-file <PATH|->]
 ```
 
 Options：
@@ -596,6 +596,7 @@ Options：
 |---|---|
 | `--claim-token <token>` | running task block 时需要。 |
 | `--force` | 强制 block。 |
+| `--reason-file <PATH|->` | 从文件或 stdin (`-`) 读取 block reason；与 positional `<reason>` 互斥。 |
 
 ### 6.7 Unblock
 
@@ -608,10 +609,13 @@ kanban task unblock <task_ref>
 ### 6.8 Reopen
 
 ```bash
-kanban task reopen <task_ref> --reason <text>
+kanban task reopen <task_ref> [--reason <text>|--reason-file <PATH|->]
 ```
 
-只允许 reopen `done` task，`--reason` 必填且不能为空。Reopen 会清空 `completed_at`，保留 `result_summary` / `result_json`，并按 spec、schedule、dependency 和 execution plan readiness 重新计算目标状态。
+只允许 reopen `done` task，reason 必填且不能为空，可用 `--reason-file <PATH|->`
+从文件或 stdin 读取；它与 inline `--reason` 互斥。Reopen 会清空
+`completed_at`，保留 `result_summary` / `result_json`，并按 spec、schedule、
+dependency 和 execution plan readiness 重新计算目标状态。
 
 如果被 reopen 的 task 是其他 task 的 dependency parent，直接 child 中仅 `triage|todo|scheduled|ready` 会重新计算；`running|blocked|review|done|archived` 不隐式改写。
 
@@ -644,11 +648,11 @@ Options：
 kanban task step list <task_ref>
 kanban task step add <task_ref> <title> [--body <text>|--body-file <PATH|->] [--link-task <task_ref>] [--position <n>] [--required|--optional]
 kanban task step update <task_ref> <step_ref> [--title <text>] [--body <text>|--body-file <PATH|->|--clear-body] [--link-task <task_ref>|--unlink-task] [--position <n>] [--required|--optional]
-kanban task step done <task_ref> <step_ref> --note <text>
-kanban task step skip <task_ref> <step_ref> --reason <text>
-kanban task step reopen <task_ref> <step_ref> --reason <text>
+kanban task step done <task_ref> <step_ref> [--note <text>|--note-file <PATH|->]
+kanban task step skip <task_ref> <step_ref> [--reason <text>|--reason-file <PATH|->]
+kanban task step reopen <task_ref> <step_ref> [--reason <text>|--reason-file <PATH|->]
 kanban task step remove <task_ref> <step_ref>
-kanban task step not-required <task_ref> --reason <text>
+kanban task step not-required <task_ref> [--reason <text>|--reason-file <PATH|->]
 ```
 
 Step 是 execution plan 的一等结构化项目。它可以是纯文本步骤，也可以通过
@@ -666,6 +670,8 @@ positional, and any other extra value remains a parser error. `--body-file
 <PATH|->` 从文件或 stdin 读取长正文，与 `--body` 互斥；`update --clear-body`
 也与 `--body-file` 互斥。`update` 只有在显式传 `--required` 或 `--optional`
 时才改变 required flag。`done`、`skip` 和 `reopen` 必须记录说明文本。
+`--note-file <PATH|->` 和 `--reason-file <PATH|->` 从文件或 stdin 读取长
+note/reason，分别与 inline `--note` / `--reason` 互斥。
 
 Human list 输出示例：
 
@@ -791,8 +797,8 @@ kanban label add [--create-missing] <task_ref> <label>...
 kanban label remove <task_ref> <label>
 kanban label semantics list [--json]
 kanban label semantics show <label> [--json]
-kanban label semantics upsert <label> [--expected-semantics-hash <hash>] [--replace] [--reason <text>] [--source-signal <signal_id>]... [--description <text>] [--applies-when <text>]... [--excludes-when <text>]... [--positive-example <text>]... [--negative-example <text>]... [--remove-applies-when <text>]... [--remove-excludes-when <text>]... [--remove-positive-example <text>]... [--remove-negative-example <text>]... [--json]
-kanban label semantics delete <label> --expected-semantics-hash <hash> --reason <text> [--json]
+kanban label semantics upsert <label> [--expected-semantics-hash <hash>] [--replace] [--reason <text>|--reason-file <PATH|->] [--source-signal <signal_id>]... [--description <text>] [--applies-when <text>]... [--excludes-when <text>]... [--positive-example <text>]... [--negative-example <text>]... [--remove-applies-when <text>]... [--remove-excludes-when <text>]... [--remove-positive-example <text>]... [--remove-negative-example <text>]... [--json]
+kanban label semantics delete <label> --expected-semantics-hash <hash> [--reason <text>|--reason-file <PATH|->] [--json]
 kanban label atoms list [--json]
 kanban label atom explain <atom-id-or-content-hash> [--json]
 kanban label atom-index status [--vector-config <toml>] [--json]
@@ -801,25 +807,32 @@ kanban label atom-index query <text> [--polarity positive|negative] [--limit 24]
 
 `label atom-index status`、`rebuild` 和 `query` 复用 vector TOML 解析规则：显式 `--vector-config`/`--config` 优先，其次是最近项目 `.kb/config.toml`，最后是全局 config。helper argv 只在显式传入 `--vector-config` 时附带该参数；省略时由 helper 按默认配置解析。
 kanban label suggest <task_ref> [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
-kanban label propose <task_ref> [--proposal-json <path>] [--source-signal <signal_id>]... [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
+kanban label propose <task_ref> [--proposal-json <path>] [--source-signal <signal_id>]... [--allow-retarget] [--retarget-reason <text>|--retarget-reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]
 kanban label proposals show <proposal_id> [--json]
-kanban label proposals accept <proposal_id> [--reason <text>] [--source-signal <signal_id>]... [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label proposals reject <proposal_id> [--reason <text>] [--json]
+kanban label proposals accept <proposal_id> [--reason <text>|--reason-file <PATH|->] [--source-signal <signal_id>]... [--allow-retarget] [--retarget-reason <text>|--retarget-reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label proposals reject <proposal_id> [--reason <text>|--reason-file <PATH|->] [--json]
 kanban label ontology record <task_ref> --input <path|-> [--suggestion-snapshot <path|-> | --capture-suggest] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label ontology list [--status open|confirmed|resolved|rejected|superseded]... [--kind false_negative|false_positive|vocabulary_gap|name_issue|boundary_issue|structure_issue]... [--task <task_ref>] [--label <label>] [--proposed-label <name>] [--include-all] [--limit 100] [--json]
 kanban label ontology show <signal_id> [--json]
 kanban label ontology review [--group-by label|candidate-atom|proposed-label|cluster] [--include-all] [--limit 100] [--json]
 kanban label ontology quality [--sample-limit 20] [--json]
-kanban label ontology confirm <signal_id>... --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology reject <signal_id>... --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology supersede <signal_id>... --by <signal_id> --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology resolve <signal_id>... --no-change --reason <text> [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology apply atom <signal_id>... --label <label> --kind applies-when|positive-example|excludes-when|negative-example --text <text> --reason <text> [--allow-retarget] [--retarget-reason <text>] [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology revert <action_id> --reason <text> [--expected-current-hash <hash>] [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology validate <action_id> --status passed|failed|partial --reason <text> --input <path|-> [signal_id]... [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology validate <action_id> --trusted --status passed|failed|partial --reason <text> [signal_id]... [--positive-control <task_ref>]... [--positive-control-waiver <reason>] [--vector-config <toml>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology confirm <signal_id>... [--reason <text>|--reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology reject <signal_id>... [--reason <text>|--reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology supersede <signal_id>... --by <signal_id> [--reason <text>|--reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology resolve <signal_id>... --no-change [--reason <text>|--reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology apply atom <signal_id>... --label <label> --kind applies-when|positive-example|excludes-when|negative-example [--text <text>|--text-file <PATH|->] [--reason <text>|--reason-file <PATH|->] [--allow-retarget] [--retarget-reason <text>|--retarget-reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology revert <action_id> [--reason <text>|--reason-file <PATH|->] [--expected-current-hash <hash>] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology validate <action_id> --status passed|failed|partial [--reason <text>|--reason-file <PATH|->] --input <path|-> [signal_id]... [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology validate <action_id> --trusted --status passed|failed|partial [--reason <text>|--reason-file <PATH|->] [signal_id]... [--positive-control <task_ref>]... [--positive-control-waiver <reason>|--positive-control-waiver-file <PATH|->] [--vector-config <toml>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--actor-type user|agent] [--agent-type <type>] [--json]
 ```
+
+Label semantics/proposal/ontology 命令中的 `--reason-file <PATH|->`、
+`--retarget-reason-file <PATH|->`、`--text-file <PATH|->` 和
+`--positive-control-waiver-file <PATH|->` 从文件或 stdin 读取对应长文本，并与同名
+inline 参数互斥。`label atom-index query <text>` 的 `<text>` 是短查询标量，不提供
+file 输入；需要持久 ontology evidence 时使用 `label ontology record --input <path|->`
+或 `label ontology validate --input <path|->`。
 
 `label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
 label，返回已有 label。`label add` 接受 task ref 和一个或多个 label 名称；默认
@@ -1659,15 +1672,15 @@ kanban signal record --board <slug> --input <path|-> --json
 kanban signal list --board <slug> [--status open] [--kind <kind>] [--task <task-ref>] [--include-all] --json
 kanban signal show --board <slug> <signal-id> --json
 kanban signal review --board <slug> [--status open] [--kind <kind>] [--task <task-ref>] --json
-kanban signal confirm --board <slug> <signal-id>... --reason <reason> --json
-kanban signal reject --board <slug> <signal-id>... --reason <reason> --json
-kanban signal resolve --board <slug> <signal-id>... --reason <reason> --json
-kanban signal supersede --board <slug> <signal-id>... --by <replacement-signal-id> --reason <reason> --json
+kanban signal confirm --board <slug> <signal-id>... [--reason <reason>|--reason-file <PATH|->] --json
+kanban signal reject --board <slug> <signal-id>... [--reason <reason>|--reason-file <PATH|->] --json
+kanban signal resolve --board <slug> <signal-id>... [--reason <reason>|--reason-file <PATH|->] --json
+kanban signal supersede --board <slug> <signal-id>... --by <replacement-signal-id> [--reason <reason>|--reason-file <PATH|->] --json
 ```
 
 `record` input JSON supports `kind`, `title`, `summary`, `severity`, optional `task_ref` / `task_id` / `run_id` / `comment_id`, `actor`, `agent_type`, `dedupe_key`, `source`, `evidence`, and optional `comment.body`. When task context is present, the service writes the signal ledger rows and a `comment.kind = "signal"` backlink in one SQLite transaction. Signal backlink metadata includes `type:"signal_link"`, `signal_id`, `observation_id`, `signal_kind`, and `signal_status`. V1 does not create follow-up tasks automatically.
 
-Lifecycle transitions are `open -> confirmed|rejected|superseded|resolved` and `confirmed -> resolved`. `supersede` requires a same-board replacement signal and rejects cycles.
+Lifecycle transitions are `open -> confirmed|rejected|superseded|resolved` and `confirmed -> resolved`. `supersede` requires a same-board replacement signal and rejects cycles. Lifecycle reason 可用 `--reason-file <PATH|->` 从文件或 stdin 读取，并与 inline `--reason` 互斥。
 
 ## 15. Maintenance Commands
 
@@ -1686,6 +1699,7 @@ kanban outbox list [--status pending] [--limit 50]
 kanban derived status
 kanban graph status
 kanban graph neighbors kb://task/t_... [--predicate depends_on] [--limit 50]
+kanban graph query [<SPARQL>|--sparql-file <PATH|->] [--limit 50]
 kanban vector configure [--provider ollama] [--endpoint http://127.0.0.1:11434] [--model qwen3-embedding:0.6b] [--dimensions 1024] [--skip-check] [--vector-config <toml>]
 kanban vector status [--vector-config <toml>]
 kanban vector rebuild [--vector-config <toml>]
@@ -1694,6 +1708,7 @@ kanban context build t_... [--lexical-limit 5] [--vector-config <toml>]
 ```
 
 `kanban stats --json` 返回 status counts、过期 running claim 列表、blocked reason 聚合、unplanned active task 数量，以及 required steps 未完成的 active parent 数量，用于本地 operator recovery。
+`kanban graph query` 的 SPARQL 可用 `--sparql-file <PATH|->` 从文件或 stdin 读取，并与 positional `<SPARQL>` 互斥。
 
 `kanban backup` 使用 SQLite `VACUUM INTO` 创建一致备份；目标文件已存在时失败，避免覆盖。
 `kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kanban backup`。JSONL export 包含 generic signal ledger record types：`signal_observation`、`signal`，以及 label ontology ledger record types：`label_ontology_observation`、`label_ontology_signal`、`label_ontology_action`、`label_ontology_action_atom_effect` 和 `label_ontology_action_signal`；因此 portable JSONL 与 SQLite backup 都会保留 signal、ontology observation/signal/action/effect provenance。

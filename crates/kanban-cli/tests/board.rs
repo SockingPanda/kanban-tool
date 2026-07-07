@@ -137,7 +137,7 @@ fn task_output_and_refs_use_board_slug_seq_format() -> anyhow::Result<()> {
     )?
     .success_stdout()?;
     assert!(human.contains("project#1"), "{human}");
-    assert!(human.contains("t_"), "{human}");
+    assert!(!human.contains("t_"), "{human}");
 
     let json = kanban(
         &temp.path,

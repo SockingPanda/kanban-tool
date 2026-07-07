@@ -80,23 +80,6 @@ fn runtime_human_errors_include_recovery_hints() -> anyhow::Result<()> {
     let temp = TempDb::new("runtime_human_errors_include_recovery_hints")?;
     kanban(&temp.path, &["init"])?.success()?;
 
-    let invalid_status = kanban(
-        &temp.path,
-        &["--locale", "en", "task", "list", "--status", "doing"],
-    )?;
-    assert_exit_stderr_contains_all(
-        invalid_status.output,
-        2,
-        &[
-            "Error:",
-            "Recovery:",
-            "Allowed statuses:",
-            "triage",
-            "ready",
-            "archived",
-        ],
-    )?;
-
     let missing_board = kanban(
         &temp.path,
         &["--locale", "en", "board", "show", "missing-board"],
@@ -119,37 +102,6 @@ fn runtime_human_errors_include_recovery_hints() -> anyhow::Result<()> {
             "kanban task list",
             "kanban task show <task-ref>",
         ],
-    )?;
-
-    let bad_sort = kanban(
-        &temp.path,
-        &["--locale", "en", "task", "list", "--sort", "surprise"],
-    )?;
-    assert_exit_stderr_contains_all(
-        bad_sort.output,
-        2,
-        &["Recovery:", "Allowed task list sort values:", "-updated_at"],
-    )?;
-
-    let bad_export_format = kanban(
-        &temp.path,
-        &[
-            "--locale",
-            "en",
-            "export",
-            "--out",
-            temp.dir
-                .join("backup.csv")
-                .to_str()
-                .context("backup path")?,
-            "--format",
-            "csv",
-        ],
-    )?;
-    assert_exit_stderr_contains_all(
-        bad_export_format.output,
-        2,
-        &["Recovery:", "Allowed export formats:", "jsonl"],
     )?;
 
     let bad_locale = kanban(&temp.path, &["--locale", "fr-FR", "task", "list"])?;

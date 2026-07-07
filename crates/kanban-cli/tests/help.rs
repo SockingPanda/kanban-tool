@@ -104,6 +104,23 @@ fn key_agent_facing_help_includes_examples_and_safe_input_guidance() -> anyhow::
         &["--text-file <PATH|->", "--vector-json-file <PATH|->"],
     )?;
 
+    let label_ontology_validate = kanban_help(&["label", "ontology", "validate"])?;
+    assert_contains_all(
+        &label_ontology_validate,
+        &[
+            "--input <PATH|->",
+            "Read external validation JSON from PATH, or stdin with -",
+            "--trusted",
+            "Run the trusted automated collector; cannot be combined with --input",
+            "--positive-control <TASK_REF>",
+            "negative atom trusted validation",
+            "--positive-control-waiver <REASON>",
+            "--positive-control-waiver-file <PATH|->",
+            "kanban label ontology validate act_01 --input - --status failed --json",
+            "kanban label ontology validate act_01 --trusted --status passed --positive-control default#1 --json",
+        ],
+    )?;
+
     Ok(())
 }
 

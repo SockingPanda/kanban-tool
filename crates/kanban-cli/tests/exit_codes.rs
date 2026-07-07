@@ -23,6 +23,43 @@ fn usage_errors_exit_2_before_runtime_json_envelope() -> anyhow::Result<()> {
 }
 
 #[test]
+fn enum_value_errors_exit_2_before_runtime_json_envelope() -> anyhow::Result<()> {
+    let cases = [
+        (
+            vec!["--json", "task", "list", "--status", "not-a-status"],
+            "not-a-status",
+        ),
+        (
+            vec!["--json", "task", "list", "--sort", "not-a-sort"],
+            "not-a-sort",
+        ),
+        (
+            vec![
+                "--json",
+                "export",
+                "--format",
+                "yaml",
+                "--out",
+                "snapshot.jsonl",
+            ],
+            "yaml",
+        ),
+    ];
+
+    for (args, invalid_value) in cases {
+        let output = Command::cargo_bin("kanban")?.args(args).output()?;
+
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("invalid value"), "{stderr}");
+        assert!(stderr.contains(invalid_value), "{stderr}");
+    }
+
+    Ok(())
+}
+
+#[test]
 fn runtime_json_errors_include_stable_code_message_and_exit_code() -> anyhow::Result<()> {
     let temp = TempDb::new("runtime_json_errors_include_stable_code_message_and_exit_code")?;
     kanban(&temp.path, &["init"])?.success()?;
@@ -30,6 +67,35 @@ fn runtime_json_errors_include_stable_code_message_and_exit_code() -> anyhow::Re
     let result = kanban(&temp.path, &["--json", "board", "show", "missing-board"])?;
     assert_exit_json(result.output, 3, "not_found")?;
 
+    Ok(())
+}
+
+#[test]
+fn runtime_value_errors_still_use_json_envelope_after_parse_succeeds() -> anyhow::Result<()> {
+    let temp = TempDb::new("runtime_value_errors_still_use_json_envelope_after_parse_succeeds")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    let result = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "scheduled task missing schedule",
+            "--description",
+            "ready spec",
+            "--status",
+            "scheduled",
+        ],
+    )?;
+
+    let json = assert_exit_json(result.output, 2, "invalid_input")?;
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("scheduled")),
+        "{json}"
+    );
     Ok(())
 }
 

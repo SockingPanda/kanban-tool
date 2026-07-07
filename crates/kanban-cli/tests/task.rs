@@ -3904,6 +3904,64 @@ fn task_step_required_accepts_bounded_boolean_value_forms() -> anyhow::Result<()
 }
 
 #[test]
+fn task_create_positional_title_after_delimiter_is_not_normalized_as_required_flag()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "task_create_positional_title_after_delimiter_is_not_normalized_as_required_flag",
+    )?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    let created = kanban(
+        &temp.path,
+        &["--json", "task", "create", "--", "--required=false"],
+    )?
+    .success_json()?;
+    assert_eq!(created["data"]["title"], "--required=false");
+
+    Ok(())
+}
+
+#[test]
+fn task_step_add_positional_title_after_delimiter_is_not_normalized_as_required_flag()
+-> anyhow::Result<()> {
+    let temp = TempDb::new(
+        "task_step_add_positional_title_after_delimiter_is_not_normalized_as_required_flag",
+    )?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "step delimiter parent",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+
+    let step = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "step",
+            "add",
+            task_id,
+            "--",
+            "--required=false",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(step["data"]["title"], "--required=false");
+    assert_eq!(step["data"]["required"], true);
+
+    Ok(())
+}
+
+#[test]
 fn task_step_linked_task_is_context_only() -> anyhow::Result<()> {
     let temp = TempDb::new("task_step_linked_task_is_context_only")?;
     kanban(&temp.path, &["init"])?.success()?;

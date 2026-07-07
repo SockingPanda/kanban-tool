@@ -186,6 +186,7 @@ fn import_exported_snapshot(
         ],
     )?
     .success_json()?;
+    assert_eq!(imported["data"]["dry_run"], false);
     assert_eq!(imported["data"]["records"], export_records);
     let tasks = kanban(&target.path, &["--json", "task", "list"])?.success_json()?;
     assert_eq!(tasks["data"][0]["id"], task_id);
@@ -269,8 +270,140 @@ fn import_requires_replace_without_creating_database() -> anyhow::Result<()> {
             input_path.to_str().context("expected UTF-8 path")?,
         ],
     )?
-    .json_failure_containing("import requires --replace")?;
+    .json_failure_containing("import requires --replace or --dry-run")?;
     assert!(!temp.path.exists());
+    Ok(())
+}
+
+#[test]
+fn import_dry_run_validates_without_creating_database() -> anyhow::Result<()> {
+    let source = TempDb::new("import_dry_run_validates_without_creating_database_source")?;
+    kanban(&source.path, &["init"])?.success()?;
+    let created = kanban(
+        &source.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "dry-run import source",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"]
+        .as_str()
+        .context("expected JSON string")?;
+    mark_no_plan_required(&source.path, task_id)?;
+    let export_path = source.dir.join("dry-run.jsonl");
+    let exported = kanban(
+        &source.path,
+        &[
+            "--json",
+            "export",
+            "--out",
+            export_path.to_str().context("expected UTF-8 path")?,
+        ],
+    )?
+    .success_json()?;
+
+    let target = TempDb::new("import_dry_run_validates_without_creating_database_target")?;
+    let dry_run = kanban(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            export_path.to_str().context("expected UTF-8 path")?,
+            "--dry-run",
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(dry_run["data"]["records"], exported["data"]["records"]);
+    assert_eq!(dry_run["data"]["dry_run"], true);
+    assert_eq!(
+        dry_run["data"]["input_path"],
+        export_path.to_str().context("expected UTF-8 path")?
+    );
+    assert!(!target.path.exists());
+    Ok(())
+}
+
+#[test]
+fn import_dry_run_does_not_replace_existing_database() -> anyhow::Result<()> {
+    let source = TempDb::new("import_dry_run_does_not_replace_existing_database_source")?;
+    kanban(&source.path, &["init"])?.success()?;
+    let incoming = kanban(
+        &source.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "incoming dry-run task",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let incoming_id = incoming["data"]["id"]
+        .as_str()
+        .context("expected JSON string")?;
+    mark_no_plan_required(&source.path, incoming_id)?;
+    let export_path = source.dir.join("incoming.jsonl");
+    kanban(
+        &source.path,
+        &[
+            "--json",
+            "export",
+            "--out",
+            export_path.to_str().context("expected UTF-8 path")?,
+        ],
+    )?
+    .success_json()?;
+
+    let target = TempDb::new("import_dry_run_does_not_replace_existing_database_target")?;
+    kanban(&target.path, &["init"])?.success()?;
+    let existing = kanban(
+        &target.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "existing task survives",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let existing_id = existing["data"]["id"]
+        .as_str()
+        .context("expected JSON string")?;
+    mark_no_plan_required(&target.path, existing_id)?;
+
+    let dry_run = kanban(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            export_path.to_str().context("expected UTF-8 path")?,
+            "--dry-run",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(dry_run["data"]["dry_run"], true);
+
+    let tasks = kanban(&target.path, &["--json", "task", "list"])?.success_json()?;
+    assert_eq!(
+        tasks["data"]
+            .as_array()
+            .context("expected tasks array")?
+            .len(),
+        1
+    );
+    assert_eq!(tasks["data"][0]["id"], existing_id);
+    assert_eq!(tasks["data"][0]["title"], "existing task survives");
     Ok(())
 }
 

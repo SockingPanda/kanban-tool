@@ -137,6 +137,80 @@ fn dangerous_flags_explain_their_semantics() -> anyhow::Result<()> {
 }
 
 #[test]
+fn dangerous_label_and_vector_flags_explain_boundaries() -> anyhow::Result<()> {
+    struct HelpCase<'a> {
+        path: &'a [&'a str],
+        needles: &'a [&'a str],
+    }
+
+    let cases = [
+        HelpCase {
+            path: &["label", "delete"],
+            needles: &[
+                "--force",
+                "Remove task bindings before deleting the label identity",
+                "does not delete semantics or ontology atoms",
+            ],
+        },
+        HelpCase {
+            path: &["label", "semantics", "upsert"],
+            needles: &[
+                "--replace",
+                "Replace existing semantics text and atom lists instead of merging edits",
+                "use for intentional full rewrites with review evidence",
+            ],
+        },
+        HelpCase {
+            path: &["label", "propose"],
+            needles: &[
+                "--allow-retarget",
+                "Allow proposal input or source signals to target a task other than TASK_REF",
+                "requires a retarget reason when the target changes",
+            ],
+        },
+        HelpCase {
+            path: &["label", "proposals", "accept"],
+            needles: &[
+                "--allow-retarget",
+                "Allow accepting a proposal whose stored target is being retargeted",
+                "requires a retarget reason when the target changes",
+            ],
+        },
+        HelpCase {
+            path: &["label", "ontology", "apply", "atom"],
+            needles: &[
+                "--allow-retarget",
+                "Allow applying atom changes to a label different from the signal target",
+                "requires a retarget reason when the target changes",
+            ],
+        },
+        HelpCase {
+            path: &["label", "ontology", "resolve"],
+            needles: &[
+                "--no-change",
+                "Resolve signals as handled without applying ontology changes",
+                "use when the reason explains why no label or atom change is needed",
+            ],
+        },
+        HelpCase {
+            path: &["vector", "configure"],
+            needles: &[
+                "--skip-check",
+                "Write vector config without probing the provider endpoint and model",
+                "use only when the provider is intentionally unavailable or checked elsewhere",
+            ],
+        },
+    ];
+
+    for case in cases {
+        let stdout = kanban_help(case.path)?;
+        assert_contains_all(&stdout, case.needles)?;
+    }
+
+    Ok(())
+}
+
+#[test]
 fn rich_file_stdin_leaf_commands_advertise_safe_input_examples() -> anyhow::Result<()> {
     let step_done = kanban_help(&["task", "step", "done"])?;
     assert_contains_all(

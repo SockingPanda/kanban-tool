@@ -600,7 +600,10 @@ pub(crate) struct LabelCreateArgs {
 #[derive(Debug, Args)]
 pub(crate) struct LabelDeleteArgs {
     pub(crate) label: String,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Remove task bindings before deleting the label identity; does not delete semantics or ontology atoms"
+    )]
     pub(crate) force: bool,
 }
 
@@ -673,7 +676,10 @@ pub(crate) struct LabelSemanticsUpsertArgs {
     pub(crate) label: String,
     #[arg(long = "expected-semantics-hash")]
     pub(crate) expected_semantics_hash: Option<String>,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Replace existing semantics text and atom lists instead of merging edits; use for intentional full rewrites with review evidence"
+    )]
     pub(crate) replace: bool,
     #[arg(long)]
     pub(crate) reason: Option<String>,
@@ -776,7 +782,10 @@ pub(crate) struct LabelProposeArgs {
     pub(crate) proposal_json: Option<std::path::PathBuf>,
     #[arg(long = "source-signal")]
     pub(crate) source_signal_ids: Vec<String>,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Allow proposal input or source signals to target a task other than TASK_REF; requires a retarget reason when the target changes"
+    )]
     pub(crate) allow_retarget: bool,
     #[arg(long = "retarget-reason")]
     pub(crate) retarget_reason: Option<String>,
@@ -848,7 +857,10 @@ pub(crate) struct LabelProposalAcceptArgs {
     pub(crate) reason_file: Option<PathBuf>,
     #[arg(long = "source-signal")]
     pub(crate) source_signal_ids: Vec<String>,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Allow accepting a proposal whose stored target is being retargeted; requires a retarget reason when the target changes"
+    )]
     pub(crate) allow_retarget: bool,
     #[arg(long = "retarget-reason")]
     pub(crate) retarget_reason: Option<String>,
@@ -1002,6 +1014,9 @@ pub(crate) struct LabelOntologyResolveArgs {
     #[arg(required = true)]
     pub(crate) signal_ids: Vec<String>,
     #[arg(long = "no-change")]
+    #[arg(
+        help = "Resolve signals as handled without applying ontology changes; use when the reason explains why no label or atom change is needed"
+    )]
     pub(crate) no_change: bool,
     #[arg(long)]
     pub(crate) reason: Option<String>,
@@ -1047,7 +1062,10 @@ pub(crate) struct LabelOntologyApplyAtomArgs {
     pub(crate) reason_file: Option<PathBuf>,
     #[command(flatten)]
     pub(crate) actor: LabelOntologyActorArgs,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Allow applying atom changes to a label different from the signal target; requires a retarget reason when the target changes"
+    )]
     pub(crate) allow_retarget: bool,
     #[arg(long = "retarget-reason")]
     pub(crate) retarget_reason: Option<String>,
@@ -1454,7 +1472,10 @@ pub(crate) struct VectorConfigureArgs {
     pub(crate) model: String,
     #[arg(long, default_value_t = kanban_local::DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS)]
     pub(crate) dimensions: usize,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Write vector config without probing the provider endpoint and model; use only when the provider is intentionally unavailable or checked elsewhere"
+    )]
     pub(crate) skip_check: bool,
     #[arg(long = "vector-config", alias = "config")]
     pub(crate) vector_config: Option<std::path::PathBuf>,

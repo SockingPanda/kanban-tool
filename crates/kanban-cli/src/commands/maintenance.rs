@@ -1,17 +1,18 @@
 use std::{
     fs,
+    io::{self, Write},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result};
 use kanban_sqlite::{
-    backup_database, begin_database_replace, checkpoint_database, export_jsonl, import_jsonl,
-    init_database, queue_stats, vacuum_database,
+    backup_database, begin_database_replace, checkpoint_database, export_jsonl,
+    export_jsonl_to_writer, import_jsonl, init_database, queue_stats, vacuum_database,
 };
 
 use crate::args::{BackupArgs, ExportArgs, ImportArgs};
-use crate::commands::common::invalid_input;
+use crate::commands::common::{invalid_input, is_stdio_path};
 use crate::output::print_or_json;
 
 pub(crate) fn import_command(
@@ -164,6 +165,11 @@ pub(crate) fn handle_stats(db_path: &PathBuf, board: &str, json: bool) -> Result
 }
 
 pub(crate) fn handle_backup(db_path: &PathBuf, args: BackupArgs, json: bool) -> Result<()> {
+    if is_stdio_path(&args.out) {
+        return Err(invalid_input(
+            "backup --out requires a filesystem path; '-' is not supported because SQLite VACUUM INTO cannot write to stdout",
+        ));
+    }
     let result = backup_database(db_path, args.out)?;
     print_or_json(json, &result, || {
         format!("Backup written to {}", result.out_path.display())
@@ -181,6 +187,18 @@ pub(crate) fn handle_export(
             "unsupported export format: {}",
             args.format
         )));
+    }
+    if is_stdio_path(&args.out) {
+        if json {
+            return Err(invalid_input(
+                "export --out - cannot be combined with --json because JSONL data and the JSON envelope would share stdout",
+            ));
+        }
+        let stdout = io::stdout();
+        let mut handle = stdout.lock();
+        export_jsonl_to_writer(db_path, board, &mut handle)?;
+        handle.flush()?;
+        return Ok(());
     }
     let result = export_jsonl(db_path, board, args.out)?;
     print_or_json(json, &result, || {

@@ -1701,13 +1701,21 @@ pub(crate) struct ServeArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct BackupArgs {
-    #[arg(long)]
+    #[arg(
+        long,
+        value_name = "PATH",
+        help = "SQLite backup output path; '-' is rejected because VACUUM INTO requires a filesystem path"
+    )]
     pub(crate) out: PathBuf,
 }
 
 #[derive(Debug, Args)]
 pub(crate) struct ExportArgs {
-    #[arg(long)]
+    #[arg(
+        long,
+        value_name = "PATH|-",
+        help = "Write JSONL to PATH, or stdout with -; --out - cannot be combined with --json"
+    )]
     pub(crate) out: PathBuf,
     #[arg(long, default_value = "jsonl")]
     pub(crate) format: String,

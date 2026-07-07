@@ -377,7 +377,7 @@ kanban task create "修复 API 回归" --label backend --label p1
 Human output：
 
 ```text
-agent-work#12 t_01HX... [ready] 实现状态机
+agent-work#12 [ready] P1 实现状态机 · plan: planned · steps: 0/0
 ```
 
 JSON output：
@@ -445,15 +445,13 @@ kanban task show <task_ref>
 kanban task show <task_ref> --details
 ```
 
-默认人类可读输出仍是紧凑的单行 task 摘要：
+默认人类可读输出仍是紧凑的单行 task 摘要；默认摘要面向扫描，保留可复制 ref、status、priority、title、labels，以及必要 plan/step 信号，不默认展示内部 `t_...` id：
 
 ```text
-agent-work#12 t_01HX... [ready] 实现状态机
+agent-work#12 [ready] P1 实现状态机 · plan: planned · steps: 0/0
 ```
 
-`--details` 改变人类可读输出，显示为易读字段列表。可用时包含 task
-ref/id/status/title、完整多行 description、assignee、priority、labels、
-scheduled_at、due_at、created_at、updated_at、execution_plan_state、required/optional step counts，以及其他 task snapshot 字段。
+`--details` 改变人类可读输出，按 `Task`、`Description`、`Plan`、`Schedule`、`Timestamps`、`Execution`、`Result`、`Metadata` 分组显示易读字段列表。可用时包含 task ref/id/status/title、完整多行 description、assignee、priority、labels、scheduled_at、due_at、created_at、updated_at、execution plan state、required/optional step counts、claim/run、result、metadata 以及其他 task snapshot 字段。
 如果该 task 有 label ontology signals，details 输出还会追加紧凑的
 `ontology_summary`，列出 signal/status/degraded/stale/action counts、aging 时间和
 少量 sample signal ids。
@@ -930,7 +928,7 @@ backend l_01HX... color=blue
 Task 的人类可读摘要如果存在 labels，会在末尾追加方括号标签列表：
 
 ```text
-default#12 t_01HX... [ready] 修复 API 回归 [backend,p1]
+default#12 [ready] P1 修复 API 回归 [backend,p1] · plan: planned · steps: 0/0
 ```
 
 `label suggest` 返回 task-level label suggestions。带内置 label atom vector store 的
@@ -1598,10 +1596,10 @@ Task ref 形状的 query 始终使用 SQLite 精确匹配语义，即使当前�
 只在显式 board 与请求 board 相同时匹配；`t_...` 只匹配请求 board 内的 task id。
 这些 query 不会因为 title、description 或聚合搜索文本包含相同数字/ref 片段而返回额外 task。
 
-Human output compactly includes seq/id, status, score, title, and snippet when available:
+Human output compactly includes the public task ref, status, score, title, and snippet when available. It does not include the internal `t_...` task id by default; task id remains available in JSON output and diagnostic/detail-oriented surfaces.
 
 ```text
-#12 t_01HX... [ready] score=60.0 实现状态机 - ready spec needle
+agent-work#12 [ready] score=60.0 实现状态机 - ready spec needle
 ```
 
 JSON output:

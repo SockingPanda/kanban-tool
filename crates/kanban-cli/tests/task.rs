@@ -65,16 +65,55 @@ fn task_show_defaults_to_one_line_summary() -> anyhow::Result<()> {
 
     assert_eq!(
         stdout,
-        format!("default#1 {task_id} [ready] P2 plan=not_required steps=0/0 show summary title\n")
+        "default#1 [ready] P2 show summary title · plan: not_required · steps: 0/0\n"
     );
+    assert!(!stdout.contains(task_id), "{stdout}");
     assert!(!stdout.contains("line one"), "{stdout}");
+    assert!(!stdout.contains("plan="), "{stdout}");
+    assert!(!stdout.contains("steps="), "{stdout}");
     assert_eq!(stdout.lines().count(), 1);
     Ok(())
 }
 
 #[test]
-fn task_show_details_prints_full_readable_record() -> anyhow::Result<()> {
-    let temp = TempDb::new("task_show_details_prints_full_readable_record")?;
+fn task_list_defaults_to_human_summary_without_internal_ids() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_list_defaults_to_human_summary_without_internal_ids")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "list summary title",
+            "--description",
+            "list details stay out of the summary",
+            "--priority",
+            "1",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"]
+        .as_str()
+        .context("expected JSON string")?;
+    mark_no_plan_required(&temp.path, task_id)?;
+
+    let stdout = kanban(&temp.path, &["task", "list"])?.success_stdout()?;
+
+    assert_eq!(
+        stdout,
+        "default#1 [ready] P1 list summary title · plan: not_required · steps: 0/0\n"
+    );
+    assert!(!stdout.contains(task_id), "{stdout}");
+    assert!(!stdout.contains("description"), "{stdout}");
+    assert!(!stdout.contains("plan="), "{stdout}");
+    assert!(!stdout.contains("steps="), "{stdout}");
+    Ok(())
+}
+
+#[test]
+fn task_show_details_prints_grouped_readable_record() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_show_details_prints_grouped_readable_record")?;
     kanban(&temp.path, &["init"])?.success()?;
     let description = "first detail line\nsecond detail line";
     let created = kanban(
@@ -104,27 +143,30 @@ fn task_show_details_prints_full_readable_record() -> anyhow::Result<()> {
 
     let stdout = kanban(&temp.path, &["task", "show", task_id, "--details"])?.success_stdout()?;
 
-    assert!(stdout.contains("ref: default#1"), "{stdout}");
-    assert!(stdout.contains(&format!("id: {task_id}")), "{stdout}");
-    assert!(stdout.contains("status: ready"), "{stdout}");
-    assert!(stdout.contains("title: detailed task title"), "{stdout}");
-    assert!(stdout.contains("labels: -"), "{stdout}");
-    assert!(stdout.contains("assignee: executor"), "{stdout}");
-    assert!(stdout.contains("priority: P1"), "{stdout}");
+    assert!(stdout.contains("Task\n"), "{stdout}");
+    assert!(stdout.contains("  ref: default#1"), "{stdout}");
+    assert!(stdout.contains(&format!("  id: {task_id}")), "{stdout}");
+    assert!(stdout.contains("  status: ready"), "{stdout}");
+    assert!(stdout.contains("  title: detailed task title"), "{stdout}");
+    assert!(stdout.contains("  labels: -"), "{stdout}");
+    assert!(stdout.contains("  assignee: executor"), "{stdout}");
+    assert!(stdout.contains("  priority: P1"), "{stdout}");
+    assert!(stdout.contains("Plan\n  state: not_required"), "{stdout}");
+    assert!(stdout.contains("  required_steps: 0/0"), "{stdout}");
+    assert!(stdout.contains("  optional_steps: 0"), "{stdout}");
+    assert!(stdout.contains("Schedule\n"), "{stdout}");
+    assert!(stdout.contains("  scheduled_at: 1767225600000"), "{stdout}");
+    assert!(stdout.contains("  due_at: 1767312000000"), "{stdout}");
+    assert!(stdout.contains("Timestamps\n"), "{stdout}");
+    assert!(stdout.contains("  created_at: "), "{stdout}");
+    assert!(stdout.contains("  updated_at: "), "{stdout}");
+    assert!(stdout.contains("Execution\n"), "{stdout}");
+    assert!(stdout.contains("Metadata\n"), "{stdout}");
     assert!(
-        stdout.contains("execution_plan_state: not_required"),
+        stdout.contains("Description\n  first detail line\n  second detail line"),
         "{stdout}"
     );
-    assert!(stdout.contains("required_steps: 0/0"), "{stdout}");
-    assert!(stdout.contains("optional_steps: 0"), "{stdout}");
-    assert!(stdout.contains("scheduled_at: 1767225600000"), "{stdout}");
-    assert!(stdout.contains("due_at: 1767312000000"), "{stdout}");
-    assert!(stdout.contains("created_at: "), "{stdout}");
-    assert!(stdout.contains("updated_at: "), "{stdout}");
-    assert!(
-        stdout.contains("description:\n  first detail line\n  second detail line"),
-        "{stdout}"
-    );
+    assert!(!stdout.contains("execution_plan_state:"), "{stdout}");
     Ok(())
 }
 

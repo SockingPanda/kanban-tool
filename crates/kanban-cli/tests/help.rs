@@ -4,6 +4,34 @@ mod args;
 
 use clap::{CommandFactory, error::ErrorKind};
 
+const PUBLIC_COMMAND_GROUP_PATHS: &[&[&str]] = &[
+    &[],
+    &["task"],
+    &["task", "step"],
+    &["board"],
+    &["comment"],
+    &["signal"],
+    &["hook"],
+    &["hook", "codex"],
+    &["hook", "codex", "handle"],
+    &["label"],
+    &["label", "semantics"],
+    &["label", "atoms"],
+    &["label", "atom-index"],
+    &["label", "proposals"],
+    &["label", "ontology"],
+    &["label", "ontology", "apply"],
+    &["dep"],
+    &["index"],
+    &["entity"],
+    &["outbox"],
+    &["derived"],
+    &["graph"],
+    &["vector"],
+    &["context"],
+    &["run"],
+];
+
 fn kanban_help(args: &[&str]) -> anyhow::Result<String> {
     let mut root = args::Cli::command();
     let mut command = &mut root;
@@ -21,33 +49,7 @@ fn kanban_help(args: &[&str]) -> anyhow::Result<String> {
 
 #[test]
 fn public_command_groups_have_subcommand_descriptions() -> anyhow::Result<()> {
-    for args in [
-        &[][..],
-        &["task"],
-        &["task", "step"],
-        &["board"],
-        &["comment"],
-        &["signal"],
-        &["hook"],
-        &["hook", "codex"],
-        &["hook", "codex", "handle"],
-        &["label"],
-        &["label", "semantics"],
-        &["label", "atoms"],
-        &["label", "atom-index"],
-        &["label", "proposals"],
-        &["label", "ontology"],
-        &["label", "ontology", "apply"],
-        &["dep"],
-        &["index"],
-        &["entity"],
-        &["outbox"],
-        &["derived"],
-        &["graph"],
-        &["vector"],
-        &["context"],
-        &["run"],
-    ] {
+    for args in PUBLIC_COMMAND_GROUP_PATHS {
         let stdout = kanban_help(args)?;
         assert_command_descriptions(args, &stdout)?;
     }
@@ -126,64 +128,50 @@ fn key_agent_facing_help_includes_examples_and_safe_input_guidance() -> anyhow::
 
 #[test]
 fn root_and_command_groups_show_help_when_missing_subcommand() -> anyhow::Result<()> {
-    for case in [
-        MissingSubcommandCase {
-            argv: &["kanban"],
-            needles: &[
-                "Local SQLite-backed Kanban work queue",
-                "Examples:",
-                "kanban task create \"Write spec\" --description-file -",
-                "Usage: kanban",
-                "Commands:",
-            ],
-        },
-        MissingSubcommandCase {
-            argv: &["kanban", "task"],
-            needles: &[
-                "Create, inspect, transition, claim, and archive tasks",
-                "Usage: kanban task",
-                "Commands:",
-                "create",
-                "list",
-            ],
-        },
-        MissingSubcommandCase {
-            argv: &["kanban", "label"],
-            needles: &[
-                "Manage task labels, suggestions, proposals, and ontology signals",
-                "Usage: kanban label",
-                "Commands:",
-                "create",
-                "suggest",
-            ],
-        },
-        MissingSubcommandCase {
-            argv: &["kanban", "hook", "codex"],
-            needles: &[
-                "Manage Codex lifecycle hooks for kanban-aware agent feedback",
-                "Usage: kanban hook codex",
-                "Commands:",
-                "install",
-                "status",
-            ],
-        },
+    let root_error = missing_subcommand_error(&["kanban"])?;
+    assert_contains_all(
+        &root_error.to_string(),
+        &[
+            "Local SQLite-backed Kanban work queue",
+            "Examples:",
+            "kanban task create \"Write spec\" --description-file -",
+            "Usage: kanban",
+            "Commands:",
+            "--help",
+        ],
+    )?;
+
+    for path in PUBLIC_COMMAND_GROUP_PATHS
+        .iter()
+        .copied()
+        .filter(|path| !path.is_empty())
+    {
+        let mut argv = Vec::with_capacity(path.len() + 1);
+        argv.push("kanban");
+        argv.extend_from_slice(path);
+        let error = missing_subcommand_error(&argv)?;
+        let help = error.to_string();
+        assert_contains_all(&help, &["Usage:", "Commands:"])?;
+    }
+
+    Ok(())
+}
+
+#[test]
+fn no_subcommand_leaf_commands_are_not_group_help_cases() -> anyhow::Result<()> {
+    for argv in [
+        &["kanban", "events"][..],
+        &["kanban", "runs"],
+        &["kanban", "stats"],
+        &["kanban", "doctor"],
+        &["kanban", "checkpoint"],
+        &["kanban", "vacuum"],
     ] {
-        let error = args::Cli::command()
-            .try_get_matches_from(case.argv)
-            .unwrap_err();
-        anyhow::ensure!(
-            error.kind() == ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand,
-            "expected missing subcommand help for {:?}, got {:?}:\n{error}",
-            case.argv,
-            error.kind()
-        );
-        anyhow::ensure!(
-            error.exit_code() == 2,
-            "expected parse-time help for {:?} to exit 2, got {}",
-            case.argv,
-            error.exit_code()
-        );
-        assert_contains_all(&error.to_string(), case.needles)?;
+        args::Cli::command()
+            .try_get_matches_from(argv)
+            .map_err(|error| {
+                anyhow::anyhow!("expected leaf command {argv:?} to parse, got {error}")
+            })?;
     }
 
     Ok(())
@@ -404,9 +392,19 @@ fn claim_and_force_leaf_help_explains_guard_boundaries() -> anyhow::Result<()> {
     Ok(())
 }
 
-struct MissingSubcommandCase<'a> {
-    argv: &'a [&'a str],
-    needles: &'a [&'a str],
+fn missing_subcommand_error(argv: &[&str]) -> anyhow::Result<clap::Error> {
+    let error = args::Cli::command().try_get_matches_from(argv).unwrap_err();
+    anyhow::ensure!(
+        error.kind() == ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand,
+        "expected missing subcommand help for {argv:?}, got {:?}:\n{error}",
+        error.kind()
+    );
+    anyhow::ensure!(
+        error.exit_code() == 2,
+        "expected parse-time help for {argv:?} to exit 2, got {}",
+        error.exit_code()
+    );
+    Ok(error)
 }
 
 fn assert_command_descriptions(args: &[&str], stdout: &str) -> anyhow::Result<()> {

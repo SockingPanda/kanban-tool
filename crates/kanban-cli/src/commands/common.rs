@@ -1,7 +1,7 @@
 use std::{
     fs,
     io::{self, Read},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result};
@@ -67,8 +67,8 @@ pub(crate) fn optional_clearable<T>(value: Option<T>, clear: bool) -> Option<Opt
     if clear { Some(None) } else { value.map(Some) }
 }
 
-pub(crate) fn default_db_path() -> PathBuf {
-    kanban_local::default_db_path()
+pub(crate) fn resolved_db_path(explicit: Option<&Path>) -> Result<PathBuf> {
+    kanban_local::resolved_db_path(explicit).with_context(|| "failed to resolve database path")
 }
 
 pub(crate) fn default_actor() -> String {

@@ -1121,6 +1121,7 @@ pub(crate) enum LabelOntologyAtomKindArg {
 }
 
 #[derive(Debug, Args)]
+#[command(after_help = "Examples:\n  kanban label ontology validate act_01 --input - --status failed --json\n  kanban label ontology validate act_01 --trusted --status passed --positive-control default#1 --json\n\n--input records external attestation JSON only. Use --trusted for the built-in collector; trusted validation does not accept caller-supplied JSON.")]
 pub(crate) struct LabelOntologyValidateArgs {
     pub(crate) action_id: String,
     #[arg(long)]
@@ -1133,19 +1134,37 @@ pub(crate) struct LabelOntologyValidateArgs {
         help = "Read reason text from PATH, or stdin with -"
     )]
     pub(crate) reason_file: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(
+        long,
+        value_name = "PATH|-",
+        conflicts_with = "trusted",
+        help = "Read external validation JSON from PATH, or stdin with -"
+    )]
     pub(crate) input: Option<String>,
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Run the trusted automated collector; cannot be combined with --input"
+    )]
     pub(crate) trusted: bool,
-    #[arg(long = "positive-control", conflicts_with = "positive_control_waiver")]
+    #[arg(
+        long = "positive-control",
+        value_name = "TASK_REF",
+        conflicts_with = "positive_control_waiver",
+        help = "Add a positive control task for negative atom trusted validation"
+    )]
     pub(crate) positive_controls: Vec<String>,
-    #[arg(long = "positive-control-waiver", conflicts_with = "positive_controls")]
+    #[arg(
+        long = "positive-control-waiver",
+        value_name = "REASON",
+        conflicts_with = "positive_controls",
+        help = "Waive positive controls for negative atom trusted validation; only accepted from --actor-type user"
+    )]
     pub(crate) positive_control_waiver: Option<String>,
     #[arg(
         long = "positive-control-waiver-file",
         value_name = "PATH|-",
         conflicts_with = "positive_controls",
-        help = "Read positive control waiver text from PATH, or stdin with -"
+        help = "Read positive control waiver text from PATH, or stdin with -; only accepted from --actor-type user for negative atom trusted validation"
     )]
     pub(crate) positive_control_waiver_file: Option<PathBuf>,
     #[arg(long = "vector-config", alias = "config")]

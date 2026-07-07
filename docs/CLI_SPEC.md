@@ -831,8 +831,8 @@ kanban label ontology supersede <signal_id>... --by <signal_id> [--reason <text>
 kanban label ontology resolve <signal_id>... --no-change [--reason <text>|--reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology apply atom <signal_id>... --label <label> --kind applies-when|positive-example|excludes-when|negative-example [--text <text>|--text-file <PATH|->] [--reason <text>|--reason-file <PATH|->] [--allow-retarget] [--retarget-reason <text>|--retarget-reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
 kanban label ontology revert <action_id> [--reason <text>|--reason-file <PATH|->] [--expected-current-hash <hash>] [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology validate <action_id> --status passed|failed|partial [--reason <text>|--reason-file <PATH|->] --input <path|-> [signal_id]... [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology validate <action_id> --trusted --status passed|failed|partial [--reason <text>|--reason-file <PATH|->] [signal_id]... [--positive-control <task_ref>]... [--positive-control-waiver <reason>|--positive-control-waiver-file <PATH|->] [--vector-config <toml>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology validate <action_id> --status passed|failed|partial [--reason <text>|--reason-file <PATH|->] --input <PATH|-> [signal_id]... [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology validate <action_id> --trusted --status passed|failed|partial [--reason <text>|--reason-file <PATH|->] [signal_id]... [--positive-control <TASK_REF>]... [--positive-control-waiver <REASON>|--positive-control-waiver-file <PATH|->] [--vector-config <toml>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--actor-type user|agent] [--agent-type <type>] [--json]
 ```
 
 Label semantics/proposal/ontology 命令中的 `--reason-file <PATH|->`、
@@ -840,7 +840,7 @@ Label semantics/proposal/ontology 命令中的 `--reason-file <PATH|->`、
 `--positive-control-waiver-file <PATH|->` 从文件或 stdin 读取对应长文本，并与同名
 inline 参数互斥。`label atom-index query <text>` 的 `<text>` 是短查询标量，不提供
 file 输入；需要持久 ontology evidence 时使用 `label ontology record --input <path|->`
-或 `label ontology validate --input <path|->`。
+或 `label ontology validate --input <PATH|->`。
 
 `label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
 label，返回已有 label。`label add` 接受 task ref 和一个或多个 label 名称；默认
@@ -1368,7 +1368,7 @@ source signals、canonical after hash、atom index dirty/error 状态和 generat
 查询后 canonical 或 derived state 已变化。dirty/error/disabled index、缺失 generation
 或 stale generation 都不能产生 trusted passed。
 
-`--positive-control <task_ref>` 与 `--positive-control-waiver <reason>` 只用于
+`--positive-control <TASK_REF>` 与 `--positive-control-waiver <REASON>` 只用于
 negative atom trusted validation，且二者互斥；非 negative parent 携带这些参数会被拒绝。
 waiver 只能由 `--actor-type user` 提交，reason 必须非空。Negative atom parent 若两者都
 缺失，会在 collection 前失败。

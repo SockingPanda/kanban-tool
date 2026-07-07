@@ -176,12 +176,6 @@ pub(crate) fn handle_export(
     args: ExportArgs,
     json: bool,
 ) -> Result<()> {
-    if args.format != "jsonl" {
-        return Err(invalid_input(format!(
-            "unsupported export format: {}",
-            args.format
-        )));
-    }
     let result = export_jsonl(db_path, board, args.out)?;
     print_or_json(json, &result, || {
         format!(

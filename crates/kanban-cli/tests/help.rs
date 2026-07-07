@@ -177,6 +177,47 @@ fn no_subcommand_leaf_commands_are_not_group_help_cases() -> anyhow::Result<()> 
     Ok(())
 }
 
+
+#[test]
+fn enum_and_value_domain_help_lists_allowed_cli_values() -> anyhow::Result<()> {
+    let task_create = kanban_help(&["task", "create"])?;
+    assert_contains_all(
+        &task_create,
+        &[
+            "--status <STATUS>",
+            "Allowed initial statuses: triage, todo, scheduled, ready",
+        ],
+    )?;
+
+    let task_list = kanban_help(&["task", "list"])?;
+    assert_contains_all(
+        &task_list,
+        &[
+            "--status <STATUS>",
+            "Allowed statuses: triage, todo, scheduled, ready, running, blocked, review, done, archived",
+            "--sort <SORT>",
+            "Allowed sort values include seq, title, status, position, priority, assignee, scheduled_at, due_at, created_at, updated_at; append _desc or use supported -field aliases for descending order",
+        ],
+    )?;
+
+    let search = kanban_help(&["search"])?;
+    assert_contains_all(
+        &search,
+        &[
+            "--status <STATUS>",
+            "Allowed statuses: triage, todo, scheduled, ready, running, blocked, review, done, archived",
+        ],
+    )?;
+
+    let export = kanban_help(&["export"])?;
+    assert_contains_all(
+        &export,
+        &["--format <FORMAT>", "Only jsonl is supported", "jsonl"],
+    )?;
+
+    Ok(())
+}
+
 #[test]
 fn dangerous_flags_explain_their_semantics() -> anyhow::Result<()> {
     let init = kanban_help(&["init"])?;

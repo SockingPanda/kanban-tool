@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
-use kanban_sqlite::FinishPolicy;
+use kanban_core::TaskStatus;
+use kanban_sqlite::{FinishPolicy, TaskListSort};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -1248,6 +1249,91 @@ pub(crate) struct BoardCreateArgs {
     pub(crate) description: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum CreateTaskStatusArg {
+    Triage,
+    Todo,
+    Scheduled,
+    Ready,
+}
+
+impl From<CreateTaskStatusArg> for TaskStatus {
+    fn from(value: CreateTaskStatusArg) -> Self {
+        match value {
+            CreateTaskStatusArg::Triage => Self::Triage,
+            CreateTaskStatusArg::Todo => Self::Todo,
+            CreateTaskStatusArg::Scheduled => Self::Scheduled,
+            CreateTaskStatusArg::Ready => Self::Ready,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum TaskStatusArg {
+    Triage,
+    Todo,
+    Scheduled,
+    Ready,
+    Running,
+    Blocked,
+    Review,
+    Done,
+    Archived,
+}
+
+impl From<TaskStatusArg> for TaskStatus {
+    fn from(value: TaskStatusArg) -> Self {
+        match value {
+            TaskStatusArg::Triage => Self::Triage,
+            TaskStatusArg::Todo => Self::Todo,
+            TaskStatusArg::Scheduled => Self::Scheduled,
+            TaskStatusArg::Ready => Self::Ready,
+            TaskStatusArg::Running => Self::Running,
+            TaskStatusArg::Blocked => Self::Blocked,
+            TaskStatusArg::Review => Self::Review,
+            TaskStatusArg::Done => Self::Done,
+            TaskStatusArg::Archived => Self::Archived,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TaskListSortArg(pub(crate) TaskListSort);
+
+fn parse_task_list_sort_arg(value: &str) -> Result<TaskListSortArg, String> {
+    match value {
+        "seq" => Ok(TaskListSortArg(TaskListSort::Seq)),
+        "seq_desc" | "-seq" => Ok(TaskListSortArg(TaskListSort::SeqDesc)),
+        "title" => Ok(TaskListSortArg(TaskListSort::Title)),
+        "title_desc" | "-title" => Ok(TaskListSortArg(TaskListSort::TitleDesc)),
+        "status" => Ok(TaskListSortArg(TaskListSort::Status)),
+        "status_desc" | "-status" => Ok(TaskListSortArg(TaskListSort::StatusDesc)),
+        "position" => Ok(TaskListSortArg(TaskListSort::Position)),
+        "position_desc" | "-position" => Ok(TaskListSortArg(TaskListSort::PositionDesc)),
+        "priority" => Ok(TaskListSortArg(TaskListSort::Priority)),
+        "priority_desc" | "-priority" => Ok(TaskListSortArg(TaskListSort::PriorityDesc)),
+        "assignee" => Ok(TaskListSortArg(TaskListSort::Assignee)),
+        "assignee_desc" | "-assignee" => Ok(TaskListSortArg(TaskListSort::AssigneeDesc)),
+        "scheduled" | "scheduled_at" => Ok(TaskListSortArg(TaskListSort::ScheduledAt)),
+        "scheduled_desc" | "scheduled_at_desc" | "-scheduled_at" => {
+            Ok(TaskListSortArg(TaskListSort::ScheduledAtDesc))
+        }
+        "created" | "created_at" => Ok(TaskListSortArg(TaskListSort::CreatedAt)),
+        "created_desc" | "created_at_desc" | "-created_at" => {
+            Ok(TaskListSortArg(TaskListSort::CreatedAtDesc))
+        }
+        "updated" | "updated_at" => Ok(TaskListSortArg(TaskListSort::UpdatedAt)),
+        "updated_desc" | "updated_at_desc" | "-updated_at" => {
+            Ok(TaskListSortArg(TaskListSort::UpdatedAtDesc))
+        }
+        "due" | "due_at" => Ok(TaskListSortArg(TaskListSort::DueAt)),
+        "due_desc" | "due_at_desc" | "-due_at" => Ok(TaskListSortArg(TaskListSort::DueAtDesc)),
+        _ => Err(format!(
+            "invalid sort value '{value}'; allowed values include seq, title, status, position, priority, assignee, scheduled_at, due_at, created_at, updated_at and descending aliases"
+        )),
+    }
+}
+
 #[derive(Debug, Args)]
 #[command(
     after_help = "Examples:\n  kanban task create \"Draft release note\" --description-file -\n  kanban task create \"Fix CLI help\" --status ready --label cli --json\n\nUse --description-file - for multiline or shell-sensitive text containing $, backticks, or JSON."
@@ -1262,8 +1348,12 @@ pub(crate) struct CreateArgs {
         help = "Read description text from PATH, or stdin with -; recommended for multiline or shell-sensitive text"
     )]
     pub(crate) description_file: Option<PathBuf>,
-    #[arg(long)]
-    pub(crate) status: Option<String>,
+    #[arg(
+        long,
+        value_enum,
+        help = "Allowed initial statuses: triage, todo, scheduled, ready"
+    )]
+    pub(crate) status: Option<CreateTaskStatusArg>,
     #[arg(long)]
     pub(crate) assignee: Option<String>,
     #[arg(long, default_value_t = kanban_sqlite::DEFAULT_PRIORITY)]
@@ -1288,8 +1378,12 @@ pub(crate) struct CreateArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct ListArgs {
-    #[arg(long)]
-    pub(crate) status: Vec<String>,
+    #[arg(
+        long,
+        value_enum,
+        help = "Allowed statuses: triage, todo, scheduled, ready, running, blocked, review, done, archived"
+    )]
+    pub(crate) status: Vec<TaskStatusArg>,
     #[arg(long)]
     pub(crate) search: Option<String>,
     #[arg(long)]
@@ -1302,8 +1396,13 @@ pub(crate) struct ListArgs {
     pub(crate) limit: Option<usize>,
     #[arg(long)]
     pub(crate) offset: Option<usize>,
-    #[arg(long)]
-    pub(crate) sort: Option<String>,
+    #[arg(
+        long,
+        value_parser = parse_task_list_sort_arg,
+        allow_hyphen_values = true,
+        help = "Allowed sort values include seq, title, status, position, priority, assignee, scheduled_at, due_at, created_at, updated_at; append _desc or use supported -field aliases for descending order"
+    )]
+    pub(crate) sort: Option<TaskListSortArg>,
     #[arg(long = "plan-needed")]
     pub(crate) plan_needed: bool,
     #[arg(long = "has-steps")]
@@ -1327,8 +1426,12 @@ pub(crate) enum TaskPlanFilterArg {
 #[derive(Debug, Args)]
 pub(crate) struct SearchArgs {
     pub(crate) query: String,
-    #[arg(long)]
-    pub(crate) status: Vec<String>,
+    #[arg(
+        long,
+        value_enum,
+        help = "Allowed statuses: triage, todo, scheduled, ready, running, blocked, review, done, archived"
+    )]
+    pub(crate) status: Vec<TaskStatusArg>,
     #[arg(long)]
     pub(crate) assignee: Option<String>,
     #[arg(long = "label")]
@@ -1735,8 +1838,18 @@ pub(crate) struct BackupArgs {
 pub(crate) struct ExportArgs {
     #[arg(long)]
     pub(crate) out: PathBuf,
-    #[arg(long, default_value = "jsonl")]
-    pub(crate) format: String,
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = ExportFormatArg::Jsonl,
+        help = "Only jsonl is supported"
+    )]
+    pub(crate) format: ExportFormatArg,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum ExportFormatArg {
+    Jsonl,
 }
 
 #[derive(Debug, Args)]

@@ -12,8 +12,8 @@ use kanban_sqlite::{
 
 use crate::args::{ListArgs, TaskCommand, TaskPlanFilterArg, TaskStepCommand};
 use crate::commands::common::{
-    invalid_input, optional_clearable, parse_status, parse_task_list_sort,
-    resolve_optional_text_input, resolve_required_text_input, validate_page_bounds,
+    invalid_input, optional_clearable, resolve_optional_text_input, resolve_required_text_input,
+    validate_page_bounds,
 };
 use crate::output::{print_or_json, print_task, print_task_with_details, task_line};
 
@@ -46,7 +46,7 @@ pub(crate) fn handle_task(
                 CreateTask {
                     title: args.title,
                     description,
-                    status: args.status.as_deref().map(parse_status).transpose()?,
+                    status: args.status.map(Into::into),
                     assignee: args.assignee,
                     priority: args.priority,
                     scheduled_at: args.scheduled_at,
@@ -67,8 +67,9 @@ pub(crate) fn handle_task(
             let statuses = args
                 .status
                 .iter()
-                .map(|s| parse_status(s))
-                .collect::<Result<Vec<_>>>()?;
+                .copied()
+                .map(Into::into)
+                .collect::<Vec<_>>();
             let plan_filters = task_plan_filters(&args)?;
             let uses_page_options = args.search.is_some()
                 || args.assignee.is_some()
@@ -91,9 +92,7 @@ pub(crate) fn handle_task(
                         search: args.search,
                         sort: args
                             .sort
-                            .as_deref()
-                            .map(parse_task_list_sort)
-                            .transpose()?
+                            .map(|sort| sort.0)
                             .unwrap_or(TaskListSort::Position),
                         limit: args.limit.unwrap_or(100),
                         offset: args.offset.unwrap_or(0),

@@ -1121,7 +1121,9 @@ pub(crate) enum LabelOntologyAtomKindArg {
 }
 
 #[derive(Debug, Args)]
-#[command(after_help = "Examples:\n  kanban label ontology validate act_01 --input - --status failed --json\n  kanban label ontology validate act_01 --trusted --status passed --positive-control default#1 --json\n\n--input records external attestation JSON only. Use --trusted for the built-in collector; trusted validation does not accept caller-supplied JSON.")]
+#[command(
+    after_help = "Examples:\n  kanban label ontology validate act_01 --input - --status failed --json\n  kanban label ontology validate act_01 --trusted --status passed --positive-control default#1 --json\n\n--input records external attestation JSON only. Use --trusted for the built-in collector; trusted validation does not accept caller-supplied JSON."
+)]
 pub(crate) struct LabelOntologyValidateArgs {
     pub(crate) action_id: String,
     #[arg(long)]

@@ -7,8 +7,9 @@ use kanban_core::KanbanError;
 use serde::Serialize;
 
 fn main() {
-    let wants_json = std::env::args_os().any(|arg| arg == "--json");
-    if let Err(error) = commands::app::run() {
+    let cli = commands::app::parse_cli();
+    let wants_json = cli.json;
+    if let Err(error) = commands::app::run(cli) {
         let report = CliErrorReport::from_error(&error);
         if wants_json {
             println!(

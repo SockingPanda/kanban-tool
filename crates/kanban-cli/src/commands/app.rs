@@ -35,8 +35,11 @@ use crate::commands::{
 };
 use crate::output::print_or_json;
 
-pub(crate) fn run() -> Result<()> {
-    let cli = Cli::parse_from(normalize_agent_bool_flags(std::env::args_os()));
+pub(crate) fn parse_cli() -> Cli {
+    Cli::parse_from(normalize_agent_bool_flags(std::env::args_os()))
+}
+
+pub(crate) fn run(cli: Cli) -> Result<()> {
     if let Command::Completions { shell } = &cli.command {
         generate_completions(*shell)?;
         return Ok(());
@@ -169,6 +172,12 @@ where
     let mut normalized = Vec::new();
     let mut args = args.into_iter().peekable();
     while let Some(arg) = args.next() {
+        if arg.to_str() == Some("--") {
+            normalized.push(arg);
+            normalized.extend(args);
+            break;
+        }
+
         if let Some(value) = arg
             .to_str()
             .and_then(|value| value.strip_prefix("--required="))

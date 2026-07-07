@@ -91,6 +91,33 @@ fn comment_add_and_list_json_roundtrip() -> anyhow::Result<()> {
 }
 
 #[test]
+fn comment_positional_body_after_delimiter_is_not_normalized_as_required_flag() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("comment_positional_body_after_delimiter_is_not_normalized_as_required_flag")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let task_id = create_task(&temp, "comment delimiter body")?;
+
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--board",
+            "default",
+            "comment",
+            "add",
+            &task_id,
+            "--",
+            "--required=false",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(added["data"]["body"], "--required=false");
+
+    Ok(())
+}
+
+#[test]
 fn comment_human_output_is_readable() -> anyhow::Result<()> {
     let temp = TempDb::new("comment_human_output_is_readable")?;
     kanban(&temp.path, &["--board", "default", "init"])?.success()?;

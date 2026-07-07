@@ -28,7 +28,95 @@ fn runtime_json_errors_include_stable_code_message_and_exit_code() -> anyhow::Re
     kanban(&temp.path, &["init"])?.success()?;
 
     let result = kanban(&temp.path, &["--json", "board", "show", "missing-board"])?;
-    assert_exit_json(result.output, 3, "not_found")?;
+    let json = assert_exit_json(result.output, 3, "not_found")?;
+    let error = json["error"].as_object().context("error object")?;
+    assert_eq!(error.len(), 3, "{json}");
+    assert!(error.contains_key("code"), "{json}");
+    assert!(error.contains_key("message"), "{json}");
+    assert!(error.contains_key("exit_code"), "{json}");
+
+    Ok(())
+}
+
+#[test]
+fn runtime_human_errors_include_recovery_hints() -> anyhow::Result<()> {
+    let temp = TempDb::new("runtime_human_errors_include_recovery_hints")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    let invalid_status = kanban(
+        &temp.path,
+        &["--locale", "en", "task", "list", "--status", "doing"],
+    )?;
+    assert_exit_stderr_contains_all(
+        invalid_status.output,
+        2,
+        &[
+            "Error:",
+            "Recovery:",
+            "Allowed statuses:",
+            "triage",
+            "ready",
+            "archived",
+        ],
+    )?;
+
+    let missing_board = kanban(
+        &temp.path,
+        &["--locale", "en", "board", "show", "missing-board"],
+    )?;
+    assert_exit_stderr_contains_all(
+        missing_board.output,
+        3,
+        &["Recovery:", "kanban board list", "kanban board current"],
+    )?;
+
+    let missing_task = kanban(
+        &temp.path,
+        &["--locale", "en", "task", "show", "default#999"],
+    )?;
+    assert_exit_stderr_contains_all(
+        missing_task.output,
+        3,
+        &[
+            "Recovery:",
+            "kanban task list",
+            "kanban task show <task-ref>",
+        ],
+    )?;
+
+    let bad_sort = kanban(
+        &temp.path,
+        &["--locale", "en", "task", "list", "--sort", "surprise"],
+    )?;
+    assert_exit_stderr_contains_all(
+        bad_sort.output,
+        2,
+        &["Recovery:", "Allowed task list sort values:", "-updated_at"],
+    )?;
+
+    let bad_export_format = kanban(
+        &temp.path,
+        &[
+            "--locale",
+            "en",
+            "export",
+            "--out",
+            temp.dir
+                .join("backup.csv")
+                .to_str()
+                .context("backup path")?,
+            "--format",
+            "csv",
+        ],
+    )?;
+    assert_exit_stderr_contains_all(
+        bad_export_format.output,
+        2,
+        &["Recovery:", "Allowed export formats:", "jsonl"],
+    )?;
+
+    let bad_locale = kanban(&temp.path, &["--locale", "fr-FR", "task", "list"])?;
+    assert_exit_stderr_contains_all(bad_locale.output, 2, &["恢复建议：", "auto", "zh-CN", "en"])?;
 
     Ok(())
 }
@@ -256,4 +344,18 @@ fn assert_exit_json(
         "{json}"
     );
     Ok(json)
+}
+
+fn assert_exit_stderr_contains_all(
+    output: std::process::Output,
+    expected_exit: i32,
+    expected: &[&str],
+) -> anyhow::Result<()> {
+    assert_eq!(output.status.code(), Some(expected_exit));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr)?;
+    for value in expected {
+        assert!(stderr.contains(value), "expected {value:?} in:\n{stderr}");
+    }
+    Ok(())
 }

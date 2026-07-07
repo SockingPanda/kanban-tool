@@ -142,6 +142,33 @@ pub fn kanban_in_dir_str_envs(
     Ok(CmdResult { output })
 }
 
+pub fn kanban_without_db_in_dir_str_envs(
+    args: &[&str],
+    current_dir: &Path,
+    envs: &[(&str, &str)],
+) -> anyhow::Result<CmdResult> {
+    let mut command =
+        Command::cargo_bin("kanban").context("failed to locate kanban test binary")?;
+    command.current_dir(current_dir).args(args);
+    command.env_remove("KB_BOARD");
+    command.env_remove("KANBAN_DB");
+    command.env_remove("KB_DB");
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    if !envs.iter().any(|(key, _)| *key == "XDG_CONFIG_HOME") {
+        command.env("XDG_CONFIG_HOME", current_dir.join(".xdg-config"));
+    }
+    if !envs.iter().any(|(key, _)| *key == "XDG_DATA_HOME") {
+        command.env("XDG_DATA_HOME", current_dir.join(".xdg-data"));
+    }
+    Ok(CmdResult {
+        output: command
+            .output()
+            .context("failed to execute kanban command")?,
+    })
+}
+
 pub struct CmdResult {
     pub output: Output,
 }

@@ -24,6 +24,8 @@ pub struct ProjectConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub board: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub db: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vector: Option<VectorConfig>,
 }
 
@@ -115,6 +117,45 @@ pub fn kb_data_dir_for_db(db_path: impl Into<PathBuf>) -> PathBuf {
         .parent()
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))
+}
+
+pub fn resolved_db_path(explicit_path: Option<&Path>) -> Result<PathBuf, ConfigError> {
+    if let Some(path) = explicit_path {
+        return Ok(path.to_path_buf());
+    }
+
+    if let Some(path) = env_db_path("KANBAN_DB").or_else(|| env_db_path("KB_DB")) {
+        return Ok(path);
+    }
+
+    if let Some(path) = nearest_project_config()? {
+        let config = read_project_config(&path)?;
+        if let Some(db) = non_empty_path(config.db) {
+            return Ok(path_relative_to_config(&path, db));
+        }
+    }
+
+    let global = global_config_path();
+    if global.is_file() {
+        let config = read_project_config(&global)?;
+        if let Some(db) = non_empty_path(config.db) {
+            return Ok(path_relative_to_config(&global, db));
+        }
+    }
+
+    Ok(default_db_path())
+}
+
+fn env_db_path(key: &str) -> Option<PathBuf> {
+    std::env::var_os(key)
+        .map(PathBuf::from)
+        .and_then(|path| non_empty_path(Some(path)))
+}
+
+fn non_empty_path(path: Option<PathBuf>) -> Option<PathBuf> {
+    path.filter(|path| {
+        !path.as_os_str().is_empty() && !path.as_os_str().to_string_lossy().trim().is_empty()
+    })
 }
 
 pub fn index_root_path(db_path: impl Into<PathBuf>) -> PathBuf {
@@ -260,6 +301,16 @@ pub fn nearest_active_board_config() -> Result<Option<String>, ConfigError> {
     Ok(read_project_config(&path)?.board)
 }
 
+fn path_relative_to_config(config_path: &Path, path: PathBuf) -> PathBuf {
+    if path.is_absolute() {
+        return path;
+    }
+    config_path
+        .parent()
+        .map(|parent| parent.join(path.clone()))
+        .unwrap_or(path)
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     #[error("{0}")]
@@ -308,6 +359,7 @@ mod tests {
             &path,
             &ProjectConfig {
                 board: Some("kanban-tool".to_owned()),
+                db: Some(PathBuf::from("kb.db")),
                 vector: Some(vector.clone()),
             },
         )
@@ -316,6 +368,7 @@ mod tests {
 
         let config = read_project_config(&path).unwrap();
         assert_eq!(config.board.as_deref(), Some("next-board"));
+        assert_eq!(config.db, Some(PathBuf::from("kb.db")));
         assert_eq!(config.vector, Some(vector));
     }
 

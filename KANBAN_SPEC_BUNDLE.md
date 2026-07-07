@@ -2596,7 +2596,7 @@ Response：
   "data": {
     "ok": true,
     "db": "ok",
-    "version": "1.4.1"
+    "version": "2.1.1"
   }
 }
 ```

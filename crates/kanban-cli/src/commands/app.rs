@@ -14,7 +14,7 @@ use crate::args::*;
 use crate::commands::{
     board::handle_board,
     comment::handle_comment,
-    common::{active_board, default_actor, default_db_path},
+    common::{active_board, default_actor, resolved_db_path},
     dep::handle_dep,
     dispatch::{dispatch_loop, dispatch_options},
     hook::handle_hook,
@@ -45,7 +45,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
         return Ok(());
     }
     if let Command::Complete(args) = &cli.command {
-        let db_path = cli.db.clone().unwrap_or_else(default_db_path);
+        let db_path = resolved_db_path(cli.db.as_deref())?;
         let board = active_board(cli.board.as_deref()).unwrap_or_else(|_| "default".to_owned());
         let candidates = completion_candidates(
             &db_path,
@@ -59,13 +59,13 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
         return Ok(());
     }
     if let Command::Hook { command } = &cli.command {
-        let db_path = cli.db.clone().unwrap_or_else(default_db_path);
+        let db_path = resolved_db_path(cli.db.as_deref())?;
         let actor = cli.actor.clone().unwrap_or_else(default_actor);
         handle_hook(command, &db_path, cli.board.as_deref(), &actor, cli.json)?;
         return Ok(());
     }
 
-    let db_path = cli.db.clone().unwrap_or_else(default_db_path);
+    let db_path = resolved_db_path(cli.db.as_deref())?;
     let actor = cli.actor.clone().unwrap_or_else(default_actor);
     let board = active_board(cli.board.as_deref())?;
     let locale = cli_locale(cli.locale.as_deref())?;

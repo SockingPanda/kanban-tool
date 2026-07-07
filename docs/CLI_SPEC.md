@@ -15,11 +15,20 @@ kanban [GLOBAL_OPTIONS] <COMMAND>
 
 | Option | 说明 |
 |---|---|
-| `--db <path>` | 指定 SQLite DB。默认从 config 读取。 |
+| `--db <path>` | 指定 SQLite DB；优先级高于 env、config 和 XDG 默认路径。 |
 | `--board <slug-or-id>` | 显式指定 active board，优先级最高。 |
 | `--actor <name>` | 操作 actor。默认 OS username。 |
 | `--locale <auto|zh-CN|en>` | human 输出语言。默认 `zh-CN`；`auto`/`system` 使用系统 locale。 |
 | `--json` | JSON 输出。 |
+
+SQLite DB path 解析顺序：
+
+1. `--db <path>`。
+2. `KANBAN_DB` 环境变量。
+3. `KB_DB` 环境变量（兼容短名）。
+4. 从当前目录向上查找最近的 `.kb/config.toml`，读取 `db = "<path>"`。
+5. 用户全局 config `$XDG_CONFIG_HOME/kanban/config.toml`，读取 `db = "<path>"`。
+6. fallback 到 XDG data 默认路径，通常是 `~/.local/share/kb/kb.db`。
 
 Active board 解析顺序：
 
@@ -29,6 +38,7 @@ Active board 解析顺序：
 4. fallback 到 `default`。
 
 `kanban board use <board>` 会把当前目录写成项目级 `.kb/config.toml`；后续子目录自动继承该 active board。该配置只选择本地项目的 board，不创建新 DB。
+如果同一配置文件也包含 `db = "<path>"` 或 `[vector]`，`board use` 必须保留这些字段。配置中的相对 DB 路径按配置文件所在目录解析；环境变量和 `--db` 中的相对路径按当前工作目录解析。
 
 Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状态枚举、task ref、ID、exit code 或机器可读 diagnostics。选择顺序：
 
@@ -321,6 +331,7 @@ kanban board current
 ```
 
 Shows the resolved active board after applying `--board`, `KB_BOARD`, project config, and fallback precedence.
+Board resolution is independent from DB path resolution: `--db` / `KANBAN_DB` / `KB_DB` choose which SQLite database to open, while `--board` / `KB_BOARD` / `.kb/config.toml` `board` choose the board inside that database.
 
 ### 4.6 Archive board
 

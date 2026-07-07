@@ -34,6 +34,21 @@ fn runtime_json_errors_include_stable_code_message_and_exit_code() -> anyhow::Re
 }
 
 #[test]
+fn positional_json_after_delimiter_does_not_enable_runtime_json_errors() -> anyhow::Result<()> {
+    let temp = TempDb::new("positional_json_after_delimiter_does_not_enable_runtime_json_errors")?;
+
+    let result = kanban(&temp.path, &["task", "show", "--", "--json"])?;
+
+    assert!(!result.output.status.success());
+    assert!(result.output.stdout.is_empty());
+    let stderr = String::from_utf8(result.output.stderr)?;
+    assert!(stderr.contains("Error:"), "{stderr}");
+    assert!(!stderr.contains(r#"{"error""#), "{stderr}");
+
+    Ok(())
+}
+
+#[test]
 fn validation_errors_exit_2() -> anyhow::Result<()> {
     let temp = TempDb::new("validation_errors_exit_2")?;
     kanban(&temp.path, &["init"])?.success()?;

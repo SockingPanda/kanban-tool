@@ -40,7 +40,7 @@ Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状
 
 ### 1.1 Help output contract
 
-`kanban --help` 和公开 command group 的 `--help` 输出必须为每个公开 command/subcommand 行提供一句简短用途说明；隐藏内部命令（例如 `__complete`）除外。全局 options 的 help 必须说明它们影响的是 SQLite DB、active board、actor、locale 或 JSON 输出，不改变 JSON key、状态枚举或 exit code 契约。
+`kanban --help` 和公开 command group 的 `--help` 输出必须为每个公开 command/subcommand 行提供一句简短用途说明；隐藏内部命令（例如 `__complete`）除外。`kanban` 无参或公开 command group 缺少 subcommand 时必须显示同一类简洁帮助，而不是只输出 parser error；这仍属于 clap parse-time 路径，退出码为 2，且不输出 runtime JSON error envelope。全局 options 的 help 必须说明它们影响的是 SQLite DB、active board、actor、locale 或 JSON 输出，不改变 JSON key、状态枚举或 exit code 契约。
 
 关键 agent-facing 输入面必须在命令 help 中优先展示安全路径：多行或 shell-sensitive 文本使用 `--description-file -`、`--body-file -`、`--metadata-json-file <PATH|->`、`--metadata-file <PATH|->` 或 `--input -`，避免 shell expansion / quoting 污染。危险、破坏性或容易误解的 flag 必须在 help 中说明语义，例如 `task archive --force` 绕过普通 archive guard，`import --replace` 是有意 backup/restore flow 的替换式恢复入口；兼容 no-op flag 必须明确写出 no-op。
 

@@ -11,7 +11,7 @@ use kanban_sqlite::{
     export_jsonl_to_writer, import_jsonl, init_database, queue_stats, vacuum_database,
 };
 
-use crate::args::{BackupArgs, ExportArgs, ImportArgs};
+use crate::args::{BackupArgs, ExportArgs, ExportFormatArg, ImportArgs};
 use crate::commands::common::{invalid_input, is_stdio_path};
 use crate::output::print_or_json;
 
@@ -215,11 +215,8 @@ pub(crate) fn handle_export(
     args: ExportArgs,
     json: bool,
 ) -> Result<()> {
-    if args.format != "jsonl" {
-        return Err(invalid_input(format!(
-            "unsupported export format: {}",
-            args.format
-        )));
+    match args.format {
+        ExportFormatArg::Jsonl => {}
     }
     if is_stdio_path(&args.out) {
         if json {

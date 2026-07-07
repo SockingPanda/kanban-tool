@@ -44,39 +44,8 @@ pub fn export_jsonl(
     }
     let export_now = SystemClock.now_ms();
     let (records, temp_path) = with_read_tx(&conn, || {
-        let board_id = board_id(&conn, board)?;
         let (temp_path, mut file) = create_temp_export_file(out_path)?;
-        let mut records = 0;
-        records += write_jsonl_table(
-            &conn,
-            &mut file,
-            "board",
-            "boards",
-            "WHERE id=?",
-            vec![Value::Text(board_id.clone())],
-            export_now,
-        )?;
-        for (record_type, table) in BOARD_SCOPED_EXPORT_TABLES {
-            records += write_jsonl_table(
-                &conn,
-                &mut file,
-                record_type,
-                table,
-                "WHERE board_id=?",
-                vec![Value::Text(board_id.clone())],
-                export_now,
-            )?;
-        }
-        records += write_export_sanitized_events(&conn, &mut file, &board_id, export_now)?;
-        records += write_jsonl_table(
-            &conn,
-            &mut file,
-            "setting",
-            "app_settings",
-            "",
-            Vec::new(),
-            export_now,
-        )?;
+        let records = write_jsonl_export(&conn, board, &mut file, export_now)?;
         file.sync_all()
             .map_err(|error| KanbanError::Storage(error.to_string()))?;
         Ok((records, temp_path))
@@ -89,6 +58,59 @@ pub fn export_jsonl(
         out_path: out_path.to_path_buf(),
         records,
     })
+}
+
+pub fn export_jsonl_to_writer(
+    path: impl AsRef<Path>,
+    board: &str,
+    writer: &mut impl Write,
+) -> Result<usize> {
+    let conn = connect_existing_database(path.as_ref())?;
+    let export_now = SystemClock.now_ms();
+    with_read_tx(&conn, || {
+        write_jsonl_export(&conn, board, writer, export_now)
+    })
+}
+
+fn write_jsonl_export(
+    conn: &Connection,
+    board: &str,
+    writer: &mut impl Write,
+    export_now: i64,
+) -> Result<usize> {
+    let board_id = board_id(conn, board)?;
+    let mut records = 0;
+    records += write_jsonl_table(
+        conn,
+        writer,
+        "board",
+        "boards",
+        "WHERE id=?",
+        vec![Value::Text(board_id.clone())],
+        export_now,
+    )?;
+    for (record_type, table) in BOARD_SCOPED_EXPORT_TABLES {
+        records += write_jsonl_table(
+            conn,
+            writer,
+            record_type,
+            table,
+            "WHERE board_id=?",
+            vec![Value::Text(board_id.clone())],
+            export_now,
+        )?;
+    }
+    records += write_export_sanitized_events(conn, writer, &board_id, export_now)?;
+    records += write_jsonl_table(
+        conn,
+        writer,
+        "setting",
+        "app_settings",
+        "",
+        Vec::new(),
+        export_now,
+    )?;
+    Ok(records)
 }
 
 pub fn import_jsonl(

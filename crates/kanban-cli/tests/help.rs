@@ -98,6 +98,24 @@ fn key_agent_facing_help_includes_examples_and_safe_input_guidance() -> anyhow::
         ],
     )?;
 
+    let backup = kanban_help(&["backup"])?;
+    assert_contains_all(
+        &backup,
+        &[
+            "--out <PATH>",
+            "SQLite backup output path; '-' is rejected because VACUUM INTO requires a filesystem path",
+        ],
+    )?;
+
+    let export = kanban_help(&["export"])?;
+    assert_contains_all(
+        &export,
+        &[
+            "--out <PATH|->",
+            "Write JSONL to PATH, or stdout with -; --out - cannot be combined with --json",
+        ],
+    )?;
+
     let vector_query_label_atoms = kanban_help(&["vector", "query-label-atoms"])?;
     assert_contains_all(
         &vector_query_label_atoms,

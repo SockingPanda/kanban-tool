@@ -1,7 +1,7 @@
 use std::{
     fs,
     io::{self, Read},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result};
@@ -10,6 +10,10 @@ use kanban_sqlite::TaskListSort;
 
 pub(crate) fn invalid_input(message: impl Into<String>) -> anyhow::Error {
     KanbanError::InvalidInput(message.into()).into()
+}
+
+pub(crate) fn is_stdio_path(path: &Path) -> bool {
+    path.as_os_str() == "-"
 }
 
 pub(crate) fn resolve_optional_text_input(
@@ -44,7 +48,7 @@ pub(crate) fn resolve_required_text_input(
 }
 
 fn read_text_input(path: &PathBuf) -> Result<String> {
-    if path.as_os_str() == "-" {
+    if is_stdio_path(path) {
         let mut value = String::new();
         io::stdin()
             .read_to_string(&mut value)

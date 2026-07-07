@@ -43,6 +43,16 @@ fn backup_writes_database_copy() -> anyhow::Result<()> {
 }
 
 #[test]
+fn backup_rejects_stdout_target() -> anyhow::Result<()> {
+    let source = initialized_database("backup_rejects_stdout_target")?;
+
+    kanban(&source.path, &["--json", "backup", "--out", "-"])?
+        .json_failure_containing("backup --out requires a filesystem path")?;
+    assert!(!source.dir.join("-").exists());
+    Ok(())
+}
+
+#[test]
 fn checkpoint_returns_wal_checkpoint_result() -> anyhow::Result<()> {
     let source = initialized_database("checkpoint_returns_wal_checkpoint_result")?;
 
@@ -69,6 +79,35 @@ fn export_import_round_trips_jsonl_snapshot() -> anyhow::Result<()> {
         export_board_snapshot(&source, &source_data.task_id)?;
     import_exported_snapshot(&export_path, export_records, &source_data.task_id)?;
     assert!(export_content.contains(&source_data.task_id));
+    Ok(())
+}
+
+#[test]
+fn export_stdout_streams_jsonl_without_status_noise() -> anyhow::Result<()> {
+    let source = TempDb::new("export_stdout_streams_jsonl_without_status_noise")?;
+    let source_data = source_with_completed_run(&source)?;
+
+    let result = kanban(&source.path, &["export", "--out", "-"])?;
+    let stdout = String::from_utf8(result.output.stdout)?;
+    let stderr = String::from_utf8(result.output.stderr)?;
+
+    assert!(result.output.status.success(), "export failed: {stderr}");
+    assert_eq!(stderr, "");
+    assert!(stdout.contains(&source_data.task_id));
+    assert!(stdout.contains(r#""type":"board""#));
+    assert!(stdout.contains(r#""log_path":null"#));
+    assert!(!stdout.contains("Exported "));
+    assert!(!source.dir.join("-").exists());
+    Ok(())
+}
+
+#[test]
+fn export_stdout_rejects_json_envelope_mode() -> anyhow::Result<()> {
+    let source = initialized_database("export_stdout_rejects_json_envelope_mode")?;
+
+    kanban(&source.path, &["--json", "export", "--out", "-"])?
+        .json_failure_containing("export --out - cannot be combined with --json")?;
+    assert!(!source.dir.join("-").exists());
     Ok(())
 }
 

@@ -4,26 +4,31 @@
 
 ## 必读文档
 
-开始任何实现前先读：
+所有任务开始时先读：
 
 - `README.md`
-- `docs/SPEC.md`
-- `docs/ARCHITECTURE.md`
-- `docs/STATE_MACHINE.md`
-- `docs/DATA_MODEL.md`
-- `docs/CLI_SPEC.md`
-- `docs/API_SPEC.md`
-- `docs/DISPATCHER_SPEC.md`
-- `docs/IMPLEMENTATION_PLAN.md`
-- `docs/ADR.md`
-- `migrations/001_initial.sql`
+
+按影响面补读：
+
+- 产品/范围/非目标：`docs/SPEC.md`
+- crate、进程、数据流或 service path：`docs/ARCHITECTURE.md`
+- 状态、transition、claim、recompute：`docs/STATE_MACHINE.md`
+- schema、ID、事件、查询模型：`docs/DATA_MODEL.md`、`migrations/001_initial.sql`
+- CLI 行为、参数、输出或退出码：`docs/CLI_SPEC.md`
+- Web API、SSE 或 desktop embedded server：`docs/API_SPEC.md`
+- dispatcher、worker、heartbeat 或 reclaim：`docs/DISPATCHER_SPEC.md`
+- 分阶段计划、验收标准或 release/milestone 判断：`docs/IMPLEMENTATION_PLAN.md`
+- 架构决策或取舍背景：`docs/ADR.md`
+
+跨模块、架构级、release/milestone 级改动必须读完整文档包和相关 migration。
 
 ## 架构边界
 
 - SQLite 是唯一数据库；不要引入 Postgres/MySQL/MongoDB 后端。
 - 单机本地语义；不要引入多用户、RBAC、组织、团队、邀请或 SaaS 假设。
 - `tasks.status` 是 canonical truth；`board_columns` 只是 UI 展示映射。
-- Web、CLI、dispatcher 必须走同一套 core command service，不允许绕过状态机直接写 status。
+- Web、CLI、desktop 和 dispatcher 必须走同一套 Rust service path；当前 application orchestration 主要在 `kanban-sqlite::service`，并复用 `kanban-core` 状态机 helper。
+- 不允许绕过 service path 或状态机 guard 直接写 `tasks.status`。
 - `ready -> running` 必须是原子 claim transaction：CAS update + run + event。
 - `blocked -> ready` 必须重新计算 spec、schedule、dependency，不允许盲设。
 - review 不自动触发执行；dispatcher 不 claim `review`。
@@ -43,20 +48,22 @@
 - milestone/release 级实现必须在合并前通过独立 spec reviewer + quality reviewer；仅 `fmt/test/clippy/smoke` 通过不能宣称版本完成。
 - 如果 reviewer 指出 P0/P1 规格或质量问题，必须在同一方向分支上修正并重新 review，直到 PASS/APPROVED 后再由父级合并。
 - 生产代码遵循 TDD：先写失败测试，运行看到 RED，再写最小实现，运行 GREEN。
+- 文档小改、只读分析或无代码行为变化的单文件校准可以跳过分支/TDD，但必须说明原因并做最小验证。
 - 提交语义使用 Conventional Commits。
 
 ## 开发执行位置
 
-- 后端开发默认在 `remote-build-host` 云服务器执行，包括 Rust workspace、CLI/server/helper、SQLite/service、Tauri Rust side、release/package、Rust check/test/clippy/build 和发布打包验证。
+- 后端/Rust 行为变更默认在 `remote-build-host` 云服务器执行，包括 Rust workspace、CLI/server/helper、SQLite/service、Tauri Rust side、release/package、Rust check/test/clippy/build 和发布打包验证。
 - 前端开发默认在本地执行，包括 `apps/desktop` 的 React/Vite/TypeScript/CSS/UI 层、前端测试、typecheck 和 UI 预览。
-- 不要用本地 Rust build/test/check/clippy/release 结果替代后端云端验证；如果一次变更同时涉及前端和后端，分别记录本地前端验证和 `remote-build-host` 后端验证的 evidence origin。
+- 文档、前端-only、只读分析或不触及 Rust/backend 行为的小改动不要求云端验证；如果云端验证适用但不可用，最终报告必须明确验证缺口。
+- 不要用本地 Rust build/test/check/clippy/release 结果替代需要云端执行的后端验证；如果一次变更同时涉及前端和后端，分别记录本地前端验证和 `remote-build-host` 后端验证的 evidence origin。
 - 后端云端任务结束、失败或阻塞后，按云服务流程清理多余远端 worktree，并停止 `remote-build-host`，除非用户在同一轮明确要求保持运行。
 
 ## 全局 skill 同步
 
-- 任何改动如果改变了用户可见的 kanban CLI、API、data model、workflow、status、task、dependency、comment、JSON、help 或 documentation 使用行为，implementer 必须检查全局 Codex skill `kanban-tool` 是否需要同步。
+- 任何改动如果改变了用户可见的 kanban CLI、API、data model、workflow、status、task、dependency、comment、JSON、help 或已实现使用说明，implementer 必须检查全局 Codex skill `kanban-tool` 是否需要同步。
 - 如果该行为影响 skill 使用说明，必须同步更新 `~/.codex/skills/kanban-tool/SKILL.md`，以及必要的相关 agent 或 `openai.yaml` 配置。
-- 如果检查后不需要同步，final report 或 task record 必须明确记录 `kanban-tool skill checked: no change`。
+- 纯内部重构、测试、样式或不改变使用行为的文档措辞不触发全局 skill 同步；如果检查后不需要同步，final report 或 task record 必须明确记录 `kanban-tool skill checked: no change`。
 - 全局 skill 只能描述已经实现、并且能由 CLI help 或实际命令/API 输出确认的行为；不要把 roadmap、计划中功能或未实现规格写入 skill。
 
 ## 验证策略
@@ -89,8 +96,8 @@
 
 当前主要 crate：
 
-- `kanban-core`：领域类型、状态机、command service 接口；不依赖 SQLite/HTTP/CLI。
-- `kanban-sqlite`：SQLite 连接、migration/init、service、transaction、query helper。
+- `kanban-core`：领域类型、状态机、guard/recompute helper；不依赖 SQLite/HTTP/CLI。
+- `kanban-sqlite`：SQLite 连接、migration/init、application service、transaction、query helper。
 - `kanban-cli`：`kanban` CLI。
 - `kanban-server`：localhost HTTP API / SSE。
 - `kanban-context`、`kanban-entity`、`kanban-graph`、`kanban-indexer`、`kanban-labels`、`kanban-local`、`kanban-search`、`kanban-vector`：本地派生层、索引、graph、context、label 和 vector 支持 crate。

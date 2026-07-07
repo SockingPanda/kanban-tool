@@ -1687,6 +1687,9 @@ pub(crate) struct DispatchArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(
+    after_help = "Logging:\n  kanban serve writes startup diagnostics and request traces to stderr by default.\n  Use --quiet to suppress serve diagnostics, --log-level to choose off|error|warn|info|debug|trace, or RUST_LOG for advanced tracing filters."
+)]
 pub(crate) struct ServeArgs {
     /// Loopback host interface to bind. Only loopback hosts are supported.
     #[arg(long, default_value = "127.0.0.1")]
@@ -1697,6 +1700,35 @@ pub(crate) struct ServeArgs {
     /// Background search index sync interval in milliseconds. Use 0 to disable.
     #[arg(long, default_value_t = 5_000)]
     pub(crate) search_sync_interval_ms: u64,
+    /// Suppress serve startup diagnostics and request traces on stderr.
+    #[arg(long, conflicts_with = "log_level")]
+    pub(crate) quiet: bool,
+    /// Set serve diagnostics verbosity on stderr; RUST_LOG still supports advanced filters when this is omitted.
+    #[arg(long, value_enum, value_name = "LEVEL")]
+    pub(crate) log_level: Option<ServeLogLevel>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub(crate) enum ServeLogLevel {
+    Off,
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl ServeLogLevel {
+    pub(crate) fn as_filter_level(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Error => "error",
+            Self::Warn => "warn",
+            Self::Info => "info",
+            Self::Debug => "debug",
+            Self::Trace => "trace",
+        }
+    }
 }
 
 #[derive(Debug, Args)]

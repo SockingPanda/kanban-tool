@@ -28,6 +28,10 @@ fn serve_help_shows_localhost_bind_defaults() -> anyhow::Result<()> {
     assert!(stdout.contains("8721"), "{stdout}");
     assert!(stdout.contains("--search-sync-interval-ms"), "{stdout}");
     assert!(stdout.contains("5000"), "{stdout}");
+    assert!(stdout.contains("--quiet"), "{stdout}");
+    assert!(stdout.contains("--log-level"), "{stdout}");
+    assert!(stdout.contains("stderr"), "{stdout}");
+    assert!(stdout.contains("RUST_LOG"), "{stdout}");
     Ok(())
 }
 
@@ -90,6 +94,101 @@ fn serve_default_tracing_logs_request_to_stderr_without_stdout() -> anyhow::Resu
         "expected response trace in stderr, got:\n{stderr}"
     );
     assert!(stderr.contains("status=200"), "{stderr}");
+    Ok(())
+}
+
+#[test]
+fn serve_quiet_suppresses_startup_and_request_logs_without_stdout() -> anyhow::Result<()> {
+    let temp = TempDb::new("serve_quiet_suppresses_startup_and_request_logs_without_stdout")?;
+    let port = reserve_loopback_port()?;
+    let port_arg = port.to_string();
+    let mut command = ProcessCommand::new(env!("CARGO_BIN_EXE_kanban"));
+    command
+        .current_dir(&temp.dir)
+        .arg("--db")
+        .arg(&temp.path)
+        .args([
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            &port_arg,
+            "--quiet",
+        ])
+        .env_remove("KB_BOARD")
+        .env_remove("RUST_LOG")
+        .env("XDG_CONFIG_HOME", temp.dir.join(".xdg-config"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = command.spawn().context("spawn kanban serve")?;
+    let health_result = wait_for_health(port);
+    let _ = child.kill();
+    let output = child.wait_with_output().context("wait for kanban serve")?;
+    health_result.with_context(|| {
+        format!(
+            "serve did not answer health before timeout\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    })?;
+
+    assert!(
+        output.stdout.is_empty(),
+        "serve quiet must not write stdout, got: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("Serving Kanban API"), "{stderr}");
+    assert!(!stderr.contains("started processing request"), "{stderr}");
+    assert!(!stderr.contains("finished processing request"), "{stderr}");
+    Ok(())
+}
+
+#[test]
+fn serve_log_level_warn_suppresses_info_logs_without_stdout() -> anyhow::Result<()> {
+    let temp = TempDb::new("serve_log_level_warn_suppresses_info_logs_without_stdout")?;
+    let port = reserve_loopback_port()?;
+    let port_arg = port.to_string();
+    let mut command = ProcessCommand::new(env!("CARGO_BIN_EXE_kanban"));
+    command
+        .current_dir(&temp.dir)
+        .arg("--db")
+        .arg(&temp.path)
+        .args([
+            "serve",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            &port_arg,
+            "--log-level",
+            "warn",
+        ])
+        .env_remove("KB_BOARD")
+        .env_remove("RUST_LOG")
+        .env("XDG_CONFIG_HOME", temp.dir.join(".xdg-config"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = command.spawn().context("spawn kanban serve")?;
+    let health_result = wait_for_health(port);
+    let _ = child.kill();
+    let output = child.wait_with_output().context("wait for kanban serve")?;
+    health_result.with_context(|| {
+        format!(
+            "serve did not answer health before timeout\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    })?;
+
+    assert!(
+        output.stdout.is_empty(),
+        "serve log-level must not write stdout, got: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("Serving Kanban API"), "{stderr}");
+    assert!(!stderr.contains("started processing request"), "{stderr}");
+    assert!(!stderr.contains("finished processing request"), "{stderr}");
     Ok(())
 }
 

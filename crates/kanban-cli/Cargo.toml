@@ -18,6 +18,7 @@ tantivy-backend = [
 ]
 
 [dependencies]
+tracing.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 clap_complete = "4.5"

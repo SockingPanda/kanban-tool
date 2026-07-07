@@ -1555,6 +1555,8 @@ kanban run logs <run_id> --tail-bytes 65536
 
 ```bash
 kanban serve
+kanban serve --quiet
+kanban serve --log-level warn
 kanban serve --search-sync-interval-ms 5000
 
 kanban dispatch
@@ -1570,6 +1572,8 @@ section and can set `command`, `claim_ttl_ms`, `heartbeat_interval_ms`,
 `on_success`, `on_failure`, and `log_dir`. Dispatcher log directories must be
 inside a trusted run-log root: the platform default run log directory,
 `<db_dir>/logs`, or `<db_dir>/.kb/logs`.
+
+`kanban serve` writes startup diagnostics and HTTP request traces to stderr by default; stdout remains reserved for explicit machine-readable output and is not used for service logs. Use `--quiet` to suppress serve diagnostics, `--log-level <off|error|warn|info|debug|trace>` for a simple verbosity override, or omit both and set `RUST_LOG` for advanced tracing filters. The default filter is `kanban=info,kanban_cli=info,kanban_server=info,tower_http=info,kanban_desktop=info`.
 
 `kanban serve` starts a conservative background search sync loop when the binary is
 built with `tantivy-backend`. The loop makes one prompt startup attempt and then

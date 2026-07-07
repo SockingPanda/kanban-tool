@@ -14,6 +14,23 @@ use crate::args::{BackupArgs, ExportArgs, ImportArgs};
 use crate::commands::common::invalid_input;
 use crate::output::print_or_json;
 
+#[derive(serde::Serialize)]
+struct ImportOutput {
+    input_path: PathBuf,
+    records: usize,
+    dry_run: bool,
+}
+
+impl ImportOutput {
+    fn from_result(result: kanban_sqlite::ImportResult, dry_run: bool) -> Self {
+        Self {
+            input_path: result.input_path,
+            records: result.records,
+            dry_run,
+        }
+    }
+}
+
 pub(crate) fn import_command(
     db_path: &Path,
     actor: &str,
@@ -33,6 +50,22 @@ pub(crate) fn import_command(
     })();
     remove_sqlite_file_family(&temp_path);
     remove_sqlite_file_family(&restore_path);
+    result
+}
+
+pub(crate) fn import_dry_run_command(
+    db_path: &Path,
+    actor: &str,
+    args: &ImportArgs,
+) -> Result<kanban_sqlite::ImportResult> {
+    let temp_path = temporary_import_db_path(db_path)?;
+    let result = (|| {
+        let _init = init_database(&temp_path, actor)
+            .with_context(|| format!("failed to initialize/open {}", temp_path.display()))?;
+        let result = import_jsonl(&temp_path, &args.input, true)?;
+        Ok(result)
+    })();
+    remove_sqlite_file_family(&temp_path);
     result
 }
 
@@ -198,15 +231,28 @@ pub(crate) fn handle_import(
             args.input.display()
         )));
     }
+    if args.dry_run {
+        let result = import_dry_run_command(db_path, actor, &args)?;
+        let output = ImportOutput::from_result(result, true);
+        print_or_json(json, &output, || {
+            format!(
+                "Dry-run import validated {} record(s) from {}",
+                output.records,
+                output.input_path.display()
+            )
+        })?;
+        return Ok(());
+    }
     if !args.replace {
-        return Err(invalid_input("import requires --replace"));
+        return Err(invalid_input("import requires --replace or --dry-run"));
     }
     let result = import_command(db_path, actor, args)?;
-    print_or_json(json, &result, || {
+    let output = ImportOutput::from_result(result, false);
+    print_or_json(json, &output, || {
         format!(
             "Imported {} record(s) from {}",
-            result.records,
-            result.input_path.display()
+            output.records,
+            output.input_path.display()
         )
     })
 }

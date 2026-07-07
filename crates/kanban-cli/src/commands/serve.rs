@@ -3,7 +3,7 @@ use std::{net::SocketAddr, path::PathBuf, time::Duration};
 use anyhow::{Context, Result};
 use kanban_sqlite::{begin_database_runtime, init_database};
 
-use crate::args::ServeArgs;
+use crate::args::{ServeArgs, ServeLogLevel};
 use crate::commands::common::invalid_input;
 
 pub(crate) fn serve(args: ServeArgs, db_path: PathBuf, board: &str, actor: String) -> Result<()> {
@@ -15,12 +15,13 @@ pub(crate) fn serve(args: ServeArgs, db_path: PathBuf, board: &str, actor: Strin
             "kanban serve only supports loopback hosts; use 127.0.0.1 or ::1",
         ));
     }
-    kanban_server::init_tracing();
+    init_serve_tracing(&args);
     let _runtime_guard = begin_database_runtime(&db_path)?;
     let _init = init_database(&db_path, &actor)
         .with_context(|| format!("failed to initialize/open {}", db_path.display()))?;
-    eprintln!(
-        "Serving Kanban API on http://{addr} using {}",
+    tracing::info!(
+        "Serving Kanban API on http://{} using {}",
+        addr,
         db_path.display()
     );
     let runtime = tokio::runtime::Runtime::new().context("failed to start tokio runtime")?;
@@ -34,4 +35,28 @@ pub(crate) fn serve(args: ServeArgs, db_path: PathBuf, board: &str, actor: Strin
             ),
         ))
         .context("kanban server failed")
+}
+
+fn init_serve_tracing(args: &ServeArgs) {
+    if args.quiet {
+        kanban_server::init_tracing_with_filter_spec("off");
+        return;
+    }
+
+    if let Some(level) = args.log_level {
+        kanban_server::init_tracing_with_filter_spec(&serve_log_filter(level));
+        return;
+    }
+
+    kanban_server::init_tracing();
+}
+
+fn serve_log_filter(level: ServeLogLevel) -> String {
+    let level = level.as_filter_level();
+    if level == "off" {
+        return "off".to_owned();
+    }
+    format!(
+        "kanban={level},kanban_cli={level},kanban_server={level},tower_http={level},kanban_desktop={level}"
+    )
 }

@@ -7,7 +7,9 @@ mod observability;
 mod router;
 mod state;
 
-pub use observability::{DEFAULT_TRACING_FILTER, init_tracing, init_tracing_with_filter};
+pub use observability::{
+    DEFAULT_TRACING_FILTER, init_tracing, init_tracing_with_filter, init_tracing_with_filter_spec,
+};
 pub use router::{
     build_desktop_router, build_router, build_serve_router, serve, serve_with_search_sync,
 };

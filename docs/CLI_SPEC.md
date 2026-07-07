@@ -1810,20 +1810,22 @@ semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
 
 失败：
 
+当 `--json` 已被 clap 成功解析，且错误发生在运行期 service/IO 路径时，错误输出到 stdout：
+
 ```json
 {
   "error": {
     "code": "invalid_transition",
     "message": "cannot claim task from status todo",
-    "details": {
-      "task_id": "t_...",
-      "status": "todo"
-    }
+    "exit_code": 4
   }
 }
 ```
 
-stderr：
+`error.exit_code` 必须与进程退出码一致；运行期 `--json` 错误不写 stderr。
+
+stderr/stdout：
 
 - human 模式：错误写 stderr。
-- JSON 模式：错误 JSON 写 stdout 或 stderr 需要固定；建议 stderr，stdout 保持空。
+- JSON 模式：运行期错误 JSON 写 stdout，stderr 保持空。
+- clap 参数解析错误发生在运行期之前，仍由 clap 写 stderr 并退出 2；这类错误不保证 JSON envelope。

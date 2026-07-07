@@ -9,6 +9,7 @@ use kanban_sqlite::FinishPolicy;
     name = "kanban",
     version,
     about = "Local SQLite-backed Kanban work queue",
+    arg_required_else_help = true,
     after_help = "Examples:\n  kanban init\n  kanban task create \"Write spec\" --description-file -\n  kanban task list --status ready --json\n  kanban comment add default#1 --body-file - --kind note"
 )]
 pub(crate) struct Cli {
@@ -32,6 +33,7 @@ pub(crate) struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum Command {
     /// Initialize the SQLite database, default board, and board columns.
     Init {
@@ -165,6 +167,7 @@ pub(crate) enum CompleteKind {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum HookCommand {
     /// Manage Codex lifecycle hooks for kanban-aware agent feedback.
     Codex {
@@ -174,6 +177,7 @@ pub(crate) enum HookCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum CodexHookCommand {
     /// Install managed Codex hooks and default prompt configuration.
     Install(CodexHookInstallArgs),
@@ -203,6 +207,7 @@ pub(crate) struct CodexHookInstallArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum CodexHookHandleCommand {
     /// Handle a failed kanban command trace from a Codex hook payload.
     Failure(CodexHookFailureHandleArgs),
@@ -226,6 +231,7 @@ pub(crate) struct CodexHookTaskCreateHandleArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum TaskCommand {
     /// Create a task, preferably with rich description input from a file or stdin.
     Create(CreateArgs),
@@ -291,6 +297,7 @@ pub(crate) struct TaskReopenArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum TaskStepCommand {
     /// List execution steps for a task.
     List { task_ref: String },
@@ -429,6 +436,7 @@ pub(crate) struct TaskStepNotRequiredArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum BoardCommand {
     /// List boards in this database.
     List {
@@ -448,6 +456,7 @@ pub(crate) enum BoardCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum CommentCommand {
     /// Append a note, decision, or signal backlink comment to a task.
     Add(CommentAddArgs),
@@ -456,6 +465,7 @@ pub(crate) enum CommentCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum SignalCommand {
     /// Record an Agent/Product signal from JSON input.
     Record(SignalRecordArgs),
@@ -544,6 +554,7 @@ pub(crate) struct SignalSupersedeArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum LabelCommand {
     /// List labels on the active board.
     List,
@@ -645,6 +656,7 @@ pub(crate) struct LabelBootstrapArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum LabelSemanticsCommand {
     /// List labels with semantics metadata.
     List,
@@ -712,6 +724,7 @@ pub(crate) struct LabelSemanticsUpsertArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum LabelAtomsCommand {
     /// List label ontology atoms.
     List,
@@ -720,6 +733,7 @@ pub(crate) enum LabelAtomsCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum LabelAtomIndexCommand {
     /// Show label atom vector index status.
     Status(LabelAtomIndexStatusArgs),
@@ -812,6 +826,7 @@ pub(crate) struct LabelProposeArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum LabelProposalsCommand {
     /// List label proposals.
     List(LabelProposalsListArgs),
@@ -875,6 +890,7 @@ pub(crate) struct LabelProposalAcceptArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum LabelOntologyCommand {
     /// Record a label ontology signal from JSON input.
     Record(LabelOntologyRecordArgs),
@@ -1031,6 +1047,7 @@ pub(crate) struct LabelOntologyResolveArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum LabelOntologyApplyCommand {
     /// Apply atom changes proposed by ontology signals.
     Atom(LabelOntologyApplyAtomArgs),
@@ -1325,6 +1342,7 @@ pub(crate) struct SearchArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum IndexCommand {
     /// Show search index status.
     Status,
@@ -1337,6 +1355,7 @@ pub(crate) enum IndexCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum EntityCommand {
     /// List derived entities.
     List(EntityListArgs),
@@ -1353,6 +1372,7 @@ pub(crate) struct EntityListArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum OutboxCommand {
     /// List derived outbox items.
     List(OutboxListArgs),
@@ -1367,12 +1387,14 @@ pub(crate) struct OutboxListArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum DerivedCommand {
     /// Show derived-store status.
     Status,
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum GraphCommand {
     /// Show graph index status.
     Status,
@@ -1412,6 +1434,7 @@ pub(crate) struct GraphQueryArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum VectorCommand {
     /// Show vector index status and configuration.
     Status(VectorConfigPathArgs),
@@ -1503,6 +1526,7 @@ pub(crate) struct VectorConfigureArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum ContextCommand {
     /// Build context for one task.
     Build(ContextBuildArgs),
@@ -1570,6 +1594,7 @@ pub(crate) struct UpdateArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum RunCommand {
     /// Show one run by id.
     Show { run_id: String },
@@ -1645,6 +1670,7 @@ pub(crate) struct ReclaimArgs {
 }
 
 #[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
 pub(crate) enum DepCommand {
     /// Add a dependency edge from parent to child.
     Add {

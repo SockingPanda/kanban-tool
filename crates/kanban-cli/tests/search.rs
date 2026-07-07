@@ -35,12 +35,10 @@ fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
         ],
     )?
     .success_json()?;
-    mark_no_plan_required(
-        &temp.path,
-        alpha["data"]["id"]
-            .as_str()
-            .context("expected JSON string")?,
-    )?;
+    let alpha_task_id = alpha["data"]["id"]
+        .as_str()
+        .context("expected JSON string")?;
+    mark_no_plan_required(&temp.path, alpha_task_id)?;
     let beta = kanban(
         &temp.path,
         &[
@@ -81,6 +79,7 @@ fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
         .as_array()
         .context("expected JSON array")?;
     assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0]["task_id"], alpha_task_id);
     assert_eq!(hits[0]["task"]["title"], "Alpha search surface");
     assert!(hits[0]["score"].as_f64().context("expected JSON f64")? > 0.0);
     assert!(
@@ -96,7 +95,8 @@ fn search_command_outputs_json_and_human_hits() -> anyhow::Result<()> {
     )?;
     assert!(human.output.status.success());
     let stdout = String::from_utf8_lossy(&human.output.stdout);
-    assert!(stdout.contains("#1"), "{stdout}");
+    assert!(stdout.contains("default#1"), "{stdout}");
+    assert!(!stdout.contains(alpha_task_id), "{stdout}");
     assert!(stdout.contains("[ready]"), "{stdout}");
     assert!(stdout.contains("score="), "{stdout}");
     assert!(stdout.contains("Alpha search surface"), "{stdout}");

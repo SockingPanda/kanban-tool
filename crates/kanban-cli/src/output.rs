@@ -71,16 +71,15 @@ pub(crate) fn print_or_json_with_meta<T: serde::Serialize, M: serde::Serialize>(
 pub(crate) fn task_line(task: &kanban_sqlite::TaskRecord) -> String {
     let labels = task_label_suffix(task);
     format!(
-        "{} {} [{}] P{} plan={} steps={}/{} {}{}",
+        "{} [{}] P{} {}{} · plan: {} · steps: {}/{}",
         task.task_ref,
-        task.id,
         task.status.as_str(),
         task.priority,
+        task.title,
+        labels,
         task.execution_plan_state.as_str(),
         task.completed_required_step_count,
         task.required_step_count,
-        task.title,
-        labels
     )
 }
 
@@ -88,79 +87,77 @@ pub(crate) fn task_details(
     task: &kanban_sqlite::TaskRecord,
     ontology_summary: Option<&kanban_sqlite::TaskOntologySummary>,
 ) -> String {
-    let mut lines = vec![
-        format!("ref: {}", task.task_ref),
-        format!("id: {}", task.id),
-        format!("board_id: {}", task.board_id),
-        format!("board_slug: {}", task.board_slug),
-        format!("seq: {}", task.seq),
-        format!("status: {}", task.status.as_str()),
-        format!("title: {}", task.title),
-        format!(
-            "labels: {}",
-            if task.labels.is_empty() {
-                "-".to_owned()
-            } else {
-                task.labels
-                    .iter()
-                    .map(|label| label.name.as_str())
-                    .collect::<Vec<_>>()
-                    .join(",")
-            }
-        ),
-    ];
-    push_multiline_field(&mut lines, "description", task.description.as_deref());
+    let mut lines = Vec::new();
     lines.extend([
+        "Task".to_owned(),
+        format!("  ref: {}", task.task_ref),
+        format!("  id: {}", task.id),
+        format!("  board_slug: {}", task.board_slug),
+        format!("  board_id: {}", task.board_id),
+        format!("  seq: {}", task.seq),
+        format!("  status: {}", task.status.as_str()),
         format!(
-            "status_reason: {}",
+            "  status_reason: {}",
             option_display(task.status_reason.as_deref())
         ),
-        format!("assignee: {}", option_display(task.assignee.as_deref())),
-        format!("priority: P{}", task.priority),
+        format!("  title: {}", task.title),
+        format!("  labels: {}", task_labels_display(task)),
+        format!("  assignee: {}", option_display(task.assignee.as_deref())),
+        format!("  priority: P{}", task.priority),
+        "Description".to_owned(),
+    ]);
+    push_indented_multiline(&mut lines, task.description.as_deref());
+    lines.extend([
+        "Plan".to_owned(),
+        format!("  state: {}", task.execution_plan_state.as_str()),
         format!(
-            "execution_plan_state: {}",
-            task.execution_plan_state.as_str()
-        ),
-        format!(
-            "required_steps: {}/{}",
+            "  required_steps: {}/{}",
             task.completed_required_step_count, task.required_step_count
         ),
-        format!("optional_steps: {}", task.optional_step_count),
-        format!("position: {}", task.position),
-        format!("scheduled_at: {}", option_i64(task.scheduled_at)),
-        format!("due_at: {}", option_i64(task.due_at)),
-        format!("created_by: {}", task.created_by),
-        format!("created_at: {}", task.created_at),
-        format!("updated_at: {}", task.updated_at),
-        format!("started_at: {}", option_i64(task.started_at)),
-        format!("completed_at: {}", option_i64(task.completed_at)),
-        format!("archived_at: {}", option_i64(task.archived_at)),
+        format!("  optional_steps: {}", task.optional_step_count),
+        format!("  position: {}", task.position),
+        "Schedule".to_owned(),
+        format!("  scheduled_at: {}", option_i64(task.scheduled_at)),
+        format!("  due_at: {}", option_i64(task.due_at)),
+        "Timestamps".to_owned(),
+        format!("  created_by: {}", task.created_by),
+        format!("  created_at: {}", task.created_at),
+        format!("  updated_at: {}", task.updated_at),
+        format!("  started_at: {}", option_i64(task.started_at)),
+        format!("  completed_at: {}", option_i64(task.completed_at)),
+        format!("  archived_at: {}", option_i64(task.archived_at)),
+        "Execution".to_owned(),
         format!(
-            "claim_token: {}",
-            option_display(task.claim_token.as_deref())
-        ),
-        format!(
-            "claim_owner: {}",
+            "  claim_owner: {}",
             option_display(task.claim_owner.as_deref())
         ),
-        format!("claim_expires_at: {}", option_i64(task.claim_expires_at)),
-        format!("last_heartbeat_at: {}", option_i64(task.last_heartbeat_at)),
         format!(
-            "current_run_id: {}",
+            "  claim_token: {}",
+            option_display(task.claim_token.as_deref())
+        ),
+        format!("  claim_expires_at: {}", option_i64(task.claim_expires_at)),
+        format!(
+            "  last_heartbeat_at: {}",
+            option_i64(task.last_heartbeat_at)
+        ),
+        format!(
+            "  current_run_id: {}",
             option_display(task.current_run_id.as_deref())
         ),
-        format!("retry_count: {}", task.retry_count),
-        format!("max_retries: {}", option_i64(task.max_retries)),
+        format!("  retry_count: {}", task.retry_count),
+        format!("  max_retries: {}", option_i64(task.max_retries)),
+        "Result".to_owned(),
         format!(
-            "result_summary: {}",
+            "  result_summary: {}",
             option_display(task.result_summary.as_deref())
         ),
         format!(
-            "result_json: {}",
+            "  result_json: {}",
             option_display(task.result_json.as_deref())
         ),
-        format!("metadata_json: {}", task.metadata_json),
-        format!("lock_version: {}", task.lock_version),
+        "Metadata".to_owned(),
+        format!("  metadata_json: {}", task.metadata_json),
+        format!("  lock_version: {}", task.lock_version),
     ]);
     if let Some(summary) = ontology_summary {
         push_task_ontology_summary(&mut lines, summary);
@@ -188,6 +185,27 @@ fn task_label_suffix(task: &kanban_sqlite::TaskRecord) -> String {
     }
 }
 
+fn task_labels_display(task: &kanban_sqlite::TaskRecord) -> String {
+    if task.labels.is_empty() {
+        "-".to_owned()
+    } else {
+        task.labels
+            .iter()
+            .map(|label| label.name.as_str())
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+}
+
+fn push_indented_multiline(lines: &mut Vec<String>, value: Option<&str>) {
+    match value {
+        Some(value) if !value.is_empty() => {
+            lines.extend(value.lines().map(|line| format!("  {line}")));
+        }
+        _ => lines.push("  -".to_owned()),
+    }
+}
+
 fn option_display(value: Option<&str>) -> &str {
     value.unwrap_or("-")
 }
@@ -196,16 +214,6 @@ fn option_i64(value: Option<i64>) -> String {
     value
         .map(|value| value.to_string())
         .unwrap_or_else(|| "-".to_string())
-}
-
-fn push_multiline_field(lines: &mut Vec<String>, label: &str, value: Option<&str>) {
-    match value {
-        Some(value) if !value.is_empty() => {
-            lines.push(format!("{label}:"));
-            lines.extend(value.lines().map(|line| format!("  {line}")));
-        }
-        _ => lines.push(format!("{label}: -")),
-    }
 }
 
 fn push_task_ontology_summary(
@@ -263,9 +271,8 @@ pub(crate) fn search_hit_line(hit: &SearchOutputHit) -> String {
         .map(|value| format!(" - {value}"))
         .unwrap_or_default();
     format!(
-        "#{} {} [{}] score={:.1} {}{}",
-        hit.seq,
-        hit.task_id,
+        "{} [{}] score={:.1} {}{}",
+        hit.task.task_ref,
         hit.task.status.as_str(),
         hit.score,
         hit.task.title,

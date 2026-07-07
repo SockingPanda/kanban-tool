@@ -195,7 +195,6 @@ fn no_subcommand_leaf_commands_are_not_group_help_cases() -> anyhow::Result<()> 
     Ok(())
 }
 
-
 #[test]
 fn enum_and_value_domain_help_lists_allowed_cli_values() -> anyhow::Result<()> {
     let task_create = kanban_help(&["task", "create"])?;

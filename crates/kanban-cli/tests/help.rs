@@ -142,12 +142,15 @@ fn dangerous_flags_explain_their_semantics() -> anyhow::Result<()> {
     assert_contains_all(
         &import,
         &[
+            "--dry-run",
+            "Validate the import in a temporary database without replacing the selected database",
             "--replace",
             "Clear existing importable records before loading input",
             "use only with an intentional backup/restore flow",
         ],
     )?;
     assert_no_line(&import, "  kanban import --input backup.jsonl")?;
+    assert_contains_all(&import, &["  kanban import --input backup.jsonl --dry-run"])?;
     assert_contains_all(&import, &["  kanban import --input backup.jsonl --replace"])?;
 
     Ok(())

@@ -1715,11 +1715,17 @@ pub(crate) struct ExportArgs {
 
 #[derive(Debug, Args)]
 #[command(
-    after_help = "Examples:\n  kanban import --input backup.jsonl --replace\n\n--replace clears existing importable records before loading the input file; use only with an intentional backup/restore flow."
+    after_help = "Examples:\n  kanban import --input backup.jsonl --dry-run\n  kanban import --input backup.jsonl --replace\n\n--dry-run validates the input in a temporary database without replacing the selected database.\n--replace clears existing importable records before loading the input file; use only with an intentional backup/restore flow."
 )]
 pub(crate) struct ImportArgs {
     #[arg(long)]
     pub(crate) input: PathBuf,
+    #[arg(
+        long,
+        conflicts_with = "replace",
+        help = "Validate the import in a temporary database without replacing the selected database"
+    )]
+    pub(crate) dry_run: bool,
     #[arg(
         long,
         help = "Clear existing importable records before loading input; intended for restore flows"

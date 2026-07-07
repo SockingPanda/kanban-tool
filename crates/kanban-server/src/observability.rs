@@ -4,7 +4,8 @@ use tower_http::trace::{
 use tracing::Level;
 use tracing_subscriber::EnvFilter;
 
-pub const DEFAULT_TRACING_FILTER: &str = "kanban_server=info,tower_http=info,kanban_desktop=info";
+pub const DEFAULT_TRACING_FILTER: &str =
+    "kanban=info,kanban_cli=info,kanban_server=info,tower_http=info,kanban_desktop=info";
 
 pub type HttpTraceLayer =
     TraceLayer<HttpMakeClassifier, DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse>;
@@ -20,6 +21,10 @@ pub fn init_tracing() {
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new(DEFAULT_TRACING_FILTER));
     init_tracing_with_filter(filter);
+}
+
+pub fn init_tracing_with_filter_spec(filter: &str) {
+    init_tracing_with_filter(EnvFilter::new(filter));
 }
 
 pub fn init_tracing_with_filter(filter: EnvFilter) {

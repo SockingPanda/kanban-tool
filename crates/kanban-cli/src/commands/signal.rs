@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf, str::FromStr};
+use std::{path::{Path, PathBuf}, str::FromStr};
 
 use anyhow::{Context, Result};
 use kanban_sqlite::{
@@ -6,7 +6,7 @@ use kanban_sqlite::{
     SignalStatus, get_signal, list_signals, record_signal, review_signals, update_signal_status,
 };
 
-use crate::commands::common::resolve_required_text_input;
+use crate::commands::common::{read_text_input, resolve_required_text_input};
 use crate::{args::SignalCommand, output::print_or_json};
 
 pub(crate) fn handle_signal(
@@ -124,13 +124,8 @@ pub(crate) fn handle_signal(
     Ok(())
 }
 
-fn read_record_input(path: &str) -> Result<SignalRecordInput> {
-    let content = if path == "-" {
-        std::io::read_to_string(std::io::stdin())
-            .context("failed to read signal input from stdin")?
-    } else {
-        fs::read_to_string(path).with_context(|| format!("failed to read signal input {path}"))?
-    };
+fn read_record_input(path: &Path) -> Result<SignalRecordInput> {
+    let content = read_text_input(path).context("failed to read signal input")?;
     serde_json::from_str(&content).context("failed to parse signal input JSON")
 }
 

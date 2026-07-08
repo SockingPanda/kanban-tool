@@ -54,6 +54,8 @@ Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状
 
 关键 agent-facing 输入面必须在命令 help 中优先展示安全路径：多行或 shell-sensitive 文本使用 `--description-file -`、`--body-file -`、`--metadata-json-file <PATH|->`、`--metadata-file <PATH|->` 或 `--input -`，避免 shell expansion / quoting 污染。危险、破坏性或容易误解的 flag 必须在 help 中说明语义，例如 `task archive --force` 绕过普通 archive guard，`import --replace` 是有意 backup/restore flow 的替换式恢复入口；兼容 no-op flag 必须明确写出 no-op。
 
+对 `PATH|-` 文本输入（如 `--reason-file`、`--input`、`--body-file`、`--metadata-json-file`）与其变体，`kanban` 实现上约束单次输入上限为 1MiB。超过上限时返回 `invalid_input`，并在 `--json` 下通过 `error.message` 指明输入长度限制，CLI 端可用更高层分片策略。该约束覆盖 stdin 与文件输入，目的是避免错误输入导致 CLI 服务路径资源异常。
+
 顶层 help 和关键 agent-facing 命令可以包含 `Examples:`，但示例必须保持短小、稳定，并与实际命令语义一致；不要把 CLI_SPEC 的完整说明复制进 help。CLI help contract 由 `crates/kanban-cli/tests/help.rs` 覆盖，防止公开 command 行退化为空描述。
 
 ### 1.2 JSON output contract
@@ -86,6 +88,8 @@ Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状
 ```
 
 `error.code` 是脚本可依赖的 ASCII 枚举；`message` 是本地化 human-readable 说明；`exit_code` 与进程退出码一致。运行期 `--json` 错误不写 stderr。
+
+`error.code` 不应依赖 message 文案推断；所有业务层 `KanbanError` 都应返回稳定枚举。仅对无结构化层外错误（IO、路径、异常第三方 text）使用降级文本分类作为补充。
 
 参数解析错误发生在 clap 解析阶段，仍由 clap 输出 stderr 并退出 2；这类错误不输出 JSON envelope。没有 `--json` 时，运行期错误继续输出 human-readable stderr。
 

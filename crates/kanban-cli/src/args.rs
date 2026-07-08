@@ -491,8 +491,8 @@ pub(crate) enum SignalCommand {
     after_help = "Input schema: source must be a string; put structured command, cwd, exit_code, and stderr details under evidence.\n\nExamples:\n  kanban signal record --input signal.json --json\n  kanban signal record --input - --json < signal.json"
 )]
 pub(crate) struct SignalRecordArgs {
-    #[arg(long)]
-    pub(crate) input: String,
+    #[arg(long, value_name = "PATH|-", help = "Read signal JSON from PATH, or stdin with -")]
+    pub(crate) input: std::path::PathBuf,
 }
 
 #[derive(Debug, Args)]
@@ -928,10 +928,10 @@ pub(crate) enum LabelOntologyCommand {
 )]
 pub(crate) struct LabelOntologyRecordArgs {
     pub(crate) task_ref: String,
-    #[arg(long)]
-    pub(crate) input: String,
-    #[arg(long = "suggestion-snapshot")]
-    pub(crate) suggestion_snapshot: Option<String>,
+    #[arg(long, value_name = "PATH|-", help = "Read ontology record JSON from PATH, or stdin with -")]
+    pub(crate) input: std::path::PathBuf,
+    #[arg(long = "suggestion-snapshot", value_name = "PATH|-", help = "Read suggestion snapshot JSON from PATH, or stdin with -")]
+    pub(crate) suggestion_snapshot: Option<std::path::PathBuf>,
     #[arg(long)]
     pub(crate) capture_suggest: bool,
     #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
@@ -1160,7 +1160,7 @@ pub(crate) struct LabelOntologyValidateArgs {
         conflicts_with = "trusted",
         help = "Read external validation JSON from PATH, or stdin with -"
     )]
-    pub(crate) input: Option<String>,
+    pub(crate) input: Option<std::path::PathBuf>,
     #[arg(
         long,
         help = "Run the trusted automated collector; cannot be combined with --input"

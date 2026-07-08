@@ -93,6 +93,8 @@ fn key_agent_facing_help_includes_examples_and_safe_input_guidance() -> anyhow::
     assert_contains_all(
         &signal_record,
         &[
+            "--input <PATH|->",
+            "Read signal JSON from PATH, or stdin with -",
             "kanban signal record --input signal.json --json",
             "kanban signal record --input - --json < signal.json",
             "source must be a string",
@@ -122,6 +124,18 @@ fn key_agent_facing_help_includes_examples_and_safe_input_guidance() -> anyhow::
     assert_contains_all(
         &vector_query_label_atoms,
         &["--text-file <PATH|->", "--vector-json-file <PATH|->"],
+    )?;
+
+    let label_ontology_record = kanban_help(&["label", "ontology", "record"])?;
+    assert_contains_all(
+        &label_ontology_record,
+        &[
+            "--input <PATH|->",
+            "Read ontology record JSON from PATH, or stdin with -",
+            "--suggestion-snapshot <PATH|->",
+            "Read suggestion snapshot JSON from PATH, or stdin with -",
+            "kanban label ontology record default#1 --input - --suggestion-snapshot suggest.json",
+        ],
     )?;
 
     let label_ontology_validate = kanban_help(&["label", "ontology", "validate"])?;

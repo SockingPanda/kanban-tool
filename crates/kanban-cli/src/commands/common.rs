@@ -1,5 +1,5 @@
 use std::{
-    fs,
+    fs::File,
     io::{self, Read},
     path::{Path, PathBuf},
 };
@@ -10,6 +10,8 @@ use kanban_core::KanbanError;
 pub(crate) fn invalid_input(message: impl Into<String>) -> anyhow::Error {
     KanbanError::InvalidInput(message.into()).into()
 }
+
+const MAX_TEXT_INPUT_BYTES: usize = 1_048_576;
 
 pub(crate) fn is_stdio_path(path: &Path) -> bool {
     path.as_os_str() == "-"
@@ -46,15 +48,28 @@ pub(crate) fn resolve_required_text_input(
     })
 }
 
-fn read_text_input(path: &PathBuf) -> Result<String> {
+pub(crate) fn read_text_input(path: &Path) -> Result<String> {
     if is_stdio_path(path) {
-        let mut value = String::new();
-        io::stdin()
-            .read_to_string(&mut value)
-            .with_context(|| "failed to read stdin")?;
-        return Ok(value);
+        let stdin = io::stdin();
+        let mut handle = stdin.lock();
+        return read_bounded_text(&mut handle, "stdin").with_context(|| "failed to read stdin");
     }
-    fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))
+    let mut file = File::open(path).with_context(|| format!("failed to read {}", path.display()))?;
+    read_bounded_text(&mut file, "input file")
+        .with_context(|| format!("failed to read {}", path.display()))
+}
+
+fn read_bounded_text(reader: &mut impl Read, source: &str) -> Result<String> {
+    let mut bytes = Vec::new();
+    reader
+        .take((MAX_TEXT_INPUT_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > MAX_TEXT_INPUT_BYTES {
+        return Err(invalid_input(format!(
+            "{source} size exceeds {MAX_TEXT_INPUT_BYTES} bytes"
+        )));
+    }
+    String::from_utf8(bytes).map_err(|_| invalid_input(format!("{source} is not valid UTF-8")))
 }
 
 pub(crate) fn validate_page_bounds(limit: usize, max_limit: usize, offset: usize) -> Result<()> {

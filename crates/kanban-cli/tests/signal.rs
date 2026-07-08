@@ -101,6 +101,36 @@ fn signal_record_creates_ledger_and_backlink_comment() -> anyhow::Result<()> {
 }
 
 #[test]
+fn signal_record_rejects_oversized_stdin_as_invalid_input() -> anyhow::Result<()> {
+    let temp = TempDb::new("signal_record_rejects_oversized_stdin_as_invalid_input")?;
+    let oversized = "x".repeat(1_048_577);
+
+    let result = kanban_with_stdin(
+        &temp.path,
+        &["--json", "signal", "record", "--input", "-"],
+        &oversized,
+    )?;
+
+    assert!(
+        !result.output.status.success(),
+        "command unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&result.output.stdout),
+        String::from_utf8_lossy(&result.output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&result.output.stderr), "");
+    let json: serde_json::Value = serde_json::from_slice(&result.output.stdout)?;
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert_eq!(json["error"]["exit_code"], 2);
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("stdin size exceeds 1048576 bytes")
+    );
+    Ok(())
+}
+
+#[test]
 fn signal_export_import_round_trips_and_doctor_remains_clean() -> anyhow::Result<()> {
     let source = TempDb::new("signal_export_import_round_trips_source")?;
     kanban(&source.path, &["--board", "default", "init"])?.success()?;

@@ -1651,10 +1651,7 @@ fn label_ontology_cli_record_accepts_simplified_snapshot_capture_input() -> anyh
         })
         .to_string(),
     )?;
-    let input_path = temp.dir.join("ontology-simplified-record.json");
-    fs::write(
-        &input_path,
-        json!({
+    let input_json = json!({
             "actor": {
                 "name": "label-agent",
                 "type": "agent",
@@ -1685,16 +1682,12 @@ fn label_ontology_cli_record_accepts_simplified_snapshot_capture_input() -> anyh
                 "signal_key": "cli-simplified-false-negative"
             }]
         })
-        .to_string(),
-    )?;
-    let input_path = input_path
-        .to_str()
-        .context("temp input path should be valid UTF-8")?;
+        .to_string();
     let snapshot_path = snapshot_path
         .to_str()
         .context("temp snapshot path should be valid UTF-8")?;
 
-    let observation = kanban(
+    let observation = kanban_with_stdin(
         &temp.path,
         &[
             "--json",
@@ -1703,10 +1696,11 @@ fn label_ontology_cli_record_accepts_simplified_snapshot_capture_input() -> anyh
             "record",
             task_id,
             "--input",
-            input_path,
+            "-",
             "--suggestion-snapshot",
             snapshot_path,
         ],
+        &input_json,
     )?
     .success_json()?;
 

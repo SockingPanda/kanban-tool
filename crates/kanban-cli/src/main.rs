@@ -69,7 +69,10 @@ impl CliErrorReport {
 
 fn classify_kanban_error(error: &KanbanError) -> (&'static str, i32) {
     match error {
-        KanbanError::InvalidInput(_) | KanbanError::InvalidStatus(_) => ("invalid_input", 2),
+        KanbanError::InvalidInput(message) => {
+            classify_storage_boundary_message(message).unwrap_or(("invalid_input", 2))
+        }
+        KanbanError::InvalidStatus(_) => ("invalid_input", 2),
         KanbanError::NotFound(_) => ("not_found", 3),
         KanbanError::InvalidTransition(message)
             if message.contains("claim conflict") || message.contains("matching running claim") =>
@@ -89,7 +92,7 @@ fn classify_kanban_error(error: &KanbanError) -> (&'static str, i32) {
     }
 }
 
-fn classify_error_message(message: &str) -> Option<(&'static str, i32)> {
+fn classify_storage_boundary_message(message: &str) -> Option<(&'static str, i32)> {
     let normalized = message.to_ascii_lowercase();
     if normalized.contains("database is locked")
         || normalized.contains("database is busy")
@@ -98,6 +101,14 @@ fn classify_error_message(message: &str) -> Option<(&'static str, i32)> {
     {
         return Some(("sqlite_busy", 7));
     }
+    None
+}
+
+fn classify_error_message(message: &str) -> Option<(&'static str, i32)> {
+    if let Some(classification) = classify_storage_boundary_message(message) {
+        return Some(classification);
+    }
+    let normalized = message.to_ascii_lowercase();
     if normalized.contains("integrity_check")
         || normalized.contains("integrity check failed")
         || normalized.contains("failed doctor checks")

@@ -89,7 +89,7 @@ Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状
 
 `error.code` 是脚本可依赖的 ASCII 枚举；`message` 是本地化 human-readable 说明；`exit_code` 与进程退出码一致。运行期 `--json` 错误不写 stderr。
 
-`error.code` 不应依赖 message 文案推断；所有业务层 `KanbanError` 都应返回稳定枚举。仅对无结构化层外错误（IO、路径、异常第三方 text）使用降级文本分类作为补充。
+`error.code` 不应依赖业务校验 message 文案推断；普通业务层 `KanbanError::InvalidInput` / `InvalidStatus` 都返回稳定 `invalid_input`。仅对无结构化层外错误（IO、路径、异常第三方 text）以及穿过 `InvalidInput` 的 SQLite/maintenance lock sentinel 使用降级文本分类作为补充，例如 `sqlite_busy`。
 
 参数解析错误发生在 clap 解析阶段，仍由 clap 输出 stderr 并退出 2；这类错误不输出 JSON envelope。没有 `--json` 时，运行期错误继续输出 human-readable stderr。
 

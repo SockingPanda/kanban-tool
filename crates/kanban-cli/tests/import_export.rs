@@ -247,7 +247,7 @@ fn reject_import_with_missing_run_log(source: &TempDb, export_content: &str) -> 
         export_content.replace(r#""log_path":null"#, r#""log_path":"/missing/kb-run.log""#),
     )?;
     let rejected = TempDb::new("maintenance_commands_rejected_import")?;
-    kanban(
+    let result = kanban(
         &rejected.path,
         &[
             "--json",
@@ -258,8 +258,19 @@ fn reject_import_with_missing_run_log(source: &TempDb, export_content: &str) -> 
                 .context("expected UTF-8 path")?,
             "--replace",
         ],
-    )?
-    .json_failure_containing("imported data failed doctor checks")?;
+    )?;
+    assert_eq!(result.output.status.code(), Some(8));
+    assert_eq!(String::from_utf8_lossy(&result.output.stderr), "");
+    let json: serde_json::Value = serde_json::from_slice(&result.output.stdout)?;
+    assert_eq!(json["error"]["code"], "integrity_check_failed");
+    assert_eq!(json["error"]["exit_code"], 8);
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("imported data failed doctor checks"),
+        "{json}"
+    );
     assert!(!rejected.path.exists());
     Ok(())
 }

@@ -69,9 +69,7 @@ impl CliErrorReport {
 
 fn classify_kanban_error(error: &KanbanError) -> (&'static str, i32) {
     match error {
-        KanbanError::InvalidInput(message) | KanbanError::InvalidStatus(message) => {
-            classify_error_message(message).unwrap_or(("invalid_input", 2))
-        }
+        KanbanError::InvalidInput(_) | KanbanError::InvalidStatus(_) => ("invalid_input", 2),
         KanbanError::NotFound(_) => ("not_found", 3),
         KanbanError::InvalidTransition(message)
             if message.contains("claim conflict") || message.contains("matching running claim") =>

@@ -26,14 +26,15 @@ use kanban_sqlite::{
 use kanban_vector::{SubprocessVectorStore, VectorStoreBackend};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use std::{fs, io::Read, str::FromStr};
+use std::{path::Path as StdPath, str::FromStr};
 
 use crate::args::{
     LabelAtomPolarityArg, LabelCommand, LabelOntologyActorArgs, LabelOntologyActorTypeArg,
     LabelOntologyAtomKindArg, LabelOntologyReviewGroupByArg, LabelOntologyValidationStatusArg,
 };
 use crate::commands::common::{
-    invalid_input, resolve_optional_text_input, resolve_required_text_input, validate_page_bounds,
+    invalid_input, read_text_input, resolve_optional_text_input, resolve_required_text_input,
+    validate_page_bounds,
 };
 use crate::commands::helper::{HelperKind, resolve_helper};
 use crate::output::{label_line, print_or_json, print_task};
@@ -1025,7 +1026,7 @@ fn captured_or_supplied_suggestion_snapshot(
         .transpose()
 }
 
-fn read_suggestion_snapshot_value(path: &str) -> Result<JsonValue> {
+fn read_suggestion_snapshot_value(path: &StdPath) -> Result<JsonValue> {
     let raw = read_json_input_string(path)?;
     normalize_suggestion_snapshot_value(serde_json::from_str(&raw)?)
 }
@@ -1069,14 +1070,8 @@ fn json_value_to_string(value: JsonValue) -> Result<String> {
     serde_json::to_string(&value).map_err(Into::into)
 }
 
-fn read_json_input_string(path: &str) -> Result<String> {
-    if path == "-" {
-        let mut raw = String::new();
-        std::io::stdin().read_to_string(&mut raw)?;
-        Ok(raw)
-    } else {
-        fs::read_to_string(path).map_err(Into::into)
-    }
+fn read_json_input_string(path: &StdPath) -> Result<String> {
+    read_text_input(path)
 }
 
 fn label_ontology_cli_actor(actor: &str, args: &LabelOntologyActorArgs) -> LabelOntologyActor {
@@ -1583,7 +1578,7 @@ fn label_suggestion_lines(result: &LabelSuggestionResult) -> String {
 }
 
 fn read_proposal_candidate(path: &std::path::Path) -> Result<LabelProposalCandidate> {
-    let raw = fs::read_to_string(path)?;
+    let raw = read_text_input(path)?;
     serde_json::from_str(&raw).map_err(Into::into)
 }
 

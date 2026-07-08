@@ -1879,35 +1879,8 @@ semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
 
 ---
 
-## 16. JSON Output Contract
+## 16. JSON contract reference
 
-成功：
+JSON 输出、运行期 JSON error、clap parse-time error、stderr/stdout 数据平面和 JSONL / NDJSON streaming boundary 的权威契约统一见 [1.3 JSON output contract](#13-json-output-contract)。
 
-```json
-{
-  "data": {},
-  "meta": {}
-}
-```
-
-失败：
-
-当 `--json` 已被 clap 成功解析，且错误发生在运行期 service/IO 路径时，错误输出到 stdout：
-
-```json
-{
-  "error": {
-    "code": "invalid_transition",
-    "message": "cannot claim task from status todo",
-    "exit_code": 4
-  }
-}
-```
-
-`error.exit_code` 必须与进程退出码一致；运行期 `--json` 错误不写 stderr。
-
-stderr/stdout：
-
-- human 模式：错误写 stderr。
-- JSON 模式：运行期错误 JSON 写 stdout，stderr 保持空。
-- clap 参数解析错误发生在运行期之前，仍由 clap 写 stderr 并退出 2；这类错误不保证 JSON envelope。
+本节仅保留跳转，避免同一份 CLI_SPEC 出现两个 JSON 契约来源。新增或修改 JSON / JSONL / error-code 行为时，只更新 1.3 及对应命令章节，并补充测试证据。

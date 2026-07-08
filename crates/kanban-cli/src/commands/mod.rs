@@ -2,6 +2,7 @@ pub(crate) mod app;
 pub(crate) mod board;
 pub(crate) mod comment;
 pub(crate) mod common;
+pub(crate) mod config;
 pub(crate) mod dep;
 pub(crate) mod dispatch;
 pub(crate) mod helper;

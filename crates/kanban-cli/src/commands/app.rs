@@ -136,13 +136,15 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
                 })?;
             } else {
                 let _runtime_guard = begin_database_runtime(&db_path)?;
-                let summary = dispatch_loop(
+                let runtime =
+                    tokio::runtime::Runtime::new().context("failed to start tokio runtime")?;
+                let summary = runtime.block_on(dispatch_loop(
                     &db_path,
                     &board,
                     options,
                     args.poll_interval_ms,
                     args.max_iterations,
-                )?;
+                ))?;
                 print_or_json(cli.json, &summary, || {
                     format!(
                         "iterations={} claimed={}",

@@ -133,6 +133,39 @@ pub fn spawn_search_sync_task(
     }
 }
 
+pub(crate) fn spawn_search_sync_task_until_shutdown(
+    state: AppState,
+    config: SearchSyncConfig,
+    shutdown: tokio::sync::watch::Receiver<bool>,
+) -> Option<tokio::task::JoinHandle<()>> {
+    if !search_sync_task_enabled(&config) {
+        return None;
+    }
+
+    #[cfg(feature = "tantivy-backend")]
+    {
+        Some(tokio::spawn(async move {
+            let mut shutdown = shutdown;
+            run_search_sync_once(state.db_path.clone(), config.board.clone()).await;
+            loop {
+                tokio::select! {
+                    _ = shutdown.changed() => break,
+                    _ = tokio::time::sleep(config.interval) => {}
+                }
+                if *shutdown.borrow() {
+                    break;
+                }
+                run_search_sync_once(state.db_path.clone(), config.board.clone()).await;
+            }
+        }))
+    }
+    #[cfg(not(feature = "tantivy-backend"))]
+    {
+        let _ = (state, config, shutdown);
+        None
+    }
+}
+
 #[cfg(feature = "tantivy-backend")]
 async fn run_search_sync_once(db_path: PathBuf, board: String) {
     let _ = tokio::task::spawn_blocking(move || kanban_sqlite::sync_search_index(db_path, &board))

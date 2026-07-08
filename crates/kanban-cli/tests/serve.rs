@@ -32,6 +32,9 @@ fn serve_help_shows_localhost_bind_defaults() -> anyhow::Result<()> {
     assert!(stdout.contains("--log-level"), "{stdout}");
     assert!(stdout.contains("stderr"), "{stdout}");
     assert!(stdout.contains("RUST_LOG"), "{stdout}");
+    assert!(stdout.contains("Ctrl-C"), "{stdout}");
+    assert!(stdout.contains("graceful shutdown"), "{stdout}");
+    assert!(stdout.contains("stdout"), "{stdout}");
     Ok(())
 }
 
@@ -192,6 +195,52 @@ fn serve_log_level_warn_suppresses_info_logs_without_stdout() -> anyhow::Result<
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn serve_sigint_gracefully_exits_without_stdout_and_releases_runtime_lock() -> anyhow::Result<()> {
+    let temp = TempDb::new("serve_sigint_gracefully_exits_without_stdout_and_releases_lock")?;
+    let port = reserve_loopback_port()?;
+    let port_arg = port.to_string();
+    let mut command = ProcessCommand::new(env!("CARGO_BIN_EXE_kanban"));
+    command
+        .current_dir(&temp.dir)
+        .arg("--db")
+        .arg(&temp.path)
+        .args(["serve", "--host", "127.0.0.1", "--port", &port_arg])
+        .env_remove("KB_BOARD")
+        .env_remove("RUST_LOG")
+        .env("XDG_CONFIG_HOME", temp.dir.join(".xdg-config"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let child = command.spawn().context("spawn kanban serve")?;
+    let health_result = wait_for_health(port);
+    send_sigint(child.id())?;
+    let output = child.wait_with_output().context("wait for kanban serve")?;
+    health_result.with_context(|| {
+        format!(
+            "serve did not answer health before timeout\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    })?;
+
+    assert!(
+        output.status.success(),
+        "serve SIGINT should exit 0\nstatus: {:?}\nstdout:\n{}\nstderr:\n{}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "serve SIGINT must not write stdout, got: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let _runtime_guard = kanban_sqlite::begin_database_runtime(&temp.path)
+        .context("serve SIGINT should release runtime lock")?;
+    Ok(())
+}
+
 fn reserve_loopback_port() -> anyhow::Result<u16> {
     let listener = TcpListener::bind(("127.0.0.1", 0)).context("reserve loopback port")?;
     Ok(listener.local_addr()?.port())
@@ -218,4 +267,15 @@ fn request_health(port: u16) -> anyhow::Result<String> {
     let mut response = String::new();
     stream.read_to_string(&mut response)?;
     Ok(response)
+}
+
+#[cfg(unix)]
+fn send_sigint(pid: u32) -> anyhow::Result<()> {
+    let status = ProcessCommand::new("/bin/kill")
+        .arg("-INT")
+        .arg(pid.to_string())
+        .status()
+        .context("send SIGINT")?;
+    anyhow::ensure!(status.success(), "kill -INT failed with {status}");
+    Ok(())
 }

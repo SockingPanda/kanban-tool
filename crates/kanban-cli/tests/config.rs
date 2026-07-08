@@ -168,9 +168,8 @@ fn config_show_invalid_locale_uses_runtime_json_error() -> anyhow::Result<()> {
 #[test]
 fn config_show_malformed_project_config_uses_runtime_invalid_input_json_error() -> anyhow::Result<()>
 {
-    let temp = TempDb::new(
-        "config_show_malformed_project_config_uses_runtime_invalid_input_json_error",
-    )?;
+    let temp =
+        TempDb::new("config_show_malformed_project_config_uses_runtime_invalid_input_json_error")?;
     let project_config = temp.dir.join(".kb").join("config.toml");
     fs::create_dir_all(project_config.parent().context("project config parent")?)?;
     fs::write(
@@ -221,7 +220,10 @@ fn config_show_malformed_global_config_uses_runtime_invalid_input_json_error() -
         &global_config,
         "db = \"global.db\"\n[vector]\ndimensions = \"large\"\n",
     )?;
-    let db_path = global_config.parent().context("global parent")?.join("global.db");
+    let db_path = global_config
+        .parent()
+        .context("global parent")?
+        .join("global.db");
     let xdg_data = temp.dir.join("xdg-data");
 
     let failed = kanban_without_db_in_dir_str_envs(

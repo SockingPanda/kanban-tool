@@ -37,6 +37,22 @@ pub struct VectorConfig {
     pub dimensions: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ConfigValueSource {
+    Flag { name: &'static str },
+    Env { name: &'static str },
+    ProjectConfig { path: PathBuf, key: &'static str },
+    GlobalConfig { path: PathBuf, key: &'static str },
+    Default,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ResolvedConfigValue<T> {
+    pub value: T,
+    pub source: ConfigValueSource,
+}
+
 impl Default for VectorConfig {
     fn default() -> Self {
         Self {
@@ -120,18 +136,40 @@ pub fn kb_data_dir_for_db(db_path: impl Into<PathBuf>) -> PathBuf {
 }
 
 pub fn resolved_db_path(explicit_path: Option<&Path>) -> Result<PathBuf, ConfigError> {
+    Ok(resolved_db_path_with_source(explicit_path)?.value)
+}
+
+pub fn resolved_db_path_with_source(
+    explicit_path: Option<&Path>,
+) -> Result<ResolvedConfigValue<PathBuf>, ConfigError> {
     if let Some(path) = explicit_path {
-        return Ok(path.to_path_buf());
+        return Ok(ResolvedConfigValue {
+            value: path.to_path_buf(),
+            source: ConfigValueSource::Flag { name: "--db" },
+        });
     }
 
-    if let Some(path) = env_db_path("KANBAN_DB").or_else(|| env_db_path("KB_DB")) {
-        return Ok(path);
+    if let Some(path) = env_db_path("KANBAN_DB") {
+        return Ok(ResolvedConfigValue {
+            value: path,
+            source: ConfigValueSource::Env { name: "KANBAN_DB" },
+        });
+    }
+
+    if let Some(path) = env_db_path("KB_DB") {
+        return Ok(ResolvedConfigValue {
+            value: path,
+            source: ConfigValueSource::Env { name: "KB_DB" },
+        });
     }
 
     if let Some(path) = nearest_project_config()? {
         let config = read_project_config(&path)?;
         if let Some(db) = non_empty_path(config.db) {
-            return Ok(path_relative_to_config(&path, db));
+            return Ok(ResolvedConfigValue {
+                value: path_relative_to_config(&path, db),
+                source: ConfigValueSource::ProjectConfig { path, key: "db" },
+            });
         }
     }
 
@@ -139,11 +177,20 @@ pub fn resolved_db_path(explicit_path: Option<&Path>) -> Result<PathBuf, ConfigE
     if global.is_file() {
         let config = read_project_config(&global)?;
         if let Some(db) = non_empty_path(config.db) {
-            return Ok(path_relative_to_config(&global, db));
+            return Ok(ResolvedConfigValue {
+                value: path_relative_to_config(&global, db),
+                source: ConfigValueSource::GlobalConfig {
+                    path: global,
+                    key: "db",
+                },
+            });
         }
     }
 
-    Ok(default_db_path())
+    Ok(ResolvedConfigValue {
+        value: default_db_path(),
+        source: ConfigValueSource::Default,
+    })
 }
 
 fn env_db_path(key: &str) -> Option<PathBuf> {
@@ -299,6 +346,49 @@ pub fn nearest_active_board_config() -> Result<Option<String>, ConfigError> {
         return Ok(None);
     };
     Ok(read_project_config(&path)?.board)
+}
+
+pub fn resolved_active_board_with_source(
+    explicit_board: Option<&str>,
+) -> Result<ResolvedConfigValue<String>, ConfigError> {
+    if let Some(board) = explicit_board
+        .map(str::trim)
+        .filter(|board| !board.is_empty())
+    {
+        return Ok(ResolvedConfigValue {
+            value: board.to_owned(),
+            source: ConfigValueSource::Flag { name: "--board" },
+        });
+    }
+
+    if let Ok(board) = std::env::var("KB_BOARD") {
+        let board = board.trim();
+        if !board.is_empty() {
+            return Ok(ResolvedConfigValue {
+                value: board.to_owned(),
+                source: ConfigValueSource::Env { name: "KB_BOARD" },
+            });
+        }
+    }
+
+    if let Some(path) = nearest_project_config()? {
+        let config = read_project_config(&path)?;
+        if let Some(board) = config
+            .board
+            .map(|board| board.trim().to_owned())
+            .filter(|board| !board.is_empty())
+        {
+            return Ok(ResolvedConfigValue {
+                value: board,
+                source: ConfigValueSource::ProjectConfig { path, key: "board" },
+            });
+        }
+    }
+
+    Ok(ResolvedConfigValue {
+        value: "default".to_owned(),
+        source: ConfigValueSource::Default,
+    })
 }
 
 fn path_relative_to_config(config_path: &Path, path: PathBuf) -> PathBuf {

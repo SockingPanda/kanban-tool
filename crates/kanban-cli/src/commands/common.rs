@@ -96,22 +96,7 @@ pub(crate) fn default_actor() -> String {
 }
 
 pub(crate) fn active_board(flag: Option<&str>) -> Result<String> {
-    if let Some(board) = flag.map(str::trim).filter(|board| !board.is_empty()) {
-        return Ok(board.to_owned());
-    }
-    if let Ok(board) = std::env::var("KB_BOARD") {
-        let board = board.trim();
-        if !board.is_empty() {
-            return Ok(board.to_owned());
-        }
-    }
-    if let Some(board) = kanban_local::nearest_active_board_config()?
-        .map(|board| board.trim().to_owned())
-        .filter(|board| !board.is_empty())
-    {
-        return Ok(board);
-    }
-    Ok("default".to_owned())
+    Ok(kanban_local::resolved_active_board_with_source(flag)?.value)
 }
 
 pub(crate) fn write_board_config(board: &str) -> Result<()> {

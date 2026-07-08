@@ -98,6 +98,8 @@ kanban config show [--json]
 
 顶层 help 和关键 agent-facing 命令可以包含 `Examples:`，但示例必须保持短小、稳定，并与实际命令语义一致；不要把 CLI_SPEC 的完整说明复制进 help。CLI help contract 由 `crates/kanban-cli/tests/help.rs` 覆盖，防止公开 command 行退化为空描述。
 
+顶层 `kanban --help` 必须包含简洁 `Error codes:` section，覆盖当前公开退出码，帮助 operator 在终端直接发现 parse/runtime error code 边界。该 section 是 human-readable discovery surface；脚本仍应依赖 `--json` 下的 `error.code` 和 `error.exit_code`，不要解析 help 文案。
+
 ### 1.3 JSON output contract
 
 所有公开 `--json` 输出使用顶层 envelope：

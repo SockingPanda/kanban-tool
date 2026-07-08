@@ -11,7 +11,7 @@ use kanban_sqlite::{FinishPolicy, TaskListSort};
     version,
     about = "Local SQLite-backed Kanban work queue",
     arg_required_else_help = true,
-    after_help = "Examples:\n  kanban init\n  kanban task create \"Write spec\" --description-file -\n  kanban task list --status ready --json\n  kanban comment add default#1 --body-file - --kind note"
+    after_help = "Examples:\n  kanban init\n  kanban task create \"Write spec\" --description-file -\n  kanban task list --status ready --json\n  kanban comment add default#1 --body-file - --kind note\n\nError codes:\n  1  generic or storage failure\n  2  CLI usage or invalid input\n  3  object not found\n  4  invalid state transition or unfinished required plan\n  5  claim conflict\n  6  dependency blocked\n  7  SQLite busy or locked\n  8  integrity check failed"
 )]
 pub(crate) struct Cli {
     /// Use a specific SQLite database path.

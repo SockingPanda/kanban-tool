@@ -172,6 +172,33 @@ fn key_agent_facing_help_includes_examples_and_safe_input_guidance() -> anyhow::
 }
 
 #[test]
+fn root_help_documents_public_error_codes() -> anyhow::Result<()> {
+    let root = kanban_help(&[])?;
+    assert_contains_all(
+        &root,
+        &[
+            "Error codes:",
+            "1  generic or storage failure",
+            "2  CLI usage or invalid input",
+            "3  object not found",
+            "4  invalid state transition or unfinished required plan",
+            "5  claim conflict",
+            "6  dependency blocked",
+            "7  SQLite busy or locked",
+            "8  integrity check failed",
+        ],
+    )?;
+
+    let root_error = missing_subcommand_error(&["kanban"])?;
+    assert_contains_all(
+        &root_error.to_string(),
+        &["Error codes:", "8  integrity check failed"],
+    )?;
+
+    Ok(())
+}
+
+#[test]
 fn root_and_command_groups_show_help_when_missing_subcommand() -> anyhow::Result<()> {
     let root_error = missing_subcommand_error(&["kanban"])?;
     assert_contains_all(

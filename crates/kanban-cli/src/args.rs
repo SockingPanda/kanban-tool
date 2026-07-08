@@ -186,6 +186,9 @@ pub(crate) enum HookCommand {
 #[command(arg_required_else_help = true)]
 pub(crate) enum ConfigCommand {
     /// Show resolved database path, active board, locale, and their sources.
+    #[command(
+        after_help = "Notes:\n  This command only resolves configuration; it does not open, initialize, migrate, or create the SQLite database.\n  With --json, read data.db.source.kind, data.board.source.kind, and data.locale.source.kind instead of parsing human output.\n\nExamples:\n  kanban config show\n  kanban --json config show"
+    )]
     Show,
 }
 

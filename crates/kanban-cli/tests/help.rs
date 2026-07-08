@@ -121,6 +121,18 @@ fn key_agent_facing_help_includes_examples_and_safe_input_guidance() -> anyhow::
         ],
     )?;
 
+    let config_show = kanban_help(&["config", "show"])?;
+    assert_contains_all(
+        &config_show,
+        &[
+            "does not open, initialize, migrate, or create the SQLite database",
+            "data.db.source.kind",
+            "data.board.source.kind",
+            "data.locale.source.kind",
+            "kanban --json config show",
+        ],
+    )?;
+
     let vector_query_label_atoms = kanban_help(&["vector", "query-label-atoms"])?;
     assert_contains_all(
         &vector_query_label_atoms,

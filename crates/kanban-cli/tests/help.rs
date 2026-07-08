@@ -190,7 +190,10 @@ fn root_help_documents_public_error_codes() -> anyhow::Result<()> {
     )?;
 
     let root_error = missing_subcommand_error(&["kanban"])?;
-    assert_contains_all(&root_error.to_string(), &["Error codes:", "8  integrity check failed"])?;
+    assert_contains_all(
+        &root_error.to_string(),
+        &["Error codes:", "8  integrity check failed"],
+    )?;
 
     Ok(())
 }

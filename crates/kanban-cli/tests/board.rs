@@ -1,7 +1,7 @@
 mod common;
 
 use anyhow::Context;
-use common::{TempDb, kanban, kanban_in_dir, kanban_in_dir_env};
+use common::{TempDb, kanban, kanban_in_dir, kanban_in_dir_env, kanban_without_db_in_dir_str_envs};
 
 #[test]
 fn board_create_list_show_archive_and_current_use_round_trip() -> anyhow::Result<()> {
@@ -110,6 +110,89 @@ fn active_board_priority_is_flag_then_env_then_nearest_config_then_default() -> 
     )?
     .success_json()?;
     assert_eq!(from_flag["data"]["board"]["slug"], "flagboard");
+    Ok(())
+}
+
+#[test]
+fn db_path_priority_is_flag_then_env_then_project_config_then_user_config() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("db_path_priority_is_flag_then_env_then_project_config_then_user_config")?;
+    let flag_db = temp.dir.join("flag.sqlite");
+    let kanban_db = temp.dir.join("kanban-env.sqlite");
+    let kb_db = temp.dir.join("kb-env.sqlite");
+    let project_db = temp.dir.join("project.sqlite");
+    let user_db = temp.dir.join("user.sqlite");
+
+    for (db, slug) in [
+        (&flag_db, "flag-db"),
+        (&kanban_db, "kanban-env-db"),
+        (&kb_db, "kb-env-db"),
+        (&project_db, "project-db"),
+        (&user_db, "user-db"),
+    ] {
+        kanban(db, &["init"])?.success()?;
+        kanban(db, &["board", "create", slug, "--name", slug])?.success()?;
+    }
+
+    let workspace = temp.dir.join("workspace");
+    let nested = workspace.join("a/b");
+    let xdg_config = temp.dir.join("xdg-config");
+    std::fs::create_dir_all(workspace.join(".kb"))?;
+    std::fs::create_dir_all(&nested)?;
+    std::fs::create_dir_all(xdg_config.join("kanban"))?;
+    std::fs::write(
+        workspace.join(".kb/config.toml"),
+        format!("db = {:?}\n", project_db.display().to_string()),
+    )?;
+    std::fs::write(
+        xdg_config.join("kanban/config.toml"),
+        format!("db = {:?}\n", user_db.display().to_string()),
+    )?;
+
+    let xdg_config = xdg_config.to_str().context("xdg path")?;
+    let flag_db = flag_db.to_str().context("flag db")?;
+    let kanban_db = kanban_db.to_str().context("kanban db")?;
+    let kb_db = kb_db.to_str().context("kb db")?;
+
+    kanban_without_db_in_dir_str_envs(
+        &["--json", "board", "show", "user-db"],
+        &temp.dir,
+        &[("XDG_CONFIG_HOME", xdg_config)],
+    )?
+    .success_json()?;
+
+    kanban_without_db_in_dir_str_envs(
+        &["--json", "board", "show", "project-db"],
+        &nested,
+        &[("XDG_CONFIG_HOME", xdg_config)],
+    )?
+    .success_json()?;
+
+    kanban_without_db_in_dir_str_envs(
+        &["--json", "board", "show", "kb-env-db"],
+        &nested,
+        &[("XDG_CONFIG_HOME", xdg_config), ("KB_DB", kb_db)],
+    )?
+    .success_json()?;
+
+    kanban_without_db_in_dir_str_envs(
+        &["--json", "board", "show", "kanban-env-db"],
+        &nested,
+        &[
+            ("XDG_CONFIG_HOME", xdg_config),
+            ("KB_DB", kb_db),
+            ("KANBAN_DB", kanban_db),
+        ],
+    )?
+    .success_json()?;
+
+    kanban_without_db_in_dir_str_envs(
+        &["--db", flag_db, "--json", "board", "show", "flag-db"],
+        &nested,
+        &[("XDG_CONFIG_HOME", xdg_config), ("KANBAN_DB", kanban_db)],
+    )?
+    .success_json()?;
+
     Ok(())
 }
 

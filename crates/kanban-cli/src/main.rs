@@ -103,6 +103,8 @@ fn classify_error_message(message: &str) -> Option<(&'static str, i32)> {
     if normalized.contains("integrity_check")
         || normalized.contains("integrity check failed")
         || normalized.contains("failed doctor checks")
+        || normalized.contains("file is not a database")
+        || normalized.contains("database disk image is malformed")
     {
         return Some(("integrity_check_failed", 8));
     }

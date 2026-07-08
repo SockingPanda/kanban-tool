@@ -491,7 +491,11 @@ pub(crate) enum SignalCommand {
     after_help = "Input schema: source must be a string; put structured command, cwd, exit_code, and stderr details under evidence.\n\nExamples:\n  kanban signal record --input signal.json --json\n  kanban signal record --input - --json < signal.json"
 )]
 pub(crate) struct SignalRecordArgs {
-    #[arg(long, value_name = "PATH|-", help = "Read signal JSON from PATH, or stdin with -")]
+    #[arg(
+        long,
+        value_name = "PATH|-",
+        help = "Read signal JSON from PATH, or stdin with -"
+    )]
     pub(crate) input: std::path::PathBuf,
 }
 
@@ -928,9 +932,17 @@ pub(crate) enum LabelOntologyCommand {
 )]
 pub(crate) struct LabelOntologyRecordArgs {
     pub(crate) task_ref: String,
-    #[arg(long, value_name = "PATH|-", help = "Read ontology record JSON from PATH, or stdin with -")]
+    #[arg(
+        long,
+        value_name = "PATH|-",
+        help = "Read ontology record JSON from PATH, or stdin with -"
+    )]
     pub(crate) input: std::path::PathBuf,
-    #[arg(long = "suggestion-snapshot", value_name = "PATH|-", help = "Read suggestion snapshot JSON from PATH, or stdin with -")]
+    #[arg(
+        long = "suggestion-snapshot",
+        value_name = "PATH|-",
+        help = "Read suggestion snapshot JSON from PATH, or stdin with -"
+    )]
     pub(crate) suggestion_snapshot: Option<std::path::PathBuf>,
     #[arg(long)]
     pub(crate) capture_suggest: bool,

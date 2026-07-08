@@ -1652,37 +1652,37 @@ fn label_ontology_cli_record_accepts_simplified_snapshot_capture_input() -> anyh
         .to_string(),
     )?;
     let input_json = json!({
-            "actor": {
-                "name": "label-agent",
-                "type": "agent",
-                "agent_type": "local"
+        "actor": {
+            "name": "label-agent",
+            "type": "agent",
+            "agent_type": "local"
+        },
+        "agent_candidates": [
+            {"label": "cli", "confidence": 0.92}
+        ],
+        "final_decision": {
+            "accepted_labels": ["cli"]
+        },
+        "capture_fingerprint": "cli-simplified-capture",
+        "signals": [{
+            "kind": "false_negative",
+            "target_label_ref": "cli",
+            "related_labels": [],
+            "proposed_action": "add_positive_atom",
+            "candidate_atom": {
+                "polarity": "positive",
+                "kind": "applies_when",
+                "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
             },
-            "agent_candidates": [
-                {"label": "cli", "confidence": 0.92}
-            ],
-            "final_decision": {
-                "accepted_labels": ["cli"]
-            },
-            "capture_fingerprint": "cli-simplified-capture",
-            "signals": [{
-                "kind": "false_negative",
-                "target_label_ref": "cli",
-                "related_labels": [],
-                "proposed_action": "add_positive_atom",
-                "candidate_atom": {
-                    "polarity": "positive",
-                    "kind": "applies_when",
-                    "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
-                },
-                "agent_selected": true,
-                "suggest_state": "absent",
-                "final_selected": true,
-                "rationale": "The task expands the CLI surface although suggest selected nothing.",
-                "confidence": 0.91,
-                "signal_key": "cli-simplified-false-negative"
-            }]
-        })
-        .to_string();
+            "agent_selected": true,
+            "suggest_state": "absent",
+            "final_selected": true,
+            "rationale": "The task expands the CLI surface although suggest selected nothing.",
+            "confidence": 0.91,
+            "signal_key": "cli-simplified-false-negative"
+        }]
+    })
+    .to_string();
     let snapshot_path = snapshot_path
         .to_str()
         .context("temp snapshot path should be valid UTF-8")?;

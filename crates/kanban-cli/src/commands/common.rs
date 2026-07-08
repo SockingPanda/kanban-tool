@@ -54,7 +54,8 @@ pub(crate) fn read_text_input(path: &Path) -> Result<String> {
         let mut handle = stdin.lock();
         return read_bounded_text(&mut handle, "stdin").with_context(|| "failed to read stdin");
     }
-    let mut file = File::open(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let mut file =
+        File::open(path).with_context(|| format!("failed to read {}", path.display()))?;
     read_bounded_text(&mut file, "input file")
         .with_context(|| format!("failed to read {}", path.display()))
 }

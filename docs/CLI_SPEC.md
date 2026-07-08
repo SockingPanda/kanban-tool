@@ -48,7 +48,47 @@ Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状
 
 `auto` / `system` 会按 `LC_ALL`、`LC_MESSAGES`、`LANG` 解析系统 locale；当前只支持中文和英文。脚本和自动化应优先使用 `--json`，不要依赖 human 文案。
 
-### 1.1 Help output contract
+### 1.1 Config inspection
+
+```bash
+kanban config show [--json]
+```
+
+`config show` 输出当前 CLI 会使用的 SQLite DB path、active board 和 locale，以及每个值的来源。该命令用于 agent/operator 排查 precedence，不会打开、初始化或创建 SQLite DB。
+
+`--json` 输出使用普通 `{ "data": ... }` envelope，`data` 结构如下：
+
+```json
+{
+  "db": {
+    "value": "/path/to/kb.db",
+    "source": { "kind": "project_config", "path": "/repo/.kb/config.toml", "key": "db" }
+  },
+  "board": {
+    "value": "kanban-tool",
+    "source": { "kind": "env", "name": "KB_BOARD" }
+  },
+  "locale": {
+    "value": "zh-CN",
+    "input": "auto",
+    "source": { "kind": "flag", "name": "--locale" }
+  }
+}
+```
+
+`source.kind` 是脚本可依赖的 ASCII 枚举：
+
+| `source.kind` | 含义 |
+|---|---|
+| `flag` | 来自显式 CLI flag，例如 `--db`、`--board`、`--locale`。 |
+| `env` | 来自环境变量，例如 `KANBAN_DB`、`KB_DB`、`KB_BOARD`、`KANBAN_LOCALE`。 |
+| `project_config` | 来自最近的项目级 `.kb/config.toml`。 |
+| `global_config` | 来自 `$XDG_CONFIG_HOME/kanban/config.toml`。当前只适用于 DB path。 |
+| `default` | 来自 CLI 默认值或 fallback。 |
+
+`locale.value` 是实际解析后的 locale；当输入为 `auto` / `system` 时，`input` 保留原始选择，`value` 保留系统 locale 解析结果。`db.value` 对显式 flag 和环境变量保留调用方传入的路径形态；config 中的相对 DB 路径按 config 文件所在目录解析。
+
+### 1.2 Help output contract
 
 `kanban --help` 和公开 command group 的 `--help` 输出必须为每个公开 command/subcommand 行提供一句简短用途说明；隐藏内部命令（例如 `__complete`）除外。`kanban` 无参或公开 command group 缺少 subcommand 时必须显示同一类简洁帮助，而不是只输出 parser error；这仍属于 clap parse-time 路径，退出码为 2，且不输出 runtime JSON error envelope。全局 options 的 help 必须说明它们影响的是 SQLite DB、active board、actor、locale 或 JSON 输出，不改变 JSON key、状态枚举或 exit code 契约。
 
@@ -58,7 +98,7 @@ Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状
 
 顶层 help 和关键 agent-facing 命令可以包含 `Examples:`，但示例必须保持短小、稳定，并与实际命令语义一致；不要把 CLI_SPEC 的完整说明复制进 help。CLI help contract 由 `crates/kanban-cli/tests/help.rs` 覆盖，防止公开 command 行退化为空描述。
 
-### 1.2 JSON output contract
+### 1.3 JSON output contract
 
 所有公开 `--json` 输出使用顶层 envelope：
 
@@ -93,7 +133,7 @@ Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状
 
 参数解析错误发生在 clap 解析阶段，仍由 clap 输出 stderr 并退出 2；这类错误不输出 JSON envelope。没有 `--json` 时，运行期错误继续输出 human-readable stderr。
 
-### 1.2.1 JSONL / NDJSON streaming boundary
+### 1.3.1 JSONL / NDJSON streaming boundary
 
 JSONL/NDJSON 只适用于 streaming 或 record-oriented surfaces，例如 portable export/import、watch/event stream，或未来逐条输出的长流命令。该类输出必须满足：stdout 中每一行都是独立 valid JSON object，编码为 UTF-8，记录之间仅用 newline 分隔；human diagnostics、progress、warnings 和 runtime errors 不得混入同一个 stdout 数据流。
 
@@ -113,7 +153,7 @@ JSONL/NDJSON 只适用于 streaming 或 record-oriented surfaces，例如 portab
 | `integrity_check_failed` | 8 | doctor/import/maintenance 发现 integrity 或 consistency hard failure。 |
 | `storage_error` | 1 | 其它存储错误；不保证可按 SQLite lock/integrity 自动恢复。 |
 
-### 1.3 Shell completions
+### 1.4 Shell completions
 
 ```bash
 kanban completions <shell>
@@ -148,7 +188,7 @@ DBs, missing board config, or read/query failures return success with no
 candidates and no stderr. Static completion generation itself does not open or
 create the SQLite database.
 
-### 1.4 Codex hooks
+### 1.5 Codex hooks
 
 ```bash
 kanban hook codex install [--handler-command <command-prefix>] [--timeout 30] [--record-signals] [--json]

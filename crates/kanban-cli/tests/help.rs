@@ -14,6 +14,7 @@ const PUBLIC_COMMAND_GROUP_PATHS: &[&[&str]] = &[
     &["hook"],
     &["hook", "codex"],
     &["hook", "codex", "handle"],
+    &["config"],
     &["label"],
     &["label", "semantics"],
     &["label", "atoms"],

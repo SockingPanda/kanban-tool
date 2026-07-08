@@ -69,6 +69,11 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: HookCommand,
     },
+    /// Show resolved CLI configuration and precedence sources.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
     /// Manage task labels, suggestions, proposals, and ontology signals.
     Label {
         #[command(subcommand)]
@@ -175,6 +180,13 @@ pub(crate) enum HookCommand {
         #[command(subcommand)]
         command: CodexHookCommand,
     },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
+pub(crate) enum ConfigCommand {
+    /// Show resolved database path, active board, locale, and their sources.
+    Show,
 }
 
 #[derive(Debug, Subcommand)]

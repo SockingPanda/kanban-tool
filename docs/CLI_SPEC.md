@@ -89,6 +89,12 @@ Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状
 
 参数解析错误发生在 clap 解析阶段，仍由 clap 输出 stderr 并退出 2；这类错误不输出 JSON envelope。没有 `--json` 时，运行期错误继续输出 human-readable stderr。
 
+### 1.2.1 JSONL / NDJSON streaming boundary
+
+JSONL/NDJSON 只适用于 streaming 或 record-oriented surfaces，例如 portable export/import、watch/event stream，或未来逐条输出的长流命令。该类输出必须满足：stdout 中每一行都是独立 valid JSON object，编码为 UTF-8，记录之间仅用 newline 分隔；human diagnostics、progress、warnings 和 runtime errors 不得混入同一个 stdout 数据流。
+
+有限命令仍使用 `--json` 的 `{data, meta?}` 成功 envelope 或 `{error:{code,message,exit_code}}` runtime error envelope。JSONL/NDJSON 不替代有限命令 envelope，也不能成为未设计的全局 `--jsonl` 快捷方式。若某个命令支持 `--out -` JSONL stream，则它不得与 `--json` 共享 stdout；需要结构化错误时，必须在命令级定义 stream error policy，并用 line-by-line JSON、stdout/stderr purity 和退出码测试覆盖。
+
 当前公开错误 code：
 
 | `error.code` | Exit code | 含义 |

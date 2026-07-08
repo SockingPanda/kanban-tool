@@ -323,6 +323,16 @@ fn sqlite_locked_errors_exit_7() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+fn malformed_database_doctor_json_errors_exit_8() -> anyhow::Result<()> {
+    let temp = TempDb::new("malformed_database_doctor_json_errors_exit_8")?;
+    std::fs::write(&temp.path, "this is not a sqlite database")?;
+
+    let result = kanban_in_dir(Path::new("kb.db"), &["--json", "doctor"], &temp.dir)?;
+    assert_exit_json(result.output, 8, "integrity_check_failed")?;
+    Ok(())
+}
+
 fn mark_plan_not_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
     kanban(
         db_path,

@@ -260,6 +260,35 @@ fn generated_bash_and_zsh_completions_include_dynamic_helper_hook() -> anyhow::R
     Ok(())
 }
 
+#[test]
+fn non_bash_zsh_completion_scripts_remain_static_without_db_helper_hook() -> anyhow::Result<()> {
+    for shell in ["fish", "powershell", "elvish"] {
+        let output = kanban()?.args(["completions", shell]).output()?;
+        anyhow::ensure!(
+            output.status.success(),
+            "shell: {shell}
+status: {:?}
+stdout:
+{}
+stderr:
+{}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stdout = String::from_utf8(output.stdout)?;
+        for dynamic_kind in ["task-ref", "dependency-task-ref", "comment-kind"] {
+            anyhow::ensure!(
+                !stdout.contains(dynamic_kind),
+                "{shell} completions should not advertise bash/zsh dynamic {dynamic_kind} hooks:
+{stdout}"
+            );
+        }
+    }
+    Ok(())
+}
+
 fn assert_candidates_include(stdout: &str, expected: &[&str]) -> anyhow::Result<()> {
     let candidates = stdout.lines().collect::<Vec<_>>();
     for expected in expected {

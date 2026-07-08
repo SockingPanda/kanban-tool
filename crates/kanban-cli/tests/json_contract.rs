@@ -59,3 +59,50 @@ fn board_current_and_step_remove_json_return_named_objects() -> anyhow::Result<(
     assert!(removed["data"].get("step_ref").is_none());
     Ok(())
 }
+
+#[test]
+fn locale_does_not_change_runtime_json_error_machine_fields() -> anyhow::Result<()> {
+    let temp = TempDb::new("locale_does_not_change_runtime_json_error_machine_fields")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    let zh = kanban(
+        &temp.path,
+        &[
+            "--locale",
+            "zh-CN",
+            "--json",
+            "board",
+            "show",
+            "missing-board",
+        ],
+    )?;
+    let en = kanban(
+        &temp.path,
+        &["--locale", "en", "--json", "board", "show", "missing-board"],
+    )?;
+
+    assert_eq!(zh.output.status.code(), Some(3));
+    assert_eq!(en.output.status.code(), Some(3));
+    assert!(zh.output.stderr.is_empty());
+    assert!(en.output.stderr.is_empty());
+
+    let zh: serde_json::Value = serde_json::from_slice(&zh.output.stdout)?;
+    let en: serde_json::Value = serde_json::from_slice(&en.output.stdout)?;
+    assert_eq!(zh["error"]["code"], "not_found");
+    assert_eq!(en["error"]["code"], "not_found");
+    assert_eq!(zh["error"]["exit_code"], 3);
+    assert_eq!(en["error"]["exit_code"], 3);
+    assert!(
+        zh["error"]["message"]
+            .as_str()
+            .context("zh message")?
+            .contains("未找到")
+    );
+    assert!(
+        en["error"]["message"]
+            .as_str()
+            .context("en message")?
+            .contains("not found")
+    );
+    Ok(())
+}

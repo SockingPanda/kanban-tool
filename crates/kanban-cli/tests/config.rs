@@ -166,6 +166,95 @@ fn config_show_invalid_locale_uses_runtime_json_error() -> anyhow::Result<()> {
 }
 
 #[test]
+fn config_show_malformed_project_config_uses_runtime_invalid_input_json_error() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("config_show_malformed_project_config_uses_runtime_invalid_input_json_error")?;
+    let project_config = temp.dir.join(".kb").join("config.toml");
+    fs::create_dir_all(project_config.parent().context("project config parent")?)?;
+    fs::write(
+        &project_config,
+        "db = \"project.db\"\n[vector]\ndimensions = \"large\"\n",
+    )?;
+    let db_path = temp.dir.join(".kb").join("project.db");
+    let xdg_config = temp.dir.join("xdg-config");
+    let xdg_data = temp.dir.join("xdg-data");
+
+    let failed = kanban_without_db_in_dir_str_envs(
+        &["--json", "config", "show"],
+        &temp.dir,
+        &[
+            ("XDG_CONFIG_HOME", xdg_config.to_str().context("config")?),
+            ("XDG_DATA_HOME", xdg_data.to_str().context("data")?),
+        ],
+    )?;
+
+    assert_eq!(failed.output.status.code(), Some(2));
+    assert!(failed.output.stderr.is_empty());
+    assert!(
+        !db_path.exists(),
+        "malformed config show must not create the database"
+    );
+    let json: serde_json::Value = serde_json::from_slice(&failed.output.stdout)?;
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert_eq!(json["error"]["exit_code"], 2);
+    let message = json["error"]["message"].as_str().context("message")?;
+    assert!(message.contains("failed to parse config"), "{message}");
+    assert!(
+        message.contains(project_config.to_string_lossy().as_ref()),
+        "{message}"
+    );
+    assert!(message.contains("vector.dimensions"), "{message}");
+    Ok(())
+}
+
+#[test]
+fn config_show_malformed_global_config_uses_runtime_invalid_input_json_error() -> anyhow::Result<()>
+{
+    let temp =
+        TempDb::new("config_show_malformed_global_config_uses_runtime_invalid_input_json_error")?;
+    let xdg_config = temp.dir.join("xdg-config");
+    let global_config = xdg_config.join("kanban").join("config.toml");
+    fs::create_dir_all(global_config.parent().context("global config parent")?)?;
+    fs::write(
+        &global_config,
+        "db = \"global.db\"\n[vector]\ndimensions = \"large\"\n",
+    )?;
+    let db_path = global_config
+        .parent()
+        .context("global parent")?
+        .join("global.db");
+    let xdg_data = temp.dir.join("xdg-data");
+
+    let failed = kanban_without_db_in_dir_str_envs(
+        &["--json", "config", "show"],
+        &temp.dir,
+        &[
+            ("XDG_CONFIG_HOME", xdg_config.to_str().context("config")?),
+            ("XDG_DATA_HOME", xdg_data.to_str().context("data")?),
+        ],
+    )?;
+
+    assert_eq!(failed.output.status.code(), Some(2));
+    assert!(failed.output.stderr.is_empty());
+    assert!(
+        !db_path.exists(),
+        "malformed global config show must not create the database"
+    );
+    let json: serde_json::Value = serde_json::from_slice(&failed.output.stdout)?;
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert_eq!(json["error"]["exit_code"], 2);
+    let message = json["error"]["message"].as_str().context("message")?;
+    assert!(message.contains("failed to parse config"), "{message}");
+    assert!(
+        message.contains(global_config.to_string_lossy().as_ref()),
+        "{message}"
+    );
+    assert!(message.contains("vector.dimensions"), "{message}");
+    Ok(())
+}
+
+#[test]
 fn config_show_reports_project_config_sources_and_resolves_relative_db() -> anyhow::Result<()> {
     let temp = TempDb::new("config_show_reports_project_config_sources_and_resolves_relative_db")?;
     let project_config = temp.dir.join(".kb").join("config.toml");

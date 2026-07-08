@@ -55,6 +55,20 @@ impl CliErrorReport {
             };
         }
 
+        if let Some(config_error) = error
+            .chain()
+            .find_map(|cause| cause.downcast_ref::<kanban_local::ConfigError>())
+        {
+            let message = format!("{error:?}");
+            let (code, exit_code) = classify_config_error(config_error);
+            return Self {
+                code,
+                message: message.clone(),
+                exit_code,
+                human_message: message,
+            };
+        }
+
         let message = format!("{error:?}");
         let (code, exit_code) = classify_error_message(&message).unwrap_or(("generic_error", 1));
         let human_message = message.clone();
@@ -63,6 +77,17 @@ impl CliErrorReport {
             message,
             exit_code,
             human_message,
+        }
+    }
+}
+
+fn classify_config_error(error: &kanban_local::ConfigError) -> (&'static str, i32) {
+    match error {
+        kanban_local::ConfigError::FileParse { .. } | kanban_local::ConfigError::Parse(_) => {
+            ("invalid_input", 2)
+        }
+        kanban_local::ConfigError::Io(_) | kanban_local::ConfigError::Serialize(_) => {
+            ("generic_error", 1)
         }
     }
 }

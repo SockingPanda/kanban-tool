@@ -15,6 +15,7 @@ use crate::commands::{
     board::handle_board,
     comment::handle_comment,
     common::{active_board, default_actor, resolved_db_path},
+    config::show_config,
     dep::handle_dep,
     dispatch::{dispatch_loop, dispatch_options},
     hook::handle_hook,
@@ -62,6 +63,17 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
         let db_path = resolved_db_path(cli.db.as_deref())?;
         let actor = cli.actor.clone().unwrap_or_else(default_actor);
         handle_hook(command, &db_path, cli.board.as_deref(), &actor, cli.json)?;
+        return Ok(());
+    }
+    if let Command::Config { command } = &cli.command {
+        match command {
+            ConfigCommand::Show => show_config(
+                cli.db.as_deref(),
+                cli.board.as_deref(),
+                cli.locale.as_deref(),
+                cli.json,
+            )?,
+        }
         return Ok(());
     }
 
@@ -118,6 +130,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
         Command::Signal { command } => handle_signal(command, &db_path, &board, &actor, cli.json)?,
         Command::Index { command } => handle_index(command, &db_path, &board, cli.json)?,
         Command::Hook { .. } => unreachable!("handled before database initialization"),
+        Command::Config { .. } => unreachable!("handled before database initialization"),
         Command::Entity { command } => handle_entity(command, &db_path, cli.json)?,
         Command::Outbox { command } => handle_outbox(command, &db_path, cli.json)?,
         Command::Derived { command } => handle_derived(command, &db_path, cli.json)?,

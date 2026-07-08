@@ -1,4 +1,12 @@
-use std::{fs, path::PathBuf, thread, time::Duration};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicU8, Ordering},
+    },
+    time::Duration,
+};
 
 use anyhow::{Context, Result};
 use kanban_sqlite::{DispatchOptions, FinishPolicy, dispatch_once};
@@ -45,7 +53,7 @@ pub(crate) fn dispatch_options(args: &DispatchArgs, actor: String) -> Result<Dis
     })
 }
 
-pub(crate) fn dispatch_loop(
+pub(crate) async fn dispatch_loop(
     db_path: &PathBuf,
     board: &str,
     options: DispatchOptions,
@@ -55,21 +63,53 @@ pub(crate) fn dispatch_loop(
     let mut iterations = 0;
     let mut claimed = 0;
     let mut runs = Vec::new();
-    loop {
+    let mut stop_reason = None;
+    let interrupt_count = install_dispatch_interrupt_listener();
+    'dispatch: loop {
         iterations += 1;
         let result = dispatch_once(db_path, board, options.clone())?;
         claimed += result.claimed;
         runs.push(result);
+        if interrupt_count.load(Ordering::SeqCst) > 0 {
+            stop_reason = Some("interrupted".to_owned());
+            break;
+        }
         if max_iterations.is_some_and(|max| iterations >= max) {
             break;
         }
-        thread::sleep(Duration::from_millis(poll_interval_ms));
+        let mut remaining = Duration::from_millis(poll_interval_ms);
+        while !remaining.is_zero() {
+            if interrupt_count.load(Ordering::SeqCst) > 0 {
+                stop_reason = Some("interrupted".to_owned());
+                break 'dispatch;
+            }
+            let step = remaining.min(Duration::from_millis(50));
+            tokio::time::sleep(step).await;
+            remaining = remaining.saturating_sub(step);
+        }
     }
     Ok(DispatchLoopSummary {
         iterations,
         claimed,
         runs,
+        stop_reason,
     })
+}
+
+fn install_dispatch_interrupt_listener() -> Arc<AtomicU8> {
+    let interrupt_count = Arc::new(AtomicU8::new(0));
+    let listener_count = Arc::clone(&interrupt_count);
+    tokio::spawn(async move {
+        while tokio::signal::ctrl_c().await.is_ok() {
+            let previous = listener_count.fetch_add(1, Ordering::SeqCst);
+            if previous == 0 {
+                eprintln!("received Ctrl-C; stopping dispatch loop after current iteration");
+            } else {
+                std::process::exit(130);
+            }
+        }
+    });
+    interrupt_count
 }
 
 pub(crate) fn absolute_path(path: PathBuf) -> Result<PathBuf> {

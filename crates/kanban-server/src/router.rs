@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{future::Future, net::SocketAddr};
 
 use axum::{
     Router,
@@ -15,7 +15,7 @@ use crate::handlers::api::*;
 use crate::handlers::health::health;
 use crate::i18n::request_locale;
 use crate::observability::http_trace_layer;
-use crate::state::{AppState, SearchSyncConfig, spawn_search_sync_task};
+use crate::state::{AppState, SearchSyncConfig, spawn_search_sync_task_until_shutdown};
 
 pub fn build_router(state: AppState) -> Router {
     build_api_router(state).layer(http_trace_layer())
@@ -293,7 +293,32 @@ pub async fn serve_with_search_sync(
     state: AppState,
     search_sync: SearchSyncConfig,
 ) -> std::io::Result<()> {
+    serve_with_search_sync_shutdown(addr, state, search_sync, std::future::pending()).await
+}
+
+pub async fn serve_with_search_sync_shutdown<S>(
+    addr: SocketAddr,
+    state: AppState,
+    search_sync: SearchSyncConfig,
+    shutdown: S,
+) -> std::io::Result<()>
+where
+    S: Future<Output = ()> + Send + 'static,
+{
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    let _search_sync_task = spawn_search_sync_task(state.clone(), search_sync);
-    axum::serve(listener, build_serve_router(state)).await
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    let shutdown_tx_for_signal = shutdown_tx.clone();
+    let search_sync_task =
+        spawn_search_sync_task_until_shutdown(state.clone(), search_sync, shutdown_rx);
+    let result = axum::serve(listener, build_serve_router(state))
+        .with_graceful_shutdown(async move {
+            shutdown.await;
+            let _ = shutdown_tx_for_signal.send(true);
+        })
+        .await;
+    let _ = shutdown_tx.send(true);
+    if let Some(task) = search_sync_task {
+        let _ = task.await;
+    }
+    result
 }

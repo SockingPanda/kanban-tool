@@ -251,7 +251,8 @@ pub(crate) fn run_worker_with_heartbeat(
     let stderr = stdout
         .try_clone()
         .map_err(|e| KanbanError::Storage(e.to_string()))?;
-    let mut child = Command::new("sh")
+    let mut command = Command::new("sh");
+    command
         .arg("-c")
         .arg(&options.command)
         .env("KB_DB_PATH", path)
@@ -264,7 +265,9 @@ pub(crate) fn run_worker_with_heartbeat(
         .env("KB_RUN_ID", &claim.run_id)
         .env("KB_ACTOR", &options.actor)
         .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr))
+        .stderr(Stdio::from(stderr));
+    isolate_worker_from_dispatcher_interrupts(&mut command);
+    let mut child = command
         .spawn()
         .map_err(|e| KanbanError::Storage(e.to_string()))?;
 
@@ -308,3 +311,15 @@ pub(crate) fn run_worker_with_heartbeat(
         }
     }
 }
+
+#[cfg(unix)]
+fn isolate_worker_from_dispatcher_interrupts(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+
+    // Keep terminal Ctrl-C on the dispatcher from actively interrupting
+    // the current worker; dispatcher cancellation only stops the next poll.
+    command.process_group(0);
+}
+
+#[cfg(not(unix))]
+fn isolate_worker_from_dispatcher_interrupts(_command: &mut Command) {}

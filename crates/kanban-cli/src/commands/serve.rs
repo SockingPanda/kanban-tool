@@ -26,15 +26,32 @@ pub(crate) fn serve(args: ServeArgs, db_path: PathBuf, board: &str, actor: Strin
     );
     let runtime = tokio::runtime::Runtime::new().context("failed to start tokio runtime")?;
     runtime
-        .block_on(kanban_server::serve_with_search_sync(
+        .block_on(kanban_server::serve_with_search_sync_shutdown(
             addr,
             kanban_server::AppState::new(db_path, actor),
             kanban_server::SearchSyncConfig::new(
                 board,
                 Duration::from_millis(args.search_sync_interval_ms),
             ),
+            serve_shutdown_signal(),
         ))
         .context("kanban server failed")
+}
+
+async fn serve_shutdown_signal() {
+    match tokio::signal::ctrl_c().await {
+        Ok(()) => {
+            tracing::info!("received Ctrl-C; shutting down Kanban API gracefully");
+            tokio::spawn(async {
+                if tokio::signal::ctrl_c().await.is_ok() {
+                    std::process::exit(130);
+                }
+            });
+        }
+        Err(error) => {
+            tracing::warn!(%error, "failed to listen for Ctrl-C shutdown signal");
+        }
+    }
 }
 
 fn init_serve_tracing(args: &ServeArgs) {

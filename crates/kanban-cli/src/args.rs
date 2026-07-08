@@ -1790,6 +1790,9 @@ pub(crate) enum DepCommand {
 }
 
 #[derive(Debug, Args)]
+#[command(
+    after_help = "Interrupts:\n  Ctrl-C stops the foreground dispatch loop before another polling iteration starts.\n  The current dispatch_once/worker iteration is allowed to finish; --json still emits a success envelope with stop_reason=\"interrupted\".\n  A second Ctrl-C exits immediately with code 130."
+)]
 pub(crate) struct DispatchArgs {
     #[arg(long)]
     pub(crate) once: bool,
@@ -1817,7 +1820,7 @@ pub(crate) struct DispatchArgs {
 
 #[derive(Debug, Args)]
 #[command(
-    after_help = "Logging:\n  kanban serve writes startup diagnostics and request traces to stderr by default.\n  Use --quiet to suppress serve diagnostics, --log-level to choose off|error|warn|info|debug|trace, or RUST_LOG for advanced tracing filters."
+    after_help = "Logging:\n  kanban serve writes startup diagnostics, request traces, and graceful shutdown notices to stderr by default.\n  Use --quiet to suppress serve diagnostics, --log-level to choose off|error|warn|info|debug|trace, or RUST_LOG for advanced tracing filters.\n\nInterrupts:\n  Ctrl-C triggers graceful shutdown and exits successfully without writing stdout; a second Ctrl-C exits immediately with code 130."
 )]
 pub(crate) struct ServeArgs {
     /// Loopback host interface to bind. Only loopback hosts are supported.
@@ -1936,6 +1939,8 @@ pub(crate) struct DispatchLoopSummary {
     pub(crate) iterations: usize,
     pub(crate) claimed: usize,
     pub(crate) runs: Vec<kanban_sqlite::DispatchResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) stop_reason: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize)]

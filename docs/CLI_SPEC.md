@@ -1588,7 +1588,22 @@ section and can set `command`, `claim_ttl_ms`, `heartbeat_interval_ms`,
 inside a trusted run-log root: the platform default run log directory,
 `<db_dir>/logs`, or `<db_dir>/.kb/logs`.
 
-`kanban serve` writes startup diagnostics and HTTP request traces to stderr by default; stdout remains reserved for explicit machine-readable output and is not used for service logs. Use `--quiet` to suppress serve diagnostics, `--log-level <off|error|warn|info|debug|trace>` for a simple verbosity override, or omit both and set `RUST_LOG` for advanced tracing filters. The default filter is `kanban=info,kanban_cli=info,kanban_server=info,tower_http=info,kanban_desktop=info`.
+Ctrl-C/SIGINT is an operator stop for the foreground `kanban dispatch` loop.
+The current `dispatch_once` / worker iteration is not actively interrupted; the
+loop stops before starting another polling iteration, including during the
+inter-iteration wait. The command exits `0` after this graceful stop. With
+`--json`, stdout remains the normal success envelope and includes
+`data.stop_reason="interrupted"`; operator cancellation diagnostics, if emitted,
+go to stderr only. A non-interrupted `--max-iterations` exit omits
+`data.stop_reason`. A second Ctrl-C during dispatcher shutdown exits
+immediately with code `130`.
+
+`kanban serve` writes startup diagnostics, HTTP request traces, and graceful shutdown notices to stderr by default; stdout remains reserved for explicit machine-readable output and is not used for service logs. Use `--quiet` to suppress serve diagnostics, `--log-level <off|error|warn|info|debug|trace>` for a simple verbosity override, or omit both and set `RUST_LOG` for advanced tracing filters. The default filter is `kanban=info,kanban_cli=info,kanban_server=info,tower_http=info,kanban_desktop=info`.
+
+Ctrl-C/SIGINT triggers graceful shutdown for `kanban serve`, releases the runtime
+lock, exits `0`, and writes no stdout. `--quiet` and `--log-level off` suppress
+the graceful shutdown notice. A second Ctrl-C during shutdown exits immediately
+with code `130`.
 
 `kanban serve` starts a conservative background search sync loop when the binary is
 built with `tantivy-backend`. The loop makes one prompt startup attempt and then

@@ -4,6 +4,14 @@ use anyhow::Context;
 use common::{TempDb, kanban};
 use pretty_assertions::assert_eq;
 use std::path::Path;
+#[cfg(unix)]
+use std::{
+    fs,
+    os::unix::process::CommandExt,
+    process::{Command as ProcessCommand, Stdio},
+    thread,
+    time::{Duration, Instant},
+};
 
 fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
     kanban_sqlite::mark_execution_plan_not_required(
@@ -15,6 +23,97 @@ fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
     )?;
     Ok(())
 }
+
+#[test]
+fn dispatch_help_documents_interrupt_contract() -> anyhow::Result<()> {
+    let temp = TempDb::new("dispatch_help_documents_interrupt_contract")?;
+    let output = kanban(&temp.path, &["dispatch", "--help"])?.output;
+    assert!(
+        output.status.success(),
+        "status: {:?}\nstdout:\n{}\nstderr:\n{}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Ctrl-C"), "{stdout}");
+    assert!(stdout.contains("dispatch_once"), "{stdout}");
+    assert!(stdout.contains("stop_reason=\"interrupted\""), "{stdout}");
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn dispatch_process_group_sigint_does_not_interrupt_current_worker() -> anyhow::Result<()> {
+    let temp = TempDb::new("dispatch_process_group_sigint_does_not_interrupt_current_worker")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "signal worker",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    mark_no_plan_required(
+        &temp.path,
+        created["data"]["id"]
+            .as_str()
+            .context("expected JSON string")?,
+    )?;
+    let marker = temp.dir.join("worker-marker.txt");
+    let marker_arg = shell_single_quote(&marker);
+    let worker_command = format!(
+        "printf started > {marker}; sleep 1; printf done > {marker}",
+        marker = marker_arg
+    );
+
+    let mut command = ProcessCommand::new(env!("CARGO_BIN_EXE_kanban"));
+    command
+        .current_dir(&temp.dir)
+        .arg("--db")
+        .arg(&temp.path)
+        .args([
+            "--json",
+            "dispatch",
+            "--poll-interval-ms",
+            "10000",
+            "--command",
+            &worker_command,
+        ])
+        .env_remove("KB_BOARD")
+        .env("XDG_CONFIG_HOME", temp.dir.join(".xdg-config"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .process_group(0);
+
+    let child = command.spawn().context("spawn kanban dispatch")?;
+    wait_for_file_to_contain(&marker, "started")?;
+    send_sigint_to_process_group(child.id())?;
+    let output = child
+        .wait_with_output()
+        .context("wait for kanban dispatch")?;
+
+    assert!(
+        output.status.success(),
+        "dispatch SIGINT should exit 0\nstatus: {:?}\nstdout:\n{}\nstderr:\n{}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let envelope: serde_json::Value =
+        serde_json::from_slice(&output.stdout).with_context(|| format!("stdout: {stdout}"))?;
+    assert_eq!(envelope["data"]["stop_reason"], "interrupted");
+    assert_eq!(envelope["data"]["iterations"], 1);
+    assert_eq!(fs::read_to_string(&marker)?, "done");
+    Ok(())
+}
+
 #[test]
 fn dispatch_profile_routes_assignees() -> anyhow::Result<()> {
     let temp =
@@ -297,5 +396,40 @@ fn run_logs_reject_suspicious_paths() -> anyhow::Result<()> {
     )?;
 
     kanban(&temp.path, &["run", "logs", run_id])?.failure_containing("suspicious run log path")?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn wait_for_file_to_contain(path: &Path, expected: &str) -> anyhow::Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        match fs::read_to_string(path) {
+            Ok(content) if content == expected => return Ok(()),
+            Ok(_) | Err(_) => thread::sleep(Duration::from_millis(25)),
+        }
+    }
+    anyhow::bail!(
+        "timed out waiting for {} to contain {expected:?}",
+        path.display()
+    )
+}
+
+#[cfg(unix)]
+fn shell_single_quote(path: &Path) -> String {
+    format!("'{}'", path.display().to_string().replace('\'', "'\\''"))
+}
+
+#[cfg(unix)]
+fn send_sigint_to_process_group(pgid: u32) -> anyhow::Result<()> {
+    let status = ProcessCommand::new("/bin/kill")
+        .arg("-INT")
+        .arg("--")
+        .arg(format!("-{pgid}"))
+        .status()
+        .context("send SIGINT to process group")?;
+    anyhow::ensure!(
+        status.success(),
+        "kill -INT -- -{pgid} failed with {status}"
+    );
     Ok(())
 }

@@ -30,6 +30,7 @@ kanban-entity.workspace = true
 kanban-graph.workspace = true
 kanban-local.workspace = true
 kanban-search.workspace = true
+fs-err.workspace = true
 kanban-server.workspace = true
 kanban-sqlite.workspace = true
 kanban-vector.workspace = true

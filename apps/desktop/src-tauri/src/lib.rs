@@ -15,7 +15,7 @@ use tauri::{
     path::BaseDirectory,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
-use tokio::sync::oneshot;
+use tokio_util::sync::CancellationToken;
 
 mod tray_lifecycle;
 use tray_lifecycle::{
@@ -38,32 +38,18 @@ pub struct RuntimeConfig {
 struct EmbeddedApiRuntime {
     config: Mutex<RuntimeConfig>,
     _runtime_guard: kanban_sqlite::api::lifecycle::DatabaseRuntimeGuard,
-    shutdown_tx: Mutex<Option<oneshot::Sender<()>>>,
+    shutdown: CancellationToken,
 }
 
 impl EmbeddedApiRuntime {
     fn shutdown(&self) {
-        if let Some(tx) = self
-            .shutdown_tx
-            .lock()
-            .expect("shutdown lock poisoned")
-            .take()
-        {
-            let _ = tx.send(());
-        }
+        self.shutdown.cancel();
     }
 }
 
 impl Drop for EmbeddedApiRuntime {
     fn drop(&mut self) {
-        if let Some(tx) = self
-            .shutdown_tx
-            .get_mut()
-            .expect("shutdown lock poisoned")
-            .take()
-        {
-            let _ = tx.send(());
-        }
+        self.shutdown.cancel();
     }
 }
 
@@ -350,7 +336,8 @@ fn start_embedded_api(app: &tauri::App) -> Result<EmbeddedApiRuntime, String> {
     let state = embedded_app_state(app, db_path.clone(), actor.clone());
     let router = kanban_server::build_desktop_router(state);
     let (tx, rx) = mpsc::channel::<Result<SocketAddr, String>>();
-    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let shutdown = CancellationToken::new();
+    let server_shutdown = shutdown.clone();
 
     std::thread::spawn(move || {
         let runtime = match tokio::runtime::Runtime::new() {
@@ -376,9 +363,8 @@ fn start_embedded_api(app: &tauri::App) -> Result<EmbeddedApiRuntime, String> {
                 }
             };
             let _ = tx.send(Ok(addr));
-            let server = axum::serve(listener, router).with_graceful_shutdown(async {
-                let _ = shutdown_rx.await;
-            });
+            let server = axum::serve(listener, router)
+                .with_graceful_shutdown(server_shutdown.cancelled_owned());
             if let Err(error) = server.await {
                 eprintln!("kanban embedded API stopped: {error}");
             }
@@ -397,7 +383,7 @@ fn start_embedded_api(app: &tauri::App) -> Result<EmbeddedApiRuntime, String> {
             board: "default".to_owned(),
         }),
         _runtime_guard: runtime_guard,
-        shutdown_tx: Mutex::new(Some(shutdown_tx)),
+        shutdown,
     })
 }
 

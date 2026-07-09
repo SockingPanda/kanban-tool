@@ -8,6 +8,7 @@ use axum::{
     response::Response,
     routing::{delete, get, patch, post},
 };
+use tokio_util::sync::CancellationToken;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::error::invalid_input;
@@ -306,17 +307,20 @@ where
     S: Future<Output = ()> + Send + 'static,
 {
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-    let shutdown_tx_for_signal = shutdown_tx.clone();
-    let search_sync_task =
-        spawn_search_sync_task_until_shutdown(state.clone(), search_sync, shutdown_rx);
+    let shutdown_token = CancellationToken::new();
+    let search_sync_shutdown = shutdown_token.clone();
+    let search_sync_task = spawn_search_sync_task_until_shutdown(
+        state.clone(),
+        search_sync,
+        search_sync_shutdown.clone(),
+    );
     let result = axum::serve(listener, build_serve_router(state))
         .with_graceful_shutdown(async move {
             shutdown.await;
-            let _ = shutdown_tx_for_signal.send(true);
+            shutdown_token.cancel();
         })
         .await;
-    let _ = shutdown_tx.send(true);
+    search_sync_shutdown.cancel();
     if let Some(task) = search_sync_task {
         let _ = task.await;
     }

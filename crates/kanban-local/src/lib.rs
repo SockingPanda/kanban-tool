@@ -1,9 +1,10 @@
 use std::{
     ffi::OsStr,
-    fs, io,
+    io,
     path::{Path, PathBuf},
 };
 
+use fs_err as fs;
 use serde::{Deserialize, Serialize};
 
 pub const INDEX_LAYOUT_VERSION: &str = "v1";
@@ -513,22 +514,24 @@ mod tests {
 
     #[test]
     fn project_config_parse_error_includes_file_and_field_path() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let path = tempdir.path().join(".kb").join("config.toml");
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(
-            &path,
-            r#"
+        use assert_fs::prelude::*;
+
+        let tempdir = assert_fs::TempDir::new().unwrap();
+        let config_file = tempdir.child(".kb/config.toml");
+        config_file
+            .write_str(
+                r#"
 [vector]
 provider = "ollama"
 endpoint = "http://127.0.0.1:11434"
 model = "qwen3-embedding:0.6b"
 dimensions = "large"
 "#,
-        )
-        .unwrap();
+            )
+            .unwrap();
+        let path = config_file.path();
 
-        let error = read_project_config(&path).unwrap_err().to_string();
+        let error = read_project_config(path).unwrap_err().to_string();
 
         assert!(error.contains(path.to_string_lossy().as_ref()), "{error}");
         assert!(error.contains("vector.dimensions"), "{error}");

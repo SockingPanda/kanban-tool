@@ -1,6 +1,7 @@
 use std::{path::PathBuf, time::Duration};
 
 use kanban_core::Locale;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -140,7 +141,7 @@ pub fn spawn_search_sync_task(
 pub(crate) fn spawn_search_sync_task_until_shutdown(
     state: AppState,
     config: SearchSyncConfig,
-    shutdown: tokio::sync::watch::Receiver<bool>,
+    shutdown: CancellationToken,
 ) -> Option<tokio::task::JoinHandle<()>> {
     if !search_sync_task_enabled(&config) {
         return None;
@@ -149,15 +150,11 @@ pub(crate) fn spawn_search_sync_task_until_shutdown(
     #[cfg(feature = "tantivy-backend")]
     {
         Some(tokio::spawn(async move {
-            let mut shutdown = shutdown;
             run_search_sync_once(state.db_path.clone(), config.board.clone()).await;
             loop {
                 tokio::select! {
-                    _ = shutdown.changed() => break,
+                    _ = shutdown.cancelled() => break,
                     _ = tokio::time::sleep(config.interval) => {}
-                }
-                if *shutdown.borrow() {
-                    break;
                 }
                 run_search_sync_once(state.db_path.clone(), config.board.clone()).await;
             }

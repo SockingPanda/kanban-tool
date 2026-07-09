@@ -1,11 +1,11 @@
 use std::{
-    fs,
     io::{self, Write},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result};
+use fs_err as fs;
 use kanban_sqlite::api::lifecycle::begin_database_replace;
 use kanban_sqlite::api::{
     backup_database, checkpoint_database, export_jsonl, export_jsonl_to_writer, import_jsonl,

@@ -1,0 +1,11 @@
+error[E0432]: unresolved import `kanban_sqlite::api::propose_task_label_with`
+ --> tests/ui/api_root_excludes_provider/propose_task_label_with.rs:3:5
+  |
+3 | use kanban_sqlite::api::propose_task_label_with;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `propose_task_label_with` in `api`
+  |
+help: a similar name exists in the module
+  |
+3 - use kanban_sqlite::api::propose_task_label_with;
+3 + use kanban_sqlite::api::propose_task_label;
+  |

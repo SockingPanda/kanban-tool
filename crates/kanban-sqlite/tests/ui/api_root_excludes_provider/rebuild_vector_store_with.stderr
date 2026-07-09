@@ -1,0 +1,11 @@
+error[E0432]: unresolved import `kanban_sqlite::api::rebuild_vector_store_with`
+ --> tests/ui/api_root_excludes_provider/rebuild_vector_store_with.rs:3:5
+  |
+3 | use kanban_sqlite::api::rebuild_vector_store_with;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `rebuild_vector_store_with` in `api`
+  |
+help: a similar name exists in the module
+  |
+3 - use kanban_sqlite::api::rebuild_vector_store_with;
+3 + use kanban_sqlite::api::rebuild_vector_store;
+  |

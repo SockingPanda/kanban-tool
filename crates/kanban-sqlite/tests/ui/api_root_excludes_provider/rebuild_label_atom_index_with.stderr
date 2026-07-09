@@ -1,0 +1,5 @@
+error[E0432]: unresolved import `kanban_sqlite::api::rebuild_label_atom_index_with`
+ --> tests/ui/api_root_excludes_provider/rebuild_label_atom_index_with.rs:3:5
+  |
+3 | use kanban_sqlite::api::rebuild_label_atom_index_with;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `rebuild_label_atom_index_with` in `api`

@@ -1,7 +1,0 @@
-error[E0432]: unresolved imports `kanban_sqlite::api::connect_file`, `kanban_sqlite::api::init_database`
- --> tests/ui/api_facade_excludes_db_init_helpers.rs:3:26
-  |
-3 | use kanban_sqlite::api::{connect_file, init_database};
-  |                          ^^^^^^^^^^^^  ^^^^^^^^^^^^^ no `init_database` in `api`
-  |                          |
-  |                          no `connect_file` in `api`

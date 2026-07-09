@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use crate::common::*;
+use kanban_sqlite::api;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CanonicalCounts {
@@ -48,7 +49,7 @@ async fn api_adapter_contract_commits_to_shared_canonical_state() -> anyhow::Res
         .to_owned();
     mark_plan_not_required_for_test(&db_path, "default", "api-adapter", &task_id)?;
     assert_eq!(
-        kanban_sqlite::get_task(&db_path, "default", &task_id)?.status,
+        api::get_task(&db_path, "default", &task_id)?.status,
         kanban_core::TaskStatus::Ready
     );
 
@@ -59,7 +60,7 @@ async fn api_adapter_contract_commits_to_shared_canonical_state() -> anyhow::Res
     )
     .await?;
     assert_eq!(status, StatusCode::CREATED, "{label_add_json}");
-    let task_after_label = kanban_sqlite::get_task(&db_path, "default", &task_id)?;
+    let task_after_label = api::get_task(&db_path, "default", &task_id)?;
     assert_eq!(task_after_label.labels.len(), 1);
     assert_eq!(task_after_label.labels[0].id, label_id);
     assert_eq!(task_after_label.labels[0].name, "adapter-contract");
@@ -78,7 +79,7 @@ async fn api_adapter_contract_commits_to_shared_canonical_state() -> anyhow::Res
     )
     .await?;
     assert_eq!(status, StatusCode::OK, "{semantics_json}");
-    let semantics = kanban_sqlite::get_label_semantics_by_id(&db_path, "default", &label_id)?;
+    let semantics = api::get_label_semantics_by_id(&db_path, "default", &label_id)?;
     assert_eq!(
         semantics.semantics_hash,
         semantics_json["data"]["semantics_hash"]
@@ -157,7 +158,7 @@ async fn api_adapter_contract_commits_to_shared_canonical_state() -> anyhow::Res
     )
     .await?;
     assert_eq!(status, StatusCode::CREATED, "{action_json}");
-    let signal_detail = kanban_sqlite::get_label_ontology_signal(
+    let signal_detail = api::get_label_ontology_signal(
         &db_path,
         action_json["data"]["signal_ids"][0]
             .as_str()
@@ -165,7 +166,7 @@ async fn api_adapter_contract_commits_to_shared_canonical_state() -> anyhow::Res
     )?;
     assert_eq!(
         signal_detail.signal.status,
-        kanban_sqlite::LabelOntologySignalStatus::Confirmed
+        api::LabelOntologySignalStatus::Confirmed
     );
     assert_eq!(signal_detail.actions.len(), 1);
     assert_eq!(signal_detail.actions[0].created_by, "api-reviewer");
@@ -189,11 +190,11 @@ async fn api_adapter_contract_commits_to_shared_canonical_state() -> anyhow::Res
     )
     .await?;
     assert_eq!(status, StatusCode::OK, "{complete_json}");
-    let completed = kanban_sqlite::get_task(&db_path, "default", &task_id)?;
+    let completed = api::get_task(&db_path, "default", &task_id)?;
     assert_eq!(completed.status, kanban_core::TaskStatus::Done);
     assert!(completed.claim_token.is_none());
     assert_eq!(completed.labels.len(), 1);
-    let runs = kanban_sqlite::list_runs(&db_path, "default", Some(&task_id))?;
+    let runs = api::list_runs(&db_path, "default", Some(&task_id))?;
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].status, "succeeded");
     assert_eq!(runs[0].worker_profile.as_deref(), Some("contract"));
@@ -208,24 +209,24 @@ fn dispatcher_adapter_contract_uses_shared_transition_service() -> anyhow::Resul
     let task =
         create_ready_task_for_test(&db_path, "default", "seed", "dispatcher adapter contract")?;
 
-    let result = kanban_sqlite::dispatch_once(
+    let result = api::dispatch_once(
         &db_path,
         "default",
-        kanban_sqlite::DispatchOptions {
+        api::DispatchOptions {
             actor: "dispatcher".to_owned(),
             command: "true".to_owned(),
             worker_profile: "contract-dispatcher".to_owned(),
             claim_ttl_ms: 60_000,
             heartbeat_interval_ms: 30_000,
-            on_success: kanban_sqlite::FinishPolicy::Done,
-            on_failure: kanban_sqlite::FinishPolicy::Blocked,
+            on_success: api::FinishPolicy::Done,
+            on_failure: api::FinishPolicy::Blocked,
             log_dir: test.dir_path().join("logs"),
         },
     )?;
 
     assert_eq!(result.claimed, 1);
     assert_eq!(result.task_id.as_deref(), Some(task.id.as_str()));
-    let completed = kanban_sqlite::get_task(&db_path, "default", &task.id)?;
+    let completed = api::get_task(&db_path, "default", &task.id)?;
     assert_eq!(completed.status, kanban_core::TaskStatus::Done);
     assert!(completed.claim_token.is_none());
     assert_eq!(completed.claim_owner, None);
@@ -234,7 +235,7 @@ fn dispatcher_adapter_contract_uses_shared_transition_service() -> anyhow::Resul
         result.run_id.as_deref()
     );
 
-    let runs = kanban_sqlite::list_runs(&db_path, "default", Some(&task.id))?;
+    let runs = api::list_runs(&db_path, "default", Some(&task.id))?;
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].status, "succeeded");
     assert_eq!(
@@ -243,10 +244,10 @@ fn dispatcher_adapter_contract_uses_shared_transition_service() -> anyhow::Resul
     );
     assert_eq!(runs[0].id.as_str(), result.run_id.as_deref().unwrap());
 
-    let events = kanban_sqlite::list_events_after(
+    let events = api::list_events_after(
         &db_path,
         "default",
-        kanban_sqlite::EventListOptions {
+        api::EventListOptions {
             task_ref: Some(task.id.clone()),
             after: 0,
             limit: 20,

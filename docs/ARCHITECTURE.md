@@ -152,6 +152,17 @@ pub fn can_complete_from(status: TaskStatus) -> bool;
 - task/comment/dependency/run/label/ontology use cases。
 - label proposal validation / persistence，以及 `LabelProposalProvider` trait 边界。
 
+Public API 边界：
+
+- `kanban_sqlite::service` 是 implementation owner，负责 transaction、状态机 guard、
+  canonical writes、events、runs 和 provenance。
+- `kanban_sqlite::api` 是 adapter-facing allowlist facade，用于新的 CLI、server、
+  desktop 和 dispatcher contract path 代码复用稳定 use case、query、record 和
+  provenance 类型。它不拥有新的 orchestration 语义，也不导出 DB connection helper、
+  rebuild helper、trusted validation collector 或 provider implementation。
+- crate root 的 `kanban_sqlite::*` 仍保留 legacy compatibility re-export；新增 adapter
+  contract 代码优先导入 `kanban_sqlite::api`，避免继续扩大 root wildcard 依赖面。
+
 关键要求：
 
 - 所有状态变化必须在 transaction 内完成。

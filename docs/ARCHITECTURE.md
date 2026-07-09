@@ -158,12 +158,23 @@ Public API 边界：
 
 - `kanban_sqlite::service` 是 implementation owner，负责 transaction、状态机 guard、
   canonical writes、events、runs 和 provenance。
-- `kanban_sqlite::api` 是 adapter-facing curated facade，用于 CLI、server、desktop 和 dispatcher
-  contract path 复用已允许的 use case、query、record 和 provenance 类型。它不拥有新的
+- `kanban_sqlite::api` root 是 adapter/product use-case curated facade，用于 CLI、server、desktop
+  和 dispatcher contract path 复用已允许的 use case、query、record 和 provenance 类型。它不拥有新的
   orchestration 语义，不是 `service::*` broad re-export，也不导出 DB connection helper、init
-  helper 或未列入 allowlist 的 service-only implementation helper。
+  helper、runtime lifecycle guard、provider/vector-store seam，或未列入 allowlist 的 service-only
+  implementation helper。
+- `kanban_sqlite::api::provider` 承载 adapter/test 需要显式注入 provider 或 vector store 的 seam，
+  包括 `LabelProposalProvider`、manual/disabled proposal provider、`*_with` label suggestion/proposal
+  helpers、label atom/vector-store status/query/rebuild/sync helpers，以及 trusted-suggestion validation DTO。
+  这些符号不从 `api` root 暴露。
+- `kanban_sqlite::api::lifecycle` 承载进程 runtime/replace lifecycle plumbing：
+  `DatabaseRuntimeGuard`、`DatabaseReplaceGuard`、`begin_database_runtime` 和
+  `begin_database_replace`。这些 guard 是 binary/runtime owner 的基础设施，不是普通 product use-case。
+- `kanban_sqlite::db` 和 `kanban_sqlite::init` 仍是显式基础设施模块；`connect_file`、
+  `init_database` 不从 `api` root 暴露。
 - crate root 不再提供 `kanban_sqlite::*` legacy re-export；旧 root path 是 breaking change，
-  并由 `tests/ui/root_legacy_reexport_removed.rs` 负向 compile contract 锁定。
+  并由 `tests/ui/root_legacy_reexport_removed.rs` 负向 compile contract 锁定。`api` root、
+  `api::provider`、`api::lifecycle` 和显式 `db` / `init` 边界由 `public_api` trybuild contract 锁定。
 - `kanban_sqlite::application::SqliteApplication` 实现 `kanban-application` 的 backend port，
   用于需要以 application API 组合 selected use-case slice 的 adapter/benchmark 路径。
 - `kanban-application` DTO/trait 演进遵循 additive-first 策略：优先新增可选字段、option
@@ -186,7 +197,8 @@ Public API 边界：
 
 - 解析命令。
 - 构造 command input。
-- 调用 `kanban-sqlite::service` 中的 shared use-case 函数；状态判断复用
+- 调用 `kanban_sqlite::api` root 中的 shared use-case 函数；需要 provider/vector-store seam 时显式使用
+  `kanban_sqlite::api::provider`，需要 runtime guard 时显式使用 `kanban_sqlite::api::lifecycle`；状态判断复用
   `kanban-core` 的纯状态机 helper。
 - 输出 human table 或 JSON。
 - 返回稳定 exit code。

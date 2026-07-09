@@ -1,0 +1,5 @@
+error[E0432]: unresolved import `kanban_sqlite::api::query_label_atom_index_by_vector_with`
+ --> tests/ui/api_root_excludes_provider/query_label_atom_index_by_vector_with.rs:3:5
+  |
+3 | use kanban_sqlite::api::query_label_atom_index_by_vector_with;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `query_label_atom_index_by_vector_with` in `api`

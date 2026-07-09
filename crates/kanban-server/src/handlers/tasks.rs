@@ -1925,8 +1925,14 @@ fn suggest_task_labels_for_state(
     options: kanban_sqlite::api::LabelSuggestionOptions,
 ) -> Result<kanban_sqlite::api::LabelSuggestionResult, ApiError> {
     let store = subprocess_vector_store_for_state(state, board)?;
-    kanban_sqlite::api::suggest_task_labels_with(state.db_path(), board, task_id, &store, options)
-        .map_err(ApiError::from)
+    kanban_sqlite::api::provider::suggest_task_labels_with(
+        state.db_path(),
+        board,
+        task_id,
+        &store,
+        options,
+    )
+    .map_err(ApiError::from)
 }
 
 fn subprocess_vector_store_for_state(
@@ -1958,9 +1964,10 @@ fn propose_task_label_for_state(
 ) -> Result<kanban_sqlite::api::LabelProposalAttempt, ApiError> {
     match candidate {
         Some(candidate) => {
-            let provider = kanban_sqlite::api::ManualLabelProposalProvider::new(candidate);
+            let provider =
+                kanban_sqlite::api::provider::ManualLabelProposalProvider::new(candidate);
             let store = subprocess_vector_store_for_state(state, board)?;
-            kanban_sqlite::api::propose_task_label_with_store_and_create_options(
+            kanban_sqlite::api::provider::propose_task_label_with_store_and_create_options(
                 state.db_path(),
                 board,
                 actor,
@@ -1975,12 +1982,12 @@ fn propose_task_label_for_state(
         }
         None => {
             let store = subprocess_vector_store_for_state(state, board)?;
-            kanban_sqlite::api::propose_task_label_with_store_and_create_options(
+            kanban_sqlite::api::provider::propose_task_label_with_store_and_create_options(
                 state.db_path(),
                 board,
                 actor,
                 task_id,
-                &kanban_sqlite::api::DisabledLabelProposalProvider,
+                &kanban_sqlite::api::provider::DisabledLabelProposalProvider,
                 &store,
                 kanban_sqlite::api::LabelProposalProposeOptions {
                     suggestion: options,

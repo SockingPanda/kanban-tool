@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};
-use kanban_sqlite::api::begin_database_runtime;
+use kanban_sqlite::api::lifecycle::begin_database_runtime;
 use kanban_sqlite::init::init_database;
 
 use crate::args::{ServeArgs, ServeLogLevel};

@@ -1,6 +1,6 @@
 # Application Service 抽取评估
 
-状态：已被 application API 收敛迁移取代。当前 `kanban-application` 只承载 selected use-case DTO/port vertical slice，不是完整 application service；`kanban-sqlite::api`/`SqliteApplication` 是 SQLite-backed adapter boundary；crate root legacy re-export 已删除。
+状态：已被 application API 收敛迁移取代。当前 `kanban-application` 只承载 selected use-case DTO/port vertical slice，不是完整 application service；`kanban-sqlite::api` root 是 SQLite-backed adapter/product use-case boundary，`api::provider` 和 `api::lifecycle` 分别承载 provider/vector-store seam 与 runtime lifecycle plumbing；`SqliteApplication` 是 backend port wrapper；crate root legacy re-export 已删除。
 
 本文记录未来什么时候值得把独立 application-service crate 抽出来，以及一旦重启这项工作必须保住哪些 invariant。它是评估记录，不是当前迭代的实现计划。
 
@@ -25,9 +25,9 @@ dispatcher CLI path
 
 Adapter 证据：
 
-- `kanban-cli` 的 task、label、dispatch、search、maintenance、board、comment、run、index、context、serve 等命令调用 `kanban_sqlite::api`，init/runtime 基础设施走显式模块。
-- `kanban-server` handlers 负责 HTTP DTO 转换，然后调用 `kanban_sqlite::api` 或 `kanban-application` wrapper 进入同一组 SQLite-backed use cases。
-- `apps/desktop/src-tauri` 通过 `kanban_sqlite` 初始化 DB runtime，并通过同一 service layer 读取 boards。
+- `kanban-cli` 的 task、dispatch、search、board、comment、run、index 等普通 use case 调用 `kanban_sqlite::api` root；label/context 中显式 provider/vector-store seam 走 `kanban_sqlite::api::provider`；serve/import runtime guard 走 `kanban_sqlite::api::lifecycle`；init 基础设施走显式 `kanban_sqlite::init` 模块。
+- `kanban-server` handlers 负责 HTTP DTO 转换，然后调用 `kanban_sqlite::api` root、必要时调用 `kanban_sqlite::api::provider`，或通过 `kanban-application` wrapper 进入同一组 SQLite-backed use cases。
+- `apps/desktop/src-tauri` 通过 `kanban_sqlite::api::lifecycle` 管理 embedded API runtime guard，通过 `kanban_sqlite::init` 初始化 DB，并通过同一 service layer 读取 boards。
 - `kanban dispatch` 是 CLI 入口，调用同一 SQLite dispatch service；当前没有独立 dispatcher business-logic crate。
 
 ## 决策
@@ -51,7 +51,7 @@ Adapter 证据：
 
 未来如果抽取，必须保留这些边界：
 
-- CLI、server、desktop 和 dispatcher 调用同一套 shared use-case implementation。
+- CLI、server、desktop 和 dispatcher 调用同一套 shared use-case implementation；root facade、provider seam 和 lifecycle plumbing 只是导入边界，不改变 write authority。
 - `tasks.status` transition 继续经过同一组纯 state-machine helper 和同一条 transactional write path。
 - SQLite transaction ownership 不在多个 crate 或 adapters 中复制。
 - `ready -> running` 仍是一个 atomic claim transaction。

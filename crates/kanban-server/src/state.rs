@@ -1,5 +1,8 @@
 use std::{path::PathBuf, time::Duration};
 
+#[cfg(any(test, feature = "tantivy-backend"))]
+use std::future::Future;
+
 use kanban_core::Locale;
 use tokio_util::sync::CancellationToken;
 
@@ -149,24 +152,48 @@ pub(crate) fn spawn_search_sync_task_until_shutdown(
 
     #[cfg(feature = "tantivy-backend")]
     {
+        let db_path = state.db_path.clone();
+        let board = config.board.clone();
+        let interval = config.interval;
+
         Some(tokio::spawn(async move {
-            run_search_sync_once(state.db_path.clone(), config.board.clone()).await;
-            loop {
-                tokio::select! {
-                    _ = shutdown.cancelled() => break,
-                    _ = tokio::time::sleep(config.interval) => {}
-                }
-                if shutdown.is_cancelled() {
-                    break;
-                }
-                run_search_sync_once(state.db_path.clone(), config.board.clone()).await;
-            }
+            run_search_sync_loop_until_shutdown(
+                shutdown,
+                || run_search_sync_once(db_path.clone(), board.clone()),
+                || tokio::time::sleep(interval),
+            )
+            .await;
         }))
     }
     #[cfg(not(feature = "tantivy-backend"))]
     {
         let _ = (state, config, shutdown);
         None
+    }
+}
+
+#[cfg(any(test, feature = "tantivy-backend"))]
+async fn run_search_sync_loop_until_shutdown<Run, RunFut, Wait, WaitFut>(
+    shutdown: CancellationToken,
+    mut run_once: Run,
+    mut wait_interval: Wait,
+) where
+    Run: FnMut() -> RunFut,
+    RunFut: Future<Output = ()>,
+    Wait: FnMut() -> WaitFut,
+    WaitFut: Future<Output = ()>,
+{
+    run_once().await;
+
+    loop {
+        tokio::select! {
+            _ = shutdown.cancelled() => break,
+            _ = wait_interval() => {}
+        }
+        if shutdown.is_cancelled() {
+            break;
+        }
+        run_once().await;
     }
 }
 
@@ -179,9 +206,17 @@ async fn run_search_sync_once(db_path: PathBuf, board: String) {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+        time::Duration,
+    };
 
-    use super::{SearchSyncConfig, search_sync_task_enabled};
+    use tokio_util::sync::CancellationToken;
+
+    use super::{SearchSyncConfig, run_search_sync_loop_until_shutdown, search_sync_task_enabled};
 
     #[test]
     fn search_sync_zero_interval_is_disabled() {
@@ -206,5 +241,34 @@ mod tests {
         let config = SearchSyncConfig::new("default", Duration::from_millis(5_000));
 
         assert!(search_sync_task_enabled(&config));
+    }
+
+    #[tokio::test]
+    async fn search_sync_loop_stops_when_shutdown_is_cancelled_after_interval_wake() {
+        let shutdown = CancellationToken::new();
+        let wait_shutdown = shutdown.clone();
+        let sync_count = Arc::new(AtomicUsize::new(0));
+
+        run_search_sync_loop_until_shutdown(
+            shutdown,
+            {
+                let sync_count = Arc::clone(&sync_count);
+                move || {
+                    let sync_count = Arc::clone(&sync_count);
+                    async move {
+                        sync_count.fetch_add(1, Ordering::SeqCst);
+                    }
+                }
+            },
+            move || {
+                let wait_shutdown = wait_shutdown.clone();
+                async move {
+                    wait_shutdown.cancel();
+                }
+            },
+        )
+        .await;
+
+        assert_eq!(sync_count.load(Ordering::SeqCst), 1);
     }
 }

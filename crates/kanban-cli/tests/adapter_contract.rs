@@ -2,6 +2,7 @@ mod common;
 
 use anyhow::Context;
 use common::{TempDb, kanban};
+use kanban_sqlite::api;
 
 #[test]
 fn cli_adapter_contract_commits_to_shared_task_label_and_run_state() -> anyhow::Result<()> {
@@ -33,7 +34,7 @@ fn cli_adapter_contract_commits_to_shared_task_label_and_run_state() -> anyhow::
         .as_str()
         .context("task id")?
         .to_owned();
-    kanban_sqlite::mark_execution_plan_not_required(
+    api::mark_execution_plan_not_required(
         &temp.path,
         "default",
         "cli-adapter",
@@ -41,7 +42,7 @@ fn cli_adapter_contract_commits_to_shared_task_label_and_run_state() -> anyhow::
         "adapter contract task does not need steps",
     )?;
     assert_eq!(
-        kanban_sqlite::get_task(&temp.path, "default", &task_id)?.status,
+        api::get_task(&temp.path, "default", &task_id)?.status,
         kanban_core::TaskStatus::Ready
     );
 
@@ -58,7 +59,7 @@ fn cli_adapter_contract_commits_to_shared_task_label_and_run_state() -> anyhow::
         ],
     )?
     .success()?;
-    let labeled = kanban_sqlite::get_task(&temp.path, "default", &task_id)?;
+    let labeled = api::get_task(&temp.path, "default", &task_id)?;
     assert_eq!(labeled.labels.len(), 1);
     assert_eq!(labeled.labels[0].id, label_id);
     assert_eq!(labeled.labels[0].name, "cli-contract");
@@ -73,7 +74,7 @@ fn cli_adapter_contract_commits_to_shared_task_label_and_run_state() -> anyhow::
         .context("claim token")?
         .to_owned();
     assert_eq!(
-        kanban_sqlite::get_task(&temp.path, "default", &task_id)?.status,
+        api::get_task(&temp.path, "default", &task_id)?.status,
         kanban_core::TaskStatus::Running
     );
 
@@ -91,11 +92,11 @@ fn cli_adapter_contract_commits_to_shared_task_label_and_run_state() -> anyhow::
         ],
     )?
     .success()?;
-    let completed = kanban_sqlite::get_task(&temp.path, "default", &task_id)?;
+    let completed = api::get_task(&temp.path, "default", &task_id)?;
     assert_eq!(completed.status, kanban_core::TaskStatus::Done);
     assert!(completed.claim_token.is_none());
     assert_eq!(completed.labels.len(), 1);
-    let runs = kanban_sqlite::list_runs(&temp.path, "default", Some(&task_id))?;
+    let runs = api::list_runs(&temp.path, "default", Some(&task_id))?;
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].status, "succeeded");
     assert_eq!(runs[0].claim_owner, "cli-worker");

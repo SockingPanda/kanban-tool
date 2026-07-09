@@ -1,0 +1,5 @@
+error[E0432]: unresolved import `kanban_sqlite::api::connect_file`
+ --> tests/ui/api_facade_excludes_non_slice_symbol.rs:1:5
+  |
+1 | use kanban_sqlite::api::connect_file;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `connect_file` in `api`

@@ -44,7 +44,7 @@ pub(crate) async fn build_context(
         state.vector_config_path().map(std::path::Path::to_path_buf),
     );
     Ok(Json(Envelope {
-        data: kanban_sqlite::api::build_context_pack_with_vector_store(
+        data: kanban_sqlite::api::provider::build_context_pack_with_vector_store(
             state.db_path(),
             &query.board,
             &task_id,

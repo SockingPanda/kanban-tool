@@ -1,0 +1,9 @@
+error[E0432]: unresolved imports `kanban_sqlite::api::DatabaseReplaceGuard`, `kanban_sqlite::api::DatabaseRuntimeGuard`, `kanban_sqlite::api::begin_database_replace`, `kanban_sqlite::api::begin_database_runtime`
+ --> tests/ui/api_facade_excludes_lifecycle_helpers.rs:4:5
+  |
+4 |     DatabaseReplaceGuard, DatabaseRuntimeGuard, begin_database_replace, begin_database_runtime,
+  |     ^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^ no `begin_database_runtime` in `api`
+  |     |                     |                     |
+  |     |                     |                     no `begin_database_replace` in `api`
+  |     |                     no `DatabaseRuntimeGuard` in `api`
+  |     no `DatabaseReplaceGuard` in `api`

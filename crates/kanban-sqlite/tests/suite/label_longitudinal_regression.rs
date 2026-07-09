@@ -5,7 +5,8 @@ use std::{
     sync::Mutex,
 };
 
-use kanban_sqlite::api::{LabelSuggestionOptions, rebuild_label_atom_index_with};
+use kanban_sqlite::api::LabelSuggestionOptions;
+use kanban_sqlite::api::provider::rebuild_label_atom_index_with;
 use kanban_vector::{
     LabelAtomHit, LabelAtomVector, LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore,
     VectorError, VectorStoreStatus,
@@ -197,7 +198,7 @@ fn run_longitudinal_corpus(
 ) -> anyhow::Result<BTreeMap<&'static str, LongitudinalSnapshot>> {
     let mut snapshots = BTreeMap::new();
     for case in cases {
-        let suggestion = kanban_sqlite::api::suggest_task_labels_with(
+        let suggestion = kanban_sqlite::api::provider::suggest_task_labels_with(
             path,
             "default",
             &case.task_ref,

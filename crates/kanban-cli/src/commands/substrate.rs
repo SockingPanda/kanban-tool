@@ -601,7 +601,7 @@ fn build_configured_context_pack(
     if let Some(config) = kanban_local::resolved_vector_config(vector_config_path)? {
         store = store.with_embedding_model(config.model);
     }
-    kanban_sqlite::api::build_context_pack_with_vector_store(
+    kanban_sqlite::api::provider::build_context_pack_with_vector_store(
         db_path, board, task_ref, policy, &store,
     )
     .map_err(Into::into)

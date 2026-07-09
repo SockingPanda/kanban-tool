@@ -1,4 +1,4 @@
-use crate::connect_file;
+use crate::db::connect_file;
 
 use super::{
     ClaimResult, TaskRecord, board_id, ensure_board_active, ensure_changed_one, exec_named,

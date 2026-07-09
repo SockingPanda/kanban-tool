@@ -1,4 +1,4 @@
-use crate::connect_file;
+use crate::db::connect_file;
 
 use super::{board_id, graph_relation_snapshot_for_board};
 

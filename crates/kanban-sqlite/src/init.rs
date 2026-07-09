@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use serde::{Deserialize, Serialize};
 
-use crate::connect_file;
+use crate::db::connect_file;
 
 const INITIAL_MIGRATION: &str = include_str!("../../../migrations/001_initial.sql");
 const KNOWLEDGE_SUBSTRATE_MIGRATION: &str =

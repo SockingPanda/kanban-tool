@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use kanban_sqlite::{rebuild_search_index, search_index_status, sync_search_index};
+use kanban_sqlite::api::{rebuild_search_index, search_index_status, sync_search_index};
 
 use crate::args::IndexCommand;
 use crate::output::print_or_json;

@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use kanban_context::ContextPolicy;
-use kanban_sqlite::{
+use kanban_sqlite::api::{
     EntityListOptions, MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT, OutboxListOptions,
     derived_store_statuses, get_entity, list_entities, list_outbox,
 };
@@ -601,6 +601,8 @@ fn build_configured_context_pack(
     if let Some(config) = kanban_local::resolved_vector_config(vector_config_path)? {
         store = store.with_embedding_model(config.model);
     }
-    kanban_sqlite::build_context_pack_with_vector_store(db_path, board, task_ref, policy, &store)
-        .map_err(Into::into)
+    kanban_sqlite::api::build_context_pack_with_vector_store(
+        db_path, board, task_ref, policy, &store,
+    )
+    .map_err(Into::into)
 }

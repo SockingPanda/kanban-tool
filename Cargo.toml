@@ -1,6 +1,8 @@
 [workspace]
 members = [
   "crates/kanban-core",
+  "crates/kanban-application",
+  "crates/kanban-test-support",
   "crates/kanban-entity",
   "crates/kanban-indexer",
   "crates/kanban-search",
@@ -71,6 +73,8 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 ulid = "1.1"
 
 kanban-core = { path = "crates/kanban-core" }
+kanban-application = { path = "crates/kanban-application" }
+kanban-test-support = { path = "crates/kanban-test-support" }
 kanban-entity = { path = "crates/kanban-entity" }
 kanban-indexer = { path = "crates/kanban-indexer" }
 kanban-search = { path = "crates/kanban-search" }

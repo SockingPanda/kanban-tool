@@ -48,6 +48,10 @@ impl AppState {
         &self.db_path
     }
 
+    pub fn application(&self) -> kanban_sqlite::application::SqliteApplication {
+        kanban_sqlite::application::SqliteApplication::new(self.db_path.clone())
+    }
+
     pub fn default_actor(&self) -> &str {
         &self.default_actor
     }
@@ -168,8 +172,9 @@ pub(crate) fn spawn_search_sync_task_until_shutdown(
 
 #[cfg(feature = "tantivy-backend")]
 async fn run_search_sync_once(db_path: PathBuf, board: String) {
-    let _ = tokio::task::spawn_blocking(move || kanban_sqlite::sync_search_index(db_path, &board))
-        .await;
+    let _ =
+        tokio::task::spawn_blocking(move || kanban_sqlite::api::sync_search_index(db_path, &board))
+            .await;
 }
 
 #[cfg(test)]

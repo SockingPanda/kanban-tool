@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use kanban_sqlite::{
+use kanban_sqlite::api::{
     CreateStepInput, CreateTask, MAX_TASK_LIST_LIMIT, TaskExecutionPlanRecord, TaskListOptions,
     TaskListSort, TaskPatch, TaskPlanFilter, TaskStepRecord, UpdateStepInput, archive_task,
     block_task, claim_task, complete_step, complete_task, create_step, execution_plan, get_task,
@@ -39,7 +39,7 @@ pub(crate) fn handle_task(
                 "--metadata-file",
             )?
             .unwrap_or_else(|| "{}".to_owned());
-            let task = kanban_sqlite::create_task_with_labels(
+            let task = kanban_sqlite::api::create_task_with_labels(
                 db_path,
                 board,
                 actor,
@@ -428,7 +428,7 @@ fn task_steps_lines(output: &TaskStepsOutput) -> String {
             step.required
                 && matches!(
                     step.status,
-                    kanban_sqlite::StepStatus::Done | kanban_sqlite::StepStatus::Skipped
+                    kanban_sqlite::api::StepStatus::Done | kanban_sqlite::api::StepStatus::Skipped
                 )
         })
         .count();

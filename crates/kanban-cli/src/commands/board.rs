@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use kanban_sqlite::{
+use kanban_sqlite::api::{
     BoardListOptions, CreateBoard, archive_board, create_board, get_board, list_boards,
 };
 use serde::Serialize;
@@ -12,7 +12,7 @@ use crate::output::print_or_json;
 
 #[derive(Debug, Serialize)]
 struct ActiveBoardOutput {
-    board: kanban_sqlite::BoardRecord,
+    board: kanban_sqlite::api::BoardRecord,
 }
 
 pub(crate) fn handle_board(

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::Context;
 use assert_cmd::Command;
-use kanban_sqlite::maintenance_lock_path;
+use kanban_sqlite::db::maintenance_lock_path;
 use serde_json::Value;
 
 use common::{TempDb, kanban, kanban_in_dir};

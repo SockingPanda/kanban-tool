@@ -16,7 +16,7 @@ fn task_events_fan_out_target_specific_outbox_and_mark_derived_stores_dirty() ->
 
     let jobs = list_outbox(
         &temp.path,
-        kanban_sqlite::OutboxListOptions {
+        kanban_sqlite::api::OutboxListOptions {
             status: Some("pending".to_owned()),
             limit: 10,
         },

@@ -1,4 +1,4 @@
-use crate::connect_file;
+use crate::db::connect_file;
 
 use super::{
     MAX_SEARCH_LIMIT, board_id, current_last_event_id, search_lag, sqlite_like_literal, storage,

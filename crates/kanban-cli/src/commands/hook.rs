@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use kanban_sqlite::{SignalRecordInput, record_signal};
+use kanban_sqlite::api::{SignalRecordInput, record_signal};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 

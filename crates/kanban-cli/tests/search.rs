@@ -3,11 +3,12 @@ mod common;
 use anyhow::Context;
 use common::{TempDb, kanban};
 use kanban_core::TaskStatus;
-use kanban_sqlite::{CreateTask, connect_file, create_task, create_task_with_labels};
+use kanban_sqlite::api::{CreateTask, create_task, create_task_with_labels};
+use kanban_test_support::connect_file;
 use pretty_assertions::assert_eq;
 
 fn mark_no_plan_required(db_path: &std::path::Path, task_id: &str) -> anyhow::Result<()> {
-    kanban_sqlite::mark_execution_plan_not_required(
+    kanban_sqlite::api::mark_execution_plan_not_required(
         db_path,
         "default",
         "cli-search-test",
@@ -161,10 +162,10 @@ fn search_command_filters_by_label() -> anyhow::Result<()> {
 fn search_command_filters_labels_before_search_pagination() -> anyhow::Result<()> {
     let temp = TempDb::new("search_command_filters_labels_before_search_pagination")?;
     kanban(&temp.path, &["init"])?.success()?;
-    kanban_sqlite::create_label(
+    kanban_sqlite::api::create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".into(),
             color: None,
         },

@@ -211,7 +211,7 @@ fn dispatch_once_does_not_claim_review_or_dependency_blocked_tasks() -> anyhow::
         "small task",
     )?;
     let review_claim = claim_task(&temp.path, "default", "worker", &review_task.id, 300_000)?;
-    kanban_sqlite::submit_review_task(
+    kanban_sqlite::api::submit_review_task(
         &temp.path,
         "default",
         "worker",

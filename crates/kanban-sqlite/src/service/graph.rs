@@ -17,7 +17,7 @@ use kanban_core::{KanbanError, Result};
 
 use kanban_entity::{EntityUri, Predicate, Provenance, Relation};
 
-use crate::connect_file;
+use crate::db::connect_file;
 use kanban_graph::{GraphStoreStatus, RelationGraph};
 use kanban_indexer::{OXIGRAPH_RELATIONS_STORE, OutboxTarget};
 use kanban_vector::{ChunkVectorStore, VectorStoreBackend, VectorStoreStatus};

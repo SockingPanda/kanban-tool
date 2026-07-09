@@ -163,7 +163,7 @@ fn context_broker_reports_vector_query_error_without_failing_pack() -> anyhow::R
     )?;
     let store = QueryFailingVectorStore;
 
-    let pack = kanban_sqlite::build_context_pack_with_vector_store(
+    let pack = kanban_sqlite::api::build_context_pack_with_vector_store(
         &temp.path,
         "default",
         &subject.id,

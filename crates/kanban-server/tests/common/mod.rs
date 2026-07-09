@@ -29,7 +29,7 @@ impl TestApp {
             &kanban_local::ProjectConfig::default(),
         )
         .context("write empty vector config")?;
-        kanban_sqlite::init_database(&db_path, default_actor).context("init db")?;
+        kanban_sqlite::init::init_database(&db_path, default_actor).context("init db")?;
         Ok(Self {
             _dir: dir,
             db_path,
@@ -244,9 +244,13 @@ pub fn create_ready_task_for_test(
     board: &str,
     actor: &str,
     title: &str,
-) -> Result<kanban_sqlite::TaskRecord> {
-    let task =
-        kanban_sqlite::create_task(path, board, actor, kanban_sqlite::CreateTask::ready(title))?;
+) -> Result<kanban_sqlite::api::TaskRecord> {
+    let task = kanban_sqlite::api::create_task(
+        path,
+        board,
+        actor,
+        kanban_sqlite::api::CreateTask::ready(title),
+    )?;
     mark_plan_not_required_for_test(path, board, actor, &task.id)
 }
 
@@ -255,15 +259,15 @@ pub fn mark_plan_not_required_for_test(
     board: &str,
     actor: &str,
     task_id: &str,
-) -> Result<kanban_sqlite::TaskRecord> {
-    kanban_sqlite::mark_execution_plan_not_required(
+) -> Result<kanban_sqlite::api::TaskRecord> {
+    kanban_sqlite::api::mark_execution_plan_not_required(
         path,
         board,
         actor,
         task_id,
         "test fixture does not require steps",
     )?;
-    kanban_sqlite::get_task(path, board, task_id).map_err(Into::into)
+    kanban_sqlite::api::get_task(path, board, task_id).map_err(Into::into)
 }
 
 pub fn assert_task_dto_exposes_ui_fields_without_claim_token(task: &Value) {
@@ -303,7 +307,7 @@ pub fn set_task_updated_at(
     task_id: &str,
     updated_at: i64,
 ) -> Result<()> {
-    let conn = kanban_sqlite::connect_file(db_path).context("connect db")?;
+    let conn = kanban_test_support::connect_file(db_path).context("connect db")?;
     let changed = conn
         .execute(
             "UPDATE tasks SET updated_at=?1 WHERE id=?2",

@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use kanban_sqlite::{
+use kanban_sqlite::api::{
     SignalLifecycle, SignalListOptions, SignalRecord, SignalRecordInput, SignalReviewInput,
     SignalStatus, get_signal, list_signals, record_signal, review_signals, update_signal_status,
 };

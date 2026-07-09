@@ -1,7 +1,8 @@
 use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};
-use kanban_sqlite::{begin_database_runtime, init_database};
+use kanban_sqlite::api::begin_database_runtime;
+use kanban_sqlite::init::init_database;
 
 use crate::args::{ServeArgs, ServeLogLevel};
 use crate::commands::common::invalid_input;

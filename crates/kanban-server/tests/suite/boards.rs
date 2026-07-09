@@ -34,7 +34,7 @@ async fn boards_lists_and_shows_default_board() -> anyhow::Result<()> {
 #[tokio::test]
 async fn boards_init_uses_custom_default_actor_for_seed_events() -> anyhow::Result<()> {
     let test = TestApp::with_actor("custom-init-actor")?;
-    let events = kanban_sqlite::list_events(test.db_path(), "default", None)?;
+    let events = kanban_sqlite::api::list_events(test.db_path(), "default", None)?;
 
     assert_eq!(events[0].kind, "board.created");
     assert_eq!(events[0].actor.as_deref(), Some("custom-init-actor"));
@@ -63,7 +63,7 @@ async fn boards_creates_and_archives_board() -> anyhow::Result<()> {
     assert_eq!(created["data"]["name"], "Project Board");
     assert_eq!(created["data"]["description"], "Local project");
 
-    let events = kanban_sqlite::list_events(&db_path, "project", None).context("events")?;
+    let events = kanban_sqlite::api::list_events(&db_path, "project", None).context("events")?;
     assert_eq!(events[0].kind, "board.created");
     assert_eq!(events[0].actor.as_deref(), Some("api-user"));
 
@@ -94,10 +94,10 @@ async fn boards_creates_and_archives_board() -> anyhow::Result<()> {
 async fn boards_archive_rejects_running_work() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    kanban_sqlite::create_board(
+    kanban_sqlite::api::create_board(
         &db_path,
         "api-test",
-        kanban_sqlite::CreateBoard {
+        kanban_sqlite::api::CreateBoard {
             slug: "busy".into(),
             name: "Busy".into(),
             description: None,
@@ -106,14 +106,15 @@ async fn boards_archive_rejects_running_work() -> anyhow::Result<()> {
     .context("board")?;
     let task =
         create_ready_task_for_test(&db_path, "busy", "seed", "running task").context("task")?;
-    kanban_sqlite::claim_task(&db_path, "busy", "worker", &task.id, 60_000).context("claim")?;
+    kanban_sqlite::api::claim_task(&db_path, "busy", "worker", &task.id, 60_000)
+        .context("claim")?;
     let app = test.router();
 
     let (status, json) = post_json(app, "/api/v1/boards/busy/archive", json!({})).await?;
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(json["error"]["code"], "invalid_transition");
     assert!(
-        kanban_sqlite::get_board(&db_path, "busy")
+        kanban_sqlite::api::get_board(&db_path, "busy")
             .context("board")?
             .archived_at
             .is_none()
@@ -161,10 +162,10 @@ async fn boards_duplicate_slug_returns_invalid_input() -> anyhow::Result<()> {
 async fn task_dto_includes_board_slug_and_ref() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    kanban_sqlite::create_board(
+    kanban_sqlite::api::create_board(
         &db_path,
         "api-test",
-        kanban_sqlite::CreateBoard {
+        kanban_sqlite::api::CreateBoard {
             slug: "project".into(),
             name: "Project".into(),
             description: None,
@@ -224,10 +225,10 @@ async fn board_columns_lists_default_columns_in_position_order() -> anyhow::Resu
 async fn archived_board_history_apis_remain_readable() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    kanban_sqlite::create_board(
+    kanban_sqlite::api::create_board(
         &db_path,
         "api-test",
-        kanban_sqlite::CreateBoard {
+        kanban_sqlite::api::CreateBoard {
             slug: "project".into(),
             name: "Project".into(),
             description: None,
@@ -236,11 +237,11 @@ async fn archived_board_history_apis_remain_readable() -> anyhow::Result<()> {
     .context("board")?;
     let task = create_ready_task_for_test(&db_path, "project", "seed", "archived history")
         .context("task")?;
-    kanban_sqlite::create_comment(&db_path, &task.id, "operator", "history note", None)
+    kanban_sqlite::api::create_comment(&db_path, &task.id, "operator", "history note", None)
         .context("comment")?;
-    let claim = kanban_sqlite::claim_task(&db_path, "project", "worker", &task.id, 60_000)
+    let claim = kanban_sqlite::api::claim_task(&db_path, "project", "worker", &task.id, 60_000)
         .context("claim")?;
-    kanban_sqlite::complete_task(
+    kanban_sqlite::api::complete_task(
         &db_path,
         "project",
         "worker",
@@ -249,7 +250,7 @@ async fn archived_board_history_apis_remain_readable() -> anyhow::Result<()> {
         false,
     )
     .context("complete")?;
-    kanban_sqlite::archive_board(&db_path, "project", "api-test").context("archive board")?;
+    kanban_sqlite::api::archive_board(&db_path, "project", "api-test").context("archive board")?;
     let app = test.router();
 
     let (status, _comment_error) = post_json(

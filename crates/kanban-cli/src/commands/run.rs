@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use anyhow::{Context, Result};
-use kanban_sqlite::{get_run_by_id_global, resolve_run_log_path};
+use kanban_sqlite::api::{get_run_by_id_global, resolve_run_log_path};
 
 use crate::args::RunCommand;
 use crate::output::print_or_json;

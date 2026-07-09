@@ -1,4 +1,4 @@
-use crate::connect_file;
+use crate::db::connect_file;
 
 use super::{
     ClaimResult, DispatchOptions, DispatchResult, FinishPolicy, allowed_run_log_roots, board_id,

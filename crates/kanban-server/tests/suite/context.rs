@@ -4,11 +4,11 @@ use crate::common::*;
 async fn context_graph_and_vector_apis_return_default_fallbacks() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "context api source".to_owned(),
             description: Some("ready spec context-api-needle".to_owned()),
             status: Some(kanban_core::TaskStatus::Ready),

@@ -50,7 +50,7 @@ async fn transitions_claim_and_heartbeat_reject_nonpositive_ttl_with_bad_request
         assert_eq!(json["error"]["code"], "invalid_input");
     }
 
-    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 1_000)
+    let claim = kanban_sqlite::api::claim_task(&db_path, "default", "worker", &task.id, 1_000)
         .context("claim")?;
     for ttl_ms in [0, -1] {
         let (status, json) = post_json(
@@ -69,11 +69,11 @@ async fn transitions_claim_and_heartbeat_reject_nonpositive_ttl_with_bad_request
 async fn transitions_reject_unknown_json_fields_in_mutation_bodies() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("strict json"),
+        kanban_sqlite::api::CreateTask::ready("strict json"),
     )?;
     let app = test.router();
 
@@ -114,9 +114,9 @@ async fn transitions_reopen_done_task_requires_reason_and_recomputes_children() 
         .context("parent")?;
     let child =
         create_ready_task_for_test(&db_path, "default", "seed", "reopen child").context("child")?;
-    kanban_sqlite::add_dependency(&db_path, "default", "seed", &parent.id, &child.id)?;
-    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &parent.id, 60_000)?;
-    kanban_sqlite::complete_task_with_summary_and_result(
+    kanban_sqlite::api::add_dependency(&db_path, "default", "seed", &parent.id, &child.id)?;
+    let claim = kanban_sqlite::api::claim_task(&db_path, "default", "worker", &parent.id, 60_000)?;
+    kanban_sqlite::api::complete_task_with_summary_and_result(
         &db_path,
         "default",
         "worker",
@@ -126,7 +126,7 @@ async fn transitions_reopen_done_task_requires_reason_and_recomputes_children() 
         Some("api done"),
         Some(r#"{"api":true}"#),
     )?;
-    kanban_sqlite::promote_task(&db_path, "default", "seed", &child.id)?;
+    kanban_sqlite::api::promote_task(&db_path, "default", "seed", &child.id)?;
     let app = test.router();
 
     let (status, json) = post_json(
@@ -150,7 +150,7 @@ async fn transitions_reopen_done_task_requires_reason_and_recomputes_children() 
     assert_eq!(json["data"]["completed_at"], serde_json::Value::Null);
     assert_eq!(json["data"]["result_summary"], "api done");
     assert_eq!(json["data"]["result_json"], r#"{"api":true}"#);
-    let child = kanban_sqlite::get_task_by_id_global(&db_path, &child.id)?;
+    let child = kanban_sqlite::api::get_task_by_id_global(&db_path, &child.id)?;
     assert_eq!(child.status, kanban_core::TaskStatus::Todo);
     assert!(child.dependency_blocked);
     Ok(())
@@ -162,7 +162,7 @@ async fn transitions_heartbeat_extends_claim_and_rejects_bad_token() -> anyhow::
     let db_path = test.db_path().to_path_buf();
     let task =
         create_ready_task_for_test(&db_path, "default", "seed", "heartbeat me").context("task")?;
-    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 1_000)
+    let claim = kanban_sqlite::api::claim_task(&db_path, "default", "worker", &task.id, 1_000)
         .context("claim")?;
     let app = test.router();
 
@@ -199,16 +199,16 @@ async fn transitions_complete_moves_running_done_and_leaves_child_todo() -> anyh
     let db_path = test.db_path().to_path_buf();
     let parent =
         create_ready_task_for_test(&db_path, "default", "seed", "parent").context("parent")?;
-    let child = kanban_sqlite::create_task_with_dependencies(
+    let child = kanban_sqlite::api::create_task_with_dependencies(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("child"),
+        kanban_sqlite::api::CreateTask::ready("child"),
         std::slice::from_ref(&parent.id),
     )
     .context("child")?;
     assert_eq!(child.status, kanban_core::TaskStatus::Todo);
-    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &parent.id, 60_000)
+    let claim = kanban_sqlite::api::claim_task(&db_path, "default", "worker", &parent.id, 60_000)
         .context("claim")?;
     let app = test.router();
 
@@ -221,7 +221,7 @@ async fn transitions_complete_moves_running_done_and_leaves_child_todo() -> anyh
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "done");
-    let child = kanban_sqlite::get_task_by_id_global(&db_path, &child.id).context("child")?;
+    let child = kanban_sqlite::api::get_task_by_id_global(&db_path, &child.id).context("child")?;
     assert_eq!(child.status, kanban_core::TaskStatus::Todo);
     assert!(!child.dependency_blocked);
     Ok(())
@@ -234,7 +234,7 @@ async fn transitions_submit_review_moves_running_to_review_and_review_is_not_cla
     let db_path = test.db_path().to_path_buf();
     let task =
         create_ready_task_for_test(&db_path, "default", "seed", "review me").context("task")?;
-    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000)
+    let claim = kanban_sqlite::api::claim_task(&db_path, "default", "worker", &task.id, 60_000)
         .context("claim")?;
     let app = test.router();
 
@@ -262,11 +262,11 @@ async fn transitions_submit_review_moves_running_to_review_and_review_is_not_cla
 async fn transitions_block_unblock_recomputes_target_status() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let parent = kanban_sqlite::create_task(
+    let parent = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "parent".into(),
             description: Some("spec".into()),
             status: Some(kanban_core::TaskStatus::Todo),
@@ -279,11 +279,11 @@ async fn transitions_block_unblock_recomputes_target_status() -> anyhow::Result<
         },
     )
     .context("parent")?;
-    let child = kanban_sqlite::create_task_with_dependencies(
+    let child = kanban_sqlite::api::create_task_with_dependencies(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("blocked child"),
+        kanban_sqlite::api::CreateTask::ready("blocked child"),
         std::slice::from_ref(&parent.id),
     )
     .context("child")?;
@@ -313,11 +313,11 @@ async fn transitions_block_unblock_recomputes_target_status() -> anyhow::Result<
 async fn transitions_archive_hides_task_from_default_list() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("archive me"),
+        kanban_sqlite::api::CreateTask::ready("archive me"),
     )
     .context("task")?;
     let app = test.router();
@@ -341,11 +341,11 @@ async fn transitions_archive_hides_task_from_default_list() -> anyhow::Result<()
 async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let ready_task = kanban_sqlite::create_task(
+    let ready_task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "needs spec".into(),
             description: None,
             status: None,
@@ -359,11 +359,11 @@ async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() -> a
     )
     .context("ready task")?;
     mark_plan_not_required_for_test(&db_path, "default", "seed", &ready_task.id)?;
-    let scheduled_task = kanban_sqlite::create_task(
+    let scheduled_task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "needs schedule".into(),
             description: None,
             status: None,
@@ -377,11 +377,11 @@ async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() -> a
     )
     .context("scheduled task")?;
     mark_plan_not_required_for_test(&db_path, "default", "seed", &scheduled_task.id)?;
-    let parent = kanban_sqlite::create_task(
+    let parent = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "parent".into(),
             description: Some("not done".into()),
             status: Some(kanban_core::TaskStatus::Todo),
@@ -394,11 +394,11 @@ async fn specify_transition_recomputes_triage_to_ready_scheduled_and_todo() -> a
         },
     )
     .context("parent")?;
-    let todo_task = kanban_sqlite::create_task_with_dependencies(
+    let todo_task = kanban_sqlite::api::create_task_with_dependencies(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "blocked spec".into(),
             description: None,
             status: None,
@@ -455,15 +455,15 @@ async fn reclaim_transition_force_and_expired_close_active_run() -> anyhow::Resu
     let maxed_task = create_ready_task_for_test(&db_path, "default", "seed", "max retries reclaim")
         .context("maxed task")?;
     let force_claim =
-        kanban_sqlite::claim_task(&db_path, "default", "worker", &force_task.id, 60_000)
+        kanban_sqlite::api::claim_task(&db_path, "default", "worker", &force_task.id, 60_000)
             .context("force claim")?;
     let expired_claim =
-        kanban_sqlite::claim_task(&db_path, "default", "worker", &expired_task.id, 60_000)
+        kanban_sqlite::api::claim_task(&db_path, "default", "worker", &expired_task.id, 60_000)
             .context("expired claim")?;
     let maxed_claim =
-        kanban_sqlite::claim_task(&db_path, "default", "worker", &maxed_task.id, 60_000)
+        kanban_sqlite::api::claim_task(&db_path, "default", "worker", &maxed_task.id, 60_000)
             .context("maxed claim")?;
-    let conn = kanban_sqlite::connect_file(&db_path).context("connect")?;
+    let conn = kanban_test_support::connect_file(&db_path).context("connect")?;
     for task_id in [&expired_task.id, &maxed_task.id] {
         conn.execute(
             "UPDATE tasks SET claim_expires_at=0 WHERE id=?1",
@@ -511,7 +511,7 @@ async fn reclaim_transition_force_and_expired_close_active_run() -> anyhow::Resu
     assert_eq!(json["data"]["status"], "blocked");
     assert_eq!(json["data"]["status_reason"], "max retries reached");
 
-    let runs = kanban_sqlite::list_runs(&db_path, "default", None).context("runs")?;
+    let runs = kanban_sqlite::api::list_runs(&db_path, "default", None).context("runs")?;
     let force_run = runs
         .iter()
         .find(|run| run.id == force_claim.run_id)
@@ -536,7 +536,7 @@ async fn complete_with_summary_stores_task_run_summary_and_result() -> anyhow::R
     let db_path = test.db_path().to_path_buf();
     let task = create_ready_task_for_test(&db_path, "default", "seed", "complete summary")
         .context("task")?;
-    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000)
+    let claim = kanban_sqlite::api::claim_task(&db_path, "default", "worker", &task.id, 60_000)
         .context("claim")?;
     let app = test.router();
 
@@ -549,15 +549,17 @@ async fn complete_with_summary_stores_task_run_summary_and_result() -> anyhow::R
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "done");
 
-    let stored = kanban_sqlite::get_task_by_id_global(&db_path, &task.id).context("task")?;
-    let runs = kanban_sqlite::list_runs(&db_path, "default", Some(&task.id)).context("runs")?;
+    let stored = kanban_sqlite::api::get_task_by_id_global(&db_path, &task.id).context("task")?;
+    let runs =
+        kanban_sqlite::api::list_runs(&db_path, "default", Some(&task.id)).context("runs")?;
     assert_eq!(stored.result_summary.as_deref(), Some("done summary"));
     assert_eq!(runs[0].summary.as_deref(), Some("done summary"));
 
     let other = create_ready_task_for_test(&db_path, "default", "seed", "reject result")
         .context("other")?;
-    let other_claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &other.id, 60_000)
-        .context("claim")?;
+    let other_claim =
+        kanban_sqlite::api::claim_task(&db_path, "default", "worker", &other.id, 60_000)
+            .context("claim")?;
     let (status, json) = post_json(
         app,
         &format!("/api/v1/tasks/{}/transitions/complete", other.id),
@@ -566,7 +568,7 @@ async fn complete_with_summary_stores_task_run_summary_and_result() -> anyhow::R
     .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "done");
-    let stored = kanban_sqlite::get_task_by_id_global(&db_path, &other.id).context("task")?;
+    let stored = kanban_sqlite::api::get_task_by_id_global(&db_path, &other.id).context("task")?;
     assert_eq!(stored.result_json.as_deref(), Some(r#"{"ok":true}"#));
     Ok(())
 }
@@ -577,7 +579,7 @@ async fn submit_review_with_summary_stores_run_summary() -> anyhow::Result<()> {
     let db_path = test.db_path().to_path_buf();
     let task = create_ready_task_for_test(&db_path, "default", "seed", "review summary")
         .context("task")?;
-    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000)
+    let claim = kanban_sqlite::api::claim_task(&db_path, "default", "worker", &task.id, 60_000)
         .context("claim")?;
     let app = test.router();
 
@@ -590,7 +592,8 @@ async fn submit_review_with_summary_stores_run_summary() -> anyhow::Result<()> {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["status"], "review");
-    let runs = kanban_sqlite::list_runs(&db_path, "default", Some(&task.id)).context("runs")?;
+    let runs =
+        kanban_sqlite::api::list_runs(&db_path, "default", Some(&task.id)).context("runs")?;
     assert_eq!(runs[0].summary.as_deref(), Some("ready for review"));
     Ok(())
 }

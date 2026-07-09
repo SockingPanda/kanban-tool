@@ -66,7 +66,11 @@ pub(crate) async fn search_tasks(
     query: Result<Query<SearchTasksQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<SearchTasksDto>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
-    validate_page_bounds(query.limit, kanban_sqlite::MAX_SEARCH_LIMIT, query.offset)?;
+    validate_page_bounds(
+        query.limit,
+        kanban_sqlite::api::MAX_SEARCH_LIMIT,
+        query.offset,
+    )?;
     let statuses = parse_status_filters(raw_query.as_deref())?;
     let labels = parse_label_filters(raw_query.as_deref())?;
     let q = query
@@ -81,7 +85,7 @@ pub(crate) async fn search_tasks(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_owned);
-    let results = kanban_sqlite::search_tasks(
+    let results = kanban_sqlite::api::search_tasks(
         state.db_path(),
         SearchQuery {
             board: query.board,
@@ -98,7 +102,7 @@ pub(crate) async fn search_tasks(
         .hits
         .into_iter()
         .map(|hit| {
-            let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &hit.task_id)?;
+            let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &hit.task_id)?;
             Ok(SearchTaskHitDto {
                 task_id: hit.task_id,
                 seq: hit.seq,
@@ -123,7 +127,11 @@ pub(crate) async fn search_tasks_by_status(
     query: Result<Query<SearchTasksQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<SearchTaskStatusWindowsDto>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
-    validate_page_bounds(query.limit, kanban_sqlite::MAX_SEARCH_LIMIT, query.offset)?;
+    validate_page_bounds(
+        query.limit,
+        kanban_sqlite::api::MAX_SEARCH_LIMIT,
+        query.offset,
+    )?;
     let statuses = parse_status_filters(raw_query.as_deref())?;
     let labels = parse_label_filters(raw_query.as_deref())?;
     let q = query
@@ -140,7 +148,7 @@ pub(crate) async fn search_tasks_by_status(
         .map(str::to_owned);
     let mut windows = Vec::with_capacity(statuses.len());
     for status in statuses {
-        let results = kanban_sqlite::search_tasks(
+        let results = kanban_sqlite::api::search_tasks(
             state.db_path(),
             SearchQuery {
                 board: query.board.clone(),
@@ -156,7 +164,7 @@ pub(crate) async fn search_tasks_by_status(
         let tasks = results
             .hits
             .into_iter()
-            .map(|hit| kanban_sqlite::get_task_by_id_global(state.db_path(), &hit.task_id))
+            .map(|hit| kanban_sqlite::api::get_task_by_id_global(state.db_path(), &hit.task_id))
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .map(TaskDto::from)
@@ -184,7 +192,7 @@ pub(crate) async fn search_status(
 ) -> Result<Json<Envelope<kanban_search::SearchIndexStatus>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
     Ok(Json(Envelope {
-        data: kanban_sqlite::search_index_status(state.db_path(), &query.board)?,
+        data: kanban_sqlite::api::search_index_status(state.db_path(), &query.board)?,
         meta: None,
     }))
 }

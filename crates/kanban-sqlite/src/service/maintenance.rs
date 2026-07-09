@@ -1,4 +1,4 @@
-use crate::{
+use crate::db::{
     connect_file, default_pragmas, maintenance_lock_blocks, maintenance_lock_path,
     runtime_lock_blocks, runtime_lock_path,
 };

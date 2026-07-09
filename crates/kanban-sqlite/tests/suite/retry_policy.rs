@@ -69,7 +69,7 @@ fn reclaim_expired_increments_retry_count_and_blocks_at_max_retries() -> anyhow:
     }
     thread::sleep(Duration::from_millis(5));
 
-    let reclaimed = kanban_sqlite::reclaim_expired(&temp.path, "default", "dispatcher")?;
+    let reclaimed = kanban_sqlite::api::reclaim_expired(&temp.path, "default", "dispatcher")?;
 
     assert_eq!(reclaimed, 2);
     let retrying = get_task(&temp.path, "default", &retrying.id)?;
@@ -130,7 +130,7 @@ fn reclaim_expired_skips_task_heartbeated_after_scan_before_claim_tx() -> anyhow
     heartbeat_started.wait();
     let reclaiming = thread::spawn({
         let db_path = temp.path.clone();
-        move || kanban_sqlite::reclaim_expired(&db_path, "default", "dispatcher")
+        move || kanban_sqlite::api::reclaim_expired(&db_path, "default", "dispatcher")
     });
     thread::sleep(Duration::from_millis(50));
     release_heartbeat.wait();

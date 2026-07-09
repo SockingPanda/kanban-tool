@@ -14,7 +14,7 @@ use std::{
 };
 
 fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
-    kanban_sqlite::mark_execution_plan_not_required(
+    kanban_sqlite::api::mark_execution_plan_not_required(
         db_path,
         "default",
         "cli-dispatch-test",
@@ -390,7 +390,7 @@ fn run_logs_reject_suspicious_paths() -> anyhow::Result<()> {
     let run_id = dispatch["data"]["run_id"]
         .as_str()
         .context("expected JSON string")?;
-    kanban_sqlite::connect_file(&temp.path)?.execute(
+    kanban_test_support::connect_file(&temp.path)?.execute(
         "UPDATE task_runs SET log_path=?1 WHERE id=?2",
         ("/etc/passwd", run_id),
     )?;

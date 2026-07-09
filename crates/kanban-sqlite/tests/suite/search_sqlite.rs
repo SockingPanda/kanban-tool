@@ -174,10 +174,10 @@ fn sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely() -> anyhow::Res
     let temp = TempDb::new("sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely")?;
     init_database(&temp.path, "tester")?;
 
-    let error = result_err(kanban_sqlite::list_tasks_page(
+    let error = result_err(kanban_sqlite::api::list_tasks_page(
         &temp.path,
         "default",
-        kanban_sqlite::TaskListOptions {
+        kanban_sqlite::api::TaskListOptions {
             statuses: vec![],
             priorities: vec![],
             labels: vec![],
@@ -185,7 +185,7 @@ fn sqlite_task_list_rejects_limit_that_cannot_be_bounded_safely() -> anyhow::Res
             include_archived: false,
             assignee: None,
             search: None,
-            sort: kanban_sqlite::TaskListSort::Position,
+            sort: kanban_sqlite::api::TaskListSort::Position,
             limit: usize::MAX,
             offset: 0,
         },
@@ -240,10 +240,10 @@ fn sqlite_task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
     mark_plan_not_required_for_test(&temp.path, "other", "tester", &other.id)?;
 
     for query in ["1", "#1", "default#1", "default/#1", first.id.as_str()] {
-        let page = kanban_sqlite::list_tasks_page(
+        let page = kanban_sqlite::api::list_tasks_page(
             &temp.path,
             "default",
-            kanban_sqlite::TaskListOptions {
+            kanban_sqlite::api::TaskListOptions {
                 statuses: vec![TaskStatus::Ready],
                 priorities: vec![],
                 labels: vec![],
@@ -251,7 +251,7 @@ fn sqlite_task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
                 include_archived: false,
                 assignee: None,
                 search: Some(query.to_owned()),
-                sort: kanban_sqlite::TaskListSort::Seq,
+                sort: kanban_sqlite::api::TaskListSort::Seq,
                 limit: 10,
                 offset: 0,
             },
@@ -266,10 +266,10 @@ fn sqlite_task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
         );
     }
 
-    let numeric_page = kanban_sqlite::list_tasks_page(
+    let numeric_page = kanban_sqlite::api::list_tasks_page(
         &temp.path,
         "default",
-        kanban_sqlite::TaskListOptions {
+        kanban_sqlite::api::TaskListOptions {
             statuses: vec![],
             priorities: vec![],
             labels: vec![],
@@ -277,7 +277,7 @@ fn sqlite_task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
             include_archived: false,
             assignee: None,
             search: Some("1".into()),
-            sort: kanban_sqlite::TaskListSort::Seq,
+            sort: kanban_sqlite::api::TaskListSort::Seq,
             limit: 10,
             offset: 0,
         },
@@ -290,10 +290,10 @@ fn sqlite_task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
         ("#3", false),
         ("#3", true),
     ] {
-        let page = kanban_sqlite::list_tasks_page(
+        let page = kanban_sqlite::api::list_tasks_page(
             &temp.path,
             "default",
-            kanban_sqlite::TaskListOptions {
+            kanban_sqlite::api::TaskListOptions {
                 statuses: vec![TaskStatus::Ready],
                 priorities: vec![],
                 labels: vec![],
@@ -301,7 +301,7 @@ fn sqlite_task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
                 include_archived,
                 assignee: None,
                 search: Some(query.to_owned()),
-                sort: kanban_sqlite::TaskListSort::Seq,
+                sort: kanban_sqlite::api::TaskListSort::Seq,
                 limit: 10,
                 offset: 0,
             },
@@ -315,10 +315,10 @@ fn sqlite_task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
             "{query} include_archived={include_archived}"
         );
     }
-    let archived_page = kanban_sqlite::list_tasks_page(
+    let archived_page = kanban_sqlite::api::list_tasks_page(
         &temp.path,
         "default",
-        kanban_sqlite::TaskListOptions {
+        kanban_sqlite::api::TaskListOptions {
             statuses: vec![],
             priorities: vec![],
             labels: vec![],
@@ -326,7 +326,7 @@ fn sqlite_task_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
             include_archived: true,
             assignee: None,
             search: Some("#3".into()),
-            sort: kanban_sqlite::TaskListSort::Seq,
+            sort: kanban_sqlite::api::TaskListSort::Seq,
             limit: 10,
             offset: 0,
         },

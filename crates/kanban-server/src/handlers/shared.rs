@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use axum::{Json, extract::rejection::JsonRejection, http::HeaderMap};
+use kanban_application::api as application_api;
 use kanban_core::TaskStatus;
 use kanban_entity::Predicate;
 use serde::Deserialize;
@@ -141,12 +142,13 @@ pub(crate) fn events_snapshot(
     state: &AppState,
     query: &EventsQuery,
 ) -> Result<(Vec<EventDto>, i64), ApiError> {
-    let board = kanban_sqlite::get_board_including_archived(state.db_path(), &query.board)?;
+    let board = kanban_sqlite::api::get_board_including_archived(state.db_path(), &query.board)?;
     let limit = query.limit.min(1000);
-    let events = kanban_sqlite::list_events_after(
-        state.db_path(),
+    let application = state.application();
+    let events = application_api::list_events_after(
+        &application,
         &query.board,
-        kanban_sqlite::EventListOptions {
+        application_api::EventListOptions {
             task_ref: query.task_id.clone(),
             after: query.after,
             limit,
@@ -174,19 +176,20 @@ pub(crate) fn dependencies_dto(
     state: &AppState,
     task_id: &str,
 ) -> Result<DependenciesDto, ApiError> {
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), task_id)?;
-    let snapshot = kanban_sqlite::dependency_snapshot(state.db_path(), &task.board_id, task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), task_id)?;
+    let snapshot =
+        kanban_sqlite::api::dependency_snapshot(state.db_path(), &task.board_id, task_id)?;
     let mut parents = Vec::new();
     let mut children = Vec::new();
     for edge in &snapshot.edges {
         if edge.child.id == task_id {
-            parents.push(TaskDto::from(kanban_sqlite::get_task_by_id_global(
+            parents.push(TaskDto::from(kanban_sqlite::api::get_task_by_id_global(
                 state.db_path(),
                 &edge.parent.id,
             )?));
         }
         if edge.parent.id == task_id {
-            children.push(TaskDto::from(kanban_sqlite::get_task_by_id_global(
+            children.push(TaskDto::from(kanban_sqlite::api::get_task_by_id_global(
                 state.db_path(),
                 &edge.child.id,
             )?));
@@ -214,28 +217,30 @@ pub(crate) fn optional_json_body<T: Default>(
     }
 }
 
-pub(crate) fn parse_task_sort(sort: Option<&str>) -> Result<kanban_sqlite::TaskListSort, ApiError> {
+pub(crate) fn parse_task_sort(
+    sort: Option<&str>,
+) -> Result<kanban_sqlite::api::TaskListSort, ApiError> {
     let sort = match sort.unwrap_or("position") {
-        "seq" => kanban_sqlite::TaskListSort::Seq,
-        "-seq" => kanban_sqlite::TaskListSort::SeqDesc,
-        "title" => kanban_sqlite::TaskListSort::Title,
-        "-title" => kanban_sqlite::TaskListSort::TitleDesc,
-        "status" => kanban_sqlite::TaskListSort::Status,
-        "-status" => kanban_sqlite::TaskListSort::StatusDesc,
-        "position" => kanban_sqlite::TaskListSort::Position,
-        "-position" => kanban_sqlite::TaskListSort::PositionDesc,
-        "priority" => kanban_sqlite::TaskListSort::Priority,
-        "-priority" => kanban_sqlite::TaskListSort::PriorityDesc,
-        "assignee" => kanban_sqlite::TaskListSort::Assignee,
-        "-assignee" => kanban_sqlite::TaskListSort::AssigneeDesc,
-        "scheduled_at" => kanban_sqlite::TaskListSort::ScheduledAt,
-        "-scheduled_at" => kanban_sqlite::TaskListSort::ScheduledAtDesc,
-        "created_at" => kanban_sqlite::TaskListSort::CreatedAt,
-        "-created_at" => kanban_sqlite::TaskListSort::CreatedAtDesc,
-        "updated_at" => kanban_sqlite::TaskListSort::UpdatedAt,
-        "-updated_at" => kanban_sqlite::TaskListSort::UpdatedAtDesc,
-        "due_at" => kanban_sqlite::TaskListSort::DueAt,
-        "-due_at" => kanban_sqlite::TaskListSort::DueAtDesc,
+        "seq" => kanban_sqlite::api::TaskListSort::Seq,
+        "-seq" => kanban_sqlite::api::TaskListSort::SeqDesc,
+        "title" => kanban_sqlite::api::TaskListSort::Title,
+        "-title" => kanban_sqlite::api::TaskListSort::TitleDesc,
+        "status" => kanban_sqlite::api::TaskListSort::Status,
+        "-status" => kanban_sqlite::api::TaskListSort::StatusDesc,
+        "position" => kanban_sqlite::api::TaskListSort::Position,
+        "-position" => kanban_sqlite::api::TaskListSort::PositionDesc,
+        "priority" => kanban_sqlite::api::TaskListSort::Priority,
+        "-priority" => kanban_sqlite::api::TaskListSort::PriorityDesc,
+        "assignee" => kanban_sqlite::api::TaskListSort::Assignee,
+        "-assignee" => kanban_sqlite::api::TaskListSort::AssigneeDesc,
+        "scheduled_at" => kanban_sqlite::api::TaskListSort::ScheduledAt,
+        "-scheduled_at" => kanban_sqlite::api::TaskListSort::ScheduledAtDesc,
+        "created_at" => kanban_sqlite::api::TaskListSort::CreatedAt,
+        "-created_at" => kanban_sqlite::api::TaskListSort::CreatedAtDesc,
+        "updated_at" => kanban_sqlite::api::TaskListSort::UpdatedAt,
+        "-updated_at" => kanban_sqlite::api::TaskListSort::UpdatedAtDesc,
+        "due_at" => kanban_sqlite::api::TaskListSort::DueAt,
+        "-due_at" => kanban_sqlite::api::TaskListSort::DueAtDesc,
         value => return Err(invalid_input(format!("unsupported sort: {value}"))),
     };
     Ok(sort)
@@ -255,7 +260,7 @@ pub(crate) fn parse_priority_filters(raw_query: Option<&str>) -> Result<Vec<i64>
                 .trim()
                 .parse::<i64>()
                 .map_err(|_| invalid_input(format!("invalid priority filter: {value}")))?;
-            kanban_sqlite::validate_priority(value).map_err(ApiError::from)?;
+            kanban_sqlite::api::validate_priority(value).map_err(ApiError::from)?;
             Ok(value)
         })
         .collect()
@@ -296,7 +301,7 @@ pub(crate) fn parse_predicate(value: &str) -> Result<Predicate, ApiError> {
 
 pub(crate) fn patch_from_value(
     object: &serde_json::Map<String, serde_json::Value>,
-) -> Result<kanban_sqlite::TaskPatch, ApiError> {
+) -> Result<kanban_sqlite::api::TaskPatch, ApiError> {
     const ALLOWED: &[&str] = &[
         "title",
         "description",
@@ -316,7 +321,7 @@ pub(crate) fn patch_from_value(
         }
     }
 
-    let mut patch = kanban_sqlite::TaskPatch::default();
+    let mut patch = kanban_sqlite::api::TaskPatch::default();
     if let Some(value) = object.get("title") {
         patch.title = Some(string_field(value, "title")?);
     }

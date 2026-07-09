@@ -21,3 +21,9 @@ fn adapter_api_facade_excludes_non_slice_symbols() {
     let tests = trybuild::TestCases::new();
     tests.compile_fail("tests/ui/api_facade_excludes_non_slice_symbol.rs");
 }
+
+#[test]
+fn crate_root_legacy_reexports_are_removed() {
+    let tests = trybuild::TestCases::new();
+    tests.compile_fail("tests/ui/root_legacy_reexport_removed.rs");
+}

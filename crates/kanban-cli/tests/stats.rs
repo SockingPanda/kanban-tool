@@ -5,7 +5,7 @@ use common::{TempDb, kanban};
 use pretty_assertions::assert_eq;
 
 fn mark_no_plan_required(db_path: &std::path::Path, task_id: &str) -> anyhow::Result<()> {
-    kanban_sqlite::mark_execution_plan_not_required(
+    kanban_sqlite::api::mark_execution_plan_not_required(
         db_path,
         "default",
         "cli-stats-test",

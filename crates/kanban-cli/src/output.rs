@@ -2,15 +2,15 @@ use anyhow::Result;
 
 use crate::args::SearchOutputHit;
 
-pub(crate) fn print_task(json: bool, task: &kanban_sqlite::TaskRecord) -> Result<()> {
+pub(crate) fn print_task(json: bool, task: &kanban_sqlite::api::TaskRecord) -> Result<()> {
     print_task_with_details(json, false, task, None)
 }
 
 pub(crate) fn print_task_with_details(
     json: bool,
     details: bool,
-    task: &kanban_sqlite::TaskRecord,
-    ontology_summary: Option<&kanban_sqlite::TaskOntologySummary>,
+    task: &kanban_sqlite::api::TaskRecord,
+    ontology_summary: Option<&kanban_sqlite::api::TaskOntologySummary>,
 ) -> Result<()> {
     if json && details {
         println!(
@@ -68,7 +68,7 @@ pub(crate) fn print_or_json_with_meta<T: serde::Serialize, M: serde::Serialize>(
     Ok(())
 }
 
-pub(crate) fn task_line(task: &kanban_sqlite::TaskRecord) -> String {
+pub(crate) fn task_line(task: &kanban_sqlite::api::TaskRecord) -> String {
     let labels = task_label_suffix(task);
     format!(
         "{} [{}] P{} {}{} · plan: {} · steps: {}/{}",
@@ -84,8 +84,8 @@ pub(crate) fn task_line(task: &kanban_sqlite::TaskRecord) -> String {
 }
 
 pub(crate) fn task_details(
-    task: &kanban_sqlite::TaskRecord,
-    ontology_summary: Option<&kanban_sqlite::TaskOntologySummary>,
+    task: &kanban_sqlite::api::TaskRecord,
+    ontology_summary: Option<&kanban_sqlite::api::TaskOntologySummary>,
 ) -> String {
     let mut lines = Vec::new();
     lines.extend([
@@ -165,12 +165,12 @@ pub(crate) fn task_details(
     lines.join("\n")
 }
 
-pub(crate) fn label_line(label: &kanban_sqlite::LabelRecord) -> String {
+pub(crate) fn label_line(label: &kanban_sqlite::api::LabelRecord) -> String {
     let color = label.color.as_deref().unwrap_or("-");
     format!("{} {} color={}", label.name, label.id, color)
 }
 
-fn task_label_suffix(task: &kanban_sqlite::TaskRecord) -> String {
+fn task_label_suffix(task: &kanban_sqlite::api::TaskRecord) -> String {
     if task.labels.is_empty() {
         String::new()
     } else {
@@ -185,7 +185,7 @@ fn task_label_suffix(task: &kanban_sqlite::TaskRecord) -> String {
     }
 }
 
-fn task_labels_display(task: &kanban_sqlite::TaskRecord) -> String {
+fn task_labels_display(task: &kanban_sqlite::api::TaskRecord) -> String {
     if task.labels.is_empty() {
         "-".to_owned()
     } else {
@@ -218,7 +218,7 @@ fn option_i64(value: Option<i64>) -> String {
 
 fn push_task_ontology_summary(
     lines: &mut Vec<String>,
-    summary: &kanban_sqlite::TaskOntologySummary,
+    summary: &kanban_sqlite::api::TaskOntologySummary,
 ) {
     lines.extend([
         "ontology_summary:".to_owned(),

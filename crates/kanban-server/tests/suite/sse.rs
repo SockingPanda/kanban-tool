@@ -5,21 +5,21 @@ async fn stream_events_sse_returns_finite_snapshot_with_id_event_and_data_frames
 -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let first = kanban_sqlite::create_task(
+    let first = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("first sse"),
+        kanban_sqlite::api::CreateTask::ready("first sse"),
     )
     .context("first")?;
-    let second = kanban_sqlite::create_task(
+    let second = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("second sse"),
+        kanban_sqlite::api::CreateTask::ready("second sse"),
     )
     .context("second")?;
-    let all = kanban_sqlite::list_events(&db_path, "default", None).context("events")?;
+    let all = kanban_sqlite::api::list_events(&db_path, "default", None).context("events")?;
     let after = all
         .iter()
         .find(|event| event.task_id.as_deref() == Some(&first.id))

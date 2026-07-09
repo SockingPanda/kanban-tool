@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use kanban_core::TaskStatus;
-use kanban_sqlite::{FinishPolicy, TaskListSort};
+use kanban_sqlite::api::{FinishPolicy, TaskListSort};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -795,15 +795,15 @@ pub(crate) enum LabelAtomPolarityArg {
 #[derive(Debug, Args)]
 pub(crate) struct LabelSuggestArgs {
     pub(crate) task_ref: String,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
     pub(crate) limit: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
     pub(crate) candidate_limit: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT)]
     pub(crate) atom_limit: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS)]
     pub(crate) max_selected_labels: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MIN_SCORE)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_MIN_SCORE)]
     pub(crate) min_score: f32,
     #[arg(long = "vector-config", alias = "config")]
     pub(crate) vector_config: Option<std::path::PathBuf>,
@@ -831,15 +831,15 @@ pub(crate) struct LabelProposeArgs {
     pub(crate) retarget_reason_file: Option<PathBuf>,
     #[command(flatten)]
     pub(crate) ontology_actor: LabelOntologyActorArgs,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
     pub(crate) limit: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
     pub(crate) candidate_limit: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT)]
     pub(crate) atom_limit: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS)]
     pub(crate) max_selected_labels: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MIN_SCORE)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_MIN_SCORE)]
     pub(crate) min_score: f32,
     #[arg(long = "vector-config", alias = "config")]
     pub(crate) vector_config: Option<std::path::PathBuf>,
@@ -961,15 +961,15 @@ pub(crate) struct LabelOntologyRecordArgs {
     pub(crate) suggestion_snapshot: Option<std::path::PathBuf>,
     #[arg(long)]
     pub(crate) capture_suggest: bool,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
     pub(crate) limit: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
     pub(crate) candidate_limit: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT)]
     pub(crate) atom_limit: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS)]
     pub(crate) max_selected_labels: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MIN_SCORE)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_MIN_SCORE)]
     pub(crate) min_score: f32,
     #[arg(long = "vector-config", alias = "config")]
     pub(crate) vector_config: Option<std::path::PathBuf>,
@@ -1216,15 +1216,15 @@ pub(crate) struct LabelOntologyValidateArgs {
     pub(crate) positive_control_waiver_file: Option<PathBuf>,
     #[arg(long = "vector-config", alias = "config")]
     pub(crate) vector_config: Option<std::path::PathBuf>,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_OUTPUT_LIMIT)]
     pub(crate) limit: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_CANDIDATE_LIMIT)]
     pub(crate) candidate_limit: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_ATOM_LIMIT)]
     pub(crate) atom_limit: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_MAX_SELECTED_LABELS)]
     pub(crate) max_selected_labels: usize,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_LABEL_SUGGESTION_MIN_SCORE)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_LABEL_SUGGESTION_MIN_SCORE)]
     pub(crate) min_score: f32,
     #[command(flatten)]
     pub(crate) actor: LabelOntologyActorArgs,
@@ -1383,7 +1383,7 @@ pub(crate) struct CreateArgs {
     pub(crate) status: Option<CreateTaskStatusArg>,
     #[arg(long)]
     pub(crate) assignee: Option<String>,
-    #[arg(long, default_value_t = kanban_sqlite::DEFAULT_PRIORITY)]
+    #[arg(long, default_value_t = kanban_sqlite::api::DEFAULT_PRIORITY)]
     pub(crate) priority: i64,
     #[arg(long)]
     pub(crate) scheduled_at: Option<i64>,
@@ -1965,7 +1965,7 @@ impl From<PolicyArg> for FinishPolicy {
 pub(crate) struct DispatchLoopSummary {
     pub(crate) iterations: usize,
     pub(crate) claimed: usize,
-    pub(crate) runs: Vec<kanban_sqlite::DispatchResult>,
+    pub(crate) runs: Vec<kanban_sqlite::api::DispatchResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) stop_reason: Option<String>,
 }
@@ -1981,7 +1981,7 @@ pub(crate) struct SearchOutputHit {
     pub(crate) seq: i64,
     pub(crate) score: f64,
     pub(crate) snippet: Option<String>,
-    pub(crate) task: kanban_sqlite::TaskRecord,
+    pub(crate) task: kanban_sqlite::api::TaskRecord,
 }
 
 #[derive(Debug, Clone)]

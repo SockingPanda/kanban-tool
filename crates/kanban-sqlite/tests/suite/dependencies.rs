@@ -19,7 +19,7 @@ fn claim_complete_leaves_dependency_child_todo_until_manual_promote() -> anyhow:
     assert_eq!(claim.task.status, TaskStatus::Running);
     assert!(!claim.claim_token.is_empty());
     assert!(claim.task.current_run_id.is_some());
-    let heartbeat = kanban_sqlite::heartbeat_task(
+    let heartbeat = kanban_sqlite::api::heartbeat_task(
         &temp.path,
         "default",
         "worker",
@@ -281,7 +281,7 @@ fn remove_dependency_keeps_child_todo_until_manual_promote() -> anyhow::Result<(
         TaskStatus::Todo
     );
 
-    kanban_sqlite::remove_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+    kanban_sqlite::api::remove_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
 
     let child = get_task(&temp.path, "default", &child.id)?;
     assert_eq!(child.status, TaskStatus::Todo);

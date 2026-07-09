@@ -1,0 +1,5 @@
+error[E0432]: unresolved import `kanban_sqlite::api::DisabledLabelProposalProvider`
+ --> tests/ui/api_root_excludes_provider/disabled_label_proposal_provider.rs:3:5
+  |
+3 | use kanban_sqlite::api::DisabledLabelProposalProvider;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `DisabledLabelProposalProvider` in `api`

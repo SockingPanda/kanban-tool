@@ -156,6 +156,9 @@ pub(crate) fn spawn_search_sync_task_until_shutdown(
                     _ = shutdown.cancelled() => break,
                     _ = tokio::time::sleep(config.interval) => {}
                 }
+                if shutdown.is_cancelled() {
+                    break;
+                }
                 run_search_sync_once(state.db_path.clone(), config.board.clone()).await;
             }
         }))

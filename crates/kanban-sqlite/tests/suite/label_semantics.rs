@@ -1942,7 +1942,7 @@ fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> an
             atom_hit(&frontend, "negative", "excludes_when", "server only", 0.0),
         ],
     };
-    let result = kanban_sqlite::api::suggest_task_labels_with(
+    let result = kanban_sqlite::api::provider::suggest_task_labels_with(
         &temp.path,
         "default",
         &labeled.id,
@@ -1992,7 +1992,7 @@ fn task_label_suggestions_reason_codes_for_selected_coverage_gap() -> anyhow::Re
         vec![1.0, 0.0, 0.0],
     )]);
 
-    let result = kanban_sqlite::api::suggest_task_labels_with(
+    let result = kanban_sqlite::api::provider::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
@@ -2044,7 +2044,7 @@ fn task_label_suggestions_reason_codes_for_empty_selection_and_residual_gap() ->
         vec![0.01, 1.0, 0.0],
     );
 
-    let result = kanban_sqlite::api::suggest_task_labels_with(
+    let result = kanban_sqlite::api::provider::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
@@ -2086,7 +2086,7 @@ fn task_label_suggestions_report_empty_index_as_degraded_reason() -> anyhow::Res
     )?;
     let store = StaticLabelAtomStore { hits: Vec::new() };
 
-    let result = kanban_sqlite::api::suggest_task_labels_with(
+    let result = kanban_sqlite::api::provider::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
@@ -2128,7 +2128,7 @@ fn task_label_suggestions_degrade_on_label_atom_vector_query_error() -> anyhow::
         query_error: Some("label atom vector query failed"),
     };
 
-    let result = kanban_sqlite::api::suggest_task_labels_with(
+    let result = kanban_sqlite::api::provider::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
@@ -2192,7 +2192,7 @@ fn task_label_suggestions_report_label_atom_index_dirty_and_errors() -> anyhow::
         query_error: None,
     };
 
-    let result = kanban_sqlite::api::suggest_task_labels_with(
+    let result = kanban_sqlite::api::provider::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
@@ -2291,7 +2291,7 @@ fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::R
         ),
     ]);
 
-    let result = kanban_sqlite::api::suggest_task_labels_with(
+    let result = kanban_sqlite::api::provider::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
@@ -2386,7 +2386,7 @@ fn task_label_suggestions_limit_truncates_output_without_narrowing_solver() -> a
         ),
     ]);
 
-    let result = kanban_sqlite::api::suggest_task_labels_with(
+    let result = kanban_sqlite::api::provider::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
@@ -2445,7 +2445,7 @@ impl CountingProposalProvider {
     }
 }
 
-impl kanban_sqlite::api::LabelProposalProvider for CountingProposalProvider {
+impl kanban_sqlite::api::provider::LabelProposalProvider for CountingProposalProvider {
     fn propose_label(
         &self,
         _task: &kanban_sqlite::api::TaskRecord,

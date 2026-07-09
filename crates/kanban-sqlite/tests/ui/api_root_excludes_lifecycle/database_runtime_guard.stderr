@@ -1,0 +1,5 @@
+error[E0432]: unresolved import `kanban_sqlite::api::DatabaseRuntimeGuard`
+ --> tests/ui/api_root_excludes_lifecycle/database_runtime_guard.rs:3:5
+  |
+3 | use kanban_sqlite::api::DatabaseRuntimeGuard;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `DatabaseRuntimeGuard` in `api`

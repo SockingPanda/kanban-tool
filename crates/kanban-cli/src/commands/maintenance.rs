@@ -6,9 +6,10 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use kanban_sqlite::api::lifecycle::begin_database_replace;
 use kanban_sqlite::api::{
-    backup_database, begin_database_replace, checkpoint_database, export_jsonl,
-    export_jsonl_to_writer, import_jsonl, queue_stats, vacuum_database,
+    backup_database, checkpoint_database, export_jsonl, export_jsonl_to_writer, import_jsonl,
+    queue_stats, vacuum_database,
 };
 use kanban_sqlite::init::init_database;
 

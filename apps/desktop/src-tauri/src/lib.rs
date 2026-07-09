@@ -37,7 +37,7 @@ pub struct RuntimeConfig {
 
 struct EmbeddedApiRuntime {
     config: Mutex<RuntimeConfig>,
-    _runtime_guard: kanban_sqlite::api::DatabaseRuntimeGuard,
+    _runtime_guard: kanban_sqlite::api::lifecycle::DatabaseRuntimeGuard,
     shutdown_tx: Mutex<Option<oneshot::Sender<()>>>,
 }
 
@@ -343,8 +343,8 @@ fn first_existing_path(paths: impl IntoIterator<Item = PathBuf>) -> Option<PathB
 fn start_embedded_api(app: &tauri::App) -> Result<EmbeddedApiRuntime, String> {
     let db_path = kanban_local::default_db_path();
     let actor = kanban_local::default_actor();
-    let runtime_guard =
-        kanban_sqlite::api::begin_database_runtime(&db_path).map_err(|error| error.to_string())?;
+    let runtime_guard = kanban_sqlite::api::lifecycle::begin_database_runtime(&db_path)
+        .map_err(|error| error.to_string())?;
     kanban_sqlite::init::init_database(&db_path, &actor).map_err(|error| error.to_string())?;
 
     let state = embedded_app_state(app, db_path.clone(), actor.clone());

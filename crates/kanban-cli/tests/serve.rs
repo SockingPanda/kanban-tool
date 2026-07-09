@@ -236,7 +236,7 @@ fn serve_sigint_gracefully_exits_without_stdout_and_releases_runtime_lock() -> a
         "serve SIGINT must not write stdout, got: {}",
         String::from_utf8_lossy(&output.stdout)
     );
-    let _runtime_guard = kanban_sqlite::api::begin_database_runtime(&temp.path)
+    let _runtime_guard = kanban_sqlite::api::lifecycle::begin_database_runtime(&temp.path)
         .context("serve SIGINT should release runtime lock")?;
     Ok(())
 }

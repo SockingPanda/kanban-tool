@@ -1,0 +1,5 @@
+error[E0432]: unresolved import `kanban_sqlite::api::build_context_pack_with_vector_store`
+ --> tests/ui/api_root_excludes_provider/build_context_pack_with_vector_store.rs:3:5
+  |
+3 | use kanban_sqlite::api::build_context_pack_with_vector_store;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `build_context_pack_with_vector_store` in `api`

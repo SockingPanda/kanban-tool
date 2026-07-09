@@ -1,6 +1,11 @@
 use std::path::Path;
 
 use anyhow::Result;
+use kanban_sqlite::api::provider::{
+    DisabledLabelProposalProvider, LabelProposalProvider, ManualLabelProposalProvider,
+    propose_task_label_with_store_and_create_options, query_label_atom_index_with,
+    suggest_task_labels_with,
+};
 use kanban_sqlite::api::{
     BootstrapTaskLabel, CreateLabel, LabelOntologyActionInput, LabelOntologyActionRecord,
     LabelOntologyActionType, LabelOntologyActor, LabelOntologyAtomApplyInput,
@@ -11,16 +16,15 @@ use kanban_sqlite::api::{
     LabelOntologyValidationStatus, LabelProposalCandidate, LabelProposalCreateOptions,
     LabelProposalDecisionOptions, LabelProposalListOptions, LabelProposalStatus,
     LabelSemanticProposalRecord, LabelSemanticsMutationOptions, LabelSuggestionOptions,
-    LabelSuggestionResult, MAX_TASK_LIST_LIMIT, ManualLabelProposalProvider, UpsertLabelSemantics,
+    LabelSuggestionResult, MAX_TASK_LIST_LIMIT, UpsertLabelSemantics,
     accept_label_proposal_with_options, add_task_labels_with_options,
     apply_label_ontology_atom_with_options, bootstrap_task_label,
     bootstrap_task_label_with_staged_verification, clear_label_semantics_with_options,
     create_label_ontology_action, delete_label, explain_label_atom, get_label_ontology_signal,
     get_label_proposal, get_label_semantics, label_ontology_quality_report, list_label_atoms,
     list_label_ontology_signals, list_label_proposals, list_label_semantics, list_labels,
-    propose_task_label_with_store_and_create_options, record_label_ontology_observation,
-    reject_label_proposal, remove_task_label, revert_label_ontology_mutation,
-    review_label_ontology, suggest_task_labels_with, upsert_label_semantics_with_options,
+    record_label_ontology_observation, reject_label_proposal, remove_task_label,
+    revert_label_ontology_mutation, review_label_ontology, upsert_label_semantics_with_options,
     validate_label_ontology_action,
 };
 use kanban_vector::{SubprocessVectorStore, VectorStoreBackend};
@@ -242,7 +246,7 @@ pub(crate) fn handle_label(
                     board,
                     actor,
                     &args.task_ref,
-                    &kanban_sqlite::api::DisabledLabelProposalProvider,
+                    &DisabledLabelProposalProvider,
                     propose_options,
                     args.vector_config.as_deref(),
                 )?
@@ -1526,7 +1530,7 @@ fn query_configured_label_atom_index(
     vector_config_path: Option<&std::path::Path>,
 ) -> Result<Vec<kanban_vector::LabelAtomHit>> {
     let store = subprocess_vector_store(db_path, board, vector_config_path)?;
-    kanban_sqlite::api::query_label_atom_index_with(
+    query_label_atom_index_with(
         db_path,
         board,
         &store,
@@ -1634,7 +1638,7 @@ fn propose_with_optional_vector_config(
     board: &str,
     actor: &str,
     task_ref: &str,
-    provider: &dyn kanban_sqlite::api::LabelProposalProvider,
+    provider: &dyn LabelProposalProvider,
     propose_options: kanban_sqlite::api::LabelProposalProposeOptions,
     vector_config_path: Option<&std::path::Path>,
 ) -> Result<kanban_sqlite::api::LabelProposalAttempt> {

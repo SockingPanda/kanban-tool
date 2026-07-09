@@ -7,7 +7,7 @@ use kanban_sqlite::api;
 #[test]
 fn cli_adapter_contract_commits_to_shared_task_label_and_run_state() -> anyhow::Result<()> {
     let temp = TempDb::new("adapter_contract")?;
-    kanban_sqlite::init_database(&temp.path, "tester")?;
+    kanban_sqlite::init::init_database(&temp.path, "tester")?;
 
     let label_json =
         kanban(&temp.path, &["label", "create", "cli-contract", "--json"])?.success_json()?;

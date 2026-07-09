@@ -15,7 +15,7 @@ pub(crate) async fn list_comments(
     Path(task_id): Path<String>,
 ) -> Result<Json<Envelope<Vec<CommentDto>>>, ApiError> {
     Ok(Json(Envelope {
-        data: kanban_sqlite::list_comments(state.db_path(), &task_id)?
+        data: kanban_sqlite::api::list_comments(state.db_path(), &task_id)?
             .into_iter()
             .map(CommentDto::from)
             .collect(),
@@ -32,10 +32,10 @@ pub(crate) async fn create_comment(
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.author.as_deref(), &headers, &state);
     let metadata_json = metadata_json(body.metadata)?;
-    let comment = kanban_sqlite::create_comment_with_options(
+    let comment = kanban_sqlite::api::create_comment_with_options(
         state.db_path(),
         &task_id,
-        kanban_sqlite::CreateComment {
+        kanban_sqlite::api::CreateComment {
             author: actor,
             body: body.body,
             kind: body.kind,

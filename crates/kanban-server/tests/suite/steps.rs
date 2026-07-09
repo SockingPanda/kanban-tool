@@ -4,11 +4,11 @@ use crate::common::*;
 async fn steps_create_list_update_resolve_delete_and_mark_not_required() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let parent = kanban_sqlite::create_task(
+    let parent = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("parent"),
+        kanban_sqlite::api::CreateTask::ready("parent"),
     )?;
     let app = test.router();
 
@@ -120,32 +120,32 @@ async fn steps_create_list_update_resolve_delete_and_mark_not_required() -> anyh
 async fn linked_step_errors_use_unified_envelope() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let parent = kanban_sqlite::create_task(
+    let parent = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("parent"),
+        kanban_sqlite::api::CreateTask::ready("parent"),
     )?;
-    let child = kanban_sqlite::create_task(
+    let child = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("child"),
+        kanban_sqlite::api::CreateTask::ready("child"),
     )?;
-    kanban_sqlite::create_board(
+    kanban_sqlite::api::create_board(
         &db_path,
         "seed",
-        kanban_sqlite::CreateBoard {
+        kanban_sqlite::api::CreateBoard {
             slug: "other".to_owned(),
             name: "Other".to_owned(),
             description: None,
         },
     )?;
-    let other = kanban_sqlite::create_task(
+    let other = kanban_sqlite::api::create_task(
         &db_path,
         "other",
         "seed",
-        kanban_sqlite::CreateTask::ready("other child"),
+        kanban_sqlite::api::CreateTask::ready("other child"),
     )?;
     let app = test.router();
 

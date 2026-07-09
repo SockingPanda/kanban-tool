@@ -3,7 +3,7 @@
 use crate::common::*;
 
 fn mark_ready_fixture(db_path: &std::path::Path, task_id: &str) -> anyhow::Result<()> {
-    kanban_sqlite::mark_execution_plan_not_required(
+    kanban_sqlite::api::mark_execution_plan_not_required(
         db_path,
         "default",
         "tantivy-search-test",
@@ -38,7 +38,7 @@ fn tantivy_rebuild_marks_only_current_board_outbox_done() -> anyhow::Result<()> 
         CreateTask::ready("default second"),
     )?;
 
-    kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
 
     assert_eq!(
         tantivy_outbox_statuses_for_board(&temp.path, "default")?,
@@ -62,7 +62,7 @@ fn tantivy_sync_marks_only_current_board_outbox_done() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("default indexed"),
     )?;
-    kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
 
     create_task(
         &temp.path,
@@ -82,7 +82,7 @@ fn tantivy_sync_marks_only_current_board_outbox_done() -> anyhow::Result<()> {
         },
     )?;
 
-    kanban_sqlite::sync_search_index(&temp.path, "default")?;
+    kanban_sqlite::api::sync_search_index(&temp.path, "default")?;
 
     assert_eq!(
         tantivy_outbox_statuses_for_board(&temp.path, "default")?,
@@ -106,7 +106,7 @@ fn tantivy_sync_failure_marks_only_current_board_outbox_failed() -> anyhow::Resu
         "tester",
         CreateTask::ready("default indexed before failure"),
     )?;
-    kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
 
     create_task(
         &temp.path,
@@ -130,7 +130,7 @@ fn tantivy_sync_failure_marks_only_current_board_outbox_failed() -> anyhow::Resu
         b"not json",
     )?;
 
-    let err = result_err(kanban_sqlite::sync_search_index(&temp.path, "default"))?;
+    let err = result_err(kanban_sqlite::api::sync_search_index(&temp.path, "default"))?;
     assert!(err.to_string().contains("expected ident") || err.to_string().contains("JSON"));
 
     assert_eq!(
@@ -235,7 +235,7 @@ fn tantivy_rebuild_searches_task_aggregate_and_keeps_sqlite_hydration_filters() 
     drop(conn);
     archive_task(&temp.path, "default", "tester", &archived.id, false)?;
 
-    let status = kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    let status = kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
     assert_eq!(status.backend, "tantivy");
     assert!(status.derived_index);
     assert!(!status.stale);
@@ -358,7 +358,7 @@ fn stale_tantivy_index_falls_back_to_sqlite_before_current_filters_are_applied()
     mark_ready_fixture(&temp.path, &assignee_candidate.id)?;
     let assignee_candidate = get_task(&temp.path, "default", &assignee_candidate.id)?;
 
-    kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
     let indexed = search_tasks(
         &temp.path,
         kanban_search::SearchQuery {
@@ -439,7 +439,7 @@ fn tantivy_rebuild_persists_search_state_in_app_settings() -> anyhow::Result<()>
         CreateTask::ready("state comet"),
     )?;
 
-    let status = kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    let status = kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
     assert_eq!(status.backend, "tantivy");
     assert_eq!(status.index_lag_events, Some(0));
 
@@ -471,7 +471,7 @@ fn tantivy_rebuild_persists_search_state_in_app_settings() -> anyhow::Result<()>
     assert!(tantivy.last_error.is_none());
     let jobs = list_outbox(
         &temp.path,
-        kanban_sqlite::OutboxListOptions {
+        kanban_sqlite::api::OutboxListOptions {
             status: Some("done".to_owned()),
             limit: 10,
         },
@@ -499,7 +499,7 @@ fn tantivy_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() -> an
         CreateTask::ready("second board task"),
     )?;
 
-    kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
 
     assert_eq!(
         tantivy_outbox_statuses_for_board(&temp.path, "default")?,
@@ -519,7 +519,7 @@ fn tantivy_rebuild_keeps_store_dirty_while_other_board_outbox_is_pending() -> an
         "second board still has pending Tantivy outbox"
     );
 
-    kanban_sqlite::rebuild_search_index(&temp.path, "second")?;
+    kanban_sqlite::api::rebuild_search_index(&temp.path, "second")?;
 
     assert_eq!(
         tantivy_outbox_statuses_for_board(&temp.path, "second")?,
@@ -574,7 +574,7 @@ fn tantivy_sync_reindexes_task_comment_run_event_and_archive_changes() -> anyhow
     }
     let updated = get_task(&temp.path, "default", &updated.id)?;
 
-    kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
     update_task(
         &temp.path,
         "default",
@@ -594,7 +594,7 @@ fn tantivy_sync_reindexes_task_comment_run_event_and_archive_changes() -> anyhow
         None,
     )?;
     let claim = claim_task(&temp.path, "default", "worker", &run_task.id, 300_000)?;
-    kanban_sqlite::complete_task_with_summary(
+    kanban_sqlite::api::complete_task_with_summary(
         &temp.path,
         "default",
         "worker",
@@ -644,7 +644,7 @@ fn tantivy_sync_reindexes_task_comment_run_event_and_archive_changes() -> anyhow
             > 0
     );
 
-    let sync = kanban_sqlite::sync_search_index(&temp.path, "default")?;
+    let sync = kanban_sqlite::api::sync_search_index(&temp.path, "default")?;
     assert_eq!(sync.backend, "tantivy");
     assert!(!sync.stale);
     assert_eq!(sync.index_lag_events, Some(0));
@@ -694,7 +694,7 @@ fn tantivy_index_ahead_of_database_falls_back_and_sync_rebuilds() -> anyhow::Res
         "tester",
         CreateTask::ready("rollback base comet"),
     )?;
-    kanban_sqlite::checkpoint_database(&temp.path)?;
+    kanban_sqlite::api::checkpoint_database(&temp.path)?;
     let snapshot = temp.dir.join("rollback-snapshot.db");
     std::fs::copy(&temp.path, &snapshot)?;
 
@@ -704,7 +704,7 @@ fn tantivy_index_ahead_of_database_falls_back_and_sync_rebuilds() -> anyhow::Res
         "tester",
         CreateTask::ready("rollback future phantom"),
     )?;
-    let rebuilt = kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    let rebuilt = kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
     assert_eq!(rebuilt.backend, "tantivy");
     assert!(!rebuilt.stale);
 
@@ -737,7 +737,7 @@ fn tantivy_index_ahead_of_database_falls_back_and_sync_rebuilds() -> anyhow::Res
     );
     assert!(stale.hits.is_empty(), "{:?}", stale.hits);
 
-    let status = kanban_sqlite::search_index_status(&temp.path, "default")?;
+    let status = kanban_sqlite::api::search_index_status(&temp.path, "default")?;
     assert_eq!(status.backend, "sqlite");
     assert!(status.derived_index);
     assert!(status.stale);
@@ -753,7 +753,7 @@ fn tantivy_index_ahead_of_database_falls_back_and_sync_rebuilds() -> anyhow::Res
         status.message
     );
 
-    let synced = kanban_sqlite::sync_search_index(&temp.path, "default")?;
+    let synced = kanban_sqlite::api::sync_search_index(&temp.path, "default")?;
     assert_eq!(synced.backend, "tantivy");
     assert!(!synced.stale);
     assert_eq!(synced.index_lag_events, Some(0));
@@ -788,10 +788,10 @@ fn tantivy_state_metadata_mismatch_falls_back_and_sync_rebuilds() -> anyhow::Res
         "tester",
         CreateTask::ready("contract base comet"),
     )?;
-    let clean = kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    let clean = kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
     assert_eq!(clean.backend, "tantivy");
     assert!(!clean.stale);
-    kanban_sqlite::checkpoint_database(&temp.path)?;
+    kanban_sqlite::api::checkpoint_database(&temp.path)?;
     let snapshot = temp.dir.join("contract-snapshot.db");
     std::fs::copy(&temp.path, &snapshot)?;
 
@@ -801,7 +801,7 @@ fn tantivy_state_metadata_mismatch_falls_back_and_sync_rebuilds() -> anyhow::Res
         "tester",
         CreateTask::ready("contract future phantom"),
     )?;
-    let advanced = kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    let advanced = kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
     assert!(advanced.last_event_id > clean.last_event_id);
 
     std::fs::copy(&snapshot, &temp.path)?;
@@ -833,7 +833,7 @@ fn tantivy_state_metadata_mismatch_falls_back_and_sync_rebuilds() -> anyhow::Res
     );
     assert!(stale.hits.is_empty(), "{:?}", stale.hits);
 
-    let status = kanban_sqlite::search_index_status(&temp.path, "default")?;
+    let status = kanban_sqlite::api::search_index_status(&temp.path, "default")?;
     assert_eq!(status.backend, "sqlite");
     assert!(status.derived_index);
     assert!(status.stale);
@@ -851,7 +851,7 @@ fn tantivy_state_metadata_mismatch_falls_back_and_sync_rebuilds() -> anyhow::Res
         status.message
     );
 
-    let synced = kanban_sqlite::sync_search_index(&temp.path, "default")?;
+    let synced = kanban_sqlite::api::sync_search_index(&temp.path, "default")?;
     assert_eq!(synced.backend, "tantivy");
     assert!(!synced.stale);
     assert_eq!(synced.last_event_id, clean.last_event_id);
@@ -888,7 +888,7 @@ fn tantivy_sync_failure_does_not_advance_search_state_watermark() -> anyhow::Res
         "tester",
         CreateTask::ready("watermark source"),
     )?;
-    let rebuilt = kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    let rebuilt = kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
     update_task(
         &temp.path,
         "default",
@@ -905,10 +905,10 @@ fn tantivy_sync_failure_does_not_advance_search_state_watermark() -> anyhow::Res
         b"not json",
     )?;
 
-    let err = result_err(kanban_sqlite::sync_search_index(&temp.path, "default"))?;
+    let err = result_err(kanban_sqlite::api::sync_search_index(&temp.path, "default"))?;
     assert!(err.to_string().contains("expected ident") || err.to_string().contains("JSON"));
 
-    let status = kanban_sqlite::search_index_status(&temp.path, "default")?;
+    let status = kanban_sqlite::api::search_index_status(&temp.path, "default")?;
     assert_eq!(status.last_event_id, rebuilt.last_event_id);
     assert!(status.stale);
     assert!(
@@ -991,7 +991,7 @@ fn tantivy_status_degrades_metadata_only_index_dir() -> anyhow::Result<()> {
         format!(r#"{{"index_version":"tasks-v1","board_id":"{board_id}","last_event_id":null}}"#),
     )?;
 
-    let status = kanban_sqlite::search_index_status(&temp.path, "default")?;
+    let status = kanban_sqlite::api::search_index_status(&temp.path, "default")?;
     assert_eq!(status.backend, "sqlite");
     assert!(status.derived_index);
     assert!(status.stale);
@@ -1025,7 +1025,7 @@ fn tantivy_status_degrades_wrong_schema_index() -> anyhow::Result<()> {
         format!(r#"{{"index_version":"tasks-v1","board_id":"{board_id}","last_event_id":null}}"#),
     )?;
 
-    let status = kanban_sqlite::search_index_status(&temp.path, "default")?;
+    let status = kanban_sqlite::api::search_index_status(&temp.path, "default")?;
     assert_eq!(status.backend, "sqlite");
     assert!(status.derived_index);
     assert!(status.stale);
@@ -1067,7 +1067,7 @@ fn tantivy_literal_special_searches_fall_back_to_sqlite_after_rebuild() -> anyho
         CreateTask::ready("literal quote \" token"),
     )?;
 
-    kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
 
     for (query, expected) in [
         ("100%", percent.id.as_str()),
@@ -1140,7 +1140,7 @@ fn tantivy_exact_task_ref_searches_fall_back_to_sqlite_after_rebuild() -> anyhow
         CreateTask::ready("other board same seq"),
     )?;
 
-    kanban_sqlite::rebuild_search_index(&temp.path, "default")?;
+    kanban_sqlite::api::rebuild_search_index(&temp.path, "default")?;
 
     for query in ["1", "#1", "default#1", "default/#1", first.id.as_str()] {
         let results = search_tasks(

@@ -5,10 +5,10 @@ async fn search_returns_hits_with_tasks_and_sqlite_status() -> anyhow::Result<()
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     for name in ["backend", "frontend"] {
-        kanban_sqlite::create_label(
+        kanban_sqlite::api::create_label(
             &db_path,
             "default",
-            kanban_sqlite::CreateLabel {
+            kanban_sqlite::api::CreateLabel {
                 name: name.to_owned(),
                 color: None,
             },
@@ -26,11 +26,11 @@ async fn search_returns_hits_with_tasks_and_sqlite_status() -> anyhow::Result<()
             vec!["frontend".to_owned()],
         ),
     ] {
-        kanban_sqlite::create_task_with_labels(
+        kanban_sqlite::api::create_task_with_labels(
             &db_path,
             "default",
             "seed",
-            kanban_sqlite::CreateTask {
+            kanban_sqlite::api::CreateTask {
                 title: title.to_owned(),
                 description: Some("ready spec api-needle".to_owned()),
                 status: Some(kanban_core::TaskStatus::Ready),
@@ -96,11 +96,11 @@ async fn search_by_status_returns_per_status_windows() -> anyhow::Result<()> {
         ("todo batch needle", kanban_core::TaskStatus::Todo),
         ("triage batch needle", kanban_core::TaskStatus::Triage),
     ] {
-        kanban_sqlite::create_task(
+        kanban_sqlite::api::create_task(
             &db_path,
             "default",
             "seed",
-            kanban_sqlite::CreateTask {
+            kanban_sqlite::api::CreateTask {
                 title: title.to_owned(),
                 description: Some("search batch spec".to_owned()),
                 status: Some(status),
@@ -152,11 +152,11 @@ mod tantivy_backend {
     async fn search_uses_tantivy_index_when_rebuilt() -> anyhow::Result<()> {
         let test = TestApp::new()?;
         let db_path = test.db_path().to_path_buf();
-        kanban_sqlite::create_task(
+        kanban_sqlite::api::create_task(
             &db_path,
             "default",
             "seed",
-            kanban_sqlite::CreateTask {
+            kanban_sqlite::api::CreateTask {
                 title: "api tantivy comet".to_owned(),
                 description: Some("ready spec".to_owned()),
                 status: Some(kanban_core::TaskStatus::Ready),
@@ -169,7 +169,7 @@ mod tantivy_backend {
             },
         )
         .context("seed task")?;
-        kanban_sqlite::rebuild_search_index(&db_path, "default").context("rebuild index")?;
+        kanban_sqlite::api::rebuild_search_index(&db_path, "default").context("rebuild index")?;
         let app = test.router();
 
         let (status, json) = get_json(
@@ -218,11 +218,11 @@ async fn search_treats_like_wildcards_as_literal_text() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     for title in ["literal percent % api", "plain api control"] {
-        kanban_sqlite::create_task(
+        kanban_sqlite::api::create_task(
             &db_path,
             "default",
             "seed",
-            kanban_sqlite::CreateTask {
+            kanban_sqlite::api::CreateTask {
                 title: title.to_owned(),
                 description: Some("ready spec".to_owned()),
                 status: Some(kanban_core::TaskStatus::Ready),
@@ -250,18 +250,18 @@ async fn search_treats_like_wildcards_as_literal_text() -> anyhow::Result<()> {
 async fn search_matches_task_refs_exactly() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let first = kanban_sqlite::create_task(
+    let first = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("first api task"),
+        kanban_sqlite::api::CreateTask::ready("first api task"),
     )
     .context("seed first task")?;
-    let _second = kanban_sqlite::create_task(
+    let _second = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("title mentions 1 but must not match numeric search"),
+        kanban_sqlite::api::CreateTask::ready("title mentions 1 but must not match numeric search"),
     )
     .context("seed second task")?;
     let app = test.router();

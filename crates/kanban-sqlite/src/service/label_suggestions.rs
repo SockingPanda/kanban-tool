@@ -1,4 +1,4 @@
-use crate::connect_file;
+use crate::db::connect_file;
 
 use super::{
     LabelSuggestionCandidate, LabelSuggestionEvidenceAtom, LabelSuggestionOptions,

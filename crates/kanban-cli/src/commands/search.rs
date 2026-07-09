@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use kanban_search::SearchQuery;
-use kanban_sqlite::{MAX_SEARCH_LIMIT, search_tasks};
+use kanban_sqlite::api::{MAX_SEARCH_LIMIT, search_tasks};
 
 use crate::args::{SearchArgs, SearchOutput, SearchOutputHit};
 use crate::commands::common::validate_page_bounds;
@@ -39,7 +39,7 @@ pub(crate) fn handle_search(
         .hits
         .into_iter()
         .map(|hit| {
-            let task = kanban_sqlite::get_task_by_id_global(db_path, &hit.task_id)?;
+            let task = kanban_sqlite::api::get_task_by_id_global(db_path, &hit.task_id)?;
             Ok(SearchOutputHit {
                 task_id: hit.task_id,
                 seq: hit.seq,

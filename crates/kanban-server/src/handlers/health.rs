@@ -24,7 +24,7 @@ pub(crate) async fn health(
         .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
-    let report = kanban_sqlite::doctor_database(state.db_path())?;
+    let report = kanban_sqlite::api::doctor_database(state.db_path())?;
     if !report.ok {
         return Err(invalid_input(format!(
             "database failed health check: {}",

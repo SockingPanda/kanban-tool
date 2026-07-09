@@ -6,8 +6,8 @@ use axum::{
     },
     http::{HeaderMap, StatusCode},
 };
+use kanban_application::api::{self as application_api, TaskPlanFilter};
 use kanban_core::TaskStatus;
-use kanban_sqlite::TaskPlanFilter;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value as JsonValue, json};
 use std::str::FromStr;
@@ -157,23 +157,23 @@ fn task_get_includes_ontology(include: Option<&str>) -> bool {
 }
 
 fn default_label_suggestion_limit() -> usize {
-    kanban_sqlite::LabelSuggestionOptions::default().output_limit
+    kanban_sqlite::api::LabelSuggestionOptions::default().output_limit
 }
 
 fn default_label_suggestion_candidate_limit() -> usize {
-    kanban_sqlite::LabelSuggestionOptions::default().candidate_limit
+    kanban_sqlite::api::LabelSuggestionOptions::default().candidate_limit
 }
 
 fn default_label_suggestion_atom_limit() -> usize {
-    kanban_sqlite::LabelSuggestionOptions::default().atom_limit
+    kanban_sqlite::api::LabelSuggestionOptions::default().atom_limit
 }
 
 fn default_label_suggestion_max_selected_labels() -> usize {
-    kanban_sqlite::LabelSuggestionOptions::default().max_selected_labels
+    kanban_sqlite::api::LabelSuggestionOptions::default().max_selected_labels
 }
 
 fn default_label_suggestion_min_score() -> f32 {
-    kanban_sqlite::LabelSuggestionOptions::default().min_score
+    kanban_sqlite::api::LabelSuggestionOptions::default().min_score
 }
 
 #[derive(Debug, Default)]
@@ -233,7 +233,7 @@ pub(crate) struct CreateTaskBody {
     description: Option<String>,
     status: Option<TaskStatus>,
     assignee: Option<String>,
-    #[serde(default = "kanban_sqlite::default_priority")]
+    #[serde(default = "kanban_sqlite::api::default_priority")]
     priority: i64,
     scheduled_at: Option<i64>,
     due_at: Option<i64>,
@@ -282,7 +282,7 @@ pub(crate) struct BootstrapTaskLabelBody {
 #[derive(Debug, Serialize)]
 pub(crate) struct BootstrapTaskLabelDto {
     task: TaskDto,
-    semantics: kanban_sqlite::LabelSemanticsRecord,
+    semantics: kanban_sqlite::api::LabelSemanticsRecord,
 }
 
 impl AddTaskLabelBody {
@@ -302,7 +302,7 @@ impl AddTaskLabelBody {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct LabelProposalBody {
-    proposal: Option<kanban_sqlite::LabelProposalCandidate>,
+    proposal: Option<kanban_sqlite::api::LabelProposalCandidate>,
     actor: Option<String>,
     #[serde(default)]
     source_signal_ids: Vec<String>,
@@ -345,19 +345,19 @@ pub(crate) struct LabelOntologyCandidateAtomBody {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct LabelOntologySignalBody {
-    kind: kanban_sqlite::LabelOntologySignalKind,
+    kind: kanban_sqlite::api::LabelOntologySignalKind,
     target_label_ref: Option<String>,
     #[serde(default)]
     related_labels: JsonBodyField,
     related_labels_json: Option<String>,
-    proposed_action: kanban_sqlite::LabelOntologyProposedAction,
+    proposed_action: kanban_sqlite::api::LabelOntologyProposedAction,
     candidate_atom: Option<LabelOntologyCandidateAtomBody>,
     proposed_label_name: Option<String>,
     #[serde(default)]
     proposal: JsonBodyField,
     proposal_json: Option<String>,
     agent_selected: bool,
-    suggest_state: Option<kanban_sqlite::LabelOntologySuggestState>,
+    suggest_state: Option<kanban_sqlite::api::LabelOntologySuggestState>,
     suggest_score: Option<f64>,
     suggest_rank: Option<i64>,
     final_selected: bool,
@@ -395,7 +395,7 @@ pub(crate) struct LabelOntologyObservationBody {
 #[serde(deny_unknown_fields)]
 pub(crate) struct LabelOntologyActionBody {
     actor: LabelOntologyActorBody,
-    action_type: kanban_sqlite::LabelOntologyActionType,
+    action_type: kanban_sqlite::api::LabelOntologyActionType,
     signal_ids: Vec<String>,
     reason: String,
     superseded_by_signal_id: Option<String>,
@@ -410,7 +410,7 @@ pub(crate) struct LabelOntologyActionBody {
     #[serde(default)]
     change: JsonBodyField,
     change_json: Option<String>,
-    validation_status: Option<kanban_sqlite::LabelOntologyValidationStatus>,
+    validation_status: Option<kanban_sqlite::api::LabelOntologyValidationStatus>,
     #[serde(default)]
     validation: JsonBodyField,
     validation_json: Option<String>,
@@ -447,7 +447,7 @@ pub(crate) struct LabelOntologyValidationBody {
     #[serde(default)]
     signal_ids: Vec<String>,
     reason: String,
-    validation_status: kanban_sqlite::LabelOntologyValidationStatus,
+    validation_status: kanban_sqlite::api::LabelOntologyValidationStatus,
     #[serde(default)]
     validation: JsonBodyField,
     validation_json: Option<String>,
@@ -494,7 +494,7 @@ pub(crate) async fn list_tasks(
     let Query(query) = query.map_err(extractor_error)?;
     validate_page_bounds(
         query.limit,
-        kanban_sqlite::MAX_TASK_LIST_LIMIT,
+        kanban_sqlite::api::MAX_TASK_LIST_LIMIT,
         query.offset,
     )?;
     let statuses = parse_status_filters(raw_query.as_deref())?;
@@ -515,10 +515,11 @@ pub(crate) async fn list_tasks(
         .filter(|value| !value.is_empty())
         .map(str::to_owned);
     let sort = parse_task_sort(query.sort.as_deref())?;
-    let page = kanban_sqlite::list_tasks_page(
-        state.db_path(),
+    let application = state.application();
+    let page = application_api::list_tasks_page(
+        &application,
         &board,
-        kanban_sqlite::TaskListOptions {
+        application_api::TaskListOptions {
             statuses,
             priorities,
             labels,
@@ -547,7 +548,7 @@ pub(crate) async fn list_tasks_by_status(
     let Query(query) = query.map_err(extractor_error)?;
     validate_page_bounds(
         query.limit,
-        kanban_sqlite::MAX_TASK_LIST_LIMIT,
+        kanban_sqlite::api::MAX_TASK_LIST_LIMIT,
         query.offset,
     )?;
     let statuses = parse_status_filters(raw_query.as_deref())?;
@@ -568,12 +569,13 @@ pub(crate) async fn list_tasks_by_status(
         .filter(|value| !value.is_empty())
         .map(str::to_owned);
     let sort = parse_task_sort(query.sort.as_deref())?;
+    let application = state.application();
     let mut windows = Vec::with_capacity(statuses.len());
     for status in statuses {
-        let page = kanban_sqlite::list_tasks_page(
-            state.db_path(),
+        let page = application_api::list_tasks_page(
+            &application,
             &board,
-            kanban_sqlite::TaskListOptions {
+            application_api::TaskListOptions {
                 statuses: vec![status],
                 priorities: priorities.clone(),
                 labels: labels.clone(),
@@ -626,7 +628,7 @@ pub(crate) async fn create_task(
 ) -> Result<(StatusCode, Json<Envelope<TaskDto>>), ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let input = kanban_sqlite::CreateTask {
+    let input = kanban_sqlite::api::CreateTask {
         title: body.title,
         description: body.description,
         status: body.status,
@@ -637,7 +639,7 @@ pub(crate) async fn create_task(
         max_retries: body.max_retries,
         metadata_json: metadata_json(body.metadata)?,
     };
-    let task = kanban_sqlite::create_task_with_labels_and_dependencies(
+    let task = kanban_sqlite::api::create_task_with_labels_and_dependencies(
         state.db_path(),
         &board,
         &actor,
@@ -659,7 +661,7 @@ pub(crate) async fn list_board_labels(
     Path(board): Path<String>,
 ) -> Result<Json<Envelope<Vec<LabelDto>>>, ApiError> {
     Ok(Json(Envelope {
-        data: kanban_sqlite::list_labels(state.db_path(), &board)?
+        data: kanban_sqlite::api::list_labels(state.db_path(), &board)?
             .into_iter()
             .map(LabelDto::from)
             .collect(),
@@ -673,10 +675,10 @@ pub(crate) async fn create_board_label(
     body: Result<Json<CreateLabelBody>, JsonRejection>,
 ) -> Result<(StatusCode, Json<Envelope<LabelDto>>), ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
-    let label = kanban_sqlite::create_label(
+    let label = kanban_sqlite::api::create_label(
         state.db_path(),
         &board,
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: body.name,
             color: body.color,
         },
@@ -693,9 +695,9 @@ pub(crate) async fn create_board_label(
 pub(crate) async fn list_label_semantics(
     State(state): State<AppState>,
     Path(board): Path<String>,
-) -> Result<Json<Envelope<Vec<kanban_sqlite::LabelSemanticsRecord>>>, ApiError> {
+) -> Result<Json<Envelope<Vec<kanban_sqlite::api::LabelSemanticsRecord>>>, ApiError> {
     Ok(Json(Envelope {
-        data: kanban_sqlite::list_label_semantics(state.db_path(), &board)?,
+        data: kanban_sqlite::api::list_label_semantics(state.db_path(), &board)?,
         meta: None,
     }))
 }
@@ -703,10 +705,10 @@ pub(crate) async fn list_label_semantics(
 pub(crate) async fn get_label_semantics(
     State(state): State<AppState>,
     Path((board, label_id)): Path<(String, String)>,
-) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticsRecord>>, ApiError> {
+) -> Result<Json<Envelope<kanban_sqlite::api::LabelSemanticsRecord>>, ApiError> {
     let label_id = require_label_id_path(label_id)?;
     Ok(Json(Envelope {
-        data: kanban_sqlite::get_label_semantics_by_id(state.db_path(), &board, &label_id)?,
+        data: kanban_sqlite::api::get_label_semantics_by_id(state.db_path(), &board, &label_id)?,
         meta: None,
     }))
 }
@@ -716,19 +718,19 @@ pub(crate) async fn upsert_label_semantics(
     Path((board, label_id)): Path<(String, String)>,
     headers: HeaderMap,
     body: Result<Json<UpsertLabelSemanticsBody>, JsonRejection>,
-) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticsRecord>>, ApiError> {
+) -> Result<Json<Envelope<kanban_sqlite::api::LabelSemanticsRecord>>, ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let label_id = require_label_id_path(label_id)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let mut options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor(actor);
+    let mut options = kanban_sqlite::api::LabelSemanticsMutationOptions::manual_actor(actor);
     options.reason = body.reason;
     options.source_signal_ids = body.source_signal_ids;
     Ok(Json(Envelope {
-        data: kanban_sqlite::upsert_label_semantics_by_id_with_options(
+        data: kanban_sqlite::api::upsert_label_semantics_by_id_with_options(
             state.db_path(),
             &board,
             &label_id,
-            kanban_sqlite::UpsertLabelSemantics {
+            kanban_sqlite::api::UpsertLabelSemantics {
                 label_ref: label_id.clone(),
                 expected_semantics_hash: body.expected_semantics_hash,
                 replace: body.replace,
@@ -756,10 +758,11 @@ pub(crate) async fn delete_label_semantics(
 ) -> Result<Json<Envelope<serde_json::Value>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
     let label_id = require_label_id_path(label_id)?;
-    let mut options =
-        kanban_sqlite::LabelSemanticsMutationOptions::manual_actor(actor(None, &headers, &state));
+    let mut options = kanban_sqlite::api::LabelSemanticsMutationOptions::manual_actor(actor(
+        None, &headers, &state,
+    ));
     options.reason = Some(query.reason);
-    kanban_sqlite::clear_label_semantics_by_id_with_options(
+    kanban_sqlite::api::clear_label_semantics_by_id_with_options(
         state.db_path(),
         &board,
         &label_id,
@@ -784,9 +787,9 @@ fn require_label_id_path(label_id: String) -> Result<String, ApiError> {
 pub(crate) async fn list_label_atoms(
     State(state): State<AppState>,
     Path(board): Path<String>,
-) -> Result<Json<Envelope<Vec<kanban_sqlite::LabelAtomRecord>>>, ApiError> {
+) -> Result<Json<Envelope<Vec<kanban_sqlite::api::LabelAtomRecord>>>, ApiError> {
     Ok(Json(Envelope {
-        data: kanban_sqlite::list_label_atoms(state.db_path(), &board)?,
+        data: kanban_sqlite::api::list_label_atoms(state.db_path(), &board)?,
         meta: None,
     }))
 }
@@ -794,9 +797,9 @@ pub(crate) async fn list_label_atoms(
 pub(crate) async fn explain_label_atom(
     State(state): State<AppState>,
     Path((board, atom_ref)): Path<(String, String)>,
-) -> Result<Json<Envelope<kanban_sqlite::LabelAtomExplainRecord>>, ApiError> {
+) -> Result<Json<Envelope<kanban_sqlite::api::LabelAtomExplainRecord>>, ApiError> {
     Ok(Json(Envelope {
-        data: kanban_sqlite::explain_label_atom(state.db_path(), &board, &atom_ref)?,
+        data: kanban_sqlite::api::explain_label_atom(state.db_path(), &board, &atom_ref)?,
         meta: None,
     }))
 }
@@ -829,7 +832,7 @@ pub(crate) async fn query_label_atom_index(
     query: Result<Query<LabelAtomIndexQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<JsonValue>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
-    validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
+    validate_page_bounds(query.limit, kanban_sqlite::api::MAX_TASK_LIST_LIMIT, 0)?;
     let text = query
         .q
         .as_deref()
@@ -875,7 +878,7 @@ pub(crate) async fn list_task_labels(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
 ) -> Result<Json<Envelope<Vec<LabelDto>>>, ApiError> {
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     Ok(Json(Envelope {
         data: task.labels.into_iter().map(LabelDto::from).collect(),
         meta: None,
@@ -886,10 +889,10 @@ pub(crate) async fn suggest_task_labels(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
     query: Result<Query<LabelSuggestionQuery>, QueryRejection>,
-) -> Result<Json<Envelope<kanban_sqlite::LabelSuggestionResult>>, ApiError> {
+) -> Result<Json<Envelope<kanban_sqlite::api::LabelSuggestionResult>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
     let options = label_suggestion_options(query)?;
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     let label_state = state.clone();
     let label_board = task.board_slug;
     let label_task_id = task_id;
@@ -917,7 +920,7 @@ pub(crate) async fn add_task_label(
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
     let label_names = body.label_names()?;
-    let result = kanban_sqlite::add_task_labels_by_id_with_options(
+    let result = kanban_sqlite::api::add_task_labels_by_id_with_options(
         state.db_path(),
         &actor,
         &task_id,
@@ -951,11 +954,11 @@ pub(crate) async fn bootstrap_task_label(
 ) -> Result<(StatusCode, Json<Envelope<BootstrapTaskLabelDto>>), ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let result = kanban_sqlite::bootstrap_task_label_by_id(
+    let result = kanban_sqlite::api::bootstrap_task_label_by_id(
         state.db_path(),
         &actor,
         &task_id,
-        kanban_sqlite::BootstrapTaskLabel {
+        kanban_sqlite::api::BootstrapTaskLabel {
             name: body.name,
             description: body.description,
             applies_when: body.applies_when,
@@ -985,7 +988,7 @@ pub(crate) async fn propose_task_label(
 ) -> Result<
     (
         StatusCode,
-        Json<Envelope<kanban_sqlite::LabelProposalAttempt>>,
+        Json<Envelope<kanban_sqlite::api::LabelProposalAttempt>>,
     ),
     ApiError,
 > {
@@ -1004,13 +1007,13 @@ pub(crate) async fn propose_task_label(
         Err(error) => return Err(extractor_error(error)),
     };
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let create_options = kanban_sqlite::LabelProposalCreateOptions {
+    let create_options = kanban_sqlite::api::LabelProposalCreateOptions {
         source_signal_ids: body.source_signal_ids,
         ontology_actor: body.ontology_actor.map(label_ontology_actor_input),
         allow_retarget: body.allow_retarget,
         retarget_reason: body.retarget_reason,
     };
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     let label_state = state.clone();
     let label_board = task.board_slug;
     let label_task_id = task.id;
@@ -1048,12 +1051,12 @@ pub(crate) async fn propose_task_label(
 
 fn label_suggestion_options(
     query: LabelSuggestionQuery,
-) -> Result<kanban_sqlite::LabelSuggestionOptions, ApiError> {
+) -> Result<kanban_sqlite::api::LabelSuggestionOptions, ApiError> {
     validate_label_suggestion_bound("limit", query.limit)?;
     validate_label_suggestion_bound("candidate_limit", query.candidate_limit)?;
     validate_label_suggestion_bound("atom_limit", query.atom_limit)?;
     validate_label_suggestion_bound("max_selected_labels", query.max_selected_labels)?;
-    Ok(kanban_sqlite::LabelSuggestionOptions {
+    Ok(kanban_sqlite::api::LabelSuggestionOptions {
         output_limit: query.limit,
         candidate_limit: query.candidate_limit,
         atom_limit: query.atom_limit,
@@ -1066,18 +1069,18 @@ fn validate_label_suggestion_bound(name: &str, value: usize) -> Result<(), ApiEr
     if value == 0 {
         return Err(invalid_input(format!("{name} must be >= 1")));
     }
-    validate_page_bounds(value, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)
+    validate_page_bounds(value, kanban_sqlite::api::MAX_TASK_LIST_LIMIT, 0)
 }
 
 pub(crate) async fn list_task_label_proposals(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
-) -> Result<Json<Envelope<Vec<kanban_sqlite::LabelSemanticProposalRecord>>>, ApiError> {
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
-    let proposals = kanban_sqlite::list_label_proposals(
+) -> Result<Json<Envelope<Vec<kanban_sqlite::api::LabelSemanticProposalRecord>>>, ApiError> {
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
+    let proposals = kanban_sqlite::api::list_label_proposals(
         state.db_path(),
         &task.board_slug,
-        kanban_sqlite::LabelProposalListOptions {
+        kanban_sqlite::api::LabelProposalListOptions {
             task_ref: Some(task.id),
             status: None,
         },
@@ -1095,13 +1098,13 @@ pub(crate) async fn record_label_ontology_observation(
 ) -> Result<
     (
         StatusCode,
-        Json<Envelope<kanban_sqlite::LabelOntologyObservationRecord>>,
+        Json<Envelope<kanban_sqlite::api::LabelOntologyObservationRecord>>,
     ),
     ApiError,
 > {
     let Json(body) = body.map_err(extractor_error)?;
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
-    let observation = kanban_sqlite::record_label_ontology_observation(
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
+    let observation = kanban_sqlite::api::record_label_ontology_observation(
         state.db_path(),
         &task.board_slug,
         &task.id,
@@ -1121,13 +1124,13 @@ pub(crate) async fn list_signals(
     Path(board): Path<String>,
     RawQuery(raw_query): RawQuery,
     query: Result<Query<SignalQuery>, QueryRejection>,
-) -> Result<Json<Envelope<Vec<kanban_sqlite::SignalRecord>>>, ApiError> {
+) -> Result<Json<Envelope<Vec<kanban_sqlite::api::SignalRecord>>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
-    validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
-    let signals = kanban_sqlite::list_signals(
+    validate_page_bounds(query.limit, kanban_sqlite::api::MAX_TASK_LIST_LIMIT, 0)?;
+    let signals = kanban_sqlite::api::list_signals(
         state.db_path(),
         &board,
-        kanban_sqlite::SignalListOptions {
+        kanban_sqlite::api::SignalListOptions {
             statuses: parse_signal_status_filters(raw_query.as_deref())?,
             kinds: parse_string_filters(raw_query.as_deref(), "kind")?,
             task_ref: query.task_ref,
@@ -1149,13 +1152,13 @@ pub(crate) async fn review_signals(
     Path(board): Path<String>,
     RawQuery(raw_query): RawQuery,
     query: Result<Query<SignalQuery>, QueryRejection>,
-) -> Result<Json<Envelope<Vec<kanban_sqlite::SignalRecord>>>, ApiError> {
+) -> Result<Json<Envelope<Vec<kanban_sqlite::api::SignalRecord>>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
-    validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
-    let signals = kanban_sqlite::review_signals(
+    validate_page_bounds(query.limit, kanban_sqlite::api::MAX_TASK_LIST_LIMIT, 0)?;
+    let signals = kanban_sqlite::api::review_signals(
         state.db_path(),
         &board,
-        kanban_sqlite::SignalListOptions {
+        kanban_sqlite::api::SignalListOptions {
             statuses: parse_signal_status_filters(raw_query.as_deref())?,
             kinds: parse_string_filters(raw_query.as_deref(), "kind")?,
             task_ref: query.task_ref,
@@ -1175,9 +1178,9 @@ pub(crate) async fn review_signals(
 pub(crate) async fn get_signal(
     State(state): State<AppState>,
     Path(signal_id): Path<String>,
-) -> Result<Json<Envelope<kanban_sqlite::SignalRecord>>, ApiError> {
+) -> Result<Json<Envelope<kanban_sqlite::api::SignalRecord>>, ApiError> {
     Ok(Json(Envelope {
-        data: kanban_sqlite::get_signal_by_id(state.db_path(), &signal_id)?,
+        data: kanban_sqlite::api::get_signal_by_id(state.db_path(), &signal_id)?,
         meta: None,
     }))
 }
@@ -1187,13 +1190,13 @@ pub(crate) async fn list_label_ontology_signals(
     Path(board): Path<String>,
     RawQuery(raw_query): RawQuery,
     query: Result<Query<LabelOntologySignalQuery>, QueryRejection>,
-) -> Result<Json<Envelope<Vec<kanban_sqlite::LabelOntologySignalRecord>>>, ApiError> {
+) -> Result<Json<Envelope<Vec<kanban_sqlite::api::LabelOntologySignalRecord>>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
-    validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
-    let signals = kanban_sqlite::list_label_ontology_signals(
+    validate_page_bounds(query.limit, kanban_sqlite::api::MAX_TASK_LIST_LIMIT, 0)?;
+    let signals = kanban_sqlite::api::list_label_ontology_signals(
         state.db_path(),
         &board,
-        kanban_sqlite::LabelOntologySignalListOptions {
+        kanban_sqlite::api::LabelOntologySignalListOptions {
             statuses: parse_label_ontology_status_filters(raw_query.as_deref())?,
             kinds: parse_label_ontology_kind_filters(raw_query.as_deref())?,
             task_ref: query.task_ref,
@@ -1213,14 +1216,14 @@ pub(crate) async fn review_label_ontology(
     State(state): State<AppState>,
     Path(board): Path<String>,
     query: Result<Query<LabelOntologyReviewQuery>, QueryRejection>,
-) -> Result<Json<Envelope<Vec<kanban_sqlite::LabelOntologyReviewGroup>>>, ApiError> {
+) -> Result<Json<Envelope<Vec<kanban_sqlite::api::LabelOntologyReviewGroup>>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
-    validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
-    let group_by = kanban_sqlite::LabelOntologyReviewGroupBy::from_str(&query.group_by)?;
-    let groups = kanban_sqlite::review_label_ontology(
+    validate_page_bounds(query.limit, kanban_sqlite::api::MAX_TASK_LIST_LIMIT, 0)?;
+    let group_by = kanban_sqlite::api::LabelOntologyReviewGroupBy::from_str(&query.group_by)?;
+    let groups = kanban_sqlite::api::review_label_ontology(
         state.db_path(),
         &board,
-        kanban_sqlite::LabelOntologyReviewOptions {
+        kanban_sqlite::api::LabelOntologyReviewOptions {
             group_by,
             include_all: query.include_all,
             limit: query.limit,
@@ -1239,9 +1242,9 @@ pub(crate) async fn review_label_ontology(
 pub(crate) async fn get_label_ontology_signal(
     State(state): State<AppState>,
     Path(signal_id): Path<String>,
-) -> Result<Json<Envelope<kanban_sqlite::LabelOntologySignalDetail>>, ApiError> {
+) -> Result<Json<Envelope<kanban_sqlite::api::LabelOntologySignalDetail>>, ApiError> {
     Ok(Json(Envelope {
-        data: kanban_sqlite::get_label_ontology_signal(state.db_path(), &signal_id)?,
+        data: kanban_sqlite::api::get_label_ontology_signal(state.db_path(), &signal_id)?,
         meta: None,
     }))
 }
@@ -1253,12 +1256,12 @@ pub(crate) async fn create_label_ontology_action(
 ) -> Result<
     (
         StatusCode,
-        Json<Envelope<kanban_sqlite::LabelOntologyActionRecord>>,
+        Json<Envelope<kanban_sqlite::api::LabelOntologyActionRecord>>,
     ),
     ApiError,
 > {
     let Json(body) = body.map_err(extractor_error)?;
-    let action = kanban_sqlite::create_label_ontology_action(
+    let action = kanban_sqlite::api::create_label_ontology_action(
         state.db_path(),
         &board,
         label_ontology_action_input(body)?,
@@ -1279,18 +1282,18 @@ pub(crate) async fn apply_label_ontology_atom(
 ) -> Result<
     (
         StatusCode,
-        Json<Envelope<kanban_sqlite::LabelOntologyActionRecord>>,
+        Json<Envelope<kanban_sqlite::api::LabelOntologyActionRecord>>,
     ),
     ApiError,
 > {
     let Json(body) = body.map_err(extractor_error)?;
     let allow_retarget = body.allow_retarget;
     let retarget_reason = body.retarget_reason.clone();
-    let action = kanban_sqlite::apply_label_ontology_atom_with_options(
+    let action = kanban_sqlite::api::apply_label_ontology_atom_with_options(
         state.db_path(),
         &board,
         label_ontology_atom_apply_input(body),
-        kanban_sqlite::LabelOntologyRetargetOptions {
+        kanban_sqlite::api::LabelOntologyRetargetOptions {
             allow_retarget,
             retarget_reason,
         },
@@ -1311,12 +1314,12 @@ pub(crate) async fn revert_label_ontology_mutation(
 ) -> Result<
     (
         StatusCode,
-        Json<Envelope<kanban_sqlite::LabelOntologyActionRecord>>,
+        Json<Envelope<kanban_sqlite::api::LabelOntologyActionRecord>>,
     ),
     ApiError,
 > {
     let Json(body) = body.map_err(extractor_error)?;
-    let action = kanban_sqlite::revert_label_ontology_mutation(
+    let action = kanban_sqlite::api::revert_label_ontology_mutation(
         state.db_path(),
         &board,
         label_ontology_revert_input(body),
@@ -1337,12 +1340,12 @@ pub(crate) async fn validate_label_ontology_action(
 ) -> Result<
     (
         StatusCode,
-        Json<Envelope<kanban_sqlite::LabelOntologyActionRecord>>,
+        Json<Envelope<kanban_sqlite::api::LabelOntologyActionRecord>>,
     ),
     ApiError,
 > {
     let Json(body) = body.map_err(extractor_error)?;
-    let action = kanban_sqlite::validate_label_ontology_action(
+    let action = kanban_sqlite::api::validate_label_ontology_action(
         state.db_path(),
         &board,
         label_ontology_validation_input(body)?,
@@ -1359,9 +1362,9 @@ pub(crate) async fn validate_label_ontology_action(
 pub(crate) async fn get_label_proposal(
     State(state): State<AppState>,
     Path(proposal_id): Path<String>,
-) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticProposalRecord>>, ApiError> {
+) -> Result<Json<Envelope<kanban_sqlite::api::LabelSemanticProposalRecord>>, ApiError> {
     Ok(Json(Envelope {
-        data: kanban_sqlite::get_label_proposal(state.db_path(), &proposal_id)?,
+        data: kanban_sqlite::api::get_label_proposal(state.db_path(), &proposal_id)?,
         meta: None,
     }))
 }
@@ -1371,17 +1374,17 @@ pub(crate) async fn accept_label_proposal(
     Path(proposal_id): Path<String>,
     headers: HeaderMap,
     body: Result<Json<LabelProposalDecisionBody>, JsonRejection>,
-) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticProposalRecord>>, ApiError> {
+) -> Result<Json<Envelope<kanban_sqlite::api::LabelSemanticProposalRecord>>, ApiError> {
     let body = optional_decision_body(body)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
     let ontology_actor = body.ontology_actor.map(label_ontology_actor_input);
     Ok(Json(Envelope {
-        data: kanban_sqlite::accept_label_proposal_with_options(
+        data: kanban_sqlite::api::accept_label_proposal_with_options(
             state.db_path(),
             &actor,
             &proposal_id,
             body.reason,
-            kanban_sqlite::LabelProposalDecisionOptions {
+            kanban_sqlite::api::LabelProposalDecisionOptions {
                 source_signal_ids: body.source_signal_ids,
                 ontology_actor,
                 allow_retarget: body.allow_retarget,
@@ -1397,7 +1400,7 @@ pub(crate) async fn reject_label_proposal(
     Path(proposal_id): Path<String>,
     headers: HeaderMap,
     body: Result<Json<LabelProposalDecisionBody>, JsonRejection>,
-) -> Result<Json<Envelope<kanban_sqlite::LabelSemanticProposalRecord>>, ApiError> {
+) -> Result<Json<Envelope<kanban_sqlite::api::LabelSemanticProposalRecord>>, ApiError> {
     let body = optional_decision_body(body)?;
     if !body.source_signal_ids.is_empty() {
         return Err(invalid_input(
@@ -1416,7 +1419,7 @@ pub(crate) async fn reject_label_proposal(
     }
     let actor = actor(body.actor.as_deref(), &headers, &state);
     Ok(Json(Envelope {
-        data: kanban_sqlite::reject_label_proposal(
+        data: kanban_sqlite::api::reject_label_proposal(
             state.db_path(),
             &actor,
             &proposal_id,
@@ -1445,7 +1448,7 @@ fn optional_decision_body(
 
 fn label_ontology_observation_input(
     body: LabelOntologyObservationBody,
-) -> Result<kanban_sqlite::LabelOntologyRecordInput, ApiError> {
+) -> Result<kanban_sqlite::api::LabelOntologyRecordInput, ApiError> {
     let (agent_candidates_json, _) = coalesce_json_body_field(
         "agent_candidates",
         body.agent_candidates,
@@ -1475,8 +1478,8 @@ fn label_ontology_observation_input(
         body.diagnostics_json,
         &suggestion_snapshot,
     )?;
-    Ok(kanban_sqlite::LabelOntologyRecordInput {
-        actor: kanban_sqlite::LabelOntologyActor {
+    Ok(kanban_sqlite::api::LabelOntologyRecordInput {
+        actor: kanban_sqlite::api::LabelOntologyActor {
             name: body.actor.name,
             actor_type: body.actor.actor_type,
             agent_type: body.actor.agent_type,
@@ -1528,7 +1531,7 @@ fn label_ontology_observation_input(
 
 fn label_ontology_signal_input(
     body: LabelOntologySignalBody,
-) -> Result<kanban_sqlite::LabelOntologySignalInput, ApiError> {
+) -> Result<kanban_sqlite::api::LabelOntologySignalInput, ApiError> {
     let (related_labels_json, _) = coalesce_json_body_field(
         "related_labels",
         body.related_labels,
@@ -1545,13 +1548,13 @@ fn label_ontology_signal_input(
         JsonBodyShape::Object,
         empty_json_object(),
     )?;
-    Ok(kanban_sqlite::LabelOntologySignalInput {
+    Ok(kanban_sqlite::api::LabelOntologySignalInput {
         kind: body.kind,
         target_label_ref: body.target_label_ref,
         related_labels_json,
         proposed_action: body.proposed_action,
         candidate_atom: body.candidate_atom.map(|candidate| {
-            kanban_sqlite::LabelOntologyCandidateAtomInput {
+            kanban_sqlite::api::LabelOntologyCandidateAtomInput {
                 polarity: candidate.polarity,
                 kind: candidate.kind,
                 text: candidate.text,
@@ -1570,8 +1573,10 @@ fn label_ontology_signal_input(
     })
 }
 
-fn label_ontology_actor_input(body: LabelOntologyActorBody) -> kanban_sqlite::LabelOntologyActor {
-    kanban_sqlite::LabelOntologyActor {
+fn label_ontology_actor_input(
+    body: LabelOntologyActorBody,
+) -> kanban_sqlite::api::LabelOntologyActor {
+    kanban_sqlite::api::LabelOntologyActor {
         name: body.name,
         actor_type: body.actor_type,
         agent_type: body.agent_type,
@@ -1580,8 +1585,8 @@ fn label_ontology_actor_input(body: LabelOntologyActorBody) -> kanban_sqlite::La
 
 fn label_ontology_action_input(
     body: LabelOntologyActionBody,
-) -> Result<kanban_sqlite::LabelOntologyActionInput, ApiError> {
-    Ok(kanban_sqlite::LabelOntologyActionInput {
+) -> Result<kanban_sqlite::api::LabelOntologyActionInput, ApiError> {
+    Ok(kanban_sqlite::api::LabelOntologyActionInput {
         actor: label_ontology_actor_input(body.actor),
         action_type: body.action_type,
         signal_ids: body.signal_ids,
@@ -1615,8 +1620,8 @@ fn label_ontology_action_input(
 
 fn label_ontology_atom_apply_input(
     body: LabelOntologyAtomApplyBody,
-) -> kanban_sqlite::LabelOntologyAtomApplyInput {
-    kanban_sqlite::LabelOntologyAtomApplyInput {
+) -> kanban_sqlite::api::LabelOntologyAtomApplyInput {
+    kanban_sqlite::api::LabelOntologyAtomApplyInput {
         actor: label_ontology_actor_input(body.actor),
         signal_ids: body.signal_ids,
         label_ref: body.label_ref,
@@ -1628,8 +1633,8 @@ fn label_ontology_atom_apply_input(
 
 fn label_ontology_revert_input(
     body: LabelOntologyRevertBody,
-) -> kanban_sqlite::LabelOntologyRevertInput {
-    kanban_sqlite::LabelOntologyRevertInput {
+) -> kanban_sqlite::api::LabelOntologyRevertInput {
+    kanban_sqlite::api::LabelOntologyRevertInput {
         actor: label_ontology_actor_input(body.actor),
         target_action_id: body.target_action_id,
         expected_current_hash: body.expected_current_hash,
@@ -1639,8 +1644,8 @@ fn label_ontology_revert_input(
 
 fn label_ontology_validation_input(
     body: LabelOntologyValidationBody,
-) -> Result<kanban_sqlite::LabelOntologyValidationInput, ApiError> {
-    Ok(kanban_sqlite::LabelOntologyValidationInput {
+) -> Result<kanban_sqlite::api::LabelOntologyValidationInput, ApiError> {
+    Ok(kanban_sqlite::api::LabelOntologyValidationInput {
         actor: label_ontology_actor_input(body.actor),
         parent_action_id: body.parent_action_id,
         signal_ids: body.signal_ids,
@@ -1871,19 +1876,19 @@ fn parse_string_filters(
 
 fn parse_label_ontology_status_filters(
     raw_query: Option<&str>,
-) -> Result<Vec<kanban_sqlite::LabelOntologySignalStatus>, ApiError> {
+) -> Result<Vec<kanban_sqlite::api::LabelOntologySignalStatus>, ApiError> {
     parse_label_ontology_filters(raw_query, "status")
 }
 
 fn parse_signal_status_filters(
     raw_query: Option<&str>,
-) -> Result<Vec<kanban_sqlite::SignalStatus>, ApiError> {
+) -> Result<Vec<kanban_sqlite::api::SignalStatus>, ApiError> {
     parse_label_ontology_filters(raw_query, "status")
 }
 
 fn parse_label_ontology_kind_filters(
     raw_query: Option<&str>,
-) -> Result<Vec<kanban_sqlite::LabelOntologySignalKind>, ApiError> {
+) -> Result<Vec<kanban_sqlite::api::LabelOntologySignalKind>, ApiError> {
     parse_label_ontology_filters(raw_query, "kind")
 }
 
@@ -1917,10 +1922,10 @@ fn suggest_task_labels_for_state(
     state: &AppState,
     board: &str,
     task_id: &str,
-    options: kanban_sqlite::LabelSuggestionOptions,
-) -> Result<kanban_sqlite::LabelSuggestionResult, ApiError> {
+    options: kanban_sqlite::api::LabelSuggestionOptions,
+) -> Result<kanban_sqlite::api::LabelSuggestionResult, ApiError> {
     let store = subprocess_vector_store_for_state(state, board)?;
-    kanban_sqlite::suggest_task_labels_with(state.db_path(), board, task_id, &store, options)
+    kanban_sqlite::api::suggest_task_labels_with(state.db_path(), board, task_id, &store, options)
         .map_err(ApiError::from)
 }
 
@@ -1947,22 +1952,22 @@ fn propose_task_label_for_state(
     board: &str,
     actor: &str,
     task_id: &str,
-    candidate: Option<kanban_sqlite::LabelProposalCandidate>,
-    options: kanban_sqlite::LabelSuggestionOptions,
-    create_options: kanban_sqlite::LabelProposalCreateOptions,
-) -> Result<kanban_sqlite::LabelProposalAttempt, ApiError> {
+    candidate: Option<kanban_sqlite::api::LabelProposalCandidate>,
+    options: kanban_sqlite::api::LabelSuggestionOptions,
+    create_options: kanban_sqlite::api::LabelProposalCreateOptions,
+) -> Result<kanban_sqlite::api::LabelProposalAttempt, ApiError> {
     match candidate {
         Some(candidate) => {
-            let provider = kanban_sqlite::ManualLabelProposalProvider::new(candidate);
+            let provider = kanban_sqlite::api::ManualLabelProposalProvider::new(candidate);
             let store = subprocess_vector_store_for_state(state, board)?;
-            kanban_sqlite::propose_task_label_with_store_and_create_options(
+            kanban_sqlite::api::propose_task_label_with_store_and_create_options(
                 state.db_path(),
                 board,
                 actor,
                 task_id,
                 &provider,
                 &store,
-                kanban_sqlite::LabelProposalProposeOptions {
+                kanban_sqlite::api::LabelProposalProposeOptions {
                     suggestion: options,
                     create: create_options,
                 },
@@ -1970,14 +1975,14 @@ fn propose_task_label_for_state(
         }
         None => {
             let store = subprocess_vector_store_for_state(state, board)?;
-            kanban_sqlite::propose_task_label_with_store_and_create_options(
+            kanban_sqlite::api::propose_task_label_with_store_and_create_options(
                 state.db_path(),
                 board,
                 actor,
                 task_id,
-                &kanban_sqlite::DisabledLabelProposalProvider,
+                &kanban_sqlite::api::DisabledLabelProposalProvider,
                 &store,
-                kanban_sqlite::LabelProposalProposeOptions {
+                kanban_sqlite::api::LabelProposalProposeOptions {
                     suggestion: options,
                     create: create_options,
                 },
@@ -2083,7 +2088,7 @@ pub(crate) async fn remove_task_label(
 ) -> Result<Json<Envelope<TaskDto>>, ApiError> {
     let actor = actor(None, &headers, &state);
     let task =
-        kanban_sqlite::remove_task_label_by_id(state.db_path(), &actor, &task_id, &label_ref)?;
+        kanban_sqlite::api::remove_task_label_by_id(state.db_path(), &actor, &task_id, &label_ref)?;
     Ok(Json(Envelope {
         data: TaskDto::from(task),
         meta: None,
@@ -2097,11 +2102,11 @@ pub(crate) async fn get_task(
 ) -> Result<Json<Envelope<TaskDto>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
     let include_ontology = task_get_includes_ontology(query.include.as_deref());
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     let meta = if include_ontology {
         Some(json!({
             "details": {
-                "ontology_summary": kanban_sqlite::task_ontology_summary_by_id_global(
+                "ontology_summary": kanban_sqlite::api::task_ontology_summary_by_id_global(
                     state.db_path(),
                     &task_id,
                 )?
@@ -2136,7 +2141,7 @@ pub(crate) async fn update_task(
     let retry_policy = retry_policy_from_value(object)?;
     let mut patch = patch_from_value(object)?;
     patch.max_retries = retry_policy;
-    let task = kanban_sqlite::update_task_by_id(state.db_path(), &actor, &task_id, patch)?;
+    let task = kanban_sqlite::api::update_task_by_id(state.db_path(), &actor, &task_id, patch)?;
     Ok(Json(Envelope {
         data: TaskDto::from(task),
         meta: None,

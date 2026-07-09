@@ -297,10 +297,10 @@ fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Resu
         )?;
     }
 
-    let page = kanban_sqlite::list_tasks_page(
+    let page = kanban_sqlite::api::list_tasks_page(
         &temp.path,
         "default",
-        kanban_sqlite::TaskListOptions {
+        kanban_sqlite::api::TaskListOptions {
             statuses: vec![],
             priorities: vec![0, 2],
             labels: vec![],
@@ -308,7 +308,7 @@ fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Resu
             include_archived: false,
             assignee: None,
             search: None,
-            sort: kanban_sqlite::TaskListSort::Title,
+            sort: kanban_sqlite::api::TaskListSort::Title,
             limit: 100,
             offset: 0,
         },
@@ -323,10 +323,10 @@ fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Resu
         ["alpha", "bravo"]
     );
 
-    let page = kanban_sqlite::list_tasks_page(
+    let page = kanban_sqlite::api::list_tasks_page(
         &temp.path,
         "default",
-        kanban_sqlite::TaskListOptions {
+        kanban_sqlite::api::TaskListOptions {
             statuses: vec![],
             priorities: vec![],
             labels: vec![],
@@ -334,7 +334,7 @@ fn task_list_page_filters_priorities_and_sorts_by_table_fields() -> anyhow::Resu
             include_archived: false,
             assignee: None,
             search: None,
-            sort: kanban_sqlite::TaskListSort::AssigneeDesc,
+            sort: kanban_sqlite::api::TaskListSort::AssigneeDesc,
             limit: 100,
             offset: 0,
         },
@@ -394,18 +394,18 @@ fn task_list_page_filters_execution_plan_and_step_progress() -> anyhow::Result<(
         },
     )?;
 
-    let plan_needed = kanban_sqlite::list_tasks_page(
+    let plan_needed = kanban_sqlite::api::list_tasks_page(
         &temp.path,
         "default",
-        kanban_sqlite::TaskListOptions {
+        kanban_sqlite::api::TaskListOptions {
             statuses: vec![],
             priorities: vec![],
             labels: vec![],
-            plan_filters: vec![kanban_sqlite::TaskPlanFilter::PlanNeeded],
+            plan_filters: vec![kanban_sqlite::api::TaskPlanFilter::PlanNeeded],
             include_archived: false,
             assignee: None,
             search: None,
-            sort: kanban_sqlite::TaskListSort::Seq,
+            sort: kanban_sqlite::api::TaskListSort::Seq,
             limit: 100,
             offset: 0,
         },
@@ -419,18 +419,18 @@ fn task_list_page_filters_execution_plan_and_step_progress() -> anyhow::Result<(
         [unplanned.id.as_str()]
     );
 
-    let has_steps = kanban_sqlite::list_tasks_page(
+    let has_steps = kanban_sqlite::api::list_tasks_page(
         &temp.path,
         "default",
-        kanban_sqlite::TaskListOptions {
+        kanban_sqlite::api::TaskListOptions {
             statuses: vec![],
             priorities: vec![],
             labels: vec![],
-            plan_filters: vec![kanban_sqlite::TaskPlanFilter::HasSteps],
+            plan_filters: vec![kanban_sqlite::api::TaskPlanFilter::HasSteps],
             include_archived: false,
             assignee: None,
             search: None,
-            sort: kanban_sqlite::TaskListSort::Seq,
+            sort: kanban_sqlite::api::TaskListSort::Seq,
             limit: 100,
             offset: 0,
         },
@@ -438,18 +438,18 @@ fn task_list_page_filters_execution_plan_and_step_progress() -> anyhow::Result<(
     assert_eq!(has_steps.tasks.len(), 1);
     assert_eq!(has_steps.tasks[0].id, parent.id);
 
-    let incomplete_required = kanban_sqlite::list_tasks_page(
+    let incomplete_required = kanban_sqlite::api::list_tasks_page(
         &temp.path,
         "default",
-        kanban_sqlite::TaskListOptions {
+        kanban_sqlite::api::TaskListOptions {
             statuses: vec![],
             priorities: vec![],
             labels: vec![],
-            plan_filters: vec![kanban_sqlite::TaskPlanFilter::IncompleteRequiredSteps],
+            plan_filters: vec![kanban_sqlite::api::TaskPlanFilter::IncompleteRequiredSteps],
             include_archived: false,
             assignee: None,
             search: None,
-            sort: kanban_sqlite::TaskListSort::Seq,
+            sort: kanban_sqlite::api::TaskListSort::Seq,
             limit: 100,
             offset: 0,
         },
@@ -468,7 +468,7 @@ fn task_create_with_missing_label_rolls_back_task_vocabulary_bindings_and_events
     init_database(&temp.path, "tester")?;
     let before = task_create_label_counts(&temp.path)?;
 
-    let error = result_err(kanban_sqlite::create_task_with_labels(
+    let error = result_err(kanban_sqlite::api::create_task_with_labels(
         &temp.path,
         "default",
         "tester",
@@ -482,7 +482,7 @@ fn task_create_with_missing_label_rolls_back_task_vocabulary_bindings_and_events
     assert!(!message.contains("pass --create-missing"));
     assert_eq!(task_create_label_counts(&temp.path)?, before);
     assert!(list_tasks(&temp.path, "default", &[], false)?.is_empty());
-    assert!(kanban_sqlite::list_labels(&temp.path, "default")?.is_empty());
+    assert!(kanban_sqlite::api::list_labels(&temp.path, "default")?.is_empty());
     Ok(())
 }
 
@@ -502,7 +502,7 @@ fn task_create_with_mixed_existing_and_missing_labels_rolls_back_atomically() ->
     )?;
     let before = task_create_label_counts(&temp.path)?;
 
-    let error = result_err(kanban_sqlite::create_task_with_labels(
+    let error = result_err(kanban_sqlite::api::create_task_with_labels(
         &temp.path,
         "default",
         "tester",
@@ -516,7 +516,7 @@ fn task_create_with_mixed_existing_and_missing_labels_rolls_back_atomically() ->
     assert!(!message.contains("pass --create-missing"));
     assert_eq!(task_create_label_counts(&temp.path)?, before);
     assert_eq!(
-        kanban_sqlite::list_labels(&temp.path, "default")?
+        kanban_sqlite::api::list_labels(&temp.path, "default")?
             .into_iter()
             .map(|label| label.id)
             .collect::<Vec<_>>(),
@@ -539,7 +539,7 @@ fn task_create_with_existing_label_binds_without_creating_vocabulary() -> anyhow
         },
     )?;
 
-    let task = kanban_sqlite::create_task_with_labels(
+    let task = kanban_sqlite::api::create_task_with_labels(
         &temp.path,
         "default",
         "tester",
@@ -549,7 +549,10 @@ fn task_create_with_existing_label_binds_without_creating_vocabulary() -> anyhow
 
     assert_eq!(task.labels.len(), 1);
     assert_eq!(task.labels[0].id, backend.id);
-    assert_eq!(kanban_sqlite::list_labels(&temp.path, "default")?.len(), 1);
+    assert_eq!(
+        kanban_sqlite::api::list_labels(&temp.path, "default")?.len(),
+        1
+    );
     let events = list_events(&temp.path, "default", Some(&task.id))?;
     assert_eq!(
         events
@@ -596,20 +599,20 @@ fn labels_create_attach_filter_and_remove_without_status_side_effects() -> anyho
         },
     )?;
 
-    let backend = kanban_sqlite::create_label(
+    let backend = kanban_sqlite::api::create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".into(),
             color: Some("#336699".into()),
         },
     )?;
     assert_eq!(backend.name, "backend");
     assert_eq!(
-        kanban_sqlite::create_label(
+        kanban_sqlite::api::create_label(
             &temp.path,
             "default",
-            kanban_sqlite::CreateLabel {
+            kanban_sqlite::api::CreateLabel {
                 name: "backend".into(),
                 color: None,
             },
@@ -619,7 +622,7 @@ fn labels_create_attach_filter_and_remove_without_status_side_effects() -> anyho
     );
 
     let labeled =
-        kanban_sqlite::add_task_label(&temp.path, "default", "tester", &ready.id, "backend")?;
+        kanban_sqlite::api::add_task_label(&temp.path, "default", "tester", &ready.id, "backend")?;
     assert_eq!(labeled.status, TaskStatus::Ready);
     assert_eq!(
         labeled
@@ -631,7 +634,7 @@ fn labels_create_attach_filter_and_remove_without_status_side_effects() -> anyho
     );
 
     let duplicate =
-        kanban_sqlite::add_task_label(&temp.path, "default", "tester", &ready.id, "backend")?;
+        kanban_sqlite::api::add_task_label(&temp.path, "default", "tester", &ready.id, "backend")?;
     assert_eq!(duplicate.labels.len(), 1);
 
     create_label(
@@ -643,14 +646,14 @@ fn labels_create_attach_filter_and_remove_without_status_side_effects() -> anyho
         },
     )?;
     let labeled_todo =
-        kanban_sqlite::add_task_label(&temp.path, "default", "tester", &todo.id, "frontend")?;
+        kanban_sqlite::api::add_task_label(&temp.path, "default", "tester", &todo.id, "frontend")?;
     assert_eq!(labeled_todo.status, TaskStatus::Todo);
     assert_eq!(labeled_todo.labels[0].name, "frontend");
 
-    let page = kanban_sqlite::list_tasks_page(
+    let page = kanban_sqlite::api::list_tasks_page(
         &temp.path,
         "default",
-        kanban_sqlite::TaskListOptions {
+        kanban_sqlite::api::TaskListOptions {
             statuses: vec![],
             priorities: vec![],
             labels: vec!["backend".into()],
@@ -658,7 +661,7 @@ fn labels_create_attach_filter_and_remove_without_status_side_effects() -> anyho
             include_archived: false,
             assignee: None,
             search: None,
-            sort: kanban_sqlite::TaskListSort::Seq,
+            sort: kanban_sqlite::api::TaskListSort::Seq,
             limit: 100,
             offset: 0,
         },
@@ -667,8 +670,9 @@ fn labels_create_attach_filter_and_remove_without_status_side_effects() -> anyho
     assert_eq!(page.tasks[0].id, ready.id);
     assert_eq!(page.tasks[0].labels[0].id, backend.id);
 
-    let removed =
-        kanban_sqlite::remove_task_label(&temp.path, "default", "tester", &ready.id, "backend")?;
+    let removed = kanban_sqlite::api::remove_task_label(
+        &temp.path, "default", "tester", &ready.id, "backend",
+    )?;
     assert_eq!(removed.status, TaskStatus::Ready);
     assert!(removed.labels.is_empty());
 
@@ -696,7 +700,7 @@ fn task_label_batch_add_normalizes_dedups_and_events_new_bindings_only() -> anyh
         )?;
     }
 
-    let first = kanban_sqlite::add_task_labels(
+    let first = kanban_sqlite::api::add_task_labels(
         &temp.path,
         "default",
         "tester",
@@ -717,7 +721,7 @@ fn task_label_batch_add_normalizes_dedups_and_events_new_bindings_only() -> anyh
         .collect::<Vec<_>>();
     assert_eq!(added_events.len(), 2);
 
-    let second = kanban_sqlite::add_task_labels(
+    let second = kanban_sqlite::api::add_task_labels(
         &temp.path,
         "default",
         "tester",
@@ -752,7 +756,7 @@ fn task_label_add_requires_existing_label_unless_create_missing() -> anyhow::Res
         CreateTask::ready("Vocabulary guard target"),
     )?;
 
-    let error = result_err(kanban_sqlite::add_task_labels(
+    let error = result_err(kanban_sqlite::api::add_task_labels(
         &temp.path,
         "default",
         "tester",
@@ -765,9 +769,9 @@ fn task_label_add_requires_existing_label_unless_create_missing() -> anyhow::Res
             .contains("label backend-typo does not exist")
     );
     assert!(get_task(&temp.path, "default", &task.id)?.labels.is_empty());
-    assert!(kanban_sqlite::list_labels(&temp.path, "default")?.is_empty());
+    assert!(kanban_sqlite::api::list_labels(&temp.path, "default")?.is_empty());
 
-    let created = kanban_sqlite::add_task_labels_with_options(
+    let created = kanban_sqlite::api::add_task_labels_with_options(
         &temp.path,
         "default",
         "tester",
@@ -778,9 +782,12 @@ fn task_label_add_requires_existing_label_unless_create_missing() -> anyhow::Res
     assert_eq!(created.created_labels.len(), 1);
     assert_eq!(created.created_labels[0].name, "backend-typo");
     assert_eq!(created.task.labels[0].name, "backend-typo");
-    assert_eq!(kanban_sqlite::list_labels(&temp.path, "default")?.len(), 1);
+    assert_eq!(
+        kanban_sqlite::api::list_labels(&temp.path, "default")?.len(),
+        1
+    );
 
-    let repeated = kanban_sqlite::add_task_labels_with_options(
+    let repeated = kanban_sqlite::api::add_task_labels_with_options(
         &temp.path,
         "default",
         "tester",
@@ -805,7 +812,7 @@ fn task_label_batch_add_validates_before_mutating() -> anyhow::Result<()> {
         CreateTask::ready("Invalid batch label target"),
     )?;
 
-    let error = result_err(kanban_sqlite::add_task_labels(
+    let error = result_err(kanban_sqlite::api::add_task_labels(
         &temp.path,
         "default",
         "tester",
@@ -814,7 +821,7 @@ fn task_label_batch_add_validates_before_mutating() -> anyhow::Result<()> {
     ))?;
     assert!(error.to_string().contains("label name is required"));
     assert!(get_task(&temp.path, "default", &task.id)?.labels.is_empty());
-    assert!(kanban_sqlite::list_labels(&temp.path, "default")?.is_empty());
+    assert!(kanban_sqlite::api::list_labels(&temp.path, "default")?.is_empty());
 
     Ok(())
 }
@@ -849,17 +856,21 @@ fn task_label_mutations_by_id_use_task_board_and_reject_archived_targets() -> an
         },
     )?;
     let labeled =
-        kanban_sqlite::add_task_label_by_id(&temp.path, "tester", &other_task.id, "backend")?;
+        kanban_sqlite::api::add_task_label_by_id(&temp.path, "tester", &other_task.id, "backend")?;
     assert_eq!(labeled.board_slug, "other");
     assert_eq!(labeled.labels[0].name, "backend");
-    assert!(kanban_sqlite::list_labels(&temp.path, "default")?.is_empty());
+    assert!(kanban_sqlite::api::list_labels(&temp.path, "default")?.is_empty());
     assert_eq!(
-        kanban_sqlite::list_labels(&temp.path, "other")?[0].name,
+        kanban_sqlite::api::list_labels(&temp.path, "other")?[0].name,
         "backend"
     );
 
-    let removed =
-        kanban_sqlite::remove_task_label_by_id(&temp.path, "tester", &other_task.id, "backend")?;
+    let removed = kanban_sqlite::api::remove_task_label_by_id(
+        &temp.path,
+        "tester",
+        &other_task.id,
+        "backend",
+    )?;
     assert!(removed.labels.is_empty());
 
     let archived_task = create_task(
@@ -869,7 +880,7 @@ fn task_label_mutations_by_id_use_task_board_and_reject_archived_targets() -> an
         CreateTask::ready("Archived label target"),
     )?;
     archive_task(&temp.path, "other", "tester", &archived_task.id, false)?;
-    let archived_task_error = result_err(kanban_sqlite::add_task_label_by_id(
+    let archived_task_error = result_err(kanban_sqlite::api::add_task_label_by_id(
         &temp.path,
         "tester",
         &archived_task.id,
@@ -878,7 +889,7 @@ fn task_label_mutations_by_id_use_task_board_and_reject_archived_targets() -> an
     assert!(archived_task_error.to_string().contains("task "));
 
     archive_board(&temp.path, "other", "tester")?;
-    let archived_board_error = result_err(kanban_sqlite::add_task_label_by_id(
+    let archived_board_error = result_err(kanban_sqlite::api::add_task_label_by_id(
         &temp.path,
         "tester",
         &other_task.id,
@@ -909,7 +920,7 @@ fn task_label_mutations_by_ref_reject_archived_tasks() -> anyhow::Result<()> {
         CreateTask::ready("Archived add label target"),
     )?;
     archive_task(&temp.path, "default", "tester", &add_target.id, false)?;
-    let add_error = result_err(kanban_sqlite::add_task_label(
+    let add_error = result_err(kanban_sqlite::api::add_task_label(
         &temp.path,
         "default",
         "tester",
@@ -924,7 +935,7 @@ fn task_label_mutations_by_ref_reject_archived_tasks() -> anyhow::Result<()> {
         "tester",
         CreateTask::ready("Archived remove label target"),
     )?;
-    kanban_sqlite::add_task_label(
+    kanban_sqlite::api::add_task_label(
         &temp.path,
         "default",
         "tester",
@@ -932,7 +943,7 @@ fn task_label_mutations_by_ref_reject_archived_tasks() -> anyhow::Result<()> {
         "backend",
     )?;
     archive_task(&temp.path, "default", "tester", &remove_target.id, false)?;
-    let remove_error = result_err(kanban_sqlite::remove_task_label(
+    let remove_error = result_err(kanban_sqlite::api::remove_task_label(
         &temp.path,
         "default",
         "tester",
@@ -964,14 +975,14 @@ fn label_ref_resolution_prefers_exact_l_prefixed_name_before_id() -> anyhow::Res
     )?;
 
     let labeled =
-        kanban_sqlite::add_task_label(&temp.path, "default", "tester", &task.id, "l_bug")?;
+        kanban_sqlite::api::add_task_label(&temp.path, "default", "tester", &task.id, "l_bug")?;
     assert_eq!(labeled.labels[0].name, "l_bug");
 
     let removed =
-        kanban_sqlite::remove_task_label(&temp.path, "default", "tester", &task.id, "l_bug")?;
+        kanban_sqlite::api::remove_task_label(&temp.path, "default", "tester", &task.id, "l_bug")?;
     assert!(removed.labels.is_empty());
     assert_eq!(
-        kanban_sqlite::list_labels(&temp.path, "default")?[0].name,
+        kanban_sqlite::api::list_labels(&temp.path, "default")?[0].name,
         "l_bug"
     );
 
@@ -989,17 +1000,17 @@ fn labels_reject_blank_names() -> anyhow::Result<()> {
         CreateTask::ready("Label target"),
     )?;
 
-    let create_error = result_err(kanban_sqlite::create_label(
+    let create_error = result_err(kanban_sqlite::api::create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "  ".into(),
             color: None,
         },
     ))?;
     assert!(create_error.to_string().contains("label name is required"));
 
-    let attach_error = result_err(kanban_sqlite::add_task_label(
+    let attach_error = result_err(kanban_sqlite::api::add_task_label(
         &temp.path, "default", "tester", &task.id, "",
     ))?;
     assert!(attach_error.to_string().contains("label name is required"));

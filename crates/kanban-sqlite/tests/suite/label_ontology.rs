@@ -359,7 +359,7 @@ fn label_ontology_records_observation_signals_and_preserves_board_scope() -> any
     let cli = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -368,7 +368,7 @@ fn label_ontology_records_observation_signals_and_preserves_board_scope() -> any
         &temp.path,
         "default",
         "tester",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "Add ontology CLI commands".to_owned(),
             description: Some("Record label ontology signals from a task labeling run".to_owned()),
             ..CreateTask::ready("unused")
@@ -498,7 +498,7 @@ fn label_ontology_quality_distinguishes_signal_counts_from_rates() -> anyhow::Re
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -616,7 +616,7 @@ fn label_ontology_record_derives_metrics_from_snapshot_and_preserves_canonical_s
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -695,7 +695,7 @@ fn label_ontology_record_rejects_conflicting_snapshot_metrics() -> anyhow::Resul
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -769,7 +769,7 @@ fn label_ontology_signal_input_rejects_atom_polarity_kind_mismatches() -> anyhow
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -1727,7 +1727,7 @@ fn label_ontology_signal_input_enforces_proposed_action_requirements() -> anyhow
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -1801,7 +1801,7 @@ fn label_ontology_signal_input_rejects_invalid_metrics() -> anyhow::Result<()> {
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -1854,7 +1854,7 @@ fn label_ontology_lifecycle_actions_update_status_and_link_actions() -> anyhow::
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -1954,7 +1954,7 @@ fn label_ontology_supersede_rejects_cycles() -> anyhow::Result<()> {
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -2036,7 +2036,7 @@ fn label_ontology_generic_action_rejects_canonical_mutation_types() -> anyhow::R
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -2098,7 +2098,7 @@ fn label_ontology_legacy_structure_plan_actions_remain_readable_and_importable()
     create_label(
         &source.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -2109,7 +2109,7 @@ fn label_ontology_legacy_structure_plan_actions_remain_readable_and_importable()
         "tester",
         CreateTask::ready("Legacy structure plan history remains readable"),
     )?;
-    kanban_sqlite::add_task_labels_with_options(
+    kanban_sqlite::api::add_task_labels_with_options(
         &source.path,
         "default",
         "tester",
@@ -2257,7 +2257,7 @@ fn label_ontology_generic_action_rejects_fabricated_provenance_fields() -> anyho
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -2305,7 +2305,7 @@ fn label_ontology_validation_rejects_non_mutation_parent() -> anyhow::Result<()>
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -2359,7 +2359,7 @@ fn label_ontology_validation_rejects_parent_without_pending_canonical_evidence()
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -2416,7 +2416,7 @@ fn label_ontology_external_passed_validation_rejects_trusted_update_semantics_pa
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -2461,7 +2461,7 @@ fn label_ontology_external_passed_validation_rejects_trusted_update_semantics_pa
         ),
     )?;
 
-    kanban_sqlite::upsert_label_semantics_with_options(
+    kanban_sqlite::api::upsert_label_semantics_with_options(
         &temp.path,
         "default",
         UpsertLabelSemantics {
@@ -2470,7 +2470,7 @@ fn label_ontology_external_passed_validation_rejects_trusted_update_semantics_pa
             description: Some("Command-line interface and CLI JSON behavior".to_owned()),
             ..UpsertLabelSemantics::default()
         },
-        kanban_sqlite::LabelSemanticsMutationOptions {
+        kanban_sqlite::api::LabelSemanticsMutationOptions {
             actor: reviewer_actor(),
             reason: Some("Clarify CLI semantics description.".to_owned()),
             source_signal_ids: vec![signal_id.clone()],
@@ -2527,7 +2527,7 @@ fn label_ontology_external_passed_validation_rejects_untyped_evidence() -> anyho
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -2637,7 +2637,7 @@ fn label_ontology_atom_apply_records_provenance_and_external_validation_diagnost
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -2984,7 +2984,7 @@ fn label_ontology_validation_effective_outcome_reduces_requirement_and_latest_at
         ),
     )?;
     let before_semantics = get_label_semantics(&temp.path, "default", "cli")?;
-    kanban_sqlite::upsert_label_semantics_with_options(
+    kanban_sqlite::api::upsert_label_semantics_with_options(
         &temp.path,
         "default",
         UpsertLabelSemantics {
@@ -2993,7 +2993,7 @@ fn label_ontology_validation_effective_outcome_reduces_requirement_and_latest_at
             description: Some("Command-line interface and CLI JSON behavior".to_owned()),
             ..UpsertLabelSemantics::default()
         },
-        kanban_sqlite::LabelSemanticsMutationOptions {
+        kanban_sqlite::api::LabelSemanticsMutationOptions {
             actor: reviewer_actor(),
             reason: Some("Clarify CLI semantics from a confirmed source signal.".to_owned()),
             source_signal_ids: vec![update_signal_id.clone()],
@@ -3071,7 +3071,7 @@ fn label_ontology_revert_positive_atom_restores_before_hash_and_records_action()
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -3344,7 +3344,7 @@ fn label_ontology_revert_legacy_child_action_records_warning() -> anyhow::Result
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -3437,7 +3437,7 @@ fn label_ontology_revert_negative_atom_restores_before_hash_and_explain_chain() 
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -3577,7 +3577,7 @@ fn label_ontology_revert_update_semantics_restores_before_hash_and_keeps_atom_hi
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -3628,7 +3628,7 @@ fn label_ontology_revert_update_semantics_restores_before_hash_and_keeps_atom_hi
         ),
     )?;
 
-    let changed_semantics = kanban_sqlite::upsert_label_semantics_with_options(
+    let changed_semantics = kanban_sqlite::api::upsert_label_semantics_with_options(
         &temp.path,
         "default",
         UpsertLabelSemantics {
@@ -3637,7 +3637,7 @@ fn label_ontology_revert_update_semantics_restores_before_hash_and_keeps_atom_hi
             description: Some("Command-line interface and CLI JSON behavior".to_owned()),
             ..UpsertLabelSemantics::default()
         },
-        kanban_sqlite::LabelSemanticsMutationOptions {
+        kanban_sqlite::api::LabelSemanticsMutationOptions {
             actor: reviewer_actor(),
             reason: Some("Clarify CLI semantics description.".to_owned()),
             source_signal_ids: vec![signal_id.clone()],
@@ -3716,7 +3716,7 @@ fn label_ontology_revert_rejects_expected_hash_mismatch_without_new_action() -> 
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -3791,7 +3791,7 @@ fn label_ontology_revert_rejects_stale_current_hash() -> anyhow::Result<()> {
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -4510,12 +4510,18 @@ fn label_ontology_validation_allows_label_binding_drift_with_warning() -> anyhow
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
     )?;
-    kanban_sqlite::add_task_label(&temp.path, "default", "tester", &fixture.task.id, "backend")?;
+    kanban_sqlite::api::add_task_label(
+        &temp.path,
+        "default",
+        "tester",
+        &fixture.task.id,
+        "backend",
+    )?;
     let rerecorded = record_label_ontology_observation(
         &temp.path,
         "default",
@@ -4927,7 +4933,7 @@ fn label_ontology_atom_apply_rejects_mismatched_target_signal() -> anyhow::Resul
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -4935,7 +4941,7 @@ fn label_ontology_atom_apply_rejects_mismatched_target_signal() -> anyhow::Resul
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -5002,7 +5008,7 @@ fn label_ontology_atom_apply_rejects_source_signal_action_polarity_and_kind_mism
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -5089,7 +5095,7 @@ fn label_ontology_atom_apply_allows_generalized_text_with_matching_contract() ->
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -5141,7 +5147,7 @@ fn label_ontology_atom_apply_retarget_does_not_bypass_atom_kind_contract() -> an
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -5149,7 +5155,7 @@ fn label_ontology_atom_apply_retarget_does_not_bypass_atom_kind_contract() -> an
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -5199,7 +5205,7 @@ fn label_ontology_atom_apply_retarget_override_records_reason() -> anyhow::Resul
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -5207,7 +5213,7 @@ fn label_ontology_atom_apply_retarget_override_records_reason() -> anyhow::Resul
     let backend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -6262,7 +6268,7 @@ fn seed_validation_fixture(
     let label = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -6320,7 +6326,7 @@ fn seed_multi_validation_fixture(
     let label = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -6487,7 +6493,7 @@ fn seed_portable_ontology_ledger(temp: &TempDb) -> anyhow::Result<PortableOntolo
     let label = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -6697,7 +6703,7 @@ fn seed_negative_validation_fixture(
     let label = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -6776,7 +6782,7 @@ fn seed_negative_validation_fixture_with_positive_control(
     let label = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -7439,7 +7445,7 @@ fn seed_existing_atom_apply_fixture(
     let label = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -7530,7 +7536,7 @@ fn seed_existing_atom_apply_fixture(
 }
 
 fn assert_existing_atom_adoption_action(
-    action: &kanban_sqlite::LabelOntologyActionRecord,
+    action: &kanban_sqlite::api::LabelOntologyActionRecord,
     fixture: &ExistingAtomApplyFixture,
     requested_action_type: &str,
 ) -> anyhow::Result<()> {
@@ -7649,8 +7655,8 @@ fn ontology_action_atom_effect_hashes(
 }
 
 fn assert_semantics_content_eq(
-    actual: &kanban_sqlite::LabelSemanticsRecord,
-    expected: &kanban_sqlite::LabelSemanticsRecord,
+    actual: &kanban_sqlite::api::LabelSemanticsRecord,
+    expected: &kanban_sqlite::api::LabelSemanticsRecord,
 ) {
     assert_eq!(actual.semantics_hash, expected.semantics_hash);
     assert_eq!(actual.description, expected.description);

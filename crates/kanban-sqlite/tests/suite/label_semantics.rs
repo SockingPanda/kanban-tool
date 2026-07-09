@@ -13,11 +13,11 @@ fn task_label_suggestions_degrade_when_vector_store_disabled() -> anyhow::Result
         CreateTask::ready("label suggestion target"),
     )?;
 
-    let result = kanban_sqlite::suggest_task_labels(
+    let result = kanban_sqlite::api::suggest_task_labels(
         &temp.path,
         "default",
         &task.id,
-        kanban_sqlite::LabelSuggestionOptions::default(),
+        kanban_sqlite::api::LabelSuggestionOptions::default(),
     )?;
 
     assert_eq!(result.task_id, task.id);
@@ -65,7 +65,7 @@ fn label_proposal_migration_and_provider_unavailable_are_non_polluting() -> anyh
         "default",
         "tester",
         &task.id,
-        kanban_sqlite::LabelSuggestionOptions::default(),
+        kanban_sqlite::api::LabelSuggestionOptions::default(),
     )?;
 
     assert!(attempt.degraded);
@@ -116,7 +116,7 @@ fn label_proposal_manual_candidate_accepts_without_task_binding() -> anyhow::Res
         &task.id,
         &provider,
         &store,
-        kanban_sqlite::LabelSuggestionOptions::default(),
+        kanban_sqlite::api::LabelSuggestionOptions::default(),
     )?;
     let proposal = attempt.proposal.context("proposal")?;
     assert_eq!(proposal.status, LabelProposalStatus::Proposed);
@@ -190,7 +190,7 @@ fn label_proposal_create_writes_ontology_action() -> anyhow::Result<()> {
         &provider,
         &store,
         LabelProposalProposeOptions {
-            suggestion: kanban_sqlite::LabelSuggestionOptions::default(),
+            suggestion: kanban_sqlite::api::LabelSuggestionOptions::default(),
             create: LabelProposalCreateOptions {
                 source_signal_ids: vec![signal_id.clone()],
                 ontology_actor: Some(LabelOntologyActor {
@@ -255,7 +255,7 @@ fn label_proposal_create_rejects_unrelated_source_signal() -> anyhow::Result<()>
         &provider,
         &store,
         LabelProposalProposeOptions {
-            suggestion: kanban_sqlite::LabelSuggestionOptions::default(),
+            suggestion: kanban_sqlite::api::LabelSuggestionOptions::default(),
             create: LabelProposalCreateOptions {
                 source_signal_ids: vec![signal_id.clone()],
                 ontology_actor: None,
@@ -297,7 +297,7 @@ fn label_proposal_create_rejects_non_bootstrap_signal_even_with_retarget() -> an
         &provider,
         &store,
         LabelProposalProposeOptions {
-            suggestion: kanban_sqlite::LabelSuggestionOptions::default(),
+            suggestion: kanban_sqlite::api::LabelSuggestionOptions::default(),
             create: LabelProposalCreateOptions {
                 source_signal_ids: vec![signal_id.clone()],
                 ontology_actor: None,
@@ -338,7 +338,7 @@ fn label_proposal_reject_keeps_create_source_signal_provenance() -> anyhow::Resu
         &provider,
         &store,
         LabelProposalProposeOptions {
-            suggestion: kanban_sqlite::LabelSuggestionOptions::default(),
+            suggestion: kanban_sqlite::api::LabelSuggestionOptions::default(),
             create: LabelProposalCreateOptions {
                 source_signal_ids: vec![signal_id.clone()],
                 ontology_actor: None,
@@ -397,7 +397,7 @@ fn label_proposal_accept_rejects_non_bootstrap_signal_even_with_retarget() -> an
         &task.id,
         &provider,
         &store,
-        kanban_sqlite::LabelSuggestionOptions::default(),
+        kanban_sqlite::api::LabelSuggestionOptions::default(),
     )?
     .proposal
     .context("proposal")?;
@@ -464,7 +464,7 @@ fn label_proposal_accept_links_creation_and_bootstrap_history() -> anyhow::Resul
         &provider,
         &store,
         LabelProposalProposeOptions {
-            suggestion: kanban_sqlite::LabelSuggestionOptions::default(),
+            suggestion: kanban_sqlite::api::LabelSuggestionOptions::default(),
             create: LabelProposalCreateOptions {
                 source_signal_ids: vec![signal_id.clone()],
                 ontology_actor: None,
@@ -557,7 +557,7 @@ fn label_bootstrap_attaches_task_and_rejects_existing_semantics_replacement() ->
             .iter()
             .any(|atom| atom.kind == "applies_when")
     );
-    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    let status = kanban_sqlite::api::label_atom_index_status(&temp.path, "default")?;
     assert_eq!(status.board_dirty, Some(true));
     let before_atoms = first.semantics.atoms.clone();
 
@@ -645,10 +645,10 @@ fn label_bootstrap_staged_verify_threshold_failure_leaves_canonical_state_clean(
     )?;
     let conn = connect_file(&temp.path)?;
     let before = bootstrap_canonical_counts(&conn)?;
-    let status_before = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    let status_before = kanban_sqlite::api::label_atom_index_status(&temp.path, "default")?;
 
     let error = result_err(
-        kanban_sqlite::bootstrap_task_label_with_staged_verification(
+        kanban_sqlite::api::bootstrap_task_label_with_staged_verification(
             &temp.path,
             "default",
             "tester",
@@ -672,7 +672,7 @@ fn label_bootstrap_staged_verify_threshold_failure_leaves_canonical_state_clean(
     );
     let conn = connect_file(&temp.path)?;
     assert_eq!(bootstrap_canonical_counts(&conn)?, before);
-    let status_after = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    let status_after = kanban_sqlite::api::label_atom_index_status(&temp.path, "default")?;
     assert_eq!(status_after.dirty, status_before.dirty);
     assert_eq!(status_after.board_dirty, status_before.board_dirty);
     assert_eq!(bootstrap_compensation_event_count(&conn)?, 0);
@@ -693,7 +693,7 @@ fn label_bootstrap_staged_verify_success_writes_single_root_action() -> anyhow::
     let action_count = table_count(&conn, "label_ontology_actions")?;
     let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
 
-    let result = kanban_sqlite::bootstrap_task_label_with_staged_verification(
+    let result = kanban_sqlite::api::bootstrap_task_label_with_staged_verification(
         &temp.path,
         "default",
         "tester",
@@ -727,7 +727,7 @@ fn label_bootstrap_staged_verify_success_writes_single_root_action() -> anyhow::
     );
     assert_eq!(bootstrap_action_count(&conn)?, 1);
     assert_eq!(bootstrap_compensation_event_count(&conn)?, 0);
-    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    let status = kanban_sqlite::api::label_atom_index_status(&temp.path, "default")?;
     assert_eq!(status.board_dirty, Some(true));
     Ok(())
 }
@@ -737,7 +737,7 @@ fn canonical_label_identity_create_writes_event_without_ontology_action() -> any
     let temp = TempDb::new("canonical_label_identity_create_writes_event_without_ontology_action")?;
     init_database(&temp.path, "tester")?;
 
-    let label = kanban_sqlite::create_label_with_actor(
+    let label = kanban_sqlite::api::create_label_with_actor(
         &temp.path,
         "default",
         "tester",
@@ -804,7 +804,8 @@ fn label_semantics_clear_requires_cas_records_root_action_effects_and_reverts() 
     let action_count = table_count(&conn, "label_ontology_actions")?;
     let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
 
-    let mut stale_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    let mut stale_options =
+        kanban_sqlite::api::LabelSemanticsMutationOptions::manual_actor("tester");
     stale_options.reason = Some("Attempt stale clear.".to_owned());
     let stale_error = result_err(clear_label_semantics_with_options(
         &temp.path,
@@ -826,7 +827,8 @@ fn label_semantics_clear_requires_cas_records_root_action_effects_and_reverts() 
     assert!(!label_atom_store_dirty(&temp.path)?);
     assert!(!label_atom_board_dirty(&temp.path, "default")?);
 
-    let mut clear_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    let mut clear_options =
+        kanban_sqlite::api::LabelSemanticsMutationOptions::manual_actor("tester");
     clear_options.reason = Some("Clear semantics with audited CAS.".to_owned());
     clear_label_semantics_with_options(
         &temp.path,
@@ -1017,7 +1019,8 @@ fn canonical_label_delete_force_cleans_truth_and_marks_index_dirty() -> anyhow::
     assert_eq!(table_count(&conn, "label_semantics")?, 1);
     assert!(table_count(&conn, "label_atoms")? > 0);
 
-    let mut clear_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    let mut clear_options =
+        kanban_sqlite::api::LabelSemanticsMutationOptions::manual_actor("tester");
     clear_options.reason = Some("Clear semantics before deleting identity.".to_owned());
     clear_label_semantics_with_options(
         &temp.path,
@@ -1039,7 +1042,7 @@ fn canonical_label_delete_force_cleans_truth_and_marks_index_dirty() -> anyhow::
     assert_eq!(table_count(&conn, "task_labels")?, 0);
     assert_eq!(table_count(&conn, "label_semantics")?, 0);
     assert_eq!(table_count(&conn, "label_atoms")?, 0);
-    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    let status = kanban_sqlite::api::label_atom_index_status(&temp.path, "default")?;
     assert_eq!(status.board_dirty, Some(true));
     let deleted_events = list_events(&temp.path, "default", None)?
         .into_iter()
@@ -1058,7 +1061,7 @@ fn label_proposal_residual_validation_passes_and_accept_keeps_task_unbound() -> 
     let backend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -1067,7 +1070,7 @@ fn label_proposal_residual_validation_passes_and_accept_keeps_task_unbound() -> 
         &temp.path,
         "default",
         "tester",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "API documentation update".to_owned(),
             description: Some("Server route docs are missing".to_owned()),
             ..CreateTask::ready("unused")
@@ -1101,11 +1104,11 @@ fn label_proposal_residual_validation_passes_and_accept_keeps_task_unbound() -> 
         &task.id,
         &provider,
         &store,
-        kanban_sqlite::LabelSuggestionOptions {
+        kanban_sqlite::api::LabelSuggestionOptions {
             output_limit: 1,
             atom_limit: 10,
             min_score: 0.01,
-            ..kanban_sqlite::LabelSuggestionOptions::default()
+            ..kanban_sqlite::api::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -1154,7 +1157,7 @@ fn label_proposal_residual_validation_unavailable_after_candidate_is_non_polluti
         &task.id,
         &provider,
         &store,
-        kanban_sqlite::LabelSuggestionOptions::default(),
+        kanban_sqlite::api::LabelSuggestionOptions::default(),
     )?;
 
     assert!(attempt.degraded);
@@ -1197,7 +1200,7 @@ fn label_proposal_residual_validation_rejects_when_existing_wins() -> anyhow::Re
     let backend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -1205,7 +1208,7 @@ fn label_proposal_residual_validation_rejects_when_existing_wins() -> anyhow::Re
     let docs = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "docs".to_owned(),
             color: None,
         },
@@ -1246,12 +1249,12 @@ fn label_proposal_residual_validation_rejects_when_existing_wins() -> anyhow::Re
         &task.id,
         &provider,
         &store,
-        kanban_sqlite::LabelSuggestionOptions {
+        kanban_sqlite::api::LabelSuggestionOptions {
             output_limit: 1,
             atom_limit: 10,
             max_selected_labels: 1,
             min_score: 0.01,
-            ..kanban_sqlite::LabelSuggestionOptions::default()
+            ..kanban_sqlite::api::LabelSuggestionOptions::default()
         },
     )?
     .proposal
@@ -1284,7 +1287,7 @@ fn label_proposal_residual_validation_rejects_when_margin_is_insufficient() -> a
     let backend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -1292,7 +1295,7 @@ fn label_proposal_residual_validation_rejects_when_margin_is_insufficient() -> a
     let docs = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "docs".to_owned(),
             color: None,
         },
@@ -1333,12 +1336,12 @@ fn label_proposal_residual_validation_rejects_when_margin_is_insufficient() -> a
         &task.id,
         &provider,
         &store,
-        kanban_sqlite::LabelSuggestionOptions {
+        kanban_sqlite::api::LabelSuggestionOptions {
             output_limit: 1,
             atom_limit: 10,
             max_selected_labels: 1,
             min_score: 0.01,
-            ..kanban_sqlite::LabelSuggestionOptions::default()
+            ..kanban_sqlite::api::LabelSuggestionOptions::default()
         },
     )?
     .proposal
@@ -1361,7 +1364,7 @@ fn label_proposal_residual_validation_uses_solver_negative_suppression() -> anyh
     let backend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -1400,11 +1403,11 @@ fn label_proposal_residual_validation_uses_solver_negative_suppression() -> anyh
         &task.id,
         &provider,
         &store,
-        kanban_sqlite::LabelSuggestionOptions {
+        kanban_sqlite::api::LabelSuggestionOptions {
             output_limit: 1,
             atom_limit: 10,
             min_score: 0.99,
-            ..kanban_sqlite::LabelSuggestionOptions::default()
+            ..kanban_sqlite::api::LabelSuggestionOptions::default()
         },
     )?
     .proposal
@@ -1432,7 +1435,7 @@ fn label_proposal_coverage_sufficient_does_not_call_provider_or_persist_candidat
     let backend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -1460,11 +1463,11 @@ fn label_proposal_coverage_sufficient_does_not_call_provider_or_persist_candidat
         &task.id,
         &provider,
         &store,
-        kanban_sqlite::LabelSuggestionOptions {
+        kanban_sqlite::api::LabelSuggestionOptions {
             output_limit: 3,
             atom_limit: 10,
             min_score: 0.01,
-            ..kanban_sqlite::LabelSuggestionOptions::default()
+            ..kanban_sqlite::api::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -1490,7 +1493,7 @@ fn label_proposal_coverage_sufficient_preserves_degraded_diagnostics() -> anyhow
     let backend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -1527,11 +1530,11 @@ fn label_proposal_coverage_sufficient_preserves_degraded_diagnostics() -> anyhow
         &task.id,
         &provider,
         &store,
-        kanban_sqlite::LabelSuggestionOptions {
+        kanban_sqlite::api::LabelSuggestionOptions {
             output_limit: 3,
             atom_limit: 10,
             min_score: 0.01,
-            ..kanban_sqlite::LabelSuggestionOptions::default()
+            ..kanban_sqlite::api::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -1585,7 +1588,7 @@ fn label_proposal_validation_rejects_blank_or_empty_semantics() -> anyhow::Resul
             "tester",
             &task.id,
             &provider,
-            kanban_sqlite::LabelSuggestionOptions::default(),
+            kanban_sqlite::api::LabelSuggestionOptions::default(),
         ))?;
         assert!(error.to_string().contains("label proposal"));
     }
@@ -1600,7 +1603,7 @@ fn label_proposal_near_duplicate_is_persisted_rejected_and_cannot_accept() -> an
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "Back End".to_owned(),
             color: None,
         },
@@ -1623,7 +1626,7 @@ fn label_proposal_near_duplicate_is_persisted_rejected_and_cannot_accept() -> an
         "tester",
         &task.id,
         &provider,
-        kanban_sqlite::LabelSuggestionOptions::default(),
+        kanban_sqlite::api::LabelSuggestionOptions::default(),
     )?;
     let proposal = attempt.proposal.context("proposal")?;
     assert_eq!(proposal.status, LabelProposalStatus::Rejected);
@@ -1672,7 +1675,7 @@ fn label_proposal_reject_then_accept_fails_and_list_filters() -> anyhow::Result<
         &task.id,
         &provider,
         &store,
-        kanban_sqlite::LabelSuggestionOptions::default(),
+        kanban_sqlite::api::LabelSuggestionOptions::default(),
     )?
     .proposal
     .context("proposal")?;
@@ -1737,7 +1740,7 @@ fn label_proposal_jsonl_export_import_round_trips() -> anyhow::Result<()> {
         &task.id,
         &provider,
         &store,
-        kanban_sqlite::LabelSuggestionOptions::default(),
+        kanban_sqlite::api::LabelSuggestionOptions::default(),
     )?
     .proposal
     .context("proposal")?;
@@ -1906,7 +1909,7 @@ fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> an
     let backend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -1914,7 +1917,7 @@ fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> an
     let frontend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "frontend".to_owned(),
             color: None,
         },
@@ -1923,14 +1926,14 @@ fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> an
         &temp.path,
         "default",
         "tester",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "Fix API route".to_owned(),
             description: Some("Touches server handler code".to_owned()),
             ..CreateTask::ready("unused")
         },
     )?;
     let labeled =
-        kanban_sqlite::add_task_label(&temp.path, "default", "tester", &task.id, "backend")?;
+        kanban_sqlite::api::add_task_label(&temp.path, "default", "tester", &task.id, "backend")?;
 
     let store = StaticLabelAtomStore {
         hits: vec![
@@ -1939,16 +1942,16 @@ fn task_label_suggestions_use_residual_vector_queries_and_refit_coverage() -> an
             atom_hit(&frontend, "negative", "excludes_when", "server only", 0.0),
         ],
     };
-    let result = kanban_sqlite::suggest_task_labels_with(
+    let result = kanban_sqlite::api::suggest_task_labels_with(
         &temp.path,
         "default",
         &labeled.id,
         &store,
-        kanban_sqlite::LabelSuggestionOptions {
+        kanban_sqlite::api::LabelSuggestionOptions {
             output_limit: 5,
             atom_limit: 10,
             min_score: 0.01,
-            ..kanban_sqlite::LabelSuggestionOptions::default()
+            ..kanban_sqlite::api::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -1972,7 +1975,7 @@ fn task_label_suggestions_reason_codes_for_selected_coverage_gap() -> anyhow::Re
     let backend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -1989,16 +1992,16 @@ fn task_label_suggestions_reason_codes_for_selected_coverage_gap() -> anyhow::Re
         vec![1.0, 0.0, 0.0],
     )]);
 
-    let result = kanban_sqlite::suggest_task_labels_with(
+    let result = kanban_sqlite::api::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
         &store,
-        kanban_sqlite::LabelSuggestionOptions {
+        kanban_sqlite::api::LabelSuggestionOptions {
             output_limit: 3,
             atom_limit: 12,
             min_score: 0.01,
-            ..kanban_sqlite::LabelSuggestionOptions::default()
+            ..kanban_sqlite::api::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -2021,7 +2024,7 @@ fn task_label_suggestions_reason_codes_for_empty_selection_and_residual_gap() ->
     let backend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -2041,16 +2044,16 @@ fn task_label_suggestions_reason_codes_for_empty_selection_and_residual_gap() ->
         vec![0.01, 1.0, 0.0],
     );
 
-    let result = kanban_sqlite::suggest_task_labels_with(
+    let result = kanban_sqlite::api::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
         &store,
-        kanban_sqlite::LabelSuggestionOptions {
+        kanban_sqlite::api::LabelSuggestionOptions {
             output_limit: 3,
             atom_limit: 12,
             min_score: 0.001,
-            ..kanban_sqlite::LabelSuggestionOptions::default()
+            ..kanban_sqlite::api::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -2083,12 +2086,12 @@ fn task_label_suggestions_report_empty_index_as_degraded_reason() -> anyhow::Res
     )?;
     let store = StaticLabelAtomStore { hits: Vec::new() };
 
-    let result = kanban_sqlite::suggest_task_labels_with(
+    let result = kanban_sqlite::api::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
         &store,
-        kanban_sqlite::LabelSuggestionOptions::default(),
+        kanban_sqlite::api::LabelSuggestionOptions::default(),
     )?;
 
     assert!(result.degraded);
@@ -2125,12 +2128,12 @@ fn task_label_suggestions_degrade_on_label_atom_vector_query_error() -> anyhow::
         query_error: Some("label atom vector query failed"),
     };
 
-    let result = kanban_sqlite::suggest_task_labels_with(
+    let result = kanban_sqlite::api::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
         &store,
-        kanban_sqlite::LabelSuggestionOptions::default(),
+        kanban_sqlite::api::LabelSuggestionOptions::default(),
     )?;
 
     assert!(result.degraded);
@@ -2189,12 +2192,12 @@ fn task_label_suggestions_report_label_atom_index_dirty_and_errors() -> anyhow::
         query_error: None,
     };
 
-    let result = kanban_sqlite::suggest_task_labels_with(
+    let result = kanban_sqlite::api::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
         &store,
-        kanban_sqlite::LabelSuggestionOptions::default(),
+        kanban_sqlite::api::LabelSuggestionOptions::default(),
     )?;
 
     assert!(result.degraded);
@@ -2242,7 +2245,7 @@ fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::R
     let backend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -2250,7 +2253,7 @@ fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::R
     let docs = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "docs".to_owned(),
             color: None,
         },
@@ -2258,7 +2261,7 @@ fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::R
     let frontend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "frontend".to_owned(),
             color: None,
         },
@@ -2288,16 +2291,16 @@ fn task_label_suggestions_query_positive_atoms_by_residual_rounds() -> anyhow::R
         ),
     ]);
 
-    let result = kanban_sqlite::suggest_task_labels_with(
+    let result = kanban_sqlite::api::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
         &store,
-        kanban_sqlite::LabelSuggestionOptions {
+        kanban_sqlite::api::LabelSuggestionOptions {
             output_limit: 3,
             atom_limit: 12,
             min_score: 0.01,
-            ..kanban_sqlite::LabelSuggestionOptions::default()
+            ..kanban_sqlite::api::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -2341,7 +2344,7 @@ fn task_label_suggestions_limit_truncates_output_without_narrowing_solver() -> a
     let backend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -2349,7 +2352,7 @@ fn task_label_suggestions_limit_truncates_output_without_narrowing_solver() -> a
     let docs = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "docs".to_owned(),
             color: None,
         },
@@ -2357,7 +2360,7 @@ fn task_label_suggestions_limit_truncates_output_without_narrowing_solver() -> a
     let frontend = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "frontend".to_owned(),
             color: None,
         },
@@ -2383,16 +2386,16 @@ fn task_label_suggestions_limit_truncates_output_without_narrowing_solver() -> a
         ),
     ]);
 
-    let result = kanban_sqlite::suggest_task_labels_with(
+    let result = kanban_sqlite::api::suggest_task_labels_with(
         &temp.path,
         "default",
         &task.id,
         &store,
-        kanban_sqlite::LabelSuggestionOptions {
+        kanban_sqlite::api::LabelSuggestionOptions {
             output_limit: 1,
             atom_limit: 12,
             min_score: 0.01,
-            ..kanban_sqlite::LabelSuggestionOptions::default()
+            ..kanban_sqlite::api::LabelSuggestionOptions::default()
         },
     )?;
 
@@ -2442,11 +2445,11 @@ impl CountingProposalProvider {
     }
 }
 
-impl kanban_sqlite::LabelProposalProvider for CountingProposalProvider {
+impl kanban_sqlite::api::LabelProposalProvider for CountingProposalProvider {
     fn propose_label(
         &self,
-        _task: &kanban_sqlite::TaskRecord,
-        _suggestions: &kanban_sqlite::LabelSuggestionResult,
+        _task: &kanban_sqlite::api::TaskRecord,
+        _suggestions: &kanban_sqlite::api::LabelSuggestionResult,
     ) -> kanban_core::Result<Option<LabelProposalCandidate>> {
         *self
             .calls
@@ -3205,7 +3208,7 @@ impl kanban_vector::LabelAtomVectorStore for StaticLabelAtomStore {
 }
 
 fn atom_hit(
-    label: &kanban_sqlite::LabelRecord,
+    label: &kanban_sqlite::api::LabelRecord,
     polarity: &str,
     kind: &str,
     text: &str,
@@ -3245,7 +3248,7 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
         },
     )?;
     let labeled =
-        kanban_sqlite::add_task_label(&temp.path, "default", "tester", &task.id, "backend")?;
+        kanban_sqlite::api::add_task_label(&temp.path, "default", "tester", &task.id, "backend")?;
     let label = labeled
         .labels
         .first()
@@ -3300,7 +3303,8 @@ fn label_semantics_crud_expands_stable_atoms_and_keeps_label_binding() -> anyhow
     assert_eq!(fresh_task.labels.len(), 1);
     assert_eq!(fresh_task.labels[0].id, label.id);
 
-    let mut clear_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    let mut clear_options =
+        kanban_sqlite::api::LabelSemanticsMutationOptions::manual_actor("tester");
     clear_options.reason = Some("Clear semantics for CRUD cleanup.".to_owned());
     clear_label_semantics_with_options(
         &temp.path,
@@ -3328,7 +3332,7 @@ fn label_atom_hashes_are_stable_across_reordered_sources_without_dirty_noop() ->
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -3415,7 +3419,7 @@ fn label_semantics_source_signal_update_semantics_allows_true_hash_change() -> a
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -3446,7 +3450,7 @@ fn label_semantics_source_signal_update_semantics_allows_true_hash_change() -> a
     let action_count = table_count(&conn, "label_ontology_actions")?;
     let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
 
-    let updated = kanban_sqlite::upsert_label_semantics_with_options(
+    let updated = kanban_sqlite::api::upsert_label_semantics_with_options(
         &temp.path,
         "default",
         UpsertLabelSemantics {
@@ -3455,7 +3459,7 @@ fn label_semantics_source_signal_update_semantics_allows_true_hash_change() -> a
             description: Some("Command-line interface and CLI JSON behavior".to_owned()),
             ..UpsertLabelSemantics::default()
         },
-        kanban_sqlite::LabelSemanticsMutationOptions {
+        kanban_sqlite::api::LabelSemanticsMutationOptions {
             actor: LabelOntologyActor {
                 name: "reviewer".to_owned(),
                 actor_type: "user".to_owned(),
@@ -3491,7 +3495,7 @@ fn label_semantics_source_signal_atom_effect_contract_rolls_back_mixed_batch() -
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
@@ -3537,7 +3541,7 @@ fn label_semantics_source_signal_atom_effect_contract_rolls_back_mixed_batch() -
     let action_count = table_count(&conn, "label_ontology_actions")?;
     let effect_count = table_count(&conn, "label_ontology_action_atom_effects")?;
 
-    let error = result_err(kanban_sqlite::upsert_label_semantics_with_options(
+    let error = result_err(kanban_sqlite::api::upsert_label_semantics_with_options(
         &temp.path,
         "default",
         UpsertLabelSemantics {
@@ -3548,7 +3552,7 @@ fn label_semantics_source_signal_atom_effect_contract_rolls_back_mixed_batch() -
             ],
             ..UpsertLabelSemantics::default()
         },
-        kanban_sqlite::LabelSemanticsMutationOptions {
+        kanban_sqlite::api::LabelSemanticsMutationOptions {
             actor: LabelOntologyActor {
                 name: "reviewer".to_owned(),
                 actor_type: "user".to_owned(),
@@ -3577,7 +3581,7 @@ fn label_semantics_source_signal_atom_effect_contract_rolls_back_mixed_batch() -
         seed.semantics_hash
     );
 
-    let patched = kanban_sqlite::upsert_label_semantics_with_options(
+    let patched = kanban_sqlite::api::upsert_label_semantics_with_options(
         &temp.path,
         "default",
         UpsertLabelSemantics {
@@ -3588,7 +3592,7 @@ fn label_semantics_source_signal_atom_effect_contract_rolls_back_mixed_batch() -
             ],
             ..UpsertLabelSemantics::default()
         },
-        kanban_sqlite::LabelSemanticsMutationOptions {
+        kanban_sqlite::api::LabelSemanticsMutationOptions {
             actor: LabelOntologyActor {
                 name: "reviewer".to_owned(),
                 actor_type: "user".to_owned(),
@@ -3624,7 +3628,7 @@ fn label_atom_rebuild_deduplicates_normalized_text_and_keeps_first_ordinal() -> 
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -3662,13 +3666,13 @@ fn direct_label_semantics_upsert_records_update_semantics_provenance() -> anyhow
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
     )?;
 
-    let semantics = kanban_sqlite::upsert_label_semantics_with_options(
+    let semantics = kanban_sqlite::api::upsert_label_semantics_with_options(
         &temp.path,
         "default",
         UpsertLabelSemantics {
@@ -3676,7 +3680,7 @@ fn direct_label_semantics_upsert_records_update_semantics_provenance() -> anyhow
             applies_when: vec!["touches Rust service code".to_owned()],
             ..UpsertLabelSemantics::default()
         },
-        kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("ontology-editor"),
+        kanban_sqlite::api::LabelSemanticsMutationOptions::manual_actor("ontology-editor"),
     )?;
     let atom = semantics
         .atoms
@@ -3728,7 +3732,7 @@ fn label_semantics_root_actions_record_only_atom_effect_deltas() -> anyhow::Resu
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -3849,7 +3853,7 @@ fn label_semantics_root_action_growth_is_linear_for_large_atom_sets() -> anyhow:
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -4013,7 +4017,7 @@ fn label_semantics_patch_preserves_missing_fields_and_records_reason() -> anyhow
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -4031,10 +4035,10 @@ fn label_semantics_patch_preserves_missing_fields_and_records_reason() -> anyhow
             ..UpsertLabelSemantics::default()
         },
     )?;
-    let mut options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("editor");
+    let mut options = kanban_sqlite::api::LabelSemanticsMutationOptions::manual_actor("editor");
     options.reason = Some("Add a CLI-facing backend boundary.".to_owned());
 
-    let patched = kanban_sqlite::upsert_label_semantics_with_options(
+    let patched = kanban_sqlite::api::upsert_label_semantics_with_options(
         &temp.path,
         "default",
         UpsertLabelSemantics {
@@ -4078,7 +4082,7 @@ fn label_semantics_patch_remove_atom_only_changes_target_collection() -> anyhow:
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -4130,7 +4134,7 @@ fn label_semantics_replace_intent_required_to_clear_omitted_fields() -> anyhow::
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -4199,7 +4203,7 @@ fn label_semantics_upsert_rejects_stale_expected_hash_without_mutating() -> anyh
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -4443,7 +4447,7 @@ fn label_atom_explain_marks_existing_atom_without_provenance_as_legacy_untracked
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "legacy".to_owned(),
             color: None,
         },
@@ -4498,7 +4502,7 @@ fn init_v10_backfills_stable_label_atom_hashes_and_marks_index_dirty() -> anyhow
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -4589,7 +4593,7 @@ fn init_retries_v10_label_atom_hash_backfill_after_recorded_migration() -> anyho
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -4681,7 +4685,7 @@ fn init_v10_label_atom_hash_backfill_rolls_back_when_dirty_mark_fails() -> anyho
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -4754,7 +4758,7 @@ fn label_semantics_resolves_l_prefixed_label_name_before_id_fallback() -> anyhow
     let label = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "l_foo".to_owned(),
             color: None,
         },
@@ -4774,7 +4778,8 @@ fn label_semantics_resolves_l_prefixed_label_name_before_id_fallback() -> anyhow
     assert_eq!(semantics.label_name, "l_foo");
     let reread = get_label_semantics(&temp.path, "default", "l_foo")?;
     assert_eq!(reread.label_id, label.id);
-    let mut clear_options = kanban_sqlite::LabelSemanticsMutationOptions::manual_actor("tester");
+    let mut clear_options =
+        kanban_sqlite::api::LabelSemanticsMutationOptions::manual_actor("tester");
     clear_options.reason = Some("Clear semantics for id fallback check.".to_owned());
     clear_label_semantics_with_options(
         &temp.path,
@@ -4795,7 +4800,7 @@ fn label_semantics_jsonl_export_import_round_trips_truth_and_atoms() -> anyhow::
     create_label(
         &source.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: Some("blue".to_owned()),
         },
@@ -4881,7 +4886,7 @@ fn label_semantics_rejects_missing_or_cross_board_label() -> anyhow::Result<()> 
     let second_label = create_label(
         &temp.path,
         "second",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "shared".to_owned(),
             color: None,
         },
@@ -4973,7 +4978,7 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
     create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -5110,7 +5115,7 @@ fn label_atom_rebuild_keeps_global_dirty_until_all_dirty_boards_rebuild() -> any
         create_label(
             &temp.path,
             board,
-            kanban_sqlite::CreateLabel {
+            kanban_sqlite::api::CreateLabel {
                 name: label.to_owned(),
                 color: None,
             },
@@ -5171,7 +5176,7 @@ fn label_semantics_jsonl_import_marks_label_atom_boards_dirty_and_rebuild_clears
         create_label(
             &source.path,
             board,
-            kanban_sqlite::CreateLabel {
+            kanban_sqlite::api::CreateLabel {
                 name: label.to_owned(),
                 color: None,
             },
@@ -5262,7 +5267,7 @@ fn seed_label_atom_explain_fixture(
     let label = create_label(
         &temp.path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },

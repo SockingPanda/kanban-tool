@@ -4,18 +4,18 @@ use crate::common::*;
 async fn dependencies_add_remove_list_and_cycle_error() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let parent = kanban_sqlite::create_task(
+    let parent = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("parent"),
+        kanban_sqlite::api::CreateTask::ready("parent"),
     )
     .context("parent")?;
-    let child = kanban_sqlite::create_task(
+    let child = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("child"),
+        kanban_sqlite::api::CreateTask::ready("child"),
     )
     .context("child")?;
     let app = test.router();
@@ -40,7 +40,7 @@ async fn dependencies_add_remove_list_and_cycle_error() -> anyhow::Result<()> {
     );
 
     let event_count_before_duplicate =
-        kanban_sqlite::list_events(&db_path, "default", Some(&child.id))?
+        kanban_sqlite::api::list_events(&db_path, "default", Some(&child.id))?
             .into_iter()
             .filter(|event| event.kind == "dependency.added")
             .count();
@@ -54,7 +54,7 @@ async fn dependencies_add_remove_list_and_cycle_error() -> anyhow::Result<()> {
     assert_eq!(json["data"]["parents"][0]["id"], parent.id);
     assert_eq!(json["data"]["edges"][0]["parent"]["id"], parent.id);
     let event_count_after_duplicate =
-        kanban_sqlite::list_events(&db_path, "default", Some(&child.id))?
+        kanban_sqlite::api::list_events(&db_path, "default", Some(&child.id))?
             .into_iter()
             .filter(|event| event.kind == "dependency.added")
             .count();
@@ -103,17 +103,17 @@ async fn dependencies_add_remove_list_and_cycle_error() -> anyhow::Result<()> {
 async fn dependency_add_rejects_unknown_json_fields() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let parent = kanban_sqlite::create_task(
+    let parent = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("parent"),
+        kanban_sqlite::api::CreateTask::ready("parent"),
     )?;
-    let child = kanban_sqlite::create_task(
+    let child = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("child"),
+        kanban_sqlite::api::CreateTask::ready("child"),
     )?;
     let app = test.router();
 

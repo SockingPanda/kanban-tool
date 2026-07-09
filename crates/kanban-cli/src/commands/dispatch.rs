@@ -9,7 +9,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use kanban_sqlite::{DispatchOptions, FinishPolicy, dispatch_once};
+use kanban_sqlite::api::{DispatchOptions, FinishPolicy, dispatch_once};
 
 use crate::args::{DispatchArgs, DispatchLoopSummary, WorkerProfileConfig};
 use crate::commands::common::invalid_input;

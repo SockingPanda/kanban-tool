@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use kanban_sqlite::{
+use kanban_sqlite::api::{
     CommentRecord, CreateComment, create_comment_with_options, get_task, list_comments,
 };
 

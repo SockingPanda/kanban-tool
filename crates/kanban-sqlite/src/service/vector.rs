@@ -1,4 +1,4 @@
-use crate::connect_file;
+use crate::db::connect_file;
 
 use super::{
     IndexOutboxRecord, board_id, current_last_event_id, derived_status_by_name,

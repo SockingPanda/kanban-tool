@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::Result;
-use kanban_sqlite::{
+use kanban_sqlite::api::{
     BootstrapTaskLabel, CreateLabel, LabelOntologyActionInput, LabelOntologyActionRecord,
     LabelOntologyActionType, LabelOntologyActor, LabelOntologyAtomApplyInput,
     LabelOntologyCandidateAtomInput, LabelOntologyProposedAction, LabelOntologyQualityOptions,
@@ -54,7 +54,7 @@ pub(crate) fn handle_label(
             })?;
         }
         LabelCommand::Create(args) => {
-            let label = kanban_sqlite::create_label_with_actor(
+            let label = kanban_sqlite::api::create_label_with_actor(
                 db_path,
                 board,
                 actor,
@@ -220,7 +220,7 @@ pub(crate) fn handle_label(
                     "--retarget-reason-file",
                 )?,
             };
-            let propose_options = kanban_sqlite::LabelProposalProposeOptions {
+            let propose_options = kanban_sqlite::api::LabelProposalProposeOptions {
                 suggestion: options,
                 create: create_options,
             };
@@ -242,7 +242,7 @@ pub(crate) fn handle_label(
                     board,
                     actor,
                     &args.task_ref,
-                    &kanban_sqlite::DisabledLabelProposalProvider,
+                    &kanban_sqlite::api::DisabledLabelProposalProvider,
                     propose_options,
                     args.vector_config.as_deref(),
                 )?
@@ -779,15 +779,15 @@ fn label_ontology_list_options(
     proposed_label_name: Option<String>,
     include_all: bool,
     limit: usize,
-) -> Result<kanban_sqlite::LabelOntologySignalListOptions> {
-    Ok(kanban_sqlite::LabelOntologySignalListOptions {
+) -> Result<kanban_sqlite::api::LabelOntologySignalListOptions> {
+    Ok(kanban_sqlite::api::LabelOntologySignalListOptions {
         statuses: statuses
             .iter()
-            .map(|status| kanban_sqlite::LabelOntologySignalStatus::from_str(status))
+            .map(|status| kanban_sqlite::api::LabelOntologySignalStatus::from_str(status))
             .collect::<kanban_core::Result<Vec<_>>>()?,
         kinds: kinds
             .iter()
-            .map(|kind| kanban_sqlite::LabelOntologySignalKind::from_str(kind))
+            .map(|kind| kanban_sqlite::api::LabelOntologySignalKind::from_str(kind))
             .collect::<kanban_core::Result<Vec<_>>>()?,
         task_ref,
         target_label_ref,
@@ -1133,7 +1133,7 @@ fn label_ontology_validation_status(
 }
 
 fn label_ontology_observation_line(
-    observation: &kanban_sqlite::LabelOntologyObservationRecord,
+    observation: &kanban_sqlite::api::LabelOntologyObservationRecord,
 ) -> String {
     format!(
         "{} task={} signals={} fingerprint={}",
@@ -1144,7 +1144,9 @@ fn label_ontology_observation_line(
     )
 }
 
-fn label_ontology_signal_lines(signals: &[kanban_sqlite::LabelOntologySignalRecord]) -> String {
+fn label_ontology_signal_lines(
+    signals: &[kanban_sqlite::api::LabelOntologySignalRecord],
+) -> String {
     if signals.is_empty() {
         return "No label ontology signals.".to_owned();
     }
@@ -1166,7 +1168,9 @@ fn label_ontology_review_group_by_value(
     }
 }
 
-fn label_ontology_review_group_lines(groups: &[kanban_sqlite::LabelOntologyReviewGroup]) -> String {
+fn label_ontology_review_group_lines(
+    groups: &[kanban_sqlite::api::LabelOntologyReviewGroup],
+) -> String {
     if groups.is_empty() {
         return "No label ontology review groups.".to_owned();
     }
@@ -1177,7 +1181,9 @@ fn label_ontology_review_group_lines(groups: &[kanban_sqlite::LabelOntologyRevie
         .join("\n")
 }
 
-fn label_ontology_review_group_line(group: &kanban_sqlite::LabelOntologyReviewGroup) -> String {
+fn label_ontology_review_group_line(
+    group: &kanban_sqlite::api::LabelOntologyReviewGroup,
+) -> String {
     let title = match group.group_by {
         LabelOntologyReviewGroupBy::Label => group.label_name.as_deref(),
         LabelOntologyReviewGroupBy::CandidateAtom => group.candidate_text.as_deref(),
@@ -1214,7 +1220,7 @@ fn label_ontology_review_group_line(group: &kanban_sqlite::LabelOntologyReviewGr
     )
 }
 
-fn label_ontology_quality_line(report: &kanban_sqlite::LabelOntologyQualityReport) -> String {
+fn label_ontology_quality_line(report: &kanban_sqlite::api::LabelOntologyQualityReport) -> String {
     let rate = report
         .rates
         .disagreement_task_rate
@@ -1243,7 +1249,7 @@ fn label_ontology_quality_line(report: &kanban_sqlite::LabelOntologyQualityRepor
     )
 }
 
-fn label_ontology_signal_line(signal: &kanban_sqlite::LabelOntologySignalRecord) -> String {
+fn label_ontology_signal_line(signal: &kanban_sqlite::api::LabelOntologySignalRecord) -> String {
     let target = signal
         .target_label_name_snapshot
         .as_deref()
@@ -1287,7 +1293,7 @@ fn label_ontology_action_line(action: &LabelOntologyActionRecord) -> String {
     )
 }
 
-fn label_atom_explain_lines(explain: &kanban_sqlite::LabelAtomExplainRecord) -> String {
+fn label_atom_explain_lines(explain: &kanban_sqlite::api::LabelAtomExplainRecord) -> String {
     let mut lines = Vec::new();
     if let Some(atom) = &explain.atom {
         lines.push(format!(
@@ -1370,7 +1376,7 @@ fn validate_label_bootstrap_verification_score(min_score: f32) -> Result<()> {
     Ok(())
 }
 
-fn label_semantics_lines(records: &[kanban_sqlite::LabelSemanticsRecord]) -> String {
+fn label_semantics_lines(records: &[kanban_sqlite::api::LabelSemanticsRecord]) -> String {
     if records.is_empty() {
         return "No label semantics.".to_owned();
     }
@@ -1381,7 +1387,7 @@ fn label_semantics_lines(records: &[kanban_sqlite::LabelSemanticsRecord]) -> Str
         .join("\n")
 }
 
-fn label_semantics_line(record: &kanban_sqlite::LabelSemanticsRecord) -> String {
+fn label_semantics_line(record: &kanban_sqlite::api::LabelSemanticsRecord) -> String {
     format!(
         "{} description={} applies={} excludes={} examples=+{}/-{} atoms={}",
         record.label_name,
@@ -1396,8 +1402,8 @@ fn label_semantics_line(record: &kanban_sqlite::LabelSemanticsRecord) -> String 
 
 #[derive(Debug, Serialize)]
 struct LabelAddCommandOutput {
-    task: kanban_sqlite::TaskRecord,
-    created_labels: Vec<kanban_sqlite::LabelRecord>,
+    task: kanban_sqlite::api::TaskRecord,
+    created_labels: Vec<kanban_sqlite::api::LabelRecord>,
 }
 
 fn label_add_lines(result: &LabelAddCommandOutput) -> String {
@@ -1417,9 +1423,9 @@ fn label_add_lines(result: &LabelAddCommandOutput) -> String {
 
 #[derive(Debug, Serialize)]
 struct LabelBootstrapCommandOutput {
-    task: kanban_sqlite::TaskRecord,
-    semantics: kanban_sqlite::LabelSemanticsRecord,
-    verification: Option<kanban_sqlite::BootstrapTaskLabelVerification>,
+    task: kanban_sqlite::api::TaskRecord,
+    semantics: kanban_sqlite::api::LabelSemanticsRecord,
+    verification: Option<kanban_sqlite::api::BootstrapTaskLabelVerification>,
 }
 
 fn label_bootstrap_lines(result: &LabelBootstrapCommandOutput) -> String {
@@ -1520,7 +1526,7 @@ fn query_configured_label_atom_index(
     vector_config_path: Option<&std::path::Path>,
 ) -> Result<Vec<kanban_vector::LabelAtomHit>> {
     let store = subprocess_vector_store(db_path, board, vector_config_path)?;
-    kanban_sqlite::query_label_atom_index_with(
+    kanban_sqlite::api::query_label_atom_index_with(
         db_path,
         board,
         &store,
@@ -1628,10 +1634,10 @@ fn propose_with_optional_vector_config(
     board: &str,
     actor: &str,
     task_ref: &str,
-    provider: &dyn kanban_sqlite::LabelProposalProvider,
-    propose_options: kanban_sqlite::LabelProposalProposeOptions,
+    provider: &dyn kanban_sqlite::api::LabelProposalProvider,
+    propose_options: kanban_sqlite::api::LabelProposalProposeOptions,
     vector_config_path: Option<&std::path::Path>,
-) -> Result<kanban_sqlite::LabelProposalAttempt> {
+) -> Result<kanban_sqlite::api::LabelProposalAttempt> {
     let store = subprocess_vector_store(db_path, board, vector_config_path)?;
     propose_task_label_with_store_and_create_options(
         db_path,

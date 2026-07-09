@@ -1,0 +1,14 @@
+[package]
+name = "kanban-test-support"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+kanban-core.workspace = true
+kanban-application.workspace = true
+kanban-sqlite.workspace = true
+rusqlite.workspace = true
+tempfile.workspace = true

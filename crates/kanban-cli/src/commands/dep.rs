@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use kanban_core::i18n::{current_locale, dep_added, dep_removed};
-use kanban_sqlite::{
+use kanban_sqlite::api::{
     DependencyMutation, add_dependency, dependency_edge, dependency_snapshot, remove_dependency,
 };
 

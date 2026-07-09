@@ -23,7 +23,7 @@ pub(crate) async fn specify_task(
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
     Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::specify_task(
+        data: TaskDto::from(kanban_sqlite::api::specify_task(
             state.db_path(),
             &actor,
             &task_id,
@@ -42,9 +42,9 @@ pub(crate) async fn promote_task(
 ) -> Result<Json<Envelope<TaskDto>>, ApiError> {
     let body = optional_json_body(body)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::promote_task(
+        data: TaskDto::from(kanban_sqlite::api::promote_task(
             state.db_path(),
             &task.board_id,
             &actor,
@@ -65,10 +65,10 @@ pub(crate) async fn claim_task(
         return Err(invalid_input("ttl_ms must be positive"));
     }
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     let worker_profile = body.worker_profile.as_deref().unwrap_or("manual");
     let metadata_json = metadata_json(body.metadata)?;
-    let claim = kanban_sqlite::claim_task_with_profile_and_metadata(
+    let claim = kanban_sqlite::api::claim_task_with_profile_and_metadata(
         state.db_path(),
         &task.board_id,
         &actor,
@@ -77,7 +77,7 @@ pub(crate) async fn claim_task(
         worker_profile,
         &metadata_json,
     )?;
-    let run = kanban_sqlite::list_runs(state.db_path(), &task.board_id, Some(&task_id))?
+    let run = kanban_sqlite::api::list_runs(state.db_path(), &task.board_id, Some(&task_id))?
         .into_iter()
         .find(|run| run.id == claim.run_id)
         .ok_or_else(|| KanbanError::NotFound(format!("run {}", claim.run_id)))?;
@@ -100,9 +100,9 @@ pub(crate) async fn reclaim_task(
 ) -> Result<Json<Envelope<TaskDto>>, ApiError> {
     let body = optional_json_body(body)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::reclaim_task_to(
+        data: TaskDto::from(kanban_sqlite::api::reclaim_task_to(
             state.db_path(),
             &task.board_id,
             &actor,
@@ -126,9 +126,9 @@ pub(crate) async fn reopen_task(
         return Err(invalid_input("reopen reason is required"));
     }
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::reopen_task(
+        data: TaskDto::from(kanban_sqlite::api::reopen_task(
             state.db_path(),
             &task.board_id,
             &actor,
@@ -150,7 +150,7 @@ pub(crate) async fn heartbeat_task(
         return Err(invalid_input("ttl_ms must be positive"));
     }
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     if task.status == TaskStatus::Running
         && task.claim_token.as_deref() != Some(body.claim_token.as_str())
     {
@@ -159,7 +159,7 @@ pub(crate) async fn heartbeat_task(
         )));
     }
     Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::heartbeat_task_with_note(
+        data: TaskDto::from(kanban_sqlite::api::heartbeat_task_with_note(
             state.db_path(),
             &task.board_id,
             &actor,
@@ -180,10 +180,10 @@ pub(crate) async fn complete_task(
 ) -> Result<Json<Envelope<TaskDto>>, ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     let result_json = body.result.map(|value| value.to_string());
     Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::complete_task_with_summary_and_result(
+        data: TaskDto::from(kanban_sqlite::api::complete_task_with_summary_and_result(
             state.db_path(),
             &task.board_id,
             &actor,
@@ -208,9 +208,9 @@ pub(crate) async fn submit_review_task(
         return Err(invalid_input("submit-review result is not supported yet"));
     }
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::submit_review_task_with_summary(
+        data: TaskDto::from(kanban_sqlite::api::submit_review_task_with_summary(
             state.db_path(),
             &task.board_id,
             &actor,
@@ -231,9 +231,9 @@ pub(crate) async fn block_task(
 ) -> Result<Json<Envelope<TaskDto>>, ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::block_task(
+        data: TaskDto::from(kanban_sqlite::api::block_task(
             state.db_path(),
             &task.board_id,
             &actor,
@@ -254,9 +254,9 @@ pub(crate) async fn unblock_task(
 ) -> Result<Json<Envelope<TaskDto>>, ApiError> {
     let body = optional_json_body(body)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::unblock_task(
+        data: TaskDto::from(kanban_sqlite::api::unblock_task(
             state.db_path(),
             &task.board_id,
             &actor,
@@ -274,9 +274,9 @@ pub(crate) async fn archive_task(
 ) -> Result<Json<Envelope<TaskDto>>, ApiError> {
     let body = optional_json_body(body)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let task = kanban_sqlite::get_task_by_id_global(state.db_path(), &task_id)?;
+    let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::archive_task(
+        data: TaskDto::from(kanban_sqlite::api::archive_task(
             state.db_path(),
             &task.board_id,
             &actor,

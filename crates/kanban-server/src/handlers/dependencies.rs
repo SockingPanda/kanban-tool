@@ -18,8 +18,8 @@ pub(crate) async fn add_dependency(
 ) -> Result<(StatusCode, Json<Envelope<DependenciesDto>>), ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    let child = kanban_sqlite::get_task_by_id_global(state.db_path(), &child_task_id)?;
-    let outcome = kanban_sqlite::add_dependency_with_outcome(
+    let child = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &child_task_id)?;
+    let outcome = kanban_sqlite::api::add_dependency_with_outcome(
         state.db_path(),
         &child.board_id,
         &actor,
@@ -27,8 +27,8 @@ pub(crate) async fn add_dependency(
         &child_task_id,
     )?;
     let status = match outcome {
-        kanban_sqlite::AddDependencyOutcome::Added => StatusCode::CREATED,
-        kanban_sqlite::AddDependencyOutcome::AlreadyExists => StatusCode::OK,
+        kanban_sqlite::api::AddDependencyOutcome::Added => StatusCode::CREATED,
+        kanban_sqlite::api::AddDependencyOutcome::AlreadyExists => StatusCode::OK,
     };
     Ok((
         status,
@@ -45,8 +45,8 @@ pub(crate) async fn remove_dependency(
     headers: HeaderMap,
 ) -> Result<Json<Envelope<DependenciesDto>>, ApiError> {
     let actor = actor(None, &headers, &state);
-    let child = kanban_sqlite::get_task_by_id_global(state.db_path(), &child_task_id)?;
-    kanban_sqlite::remove_dependency(
+    let child = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &child_task_id)?;
+    kanban_sqlite::api::remove_dependency(
         state.db_path(),
         &child.board_id,
         &actor,

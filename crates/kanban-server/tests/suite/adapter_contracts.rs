@@ -273,23 +273,23 @@ fn dispatcher_adapter_contract_uses_shared_transition_service() -> anyhow::Resul
 async fn derived_adapter_contract_does_not_write_canonical_label_truth() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let label = kanban_sqlite::create_label(
+    let label = kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "derived-contract".to_owned(),
             color: None,
         },
     )?;
-    kanban_sqlite::upsert_label_semantics_by_id(
+    kanban_sqlite::api::upsert_label_semantics_by_id(
         &db_path,
         "default",
         &label.id,
-        kanban_sqlite::UpsertLabelSemantics {
+        kanban_sqlite::api::UpsertLabelSemantics {
             label_ref: label.id.clone(),
             description: Some("Derived contract label".to_owned()),
             applies_when: vec!["checks derived adapters".to_owned()],
-            ..kanban_sqlite::UpsertLabelSemantics::default()
+            ..kanban_sqlite::api::UpsertLabelSemantics::default()
         },
     )?;
     let before = canonical_counts(&db_path)?;
@@ -328,7 +328,7 @@ async fn derived_adapter_contract_does_not_write_canonical_label_truth() -> anyh
 }
 
 fn canonical_counts(path: &Path) -> anyhow::Result<CanonicalCounts> {
-    let conn = kanban_sqlite::connect_file(path)?;
+    let conn = kanban_test_support::connect_file(path)?;
     let count = |table: &str| -> anyhow::Result<i64> {
         let sql = format!("SELECT COUNT(*) FROM {table}");
         Ok(conn.query_row(&sql, [], |row| row.get(0))?)
@@ -349,7 +349,7 @@ fn ontology_atom_effect_count(
     atom_content_hash: &str,
     effect: &str,
 ) -> anyhow::Result<i64> {
-    let conn = kanban_sqlite::connect_file(path)?;
+    let conn = kanban_test_support::connect_file(path)?;
     Ok(conn.query_row(
         "SELECT COUNT(*) FROM label_ontology_action_atom_effects \
          WHERE atom_content_hash=?1 AND effect=?2",

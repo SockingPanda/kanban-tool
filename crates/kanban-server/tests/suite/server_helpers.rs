@@ -178,18 +178,18 @@ async fn vector_and_label_atom_endpoints_use_vector_helper() -> anyhow::Result<(
 async fn label_suggest_and_propose_use_resolved_vector_config_model() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let seed_task = kanban_sqlite::create_task(
+    let seed_task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("server helper model seed"),
+        kanban_sqlite::api::CreateTask::ready("server helper model seed"),
     )?;
-    kanban_sqlite::bootstrap_task_label(
+    kanban_sqlite::api::bootstrap_task_label(
         &db_path,
         "default",
         "seed",
         &seed_task.id,
-        kanban_sqlite::BootstrapTaskLabel {
+        kanban_sqlite::api::BootstrapTaskLabel {
             name: "backend".to_owned(),
             description: Some("Backend work".to_owned()),
             applies_when: vec!["touches rust service code".to_owned()],
@@ -198,11 +198,13 @@ async fn label_suggest_and_propose_use_resolved_vector_config_model() -> anyhow:
             negative_examples: Vec::new(),
         },
     )?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("server helper model target touches rust service code"),
+        kanban_sqlite::api::CreateTask::ready(
+            "server helper model target touches rust service code",
+        ),
     )?;
     let vector_config = test.dir_path().join("review-vector.toml");
     std::fs::write(

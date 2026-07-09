@@ -4,11 +4,11 @@ use crate::common::*;
 async fn comments_creates_and_lists_task_comments() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("commented"),
+        kanban_sqlite::api::CreateTask::ready("commented"),
     )
     .context("task")?;
     let app = test.router();
@@ -44,7 +44,7 @@ async fn comments_creates_and_lists_task_comments() -> anyhow::Result<()> {
     assert_eq!(comments[0]["author_type"], "user");
 
     let events =
-        kanban_sqlite::list_events(&db_path, "default", Some(&task.id)).context("events")?;
+        kanban_sqlite::api::list_events(&db_path, "default", Some(&task.id)).context("events")?;
     assert!(
         events
             .iter()
@@ -57,11 +57,11 @@ async fn comments_creates_and_lists_task_comments() -> anyhow::Result<()> {
 async fn comments_accept_agent_identity_and_reject_non_agent_type() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("agent comment"),
+        kanban_sqlite::api::CreateTask::ready("agent comment"),
     )
     .context("task")?;
     let app = test.router();
@@ -113,11 +113,11 @@ async fn comments_accept_agent_identity_and_reject_non_agent_type() -> anyhow::R
 async fn comments_accept_decision_kind_with_default_and_agent_identity() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("decision comment"),
+        kanban_sqlite::api::CreateTask::ready("decision comment"),
     )
     .context("task")?;
     let app = test.router();
@@ -184,11 +184,11 @@ async fn comments_accept_decision_kind_with_default_and_agent_identity() -> anyh
 async fn comments_reject_invalid_decision_metadata_schema() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("invalid decision comment"),
+        kanban_sqlite::api::CreateTask::ready("invalid decision comment"),
     )
     .context("task")?;
     let app = test.router();

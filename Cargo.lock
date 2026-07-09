@@ -3870,6 +3870,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "kanban-application"
+version = "2.1.2"
+dependencies = [
+ "kanban-core",
+ "serde",
+]
+
+[[package]]
 name = "kanban-cli"
 version = "2.1.2"
 dependencies = [
@@ -3888,6 +3896,7 @@ dependencies = [
  "kanban-search",
  "kanban-server",
  "kanban-sqlite",
+ "kanban-test-support",
  "kanban-vector",
  "predicates",
  "pretty_assertions",
@@ -4051,6 +4060,7 @@ dependencies = [
  "futures-util",
  "http-body-util",
  "insta",
+ "kanban-application",
  "kanban-context",
  "kanban-core",
  "kanban-derived-io",
@@ -4060,6 +4070,7 @@ dependencies = [
  "kanban-local",
  "kanban-search",
  "kanban-sqlite",
+ "kanban-test-support",
  "kanban-vector",
  "serde",
  "serde_json",
@@ -4078,6 +4089,7 @@ version = "2.1.2"
 dependencies = [
  "anyhow",
  "criterion",
+ "kanban-application",
  "kanban-context",
  "kanban-core",
  "kanban-entity",
@@ -4094,6 +4106,17 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "trybuild",
+]
+
+[[package]]
+name = "kanban-test-support"
+version = "2.1.2"
+dependencies = [
+ "kanban-application",
+ "kanban-core",
+ "kanban-sqlite",
+ "rusqlite",
+ "tempfile",
 ]
 
 [[package]]

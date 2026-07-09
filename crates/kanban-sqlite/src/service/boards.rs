@@ -1,4 +1,4 @@
-use crate::connect_file;
+use crate::db::connect_file;
 
 use super::{
     BoardColumnRecord, BoardListOptions, BoardRecord, CreateBoard, all, exec, exec_one, exists,

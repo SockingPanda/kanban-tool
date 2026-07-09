@@ -5,7 +5,7 @@ async fn runs_lists_task_runs_without_claim_token() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     let task = create_ready_task_for_test(&db_path, "default", "seed", "runs").context("task")?;
-    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000)
+    let claim = kanban_sqlite::api::claim_task(&db_path, "default", "worker", &task.id, 60_000)
         .context("claim")?;
     let app = test.router();
 
@@ -25,17 +25,17 @@ async fn run_log_reads_dispatch_log_content_without_claim_token() -> anyhow::Res
     let log_dir = test.dir_path().join("logs");
     let task =
         create_ready_task_for_test(&db_path, "default", "seed", "logged run").context("task")?;
-    let result = kanban_sqlite::dispatch_once(
+    let result = kanban_sqlite::api::dispatch_once(
         &db_path,
         "default",
-        kanban_sqlite::DispatchOptions {
+        kanban_sqlite::api::DispatchOptions {
             actor: "dispatcher".into(),
             command: "printf 'hello log\\n'".into(),
             worker_profile: "default".into(),
             claim_ttl_ms: 60_000,
             heartbeat_interval_ms: 10,
-            on_success: kanban_sqlite::FinishPolicy::Done,
-            on_failure: kanban_sqlite::FinishPolicy::Blocked,
+            on_success: kanban_sqlite::api::FinishPolicy::Done,
+            on_failure: kanban_sqlite::api::FinishPolicy::Blocked,
             log_dir,
         },
     )
@@ -60,23 +60,23 @@ async fn run_log_rejects_suspicious_log_paths() -> anyhow::Result<()> {
     let db_path = test.db_path().to_path_buf();
     let _task = create_ready_task_for_test(&db_path, "default", "seed", "suspicious logged run")
         .context("task")?;
-    let result = kanban_sqlite::dispatch_once(
+    let result = kanban_sqlite::api::dispatch_once(
         &db_path,
         "default",
-        kanban_sqlite::DispatchOptions {
+        kanban_sqlite::api::DispatchOptions {
             actor: "dispatcher".into(),
             command: "printf 'hello log\\n'".into(),
             worker_profile: "default".into(),
             claim_ttl_ms: 60_000,
             heartbeat_interval_ms: 10,
-            on_success: kanban_sqlite::FinishPolicy::Done,
-            on_failure: kanban_sqlite::FinishPolicy::Blocked,
+            on_success: kanban_sqlite::api::FinishPolicy::Done,
+            on_failure: kanban_sqlite::api::FinishPolicy::Blocked,
             log_dir: test.dir_path().join("logs"),
         },
     )
     .context("dispatch")?;
     let run_id = result.run_id.context("run id")?;
-    kanban_sqlite::connect_file(&db_path)
+    kanban_test_support::connect_file(&db_path)
         .context("connect")?
         .execute(
             "UPDATE task_runs SET log_path=?1 WHERE id=?2",
@@ -99,18 +99,18 @@ async fn run_log_returns_tail_window_when_log_is_large() -> anyhow::Result<()> {
     let log_dir = test.dir_path().join("logs");
     let _task = create_ready_task_for_test(&db_path, "default", "seed", "large logged run")
         .context("task")?;
-    let result = kanban_sqlite::dispatch_once(
+    let result = kanban_sqlite::api::dispatch_once(
         &db_path,
         "default",
-        kanban_sqlite::DispatchOptions {
+        kanban_sqlite::api::DispatchOptions {
             actor: "dispatcher".into(),
             command: "printf head; python3 - <<'PY'\nprint('x' * 270000, end='')\nPY\nprintf tail"
                 .into(),
             worker_profile: "default".into(),
             claim_ttl_ms: 60_000,
             heartbeat_interval_ms: 10,
-            on_success: kanban_sqlite::FinishPolicy::Done,
-            on_failure: kanban_sqlite::FinishPolicy::Blocked,
+            on_success: kanban_sqlite::api::FinishPolicy::Done,
+            on_failure: kanban_sqlite::api::FinishPolicy::Blocked,
             log_dir,
         },
     )
@@ -154,7 +154,7 @@ async fn runs_gets_run_by_id_without_claim_token() -> anyhow::Result<()> {
     let db_path = test.db_path().to_path_buf();
     let task =
         create_ready_task_for_test(&db_path, "default", "seed", "get run").context("task")?;
-    let claim = kanban_sqlite::claim_task(&db_path, "default", "worker", &task.id, 60_000)
+    let claim = kanban_sqlite::api::claim_task(&db_path, "default", "worker", &task.id, 60_000)
         .context("claim")?;
     let app = test.router();
 

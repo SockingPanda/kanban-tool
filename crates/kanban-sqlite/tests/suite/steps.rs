@@ -1,6 +1,6 @@
 use crate::common::*;
 
-fn step_kinds(events: &[kanban_sqlite::EventRecord]) -> Vec<String> {
+fn step_kinds(events: &[kanban_sqlite::api::EventRecord]) -> Vec<String> {
     events.iter().map(|event| event.kind.clone()).collect()
 }
 
@@ -423,20 +423,20 @@ fn task_neighborhood_includes_linked_step_edges_without_dependency_blocking() ->
         },
     )?;
 
-    let graph = kanban_sqlite::task_neighborhood(
+    let graph = kanban_sqlite::api::task_neighborhood(
         &temp.path,
         &parent.id,
-        kanban_sqlite::TaskNeighborhoodOptions::default(),
+        kanban_sqlite::api::TaskNeighborhoodOptions::default(),
     )?;
 
     assert!(graph.nodes.iter().any(|node| {
-        node.task.id == child.id && node.role == kanban_sqlite::TaskGraphNodeRole::StepChild
+        node.task.id == child.id && node.role == kanban_sqlite::api::TaskGraphNodeRole::StepChild
     }));
     assert!(graph.edges.iter().any(|edge| {
         edge.id == format!("step:{}", step.id)
             && edge.source_task_id == parent.id
             && edge.target_task_id == child.id
-            && edge.kind == kanban_sqlite::TaskGraphEdgeKind::Step
+            && edge.kind == kanban_sqlite::api::TaskGraphEdgeKind::Step
             && edge.required
             && !edge.blocking
     }));
@@ -444,7 +444,7 @@ fn task_neighborhood_includes_linked_step_edges_without_dependency_blocking() ->
         graph
             .edges
             .iter()
-            .filter(|edge| edge.kind == kanban_sqlite::TaskGraphEdgeKind::Step)
+            .filter(|edge| edge.kind == kanban_sqlite::api::TaskGraphEdgeKind::Step)
             .count(),
         1
     );

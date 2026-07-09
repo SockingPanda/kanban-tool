@@ -37,7 +37,7 @@ pub struct RuntimeConfig {
 
 struct EmbeddedApiRuntime {
     config: Mutex<RuntimeConfig>,
-    _runtime_guard: kanban_sqlite::DatabaseRuntimeGuard,
+    _runtime_guard: kanban_sqlite::api::DatabaseRuntimeGuard,
     shutdown_tx: Mutex<Option<oneshot::Sender<()>>>,
 }
 
@@ -87,7 +87,7 @@ fn set_runtime_board(
         .expect("runtime config lock poisoned")
         .db_path
         .clone();
-    let board = kanban_sqlite::get_board(&db_path, &board)
+    let board = kanban_sqlite::api::get_board(&db_path, &board)
         .map_err(|error| error.to_string())?
         .slug;
     let mut config = runtime.config.lock().expect("runtime config lock poisoned");
@@ -344,8 +344,8 @@ fn start_embedded_api(app: &tauri::App) -> Result<EmbeddedApiRuntime, String> {
     let db_path = kanban_local::default_db_path();
     let actor = kanban_local::default_actor();
     let runtime_guard =
-        kanban_sqlite::begin_database_runtime(&db_path).map_err(|error| error.to_string())?;
-    kanban_sqlite::init_database(&db_path, &actor).map_err(|error| error.to_string())?;
+        kanban_sqlite::api::begin_database_runtime(&db_path).map_err(|error| error.to_string())?;
+    kanban_sqlite::init::init_database(&db_path, &actor).map_err(|error| error.to_string())?;
 
     let state = embedded_app_state(app, db_path.clone(), actor.clone());
     let router = kanban_server::build_desktop_router(state);

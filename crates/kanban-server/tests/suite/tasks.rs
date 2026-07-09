@@ -1,5 +1,5 @@
 use crate::common::*;
-use kanban_sqlite::LabelProposalCandidate;
+use kanban_sqlite::api::LabelProposalCandidate;
 
 #[derive(Debug, PartialEq, Eq)]
 struct HttpTaskCreateLabelCounts {
@@ -12,7 +12,7 @@ struct HttpTaskCreateLabelCounts {
 fn http_task_create_label_counts(
     path: &std::path::Path,
 ) -> anyhow::Result<HttpTaskCreateLabelCounts> {
-    let conn = kanban_sqlite::connect_file(path)?;
+    let conn = kanban_test_support::connect_file(path)?;
     let count_rows = |table: &str| -> anyhow::Result<i64> {
         conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
             row.get(0)
@@ -35,11 +35,11 @@ async fn tasks_by_status_returns_per_status_windows() -> anyhow::Result<()> {
         .context("seed ready alpha")?;
     create_ready_task_for_test(&db_path, "default", "seed", "ready beta")
         .context("seed ready beta")?;
-    kanban_sqlite::create_task(
+    kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "todo gamma".to_owned(),
             description: Some("ready spec".to_owned()),
             status: Some(kanban_core::TaskStatus::Todo),
@@ -157,7 +157,7 @@ async fn tasks_creates_task_and_event_with_body_actor_priority() -> anyhow::Resu
     assert_task_dto_exposes_ui_fields_without_claim_token(task);
     assert_eq!(task["metadata_json"], r#"{"source":"test"}"#);
 
-    let events = kanban_sqlite::list_events(
+    let events = kanban_sqlite::api::list_events(
         &db_path,
         "default",
         Some(task["id"].as_str().context("value")?),
@@ -173,11 +173,11 @@ async fn tasks_creates_task_and_event_with_body_actor_priority() -> anyhow::Resu
 async fn tasks_creates_task_with_dependencies_and_degrades_ready_to_todo() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let parent = kanban_sqlite::create_task(
+    let parent = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "unfinished parent".to_owned(),
             description: Some("spec".to_owned()),
             status: Some(kanban_core::TaskStatus::Todo),
@@ -207,13 +207,14 @@ async fn tasks_creates_task_with_dependencies_and_degrades_ready_to_todo() -> an
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(json["data"]["status"], "todo");
     let child_id = json["data"]["id"].as_str().context("child id")?;
-    let deps = kanban_sqlite::list_dependencies(&db_path, "default", child_id).context("deps")?;
+    let deps =
+        kanban_sqlite::api::list_dependencies(&db_path, "default", child_id).context("deps")?;
     assert!(
         deps.iter()
             .any(|(parent_id, _child_id)| parent_id == &parent.id)
     );
     let events =
-        kanban_sqlite::list_events(&db_path, "default", Some(child_id)).context("events")?;
+        kanban_sqlite::api::list_events(&db_path, "default", Some(child_id)).context("events")?;
     assert!(events.iter().any(|event| event.kind == "dependency.added"));
     Ok(())
 }
@@ -238,7 +239,7 @@ async fn tasks_create_with_missing_dependency_rolls_back_task() -> anyhow::Resul
 
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(json["error"]["code"], "not_found");
-    let tasks = kanban_sqlite::list_tasks(&db_path, "default", &[], false).context("tasks")?;
+    let tasks = kanban_sqlite::api::list_tasks(&db_path, "default", &[], false).context("tasks")?;
     assert!(tasks.iter().all(|task| task.title != "must not persist"));
     Ok(())
 }
@@ -247,7 +248,7 @@ async fn tasks_create_with_missing_dependency_rolls_back_task() -> anyhow::Resul
 async fn tasks_create_with_invalid_max_retries_rolls_back_task_and_events() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let before_events = kanban_sqlite::list_events(&db_path, "default", None)?.len();
+    let before_events = kanban_sqlite::api::list_events(&db_path, "default", None)?.len();
     let app = test.router();
 
     let (status, json) = post_json(
@@ -263,14 +264,14 @@ async fn tasks_create_with_invalid_max_retries_rolls_back_task_and_events() -> a
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(json["error"]["code"], "invalid_input");
-    let tasks = kanban_sqlite::list_tasks(&db_path, "default", &[], false).context("tasks")?;
+    let tasks = kanban_sqlite::api::list_tasks(&db_path, "default", &[], false).context("tasks")?;
     assert!(
         tasks
             .iter()
             .all(|task| task.title != "invalid retry create"),
         "invalid create must not persist task"
     );
-    let after_events = kanban_sqlite::list_events(&db_path, "default", None)?.len();
+    let after_events = kanban_sqlite::api::list_events(&db_path, "default", None)?.len();
     assert_eq!(
         after_events, before_events,
         "invalid create must not write events"
@@ -283,11 +284,11 @@ async fn tasks_create_with_multiple_dependencies_rolls_back_prior_edges_on_later
 -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let valid_parent = kanban_sqlite::create_task(
+    let valid_parent = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("valid parent"),
+        kanban_sqlite::api::CreateTask::ready("valid parent"),
     )
     .context("valid parent")?;
     let app = test.router();
@@ -306,11 +307,11 @@ async fn tasks_create_with_multiple_dependencies_rolls_back_prior_edges_on_later
 
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(json["error"]["code"], "not_found");
-    let tasks = kanban_sqlite::list_tasks(&db_path, "default", &[], false).context("tasks")?;
+    let tasks = kanban_sqlite::api::list_tasks(&db_path, "default", &[], false).context("tasks")?;
     let child = tasks.iter().find(|task| task.title == "partial child");
     assert!(child.is_none(), "failed create must roll back child task");
-    let deps =
-        kanban_sqlite::list_dependencies(&db_path, "default", &valid_parent.id).context("deps")?;
+    let deps = kanban_sqlite::api::list_dependencies(&db_path, "default", &valid_parent.id)
+        .context("deps")?;
     assert!(
         deps.is_empty(),
         "failed create must roll back prior dependency edge"
@@ -354,10 +355,10 @@ async fn tasks_create_with_mixed_existing_and_missing_labels_rolls_back_atomical
 -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let backend = kanban_sqlite::create_label(
+    let backend = kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "backend".to_owned(),
             color: None,
         },
@@ -386,7 +387,7 @@ async fn tasks_create_with_mixed_existing_and_missing_labels_rolls_back_atomical
     );
     assert_eq!(http_task_create_label_counts(&db_path)?, before);
     assert_eq!(
-        kanban_sqlite::list_labels(&db_path, "default")?
+        kanban_sqlite::api::list_labels(&db_path, "default")?
             .into_iter()
             .map(|label| label.id)
             .collect::<Vec<_>>(),
@@ -400,10 +401,10 @@ async fn tasks_create_accepts_labels_and_exposes_task_label_dto() -> anyhow::Res
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     for name in ["backend", "api"] {
-        kanban_sqlite::create_label(
+        kanban_sqlite::api::create_label(
             &db_path,
             "default",
-            kanban_sqlite::CreateLabel {
+            kanban_sqlite::api::CreateLabel {
                 name: name.to_owned(),
                 color: None,
             },
@@ -427,8 +428,11 @@ async fn tasks_create_accepts_labels_and_exposes_task_label_dto() -> anyhow::Res
     assert_eq!(labels.len(), 2);
     let names: Vec<_> = labels.iter().map(|label| label["name"].clone()).collect();
     assert_eq!(names, [json!("api"), json!("backend")]);
-    assert_eq!(kanban_sqlite::list_labels(&db_path, "default")?.len(), 2);
-    let events = kanban_sqlite::list_events(
+    assert_eq!(
+        kanban_sqlite::api::list_labels(&db_path, "default")?.len(),
+        2
+    );
+    let events = kanban_sqlite::api::list_events(
         &db_path,
         "default",
         Some(json["data"]["id"].as_str().context("task id")?),
@@ -447,11 +451,11 @@ async fn tasks_create_accepts_labels_and_exposes_task_label_dto() -> anyhow::Res
 async fn tasks_label_bootstrap_returns_task_and_semantics() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("bootstrap API task"),
+        kanban_sqlite::api::CreateTask::ready("bootstrap API task"),
     )
     .context("task")?;
     let app = test.router();
@@ -497,21 +501,21 @@ async fn tasks_lists_non_archived_by_default_and_includes_archived_on_query() ->
 {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let visible = kanban_sqlite::create_task(
+    let visible = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("visible task"),
+        kanban_sqlite::api::CreateTask::ready("visible task"),
     )
     .context("visible task")?;
-    let archived = kanban_sqlite::create_task(
+    let archived = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("archived task"),
+        kanban_sqlite::api::CreateTask::ready("archived task"),
     )
     .context("archived task")?;
-    kanban_sqlite::archive_task(&db_path, "default", "seed", &archived.id, false)
+    kanban_sqlite::api::archive_task(&db_path, "default", "seed", &archived.id, false)
         .context("archive")?;
     let app = test.router();
 
@@ -536,14 +540,14 @@ async fn tasks_lists_non_archived_by_default_and_includes_archived_on_query() ->
 async fn tasks_lists_with_single_status_filter() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let ready = kanban_sqlite::create_task(
+    let ready = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("ready task"),
+        kanban_sqlite::api::CreateTask::ready("ready task"),
     )
     .context("ready task")?;
-    kanban_sqlite::mark_execution_plan_not_required(
+    kanban_sqlite::api::mark_execution_plan_not_required(
         &db_path,
         "default",
         "seed",
@@ -551,11 +555,11 @@ async fn tasks_lists_with_single_status_filter() -> anyhow::Result<()> {
         "status filter fixture",
     )
     .context("mark ready not required")?;
-    let todo = kanban_sqlite::create_task(
+    let todo = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "todo task".to_owned(),
             description: Some("todo details".to_owned()),
             status: Some(kanban_core::TaskStatus::Todo),
@@ -584,14 +588,14 @@ async fn tasks_lists_with_single_status_filter() -> anyhow::Result<()> {
 async fn tasks_lists_with_repeated_status_filters() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let ready = kanban_sqlite::create_task(
+    let ready = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("ready task"),
+        kanban_sqlite::api::CreateTask::ready("ready task"),
     )
     .context("ready task")?;
-    kanban_sqlite::mark_execution_plan_not_required(
+    kanban_sqlite::api::mark_execution_plan_not_required(
         &db_path,
         "default",
         "seed",
@@ -599,14 +603,14 @@ async fn tasks_lists_with_repeated_status_filters() -> anyhow::Result<()> {
         "status filter fixture",
     )
     .context("mark ready not required")?;
-    let running = kanban_sqlite::create_task(
+    let running = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("running task"),
+        kanban_sqlite::api::CreateTask::ready("running task"),
     )
     .context("running task")?;
-    kanban_sqlite::mark_execution_plan_not_required(
+    kanban_sqlite::api::mark_execution_plan_not_required(
         &db_path,
         "default",
         "seed",
@@ -614,13 +618,13 @@ async fn tasks_lists_with_repeated_status_filters() -> anyhow::Result<()> {
         "status filter fixture",
     )
     .context("mark running not required")?;
-    kanban_sqlite::claim_task(&db_path, "default", "seed", &running.id, 60_000)
+    kanban_sqlite::api::claim_task(&db_path, "default", "seed", &running.id, 60_000)
         .context("claim task")?;
-    let todo = kanban_sqlite::create_task(
+    let todo = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "todo task".to_owned(),
             description: Some("todo details".to_owned()),
             status: Some(kanban_core::TaskStatus::Todo),
@@ -654,25 +658,25 @@ async fn tasks_lists_with_repeated_status_filters() -> anyhow::Result<()> {
 async fn tasks_sorts_by_updated_at_ascending_and_descending() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let oldest = kanban_sqlite::create_task(
+    let oldest = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("oldest update"),
+        kanban_sqlite::api::CreateTask::ready("oldest update"),
     )
     .context("oldest task")?;
-    let newest = kanban_sqlite::create_task(
+    let newest = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("newest update"),
+        kanban_sqlite::api::CreateTask::ready("newest update"),
     )
     .context("newest task")?;
-    let middle = kanban_sqlite::create_task(
+    let middle = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("middle update"),
+        kanban_sqlite::api::CreateTask::ready("middle update"),
     )
     .context("middle task")?;
     set_task_updated_at(&db_path, &oldest.id, 1_000)?;
@@ -703,10 +707,10 @@ async fn tasks_lists_with_assignee_search_sort_and_label_filter() -> anyhow::Res
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
     for name in ["backend", "frontend"] {
-        kanban_sqlite::create_label(
+        kanban_sqlite::api::create_label(
             &db_path,
             "default",
-            kanban_sqlite::CreateLabel {
+            kanban_sqlite::api::CreateLabel {
                 name: name.to_owned(),
                 color: None,
             },
@@ -717,11 +721,11 @@ async fn tasks_lists_with_assignee_search_sort_and_label_filter() -> anyhow::Res
         ("beta bug", Some("alice"), 3, vec!["backend".to_owned()]),
         ("alpha chore", Some("bob"), 2, vec!["frontend".to_owned()]),
     ] {
-        kanban_sqlite::create_task_with_labels(
+        kanban_sqlite::api::create_task_with_labels(
             &db_path,
             "default",
             "seed",
-            kanban_sqlite::CreateTask {
+            kanban_sqlite::api::CreateTask {
                 title: title.to_owned(),
                 description: Some(format!("{title} details")),
                 status: Some(kanban_core::TaskStatus::Ready),
@@ -766,11 +770,11 @@ async fn tasks_lists_with_assignee_search_sort_and_label_filter() -> anyhow::Res
 async fn labels_routes_create_list_add_and_remove_task_labels() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("label route target"),
+        kanban_sqlite::api::CreateTask::ready("label route target"),
     )?;
     let app = test.router();
 
@@ -811,7 +815,10 @@ async fn labels_routes_create_list_add_and_remove_task_labels() -> anyhow::Resul
             .unwrap_or_default()
             .contains("label frontend does not exist")
     );
-    assert_eq!(kanban_sqlite::list_labels(&db_path, "default")?.len(), 1);
+    assert_eq!(
+        kanban_sqlite::api::list_labels(&db_path, "default")?.len(),
+        1
+    );
 
     let (status, json) = post_json(
         app.clone(),
@@ -880,11 +887,11 @@ async fn task_label_suggestions_route_returns_degraded_json_without_provider() -
 {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("label suggestion route target"),
+        kanban_sqlite::api::CreateTask::ready("label suggestion route target"),
     )?;
     let app = test.router();
 
@@ -925,11 +932,11 @@ async fn task_label_suggestions_route_returns_degraded_json_without_provider() -
 async fn task_label_proposal_route_degrades_without_provider() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("label proposal route degraded target"),
+        kanban_sqlite::api::CreateTask::ready("label proposal route degraded target"),
     )?;
     let app = test.router();
 
@@ -953,7 +960,7 @@ async fn task_label_proposal_route_degrades_without_provider() -> anyhow::Result
             .iter()
             .any(|value| value == "label_proposal_provider_unavailable")
     );
-    assert!(kanban_sqlite::list_labels(&db_path, "default")?.is_empty());
+    assert!(kanban_sqlite::api::list_labels(&db_path, "default")?.is_empty());
     Ok(())
 }
 
@@ -962,11 +969,11 @@ async fn task_label_proposal_route_with_candidate_degrades_without_polluting_tru
 -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("label proposal route candidate degraded target"),
+        kanban_sqlite::api::CreateTask::ready("label proposal route candidate degraded target"),
     )?;
     let app = test.router();
 
@@ -999,13 +1006,13 @@ async fn task_label_proposal_route_with_candidate_degrades_without_polluting_tru
             .any(|value| value == "label_proposal_residual_validation_unavailable"),
         "{diagnostics:?}"
     );
-    let conn = kanban_sqlite::connect_file(&db_path)?;
+    let conn = kanban_test_support::connect_file(&db_path)?;
     let proposal_count: i64 =
         conn.query_row("SELECT COUNT(*) FROM label_semantic_proposals", [], |row| {
             row.get(0)
         })?;
     assert_eq!(proposal_count, 0);
-    assert!(kanban_sqlite::list_labels(&db_path, "default")?.is_empty());
+    assert!(kanban_sqlite::api::list_labels(&db_path, "default")?.is_empty());
     Ok(())
 }
 
@@ -1014,11 +1021,11 @@ async fn task_label_proposal_route_accepts_and_rejects_without_task_binding() ->
 {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("label proposal route target"),
+        kanban_sqlite::api::CreateTask::ready("label proposal route target"),
     )?;
     let app = test.router();
 
@@ -1061,14 +1068,14 @@ async fn task_label_proposal_route_accepts_and_rejects_without_task_binding() ->
     assert_eq!(json["data"]["status"], "accepted");
     assert!(json["data"]["resolved_label_id"].as_str().is_some());
     assert!(
-        kanban_sqlite::get_task(&db_path, "default", &task.id)?
+        kanban_sqlite::api::get_task(&db_path, "default", &task.id)?
             .labels
             .is_empty()
     );
     let label_id = json["data"]["resolved_label_id"]
         .as_str()
         .context("resolved label id")?;
-    let semantics = kanban_sqlite::get_label_semantics(&db_path, "default", label_id)?;
+    let semantics = kanban_sqlite::api::get_label_semantics(&db_path, "default", label_id)?;
     let atom = semantics
         .atoms
         .iter()
@@ -1118,19 +1125,19 @@ async fn task_label_proposal_route_accepts_and_rejects_without_task_binding() ->
 async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let label = kanban_sqlite::create_label(
+    let label = kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
     )?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("ontology API route target"),
+        kanban_sqlite::api::CreateTask::ready("ontology API route target"),
     )?;
     let app = test.router();
 
@@ -1294,13 +1301,13 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
 async fn generic_signal_routes_filter_and_show_board_signals() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("generic signal target"),
+        kanban_sqlite::api::CreateTask::ready("generic signal target"),
     )?;
-    let conn = kanban_sqlite::connect_file(&db_path)?;
+    let conn = kanban_test_support::connect_file(&db_path)?;
     for (observation_id, signal_id, status, title, created_at) in [
         (
             "obs_generic_open",
@@ -1406,19 +1413,19 @@ async fn generic_signal_routes_filter_and_show_board_signals() -> anyhow::Result
 async fn label_ontology_observation_accepts_natural_json_fields() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let label = kanban_sqlite::create_label(
+    let label = kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
     )?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("ontology natural API body"),
+        kanban_sqlite::api::CreateTask::ready("ontology natural API body"),
     )?;
     let app = test.router();
 
@@ -1513,11 +1520,11 @@ async fn label_ontology_observation_accepts_natural_json_fields() -> anyhow::Res
 #[tokio::test]
 async fn label_ontology_observation_rejects_duplicate_json_fields() -> anyhow::Result<()> {
     let test = TestApp::new()?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         test.db_path(),
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("ontology duplicate API body"),
+        kanban_sqlite::api::CreateTask::ready("ontology duplicate API body"),
     )?;
     let app = test.router();
 
@@ -1549,11 +1556,11 @@ async fn label_ontology_observation_rejects_duplicate_json_fields() -> anyhow::R
 #[tokio::test]
 async fn label_ontology_observation_rejects_conflicting_snapshot_metrics() -> anyhow::Result<()> {
     let test = TestApp::new()?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         test.db_path(),
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("ontology conflicting snapshot metric"),
+        kanban_sqlite::api::CreateTask::ready("ontology conflicting snapshot metric"),
     )?;
     let app = test.router();
 
@@ -1592,11 +1599,11 @@ async fn label_ontology_observation_rejects_conflicting_snapshot_metrics() -> an
 #[tokio::test]
 async fn label_ontology_observation_rejects_invalid_natural_json_shape() -> anyhow::Result<()> {
     let test = TestApp::new()?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         test.db_path(),
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("ontology invalid natural JSON shape"),
+        kanban_sqlite::api::CreateTask::ready("ontology invalid natural JSON shape"),
     )?;
     let app = test.router();
 
@@ -1626,19 +1633,19 @@ async fn label_ontology_observation_rejects_invalid_natural_json_shape() -> anyh
 async fn label_ontology_observation_route_rejects_invalid_signal_contract() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    kanban_sqlite::create_label(
+    kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
     )?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("ontology API invalid signal target"),
+        kanban_sqlite::api::CreateTask::ready("ontology API invalid signal target"),
     )?;
     let app = test.router();
 
@@ -1694,7 +1701,7 @@ async fn label_ontology_observation_route_rejects_invalid_signal_contract() -> a
             .context("error message")?
             .contains("candidate atom polarity")
     );
-    let conn = kanban_sqlite::connect_file(&db_path)?;
+    let conn = kanban_test_support::connect_file(&db_path)?;
     let observation_count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM label_ontology_observations",
         [],
@@ -1709,26 +1716,26 @@ async fn label_ontology_apply_atom_route_rejects_incompatible_source_signal() ->
 {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    kanban_sqlite::create_label(
+    kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
     )?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("ontology API incompatible source signal"),
+        kanban_sqlite::api::CreateTask::ready("ontology API incompatible source signal"),
     )?;
-    let observation = kanban_sqlite::record_label_ontology_observation(
+    let observation = kanban_sqlite::api::record_label_ontology_observation(
         &db_path,
         "default",
         &task.id,
-        kanban_sqlite::LabelOntologyRecordInput {
-            actor: kanban_sqlite::LabelOntologyActor {
+        kanban_sqlite::api::LabelOntologyRecordInput {
+            actor: kanban_sqlite::api::LabelOntologyActor {
                 name: "label-agent".to_owned(),
                 actor_type: "agent".to_owned(),
                 agent_type: Some("local".to_owned()),
@@ -1743,12 +1750,12 @@ async fn label_ontology_apply_atom_route_rejects_incompatible_source_signal() ->
             suggest_degraded: false,
             diagnostics_json: json!([]).to_string(),
             capture_fingerprint: Some("api-incompatible-source-signal".to_owned()),
-            signals: vec![kanban_sqlite::LabelOntologySignalInput {
-                kind: kanban_sqlite::LabelOntologySignalKind::FalseNegative,
+            signals: vec![kanban_sqlite::api::LabelOntologySignalInput {
+                kind: kanban_sqlite::api::LabelOntologySignalKind::FalseNegative,
                 target_label_ref: Some("cli".to_owned()),
                 related_labels_json: json!([]).to_string(),
-                proposed_action: kanban_sqlite::LabelOntologyProposedAction::AddPositiveAtom,
-                candidate_atom: Some(kanban_sqlite::LabelOntologyCandidateAtomInput {
+                proposed_action: kanban_sqlite::api::LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(kanban_sqlite::api::LabelOntologyCandidateAtomInput {
                     polarity: "positive".to_owned(),
                     kind: "applies_when".to_owned(),
                     text: "extends CLI subcommands, arguments, help output, or JSON behavior"
@@ -1757,7 +1764,7 @@ async fn label_ontology_apply_atom_route_rejects_incompatible_source_signal() ->
                 proposed_label_name: None,
                 proposal_json: json!({}).to_string(),
                 agent_selected: true,
-                suggest_state: Some(kanban_sqlite::LabelOntologySuggestState::Candidate),
+                suggest_state: Some(kanban_sqlite::api::LabelOntologySuggestState::Candidate),
                 suggest_score: Some(0.08),
                 suggest_rank: Some(4),
                 final_selected: true,
@@ -1768,16 +1775,16 @@ async fn label_ontology_apply_atom_route_rejects_incompatible_source_signal() ->
         },
     )?;
     let signal_id = observation.signals[0].id.clone();
-    kanban_sqlite::create_label_ontology_action(
+    kanban_sqlite::api::create_label_ontology_action(
         &db_path,
         "default",
-        kanban_sqlite::LabelOntologyActionInput {
-            actor: kanban_sqlite::LabelOntologyActor {
+        kanban_sqlite::api::LabelOntologyActionInput {
+            actor: kanban_sqlite::api::LabelOntologyActor {
                 name: "reviewer".to_owned(),
                 actor_type: "user".to_owned(),
                 agent_type: None,
             },
-            action_type: kanban_sqlite::LabelOntologyActionType::Confirm,
+            action_type: kanban_sqlite::api::LabelOntologyActionType::Confirm,
             signal_ids: vec![signal_id.clone()],
             reason: "valid false negative".to_owned(),
             superseded_by_signal_id: None,
@@ -1794,7 +1801,7 @@ async fn label_ontology_apply_atom_route_rejects_incompatible_source_signal() ->
             validation_json: None,
         },
     )?;
-    let conn = kanban_sqlite::connect_file(&db_path)?;
+    let conn = kanban_test_support::connect_file(&db_path)?;
     let action_count: i64 =
         conn.query_row("SELECT COUNT(*) FROM label_ontology_actions", [], |row| {
             row.get(0)
@@ -1832,7 +1839,7 @@ async fn label_ontology_apply_atom_route_rejects_incompatible_source_signal() ->
             row.get(0)
         })?;
     assert_eq!(post_count, action_count);
-    assert!(kanban_sqlite::list_label_atoms(&db_path, "default")?.is_empty());
+    assert!(kanban_sqlite::api::list_label_atoms(&db_path, "default")?.is_empty());
     Ok(())
 }
 
@@ -1840,19 +1847,19 @@ async fn label_ontology_apply_atom_route_rejects_incompatible_source_signal() ->
 async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let cli_label = kanban_sqlite::create_label(
+    let cli_label = kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
     )?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("ontology API action route target"),
+        kanban_sqlite::api::CreateTask::ready("ontology API action route target"),
     )?;
     let app = test.router();
 
@@ -2241,36 +2248,36 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
 async fn label_ontology_revert_route_round_trip() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    kanban_sqlite::create_label(
+    kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
     )?;
-    kanban_sqlite::upsert_label_semantics(
+    kanban_sqlite::api::upsert_label_semantics(
         &db_path,
         "default",
-        kanban_sqlite::UpsertLabelSemantics {
+        kanban_sqlite::api::UpsertLabelSemantics {
             label_ref: "cli".to_owned(),
             description: Some("Command-line interface behavior".to_owned()),
-            ..kanban_sqlite::UpsertLabelSemantics::default()
+            ..kanban_sqlite::api::UpsertLabelSemantics::default()
         },
     )?;
-    let before_semantics = kanban_sqlite::get_label_semantics(&db_path, "default", "cli")?;
-    let task = kanban_sqlite::create_task(
+    let before_semantics = kanban_sqlite::api::get_label_semantics(&db_path, "default", "cli")?;
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("ontology API revert route target"),
+        kanban_sqlite::api::CreateTask::ready("ontology API revert route target"),
     )?;
-    let observation = kanban_sqlite::record_label_ontology_observation(
+    let observation = kanban_sqlite::api::record_label_ontology_observation(
         &db_path,
         "default",
         &task.id,
-        kanban_sqlite::LabelOntologyRecordInput {
-            actor: kanban_sqlite::LabelOntologyActor {
+        kanban_sqlite::api::LabelOntologyRecordInput {
+            actor: kanban_sqlite::api::LabelOntologyActor {
                 name: "label-agent".to_owned(),
                 actor_type: "agent".to_owned(),
                 agent_type: Some("local".to_owned()),
@@ -2285,12 +2292,12 @@ async fn label_ontology_revert_route_round_trip() -> anyhow::Result<()> {
             suggest_degraded: false,
             diagnostics_json: "[]".to_owned(),
             capture_fingerprint: Some("api-ontology-revert-route".to_owned()),
-            signals: vec![kanban_sqlite::LabelOntologySignalInput {
-                kind: kanban_sqlite::LabelOntologySignalKind::FalseNegative,
+            signals: vec![kanban_sqlite::api::LabelOntologySignalInput {
+                kind: kanban_sqlite::api::LabelOntologySignalKind::FalseNegative,
                 target_label_ref: Some("cli".to_owned()),
                 related_labels_json: "[]".to_owned(),
-                proposed_action: kanban_sqlite::LabelOntologyProposedAction::AddPositiveAtom,
-                candidate_atom: Some(kanban_sqlite::LabelOntologyCandidateAtomInput {
+                proposed_action: kanban_sqlite::api::LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(kanban_sqlite::api::LabelOntologyCandidateAtomInput {
                     polarity: "positive".to_owned(),
                     kind: "applies_when".to_owned(),
                     text: "changes the local CLI command surface".to_owned(),
@@ -2298,7 +2305,7 @@ async fn label_ontology_revert_route_round_trip() -> anyhow::Result<()> {
                 proposed_label_name: None,
                 proposal_json: "{}".to_owned(),
                 agent_selected: true,
-                suggest_state: Some(kanban_sqlite::LabelOntologySuggestState::Candidate),
+                suggest_state: Some(kanban_sqlite::api::LabelOntologySuggestState::Candidate),
                 suggest_score: Some(0.12),
                 suggest_rank: Some(2),
                 final_selected: true,
@@ -2309,16 +2316,16 @@ async fn label_ontology_revert_route_round_trip() -> anyhow::Result<()> {
         },
     )?;
     let signal_id = observation.signals[0].id.clone();
-    kanban_sqlite::create_label_ontology_action(
+    kanban_sqlite::api::create_label_ontology_action(
         &db_path,
         "default",
-        kanban_sqlite::LabelOntologyActionInput {
-            actor: kanban_sqlite::LabelOntologyActor {
+        kanban_sqlite::api::LabelOntologyActionInput {
+            actor: kanban_sqlite::api::LabelOntologyActor {
                 name: "reviewer".to_owned(),
                 actor_type: "user".to_owned(),
                 agent_type: None,
             },
-            action_type: kanban_sqlite::LabelOntologyActionType::Confirm,
+            action_type: kanban_sqlite::api::LabelOntologyActionType::Confirm,
             signal_ids: vec![signal_id.clone()],
             reason: "valid false negative".to_owned(),
             superseded_by_signal_id: None,
@@ -2335,11 +2342,11 @@ async fn label_ontology_revert_route_round_trip() -> anyhow::Result<()> {
             validation_json: None,
         },
     )?;
-    let applied = kanban_sqlite::apply_label_ontology_atom(
+    let applied = kanban_sqlite::api::apply_label_ontology_atom(
         &db_path,
         "default",
-        kanban_sqlite::LabelOntologyAtomApplyInput {
-            actor: kanban_sqlite::LabelOntologyActor {
+        kanban_sqlite::api::LabelOntologyAtomApplyInput {
+            actor: kanban_sqlite::api::LabelOntologyActor {
                 name: "reviewer".to_owned(),
                 actor_type: "user".to_owned(),
                 agent_type: None,
@@ -2372,7 +2379,7 @@ async fn label_ontology_revert_route_round_trip() -> anyhow::Result<()> {
     assert_eq!(json["data"]["action_type"], "revert_ontology_mutation");
     assert_eq!(json["data"]["parent_action_id"], applied.id);
     assert_eq!(json["data"]["signal_ids"], json!([signal_id]));
-    let restored_semantics = kanban_sqlite::get_label_semantics(&db_path, "default", "cli")?;
+    let restored_semantics = kanban_sqlite::api::get_label_semantics(&db_path, "default", "cli")?;
     assert_eq!(
         restored_semantics.semantics_hash,
         before_semantics.semantics_hash
@@ -2452,7 +2459,7 @@ async fn label_ontology_structure_plan_route_is_not_available() -> anyhow::Resul
         )
         .await?;
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    let action_count: i64 = kanban_sqlite::connect_file(&db_path)?.query_row(
+    let action_count: i64 = kanban_test_support::connect_file(&db_path)?.query_row(
         "SELECT COUNT(*) FROM label_ontology_actions",
         [],
         |row| row.get(0),
@@ -2466,28 +2473,28 @@ async fn label_ontology_structure_plan_route_is_not_available() -> anyhow::Resul
 async fn label_ontology_action_route_rejects_generic_mutation_action_type() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    kanban_sqlite::create_label(
+    kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
     )?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("ontology API mutation guard target"),
+        kanban_sqlite::api::CreateTask::ready("ontology API mutation guard target"),
     )?;
     let app = test.router();
 
-    let observation = kanban_sqlite::record_label_ontology_observation(
+    let observation = kanban_sqlite::api::record_label_ontology_observation(
         &db_path,
         "default",
         &task.id,
-        kanban_sqlite::LabelOntologyRecordInput {
-            actor: kanban_sqlite::LabelOntologyActor {
+        kanban_sqlite::api::LabelOntologyRecordInput {
+            actor: kanban_sqlite::api::LabelOntologyActor {
                 name: "label-agent".to_owned(),
                 actor_type: "agent".to_owned(),
                 agent_type: Some("local".to_owned()),
@@ -2502,12 +2509,12 @@ async fn label_ontology_action_route_rejects_generic_mutation_action_type() -> a
             suggest_degraded: false,
             diagnostics_json: "[]".to_owned(),
             capture_fingerprint: Some("api-generic-mutation-guard".to_owned()),
-            signals: vec![kanban_sqlite::LabelOntologySignalInput {
-                kind: kanban_sqlite::LabelOntologySignalKind::FalseNegative,
+            signals: vec![kanban_sqlite::api::LabelOntologySignalInput {
+                kind: kanban_sqlite::api::LabelOntologySignalKind::FalseNegative,
                 target_label_ref: Some("cli".to_owned()),
                 related_labels_json: "[]".to_owned(),
-                proposed_action: kanban_sqlite::LabelOntologyProposedAction::AddPositiveAtom,
-                candidate_atom: Some(kanban_sqlite::LabelOntologyCandidateAtomInput {
+                proposed_action: kanban_sqlite::api::LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(kanban_sqlite::api::LabelOntologyCandidateAtomInput {
                     polarity: "positive".to_owned(),
                     kind: "applies_when".to_owned(),
                     text: "changes the local CLI command surface".to_owned(),
@@ -2515,7 +2522,7 @@ async fn label_ontology_action_route_rejects_generic_mutation_action_type() -> a
                 proposed_label_name: None,
                 proposal_json: "{}".to_owned(),
                 agent_selected: true,
-                suggest_state: Some(kanban_sqlite::LabelOntologySuggestState::Candidate),
+                suggest_state: Some(kanban_sqlite::api::LabelOntologySuggestState::Candidate),
                 suggest_score: Some(0.12),
                 suggest_rank: Some(2),
                 final_selected: true,
@@ -2526,16 +2533,16 @@ async fn label_ontology_action_route_rejects_generic_mutation_action_type() -> a
         },
     )?;
     let signal_id = observation.signals[0].id.clone();
-    kanban_sqlite::create_label_ontology_action(
+    kanban_sqlite::api::create_label_ontology_action(
         &db_path,
         "default",
-        kanban_sqlite::LabelOntologyActionInput {
-            actor: kanban_sqlite::LabelOntologyActor {
+        kanban_sqlite::api::LabelOntologyActionInput {
+            actor: kanban_sqlite::api::LabelOntologyActor {
                 name: "reviewer".to_owned(),
                 actor_type: "user".to_owned(),
                 agent_type: None,
             },
-            action_type: kanban_sqlite::LabelOntologyActionType::Confirm,
+            action_type: kanban_sqlite::api::LabelOntologyActionType::Confirm,
             signal_ids: vec![signal_id.clone()],
             reason: "valid false negative".to_owned(),
             superseded_by_signal_id: None,
@@ -2645,7 +2652,7 @@ fn seed_proposed_label_proposal(
     task_id: &str,
     candidate: LabelProposalCandidate,
 ) -> anyhow::Result<String> {
-    let conn = kanban_sqlite::connect_file(db_path)?;
+    let conn = kanban_test_support::connect_file(db_path)?;
     let board_id: String =
         conn.query_row("SELECT board_id FROM tasks WHERE id=?1", [task_id], |row| {
             row.get(0)
@@ -2881,7 +2888,7 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(json["error"]["code"], "conflict");
     assert!(
-        !kanban_sqlite::list_label_atoms(&db_path, "default")?.is_empty(),
+        !kanban_sqlite::api::list_label_atoms(&db_path, "default")?.is_empty(),
         "stale clear must not remove atoms"
     );
 
@@ -2894,7 +2901,7 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
     .await?;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["deleted"], true);
-    assert!(kanban_sqlite::list_label_atoms(&db_path, "default")?.is_empty());
+    assert!(kanban_sqlite::api::list_label_atoms(&db_path, "default")?.is_empty());
     Ok(())
 }
 
@@ -2905,30 +2912,31 @@ async fn label_atom_explain_route_returns_legacy_untracked_for_unprovenanced_ato
     let db_path = test.db_path().to_path_buf();
     let app = test.router();
 
-    let label = kanban_sqlite::create_label(
+    let label = kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "team/backend".to_owned(),
             color: None,
         },
     )?;
-    kanban_sqlite::upsert_label_semantics_by_id(
+    kanban_sqlite::api::upsert_label_semantics_by_id(
         &db_path,
         "default",
         &label.id,
-        kanban_sqlite::UpsertLabelSemantics {
+        kanban_sqlite::api::UpsertLabelSemantics {
             label_ref: label.id.clone(),
             description: Some("Backend service work".to_owned()),
             applies_when: vec!["touches Rust service code".to_owned()],
             excludes_when: vec![],
             positive_examples: vec!["add API handler".to_owned()],
             negative_examples: vec![],
-            ..kanban_sqlite::UpsertLabelSemantics::default()
+            ..kanban_sqlite::api::UpsertLabelSemantics::default()
         },
     )?;
-    kanban_sqlite::connect_file(&db_path)?.execute("DELETE FROM label_ontology_actions", [])?;
-    let atom = kanban_sqlite::list_label_atoms(&db_path, "default")?
+    kanban_test_support::connect_file(&db_path)?
+        .execute("DELETE FROM label_ontology_actions", [])?;
+    let atom = kanban_sqlite::api::list_label_atoms(&db_path, "default")?
         .into_iter()
         .find(|atom| atom.kind == "positive_example")
         .context("positive atom")?;
@@ -2960,10 +2968,10 @@ async fn board_label_semantics_paths_resolve_exact_label_ids_only() -> anyhow::R
     let db_path = test.db_path().to_path_buf();
     let app = test.router();
 
-    let name_prefixed = kanban_sqlite::create_label(
+    let name_prefixed = kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "l_bug".to_owned(),
             color: None,
         },
@@ -2980,20 +2988,22 @@ async fn board_label_semantics_paths_resolve_exact_label_ids_only() -> anyhow::R
     .await?;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(json["error"]["code"], "not_found");
-    assert!(kanban_sqlite::get_label_semantics(&db_path, "default", &name_prefixed.name).is_err());
+    assert!(
+        kanban_sqlite::api::get_label_semantics(&db_path, "default", &name_prefixed.name).is_err()
+    );
 
-    let canonical = kanban_sqlite::create_label(
+    let canonical = kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "canonical".to_owned(),
             color: None,
         },
     )?;
-    let colliding_name = kanban_sqlite::create_label(
+    let colliding_name = kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: canonical.id.clone(),
             color: None,
         },
@@ -3021,7 +3031,9 @@ async fn board_label_semantics_paths_resolve_exact_label_ids_only() -> anyhow::R
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json["data"]["label_id"], canonical.id);
     assert_eq!(json["data"]["label_name"], canonical.name);
-    assert!(kanban_sqlite::get_label_semantics(&db_path, "default", &colliding_name.name).is_err());
+    assert!(
+        kanban_sqlite::api::get_label_semantics(&db_path, "default", &colliding_name.name).is_err()
+    );
     Ok(())
 }
 
@@ -3029,20 +3041,20 @@ async fn board_label_semantics_paths_resolve_exact_label_ids_only() -> anyhow::R
 async fn task_label_routes_use_task_board_and_reject_archived_targets() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    kanban_sqlite::create_board(
+    kanban_sqlite::api::create_board(
         &db_path,
         "seed",
-        kanban_sqlite::CreateBoard {
+        kanban_sqlite::api::CreateBoard {
             slug: "other".into(),
             name: "Other".into(),
             description: None,
         },
     )?;
-    let other_task = kanban_sqlite::create_task(
+    let other_task = kanban_sqlite::api::create_task(
         &db_path,
         "other",
         "seed",
-        kanban_sqlite::CreateTask::ready("non-default route target"),
+        kanban_sqlite::api::CreateTask::ready("non-default route target"),
     )?;
     let app = test.router();
 
@@ -3056,8 +3068,8 @@ async fn task_label_routes_use_task_board_and_reject_archived_targets() -> anyho
     assert_eq!(json["data"]["board_slug"], "other");
     assert_eq!(json["data"]["labels"][0]["name"], "backend");
     assert_eq!(json["meta"]["created_labels"][0]["name"], "backend");
-    assert!(kanban_sqlite::list_labels(&db_path, "default")?.is_empty());
-    let other_labels = kanban_sqlite::list_labels(&db_path, "other")?;
+    assert!(kanban_sqlite::api::list_labels(&db_path, "default")?.is_empty());
+    let other_labels = kanban_sqlite::api::list_labels(&db_path, "other")?;
     assert_eq!(other_labels[0].name, "backend");
 
     let (status, json) = delete_json(
@@ -3073,13 +3085,13 @@ async fn task_label_routes_use_task_board_and_reject_archived_targets() -> anyho
             .is_empty()
     );
 
-    let archived_task = kanban_sqlite::create_task(
+    let archived_task = kanban_sqlite::api::create_task(
         &db_path,
         "other",
         "seed",
-        kanban_sqlite::CreateTask::ready("archived route target"),
+        kanban_sqlite::api::CreateTask::ready("archived route target"),
     )?;
-    kanban_sqlite::archive_task(&db_path, "other", "seed", &archived_task.id, false)?;
+    kanban_sqlite::api::archive_task(&db_path, "other", "seed", &archived_task.id, false)?;
     let (status, json) = post_json(
         app.clone(),
         &format!("/api/v1/tasks/{}/labels", archived_task.id),
@@ -3089,7 +3101,7 @@ async fn task_label_routes_use_task_board_and_reject_archived_targets() -> anyho
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(json["error"]["code"], "not_found");
 
-    kanban_sqlite::archive_board(&db_path, "other", "seed")?;
+    kanban_sqlite::api::archive_board(&db_path, "other", "seed")?;
     let (status, json) = post_json(
         app,
         &format!("/api/v1/tasks/{}/labels", other_task.id),
@@ -3105,18 +3117,18 @@ async fn task_label_routes_use_task_board_and_reject_archived_targets() -> anyho
 async fn tasks_list_search_matches_task_refs_exactly() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let first = kanban_sqlite::create_task(
+    let first = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("first api list task"),
+        kanban_sqlite::api::CreateTask::ready("first api list task"),
     )
     .context("seed first task")?;
-    let _second = kanban_sqlite::create_task(
+    let _second = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("title mentions 1 but must not match numeric search"),
+        kanban_sqlite::api::CreateTask::ready("title mentions 1 but must not match numeric search"),
     )
     .context("seed second task")?;
     let app = test.router();
@@ -3148,11 +3160,11 @@ async fn tasks_lists_with_priority_filters_and_table_sort_fields() -> anyhow::Re
         ("alpha", 0, Some("worker-a")),
         ("charlie", 3, None),
     ] {
-        kanban_sqlite::create_task(
+        kanban_sqlite::api::create_task(
             &db_path,
             "default",
             "seed",
-            kanban_sqlite::CreateTask {
+            kanban_sqlite::api::CreateTask {
                 title: title.to_owned(),
                 description: Some(format!("{title} details")),
                 status: Some(kanban_core::TaskStatus::Ready),
@@ -3198,11 +3210,11 @@ async fn tasks_accepts_list_view_sort_contract_for_ref_title_and_status() -> any
         ("alpha contract sort", kanban_core::TaskStatus::Ready),
         ("bravo contract sort", kanban_core::TaskStatus::Todo),
     ] {
-        let task = kanban_sqlite::create_task(
+        let task = kanban_sqlite::api::create_task(
             &db_path,
             "default",
             "seed",
-            kanban_sqlite::CreateTask {
+            kanban_sqlite::api::CreateTask {
                 title: title.to_owned(),
                 description: Some(format!("{title} details")),
                 status: Some(status),
@@ -3216,7 +3228,7 @@ async fn tasks_accepts_list_view_sort_contract_for_ref_title_and_status() -> any
         )
         .context("seed task")?;
         if status == kanban_core::TaskStatus::Ready {
-            kanban_sqlite::mark_execution_plan_not_required(
+            kanban_sqlite::api::mark_execution_plan_not_required(
                 &db_path,
                 "default",
                 "seed",
@@ -3317,11 +3329,11 @@ async fn tasks_rejects_unbounded_limit() -> anyhow::Result<()> {
 async fn tasks_gets_task_by_id() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("get by id"),
+        kanban_sqlite::api::CreateTask::ready("get by id"),
     )
     .context("task")?;
     let app = test.router();
@@ -3339,19 +3351,19 @@ async fn tasks_gets_task_by_id() -> anyhow::Result<()> {
 async fn tasks_gets_ontology_summary_only_when_included() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    kanban_sqlite::create_label(
+    kanban_sqlite::api::create_label(
         &db_path,
         "default",
-        kanban_sqlite::CreateLabel {
+        kanban_sqlite::api::CreateLabel {
             name: "cli".to_owned(),
             color: None,
         },
     )?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("ontology summary via api"),
+        kanban_sqlite::api::CreateTask::ready("ontology summary via api"),
     )
     .context("task")?;
     let app = test.router();
@@ -3460,11 +3472,11 @@ async fn tasks_rejects_priority_outside_p0_p3() -> anyhow::Result<()> {
         "invalid input: priority must be one of P0, P1, P2, P3"
     );
 
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("valid priority"),
+        kanban_sqlite::api::CreateTask::ready("valid priority"),
     )?;
     let (status, json) = patch_json(
         app,
@@ -3487,14 +3499,14 @@ async fn tasks_patches_editable_fields_and_uses_header_actor_when_body_actor_abs
 -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("before update"),
+        kanban_sqlite::api::CreateTask::ready("before update"),
     )
     .context("task")?;
-    kanban_sqlite::mark_execution_plan_not_required(
+    kanban_sqlite::api::mark_execution_plan_not_required(
         &db_path,
         "default",
         "seed",
@@ -3502,7 +3514,8 @@ async fn tasks_patches_editable_fields_and_uses_header_actor_when_body_actor_abs
         "patch fixture",
     )
     .context("mark not required")?;
-    let task = kanban_sqlite::get_task(&db_path, "default", &task.id).context("task after plan")?;
+    let task =
+        kanban_sqlite::api::get_task(&db_path, "default", &task.id).context("task after plan")?;
     let app = test.router();
 
     let (status, json) = patch_json(
@@ -3530,7 +3543,7 @@ async fn tasks_patches_editable_fields_and_uses_header_actor_when_body_actor_abs
     assert_eq!(json["data"]["status"], "triage");
 
     let events =
-        kanban_sqlite::list_events(&db_path, "default", Some(&task.id)).context("events")?;
+        kanban_sqlite::api::list_events(&db_path, "default", Some(&task.id)).context("events")?;
     assert_eq!(events.last().context("updated event")?.kind, "task.updated");
     assert_eq!(
         events.last().context("updated event")?.actor.as_deref(),
@@ -3562,11 +3575,11 @@ async fn tasks_patches_editable_fields_and_uses_header_actor_when_body_actor_abs
 async fn tasks_patch_rejects_forbidden_status_and_claim_fields() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("reject forbidden"),
+        kanban_sqlite::api::CreateTask::ready("reject forbidden"),
     )
     .context("task")?;
     let app = test.router();
@@ -3593,11 +3606,11 @@ async fn tasks_patch_rejects_forbidden_status_and_claim_fields() -> anyhow::Resu
 async fn tasks_patch_rejects_unknown_fields() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("reject unknown"),
+        kanban_sqlite::api::CreateTask::ready("reject unknown"),
     )
     .context("task")?;
     let app = test.router();
@@ -3619,11 +3632,11 @@ async fn tasks_patch_rejects_unknown_fields() -> anyhow::Result<()> {
 async fn tasks_patch_future_scheduled_at_recomputes_status_to_scheduled() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("schedule me"),
+        kanban_sqlite::api::CreateTask::ready("schedule me"),
     )
     .context("task")?;
     let app = test.router();
@@ -3647,14 +3660,14 @@ async fn tasks_patch_future_scheduled_at_recomputes_status_to_scheduled() -> any
 async fn tasks_patch_with_invalid_max_retries_rolls_back_task_and_events() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("before invalid retry patch"),
+        kanban_sqlite::api::CreateTask::ready("before invalid retry patch"),
     )
     .context("task")?;
-    let before_events = kanban_sqlite::list_events(&db_path, "default", Some(&task.id))?.len();
+    let before_events = kanban_sqlite::api::list_events(&db_path, "default", Some(&task.id))?.len();
     let app = test.router();
 
     let (status, json) = patch_json(
@@ -3670,10 +3683,10 @@ async fn tasks_patch_with_invalid_max_retries_rolls_back_task_and_events() -> an
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(json["error"]["code"], "invalid_input");
-    let fresh = kanban_sqlite::get_task(&db_path, "default", &task.id)?;
+    let fresh = kanban_sqlite::api::get_task(&db_path, "default", &task.id)?;
     assert_eq!(fresh.title, "before invalid retry patch");
     assert_eq!(fresh.lock_version, task.lock_version);
-    let after_events = kanban_sqlite::list_events(&db_path, "default", Some(&task.id))?.len();
+    let after_events = kanban_sqlite::api::list_events(&db_path, "default", Some(&task.id))?.len();
     assert_eq!(
         after_events, before_events,
         "invalid patch must not write events"

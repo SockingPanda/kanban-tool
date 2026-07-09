@@ -52,10 +52,10 @@ pub(crate) async fn task_neighborhood(
     query: Result<Query<TaskNeighborhoodQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<TaskNeighborhoodDto>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
-    let graph = kanban_sqlite::task_neighborhood(
+    let graph = kanban_sqlite::api::task_neighborhood(
         state.db_path(),
         &task_id,
-        kanban_sqlite::TaskNeighborhoodOptions {
+        kanban_sqlite::api::TaskNeighborhoodOptions {
             depth: query.depth,
             limit_nodes: query.limit_nodes,
             include_archived_context: query.include_archived_context,
@@ -73,10 +73,10 @@ pub(crate) async fn board_task_map(
     query: Result<Query<BoardTaskMapQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<BoardTaskMapDto>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
-    let graph = kanban_sqlite::board_task_map(
+    let graph = kanban_sqlite::api::board_task_map(
         state.db_path(),
         &board,
-        kanban_sqlite::BoardTaskMapOptions {
+        kanban_sqlite::api::BoardTaskMapOptions {
             active_only: query.active_only,
             context_depth: query.context_depth,
             limit_nodes: query.limit_nodes,

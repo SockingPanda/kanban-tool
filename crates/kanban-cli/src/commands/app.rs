@@ -1,14 +1,16 @@
+use std::{ffi::OsString, io::Write};
+
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use clap_complete::Shell;
 use kanban_core::{Locale, set_current_locale};
 
 use crate::commands::common::invalid_input;
-use kanban_sqlite::{
+use kanban_sqlite::api::{
     CompletionCandidateKind, begin_database_runtime, completion_candidates, dispatch_once,
-    init_database, list_events, list_runs,
+    list_events, list_runs,
 };
-use std::{ffi::OsString, io::Write};
+use kanban_sqlite::init::init_database;
 
 use crate::args::*;
 use crate::commands::{

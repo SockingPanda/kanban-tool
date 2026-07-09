@@ -101,7 +101,7 @@ fn heartbeat_rejects_nonpositive_ttl_without_shortening_claim() -> anyhow::Resul
     let claim = claim_task(&temp.path, "default", "worker", &task.id, 300_000)?;
 
     for ttl_ms in [0, -1] {
-        let err = result_err(kanban_sqlite::heartbeat_task(
+        let err = result_err(kanban_sqlite::api::heartbeat_task(
             &temp.path,
             "default",
             "worker",
@@ -299,7 +299,7 @@ fn reopen_done_task_recomputes_target_and_preserves_result() -> anyhow::Result<(
     add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
 
     let claim = claim_task(&temp.path, "default", "worker", &parent.id, 300_000)?;
-    let completed = kanban_sqlite::complete_task_with_summary_and_result(
+    let completed = kanban_sqlite::api::complete_task_with_summary_and_result(
         &temp.path,
         "default",
         "worker",
@@ -789,7 +789,7 @@ fn heartbeat_against_stale_non_running_claim_fails_without_touching_heartbeat_fi
     )?;
     let blocked = get_task(&temp.path, "default", &task.id)?;
 
-    let err = result_err(kanban_sqlite::heartbeat_task(
+    let err = result_err(kanban_sqlite::api::heartbeat_task(
         &temp.path,
         "default",
         "worker",
@@ -964,7 +964,7 @@ fn execution_plan_required_blocks_promote_claim_and_dispatch_until_planned() -> 
         "DELETE FROM task_execution_plans WHERE task_id=?1",
         params![reclaim_target.id],
     )?;
-    let reclaimed = kanban_sqlite::reclaim_task(
+    let reclaimed = kanban_sqlite::api::reclaim_task(
         &temp.path,
         "default",
         "tester",

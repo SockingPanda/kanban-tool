@@ -1,6 +1,6 @@
 # Application Service 抽取评估
 
-状态：暂缓。当前继续把 application orchestration 保持在 `kanban-sqlite::service`。
+状态：已被 application API 收敛迁移取代。当前 `kanban-application` 承载 DTO/port 合同，`kanban-sqlite::api`/`SqliteApplication` 是 SQLite-backed adapter boundary；crate root legacy re-export 已删除。
 
 本文记录未来什么时候值得把独立 application-service crate 抽出来，以及一旦重启这项工作必须保住哪些 invariant。它是评估记录，不是当前迭代的实现计划。
 
@@ -25,18 +25,18 @@ dispatcher CLI path
 
 Adapter 证据：
 
-- `kanban-cli` 的 task、label、dispatch、search、maintenance、board、comment、run、index、context、serve 等命令调用 `kanban_sqlite::*`。
-- `kanban-server` handlers 负责 HTTP DTO 转换，然后调用同一组 `kanban_sqlite::*` use cases。
+- `kanban-cli` 的 task、label、dispatch、search、maintenance、board、comment、run、index、context、serve 等命令调用 `kanban_sqlite::api`，init/runtime 基础设施走显式模块。
+- `kanban-server` handlers 负责 HTTP DTO 转换，然后调用 `kanban_sqlite::api` 或 `kanban-application` wrapper 进入同一组 SQLite-backed use cases。
 - `apps/desktop/src-tauri` 通过 `kanban_sqlite` 初始化 DB runtime，并通过同一 service layer 读取 boards。
 - `kanban dispatch` 是 CLI 入口，调用同一 SQLite dispatch service；当前没有独立 dispatcher business-logic crate。
 
 ## 决策
 
-现在不抽取 application-service crate。
+已抽取 `kanban-application` DTO/port contract crate；不把 transaction implementation 从 `kanban-sqlite::service` 迁出。
 
 当前最高风险仍在 label ontology mutation、validation evidence、derived-store dirty state、board isolation 和 adapter parity 的行为契约。行为契约稳定前移动 orchestration，会增加 churn，但不会天然带来新的安全保证。
 
-因此架构文档应继续诚实描述当前形态：application orchestration 主要在 `kanban-sqlite::service`，`kanban-core` 保持为纯领域 / 状态机 crate。
+因此架构文档应继续诚实描述当前形态：application contract 在 `kanban-application`，SQLite-backed implementation owner 仍在 `kanban-sqlite::service`，`kanban-core` 保持为纯领域 / 状态机 crate。
 
 ## 重新评估门槛
 

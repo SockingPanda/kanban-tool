@@ -2,12 +2,12 @@ mod common;
 
 use anyhow::Context;
 use common::{TempDb, kanban, kanban_in_dir};
-use kanban_sqlite::maintenance_lock_path;
+use kanban_sqlite::db::maintenance_lock_path;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 
 fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
-    kanban_sqlite::mark_execution_plan_not_required(
+    kanban_sqlite::api::mark_execution_plan_not_required(
         db_path,
         "default",
         "cli-maintenance-test",

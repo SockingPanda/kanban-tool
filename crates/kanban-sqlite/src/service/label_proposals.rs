@@ -1,4 +1,4 @@
-use crate::connect_file;
+use crate::db::connect_file;
 
 use super::label_suggestions::{
     bounded_diagnostic_message, compute_task_label_suggestions_with, retrieve_residual_atoms,

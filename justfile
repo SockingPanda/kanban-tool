@@ -27,6 +27,12 @@ clippy:
 bench-check *args:
     scripts/cargo-build-lock.sh -- cargo bench --no-run -p kanban-sqlite "$@"
 
+bench-sqlite-service *args:
+    scripts/cargo-build-lock.sh -- cargo bench -p kanban-sqlite --bench sqlite_service "$@"
+
+bench-sqlite-service-compare baseline candidate *benchmarks:
+    scripts/compare-criterion-baseline.py --criterion-dir "$(scripts/cargo-build-lock.sh --print-target-dir)/criterion" --baseline "{{baseline}}" --candidate "{{candidate}}" {{benchmarks}}
+
 clippy-p package:
     scripts/cargo-build-lock.sh -- cargo clippy -p {{package}} --tests -- -D warnings
 

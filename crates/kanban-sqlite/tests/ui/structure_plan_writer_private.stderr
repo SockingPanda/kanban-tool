@@ -1,5 +1,5 @@
-error[E0432]: unresolved import `kanban_sqlite::plan_label_ontology_structure_change`
+error[E0432]: unresolved import `kanban_sqlite::api::plan_label_ontology_structure_change`
  --> tests/ui/structure_plan_writer_private.rs:1:5
   |
-1 | use kanban_sqlite::plan_label_ontology_structure_change;
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `plan_label_ontology_structure_change` in the root
+1 | use kanban_sqlite::api::plan_label_ontology_structure_change;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `plan_label_ontology_structure_change` in `api`

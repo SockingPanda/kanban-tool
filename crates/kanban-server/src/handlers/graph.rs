@@ -41,7 +41,7 @@ pub(crate) async fn graph_neighbors(
     query: Result<Query<GraphNeighborsQuery>, QueryRejection>,
 ) -> Result<Json<Envelope<Vec<kanban_entity::Relation>>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
-    validate_page_bounds(query.limit, kanban_sqlite::MAX_TASK_LIST_LIMIT, 0)?;
+    validate_page_bounds(query.limit, kanban_sqlite::api::MAX_TASK_LIST_LIMIT, 0)?;
     let entity_uri =
         EntityUri::new(query.entity_uri).map_err(|error| invalid_input(error.to_string()))?;
     let predicate = query

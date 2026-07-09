@@ -1,0 +1,9 @@
+error[E0432]: unresolved imports `kanban_sqlite::connect_file`, `kanban_sqlite::create_task`, `kanban_sqlite::init_database`, `kanban_sqlite::CreateTask`
+ --> tests/ui/root_legacy_reexport_removed.rs:1:21
+  |
+1 | use kanban_sqlite::{connect_file, create_task, init_database, CreateTask};
+  |                     ^^^^^^^^^^^^  ^^^^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^^^^^^ no `CreateTask` in the root
+  |                     |             |            |
+  |                     |             |            no `init_database` in the root
+  |                     |             no `create_task` in the root
+  |                     no `connect_file` in the root

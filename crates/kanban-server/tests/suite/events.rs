@@ -4,21 +4,21 @@ use crate::common::*;
 async fn events_after_limit_returns_ordered_events_and_next_after() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let first = kanban_sqlite::create_task(
+    let first = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("first"),
+        kanban_sqlite::api::CreateTask::ready("first"),
     )
     .context("first")?;
-    let second = kanban_sqlite::create_task(
+    let second = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("second"),
+        kanban_sqlite::api::CreateTask::ready("second"),
     )
     .context("second")?;
-    let all = kanban_sqlite::list_events(&db_path, "default", None).context("events")?;
+    let all = kanban_sqlite::api::list_events(&db_path, "default", None).context("events")?;
     let after = all
         .iter()
         .find(|event| event.task_id.as_deref() == Some(&first.id))
@@ -53,21 +53,21 @@ async fn events_after_limit_returns_ordered_events_and_next_after() -> anyhow::R
 async fn events_filters_by_task_id_for_detail_timeline() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let first = kanban_sqlite::create_task(
+    let first = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("first timeline"),
+        kanban_sqlite::api::CreateTask::ready("first timeline"),
     )
     .context("first")?;
-    let second = kanban_sqlite::create_task(
+    let second = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("second timeline"),
+        kanban_sqlite::api::CreateTask::ready("second timeline"),
     )
     .context("second")?;
-    kanban_sqlite::block_task(
+    kanban_sqlite::api::block_task(
         &db_path,
         "default",
         "seed",

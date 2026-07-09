@@ -4,14 +4,14 @@ use crate::common::*;
 async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let stale = kanban_sqlite::create_task(
+    let stale = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("stale claim"),
+        kanban_sqlite::api::CreateTask::ready("stale claim"),
     )
     .context("stale task")?;
-    kanban_sqlite::mark_execution_plan_not_required(
+    kanban_sqlite::api::mark_execution_plan_not_required(
         &db_path,
         "default",
         "seed",
@@ -19,8 +19,9 @@ async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Resul
         "stale claim fixture",
     )
     .context("mark stale not required")?;
-    kanban_sqlite::claim_task(&db_path, "default", "worker", &stale.id, 60_000).context("claim")?;
-    let conn = kanban_sqlite::connect_file(&db_path).context("connect")?;
+    kanban_sqlite::api::claim_task(&db_path, "default", "worker", &stale.id, 60_000)
+        .context("claim")?;
+    let conn = kanban_test_support::connect_file(&db_path).context("connect")?;
     conn.execute(
         "UPDATE tasks SET claim_expires_at=0 WHERE id=?1",
         (&stale.id,),
@@ -31,21 +32,21 @@ async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Resul
         (&stale.id,),
     )
     .context("expire run claim")?;
-    let blocked_a = kanban_sqlite::create_task(
+    let blocked_a = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("blocked a"),
+        kanban_sqlite::api::CreateTask::ready("blocked a"),
     )
     .context("blocked a")?;
-    let blocked_b = kanban_sqlite::create_task(
+    let blocked_b = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("blocked b"),
+        kanban_sqlite::api::CreateTask::ready("blocked b"),
     )
     .context("blocked b")?;
-    kanban_sqlite::block_task(
+    kanban_sqlite::api::block_task(
         &db_path,
         "default",
         "seed",
@@ -55,7 +56,7 @@ async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Resul
         true,
     )
     .context("block a")?;
-    kanban_sqlite::block_task(
+    kanban_sqlite::api::block_task(
         &db_path,
         "default",
         "seed",
@@ -65,19 +66,19 @@ async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Resul
         true,
     )
     .context("block b")?;
-    let parent = kanban_sqlite::create_task(
+    let parent = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("parent with incomplete step"),
+        kanban_sqlite::api::CreateTask::ready("parent with incomplete step"),
     )
     .context("parent")?;
-    kanban_sqlite::create_step(
+    kanban_sqlite::api::create_step(
         &db_path,
         "default",
         "seed",
         &parent.id,
-        kanban_sqlite::CreateStepInput {
+        kanban_sqlite::api::CreateStepInput {
             title: "child step".to_owned(),
             body: None,
             linked_task_ref: None,
@@ -86,11 +87,11 @@ async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Resul
         },
     )
     .context("create step")?;
-    let unplanned = kanban_sqlite::create_task(
+    let unplanned = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask {
+        kanban_sqlite::api::CreateTask {
             title: "unplanned active".to_owned(),
             description: Some("spec".to_owned()),
             status: Some(kanban_core::TaskStatus::Todo),
@@ -128,8 +129,8 @@ async fn stats_reports_stale_claims_and_blocked_reason_counts() -> anyhow::Resul
         1
     );
     assert_eq!(
-        kanban_sqlite::get_task(&db_path, "default", &unplanned.id)?.execution_plan_state,
-        kanban_sqlite::StepPlanState::Unplanned
+        kanban_sqlite::api::get_task(&db_path, "default", &unplanned.id)?.execution_plan_state,
+        kanban_sqlite::api::StepPlanState::Unplanned
     );
     Ok(())
 }

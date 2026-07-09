@@ -2,7 +2,7 @@ mod common;
 
 use anyhow::Context;
 use common::{TempDb, kanban, kanban_in_dir_envs, kanban_with_stdin};
-use kanban_sqlite::{
+use kanban_sqlite::api::{
     CreateLabel, CreateTask, LabelOntologyActionInput, LabelOntologyActionType, LabelOntologyActor,
     LabelOntologyAtomApplyInput, LabelOntologyCandidateAtomInput, LabelOntologyProposedAction,
     LabelOntologyRecordInput, LabelOntologySignalInput, LabelOntologySignalKind,
@@ -26,7 +26,7 @@ fn write_executable(path: &Path, body: &str) -> anyhow::Result<()> {
 }
 
 fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
-    kanban_sqlite::mark_execution_plan_not_required(
+    kanban_sqlite::api::mark_execution_plan_not_required(
         db_path,
         "default",
         "cli-task-test",
@@ -1059,7 +1059,7 @@ fn label_propose_with_proposal_json_degrades_without_polluting_truth() -> anyhow
             .any(|value| value == "label_proposal_residual_validation_unavailable"),
         "{diagnostics:?}"
     );
-    let conn = kanban_sqlite::connect_file(&temp.path)?;
+    let conn = kanban_test_support::connect_file(&temp.path)?;
     let proposal_count: i64 =
         conn.query_row("SELECT COUNT(*) FROM label_semantic_proposals", [], |row| {
             row.get(0)
@@ -1215,7 +1215,7 @@ fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<(
     let label_id = accepted["data"]["resolved_label_id"]
         .as_str()
         .context("resolved label id")?;
-    let semantics = kanban_sqlite::get_label_semantics(&temp.path, "default", label_id)?;
+    let semantics = kanban_sqlite::api::get_label_semantics(&temp.path, "default", label_id)?;
     let atom = semantics
         .atoms
         .iter()
@@ -1471,19 +1471,19 @@ fn label_ontology_cli_record_list_show_review_round_trip() -> anyhow::Result<()>
 fn label_ontology_cli_review_candidate_atom_empty_candidate_fallback() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_cli_review_candidate_atom_empty_candidate_fallback")?;
     kanban(&temp.path, &["init"])?.success()?;
-    let task_a = kanban_sqlite::create_task(
+    let task_a = kanban_sqlite::api::create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("Ontology ledger gap A"),
     )?;
-    let task_b = kanban_sqlite::create_task(
+    let task_b = kanban_sqlite::api::create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("Ontology ledger gap B"),
     )?;
-    let task_c = kanban_sqlite::create_task(
+    let task_c = kanban_sqlite::api::create_task(
         &temp.path,
         "default",
         "tester",
@@ -1494,7 +1494,7 @@ fn label_ontology_cli_review_candidate_atom_empty_candidate_fallback() -> anyhow
         (&task_b.id, "cli-gap-b", "Ontology Ledger", 0.12),
         (&task_c.id, "cli-gap-c", "Decision Comments", 0.14),
     ] {
-        kanban_sqlite::record_label_ontology_observation(
+        kanban_sqlite::api::record_label_ontology_observation(
             &temp.path,
             "default",
             task_id,
@@ -2152,7 +2152,7 @@ fn label_ontology_cli_revert_action_round_trip() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_cli_revert_action_round_trip")?;
     kanban(&temp.path, &["init"])?.success()?;
     kanban(&temp.path, &["label", "create", "cli"])?.success()?;
-    kanban_sqlite::upsert_label_semantics(
+    kanban_sqlite::api::upsert_label_semantics(
         &temp.path,
         "default",
         UpsertLabelSemantics {
@@ -2162,13 +2162,13 @@ fn label_ontology_cli_revert_action_round_trip() -> anyhow::Result<()> {
         },
     )?;
     let before_semantics = get_label_semantics(&temp.path, "default", "cli")?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("ontology CLI revert task"),
     )?;
-    let observation = kanban_sqlite::record_label_ontology_observation(
+    let observation = kanban_sqlite::api::record_label_ontology_observation(
         &temp.path,
         "default",
         &task.id,
@@ -2214,7 +2214,7 @@ fn label_ontology_cli_revert_action_round_trip() -> anyhow::Result<()> {
         },
     )?;
     let signal_id = observation.signals[0].id.clone();
-    kanban_sqlite::create_label_ontology_action(
+    kanban_sqlite::api::create_label_ontology_action(
         &temp.path,
         "default",
         LabelOntologyActionInput {
@@ -2240,7 +2240,7 @@ fn label_ontology_cli_revert_action_round_trip() -> anyhow::Result<()> {
             validation_json: None,
         },
     )?;
-    let applied = kanban_sqlite::apply_label_ontology_atom(
+    let applied = kanban_sqlite::api::apply_label_ontology_atom(
         &temp.path,
         "default",
         LabelOntologyAtomApplyInput {
@@ -2385,7 +2385,7 @@ fn label_ontology_cli_structure_plan_command_is_not_available() -> anyhow::Resul
         ],
     )?
     .failure_containing("unrecognized subcommand 'structure'")?;
-    let action_count: i64 = kanban_sqlite::connect_file(&temp.path)?.query_row(
+    let action_count: i64 = kanban_test_support::connect_file(&temp.path)?.query_row(
         "SELECT COUNT(*) FROM label_ontology_actions",
         [],
         |row| row.get(0),
@@ -2470,7 +2470,7 @@ fn label_ontology_cli_apply_existing_atom_uses_adopt_existing_action() -> anyhow
     let temp = TempDb::new("label_ontology_cli_apply_existing_atom_uses_adopt_existing_action")?;
     kanban(&temp.path, &["init"])?.success()?;
     kanban(&temp.path, &["label", "create", "cli"])?.success()?;
-    kanban_sqlite::upsert_label_semantics(
+    kanban_sqlite::api::upsert_label_semantics(
         &temp.path,
         "default",
         UpsertLabelSemantics {
@@ -2582,7 +2582,7 @@ fn label_ontology_cli_apply_existing_atom_uses_adopt_existing_action() -> anyhow
     assert_eq!(change["requested_action_type"], "add_positive_atom");
     assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
     assert_eq!(add_atom_action_count(&temp.path)?, add_action_count_before);
-    let status = kanban_sqlite::label_atom_index_status(&temp.path, "default")?;
+    let status = kanban_sqlite::api::label_atom_index_status(&temp.path, "default")?;
     assert_eq!(status.dirty, Some(false));
     assert_eq!(status.board_dirty, Some(false));
 
@@ -2720,13 +2720,13 @@ fn label_ontology_cli_apply_atom_rejects_incompatible_source_signal() -> anyhow:
     let temp = TempDb::new("label_ontology_cli_apply_atom_rejects_incompatible_source_signal")?;
     kanban(&temp.path, &["init"])?.success()?;
     kanban(&temp.path, &["label", "create", "cli"])?.success()?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("ontology CLI incompatible source signal"),
     )?;
-    let observation = kanban_sqlite::record_label_ontology_observation(
+    let observation = kanban_sqlite::api::record_label_ontology_observation(
         &temp.path,
         "default",
         &task.id,
@@ -2771,7 +2771,7 @@ fn label_ontology_cli_apply_atom_rejects_incompatible_source_signal() -> anyhow:
         },
     )?;
     let signal_id = observation.signals[0].id.clone();
-    kanban_sqlite::create_label_ontology_action(
+    kanban_sqlite::api::create_label_ontology_action(
         &temp.path,
         "default",
         LabelOntologyActionInput {
@@ -2829,7 +2829,7 @@ fn label_ontology_cli_apply_atom_rejects_incompatible_source_signal() -> anyhow:
 fn label_atom_explain_cli_json_round_trip() -> anyhow::Result<()> {
     let temp = TempDb::new("label_atom_explain_cli_json_round_trip")?;
     kanban(&temp.path, &["init"])?.success()?;
-    let label = kanban_sqlite::create_label(
+    let label = kanban_sqlite::api::create_label(
         &temp.path,
         "default",
         CreateLabel {
@@ -2837,13 +2837,13 @@ fn label_atom_explain_cli_json_round_trip() -> anyhow::Result<()> {
             color: None,
         },
     )?;
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &temp.path,
         "default",
         "tester",
         CreateTask::ready("explain atom CLI provenance"),
     )?;
-    let observation = kanban_sqlite::record_label_ontology_observation(
+    let observation = kanban_sqlite::api::record_label_ontology_observation(
         &temp.path,
         "default",
         &task.id,
@@ -2889,7 +2889,7 @@ fn label_atom_explain_cli_json_round_trip() -> anyhow::Result<()> {
         },
     )?;
     let signal_id = observation.signals[0].id.clone();
-    kanban_sqlite::create_label_ontology_action(
+    kanban_sqlite::api::create_label_ontology_action(
         &temp.path,
         "default",
         LabelOntologyActionInput {
@@ -2915,7 +2915,7 @@ fn label_atom_explain_cli_json_round_trip() -> anyhow::Result<()> {
             validation_json: None,
         },
     )?;
-    let applied = kanban_sqlite::apply_label_ontology_atom(
+    let applied = kanban_sqlite::api::apply_label_ontology_atom(
         &temp.path,
         "default",
         LabelOntologyAtomApplyInput {
@@ -2958,8 +2958,8 @@ fn label_atom_explain_cli_json_round_trip() -> anyhow::Result<()> {
 }
 
 fn clear_label_atom_dirty_flags(path: &Path, board: &str) -> anyhow::Result<()> {
-    let board = kanban_sqlite::get_board(path, board)?;
-    let conn = kanban_sqlite::connect_file(path)?;
+    let board = kanban_sqlite::api::get_board(path, board)?;
+    let conn = kanban_test_support::connect_file(path)?;
     conn.execute(
         "UPDATE derived_store_state SET dirty=0, last_error=NULL \
          WHERE store_name='lancedb_label_atoms'",
@@ -2974,7 +2974,7 @@ fn clear_label_atom_dirty_flags(path: &Path, board: &str) -> anyhow::Result<()> 
 }
 
 fn add_atom_action_count(path: &Path) -> anyhow::Result<i64> {
-    Ok(kanban_sqlite::connect_file(path)?.query_row(
+    Ok(kanban_test_support::connect_file(path)?.query_row(
         "SELECT COUNT(*) FROM label_ontology_actions \
          WHERE action_type IN ('add_positive_atom','add_negative_atom')",
         [],
@@ -2983,7 +2983,7 @@ fn add_atom_action_count(path: &Path) -> anyhow::Result<i64> {
 }
 
 fn ontology_action_count(path: &Path) -> anyhow::Result<i64> {
-    Ok(kanban_sqlite::connect_file(path)?.query_row(
+    Ok(kanban_test_support::connect_file(path)?.query_row(
         "SELECT COUNT(*) FROM label_ontology_actions",
         [],
         |row| row.get(0),
@@ -3055,7 +3055,7 @@ fn seed_proposed_label_proposal(
     task_id: &str,
     candidate: LabelProposalCandidate,
 ) -> anyhow::Result<String> {
-    let conn = kanban_sqlite::connect_file(db_path)?;
+    let conn = kanban_test_support::connect_file(db_path)?;
     let board_id: String =
         conn.query_row("SELECT board_id FROM tasks WHERE id=?1", [task_id], |row| {
             row.get(0)

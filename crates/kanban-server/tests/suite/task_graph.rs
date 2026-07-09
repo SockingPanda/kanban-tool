@@ -5,34 +5,34 @@ async fn task_neighborhood_returns_one_hop_nodes_and_visible_internal_edges() ->
 {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let blocker = kanban_sqlite::create_task(
+    let blocker = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("blocker"),
+        kanban_sqlite::api::CreateTask::ready("blocker"),
     )?;
-    let peer = kanban_sqlite::create_task(
+    let peer = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("peer blocker"),
+        kanban_sqlite::api::CreateTask::ready("peer blocker"),
     )?;
-    let center = kanban_sqlite::create_task(
+    let center = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("center"),
+        kanban_sqlite::api::CreateTask::ready("center"),
     )?;
-    let unlock = kanban_sqlite::create_task(
+    let unlock = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("unlock"),
+        kanban_sqlite::api::CreateTask::ready("unlock"),
     )?;
-    kanban_sqlite::add_dependency(&db_path, "default", "seed", &blocker.id, &center.id)?;
-    kanban_sqlite::add_dependency(&db_path, "default", "seed", &peer.id, &center.id)?;
-    kanban_sqlite::add_dependency(&db_path, "default", "seed", &center.id, &unlock.id)?;
-    kanban_sqlite::add_dependency(&db_path, "default", "seed", &blocker.id, &peer.id)?;
+    kanban_sqlite::api::add_dependency(&db_path, "default", "seed", &blocker.id, &center.id)?;
+    kanban_sqlite::api::add_dependency(&db_path, "default", "seed", &peer.id, &center.id)?;
+    kanban_sqlite::api::add_dependency(&db_path, "default", "seed", &center.id, &unlock.id)?;
+    kanban_sqlite::api::add_dependency(&db_path, "default", "seed", &blocker.id, &peer.id)?;
 
     let (status, json) = get_json(
         test.router(),
@@ -111,8 +111,8 @@ async fn board_task_map_returns_active_graph_with_done_context_and_excludes_arch
     let db_path = test.db_path().to_path_buf();
     let done_parent = create_ready_task_for_test(&db_path, "default", "seed", "done context")?;
     let done_claim =
-        kanban_sqlite::claim_task(&db_path, "default", "seed", &done_parent.id, 60_000)?;
-    kanban_sqlite::complete_task(
+        kanban_sqlite::api::claim_task(&db_path, "default", "seed", &done_parent.id, 60_000)?;
+    kanban_sqlite::api::complete_task(
         &db_path,
         "default",
         "seed",
@@ -122,9 +122,9 @@ async fn board_task_map_returns_active_graph_with_done_context_and_excludes_arch
     )?;
     let active = create_ready_task_for_test(&db_path, "default", "seed", "active")?;
     let archived = create_ready_task_for_test(&db_path, "default", "seed", "archived context")?;
-    kanban_sqlite::archive_task(&db_path, "default", "seed", &archived.id, false)?;
-    kanban_sqlite::add_dependency(&db_path, "default", "seed", &done_parent.id, &active.id)?;
-    kanban_sqlite::add_dependency(&db_path, "default", "seed", &archived.id, &active.id)?;
+    kanban_sqlite::api::archive_task(&db_path, "default", "seed", &archived.id, false)?;
+    kanban_sqlite::api::add_dependency(&db_path, "default", "seed", &done_parent.id, &active.id)?;
+    kanban_sqlite::api::add_dependency(&db_path, "default", "seed", &archived.id, &active.id)?;
 
     let (status, json) = get_json(
         test.router(),
@@ -165,11 +165,11 @@ async fn board_task_map_returns_active_graph_with_done_context_and_excludes_arch
 async fn task_graph_rejects_unsupported_depth_options() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let db_path = test.db_path().to_path_buf();
-    let task = kanban_sqlite::create_task(
+    let task = kanban_sqlite::api::create_task(
         &db_path,
         "default",
         "seed",
-        kanban_sqlite::CreateTask::ready("center"),
+        kanban_sqlite::api::CreateTask::ready("center"),
     )?;
 
     let (status, json) = get_json(

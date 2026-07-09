@@ -6,10 +6,11 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use kanban_sqlite::{
+use kanban_sqlite::api::{
     backup_database, begin_database_replace, checkpoint_database, export_jsonl,
-    export_jsonl_to_writer, import_jsonl, init_database, queue_stats, vacuum_database,
+    export_jsonl_to_writer, import_jsonl, queue_stats, vacuum_database,
 };
+use kanban_sqlite::init::init_database;
 
 use crate::args::{BackupArgs, ExportArgs, ExportFormatArg, ImportArgs};
 use crate::commands::common::{invalid_input, is_stdio_path};
@@ -23,7 +24,7 @@ struct ImportOutput {
 }
 
 impl ImportOutput {
-    fn from_result(result: kanban_sqlite::ImportResult, dry_run: bool) -> Self {
+    fn from_result(result: kanban_sqlite::api::ImportResult, dry_run: bool) -> Self {
         Self {
             input_path: result.input_path,
             records: result.records,
@@ -36,7 +37,7 @@ pub(crate) fn import_command(
     db_path: &Path,
     actor: &str,
     args: ImportArgs,
-) -> Result<kanban_sqlite::ImportResult> {
+) -> Result<kanban_sqlite::api::ImportResult> {
     let temp_path = temporary_import_db_path(db_path)?;
     let restore_path = temporary_restore_db_path(db_path)?;
     let replaced_path = temporary_replaced_db_path(db_path)?;
@@ -58,7 +59,7 @@ pub(crate) fn import_dry_run_command(
     db_path: &Path,
     actor: &str,
     args: &ImportArgs,
-) -> Result<kanban_sqlite::ImportResult> {
+) -> Result<kanban_sqlite::api::ImportResult> {
     let temp_path = temporary_import_db_path(db_path)?;
     let result = (|| {
         let _init = init_database(&temp_path, actor)
@@ -152,7 +153,7 @@ fn replace_database_main_file(
 }
 
 pub(crate) fn handle_doctor(db_path: &PathBuf, json: bool) -> Result<()> {
-    let report = kanban_sqlite::doctor_database(db_path)?;
+    let report = kanban_sqlite::api::doctor_database(db_path)?;
     print_or_json(json, &report, || {
         format!(
             "ok={} integrity={} migration={:?} user_version={} expired_running={} running_without_run={} orphan_running_runs={} dependency_cycles={} archived_dependency_edges={} missing_run_logs={} suspicious_run_log_paths={} executable_dependency_violations={} executable_spec_violations={} executable_schedule_violations={} outbox_pending={} outbox_running={} outbox_failed={} derived_dirty_stores={} derived_error_stores={} consistency_errors={} consistency_warnings={} ontology_ledger_errors={} ontology_ledger_warnings={}",

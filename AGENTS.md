@@ -28,6 +28,7 @@
 - 单机本地语义；不要引入多用户、RBAC、组织、团队、邀请或 SaaS 假设。
 - `tasks.status` 是 canonical truth；`board_columns` 只是 UI 展示映射。
 - Web、CLI、desktop 和 dispatcher 必须走同一套 Rust service path；当前 application orchestration 主要在 `kanban-sqlite::service`，并复用 `kanban-core` 状态机 helper。
+- 涉及 `kanban_sqlite::api` facade、provider seam、lifecycle plumbing、`db` / `init` 边界的改动，以 `docs/ARCHITECTURE.md` 的 Public API 边界为准，并同步维护 `public_api` compile contract。
 - 不允许绕过 service path 或状态机 guard 直接写 `tasks.status`。
 - `ready -> running` 必须是原子 claim transaction：CAS update + run + event。
 - `blocked -> ready` 必须重新计算 spec、schedule、dependency，不允许盲设。

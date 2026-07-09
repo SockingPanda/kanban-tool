@@ -3,9 +3,3 @@ error[E0432]: unresolved import `kanban_sqlite::api::validate_label_ontology_act
   |
 1 | use kanban_sqlite::api::validate_label_ontology_action_with_trusted_evidence;
   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `validate_label_ontology_action_with_trusted_evidence` in `api`
-  |
-help: a similar name exists in the module
-  |
-1 - use kanban_sqlite::api::validate_label_ontology_action_with_trusted_evidence;
-1 + use kanban_sqlite::api::validate_label_ontology_action_with_trusted_suggestions;
-  |

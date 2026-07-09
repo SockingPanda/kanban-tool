@@ -1,0 +1,49 @@
+error[E0432]: unresolved imports `kanban_sqlite::api::DisabledLabelProposalProvider`, `kanban_sqlite::api::LabelOntologyTrustedValidationInput`, `kanban_sqlite::api::LabelProposalProvider`, `kanban_sqlite::api::ManualLabelProposalProvider`, `kanban_sqlite::api::build_context_pack_with_vector_store`, `kanban_sqlite::api::label_atom_index_status_with`, `kanban_sqlite::api::propose_task_label_with`, `kanban_sqlite::api::propose_task_label_with_create_options`, `kanban_sqlite::api::propose_task_label_with_store`, `kanban_sqlite::api::propose_task_label_with_store_and_create_options`, `kanban_sqlite::api::query_label_atom_index_by_vector_with`, `kanban_sqlite::api::query_label_atom_index_with`, `kanban_sqlite::api::rebuild_label_atom_index_with`, `kanban_sqlite::api::rebuild_vector_store_with`, `kanban_sqlite::api::suggest_task_labels_with`, `kanban_sqlite::api::sync_vector_store_with`, `kanban_sqlite::api::vector_store_status_with`, `kanban_sqlite::api::validate_label_ontology_action_with_trusted_suggestions`
+  --> tests/ui/api_facade_excludes_provider_helpers.rs:4:5
+   |
+ 4 |     DisabledLabelProposalProvider, LabelOntologyTrustedValidationInput, LabelProposalProvider,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^ no `LabelProposalProvider` in `api`
+   |     |                              |
+   |     |                              no `LabelOntologyTrustedValidationInput` in `api`
+   |     no `DisabledLabelProposalProvider` in `api`
+ 5 |     ManualLabelProposalProvider, build_context_pack_with_vector_store, label_atom_index_status_with,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `label_atom_index_status_with` in `api`
+   |     |                            |
+   |     |                            no `build_context_pack_with_vector_store` in `api`
+   |     no `ManualLabelProposalProvider` in `api`
+ 6 |     propose_task_label_with, propose_task_label_with_create_options, propose_task_label_with_store,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `propose_task_label_with_store` in `api`
+   |     |                        |
+   |     |                        no `propose_task_label_with_create_options` in `api`
+   |     no `propose_task_label_with` in `api`
+ 7 |     propose_task_label_with_store_and_create_options, query_label_atom_index_by_vector_with,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |     |
+   |     no `propose_task_label_with_store_and_create_options` in `api`
+ 8 |     query_label_atom_index_with, rebuild_label_atom_index_with, rebuild_vector_store_with,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^
+ 9 |     suggest_task_labels_with, sync_vector_store_with, vector_store_status_with,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^
+10 |     validate_label_ontology_action_with_trusted_suggestions,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: a similar name exists in the module
+   |
+ 4 -     DisabledLabelProposalProvider, LabelOntologyTrustedValidationInput, LabelProposalProvider,
+ 4 +     DisabledLabelProposalProvider, LabelOntologyValidationInput, LabelProposalProvider,
+   |
+help: a similar name exists in the module
+   |
+ 4 -     DisabledLabelProposalProvider, LabelOntologyTrustedValidationInput, LabelProposalProvider,
+ 4 +     DisabledLabelProposalProvider, LabelOntologyTrustedValidationInput, LabelProposalCandidate,
+   |
+help: a similar name exists in the module
+   |
+ 5 -     ManualLabelProposalProvider, build_context_pack_with_vector_store, label_atom_index_status_with,
+ 5 +     ManualLabelProposalProvider, build_context_pack_with_vector_store, label_atom_index_status,
+   |
+help: a similar name exists in the module
+   |
+ 6 -     propose_task_label_with, propose_task_label_with_create_options, propose_task_label_with_store,
+ 6 +     propose_task_label, propose_task_label_with_create_options, propose_task_label_with_store,
+   |

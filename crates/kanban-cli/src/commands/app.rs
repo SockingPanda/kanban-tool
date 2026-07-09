@@ -6,9 +6,9 @@ use clap_complete::Shell;
 use kanban_core::{Locale, set_current_locale};
 
 use crate::commands::common::invalid_input;
+use kanban_sqlite::api::lifecycle::begin_database_runtime;
 use kanban_sqlite::api::{
-    CompletionCandidateKind, begin_database_runtime, completion_candidates, dispatch_once,
-    list_events, list_runs,
+    CompletionCandidateKind, completion_candidates, dispatch_once, list_events, list_runs,
 };
 use kanban_sqlite::init::init_database;
 

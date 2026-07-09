@@ -1239,9 +1239,9 @@ fn set_jsonl_record_field(
 fn database_replace_is_rejected_while_runtime_lock_is_held() -> anyhow::Result<()> {
     let temp = TempDb::new("database_replace_is_rejected_while_runtime_lock_is_held")?;
     init_database(&temp.path, "tester")?;
-    let _runtime_guard = begin_database_runtime(&temp.path)?;
+    let _runtime_guard = lifecycle::begin_database_runtime(&temp.path)?;
 
-    let err = result_err(begin_database_replace(&temp.path))?;
+    let err = result_err(lifecycle::begin_database_replace(&temp.path))?;
 
     assert!(
         err.to_string().contains("running")

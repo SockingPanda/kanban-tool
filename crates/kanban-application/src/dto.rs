@@ -1,3 +1,9 @@
+//! DTOs for selected adapter-facing use-case slices.
+//!
+//! These records are public contracts. Prefer additive fields and new option
+//! structs over mutating existing field meaning; breaking changes must update all
+//! adapters and the public API compile contracts in the same change.
+
 use std::path::PathBuf;
 
 use kanban_core::TaskStatus;

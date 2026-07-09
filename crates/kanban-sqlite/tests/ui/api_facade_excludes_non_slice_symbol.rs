@@ -1,5 +1,5 @@
-use kanban_sqlite::api::connect_file;
+use kanban_sqlite::api::graph_relation_snapshot;
 
 fn main() {
-    let _ = connect_file;
+    let _ = graph_relation_snapshot;
 }

@@ -23,7 +23,7 @@ dispatcher  -> kanban-application API / DTO contracts
                 (Tantivy / Oxigraph / LanceDB)
 ```
 
-当前实现已经把 adapter-facing DTO/port 合同抽到 `kanban-application`。CLI、HTTP
+当前实现已经把一组已选择的 adapter-facing DTO/port vertical slice 抽到 `kanban-application`；它不是完整 application service，也不拥有 SQLite transaction。CLI、HTTP
 server、desktop 和 dispatcher 通过 `kanban_sqlite::api` 或 `SqliteApplication` 进入同一组
 SQLite-backed use cases；`kanban-sqlite::service` 仍是 transaction、状态机 guard、canonical
 writes、events、runs、outbox 和 provenance 的 implementation owner。`kanban-core` 承载
@@ -39,7 +39,7 @@ writes、events、runs、outbox 和 provenance 的 implementation owner。`kanba
 | 平面 | 当前内容 | 写权限边界 |
 |---|---|---|
 | Interaction/adapters | `kanban-cli`、`kanban-server`、desktop、dispatcher 入口 | 转换输入/输出和 locale/message 渲染，不直接写 SQLite truth |
-| Application contracts | `kanban-application` DTO/port API，SQLite 实现位于 `kanban-sqlite` | adapters 依赖稳定 API/DTO，不直接依赖 root legacy path |
+| Application contracts | `kanban-application` selected use-case DTO/port API，SQLite 实现位于 `kanban-sqlite` | adapters 逐步依赖稳定 API/DTO；该 crate 不是完整 application service |
 | Domain/state machine | `kanban-core` 的 status、guard 和 recompute helper | 纯逻辑，不访问 SQLite/HTTP/CLI |
 | Canonical SQLite truth | tasks/status、dependencies、labels、semantics、proposals、ontology ledger | 只能由 service path 写入 |
 | Propagation/control plane | `task_events`、`index_outbox`、dirty/generation/status markers | 记录同步水位和恢复入口，不替代 truth |
@@ -158,13 +158,17 @@ Public API 边界：
 
 - `kanban_sqlite::service` 是 implementation owner，负责 transaction、状态机 guard、
   canonical writes、events、runs 和 provenance。
-- `kanban_sqlite::api` 是 adapter-facing facade，用于 CLI、server、desktop 和 dispatcher
-  contract path 复用稳定 use case、query、record 和 provenance 类型。它不拥有新的
-  orchestration 语义，也不导出 DB connection helper 或 init helper。
+- `kanban_sqlite::api` 是 adapter-facing curated facade，用于 CLI、server、desktop 和 dispatcher
+  contract path 复用已允许的 use case、query、record 和 provenance 类型。它不拥有新的
+  orchestration 语义，不是 `service::*` broad re-export，也不导出 DB connection helper、init
+  helper 或未列入 allowlist 的 service-only implementation helper。
 - crate root 不再提供 `kanban_sqlite::*` legacy re-export；旧 root path 是 breaking change，
   并由 `tests/ui/root_legacy_reexport_removed.rs` 负向 compile contract 锁定。
 - `kanban_sqlite::application::SqliteApplication` 实现 `kanban-application` 的 backend port，
-  用于需要以 application API 组合 use case 的 adapter/benchmark 路径。
+  用于需要以 application API 组合 selected use-case slice 的 adapter/benchmark 路径。
+- `kanban-application` DTO/trait 演进遵循 additive-first 策略：优先新增可选字段、option
+  struct 或 extension trait；破坏性 DTO/trait 变更必须和 adapter 更新、public API compile
+  contract 同步提交。
 
 关键要求：
 

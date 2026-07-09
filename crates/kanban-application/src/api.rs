@@ -1,10 +1,18 @@
-//! Public application API boundary.
+//! Public application API boundary for selected use-case slices.
+//!
+//! Functions in this module are thin dispatch helpers over `ApplicationBackend`.
+//! They define the currently selected adapter contract; they do not imply that
+//! every `kanban-sqlite::service` use case has moved into this crate.
 
 use kanban_core::Result;
 
 pub use crate::dto::*;
 
-/// Backend implementation for application use cases.
+/// Backend implementation for the selected application use-case slices.
+///
+/// Add methods here only when an adapter-facing use case is intentionally moved
+/// behind the application boundary. Prefer additive evolution or extension
+/// traits over changing existing signatures in place.
 pub trait ApplicationBackend {
     fn create_task(&self, board: &str, actor: &str, input: CreateTask) -> Result<TaskRecord>;
 

@@ -1,6 +1,6 @@
 # Application Service 抽取评估
 
-状态：已被 application API 收敛迁移取代。当前 `kanban-application` 承载 DTO/port 合同，`kanban-sqlite::api`/`SqliteApplication` 是 SQLite-backed adapter boundary；crate root legacy re-export 已删除。
+状态：已被 application API 收敛迁移取代。当前 `kanban-application` 只承载 selected use-case DTO/port vertical slice，不是完整 application service；`kanban-sqlite::api`/`SqliteApplication` 是 SQLite-backed adapter boundary；crate root legacy re-export 已删除。
 
 本文记录未来什么时候值得把独立 application-service crate 抽出来，以及一旦重启这项工作必须保住哪些 invariant。它是评估记录，不是当前迭代的实现计划。
 
@@ -32,11 +32,11 @@ Adapter 证据：
 
 ## 决策
 
-已抽取 `kanban-application` DTO/port contract crate；不把 transaction implementation 从 `kanban-sqlite::service` 迁出。
+已抽取 `kanban-application` DTO/port contract crate 作为 selected vertical slice；不把 transaction implementation 从 `kanban-sqlite::service` 迁出，也不把该 crate 宣称为完整 application service。
 
 当前最高风险仍在 label ontology mutation、validation evidence、derived-store dirty state、board isolation 和 adapter parity 的行为契约。行为契约稳定前移动 orchestration，会增加 churn，但不会天然带来新的安全保证。
 
-因此架构文档应继续诚实描述当前形态：application contract 在 `kanban-application`，SQLite-backed implementation owner 仍在 `kanban-sqlite::service`，`kanban-core` 保持为纯领域 / 状态机 crate。
+因此架构文档应继续诚实描述当前形态：selected application contract 在 `kanban-application`，SQLite-backed implementation owner 仍在 `kanban-sqlite::service`，`kanban-core` 保持为纯领域 / 状态机 crate。DTO/trait 演进采用 additive-first：优先可选字段、option struct、extension trait 或新 selected use-case method；破坏性变更必须同步 adapter 和 public API compile contract。
 
 ## 重新评估门槛
 

@@ -85,7 +85,7 @@ function RunSummary({ activeRun, detail }: { activeRun?: Run; detail: DetailStat
       <InfoRow label={t("worker")} value={activeRun.worker_profile ?? t("manual")} />
       <InfoRow label={t("owner")} value={activeRun.claim_owner} />
       <InfoRow label={t("started")} value={formatRelativeTime(activeRun.started_at)} />
-      <InfoRow label={t("log")} value={activeRun.log_path ?? "-"} />
+      <InfoRow label={t("log")} value={activeRun.has_log ? t("available") : "-"} />
       {detail.runLog ? (
         <div className="mt-3 rounded-md border border-border bg-terminal-bg p-2 text-xs text-terminal-fg">
           <div className="mb-2 flex items-center justify-between text-terminal-muted-foreground">

@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "ColumnJsonlData": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "position": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/PortableTaskStatus"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "wip_limit": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "status",
+        "title",
+        "position",
+        "hidden",
+        "wip_limit",
+        "created_at",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "ColumnJsonlType": {
+      "enum": [
+        "column"
+      ],
+      "type": "string"
+    },
+    "PortableTaskStatus": {
+      "enum": [
+        "triage",
+        "todo",
+        "scheduled",
+        "ready",
+        "running",
+        "blocked",
+        "review",
+        "done",
+        "archived"
+      ],
+      "type": "string"
+    },
+    "RequiredNullableSchema": {
+      "description": "Schema-only marker for a key that must be present but may contain JSON null.\n\nA bare `Option<T>` is considered omittable by schemars, while\n`#[schemars(required)]` deliberately removes its null branch. This\ntransparent non-Option wrapper preserves both halves of the wire contract.",
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:column-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/ColumnJsonlData"
+    },
+    "type": {
+      "$ref": "#/$defs/ColumnJsonlType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL column output v1",
+  "type": "object"
+}

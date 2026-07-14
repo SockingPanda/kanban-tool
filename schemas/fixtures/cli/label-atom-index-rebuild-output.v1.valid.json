@@ -1,0 +1,13 @@
+{
+  "data": {
+    "backend": "fixture-helper",
+    "board_dirty": false,
+    "diagnostics": [
+      "fixture"
+    ],
+    "dirty": false,
+    "enabled": true,
+    "generation": 7,
+    "message": "fixture labels rebuilt"
+  }
+}

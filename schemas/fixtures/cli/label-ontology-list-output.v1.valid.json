@@ -1,0 +1,36 @@
+{
+  "data": [
+    {
+      "agent_selected": true,
+      "board_id": "b_FIXTURE_1",
+      "candidate_atom_kind": "applies_when",
+      "candidate_atom_polarity": "positive",
+      "candidate_content_hash": "hash_fixture",
+      "candidate_text": "touches Rust service code list",
+      "closed_at": null,
+      "confidence": 0.9,
+      "created_at": 100,
+      "final_selected": true,
+      "id": "los_FIXTURE_1",
+      "kind": "false_negative",
+      "observation_id": "lor_FIXTURE_1",
+      "proposed_action": "add_positive_atom",
+      "proposed_label_name": null,
+      "proposed_label_name_normalized": null,
+      "rationale": "fixture rationale list",
+      "reviewed_at": null,
+      "signal_key": "hash_fixture",
+      "status": "open",
+      "status_reason": null,
+      "suggest_rank": null,
+      "suggest_score": 0,
+      "suggest_state": "absent",
+      "superseded_by_signal_id": null,
+      "target_label_id": "l_FIXTURE_1",
+      "target_label_name_snapshot": "backend",
+      "updated_at": 100,
+      "related_labels": [],
+      "proposal": {}
+    }
+  ]
+}

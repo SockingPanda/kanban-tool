@@ -1,0 +1,59 @@
+{
+  "data": {
+    "id": "loa_target_fixture",
+    "board_id": "fixture",
+    "parent_action_id": null,
+    "action_type": "add_positive_atom",
+    "reason": "fixture",
+    "target_label_id": "l_fixture",
+    "result_label_id": null,
+    "result_atom_id": "la_fixture",
+    "result_atom_content_hash": "fixture",
+    "result_proposal_id": null,
+    "canonical_before_hash": "fixture",
+    "canonical_after_hash": "fixture",
+    "validation_requirement": "required",
+    "validation_status": "pending",
+    "validation_effective_outcome": "pending",
+    "validation_latest_attempt_id": null,
+    "created_by": "fixture",
+    "created_by_type": "user",
+    "agent_type": null,
+    "created_at": 1,
+    "signal_ids": ["los_fixture"],
+    "change": {
+      "label": {"id": "l_fixture", "name": "fixture"},
+      "added_atom": {
+        "polarity": "positive",
+        "kind": "applies_when",
+        "text": "fixture",
+        "content_hash": "fixture",
+        "id": "la_fixture"
+      },
+      "changed": true,
+      "canonical_changed": true,
+      "provenance_only": false,
+      "requested_action_type": "add_positive_atom",
+      "before": {
+        "label_id": "l_fixture",
+        "label_name": "fixture",
+        "description": null,
+        "applies_when": [],
+        "excludes_when": [],
+        "positive_examples": [],
+        "negative_examples": []
+      },
+      "after": {
+        "label_id": "l_fixture",
+        "label_name": "fixture",
+        "description": null,
+        "applies_when": ["fixture"],
+        "excludes_when": [],
+        "positive_examples": [],
+        "negative_examples": []
+      },
+      "retarget_override": null
+    },
+    "validation": {}
+  }
+}

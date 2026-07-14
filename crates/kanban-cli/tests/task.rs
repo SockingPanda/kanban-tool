@@ -220,7 +220,7 @@ fn task_reopen_requires_reason_and_returns_reopened_task() -> anyhow::Result<()>
     assert_eq!(reopened["data"]["status"], "ready");
     assert_eq!(reopened["data"]["completed_at"], serde_json::Value::Null);
     assert_eq!(reopened["data"]["result_summary"], "done once");
-    assert_eq!(reopened["data"]["result_json"], r#"{"cli":true}"#);
+    assert_eq!(reopened["data"]["result"], json!({"cli":true}));
     Ok(())
 }
 
@@ -457,7 +457,7 @@ import json, sys
 args = sys.argv[1:]
 cmd = args[0]
 if cmd == "status":
-    payload = {"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[]}
+    payload = {"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[],"dirty":False,"board_dirty":False}
 elif cmd == "embed-query":
     payload = [1.0, 0.0]
 elif cmd == "query-label-atoms":
@@ -1003,7 +1003,7 @@ fn label_propose_without_provider_returns_degraded_without_polluting_labels() ->
 }
 
 #[test]
-fn label_propose_with_proposal_json_degrades_without_polluting_truth() -> anyhow::Result<()> {
+fn metadata_label_proposal_candidate_input_fixture_is_consumed_by_real_cli() -> anyhow::Result<()> {
     let temp = TempDb::new("label_propose_with_proposal_json_degrades_without_polluting_truth")?;
     kanban(&temp.path, &["init"])?.success()?;
     let task = kanban(
@@ -1021,19 +1021,10 @@ fn label_propose_with_proposal_json_degrades_without_polluting_truth() -> anyhow
     )?
     .success_json()?;
     let task_id = task["data"]["id"].as_str().context("task id")?;
-    let proposal_path = temp.dir.join("candidate.json");
-    std::fs::write(
-        &proposal_path,
-        json!({
-            "name": "workflow",
-            "description": "Workflow classification",
-            "applies_when": ["classifies execution flow"],
-            "excludes_when": ["UI-only polish"],
-            "positive_examples": ["triage work queue"],
-            "negative_examples": ["CSS tweak"]
-        })
-        .to_string(),
-    )?;
+    let proposal_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/metadata/label-proposal-candidate-input.v1.valid.json"
+    );
 
     let attempt = kanban(
         &temp.path,
@@ -1043,7 +1034,7 @@ fn label_propose_with_proposal_json_degrades_without_polluting_truth() -> anyhow
             "propose",
             task_id,
             "--proposal-json",
-            proposal_path.to_str().context("proposal json path")?,
+            proposal_path,
         ],
     )?
     .success_json()?;
@@ -1102,7 +1093,7 @@ import json, sys
 args = sys.argv[1:]
 cmd = args[0]
 if cmd == "status":
-    payload = {"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[]}
+    payload = {"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[],"dirty":False,"board_dirty":False}
 elif cmd == "embed-query":
     payload = [1.0, 0.0]
 else:
@@ -1267,7 +1258,7 @@ fn label_proposals_json_accept_reject_list_show_round_trip() -> anyhow::Result<(
 }
 
 #[test]
-fn label_ontology_cli_record_list_show_review_round_trip() -> anyhow::Result<()> {
+fn metadata_ontology_record_input_fixture_is_consumed_by_real_cli() -> anyhow::Result<()> {
     let temp = TempDb::new("label_ontology_cli_record_list_show_review_round_trip")?;
     kanban(&temp.path, &["init"])?.success()?;
     kanban(&temp.path, &["label", "create", "cli"])?.success()?;
@@ -1287,67 +1278,10 @@ fn label_ontology_cli_record_list_show_review_round_trip() -> anyhow::Result<()>
         .as_str()
         .context("expected JSON string")?;
 
-    let input_path = temp.dir.join("ontology-record.json");
-    let agent_candidates_json = json!([
-        {"label": "cli", "confidence": 0.92}
-    ])
-    .to_string();
-    let suggestion_snapshot_json = json!({
-        "selected_labels": []
-    })
-    .to_string();
-    let final_decision_json = json!({
-        "accepted_labels": ["cli"]
-    })
-    .to_string();
-    let diagnostics_json = json!([]).to_string();
-    let related_labels_json = json!([]).to_string();
-    let proposal_json = json!({}).to_string();
-    fs::write(
-        &input_path,
-        json!({
-            "actor": {
-                "name": "label-agent",
-                "type": "agent",
-                "agent_type": "local"
-            },
-            "agent_candidates_json": agent_candidates_json,
-            "suggestion_snapshot_json": suggestion_snapshot_json,
-            "final_decision_json": final_decision_json,
-            "suggest_coverage": 0.61,
-            "suggest_coverage_cosine": 0.74,
-            "suggest_residual_norm": 0.39,
-            "suggest_needs_new_label": false,
-            "suggest_degraded": false,
-            "diagnostics_json": diagnostics_json,
-            "capture_fingerprint": "cli-ontology-round-trip",
-            "signals": [{
-                "kind": "false_negative",
-                "target_label_ref": "cli",
-                "related_labels_json": related_labels_json,
-                "proposed_action": "add_positive_atom",
-                "candidate_atom": {
-                    "polarity": "positive",
-                    "kind": "applies_when",
-                    "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
-                },
-                "proposed_label_name": null,
-                "proposal_json": proposal_json,
-                "agent_selected": true,
-                "suggest_state": "candidate",
-                "suggest_score": 0.08,
-                "suggest_rank": 4,
-                "final_selected": true,
-                "rationale": "The task expands the CLI surface although suggest scored cli weakly.",
-                "confidence": 0.91,
-                "signal_key": "cli-false-negative"
-            }]
-        })
-        .to_string(),
-    )?;
-    let input_path = input_path
-        .to_str()
-        .context("temp path should be valid UTF-8")?;
+    let input_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/metadata/ontology-record-input.v1.valid.json"
+    );
 
     let observation = kanban(
         &temp.path,
@@ -1709,11 +1643,7 @@ fn label_ontology_cli_record_accepts_simplified_snapshot_capture_input() -> anyh
     assert_eq!(observation["data"]["suggest_residual_norm"], 0.58);
     assert_eq!(observation["data"]["suggest_needs_new_label"], true);
     assert_eq!(observation["data"]["suggest_degraded"], true);
-    let diagnostics: serde_json::Value = serde_json::from_str(
-        observation["data"]["diagnostics_json"]
-            .as_str()
-            .context("diagnostics_json")?,
-    )?;
+    let diagnostics = observation["data"]["diagnostics"].clone();
     assert_eq!(diagnostics, json!(["vector_store_disabled"]));
     assert_eq!(
         observation["data"]["signals"][0]["signal_key"],
@@ -1728,6 +1658,229 @@ fn label_ontology_cli_record_accepts_simplified_snapshot_capture_input() -> anyh
     assert_eq!(list_label_atoms(&temp.path, "default")?, atoms_before);
 
     Ok(())
+}
+
+fn assert_ontology_record_snapshot_projection_conflict(
+    explicit_field: &str,
+    snapshot_value: serde_json::Value,
+    explicit_value: serde_json::Value,
+) -> anyhow::Result<()> {
+    let temp = TempDb::new(&format!("ontology_record_{explicit_field}_conflict"))?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology projection conflict",
+            "--description",
+            "reject conflicting explicit ontology projection fields",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    let mut snapshot = json!({
+        "needs_new_label": false,
+        "degraded": false,
+        "diagnostics": []
+    });
+    let snapshot_field = match explicit_field {
+        "suggest_needs_new_label" => "needs_new_label",
+        "suggest_degraded" => "degraded",
+        "diagnostics" => "diagnostics",
+        other => anyhow::bail!("unsupported projection field {other}"),
+    };
+    snapshot[snapshot_field] = snapshot_value;
+    let mut input = json!({
+        "actor": {"name": "fixture", "type": "agent", "agent_type": "codex"},
+        "suggestion_snapshot": snapshot,
+        "signals": [{
+            "kind": "false_negative",
+            "target_label_ref": "cli",
+            "related_labels": [],
+            "proposed_action": "add_positive_atom",
+            "candidate_atom": {
+                "polarity": "positive",
+                "kind": "applies_when",
+                "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
+            },
+            "agent_selected": true,
+            "suggest_state": "absent",
+            "final_selected": true,
+            "rationale": "fixture conflict must be rejected before service persistence"
+        }]
+    });
+    input[explicit_field] = explicit_value;
+    let input_path = temp.dir.join(format!("{explicit_field}-conflict.json"));
+    fs::write(&input_path, serde_json::to_vec_pretty(&input)?)?;
+
+    let result = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            input_path.to_str().context("input path")?,
+        ],
+    )?;
+    assert!(
+        !result.output.status.success(),
+        "conflicting {explicit_field} unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&result.output.stdout),
+        String::from_utf8_lossy(&result.output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&result.output.stderr), "");
+    let error: serde_json::Value = serde_json::from_slice(&result.output.stdout)?;
+    assert_eq!(error["error"]["code"], "invalid_input");
+    assert_eq!(error["error"]["exit_code"], 2);
+    assert!(
+        error["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains(&format!(
+                "input {explicit_field} conflicts with suggestion_snapshot.{snapshot_field}"
+            )),
+        "{error}"
+    );
+    let observation_count: i64 = kanban_test_support::connect_file(&temp.path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_observations",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        observation_count, 0,
+        "conflict must not persist an observation"
+    );
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_record_rejects_explicit_needs_new_label_snapshot_conflict()
+-> anyhow::Result<()> {
+    assert_ontology_record_snapshot_projection_conflict(
+        "suggest_needs_new_label",
+        json!(false),
+        json!(true),
+    )
+}
+
+#[test]
+fn label_ontology_cli_record_rejects_explicit_degraded_snapshot_conflict() -> anyhow::Result<()> {
+    assert_ontology_record_snapshot_projection_conflict(
+        "suggest_degraded",
+        json!(false),
+        json!(true),
+    )
+}
+
+#[test]
+fn label_ontology_cli_record_rejects_empty_diagnostics_snapshot_conflict() -> anyhow::Result<()> {
+    assert_ontology_record_snapshot_projection_conflict(
+        "diagnostics",
+        json!(["snapshot diagnostic"]),
+        json!([]),
+    )
+}
+
+fn assert_ontology_record_null_snapshot_projection_uses_explicit(
+    explicit_field: &str,
+    snapshot_field: &str,
+    explicit_value: serde_json::Value,
+) -> anyhow::Result<()> {
+    let temp = TempDb::new(&format!("ontology_record_{explicit_field}_null_snapshot"))?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "ontology null projection",
+            "--description",
+            "treat null snapshot projections as absent",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("task id")?;
+    let mut snapshot = json!({});
+    snapshot[snapshot_field] = serde_json::Value::Null;
+    let mut input = json!({
+        "actor": {"name": "fixture", "type": "agent", "agent_type": "codex"},
+        "suggestion_snapshot": snapshot,
+        "signals": [{
+            "kind": "false_negative",
+            "target_label_ref": "cli",
+            "related_labels": [],
+            "proposed_action": "add_positive_atom",
+            "candidate_atom": {
+                "polarity": "positive",
+                "kind": "applies_when",
+                "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
+            },
+            "agent_selected": true,
+            "suggest_state": "absent",
+            "final_selected": true,
+            "rationale": "null snapshot projection defers to the explicit field"
+        }]
+    });
+    input[explicit_field] = explicit_value.clone();
+    let input_path = temp
+        .dir
+        .join(format!("{explicit_field}-null-snapshot.json"));
+    fs::write(&input_path, serde_json::to_vec_pretty(&input)?)?;
+
+    let observation = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            input_path.to_str().context("input path")?,
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(observation["data"][explicit_field], explicit_value);
+    assert_eq!(
+        observation["data"]["suggestion_snapshot"].get(snapshot_field),
+        Some(&serde_json::Value::Null),
+        "the natural snapshot must retain the explicit null field"
+    );
+    let observation_count: i64 = kanban_test_support::connect_file(&temp.path)?.query_row(
+        "SELECT COUNT(*) FROM label_ontology_observations",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(observation_count, 1);
+    Ok(())
+}
+
+#[test]
+fn label_ontology_cli_record_accepts_null_needs_new_label_with_explicit_projection()
+-> anyhow::Result<()> {
+    assert_ontology_record_null_snapshot_projection_uses_explicit(
+        "suggest_needs_new_label",
+        "needs_new_label",
+        json!(true),
+    )
+}
+
+#[test]
+fn label_ontology_cli_record_accepts_null_diagnostics_with_explicit_projection()
+-> anyhow::Result<()> {
+    assert_ontology_record_null_snapshot_projection_uses_explicit(
+        "diagnostics",
+        "diagnostics",
+        json!([]),
+    )
 }
 
 #[test]
@@ -2011,24 +2164,24 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
                 "type": "agent",
                 "agent_type": "local"
             },
-            "agent_candidates_json": "[]",
-            "suggestion_snapshot_json": "{}",
-            "final_decision_json": "{}",
+            "agent_candidates": [],
+            "suggestion_snapshot": {},
+            "final_decision": {},
             "suggest_coverage": 0.2,
             "suggest_coverage_cosine": 0.3,
             "suggest_residual_norm": 0.8,
             "suggest_needs_new_label": true,
             "suggest_degraded": false,
-            "diagnostics_json": "[]",
+            "diagnostics": [],
             "capture_fingerprint": "cli-proposal-gap",
             "signals": [{
                 "kind": "vocabulary_gap",
                 "target_label_ref": null,
-                "related_labels_json": "[]",
+                "related_labels": [],
                 "proposed_action": "bootstrap_label",
                 "candidate_atom": null,
                 "proposed_label_name": "ontology-ledger",
-                "proposal_json": "{\"name\":\"ontology-ledger\"}",
+                "proposal": {"name":"ontology-ledger"},
                 "agent_selected": true,
                 "suggest_state": "absent",
                 "suggest_score": null,
@@ -2134,11 +2287,7 @@ fn label_ontology_cli_lifecycle_apply_and_validate_round_trip() -> anyhow::Resul
     assert_eq!(bootstrap["created_by"], "ontology-agent");
     assert_eq!(bootstrap["created_by_type"], "agent");
     assert_eq!(bootstrap["agent_type"], "codex");
-    let change: serde_json::Value = serde_json::from_str(
-        bootstrap["change_json"]
-            .as_str()
-            .context("bootstrap change_json")?,
-    )?;
+    let change = &bootstrap["change"];
     assert_eq!(
         change["retarget_override"]["reason"],
         "Reviewer explicitly audited proposal source signal retarget."
@@ -2572,11 +2721,7 @@ fn label_ontology_cli_apply_existing_atom_uses_adopt_existing_action() -> anyhow
         applied["data"]["canonical_before_hash"],
         applied["data"]["canonical_after_hash"]
     );
-    let change: serde_json::Value = serde_json::from_str(
-        applied["data"]["change_json"]
-            .as_str()
-            .context("change_json")?,
-    )?;
+    let change = &applied["data"]["change"];
     assert_eq!(change["canonical_changed"], false);
     assert_eq!(change["provenance_only"], true);
     assert_eq!(change["requested_action_type"], "add_positive_atom");
@@ -2617,20 +2762,20 @@ fn label_ontology_cli_apply_atom_retarget_override_records_reason() -> anyhow::R
                 "type": "agent",
                 "agent_type": "local"
             },
-            "agent_candidates_json": "[]",
-            "suggestion_snapshot_json": "{}",
-            "final_decision_json": "{}",
+            "agent_candidates": [],
+            "suggestion_snapshot": {},
+            "final_decision": {},
             "suggest_coverage": 0.2,
             "suggest_coverage_cosine": 0.3,
             "suggest_residual_norm": 0.8,
             "suggest_needs_new_label": false,
             "suggest_degraded": false,
-            "diagnostics_json": "[]",
+            "diagnostics": [],
             "capture_fingerprint": "cli-retarget-override",
             "signals": [{
                 "kind": "false_negative",
                 "target_label_ref": "backend",
-                "related_labels_json": "[]",
+                "related_labels": [],
                 "proposed_action": "add_positive_atom",
                 "candidate_atom": {
                     "polarity": "positive",
@@ -2638,7 +2783,7 @@ fn label_ontology_cli_apply_atom_retarget_override_records_reason() -> anyhow::R
                     "text": "extends backend persistence or service APIs"
                 },
                 "proposed_label_name": null,
-                "proposal_json": "{}",
+                "proposal": {},
                 "agent_selected": true,
                 "suggest_state": "candidate",
                 "suggest_score": 0.08,
@@ -2701,11 +2846,7 @@ fn label_ontology_cli_apply_atom_retarget_override_records_reason() -> anyhow::R
         ],
     )?
     .success_json()?;
-    let change: serde_json::Value = serde_json::from_str(
-        applied["data"]["change_json"]
-            .as_str()
-            .context("change_json")?,
-    )?;
+    let change = &applied["data"]["change"];
     assert_eq!(
         change["retarget_override"]["reason"],
         "Signal captures a CLI boundary despite backend wording."
@@ -2982,6 +3123,84 @@ fn add_atom_action_count(path: &Path) -> anyhow::Result<i64> {
     )?)
 }
 
+#[test]
+fn label_ontology_cli_record_rejects_double_encoded_json_compatibility_fields() -> anyhow::Result<()>
+{
+    let temp = TempDb::new("ontology_rejects_double_encoded_json")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "natural ontology input",
+            "--description",
+            "reject legacy double-encoded metadata fields",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?;
+    let path = temp.dir.join("legacy-ontology-input.json");
+    fs::write(
+        &path,
+        json!({
+            "actor": {"name": "fixture", "type": "agent", "agent_type": "codex"},
+            "agent_candidates_json": "[]",
+            "suggestion_snapshot": {},
+            "signals": []
+        })
+        .to_string(),
+    )?;
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "ontology",
+            "record",
+            task_id,
+            "--input",
+            path.to_str().context("input path")?,
+        ],
+    )?
+    .failure_containing("unknown field")?;
+    Ok(())
+}
+
+#[test]
+fn metadata_ontology_record_input_rejects_closed_value_domain_fixture() -> anyhow::Result<()> {
+    let temp = TempDb::new("ontology_rejects_open_value_domain")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "closed ontology metadata",
+            "--description",
+            "reject values outside the contract vocabulary",
+        ],
+    )?
+    .success_json()?;
+    kanban(
+        &temp.path,
+        &[
+            "label",
+            "ontology",
+            "record",
+            "default#1",
+            "--input",
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../schemas/fixtures/metadata/ontology-record-input.v1.invalid.json"
+            ),
+        ],
+    )?
+    .failure_containing("unknown variant")?;
+    Ok(())
+}
+
 fn ontology_action_count(path: &Path) -> anyhow::Result<i64> {
     Ok(kanban_test_support::connect_file(path)?.query_row(
         "SELECT COUNT(*) FROM label_ontology_actions",
@@ -3001,7 +3220,7 @@ fn write_cli_ontology_record_input(
             json!({
                 "kind": "false_negative",
                 "target_label_ref": "cli",
-                "related_labels_json": "[]",
+                "related_labels": [],
                 "proposed_action": "add_positive_atom",
                 "candidate_atom": {
                     "polarity": "positive",
@@ -3009,7 +3228,7 @@ fn write_cli_ontology_record_input(
                     "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
                 },
                 "proposed_label_name": null,
-                "proposal_json": "{}",
+                "proposal": {},
                 "agent_selected": true,
                 "suggest_state": "candidate",
                 "suggest_score": 0.08,
@@ -3030,15 +3249,15 @@ fn write_cli_ontology_record_input(
                 "type": "agent",
                 "agent_type": "local"
             },
-            "agent_candidates_json": "[{\"label\":\"cli\",\"confidence\":0.92}]",
-            "suggestion_snapshot_json": "{\"selected_labels\":[]}",
-            "final_decision_json": "{\"accepted_labels\":[\"cli\"]}",
+            "agent_candidates": [{"label":"cli","confidence":0.92}],
+            "suggestion_snapshot": {"selected_labels":[]},
+            "final_decision": {"accepted_labels":["cli"]},
             "suggest_coverage": 0.61,
             "suggest_coverage_cosine": 0.74,
             "suggest_residual_norm": 0.39,
             "suggest_needs_new_label": false,
             "suggest_degraded": false,
-            "diagnostics_json": "[]",
+            "diagnostics": [],
             "capture_fingerprint": filename,
             "signals": signals
         })
@@ -3521,6 +3740,49 @@ fn task_update_with_invalid_max_retries_does_not_persist_fields_or_event() -> an
             .context("expected event array")?
             .len()
     );
+    Ok(())
+}
+
+#[test]
+fn task_retry_policy_clear_event_is_consumed_by_contract_payload() -> anyhow::Result<()> {
+    let temp = TempDb::new("task_retry_policy_clear_event_contract")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let created = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "clear retry policy",
+            "--description",
+            "ready spec",
+            "--max-retries",
+            "2",
+        ],
+    )?
+    .success_json()?;
+    let task_id = created["data"]["id"].as_str().context("expected task id")?;
+
+    kanban(
+        &temp.path,
+        &["--json", "task", "update", task_id, "--clear-max-retries"],
+    )?
+    .success()?;
+    let events = kanban(&temp.path, &["--json", "events", task_id])?.success_json()?;
+    let event = events["data"]
+        .as_array()
+        .context("expected event array")?
+        .iter()
+        .rev()
+        .find(|event| event["kind"] == "task.retry_policy.updated")
+        .context("expected retry policy event")?;
+    let payload = event["payload"].clone();
+    assert_eq!(payload, json!({"max_retries": null}));
+    let typed = kanban_contract::event_payload::EventPayload::from_kind_and_value(
+        "task.retry_policy.updated",
+        payload.clone(),
+    )?;
+    assert_eq!(serde_json::to_value(typed)?, payload);
     Ok(())
 }
 
@@ -4425,7 +4687,10 @@ fn task_metadata_file_and_stdin_preserve_shell_sensitive_json() -> anyhow::Resul
         ],
     )?
     .success_json()?;
-    assert_eq!(created["data"]["metadata_json"], metadata);
+    assert_eq!(
+        created["data"]["metadata"],
+        serde_json::from_str::<serde_json::Value>(metadata)?
+    );
     let task_id = created["data"]["id"].as_str().context("expected task id")?;
 
     let stdin_metadata =
@@ -4437,6 +4702,9 @@ fn task_metadata_file_and_stdin_preserve_shell_sensitive_json() -> anyhow::Resul
     )?
     .success_json()?;
 
-    assert_eq!(updated["data"]["metadata_json"], stdin_metadata);
+    assert_eq!(
+        updated["data"]["metadata"],
+        serde_json::from_str::<serde_json::Value>(stdin_metadata)?
+    );
     Ok(())
 }

@@ -1,0 +1,38 @@
+{
+  "$id": "urn:kanban-tool:schema:api:propose-task-label-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "atom_limit": {
+      "default": 80,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "candidate_limit": {
+      "default": 32,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "limit": {
+      "default": 5,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "max_selected_labels": {
+      "default": 4,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "min_score": {
+      "default": 0.15000000596046448,
+      "format": "float",
+      "type": "number"
+    }
+  },
+  "title": "Propose task label query v1",
+  "type": "object"
+}

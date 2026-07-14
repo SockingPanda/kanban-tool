@@ -1,4 +1,9 @@
-use kanban_entity::ChunkRef;
+use kanban_contract::{
+    VectorHelperEmbedQueryResponse, VectorHelperErrorResponse, VectorHelperLabelAtomHit,
+    VectorHelperQueryChunksResponse, VectorHelperQueryLabelAtomsItem,
+    VectorHelperQueryLabelAtomsResponse, VectorHelperStatusResponse,
+};
+use kanban_entity::{ChunkRef, EntityUri};
 use kanban_helper_protocol::HelperEnvelope;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -359,7 +364,7 @@ impl SubprocessVectorStore {
         let stdout = String::from_utf8_lossy(&output.stdout);
         if !output.status.success() {
             if let Ok(envelope) = HelperEnvelope::from_json(stdout.trim())
-                && let Ok(error) = envelope.decode::<HelperErrorPayload>()
+                && let Ok(error) = envelope.decode::<VectorHelperErrorResponse>()
             {
                 return Err(VectorError::Store(format!(
                     "vector helper failed: {} ({})",
@@ -391,7 +396,10 @@ impl SubprocessVectorStore {
     }
 
     pub fn label_atom_status(&self) -> VectorStoreStatus {
-        match self.run_helper::<VectorStoreStatus>(&["label-atoms-status".to_owned()]) {
+        match self
+            .run_helper::<VectorHelperStatusResponse>(&["label-atoms-status".to_owned()])
+            .map(vector_store_status)
+        {
             Ok(status) => status,
             Err(error) => {
                 let mut status = VectorStoreStatus::new(
@@ -409,18 +417,14 @@ impl SubprocessVectorStore {
     }
 
     pub fn rebuild_label_atoms(&self) -> Result<VectorStoreStatus, VectorError> {
-        self.run_helper(&["rebuild-label-atoms".to_owned()])
+        self.run_helper::<VectorHelperStatusResponse>(&["rebuild-label-atoms".to_owned()])
+            .map(vector_store_status)
     }
 
     pub fn sync_label_atoms(&self) -> Result<VectorStoreStatus, VectorError> {
-        self.run_helper(&["sync-label-atoms".to_owned()])
+        self.run_helper::<VectorHelperStatusResponse>(&["sync-label-atoms".to_owned()])
+            .map(vector_store_status)
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct HelperErrorPayload {
-    code: String,
-    message: String,
 }
 
 fn bounded_helper_message(value: &str) -> String {
@@ -441,7 +445,10 @@ impl VectorStoreBackend for SubprocessVectorStore {
     }
 
     fn status(&self) -> VectorStoreStatus {
-        match self.run_helper::<VectorStoreStatus>(&["status".to_owned()]) {
+        match self
+            .run_helper::<VectorHelperStatusResponse>(&["status".to_owned()])
+            .map(vector_store_status)
+        {
             Ok(status) => status,
             Err(error) => {
                 let mut status = VectorStoreStatus::new(
@@ -458,7 +465,7 @@ impl VectorStoreBackend for SubprocessVectorStore {
 
 impl QueryEmbeddingProvider for SubprocessVectorStore {
     fn embed_query_text(&self, text: &str) -> Result<Vec<f32>, VectorError> {
-        self.run_helper(&[
+        self.run_helper::<VectorHelperEmbedQueryResponse>(&[
             "embed-query".to_owned(),
             "--text".to_owned(),
             text.to_owned(),
@@ -480,13 +487,16 @@ impl ChunkVectorStore for SubprocessVectorStore {
     }
 
     fn query(&self, query: &VectorQuery) -> Result<Vec<VectorHit>, VectorError> {
-        self.run_helper(&[
+        self.run_helper::<VectorHelperQueryChunksResponse>(&[
             "query-chunks".to_owned(),
             "--text".to_owned(),
             query.text.clone(),
             "--limit".to_owned(),
             query.limit.to_string(),
-        ])
+        ])?
+        .into_iter()
+        .map(vector_hit)
+        .collect()
     }
 }
 
@@ -505,7 +515,13 @@ impl LabelAtomVectorStore for SubprocessVectorStore {
             query.embedding_model.as_deref(),
             query.polarity.as_deref(),
         );
-        self.run_helper(&args)
+        self.run_helper::<VectorHelperQueryLabelAtomsResponse>(&args)?
+            .into_iter()
+            .map(|item| match item {
+                VectorHelperQueryLabelAtomsItem::Hit(hit) => label_atom_hit(hit),
+                VectorHelperQueryLabelAtomsItem::WithVector(hit) => label_atom_hit(hit.hit),
+            })
+            .collect()
     }
 
     fn query_label_atoms_by_vector(
@@ -530,8 +546,64 @@ impl LabelAtomVectorStore for SubprocessVectorStore {
         if query.include_vector {
             args.push("--include-vector".to_owned());
         }
-        self.run_helper(&args)
+        self.run_helper::<VectorHelperQueryLabelAtomsResponse>(&args)?
+            .into_iter()
+            .map(|item| match item {
+                VectorHelperQueryLabelAtomsItem::Hit(hit) => Ok(LabelAtomVectorHit {
+                    hit: label_atom_hit(hit)?,
+                    vector: None,
+                }),
+                VectorHelperQueryLabelAtomsItem::WithVector(hit) => Ok(LabelAtomVectorHit {
+                    hit: label_atom_hit(hit.hit)?,
+                    vector: hit.vector,
+                }),
+            })
+            .collect()
     }
+}
+
+fn vector_store_status(status: VectorHelperStatusResponse) -> VectorStoreStatus {
+    VectorStoreStatus {
+        backend: status.backend,
+        enabled: status.enabled,
+        message: status.message,
+        diagnostics: status.diagnostics,
+        dirty: status.dirty,
+        board_dirty: status.board_dirty,
+        generation: status.generation,
+    }
+}
+
+fn vector_hit(hit: kanban_contract::VectorHelperChunkHit) -> Result<VectorHit, VectorError> {
+    Ok(VectorHit {
+        chunk: ChunkRef {
+            uri: EntityUri::new(hit.chunk.uri)
+                .map_err(|error| VectorError::Store(error.to_string()))?,
+            entity_uri: EntityUri::new(hit.chunk.entity_uri)
+                .map_err(|error| VectorError::Store(error.to_string()))?,
+            ordinal: hit.chunk.ordinal,
+            content_hash: hit.chunk.content_hash,
+        },
+        score: hit.score,
+        text: hit.text,
+        summary: hit.summary,
+    })
+}
+
+fn label_atom_hit(hit: VectorHelperLabelAtomHit) -> Result<LabelAtomHit, VectorError> {
+    Ok(LabelAtomHit {
+        atom_id: hit.atom_id,
+        label_id: hit.label_id,
+        label_name: hit.label_name,
+        board_id: hit.board_id,
+        polarity: hit.polarity,
+        kind: hit.kind,
+        text: hit.text,
+        ordinal: hit.ordinal,
+        content_hash: hit.content_hash,
+        embedding_model: hit.embedding_model,
+        distance: hit.distance,
+    })
 }
 
 fn push_label_atom_filters(

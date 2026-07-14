@@ -1,0 +1,37 @@
+{
+  "$id": "urn:kanban-tool:schema:api:build-context-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "board": {
+      "default": "default",
+      "type": "string"
+    },
+    "graph_limit": {
+      "default": 10,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "lexical_limit": {
+      "default": 5,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "max_items": {
+      "default": 20,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "vector_limit": {
+      "default": 5,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "title": "Kanban build context query v1",
+  "type": "object"
+}

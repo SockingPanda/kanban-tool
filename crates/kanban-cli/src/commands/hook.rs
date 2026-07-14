@@ -7,6 +7,11 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use kanban_contract::cli_operator::{
+    CliHookCodexInstallOutput, CliHookCodexInstallResult, CliHookCodexStatusOutput,
+    CliHookCodexStatusResult, CliHookCodexUninstallOutput, CliHookCodexUninstallResult,
+    CliHookPromptBindings, CliHookPromptConfigStatus,
+};
 use kanban_sqlite::api::{SignalRecordInput, record_signal};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
@@ -14,7 +19,7 @@ use serde_json::{Map, Value, json};
 use crate::{
     args::{CodexHookCommand, CodexHookHandleCommand, CodexHookInstallArgs, HookCommand},
     commands::common::{active_board, invalid_input},
-    output::print_or_json,
+    output::print_contract_or_human,
 };
 
 const MANAGED_MARKER: &str = "kanban-hook-codex";
@@ -73,7 +78,7 @@ fn install_codex_hook(args: &CodexHookInstallArgs, json_output: bool) -> Result<
     let prompt_config = inspect_prompt_config(&prompt_config_path);
 
     let status = inspect_hooks_config(&path, Some(&config))?;
-    let output = CodexHookInstallOutput {
+    let output = CliHookCodexInstallOutput::new(CliHookCodexInstallResult {
         path,
         installed: status.installed,
         matcher: BASH_MATCHER.to_owned(),
@@ -84,13 +89,13 @@ fn install_codex_hook(args: &CodexHookInstallArgs, json_output: bool) -> Result<
         managed_hook_count: status.managed_hook_count,
         prompt_config_created,
         prompt_config,
-    };
-    print_or_json(json_output, &output, || {
+    });
+    print_contract_or_human(json_output, &output, || {
         format!(
             "Installed {} managed kanban Codex hooks at {}; prompt config at {}",
-            output.managed_hook_count,
-            output.path.display(),
-            output.prompt_config.path.display(),
+            output.data.managed_hook_count,
+            output.data.path.display(),
+            output.data.prompt_config.path.display(),
         )
     })
 }
@@ -99,7 +104,9 @@ fn status_codex_hook(json_output: bool) -> Result<()> {
     let path = hooks_config_path()?;
     let mut status = inspect_hooks_config(&path, None)?;
     status.prompt_config = inspect_prompt_config(&prompt_config_path()?);
-    print_or_json(json_output, &status, || {
+    let output = CliHookCodexStatusOutput::new(status);
+    print_contract_or_human(json_output, &output, || {
+        let status = &output.data;
         if status.installed {
             format!(
                 "kanban Codex hook installed at {} ({} managed hook{}); prompt config at {}",
@@ -123,17 +130,17 @@ fn uninstall_codex_hook(json_output: bool) -> Result<()> {
     let mut config = read_hooks_config(&path)?;
     let removed_hook_count = remove_managed_hooks(&mut config)?;
     write_hooks_config(&path, &config)?;
-    let output = CodexHookUninstallOutput {
+    let output = CliHookCodexUninstallOutput::new(CliHookCodexUninstallResult {
         path,
         removed_hook_count,
         installed: false,
-    };
-    print_or_json(json_output, &output, || {
+    });
+    print_contract_or_human(json_output, &output, || {
         format!(
             "Removed {} managed kanban Codex hook{} from {}",
-            output.removed_hook_count,
-            plural(output.removed_hook_count),
-            output.path.display()
+            output.data.removed_hook_count,
+            plural(output.data.removed_hook_count),
+            output.data.path.display()
         )
     })
 }
@@ -286,9 +293,9 @@ fn default_prompt_config() -> Value {
     })
 }
 
-fn inspect_prompt_config(path: &Path) -> CodexHookPromptConfigStatus {
+fn inspect_prompt_config(path: &Path) -> CliHookPromptConfigStatus {
     if !path.exists() {
-        return CodexHookPromptConfigStatus {
+        return CliHookPromptConfigStatus {
             path: path.to_path_buf(),
             exists: false,
             valid: false,
@@ -299,7 +306,7 @@ fn inspect_prompt_config(path: &Path) -> CodexHookPromptConfigStatus {
     let value = match read_prompt_config(path) {
         Ok(value) => value,
         Err(error) => {
-            return CodexHookPromptConfigStatus {
+            return CliHookPromptConfigStatus {
                 path: path.to_path_buf(),
                 exists: true,
                 valid: false,
@@ -311,14 +318,14 @@ fn inspect_prompt_config(path: &Path) -> CodexHookPromptConfigStatus {
     match prompt_bindings_from_config(&value)
         .and_then(|bindings| validate_prompt_templates(&value, &bindings).map(|()| bindings))
     {
-        Ok(bindings) => CodexHookPromptConfigStatus {
+        Ok(bindings) => CliHookPromptConfigStatus {
             path: path.to_path_buf(),
             exists: true,
             valid: true,
             error: None,
             bindings,
         },
-        Err(error) => CodexHookPromptConfigStatus {
+        Err(error) => CliHookPromptConfigStatus {
             path: path.to_path_buf(),
             exists: true,
             valid: false,
@@ -329,15 +336,15 @@ fn inspect_prompt_config(path: &Path) -> CodexHookPromptConfigStatus {
     }
 }
 
-fn prompt_bindings_from_config(value: &Value) -> Result<CodexHookPromptBindings> {
+fn prompt_bindings_from_config(value: &Value) -> Result<CliHookPromptBindings> {
     validate_prompt_config_version(value)?;
-    Ok(CodexHookPromptBindings {
+    Ok(CliHookPromptBindings {
         failure: prompt_binding_alias(value, CodexHookPromptKind::Failure)?,
         task_create: prompt_binding_alias(value, CodexHookPromptKind::TaskCreate)?,
     })
 }
 
-fn validate_prompt_templates(value: &Value, bindings: &CodexHookPromptBindings) -> Result<()> {
+fn validate_prompt_templates(value: &Value, bindings: &CliHookPromptBindings) -> Result<()> {
     prompt_template_by_alias(value, &bindings.failure)?;
     prompt_template_by_alias(value, &bindings.task_create)?;
     Ok(())
@@ -384,8 +391,8 @@ fn prompt_template_by_alias<'a>(value: &'a Value, alias: &str) -> Result<&'a str
     Ok(template)
 }
 
-fn default_prompt_bindings() -> CodexHookPromptBindings {
-    CodexHookPromptBindings {
+fn default_prompt_bindings() -> CliHookPromptBindings {
+    CliHookPromptBindings {
         failure: DEFAULT_FAILURE_PROMPT_ALIAS.to_owned(),
         task_create: DEFAULT_TASK_CREATE_PROMPT_ALIAS.to_owned(),
     }
@@ -475,7 +482,7 @@ fn is_managed_hook(hook: &Value) -> bool {
         && command.contains(MANAGED_MARKER)
 }
 
-fn inspect_hooks_config(path: &Path, config: Option<&Value>) -> Result<CodexHookStatusOutput> {
+fn inspect_hooks_config(path: &Path, config: Option<&Value>) -> Result<CliHookCodexStatusResult> {
     let owned;
     let config = if let Some(config) = config {
         Some(config)
@@ -512,7 +519,7 @@ fn inspect_hooks_config(path: &Path, config: Option<&Value>) -> Result<CodexHook
         }
     }
 
-    Ok(CodexHookStatusOutput {
+    Ok(CliHookCodexStatusResult {
         path: path.to_path_buf(),
         installed: !managed_commands.is_empty(),
         matcher: BASH_MATCHER.to_owned(),
@@ -871,35 +878,6 @@ fn plural(count: usize) -> &'static str {
     if count == 1 { "" } else { "s" }
 }
 
-#[derive(Debug, Serialize)]
-struct CodexHookInstallOutput {
-    path: PathBuf,
-    installed: bool,
-    matcher: String,
-    handler_commands: Vec<String>,
-    managed_hook_count: usize,
-    prompt_config_created: bool,
-    prompt_config: CodexHookPromptConfigStatus,
-}
-
-#[derive(Debug, Serialize)]
-struct CodexHookStatusOutput {
-    path: PathBuf,
-    installed: bool,
-    matcher: String,
-    managed_hook_count: usize,
-    post_tool_use_group_count: usize,
-    managed_commands: Vec<String>,
-    prompt_config: CodexHookPromptConfigStatus,
-}
-
-#[derive(Debug, Serialize)]
-struct CodexHookUninstallOutput {
-    path: PathBuf,
-    removed_hook_count: usize,
-    installed: bool,
-}
-
 #[derive(Debug)]
 struct ManagedHookSpec {
     command: String,
@@ -939,21 +917,6 @@ impl CodexHookPromptKind {
             Self::TaskCreate => DEFAULT_TASK_CREATE_PROMPT_TEMPLATE,
         }
     }
-}
-
-#[derive(Debug, Serialize)]
-struct CodexHookPromptConfigStatus {
-    path: PathBuf,
-    exists: bool,
-    valid: bool,
-    error: Option<String>,
-    bindings: CodexHookPromptBindings,
-}
-
-#[derive(Debug, Serialize)]
-struct CodexHookPromptBindings {
-    failure: String,
-    task_create: String,
 }
 
 #[derive(Debug)]

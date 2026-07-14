@@ -1,0 +1,202 @@
+{
+  "$defs": {
+    "LabelOntologyActionTypeWire": {
+      "enum": [
+        "confirm",
+        "reject",
+        "supersede",
+        "resolve_no_change",
+        "add_positive_atom",
+        "add_negative_atom",
+        "adopt_existing_atom",
+        "update_semantics",
+        "create_label_proposal",
+        "bootstrap_label",
+        "rename_label",
+        "split_label",
+        "merge_labels",
+        "revert_ontology_mutation",
+        "validate"
+      ],
+      "type": "string"
+    },
+    "LabelOntologyActionWire": {
+      "additionalProperties": false,
+      "properties": {
+        "action_type": {
+          "$ref": "#/$defs/LabelOntologyActionTypeWire"
+        },
+        "agent_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "canonical_after_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "canonical_before_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "change": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "created_by": {
+          "type": "string"
+        },
+        "created_by_type": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "parent_action_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "result_atom_content_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_atom_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_label_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_proposal_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signal_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "target_label_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "validation": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "validation_effective_outcome": {
+          "$ref": "#/$defs/LabelOntologyValidationEffectiveOutcomeWire"
+        },
+        "validation_latest_attempt_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "validation_requirement": {
+          "$ref": "#/$defs/LabelOntologyValidationRequirementWire"
+        },
+        "validation_status": {
+          "$ref": "#/$defs/LabelOntologyValidationStatusWire"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "parent_action_id",
+        "action_type",
+        "reason",
+        "target_label_id",
+        "result_label_id",
+        "result_atom_id",
+        "result_atom_content_hash",
+        "result_proposal_id",
+        "canonical_before_hash",
+        "canonical_after_hash",
+        "change",
+        "validation_requirement",
+        "validation_status",
+        "validation_effective_outcome",
+        "validation_latest_attempt_id",
+        "validation",
+        "created_by",
+        "created_by_type",
+        "agent_type",
+        "created_at",
+        "signal_ids"
+      ],
+      "type": "object"
+    },
+    "LabelOntologyValidationEffectiveOutcomeWire": {
+      "enum": [
+        "not_required",
+        "unsupported",
+        "pending",
+        "passed",
+        "failed",
+        "partial"
+      ],
+      "type": "string"
+    },
+    "LabelOntologyValidationRequirementWire": {
+      "enum": [
+        "none",
+        "required",
+        "unsupported"
+      ],
+      "type": "string"
+    },
+    "LabelOntologyValidationStatusWire": {
+      "enum": [
+        "not_required",
+        "pending",
+        "passed",
+        "failed",
+        "partial"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:label-ontology-apply-atom-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/LabelOntologyActionWire"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI label ontology apply atom output v1",
+  "type": "object"
+}

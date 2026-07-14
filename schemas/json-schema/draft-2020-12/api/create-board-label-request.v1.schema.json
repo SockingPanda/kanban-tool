@@ -1,0 +1,21 @@
+{
+  "$id": "urn:kanban-tool:schema:api:create-board-label-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "color": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "Create board label request v1",
+  "type": "object"
+}

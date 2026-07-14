@@ -1,0 +1,30 @@
+{
+  "data": {
+    "label_id": "l_fixture",
+    "board_id": "fixture",
+    "label_name": "fixture",
+    "semantics_hash": "fixture",
+    "description": null,
+    "applies_when": [],
+    "excludes_when": [],
+    "positive_examples": [],
+    "negative_examples": [],
+    "created_at": 1,
+    "updated_at": 1,
+    "atoms": [
+      {
+        "id": "la_fixture",
+        "label_id": "l_fixture",
+        "board_id": "fixture",
+        "label_name": "fixture",
+        "polarity": "positive",
+        "kind": "name",
+        "text": "fixture",
+        "ordinal": 0,
+        "content_hash": "fixture",
+        "created_at": 1,
+        "updated_at": 1
+      }
+    ]
+  }
+}

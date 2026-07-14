@@ -1,0 +1,31 @@
+{
+  "$id": "urn:kanban-tool:schema:api:graph-neighbors-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "board": {
+      "default": "default",
+      "type": "string"
+    },
+    "entity_uri": {
+      "type": "string"
+    },
+    "limit": {
+      "default": 50,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "predicate": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "entity_uri"
+  ],
+  "title": "Kanban graph neighbors query v1",
+  "type": "object"
+}

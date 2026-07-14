@@ -1,17 +1,15 @@
 use std::time::UNIX_EPOCH;
 
 use axum::{Json, extract::State};
-use serde_json::json;
 
 use crate::{
-    dto::Envelope,
     error::{ApiError, invalid_input},
     state::AppState,
 };
 
 pub(crate) async fn health(
     State(state): State<AppState>,
-) -> Result<Json<Envelope<serde_json::Value>>, ApiError> {
+) -> Result<Json<kanban_contract::HealthResponse>, ApiError> {
     let metadata = std::fs::metadata(state.db_path()).map_err(|error| {
         invalid_input(format!(
             "database file is unreadable: {} ({error})",
@@ -31,14 +29,13 @@ pub(crate) async fn health(
             state.db_path().display()
         )));
     }
-    Ok(Json(Envelope {
-        data: json!({
-            "ok": true,
-            "db": "ok",
-            "version": env!("CARGO_PKG_VERSION"),
-            "db_path": state.db_path().display().to_string(),
-            "db_fingerprint": format!("sqlite:{}:{modified_ms}", metadata.len()),
-        }),
-        meta: None,
-    }))
+    Ok(Json(kanban_contract::HealthResponse::new(
+        kanban_contract::HealthReport {
+            ok: true,
+            db: "ok".to_owned(),
+            version: env!("CARGO_PKG_VERSION").to_owned(),
+            db_path: state.db_path().display().to_string(),
+            db_fingerprint: format!("sqlite:{}:{modified_ms}", metadata.len()),
+        },
+    )))
 }

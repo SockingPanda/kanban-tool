@@ -1,0 +1,1 @@
+{"type":"event","data":{"id":1,"event_id":"e_core","board_id":"b_core","task_id":"t_core","run_id":"r_core","kind":"custom.opaque","actor":"tester","payload":["opaque",1],"created_at":32}}

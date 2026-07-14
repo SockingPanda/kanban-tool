@@ -1,0 +1,21 @@
+{
+  "$id": "urn:kanban-tool:schema:api:complete-step-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "note": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "note"
+  ],
+  "title": "Kanban complete step request v1",
+  "type": "object"
+}

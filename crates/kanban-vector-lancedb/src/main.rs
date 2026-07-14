@@ -15,8 +15,13 @@ use kanban_vector::{
     LabelAtomVectorStore, VectorQuery, VectorStoreBackend, VectorStoreStatus,
 };
 use kanban_vector_lancedb::{LanceDbConfig, LanceDbStore, OllamaEmbeddingProvider};
+use kanban_vector_lancedb::{
+    vector_helper_check_provider_response, vector_helper_embed_query_response,
+    vector_helper_error_response, vector_helper_handshake_response,
+    vector_helper_query_chunks_response, vector_helper_query_label_atom_vectors_response,
+    vector_helper_query_label_atoms_response, vector_helper_status_response,
+};
 use serde::Serialize;
-use serde_json::json;
 use std::sync::Arc;
 
 #[derive(Debug, Parser)]
@@ -110,18 +115,9 @@ struct EmbedQueryArgs {
     text: String,
 }
 
-#[derive(Debug, Serialize)]
-struct ErrorPayload {
-    code: &'static str,
-    message: String,
-}
-
 fn main() {
     if let Err(error) = run() {
-        let payload = ErrorPayload {
-            code: "helper_error",
-            message: error.to_string(),
-        };
+        let payload = vector_helper_error_response(error.to_string());
         if let Ok(envelope) = HelperEnvelope::new(payload).and_then(|envelope| envelope.to_json()) {
             println!("{envelope}");
         } else {
@@ -134,31 +130,27 @@ fn main() {
 fn run() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Handshake => print_payload(json!({
-            "helper": "kanban-vector-lancedb",
-            "protocol": HelperEnvelope::PROTOCOL,
-            "version": env!("CARGO_PKG_VERSION"),
-        })),
-        Command::Status(args) => print_payload(vector_status(&args)?),
+        Command::Handshake => {
+            print_payload(vector_helper_handshake_response(env!("CARGO_PKG_VERSION")))
+        }
+        Command::Status(args) => {
+            print_payload(vector_helper_status_response(vector_status(&args)?))
+        }
         Command::CheckProvider(args) => {
             provider(&args)?.check()?;
-            print_payload(json!({"ok": true}))
+            print_payload(vector_helper_check_provider_response())
         }
         Command::Rebuild(args) => {
             let store = configured_store(&args)?;
-            print_payload(rebuild_lancedb_chunks_with_store(
-                &args.db,
-                &args.board,
-                &store,
-            )?)
+            print_payload(vector_helper_status_response(
+                rebuild_lancedb_chunks_with_store(&args.db, &args.board, &store)?,
+            ))
         }
         Command::Sync(args) => {
             let store = configured_store(&args)?;
-            print_payload(sync_lancedb_chunks_with_store(
-                &args.db,
-                &args.board,
-                &store,
-            )?)
+            print_payload(vector_helper_status_response(
+                sync_lancedb_chunks_with_store(&args.db, &args.board, &store)?,
+            ))
         }
         Command::QueryChunks(args) => {
             let store = configured_store(&args.store)?;
@@ -166,7 +158,7 @@ fn run() -> Result<()> {
                 text: args.text,
                 limit: args.limit,
             })?;
-            print_payload(hits)
+            print_payload(vector_helper_query_chunks_response(hits))
         }
         Command::QueryLabelAtoms(args) => {
             if let Some(vector_json) = args.vector_json {
@@ -180,7 +172,7 @@ fn run() -> Result<()> {
                     polarity: args.polarity,
                     include_vector: args.include_vector,
                 })?;
-                print_payload(hits)
+                print_payload(vector_helper_query_label_atom_vectors_response(hits))
             } else {
                 let store = configured_store(&args.store)?;
                 let hits = store.query_label_atoms(&LabelAtomQuery {
@@ -190,29 +182,29 @@ fn run() -> Result<()> {
                     embedding_model: args.embedding_model,
                     polarity: args.polarity,
                 })?;
-                print_payload(hits)
+                print_payload(vector_helper_query_label_atoms_response(hits))
             }
         }
-        Command::LabelAtomsStatus(args) => print_payload(label_atom_status(&args)?),
+        Command::LabelAtomsStatus(args) => {
+            print_payload(vector_helper_status_response(label_atom_status(&args)?))
+        }
         Command::RebuildLabelAtoms(args) => {
             let store = configured_store(&args)?;
-            print_payload(rebuild_lancedb_label_atoms_with_store(
-                &args.db,
-                &args.board,
-                &store,
-            )?)
+            print_payload(vector_helper_status_response(
+                rebuild_lancedb_label_atoms_with_store(&args.db, &args.board, &store)?,
+            ))
         }
         Command::SyncLabelAtoms(args) => {
             let store = configured_store(&args)?;
-            print_payload(sync_lancedb_label_atoms_with_store(
-                &args.db,
-                &args.board,
-                &store,
-            )?)
+            print_payload(vector_helper_status_response(
+                sync_lancedb_label_atoms_with_store(&args.db, &args.board, &store)?,
+            ))
         }
         Command::EmbedQuery(args) => {
             let provider = provider_from_store_args(&args.store)?;
-            print_payload(provider.embed(&args.text)?)
+            print_payload(vector_helper_embed_query_response(
+                provider.embed(&args.text)?,
+            ))
         }
     }
 }

@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "RequiredNullableSchema": {
+      "description": "Schema-only marker for a key that is required but may contain JSON null.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    }
+  },
+  "$id": "urn:kanban-tool:schema:helper:vector-status-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "backend": {
+      "type": "string"
+    },
+    "board_dirty": {
+      "$ref": "#/$defs/RequiredNullableSchema"
+    },
+    "diagnostics": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "dirty": {
+      "$ref": "#/$defs/RequiredNullableSchema"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "generation": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "backend",
+    "enabled",
+    "message",
+    "diagnostics",
+    "dirty",
+    "board_dirty"
+  ],
+  "title": "Vector Helper Status Response v1",
+  "type": "object"
+}

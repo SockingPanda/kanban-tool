@@ -152,7 +152,7 @@ async fn linked_step_errors_use_unified_envelope() -> anyhow::Result<()> {
     let (status, json) = post_json(
         app.clone(),
         &format!("/api/v1/tasks/{}/steps", parent.id),
-        json!({"title":"missing link","linked_task_id":"t_missing","actor":"api-actor"}),
+        json!({"title":"missing link","linked_task_ref":"t_missing","actor":"api-actor"}),
     )
     .await?;
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -161,7 +161,7 @@ async fn linked_step_errors_use_unified_envelope() -> anyhow::Result<()> {
     let (status, json) = post_json(
         app.clone(),
         &format!("/api/v1/tasks/{}/steps", parent.id),
-        json!({"title":"cross board link","linked_task_id":other.id,"actor":"api-actor"}),
+        json!({"title":"cross board link","linked_task_ref":other.id,"actor":"api-actor"}),
     )
     .await?;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -176,7 +176,7 @@ async fn linked_step_errors_use_unified_envelope() -> anyhow::Result<()> {
     let (status, json) = post_json(
         app.clone(),
         &format!("/api/v1/tasks/{}/steps", parent.id),
-        json!({"title":"self link","linked_task_id":parent.id,"actor":"api-actor"}),
+        json!({"title":"self link","linked_task_ref":parent.id,"actor":"api-actor"}),
     )
     .await?;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -191,7 +191,7 @@ async fn linked_step_errors_use_unified_envelope() -> anyhow::Result<()> {
     let (status, json) = post_json(
         app,
         &format!("/api/v1/tasks/{}/steps", parent.id),
-        json!({"title":"linked normal task","linked_task_id":child.id,"actor":"api-actor"}),
+        json!({"title":"linked normal task","linked_task_ref":child.id,"actor":"api-actor"}),
     )
     .await?;
     assert_eq!(status, StatusCode::CREATED);

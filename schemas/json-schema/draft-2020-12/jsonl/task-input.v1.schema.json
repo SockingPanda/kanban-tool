@@ -1,0 +1,193 @@
+{
+  "$defs": {
+    "ApiTaskPriority": {
+      "format": "uint8",
+      "maximum": 3,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "PortableTaskStatus": {
+      "enum": [
+        "triage",
+        "todo",
+        "scheduled",
+        "ready",
+        "running",
+        "blocked",
+        "review",
+        "done",
+        "archived"
+      ],
+      "type": "string"
+    },
+    "RequiredNullableSchema": {
+      "description": "Schema-only marker for a key that must be present but may contain JSON null.\n\nA bare `Option<T>` is considered omittable by schemars, while\n`#[schemars(required)]` deliberately removes its null branch. This\ntransparent non-Option wrapper preserves both halves of the wire contract.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "RequiredNullableSchema2": {
+      "description": "Schema-only marker for a key that must be present but may contain JSON null.\n\nA bare `Option<T>` is considered omittable by schemars, while\n`#[schemars(required)]` deliberately removes its null branch. This\ntransparent non-Option wrapper preserves both halves of the wire contract.",
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "RequiredNullableSchema3": {
+      "description": "Schema-only marker for a key that must be present but may contain JSON null.\n\nA bare `Option<T>` is considered omittable by schemars, while\n`#[schemars(required)]` deliberately removes its null branch. This\ntransparent non-Option wrapper preserves both halves of the wire contract."
+    },
+    "TaskJsonlData": {
+      "additionalProperties": false,
+      "properties": {
+        "archived_at": {
+          "$ref": "#/$defs/RequiredNullableSchema2"
+        },
+        "assignee": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "claim_expires_at": {
+          "$ref": "#/$defs/RequiredNullableSchema2"
+        },
+        "claim_owner": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        },
+        "claim_token": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        },
+        "completed_at": {
+          "$ref": "#/$defs/RequiredNullableSchema2"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "created_by": {
+          "type": "string"
+        },
+        "current_run_id": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        },
+        "description": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        },
+        "due_at": {
+          "$ref": "#/$defs/RequiredNullableSchema2"
+        },
+        "id": {
+          "type": "string"
+        },
+        "last_heartbeat_at": {
+          "$ref": "#/$defs/RequiredNullableSchema2"
+        },
+        "lock_version": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "max_retries": {
+          "$ref": "#/$defs/RequiredNullableSchema2"
+        },
+        "metadata": true,
+        "position": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "priority": {
+          "$ref": "#/$defs/ApiTaskPriority"
+        },
+        "result": {
+          "$ref": "#/$defs/RequiredNullableSchema3"
+        },
+        "result_summary": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        },
+        "retry_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "scheduled_at": {
+          "$ref": "#/$defs/RequiredNullableSchema2"
+        },
+        "seq": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "started_at": {
+          "$ref": "#/$defs/RequiredNullableSchema2"
+        },
+        "status": {
+          "$ref": "#/$defs/PortableTaskStatus"
+        },
+        "status_reason": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "seq",
+        "title",
+        "description",
+        "status",
+        "status_reason",
+        "assignee",
+        "priority",
+        "position",
+        "scheduled_at",
+        "due_at",
+        "created_by",
+        "created_at",
+        "updated_at",
+        "started_at",
+        "completed_at",
+        "archived_at",
+        "claim_token",
+        "claim_owner",
+        "claim_expires_at",
+        "last_heartbeat_at",
+        "current_run_id",
+        "retry_count",
+        "max_retries",
+        "result_summary",
+        "result",
+        "metadata",
+        "lock_version"
+      ],
+      "type": "object"
+    },
+    "TaskJsonlType": {
+      "enum": [
+        "task"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:task-input:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/TaskJsonlData"
+    },
+    "type": {
+      "$ref": "#/$defs/TaskJsonlType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL task input v1",
+  "type": "object"
+}

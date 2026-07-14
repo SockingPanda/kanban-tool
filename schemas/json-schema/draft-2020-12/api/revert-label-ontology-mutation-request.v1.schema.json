@@ -1,0 +1,53 @@
+{
+  "$defs": {
+    "LabelOntologyActorWire": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:revert-label-ontology-mutation-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "$ref": "#/$defs/LabelOntologyActorWire"
+    },
+    "expected_current_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reason": {
+      "type": "string"
+    },
+    "target_action_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "actor",
+    "target_action_id",
+    "reason"
+  ],
+  "title": "Revert label ontology mutation request v1",
+  "type": "object"
+}

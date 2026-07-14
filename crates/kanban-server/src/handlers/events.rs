@@ -6,32 +6,45 @@ use axum::{
     response::sse::{Event, Sse},
 };
 use futures_util::stream;
-use serde_json::json;
+use kanban_contract::{
+    ListEventsQuery, ListEventsResponse, NextAfterMeta, StreamEventData, StreamEventsQuery,
+};
 
-use crate::dto::{Envelope, EventDto};
 use crate::error::{ApiError, extractor_error, invalid_input};
 use crate::state::AppState;
 
-use super::shared::{EventsQuery, events_snapshot};
+use super::shared::events_snapshot;
 
 pub(crate) async fn list_events(
     State(state): State<AppState>,
-    query: Result<Query<EventsQuery>, QueryRejection>,
-) -> Result<Json<Envelope<Vec<EventDto>>>, ApiError> {
+    query: Result<Query<ListEventsQuery>, QueryRejection>,
+) -> Result<Json<ListEventsResponse>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
-    let (data, next_after) = events_snapshot(&state, &query)?;
-    Ok(Json(Envelope {
+    let (data, next_after) = events_snapshot(
+        &state,
+        &query.board,
+        query.task_id.clone(),
+        query.after,
+        query.limit,
+    )?;
+    Ok(Json(ListEventsResponse::new(
         data,
-        meta: Some(json!({ "next_after": next_after })),
-    }))
+        NextAfterMeta { next_after },
+    )))
 }
 
 pub(crate) async fn stream_events(
     State(state): State<AppState>,
-    query: Result<Query<EventsQuery>, QueryRejection>,
+    query: Result<Query<StreamEventsQuery>, QueryRejection>,
 ) -> Result<Sse<impl futures_util::Stream<Item = Result<Event, Infallible>>>, ApiError> {
     let Query(query) = query.map_err(extractor_error)?;
-    let (data, _next_after) = events_snapshot(&state, &query)?;
+    let (data, _next_after): (Vec<StreamEventData>, i64) = events_snapshot(
+        &state,
+        &query.board,
+        query.task_id.clone(),
+        query.after,
+        query.limit,
+    )?;
     let mut frames = Vec::with_capacity(data.len());
     for event in data {
         let frame = Event::default()

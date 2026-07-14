@@ -1,0 +1,345 @@
+{
+  "$defs": {
+    "OntologyActorMetadataInput": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/OntologyActorType"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "type": "object"
+    },
+    "OntologyActorType": {
+      "enum": [
+        "user",
+        "agent"
+      ],
+      "type": "string"
+    },
+    "OntologyCandidateAtomMetadataInput": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/OntologyCandidateKind"
+        },
+        "polarity": {
+          "$ref": "#/$defs/OntologyCandidatePolarity"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "polarity",
+        "kind",
+        "text"
+      ],
+      "type": "object"
+    },
+    "OntologyCandidateKind": {
+      "enum": [
+        "applies_when",
+        "positive_example",
+        "excludes_when",
+        "negative_example"
+      ],
+      "type": "string"
+    },
+    "OntologyCandidatePolarity": {
+      "enum": [
+        "positive",
+        "negative"
+      ],
+      "type": "string"
+    },
+    "OntologyProposedAction": {
+      "enum": [
+        "observe",
+        "add_positive_atom",
+        "add_negative_atom",
+        "update_semantics",
+        "bootstrap_label",
+        "rename_label",
+        "split_label",
+        "merge_labels"
+      ],
+      "type": "string"
+    },
+    "OntologySignalKind": {
+      "enum": [
+        "false_negative",
+        "false_positive",
+        "vocabulary_gap",
+        "name_issue",
+        "boundary_issue",
+        "structure_issue"
+      ],
+      "type": "string"
+    },
+    "OntologySignalMetadataInput": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_selected": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "candidate_atom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OntologyCandidateAtomMetadataInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitInterval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "final_selected": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/OntologySignalKind"
+        },
+        "proposal": {
+          "additionalProperties": true,
+          "default": null,
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "proposed_action": {
+          "$ref": "#/$defs/OntologyProposedAction"
+        },
+        "proposed_label_name": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "related_labels": {
+          "default": null,
+          "items": true,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "signal_key": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suggest_rank": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PositiveRank"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "suggest_score": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitInterval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "suggest_state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OntologySuggestState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "target_label_ref": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "proposed_action",
+        "rationale"
+      ],
+      "type": "object"
+    },
+    "OntologySuggestState": {
+      "enum": [
+        "selected",
+        "candidate",
+        "absent",
+        "unavailable"
+      ],
+      "type": "string"
+    },
+    "PositiveRank": {
+      "format": "int64",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "UnitInterval": {
+      "format": "double",
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "type": "number"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:metadata:ontology-record-input:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "$ref": "#/$defs/OntologyActorMetadataInput"
+    },
+    "agent_candidates": {
+      "default": null,
+      "items": true,
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "capture_fingerprint": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "diagnostics": {
+      "default": null,
+      "items": true,
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "final_decision": {
+      "additionalProperties": true,
+      "default": null,
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "signals": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/OntologySignalMetadataInput"
+      },
+      "type": "array"
+    },
+    "suggest_coverage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UnitInterval"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "suggest_coverage_cosine": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UnitInterval"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "suggest_degraded": {
+      "default": null,
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "suggest_needs_new_label": {
+      "default": null,
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "suggest_residual_norm": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/UnitInterval"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "suggestion_snapshot": {
+      "additionalProperties": true,
+      "default": null,
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "actor"
+  ],
+  "title": "Kanban label ontology record metadata input v1",
+  "type": "object"
+}

@@ -1,0 +1,1 @@
+{"type":"label_semantics","data":{"label_id":"l_fixture","board_id":"b_fixture","description":null,"applies_when":["systems language"],"excludes_when":[],"positive_examples":["cargo"],"negative_examples":[],"created_at":1,"updated_at":2}}

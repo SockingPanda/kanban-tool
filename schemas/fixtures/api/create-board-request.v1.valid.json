@@ -1,0 +1,6 @@
+{
+  "slug": "contract-created",
+  "name": "Contract Created",
+  "description": "Created through the canonical request",
+  "actor": "contract-test"
+}

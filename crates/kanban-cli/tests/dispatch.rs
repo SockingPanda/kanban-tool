@@ -340,7 +340,9 @@ fn retry_policy_and_run_logs_support_recovery() -> anyhow::Result<()> {
 
     let run = kanban(&temp.path, &["--json", "run", "show", run_id])?.success_json()?;
     assert_eq!(run["data"]["id"], run_id);
-    assert!(run["data"].get("claim_token").is_some());
+    assert!(run["data"].get("claim_token").is_none());
+    assert!(run["data"].get("log_path").is_none());
+    assert_eq!(run["data"]["has_log"], true);
 
     let log = kanban(&temp.path, &["--json", "run", "logs", run_id])?.success_json()?;
     assert_eq!(log["data"]["run_id"], run_id);

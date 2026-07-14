@@ -1,0 +1,186 @@
+{
+  "$defs": {
+    "CliLabelOntologyPrecisionRecall": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "available",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "CliLabelOntologyQuality": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "denominator": {
+          "$ref": "#/$defs/CliLabelOntologyQualityDenominator"
+        },
+        "disagreement": {
+          "$ref": "#/$defs/CliLabelOntologyQualityDisagreement"
+        },
+        "precision_recall": {
+          "$ref": "#/$defs/CliLabelOntologyPrecisionRecall"
+        },
+        "rates": {
+          "$ref": "#/$defs/CliLabelOntologyQualityRates"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "board_id",
+        "denominator",
+        "disagreement",
+        "rates",
+        "precision_recall",
+        "warnings"
+      ],
+      "type": "object"
+    },
+    "CliLabelOntologyQualityDenominator": {
+      "additionalProperties": false,
+      "properties": {
+        "agreement_observation_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "agreement_task_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "degraded_observation_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "description": {
+          "type": "string"
+        },
+        "distinct_task_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "first_observed_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "latest_observed_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "observation_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "sample_task_refs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "description",
+        "observation_count",
+        "distinct_task_count",
+        "agreement_observation_count",
+        "agreement_task_count",
+        "degraded_observation_count",
+        "first_observed_at",
+        "latest_observed_at",
+        "sample_task_refs"
+      ],
+      "type": "object"
+    },
+    "CliLabelOntologyQualityDisagreement": {
+      "additionalProperties": false,
+      "properties": {
+        "by_kind": {
+          "additionalProperties": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "by_status": {
+          "additionalProperties": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        "distinct_task_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "signal_count": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "signal_count",
+        "distinct_task_count",
+        "by_kind",
+        "by_status"
+      ],
+      "type": "object"
+    },
+    "CliLabelOntologyQualityRates": {
+      "additionalProperties": false,
+      "properties": {
+        "disagreement_task_rate": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "disagreement_task_rate_basis": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "disagreement_task_rate",
+        "disagreement_task_rate_basis"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:label-ontology-quality-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CliLabelOntologyQuality"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI label ontology quality output v1",
+  "type": "object"
+}

@@ -1,0 +1,112 @@
+{
+  "$defs": {
+    "ApiTaskStatus": {
+      "enum": [
+        "triage",
+        "todo",
+        "scheduled",
+        "ready",
+        "running",
+        "blocked",
+        "review",
+        "done",
+        "archived"
+      ],
+      "type": "string"
+    },
+    "CliDependencyEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "child": {
+          "$ref": "#/$defs/CliDependencyTask"
+        },
+        "parent": {
+          "$ref": "#/$defs/CliDependencyTask"
+        }
+      },
+      "required": [
+        "parent",
+        "child"
+      ],
+      "type": "object"
+    },
+    "CliDependencySnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "children": {
+          "items": {
+            "$ref": "#/$defs/CliDependencyTask"
+          },
+          "type": "array"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/CliDependencyEdge"
+          },
+          "type": "array"
+        },
+        "parents": {
+          "items": {
+            "$ref": "#/$defs/CliDependencyTask"
+          },
+          "type": "array"
+        },
+        "task": {
+          "$ref": "#/$defs/CliDependencyTask"
+        }
+      },
+      "required": [
+        "task",
+        "parents",
+        "children",
+        "edges"
+      ],
+      "type": "object"
+    },
+    "CliDependencyTask": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "board_slug": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ApiTaskStatus"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "board_slug",
+        "ref",
+        "title",
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:dep-list-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CliDependencySnapshot"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI dependency list output v1",
+  "type": "object"
+}

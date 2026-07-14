@@ -49,10 +49,25 @@ async fn search_returns_hits_with_tasks_and_sqlite_status() -> anyhow::Result<()
 
     let (status, json) = get_json(
         app.clone(),
-        "/api/v1/search/tasks?board=default&q=api-needle&assignee=worker-a&limit=10",
+        "/api/v1/search/tasks?board=default&q=api-needle&assignee=worker-a&limit=10&offset=0",
     )
     .await?;
     assert_eq!(status, StatusCode::OK);
+    let top_level = json.as_object().context("search response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::MetadataEnvelope<
+        serde_json::Value,
+        kanban_contract::OffsetPaginationMeta,
+    > = serde_json::from_value(json.clone()).context("search metadata envelope")?;
+    assert_eq!(
+        envelope.meta,
+        kanban_contract::OffsetPaginationMeta {
+            limit: 10,
+            offset: 0,
+        }
+    );
     assert_eq!(json["data"]["meta"]["backend"], "sqlite");
     assert_eq!(json["meta"]["limit"], 10);
     assert_eq!(json["meta"]["offset"], 0);
@@ -118,11 +133,28 @@ async fn search_by_status_returns_per_status_windows() -> anyhow::Result<()> {
 
     let (status, json) = get_json(
         app,
-        "/api/v1/search/tasks/by-status?board=default&q=batch&status=ready&status=todo&limit=1",
+        "/api/v1/search/tasks/by-status?board=default&q=batch&status=ready&status=todo&limit=1&offset=0",
     )
     .await?;
 
     assert_eq!(status, StatusCode::OK);
+    let top_level = json
+        .as_object()
+        .context("search by-status response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::MetadataEnvelope<
+        serde_json::Value,
+        kanban_contract::OffsetPaginationMeta,
+    > = serde_json::from_value(json.clone()).context("search by-status metadata envelope")?;
+    assert_eq!(
+        envelope.meta,
+        kanban_contract::OffsetPaginationMeta {
+            limit: 1,
+            offset: 0,
+        }
+    );
     assert_eq!(json["meta"]["limit"], 1);
     assert_eq!(json["meta"]["offset"], 0);
     let windows = json["data"]["statuses"]
@@ -135,12 +167,20 @@ async fn search_by_status_returns_per_status_windows() -> anyhow::Result<()> {
         1
     );
     assert_eq!(windows[0]["search_meta"]["backend"], "sqlite");
+    assert_eq!(
+        windows[0]["page"],
+        json!({"limit": 1, "offset": 0, "total": null})
+    );
     assert_eq!(windows[1]["status"], "todo");
     assert_eq!(
         windows[1]["tasks"].as_array().context("todo tasks")?.len(),
         1
     );
     assert_eq!(windows[1]["search_meta"]["backend"], "sqlite");
+    assert_eq!(
+        windows[1]["page"],
+        json!({"limit": 1, "offset": 0, "total": null})
+    );
     Ok(())
 }
 

@@ -1,0 +1,1 @@
+{"data":[{"subject_uri":"kb://task/t_subject","predicate":"depends_on","object_uri":"kb://task/t_parent","graph_uri":"kb://graph/relations","provenance":{"source_table":"task_dependencies","source_id":"t_parent->t_subject","source_event_id":12,"authoritative_store":"sqlite"},"metadata":{},"created_at":100,"updated_at":101}]}

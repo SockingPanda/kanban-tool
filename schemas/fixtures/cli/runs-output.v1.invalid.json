@@ -1,0 +1,20 @@
+{
+  "data": [
+    {
+      "claim_owner": "fixture",
+      "claim_token": "ct_private",
+      "error": null,
+      "exit_code": 0,
+      "finished_at": 102,
+      "has_log": true,
+      "id": "r_fixture",
+      "metadata": {},
+      "started_at": 101,
+      "status": "succeeded",
+      "summary": null,
+      "task_id": "t_fixture",
+      "worker_pid": null,
+      "worker_profile": "default"
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "data": {
+    "action_type": "validate",
+    "agent_type": null,
+    "board_id": "b_FIXTURE_1",
+    "canonical_after_hash": "hash_fixture",
+    "canonical_before_hash": "hash_fixture",
+    "created_at": 100,
+    "created_by": "root",
+    "created_by_type": "user",
+    "id": "loa_FIXTURE_1",
+    "parent_action_id": "loa_FIXTURE_2",
+    "reason": "fixture validation",
+    "result_atom_content_hash": "hash_fixture",
+    "result_atom_id": "la_FIXTURE_1",
+    "result_label_id": null,
+    "result_proposal_id": null,
+    "signal_ids": [
+      "los_FIXTURE_1"
+    ],
+    "target_label_id": "l_FIXTURE_1",
+    "validation_effective_outcome": "failed",
+    "validation_latest_attempt_id": null,
+    "validation_requirement": "none",
+    "validation_status": "failed",
+    "change": {},
+    "validation": {
+      "cases": [
+        {
+          "after": {
+            "manual_case_ref": null,
+            "validation_status": "failed"
+          },
+          "before": {
+            "coverage": 0.0,
+            "coverage_cosine": 0.0,
+            "degraded": false,
+            "diagnostics": [],
+            "rank": null,
+            "residual_norm": 1.0,
+            "score": 0.0,
+            "state": "absent"
+          },
+          "comparable": true,
+          "current_suggest_input_hash": "hash_fixture",
+          "current_task_snapshot_hash": "hash_fixture",
+          "legacy_incomparable": false,
+          "passed": false,
+          "result_atom_content_hash": "hash_fixture",
+          "result_atom_id": "la_FIXTURE_1",
+          "result_label_id": null,
+          "result_proposal_id": null,
+          "signal_id": "los_FIXTURE_1",
+          "stale": false,
+          "suggest_input_hash": "hash_fixture",
+          "target_label_id": "l_FIXTURE_1",
+          "task_id": "t_FIXTURE_1",
+          "task_ref_snapshot": "default#1",
+          "task_snapshot_hash": "hash_fixture",
+          "warnings": []
+        }
+      ],
+      "manual": {
+        "checks": [
+          {
+            "name": "candidate remains selected",
+            "passed": true
+          }
+        ],
+        "evidence_type": "external_attestation",
+        "source": "fixture"
+      },
+      "summary": {
+        "case_count": 1,
+        "degraded_count": 0,
+        "incomparable_count": 0,
+        "label_binding_drift_count": 0,
+        "legacy_incomparable_count": 0,
+        "metadata_drift_count": 0,
+        "stale_count": 0,
+        "status": "failed",
+        "suggest_input_drift_count": 0
+      }
+    }
+  }
+}

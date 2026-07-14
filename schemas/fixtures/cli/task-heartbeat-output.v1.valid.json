@@ -1,0 +1,43 @@
+{
+  "data": {
+    "archived_at": null,
+    "assignee": "fixture-owner",
+    "board_id": "b_fixture",
+    "board_slug": "default",
+    "claim_expires_at": 107,
+    "claim_owner": "fixture-worker",
+    "completed_at": null,
+    "completed_required_step_count": 0,
+    "created_at": 101,
+    "created_by": "fixture",
+    "current_run_id": "r_fixture",
+    "dependency_blocked": false,
+    "description": "lifecycle specification",
+    "due_at": null,
+    "execution_plan_state": "not_required",
+    "id": "t_fixture",
+    "labels": [],
+    "last_heartbeat_at": 108,
+    "lock_version": 5,
+    "max_retries": 4,
+    "metadata": {
+      "cohort": "cli-lifecycle"
+    },
+    "optional_step_count": 0,
+    "position": 1024,
+    "priority": 2,
+    "ref": "default#1",
+    "required_step_count": 0,
+    "result": null,
+    "result_summary": null,
+    "retry_count": 0,
+    "scheduled_at": null,
+    "seq": 1,
+    "started_at": 104,
+    "status": "running",
+    "status_reason": null,
+    "title": "Lifecycle contract task",
+    "unfinished_parent_count": 0,
+    "updated_at": 102
+  }
+}

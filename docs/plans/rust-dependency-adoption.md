@@ -35,6 +35,33 @@
 
 验证重点：`kanban-local` tests 和 workspace fast gate。
 
+### `schemars` / `jsonschema`
+
+用途：`schemars 1.2.1` 从 `kanban-contract` 的候选 Serde wire DTO 生成显式 Draft
+2020-12 schema；当前 API error response 与 `GET /health` response 已是 `Adopted`，label
+semantics delete response 与 decision comment metadata input 保持 `Generated`，合计 2 个
+adopted 与 2 个 generated foundation roots。前两项由 producer/consumer 双方共 4 个真实
+witness 证明运行时采用；generated 仍只代表离线 schema/fixture 就绪。`jsonschema 0.47.0`
+在开发期离线校验 metaschema、手写正负 fixtures 和 committed artifact drift。
+
+边界：`kanban-contract` 只用 optional `schema` feature 启用 `schemars`；独立的
+`kanban-schema-tool` leaf crate 通过 normal dependency 启用该 feature，并独占 `jsonschema`、
+SHA-256、binary 和 drift tooling。产品 default/core/full 门禁不包含 leaf tool；除该 tool 外，任何 workspace member 都不得通过
+normal/dev/build、alias、optional 或 target-specific direct edge 引用它。tool 自身仅允许 5 条
+已批准 normal edge，且完整 manifest/metadata signature 由 isolation gate 锁定。desktop 因 Tauri 既有依赖仍独立包含
+`schemars 0.8.x`；依赖隔离 gate 专门禁止本次新增的 `schemars 1.x`、`jsonschema`、
+`kanban-contract/schema` 或 `kanban-schema-tool` 泄漏到产品 runtime 图，不把 Tauri 的既有
+版本误报为本次回归。schema 仍不替代 service/state-machine guard。
+
+验证重点：`just schema-contract`、manifest/hash determinism、手写 fixture parity、
+Axum/Clap/JSONL 精确 surface audit、`schema-audit-closed` 和
+`just schema-dependency-isolation`。adopted 条目还必须通过结构化 producer/consumer
+witness gate，以 canonical manifest/package ID 证明 unconditional non-optional normal dependency
+及 default resolve edge 指向当前 workspace contract，并通过
+`--all-features --target all --edges normal,features --locked` runtime graph 负向扫描和精确 Cargo test
+locator 的真实执行；registry、git 或其它 path 的同名 package 不算采用，平台或 feature-specific witness
+当前不支持。
+
 ## 暂缓项
 
 ### `tracing-appender`
@@ -48,12 +75,6 @@
 暂缓原因：适合 `kanban-core` 状态机动作序列模型，但应单独建模 ready/running/blocked/review/archive 迁移和 shrink 策略，避免在 dependency adoption PR 中混入大测试设计。
 
 后续建议：单独测试 lane，先覆盖纯 `kanban-core` 状态机，不触碰 SQLite service。
-
-### `schemars` / `jsonschema`
-
-暂缓原因：schema 生成和 runtime validation 会影响 API/metadata contract 解释权。需要先选择一个窄 DTO 或 metadata surface，并定义 snapshot ownership。
-
-后续建议：先在 non-canonical DTO 做 schema snapshot pilot；generated schema 只作为 contract aid，不替代 `docs/API_SPEC.md`。
 
 ### `petgraph`
 

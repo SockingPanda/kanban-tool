@@ -1,0 +1,1 @@
+[{"hit":{"atom_id":"la_backend","label_id":"l_backend","label_name":"backend","board_id":"b_fixture","polarity":"positive","kind":"applies_when","text":"touches Rust service code","ordinal":0,"content_hash":"hash-atom","embedding_model":"fixture-model","distance":0.125},"vector":[1.0,0.0]}]

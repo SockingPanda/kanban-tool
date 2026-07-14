@@ -1,0 +1,15 @@
+{
+  "$id": "urn:kanban-tool:schema:api:accept-label-proposal-path:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "proposal_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "proposal_id"
+  ],
+  "title": "Accept Label Proposal Path v1",
+  "type": "object"
+}

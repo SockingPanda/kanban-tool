@@ -252,7 +252,7 @@ import json, sys
 args = sys.argv[1:]
 cmd = args[0]
 if cmd == "status":
-    payload = {{"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[]}}
+    payload = {{"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[],"dirty":False,"board_dirty":False}}
 elif cmd == "query-chunks":
     payload = [{{
         "chunk": {{"uri":"kb://chunk/task/{related_id}/0","entity_uri":"kb://task/{related_id}","ordinal":0,"content_hash":"hash"}},

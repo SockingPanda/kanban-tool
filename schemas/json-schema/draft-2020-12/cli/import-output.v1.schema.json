@@ -1,0 +1,39 @@
+{
+  "$defs": {
+    "CliImportResult": {
+      "additionalProperties": false,
+      "properties": {
+        "dry_run": {
+          "type": "boolean"
+        },
+        "input_path": {
+          "type": "string"
+        },
+        "records": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input_path",
+        "records",
+        "dry_run"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:import-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CliImportResult"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI import output v1",
+  "type": "object"
+}

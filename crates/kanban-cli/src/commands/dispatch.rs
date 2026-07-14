@@ -1,6 +1,5 @@
 use std::{
-    fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicU8, Ordering},
@@ -9,6 +8,9 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use kanban_contract::cli_operator::{
+    CliDispatchLoopResult, CliDispatchRunResult, CliDispatchStopReason,
+};
 use kanban_sqlite::api::{DispatchOptions, FinishPolicy, dispatch_once};
 
 use crate::args::{DispatchArgs, DispatchLoopSummary, WorkerProfileConfig};
@@ -96,6 +98,33 @@ pub(crate) async fn dispatch_loop(
     })
 }
 
+pub(crate) fn cli_dispatch_run_result(
+    result: &kanban_sqlite::api::DispatchResult,
+) -> CliDispatchRunResult {
+    CliDispatchRunResult {
+        claimed: result.claimed,
+        task_id: result.task_id.clone(),
+        run_id: result.run_id.clone(),
+        exit_code: result.exit_code,
+    }
+}
+
+pub(crate) fn cli_dispatch_loop_result(
+    summary: &DispatchLoopSummary,
+) -> Result<CliDispatchLoopResult> {
+    let stop_reason = match summary.stop_reason.as_deref() {
+        None => None,
+        Some("interrupted") => Some(CliDispatchStopReason::Interrupted),
+        Some(value) => anyhow::bail!("dispatch output has invalid stop reason {value}"),
+    };
+    Ok(CliDispatchLoopResult {
+        iterations: summary.iterations,
+        claimed: summary.claimed,
+        runs: summary.runs.iter().map(cli_dispatch_run_result).collect(),
+        stop_reason,
+    })
+}
+
 fn install_dispatch_interrupt_listener() -> Arc<AtomicU8> {
     let interrupt_count = Arc::new(AtomicU8::new(0));
     let listener_count = Arc::clone(&interrupt_count);
@@ -122,99 +151,30 @@ pub(crate) fn absolute_path(path: PathBuf) -> Result<PathBuf> {
     }
 }
 
-pub(crate) fn load_worker_profile(
-    path: &PathBuf,
-    profile_name: &str,
-) -> Result<WorkerProfileConfig> {
-    let text = fs::read_to_string(path)
+pub(crate) fn load_worker_profile(path: &Path, profile_name: &str) -> Result<WorkerProfileConfig> {
+    let document = kanban_local::read_worker_profiles(path)
         .with_context(|| format!("failed to read worker profile config {}", path.display()))?;
-    let mut active = false;
-    let mut found = false;
-    let mut profile = WorkerProfileConfig {
-        command: None,
-        claim_ttl_ms: None,
-        heartbeat_interval_ms: None,
-        on_success: None,
-        on_failure: None,
-        log_dir: None,
-    };
-    let section = format!("workers.{profile_name}");
-    for raw_line in text.lines() {
-        let line = raw_line.split('#').next().unwrap_or("").trim();
-        if line.is_empty() {
-            continue;
-        }
-        if let Some(name) = line
-            .strip_prefix('[')
-            .and_then(|line| line.strip_suffix(']'))
-        {
-            active = name.trim() == section;
-            found |= active;
-            continue;
-        }
-        if !active {
-            continue;
-        }
-        let Some((key, value)) = line.split_once('=') else {
-            return Err(invalid_input(format!(
-                "invalid worker profile line: {raw_line}"
-            )));
-        };
-        let key = key.trim();
-        let value = unquote(value.trim());
-        match key {
-            "command" => profile.command = Some(value.to_owned()),
-            "claim_ttl_ms" => {
-                profile.claim_ttl_ms = Some(value.parse().map_err(|_| {
-                    invalid_input(format!(
-                        "worker profile claim_ttl_ms must be an integer: {value}"
-                    ))
-                })?)
-            }
-            "heartbeat_interval_ms" => {
-                profile.heartbeat_interval_ms = Some(value.parse().map_err(|_| {
-                    invalid_input(format!(
-                        "worker profile heartbeat_interval_ms must be an integer: {value}"
-                    ))
-                })?)
-            }
-            "on_success" => profile.on_success = Some(parse_finish_policy(value)?),
-            "on_failure" => profile.on_failure = Some(parse_finish_policy(value)?),
-            "log_dir" => profile.log_dir = Some(PathBuf::from(value)),
-            _ => {
-                return Err(invalid_input(format!(
-                    "unsupported worker profile key: {key}"
-                )));
-            }
-        }
-    }
-    if !found {
-        return Err(invalid_input(format!(
+    let profile = document.workers.get(profile_name).ok_or_else(|| {
+        invalid_input(format!(
             "worker profile {profile_name} not found in {}",
             path.display()
-        )));
-    }
-    Ok(profile)
+        ))
+    })?;
+    Ok(WorkerProfileConfig {
+        command: profile.command.clone(),
+        claim_ttl_ms: profile.claim_ttl_ms,
+        heartbeat_interval_ms: profile.heartbeat_interval_ms,
+        on_success: profile.on_success.map(finish_policy),
+        on_failure: profile.on_failure.map(finish_policy),
+        log_dir: profile.log_dir.clone(),
+    })
 }
 
-pub(crate) fn unquote(value: &str) -> &str {
-    value
-        .strip_prefix('"')
-        .and_then(|value| value.strip_suffix('"'))
-        .or_else(|| {
-            value
-                .strip_prefix('\'')
-                .and_then(|value| value.strip_suffix('\''))
-        })
-        .unwrap_or(value)
-}
-
-fn parse_finish_policy(value: &str) -> Result<FinishPolicy> {
+fn finish_policy(value: kanban_local::WorkerFinishPolicy) -> FinishPolicy {
     match value {
-        "done" => Ok(FinishPolicy::Done),
-        "review" => Ok(FinishPolicy::Review),
-        "blocked" => Ok(FinishPolicy::Blocked),
-        "ready" => Ok(FinishPolicy::Ready),
-        _ => Err(invalid_input(format!("unsupported finish policy: {value}"))),
+        kanban_local::WorkerFinishPolicy::Done => FinishPolicy::Done,
+        kanban_local::WorkerFinishPolicy::Review => FinishPolicy::Review,
+        kanban_local::WorkerFinishPolicy::Blocked => FinishPolicy::Blocked,
+        kanban_local::WorkerFinishPolicy::Ready => FinishPolicy::Ready,
     }
 }

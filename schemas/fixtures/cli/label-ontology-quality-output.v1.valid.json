@@ -1,0 +1,40 @@
+{
+  "data": {
+    "board_id": "b_FIXTURE_1",
+    "denominator": {
+      "agreement_observation_count": 0,
+      "agreement_task_count": 0,
+      "degraded_observation_count": 0,
+      "description": "distinct task_id values with label ontology observations on this board",
+      "distinct_task_count": 1,
+      "first_observed_at": 100,
+      "latest_observed_at": 100,
+      "observation_count": 1,
+      "sample_task_refs": [
+        "default#1"
+      ],
+      "source": "label_ontology_observations"
+    },
+    "disagreement": {
+      "by_kind": {
+        "false_negative": 1
+      },
+      "by_status": {
+        "open": 1
+      },
+      "distinct_task_count": 1,
+      "signal_count": 1
+    },
+    "precision_recall": {
+      "available": false,
+      "reason": "precision and recall require an audited evaluation cohort with expected labels; ontology signals alone are only disagreement evidence"
+    },
+    "rates": {
+      "disagreement_task_rate": null,
+      "disagreement_task_rate_basis": "unavailable until the observed-task denominator includes agreement observations"
+    },
+    "warnings": [
+      "the denominator has no agreement observations, so raw disagreement counts must not be treated as an error rate"
+    ]
+  }
+}

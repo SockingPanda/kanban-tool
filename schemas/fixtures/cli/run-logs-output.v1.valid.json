@@ -1,0 +1,8 @@
+{
+  "data": {
+    "content": "bcdef\n",
+    "run_id": "r_fixture",
+    "tail_bytes": 6,
+    "truncated": true
+  }
+}

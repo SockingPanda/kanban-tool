@@ -1,0 +1,44 @@
+{
+  "data": [
+    {
+      "store_name": "lancedb_chunks",
+      "schema_version": 1,
+      "last_event_id": 0,
+      "dirty": true,
+      "last_rebuild_at": null,
+      "last_sync_at": null,
+      "last_error": null,
+      "updated_at": 100
+    },
+    {
+      "store_name": "lancedb_label_atoms",
+      "schema_version": 1,
+      "last_event_id": 0,
+      "dirty": false,
+      "last_rebuild_at": null,
+      "last_sync_at": null,
+      "last_error": null,
+      "updated_at": 100
+    },
+    {
+      "store_name": "oxigraph_relations",
+      "schema_version": 1,
+      "last_event_id": 0,
+      "dirty": true,
+      "last_rebuild_at": null,
+      "last_sync_at": null,
+      "last_error": null,
+      "updated_at": 100
+    },
+    {
+      "store_name": "tantivy_tasks",
+      "schema_version": 1,
+      "last_event_id": 10,
+      "dirty": true,
+      "last_rebuild_at": 100,
+      "last_sync_at": null,
+      "last_error": null,
+      "updated_at": 100
+    }
+  ]
+}

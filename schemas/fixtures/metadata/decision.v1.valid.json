@@ -1,0 +1,15 @@
+{
+  "options": [
+    {
+      "slug": "comment-metadata",
+      "title": "Use comment metadata",
+      "detail": "Store structured decision data in task comment metadata.",
+      "owner": "adapter"
+    }
+  ],
+  "selected": "comment-metadata",
+  "reason": "Keep structured decisions near the task discussion.",
+  "risk": "Schema and service semantics can drift.",
+  "verification": "Schema fixtures and service tests cover separate layers.",
+  "ticket": "default#123"
+}

@@ -16,6 +16,7 @@ tantivy-backend = [
 axum.workspace = true
 futures-util = "0.3"
 kanban-core.workspace = true
+kanban-contract.workspace = true
 kanban-application.workspace = true
 kanban-derived-io.workspace = true
 kanban-helper-protocol.workspace = true
@@ -42,3 +43,5 @@ http-body-util.workspace = true
 insta = { version = "1.48.0", features = ["json"] }
 tempfile.workspace = true
 tower.workspace = true
+syn = { version = "2", features = ["full", "visit"] }
+quote = "1"

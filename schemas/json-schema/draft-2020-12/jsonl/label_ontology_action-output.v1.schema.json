@@ -1,0 +1,199 @@
+{
+  "$defs": {
+    "ActorType": {
+      "enum": [
+        "user",
+        "agent"
+      ],
+      "type": "string"
+    },
+    "LabelOntologyActionData": {
+      "additionalProperties": false,
+      "properties": {
+        "action_type": {
+          "$ref": "#/$defs/OntologyActionType"
+        },
+        "agent_type": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "canonical_after_hash": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "canonical_before_hash": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "change": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "created_by": {
+          "type": "string"
+        },
+        "created_by_type": {
+          "$ref": "#/$defs/ActorType"
+        },
+        "id": {
+          "type": "string"
+        },
+        "parent_action_id": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "result_atom_content_hash": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_atom_id": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_label_id": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_proposal_id": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_label_id": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "validation": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "validation_requirement": {
+          "$ref": "#/$defs/ValidationRequirement"
+        },
+        "validation_status": {
+          "$ref": "#/$defs/ValidationStatus"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "parent_action_id",
+        "action_type",
+        "reason",
+        "target_label_id",
+        "result_label_id",
+        "result_atom_id",
+        "result_atom_content_hash",
+        "result_proposal_id",
+        "canonical_before_hash",
+        "canonical_after_hash",
+        "change",
+        "validation_status",
+        "validation",
+        "created_by",
+        "created_by_type",
+        "agent_type",
+        "created_at",
+        "validation_requirement"
+      ],
+      "type": "object"
+    },
+    "LabelOntologyActionRecordType": {
+      "enum": [
+        "label_ontology_action"
+      ],
+      "type": "string"
+    },
+    "OntologyActionType": {
+      "enum": [
+        "confirm",
+        "reject",
+        "supersede",
+        "resolve_no_change",
+        "add_positive_atom",
+        "add_negative_atom",
+        "adopt_existing_atom",
+        "update_semantics",
+        "create_label_proposal",
+        "bootstrap_label",
+        "rename_label",
+        "split_label",
+        "merge_labels",
+        "validate",
+        "revert_ontology_mutation"
+      ],
+      "type": "string"
+    },
+    "ValidationRequirement": {
+      "enum": [
+        "none",
+        "required",
+        "unsupported"
+      ],
+      "type": "string"
+    },
+    "ValidationStatus": {
+      "enum": [
+        "not_required",
+        "pending",
+        "passed",
+        "failed",
+        "partial"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:label_ontology_action-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/LabelOntologyActionData"
+    },
+    "type": {
+      "$ref": "#/$defs/LabelOntologyActionRecordType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL label_ontology_action output v1",
+  "type": "object"
+}

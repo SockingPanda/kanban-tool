@@ -1,5 +1,6 @@
 use std::{env, fmt, io, path::PathBuf, process::Command};
 
+use kanban_contract::{GraphHelperErrorResponse, VectorHelperErrorResponse};
 use kanban_helper_protocol::HelperEnvelope;
 use serde::de::DeserializeOwned;
 
@@ -39,12 +40,6 @@ impl HelperKind {
             Self::Graph => state.graph_helper_path().map(PathBuf::from),
         }
     }
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct HelperErrorPayload {
-    code: String,
-    message: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -189,16 +184,11 @@ where
     let stdout = String::from_utf8_lossy(&output.stdout);
     if !output.status.success() {
         if let Ok(envelope) = HelperEnvelope::from_json(stdout.trim())
-            && let Ok(error) = envelope.decode::<HelperErrorPayload>()
+            && let Some((code, message)) = decode_helper_error(kind, &envelope)
         {
             return Err(HelperRunError::new(
                 HelperRunErrorKind::HelperError,
-                format!(
-                    "{} helper failed: {} ({})",
-                    kind.label(),
-                    error.message,
-                    error.code
-                ),
+                format!("{} helper failed: {} ({})", kind.label(), message, code),
             ));
         }
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -236,6 +226,19 @@ where
             ),
         )
     })
+}
+
+fn decode_helper_error(kind: HelperKind, envelope: &HelperEnvelope) -> Option<(String, String)> {
+    match kind {
+        HelperKind::Graph => envelope
+            .decode::<GraphHelperErrorResponse>()
+            .ok()
+            .map(|error| (error.code, error.message)),
+        HelperKind::Vector => envelope
+            .decode::<VectorHelperErrorResponse>()
+            .ok()
+            .map(|error| (error.code, error.message)),
+    }
 }
 
 pub(crate) fn resolve_helper(state: &AppState, kind: HelperKind) -> PathBuf {

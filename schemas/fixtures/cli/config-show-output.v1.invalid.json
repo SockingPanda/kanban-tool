@@ -1,0 +1,1 @@
+{"data":{"db":{"value":"/fixture/.kb/project.db","source":{"kind":"project_config","path":"/fixture/.kb/config.toml","key":"db"},"input":"secret"},"board":{"value":"project-board","source":{"kind":"project_config","path":"/fixture/.kb/config.toml","key":"board"}},"locale":{"value":"en","source":{"kind":"flag","name":"--locale"},"input":"en"}}}

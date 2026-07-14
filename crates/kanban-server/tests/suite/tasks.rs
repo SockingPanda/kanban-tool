@@ -56,11 +56,28 @@ async fn tasks_by_status_returns_per_status_windows() -> anyhow::Result<()> {
 
     let (status, json) = get_json(
         app,
-        "/api/v1/boards/default/tasks/by-status?status=ready&status=todo&limit=1",
+        "/api/v1/boards/default/tasks/by-status?status=ready&status=todo&limit=1&offset=0",
     )
     .await?;
 
     assert_eq!(status, StatusCode::OK);
+    let top_level = json
+        .as_object()
+        .context("tasks by-status response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::MetadataEnvelope<
+        serde_json::Value,
+        kanban_contract::OffsetPaginationMeta,
+    > = serde_json::from_value(json.clone()).context("tasks by-status metadata envelope")?;
+    assert_eq!(
+        envelope.meta,
+        kanban_contract::OffsetPaginationMeta {
+            limit: 1,
+            offset: 0,
+        }
+    );
     assert_eq!(json["meta"]["limit"], 1);
     assert_eq!(json["meta"]["offset"], 0);
     let windows = json["data"]["statuses"]
@@ -155,7 +172,7 @@ async fn tasks_creates_task_and_event_with_body_actor_priority() -> anyhow::Resu
     assert_eq!(task["assignee"], "worker-a");
     assert_eq!(task["priority"], 1);
     assert_task_dto_exposes_ui_fields_without_claim_token(task);
-    assert_eq!(task["metadata_json"], r#"{"source":"test"}"#);
+    assert_eq!(task["metadata"], json!({"source":"test"}));
 
     let events = kanban_sqlite::api::list_events(
         &db_path,
@@ -519,8 +536,28 @@ async fn tasks_lists_non_archived_by_default_and_includes_archived_on_query() ->
         .context("archive")?;
     let app = test.router();
 
-    let (status, json) = get_json(app.clone(), "/api/v1/boards/default/tasks").await?;
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/tasks?limit=100&offset=0",
+    )
+    .await?;
     assert_eq!(status, StatusCode::OK);
+    let top_level = json.as_object().context("tasks list response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::MetadataEnvelope<
+        serde_json::Value,
+        kanban_contract::TotalPaginationMeta,
+    > = serde_json::from_value(json.clone()).context("tasks list metadata envelope")?;
+    assert_eq!(
+        envelope.meta,
+        kanban_contract::TotalPaginationMeta {
+            limit: 100,
+            offset: 0,
+            total: 1,
+        }
+    );
     let tasks = json["data"].as_array().context("tasks array")?;
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0]["id"], visible.id);
@@ -799,6 +836,16 @@ async fn labels_routes_create_list_add_and_remove_task_labels() -> anyhow::Resul
     )
     .await?;
     assert_eq!(status, StatusCode::CREATED);
+    let top_level = json
+        .as_object()
+        .context("existing-label response envelope")?;
+    assert_eq!(top_level.len(), 1);
+    assert!(top_level.contains_key("data"));
+    let envelope: kanban_contract::OptionalMetadataEnvelope<
+        serde_json::Value,
+        kanban_contract::CreatedLabelsMeta<kanban_sqlite::api::LabelRecord>,
+    > = serde_json::from_value(json.clone()).context("existing-label optional envelope")?;
+    assert!(envelope.meta.is_none());
     assert_eq!(json["data"]["labels"][0]["id"], label_id);
 
     let (status, json) = post_json(
@@ -824,19 +871,30 @@ async fn labels_routes_create_list_add_and_remove_task_labels() -> anyhow::Resul
         app.clone(),
         &format!("/api/v1/tasks/{}/labels", task.id),
         json!({
-            "names": ["frontend", "api", "frontend"],
+            "names": ["backend", "frontend", "api", "frontend"],
             "create_missing": true,
             "actor": "api-labeler"
         }),
     )
     .await?;
     assert_eq!(status, StatusCode::CREATED);
-    let created_label_names: Vec<_> = json["meta"]["created_labels"]
-        .as_array()
-        .context("created labels")?
+    let top_level = json
+        .as_object()
+        .context("create-missing label response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::OptionalMetadataEnvelope<
+        serde_json::Value,
+        kanban_contract::CreatedLabelsMeta<kanban_sqlite::api::LabelRecord>,
+    > = serde_json::from_value(json.clone()).context("create-missing label optional envelope")?;
+    let created_meta = envelope.meta.context("create-missing label metadata")?;
+    assert_eq!(created_meta.created_labels.len(), 2);
+    let created_label_names = created_meta
+        .created_labels
         .iter()
-        .map(|label| label["name"].as_str().unwrap_or_default().to_owned())
-        .collect();
+        .map(|label| label.name.as_str())
+        .collect::<Vec<_>>();
     assert_eq!(created_label_names, ["frontend", "api"]);
     let label_names: Vec<_> = json["data"]["labels"]
         .as_array()
@@ -1141,6 +1199,29 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
     )?;
     let app = test.router();
 
+    let (status, empty_signals) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/label-ontology/signals?limit=7",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{empty_signals}");
+    let top_level = empty_signals
+        .as_object()
+        .context("empty ontology signals response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::MetadataEnvelope<serde_json::Value, kanban_contract::LimitMeta> =
+        serde_json::from_value(empty_signals.clone())
+            .context("empty ontology signals metadata envelope")?;
+    assert_eq!(envelope.meta, kanban_contract::LimitMeta { limit: 7 });
+    assert!(
+        empty_signals["data"]
+            .as_array()
+            .context("empty ontology signals")?
+            .is_empty()
+    );
+
     let (status, json) = post_json(
         app.clone(),
         &format!("/api/v1/tasks/{}/label-ontology/observations", task.id),
@@ -1150,25 +1231,25 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
                 "type": "agent",
                 "agent_type": "local"
             },
-            "agent_candidates_json": json!([
+            "agent_candidates": json!([
                 {"label": "cli", "confidence": 0.92}
-            ]).to_string(),
-            "suggestion_snapshot_json": json!({
+            ]),
+            "suggestion_snapshot": json!({
                 "selected_labels": [],
                 "candidates": []
-            }).to_string(),
-            "final_decision_json": json!({"accepted_labels": ["cli"]}).to_string(),
+            }),
+            "final_decision": json!({"accepted_labels": ["cli"]}),
             "suggest_coverage": 0.61,
             "suggest_coverage_cosine": 0.74,
             "suggest_residual_norm": 0.39,
             "suggest_needs_new_label": false,
             "suggest_degraded": false,
-            "diagnostics_json": "[]",
+            "diagnostics": [],
             "capture_fingerprint": "api-ontology-run",
             "signals": [{
                 "kind": "false_negative",
                 "target_label_ref": "cli",
-                "related_labels_json": "[]",
+                "related_labels": [],
                 "proposed_action": "add_positive_atom",
                 "candidate_atom": {
                     "polarity": "positive",
@@ -1176,7 +1257,7 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
                     "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
                 },
                 "proposed_label_name": null,
-                "proposal_json": "{}",
+                "proposal": {},
                 "agent_selected": true,
                 "suggest_state": "candidate",
                 "suggest_score": 0.08,
@@ -1212,6 +1293,15 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
     )
     .await?;
     assert_eq!(status, StatusCode::OK, "{json}");
+    let top_level = json
+        .as_object()
+        .context("ontology signals response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::MetadataEnvelope<serde_json::Value, kanban_contract::LimitMeta> =
+        serde_json::from_value(json.clone()).context("ontology signals metadata envelope")?;
+    assert_eq!(envelope.meta, kanban_contract::LimitMeta { limit: 10 });
     let signals = json["data"].as_array().context("signals")?;
     assert_eq!(signals.len(), 1);
     assert_eq!(signals[0]["id"], signal_id);
@@ -1219,7 +1309,7 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
     let (status, json) = get_json(
         app.clone(),
         &format!(
-            "/api/v1/boards/default/label-ontology/signals?status=open&kind=false_negative&task={}&label=cli&limit=10",
+            "/api/v1/boards/default/label-ontology/signals?status=open&kind=false_negative&task_ref={}&target_label_ref=cli&limit=10",
             task.id
         ),
     )
@@ -1248,10 +1338,28 @@ async fn label_ontology_observation_and_signal_routes_round_trip() -> anyhow::Re
 
     let (status, json) = get_json(
         app.clone(),
-        "/api/v1/boards/default/label-ontology/review?group_by=candidate-atom&limit=10",
+        "/api/v1/boards/default/label-ontology/review?group_by=candidate_atom&limit=10",
     )
     .await?;
     assert_eq!(status, StatusCode::OK, "{json}");
+    let top_level = json
+        .as_object()
+        .context("candidate-atom review response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::MetadataEnvelope<
+        serde_json::Value,
+        kanban_contract::LabelOntologyReviewMeta,
+    > = serde_json::from_value(json.clone()).context("candidate-atom review metadata envelope")?;
+    assert_eq!(
+        envelope.meta,
+        kanban_contract::LabelOntologyReviewMeta {
+            group_by: "candidate_atom".to_owned(),
+            include_all: false,
+            limit: 10,
+        }
+    );
     let groups = json["data"].as_array().context("candidate atom groups")?;
     assert_eq!(groups.len(), 1);
     assert_eq!(groups[0]["group_by"], "candidate_atom");
@@ -1307,6 +1415,32 @@ async fn generic_signal_routes_filter_and_show_board_signals() -> anyhow::Result
         "seed",
         kanban_sqlite::api::CreateTask::ready("generic signal target"),
     )?;
+    let app = test.router();
+    let (status, empty_json) = get_json(app.clone(), "/api/v1/boards/default/signals").await?;
+    assert_eq!(status, StatusCode::OK, "{empty_json}");
+    let top_level = empty_json
+        .as_object()
+        .context("empty signals response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::MetadataEnvelope<
+        serde_json::Value,
+        kanban_contract::SignalFilterMeta,
+    > = serde_json::from_value(empty_json.clone()).context("empty signals metadata envelope")?;
+    assert_eq!(
+        envelope.meta,
+        kanban_contract::SignalFilterMeta {
+            include_all: false,
+            limit: 100,
+        }
+    );
+    assert!(
+        empty_json["data"]
+            .as_array()
+            .context("empty signals")?
+            .is_empty()
+    );
     let conn = kanban_test_support::connect_file(&db_path)?;
     for (observation_id, signal_id, status, title, created_at) in [
         (
@@ -1360,9 +1494,23 @@ async fn generic_signal_routes_filter_and_show_board_signals() -> anyhow::Result
     }
     drop(conn);
 
-    let app = test.router();
     let (status, json) = get_json(app.clone(), "/api/v1/boards/default/signals?limit=10").await?;
     assert_eq!(status, StatusCode::OK, "{json}");
+    let top_level = json.as_object().context("signals response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::MetadataEnvelope<
+        serde_json::Value,
+        kanban_contract::SignalFilterMeta,
+    > = serde_json::from_value(json.clone()).context("signals metadata envelope")?;
+    assert_eq!(
+        envelope.meta,
+        kanban_contract::SignalFilterMeta {
+            include_all: false,
+            limit: 10,
+        }
+    );
     assert_eq!(json["meta"]["include_all"], false);
     let signals = json["data"].as_array().context("signals")?;
     assert_eq!(
@@ -1383,28 +1531,103 @@ async fn generic_signal_routes_filter_and_show_board_signals() -> anyhow::Result
     )
     .await?;
     assert_eq!(status, StatusCode::OK, "{json}");
+    let top_level = json
+        .as_object()
+        .context("include-all signals response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::MetadataEnvelope<
+        serde_json::Value,
+        kanban_contract::SignalFilterMeta,
+    > = serde_json::from_value(json.clone()).context("include-all signals metadata envelope")?;
+    assert_eq!(
+        envelope.meta,
+        kanban_contract::SignalFilterMeta {
+            include_all: true,
+            limit: 10
+        }
+    );
     assert_eq!(json["data"].as_array().context("all signals")?.len(), 3);
 
     let (status, json) = get_json(
         app.clone(),
         &format!(
-            "/api/v1/boards/default/signals/review?status=resolved&kind=agent_cli_friction&task={}&limit=10",
+            "/api/v1/boards/default/signals/review?status=resolved&kind=agent_cli_friction&task_ref={}&limit=10",
             task.id
         ),
     )
     .await?;
     assert_eq!(status, StatusCode::OK, "{json}");
+    let top_level = json
+        .as_object()
+        .context("signal review response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::MetadataEnvelope<
+        serde_json::Value,
+        kanban_contract::SignalFilterMeta,
+    > = serde_json::from_value(json.clone()).context("signal review metadata envelope")?;
+    assert_eq!(
+        envelope.meta,
+        kanban_contract::SignalFilterMeta {
+            include_all: false,
+            limit: 10
+        }
+    );
     let resolved = json["data"].as_array().context("resolved signals")?;
     assert_eq!(resolved.len(), 1);
     assert_eq!(resolved[0]["id"], "sig_generic_resolved");
+
+    let (status, json) = get_json(
+        app.clone(),
+        "/api/v1/boards/default/signals/review?include_all=true&limit=10",
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    let top_level = json
+        .as_object()
+        .context("include-all signal review response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::MetadataEnvelope<
+        serde_json::Value,
+        kanban_contract::SignalFilterMeta,
+    > = serde_json::from_value(json.clone())
+        .context("include-all signal review metadata envelope")?;
+    assert_eq!(
+        envelope.meta,
+        kanban_contract::SignalFilterMeta {
+            include_all: true,
+            limit: 10,
+        }
+    );
+    let mut signal_ids = json["data"]
+        .as_array()
+        .context("include-all signal review history")?
+        .iter()
+        .map(|signal| signal["id"].as_str().unwrap_or_default())
+        .collect::<Vec<_>>();
+    signal_ids.sort_unstable();
+    assert_eq!(
+        signal_ids,
+        [
+            "sig_generic_confirmed",
+            "sig_generic_open",
+            "sig_generic_resolved",
+        ],
+        "include_all=true must retain terminal signal history"
+    );
 
     let (status, json) = get_json(app, "/api/v1/signals/sig_generic_open").await?;
     assert_eq!(status, StatusCode::OK, "{json}");
     assert_eq!(json["data"]["title"], "Open CLI friction");
     assert_eq!(json["data"]["observation"]["actor"], "codex");
     assert_eq!(
-        json["data"]["observation"]["evidence_json"],
-        r#"{"status":"open","command":"kanban task create"}"#
+        json["data"]["observation"]["evidence"],
+        json!({"status": "open", "command": "kanban task create"})
     );
     Ok(())
 }
@@ -1483,42 +1706,20 @@ async fn label_ontology_observation_accepts_natural_json_fields() -> anyhow::Res
         "cli"
     );
     assert_eq!(
-        serde_json::from_str::<serde_json::Value>(
-            json["data"]["agent_candidates_json"]
-                .as_str()
-                .context("agent candidates json")?
-        )?,
+        json["data"]["agent_candidates"],
         json!([{"label": "cli", "confidence": 0.92}])
     );
     assert_eq!(
-        serde_json::from_str::<serde_json::Value>(
-            json["data"]["diagnostics_json"]
-                .as_str()
-                .context("diagnostics json")?
-        )?,
+        json["data"]["diagnostics"],
         json!(["label_atom_index_dirty"])
     );
-    assert_eq!(
-        serde_json::from_str::<serde_json::Value>(
-            json["data"]["signals"][0]["related_labels_json"]
-                .as_str()
-                .context("related labels json")?
-        )?,
-        json!([])
-    );
-    assert_eq!(
-        serde_json::from_str::<serde_json::Value>(
-            json["data"]["signals"][0]["proposal_json"]
-                .as_str()
-                .context("proposal json")?
-        )?,
-        json!({})
-    );
+    assert_eq!(json["data"]["signals"][0]["related_labels"], json!([]));
+    assert_eq!(json["data"]["signals"][0]["proposal"], json!({}));
     Ok(())
 }
 
 #[tokio::test]
-async fn label_ontology_observation_rejects_duplicate_json_fields() -> anyhow::Result<()> {
+async fn label_ontology_observation_rejects_legacy_json_string_fields() -> anyhow::Result<()> {
     let test = TestApp::new()?;
     let task = kanban_sqlite::api::create_task(
         test.db_path(),
@@ -1535,11 +1736,10 @@ async fn label_ontology_observation_rejects_duplicate_json_fields() -> anyhow::R
             "actor": {"name": "label-agent", "type": "agent", "agent_type": "local"},
             "agent_candidates_json": "[]",
             "suggestion_snapshot": {},
-            "suggestion_snapshot_json": "{}",
-            "final_decision_json": "{}",
+            "final_decision": {},
             "suggest_needs_new_label": false,
             "suggest_degraded": false,
-            "diagnostics_json": "[]",
+            "diagnostics": [],
             "signals": []
         }),
     )
@@ -1547,9 +1747,6 @@ async fn label_ontology_observation_rejects_duplicate_json_fields() -> anyhow::R
 
     assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
     assert_eq!(json["error"]["code"], "invalid_input");
-    let message = json["error"]["message"].as_str().context("error message")?;
-    assert!(message.contains("suggestion_snapshot"), "{message}");
-    assert!(message.contains("suggestion_snapshot_json"), "{message}");
     Ok(())
 }
 
@@ -1658,20 +1855,20 @@ async fn label_ontology_observation_route_rejects_invalid_signal_contract() -> a
                 "type": "agent",
                 "agent_type": "local"
             },
-            "agent_candidates_json": "[]",
-            "suggestion_snapshot_json": "{}",
-            "final_decision_json": "{}",
+            "agent_candidates": [],
+            "suggestion_snapshot": {},
+            "final_decision": {},
             "suggest_coverage": 0.61,
             "suggest_coverage_cosine": 0.74,
             "suggest_residual_norm": 0.39,
             "suggest_needs_new_label": false,
             "suggest_degraded": false,
-            "diagnostics_json": "[]",
+            "diagnostics": [],
             "capture_fingerprint": "api-invalid-signal-contract",
             "signals": [{
                 "kind": "false_negative",
                 "target_label_ref": "cli",
-                "related_labels_json": "[]",
+                "related_labels": [],
                 "proposed_action": "add_positive_atom",
                 "candidate_atom": {
                     "polarity": "negative",
@@ -1679,7 +1876,7 @@ async fn label_ontology_observation_route_rejects_invalid_signal_contract() -> a
                     "text": "does not touch CLI behavior"
                 },
                 "proposed_label_name": null,
-                "proposal_json": "{}",
+                "proposal": {},
                 "agent_selected": true,
                 "suggest_state": "candidate",
                 "suggest_score": 0.08,
@@ -1872,20 +2069,20 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
                 "type": "agent",
                 "agent_type": "local"
             },
-            "agent_candidates_json": "[]",
-            "suggestion_snapshot_json": "{}",
-            "final_decision_json": "{}",
+            "agent_candidates": [],
+            "suggestion_snapshot": {},
+            "final_decision": {},
             "suggest_coverage": null,
             "suggest_coverage_cosine": null,
             "suggest_residual_norm": null,
             "suggest_needs_new_label": false,
             "suggest_degraded": false,
-            "diagnostics_json": "[]",
+            "diagnostics": [],
             "capture_fingerprint": "api-ontology-action-run",
             "signals": [{
                 "kind": "false_negative",
                 "target_label_ref": "cli",
-                "related_labels_json": "[]",
+                "related_labels": [],
                 "proposed_action": "add_positive_atom",
                 "candidate_atom": {
                     "polarity": "positive",
@@ -1893,7 +2090,7 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
                     "text": "changes the local CLI command surface"
                 },
                 "proposed_label_name": null,
-                "proposal_json": "{}",
+                "proposal": {},
                 "agent_selected": true,
                 "suggest_state": "candidate",
                 "suggest_score": 0.12,
@@ -1933,9 +2130,7 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
             "result_proposal_id": null,
             "canonical_before_hash": null,
             "canonical_after_hash": null,
-            "change_json": null,
             "validation_status": null,
-            "validation_json": null
         }),
     )
     .await?;
@@ -1971,11 +2166,7 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
         json["data"]["validation_latest_attempt_id"],
         serde_json::Value::Null
     );
-    let change: serde_json::Value = serde_json::from_str(
-        json["data"]["change_json"]
-            .as_str()
-            .context("change_json")?,
-    )?;
+    let change = &json["data"]["change"];
     assert_eq!(
         change["retarget_override"]["reason"],
         "API caller explicitly audited this source signal retarget."
@@ -2006,7 +2197,7 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
             "signal_ids": [],
             "reason": "empty evidence cannot pass validation",
             "validation_status": "passed",
-            "validation_json": "{}"
+            "validation": {}
         }),
     )
     .await?;
@@ -2127,24 +2318,24 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
                 "type": "agent",
                 "agent_type": "local"
             },
-            "agent_candidates_json": "[]",
-            "suggestion_snapshot_json": "{}",
-            "final_decision_json": "{}",
+            "agent_candidates": [],
+            "suggestion_snapshot": {},
+            "final_decision": {},
             "suggest_coverage": 0.2,
             "suggest_coverage_cosine": 0.3,
             "suggest_residual_norm": 0.8,
             "suggest_needs_new_label": true,
             "suggest_degraded": false,
-            "diagnostics_json": "[]",
+            "diagnostics": [],
             "capture_fingerprint": "api-proposal-gap",
             "signals": [{
                 "kind": "vocabulary_gap",
                 "target_label_ref": null,
-                "related_labels_json": "[]",
+                "related_labels": [],
                 "proposed_action": "bootstrap_label",
                 "candidate_atom": null,
                 "proposed_label_name": "ontology-ledger",
-                "proposal_json": "{\"name\":\"ontology-ledger\"}",
+                "proposal": {"name": "ontology-ledger"},
                 "agent_selected": true,
                 "suggest_state": "absent",
                 "suggest_score": null,
@@ -2164,7 +2355,7 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
         .to_owned();
     let (status, json) = get_json(
         app.clone(),
-        "/api/v1/boards/default/label-ontology/signals?proposed_label=ontology-ledger&limit=10",
+        "/api/v1/boards/default/label-ontology/signals?proposed_label_name=ontology-ledger&limit=10",
     )
     .await?;
     assert_eq!(status, StatusCode::OK, "{json}");
@@ -2235,8 +2426,7 @@ async fn label_ontology_action_apply_and_validate_routes_round_trip() -> anyhow:
     assert_eq!(bootstrap["created_by"], "ontology-agent");
     assert_eq!(bootstrap["created_by_type"], "agent");
     assert_eq!(bootstrap["agent_type"], "codex");
-    let change: serde_json::Value =
-        serde_json::from_str(bootstrap["change_json"].as_str().context("change_json")?)?;
+    let change = &bootstrap["change"];
     assert_eq!(
         change["retarget_override"]["reason"],
         "API reviewer explicitly audited proposal source signal retarget."
@@ -2581,9 +2771,8 @@ async fn label_ontology_action_route_rejects_generic_mutation_action_type() -> a
             "result_proposal_id": null,
             "canonical_before_hash": "before",
             "canonical_after_hash": "after",
-            "change_json": json!({"fabricated": true}).to_string(),
+            "change": {"fabricated": true},
             "validation_status": "pending",
-            "validation_json": null
         }),
     )
     .await?;
@@ -2635,7 +2824,7 @@ async fn label_ontology_action_routes_reject_unknown_json_fields() -> anyhow::Re
                 "signal_ids": [],
                 "reason": "validated",
                 "validation_status": "passed",
-                "validation_json": "{}",
+                "validation": {},
                 "unexpected": true
             }),
         ),
@@ -2900,7 +3089,16 @@ async fn board_label_semantics_and_atom_routes_round_trip() -> anyhow::Result<()
     )
     .await?;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(json["data"]["deleted"], true);
+    let typed: kanban_contract::DeleteResponse = serde_json::from_value(json.clone())?;
+    assert_eq!(typed.data, kanban_contract::DeleteResult { deleted: true });
+    assert_eq!(serde_json::to_value(&typed)?, json);
+    let fixture: kanban_contract::DeleteResponse = serde_json::from_str(include_str!(
+        "../../../../schemas/fixtures/api/delete-response.v1.valid.json"
+    ))?;
+    assert_eq!(
+        serde_json::to_value(&typed)?,
+        serde_json::to_value(fixture)?
+    );
     assert!(kanban_sqlite::api::list_label_atoms(&db_path, "default")?.is_empty());
     Ok(())
 }
@@ -2959,6 +3157,160 @@ async fn label_atom_explain_route_returns_legacy_untracked_for_unprovenanced_ato
             .context("legacy reason")?
             .contains("no ontology provenance action")
     );
+    Ok(())
+}
+
+fn assert_no_claim_token_at_any_depth(value: &serde_json::Value, path: &str) {
+    match value {
+        serde_json::Value::Object(object) => {
+            assert!(
+                !object.contains_key("claim_token"),
+                "公开 JSON 在 {path} 泄漏 claim_token: {}",
+                object["claim_token"],
+            );
+            for (key, child) in object {
+                assert_no_claim_token_at_any_depth(child, &format!("{path}.{key}"));
+            }
+        }
+        serde_json::Value::Array(array) => {
+            for (index, child) in array.iter().enumerate() {
+                assert_no_claim_token_at_any_depth(child, &format!("{path}[{index}]"));
+            }
+        }
+        _ => {}
+    }
+}
+
+#[tokio::test]
+async fn label_atom_explain_route_never_exposes_nested_source_task_claim_token()
+-> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let db_path = test.db_path().to_path_buf();
+    let label = kanban_sqlite::api::create_label(
+        &db_path,
+        "default",
+        kanban_sqlite::api::CreateLabel {
+            name: "security/explain".to_owned(),
+            color: Some("#123456".to_owned()),
+        },
+    )?;
+    let task = create_ready_task_for_test(
+        &db_path,
+        "default",
+        "seed",
+        "label atom explain active source task",
+    )?;
+    let observation = kanban_sqlite::api::record_label_ontology_observation(
+        &db_path,
+        "default",
+        &task.id,
+        kanban_sqlite::api::LabelOntologyRecordInput {
+            actor: kanban_sqlite::api::LabelOntologyActor {
+                name: "label-agent".to_owned(),
+                actor_type: "agent".to_owned(),
+                agent_type: Some("codex".to_owned()),
+            },
+            agent_candidates_json: json!([{
+                "label": label.name,
+                "confidence": 0.95
+            }])
+            .to_string(),
+            suggestion_snapshot_json: json!({"selected_labels": []}).to_string(),
+            final_decision_json: json!({"accepted_labels": [label.name]}).to_string(),
+            suggest_coverage: Some(0.51),
+            suggest_coverage_cosine: Some(0.63),
+            suggest_residual_norm: Some(0.49),
+            suggest_needs_new_label: false,
+            suggest_degraded: false,
+            diagnostics_json: json!([]).to_string(),
+            capture_fingerprint: Some("http-explain-active-source-task".to_owned()),
+            signals: vec![kanban_sqlite::api::LabelOntologySignalInput {
+                kind: kanban_sqlite::api::LabelOntologySignalKind::FalseNegative,
+                target_label_ref: Some(label.id.clone()),
+                related_labels_json: json!([]).to_string(),
+                proposed_action: kanban_sqlite::api::LabelOntologyProposedAction::AddPositiveAtom,
+                candidate_atom: Some(kanban_sqlite::api::LabelOntologyCandidateAtomInput {
+                    polarity: "positive".to_owned(),
+                    kind: "applies_when".to_owned(),
+                    text: "audits nested public task transport boundaries".to_owned(),
+                }),
+                proposed_label_name: None,
+                proposal_json: json!({}).to_string(),
+                agent_selected: true,
+                suggest_state: Some(kanban_sqlite::api::LabelOntologySuggestState::Candidate),
+                suggest_score: Some(0.05),
+                suggest_rank: Some(3),
+                final_selected: true,
+                rationale: "The task exercises the explain response boundary.".to_owned(),
+                confidence: Some(0.95),
+                signal_key: Some("http-explain-active-source-task".to_owned()),
+            }],
+        },
+    )?;
+    let signal_id = observation.signals[0].id.clone();
+    kanban_sqlite::api::create_label_ontology_action(
+        &db_path,
+        "default",
+        kanban_sqlite::api::LabelOntologyActionInput {
+            actor: kanban_sqlite::api::LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            action_type: kanban_sqlite::api::LabelOntologyActionType::Confirm,
+            signal_ids: vec![signal_id.clone()],
+            reason: "Confirm source signal for explain transport regression.".to_owned(),
+            superseded_by_signal_id: None,
+            parent_action_id: None,
+            target_label_ref: None,
+            result_label_ref: None,
+            result_atom_id: None,
+            result_atom_content_hash: None,
+            result_proposal_id: None,
+            canonical_before_hash: None,
+            canonical_after_hash: None,
+            change_json: None,
+            validation_status: None,
+            validation_json: None,
+        },
+    )?;
+    let applied = kanban_sqlite::api::apply_label_ontology_atom(
+        &db_path,
+        "default",
+        kanban_sqlite::api::LabelOntologyAtomApplyInput {
+            actor: kanban_sqlite::api::LabelOntologyActor {
+                name: "reviewer".to_owned(),
+                actor_type: "user".to_owned(),
+                agent_type: None,
+            },
+            signal_ids: vec![signal_id],
+            label_ref: label.id,
+            kind: "applies_when".to_owned(),
+            text: "audits nested public task transport boundaries".to_owned(),
+            reason: "Apply source signal for explain transport regression.".to_owned(),
+        },
+    )?;
+    let atom_id = applied.result_atom_id.context("applied result atom id")?;
+    let claim = kanban_sqlite::api::claim_task(&db_path, "default", "worker", &task.id, 300_000)?;
+    assert!(
+        claim.task.claim_token.is_some(),
+        "fixture 必须持有 active claim"
+    );
+
+    let (status, json) = get_json(
+        test.router(),
+        &format!("/api/v1/boards/default/labels/atoms/{atom_id}/explain"),
+    )
+    .await?;
+
+    assert_eq!(status, StatusCode::OK, "{json}");
+    let source_task = &json["data"]["supporting_signals"][0]["source_task"];
+    assert_eq!(source_task["id"], task.id);
+    assert_eq!(source_task["status"], "running");
+    assert_no_claim_token_at_any_depth(&json, "$response");
+    assert_task_dto_exposes_ui_fields_without_claim_token(source_task);
+    let typed: kanban_contract::ApiTask = serde_json::from_value(source_task.clone())?;
+    assert_eq!(serde_json::to_value(typed)?, *source_task);
     Ok(())
 }
 
@@ -3338,12 +3690,39 @@ async fn tasks_gets_task_by_id() -> anyhow::Result<()> {
     .context("task")?;
     let app = test.router();
 
-    let (status, json) = get_json(app, &format!("/api/v1/tasks/{}", task.id)).await?;
+    let (status, json) = get_json(app.clone(), &format!("/api/v1/tasks/{}", task.id)).await?;
 
     assert_eq!(status, StatusCode::OK);
+    let top_level = json.as_object().context("task detail response envelope")?;
+    assert_eq!(top_level.len(), 1);
+    assert!(top_level.contains_key("data"));
+    let envelope: kanban_contract::OptionalMetadataEnvelope<
+        Value,
+        kanban_contract::TaskOntologyDetailsMeta<Option<kanban_sqlite::api::TaskOntologySummary>>,
+    > = serde_json::from_value(json.clone()).context("task detail optional envelope")?;
+    assert!(envelope.meta.is_none());
     assert_eq!(json["data"]["id"], task.id);
     assert_eq!(json["data"]["title"], "get by id");
     assert_task_dto_exposes_ui_fields_without_claim_token(&json["data"]);
+
+    let (status, json) = get_json(
+        app,
+        &format!("/api/v1/tasks/{}?include=not-ontology", task.id),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    let top_level = json
+        .as_object()
+        .context("task detail unknown-include response envelope")?;
+    assert_eq!(top_level.len(), 1);
+    assert!(top_level.contains_key("data"));
+    let envelope: kanban_contract::OptionalMetadataEnvelope<
+        Value,
+        kanban_contract::TaskOntologyDetailsMeta<Option<kanban_sqlite::api::TaskOntologySummary>>,
+    > = serde_json::from_value(json.clone())
+        .context("task detail unknown-include optional envelope")?;
+    assert!(envelope.meta.is_none());
+    assert_eq!(json["data"]["id"], task.id);
     Ok(())
 }
 
@@ -3366,6 +3745,13 @@ async fn tasks_gets_ontology_summary_only_when_included() -> anyhow::Result<()> 
         kanban_sqlite::api::CreateTask::ready("ontology summary via api"),
     )
     .context("task")?;
+    let no_signal_task = kanban_sqlite::api::create_task(
+        &db_path,
+        "default",
+        "seed",
+        kanban_sqlite::api::CreateTask::ready("ontology summary absent"),
+    )
+    .context("no-signal task")?;
     let app = test.router();
 
     let (status, observation) = post_json(
@@ -3373,24 +3759,24 @@ async fn tasks_gets_ontology_summary_only_when_included() -> anyhow::Result<()> 
         &format!("/api/v1/tasks/{}/label-ontology/observations", task.id),
         json!({
             "actor": {"name": "label-agent", "type": "agent", "agent_type": "local"},
-            "agent_candidates_json": "[]",
-            "suggestion_snapshot_json": "{}",
-            "final_decision_json": "{}",
+            "agent_candidates": [],
+            "suggestion_snapshot": {},
+            "final_decision": {},
             "suggest_needs_new_label": false,
             "suggest_degraded": false,
-            "diagnostics_json": "[]",
+            "diagnostics": [],
             "capture_fingerprint": "api-task-ontology-summary",
             "signals": [{
                 "kind": "false_negative",
                 "target_label_ref": "cli",
-                "related_labels_json": "[]",
+                "related_labels": [],
                 "proposed_action": "add_positive_atom",
                 "candidate_atom": {
                     "polarity": "positive",
                     "kind": "applies_when",
                     "text": "changes task detail ontology summary"
                 },
-                "proposal_json": "{}",
+                "proposal": {},
                 "agent_selected": true,
                 "suggest_state": "candidate",
                 "suggest_score": 0.22,
@@ -3409,11 +3795,46 @@ async fn tasks_gets_ontology_summary_only_when_included() -> anyhow::Result<()> 
 
     let (status, json) = get_json(app.clone(), &format!("/api/v1/tasks/{}", task.id)).await?;
     assert_eq!(status, StatusCode::OK);
-    assert!(json.get("meta").is_none());
+    let top_level = json
+        .as_object()
+        .context("task detail without ontology response envelope")?;
+    assert_eq!(top_level.len(), 1);
+    assert!(top_level.contains_key("data"));
+    let envelope: kanban_contract::OptionalMetadataEnvelope<
+        Value,
+        kanban_contract::TaskOntologyDetailsMeta<Option<kanban_sqlite::api::TaskOntologySummary>>,
+    > = serde_json::from_value(json.clone())
+        .context("task detail without ontology optional envelope")?;
+    assert!(envelope.meta.is_none());
 
-    let (status, json) =
-        get_json(app, &format!("/api/v1/tasks/{}?include=ontology", task.id)).await?;
+    let (status, json) = get_json(
+        app.clone(),
+        &format!("/api/v1/tasks/{}?include=ontology", task.id),
+    )
+    .await?;
     assert_eq!(status, StatusCode::OK, "{json}");
+    let top_level = json
+        .as_object()
+        .context("task detail ontology response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::OptionalMetadataEnvelope<
+        Value,
+        kanban_contract::TaskOntologyDetailsMeta<Option<kanban_sqlite::api::TaskOntologySummary>>,
+    > = serde_json::from_value(json.clone()).context("task detail ontology optional envelope")?;
+    let ontology_meta = envelope.meta.context("task detail ontology metadata")?;
+    let typed_summary = ontology_meta
+        .details
+        .ontology_summary
+        .context("task ontology summary")?;
+    assert_eq!(typed_summary.signal_count, 1);
+    assert_eq!(typed_summary.open_count, 1);
+    assert_eq!(typed_summary.sample_signals[0].id, signal_id);
+    assert_eq!(
+        typed_summary.sample_signals[0].proposed_action,
+        kanban_sqlite::api::LabelOntologyProposedAction::AddPositiveAtom
+    );
     let summary = &json["meta"]["details"]["ontology_summary"];
     assert_eq!(summary["signal_count"], 1);
     assert_eq!(summary["open_count"], 1);
@@ -3422,6 +3843,29 @@ async fn tasks_gets_ontology_summary_only_when_included() -> anyhow::Result<()> 
         summary["sample_signals"][0]["proposed_action"],
         "add_positive_atom"
     );
+
+    let (status, json) = get_json(
+        app,
+        &format!("/api/v1/tasks/{}?include=ontology", no_signal_task.id),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK, "{json}");
+    let top_level = json
+        .as_object()
+        .context("task detail empty ontology response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::OptionalMetadataEnvelope<
+        Value,
+        kanban_contract::TaskOntologyDetailsMeta<Option<kanban_sqlite::api::TaskOntologySummary>>,
+    > = serde_json::from_value(json.clone())
+        .context("task detail empty ontology optional envelope")?;
+    let ontology_meta = envelope
+        .meta
+        .context("task detail empty ontology metadata")?;
+    assert!(ontology_meta.details.ontology_summary.is_none());
+    assert_eq!(json["data"]["id"], no_signal_task.id);
     Ok(())
 }
 
@@ -3539,7 +3983,7 @@ async fn tasks_patches_editable_fields_and_uses_header_actor_when_body_actor_abs
     assert_eq!(json["data"]["description"], Value::Null);
     assert_eq!(json["data"]["assignee"], "worker-b");
     assert_eq!(json["data"]["priority"], 2);
-    assert_eq!(json["data"]["metadata_json"], r#"{"updated":true}"#);
+    assert_eq!(json["data"]["metadata"], json!({"updated":true}));
     assert_eq!(json["data"]["status"], "triage");
 
     let events =

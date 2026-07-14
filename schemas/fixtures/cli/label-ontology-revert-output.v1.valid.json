@@ -1,0 +1,69 @@
+{
+  "data": {
+    "action_type": "revert_ontology_mutation",
+    "agent_type": null,
+    "board_id": "b_FIXTURE_1",
+    "canonical_after_hash": "hash_fixture",
+    "canonical_before_hash": "hash_fixture",
+    "created_at": 100,
+    "created_by": "root",
+    "created_by_type": "user",
+    "id": "loa_FIXTURE_2",
+    "parent_action_id": "loa_FIXTURE_1",
+    "reason": "fixture revert",
+    "result_atom_content_hash": "hash_fixture",
+    "result_atom_id": "la_FIXTURE_1",
+    "result_label_id": null,
+    "result_proposal_id": null,
+    "signal_ids": [
+      "los_FIXTURE_1"
+    ],
+    "target_label_id": "l_FIXTURE_1",
+    "validation_effective_outcome": "unsupported",
+    "validation_latest_attempt_id": null,
+    "validation_requirement": "unsupported",
+    "validation_status": "pending",
+    "change": {
+      "after_revert": {
+        "applies_when": [],
+        "description": null,
+        "excludes_when": [],
+        "label_id": "l_FIXTURE_1",
+        "label_name": "backend",
+        "negative_examples": [],
+        "positive_examples": []
+      },
+      "atom_effect_counts": {
+        "added": 0,
+        "removed": 1
+      },
+      "before_revert": {
+        "applies_when": [
+          "canonical fixture atom revert"
+        ],
+        "description": null,
+        "excludes_when": [],
+        "label_id": "l_FIXTURE_1",
+        "label_name": "backend",
+        "negative_examples": [],
+        "positive_examples": []
+      },
+      "expected_current_hash": null,
+      "index_dirty": true,
+      "label": {
+        "id": "l_FIXTURE_1",
+        "name": "backend"
+      },
+      "legacy_warning": null,
+      "reverted_action_id": "loa_FIXTURE_1",
+      "reverted_action_type": "add_positive_atom",
+      "reverted_canonical_after_hash": "hash_fixture",
+      "reverted_canonical_before_hash": "hash_fixture"
+    },
+    "validation": {
+      "reverted_action_id": "loa_FIXTURE_1",
+      "reverted_action_type": "add_positive_atom",
+      "state": "pending_revert_validation"
+    }
+  }
+}

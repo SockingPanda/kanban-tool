@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "SignalObservationData": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "type": "string"
+        },
+        "agent_type": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "comment_id": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "evidence": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "id": {
+          "type": "string"
+        },
+        "run_id": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task_id": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task_ref_snapshot": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "task_id",
+        "task_ref_snapshot",
+        "run_id",
+        "comment_id",
+        "actor",
+        "agent_type",
+        "source",
+        "evidence",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "SignalObservationRecordType": {
+      "enum": [
+        "signal_observation"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:signal_observation-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/SignalObservationData"
+    },
+    "type": {
+      "$ref": "#/$defs/SignalObservationRecordType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL signal_observation output v1",
+  "type": "object"
+}

@@ -149,7 +149,7 @@ async fn transitions_reopen_done_task_requires_reason_and_recomputes_children() 
     assert_eq!(json["data"]["status"], "ready");
     assert_eq!(json["data"]["completed_at"], serde_json::Value::Null);
     assert_eq!(json["data"]["result_summary"], "api done");
-    assert_eq!(json["data"]["result_json"], r#"{"api":true}"#);
+    assert_eq!(json["data"]["result"], json!({"api":true}));
     let child = kanban_sqlite::api::get_task_by_id_global(&db_path, &child.id)?;
     assert_eq!(child.status, kanban_core::TaskStatus::Todo);
     assert!(child.dependency_blocked);

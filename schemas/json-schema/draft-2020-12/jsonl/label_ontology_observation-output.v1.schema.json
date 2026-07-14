@@ -1,0 +1,151 @@
+{
+  "$defs": {
+    "ActorType": {
+      "enum": [
+        "user",
+        "agent"
+      ],
+      "type": "string"
+    },
+    "LabelOntologyObservationData": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_candidates": {
+          "items": true,
+          "type": "array"
+        },
+        "agent_type": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "capture_fingerprint": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "created_by": {
+          "type": "string"
+        },
+        "created_by_type": {
+          "$ref": "#/$defs/ActorType"
+        },
+        "diagnostics": {
+          "items": true,
+          "type": "array"
+        },
+        "final_decision": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "id": {
+          "type": "string"
+        },
+        "suggest_coverage": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "suggest_coverage_cosine": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "suggest_degraded": {
+          "type": "boolean"
+        },
+        "suggest_input_hash": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suggest_needs_new_label": {
+          "type": "boolean"
+        },
+        "suggest_residual_norm": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "suggestion_snapshot": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "task_ref_snapshot": {
+          "type": "string"
+        },
+        "task_snapshot": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "task_id",
+        "task_ref_snapshot",
+        "task_snapshot",
+        "agent_candidates",
+        "suggestion_snapshot",
+        "final_decision",
+        "suggest_coverage",
+        "suggest_coverage_cosine",
+        "suggest_residual_norm",
+        "suggest_needs_new_label",
+        "suggest_degraded",
+        "diagnostics",
+        "capture_fingerprint",
+        "created_by",
+        "created_by_type",
+        "agent_type",
+        "created_at",
+        "suggest_input_hash"
+      ],
+      "type": "object"
+    },
+    "LabelOntologyObservationRecordType": {
+      "enum": [
+        "label_ontology_observation"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:label_ontology_observation-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/LabelOntologyObservationData"
+    },
+    "type": {
+      "$ref": "#/$defs/LabelOntologyObservationRecordType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL label_ontology_observation output v1",
+  "type": "object"
+}

@@ -486,11 +486,11 @@ pub(crate) enum SignalCommand {
     /// Record an Agent/Product signal from JSON input.
     Record(SignalRecordArgs),
     /// List signals with status, kind, task, and history filters.
-    List(SignalListArgs),
+    List(SignalQueryArgs),
     /// Show one signal by id.
     Show { signal_id: String },
     /// List signals that need review.
-    Review(SignalReviewListArgs),
+    Review(SignalQueryArgs),
     /// Confirm open signals with a reason.
     Confirm(SignalLifecycleArgs),
     /// Reject signals with a reason.
@@ -515,7 +515,7 @@ pub(crate) struct SignalRecordArgs {
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct SignalListArgs {
+pub(crate) struct SignalQueryArgs {
     #[arg(long)]
     pub(crate) status: Vec<String>,
     #[arg(long)]
@@ -524,18 +524,6 @@ pub(crate) struct SignalListArgs {
     pub(crate) task: Option<String>,
     #[arg(long)]
     pub(crate) include_all: bool,
-    #[arg(long, default_value_t = 100)]
-    pub(crate) limit: usize,
-}
-
-#[derive(Debug, Args)]
-pub(crate) struct SignalReviewListArgs {
-    #[arg(long)]
-    pub(crate) status: Vec<String>,
-    #[arg(long)]
-    pub(crate) kind: Vec<String>,
-    #[arg(long)]
-    pub(crate) task: Option<String>,
     #[arg(long, default_value_t = 100)]
     pub(crate) limit: usize,
 }
@@ -1992,4 +1980,46 @@ pub(crate) struct WorkerProfileConfig {
     pub(crate) on_success: Option<FinishPolicy>,
     pub(crate) on_failure: Option<FinishPolicy>,
     pub(crate) log_dir: Option<PathBuf>,
+}
+
+#[cfg(test)]
+mod contract_catalog_tests {
+    use std::collections::BTreeSet;
+
+    use clap::CommandFactory;
+    use kanban_contract::{ContractSurface, surface_operation_keys};
+
+    use super::Cli;
+
+    #[test]
+    fn clap_leaf_commands_match_exact_contract_catalog() {
+        let mut actual = BTreeSet::new();
+        collect_leaf_commands(&Cli::command(), &mut Vec::new(), &mut actual);
+        let expected = surface_operation_keys(ContractSurface::Cli).collect::<BTreeSet<_>>();
+
+        assert_eq!(
+            actual, expected,
+            "新增、删除或重命名 CLI leaf command 时必须同步精确 contract catalog"
+        );
+    }
+
+    fn collect_leaf_commands(
+        command: &clap::Command,
+        prefix: &mut Vec<String>,
+        output: &mut BTreeSet<String>,
+    ) {
+        let subcommands = command.get_subcommands().collect::<Vec<_>>();
+        if subcommands.is_empty() {
+            if !prefix.is_empty() {
+                output.insert(prefix.join(" "));
+            }
+            return;
+        }
+
+        for subcommand in subcommands {
+            prefix.push(subcommand.get_name().to_owned());
+            collect_leaf_commands(subcommand, prefix, output);
+            prefix.pop();
+        }
+    }
 }

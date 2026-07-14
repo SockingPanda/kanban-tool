@@ -1,0 +1,7 @@
+{
+  "type": "signal_link",
+  "signal_id": "sig_fixture",
+  "observation_id": "obs_fixture",
+  "signal_kind": "agent_cli_failure",
+  "signal_status": "open"
+}

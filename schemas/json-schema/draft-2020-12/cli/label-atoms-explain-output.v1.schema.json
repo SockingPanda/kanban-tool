@@ -1,0 +1,1071 @@
+{
+  "$defs": {
+    "ApiExecutionPlanState": {
+      "enum": [
+        "unplanned",
+        "planned",
+        "not_required"
+      ],
+      "type": "string"
+    },
+    "ApiLabel": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "name",
+        "color",
+        "created_at",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "ApiTask": {
+      "additionalProperties": false,
+      "properties": {
+        "archived_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "assignee": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "board_slug": {
+          "type": "string"
+        },
+        "claim_expires_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "claim_owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "completed_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "completed_required_step_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "created_by": {
+          "type": "string"
+        },
+        "current_run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dependency_blocked": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "due_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "execution_plan_state": {
+          "$ref": "#/$defs/ApiExecutionPlanState"
+        },
+        "id": {
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "$ref": "#/$defs/ApiLabel"
+          },
+          "type": "array"
+        },
+        "last_heartbeat_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "lock_version": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "max_retries": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "metadata": true,
+        "optional_step_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "position": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "priority": {
+          "$ref": "#/$defs/ApiTaskPriority"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "required_step_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "result": true,
+        "result_summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retry_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "scheduled_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "seq": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "started_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/ApiTaskStatus"
+        },
+        "status_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "unfinished_parent_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "board_slug",
+        "ref",
+        "seq",
+        "title",
+        "description",
+        "status",
+        "status_reason",
+        "assignee",
+        "priority",
+        "position",
+        "scheduled_at",
+        "due_at",
+        "created_by",
+        "created_at",
+        "updated_at",
+        "started_at",
+        "completed_at",
+        "archived_at",
+        "claim_owner",
+        "claim_expires_at",
+        "last_heartbeat_at",
+        "current_run_id",
+        "retry_count",
+        "max_retries",
+        "result_summary",
+        "result",
+        "metadata",
+        "lock_version",
+        "dependency_blocked",
+        "unfinished_parent_count",
+        "execution_plan_state",
+        "required_step_count",
+        "completed_required_step_count",
+        "optional_step_count",
+        "labels"
+      ],
+      "type": "object"
+    },
+    "ApiTaskPriority": {
+      "format": "uint8",
+      "maximum": 3,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ApiTaskStatus": {
+      "enum": [
+        "triage",
+        "todo",
+        "scheduled",
+        "ready",
+        "running",
+        "blocked",
+        "review",
+        "done",
+        "archived"
+      ],
+      "type": "string"
+    },
+    "LabelAtomExplainActionWire": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/LabelOntologyActionWire"
+        },
+        "matched_by": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "matched_by"
+      ],
+      "type": "object"
+    },
+    "LabelAtomExplainSignalWire": {
+      "additionalProperties": false,
+      "properties": {
+        "observation": {
+          "$ref": "#/$defs/LabelOntologyObservationWire"
+        },
+        "signal": {
+          "$ref": "#/$defs/LabelOntologySignalWire"
+        },
+        "source_task": {
+          "$ref": "#/$defs/ApiTask"
+        },
+        "suggest_degraded": {
+          "type": "boolean"
+        },
+        "suggest_input_stale": {
+          "type": "boolean"
+        },
+        "task_ref_snapshot": {
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "signal",
+        "observation",
+        "source_task",
+        "task_ref_snapshot",
+        "suggest_input_stale",
+        "suggest_degraded",
+        "warnings"
+      ],
+      "type": "object"
+    },
+    "LabelAtomExplainValidationWire": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/LabelOntologyActionWire"
+        },
+        "cases": true,
+        "manual": true,
+        "parent_action_id": {
+          "type": "string"
+        },
+        "summary": true,
+        "validation_status": {
+          "$ref": "#/$defs/LabelOntologyValidationStatusWire"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "action",
+        "parent_action_id",
+        "validation_status",
+        "manual",
+        "summary",
+        "cases",
+        "warnings"
+      ],
+      "type": "object"
+    },
+    "LabelAtomExplainWire": {
+      "additionalProperties": false,
+      "properties": {
+        "atom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LabelAtomWire"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "current_semantics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LabelSemanticsWire"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "legacy_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "legacy_untracked": {
+          "type": "boolean"
+        },
+        "provenance_actions": {
+          "items": {
+            "$ref": "#/$defs/LabelAtomExplainActionWire"
+          },
+          "type": "array"
+        },
+        "query": {
+          "type": "string"
+        },
+        "supporting_signals": {
+          "items": {
+            "$ref": "#/$defs/LabelAtomExplainSignalWire"
+          },
+          "type": "array"
+        },
+        "validation_history": {
+          "items": {
+            "$ref": "#/$defs/LabelAtomExplainValidationWire"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "query",
+        "atom",
+        "current_semantics",
+        "provenance_actions",
+        "supporting_signals",
+        "validation_history",
+        "legacy_untracked",
+        "legacy_reason"
+      ],
+      "type": "object"
+    },
+    "LabelAtomWire": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "content_hash": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "label_id": {
+          "type": "string"
+        },
+        "label_name": {
+          "type": "string"
+        },
+        "ordinal": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "polarity": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "label_id",
+        "board_id",
+        "label_name",
+        "polarity",
+        "kind",
+        "text",
+        "ordinal",
+        "content_hash",
+        "created_at",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "LabelOntologyActionTypeWire": {
+      "enum": [
+        "confirm",
+        "reject",
+        "supersede",
+        "resolve_no_change",
+        "add_positive_atom",
+        "add_negative_atom",
+        "adopt_existing_atom",
+        "update_semantics",
+        "create_label_proposal",
+        "bootstrap_label",
+        "rename_label",
+        "split_label",
+        "merge_labels",
+        "revert_ontology_mutation",
+        "validate"
+      ],
+      "type": "string"
+    },
+    "LabelOntologyActionWire": {
+      "additionalProperties": false,
+      "properties": {
+        "action_type": {
+          "$ref": "#/$defs/LabelOntologyActionTypeWire"
+        },
+        "agent_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "canonical_after_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "canonical_before_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "change": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "created_by": {
+          "type": "string"
+        },
+        "created_by_type": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "parent_action_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "result_atom_content_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_atom_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_label_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_proposal_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signal_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "target_label_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "validation": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "validation_effective_outcome": {
+          "$ref": "#/$defs/LabelOntologyValidationEffectiveOutcomeWire"
+        },
+        "validation_latest_attempt_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "validation_requirement": {
+          "$ref": "#/$defs/LabelOntologyValidationRequirementWire"
+        },
+        "validation_status": {
+          "$ref": "#/$defs/LabelOntologyValidationStatusWire"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "parent_action_id",
+        "action_type",
+        "reason",
+        "target_label_id",
+        "result_label_id",
+        "result_atom_id",
+        "result_atom_content_hash",
+        "result_proposal_id",
+        "canonical_before_hash",
+        "canonical_after_hash",
+        "change",
+        "validation_requirement",
+        "validation_status",
+        "validation_effective_outcome",
+        "validation_latest_attempt_id",
+        "validation",
+        "created_by",
+        "created_by_type",
+        "agent_type",
+        "created_at",
+        "signal_ids"
+      ],
+      "type": "object"
+    },
+    "LabelOntologyObservationWire": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_candidates": {
+          "items": true,
+          "type": "array"
+        },
+        "agent_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "capture_fingerprint": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "created_by": {
+          "type": "string"
+        },
+        "created_by_type": {
+          "type": "string"
+        },
+        "diagnostics": {
+          "items": true,
+          "type": "array"
+        },
+        "final_decision": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "id": {
+          "type": "string"
+        },
+        "signals": {
+          "items": {
+            "$ref": "#/$defs/LabelOntologySignalWire"
+          },
+          "type": "array"
+        },
+        "suggest_coverage": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "suggest_coverage_cosine": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "suggest_degraded": {
+          "type": "boolean"
+        },
+        "suggest_input_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suggest_needs_new_label": {
+          "type": "boolean"
+        },
+        "suggest_residual_norm": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "suggestion_snapshot": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "task_ref_snapshot": {
+          "type": "string"
+        },
+        "task_snapshot": {
+          "additionalProperties": true,
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "task_id",
+        "task_ref_snapshot",
+        "task_snapshot",
+        "suggest_input_hash",
+        "agent_candidates",
+        "suggestion_snapshot",
+        "final_decision",
+        "suggest_coverage",
+        "suggest_coverage_cosine",
+        "suggest_residual_norm",
+        "suggest_needs_new_label",
+        "suggest_degraded",
+        "diagnostics",
+        "capture_fingerprint",
+        "created_by",
+        "created_by_type",
+        "agent_type",
+        "created_at",
+        "signals"
+      ],
+      "type": "object"
+    },
+    "LabelOntologySignalWire": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_selected": {
+          "type": "boolean"
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "candidate_atom_kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "candidate_atom_polarity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "candidate_content_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "candidate_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "closed_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "confidence": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "final_selected": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "observation_id": {
+          "type": "string"
+        },
+        "proposal": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "proposed_action": {
+          "type": "string"
+        },
+        "proposed_label_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proposed_label_name_normalized": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "related_labels": {
+          "items": true,
+          "type": "array"
+        },
+        "reviewed_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "signal_key": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "status_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suggest_rank": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "suggest_score": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "suggest_state": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "superseded_by_signal_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_label_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_label_name_snapshot": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "observation_id",
+        "board_id",
+        "kind",
+        "status",
+        "target_label_id",
+        "target_label_name_snapshot",
+        "related_labels",
+        "proposed_action",
+        "candidate_atom_polarity",
+        "candidate_atom_kind",
+        "candidate_text",
+        "candidate_content_hash",
+        "proposed_label_name",
+        "proposed_label_name_normalized",
+        "proposal",
+        "agent_selected",
+        "suggest_state",
+        "suggest_score",
+        "suggest_rank",
+        "final_selected",
+        "rationale",
+        "confidence",
+        "signal_key",
+        "superseded_by_signal_id",
+        "status_reason",
+        "created_at",
+        "updated_at",
+        "reviewed_at",
+        "closed_at"
+      ],
+      "type": "object"
+    },
+    "LabelOntologyValidationEffectiveOutcomeWire": {
+      "enum": [
+        "not_required",
+        "unsupported",
+        "pending",
+        "passed",
+        "failed",
+        "partial"
+      ],
+      "type": "string"
+    },
+    "LabelOntologyValidationRequirementWire": {
+      "enum": [
+        "none",
+        "required",
+        "unsupported"
+      ],
+      "type": "string"
+    },
+    "LabelOntologyValidationStatusWire": {
+      "enum": [
+        "not_required",
+        "pending",
+        "passed",
+        "failed",
+        "partial"
+      ],
+      "type": "string"
+    },
+    "LabelSemanticsWire": {
+      "additionalProperties": false,
+      "properties": {
+        "applies_when": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "atoms": {
+          "items": {
+            "$ref": "#/$defs/LabelAtomWire"
+          },
+          "type": "array"
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "excludes_when": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "label_id": {
+          "type": "string"
+        },
+        "label_name": {
+          "type": "string"
+        },
+        "negative_examples": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "positive_examples": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "semantics_hash": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label_id",
+        "board_id",
+        "label_name",
+        "semantics_hash",
+        "description",
+        "applies_when",
+        "excludes_when",
+        "positive_examples",
+        "negative_examples",
+        "created_at",
+        "updated_at",
+        "atoms"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:label-atoms-explain-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/LabelAtomExplainWire"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI label atoms explain output v1",
+  "type": "object"
+}

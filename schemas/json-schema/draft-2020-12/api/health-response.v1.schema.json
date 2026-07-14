@@ -1,0 +1,45 @@
+{
+  "$defs": {
+    "HealthReport": {
+      "additionalProperties": false,
+      "properties": {
+        "db": {
+          "type": "string"
+        },
+        "db_fingerprint": {
+          "type": "string"
+        },
+        "db_path": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "db",
+        "version",
+        "db_path",
+        "db_fingerprint"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:health-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/HealthReport"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban API health response v1",
+  "type": "object"
+}

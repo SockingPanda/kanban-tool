@@ -1,0 +1,13 @@
+{
+  "$id": "urn:kanban-tool:schema:api:graph-status-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "board": {
+      "default": "default",
+      "type": "string"
+    }
+  },
+  "title": "Kanban graph status query v1",
+  "type": "object"
+}

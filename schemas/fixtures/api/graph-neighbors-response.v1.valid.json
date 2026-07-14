@@ -1,0 +1,1 @@
+{"data":[{"subject_uri":"kb://task/t_fixture","predicate":"depends_on","object_uri":"kb://task/t_dependency","graph_uri":"kb://board/default","provenance":{"source_table":"task_dependencies","source_id":"dep_fixture","source_event_id":17,"authoritative_store":"sqlite"},"metadata":{},"created_at":101,"updated_at":102}],"meta":{"limit":2}}

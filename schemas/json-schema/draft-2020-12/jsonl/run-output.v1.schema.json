@@ -1,0 +1,143 @@
+{
+  "$defs": {
+    "PortableNever": {
+      "description": "An uninhabited value makes a required nullable field accept only JSON null.",
+      "not": {}
+    },
+    "PortableRunStatus": {
+      "enum": [
+        "running",
+        "succeeded",
+        "failed",
+        "canceled",
+        "expired"
+      ],
+      "type": "string"
+    },
+    "RequiredNullableSchema": {
+      "description": "Schema-only marker for a key that must be present but may contain JSON null.\n\nA bare `Option<T>` is considered omittable by schemars, while\n`#[schemars(required)]` deliberately removes its null branch. This\ntransparent non-Option wrapper preserves both halves of the wire contract.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "RequiredNullableSchema2": {
+      "description": "Schema-only marker for a key that must be present but may contain JSON null.\n\nA bare `Option<T>` is considered omittable by schemars, while\n`#[schemars(required)]` deliberately removes its null branch. This\ntransparent non-Option wrapper preserves both halves of the wire contract.",
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "RequiredNullableSchema3": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PortableNever"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Schema-only marker for a key that must be present but may contain JSON null.\n\nA bare `Option<T>` is considered omittable by schemars, while\n`#[schemars(required)]` deliberately removes its null branch. This\ntransparent non-Option wrapper preserves both halves of the wire contract."
+    },
+    "RunJsonlData": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "claim_expires_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "claim_owner": {
+          "type": "string"
+        },
+        "claim_token": {
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        },
+        "exit_code": {
+          "$ref": "#/$defs/RequiredNullableSchema2"
+        },
+        "finished_at": {
+          "$ref": "#/$defs/RequiredNullableSchema2"
+        },
+        "id": {
+          "type": "string"
+        },
+        "last_heartbeat_at": {
+          "$ref": "#/$defs/RequiredNullableSchema2"
+        },
+        "log_path": {
+          "$ref": "#/$defs/RequiredNullableSchema3"
+        },
+        "metadata": true,
+        "started_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/PortableRunStatus"
+        },
+        "summary": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "worker_pid": {
+          "$ref": "#/$defs/RequiredNullableSchema2"
+        },
+        "worker_profile": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "task_id",
+        "status",
+        "worker_profile",
+        "worker_pid",
+        "claim_token",
+        "claim_owner",
+        "claim_expires_at",
+        "started_at",
+        "last_heartbeat_at",
+        "finished_at",
+        "exit_code",
+        "summary",
+        "error",
+        "log_path",
+        "metadata"
+      ],
+      "type": "object"
+    },
+    "RunJsonlType": {
+      "enum": [
+        "run"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:run-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/RunJsonlData"
+    },
+    "type": {
+      "$ref": "#/$defs/RunJsonlType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL run output v1",
+  "type": "object"
+}

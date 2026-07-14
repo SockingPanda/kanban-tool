@@ -13,10 +13,12 @@ set shell := ["bash", "-cu"]
 audit-ignore-flags := "--ignore RUSTSEC-2024-0370 --ignore RUSTSEC-2024-0411 --ignore RUSTSEC-2024-0412 --ignore RUSTSEC-2024-0413 --ignore RUSTSEC-2024-0414 --ignore RUSTSEC-2024-0415 --ignore RUSTSEC-2024-0416 --ignore RUSTSEC-2024-0417 --ignore RUSTSEC-2024-0418 --ignore RUSTSEC-2024-0419 --ignore RUSTSEC-2024-0420 --ignore RUSTSEC-2024-0429 --ignore RUSTSEC-2024-0436 --ignore RUSTSEC-2025-0075 --ignore RUSTSEC-2025-0080 --ignore RUSTSEC-2025-0081 --ignore RUSTSEC-2025-0098 --ignore RUSTSEC-2025-0100"
 
 fmt:
-    cargo fmt -- --check
+    cargo fmt -p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-search -p kanban-graph -p kanban-vector -p kanban-derived-io -p kanban-helper-protocol -p kanban-labels -p kanban-context -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli -- --check
 
-fmt-check:
-    cargo fmt -- --check
+fmt-check: fmt
+
+fmt-full:
+    cargo fmt -p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-search -p kanban-graph -p kanban-vector -p kanban-derived-io -p kanban-helper-protocol -p kanban-labels -p kanban-context -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli -p kanban-vector-lancedb -p kanban-graph-oxigraph -- --check
 
 fix *args:
     scripts/cargo-build-lock.sh -- cargo clippy --fix --tests --allow-dirty "$@"
@@ -41,6 +43,7 @@ check: check-core
 check-core:
     scripts/cargo-build-lock.sh -- cargo check --tests \
         -p kanban-core \
+        -p kanban-contract \
         -p kanban-entity \
         -p kanban-indexer \
         -p kanban-search \
@@ -82,6 +85,7 @@ rust-fast:
 test-core *args:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run \
         -p kanban-core \
+        -p kanban-contract \
         -p kanban-entity \
         -p kanban-indexer \
         -p kanban-search \
@@ -96,7 +100,7 @@ test-core *args:
         -p kanban-server \
         -p kanban-cli \
         --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test \
-        -p kanban-core -p kanban-entity -p kanban-indexer -p kanban-search \
+        -p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-search \
         -p kanban-graph -p kanban-vector -p kanban-derived-io \
         -p kanban-helper-protocol -p kanban-labels -p kanban-context \
         -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli "$@"; fi
@@ -109,11 +113,11 @@ test-helpers *args:
         -p kanban-vector-lancedb -p kanban-graph-oxigraph "$@"; fi
 
 test-full *args:
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop "$@"; fi
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --exclude kanban-schema-tool --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude kanban-schema-tool "$@"; fi
 
 clippy-core *args:
     scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
-        -p kanban-core -p kanban-entity -p kanban-indexer -p kanban-search \
+        -p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-search \
         -p kanban-graph -p kanban-vector -p kanban-derived-io \
         -p kanban-helper-protocol -p kanban-labels -p kanban-context \
         -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli "$@" -- -D warnings
@@ -127,7 +131,7 @@ clippy-full *args:
     just clippy-helpers "$@"
 
 rust-full:
-    just fmt
+    just fmt-full
     just check-full
     just test-full
     just clippy-full
@@ -198,8 +202,70 @@ feature-p package features:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run -p {{package}} --features "{{features}}" --no-fail-fast --no-tests pass; else scripts/cargo-build-lock.sh -- cargo test -p {{package}} --features "{{features}}"; fi
     scripts/cargo-build-lock.sh -- cargo clippy -p {{package}} --all-targets --features "{{features}}" -- -D warnings
 
+schema-generate:
+    scripts/cargo-build-lock.sh -- cargo run -p kanban-schema-tool --bin kanban-schema -- generate --root .
+
+schema-check:
+    scripts/cargo-build-lock.sh -- cargo run -p kanban-schema-tool --bin kanban-schema -- check --root .
+
+spec-bundle-generate:
+    python3 -B scripts/spec_bundle.py --root . --write
+
+spec-bundle-check:
+    python3 -B scripts/test_spec_bundle.py
+    python3 -B scripts/spec_bundle.py --root . --check
+
+schema-docs:
+    just spec-bundle-check
+    python3 -B scripts/test_schema_docs_markers.py
+    python3 -B scripts/schema_docs_markers.py --root .
+
+schema-fmt:
+    cargo fmt -p kanban-contract -p kanban-schema-tool -- --check
+
+schema-tool:
+    just check-p kanban-schema-tool
+    just test-p kanban-schema-tool
+    scripts/cargo-build-lock.sh -- cargo clippy -p kanban-schema-tool --all-targets -- -D warnings
+
+schema-dependency-isolation-self-test:
+    python3 -B scripts/test_schema_dependency_isolation.py
+    python3 -B scripts/test_schema_recipe_witness.py
+
+schema-dependency-isolation:
+    just schema-dependency-isolation-self-test
+    python3 -B scripts/schema_dependency_policy.py
+    scripts/test-schema-cargo-tree.sh
+
+schema-adoption-witness-self-test:
+    python3 -B scripts/test_schema_adoption_witnesses.py
+
+schema-adoption-witness:
+    just schema-adoption-witness-self-test
+    python3 -B scripts/schema_adoption_witnesses.py --root .
+
+schema-surface-audit:
+    just test-p kanban-server api_route_catalog_matches_exact_contract_catalog
+    just test-p kanban-cli clap_leaf_commands_match_exact_contract_catalog
+    just test-p kanban-sqlite jsonl_export_discriminators_match_exact_contract_catalog
+
+schema-contract:
+    just schema-dependency-isolation
+    just schema-fmt
+    just feature-p kanban-contract schema
+    just schema-tool
+    just schema-check
+    just schema-docs
+    just schema-surface-audit
+    just schema-adoption-witness
+
+schema-audit-closed:
+    just schema-adoption-witness
+    scripts/cargo-build-lock.sh -- cargo run -p kanban-schema-tool --bin kanban-schema -- audit --root . --require-closed
+
 release:
     just affected-self-test
+    just schema-contract
     just audit
     just rust-full
     just bench-check

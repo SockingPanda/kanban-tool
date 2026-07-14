@@ -6,13 +6,23 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
+import tomllib
 from dataclasses import dataclass
+from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Iterable, NotRequired, TypedDict
+
+sys.dont_write_bytecode = True
+
+from spec_bundle import SOURCE_PATHS as SPEC_BUNDLE_SOURCE_PATHS
 
 
 Command = list[str]
 Classifications = dict[str, list[str]]
+SCHEMA_TOOL_REGISTRY_APPROVAL = (
+    "policy/schema-tool-registry-closure.json"
+)
 
 
 class Plan(TypedDict):
@@ -54,6 +64,7 @@ def is_desktop(path: str) -> bool:
 
 CORE_CRATES = {
     "kanban-core",
+    "kanban-contract",
     "kanban-entity",
     "kanban-indexer",
     "kanban-helper-protocol",
@@ -88,6 +99,54 @@ def is_core(path: str) -> bool:
             "docs/API_SPEC.md",
             "docs/DISPATCHER_SPEC.md",
         }
+    )
+
+
+def is_workspace_member_manifest(path: str) -> bool:
+    parts = _parts(path)
+    return (
+        len(parts) == 3 and parts[0] == "crates" and parts[2] == "Cargo.toml"
+    ) or path == "apps/desktop/src-tauri/Cargo.toml"
+
+
+def is_schema_contract(path: str) -> bool:
+    return (
+        path in {
+            "Cargo.toml",
+            "Cargo.lock",
+            "justfile",
+            ".cargo/config",
+            ".cargo/config.toml",
+            "AGENTS.md",
+            "docs/ARCHITECTURE.md",
+            "docs/SCHEMA_CONTRACTS.md",
+            SCHEMA_TOOL_REGISTRY_APPROVAL,
+        }
+        or is_workspace_member_manifest(path)
+        or path.startswith("crates/kanban-contract/")
+        or path.startswith("crates/kanban-schema-tool/")
+        or path.startswith("schemas/")
+        or path in {
+            "scripts/schema_adoption_witnesses.py",
+            "scripts/schema_dependency_policy.py",
+            "scripts/test_schema_adoption_witnesses.py",
+            "scripts/test-schema-cargo-tree.sh",
+            "scripts/test_schema_dependency_isolation.py",
+            "scripts/test_schema_recipe_witness.py",
+            "scripts/schema_docs_markers.py",
+            "scripts/test_schema_docs_markers.py",
+            "scripts/spec_bundle.py",
+            "scripts/test_spec_bundle.py",
+        }
+    )
+
+
+def is_schema_docs(path: str) -> bool:
+    return (
+        ("/" not in path and path.endswith(".md"))
+        or (path.startswith("docs/") and path.endswith(".md"))
+        or path in SPEC_BUNDLE_SOURCE_PATHS
+        or path in {"scripts/spec_bundle.py", "scripts/test_spec_bundle.py"}
     )
 
 
@@ -141,8 +200,11 @@ def is_scripts_packaging_release_sensitive(path: str) -> bool:
         "Cargo.toml",
         "Cargo.lock",
         "justfile",
+        ".cargo/config",
+        ".cargo/config.toml",
         "rust-toolchain.toml",
         ".config/nextest.toml",
+        SCHEMA_TOOL_REGISTRY_APPROVAL,
     }
     file_name = PurePosixPath(path).name.lower()
     return (
@@ -160,6 +222,8 @@ CLASSIFIERS = {
     "docs-only": is_docs_only,
     "desktop": is_desktop,
     "core": is_core,
+    "schema-contract": is_schema_contract,
+    "schema-docs": is_schema_docs,
     "vector-helper": is_vector_helper,
     "graph-helper": is_graph_helper,
     "cli": is_cli,
@@ -173,6 +237,8 @@ CLASSIFIERS = {
 RULES = (
     Rule("desktop", (["just", "desktop-check"],)),
     Rule("core", (["just", "check-core"],)),
+    Rule("schema-contract", (["just", "schema-contract"],)),
+    Rule("schema-docs", (["just", "schema-docs"],)),
     Rule("vector-helper", (["just", "check-p", "kanban-vector-lancedb"],)),
     Rule("graph-helper", (["just", "check-p", "kanban-graph-oxigraph"],)),
     Rule(
@@ -240,13 +306,18 @@ FULL_GATE_PATTERNS = (
     "Cargo.toml",
     "Cargo.lock",
     "justfile",
+    ".cargo/config",
+    ".cargo/config.toml",
     "rust-toolchain.toml",
     ".config/nextest.toml",
+    SCHEMA_TOOL_REGISTRY_APPROVAL,
 )
 
 WORKSPACE_RUST_FAST_PATTERNS = {
     "Cargo.toml",
     "Cargo.lock",
+    ".cargo/config",
+    ".cargo/config.toml",
     "rust-toolchain.toml",
     ".config/nextest.toml",
 }
@@ -393,8 +464,30 @@ def execute(plan: Plan) -> int:
         print(f"+ {' '.join(command)}", flush=True)
         completed = subprocess.run(command)
         if completed.returncode != 0:
+            if is_allowed_empty_test_result(command, completed.returncode):
+                print(
+                    f"ok: {' '.join(command)} has no tests; check/clippy remain required",
+                    flush=True,
+                )
+                continue
             return completed.returncode
     return 0
+
+
+ALLOW_EMPTY_TEST_PACKAGES = {
+    "kanban-search",
+    "kanban-graph",
+    "kanban-entity",
+}
+
+
+def is_allowed_empty_test_result(command: Command, returncode: int) -> bool:
+    return (
+        returncode == 4
+        and len(command) == 3
+        and command[:2] == ["just", "test-p"]
+        and command[2] in ALLOW_EMPTY_TEST_PACKAGES
+    )
 
 
 def self_test() -> None:
@@ -402,8 +495,8 @@ def self_test() -> None:
         (
             "docs only",
             ["docs/SPEC.md", "README.md"],
-            {"docs-only"},
-            [["just", "diff-check"]],
+            {"docs-only", "schema-docs"},
+            [["just", "schema-docs"], ["just", "diff-check"]],
             False,
         ),
         (
@@ -423,15 +516,15 @@ def self_test() -> None:
         (
             "cli spec",
             ["docs/CLI_SPEC.md"],
-            {"docs-only", "core", "cli"},
-            [["just", "check-core"], ["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
+            {"docs-only", "schema-docs", "core", "cli"},
+            [["just", "schema-docs"], ["just", "check-core"], ["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
             False,
         ),
         (
             "server api",
             ["crates/kanban-server/src/router.rs", "docs/API_SPEC.md"],
-            {"core", "server/api", "docs-only"},
-            [["just", "check-core"], ["just", "check-p", "kanban-server"], ["just", "diff-check"]],
+            {"core", "server/api", "docs-only", "schema-docs"},
+            [["just", "schema-docs"], ["just", "check-core"], ["just", "check-p", "kanban-server"], ["just", "diff-check"]],
             False,
         ),
         (
@@ -533,32 +626,141 @@ def self_test() -> None:
             False,
         ),
         (
+            "schema contract",
+            [
+                "crates/kanban-contract/src/schema.rs",
+                "schemas/fixtures/api/error-response.v1.valid.json",
+            ],
+            {"core", "schema-contract"},
+            [
+                ["just", "check-core"],
+                ["just", "schema-contract"],
+                ["just", "diff-check"],
+            ],
+            False,
+        ),
+        (
+            "schema tool source",
+            ["crates/kanban-schema-tool/src/lib.rs"],
+            {"schema-contract"},
+            [["just", "schema-contract"], ["just", "diff-check"]],
+            False,
+        ),
+        (
+            "schema tool manifest",
+            ["crates/kanban-schema-tool/Cargo.toml"],
+            {"schema-contract"},
+            [["just", "schema-contract"], ["just", "diff-check"]],
+            True,
+        ),
+        (
+            "schema registry approval",
+            [SCHEMA_TOOL_REGISTRY_APPROVAL],
+            {"schema-contract", "scripts/packaging/release-sensitive"},
+            [
+                ["just", "schema-contract"],
+                ["just", "affected-self-test"],
+                ["just", "check-full"],
+                ["just", "target-tools"],
+                ["just", "diff-check"],
+            ],
+            True,
+        ),
+        (
             "release sensitive",
             ["justfile", "scripts/package-cli-linux.sh"],
-            {"scripts/packaging/release-sensitive"},
-            [["just", "affected-self-test"], ["just", "check-full"], ["just", "target-tools"], ["just", "diff-check"]],
+            {"schema-contract", "scripts/packaging/release-sensitive"},
+            [["just", "schema-contract"], ["just", "affected-self-test"], ["just", "check-full"], ["just", "target-tools"], ["just", "diff-check"]],
             True,
         ),
         (
             "workspace manifest",
             ["Cargo.toml"],
-            {"scripts/packaging/release-sensitive"},
-            [["just", "check-full"], ["just", "affected-self-test"], ["just", "diff-check"]],
+            {"schema-contract", "scripts/packaging/release-sensitive"},
+            [["just", "schema-contract"], ["just", "check-full"], ["just", "affected-self-test"], ["just", "diff-check"]],
+            True,
+        ),
+        (
+            "workspace lockfile",
+            ["Cargo.lock"],
+            {"schema-contract", "scripts/packaging/release-sensitive"},
+            [["just", "schema-contract"], ["just", "check-full"], ["just", "affected-self-test"], ["just", "diff-check"]],
+            True,
+        ),
+        (
+            "cargo source config",
+            [".cargo/config"],
+            {"schema-contract", "scripts/packaging/release-sensitive"},
+            [
+                ["just", "check-full"],
+                ["just", "schema-contract"],
+                ["just", "affected-self-test"],
+                ["just", "target-tools"],
+                ["just", "diff-check"],
+            ],
+            True,
+        ),
+        (
+            "cargo source config toml",
+            [".cargo/config.toml"],
+            {"schema-contract", "scripts/packaging/release-sensitive"},
+            [
+                ["just", "check-full"],
+                ["just", "schema-contract"],
+                ["just", "affected-self-test"],
+                ["just", "target-tools"],
+                ["just", "diff-check"],
+            ],
             True,
         ),
         (
             "nested crate manifest",
             ["crates/kanban-cli/Cargo.toml"],
-            {"core", "cli"},
-            [["just", "check-core"], ["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
+            {"core", "cli", "schema-contract"},
+            [["just", "check-core"], ["just", "schema-contract"], ["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
             True,
         ),
         (
             "desktop tauri manifest",
             ["apps/desktop/src-tauri/Cargo.toml"],
-            {"desktop", "scripts/packaging/release-sensitive"},
-            [["just", "desktop-check"], ["just", "affected-self-test"], ["just", "diff-check"]],
+            {"desktop", "schema-contract", "scripts/packaging/release-sensitive"},
+            [["just", "desktop-check"], ["just", "schema-contract"], ["just", "affected-self-test"], ["just", "diff-check"]],
             True,
+        ),
+        (
+            "schema witness gate script",
+            ["scripts/schema_adoption_witnesses.py"],
+            {"schema-contract", "scripts/packaging/release-sensitive"},
+            [["just", "schema-contract"], ["just", "affected-self-test"], ["just", "diff-check"]],
+            False,
+        ),
+        (
+            "schema dependency policy script",
+            ["scripts/schema_dependency_policy.py"],
+            {"schema-contract", "scripts/packaging/release-sensitive"},
+            [["just", "schema-contract"], ["just", "affected-self-test"], ["just", "diff-check"]],
+            False,
+        ),
+        (
+            "schema dependency isolation self-test",
+            ["scripts/test_schema_dependency_isolation.py"],
+            {"schema-contract", "scripts/packaging/release-sensitive"},
+            [["just", "schema-contract"], ["just", "affected-self-test"], ["just", "diff-check"]],
+            False,
+        ),
+        (
+            "schema recipe execution witness",
+            ["scripts/test_schema_recipe_witness.py"],
+            {"schema-contract", "scripts/packaging/release-sensitive"},
+            [["just", "schema-contract"], ["just", "affected-self-test"], ["just", "diff-check"]],
+            False,
+        ),
+        (
+            "schema architecture policy docs",
+            ["AGENTS.md", "docs/ARCHITECTURE.md", "docs/SCHEMA_CONTRACTS.md"],
+            {"docs-only", "schema-contract"},
+            [["just", "schema-contract"], ["just", "diff-check"]],
+            False,
         ),
     ]
 
@@ -576,6 +778,69 @@ def self_test() -> None:
             raise AssertionError(
                 f"{name}: full_gate_recommended expected {expected_full_gate}, "
                 f"got {plan['full_gate_recommended']}"
+            )
+
+    testless_plan = build_plan(
+        "main",
+        [
+            "crates/kanban-search/src/lib.rs",
+            "crates/kanban-graph/src/lib.rs",
+            "crates/kanban-entity/src/lib.rs",
+        ],
+    )
+    for package in ("kanban-search", "kanban-graph", "kanban-entity"):
+        command = ["just", "test-p", package]
+        if command not in testless_plan["commands"]:
+            raise AssertionError(
+                f"testless package {package} must retain test command {command}"
+            )
+        if not is_allowed_empty_test_result(command, 4):
+            raise AssertionError(f"testless package {package} must accept nextest exit 4")
+        if is_allowed_empty_test_result(command, 1):
+            raise AssertionError(f"test failure for {package} must remain fatal")
+    if is_allowed_empty_test_result(["just", "test-p", "kanban-vector"], 4):
+        raise AssertionError("packages outside the explicit allowlist must reject exit 4")
+
+    root = Path(__file__).resolve().parents[1]
+    with (root / "Cargo.toml").open("rb") as manifest_file:
+        workspace = tomllib.load(manifest_file)["workspace"]
+    schema_inputs = [
+        "Cargo.toml",
+        "Cargo.lock",
+        "justfile",
+        ".cargo/config",
+        ".cargo/config.toml",
+        "scripts/test_schema_recipe_witness.py",
+        "scripts/schema_docs_markers.py",
+        "scripts/test_schema_docs_markers.py",
+        "scripts/spec_bundle.py",
+        "scripts/test_spec_bundle.py",
+        "AGENTS.md",
+        "docs/ARCHITECTURE.md",
+        "docs/SCHEMA_CONTRACTS.md",
+        *(f"{member}/Cargo.toml" for member in workspace["members"]),
+    ]
+    for path in schema_inputs:
+        plan = build_plan("main", [path])
+        if "schema-contract" not in plan["classifications"]:
+            raise AssertionError(
+                f"schema manifest routing missing classification: {path}"
+            )
+        if ["just", "schema-contract"] not in plan["commands"]:
+            raise AssertionError(
+                f"schema manifest routing missing command: {path}; got {plan['commands']}"
+            )
+
+    for path in SPEC_BUNDLE_SOURCE_PATHS:
+        plan = build_plan("main", [path])
+        if "schema-docs" not in plan["classifications"]:
+            raise AssertionError(
+                f"SPEC bundle source missing schema-docs classification: {path}"
+            )
+        if ["just", "schema-docs"] not in plan["commands"]:
+            raise AssertionError(
+                f"SPEC bundle source missing schema-docs command: {path}; "
+                f"got {plan['commands']}"
             )
 
     duplicate_plan = build_plan("main", ["crates/kanban-cli/src/main.rs", "crates/kanban-cli/tests/task.rs"])

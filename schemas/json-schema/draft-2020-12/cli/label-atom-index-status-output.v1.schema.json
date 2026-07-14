@@ -1,0 +1,66 @@
+{
+  "$defs": {
+    "CliLabelAtomIndexStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "board_dirty": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "diagnostics": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dirty": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "generation": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "backend",
+        "enabled",
+        "message",
+        "diagnostics",
+        "dirty",
+        "board_dirty",
+        "generation"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:label-atom-index-status-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CliLabelAtomIndexStatus"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI label atom-index status output v1",
+  "type": "object"
+}

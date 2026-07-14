@@ -1,0 +1,178 @@
+//! kanban-tool 的公开 wire contract 与离线 schema catalog。
+//!
+//! 该 crate 只拥有跨 adapter 的机器可读契约，不拥有 SQLite record、service input、
+//! HTTP handler 或 CLI command。operation inventory 明确区分 `Planned`、`Generated`、
+//! `Adopted` 与 `Excluded`：生成 schema 和手写 fixture 只证明离线契约可校验，不代表
+//! 真实 producer/consumer 已迁移；只有绑定双方测试证据的 `Adopted` 才表示运行时采用。
+//! schema model 生成由显式 `schema` feature 启用；离线校验、artifact 管理和 CLI
+//! 位于独立的 `kanban-schema-tool` leaf crate。正常 runtime 依赖图只包含 Serde wire 类型。
+
+mod api_components;
+mod boards;
+mod cli;
+pub mod cli_helpers;
+pub mod cli_labels;
+pub mod cli_operator;
+mod comments;
+mod create_task;
+mod dependencies;
+mod derived;
+mod endpoint;
+pub mod event_payload;
+mod events;
+mod headers;
+mod inventory;
+pub mod jsonl_core;
+pub mod jsonl_ledger;
+mod label_surfaces;
+mod labels;
+mod lifecycle;
+mod ontology;
+mod portable;
+#[cfg(all(test, feature = "schema"))]
+mod protocol_tests;
+mod protocols;
+mod runs;
+mod sse;
+mod steps;
+pub mod structured_metadata;
+mod surface;
+mod task_core;
+mod task_graph;
+mod task_read;
+mod transitions;
+mod wire;
+
+#[cfg(all(test, feature = "schema"))]
+mod lifecycle_tests;
+
+pub use api_components::{
+    ApiExecutionPlanState, ApiLabel, ApiTask, ApiTaskPriority, ApiTaskStatus,
+    ListTasksByStatusData, ListTasksByStatusResponse, ListTasksResponse, ListTasksStatusWindow,
+};
+pub use boards::{
+    ApiBoard, ApiBoardColumn, ArchiveBoardPath, ArchiveBoardResponse, CreateBoardRequest,
+    CreateBoardResponse, GetBoardPath, GetBoardResponse, ListBoardColumnsPath,
+    ListBoardColumnsResponse, ListBoardsQuery, ListBoardsResponse,
+};
+pub use cli::{
+    CliActiveBoard, CliActiveBoardOutput, CliBackupOutput, CliBackupResult, CliCheckpointOutput,
+    CliCommentAddOutput, CliCommentListOutput, CliConfigShow, CliConfigShowOutput, CliConfigSource,
+    CliDependencyAddOutput, CliDependencyEdge, CliDependencyListOutput, CliDependencyMutation,
+    CliDependencyRemoveOutput, CliDependencySnapshot, CliDependencyTask, CliDerivedStatusOutput,
+    CliDerivedStoreStatus, CliDoctorOutput, CliEntity, CliEntityListOutput, CliEntityShowOutput,
+    CliEvent, CliEventsOutput, CliIndexDoctorOutput, CliIndexStatusOutput, CliInitOutput,
+    CliInitResult, CliMachineOutput, CliOperationDescriptor, CliOutboxItem, CliOutboxListOutput,
+    CliResolvedConfigValue, CliResolvedLocaleValue, CliRunLog, CliRunLogsOutput, CliRunShowOutput,
+    CliRunsOutput, CliStatsOutput, CliTaskArchiveOutput, CliTaskBlockOutput, CliTaskClaimOutput,
+    CliTaskCompleteOutput, CliTaskCreateOutput, CliTaskDoneOutput, CliTaskHeartbeatOutput,
+    CliTaskListOutput, CliTaskPromoteOutput, CliTaskReclaimOutput, CliTaskReclaimResult,
+    CliTaskReopenOutput, CliTaskReviewOutput, CliTaskShowOutput, CliTaskStartOutput,
+    CliTaskStepAddOutput, CliTaskStepDoneOutput, CliTaskStepListOutput,
+    CliTaskStepNotRequiredOutput, CliTaskStepRemoveOutput, CliTaskStepRemoveResult,
+    CliTaskStepReopenOutput, CliTaskStepSkipOutput, CliTaskStepUpdateOutput, CliTaskUnblockOutput,
+    CliTaskUpdateOutput, CliVacuumOutput, CliVacuumResult, cli_operation_catalog,
+};
+pub use comments::{
+    ApiComment, CommentAuthorType, CommentKind, CreateCommentPath, CreateCommentRequest,
+    CreateCommentResponse, ListCommentsPath, ListCommentsResponse,
+};
+pub use create_task::{ApiCreateTaskStatus, CreateTaskPath, CreateTaskRequest, CreateTaskResponse};
+pub use dependencies::{
+    AddDependencyPath, AddDependencyResponse, ApiDependencies, ApiDependencyEdge,
+    ApiDependencyTask, ListDependenciesPath, ListDependenciesResponse, RemoveDependencyPath,
+    RemoveDependencyResponse,
+};
+pub use derived::{
+    ApiRelation, ApiRelationProvenance, BlockedReasonCount, BoardQuery, BuildContextPath,
+    BuildContextQuery, BuildContextResponse, ContextDiagnostic, ContextItem, ContextPack,
+    ContextPolicy, GraphNeighborsQuery, GraphNeighborsResponse, GraphStatus, GraphStatusResponse,
+    ListEventsQuery, QueueStats, SearchMeta, SearchPageMeta, SearchStatus, SearchStatusResponse,
+    SearchTaskHit, SearchTaskStatusWindow, SearchTaskStatusWindows, SearchTasksByStatusResponse,
+    SearchTasksData, SearchTasksQuery, SearchTasksResponse, StaleClaim, StatsResponse, StatusCount,
+    VectorStatus, VectorStatusResponse,
+};
+pub use endpoint::{
+    EndpointDescriptor, EndpointObligation, EndpointObligationKind, EndpointObligations,
+    HttpMethod, endpoint_catalog, endpoint_descriptor, endpoint_obligation_todo_count,
+    validate_contract_topology, validate_endpoint_catalog, validate_operation_contracts,
+};
+pub use events::ListEventsResponse;
+pub use headers::{ApiHeaderContractSpec, ApiHeaderProfile, api_header_contract_specs};
+pub use inventory::{
+    AdoptionEvidence, AdoptionWitness, ContractBinding, ContractDirection, ContractGranularity,
+    ContractStrictness, ContractSurface, ContractTransport, HttpTransportLocation, MigrationState,
+    OperationContract, WireParameter, WireParameterCardinality, operation_inventory,
+};
+pub use label_surfaces::*;
+pub use labels::{
+    AddTaskLabelPath, AddTaskLabelRequest, AddTaskLabelResponse, ListTaskLabelsPath,
+    ListTaskLabelsResponse, RemoveTaskLabelPath, RemoveTaskLabelResponse,
+};
+pub use lifecycle::{
+    AddDependencyRequest, ArchiveBoardRequest, ArchiveTaskRequest, BlockTaskRequest,
+    ClaimTaskRequest, CompleteTaskRequest, HeartbeatTaskRequest, PromoteTaskRequest,
+    ReclaimTargetStatus, ReclaimTaskRequest, ReopenTaskRequest, SpecifyTaskRequest,
+    SubmitReviewTaskRequest, UnblockTaskRequest,
+};
+pub use ontology::{LabelOntologySignalWire, LabelOntologySignalsResponse};
+pub use portable::{
+    PortableContractDescriptor, PortableContractLane, PortableContractSide,
+    portable_contract_catalog,
+};
+pub use protocols::*;
+pub use runs::{
+    ApiClaim, ApiRun, ApiRunLog, ApiRunStatus, GetRunLogPath, GetRunLogResponse, GetRunPath,
+    GetRunResponse, ListRunsPath, ListRunsResponse,
+};
+pub use sse::{StreamEventData, StreamEventsQuery};
+pub use steps::{
+    ApiExecutionPlan, ApiStepStatus, ApiTaskStep, ApiTaskSteps, CompleteStepPath,
+    CompleteStepRequest, CompleteStepResponse, CreateStepPath, CreateStepRequest,
+    CreateStepResponse, ListStepsPath, ListStepsResponse, MarkExecutionPlanNotRequiredPath,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, RemoveStepPath,
+    RemoveStepResponse, ReopenStepPath, ReopenStepRequest, ReopenStepResponse, SkipStepPath,
+    SkipStepRequest, SkipStepResponse, UpdateStepPath, UpdateStepRequest, UpdateStepResponse,
+};
+pub use surface::{SurfaceOperation, surface_operation_catalog, surface_operation_keys};
+pub use task_core::{
+    GetTaskPath, GetTaskQuery, GetTaskResponse, TaskOntologySummary, UpdateTaskPath,
+    UpdateTaskRequest, UpdateTaskResponse,
+};
+pub use task_graph::{
+    ApiTaskGraphEdgeKind, ApiTaskGraphNodeRole, BoardTaskMap, BoardTaskMapPath, BoardTaskMapQuery,
+    BoardTaskMapResponse, TaskGraphEdge, TaskGraphMeta, TaskGraphNode, TaskNeighborhood,
+    TaskNeighborhoodPath, TaskNeighborhoodQuery, TaskNeighborhoodResponse,
+};
+pub use task_read::{
+    DEFAULT_TASK_READ_LIMIT, ListTasksByStatusPath, ListTasksByStatusQuery, ListTasksPath,
+    ListTasksQuery, MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS, MAX_TASK_READ_LABELS,
+    MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS, MAX_TASK_READ_PRIORITIES,
+    MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES, MAX_TASK_READ_QUERY_PAIRS,
+    MAX_TASK_READ_STATUSES, TaskReadLabel, TaskReadPlanFilter, TaskReadSort,
+};
+pub use transitions::{
+    ArchiveTaskPath, ArchiveTaskResponse, BlockTaskPath, BlockTaskResponse, ClaimTaskPath,
+    ClaimTaskResponse, CompleteTaskPath, CompleteTaskResponse, HeartbeatTaskPath,
+    HeartbeatTaskResponse, PromoteTaskPath, PromoteTaskResponse, ReclaimTaskPath,
+    ReclaimTaskResponse, ReopenTaskPath, ReopenTaskResponse, SpecifyTaskPath, SpecifyTaskResponse,
+    SubmitReviewTaskPath, SubmitReviewTaskResponse, UnblockTaskPath, UnblockTaskResponse,
+};
+pub use wire::{
+    ApiErrorCode, CreatedLabelsMeta, DataEnvelope, DecisionMetadata, DecisionOption,
+    DeleteResponse, DeleteResult, ErrorBody, ErrorEnvelope, HealthReport, HealthResponse,
+    LabelOntologyReviewMeta, LimitMeta, MetadataEnvelope, NextAfterMeta, OffsetPaginationMeta,
+    OptionalMetadataEnvelope, SignalFilterMeta, TaskOntologyDetails, TaskOntologyDetailsMeta,
+    TotalPaginationMeta,
+};
+
+#[cfg(feature = "schema")]
+pub mod schema;
+
+#[cfg(feature = "schema")]
+pub use schema::{generated_artifacts, generated_schema_ids, schema_registry};
+mod maintenance;
+pub use maintenance::{
+    CheckpointReport, CheckpointResponse, DoctorDerivedStore, DoctorIssue, DoctorReport,
+    DoctorResponse,
+};

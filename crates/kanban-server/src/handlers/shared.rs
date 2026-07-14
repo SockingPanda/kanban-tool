@@ -1,181 +1,74 @@
-use std::str::FromStr;
-
 use axum::{Json, extract::rejection::JsonRejection, http::HeaderMap};
 use kanban_application::api as application_api;
-use kanban_core::TaskStatus;
 use kanban_entity::Predicate;
-use serde::Deserialize;
 use serde_json::json;
 
 use crate::dto::*;
 use crate::error::{ApiError, extractor_error, invalid_input};
 use crate::state::AppState;
 
-#[derive(Debug, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct ActorBody {
-    pub(crate) actor: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct CommentBody {
-    pub(crate) author: Option<String>,
-    pub(crate) body: String,
-    pub(crate) kind: Option<String>,
-    pub(crate) author_type: Option<String>,
-    pub(crate) agent_type: Option<String>,
-    pub(crate) metadata: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct ClaimBody {
-    pub(crate) actor: Option<String>,
-    #[serde(default = "default_claim_ttl_ms")]
-    pub(crate) ttl_ms: i64,
-    pub(crate) worker_profile: Option<String>,
-    pub(crate) metadata: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct SpecifyBody {
-    pub(crate) actor: Option<String>,
-    pub(crate) description: Option<String>,
-    pub(crate) scheduled_at: Option<i64>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct HeartbeatBody {
-    pub(crate) actor: Option<String>,
-    pub(crate) claim_token: String,
-    #[serde(default = "default_claim_ttl_ms")]
-    pub(crate) ttl_ms: i64,
-    pub(crate) note: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct TokenBody {
-    pub(crate) actor: Option<String>,
-    pub(crate) claim_token: Option<String>,
-    #[serde(default)]
-    pub(crate) force: bool,
-    pub(crate) summary: Option<String>,
-    pub(crate) result: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct ReclaimBody {
-    pub(crate) actor: Option<String>,
-    #[serde(default)]
-    pub(crate) force: bool,
-    pub(crate) to_status: Option<TaskStatus>,
-    pub(crate) reason: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct BlockBody {
-    pub(crate) actor: Option<String>,
-    pub(crate) reason: String,
-    pub(crate) claim_token: Option<String>,
-    #[serde(default)]
-    pub(crate) force: bool,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct ReopenBody {
-    pub(crate) actor: Option<String>,
-    pub(crate) reason: String,
-}
-
-#[derive(Debug, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct ArchiveBody {
-    pub(crate) actor: Option<String>,
-    #[serde(default)]
-    pub(crate) force: bool,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct AddDependencyBody {
-    pub(crate) parent_task_id: String,
-    pub(crate) actor: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct EventsQuery {
-    #[serde(default = "default_board")]
-    pub(crate) board: String,
-    pub(crate) task_id: Option<String>,
-    #[serde(default)]
-    pub(crate) after: i64,
-    #[serde(default = "default_limit")]
-    pub(crate) limit: usize,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct StatsQuery {
-    #[serde(default = "default_board")]
-    pub(crate) board: String,
-}
-
-pub(crate) fn default_claim_ttl_ms() -> i64 {
-    300_000
-}
-
-fn default_limit() -> usize {
-    100
-}
-
-pub(crate) fn default_board() -> String {
-    "default".to_owned()
-}
-
 pub(crate) fn events_snapshot(
     state: &AppState,
-    query: &EventsQuery,
-) -> Result<(Vec<EventDto>, i64), ApiError> {
-    let board = kanban_sqlite::api::get_board_including_archived(state.db_path(), &query.board)?;
-    let limit = query.limit.min(1000);
+    board_ref: &str,
+    task_id: Option<String>,
+    after: i64,
+    requested_limit: usize,
+) -> Result<(Vec<kanban_contract::StreamEventData>, i64), ApiError> {
+    let board = kanban_sqlite::api::get_board_including_archived(state.db_path(), board_ref)?;
+    let limit = requested_limit.min(1000);
     let application = state.application();
     let events = application_api::list_events_after(
         &application,
-        &query.board,
+        board_ref,
         application_api::EventListOptions {
-            task_ref: query.task_id.clone(),
-            after: query.after,
+            task_ref: task_id,
+            after,
             limit,
         },
     )?;
-    let next_after = events.last().map_or(query.after, |event| event.id);
+    let next_after = events.last().map_or(after, |event| event.id);
     let data = events
         .into_iter()
-        .map(|event| EventDto {
-            id: event.id,
-            event_id: event.event_id,
-            board_id: board.id.clone(),
-            task_id: event.task_id,
-            run_id: event.run_id,
-            kind: event.kind,
-            actor: event.actor,
-            payload: serde_json::from_str(&event.payload_json).unwrap_or_else(|_| json!({})),
-            created_at: event.created_at,
-        })
-        .collect();
+        .map(|event| stream_event_data(event, &board.id))
+        .collect::<Result<Vec<_>, _>>()?;
     Ok((data, next_after))
+}
+
+fn stream_event_data(
+    event: application_api::EventRecord,
+    board_id: &str,
+) -> Result<kanban_contract::StreamEventData, ApiError> {
+    let raw_payload = serde_json::from_str(&event.payload_json).map_err(|error| {
+        ApiError(kanban_core::KanbanError::Storage(format!(
+            "event {} ({}) has malformed payload_json: {error}",
+            event.event_id, event.kind
+        )))
+    })?;
+    let payload =
+        kanban_contract::event_payload::EventPayload::from_kind_and_value(&event.kind, raw_payload)
+            .map_err(|error| {
+                ApiError(kanban_core::KanbanError::Storage(format!(
+                    "event {} ({}) violates its payload contract: {error}",
+                    event.event_id, event.kind
+                )))
+            })?;
+    Ok(kanban_contract::StreamEventData {
+        id: event.id,
+        event_id: event.event_id,
+        board_id: board_id.to_owned(),
+        task_id: event.task_id,
+        run_id: event.run_id,
+        kind: event.kind,
+        actor: event.actor,
+        payload,
+        created_at: event.created_at,
+    })
 }
 
 pub(crate) fn dependencies_dto(
     state: &AppState,
     task_id: &str,
-) -> Result<DependenciesDto, ApiError> {
+) -> Result<kanban_contract::ApiDependencies, ApiError> {
     let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), task_id)?;
     let snapshot =
         kanban_sqlite::api::dependency_snapshot(state.db_path(), &task.board_id, task_id)?;
@@ -183,28 +76,41 @@ pub(crate) fn dependencies_dto(
     let mut children = Vec::new();
     for edge in &snapshot.edges {
         if edge.child.id == task_id {
-            parents.push(TaskDto::from(kanban_sqlite::api::get_task_by_id_global(
-                state.db_path(),
-                &edge.parent.id,
-            )?));
+            let parent =
+                kanban_sqlite::api::get_task_by_id_global(state.db_path(), &edge.parent.id)?;
+            parents.push(api_task_from_record(parent)?);
         }
         if edge.parent.id == task_id {
-            children.push(TaskDto::from(kanban_sqlite::api::get_task_by_id_global(
-                state.db_path(),
-                &edge.child.id,
-            )?));
+            let child = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &edge.child.id)?;
+            children.push(api_task_from_record(child)?);
         }
     }
-    Ok(DependenciesDto {
-        task: DependencyTaskDto::from(snapshot.task),
+    Ok(kanban_contract::ApiDependencies {
+        task: api_dependency_task(snapshot.task),
         parents,
         children,
         edges: snapshot
             .edges
             .into_iter()
-            .map(DependencyEdgeDto::from)
+            .map(|edge| kanban_contract::ApiDependencyEdge {
+                parent: api_dependency_task(edge.parent),
+                child: api_dependency_task(edge.child),
+            })
             .collect(),
     })
+}
+
+fn api_dependency_task(
+    task: kanban_sqlite::api::DependencyTaskRecord,
+) -> kanban_contract::ApiDependencyTask {
+    kanban_contract::ApiDependencyTask {
+        id: task.id,
+        board_id: task.board_id,
+        board_slug: task.board_slug,
+        task_ref: task.task_ref,
+        title: task.title,
+        status: api_task_status_from_core(task.status),
+    }
 }
 
 pub(crate) fn optional_json_body<T: Default>(
@@ -215,68 +121,6 @@ pub(crate) fn optional_json_body<T: Default>(
         Err(JsonRejection::MissingJsonContentType(_)) => Ok(T::default()),
         Err(error) => Err(extractor_error(error)),
     }
-}
-
-pub(crate) fn parse_task_sort(
-    sort: Option<&str>,
-) -> Result<kanban_sqlite::api::TaskListSort, ApiError> {
-    let sort = match sort.unwrap_or("position") {
-        "seq" => kanban_sqlite::api::TaskListSort::Seq,
-        "-seq" => kanban_sqlite::api::TaskListSort::SeqDesc,
-        "title" => kanban_sqlite::api::TaskListSort::Title,
-        "-title" => kanban_sqlite::api::TaskListSort::TitleDesc,
-        "status" => kanban_sqlite::api::TaskListSort::Status,
-        "-status" => kanban_sqlite::api::TaskListSort::StatusDesc,
-        "position" => kanban_sqlite::api::TaskListSort::Position,
-        "-position" => kanban_sqlite::api::TaskListSort::PositionDesc,
-        "priority" => kanban_sqlite::api::TaskListSort::Priority,
-        "-priority" => kanban_sqlite::api::TaskListSort::PriorityDesc,
-        "assignee" => kanban_sqlite::api::TaskListSort::Assignee,
-        "-assignee" => kanban_sqlite::api::TaskListSort::AssigneeDesc,
-        "scheduled_at" => kanban_sqlite::api::TaskListSort::ScheduledAt,
-        "-scheduled_at" => kanban_sqlite::api::TaskListSort::ScheduledAtDesc,
-        "created_at" => kanban_sqlite::api::TaskListSort::CreatedAt,
-        "-created_at" => kanban_sqlite::api::TaskListSort::CreatedAtDesc,
-        "updated_at" => kanban_sqlite::api::TaskListSort::UpdatedAt,
-        "-updated_at" => kanban_sqlite::api::TaskListSort::UpdatedAtDesc,
-        "due_at" => kanban_sqlite::api::TaskListSort::DueAt,
-        "-due_at" => kanban_sqlite::api::TaskListSort::DueAtDesc,
-        value => return Err(invalid_input(format!("unsupported sort: {value}"))),
-    };
-    Ok(sort)
-}
-
-pub(crate) fn parse_priority_filters(raw_query: Option<&str>) -> Result<Vec<i64>, ApiError> {
-    let Some(raw_query) = raw_query else {
-        return Ok(Vec::new());
-    };
-    let pairs = serde_urlencoded::from_str::<Vec<(String, String)>>(raw_query)
-        .map_err(|error| invalid_input(error.to_string()))?;
-    pairs
-        .into_iter()
-        .filter_map(|(key, value)| (key == "priority").then_some(value))
-        .map(|value| {
-            let value = value
-                .trim()
-                .parse::<i64>()
-                .map_err(|_| invalid_input(format!("invalid priority filter: {value}")))?;
-            kanban_sqlite::api::validate_priority(value).map_err(ApiError::from)?;
-            Ok(value)
-        })
-        .collect()
-}
-
-pub(crate) fn parse_status_filters(raw_query: Option<&str>) -> Result<Vec<TaskStatus>, ApiError> {
-    let Some(raw_query) = raw_query else {
-        return Ok(Vec::new());
-    };
-    let pairs = serde_urlencoded::from_str::<Vec<(String, String)>>(raw_query)
-        .map_err(|error| invalid_input(error.to_string()))?;
-    pairs
-        .into_iter()
-        .filter_map(|(key, value)| (key == "status").then_some(value))
-        .map(|value| TaskStatus::from_str(value.trim()).map_err(ApiError::from))
-        .collect()
 }
 
 pub(crate) fn parse_predicate(value: &str) -> Result<Predicate, ApiError> {
@@ -299,82 +143,6 @@ pub(crate) fn parse_predicate(value: &str) -> Result<Predicate, ApiError> {
     }
 }
 
-pub(crate) fn patch_from_value(
-    object: &serde_json::Map<String, serde_json::Value>,
-) -> Result<kanban_sqlite::api::TaskPatch, ApiError> {
-    const ALLOWED: &[&str] = &[
-        "title",
-        "description",
-        "assignee",
-        "priority",
-        "scheduled_at",
-        "due_at",
-        "metadata_json",
-        "metadata",
-        "max_retries",
-        "expected_lock_version",
-        "actor",
-    ];
-    for key in object.keys() {
-        if !ALLOWED.contains(&key.as_str()) {
-            return Err(invalid_input(format!("unknown patch field: {key}")));
-        }
-    }
-
-    let mut patch = kanban_sqlite::api::TaskPatch::default();
-    if let Some(value) = object.get("title") {
-        patch.title = Some(string_field(value, "title")?);
-    }
-    if object.contains_key("description") {
-        patch.description = Some(optional_string_field(
-            object.get("description"),
-            "description",
-        )?);
-    }
-    if object.contains_key("assignee") {
-        patch.assignee = Some(optional_string_field(object.get("assignee"), "assignee")?);
-    }
-    if let Some(value) = object.get("priority") {
-        patch.priority = Some(
-            value
-                .as_i64()
-                .ok_or_else(|| invalid_input("priority must be an integer"))?,
-        );
-    }
-    if object.contains_key("scheduled_at") {
-        patch.scheduled_at = Some(optional_i64_field(
-            object.get("scheduled_at"),
-            "scheduled_at",
-        )?);
-    }
-    if object.contains_key("due_at") {
-        patch.due_at = Some(optional_i64_field(object.get("due_at"), "due_at")?);
-    }
-    if let Some(value) = object.get("metadata") {
-        patch.metadata_json = Some(value.to_string());
-    }
-    if let Some(value) = object.get("metadata_json") {
-        patch.metadata_json = Some(string_field(value, "metadata_json")?);
-    }
-    if let Some(value) = object.get("expected_lock_version") {
-        patch.expected_lock_version = Some(
-            value
-                .as_i64()
-                .ok_or_else(|| invalid_input("expected_lock_version must be an integer"))?,
-        );
-    }
-    Ok(patch)
-}
-
-pub(crate) fn retry_policy_from_value(
-    object: &serde_json::Map<String, serde_json::Value>,
-) -> Result<Option<Option<i64>>, ApiError> {
-    if !object.contains_key("max_retries") {
-        return Ok(None);
-    }
-    optional_i64_field(object.get("max_retries"), "max_retries").map(Some)
-}
-
 pub(crate) fn actor(body_actor: Option<&str>, headers: &HeaderMap, state: &AppState) -> String {
     body_actor
         .filter(|value| !value.trim().is_empty())
@@ -391,36 +159,4 @@ pub(crate) fn actor(body_actor: Option<&str>, headers: &HeaderMap, state: &AppSt
 
 pub(crate) fn metadata_json(value: Option<serde_json::Value>) -> Result<String, ApiError> {
     Ok(value.unwrap_or_else(|| json!({})).to_string())
-}
-
-pub(crate) fn string_field(value: &serde_json::Value, field: &str) -> Result<String, ApiError> {
-    value
-        .as_str()
-        .map(str::to_owned)
-        .ok_or_else(|| invalid_input(format!("{field} must be a string")))
-}
-
-pub(crate) fn optional_string_field(
-    value: Option<&serde_json::Value>,
-    field: &str,
-) -> Result<Option<String>, ApiError> {
-    match value {
-        Some(serde_json::Value::Null) => Ok(None),
-        Some(value) => string_field(value, field).map(Some),
-        None => Ok(None),
-    }
-}
-
-pub(crate) fn optional_i64_field(
-    value: Option<&serde_json::Value>,
-    field: &str,
-) -> Result<Option<i64>, ApiError> {
-    match value {
-        Some(serde_json::Value::Null) => Ok(None),
-        Some(value) => value
-            .as_i64()
-            .map(Some)
-            .ok_or_else(|| invalid_input(format!("{field} must be an integer epoch ms"))),
-        None => Ok(None),
-    }
 }

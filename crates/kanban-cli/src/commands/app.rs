@@ -19,7 +19,9 @@ use crate::commands::{
     common::{active_board, default_actor, resolved_db_path},
     config::show_config,
     dep::handle_dep,
-    dispatch::{dispatch_loop, dispatch_options},
+    dispatch::{
+        cli_dispatch_loop_result, cli_dispatch_run_result, dispatch_loop, dispatch_options,
+    },
     hook::handle_hook,
     index::handle_index,
     label::handle_label,
@@ -36,7 +38,7 @@ use crate::commands::{
     },
     task::handle_task,
 };
-use crate::output::print_or_json;
+use crate::output::{print_contract_or_human, print_human};
 
 pub(crate) fn parse_cli() -> Cli {
     Cli::parse_from(normalize_agent_bool_flags(std::env::args_os()))
@@ -86,15 +88,34 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
     set_current_locale(locale);
     match cli.command {
         Command::Init { force: _ } => {
+            let json_db_path = if cli.json {
+                Some(
+                    db_path
+                        .to_str()
+                        .context("initialized database path is not valid UTF-8")?
+                        .to_owned(),
+                )
+            } else {
+                None
+            };
             let result = init_database(&db_path, &actor)
                 .with_context(|| format!("failed to initialize {}", db_path.display()))?;
-            print_or_json(cli.json, &result, || {
-                format!(
-                    "Initialized Kanban database at {}\nDefault board: {}",
-                    result.db_path.display(),
-                    result.board_slug
-                )
-            })?;
+            if cli.json {
+                let output = kanban_contract::CliInitOutput::new(kanban_contract::CliInitResult {
+                    db_path: json_db_path.expect("JSON path validated before initialization"),
+                    board_id: result.board_id,
+                    board_slug: result.board_slug,
+                });
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| {
+                    format!(
+                        "Initialized Kanban database at {}\nDefault board: {}",
+                        result.db_path.display(),
+                        result.board_slug
+                    )
+                })?;
+            }
         }
         Command::Board { command } => handle_board(command, &db_path, &board, &actor, cli.json)?,
         Command::Task { command } => handle_task(command, &db_path, &board, &actor, cli.json)?,
@@ -105,7 +126,13 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
         Command::Dep { command } => handle_dep(command, &db_path, &board, &actor, cli.json)?,
         Command::Events { task_ref } => {
             let events = list_events(&db_path, &board, task_ref.as_deref())?;
-            print_or_json(cli.json, &events, || {
+            let output = kanban_contract::CliEventsOutput::new(
+                events
+                    .iter()
+                    .map(crate::output::cli_event_from_record)
+                    .collect::<Result<Vec<_>>>()?,
+            );
+            crate::output::print_contract_or_human(cli.json, &output, || {
                 events
                     .iter()
                     .map(|e| format!("{} {} {:?}", e.id, e.kind, e.task_id))
@@ -115,17 +142,26 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
         }
         Command::Runs { task_ref } => {
             let runs = list_runs(&db_path, &board, task_ref.as_deref())?;
-            print_or_json(cli.json, &runs, || {
-                runs.iter()
-                    .map(|r| {
-                        format!(
-                            "{} [{}] task={} exit={:?}",
-                            r.id, r.status, r.task_id, r.exit_code
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            })?;
+            if cli.json {
+                let output = kanban_contract::CliRunsOutput::new(
+                    runs.iter()
+                        .map(crate::output::api_run_from_record)
+                        .collect::<Result<Vec<_>>>()?,
+                );
+                crate::output::print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| {
+                    runs.iter()
+                        .map(|r| {
+                            format!(
+                                "{} [{}] task={} exit={:?}",
+                                r.id, r.status, r.task_id, r.exit_code
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })?;
+            }
         }
         Command::Run { command } => handle_run(command, &db_path, cli.json)?,
         Command::Search(args) => handle_search(args, &db_path, &board, cli.json)?,
@@ -143,7 +179,12 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             let options = dispatch_options(&args, actor.clone())?;
             if args.once {
                 let result = dispatch_once(&db_path, &board, options)?;
-                print_or_json(cli.json, &result, || {
+                let output = kanban_contract::cli_operator::CliDispatchOutput::new(
+                    kanban_contract::cli_operator::CliDispatchResult::Once(
+                        cli_dispatch_run_result(&result),
+                    ),
+                );
+                print_contract_or_human(cli.json, &output, || {
                     format!(
                         "claimed={} task={:?} exit={:?}",
                         result.claimed, result.task_id, result.exit_code
@@ -160,7 +201,12 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
                     args.poll_interval_ms,
                     args.max_iterations,
                 ))?;
-                print_or_json(cli.json, &summary, || {
+                let output = kanban_contract::cli_operator::CliDispatchOutput::new(
+                    kanban_contract::cli_operator::CliDispatchResult::Loop(
+                        cli_dispatch_loop_result(&summary)?,
+                    ),
+                );
+                print_contract_or_human(cli.json, &output, || {
                     format!(
                         "iterations={} claimed={}",
                         summary.iterations, summary.claimed

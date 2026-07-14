@@ -1,0 +1,29 @@
+{
+  "$defs": {
+    "CliVacuumResult": {
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:vacuum-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CliVacuumResult"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI vacuum output v1",
+  "type": "object"
+}

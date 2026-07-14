@@ -1,0 +1,10 @@
+{
+  "actor": {
+    "name": "fixture",
+    "type": "user"
+  },
+  "parent_action_id": "loa_target_fixture",
+  "reason": "fixture",
+  "validation_status": "failed",
+  "validation": {"cases": []}
+}

@@ -1,0 +1,29 @@
+{
+  "data": {
+    "action_type": "reject",
+    "agent_type": null,
+    "board_id": "b_FIXTURE_1",
+    "canonical_after_hash": null,
+    "canonical_before_hash": null,
+    "created_at": 100,
+    "created_by": "root",
+    "created_by_type": "user",
+    "id": "loa_FIXTURE_1",
+    "parent_action_id": null,
+    "reason": "fixture reject",
+    "result_atom_content_hash": null,
+    "result_atom_id": null,
+    "result_label_id": null,
+    "result_proposal_id": null,
+    "signal_ids": [
+      "los_FIXTURE_1"
+    ],
+    "target_label_id": null,
+    "validation_effective_outcome": "not_required",
+    "validation_latest_attempt_id": null,
+    "validation_requirement": "none",
+    "validation_status": "not_required",
+    "change": {},
+    "validation": {}
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "RequiredNullableSchema": {
+      "description": "Schema-only marker for a key that is required but may contain JSON null.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "VectorHelperChunkHit": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk": {
+          "$ref": "#/$defs/VectorHelperChunkRef"
+        },
+        "score": {
+          "format": "float",
+          "type": "number"
+        },
+        "summary": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        },
+        "text": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        }
+      },
+      "required": [
+        "chunk",
+        "score",
+        "text",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "VectorHelperChunkRef": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        },
+        "entity_uri": {
+          "type": "string"
+        },
+        "ordinal": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri",
+        "entity_uri",
+        "ordinal",
+        "content_hash"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:helper:vector-query-chunks-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "items": {
+    "$ref": "#/$defs/VectorHelperChunkHit"
+  },
+  "title": "Vector Helper Query Chunks Response v1",
+  "type": "array"
+}

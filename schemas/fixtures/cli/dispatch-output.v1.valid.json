@@ -1,0 +1,14 @@
+{
+  "data": {
+    "iterations": 1,
+    "claimed": 0,
+    "runs": [
+      {
+        "claimed": 0,
+        "task_id": null,
+        "run_id": null,
+        "exit_code": null
+      }
+    ]
+  }
+}

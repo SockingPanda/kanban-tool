@@ -1,11 +1,14 @@
 use crate::db::connect_file;
 
 use super::{
-    DEFAULT_PRIORITY, DoctorReport, ExportResult, ImportResult, board_id,
-    comment_identity::infer_comment_author_type,
-    comment_metadata::normalize_imported_comment_metadata_json, connect_existing_database,
-    doctor_report_conn, mark_label_atom_store_dirty, normalize_legacy_priority, storage,
-    with_immediate_tx, with_read_tx,
+    DoctorReport, ExportResult, ImportResult, board_id,
+    comment_metadata::normalize_comment_metadata_json,
+    connect_existing_database, doctor_report_conn, mark_label_atom_store_dirty,
+    portable::{
+        ExportScope, decode_portable_record, encode_portable_output_envelope,
+        portable_record_catalog, portable_record_descriptor,
+    },
+    storage, with_immediate_tx, with_read_tx,
 };
 
 use std::{
@@ -80,36 +83,41 @@ fn write_jsonl_export(
 ) -> Result<usize> {
     let board_id = board_id(conn, board)?;
     let mut records = 0;
-    records += write_jsonl_table(
-        conn,
-        writer,
-        "board",
-        "boards",
-        "WHERE id=?",
-        vec![Value::Text(board_id.clone())],
-        export_now,
-    )?;
-    for (record_type, table) in BOARD_SCOPED_EXPORT_TABLES {
+    let portable_records = portable_record_catalog()?;
+    for descriptor in portable_records
+        .iter()
+        .filter(|descriptor| descriptor.scope != ExportScope::Global)
+    {
+        let (where_sql, params) = match descriptor.scope {
+            ExportScope::SelectedBoard => ("WHERE id=?", vec![Value::Text(board_id.clone())]),
+            ExportScope::BoardScoped => ("WHERE board_id=?", vec![Value::Text(board_id.clone())]),
+            ExportScope::Global => unreachable!("global descriptors are exported after events"),
+        };
         records += write_jsonl_table(
             conn,
             writer,
-            record_type,
-            table,
-            "WHERE board_id=?",
-            vec![Value::Text(board_id.clone())],
+            descriptor.contract.discriminator,
+            descriptor.table,
+            where_sql,
+            params,
             export_now,
         )?;
     }
     records += write_export_sanitized_events(conn, writer, &board_id, export_now)?;
-    records += write_jsonl_table(
-        conn,
-        writer,
-        "setting",
-        "app_settings",
-        "",
-        Vec::new(),
-        export_now,
-    )?;
+    for descriptor in portable_records
+        .iter()
+        .filter(|descriptor| descriptor.scope == ExportScope::Global)
+    {
+        records += write_jsonl_table(
+            conn,
+            writer,
+            descriptor.contract.discriminator,
+            descriptor.table,
+            "",
+            Vec::new(),
+            export_now,
+        )?;
+    }
     Ok(records)
 }
 
@@ -166,34 +174,6 @@ pub fn import_jsonl(
     })
 }
 
-pub(crate) const BOARD_SCOPED_EXPORT_TABLES: &[(&str, &str)] = &[
-    ("column", "board_columns"),
-    ("task", "tasks"),
-    ("dependency", "task_dependencies"),
-    ("run", "task_runs"),
-    ("comment", "task_comments"),
-    ("signal_observation", "signal_observations"),
-    ("signal", "signals"),
-    ("event", "task_events"),
-    ("attachment", "task_attachments"),
-    ("label", "labels"),
-    ("label_semantics", "label_semantics"),
-    ("label_atom", "label_atoms"),
-    ("label_semantic_proposal", "label_semantic_proposals"),
-    ("label_ontology_observation", "label_ontology_observations"),
-    ("label_ontology_signal", "label_ontology_signals"),
-    ("label_ontology_action", "label_ontology_actions"),
-    (
-        "label_ontology_action_atom_effect",
-        "label_ontology_action_atom_effects",
-    ),
-    (
-        "label_ontology_action_signal",
-        "label_ontology_action_signals",
-    ),
-    ("task_label", "task_labels"),
-];
-
 pub(crate) const IMPORT_DELETE_ORDER: &[&str] = &[
     "label_ontology_action_signals",
     "label_ontology_action_atom_effects",
@@ -247,7 +227,7 @@ pub(crate) fn write_jsonl_table(
             );
         }
         scrub_jsonl_export_record(record_type, &mut data, export_now);
-        let record = json!({ "type": record_type, "data": data });
+        let record = encode_portable_output_envelope(record_type, data)?;
         writeln!(writer, "{record}").map_err(|error| KanbanError::Storage(error.to_string()))?;
         count += 1;
     }
@@ -301,20 +281,21 @@ pub(crate) fn write_export_sanitized_events(
             "reason": "jsonl export clears non-portable live claim"
         })
         .to_string();
-        let record = json!({
-            "type": "event",
-            "data": {
-                "id": next_id,
-                "event_id": new_event_id(),
-                "board_id": board_id,
-                "task_id": task_id,
-                "run_id": run_id,
-                "kind": "task.export_sanitized",
-                "actor": "kanban export",
-                "payload_json": payload,
-                "created_at": export_now
-            }
-        });
+        let data = json!({
+            "id": next_id,
+            "event_id": new_event_id(),
+            "board_id": board_id,
+            "task_id": task_id,
+            "run_id": run_id,
+            "kind": "task.export_sanitized",
+            "actor": "kanban export",
+            "payload_json": payload,
+            "created_at": export_now
+        })
+        .as_object()
+        .cloned()
+        .expect("synthetic export event data is an object");
+        let record = encode_portable_output_envelope("event", data)?;
         writeln!(writer, "{record}").map_err(|error| KanbanError::Storage(error.to_string()))?;
         next_id += 1;
     }
@@ -532,13 +513,16 @@ pub(crate) fn insert_jsonl_record(
         .get("type")
         .and_then(|value| value.as_str())
         .ok_or_else(|| KanbanError::InvalidInput("export record type is required".into()))?;
-    let table = import_table_for_type(record_type)?;
-    let mut data = record
-        .get("data")
-        .and_then(|value| value.as_object())
-        .cloned()
-        .ok_or_else(|| KanbanError::InvalidInput("export record data is required".into()))?;
-    normalize_import_record(record_type, &mut data)?;
+    let descriptor = portable_record_descriptor(record_type)?;
+    let table = descriptor.table;
+    let data = descriptor
+        .contract
+        .decode_input_envelope(record.clone())
+        .map_err(|error| {
+            KanbanError::InvalidInput(format!("top-level JSONL contract violation: {error}"))
+        })?;
+    let mut data = decode_portable_record(record_type, data)?;
+    validate_import_record(record_type, &data)?;
     capture_deferred_ontology_links(record_type, &mut data, deferred_ontology_links)?;
     if data.is_empty() {
         return Err(KanbanError::InvalidInput(
@@ -886,67 +870,22 @@ fn reject_link_cycles(links: &HashMap<String, String>, message: &str) -> Result<
     Ok(())
 }
 
-pub(crate) fn normalize_import_record(
+pub(crate) fn validate_import_record(
     record_type: &str,
-    data: &mut Map<String, serde_json::Value>,
+    data: &Map<String, serde_json::Value>,
 ) -> Result<()> {
-    if record_type == "task" {
-        let normalized = data
-            .get("priority")
-            .and_then(|value| value.as_i64())
-            .map(normalize_legacy_priority)
-            .unwrap_or(DEFAULT_PRIORITY);
-        data.insert("priority".into(), json!(normalized));
-    }
     if record_type == "comment" {
-        let has_metadata_json = data.contains_key("metadata_json");
-        let legacy_kind = data
+        let kind = data
             .get("kind")
             .and_then(|value| value.as_str())
-            .unwrap_or("note")
-            .to_owned();
-        if !data.contains_key("author_type") {
-            let has_agent_type = data
-                .get("agent_type")
-                .and_then(|value| value.as_str())
-                .is_some_and(|value| !value.trim().is_empty());
-            let author_type = if has_agent_type {
-                "agent"
-            } else {
-                infer_comment_author_type(&legacy_kind)
-            };
-            data.insert("author_type".into(), json!(author_type));
-        } else {
-            let author_type = data
-                .get("author_type")
-                .and_then(|value| value.as_str())
-                .map(normalize_imported_comment_author_type)
-                .unwrap_or("user");
-            data.insert("author_type".into(), json!(author_type));
-        }
-        data.entry("agent_type").or_insert(serde_json::Value::Null);
-        let kind = normalize_imported_comment_kind(&legacy_kind, has_metadata_json);
-        data.insert("kind".into(), json!(kind));
-        let metadata_json =
-            normalize_imported_comment_metadata_json(kind, data.get("metadata_json"))?;
-        data.insert("metadata_json".into(), json!(metadata_json));
+            .ok_or_else(|| KanbanError::InvalidInput("comment kind is required".into()))?;
+        let metadata_json = data
+            .get("metadata_json")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| KanbanError::InvalidInput("comment metadata is required".into()))?;
+        normalize_comment_metadata_json(kind, Some(metadata_json))?;
     }
     Ok(())
-}
-
-fn normalize_imported_comment_author_type(author_type: &str) -> &'static str {
-    match author_type {
-        "agent" | "system" => "agent",
-        _ => "user",
-    }
-}
-
-fn normalize_imported_comment_kind(kind: &str, has_metadata_json: bool) -> &'static str {
-    match (kind, has_metadata_json) {
-        ("decision", true) => "decision",
-        ("signal", true) => "signal",
-        _ => "note",
-    }
 }
 
 pub(crate) fn is_sql_identifier(value: &str) -> bool {
@@ -957,33 +896,9 @@ pub(crate) fn is_sql_identifier(value: &str) -> bool {
         && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
 }
 
+#[cfg(test)]
 pub(crate) fn import_table_for_type(record_type: &str) -> Result<&'static str> {
-    match record_type {
-        "board" => Ok("boards"),
-        "column" => Ok("board_columns"),
-        "task" => Ok("tasks"),
-        "dependency" => Ok("task_dependencies"),
-        "run" => Ok("task_runs"),
-        "comment" => Ok("task_comments"),
-        "signal_observation" => Ok("signal_observations"),
-        "signal" => Ok("signals"),
-        "event" => Ok("task_events"),
-        "attachment" => Ok("task_attachments"),
-        "label" => Ok("labels"),
-        "label_semantics" => Ok("label_semantics"),
-        "label_atom" => Ok("label_atoms"),
-        "label_semantic_proposal" => Ok("label_semantic_proposals"),
-        "label_ontology_observation" => Ok("label_ontology_observations"),
-        "label_ontology_signal" => Ok("label_ontology_signals"),
-        "label_ontology_action" => Ok("label_ontology_actions"),
-        "label_ontology_action_atom_effect" => Ok("label_ontology_action_atom_effects"),
-        "label_ontology_action_signal" => Ok("label_ontology_action_signals"),
-        "task_label" => Ok("task_labels"),
-        "setting" => Ok("app_settings"),
-        _ => Err(KanbanError::InvalidInput(format!(
-            "unsupported export record type: {record_type}"
-        ))),
-    }
+    portable_record_descriptor(record_type).map(|descriptor| descriptor.table)
 }
 
 pub(crate) fn json_to_sql_value(value: &serde_json::Value) -> Result<Value> {
@@ -1004,6 +919,45 @@ pub(crate) fn json_to_sql_value(value: &serde_json::Value) -> Result<Value> {
         serde_json::Value::String(value) => Ok(Value::Text(value.clone())),
         serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
             Ok(Value::Text(value.to_string()))
+        }
+    }
+}
+
+#[cfg(test)]
+mod contract_catalog_tests {
+    use std::collections::BTreeSet;
+
+    use kanban_contract::{ContractSurface, surface_operation_keys};
+
+    use super::{import_table_for_type, portable_record_catalog};
+
+    #[test]
+    fn jsonl_export_discriminators_match_exact_contract_catalog() {
+        let portable_records = portable_record_catalog().expect("portable adapter catalog");
+        let actual = portable_records
+            .iter()
+            .map(|descriptor| descriptor.contract.discriminator.to_owned())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            actual.len(),
+            portable_records.len(),
+            "portable record descriptor 不得包含重复 discriminator"
+        );
+        let expected = surface_operation_keys(ContractSurface::Jsonl)
+            .map(|key| {
+                key.strip_prefix("type=")
+                    .expect("JSONL operation key 必须使用 type=<discriminator>")
+                    .to_owned()
+            })
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(
+            actual, expected,
+            "新增、删除或重命名 JSONL export type 时必须同步精确 contract catalog"
+        );
+        for record_type in expected {
+            import_table_for_type(&record_type)
+                .expect("catalog 中的 JSONL type 必须被 current importer 接受");
         }
     }
 }

@@ -1,12 +1,16 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use kanban_contract::{
+    SearchMeta, SearchTaskHit,
+    cli_helpers::{CliSearchData, CliSearchOutput},
+};
 use kanban_search::SearchQuery;
 use kanban_sqlite::api::{MAX_SEARCH_LIMIT, search_tasks};
 
 use crate::args::{SearchArgs, SearchOutput, SearchOutputHit};
 use crate::commands::common::validate_page_bounds;
-use crate::output::{print_or_json_with_meta, search_hit_line};
+use crate::output::{api_task_from_record, print_contract_or_human, print_human, search_hit_line};
 
 pub(crate) fn handle_search(
     args: SearchArgs,
@@ -50,12 +54,39 @@ pub(crate) fn handle_search(
         })
         .collect::<Result<Vec<_>>>()?;
     let output = SearchOutput { hits };
-    print_or_json_with_meta(json, &output, &results.meta, || {
-        output
-            .hits
-            .iter()
-            .map(search_hit_line)
-            .collect::<Vec<_>>()
-            .join("\n")
-    })
+    if !json {
+        return print_human(|| {
+            output
+                .hits
+                .iter()
+                .map(search_hit_line)
+                .collect::<Vec<_>>()
+                .join("\n")
+        });
+    }
+    let output = CliSearchOutput::new(
+        CliSearchData {
+            hits: output
+                .hits
+                .iter()
+                .map(|hit| {
+                    Ok(SearchTaskHit {
+                        task_id: hit.task_id.clone(),
+                        seq: hit.seq,
+                        score: hit.score,
+                        snippet: hit.snippet.clone(),
+                        task: api_task_from_record(&hit.task)?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?,
+        },
+        SearchMeta {
+            backend: results.meta.backend,
+            stale: results.meta.stale,
+            index_version: results.meta.index_version,
+            last_event_id: results.meta.last_event_id,
+            index_lag_events: results.meta.index_lag_events,
+        },
+    );
+    print_contract_or_human(json, &output, String::new)
 }

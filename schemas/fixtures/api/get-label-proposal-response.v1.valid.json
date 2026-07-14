@@ -1,0 +1,26 @@
+{
+  "data": {
+    "id": "lp_fixture",
+    "board_id": "fixture",
+    "task_id": "t_fixture",
+    "status": "proposed",
+    "name": "fixture",
+    "description": null,
+    "applies_when": [],
+    "excludes_when": [],
+    "positive_examples": [],
+    "negative_examples": [],
+    "heuristic_coverage": 0.0,
+    "heuristic_coverage_cosine": 0.0,
+    "heuristic_residual_norm": 1.0,
+    "top1_existing_label_id": null,
+    "top1_existing_label_name": null,
+    "diagnostics": [],
+    "created_by": "fixture",
+    "decision_reason": null,
+    "resolved_label_id": null,
+    "created_at": 1,
+    "updated_at": 1,
+    "decided_at": null
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "data": {
+    "action_type": "add_positive_atom",
+    "agent_type": "reviewer",
+    "board_id": "b_FIXTURE_1",
+    "canonical_after_hash": "hash_fixture",
+    "canonical_before_hash": "hash_fixture",
+    "created_at": 100,
+    "created_by": "root",
+    "created_by_type": "agent",
+    "id": "loa_FIXTURE_1",
+    "parent_action_id": null,
+    "reason": "fixture atom adoption",
+    "result_atom_content_hash": "hash_fixture",
+    "result_atom_id": "la_FIXTURE_1",
+    "result_label_id": null,
+    "result_proposal_id": null,
+    "signal_ids": [
+      "los_FIXTURE_1"
+    ],
+    "target_label_id": "l_FIXTURE_1",
+    "validation_effective_outcome": "pending",
+    "validation_latest_attempt_id": null,
+    "validation_requirement": "required",
+    "validation_status": "pending",
+    "change": {
+      "added_atom": {
+        "content_hash": "hash_fixture",
+        "id": "la_FIXTURE_1",
+        "kind": "applies_when",
+        "polarity": "positive",
+        "text": "canonical fixture atom apply"
+      },
+      "after": {
+        "applies_when": [
+          "canonical fixture atom apply"
+        ],
+        "description": null,
+        "excludes_when": [],
+        "label_id": "l_FIXTURE_1",
+        "label_name": "backend",
+        "negative_examples": [],
+        "positive_examples": []
+      },
+      "before": {
+        "applies_when": [],
+        "description": null,
+        "excludes_when": [],
+        "label_id": "l_FIXTURE_1",
+        "label_name": "backend",
+        "negative_examples": [],
+        "positive_examples": []
+      },
+      "canonical_changed": true,
+      "changed": true,
+      "label": {
+        "id": "l_FIXTURE_1",
+        "name": "backend"
+      },
+      "provenance_only": false,
+      "requested_action_type": "add_positive_atom",
+      "retarget_override": null
+    },
+    "validation": {}
+  }
+}

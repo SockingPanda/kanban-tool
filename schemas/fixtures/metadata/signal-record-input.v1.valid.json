@@ -1,0 +1,16 @@
+{
+  "kind": "agent_cli_failure",
+  "title": "Bad flag",
+  "summary": "comment add rejected body-file",
+  "severity": "medium",
+  "task_ref": "default#1",
+  "task_id": null,
+  "run_id": null,
+  "comment_id": null,
+  "actor": "codex",
+  "agent_type": "executor",
+  "dedupe_key": "cli-body-file",
+  "source": "fixture",
+  "evidence": {"stderr": "unexpected argument"},
+  "comment": {"body": "Signal backlink body"}
+}

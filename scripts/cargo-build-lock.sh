@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RAW_TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-$HOME/.cache/kanban-tool/cargo-target}"
 CHILD_PID=""
 CHILD_PGID=""
+COMMAND=()
+NEXTEST_RUN=0
 
 usage() {
   cat <<'USAGE'
@@ -14,15 +15,15 @@ Usage:
 
 Run a Cargo build/test/check/clippy/nextest command after acquiring the
 kanban-tool local build lock. The wrapper serializes commands that write under
-the shared Cargo target root and exports CARGO_TARGET_DIR to a per-worktree
-subdirectory under that root for the command.
+the shared Cargo target root and exports one exact CARGO_TARGET_DIR for every
+worktree so the shared build lock protects the shared artifacts.
 
 Options:
-  --print-target-dir  Print the per-worktree Cargo target directory and exit.
+  --print-target-dir  Print the exact shared Cargo target directory and exit.
   -h, --help          Show this help.
 
 Environment:
-  CARGO_TARGET_DIR            If set, it must be under the configured shared
+  CARGO_TARGET_DIR            If set, it must equal the configured shared
                               target root.
   CARGO_BUILD_JOBS            Cargo build jobs passed through when set.
                               Default: ${KANBAN_CARGO_BUILD_JOBS:-2}
@@ -31,8 +32,8 @@ Environment:
   RUST_TEST_THREADS           libtest threads passed through when set.
                               Default: ${KANBAN_TEST_THREADS:-2}
   KANBAN_CARGO_TARGET_ROOT    Override target root for local tests. The wrapper
-                              derives a per-worktree target subdirectory under
-                              this root while keeping one shared build lock.
+                              uses this exact directory for every worktree while
+                              keeping one shared build lock.
                               Default: $HOME/.cache/kanban-tool/cargo-target
   KANBAN_CARGO_BUILD_JOBS     Repo-level default for CARGO_BUILD_JOBS.
   KANBAN_TEST_THREADS         Repo-level default for nextest/libtest threads.
@@ -47,6 +48,22 @@ USAGE
 
 error() {
   echo "error: $*" >&2
+}
+
+prepare_nextest_command() {
+  local config_path="$target_dir/.nextest.toml"
+  local temporary_config
+  local toml_store_dir="$target_dir/nextest"
+
+  toml_store_dir="${toml_store_dir//\\/\\\\}"
+  toml_store_dir="${toml_store_dir//\"/\\\"}"
+  temporary_config="$(mktemp "$target_dir/.nextest.toml.XXXXXX")"
+  {
+    printf '[store]\ndir = "%s"\n\n' "$toml_store_dir"
+    cat .config/nextest.toml
+  } >"$temporary_config"
+  mv "$temporary_config" "$config_path"
+  COMMAND=(cargo nextest run --config-file "$config_path" --target-dir "$target_dir" "${COMMAND[@]:3}")
 }
 
 cleanup_process_group() {
@@ -135,19 +152,6 @@ target_root() {
 }
 
 
-workspace_target_dir() {
-  local root="$1"
-  local hash=""
-
-  if command -v sha256sum >/dev/null 2>&1; then
-    hash="$(printf '%s' "$ROOT" | sha256sum | awk '{print substr($1, 1, 16)}')"
-  else
-    hash="$(printf '%s' "$ROOT" | cksum | awk '{print $1}')"
-  fi
-
-  printf '%s/worktrees/%s\n' "$root" "$hash"
-}
-
 validate_inherited_target_dir() {
   local expected="$1"
   local actual
@@ -157,16 +161,13 @@ validate_inherited_target_dir() {
   fi
 
   actual="$(normalize_path "$(expand_home_path "$CARGO_TARGET_DIR")")"
-  case "$actual" in
-    "$expected"|"$expected"/*)
-      return 0
-      ;;
-    *)
-      error "CARGO_TARGET_DIR must be inside the kanban-tool shared target root: $expected"
-      error "got: $CARGO_TARGET_DIR"
-      return 2
-      ;;
-  esac
+  if [[ "$actual" == "$expected" ]]; then
+    return 0
+  fi
+
+  error "CARGO_TARGET_DIR must equal the kanban-tool shared target root: $expected"
+  error "got: $CARGO_TARGET_DIR"
+  return 2
 }
 
 configure_resource_limits() {
@@ -199,7 +200,7 @@ main() {
 
   target_root_dir="$(target_root)"
   validate_inherited_target_dir "$target_root_dir"
-  target_dir="$(workspace_target_dir "$target_root_dir")"
+  target_dir="$target_root_dir"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -229,6 +230,17 @@ main() {
     exit 2
   fi
 
+  COMMAND=("$@")
+  if [[ "${1:-}" == "cargo" && "${2:-}" == "nextest" && "${3:-}" == "run" ]]; then
+    NEXTEST_RUN=1
+    for argument in "${@:4}"; do
+      if [[ "$argument" == "--target-dir" || "$argument" == --target-dir=* || "$argument" == "--config-file" || "$argument" == --config-file=* ]]; then
+        error "cargo nextest target dir and config are managed by the shared-target wrapper"
+        exit 2
+      fi
+    done
+  fi
+
   if ! command -v flock >/dev/null 2>&1; then
     error "flock is required for kanban-tool Cargo build locking"
     exit 1
@@ -246,7 +258,10 @@ main() {
 
   if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]]; then
     export CARGO_TARGET_DIR="$target_dir"
-    "$@"
+    if [[ "$NEXTEST_RUN" == "1" ]]; then
+      prepare_nextest_command
+    fi
+    "${COMMAND[@]}"
     exit $?
   fi
 
@@ -258,7 +273,10 @@ main() {
 
   export CARGO_TARGET_DIR="$target_dir"
   export KANBAN_CARGO_BUILD_LOCK_HELD=1
-  setsid "$@" &
+  if [[ "$NEXTEST_RUN" == "1" ]]; then
+    prepare_nextest_command
+  fi
+  setsid "${COMMAND[@]}" &
   CHILD_PID=$!
   CHILD_PGID=$CHILD_PID
 

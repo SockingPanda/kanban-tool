@@ -1,0 +1,7 @@
+{
+  "data": {
+    "input_path": "/fixture/portable.jsonl",
+    "records": 10,
+    "dry_run": true
+  }
+}

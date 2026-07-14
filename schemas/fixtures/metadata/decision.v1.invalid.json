@@ -1,0 +1,10 @@
+{
+  "options": [
+    {
+      "slug": "comment-metadata",
+      "title": "Use comment metadata",
+      "detail": "Store structured decision data in task comment metadata."
+    }
+  ],
+  "selected": "comment-metadata"
+}

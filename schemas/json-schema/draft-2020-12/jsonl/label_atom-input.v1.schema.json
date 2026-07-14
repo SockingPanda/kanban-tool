@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "AtomKind": {
+      "enum": [
+        "name",
+        "description",
+        "applies_when",
+        "positive_example",
+        "excludes_when",
+        "negative_example"
+      ],
+      "type": "string"
+    },
+    "AtomPolarity": {
+      "enum": [
+        "positive",
+        "negative"
+      ],
+      "type": "string"
+    },
+    "LabelAtomData": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "content_hash": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/AtomKind"
+        },
+        "label_id": {
+          "type": "string"
+        },
+        "ordinal": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "polarity": {
+          "$ref": "#/$defs/AtomPolarity"
+        },
+        "text": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "label_id",
+        "board_id",
+        "polarity",
+        "kind",
+        "text",
+        "ordinal",
+        "content_hash",
+        "created_at",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "LabelAtomRecordType": {
+      "enum": [
+        "label_atom"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:label_atom-input:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/LabelAtomData"
+    },
+    "type": {
+      "$ref": "#/$defs/LabelAtomRecordType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL label_atom input v1",
+  "type": "object"
+}

@@ -15,7 +15,11 @@ use crate::commands::common::{
     invalid_input, optional_clearable, resolve_optional_text_input, resolve_required_text_input,
     validate_page_bounds,
 };
-use crate::output::{print_or_json, print_task, print_task_with_details, task_line};
+use crate::output::{
+    api_claim_from_result, api_execution_plan_from_record, api_task_from_record,
+    api_task_step_from_record, api_task_steps_from_records, print_contract_or_human, print_human,
+    print_task_with_details, task_line,
+};
 
 pub(crate) fn handle_task(
     command: TaskCommand,
@@ -56,7 +60,13 @@ pub(crate) fn handle_task(
                 },
                 &args.labels,
             )?;
-            print_task(json, &task)?;
+            if json {
+                let output =
+                    kanban_contract::CliTaskCreateOutput::new(api_task_from_record(&task)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| task_line(&task))?;
+            }
         }
         TaskCommand::List(args) => {
             validate_page_bounds(
@@ -102,7 +112,13 @@ pub(crate) fn handle_task(
             } else {
                 list_tasks(db_path, board, &statuses, args.include_archived)?
             };
-            print_or_json(json, &tasks, || {
+            let output = kanban_contract::CliTaskListOutput::new(
+                tasks
+                    .iter()
+                    .map(api_task_from_record)
+                    .collect::<Result<Vec<_>>>()?,
+            );
+            print_contract_or_human(json, &output, || {
                 tasks.iter().map(task_line).collect::<Vec<_>>().join("\n")
             })?;
         }
@@ -157,10 +173,23 @@ pub(crate) fn handle_task(
                     expected_lock_version: args.expected_lock_version,
                 },
             )?;
-            print_task(json, &task)?;
+            if json {
+                let output =
+                    kanban_contract::CliTaskUpdateOutput::new(api_task_from_record(&task)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| task_line(&task))?;
+            }
         }
         TaskCommand::Promote { task_ref } => {
-            print_task(json, &promote_task(db_path, board, actor, &task_ref)?)?
+            let task = promote_task(db_path, board, actor, &task_ref)?;
+            if json {
+                let output =
+                    kanban_contract::CliTaskPromoteOutput::new(api_task_from_record(&task)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| task_line(&task))?;
+            }
         }
         TaskCommand::Reopen(args) => {
             let reason = resolve_required_text_input(
@@ -170,52 +199,104 @@ pub(crate) fn handle_task(
                 "--reason-file",
                 "reason",
             )?;
-            print_task(
-                json,
-                &reopen_task(db_path, board, actor, &args.task_ref, &reason)?,
-            )?
+            let task = reopen_task(db_path, board, actor, &args.task_ref, &reason)?;
+            if json {
+                let output =
+                    kanban_contract::CliTaskReopenOutput::new(api_task_from_record(&task)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| task_line(&task))?;
+            }
         }
-        TaskCommand::Start(args) | TaskCommand::Claim(args) => {
+        TaskCommand::Start(args) => {
             let claim = claim_task(db_path, board, actor, &args.task_ref, args.ttl_ms)?;
-            print_or_json(json, &claim, || {
-                format!("Claimed {} token={}", claim.task.id, claim.claim_token)
-            })?;
+            if json {
+                let output = kanban_contract::CliTaskStartOutput::new(api_claim_from_result(
+                    db_path, &claim,
+                )?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| format!("Claimed {} token={}", claim.task.id, claim.claim_token))?;
+            }
+        }
+        TaskCommand::Claim(args) => {
+            let claim = claim_task(db_path, board, actor, &args.task_ref, args.ttl_ms)?;
+            if json {
+                let output = kanban_contract::CliTaskClaimOutput::new(api_claim_from_result(
+                    db_path, &claim,
+                )?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| format!("Claimed {} token={}", claim.task.id, claim.claim_token))?;
+            }
         }
         TaskCommand::Heartbeat(args) => {
-            print_task(
-                json,
-                &heartbeat_task(
-                    db_path,
-                    board,
-                    actor,
-                    &args.task_ref,
-                    &args.claim_token,
-                    args.ttl_ms,
-                )?,
+            let task = heartbeat_task(
+                db_path,
+                board,
+                actor,
+                &args.task_ref,
+                &args.claim_token,
+                args.ttl_ms,
             )?;
+            if json {
+                let output =
+                    kanban_contract::CliTaskHeartbeatOutput::new(api_task_from_record(&task)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| task_line(&task))?;
+            }
         }
-        TaskCommand::Done(args) | TaskCommand::Complete(args) => print_task(
-            json,
-            &complete_task(
+        TaskCommand::Done(args) => {
+            let task = complete_task(
                 db_path,
                 board,
                 actor,
                 &args.task_ref,
                 args.claim_token.as_deref(),
                 args.force,
-            )?,
-        )?,
-        TaskCommand::Review(args) => print_task(
-            json,
-            &submit_review_task(
+            )?;
+            if json {
+                let output = kanban_contract::CliTaskDoneOutput::new(api_task_from_record(&task)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| task_line(&task))?;
+            }
+        }
+        TaskCommand::Complete(args) => {
+            let task = complete_task(
                 db_path,
                 board,
                 actor,
                 &args.task_ref,
                 args.claim_token.as_deref(),
                 args.force,
-            )?,
-        )?,
+            )?;
+            if json {
+                let output =
+                    kanban_contract::CliTaskCompleteOutput::new(api_task_from_record(&task)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| task_line(&task))?;
+            }
+        }
+        TaskCommand::Review(args) => {
+            let task = submit_review_task(
+                db_path,
+                board,
+                actor,
+                &args.task_ref,
+                args.claim_token.as_deref(),
+                args.force,
+            )?;
+            if json {
+                let output =
+                    kanban_contract::CliTaskReviewOutput::new(api_task_from_record(&task)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| task_line(&task))?;
+            }
+        }
         TaskCommand::Block(args) => {
             let reason = resolve_required_text_input(
                 args.reason,
@@ -224,33 +305,55 @@ pub(crate) fn handle_task(
                 "--reason-file",
                 "reason",
             )?;
-            print_task(
-                json,
-                &block_task(
-                    db_path,
-                    board,
-                    actor,
-                    &args.task_ref,
-                    &reason,
-                    args.claim_token.as_deref(),
-                    args.force,
-                )?,
-            )?
+            let task = block_task(
+                db_path,
+                board,
+                actor,
+                &args.task_ref,
+                &reason,
+                args.claim_token.as_deref(),
+                args.force,
+            )?;
+            if json {
+                let output = kanban_contract::CliTaskBlockOutput::new(api_task_from_record(&task)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| task_line(&task))?;
+            }
         }
         TaskCommand::Unblock { task_ref } => {
-            print_task(json, &unblock_task(db_path, board, actor, &task_ref)?)?
+            let task = unblock_task(db_path, board, actor, &task_ref)?;
+            if json {
+                let output =
+                    kanban_contract::CliTaskUnblockOutput::new(api_task_from_record(&task)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| task_line(&task))?;
+            }
         }
         TaskCommand::Reclaim(args) => {
             let _expired_only = args.expired;
             let count = reclaim_expired(db_path, board, actor)?;
-            print_or_json(json, &serde_json::json!({"reclaimed": count}), || {
-                format!("Reclaimed {count} task(s)")
-            })?;
+            if json {
+                let reclaimed = u64::try_from(count)?;
+                let output = kanban_contract::CliTaskReclaimOutput::new(
+                    kanban_contract::CliTaskReclaimResult { reclaimed },
+                );
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| format!("Reclaimed {count} task(s)"))?;
+            }
         }
-        TaskCommand::Archive { task_ref, force } => print_task(
-            json,
-            &archive_task(db_path, board, actor, &task_ref, force)?,
-        )?,
+        TaskCommand::Archive { task_ref, force } => {
+            let task = archive_task(db_path, board, actor, &task_ref, force)?;
+            if json {
+                let output =
+                    kanban_contract::CliTaskArchiveOutput::new(api_task_from_record(&task)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| task_line(&task))?;
+            }
+        }
         TaskCommand::Step { command } => handle_task_step(command, db_path, board, actor, json)?,
     }
     Ok(())
@@ -273,7 +376,17 @@ fn handle_task_step(
     match command {
         TaskStepCommand::List { task_ref } => {
             let output = task_steps_output(db_path, board, &task_ref)?;
-            print_or_json(json, &output, || task_steps_lines(&output))?;
+            if json {
+                let contract =
+                    kanban_contract::CliTaskStepListOutput::new(api_task_steps_from_records(
+                        output.task_id.clone(),
+                        output.execution_plan.clone(),
+                        &output.steps,
+                    )?);
+                print_contract_or_human(true, &contract, String::new)?;
+            } else {
+                print_human(|| task_steps_lines(&output))?;
+            }
         }
         TaskStepCommand::Add(args) => {
             let required = step_required_for_add(args.required, args.optional)?;
@@ -292,7 +405,13 @@ fn handle_task_step(
                     required,
                 },
             )?;
-            print_step(json, &step, "Created")?;
+            if json {
+                let output =
+                    kanban_contract::CliTaskStepAddOutput::new(api_task_step_from_record(&step)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_step(&step, "Created")?;
+            }
         }
         TaskStepCommand::Update(args) => {
             if args.linked_task_ref.is_some() && args.unlink_task {
@@ -331,7 +450,14 @@ fn handle_task_step(
                     required: step_required_for_update(args.required, args.optional)?,
                 },
             )?;
-            print_step(json, &step, "Updated")?;
+            if json {
+                let output = kanban_contract::CliTaskStepUpdateOutput::new(
+                    api_task_step_from_record(&step)?,
+                );
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_step(&step, "Updated")?;
+            }
         }
         TaskStepCommand::Done(args) => {
             let note = resolve_required_text_input(
@@ -342,7 +468,13 @@ fn handle_task_step(
                 "note",
             )?;
             let step = complete_step(db_path, board, actor, &args.task_ref, &args.step_ref, &note)?;
-            print_step(json, &step, "Completed")?;
+            if json {
+                let output =
+                    kanban_contract::CliTaskStepDoneOutput::new(api_task_step_from_record(&step)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_step(&step, "Completed")?;
+            }
         }
         TaskStepCommand::Skip(args) => {
             let reason = resolve_required_text_input(
@@ -360,7 +492,13 @@ fn handle_task_step(
                 &args.step_ref,
                 &reason,
             )?;
-            print_step(json, &step, "Skipped")?;
+            if json {
+                let output =
+                    kanban_contract::CliTaskStepSkipOutput::new(api_task_step_from_record(&step)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_step(&step, "Skipped")?;
+            }
         }
         TaskStepCommand::Reopen(args) => {
             let reason = resolve_required_text_input(
@@ -378,15 +516,28 @@ fn handle_task_step(
                 &args.step_ref,
                 &reason,
             )?;
-            print_step(json, &step, "Reopened")?;
+            if json {
+                let output = kanban_contract::CliTaskStepReopenOutput::new(
+                    api_task_step_from_record(&step)?,
+                );
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_step(&step, "Reopened")?;
+            }
         }
         TaskStepCommand::Remove { task_ref, step_ref } => {
             let step = remove_step(db_path, board, actor, &task_ref, &step_ref)?;
-            print_or_json(
-                json,
-                &serde_json::json!({"removed": true, "step": step}),
-                || format!("Removed step relation {step_ref} from {task_ref}"),
-            )?;
+            if json {
+                let output = kanban_contract::CliTaskStepRemoveOutput::new(
+                    kanban_contract::CliTaskStepRemoveResult {
+                        removed: true,
+                        step: api_task_step_from_record(&step)?,
+                    },
+                );
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| format!("Removed step relation {step_ref} from {task_ref}"))?;
+            }
         }
         TaskStepCommand::NotRequired(args) => {
             let reason = resolve_required_text_input(
@@ -398,7 +549,14 @@ fn handle_task_step(
             )?;
             let plan =
                 mark_execution_plan_not_required(db_path, board, actor, &args.task_ref, &reason)?;
-            print_or_json(json, &plan, || execution_plan_line(&plan))?;
+            if json {
+                let output = kanban_contract::CliTaskStepNotRequiredOutput::new(
+                    api_execution_plan_from_record(&plan),
+                );
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| execution_plan_line(&plan))?;
+            }
         }
     }
     Ok(())
@@ -415,8 +573,8 @@ fn task_steps_output(db_path: &PathBuf, board: &str, task_ref: &str) -> Result<T
     })
 }
 
-fn print_step(json: bool, step: &TaskStepRecord, verb: &str) -> Result<()> {
-    print_or_json(json, step, || format!("{verb} {}", step_line(1, step)))
+fn print_step(step: &TaskStepRecord, verb: &str) -> Result<()> {
+    print_human(|| format!("{verb} {}", step_line(1, step)))
 }
 
 fn task_steps_lines(output: &TaskStepsOutput) -> String {

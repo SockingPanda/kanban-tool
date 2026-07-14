@@ -1,0 +1,17 @@
+{
+  "data": [
+    {
+      "atom_id": "lat_FIXTURE_1",
+      "board_id": "b_FIXTURE_1",
+      "content_hash": "hash_fixture",
+      "distance": 0,
+      "embedding_model": "fixture-model",
+      "kind": "applies_when",
+      "label_id": "l_FIXTURE_1",
+      "label_name": "backend",
+      "ordinal": 0,
+      "polarity": "positive",
+      "text": "touches Rust service code"
+    }
+  ]
+}

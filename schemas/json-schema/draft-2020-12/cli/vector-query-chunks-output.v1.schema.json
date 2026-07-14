@@ -1,0 +1,79 @@
+{
+  "$defs": {
+    "CliChunkRef": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entity_uri": {
+          "type": "string"
+        },
+        "ordinal": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri",
+        "entity_uri",
+        "ordinal",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "CliVectorChunkHit": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk": {
+          "$ref": "#/$defs/CliChunkRef"
+        },
+        "score": {
+          "format": "float",
+          "type": "number"
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "chunk",
+        "score",
+        "text",
+        "summary"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:vector-query-chunks-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/$defs/CliVectorChunkHit"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI vector query-chunks output v1",
+  "type": "object"
+}

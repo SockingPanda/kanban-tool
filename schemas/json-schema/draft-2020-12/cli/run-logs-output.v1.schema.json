@@ -1,0 +1,46 @@
+{
+  "$defs": {
+    "CliRunLog": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "tail_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "run_id",
+        "content",
+        "truncated",
+        "tail_bytes"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:run-logs-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CliRunLog"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI run logs output v1",
+  "type": "object"
+}

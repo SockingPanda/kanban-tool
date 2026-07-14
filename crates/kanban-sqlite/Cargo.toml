@@ -13,6 +13,7 @@ tantivy-backend = ["dep:tantivy", "kanban-search/tantivy-backend"]
 kanban-application.workspace = true
 kanban-core.workspace = true
 kanban-context.workspace = true
+kanban-contract.workspace = true
 kanban-entity.workspace = true
 kanban-graph.workspace = true
 kanban-indexer.workspace = true

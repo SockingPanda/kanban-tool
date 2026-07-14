@@ -1,0 +1,297 @@
+{
+  "$defs": {
+    "ApiExecutionPlanState": {
+      "enum": [
+        "unplanned",
+        "planned",
+        "not_required"
+      ],
+      "type": "string"
+    },
+    "ApiLabel": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "name",
+        "color",
+        "created_at",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "ApiTask": {
+      "additionalProperties": false,
+      "properties": {
+        "archived_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "assignee": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "board_slug": {
+          "type": "string"
+        },
+        "claim_expires_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "claim_owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "completed_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "completed_required_step_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "created_by": {
+          "type": "string"
+        },
+        "current_run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dependency_blocked": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "due_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "execution_plan_state": {
+          "$ref": "#/$defs/ApiExecutionPlanState"
+        },
+        "id": {
+          "type": "string"
+        },
+        "labels": {
+          "items": {
+            "$ref": "#/$defs/ApiLabel"
+          },
+          "type": "array"
+        },
+        "last_heartbeat_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "lock_version": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "max_retries": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "metadata": true,
+        "optional_step_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "position": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "priority": {
+          "$ref": "#/$defs/ApiTaskPriority"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "required_step_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "result": true,
+        "result_summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retry_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "scheduled_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "seq": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "started_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/ApiTaskStatus"
+        },
+        "status_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "unfinished_parent_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "board_slug",
+        "ref",
+        "seq",
+        "title",
+        "description",
+        "status",
+        "status_reason",
+        "assignee",
+        "priority",
+        "position",
+        "scheduled_at",
+        "due_at",
+        "created_by",
+        "created_at",
+        "updated_at",
+        "started_at",
+        "completed_at",
+        "archived_at",
+        "claim_owner",
+        "claim_expires_at",
+        "last_heartbeat_at",
+        "current_run_id",
+        "retry_count",
+        "max_retries",
+        "result_summary",
+        "result",
+        "metadata",
+        "lock_version",
+        "dependency_blocked",
+        "unfinished_parent_count",
+        "execution_plan_state",
+        "required_step_count",
+        "completed_required_step_count",
+        "optional_step_count",
+        "labels"
+      ],
+      "type": "object"
+    },
+    "ApiTaskPriority": {
+      "format": "uint8",
+      "maximum": 3,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ApiTaskStatus": {
+      "enum": [
+        "triage",
+        "todo",
+        "scheduled",
+        "ready",
+        "running",
+        "blocked",
+        "review",
+        "done",
+        "archived"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:archive-task-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/ApiTask"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban archive task response v1",
+  "type": "object"
+}

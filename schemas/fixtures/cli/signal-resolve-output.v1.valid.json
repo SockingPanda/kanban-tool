@@ -1,0 +1,34 @@
+{
+  "data": [
+    {
+      "id": "sig_FIXTURE",
+      "board_id": "b_BOARD",
+      "observation_id": "obs_FIXTURE",
+      "kind": "operator_feedback",
+      "title": "signal",
+      "summary": "Stable operator signal summary",
+      "severity": "medium",
+      "status": "resolved",
+      "dedupe_key": "fixture-signal",
+      "superseded_by_signal_id": null,
+      "reviewed_by": "fixture",
+      "reviewed_at": 200,
+      "review_reason": "resolved",
+      "created_at": 100,
+      "updated_at": 200,
+      "observation": {
+        "id": "obs_FIXTURE",
+        "board_id": "b_BOARD",
+        "task_id": null,
+        "task_ref_snapshot": null,
+        "run_id": null,
+        "comment_id": null,
+        "actor": "fixture",
+        "agent_type": "codex",
+        "source": "contract-test",
+        "evidence": {"case": "operator"},
+        "created_at": 100
+      }
+    }
+  ]
+}

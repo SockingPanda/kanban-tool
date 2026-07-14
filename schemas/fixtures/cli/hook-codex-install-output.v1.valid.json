@@ -1,0 +1,23 @@
+{
+  "data": {
+    "path": "/fixture/hooks.json",
+    "installed": true,
+    "matcher": "^Bash$",
+    "handler_commands": [
+      "kanban hook codex handle failure --installed-by kanban-hook-codex",
+      "kanban hook codex handle task-create --installed-by kanban-hook-codex"
+    ],
+    "managed_hook_count": 2,
+    "prompt_config_created": true,
+    "prompt_config": {
+      "path": "/fixture/codex-hooks.json",
+      "exists": true,
+      "valid": true,
+      "error": null,
+      "bindings": {
+        "failure": "failure.zh-default",
+        "task_create": "task_create.zh-default"
+      }
+    }
+  }
+}

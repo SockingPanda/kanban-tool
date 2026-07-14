@@ -1,0 +1,89 @@
+{
+  "$defs": {
+    "LabelSemanticsData": {
+      "additionalProperties": false,
+      "properties": {
+        "applies_when": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "description": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "excludes_when": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "label_id": {
+          "type": "string"
+        },
+        "negative_examples": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "positive_examples": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label_id",
+        "board_id",
+        "description",
+        "applies_when",
+        "excludes_when",
+        "positive_examples",
+        "negative_examples",
+        "created_at",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "LabelSemanticsRecordType": {
+      "enum": [
+        "label_semantics"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:label_semantics-input:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/LabelSemanticsData"
+    },
+    "type": {
+      "$ref": "#/$defs/LabelSemanticsRecordType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL label_semantics input v1",
+  "type": "object"
+}

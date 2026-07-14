@@ -137,7 +137,7 @@ export function useTaskDetail(
     },
   })
 
-  const runWithLog = runsQuery.data?.find((run) => Boolean(run.log_path)) ?? null
+  const runWithLog = runsQuery.data?.find((run) => run.has_log) ?? null
   const runLogQuery = useQuery({
     enabled: Boolean(ready && queryEnablement.runLog && runWithLog),
     queryKey: runWithLog ? queryKeys.taskRunLog(runWithLog.id) : ["task-run-log", "none"],

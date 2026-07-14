@@ -1,0 +1,11 @@
+{
+  "actor": {
+    "name": "fixture",
+    "type": "user"
+  },
+  "signal_ids": ["los_fixture"],
+  "label_ref": "fixture",
+  "kind": "applies_when",
+  "text": "fixture",
+  "reason": "fixture"
+}

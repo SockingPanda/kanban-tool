@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "TaskLabelJsonlData": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "label_id": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "board_id",
+        "task_id",
+        "label_id",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "TaskLabelJsonlType": {
+      "enum": [
+        "task_label"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:task_label-input:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/TaskLabelJsonlData"
+    },
+    "type": {
+      "$ref": "#/$defs/TaskLabelJsonlType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL task_label input v1",
+  "type": "object"
+}

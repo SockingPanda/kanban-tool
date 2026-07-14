@@ -5,7 +5,12 @@ use std::{
 };
 
 use fs_err as fs;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
+
+pub use kanban_contract::{
+    ProjectConfigInput as ProjectConfig, ProjectVectorConfigInput as VectorConfig,
+    WorkerFinishPolicy, WorkerProfileInput, WorkerProfilesInput,
+};
 
 pub const INDEX_LAYOUT_VERSION: &str = "v1";
 pub const TASK_INDEX_NAME: &str = "tasks";
@@ -19,24 +24,6 @@ pub const DEFAULT_VECTOR_PROVIDER: &str = "ollama";
 pub const DEFAULT_OLLAMA_ENDPOINT: &str = "http://127.0.0.1:11434";
 pub const DEFAULT_OLLAMA_EMBEDDING_MODEL: &str = "qwen3-embedding:0.6b";
 pub const DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS: usize = 1024;
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProjectConfig {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub board: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub db: Option<PathBuf>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub vector: Option<VectorConfig>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VectorConfig {
-    pub provider: String,
-    pub endpoint: String,
-    pub model: String,
-    pub dimensions: usize,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -52,17 +39,6 @@ pub enum ConfigValueSource {
 pub struct ResolvedConfigValue<T> {
     pub value: T,
     pub source: ConfigValueSource,
-}
-
-impl Default for VectorConfig {
-    fn default() -> Self {
-        Self {
-            provider: DEFAULT_VECTOR_PROVIDER.to_owned(),
-            endpoint: DEFAULT_OLLAMA_ENDPOINT.to_owned(),
-            model: DEFAULT_OLLAMA_EMBEDDING_MODEL.to_owned(),
-            dimensions: DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS,
-        }
-    }
 }
 
 pub fn default_db_path() -> PathBuf {
@@ -280,6 +256,16 @@ pub fn read_project_config(path: &Path) -> Result<ProjectConfig, ConfigError> {
     })
 }
 
+pub fn read_worker_profiles(path: &Path) -> Result<WorkerProfilesInput, ConfigError> {
+    let text = fs::read_to_string(path)?;
+    let deserializer = toml::Deserializer::new(&text);
+    serde_path_to_error::deserialize(deserializer).map_err(|err| ConfigError::FileParse {
+        path: path.to_path_buf(),
+        field_path: err.path().to_string(),
+        source: Box::new(err.into_inner()),
+    })
+}
+
 pub fn write_project_config(path: &Path, config: &ProjectConfig) -> Result<(), ConfigError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -434,6 +420,109 @@ pub fn default_actor() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn contract_fixture(relative: &str) -> serde_json::Value {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        serde_json::from_str(
+            &fs::read_to_string(root.join("schemas/fixtures/config").join(relative)).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn project_config_input_fixture_is_produced_by_runtime_config_dto() {
+        let config = ProjectConfig {
+            board: Some("kanban-tool".to_owned()),
+            db: Some(PathBuf::from(".kb/kb.db")),
+            vector: Some(VectorConfig::default()),
+        };
+
+        assert_eq!(
+            serde_json::to_value(config).unwrap(),
+            contract_fixture("project-input.v1.valid.json")
+        );
+    }
+
+    #[test]
+    fn project_config_input_fixture_is_consumed_by_real_toml_decoder() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("config.toml");
+        fs::write(
+            &path,
+            r#"board = "kanban-tool"
+db = ".kb/kb.db"
+
+[vector]
+provider = "ollama"
+endpoint = "http://127.0.0.1:11434"
+model = "qwen3-embedding:0.6b"
+dimensions = 1024
+"#,
+        )
+        .unwrap();
+
+        let decoded = read_project_config(&path).unwrap();
+        assert_eq!(
+            serde_json::to_value(decoded).unwrap(),
+            contract_fixture("project-input.v1.valid.json")
+        );
+
+        fs::write(&path, "unknown = true\n").unwrap();
+        assert!(read_project_config(&path).is_err());
+    }
+
+    #[test]
+    fn worker_profiles_input_fixture_is_produced_by_runtime_config_dto() {
+        let profiles = WorkerProfilesInput {
+            workers: [(
+                "default".to_owned(),
+                WorkerProfileInput {
+                    command: Some("echo $KB_TASK_ID".to_owned()),
+                    claim_ttl_ms: Some(300_000),
+                    heartbeat_interval_ms: Some(30_000),
+                    on_success: Some(WorkerFinishPolicy::Done),
+                    on_failure: Some(WorkerFinishPolicy::Blocked),
+                    log_dir: Some(PathBuf::from(".kb/logs")),
+                },
+            )]
+            .into_iter()
+            .collect(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(profiles).unwrap(),
+            contract_fixture("worker-profiles-input.v1.valid.json")
+        );
+    }
+
+    #[test]
+    fn worker_profiles_input_fixture_is_consumed_by_real_toml_decoder() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("workers.toml");
+        fs::write(
+            &path,
+            r#"[workers.default]
+command = "echo $KB_TASK_ID"
+claim_ttl_ms = 300000
+heartbeat_interval_ms = 30000
+on_success = "done"
+on_failure = "blocked"
+log_dir = ".kb/logs"
+"#,
+        )
+        .unwrap();
+
+        let decoded = read_worker_profiles(&path).unwrap();
+        assert_eq!(
+            serde_json::to_value(decoded).unwrap(),
+            contract_fixture("worker-profiles-input.v1.valid.json")
+        );
+
+        fs::write(&path, "[workers.default]\nunknown = true\n").unwrap();
+        assert!(read_worker_profiles(&path).is_err());
+        fs::write(&path, "[not_workers]\nunknown = true\n").unwrap();
+        assert!(read_worker_profiles(&path).is_err());
+    }
 
     #[test]
     fn project_config_round_trips_vector_settings_and_preserves_them_on_board_update() {

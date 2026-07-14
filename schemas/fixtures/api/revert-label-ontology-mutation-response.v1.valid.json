@@ -1,0 +1,59 @@
+{
+  "data": {
+    "id": "loa_fixture",
+    "board_id": "fixture",
+    "parent_action_id": "loa_target_fixture",
+    "action_type": "revert_ontology_mutation",
+    "reason": "fixture",
+    "target_label_id": "l_fixture",
+    "result_label_id": null,
+    "result_atom_id": "la_fixture",
+    "result_atom_content_hash": "fixture",
+    "result_proposal_id": null,
+    "canonical_before_hash": "fixture",
+    "canonical_after_hash": "fixture",
+    "validation_requirement": "unsupported",
+    "validation_status": "pending",
+    "validation_effective_outcome": "unsupported",
+    "validation_latest_attempt_id": null,
+    "created_by": "fixture",
+    "created_by_type": "user",
+    "agent_type": null,
+    "created_at": 1,
+    "signal_ids": ["los_fixture"],
+    "change": {
+      "reverted_action_id": "loa_target_fixture",
+      "reverted_action_type": "add_positive_atom",
+      "label": {"id": "l_fixture", "name": "fixture"},
+      "expected_current_hash": null,
+      "reverted_canonical_before_hash": "fixture",
+      "reverted_canonical_after_hash": "fixture",
+      "before_revert": {
+        "label_id": "l_fixture",
+        "label_name": "fixture",
+        "description": null,
+        "applies_when": ["fixture"],
+        "excludes_when": [],
+        "positive_examples": [],
+        "negative_examples": []
+      },
+      "after_revert": {
+        "label_id": "l_fixture",
+        "label_name": "fixture",
+        "description": null,
+        "applies_when": [],
+        "excludes_when": [],
+        "positive_examples": [],
+        "negative_examples": []
+      },
+      "atom_effect_counts": {"added": 0, "removed": 1},
+      "legacy_warning": null,
+      "index_dirty": true
+    },
+    "validation": {
+      "state": "pending_revert_validation",
+      "reverted_action_id": "loa_target_fixture",
+      "reverted_action_type": "add_positive_atom"
+    }
+  }
+}

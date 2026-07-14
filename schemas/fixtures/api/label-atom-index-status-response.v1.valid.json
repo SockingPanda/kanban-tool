@@ -1,0 +1,11 @@
+{
+  "data": {
+    "backend": "fixture",
+    "enabled": false,
+    "message": "fixture",
+    "diagnostics": [],
+    "dirty": null,
+    "board_dirty": null,
+    "generation": 1
+  }
+}

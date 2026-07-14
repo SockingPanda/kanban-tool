@@ -1,5 +1,5 @@
 /// Maximum task-list page size accepted by CLI, API, and SQLite service calls.
-pub const MAX_TASK_LIST_LIMIT: usize = 1000;
+pub const MAX_TASK_LIST_LIMIT: usize = kanban_application::dto::MAX_TASK_LIST_LIMIT;
 /// Maximum search page size accepted by CLI, API, and SQLite service calls.
 pub const MAX_SEARCH_LIMIT: usize = 1000;
 
@@ -21,6 +21,9 @@ mod label_proposals;
 mod label_semantics;
 mod label_suggestions;
 mod maintenance;
+mod portable;
+mod portable_core;
+mod portable_ledger;
 mod projections;
 mod run_logs;
 mod runs;
@@ -28,6 +31,7 @@ mod search;
 mod signals;
 mod sql;
 mod steps;
+mod structured_metadata;
 mod task_graph;
 mod tasks;
 mod transaction;
@@ -60,6 +64,7 @@ pub use runs::*;
 pub use search::*;
 pub use signals::*;
 pub use steps::*;
+pub use structured_metadata::*;
 pub use task_graph::*;
 pub use tasks::*;
 pub use transitions::*;

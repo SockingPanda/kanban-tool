@@ -29,7 +29,7 @@ function task(id: string, status: Task["status"], overrides: Partial<Task> = {})
     updated_at: 1,
     created_by: "test",
     labels: [],
-    metadata_json: "{}",
+    metadata: {},
     dependency_blocked: false,
     unfinished_parent_count: 0,
     execution_plan_state: "planned",
@@ -44,7 +44,7 @@ function task(id: string, status: Task["status"], overrides: Partial<Task> = {})
     last_heartbeat_at: null,
     lock_version: 0,
     result_summary: null,
-    result_json: null,
+    result: null,
     ...overrides,
   }
 }

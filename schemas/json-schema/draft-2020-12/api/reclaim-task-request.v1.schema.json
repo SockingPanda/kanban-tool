@@ -1,0 +1,44 @@
+{
+  "$defs": {
+    "ReclaimTargetStatus": {
+      "enum": [
+        "ready",
+        "blocked"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:reclaim-task-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "force": {
+      "default": false,
+      "type": "boolean"
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "to_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReclaimTargetStatus"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "title": "Kanban reclaim task request v1",
+  "type": "object"
+}

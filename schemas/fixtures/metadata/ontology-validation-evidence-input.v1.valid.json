@@ -1,0 +1,5 @@
+{
+  "evidence_type": "external_attestation",
+  "source": "fixture",
+  "checks": [{"name": "candidate remains selected", "passed": true}]
+}

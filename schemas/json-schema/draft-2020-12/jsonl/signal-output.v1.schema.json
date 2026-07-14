@@ -1,0 +1,128 @@
+{
+  "$defs": {
+    "SignalData": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "dedupe_key": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "observation_id": {
+          "type": "string"
+        },
+        "review_reason": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reviewed_at": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reviewed_by": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "severity": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SignalStatus"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "superseded_by_signal_id": {
+          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "observation_id",
+        "kind",
+        "title",
+        "summary",
+        "severity",
+        "status",
+        "dedupe_key",
+        "superseded_by_signal_id",
+        "reviewed_by",
+        "reviewed_at",
+        "review_reason",
+        "created_at",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "SignalRecordType": {
+      "enum": [
+        "signal"
+      ],
+      "type": "string"
+    },
+    "SignalStatus": {
+      "enum": [
+        "open",
+        "confirmed",
+        "rejected",
+        "superseded",
+        "resolved"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:signal-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/SignalData"
+    },
+    "type": {
+      "$ref": "#/$defs/SignalRecordType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL signal output v1",
+  "type": "object"
+}

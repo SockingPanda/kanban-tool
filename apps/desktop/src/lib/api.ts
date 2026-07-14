@@ -34,6 +34,12 @@ export type Board = {
   archived_at: number | null
 }
 
+export type CreateBoardInput = {
+  slug: string
+  name: string
+  description?: string | null
+}
+
 export type Task = {
   id: string
   board_id: string
@@ -62,8 +68,8 @@ export type Task = {
   retry_count: number
   max_retries: number | null
   result_summary: string | null
-  result_json: string | null
-  metadata_json: string
+  result: unknown | null
+  metadata: unknown
   lock_version: number
   dependency_blocked: boolean
   unfinished_parent_count: number
@@ -394,7 +400,7 @@ export type LabelAtomExplainRecord = {
 export type Run = {
   id: string
   task_id: string
-  status: string
+  status: "running" | "succeeded" | "failed" | "canceled" | "expired"
   worker_profile: string | null
   worker_pid: number | null
   claim_owner: string
@@ -403,8 +409,8 @@ export type Run = {
   exit_code: number | null
   summary: string | null
   error: string | null
-  log_path: string | null
-  metadata_json: string
+  has_log: boolean
+  metadata: unknown
 }
 
 export type EventRecord = {
@@ -440,7 +446,7 @@ export type CommentRecord = {
   agent_type: string | null
   body: string
   kind: "note" | "decision" | "signal"
-  metadata_json: string
+  metadata: Record<string, unknown>
   created_at: number
 }
 
@@ -523,6 +529,8 @@ export type DoctorReport = {
   executable_schedule_violations: number
   outbox_pending: number
   outbox_running: number
+  unplanned_active_tasks: number
+  active_parents_with_incomplete_required_steps: number
   outbox_failed: number
   derived_dirty_stores: number
   derived_error_stores: number
@@ -740,7 +748,8 @@ export type EventPage = {
   meta: EventMeta
 }
 
-type ErrorEnvelope = { error: { code: string; message: string } }
+type ErrorBody = { code: string; message: string; details?: unknown }
+type ErrorEnvelope = { error: ErrorBody }
 
 type SearchTaskHit = {
   task_id: string
@@ -755,15 +764,18 @@ type SearchTasksResponse = {
   meta: SearchTasksMeta
 }
 
+type RequiredOffsetPageMeta = { limit: number; offset: number }
+type RequiredTotalPageMeta = RequiredOffsetPageMeta & { total: number }
+
 type TaskStatusWindowResponse = {
   status: TaskStatus
   tasks: Task[]
-  page?: PageEnvelopeMeta
-}
+  page: RequiredTotalPageMeta
+ }
 
 type TaskStatusWindowsResponse = {
   statuses: TaskStatusWindowResponse[]
-}
+ }
 
 type SearchTaskStatusWindowResponse = {
   status: TaskStatus
@@ -780,6 +792,7 @@ export class ApiError extends Error {
   constructor(
     public code: string,
     message: string,
+    public details?: unknown,
   ) {
     super(message)
   }
@@ -837,10 +850,43 @@ export class KanbanApi {
     const params = new URLSearchParams({
       include_archived: String(options.includeArchived ?? false),
     })
-    const boards = await this.request<Board[]>(`/api/v1/boards?${params.toString()}`, {
+    const envelope = parseListBoardsEnvelope(await this.requestRaw(`/api/v1/boards?${params.toString()}`, {
       signal: options.signal,
-    })
-    return expectArray<Board>(boards, "boards response data")
+    }))
+    return envelope.data
+  }
+
+  async createBoard(input: CreateBoardInput, options: RequestOptions = {}) {
+    return parseCreateBoardEnvelope(await this.requestRaw("/api/v1/boards", {
+      method: "POST",
+      body: {
+        slug: input.slug,
+        name: input.name,
+        description: input.description ?? null,
+        actor: this.actor,
+      },
+      actorHeader: true,
+      signal: options.signal,
+    })).data
+  }
+
+  async getBoard(board: string, options: RequestOptions = {}) {
+    return parseGetBoardEnvelope(await this.requestRaw(
+      `/api/v1/boards/${encodeURIComponent(board)}`,
+      { signal: options.signal },
+    )).data
+  }
+
+  async archiveBoard(board: string, options: RequestOptions = {}) {
+    return parseArchiveBoardEnvelope(await this.requestRaw(
+      `/api/v1/boards/${encodeURIComponent(board)}/archive`,
+      {
+        method: "POST",
+        body: { actor: this.actor },
+        actorHeader: true,
+        signal: options.signal,
+      },
+    )).data
   }
 
   async stats(options: RequestOptions = {}) {
@@ -854,19 +900,21 @@ export class KanbanApi {
   }
 
   async doctor(options: RequestOptions = {}) {
-    return this.request<DoctorReport>("/api/v1/maintenance/doctor", {
+    const envelope = await this.requestEnvelope<unknown>("/api/v1/maintenance/doctor", {
       method: "POST",
-      body: { board: this.board, actor: this.actor },
       signal: options.signal,
     })
+    expectExactKeys(envelope as unknown as Record<string, unknown>, ["data"], "doctor response")
+    return parseDoctorReport(envelope.data)
   }
 
   async checkpoint(options: RequestOptions = {}) {
-    return this.request<CheckpointReport>("/api/v1/maintenance/checkpoint", {
+    const envelope = await this.requestEnvelope<unknown>("/api/v1/maintenance/checkpoint", {
       method: "POST",
-      body: { board: this.board, actor: this.actor },
       signal: options.signal,
     })
+    expectExactKeys(envelope as unknown as Record<string, unknown>, ["data"], "checkpoint response")
+    return parseCheckpointReport(envelope.data)
   }
 
   async listBoardColumns(options: RequestOptions = {}) {
@@ -888,29 +936,19 @@ export class KanbanApi {
       if (label.trim()) params.append("label", label.trim())
     }
     for (const filter of options.planFilters ?? []) params.append("plan_filter", filter)
-    const envelope = await this.requestEnvelope<Task[], PageEnvelopeMeta>(
-      `/api/v1/boards/${this.board}/tasks?${params.toString()}`,
-      { signal: options.signal },
-    )
-    const tasks = expectArray<Task>(envelope.data, "tasks response data")
-    return {
-      tasks,
-      page: normalizePageMeta(envelope.meta, { limit, offset }),
-    } satisfies TaskPageResult
+    const envelope = parseTaskListEnvelope(await this.requestRaw(`/api/v1/boards/${this.board}/tasks?${params.toString()}`, { signal: options.signal }))
+    return { tasks: envelope.data, page: envelope.meta } satisfies TaskPageResult
   }
 
   async listTasksByStatus(options: TaskListOptions & { statuses: TaskStatus[] }) {
     const params = this.taskListParams(options)
-    const envelope = await this.requestEnvelope<TaskStatusWindowsResponse, PageEnvelopeMeta>(
-      `/api/v1/boards/${this.board}/tasks/by-status?${params.toString()}`,
-      { signal: options.signal },
-    )
-    const data = expectRecord<TaskStatusWindowsResponse>(envelope.data, "task status windows response data")
+    const envelope = parseTaskStatusEnvelope(await this.requestRaw(`/api/v1/boards/${this.board}/tasks/by-status?${params.toString()}`, { signal: options.signal }))
+    const data = envelope.data
     return {
       statuses: expectArray<TaskStatusWindowResponse>(data.statuses, "task status windows").map((entry) => ({
         status: entry.status,
         tasks: expectArray<Task>(entry.tasks, "task status window tasks"),
-        page: normalizePageMeta(entry.page, { limit: options.limit ?? 100, offset: options.offset ?? 0 }),
+        page: expectRequiredTotalPageMeta(entry.page, "task status window page"),
       })),
     } satisfies TaskStatusWindowsResult
   }
@@ -959,7 +997,7 @@ export class KanbanApi {
   }
 
   async createTask(input: { title: string; description?: string; status?: TaskStatus }, options: RequestOptions = {}) {
-    return this.request<Task>(`/api/v1/boards/${this.board}/tasks`, {
+    const envelope = await this.requestEnvelope<unknown>(`/api/v1/boards/${this.board}/tasks`, {
       method: "POST",
       body: {
         title: input.title,
@@ -969,6 +1007,9 @@ export class KanbanApi {
       },
       signal: options.signal,
     })
+    const record = expectRecord<Record<string, unknown>>(envelope, "create task response")
+    expectExactKeys(record, ["data"], "create task response")
+    return parseApiTask(record.data, "create task response data")
   }
 
   async updateTask(taskId: string, patch: Partial<Pick<Task, "title" | "description" | "assignee" | "priority" | "due_at" | "scheduled_at">>, options: RequestOptions = {}) {
@@ -1044,15 +1085,15 @@ export class KanbanApi {
   }
 
   async listSteps(taskId: string, options: RequestOptions = {}) {
-    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps", options)
+    return parseListStepsEnvelope(await this.requestRaw("/api/v1/tasks/" + taskId + "/steps", options)).data
   }
 
   async createStep(taskId: string, input: CreateStepInput, options: RequestOptions = {}) {
-    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps", {
+    return parseCreateStepEnvelope(await this.requestRaw("/api/v1/tasks/" + taskId + "/steps", {
       method: "POST",
       body: { ...input, actor: this.actor },
       signal: options.signal,
-    })
+    })).data
   }
 
   async updateStep(
@@ -1061,42 +1102,42 @@ export class KanbanApi {
     input: UpdateStepInput,
     options: RequestOptions = {},
   ) {
-    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps/" + stepId, {
+    return parseUpdateStepEnvelope(await this.requestRaw("/api/v1/tasks/" + taskId + "/steps/" + stepId, {
       method: "PATCH",
       body: { ...input, actor: this.actor },
       signal: options.signal,
-    })
+    })).data
   }
 
   async removeStep(taskId: string, stepId: string, options: RequestOptions = {}) {
-    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps/" + stepId, {
+    return parseRemoveStepEnvelope(await this.requestRaw("/api/v1/tasks/" + taskId + "/steps/" + stepId, {
       method: "DELETE",
       signal: options.signal,
-    })
+    })).data
   }
 
   async completeStep(taskId: string, stepId: string, note: string, options: RequestOptions = {}) {
-    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps/" + stepId + "/done", {
+    return parseCompleteStepEnvelope(await this.requestRaw("/api/v1/tasks/" + taskId + "/steps/" + stepId + "/done", {
       method: "POST",
       body: { note, actor: this.actor },
       signal: options.signal,
-    })
+    })).data
   }
 
   async skipStep(taskId: string, stepId: string, reason: string, options: RequestOptions = {}) {
-    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps/" + stepId + "/skip", {
+    return parseSkipStepEnvelope(await this.requestRaw("/api/v1/tasks/" + taskId + "/steps/" + stepId + "/skip", {
       method: "POST",
       body: { reason, actor: this.actor },
       signal: options.signal,
-    })
+    })).data
   }
 
   async reopenStep(taskId: string, stepId: string, reason: string, options: RequestOptions = {}) {
-    return this.request<TaskSteps>("/api/v1/tasks/" + taskId + "/steps/" + stepId + "/reopen", {
+    return parseReopenStepEnvelope(await this.requestRaw("/api/v1/tasks/" + taskId + "/steps/" + stepId + "/reopen", {
       method: "POST",
       body: { reason, actor: this.actor },
       signal: options.signal,
-    })
+    })).data
   }
 
   async markExecutionPlanNotRequired(taskId: string, reason: string, options: RequestOptions = {}) {
@@ -1108,7 +1149,11 @@ export class KanbanApi {
   }
 
   async listRuns(taskId: string, options: RequestOptions = {}) {
-    return this.request<Run[]>(`/api/v1/tasks/${taskId}/runs`, options)
+    return parseListRunsEnvelope(await this.requestRaw(`/api/v1/tasks/${taskId}/runs`, options)).data
+  }
+
+  async getRun(runId: string, options: RequestOptions = {}) {
+    return parseGetRunEnvelope(await this.requestRaw(`/api/v1/runs/${runId}`, options)).data
   }
 
   async getRunLog(runId: string, options: RequestOptions = {}) {
@@ -1116,23 +1161,19 @@ export class KanbanApi {
   }
 
   async listComments(taskId: string, options: RequestOptions = {}) {
-    return this.request<CommentRecord[]>(`/api/v1/tasks/${taskId}/comments`, options)
+    return parseListCommentsEnvelope(await this.requestRaw(`/api/v1/tasks/${taskId}/comments`, options)).data
   }
 
   async createComment(taskId: string, body: string, options: RequestOptions = {}) {
-    return this.request<CommentRecord>(`/api/v1/tasks/${taskId}/comments`, {
-      method: "POST",
-      body: { author: this.actor, body },
-      signal: options.signal,
-    })
+    return parseCreateCommentEnvelope(await this.requestRaw(`/api/v1/tasks/${taskId}/comments`, {
+      method: "POST", body: { author: this.actor, body }, signal: options.signal,
+    })).data
   }
 
   async addTaskLabel(taskId: string, name: string, options: RequestOptions = {}) {
-    return this.request<Task>(`/api/v1/tasks/${taskId}/labels`, {
-      method: "POST",
-      body: { name, actor: this.actor },
-      signal: options.signal,
-    })
+    return parseAddTaskLabelEnvelope(await this.requestRaw(`/api/v1/tasks/${taskId}/labels`, {
+      method: "POST", body: { name, actor: this.actor }, signal: options.signal,
+    })).data
   }
 
   async suggestTaskLabels(
@@ -1158,41 +1199,38 @@ export class KanbanApi {
     if (typeof options.minScore === "number") {
       params.set("min_score", String(options.minScore))
     }
-    return this.request<LabelSuggestionResult>(
+    return parseLabelSuggestionEnvelope(await this.requestRaw(
       `/api/v1/tasks/${taskId}/labels/suggestions?${params.toString()}`,
-      {
-        signal: options.signal,
-      },
-    )
+      { signal: options.signal },
+    )).data
   }
 
   async removeTaskLabel(taskId: string, labelId: string, options: RequestOptions = {}) {
-    return this.request<Task>(`/api/v1/tasks/${taskId}/labels/${labelId}`, {
-      method: "DELETE",
-      signal: options.signal,
-    })
+    return parseRemoveTaskLabelEnvelope(await this.requestRaw(`/api/v1/tasks/${taskId}/labels/${labelId}`, {
+      method: "DELETE", signal: options.signal,
+    })).data
   }
 
   async listSignals(options: SignalListOptions = {}) {
     const params = signalSearchParams(options)
-    const signals = await this.request<SignalRecord[]>(
+    const signals = parseSignalListEnvelope(await this.requestRaw(
       `/api/v1/boards/${this.board}/signals?${params.toString()}`,
       { signal: options.signal },
-    )
-    return expectArray<SignalRecord>(signals, "signals response data")
+    )).data
+    return signals
   }
 
   async reviewSignals(options: SignalListOptions = {}) {
     const params = signalSearchParams(options)
-    const signals = await this.request<SignalRecord[]>(
+    const signals = parseSignalListEnvelope(await this.requestRaw(
       `/api/v1/boards/${this.board}/signals/review?${params.toString()}`,
       { signal: options.signal },
-    )
-    return expectArray<SignalRecord>(signals, "signal review response data")
+    )).data
+    return signals
   }
 
   async getSignal(signalId: string, options: RequestOptions = {}) {
-    return this.request<SignalRecord>(`/api/v1/signals/${encodeURIComponent(signalId)}`, options)
+    return parseSignalEnvelope(await this.requestRaw(`/api/v1/signals/${encodeURIComponent(signalId)}`, options)).data
   }
 
   async listLabelOntologySignals(options: LabelOntologySignalListOptions = {}) {
@@ -1205,11 +1243,17 @@ export class KanbanApi {
     if (options.task?.trim()) params.set("task", options.task.trim())
     if (options.label?.trim()) params.set("label", options.label.trim())
     if (options.proposedLabel?.trim()) params.set("proposed_label", options.proposedLabel.trim())
-    const signals = await this.request<LabelOntologySignalRecord[]>(
-      `/api/v1/boards/${this.board}/label-ontology/signals?${params.toString()}`,
-      { signal: options.signal },
+    const response = expectRecord(
+      await this.requestRaw(`/api/v1/boards/${this.board}/label-ontology/signals?${params.toString()}`, {
+        signal: options.signal,
+      }),
+      "label ontology signals response",
     )
-    return expectArray<LabelOntologySignalRecord>(signals, "label ontology signals response data")
+    expectExactKeys(response, ["data", "meta"], "label ontology signals response")
+    const meta = expectRecord(response.meta, "label ontology signals response meta")
+    expectExactKeys(meta, ["limit"], "label ontology signals response meta")
+    expectSafeInteger(meta.limit, "label ontology signals response meta.limit", true)
+    return expectArray<LabelOntologySignalRecord>(response.data, "label ontology signals response data")
   }
 
   async reviewLabelOntology(options: LabelOntologyReviewOptions = {}) {
@@ -1281,13 +1325,41 @@ export class KanbanApi {
     return { events: envelope.data, meta: envelope.meta ?? {} } satisfies EventPage
   }
 
-  async transition(task: Task, action: "specify" | "promote" | "claim" | "heartbeat" | "complete" | "reopen" | "submit-review" | "block" | "unblock" | "archive", body: Record<string, unknown> = {}, options: RequestOptions = {}) {
+  async transition(task: Task, action: "specify" | "promote" | "reopen" | "unblock" | "archive", body?: Record<string, unknown>, options?: RequestOptions): Promise<Task>
+  async transition(task: Task, action: "claim" | "heartbeat" | "complete" | "submit-review" | "block", body?: Record<string, unknown>, options?: RequestOptions): Promise<Task | ClaimResponse>
+  async transition(task: Task, action: "specify" | "promote" | "claim" | "heartbeat" | "complete" | "reopen" | "submit-review" | "block" | "unblock" | "archive", body?: Record<string, unknown>, options?: RequestOptions): Promise<Task | ClaimResponse>
+  async transition(task: Task, action: "specify" | "promote" | "claim" | "heartbeat" | "complete" | "reopen" | "submit-review" | "block" | "unblock" | "archive", body: Record<string, unknown> = {}, options: RequestOptions = {}): Promise<Task | ClaimResponse> {
     const payload = { actor: this.actor, ...body }
-    return this.request<Task | ClaimResponse>(`/api/v1/tasks/${task.id}/transitions/${action}`, {
+    const path = `/api/v1/tasks/${task.id}/transitions/${action}`
+    if (action === "specify" || action === "promote" || action === "reopen" || action === "unblock" || action === "archive") {
+      return parseTransitionTaskEnvelope(await this.requestRaw(path, {
+        method: "POST",
+        body: payload,
+        signal: options.signal,
+      }))
+    }
+    return this.request<Task | ClaimResponse>(path, {
       method: "POST",
       body: payload,
       signal: options.signal,
     })
+  }
+
+  private async requestRaw(path: string, init: RequestOptions = {}): Promise<unknown> {
+    const headers: Record<string, string> = { "Accept-Language": this.options.locale ?? getCurrentDesktopLocale() }
+    if (init.body !== undefined) headers["Content-Type"] = "application/json"
+    if (init.actorHeader) headers["X-KB-Actor"] = this.actor
+    const response = await fetch(`${this.config.apiBaseUrl}${path}`, { method: init.method ?? "GET", headers, body: init.body === undefined ? undefined : JSON.stringify(init.body), signal: init.signal })
+    const text = await response.text()
+    let json: unknown = null
+    try { json = text ? JSON.parse(text) : null } catch { throw new ApiError("invalid_response", "response must be valid JSON") }
+    const record = json && typeof json === "object" && !Array.isArray(json) ? json as Record<string, unknown> : null
+    if (record && "error" in record) {
+      const error = parseTaskReadErrorEnvelope(record)
+      throw new ApiError(error.code, error.message, error.details)
+    }
+    if (!response.ok) throw new ApiError("http_error", `${response.status} ${response.statusText}`.trim())
+    return json
   }
 
   async requestEnvelope<T, M = Record<string, unknown>>(path: string, init: RequestOptions = {}) {
@@ -1357,6 +1429,7 @@ export class KanbanApi {
 type RequestOptions = {
   method?: string
   body?: unknown
+  actorHeader?: boolean
   signal?: AbortSignal
 }
 
@@ -1463,4 +1536,353 @@ function normalizePageMeta(meta: PageEnvelopeMeta | undefined, fallback: { limit
 
 function numericMeta(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
+}
+
+function expectRequiredOffsetPageMeta(value: unknown, label: string): RequiredOffsetPageMeta {
+  const meta = expectRecord<Record<string, unknown>>(value, label)
+  return {
+    limit: expectFiniteNumber(meta.limit, label + ".limit"),
+    offset: expectFiniteNumber(meta.offset, label + ".offset"),
+  }
+}
+
+function expectRequiredTotalPageMeta(value: unknown, label: string): RequiredTotalPageMeta {
+  const meta = expectRequiredOffsetPageMeta(value, label)
+  const record = expectRecord<Record<string, unknown>>(value, label)
+  return { ...meta, total: expectFiniteNumber(record.total, label + ".total") }
+}
+
+function expectFiniteNumber(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new ApiError("invalid_response", label + " must be a finite number")
+  }
+  return value
+}
+
+
+const DOCTOR_STORE_KEYS = ["store_name", "schema_version", "last_event_id", "dirty", "last_error", "pending_outbox", "running_outbox", "failed_outbox"] as const
+const DOCTOR_ISSUE_KEYS = ["severity", "code", "message", "record_ids"] as const
+const DOCTOR_KEYS = ["ok", "integrity_check", "migration_version", "user_version", "expired_running_tasks", "running_tasks_without_active_run", "orphan_running_runs", "dependency_cycles", "archived_dependency_edges", "missing_run_logs", "suspicious_run_log_paths", "executable_dependency_violations", "executable_spec_violations", "executable_schedule_violations", "unplanned_active_tasks", "active_parents_with_incomplete_required_steps", "outbox_pending", "outbox_running", "outbox_failed", "derived_dirty_stores", "derived_error_stores", "derived_stores", "consistency_errors", "consistency_warnings", "consistency_issues", "ontology_ledger_errors", "ontology_ledger_warnings", "ontology_ledger_issues"] as const
+const CHECKPOINT_KEYS = ["busy", "log_frames", "checkpointed_frames"] as const
+
+function parseDoctorIssue(value: unknown, label: string): DoctorIssue {
+  const record = expectRecord<Record<string, unknown>>(value, label)
+  expectExactKeys(record, DOCTOR_ISSUE_KEYS, label)
+  expectString(record.severity, label + ".severity")
+  expectString(record.code, label + ".code")
+  expectString(record.message, label + ".message")
+  expectArray<unknown>(record.record_ids, label + ".record_ids").forEach((entry, index) => expectString(entry, label + ".record_ids[" + index + "]"))
+  return record as DoctorIssue
+}
+
+function parseDoctorStore(value: unknown, label: string): DoctorDerivedStore {
+  const record = expectRecord<Record<string, unknown>>(value, label)
+  expectExactKeys(record, DOCTOR_STORE_KEYS, label)
+  expectString(record.store_name, label + ".store_name")
+  for (const key of ["schema_version", "last_event_id", "pending_outbox", "running_outbox", "failed_outbox"] as const) expectSafeInteger(record[key], label + "." + key)
+  expectBoolean(record.dirty, label + ".dirty")
+  expectNullableString(record.last_error, label + ".last_error")
+  return record as DoctorDerivedStore
+}
+
+function parseDoctorReport(value: unknown): DoctorReport {
+  const record = expectRecord<Record<string, unknown>>(value, "doctor response data")
+  expectExactKeys(record, DOCTOR_KEYS, "doctor response data")
+  expectBoolean(record.ok, "doctor response data.ok")
+  expectString(record.integrity_check, "doctor response data.integrity_check")
+  expectNullableInteger(record.migration_version, "doctor response data.migration_version")
+  for (const key of DOCTOR_KEYS) {
+    if (!["ok", "integrity_check", "migration_version", "derived_stores", "consistency_issues", "ontology_ledger_issues"].includes(key)) {
+      expectSafeInteger(record[key], "doctor response data." + key)
+    }
+  }
+  expectArray<unknown>(record.derived_stores, "doctor response data.derived_stores").forEach((entry, index) => parseDoctorStore(entry, "doctor response data.derived_stores[" + index + "]"))
+  for (const key of ["consistency_issues", "ontology_ledger_issues"] as const) {
+    expectArray<unknown>(record[key], "doctor response data." + key).forEach((entry, index) => parseDoctorIssue(entry, "doctor response data." + key + "[" + index + "]"))
+  }
+  return record as DoctorReport
+}
+
+function parseCheckpointReport(value: unknown): CheckpointReport {
+  const record = expectRecord<Record<string, unknown>>(value, "checkpoint response data")
+  expectExactKeys(record, CHECKPOINT_KEYS, "checkpoint response data")
+  for (const key of CHECKPOINT_KEYS) expectSafeInteger(record[key], "checkpoint response data." + key)
+  return record as CheckpointReport
+}
+const TASK_STATUSES = new Set<TaskStatus>(["triage", "todo", "scheduled", "ready", "running", "blocked", "review", "done", "archived"])
+const PLAN_STATES = new Set<StepPlanState>(["unplanned", "planned", "not_required"])
+const TASK_KEYS = ["id", "board_id", "board_slug", "ref", "seq", "title", "description", "status", "status_reason", "assignee", "priority", "position", "scheduled_at", "due_at", "created_by", "created_at", "updated_at", "started_at", "completed_at", "archived_at", "claim_owner", "claim_expires_at", "last_heartbeat_at", "current_run_id", "retry_count", "max_retries", "result_summary", "result", "metadata", "lock_version", "dependency_blocked", "unfinished_parent_count", "execution_plan_state", "required_step_count", "completed_required_step_count", "optional_step_count", "labels"] as const
+const LABEL_KEYS = ["id", "board_id", "name", "color", "created_at", "updated_at"] as const
+
+function expectExactKeys(record: Record<string, unknown>, expected: readonly string[], label: string) {
+  const actual = Object.keys(record)
+  if (actual.length !== expected.length || actual.some((key) => !expected.includes(key))) {
+    throw new ApiError("invalid_response", `${label} must contain exactly: ${expected.join(", ")}`)
+  }
+}
+
+function expectString(value: unknown, label: string): string {
+  if (typeof value !== "string") throw new ApiError("invalid_response", `${label} must be a string`)
+  return value
+}
+
+function expectBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") throw new ApiError("invalid_response", `${label} must be a boolean`)
+  return value
+}
+
+function expectSafeInteger(value: unknown, label: string, nonNegative = false): number {
+  if (!Number.isSafeInteger(value) || (nonNegative && (value as number) < 0)) {
+    throw new ApiError("invalid_response", `${label} must be ${nonNegative ? "a non-negative " : "a "}safe integer`)
+  }
+  return value as number
+}
+
+function expectNullableString(value: unknown, label: string): string | null {
+  return value === null ? null : expectString(value, label)
+}
+
+function expectNullableInteger(value: unknown, label: string): number | null {
+  return value === null ? null : expectSafeInteger(value, label)
+}
+
+function parseApiLabel(value: unknown, label: string): LabelRecord {
+  const record = expectRecord<Record<string, unknown>>(value, label)
+  expectExactKeys(record, LABEL_KEYS, label)
+  expectString(record.id, `${label}.id`); expectString(record.board_id, `${label}.board_id`); expectString(record.name, `${label}.name`)
+  expectNullableString(record.color, `${label}.color`); expectSafeInteger(record.created_at, `${label}.created_at`); expectSafeInteger(record.updated_at, `${label}.updated_at`)
+  return record as LabelRecord
+}
+
+function parseApiTask(value: unknown, label: string): Task {
+  const record = expectRecord<Record<string, unknown>>(value, label)
+  expectExactKeys(record, TASK_KEYS, label)
+  for (const key of ["id", "board_id", "board_slug", "ref", "title", "created_by"] as const) expectString(record[key], `${label}.${key}`)
+  for (const key of ["description", "status_reason", "assignee", "claim_owner", "current_run_id", "result_summary"] as const) expectNullableString(record[key], `${label}.${key}`)
+  for (const key of ["seq", "position", "created_at", "updated_at", "retry_count", "lock_version", "unfinished_parent_count", "required_step_count", "completed_required_step_count", "optional_step_count"] as const) expectSafeInteger(record[key], `${label}.${key}`)
+  for (const key of ["scheduled_at", "due_at", "started_at", "completed_at", "archived_at", "claim_expires_at", "last_heartbeat_at", "max_retries"] as const) expectNullableInteger(record[key], `${label}.${key}`)
+  if (!TASK_STATUSES.has(record.status as TaskStatus)) throw new ApiError("invalid_response", `${label}.status is unknown`)
+  if (!Number.isSafeInteger(record.priority) || (record.priority as number) < 0 || (record.priority as number) > 3) throw new ApiError("invalid_response", `${label}.priority must be an integer in 0..=3`)
+  expectBoolean(record.dependency_blocked, `${label}.dependency_blocked`)
+  if (!PLAN_STATES.has(record.execution_plan_state as StepPlanState)) throw new ApiError("invalid_response", `${label}.execution_plan_state is unknown`)
+  record.labels = expectArray<unknown>(record.labels, `${label}.labels`).map((entry, index) => parseApiLabel(entry, `${label}.labels[${index}]`))
+  return record as Task
+}
+
+function parseTransitionTaskEnvelope(value: unknown): Task {
+  const envelope = expectRecord<Record<string, unknown>>(value, "task transition response")
+  expectExactKeys(envelope, ["data"], "task transition response")
+  return parseApiTask(envelope.data, "task transition response.data")
+}
+
+function parseTotalMeta(value: unknown, label: string): RequiredTotalPageMeta {
+  const record = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(record, ["limit", "offset", "total"], label)
+  return { limit: expectSafeInteger(record.limit, `${label}.limit`, true), offset: expectSafeInteger(record.offset, `${label}.offset`, true), total: expectSafeInteger(record.total, `${label}.total`, true) }
+}
+
+function parseOffsetMeta(value: unknown, label: string): RequiredOffsetPageMeta {
+  const record = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(record, ["limit", "offset"], label)
+  return { limit: expectSafeInteger(record.limit, `${label}.limit`, true), offset: expectSafeInteger(record.offset, `${label}.offset`, true) }
+}
+
+function parseTaskReadErrorEnvelope(value: unknown): ErrorBody {
+  const envelope = expectRecord<Record<string, unknown>>(value, "task-read error response")
+  expectExactKeys(envelope, ["error"], "task-read error response")
+  const error = expectRecord<Record<string, unknown>>(envelope.error, "task-read error response.error")
+  const keys = Object.keys(error)
+  const hasDetails = keys.includes("details")
+  expectExactKeys(error, hasDetails ? ["code", "message", "details"] : ["code", "message"], "task-read error response.error")
+  return {
+    code: expectString(error.code, "task-read error response.error.code"),
+    message: expectString(error.message, "task-read error response.error.message"),
+    ...(hasDetails ? { details: error.details } : {}),
+  }
+}
+
+
+const RUN_STATUSES = new Set(["running", "succeeded", "failed", "canceled", "expired"])
+function parseApiRun(value: unknown, label: string): Run {
+  const record = expectRecord<Record<string, unknown>>(value, label)
+  expectExactKeys(record, ["id", "task_id", "status", "worker_profile", "worker_pid", "claim_owner", "started_at", "finished_at", "exit_code", "summary", "error", "has_log", "metadata"], label)
+  if (!RUN_STATUSES.has(record.status as string)) throw new ApiError("invalid_response", `${label}.status is unknown`)
+  return { id: expectString(record.id, `${label}.id`), task_id: expectString(record.task_id, `${label}.task_id`), status: record.status as Run["status"], worker_profile: expectNullableString(record.worker_profile, `${label}.worker_profile`), worker_pid: expectNullableInteger(record.worker_pid, `${label}.worker_pid`), claim_owner: expectString(record.claim_owner, `${label}.claim_owner`), started_at: expectSafeInteger(record.started_at, `${label}.started_at`, true), finished_at: expectNullableInteger(record.finished_at, `${label}.finished_at`), exit_code: expectNullableInteger(record.exit_code, `${label}.exit_code`), summary: expectNullableString(record.summary, `${label}.summary`), error: expectNullableString(record.error, `${label}.error`), has_log: expectBoolean(record.has_log, `${label}.has_log`), metadata: record.metadata }
+}
+function parseListRunsEnvelope(value: unknown): { data: Run[] } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "list runs response"); expectExactKeys(envelope, ["data"], "list runs response")
+  return { data: expectArray<unknown>(envelope.data, "list runs response data").map((entry, index) => parseApiRun(entry, `list runs response data[${index}]`)) }
+}
+function parseGetRunEnvelope(value: unknown): { data: Run } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "get run response"); expectExactKeys(envelope, ["data"], "get run response")
+  return { data: parseApiRun(envelope.data, "get run response data") }
+}
+
+const SIGNAL_OBSERVATION_KEYS = ["id", "board_id", "task_id", "task_ref_snapshot", "run_id", "comment_id", "actor", "agent_type", "source", "evidence_json", "created_at"] as const
+const SIGNAL_KEYS = ["id", "board_id", "observation_id", "kind", "title", "summary", "severity", "status", "dedupe_key", "superseded_by_signal_id", "reviewed_by", "reviewed_at", "review_reason", "created_at", "updated_at", "observation"] as const
+function parseSignalObservation(value: unknown, label: string): SignalObservationRecord {
+ const record = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(record, SIGNAL_OBSERVATION_KEYS, label)
+ for (const key of ["id", "board_id", "actor", "evidence_json"] as const) expectString(record[key], `.`)
+ for (const key of ["task_id", "task_ref_snapshot", "run_id", "comment_id", "agent_type", "source"] as const) expectNullableString(record[key], `.`)
+ expectSafeInteger(record.created_at, `.created_at`, true); return record as SignalObservationRecord
+}
+function parseSignalRecord(value: unknown, label: string): SignalRecord {
+ const record = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(record, SIGNAL_KEYS, label)
+ for (const key of ["id", "board_id", "observation_id", "kind", "title", "summary", "severity"] as const) expectString(record[key], `.`)
+ if (!["open", "confirmed", "resolved", "rejected", "superseded"].includes(record.status as string)) throw new ApiError("invalid_response", `.status is unknown`)
+ for (const key of ["dedupe_key", "superseded_by_signal_id", "reviewed_by", "review_reason"] as const) expectNullableString(record[key], `.`)
+ expectNullableInteger(record.reviewed_at, `.reviewed_at`); expectSafeInteger(record.created_at, `.created_at`, true); expectSafeInteger(record.updated_at, `.updated_at`, true)
+ record.observation = parseSignalObservation(record.observation, `.observation`); return record as SignalRecord
+}
+function parseSignalListEnvelope(value: unknown): { data: SignalRecord[] } { const envelope = expectRecord<Record<string, unknown>>(value, "signals response"); expectExactKeys(envelope, ["data"], "signals response"); return { data: expectArray<unknown>(envelope.data, "signals response data").map((entry, index) => parseSignalRecord(entry, `signals response data[]`)) } }
+function parseSignalEnvelope(value: unknown): { data: SignalRecord } { const envelope = expectRecord<Record<string, unknown>>(value, "signal response"); expectExactKeys(envelope, ["data"], "signal response"); return { data: parseSignalRecord(envelope.data, "signal response data") } }
+
+const LABEL_EVIDENCE_KEYS = ["atom_id", "label_id", "label_name", "polarity", "kind", "text", "score"] as const
+const LABEL_SUGGESTION_KEYS = ["label_id", "label_name", "score", "weight", "already_applied", "evidence_atoms", "negative_evidence_atoms"] as const
+const LABEL_SUGGESTION_RESULT_KEYS = ["task_id", "board_id", "selected_labels", "candidates", "coverage", "coverage_cosine", "residual_norm", "needs_new_label", "reason_codes", "degraded", "diagnostics"] as const
+
+function parseLabelEvidence(value: unknown, label: string): LabelSuggestionEvidenceAtom {
+  const record = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(record, LABEL_EVIDENCE_KEYS, label)
+  for (const key of ["atom_id", "label_id", "label_name", "polarity", "kind", "text"] as const) expectString(record[key], `.`)
+  expectFiniteNumber(record.score, `.score`)
+  return record as LabelSuggestionEvidenceAtom
+}
+function parseSelectedLabel(value: unknown, label: string): SelectedLabelSuggestion {
+  const record = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(record, LABEL_SUGGESTION_KEYS, label)
+  expectString(record.label_id, `.label_id`); expectString(record.label_name, `.label_name`)
+  expectFiniteNumber(record.score, `.score`); expectFiniteNumber(record.weight, `.weight`); expectBoolean(record.already_applied, `.already_applied`)
+  record.evidence_atoms = expectArray<unknown>(record.evidence_atoms, `.evidence_atoms`).map((entry, index) => parseLabelEvidence(entry, `.evidence_atoms[]`))
+  record.negative_evidence_atoms = expectArray<unknown>(record.negative_evidence_atoms, `.negative_evidence_atoms`).map((entry, index) => parseLabelEvidence(entry, `.negative_evidence_atoms[]`))
+  return record as SelectedLabelSuggestion
+}
+function parseLabelSuggestionEnvelope(value: unknown): { data: LabelSuggestionResult } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "label suggestions response"); expectExactKeys(envelope, ["data"], "label suggestions response")
+  const record = expectRecord<Record<string, unknown>>(envelope.data, "label suggestions response data"); expectExactKeys(record, LABEL_SUGGESTION_RESULT_KEYS, "label suggestions response data")
+  expectString(record.task_id, "label suggestions response data.task_id"); expectString(record.board_id, "label suggestions response data.board_id")
+  record.selected_labels = expectArray<unknown>(record.selected_labels, "label suggestions response data.selected_labels").map((entry, index) => parseSelectedLabel(entry, `label suggestions response data.selected_labels[]`))
+  record.candidates = expectArray<unknown>(record.candidates, "label suggestions response data.candidates").map((entry, index) => parseSelectedLabel(entry, `label suggestions response data.candidates[]`))
+  for (const key of ["coverage", "coverage_cosine", "residual_norm"] as const) expectFiniteNumber(record[key], `label suggestions response data.`)
+  expectBoolean(record.needs_new_label, "label suggestions response data.needs_new_label"); expectBoolean(record.degraded, "label suggestions response data.degraded")
+  for (const key of ["reason_codes", "diagnostics"] as const) expectArray<unknown>(record[key], `label suggestions response data.`).forEach((entry, index) => expectString(entry, `label suggestions response data.[]`))
+  return { data: record as LabelSuggestionResult }
+}
+
+function parseAddTaskLabelEnvelope(value: unknown): { data: Task; meta?: { created_labels: LabelRecord[] } } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "add task label response")
+  const hasMeta = Object.prototype.hasOwnProperty.call(envelope, "meta")
+  expectExactKeys(envelope, hasMeta ? ["data", "meta"] : ["data"], "add task label response")
+  const result: { data: Task; meta?: { created_labels: LabelRecord[] } } = { data: parseApiTask(envelope.data, "add task label response data") }
+  if (hasMeta) {
+    const meta = expectRecord<Record<string, unknown>>(envelope.meta, "add task label response meta"); expectExactKeys(meta, ["created_labels"], "add task label response meta")
+    result.meta = { created_labels: expectArray<unknown>(meta.created_labels, "add task label response meta.created_labels").map((entry, index) => parseApiLabel(entry, `add task label response meta.created_labels[${index}]`)) }
+  }
+  return result
+}
+function parseRemoveTaskLabelEnvelope(value: unknown): { data: Task } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "remove task label response"); expectExactKeys(envelope, ["data"], "remove task label response")
+  return { data: parseApiTask(envelope.data, "remove task label response data") }
+}
+
+function parseApiComment(value: unknown, label: string): CommentRecord {
+  const record = expectRecord<Record<string, unknown>>(value, label)
+  expectExactKeys(record, ["id", "board_id", "task_id", "author", "author_type", "agent_type", "body", "kind", "metadata", "created_at"], label)
+  if (record.author_type !== "user" && record.author_type !== "agent") throw new ApiError("invalid_response", `${label}.author_type is unknown`)
+  if (record.kind !== "note" && record.kind !== "decision" && record.kind !== "signal") throw new ApiError("invalid_response", `${label}.kind is unknown`)
+  return { id: expectString(record.id, `${label}.id`), board_id: expectString(record.board_id, `${label}.board_id`), task_id: expectString(record.task_id, `${label}.task_id`), author: expectString(record.author, `${label}.author`), author_type: record.author_type, agent_type: expectNullableString(record.agent_type, `${label}.agent_type`), body: expectString(record.body, `${label}.body`), kind: record.kind, metadata: expectRecord<Record<string, unknown>>(record.metadata, `${label}.metadata`), created_at: expectSafeInteger(record.created_at, `${label}.created_at`, true) }
+}
+
+function parseApiBoard(value: unknown, label: string): Board {
+  const record = expectRecord<Record<string, unknown>>(value, label)
+  expectExactKeys(record, ["id", "slug", "name", "description", "created_at", "updated_at", "archived_at"], label)
+  return {
+    id: expectString(record.id, `${label}.id`),
+    slug: expectString(record.slug, `${label}.slug`),
+    name: expectString(record.name, `${label}.name`),
+    description: expectNullableString(record.description, `${label}.description`),
+    created_at: expectSafeInteger(record.created_at, `${label}.created_at`, true),
+    updated_at: expectSafeInteger(record.updated_at, `${label}.updated_at`, true),
+    archived_at: record.archived_at === null ? null : expectSafeInteger(record.archived_at, `${label}.archived_at`, true),
+  }
+}
+
+function parseListBoardsEnvelope(value: unknown): { data: Board[] } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "boards response")
+  expectExactKeys(envelope, ["data"], "boards response")
+  return {
+    data: expectArray<unknown>(envelope.data, "boards response data")
+      .map((entry, index) => parseApiBoard(entry, `boards response data[${index}]`)),
+  }
+}
+function parseCreateBoardEnvelope(value: unknown): { data: Board } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "create board response")
+  expectExactKeys(envelope, ["data"], "create board response")
+  return { data: parseApiBoard(envelope.data, "create board response data") }
+}
+function parseGetBoardEnvelope(value: unknown): { data: Board } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "get board response")
+  expectExactKeys(envelope, ["data"], "get board response")
+  return { data: parseApiBoard(envelope.data, "get board response data") }
+}
+function parseArchiveBoardEnvelope(value: unknown): { data: Board } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "archive board response")
+  expectExactKeys(envelope, ["data"], "archive board response")
+  return { data: parseApiBoard(envelope.data, "archive board response data") }
+}
+function parseListCommentsEnvelope(value: unknown): { data: CommentRecord[] } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "list comments response"); expectExactKeys(envelope, ["data"], "list comments response")
+  return { data: expectArray<unknown>(envelope.data, "list comments response data").map((entry, index) => parseApiComment(entry, `list comments response data[${index}]`)) }
+}
+function parseCreateCommentEnvelope(value: unknown): { data: CommentRecord } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "create comment response"); expectExactKeys(envelope, ["data"], "create comment response")
+  return { data: parseApiComment(envelope.data, "create comment response data") }
+}
+
+const STEP_KEYS = ["id", "parent_task_id", "title", "body", "linked_task", "position", "required", "status", "resolution_note", "resolved_by", "resolved_at", "created_by", "created_at", "updated_by", "updated_at"] as const
+const EXECUTION_PLAN_KEYS = ["board_id", "task_id", "state", "reason", "updated_by", "updated_at"] as const
+const STEP_STATUSES = new Set<StepStatus>(["todo", "done", "skipped"])
+
+function parseTaskStep(value: unknown, label: string): TaskStep {
+  const step = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(step, STEP_KEYS, label)
+  for (const key of ["id", "parent_task_id", "title", "created_by", "updated_by"] as const) expectString(step[key], `${label}.${key}`)
+  for (const key of ["body", "resolution_note", "resolved_by"] as const) expectNullableString(step[key], `${label}.${key}`)
+  for (const key of ["position", "created_at", "updated_at"] as const) expectSafeInteger(step[key], `${label}.${key}`)
+  expectNullableInteger(step.resolved_at, `${label}.resolved_at`); expectBoolean(step.required, `${label}.required`)
+  if (!STEP_STATUSES.has(step.status as StepStatus)) throw new ApiError("invalid_response", `${label}.status is unknown`)
+  if (step.linked_task !== null) step.linked_task = parseApiTask(step.linked_task, `${label}.linked_task`)
+  return step as TaskStep
+}
+
+function parseExecutionPlan(value: unknown, label: string): TaskExecutionPlan {
+  const plan = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(plan, EXECUTION_PLAN_KEYS, label)
+  for (const key of ["board_id", "task_id", "updated_by"] as const) expectString(plan[key], `${label}.${key}`)
+  expectNullableString(plan.reason, `${label}.reason`); expectSafeInteger(plan.updated_at, `${label}.updated_at`)
+  if (!PLAN_STATES.has(plan.state as StepPlanState)) throw new ApiError("invalid_response", `${label}.state is unknown`)
+  return plan as TaskExecutionPlan
+}
+
+function parseStepsEnvelope(value: unknown, label: string): { data: TaskSteps } {
+  const envelope = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(envelope, ["data"], label)
+  const data = expectRecord<Record<string, unknown>>(envelope.data, `${label}.data`); expectExactKeys(data, ["task_id", "steps", "execution_plan"], `${label}.data`)
+  return { data: { task_id: expectString(data.task_id, `${label}.data.task_id`), steps: expectArray<unknown>(data.steps, `${label}.data.steps`).map((step, index) => parseTaskStep(step, `${label}.data.steps[${index}]`)), execution_plan: parseExecutionPlan(data.execution_plan, `${label}.data.execution_plan`) } }
+}
+function parseListStepsEnvelope(value: unknown) { return parseStepsEnvelope(value, "list steps response") }
+function parseCreateStepEnvelope(value: unknown) { return parseStepsEnvelope(value, "create step response") }
+function parseUpdateStepEnvelope(value: unknown) { return parseStepsEnvelope(value, "update step response") }
+function parseRemoveStepEnvelope(value: unknown) { return parseStepsEnvelope(value, "remove step response") }
+function parseCompleteStepEnvelope(value: unknown) { return parseStepsEnvelope(value, "complete step response") }
+function parseSkipStepEnvelope(value: unknown) { return parseStepsEnvelope(value, "skip step response") }
+function parseReopenStepEnvelope(value: unknown) { return parseStepsEnvelope(value, "reopen step response") }
+
+function parseTaskListEnvelope(value: unknown): { data: Task[]; meta: RequiredTotalPageMeta } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "tasks response"); expectExactKeys(envelope, ["data", "meta"], "tasks response")
+  return { data: expectArray<unknown>(envelope.data, "tasks response data").map((entry, index) => parseApiTask(entry, `tasks response data[${index}]`)), meta: parseTotalMeta(envelope.meta, "tasks response meta") }
+}
+
+function parseTaskStatusEnvelope(value: unknown): { data: TaskStatusWindowsResponse; meta: RequiredOffsetPageMeta } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "task status windows response"); expectExactKeys(envelope, ["data", "meta"], "task status windows response")
+  const data = expectRecord<Record<string, unknown>>(envelope.data, "task status windows response data"); expectExactKeys(data, ["statuses"], "task status windows response data")
+  const statuses = expectArray<unknown>(data.statuses, "task status windows").map((entry, index) => {
+    const label = `task status windows[${index}]`; const window = expectRecord<Record<string, unknown>>(entry, label); expectExactKeys(window, ["status", "tasks", "page"], label)
+    if (!TASK_STATUSES.has(window.status as TaskStatus)) throw new ApiError("invalid_response", `${label}.status is unknown`)
+    return { status: window.status as TaskStatus, tasks: expectArray<unknown>(window.tasks, `${label}.tasks`).map((task, taskIndex) => parseApiTask(task, `${label}.tasks[${taskIndex}]`)), page: parseTotalMeta(window.page, `${label}.page`) }
+  })
+  return { data: { statuses }, meta: parseOffsetMeta(envelope.meta, "task status windows response meta") }
 }

@@ -1,0 +1,50 @@
+{
+  "$id": "urn:kanban-tool:schema:api:update-step-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "body": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "linked_task_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "position": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "required": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "title": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "unlink_task": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "title": "Kanban update step request v1",
+  "type": "object"
+}

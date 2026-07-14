@@ -1,0 +1,107 @@
+{
+  "$defs": {
+    "CliHookCodexStatusResult": {
+      "additionalProperties": false,
+      "properties": {
+        "installed": {
+          "type": "boolean"
+        },
+        "managed_commands": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "managed_hook_count": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "matcher": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "post_tool_use_group_count": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "prompt_config": {
+          "$ref": "#/$defs/CliHookPromptConfigStatus"
+        }
+      },
+      "required": [
+        "path",
+        "installed",
+        "matcher",
+        "managed_hook_count",
+        "post_tool_use_group_count",
+        "managed_commands",
+        "prompt_config"
+      ],
+      "type": "object"
+    },
+    "CliHookPromptBindings": {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "type": "string"
+        },
+        "task_create": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "failure",
+        "task_create"
+      ],
+      "type": "object"
+    },
+    "CliHookPromptConfigStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "bindings": {
+          "$ref": "#/$defs/CliHookPromptBindings"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "valid": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "valid",
+        "error",
+        "bindings"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:hook-codex-status-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CliHookCodexStatusResult"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI hook codex status output v1",
+  "type": "object"
+}

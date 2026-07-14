@@ -7,7 +7,9 @@ use kanban_sqlite::api::{
 };
 
 use crate::args::DepCommand;
-use crate::output::print_or_json;
+use crate::output::{
+    cli_dependency_mutation, cli_dependency_snapshot, print_contract_or_human, print_human,
+};
 
 pub(crate) fn handle_dep(
     command: DepCommand,
@@ -25,9 +27,13 @@ pub(crate) fn handle_dep(
             let edge = dependency_edge(db_path, board, &parent_ref, &child_ref)?;
             let dependencies = dependency_snapshot(db_path, board, &child_ref)?;
             let output = DependencyMutation { edge, dependencies };
-            print_or_json(json, &output, || {
-                dep_added(current_locale(), &parent_ref, &child_ref)
-            })?;
+            if json {
+                let contract =
+                    kanban_contract::CliDependencyAddOutput::new(cli_dependency_mutation(&output));
+                print_contract_or_human(true, &contract, String::new)?;
+            } else {
+                print_human(|| dep_added(current_locale(), &parent_ref, &child_ref))?;
+            }
         }
         DepCommand::Remove {
             parent_ref,
@@ -37,13 +43,20 @@ pub(crate) fn handle_dep(
             remove_dependency(db_path, board, actor, &parent_ref, &child_ref)?;
             let dependencies = dependency_snapshot(db_path, board, &child_ref)?;
             let output = DependencyMutation { edge, dependencies };
-            print_or_json(json, &output, || {
-                dep_removed(current_locale(), &parent_ref, &child_ref)
-            })?;
+            if json {
+                let contract = kanban_contract::CliDependencyRemoveOutput::new(
+                    cli_dependency_mutation(&output),
+                );
+                print_contract_or_human(true, &contract, String::new)?;
+            } else {
+                print_human(|| dep_removed(current_locale(), &parent_ref, &child_ref))?;
+            }
         }
         DepCommand::List { task_ref } => {
             let snapshot = dependency_snapshot(db_path, board, &task_ref)?;
-            print_or_json(json, &snapshot, || {
+            let output =
+                kanban_contract::CliDependencyListOutput::new(cli_dependency_snapshot(&snapshot));
+            print_contract_or_human(json, &output, || {
                 snapshot
                     .edges
                     .iter()

@@ -1,0 +1,15 @@
+{
+  "$id": "urn:kanban-tool:schema:api:get-label-ontology-signal-path:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "signal_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "signal_id"
+  ],
+  "title": "Get Label Ontology Signal Path v1",
+  "type": "object"
+}

@@ -1,0 +1,39 @@
+{
+  "$defs": {
+    "CliHookCodexUninstallResult": {
+      "additionalProperties": false,
+      "properties": {
+        "installed": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "removed_hook_count": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "removed_hook_count",
+        "installed"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:hook-codex-uninstall-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CliHookCodexUninstallResult"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI hook codex uninstall output v1",
+  "type": "object"
+}

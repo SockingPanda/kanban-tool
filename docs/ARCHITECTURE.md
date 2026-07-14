@@ -1,5 +1,12 @@
 # Architecture
 
+`POST /api/v1/boards/:board/tasks` 的公开 path/request/success wire DTO 由
+`kanban-contract` 单一拥有；server adapter 显式映射到 `kanban_sqlite::api::CreateTask`，并继续
+以一次 `create_task_with_labels_and_dependencies` 调用进入 canonical transaction。Contract
+status 只表达 create 输入允许的 `triage|todo|scheduled|ready`，metadata 只表达 opaque object
+shape；initial-status recompute、ready 降级、labels/dependencies、retry policy、events 与 rollback
+仍由 SQLite service/core 拥有。
+
 本架构面向本地单机运行：Rust workspace、SQLite-only、CLI、localhost Web server、可选 dispatcher。
 
 ---
@@ -34,11 +41,13 @@ writes、events、runs、outbox 和 provenance 的 implementation owner。`kanba
 `kanban_sqlite::db` / `kanban_sqlite::init` 基础设施模块。测试 raw inspection 入口集中到
 `kanban-test-support`，crate 内部测试可使用显式 `db` / `init` 模块。
 
-可把系统按六个运行平面理解：
+可把系统按八个运行平面理解：
 
 | 平面 | 当前内容 | 写权限边界 |
 |---|---|---|
 | Interaction/adapters | `kanban-cli`、`kanban-server`、desktop、dispatcher 入口 | 转换输入/输出和 locale/message 渲染，不直接写 SQLite truth |
+| Wire contracts | `kanban-contract` 的候选 Serde DTO、精确 surface catalog、operation inventory 与 schema root registry | 只定义公开机器契约候选；只有 `Adopted` 条目表示运行时采用，不拥有 service guard、SQLite record 或 runtime validation |
+| Schema tooling | `kanban-schema-tool` 的 `kanban-schema` binary、metaschema/fixture 校验、manifest/hash 和 drift gate | 独立 leaf tool，不进入产品 runtime graph，也不能充当 adoption witness |
 | Application contracts | `kanban-application` selected use-case DTO/port API，SQLite 实现位于 `kanban-sqlite` | adapters 逐步依赖稳定 API/DTO；该 crate 不是完整 application service |
 | Domain/state machine | `kanban-core` 的 status、guard 和 recompute helper | 纯逻辑，不访问 SQLite/HTTP/CLI |
 | Canonical SQLite truth | tasks/status、dependencies、labels、semantics、proposals、ontology ledger | 只能由 service path 写入 |
@@ -60,6 +69,17 @@ crates/
       error.rs
       clock.rs
       id.rs
+
+  kanban-contract/
+    src/
+      wire.rs
+      inventory.rs
+      schema.rs
+
+  kanban-schema-tool/
+    src/
+      lib.rs
+      bin/kanban-schema.rs
 
   kanban-sqlite/
     src/
@@ -139,6 +159,90 @@ pub fn recompute_ready_status(...) -> TaskStatus;
 pub fn can_promote_from(status: TaskStatus) -> bool;
 pub fn can_complete_from(status: TaskStatus) -> bool;
 ```
+
+### 2.1a `kanban-contract`
+
+职责：
+
+- 为逐步迁入的公开 API、CLI、JSONL、SSE、structured metadata、config 和 helper
+  wire DTO 提供唯一候选归属；adapter 迁移时负责 application/SQLite record 到 wire DTO
+  的显式映射。
+- 默认 feature 只包含轻量 Serde 类型；唯一 additive `schema` feature 启用 `schemars`
+  并公开 schema root registry。该 crate 不拥有 binary、`jsonschema`、SHA-256 或 drift tooling。
+- 用精确 surface catalog 枚举实际 Axum method/path、Clap leaf command 和 JSONL
+  discriminator；对应测试从真实声明生成 key，新增公开入口而未登记时自动失败。
+- 对 API/SSE contract 显式记录 `operation_key`、`Path|Query|Headers|Body|Success|Error|Sse`
+  location 和参数 cardinality；非 HTTP surface 显式记录 `NoTransport`。`Success` 只表达 2xx
+  success，`Error` 只表达 `SharedComponent` 非 2xx response，且不新增第七 endpoint obligation。
+  transport validator 负责 direction/location、operation/surface、granularity、path placeholder 和
+  重复/缺失参数的 fail-closed 拓扑校验，不承担 HTTP status 或业务语义。
+- 用 operation inventory 明确每个公开 surface 的方向、strictness、fixture、schema ID
+  或 exclusion，并区分 `Planned`、`Generated`、`Adopted`、`Excluded`。`Generated`
+  只表示离线 schema/fixture 就绪；`Adopted` 还必须绑定 direction-correct evidence：
+  request/input producer 由 contract DTO 程序化序列化并精确匹配 committed fixture，consumer
+  从 fixture 经真实 runtime handler；response/output producer 来自真实 adapter。双方包含
+  operation/contract/surface/direction 和精确 Cargo test locator，且不共用同一个高层 exercise
+  helper。Endpoint 的整体 migration state 与六项 obligation 分开收敛：
+  `Generated` endpoint 可以先把已迁移的 body 声明为 adopted exact contract，但其它
+  obligation 仍为 `Todo` 时不能提升为 `Adopted`；审计要求该 contract 与 runtime operation
+  唯一、双向且精确绑定。witness gate 以 canonical manifest 和 Cargo package ID 锁定
+  当前 workspace `kanban-contract`，要求 unconditional non-optional normal declaration 与 default
+  resolve edge，并以 `--all-features --target all --edges normal,features --locked` 扫描 adopter runtime
+  leakage，随后真实执行双方测试；registry/git/其它 path 的同名 package 不构成 adoption。最终 closure gate 只允许
+  `Adopted` 或 `Excluded`。
+- 生成显式 Draft 2020-12、离线
+  `urn:kanban-tool:schema:<surface>:<semantic-name>:v1` root；schema bytes 从候选 wire type
+  确定生成。fixtures 是手写正负样例，用于验证 schema 与当前候选 wire shape；
+  它们本身不构成运行时采用证据。
+
+该 crate 不依赖 `kanban-sqlite`、`kanban-server`、`kanban-cli`、desktop、
+dispatcher 或 helper-heavy backend。JSON Schema 只验证 wire shape/value domain，
+不能替代状态机、CAS、dependency、recompute、transaction 或 comment semantic guard。
+详细生成与验证契约见 [`SCHEMA_CONTRACTS.md`](SCHEMA_CONTRACTS.md)。
+
+### 2.1b `kanban-schema-tool`
+
+职责：
+
+- 独占 `kanban-schema` binary、离线 inventory audit、metaschema/fixture 校验、
+  committed artifact 写入/漂移检查和 SHA-256 manifest。
+- direct dependency 必须且只能是 `jsonschema`、`kanban-contract/schema`、`serde`、
+  `serde_json` 与 `sha2` 这 5 条 normal edge；不得声明 dev、build、optional、alias 或
+  target-specific edge，也不得依赖任何产品或内部 workspace crate。
+- `autolib`、`autobins`、`autoexamples`、`autotests`、`autobenches` 与 auto build script
+  全部关闭；只允许显式声明的一个 lib、一个 bin 与一个 integration test。contract 同样
+  只允许一个 lib 和两个显式 integration tests；metadata 与普通文件/symlink gate 锁定
+  target name、kind、lexical `src_path` 和仓库内归属。
+- dependency policy 从 tool manifest 运行 full locked `cargo metadata`，锁定
+  `resolve.root`、canonical tool/contract package ID 与 manifest path、五条 resolved
+  direct edge、启用 `kanban-contract/schema` 后批准的逻辑 registry
+  `schemars 1.2.1` edge，以及 `jsonschema=[]`、
+  `schemars=[derive,schemars_derive,std]` effective feature union，并拒绝
+  tool-root reachable closure 中的其它 path/git override。
+- `policy/schema-tool-registry-closure.json` 是独立治理数据边界，只包含当前
+  tool-root closure 的 registry packages；两个 canonical workspace path packages 不进入
+  snapshot。policy 解析真实 `Cargo.lock`，要求每个 reachable registry package 唯一映射到
+  64 位小写十六进制 checksum，并与按 `(name, version, source)` canonical 排序的 committed
+  `{name, version, source, checksum}` 集合双向完全一致。普通 gate 只比较，禁止自动写入或
+  bless；该检查证明 committed lockfile 相对 approval 的漂移，crate 内容仍由 Cargo
+  fetch/build 按 registry index `cksum` 验证。
+- Cargo metadata 的 `SourceId` 是 opaque identity；这里锁定的是 pinned toolchain 下
+  本项目批准的 logical SourceId 字符串，不宣称其中 URL 是 Cargo 通用 canonical network
+  URL。物理 index/download 可由 Cargo source replacement mirror 提供，不要求直连
+  crates.io origin。
+- 除该 tool 自身外，任何 workspace member 都不得以任何 dependency kind、alias、optional
+  或 target-specific direct edge 引用它；六个产品 runtime graph 另由 all-features/all-target
+  cargo tree gate 扫描传递性 tooling 泄漏。
+- 作为 workspace leaf crate 排除在 default/core/helper/full 产品门禁之外。产品 `fmt`
+  （及 `fmt-check` alias）精确选择 core packages，`fmt-full` 精确选择 core + helper，
+  `schema-fmt` 则只选择 `kanban-contract` + `kanban-schema-tool`，并且必须在 schema
+  dependency preflight 之后执行；不存在 workspace-wide fmt 旁路。
+- 真实 `just --dump-format json --dump` parser AST hash 与 fake nested
+  `just`/build-lock/cargo/python/script 有序 JSONL trace 形成双门禁，锁定上述 fmt lane、
+  full/rust/test 分支、schema 子 gate、`schema-audit-closed` 的 adoption + locked audit，
+  以及 `release` 从 affected self-test 到 diff-check 的 13 步精确顺序。leaf 仅由独立
+  schema gates 执行格式、check、tests、clippy、生成和校验；witness gate 显式拒绝该
+  tooling owner 冒充 runtime adopter。
 
 ### 2.2 `kanban-sqlite`
 
@@ -532,20 +636,13 @@ SQLite WAL 和 busy timeout 负责排队。业务层仍需保证 transaction 短
 
 ## 7. Error Model
 
-核心错误类型：
+公开 error wire vocabulary 由 `kanban-contract::ApiErrorCode` 作为唯一闭合集合 owner。
+HTTP status 映射与 operation-level transport 说明仅在 `docs/API_SPEC.md` 的
+“HTTP Status Mapping”表中维护；架构文档不复制 code 表，避免与 server adapter 的实际
+`KanbanError -> ApiErrorCode` 映射漂移。
 
-| code | 说明 |
-|---|---|
-| `not_found` | 对象不存在。 |
-| `invalid_input` | 输入不合法。 |
-| `invalid_transition` | 状态转换非法。 |
-| `dependency_blocked` | 依赖未完成。 |
-| `claim_conflict` | task 已被其他 actor claim。 |
-| `claim_expired` | claim token 已过期。 |
-| `claim_token_mismatch` | token 不匹配。 |
-| `cycle_detected` | dependency 形成环。 |
-| `db_busy` | SQLite 忙且超过 timeout。 |
-| `internal` | 未分类内部错误。 |
+`error.message` 仍是面向人的 locale-dependent 文案；状态机、service guard、CAS、
+transaction 与 SQLite 错误 authority 不转移给 wire contract。
 
 ---
 
@@ -594,3 +691,35 @@ atom refs 保持 soft ref。
 - 不提供远程访问配置。
 - 不在 API 中执行任意 shell，worker profile 只能来自本地 config。
 - 附件路径必须限制在 data dir 内，防止 path traversal。
+
+
+### Transport descriptor boundary
+
+`kanban-contract` 是 localhost transport 的 method/path authority：其 default feature 无 runtime HTTP dependency，仍可被 leaf schema tool 离线使用。`kanban-server::router::registered_api_routes()` 仅提供显式 `adapter_id` 和真实 handler；path/method 从 contract descriptor 读取。这样 CLI/JSONL inventory 与 API/SSE transport identity 分层，server 不能自行复制 transport strings。
+
+每个 API/SSE semantic contract 还必须显式声明 HTTP location；其它 surface 必须声明
+`NoTransport`。任意 `Adopted` contract 与 endpoint exact reference 都必须保持
+`granularity=Exact`。唯一 method/path、精确 `operation_key` 和单一 location 共同保证一个
+`ExactSurface` contract 不可能合法绑定两个 endpoint obligations，因此不保留不可达的全局
+second-binding guard。`SharedComponent` 允许被多个 endpoint 显式链接，或由同 surface 的真实
+adoption witness 证明非 orphan；这两个条件是 OR。shared 永远不计入 endpoint exact coverage，
+也不单独决定 endpoint migration state。
+
+B1-C1 已把两个 board task-read endpoint 的 path/query transport 收口为 4 个 endpoint-specific
+exact contract。两个 server-local typed Axum extractor 各自绑定对应 path/query DTO，并且各自只从
+`parts.uri.query()` 调用一次共享 ordered parser；handler 不再持有 `Path`、`RawQuery` 或第二套
+`Query<T>` extractor。parser 以 8192 bytes 为 raw 总预算；pair cap 由 9/4/3/32 repeated
+budgets 加 6 个 scalar 参数推导为 54。只有 `status`、`priority`、`label`、`plan_filter` 可重复，
+不同值保留首次出现顺序；重复语义值、纯 Unicode 空白 label、未知 key、旧 `search` alias、
+scalar duplicate 及各字段预算越界均失败关闭。wire limit 由
+`kanban-contract::MAX_TASK_READ_LIMIT` 拥有；`kanban-sqlite::service::MAX_TASK_LIST_LIMIT` 直接引用
+唯一 application authority，server 对这个实际 defensive path 建立编译期相等门禁。该边界只
+负责 wire grammar 与 DTO 到既有 application option 的显式映射；service 查询行为与
+`kanban-core` 状态机语义未改变。两个 endpoint 的 path/query
+obligation 已是 `Contract`，GET body 是 `NotApplicable`；headers 和 success response 仍为
+`Todo`，因此 endpoint migration state 保持 `Generated`。
+
+
+## B1-C2b task-read 响应边界
+
+`kanban-contract` 拥有共享 `ApiTask`/`ApiLabel` 与既有 pagination primitives，两个 endpoint 各自拥有闭合 response root；server adapter 与 Desktop consumer 不另建 wire DTO。精确 wire 行为见 [API_SPEC](API_SPEC.md#b1-c2b-task-read-成功响应契约)，schema/adoption 证据见 [SCHEMA_CONTRACTS](SCHEMA_CONTRACTS.md#b1-c2b-task-read-成功响应契约)。

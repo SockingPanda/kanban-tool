@@ -1,0 +1,51 @@
+{
+  "$defs": {
+    "CliGraphQueryBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "type": "object"
+    },
+    "CliGraphQueryRow": {
+      "additionalProperties": false,
+      "properties": {
+        "bindings": {
+          "items": {
+            "$ref": "#/$defs/CliGraphQueryBinding"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "bindings"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:graph-query-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/$defs/CliGraphQueryRow"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI graph query output v1",
+  "type": "object"
+}

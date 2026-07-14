@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "WorkerFinishPolicy": {
+      "enum": [
+        "done",
+        "review",
+        "blocked",
+        "ready"
+      ],
+      "type": "string"
+    },
+    "WorkerProfileInput": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_ttl_ms": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "command": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "heartbeat_interval_ms": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "log_dir": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "on_failure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkerFinishPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "on_success": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkerFinishPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:config:worker-profiles-input:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "workers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/WorkerProfileInput"
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "workers"
+  ],
+  "title": "Worker Profiles Input v1",
+  "type": "object"
+}

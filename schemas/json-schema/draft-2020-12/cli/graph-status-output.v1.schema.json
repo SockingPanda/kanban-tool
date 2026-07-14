@@ -1,0 +1,37 @@
+{
+  "$defs": {
+    "CliGraphStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "backend",
+        "enabled",
+        "message"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:graph-status-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CliGraphStatus"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI graph status output v1",
+  "type": "object"
+}

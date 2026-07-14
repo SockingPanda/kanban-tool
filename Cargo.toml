@@ -2,6 +2,8 @@
 members = [
   "crates/kanban-core",
   "crates/kanban-application",
+  "crates/kanban-contract",
+  "crates/kanban-schema-tool",
   "crates/kanban-test-support",
   "crates/kanban-entity",
   "crates/kanban-indexer",
@@ -22,6 +24,7 @@ members = [
 ]
 default-members = [
   "crates/kanban-core",
+  "crates/kanban-contract",
   "crates/kanban-entity",
   "crates/kanban-indexer",
   "crates/kanban-search",
@@ -59,6 +62,9 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_path_to_error = "0.1.20"
+schemars = { version = "1.2.1", default-features = false, features = ["std", "derive"] }
+jsonschema = { version = "0.47.0", default-features = false }
+sha2 = "0.10"
 strum = { version = "0.26", features = ["derive"] }
 tantivy = "0.26.1"
 toml = "0.8"
@@ -77,6 +83,7 @@ assert_fs = "1.1"
 
 kanban-core = { path = "crates/kanban-core" }
 kanban-application = { path = "crates/kanban-application" }
+kanban-contract = { path = "crates/kanban-contract", default-features = false }
 kanban-test-support = { path = "crates/kanban-test-support" }
 kanban-entity = { path = "crates/kanban-entity" }
 kanban-indexer = { path = "crates/kanban-indexer" }
@@ -92,3 +99,10 @@ kanban-context = { path = "crates/kanban-context" }
 kanban-sqlite = { path = "crates/kanban-sqlite" }
 kanban-local = { path = "crates/kanban-local" }
 kanban-server = { path = "crates/kanban-server" }
+
+# Oxigraph 0.5.x still publishes oxrdfxml/sparesults with quick-xml <0.41.
+# Vendor the upstream security update until the same package versions are released
+# with quick-xml 0.41 support (RUSTSEC-2026-0194/RUSTSEC-2026-0195).
+[patch.crates-io]
+oxrdfxml = { path = "vendor/oxrdfxml-0.2.3" }
+sparesults = { path = "vendor/sparesults-0.3.3" }

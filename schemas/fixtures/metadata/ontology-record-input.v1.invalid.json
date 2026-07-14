@@ -1,0 +1,14 @@
+{
+  "actor": {"name": "label-agent", "type": "system", "agent_type": "local"},
+  "suggestion_snapshot": {},
+  "signals": [{
+    "kind": "false_negative",
+    "proposed_action": "add_positive_atom",
+    "candidate_atom": {
+      "polarity": "positive",
+      "kind": "arbitrary_kind",
+      "text": "not a real candidate kind"
+    },
+    "rationale": "invalid closed value domains"
+  }]
+}

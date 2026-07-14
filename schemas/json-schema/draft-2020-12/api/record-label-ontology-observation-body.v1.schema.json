@@ -1,0 +1,244 @@
+{
+  "$defs": {
+    "JsonBodyField": true,
+    "LabelOntologyActorWire": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "type": "object"
+    },
+    "LabelOntologyCandidateAtomRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "polarity": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "polarity",
+        "kind",
+        "text"
+      ],
+      "type": "object"
+    },
+    "LabelOntologyProposedActionWire": {
+      "enum": [
+        "observe",
+        "add_positive_atom",
+        "add_negative_atom",
+        "update_semantics",
+        "bootstrap_label",
+        "rename_label",
+        "split_label",
+        "merge_labels"
+      ],
+      "type": "string"
+    },
+    "LabelOntologySignalKindWire": {
+      "enum": [
+        "false_negative",
+        "false_positive",
+        "vocabulary_gap",
+        "name_issue",
+        "boundary_issue",
+        "structure_issue"
+      ],
+      "type": "string"
+    },
+    "LabelOntologySignalRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_selected": {
+          "type": "boolean"
+        },
+        "candidate_atom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LabelOntologyCandidateAtomRequest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "final_selected": {
+          "type": "boolean"
+        },
+        "kind": {
+          "$ref": "#/$defs/LabelOntologySignalKindWire"
+        },
+        "proposal": {
+          "$ref": "#/$defs/JsonBodyField"
+        },
+        "proposed_action": {
+          "$ref": "#/$defs/LabelOntologyProposedActionWire"
+        },
+        "proposed_label_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "related_labels": {
+          "$ref": "#/$defs/JsonBodyField"
+        },
+        "signal_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suggest_rank": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "suggest_score": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "suggest_state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LabelOntologySuggestStateWire"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_label_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "proposed_action",
+        "agent_selected",
+        "final_selected",
+        "rationale"
+      ],
+      "type": "object"
+    },
+    "LabelOntologySuggestStateWire": {
+      "enum": [
+        "selected",
+        "candidate",
+        "absent",
+        "unavailable"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:record-label-ontology-observation-body:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "$ref": "#/$defs/LabelOntologyActorWire"
+    },
+    "agent_candidates": {
+      "$ref": "#/$defs/JsonBodyField"
+    },
+    "capture_fingerprint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "diagnostics": {
+      "$ref": "#/$defs/JsonBodyField"
+    },
+    "final_decision": {
+      "$ref": "#/$defs/JsonBodyField"
+    },
+    "signals": {
+      "items": {
+        "$ref": "#/$defs/LabelOntologySignalRequest"
+      },
+      "type": "array"
+    },
+    "suggest_coverage": {
+      "format": "double",
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "suggest_coverage_cosine": {
+      "format": "double",
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "suggest_degraded": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "suggest_needs_new_label": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "suggest_residual_norm": {
+      "format": "double",
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "suggestion_snapshot": {
+      "$ref": "#/$defs/JsonBodyField"
+    }
+  },
+  "required": [
+    "actor",
+    "signals"
+  ],
+  "title": "Record label ontology observation request v1",
+  "type": "object"
+}

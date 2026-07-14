@@ -1,0 +1,46 @@
+{
+  "$defs": {
+    "SettingData": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "value": true
+      },
+      "required": [
+        "key",
+        "value",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "SettingRecordType": {
+      "enum": [
+        "setting"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:setting-input:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/SettingData"
+    },
+    "type": {
+      "$ref": "#/$defs/SettingRecordType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL setting input v1",
+  "type": "object"
+}

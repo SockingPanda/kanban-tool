@@ -1,0 +1,9 @@
+{
+  "data": {
+    "board_id": "b_fixture",
+    "state": "not_required",
+    "task_id": "t_parent",
+    "updated_at": 101,
+    "updated_by": "fixture-planner"
+  }
+}

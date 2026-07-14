@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "CliGraphRelation": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "graph_uri": {
+          "type": "string"
+        },
+        "metadata": true,
+        "object_uri": {
+          "type": "string"
+        },
+        "predicate": {
+          "type": "string"
+        },
+        "provenance": {
+          "$ref": "#/$defs/CliGraphRelationProvenance"
+        },
+        "subject_uri": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "subject_uri",
+        "predicate",
+        "object_uri",
+        "graph_uri",
+        "provenance",
+        "metadata",
+        "created_at",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "CliGraphRelationProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "authoritative_store": {
+          "type": "string"
+        },
+        "source_event_id": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_table": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "source_table",
+        "source_id",
+        "source_event_id",
+        "authoritative_store"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:graph-neighbors-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/$defs/CliGraphRelation"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI graph neighbors output v1",
+  "type": "object"
+}

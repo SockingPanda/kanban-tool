@@ -1,0 +1,75 @@
+{
+  "data": {
+    "id": "loa_fixture",
+    "board_id": "fixture",
+    "parent_action_id": "loa_target_fixture",
+    "action_type": "validate",
+    "reason": "fixture",
+    "target_label_id": "l_fixture",
+    "result_label_id": null,
+    "result_atom_id": "la_fixture",
+    "result_atom_content_hash": "fixture",
+    "result_proposal_id": null,
+    "canonical_before_hash": "fixture",
+    "canonical_after_hash": "fixture",
+    "validation_requirement": "none",
+    "validation_status": "failed",
+    "validation_effective_outcome": "failed",
+    "validation_latest_attempt_id": null,
+    "created_by": "fixture",
+    "created_by_type": "user",
+    "agent_type": null,
+    "created_at": 1,
+    "signal_ids": ["los_fixture"],
+    "change": {},
+    "validation": {
+      "manual": {"cases": []},
+      "cases": [
+        {
+          "signal_id": "los_fixture",
+          "task_id": "t_fixture",
+          "task_ref_snapshot": "fixture#1",
+          "target_label_id": "l_fixture",
+          "result_label_id": null,
+          "result_proposal_id": null,
+          "result_atom_id": "la_fixture",
+          "result_atom_content_hash": "fixture",
+          "task_snapshot_hash": "fixture",
+          "current_task_snapshot_hash": "fixture",
+          "suggest_input_hash": "fixture",
+          "current_suggest_input_hash": "fixture",
+          "stale": false,
+          "legacy_incomparable": false,
+          "comparable": true,
+          "passed": false,
+          "warnings": [],
+          "before": {
+            "state": null,
+            "score": null,
+            "rank": null,
+            "coverage": null,
+            "coverage_cosine": null,
+            "residual_norm": null,
+            "degraded": false,
+            "diagnostics": []
+          },
+          "after": {
+            "validation_status": "failed",
+            "manual_case_ref": null
+          }
+        }
+      ],
+      "summary": {
+        "status": "failed",
+        "case_count": 1,
+        "stale_count": 0,
+        "degraded_count": 0,
+        "metadata_drift_count": 0,
+        "label_binding_drift_count": 0,
+        "suggest_input_drift_count": 0,
+        "legacy_incomparable_count": 0,
+        "incomparable_count": 0
+      }
+    }
+  }
+}

@@ -1,0 +1,247 @@
+{
+  "$defs": {
+    "DoctorDerivedStore": {
+      "additionalProperties": false,
+      "properties": {
+        "dirty": {
+          "type": "boolean"
+        },
+        "failed_outbox": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "last_error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_event_id": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "pending_outbox": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "running_outbox": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "schema_version": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "store_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "store_name",
+        "schema_version",
+        "last_event_id",
+        "dirty",
+        "last_error",
+        "pending_outbox",
+        "running_outbox",
+        "failed_outbox"
+      ],
+      "type": "object"
+    },
+    "DoctorIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "record_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "severity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "severity",
+        "code",
+        "message",
+        "record_ids"
+      ],
+      "type": "object"
+    },
+    "DoctorReport": {
+      "additionalProperties": false,
+      "properties": {
+        "active_parents_with_incomplete_required_steps": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "archived_dependency_edges": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "consistency_errors": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "consistency_issues": {
+          "items": {
+            "$ref": "#/$defs/DoctorIssue"
+          },
+          "type": "array"
+        },
+        "consistency_warnings": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "dependency_cycles": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "derived_dirty_stores": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "derived_error_stores": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "derived_stores": {
+          "items": {
+            "$ref": "#/$defs/DoctorDerivedStore"
+          },
+          "type": "array"
+        },
+        "executable_dependency_violations": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "executable_schedule_violations": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "executable_spec_violations": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "expired_running_tasks": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "integrity_check": {
+          "type": "string"
+        },
+        "migration_version": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "missing_run_logs": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "ontology_ledger_errors": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "ontology_ledger_issues": {
+          "items": {
+            "$ref": "#/$defs/DoctorIssue"
+          },
+          "type": "array"
+        },
+        "ontology_ledger_warnings": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "orphan_running_runs": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "outbox_failed": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "outbox_pending": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "outbox_running": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "running_tasks_without_active_run": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "suspicious_run_log_paths": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "unplanned_active_tasks": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "user_version": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "integrity_check",
+        "migration_version",
+        "user_version",
+        "expired_running_tasks",
+        "running_tasks_without_active_run",
+        "orphan_running_runs",
+        "dependency_cycles",
+        "archived_dependency_edges",
+        "missing_run_logs",
+        "suspicious_run_log_paths",
+        "executable_dependency_violations",
+        "executable_spec_violations",
+        "executable_schedule_violations",
+        "unplanned_active_tasks",
+        "active_parents_with_incomplete_required_steps",
+        "outbox_pending",
+        "outbox_running",
+        "outbox_failed",
+        "derived_dirty_stores",
+        "derived_error_stores",
+        "derived_stores",
+        "consistency_errors",
+        "consistency_warnings",
+        "consistency_issues",
+        "ontology_ledger_errors",
+        "ontology_ledger_warnings",
+        "ontology_ledger_issues"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:doctor-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/DoctorReport"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI doctor output v1",
+  "type": "object"
+}

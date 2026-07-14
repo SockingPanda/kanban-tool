@@ -1,0 +1,15 @@
+{
+  "$id": "urn:kanban-tool:schema:api:get-run-path:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "run_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id"
+  ],
+  "title": "Kanban get run path v1",
+  "type": "object"
+}

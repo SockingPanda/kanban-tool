@@ -4,13 +4,24 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use kanban_contract::cli_operator::{
+    CliSignal, CliSignalConfirmOutput, CliSignalListOutput, CliSignalObservation,
+    CliSignalRecordOutput, CliSignalRecordResult, CliSignalRejectOutput, CliSignalResolveOutput,
+    CliSignalReviewOutput, CliSignalShowOutput, CliSignalStatus, CliSignalSupersedeOutput,
+};
+use kanban_contract::structured_metadata::SignalRecordMetadataInput;
+use kanban_core::KanbanError;
 use kanban_sqlite::api::{
-    SignalLifecycle, SignalListOptions, SignalRecord, SignalRecordInput, SignalReviewInput,
-    SignalStatus, get_signal, list_signals, record_signal, review_signals, update_signal_status,
+    SignalLifecycle, SignalListOptions, SignalRecord, SignalRecordInput, SignalRecordResult,
+    SignalReviewInput, SignalStatus, get_signal, list_signals, record_signal, review_signals,
+    update_signal_status,
 };
 
 use crate::commands::common::{read_text_input, resolve_required_text_input};
-use crate::{args::SignalCommand, output::print_or_json};
+use crate::{
+    args::SignalCommand,
+    output::{api_comment_from_record, print_contract_or_human},
+};
 
 pub(crate) fn handle_signal(
     command: SignalCommand,
@@ -23,7 +34,8 @@ pub(crate) fn handle_signal(
         SignalCommand::Record(args) => {
             let input = read_record_input(&args.input)?;
             let result = record_signal(db_path, board, actor, input)?;
-            print_or_json(json, &result, || signal_line(&result.signal))?;
+            let output = CliSignalRecordOutput::new(cli_signal_record_result(&result)?);
+            print_contract_or_human(json, &output, || signal_line(&result.signal))?;
         }
         SignalCommand::List(args) => {
             let signals = list_signals(
@@ -37,21 +49,30 @@ pub(crate) fn handle_signal(
                     args.limit,
                 )?,
             )?;
-            print_or_json(json, &signals, || signal_lines(&signals))?;
+            let output = CliSignalListOutput::new(cli_signals(&signals)?);
+            print_contract_or_human(json, &output, || signal_lines(&signals))?;
         }
         SignalCommand::Show { signal_id } => {
             let signal = get_signal(db_path, board, &signal_id)?;
-            print_or_json(json, &signal, || signal_line(&signal))?;
+            let output = CliSignalShowOutput::new(cli_signal(&signal)?);
+            print_contract_or_human(json, &output, || signal_line(&signal))?;
         }
         SignalCommand::Review(args) => {
             let signals = review_signals(
                 db_path,
                 board,
-                list_options(args.status, args.kind, args.task, false, args.limit)?,
+                list_options(
+                    args.status,
+                    args.kind,
+                    args.task,
+                    args.include_all,
+                    args.limit,
+                )?,
             )?;
-            print_or_json(json, &signals, || signal_lines(&signals))?;
+            let output = CliSignalReviewOutput::new(cli_signals(&signals)?);
+            print_contract_or_human(json, &output, || signal_lines(&signals))?;
         }
-        SignalCommand::Confirm(args) => lifecycle(
+        SignalCommand::Confirm(args) => lifecycle_confirm(
             db_path,
             board,
             actor,
@@ -69,7 +90,7 @@ pub(crate) fn handle_signal(
                 )?,
             },
         )?,
-        SignalCommand::Reject(args) => lifecycle(
+        SignalCommand::Reject(args) => lifecycle_reject(
             db_path,
             board,
             actor,
@@ -87,7 +108,7 @@ pub(crate) fn handle_signal(
                 )?,
             },
         )?,
-        SignalCommand::Resolve(args) => lifecycle(
+        SignalCommand::Resolve(args) => lifecycle_resolve(
             db_path,
             board,
             actor,
@@ -105,7 +126,7 @@ pub(crate) fn handle_signal(
                 )?,
             },
         )?,
-        SignalCommand::Supersede(args) => lifecycle(
+        SignalCommand::Supersede(args) => lifecycle_supersede(
             db_path,
             board,
             actor,
@@ -129,7 +150,10 @@ pub(crate) fn handle_signal(
 
 fn read_record_input(path: &Path) -> Result<SignalRecordInput> {
     let content = read_text_input(path).context("failed to read signal input")?;
-    serde_json::from_str(&content).context("failed to parse signal input JSON")
+    let contract: SignalRecordMetadataInput =
+        serde_json::from_str(&content).context("failed to parse signal input JSON")?;
+    serde_json::from_value(serde_json::to_value(contract)?)
+        .context("failed to adapt signal input contract")
 }
 
 fn list_options(
@@ -158,14 +182,13 @@ struct LifecycleCommandInput {
     reason: String,
 }
 
-fn lifecycle(
+fn update_lifecycle(
     db_path: &PathBuf,
     board: &str,
     actor: &str,
-    json: bool,
     input: LifecycleCommandInput,
-) -> Result<()> {
-    let signals = update_signal_status(
+) -> Result<Vec<SignalRecord>> {
+    Ok(update_signal_status(
         db_path,
         board,
         actor,
@@ -175,8 +198,119 @@ fn lifecycle(
             replacement_signal_id: input.replacement_signal_id,
             reason: input.reason,
         },
-    )?;
-    print_or_json(json, &signals, || signal_lines(&signals))
+    )?)
+}
+
+fn lifecycle_confirm(
+    db_path: &PathBuf,
+    board: &str,
+    actor: &str,
+    json: bool,
+    input: LifecycleCommandInput,
+) -> Result<()> {
+    let signals = update_lifecycle(db_path, board, actor, input)?;
+    let output = CliSignalConfirmOutput::new(cli_signals(&signals)?);
+    print_contract_or_human(json, &output, || signal_lines(&signals))
+}
+
+fn lifecycle_reject(
+    db_path: &PathBuf,
+    board: &str,
+    actor: &str,
+    json: bool,
+    input: LifecycleCommandInput,
+) -> Result<()> {
+    let signals = update_lifecycle(db_path, board, actor, input)?;
+    let output = CliSignalRejectOutput::new(cli_signals(&signals)?);
+    print_contract_or_human(json, &output, || signal_lines(&signals))
+}
+
+fn lifecycle_resolve(
+    db_path: &PathBuf,
+    board: &str,
+    actor: &str,
+    json: bool,
+    input: LifecycleCommandInput,
+) -> Result<()> {
+    let signals = update_lifecycle(db_path, board, actor, input)?;
+    let output = CliSignalResolveOutput::new(cli_signals(&signals)?);
+    print_contract_or_human(json, &output, || signal_lines(&signals))
+}
+
+fn lifecycle_supersede(
+    db_path: &PathBuf,
+    board: &str,
+    actor: &str,
+    json: bool,
+    input: LifecycleCommandInput,
+) -> Result<()> {
+    let signals = update_lifecycle(db_path, board, actor, input)?;
+    let output = CliSignalSupersedeOutput::new(cli_signals(&signals)?);
+    print_contract_or_human(json, &output, || signal_lines(&signals))
+}
+
+fn cli_signal_record_result(result: &SignalRecordResult) -> Result<CliSignalRecordResult> {
+    Ok(CliSignalRecordResult {
+        signal: cli_signal(&result.signal)?,
+        backlink_comment: result
+            .backlink_comment
+            .as_ref()
+            .map(api_comment_from_record)
+            .transpose()?,
+    })
+}
+
+fn cli_signals(signals: &[SignalRecord]) -> Result<Vec<CliSignal>> {
+    signals.iter().map(cli_signal).collect()
+}
+
+fn cli_signal(signal: &SignalRecord) -> Result<CliSignal> {
+    Ok(CliSignal {
+        id: signal.id.clone(),
+        board_id: signal.board_id.clone(),
+        observation_id: signal.observation_id.clone(),
+        kind: signal.kind.clone(),
+        title: signal.title.clone(),
+        summary: signal.summary.clone(),
+        severity: signal.severity.clone(),
+        status: cli_signal_status(&signal.status)?,
+        dedupe_key: signal.dedupe_key.clone(),
+        superseded_by_signal_id: signal.superseded_by_signal_id.clone(),
+        reviewed_by: signal.reviewed_by.clone(),
+        reviewed_at: signal.reviewed_at,
+        review_reason: signal.review_reason.clone(),
+        created_at: signal.created_at,
+        updated_at: signal.updated_at,
+        observation: CliSignalObservation {
+            id: signal.observation.id.clone(),
+            board_id: signal.observation.board_id.clone(),
+            task_id: signal.observation.task_id.clone(),
+            task_ref_snapshot: signal.observation.task_ref_snapshot.clone(),
+            run_id: signal.observation.run_id.clone(),
+            comment_id: signal.observation.comment_id.clone(),
+            actor: signal.observation.actor.clone(),
+            agent_type: signal.observation.agent_type.clone(),
+            source: signal.observation.source.clone(),
+            evidence: serde_json::from_str(&signal.observation.evidence_json).map_err(|error| {
+                KanbanError::Storage(format!(
+                    "signal observation {} has invalid evidence_json: {error}",
+                    signal.observation.id
+                ))
+            })?,
+            created_at: signal.observation.created_at,
+        },
+    })
+}
+
+fn cli_signal_status(status: &str) -> Result<CliSignalStatus> {
+    match status {
+        "open" => Ok(CliSignalStatus::Open),
+        "confirmed" => Ok(CliSignalStatus::Confirmed),
+        "rejected" => Ok(CliSignalStatus::Rejected),
+        "superseded" => Ok(CliSignalStatus::Superseded),
+        "resolved" => Ok(CliSignalStatus::Resolved),
+        value => anyhow::bail!("signal output has invalid status {value}"),
+    }
 }
 
 fn signal_lines(signals: &[SignalRecord]) -> String {

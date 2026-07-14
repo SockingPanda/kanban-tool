@@ -1,0 +1,7 @@
+{
+  "$id": "urn:kanban-tool:schema:metadata:ontology-validation-evidence-input:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "title": "Kanban label ontology validation evidence metadata input v1",
+  "type": "object"
+}

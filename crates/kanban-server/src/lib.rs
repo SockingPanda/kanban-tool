@@ -7,6 +7,7 @@ mod observability;
 mod router;
 mod state;
 
+pub use dto::{doctor_report_from_record, queue_stats_from_record, search_status_from_record};
 pub use observability::{
     DEFAULT_TRACING_FILTER, init_tracing, init_tracing_with_filter, init_tracing_with_filter_spec,
 };

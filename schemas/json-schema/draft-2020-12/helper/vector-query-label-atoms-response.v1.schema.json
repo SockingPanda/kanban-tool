@@ -1,0 +1,102 @@
+{
+  "$defs": {
+    "RequiredNullableSchema": {
+      "description": "Schema-only marker for a key that is required but may contain JSON null.",
+      "items": {
+        "format": "float",
+        "type": "number"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "VectorHelperLabelAtomHit": {
+      "additionalProperties": false,
+      "properties": {
+        "atom_id": {
+          "type": "string"
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "content_hash": {
+          "type": "string"
+        },
+        "distance": {
+          "format": "float",
+          "type": "number"
+        },
+        "embedding_model": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "label_id": {
+          "type": "string"
+        },
+        "label_name": {
+          "type": "string"
+        },
+        "ordinal": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "polarity": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "atom_id",
+        "label_id",
+        "label_name",
+        "board_id",
+        "polarity",
+        "kind",
+        "text",
+        "ordinal",
+        "content_hash",
+        "embedding_model",
+        "distance"
+      ],
+      "type": "object"
+    },
+    "VectorHelperLabelAtomVectorHit": {
+      "additionalProperties": false,
+      "properties": {
+        "hit": {
+          "$ref": "#/$defs/VectorHelperLabelAtomHit"
+        },
+        "vector": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        }
+      },
+      "required": [
+        "hit",
+        "vector"
+      ],
+      "type": "object"
+    },
+    "VectorHelperQueryLabelAtomsItem": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/VectorHelperLabelAtomHit"
+        },
+        {
+          "$ref": "#/$defs/VectorHelperLabelAtomVectorHit"
+        }
+      ]
+    }
+  },
+  "$id": "urn:kanban-tool:schema:helper:vector-query-label-atoms-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "items": {
+    "$ref": "#/$defs/VectorHelperQueryLabelAtomsItem"
+  },
+  "title": "Vector Helper Query Label Atoms Response v1",
+  "type": "array"
+}

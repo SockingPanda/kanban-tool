@@ -27,6 +27,7 @@
 
 ```bash
 KANBAN_CARGO_TARGET_ROOT=$HOME/.cache/kanban-tool/cargo-target
+CARGO_TARGET_DIR=$HOME/.cache/kanban-tool/cargo-target
 KANBAN_CARGO_BUILD_JOBS=auto
 KANBAN_TEST_THREADS=auto
 CODEX_CLOUD_INSTALL_TAURI_DEPS=1
@@ -35,7 +36,7 @@ CODEX_CLOUD_PREWARM_RUST=1
 CODEX_CLOUD_PREWARM_DESKTOP=0
 ```
 
-`KANBAN_CARGO_TARGET_ROOT` 是 Cloud 专用 target 目录。项目本地验证仍按 `AGENTS.md` 使用 `just` recipes；Cloud 环境需要这个变量是因为本地默认 target root 是开发机路径，容器中不应依赖它。Codex Cloud environment values are not shell-expanded by the UI, so the repo scripts expand literal `$HOME/...`, `${HOME}/...`, and `~/...` values before passing paths to Cargo. `KANBAN_CARGO_BUILD_JOBS=auto` 和 `KANBAN_TEST_THREADS=auto` 让 Cargo、nextest 和 libtest 使用容器默认并发；只有 Cloud runner 资源紧张时才改成具体数字。
+`KANBAN_CARGO_TARGET_ROOT` 是 Cloud 专用 target 目录；`CARGO_TARGET_DIR` 必须规范化为同一路径。所有 worktree 使用该 exact target，不再派生 `worktrees/<hash>` 子目录，并由 target root 下唯一的 `.build.lock` 串行写入。项目本地验证仍按 `AGENTS.md` 使用 `just` recipes；Cloud 环境需要这个变量是因为本地默认 target root 是开发机路径，容器中不应依赖它。Codex Cloud environment values are not shell-expanded by the UI, so the repo scripts expand literal `$HOME/...`, `${HOME}/...`, and `~/...` values before passing paths to Cargo. `KANBAN_CARGO_BUILD_JOBS=auto` 和 `KANBAN_TEST_THREADS=auto` 让 Cargo、nextest 和 libtest 使用容器默认并发；只有 Cloud runner 资源紧张时才改成具体数字。
 
 ## Installed Surface
 
@@ -170,7 +171,7 @@ Codex Cloud is useful for saving local CPU, RAM, and compile time, but keep thes
 
 ## Troubleshooting
 
-If `just` commands try to write to a missing local path, confirm `KANBAN_CARGO_TARGET_ROOT` is set in the environment settings or sourced from `~/.bashrc`.
+If `just` commands try to write to a missing local path, confirm `KANBAN_CARGO_TARGET_ROOT` and `CARGO_TARGET_DIR` are set to the same exact path in the environment settings or sourced from `~/.bashrc`.
 
 If `just check` fails in `lance-encoding` with `google/protobuf/empty.proto: File not found`, rerun maintenance or reset the environment cache so `protobuf-compiler` and `libprotobuf-dev` are installed.
 

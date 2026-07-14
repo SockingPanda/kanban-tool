@@ -1,0 +1,37 @@
+{
+  "$defs": {
+    "GraphStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "backend",
+        "enabled",
+        "message"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:graph-status-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/GraphStatus"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban graph status response v1",
+  "type": "object"
+}

@@ -1,0 +1,15 @@
+{
+  "data": {
+    "backend": "helper-missing",
+    "board_dirty": null,
+    "diagnostics": [
+      "helper_missing",
+      "label_atom_helper_missing"
+    ],
+    "dirty": null,
+    "enabled": false,
+    "generation": null,
+    "message": "fixture missing vector helper"
+  },
+  "unexpected": true
+}

@@ -1,0 +1,34 @@
+{
+  "actor": {"name": "label-agent", "type": "agent", "agent_type": "local"},
+  "agent_candidates": [{"label": "cli", "confidence": 0.92}],
+  "suggestion_snapshot": {"selected_labels": []},
+  "final_decision": {"accepted_labels": ["cli"]},
+  "suggest_coverage": 0.61,
+  "suggest_coverage_cosine": 0.74,
+  "suggest_residual_norm": 0.39,
+  "suggest_needs_new_label": false,
+  "suggest_degraded": false,
+  "diagnostics": [],
+  "capture_fingerprint": "metadata-fixture",
+  "signals": [{
+    "kind": "false_negative",
+    "target_label_ref": "cli",
+    "related_labels": [],
+    "proposed_action": "add_positive_atom",
+    "candidate_atom": {
+      "polarity": "positive",
+      "kind": "applies_when",
+      "text": "extends CLI subcommands, arguments, help output, or JSON behavior"
+    },
+    "proposed_label_name": null,
+    "proposal": {},
+    "agent_selected": true,
+    "suggest_state": "candidate",
+    "suggest_score": 0.08,
+    "suggest_rank": 4,
+    "final_selected": true,
+    "rationale": "The task expands the CLI surface although suggest scored cli weakly.",
+    "confidence": 0.91,
+    "signal_key": "cli-false-negative"
+  }]
+}

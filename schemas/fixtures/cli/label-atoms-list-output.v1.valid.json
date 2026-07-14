@@ -1,0 +1,43 @@
+{
+  "data": [
+    {
+      "board_id": "b_FIXTURE_1",
+      "content_hash": "hash_fixture",
+      "created_at": 100,
+      "id": "la_FIXTURE_1",
+      "kind": "description",
+      "label_id": "l_FIXTURE_1",
+      "label_name": "backend",
+      "ordinal": 0,
+      "polarity": "positive",
+      "text": "label: backend\ndescription: Backend implementation work",
+      "updated_at": 100
+    },
+    {
+      "board_id": "b_FIXTURE_1",
+      "content_hash": "hash_fixture",
+      "created_at": 100,
+      "id": "la_FIXTURE_2",
+      "kind": "applies_when",
+      "label_id": "l_FIXTURE_1",
+      "label_name": "backend",
+      "ordinal": 1,
+      "polarity": "positive",
+      "text": "touches Rust service code",
+      "updated_at": 100
+    },
+    {
+      "board_id": "b_FIXTURE_1",
+      "content_hash": "hash_fixture",
+      "created_at": 100,
+      "id": "la_FIXTURE_3",
+      "kind": "positive_example",
+      "label_id": "l_FIXTURE_1",
+      "label_name": "backend",
+      "ordinal": 2,
+      "polarity": "positive",
+      "text": "add a service command",
+      "updated_at": 100
+    }
+  ]
+}

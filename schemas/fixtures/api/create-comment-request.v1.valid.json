@@ -1,0 +1,1 @@
+{"author":"codex","body":"Choose A","kind":"decision","author_type":"agent","agent_type":"executor","metadata":{"options":[{"slug":"a","title":"A","detail":"Choose A"},{"slug":"b","title":"B","detail":"Choose B"}],"selected":"a","reason":"Smaller boundary","risk":"Migration drift","verification":"Contract tests","extension":{"source":"fixture"}}}

@@ -1,0 +1,149 @@
+{
+  "$defs": {
+    "ContextDiagnostic": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "ContextItem": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_uri": {
+          "type": "string"
+        },
+        "provenance": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "score": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "snippet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "entity_uri",
+        "source",
+        "score",
+        "title",
+        "snippet"
+      ],
+      "type": "object"
+    },
+    "ContextPack": {
+      "additionalProperties": false,
+      "properties": {
+        "degraded": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "diagnostics": {
+          "items": {
+            "$ref": "#/$defs/ContextDiagnostic"
+          },
+          "type": "array"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ContextItem"
+          },
+          "type": "array"
+        },
+        "policy": {
+          "$ref": "#/$defs/ContextPolicy"
+        },
+        "subject": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "subject",
+        "policy",
+        "items",
+        "degraded"
+      ],
+      "type": "object"
+    },
+    "ContextPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "graph_limit": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lexical_limit": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_items": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "vector_limit": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lexical_limit",
+        "graph_limit",
+        "vector_limit",
+        "max_items"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:build-context-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/ContextPack"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban build context response v1",
+  "type": "object"
+}

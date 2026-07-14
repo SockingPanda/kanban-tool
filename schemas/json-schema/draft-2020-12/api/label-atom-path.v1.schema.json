@@ -1,0 +1,19 @@
+{
+  "$id": "urn:kanban-tool:schema:api:label-atom-path:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "atom_ref": {
+      "type": "string"
+    },
+    "board": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "board",
+    "atom_ref"
+  ],
+  "title": "Label atom path v1",
+  "type": "object"
+}

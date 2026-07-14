@@ -230,7 +230,7 @@ with log.open("a") as handle:
     handle.write(json.dumps(args) + "\n")
 cmd = args[0] if args else ""
 if cmd == "status":
-    payload = {{"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[]}}
+    payload = {{"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[],"dirty":False,"board_dirty":False}}
 elif cmd == "embed-query":
     payload = [1.0, 0.0]
 elif cmd == "query-label-atoms":
@@ -330,6 +330,15 @@ async fn graph_status_and_neighbors_use_graph_helper() -> anyhow::Result<()> {
     )
     .await?;
     assert_eq!(status, StatusCode::OK);
+    let top_level = json
+        .as_object()
+        .context("graph neighbors response envelope")?;
+    assert_eq!(top_level.len(), 2);
+    assert!(top_level.contains_key("data"));
+    assert!(top_level.contains_key("meta"));
+    let envelope: kanban_contract::MetadataEnvelope<serde_json::Value, kanban_contract::LimitMeta> =
+        serde_json::from_value(json.clone()).context("graph neighbors metadata envelope")?;
+    assert_eq!(envelope.meta, kanban_contract::LimitMeta { limit: 2 });
     assert_eq!(json["data"].as_array().context("neighbors")?.len(), 0);
     let args: Vec<String> = serde_json::from_str(&std::fs::read_to_string(&log)?)?;
     assert_eq!(args[0], "neighbors");

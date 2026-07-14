@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use kanban_sqlite::api::{
     CommentRecord, CreateComment, create_comment_with_options, get_task, list_comments,
 };
 
 use crate::args::CommentCommand;
 use crate::commands::common::resolve_required_text_input;
-use crate::output::print_or_json;
+use crate::output::{api_comment_from_record, print_contract_or_human, print_human};
 
 pub(crate) fn handle_comment(
     command: CommentCommand,
@@ -31,6 +31,12 @@ pub(crate) fn handle_comment(
                 "--metadata-json",
                 "--metadata-json-file",
             )?;
+            if args.kind.as_deref() == Some("decision")
+                && let Some(raw) = metadata_json.as_deref()
+            {
+                serde_json::from_str::<kanban_contract::DecisionMetadata>(raw)
+                    .context("decision metadata violates the public contract")?;
+            }
             let task = get_task(db_path, board, &args.task_ref)?;
             let comment = create_comment_with_options(
                 db_path,
@@ -44,7 +50,13 @@ pub(crate) fn handle_comment(
                     metadata_json,
                 },
             )?;
-            print_or_json(json, &comment, || comment_line(&comment))?;
+            if json {
+                let output =
+                    kanban_contract::CliCommentAddOutput::new(api_comment_from_record(&comment)?);
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| comment_line(&comment))?;
+            }
         }
         CommentCommand::List { task_ref } => {
             let comments = if task_ref.starts_with("t_") || is_board_qualified_ref(&task_ref) {
@@ -53,7 +65,13 @@ pub(crate) fn handle_comment(
                 let task = get_task(db_path, board, &task_ref)?;
                 list_comments(db_path, &task.id)?
             };
-            print_or_json(json, &comments, || {
+            let output = kanban_contract::CliCommentListOutput::new(
+                comments
+                    .iter()
+                    .map(api_comment_from_record)
+                    .collect::<Result<Vec<_>>>()?,
+            );
+            print_contract_or_human(json, &output, || {
                 comments
                     .iter()
                     .map(comment_line)

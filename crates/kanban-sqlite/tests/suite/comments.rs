@@ -418,7 +418,7 @@ fn migration_narrows_comment_kind_and_adds_metadata_to_existing_v5_database() ->
 }
 
 #[test]
-fn legacy_jsonl_import_infers_comment_author_identity() -> anyhow::Result<()> {
+fn legacy_jsonl_import_rejects_missing_comment_author_identity() -> anyhow::Result<()> {
     let source = TempDb::new("legacy_jsonl_import_infers_comment_author_identity_source")?;
     init_database(&source.path, "tester")?;
     let task = create_task(
@@ -453,31 +453,31 @@ fn legacy_jsonl_import_infers_comment_author_identity() -> anyhow::Result<()> {
 
     let target = TempDb::new("legacy_jsonl_import_infers_comment_author_identity_target")?;
     init_database(&target.path, "tester")?;
-    import_jsonl(&target.path, &legacy_path, true)?;
-
-    let comments = list_comments(&target.path, &task.id)?;
-    assert_eq!(comments.len(), 2);
-    let text = comments
-        .iter()
-        .find(|comment| comment.body == "text note")
-        .ok_or_else(|| test_error("missing text comment"))?;
-    let worker = comments
-        .iter()
-        .find(|comment| comment.body == "worker note")
-        .ok_or_else(|| test_error("missing worker comment"))?;
-    assert_eq!(text.kind, "note");
-    assert_eq!(worker.kind, "note");
-    assert_eq!(text.author_type, "user");
-    assert_eq!(worker.author_type, "agent");
-    assert_eq!(text.agent_type, None);
-    assert_eq!(worker.agent_type, None);
-    assert_eq!(text.metadata_json, "{}");
-    assert_eq!(worker.metadata_json, "{}");
+    let error = result_err(import_jsonl(&target.path, &legacy_path, true))?;
+    assert!(
+        error
+            .to_string()
+            .contains("comment import row violates its contract"),
+        "{error}"
+    );
+    let conn = connect_file(&target.path)?;
+    let default_boards: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM boards WHERE slug='default'",
+        [],
+        |row| row.get(0),
+    )?;
+    let imported_tasks: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM tasks WHERE id=?1",
+        [&task.id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(default_boards, 1);
+    assert_eq!(imported_tasks, 0, "failed replace import must roll back");
     Ok(())
 }
 
 #[test]
-fn legacy_jsonl_import_normalizes_task_priority() -> anyhow::Result<()> {
+fn legacy_jsonl_import_rejects_integer_hidden_and_json_text_task_fields() -> anyhow::Result<()> {
     let source = TempDb::new("legacy_jsonl_import_normalizes_task_priority_source")?;
     let legacy_path = source.dir.join("legacy-priority.jsonl");
     let records = vec![
@@ -560,23 +560,19 @@ fn legacy_jsonl_import_normalizes_task_priority() -> anyhow::Result<()> {
 
     let target = TempDb::new("legacy_jsonl_import_normalizes_task_priority_target")?;
     init_database(&target.path, "tester")?;
-    import_jsonl(&target.path, &legacy_path, true)?;
-
-    let tasks = list_tasks(&target.path, "default", &[], true)?;
-    let priorities = tasks
-        .iter()
-        .map(|task| (task.title.as_str(), task.priority))
-        .collect::<Vec<_>>();
-    assert_eq!(
-        priorities,
-        vec![("negative", 0), ("zero", 0), ("two", 2), ("eighty", 3)]
+    let error = result_err(import_jsonl(&target.path, &legacy_path, true))?;
+    assert!(
+        error
+            .to_string()
+            .contains("column import row violates its contract"),
+        "{error}"
     );
+    assert!(list_tasks(&target.path, "default", &[], true)?.is_empty());
     Ok(())
 }
 
 #[test]
-fn legacy_jsonl_import_infers_agent_author_type_without_dropping_agent_type() -> anyhow::Result<()>
-{
+fn legacy_jsonl_import_rejects_missing_author_type_with_agent_type() -> anyhow::Result<()> {
     let source = TempDb::new("legacy_jsonl_import_preserves_agent_type_source")?;
     init_database(&source.path, "tester")?;
     let task = create_task(
@@ -610,14 +606,19 @@ fn legacy_jsonl_import_infers_agent_author_type_without_dropping_agent_type() ->
 
     let target = TempDb::new("legacy_jsonl_import_preserves_agent_type_target")?;
     init_database(&target.path, "tester")?;
-    import_jsonl(&target.path, &legacy_path, true)?;
-
-    let comments = list_comments(&target.path, &task.id)?;
-    assert_eq!(comments.len(), 1);
-    assert_eq!(comments[0].kind, "note");
-    assert_eq!(comments[0].author_type, "agent");
-    assert_eq!(comments[0].agent_type.as_deref(), Some("executor"));
-    assert_eq!(comments[0].metadata_json, r#"{"origin":"legacy"}"#);
+    let error = result_err(import_jsonl(&target.path, &legacy_path, true))?;
+    assert!(
+        error
+            .to_string()
+            .contains("comment import row violates its contract"),
+        "{error}"
+    );
+    let imported_comments: i64 = connect_file(&target.path)?.query_row(
+        "SELECT COUNT(*) FROM task_comments WHERE task_id=?1",
+        [&task.id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(imported_comments, 0, "failed replace import must roll back");
     Ok(())
 }
 
@@ -686,7 +687,7 @@ fn jsonl_import_rejects_invalid_decision_metadata_schema() -> anyhow::Result<()>
                 "status": "ready",
                 "title": "Ready",
                 "position": 40,
-                "hidden": 0,
+                "hidden": false,
                 "wip_limit": null,
                 "created_at": 1,
                 "updated_at": 1
@@ -721,8 +722,8 @@ fn jsonl_import_rejects_invalid_decision_metadata_schema() -> anyhow::Result<()>
                 "retry_count": 0,
                 "max_retries": null,
                 "result_summary": null,
-                "result_json": null,
-                "metadata_json": "{}",
+                "result": null,
+                "metadata": {},
                 "lock_version": 0
             }
         }),
@@ -737,7 +738,7 @@ fn jsonl_import_rejects_invalid_decision_metadata_schema() -> anyhow::Result<()>
                 "agent_type": null,
                 "body": "invalid decision",
                 "kind": "decision",
-                "metadata_json": r#"{"options":[{"slug":" import ","title":"Import","detail":"Import detail"}],"selected":"import","reason":"because"}"#,
+                "metadata": {"options":[{"slug":" import ","title":"Import","detail":"Import detail"}],"selected":"import","reason":"because"},
                 "created_at": 1
             }
         }),
@@ -800,4 +801,57 @@ fn remove_comment_author_type(line: &str) -> anyhow::Result<String> {
 
 fn decision_metadata() -> String {
     r#"{"options":[{"slug":"sqlite","title":"Use SQLite","detail":"Keep the decision payload in comment metadata."},{"slug":"table","title":"Add a table","detail":"Store decisions in a separate table."}],"selected":"sqlite","reason":"Keeps decisions local to the discussion.","risk":"Schema drift would make older comments ambiguous.","verification":"Service, CLI, API, and Desktop tests cover the contract."}"#.into()
+}
+
+#[test]
+fn comment_insert_rolls_back_when_event_insert_fails() -> anyhow::Result<()> {
+    let temp = TempDb::new("comment_insert_rolls_back_when_event_insert_fails")?;
+    init_database(&temp.path, "tester")?;
+    let task = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("comment rollback"),
+    )?;
+    let conn = connect_file(&temp.path)?;
+    let before_comments: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM task_comments WHERE task_id=?1",
+        params![task.id],
+        |row| row.get(0),
+    )?;
+    let before_events: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM task_events WHERE task_id=?1",
+        params![task.id],
+        |row| row.get(0),
+    )?;
+    conn.execute(
+        "CREATE TRIGGER fail_comment_event BEFORE INSERT ON task_events WHEN NEW.kind='task.comment.created' BEGIN SELECT RAISE(ABORT, 'forced task.comment.created event failure'); END",
+        [],
+    )?;
+    let error = result_err(create_comment(
+        &temp.path,
+        &task.id,
+        "tester",
+        "must rollback",
+        None,
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("forced task.comment.created event failure"),
+        "{error}"
+    );
+    let after_comments: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM task_comments WHERE task_id=?1",
+        params![task.id],
+        |row| row.get(0),
+    )?;
+    let after_events: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM task_events WHERE task_id=?1",
+        params![task.id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(after_comments, before_comments);
+    assert_eq!(after_events, before_events);
+    Ok(())
 }

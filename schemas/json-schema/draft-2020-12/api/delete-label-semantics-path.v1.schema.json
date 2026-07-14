@@ -1,0 +1,19 @@
+{
+  "$id": "urn:kanban-tool:schema:api:delete-label-semantics-path:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "board": {
+      "type": "string"
+    },
+    "label_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "board",
+    "label_id"
+  ],
+  "title": "Delete Label Semantics Path v1",
+  "type": "object"
+}

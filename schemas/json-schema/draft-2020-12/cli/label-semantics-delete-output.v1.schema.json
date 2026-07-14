@@ -1,0 +1,29 @@
+{
+  "$defs": {
+    "CliLabelSemanticsDeleteResult": {
+      "additionalProperties": false,
+      "properties": {
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deleted"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:label-semantics-delete-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CliLabelSemanticsDeleteResult"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI label semantics delete output v1",
+  "type": "object"
+}

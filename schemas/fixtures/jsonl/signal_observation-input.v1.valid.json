@@ -1,0 +1,1 @@
+{"type":"signal_observation","data":{"id":"obs_fixture","board_id":"b_fixture","task_id":"t_fixture","task_ref_snapshot":"default#1","run_id":null,"comment_id":null,"actor":"tester","agent_type":"codex","source":"contract-test","evidence":{"confidence":0.9},"created_at":1}}

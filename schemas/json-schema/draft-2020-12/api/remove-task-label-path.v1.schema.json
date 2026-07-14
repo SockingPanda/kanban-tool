@@ -1,0 +1,19 @@
+{
+  "$id": "urn:kanban-tool:schema:api:remove-task-label-path:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "label_id": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "label_id"
+  ],
+  "title": "Kanban remove task label path v1",
+  "type": "object"
+}

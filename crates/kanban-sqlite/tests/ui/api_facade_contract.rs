@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use kanban_sqlite::api;
 
 fn adapter_contract_path_compiles(path: &Path, task_id: &str, label_id: &str) {
+    let mut structured_metadata = serde_json::json!({});
+    let _ = api::naturalize_structured_metadata(&mut structured_metadata);
     let create = api::CreateTask::ready("facade contract");
     let _ = api::create_task(path, "default", "tester", create);
     let _ = api::mark_execution_plan_not_required(path, "default", "tester", task_id, "contract");

@@ -1,0 +1,31 @@
+{
+  "$defs": {
+    "CliTaskReclaimResult": {
+      "additionalProperties": false,
+      "properties": {
+        "reclaimed": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "reclaimed"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:task-reclaim-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CliTaskReclaimResult"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI task reclaim output v1",
+  "type": "object"
+}

@@ -75,7 +75,7 @@ fn comment_add_and_list_json_roundtrip() -> anyhow::Result<()> {
     assert_eq!(added["data"]["author"], "alice");
     assert_eq!(added["data"]["author_type"], "user");
     assert!(added["data"]["agent_type"].is_null());
-    assert_eq!(added["data"]["metadata_json"], "{}");
+    assert_eq!(added["data"]["metadata"], serde_json::json!({}));
 
     let listed = kanban(
         &temp.path,
@@ -180,12 +180,97 @@ fn comment_add_accepts_metadata_json() -> anyhow::Result<()> {
     .success_json()?;
     assert_eq!(added["data"]["kind"], "note");
     assert_eq!(added["data"]["author_type"], "user");
-    assert_eq!(added["data"]["metadata_json"], r#"{"source":"cli"}"#);
+    assert_eq!(
+        added["data"]["metadata"],
+        serde_json::json!({"source": "cli"})
+    );
     Ok(())
 }
 
 #[test]
-fn comment_kind_decision_roundtrips_and_defaults_to_user() -> anyhow::Result<()> {
+fn comment_note_metadata_decision_key_collisions_roundtrip_losslessly() -> anyhow::Result<()> {
+    let temp = TempDb::new("comment_note_metadata_decision_key_collisions")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let task_id = create_task(&temp, "open note metadata")?;
+    let metadata = serde_json::json!({
+        "selected": 7,
+        "risk": null,
+        "options": "opaque",
+        "nested": {"keep": [true, 1]}
+    });
+
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--board",
+            "default",
+            "comment",
+            "add",
+            &task_id,
+            "opaque metadata",
+            "--kind",
+            "note",
+            "--metadata-json",
+            &metadata.to_string(),
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(added["data"]["metadata"], metadata);
+
+    let listed = kanban(
+        &temp.path,
+        &["--json", "--board", "default", "comment", "list", &task_id],
+    )?
+    .success_json()?;
+    assert_eq!(listed["data"][0]["metadata"], metadata);
+    Ok(())
+}
+
+#[test]
+fn comment_signal_metadata_discriminator_collision_commits_once_and_roundtrips_losslessly()
+-> anyhow::Result<()> {
+    let temp = TempDb::new("comment_signal_metadata_discriminator_collision")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let task_id = create_task(&temp, "open signal metadata")?;
+    let metadata = serde_json::json!({"type": "signal_link", "custom": true});
+
+    let added = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "--board",
+            "default",
+            "comment",
+            "add",
+            &task_id,
+            "user-owned signal metadata",
+            "--kind",
+            "signal",
+            "--metadata-json",
+            &metadata.to_string(),
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(added["data"]["metadata"], metadata);
+
+    let listed = kanban(
+        &temp.path,
+        &["--json", "--board", "default", "comment", "list", &task_id],
+    )?
+    .success_json()?;
+    assert_eq!(listed["data"][0]["metadata"], metadata);
+    let stored = kanban_sqlite::api::list_comments(&temp.path, &task_id)?;
+    assert_eq!(stored.len(), 1, "create must commit exactly one comment");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&stored[0].metadata_json)?,
+        metadata
+    );
+    Ok(())
+}
+
+#[test]
+fn metadata_decision_input_fixture_is_consumed_by_real_cli() -> anyhow::Result<()> {
     let temp = TempDb::new("comment_kind_decision_roundtrips_and_defaults_to_user")?;
     kanban(&temp.path, &["--board", "default", "init"])?.success()?;
     let task_id = create_task(&temp, "decision comment")?;
@@ -205,15 +290,24 @@ fn comment_kind_decision_roundtrips_and_defaults_to_user() -> anyhow::Result<()>
             body,
             "--kind",
             "decision",
-            "--metadata-json",
-            &decision_metadata(),
+            "--metadata-json-file",
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../schemas/fixtures/metadata/decision.v1.valid.json"
+            ),
         ],
     )?
     .success_json()?;
     assert_eq!(added["data"]["kind"], "decision");
     assert_eq!(added["data"]["author_type"], "user");
     assert!(added["data"]["agent_type"].is_null());
-    assert_eq!(added["data"]["metadata_json"], decision_metadata());
+    assert_eq!(
+        added["data"]["metadata"],
+        serde_json::from_str::<serde_json::Value>(&fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/fixtures/metadata/decision.v1.valid.json"
+        ))?)?
+    );
 
     let listed = kanban(
         &temp.path,
@@ -660,6 +754,9 @@ fn comment_add_metadata_json_file_preserves_shell_sensitive_json() -> anyhow::Re
     )?
     .success_json()?;
 
-    assert_eq!(added["data"]["metadata_json"], metadata);
+    assert_eq!(
+        added["data"]["metadata"],
+        serde_json::from_str::<serde_json::Value>(metadata)?
+    );
     Ok(())
 }

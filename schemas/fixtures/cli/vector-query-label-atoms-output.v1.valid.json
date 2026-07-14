@@ -1,0 +1,1 @@
+{"data":[{"hit":{"atom_id":"atom_backend_positive","label_id":"label_backend","label_name":"backend","board_id":"b_fixture","polarity":"positive","kind":"applies_when","text":"touches rust service code","ordinal":0,"content_hash":"hash-atom","embedding_model":"fixture-model","distance":0.125},"vector":[1.0,0.0]}]}

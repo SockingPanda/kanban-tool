@@ -1,0 +1,22 @@
+{
+  "data": {
+    "board_id": "b_FIXTURE_1",
+    "candidates": [],
+    "coverage": 0,
+    "coverage_cosine": 0,
+    "degraded": true,
+    "diagnostics": [
+      "retrieved atom polarity mismatch: expected Negative, got Positive",
+      "vector_query_error"
+    ],
+    "needs_new_label": false,
+    "reason_codes": [
+      "degraded_result",
+      "vector_query_error"
+    ],
+    "residual_norm": 1,
+    "selected_labels": [],
+    "task_id": "t_FIXTURE_1"
+  },
+  "unexpected": true
+}

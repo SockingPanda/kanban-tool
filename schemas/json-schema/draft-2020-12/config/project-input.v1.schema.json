@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "ProjectVectorConfigInput": {
+      "additionalProperties": false,
+      "properties": {
+        "dimensions": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "endpoint",
+        "model",
+        "dimensions"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:config:project-input:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "board": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "db": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "vector": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProjectVectorConfigInput"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "title": "Project Config Input v1",
+  "type": "object"
+}

@@ -60,7 +60,7 @@ describe("MarkdownDescription", () => {
                 agent_type: "codex",
                 body: "**bold**\n\n- item\n\n<script>alert('x')</script>\n\n[bad](javascript:alert('x'))",
                 kind: "note",
-                metadata_json: "{}",
+                metadata: {},
                 created_at: task.created_at,
               },
             ],
@@ -114,7 +114,7 @@ describe("MarkdownDescription", () => {
                 agent_type: "codex",
                 body: "Choose where to store decisions.",
                 kind: "decision",
-                metadata_json: JSON.stringify({
+                metadata: {
                   options: [
                     { slug: "metadata", title: "Use metadata", detail: "**Keep** it in comment metadata." },
                     { slug: "table", title: "Add table", detail: "Create separate decision rows." },
@@ -123,7 +123,7 @@ describe("MarkdownDescription", () => {
                   reason: "Keeps the choice next to the discussion.",
                   risk: "Schema drift.",
                   verification: "Render and service tests.",
-                }),
+                },
                 created_at: task.created_at,
               },
             ],
@@ -181,11 +181,11 @@ describe("MarkdownDescription", () => {
                 agent_type: "codex",
                 body: "Fallback decision body.",
                 kind: "decision",
-                metadata_json: JSON.stringify({
+                metadata: {
                   options: [{ slug: " metadata ", title: "Metadata", detail: "Invalid raw slug." }],
                   selected: "metadata",
                   reason: "Whitespace-padded slugs must not be accepted.",
-                }),
+                },
                 created_at: task.created_at,
               },
             ],
@@ -220,6 +220,65 @@ describe("MarkdownDescription", () => {
     expect(html).toContain("option slug must be lowercase ASCII letters, digits, or hyphen")
   })
 
+  it("renders complete signal backlink metadata while preserving the readable body fallback", () => {
+    const html = renderToStaticMarkup(
+      <Sheet open>
+        <TaskDetail
+          api={null}
+          task={task}
+          detail={{
+            ...emptyDetail,
+            comments: [
+              {
+                id: "c_signal",
+                board_id: task.board_id,
+                task_id: task.id,
+                author: "codex",
+                author_type: "agent",
+                agent_type: "codex",
+                body: "Signal captured for operator review.",
+                kind: "signal",
+                metadata: {
+                  type: "signal_link",
+                  signal_id: "sig_fixture",
+                  observation_id: "obs_fixture",
+                  signal_kind: "agent_cli_failure",
+                  signal_status: "open",
+                },
+                created_at: task.created_at,
+              },
+            ],
+          }}
+          blockReason=""
+          setBlockReason={() => undefined}
+          dependencyInput=""
+          setDependencyInput={() => undefined}
+          claimToken={null}
+          commentBody=""
+          setCommentBody={() => undefined}
+          editDraft={null}
+          draftDirty={false}
+          setEditDraft={() => undefined}
+          detailLoading={false}
+          commentsExpanded
+          pendingAction={null}
+          onAction={async () => undefined}
+          onAddDependency={async () => undefined}
+          onRemoveDependency={async () => undefined}
+          onSelectTask={() => undefined}
+          onSaveTask={async () => true}
+          onCancelEdit={() => undefined}
+          onAddComment={async () => undefined}
+        />
+      </Sheet>,
+    )
+
+    expect(html).toContain("Signal captured for operator review.")
+    expect(html).toContain("sig_fixture")
+    expect(html).toContain("agent_cli_failure")
+    expect(html).toContain("open")
+  })
+
   it("renders the first newest-first comment page with pagination controls", () => {
     const html = renderToStaticMarkup(
       <Sheet open>
@@ -237,7 +296,7 @@ describe("MarkdownDescription", () => {
               agent_type: "codex",
               body: `Body ${String(index + 1).padStart(2, "0")}`,
               kind: "note",
-              metadata_json: "{}",
+              metadata: {},
               created_at: task.created_at + index,
             })),
           }}
@@ -560,8 +619,8 @@ const task: Task = {
   retry_count: 0,
   max_retries: null,
   result_summary: null,
-  result_json: null,
-  metadata_json: "{}",
+  result: null,
+  metadata: {},
   lock_version: 0,
   dependency_blocked: false,
   unfinished_parent_count: 0,

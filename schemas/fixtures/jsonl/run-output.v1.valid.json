@@ -1,0 +1,1 @@
+{"type":"run","data":{"id":"r_core","board_id":"b_core","task_id":"t_core","status":"succeeded","worker_profile":null,"worker_pid":null,"claim_token":"historical-token","claim_owner":"tester","claim_expires_at":25,"started_at":21,"last_heartbeat_at":null,"finished_at":30,"exit_code":0,"summary":"done","error":null,"log_path":null,"metadata":42}}

@@ -1,0 +1,74 @@
+{
+  "$defs": {
+    "CliDerivedStoreStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "dirty": {
+          "type": "boolean"
+        },
+        "last_error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_event_id": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "last_rebuild_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "last_sync_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "schema_version": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "store_name": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "store_name",
+        "schema_version",
+        "last_event_id",
+        "dirty",
+        "last_rebuild_at",
+        "last_sync_at",
+        "last_error",
+        "updated_at"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:derived-status-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/$defs/CliDerivedStoreStatus"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI derived status output v1",
+  "type": "object"
+}

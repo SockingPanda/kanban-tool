@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "LabelOntologyActorWire": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:apply-label-ontology-atom-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "$ref": "#/$defs/LabelOntologyActorWire"
+    },
+    "allow_retarget": {
+      "default": false,
+      "type": "boolean"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "label_ref": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "retarget_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "signal_ids": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "actor",
+    "signal_ids",
+    "label_ref",
+    "kind",
+    "text",
+    "reason"
+  ],
+  "title": "Apply label ontology atom request v1",
+  "type": "object"
+}

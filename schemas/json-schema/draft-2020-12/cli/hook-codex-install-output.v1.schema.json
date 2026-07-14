@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "CliHookCodexInstallResult": {
+      "additionalProperties": false,
+      "properties": {
+        "handler_commands": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "installed": {
+          "type": "boolean"
+        },
+        "managed_hook_count": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "matcher": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "prompt_config": {
+          "$ref": "#/$defs/CliHookPromptConfigStatus"
+        },
+        "prompt_config_created": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "installed",
+        "matcher",
+        "handler_commands",
+        "managed_hook_count",
+        "prompt_config_created",
+        "prompt_config"
+      ],
+      "type": "object"
+    },
+    "CliHookPromptBindings": {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "type": "string"
+        },
+        "task_create": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "failure",
+        "task_create"
+      ],
+      "type": "object"
+    },
+    "CliHookPromptConfigStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "bindings": {
+          "$ref": "#/$defs/CliHookPromptBindings"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exists": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "valid": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "exists",
+        "valid",
+        "error",
+        "bindings"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:hook-codex-install-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CliHookCodexInstallResult"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI hook codex install output v1",
+  "type": "object"
+}

@@ -1,0 +1,49 @@
+{
+  "$defs": {
+    "SignalLinkStatus": {
+      "enum": [
+        "open",
+        "confirmed",
+        "rejected",
+        "superseded",
+        "resolved"
+      ],
+      "type": "string"
+    },
+    "SignalLinkType": {
+      "enum": [
+        "signal_link"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:metadata:signal-link-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "observation_id": {
+      "type": "string"
+    },
+    "signal_id": {
+      "type": "string"
+    },
+    "signal_kind": {
+      "type": "string"
+    },
+    "signal_status": {
+      "$ref": "#/$defs/SignalLinkStatus"
+    },
+    "type": {
+      "$ref": "#/$defs/SignalLinkType"
+    }
+  },
+  "required": [
+    "type",
+    "signal_id",
+    "observation_id",
+    "signal_kind",
+    "signal_status"
+  ],
+  "title": "Kanban signal backlink metadata output v1",
+  "type": "object"
+}

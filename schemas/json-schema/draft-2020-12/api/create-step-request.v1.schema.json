@@ -1,0 +1,44 @@
+{
+  "$id": "urn:kanban-tool:schema:api:create-step-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "body": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "linked_task_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "position": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "required": {
+      "default": true,
+      "type": "boolean"
+    },
+    "title": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "title"
+  ],
+  "title": "Kanban create step request v1",
+  "type": "object"
+}

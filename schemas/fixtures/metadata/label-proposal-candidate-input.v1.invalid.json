@@ -1,0 +1,4 @@
+{
+  "name": "workflow",
+  "applies_when": "classifies execution flow"
+}

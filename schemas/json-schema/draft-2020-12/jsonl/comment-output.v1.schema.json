@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "CommentAuthorType": {
+      "enum": [
+        "user",
+        "agent"
+      ],
+      "type": "string"
+    },
+    "CommentJsonlData": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_type": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        },
+        "author": {
+          "type": "string"
+        },
+        "author_type": {
+          "$ref": "#/$defs/CommentAuthorType"
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/CommentKind"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "task_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "task_id",
+        "author",
+        "author_type",
+        "agent_type",
+        "body",
+        "kind",
+        "metadata",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "CommentJsonlType": {
+      "enum": [
+        "comment"
+      ],
+      "type": "string"
+    },
+    "CommentKind": {
+      "enum": [
+        "note",
+        "decision",
+        "signal"
+      ],
+      "type": "string"
+    },
+    "RequiredNullableSchema": {
+      "description": "Schema-only marker for a key that must be present but may contain JSON null.\n\nA bare `Option<T>` is considered omittable by schemars, while\n`#[schemars(required)]` deliberately removes its null branch. This\ntransparent non-Option wrapper preserves both halves of the wire contract.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:comment-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CommentJsonlData"
+    },
+    "type": {
+      "$ref": "#/$defs/CommentJsonlType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL comment output v1",
+  "type": "object"
+}

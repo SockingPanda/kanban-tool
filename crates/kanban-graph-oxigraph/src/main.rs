@@ -8,11 +8,13 @@ use kanban_derived_io::{
 };
 use kanban_entity::{EntityUri, Predicate};
 use kanban_graph::{GraphStoreStatus, RelationGraph};
-use kanban_graph_oxigraph::OxigraphStore;
+use kanban_graph_oxigraph::{
+    OxigraphStore, graph_helper_error_response, graph_helper_handshake_response,
+    graph_helper_neighbors_response, graph_helper_query_response, graph_helper_status_response,
+};
 use kanban_helper_protocol::HelperEnvelope;
 use kanban_indexer::OXIGRAPH_RELATIONS_STORE;
 use serde::Serialize;
-use serde_json::json;
 
 #[derive(Debug, Parser)]
 #[command(name = "kanban-graph-oxigraph")]
@@ -61,18 +63,9 @@ struct QueryArgs {
     limit: usize,
 }
 
-#[derive(Debug, Serialize)]
-struct ErrorPayload {
-    code: &'static str,
-    message: String,
-}
-
 fn main() {
     if let Err(error) = run() {
-        let payload = ErrorPayload {
-            code: "helper_error",
-            message: error.to_string(),
-        };
+        let payload = graph_helper_error_response(error.to_string());
         if let Ok(envelope) = HelperEnvelope::new(payload).and_then(|envelope| envelope.to_json()) {
             println!("{envelope}");
         } else {
@@ -85,29 +78,39 @@ fn main() {
 fn run() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Handshake => print_payload(json!({
-            "helper": "kanban-graph-oxigraph",
-            "protocol": HelperEnvelope::PROTOCOL,
-            "version": env!("CARGO_PKG_VERSION"),
-        })),
-        Command::Status(args) => print_payload(graph_status(&args)?),
+        Command::Handshake => {
+            print_payload(graph_helper_handshake_response(env!("CARGO_PKG_VERSION")))
+        }
+        Command::Status(args) => print_payload(graph_helper_status_response(graph_status(&args)?)),
         Command::Rebuild(args) => {
             let graph = graph_store(&args)?;
-            print_payload(rebuild_oxigraph_with_store(&args.db, &args.board, &graph)?)
+            print_payload(graph_helper_status_response(rebuild_oxigraph_with_store(
+                &args.db,
+                &args.board,
+                &graph,
+            )?))
         }
         Command::Sync(args) => {
             let graph = graph_store(&args)?;
-            print_payload(sync_oxigraph_with_store(&args.db, &args.board, &graph)?)
+            print_payload(graph_helper_status_response(sync_oxigraph_with_store(
+                &args.db,
+                &args.board,
+                &graph,
+            )?))
         }
         Command::Neighbors(args) => {
             let graph = graph_store(&args.store)?;
             let uri = EntityUri::new(args.entity_uri)?;
             let predicate = args.predicate.as_deref().map(parse_predicate).transpose()?;
-            print_payload(graph.neighbors(&uri, predicate, args.limit)?)
+            print_payload(graph_helper_neighbors_response(
+                graph.neighbors(&uri, predicate, args.limit)?,
+            )?)
         }
         Command::Query(args) => {
             let graph = graph_store(&args.store)?;
-            print_payload(graph.query(&args.sparql, args.limit)?)
+            print_payload(graph_helper_query_response(
+                graph.query(&args.sparql, args.limit)?,
+            ))
         }
     }
 }

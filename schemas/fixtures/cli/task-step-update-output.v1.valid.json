@@ -1,0 +1,19 @@
+{
+  "data": {
+    "body": "Updated public wire",
+    "created_at": 101,
+    "created_by": "fixture",
+    "id": "s_fixture",
+    "linked_task": null,
+    "parent_task_id": "t_parent",
+    "position": 3072,
+    "required": true,
+    "resolution_note": null,
+    "resolved_at": null,
+    "resolved_by": null,
+    "status": "todo",
+    "title": "Updated contract",
+    "updated_at": 102,
+    "updated_by": "fixture-editor"
+  }
+}

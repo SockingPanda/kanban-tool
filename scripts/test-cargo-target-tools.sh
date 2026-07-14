@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+unset CARGO_TARGET_DIR
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMPDIR="$(mktemp -d)"
@@ -53,14 +54,11 @@ expected_target_dir() {
   env KANBAN_CARGO_TARGET_ROOT="$target_root" "$LOCK_SCRIPT" --print-target-dir
 }
 
-assert_target_dir_under_root() {
+assert_exact_shared_target_dir() {
   local target_root="$1"
   local actual="$2"
 
-  [[ "$actual" == "$target_root"/worktrees/* ]] || {
-    fail "expected CARGO_TARGET_DIR under $target_root/worktrees, got $actual"
-  }
-  [[ "$actual" != "$target_root" ]] || fail "CARGO_TARGET_DIR must not be the shared target root"
+  [[ "$actual" == "$target_root" ]] || fail "expected exact shared CARGO_TARGET_DIR $target_root, got $actual"
 }
 
 assert_failure() {
@@ -154,6 +152,23 @@ assert_package_help_output_path() {
   }
 }
 
+assert_debian_control_directory_mode() {
+  rg -F 'install -d -m 0755 "$control_dir"' "$ROOT/scripts/package-cli-linux.sh" >/dev/null ||
+    fail "CLI package must create DEBIAN control directory with a dpkg-deb compatible mode"
+}
+
+assert_nextest_junit_stays_under_shared_target() {
+  local configured_path
+
+  configured_path="$(sed -n 's/^[[:space:]]*path[[:space:]]*=[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' "$ROOT/.config/nextest.toml")"
+  [[ "$configured_path" == "junit.xml" ]] ||
+    fail "nextest junit path must be relative to its shared target profile directory, got: $configured_path"
+  rg -F 'COMMAND=(cargo nextest run --config-file "$config_path" --target-dir "$target_dir"' "$LOCK_SCRIPT" >/dev/null ||
+    fail "shared-target wrapper must pass its generated config and exact target dir to cargo nextest run"
+  rg -F "printf '[store]\\ndir = \"%s\"\\n\\n'" "$LOCK_SCRIPT" >/dev/null ||
+    fail "shared-target wrapper must override nextest store.dir"
+}
+
 assert_target_dir_probe_call_sites_quote_paths() {
   local file line_number line
   local files=(
@@ -193,7 +208,7 @@ assert_target_dir_probe_handles_space_paths() {
   chmod +x "$space_lock"
 
   expected="$(env KANBAN_CARGO_TARGET_ROOT="$space_target_root" "$space_lock" --print-target-dir)"
-  assert_target_dir_under_root "$space_target_root" "$expected"
+  assert_exact_shared_target_dir "$space_target_root" "$expected"
   actual="$(env KANBAN_CARGO_TARGET_ROOT="$space_target_root" bash -c '
     set -euo pipefail
     LOCK="$1"
@@ -204,6 +219,44 @@ assert_target_dir_probe_handles_space_paths() {
   [[ "$actual" == "$expected/release" ]] || {
     fail "quoted target-dir probe failed with spaces: expected $expected/release, got $actual"
   }
+}
+
+assert_distinct_worktrees_share_target_and_lock() {
+  local repo_a="$TMPDIR/worktree-a"
+  local repo_b="$TMPDIR/worktree-b"
+  local lock_a="$repo_a/scripts/cargo-build-lock.sh"
+  local lock_b="$repo_b/scripts/cargo-build-lock.sh"
+  local shared_root="$TMPDIR/exact-shared-target"
+  local first_ready="$TMPDIR/cross-worktree-first-ready"
+  local release_first="$TMPDIR/cross-worktree-release-first"
+  local second_done="$TMPDIR/cross-worktree-second-done"
+  local second_stderr="$TMPDIR/cross-worktree-second.stderr"
+  local first_pid second_pid
+
+  mkdir -p "$repo_a/scripts" "$repo_b/scripts" "$shared_root"
+  cp "$LOCK_SCRIPT" "$lock_a"
+  cp "$LOCK_SCRIPT" "$lock_b"
+  chmod +x "$lock_a" "$lock_b"
+
+  [[ "$(KANBAN_CARGO_TARGET_ROOT="$shared_root" "$lock_a" --print-target-dir)" == "$shared_root" ]]
+  [[ "$(KANBAN_CARGO_TARGET_ROOT="$shared_root" "$lock_b" --print-target-dir)" == "$shared_root" ]]
+
+  KANBAN_CARGO_TARGET_ROOT="$shared_root" "$lock_a" -- bash -c '
+    touch "$1"
+    while [[ ! -e "$2" ]]; do sleep 0.02; done
+  ' _ "$first_ready" "$release_first" &
+  first_pid=$!
+  wait_for_file "$first_ready" "cross-worktree first lock holder"
+
+  KANBAN_CARGO_TARGET_ROOT="$shared_root" "$lock_b" -- bash -c 'touch "$1"' _ "$second_done" 2>"$second_stderr" &
+  second_pid=$!
+  wait_for_grep "正在等待其他构建/测试释放" "$second_stderr" "cross-worktree lock wait"
+  [[ ! -e "$second_done" ]] || fail "second worktree bypassed the shared lock"
+
+  touch "$release_first"
+  wait "$first_pid"
+  wait "$second_pid"
+  [[ -e "$second_done" ]] || fail "second worktree did not run after the shared lock was released"
 }
 
 assert_resource_limit_defaults() {
@@ -277,19 +330,20 @@ KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT/" "$LOCK_SCRIPT" -- bash -c '
   [[ "$CARGO_TARGET_DIR" == "$1" ]]
   [[ -e "$2/.build.lock" ]]
 ' _ "$expected_target" "$TARGET_ROOT"
-assert_target_dir_under_root "$TARGET_ROOT" "$expected_target"
+assert_exact_shared_target_dir "$TARGET_ROOT" "$expected_target"
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TARGET_ROOT/" "$LOCK_SCRIPT" -- true
 home_dir="$TMPDIR/home"
 home_target="$home_dir/.cache/kanban-tool/cargo-target"
 mkdir -p "$home_dir"
 home_expected_target="$(HOME="$home_dir" KANBAN_CARGO_TARGET_ROOT='$HOME/.cache/kanban-tool/cargo-target' "$LOCK_SCRIPT" --print-target-dir)"
 env HOME="$home_dir"   KANBAN_CARGO_TARGET_ROOT='$HOME/.cache/kanban-tool/cargo-target'   "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$home_expected_target"
-assert_target_dir_under_root "$home_target" "$home_expected_target"
+assert_exact_shared_target_dir "$home_target" "$home_expected_target"
 env HOME="$home_dir"   KANBAN_CARGO_TARGET_ROOT='${HOME}/.cache/kanban-tool/cargo-target'   CARGO_TARGET_DIR='${HOME}/.cache/kanban-tool/cargo-target'   "$LOCK_SCRIPT" -- true
 tilde_expected_target="$(HOME="$home_dir" KANBAN_CARGO_TARGET_ROOT='~/.cache/kanban-tool/cargo-target' "$LOCK_SCRIPT" --print-target-dir)"
 env HOME="$home_dir"   KANBAN_CARGO_TARGET_ROOT='~/.cache/kanban-tool/cargo-target'   "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$tilde_expected_target"
-assert_target_dir_under_root "$home_target" "$tilde_expected_target"
+assert_exact_shared_target_dir "$home_target" "$tilde_expected_target"
 assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TMPDIR/outside-target" "$LOCK_SCRIPT" -- true
+assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TARGET_ROOT/subdir" "$LOCK_SCRIPT" -- true
 assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" "$REMOVED_FLAG" cli -- true
 assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" "$REMOVED_PATH_FLAG" "$TARGET_ROOT" -- true
 
@@ -368,10 +422,13 @@ outer_lock_marker="$TMPDIR/outer-lock-marker"
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash -c 'touch "$1"' _ "$outer_lock_marker"
 [[ -e "$outer_lock_marker" ]] || fail "nested lock-held command did not run"
 
+assert_distinct_worktrees_share_target_and_lock
 assert_resource_limit_defaults
 assert_no_bare_target_writing_cargo
 assert_target_dir_probe_call_sites_quote_paths
 assert_target_dir_probe_handles_space_paths
 assert_package_help_output_path
+assert_debian_control_directory_mode
+assert_nextest_junit_stays_under_shared_target
 
 echo "cargo target root and build lock tests passed"

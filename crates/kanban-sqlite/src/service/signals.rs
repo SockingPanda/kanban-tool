@@ -147,9 +147,8 @@ pub fn get_signal_by_id(path: impl AsRef<Path>, signal_id: &str) -> Result<Signa
 pub fn review_signals(
     path: impl AsRef<Path>,
     board: &str,
-    mut options: SignalListOptions,
+    options: SignalListOptions,
 ) -> Result<Vec<SignalRecord>> {
-    options.include_all = false;
     list_signals(path, board, options)
 }
 

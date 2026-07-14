@@ -1,505 +1,746 @@
-use kanban_core::TaskStatus;
-use kanban_sqlite::api::StepPlanState;
-use serde::{Deserialize, Serialize};
+use kanban_contract::{
+    ApiExecutionPlanState, ApiLabel, ApiTask, ApiTaskPriority, ApiTaskStatus, BlockedReasonCount,
+    DoctorDerivedStore, DoctorIssue, DoctorReport, QueueStats, SearchStatus, StaleClaim,
+    StatusCount,
+};
+use kanban_core::{KanbanError, TaskStatus};
+use kanban_sqlite::api::{LabelRecord, StepPlanState, TaskRecord};
+use serde::Serialize;
 
-#[derive(Debug, Serialize)]
-pub(super) struct Envelope<T> {
-    pub(super) data: T,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) meta: Option<serde_json::Value>,
+use crate::error::ApiError;
+
+pub fn queue_stats_from_record(
+    value: kanban_sqlite::api::QueueStats,
+) -> Result<QueueStats, KanbanError> {
+    Ok(QueueStats {
+        board_id: value.board_id,
+        generated_at: value.generated_at,
+        status_counts: value
+            .status_counts
+            .into_iter()
+            .map(|item| {
+                Ok(StatusCount {
+                    status: item.status.parse().map_err(|_| {
+                        KanbanError::Storage(format!(
+                            "invalid persisted task status in queue stats: {}",
+                            item.status
+                        ))
+                    })?,
+                    count: item.count,
+                })
+            })
+            .collect::<Result<Vec<_>, KanbanError>>()?,
+        stale_claims: value
+            .stale_claims
+            .into_iter()
+            .map(|item| StaleClaim {
+                task_id: item.task_id,
+                seq: item.seq,
+                title: item.title,
+                claim_owner: item.claim_owner,
+                claim_expires_at: item.claim_expires_at,
+                last_heartbeat_at: item.last_heartbeat_at,
+                current_run_id: item.current_run_id,
+                retry_count: item.retry_count,
+                max_retries: item.max_retries,
+            })
+            .collect(),
+        blocked_reasons: value
+            .blocked_reasons
+            .into_iter()
+            .map(|item| BlockedReasonCount {
+                reason: item.reason,
+                count: item.count,
+            })
+            .collect(),
+        unplanned_active_tasks: value.unplanned_active_tasks,
+        active_parents_with_incomplete_required_steps: value
+            .active_parents_with_incomplete_required_steps,
+    })
 }
 
-#[derive(Debug, Serialize)]
-pub(super) struct ErrorEnvelope {
-    pub(super) error: ErrorBody,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ErrorBody {
-    pub(super) code: &'static str,
-    pub(super) message: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct TaskDto {
-    pub(super) id: String,
-    pub(super) board_id: String,
-    pub(super) board_slug: String,
-    #[serde(rename = "ref")]
-    pub(super) task_ref: String,
-    pub(super) seq: i64,
-    pub(super) title: String,
-    pub(super) description: Option<String>,
-    pub(super) status: TaskStatus,
-    pub(super) status_reason: Option<String>,
-    pub(super) assignee: Option<String>,
-    pub(super) priority: i64,
-    pub(super) position: i64,
-    pub(super) scheduled_at: Option<i64>,
-    pub(super) due_at: Option<i64>,
-    pub(super) created_by: String,
-    pub(super) created_at: i64,
-    pub(super) updated_at: i64,
-    pub(super) started_at: Option<i64>,
-    pub(super) completed_at: Option<i64>,
-    pub(super) archived_at: Option<i64>,
-    pub(super) claim_owner: Option<String>,
-    pub(super) claim_expires_at: Option<i64>,
-    pub(super) last_heartbeat_at: Option<i64>,
-    pub(super) current_run_id: Option<String>,
-    pub(super) retry_count: i64,
-    pub(super) max_retries: Option<i64>,
-    pub(super) result_summary: Option<String>,
-    pub(super) result_json: Option<String>,
-    pub(super) metadata_json: String,
-    pub(super) lock_version: i64,
-    pub(super) dependency_blocked: bool,
-    pub(super) unfinished_parent_count: i64,
-    pub(super) execution_plan_state: StepPlanState,
-    pub(super) required_step_count: i64,
-    pub(super) completed_required_step_count: i64,
-    pub(super) optional_step_count: i64,
-    pub(super) labels: Vec<LabelDto>,
-}
-
-impl From<kanban_sqlite::api::TaskRecord> for TaskDto {
-    fn from(task: kanban_sqlite::api::TaskRecord) -> Self {
-        Self {
-            id: task.id,
-            board_id: task.board_id,
-            board_slug: task.board_slug,
-            task_ref: task.task_ref,
-            seq: task.seq,
-            title: task.title,
-            description: task.description,
-            status: task.status,
-            status_reason: task.status_reason,
-            assignee: task.assignee,
-            priority: task.priority,
-            position: task.position,
-            scheduled_at: task.scheduled_at,
-            due_at: task.due_at,
-            created_by: task.created_by,
-            created_at: task.created_at,
-            updated_at: task.updated_at,
-            started_at: task.started_at,
-            completed_at: task.completed_at,
-            archived_at: task.archived_at,
-            claim_owner: task.claim_owner,
-            claim_expires_at: task.claim_expires_at,
-            last_heartbeat_at: task.last_heartbeat_at,
-            current_run_id: task.current_run_id,
-            retry_count: task.retry_count,
-            max_retries: task.max_retries,
-            result_summary: task.result_summary,
-            result_json: task.result_json,
-            metadata_json: task.metadata_json,
-            lock_version: task.lock_version,
-            dependency_blocked: task.dependency_blocked,
-            unfinished_parent_count: task.unfinished_parent_count,
-            execution_plan_state: task.execution_plan_state,
-            required_step_count: task.required_step_count,
-            completed_required_step_count: task.completed_required_step_count,
-            optional_step_count: task.optional_step_count,
-            labels: task.labels.into_iter().map(LabelDto::from).collect(),
-        }
+fn doctor_issue_from_record(value: kanban_sqlite::api::DoctorIssue) -> DoctorIssue {
+    DoctorIssue {
+        severity: value.severity,
+        code: value.code,
+        message: value.message,
+        record_ids: value.record_ids,
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(super) struct LabelDto {
-    pub(super) id: String,
-    pub(super) board_id: String,
-    pub(super) name: String,
-    pub(super) color: Option<String>,
-    pub(super) created_at: i64,
-    pub(super) updated_at: i64,
-}
-
-impl From<kanban_sqlite::api::LabelRecord> for LabelDto {
-    fn from(label: kanban_sqlite::api::LabelRecord) -> Self {
-        Self {
-            id: label.id,
-            board_id: label.board_id,
-            name: label.name,
-            color: label.color,
-            created_at: label.created_at,
-            updated_at: label.updated_at,
-        }
+fn doctor_store_from_record(
+    value: kanban_sqlite::api::DoctorDerivedStoreReport,
+) -> DoctorDerivedStore {
+    DoctorDerivedStore {
+        store_name: value.store_name,
+        schema_version: value.schema_version,
+        last_event_id: value.last_event_id,
+        dirty: value.dirty,
+        last_error: value.last_error,
+        pending_outbox: value.pending_outbox,
+        running_outbox: value.running_outbox,
+        failed_outbox: value.failed_outbox,
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(super) struct RunDto {
-    pub(super) id: String,
-    pub(super) task_id: String,
-    pub(super) status: String,
-    pub(super) worker_profile: Option<String>,
-    pub(super) worker_pid: Option<i64>,
-    pub(super) claim_owner: String,
-    pub(super) started_at: i64,
-    pub(super) finished_at: Option<i64>,
-    pub(super) exit_code: Option<i64>,
-    pub(super) summary: Option<String>,
-    pub(super) error: Option<String>,
-    pub(super) log_path: Option<String>,
-    pub(super) metadata_json: String,
-}
-
-impl From<kanban_sqlite::api::RunRecord> for RunDto {
-    fn from(run: kanban_sqlite::api::RunRecord) -> Self {
-        Self {
-            id: run.id,
-            task_id: run.task_id,
-            status: run.status,
-            worker_profile: run.worker_profile,
-            worker_pid: run.worker_pid,
-            claim_owner: run.claim_owner,
-            started_at: run.started_at,
-            finished_at: run.finished_at,
-            exit_code: run.exit_code,
-            summary: run.summary,
-            error: run.error,
-            log_path: run.log_path,
-            metadata_json: run.metadata_json,
-        }
+pub fn doctor_report_from_record(value: kanban_sqlite::api::DoctorReport) -> DoctorReport {
+    DoctorReport {
+        ok: value.ok,
+        integrity_check: value.integrity_check,
+        migration_version: value.migration_version,
+        user_version: value.user_version,
+        expired_running_tasks: value.expired_running_tasks,
+        running_tasks_without_active_run: value.running_tasks_without_active_run,
+        orphan_running_runs: value.orphan_running_runs,
+        dependency_cycles: value.dependency_cycles,
+        archived_dependency_edges: value.archived_dependency_edges,
+        missing_run_logs: value.missing_run_logs,
+        suspicious_run_log_paths: value.suspicious_run_log_paths,
+        executable_dependency_violations: value.executable_dependency_violations,
+        executable_spec_violations: value.executable_spec_violations,
+        executable_schedule_violations: value.executable_schedule_violations,
+        unplanned_active_tasks: value.unplanned_active_tasks,
+        active_parents_with_incomplete_required_steps: value
+            .active_parents_with_incomplete_required_steps,
+        outbox_pending: value.outbox_pending,
+        outbox_running: value.outbox_running,
+        outbox_failed: value.outbox_failed,
+        derived_dirty_stores: value.derived_dirty_stores,
+        derived_error_stores: value.derived_error_stores,
+        derived_stores: value
+            .derived_stores
+            .into_iter()
+            .map(doctor_store_from_record)
+            .collect(),
+        consistency_errors: value.consistency_errors,
+        consistency_warnings: value.consistency_warnings,
+        consistency_issues: value
+            .consistency_issues
+            .into_iter()
+            .map(doctor_issue_from_record)
+            .collect(),
+        ontology_ledger_errors: value.ontology_ledger_errors,
+        ontology_ledger_warnings: value.ontology_ledger_warnings,
+        ontology_ledger_issues: value
+            .ontology_ledger_issues
+            .into_iter()
+            .map(doctor_issue_from_record)
+            .collect(),
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(super) struct EventDto {
-    pub(super) id: i64,
-    pub(super) event_id: String,
-    pub(super) board_id: String,
-    pub(super) task_id: Option<String>,
-    pub(super) run_id: Option<String>,
-    pub(super) kind: String,
-    pub(super) actor: Option<String>,
-    pub(super) payload: serde_json::Value,
-    pub(super) created_at: i64,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct CommentDto {
-    pub(super) id: String,
-    pub(super) board_id: String,
-    pub(super) task_id: String,
-    pub(super) author: String,
-    pub(super) author_type: String,
-    pub(super) agent_type: Option<String>,
-    pub(super) body: String,
-    pub(super) kind: String,
-    pub(super) metadata_json: String,
-    pub(super) created_at: i64,
-}
-
-impl From<kanban_sqlite::api::CommentRecord> for CommentDto {
-    fn from(comment: kanban_sqlite::api::CommentRecord) -> Self {
-        Self {
-            id: comment.id,
-            board_id: comment.board_id,
-            task_id: comment.task_id,
-            author: comment.author,
-            author_type: comment.author_type,
-            agent_type: comment.agent_type,
-            body: comment.body,
-            kind: comment.kind,
-            metadata_json: comment.metadata_json,
-            created_at: comment.created_at,
-        }
+pub fn search_status_from_record(value: kanban_search::SearchIndexStatus) -> SearchStatus {
+    SearchStatus {
+        backend: value.backend,
+        derived_index: value.derived_index,
+        stale: value.stale,
+        index_version: value.index_version,
+        last_event_id: value.last_event_id,
+        index_lag_events: value.index_lag_events,
+        message: value.message,
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(super) struct RunLogDto {
-    pub(super) run_id: String,
-    pub(super) content: String,
-    pub(super) truncated: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ClaimDto {
-    pub(super) task: TaskDto,
-    pub(super) run: RunDto,
-    pub(super) claim_token: String,
-    pub(super) claim_expires_at: Option<i64>,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct DependencyTaskDto {
-    pub(super) id: String,
-    pub(super) board_id: String,
-    pub(super) board_slug: String,
-    #[serde(rename = "ref")]
-    pub(super) task_ref: String,
-    pub(super) title: String,
-    pub(super) status: TaskStatus,
-}
-
-impl From<kanban_sqlite::api::DependencyTaskRecord> for DependencyTaskDto {
-    fn from(task: kanban_sqlite::api::DependencyTaskRecord) -> Self {
-        Self {
-            id: task.id,
-            board_id: task.board_id,
-            board_slug: task.board_slug,
-            task_ref: task.task_ref,
-            title: task.title,
-            status: task.status,
-        }
+pub(super) const fn api_task_status_from_core(status: TaskStatus) -> ApiTaskStatus {
+    match status {
+        TaskStatus::Triage => ApiTaskStatus::Triage,
+        TaskStatus::Todo => ApiTaskStatus::Todo,
+        TaskStatus::Scheduled => ApiTaskStatus::Scheduled,
+        TaskStatus::Ready => ApiTaskStatus::Ready,
+        TaskStatus::Running => ApiTaskStatus::Running,
+        TaskStatus::Blocked => ApiTaskStatus::Blocked,
+        TaskStatus::Review => ApiTaskStatus::Review,
+        TaskStatus::Done => ApiTaskStatus::Done,
+        TaskStatus::Archived => ApiTaskStatus::Archived,
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(super) struct DependencyEdgeDto {
-    pub(super) parent: DependencyTaskDto,
-    pub(super) child: DependencyTaskDto,
-}
-
-impl From<kanban_sqlite::api::DependencyEdgeRecord> for DependencyEdgeDto {
-    fn from(edge: kanban_sqlite::api::DependencyEdgeRecord) -> Self {
-        Self {
-            parent: DependencyTaskDto::from(edge.parent),
-            child: DependencyTaskDto::from(edge.child),
-        }
+pub(super) const fn task_status_from_api(status: ApiTaskStatus) -> TaskStatus {
+    match status {
+        ApiTaskStatus::Triage => TaskStatus::Triage,
+        ApiTaskStatus::Todo => TaskStatus::Todo,
+        ApiTaskStatus::Scheduled => TaskStatus::Scheduled,
+        ApiTaskStatus::Ready => TaskStatus::Ready,
+        ApiTaskStatus::Running => TaskStatus::Running,
+        ApiTaskStatus::Blocked => TaskStatus::Blocked,
+        ApiTaskStatus::Review => TaskStatus::Review,
+        ApiTaskStatus::Done => TaskStatus::Done,
+        ApiTaskStatus::Archived => TaskStatus::Archived,
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(super) struct DependenciesDto {
-    pub(super) task: DependencyTaskDto,
-    pub(super) parents: Vec<TaskDto>,
-    pub(super) children: Vec<TaskDto>,
-    pub(super) edges: Vec<DependencyEdgeDto>,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct TaskStepDto {
-    pub(super) id: String,
-    pub(super) parent_task_id: String,
-    pub(super) title: String,
-    pub(super) body: Option<String>,
-    pub(super) linked_task: Option<TaskDto>,
-    pub(super) position: i64,
-    pub(super) required: bool,
-    pub(super) status: kanban_sqlite::api::StepStatus,
-    pub(super) resolution_note: Option<String>,
-    pub(super) resolved_by: Option<String>,
-    pub(super) resolved_at: Option<i64>,
-    pub(super) created_by: String,
-    pub(super) created_at: i64,
-    pub(super) updated_by: String,
-    pub(super) updated_at: i64,
-}
-
-impl From<kanban_sqlite::api::TaskStepRecord> for TaskStepDto {
-    fn from(step: kanban_sqlite::api::TaskStepRecord) -> Self {
-        Self {
-            id: step.id,
-            parent_task_id: step.parent_task_id,
-            title: step.title,
-            body: step.body,
-            linked_task: step.linked_task.map(TaskDto::from),
-            position: step.position,
-            required: step.required,
-            status: step.status,
-            resolution_note: step.resolution_note,
-            resolved_by: step.resolved_by,
-            resolved_at: step.resolved_at,
-            created_by: step.created_by,
-            created_at: step.created_at,
-            updated_by: step.updated_by,
-            updated_at: step.updated_at,
-        }
+pub(super) const fn api_execution_plan_state_from_record(
+    state: StepPlanState,
+) -> ApiExecutionPlanState {
+    match state {
+        StepPlanState::Unplanned => ApiExecutionPlanState::Unplanned,
+        StepPlanState::Planned => ApiExecutionPlanState::Planned,
+        StepPlanState::NotRequired => ApiExecutionPlanState::NotRequired,
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(super) struct TaskExecutionPlanDto {
-    pub(super) board_id: String,
-    pub(super) task_id: String,
-    pub(super) state: kanban_sqlite::api::StepPlanState,
-    pub(super) reason: Option<String>,
-    pub(super) updated_by: String,
-    pub(super) updated_at: i64,
-}
-
-impl From<kanban_sqlite::api::TaskExecutionPlanRecord> for TaskExecutionPlanDto {
-    fn from(plan: kanban_sqlite::api::TaskExecutionPlanRecord) -> Self {
-        Self {
-            board_id: plan.board_id,
-            task_id: plan.task_id,
-            state: plan.state,
-            reason: plan.reason,
-            updated_by: plan.updated_by,
-            updated_at: plan.updated_at,
-        }
+pub(super) fn api_label_from_record(label: LabelRecord) -> ApiLabel {
+    let LabelRecord {
+        id,
+        board_id,
+        name,
+        color,
+        created_at,
+        updated_at,
+    } = label;
+    ApiLabel {
+        id,
+        board_id,
+        name,
+        color,
+        created_at,
+        updated_at,
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(super) struct TaskStepsDto {
-    pub(super) task_id: String,
-    pub(super) steps: Vec<TaskStepDto>,
-    pub(super) execution_plan: TaskExecutionPlanDto,
+pub(super) fn api_task_from_record(task: TaskRecord) -> Result<ApiTask, ApiError> {
+    let TaskRecord {
+        id,
+        board_id,
+        board_slug,
+        task_ref,
+        seq,
+        title,
+        description,
+        status,
+        status_reason,
+        assignee,
+        priority,
+        position,
+        scheduled_at,
+        due_at,
+        created_by,
+        created_at,
+        updated_at,
+        started_at,
+        completed_at,
+        archived_at,
+        claim_token: _,
+        claim_owner,
+        claim_expires_at,
+        last_heartbeat_at,
+        current_run_id,
+        retry_count,
+        max_retries,
+        result_summary,
+        result_json,
+        metadata_json,
+        lock_version,
+        dependency_blocked,
+        unfinished_parent_count,
+        execution_plan_state,
+        required_step_count,
+        completed_required_step_count,
+        optional_step_count,
+        labels,
+    } = task;
+    let priority = ApiTaskPriority::try_from(priority).map_err(|priority| {
+        ApiError(KanbanError::Storage(format!(
+            "task record {id} has invalid priority {priority}; expected 0..=3"
+        )))
+    })?;
+    let result = result_json
+        .as_deref()
+        .map(serde_json::from_str)
+        .transpose()
+        .map_err(|error| {
+            ApiError(KanbanError::Storage(format!(
+                "task record {id} has invalid result_json: {error}"
+            )))
+        })?;
+    let metadata = serde_json::from_str(&metadata_json).map_err(|error| {
+        ApiError(KanbanError::Storage(format!(
+            "task record {id} has invalid metadata_json: {error}"
+        )))
+    })?;
+    Ok(ApiTask {
+        id,
+        board_id,
+        board_slug,
+        task_ref,
+        seq,
+        title,
+        description,
+        status: api_task_status_from_core(status),
+        status_reason,
+        assignee,
+        priority,
+        position,
+        scheduled_at,
+        due_at,
+        created_by,
+        created_at,
+        updated_at,
+        started_at,
+        completed_at,
+        archived_at,
+        claim_owner,
+        claim_expires_at,
+        last_heartbeat_at,
+        current_run_id,
+        retry_count,
+        max_retries,
+        result_summary,
+        result,
+        metadata,
+        lock_version,
+        dependency_blocked,
+        unfinished_parent_count,
+        execution_plan_state: api_execution_plan_state_from_record(execution_plan_state),
+        required_step_count,
+        completed_required_step_count,
+        optional_step_count,
+        labels: labels.into_iter().map(api_label_from_record).collect(),
+    })
 }
 
 #[derive(Debug, Serialize)]
-pub(super) struct SearchTaskHitDto {
-    pub(super) task_id: String,
-    pub(super) seq: i64,
-    pub(super) score: f64,
-    pub(super) snippet: Option<String>,
-    pub(super) task: TaskDto,
+pub(super) struct LabelAtomExplainDto {
+    pub(super) query: String,
+    pub(super) atom: Option<kanban_sqlite::api::LabelAtomRecord>,
+    pub(super) current_semantics: Option<kanban_sqlite::api::LabelSemanticsRecord>,
+    pub(super) provenance_actions: Vec<kanban_sqlite::api::LabelAtomExplainAction>,
+    pub(super) supporting_signals: Vec<LabelAtomExplainSignalDto>,
+    pub(super) validation_history: Vec<kanban_sqlite::api::LabelAtomExplainValidation>,
+    pub(super) legacy_untracked: bool,
+    pub(super) legacy_reason: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
-pub(super) struct SearchTasksDto {
-    pub(super) hits: Vec<SearchTaskHitDto>,
-    pub(super) meta: kanban_search::SearchMeta,
+pub(super) struct LabelAtomExplainSignalDto {
+    pub(super) signal: kanban_sqlite::api::LabelOntologySignalRecord,
+    pub(super) observation: kanban_sqlite::api::LabelOntologyObservationRecord,
+    pub(super) source_task: ApiTask,
+    pub(super) task_ref_snapshot: String,
+    pub(super) suggest_input_stale: bool,
+    pub(super) suggest_degraded: bool,
+    pub(super) warnings: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
-pub(super) struct ContextBuildQuery {
-    #[serde(default = "default_board")]
-    pub(super) board: String,
-    #[serde(default = "default_context_lexical_limit")]
-    pub(super) lexical_limit: usize,
-    #[serde(default = "default_context_graph_limit")]
-    pub(super) graph_limit: usize,
-    #[serde(default = "default_context_vector_limit")]
-    pub(super) vector_limit: usize,
-    #[serde(default = "default_context_max_items")]
-    pub(super) max_items: usize,
-}
+impl TryFrom<kanban_sqlite::api::LabelAtomExplainSignal> for LabelAtomExplainSignalDto {
+    type Error = ApiError;
 
-#[derive(Debug, Deserialize)]
-pub(super) struct BoardQuery {
-    #[serde(default = "default_board")]
-    pub(super) board: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub(super) struct GraphNeighborsQuery {
-    #[serde(default = "default_board")]
-    pub(super) board: String,
-    pub(super) entity_uri: String,
-    pub(super) predicate: Option<String>,
-    #[serde(default = "default_graph_limit")]
-    pub(super) limit: usize,
-}
-
-fn default_board() -> String {
-    "default".to_owned()
-}
-
-fn default_context_lexical_limit() -> usize {
-    5
-}
-
-fn default_context_graph_limit() -> usize {
-    10
-}
-
-fn default_context_vector_limit() -> usize {
-    5
-}
-
-fn default_context_max_items() -> usize {
-    20
-}
-
-fn default_graph_limit() -> usize {
-    50
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct TaskGraphNodeDto {
-    pub(super) task: TaskDto,
-    pub(super) role: kanban_sqlite::api::TaskGraphNodeRole,
-    pub(super) context_only: bool,
-}
-
-impl From<kanban_sqlite::api::TaskGraphNodeRecord> for TaskGraphNodeDto {
-    fn from(node: kanban_sqlite::api::TaskGraphNodeRecord) -> Self {
-        Self {
-            task: TaskDto::from(node.task),
-            role: node.role,
-            context_only: node.context_only,
-        }
+    fn try_from(value: kanban_sqlite::api::LabelAtomExplainSignal) -> Result<Self, Self::Error> {
+        let kanban_sqlite::api::LabelAtomExplainSignal {
+            signal,
+            observation,
+            source_task,
+            task_ref_snapshot,
+            suggest_input_stale,
+            suggest_degraded,
+            warnings,
+        } = value;
+        Ok(Self {
+            signal,
+            observation,
+            source_task: api_task_from_record(source_task)?,
+            task_ref_snapshot,
+            suggest_input_stale,
+            suggest_degraded,
+            warnings,
+        })
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(super) struct TaskGraphEdgeDto {
-    pub(super) id: String,
-    pub(super) source_task_id: String,
-    pub(super) target_task_id: String,
-    pub(super) kind: kanban_sqlite::api::TaskGraphEdgeKind,
-    pub(super) required: bool,
-    pub(super) blocking: bool,
-}
+impl TryFrom<kanban_sqlite::api::LabelAtomExplainRecord> for LabelAtomExplainDto {
+    type Error = ApiError;
 
-impl From<kanban_sqlite::api::TaskGraphEdgeRecord> for TaskGraphEdgeDto {
-    fn from(edge: kanban_sqlite::api::TaskGraphEdgeRecord) -> Self {
-        Self {
-            id: edge.id,
-            source_task_id: edge.source_task_id,
-            target_task_id: edge.target_task_id,
-            kind: edge.kind,
-            required: edge.required,
-            blocking: edge.blocking,
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct TaskNeighborhoodDto {
-    pub(super) center_task_id: String,
-    pub(super) nodes: Vec<TaskGraphNodeDto>,
-    pub(super) edges: Vec<TaskGraphEdgeDto>,
-    pub(super) meta: kanban_sqlite::api::TaskGraphMeta,
-}
-
-impl From<kanban_sqlite::api::TaskNeighborhoodRecord> for TaskNeighborhoodDto {
-    fn from(graph: kanban_sqlite::api::TaskNeighborhoodRecord) -> Self {
-        Self {
-            center_task_id: graph.center_task_id,
-            nodes: graph
-                .nodes
+    fn try_from(value: kanban_sqlite::api::LabelAtomExplainRecord) -> Result<Self, Self::Error> {
+        let kanban_sqlite::api::LabelAtomExplainRecord {
+            query,
+            atom,
+            current_semantics,
+            provenance_actions,
+            supporting_signals,
+            validation_history,
+            legacy_untracked,
+            legacy_reason,
+        } = value;
+        Ok(Self {
+            query,
+            atom,
+            current_semantics,
+            provenance_actions,
+            supporting_signals: supporting_signals
                 .into_iter()
-                .map(TaskGraphNodeDto::from)
-                .collect(),
-            edges: graph
-                .edges
-                .into_iter()
-                .map(TaskGraphEdgeDto::from)
-                .collect(),
-            meta: graph.meta,
-        }
+                .map(LabelAtomExplainSignalDto::try_from)
+                .collect::<Result<Vec<_>, _>>()?,
+            validation_history,
+            legacy_untracked,
+            legacy_reason,
+        })
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(super) struct BoardTaskMapDto {
-    pub(super) nodes: Vec<TaskGraphNodeDto>,
-    pub(super) edges: Vec<TaskGraphEdgeDto>,
-    pub(super) meta: kanban_sqlite::api::TaskGraphMeta,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl From<kanban_sqlite::api::BoardTaskMapRecord> for BoardTaskMapDto {
-    fn from(graph: kanban_sqlite::api::BoardTaskMapRecord) -> Self {
-        Self {
-            nodes: graph
-                .nodes
-                .into_iter()
-                .map(TaskGraphNodeDto::from)
-                .collect(),
-            edges: graph
-                .edges
-                .into_iter()
-                .map(TaskGraphEdgeDto::from)
-                .collect(),
-            meta: graph.meta,
+    fn label_record() -> LabelRecord {
+        LabelRecord {
+            id: "label-1".to_owned(),
+            board_id: "board-1".to_owned(),
+            name: "backend".to_owned(),
+            color: None,
+            created_at: 1,
+            updated_at: 2,
         }
+    }
+
+    fn task_record(priority: i64) -> TaskRecord {
+        TaskRecord {
+            id: "task-1".to_owned(),
+            board_id: "board-1".to_owned(),
+            board_slug: "default".to_owned(),
+            task_ref: "default#1".to_owned(),
+            seq: 1,
+            title: "adapter task".to_owned(),
+            description: None,
+            status: TaskStatus::Ready,
+            status_reason: None,
+            assignee: None,
+            priority,
+            position: 1024,
+            scheduled_at: None,
+            due_at: None,
+            created_by: "tester".to_owned(),
+            created_at: 1,
+            updated_at: 2,
+            started_at: None,
+            completed_at: None,
+            archived_at: None,
+            claim_token: Some("never-leak".to_owned()),
+            claim_owner: None,
+            claim_expires_at: None,
+            last_heartbeat_at: None,
+            current_run_id: None,
+            retry_count: 0,
+            max_retries: None,
+            result_summary: None,
+            result_json: None,
+            metadata_json: "{}".to_owned(),
+            lock_version: 0,
+            dependency_blocked: false,
+            unfinished_parent_count: 0,
+            execution_plan_state: StepPlanState::Planned,
+            required_step_count: 1,
+            completed_required_step_count: 0,
+            optional_step_count: 0,
+            labels: vec![label_record()],
+        }
+    }
+
+    #[test]
+    fn task_status_adapter_is_explicit_and_exhaustive() {
+        let cases = [
+            (TaskStatus::Triage, ApiTaskStatus::Triage),
+            (TaskStatus::Todo, ApiTaskStatus::Todo),
+            (TaskStatus::Scheduled, ApiTaskStatus::Scheduled),
+            (TaskStatus::Ready, ApiTaskStatus::Ready),
+            (TaskStatus::Running, ApiTaskStatus::Running),
+            (TaskStatus::Blocked, ApiTaskStatus::Blocked),
+            (TaskStatus::Review, ApiTaskStatus::Review),
+            (TaskStatus::Done, ApiTaskStatus::Done),
+            (TaskStatus::Archived, ApiTaskStatus::Archived),
+        ];
+        for (core, api) in cases {
+            assert_eq!(api_task_status_from_core(core), api);
+            assert_eq!(task_status_from_api(api), core);
+        }
+    }
+
+    #[test]
+    fn execution_plan_adapter_is_explicit_and_exhaustive() {
+        let cases = [
+            (StepPlanState::Unplanned, ApiExecutionPlanState::Unplanned),
+            (StepPlanState::Planned, ApiExecutionPlanState::Planned),
+            (
+                StepPlanState::NotRequired,
+                ApiExecutionPlanState::NotRequired,
+            ),
+        ];
+        for (record, api) in cases {
+            assert_eq!(api_execution_plan_state_from_record(record), api);
+        }
+    }
+
+    #[test]
+    fn task_record_adapter_checks_priority_and_never_exposes_claim_token() {
+        let task = api_task_from_record(task_record(3)).expect("valid task record");
+        assert_eq!(task.priority.get(), 3);
+        assert_eq!(task.labels, vec![api_label_from_record(label_record())]);
+
+        let value = serde_json::to_value(task).expect("serialize ApiTask");
+        assert!(value.get("claim_token").is_none());
+        assert_eq!(value["description"], serde_json::Value::Null);
+        assert_eq!(value["labels"][0]["color"], serde_json::Value::Null);
+
+        for invalid in [-1, 4, i64::MAX] {
+            assert!(
+                api_task_from_record(task_record(invalid)).is_err(),
+                "adapter 必须拒绝非法 priority {invalid}",
+            );
+        }
+    }
+
+    #[test]
+    fn label_record_adapter_maps_every_public_field() {
+        let label = api_label_from_record(label_record());
+        assert_eq!(
+            label,
+            ApiLabel {
+                id: "label-1".to_owned(),
+                board_id: "board-1".to_owned(),
+                name: "backend".to_owned(),
+                color: None,
+                created_at: 1,
+                updated_at: 2,
+            }
+        );
+    }
+
+    const NULLABLE_TASK_JSON_FIELDS: &[&str] = &[
+        "description",
+        "status_reason",
+        "assignee",
+        "scheduled_at",
+        "due_at",
+        "started_at",
+        "completed_at",
+        "archived_at",
+        "claim_owner",
+        "claim_expires_at",
+        "last_heartbeat_at",
+        "current_run_id",
+        "max_retries",
+        "result_summary",
+        "result",
+    ];
+
+    fn sentinel_label_record() -> LabelRecord {
+        LabelRecord {
+            id: "label-id-sentinel".to_owned(),
+            board_id: "label-board-id-sentinel".to_owned(),
+            name: "label-name-sentinel".to_owned(),
+            color: Some("#123456".to_owned()),
+            created_at: 701,
+            updated_at: 702,
+        }
+    }
+
+    fn expected_sentinel_label() -> ApiLabel {
+        ApiLabel {
+            id: "label-id-sentinel".to_owned(),
+            board_id: "label-board-id-sentinel".to_owned(),
+            name: "label-name-sentinel".to_owned(),
+            color: Some("#123456".to_owned()),
+            created_at: 701,
+            updated_at: 702,
+        }
+    }
+
+    fn sentinel_task_record(priority: i64) -> TaskRecord {
+        TaskRecord {
+            id: "task-id-sentinel".to_owned(),
+            board_id: "task-board-id-sentinel".to_owned(),
+            board_slug: "task-board-slug-sentinel".to_owned(),
+            task_ref: "task-board-slug-sentinel#314".to_owned(),
+            seq: 314,
+            title: "task-title-sentinel".to_owned(),
+            description: Some("task-description-sentinel".to_owned()),
+            status: TaskStatus::Blocked,
+            status_reason: Some("task-status-reason-sentinel".to_owned()),
+            assignee: Some("task-assignee-sentinel".to_owned()),
+            priority,
+            position: 2718,
+            scheduled_at: Some(101),
+            due_at: Some(102),
+            created_by: "task-created-by-sentinel".to_owned(),
+            created_at: 103,
+            updated_at: 104,
+            started_at: Some(105),
+            completed_at: Some(106),
+            archived_at: Some(107),
+            claim_token: Some("claim-token-secret-sentinel".to_owned()),
+            claim_owner: Some("claim-owner-sentinel".to_owned()),
+            claim_expires_at: Some(108),
+            last_heartbeat_at: Some(109),
+            current_run_id: Some("current-run-id-sentinel".to_owned()),
+            retry_count: 7,
+            max_retries: Some(8),
+            result_summary: Some("result-summary-sentinel".to_owned()),
+            result_json: Some("{\"result\":\"sentinel\"}".to_owned()),
+            metadata_json: "{\"metadata\":\"sentinel\"}".to_owned(),
+            lock_version: 11,
+            dependency_blocked: true,
+            unfinished_parent_count: 12,
+            execution_plan_state: StepPlanState::NotRequired,
+            required_step_count: 13,
+            completed_required_step_count: 14,
+            optional_step_count: 15,
+            labels: vec![sentinel_label_record()],
+        }
+    }
+
+    fn nullable_sentinel_task_record(priority: i64) -> TaskRecord {
+        let mut task = sentinel_task_record(priority);
+        task.description = None;
+        task.status_reason = None;
+        task.assignee = None;
+        task.scheduled_at = None;
+        task.due_at = None;
+        task.started_at = None;
+        task.completed_at = None;
+        task.archived_at = None;
+        task.claim_owner = None;
+        task.claim_expires_at = None;
+        task.last_heartbeat_at = None;
+        task.current_run_id = None;
+        task.max_retries = None;
+        task.result_summary = None;
+        task.result_json = None;
+        task.labels[0].color = None;
+        task
+    }
+
+    #[test]
+    fn task_record_adapter_maps_every_public_field_with_unique_sentinels() {
+        let task = api_task_from_record(sentinel_task_record(2)).expect("valid task record");
+        assert_eq!(
+            task,
+            ApiTask {
+                id: "task-id-sentinel".to_owned(),
+                board_id: "task-board-id-sentinel".to_owned(),
+                board_slug: "task-board-slug-sentinel".to_owned(),
+                task_ref: "task-board-slug-sentinel#314".to_owned(),
+                seq: 314,
+                title: "task-title-sentinel".to_owned(),
+                description: Some("task-description-sentinel".to_owned()),
+                status: ApiTaskStatus::Blocked,
+                status_reason: Some("task-status-reason-sentinel".to_owned()),
+                assignee: Some("task-assignee-sentinel".to_owned()),
+                priority: ApiTaskPriority::new(2).expect("priority fixture"),
+                position: 2718,
+                scheduled_at: Some(101),
+                due_at: Some(102),
+                created_by: "task-created-by-sentinel".to_owned(),
+                created_at: 103,
+                updated_at: 104,
+                started_at: Some(105),
+                completed_at: Some(106),
+                archived_at: Some(107),
+                claim_owner: Some("claim-owner-sentinel".to_owned()),
+                claim_expires_at: Some(108),
+                last_heartbeat_at: Some(109),
+                current_run_id: Some("current-run-id-sentinel".to_owned()),
+                retry_count: 7,
+                max_retries: Some(8),
+                result_summary: Some("result-summary-sentinel".to_owned()),
+                result: Some(serde_json::json!({"result": "sentinel"})),
+                metadata: serde_json::json!({"metadata": "sentinel"}),
+                lock_version: 11,
+                dependency_blocked: true,
+                unfinished_parent_count: 12,
+                execution_plan_state: ApiExecutionPlanState::NotRequired,
+                required_step_count: 13,
+                completed_required_step_count: 14,
+                optional_step_count: 15,
+                labels: vec![expected_sentinel_label()],
+            }
+        );
+
+        let value = serde_json::to_value(task).expect("serialize ApiTask");
+        assert_eq!(value["ref"], "task-board-slug-sentinel#314");
+        assert_eq!(value["status"], "blocked");
+        assert_eq!(value["priority"], 2);
+        assert_eq!(value["execution_plan_state"], "not_required");
+        assert_eq!(value["labels"][0]["color"], "#123456");
+        assert_eq!(value["result"], serde_json::json!({"result": "sentinel"}));
+        assert_eq!(
+            value["metadata"],
+            serde_json::json!({"metadata": "sentinel"})
+        );
+        assert!(value.get("result_json").is_none());
+        assert!(value.get("metadata_json").is_none());
+        assert!(value.get("claim_token").is_none());
+    }
+
+    #[test]
+    fn task_record_adapter_preserves_all_required_nulls_and_omits_secret() {
+        let task =
+            api_task_from_record(nullable_sentinel_task_record(0)).expect("nullable task record");
+        let value = serde_json::to_value(task).expect("serialize nullable ApiTask");
+        for field in NULLABLE_TASK_JSON_FIELDS {
+            assert_eq!(value[*field], serde_json::Value::Null, "field {field}");
+        }
+        assert_eq!(value["labels"][0]["color"], serde_json::Value::Null);
+        assert!(value.get("claim_token").is_none());
+    }
+
+    #[test]
+    fn task_record_sentinel_adapter_rejects_every_invalid_priority() {
+        for invalid in [-1, 4, i64::MAX] {
+            assert!(
+                api_task_from_record(sentinel_task_record(invalid)).is_err(),
+                "adapter 必须拒绝非法 priority {invalid}",
+            );
+        }
+    }
+
+    #[test]
+    fn task_record_adapter_rejects_malformed_persisted_json() {
+        let mut invalid_result = sentinel_task_record(2);
+        invalid_result.result_json = Some("{".to_owned());
+        assert!(api_task_from_record(invalid_result).is_err());
+
+        let mut invalid_metadata = sentinel_task_record(2);
+        invalid_metadata.metadata_json = "{".to_owned();
+        assert!(api_task_from_record(invalid_metadata).is_err());
+    }
+
+    #[test]
+    fn label_record_adapter_maps_unique_sentinels_to_exact_public_json() {
+        let label = api_label_from_record(sentinel_label_record());
+        assert_eq!(label, expected_sentinel_label());
+        assert_eq!(
+            serde_json::to_value(label).expect("serialize ApiLabel"),
+            serde_json::json!({
+                "id": "label-id-sentinel",
+                "board_id": "label-board-id-sentinel",
+                "name": "label-name-sentinel",
+                "color": "#123456",
+                "created_at": 701,
+                "updated_at": 702
+            })
+        );
+    }
+
+    #[test]
+    fn queue_stats_adapter_rejects_invalid_persisted_status() {
+        let error = queue_stats_from_record(kanban_sqlite::api::QueueStats {
+            board_id: "board-1".to_owned(),
+            generated_at: 1,
+            status_counts: vec![kanban_sqlite::api::StatusCount {
+                status: "not-a-task-status".to_owned(),
+                count: 1,
+            }],
+            stale_claims: Vec::new(),
+            blocked_reasons: Vec::new(),
+            unplanned_active_tasks: 0,
+            active_parents_with_incomplete_required_steps: 0,
+        })
+        .expect_err("invalid persisted status must be reported");
+
+        assert!(
+            error
+                .to_string()
+                .contains("invalid persisted task status in queue stats"),
+            "{error}"
+        );
     }
 }

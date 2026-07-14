@@ -19,17 +19,34 @@ describe("KanbanApi task search", () => {
     setCurrentDesktopLocale("en")
   })
 
+  it("consumes committed C2b task-read fixtures through production clients", async () => {
+    const listFixture = JSON.parse(readFileSync(new URL("../../../../schemas/fixtures/api/list-tasks-response.v1.valid.json", import.meta.url), "utf8"))
+    const windowsFixture = JSON.parse(readFileSync(new URL("../../../../schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json", import.meta.url), "utf8"))
+    const api = new KanbanApi(runtimeConfig)
+    const listFetch = mockFetch(listFixture)
+    const list = await api.listTasks({ limit: 25, offset: 0 })
+    expect(list.page).toEqual({ limit: 25, offset: 0, total: 1 })
+    expect(list.tasks).toHaveLength(1)
+    vi.unstubAllGlobals()
+    const windowsFetch = mockFetch(windowsFixture)
+    const windows = await api.listTasksByStatus({ statuses: ["ready", "blocked"], limit: 25, offset: 0 })
+    expect(windows.statuses.map((entry) => entry.page)).toEqual([{ limit: 25, offset: 0, total: 1 }, { limit: 25, offset: 0, total: 0 }])
+    expect(calledUrl(listFetch).pathname).toContain("/tasks")
+    expect(calledUrl(windowsFetch).pathname).toContain("/tasks/by-status")
+  })
+
   it("keeps the task list endpoint query-free for empty search flows", async () => {
-    const fetchMock = mockFetch({ data: [task({ id: "t_list", title: "plain list" })] })
+    const fetchMock = mockFetch({ data: [task({ id: "t_list", title: "plain list" })], meta: { limit: 25, offset: 50, total: 1 } })
     const api = new KanbanApi(runtimeConfig)
 
     const result = await api.listTasks({ includeArchived: true, statuses: ["ready"], limit: 25, offset: 50 })
 
     expect(result.tasks).toHaveLength(1)
-    expect(result.page).toEqual({ limit: 25, offset: 50, total: null })
+    expect(result.page).toEqual({ limit: 25, offset: 50, total: 1 })
     const url = calledUrl(fetchMock)
     expect(url.pathname).toBe("/api/v1/boards/default/tasks")
     expect(url.searchParams.get("q")).toBeNull()
+    expect(url.searchParams.get("search")).toBeNull()
     expect(url.searchParams.get("include_archived")).toBe("true")
     expect(url.searchParams.get("limit")).toBe("25")
     expect(url.searchParams.get("offset")).toBe("50")
@@ -37,14 +54,14 @@ describe("KanbanApi task search", () => {
   })
 
   it("passes list search, priority filters, and sort to the task list endpoint", async () => {
-    const fetchMock = mockFetch({ data: [] })
+    const fetchMock = mockFetch({ data: [], meta: { limit: 25, offset: 0, total: 0 } })
     const api = new KanbanApi(runtimeConfig)
 
     await api.listTasks({
-      query: " dashboard ",
+      query: " 架构 & /=+ 空格 ",
       statuses: ["ready", "blocked"],
       priorities: [0, 2],
-      labels: [" backend ", "api"],
+      labels: [" 后端 & API ", "api=客户端+v1"],
       planFilters: ["plan_needed", "incomplete_required_steps"],
       sort: "priority",
       limit: 25,
@@ -53,11 +70,12 @@ describe("KanbanApi task search", () => {
 
     const url = calledUrl(fetchMock)
     expect(url.pathname).toBe("/api/v1/boards/default/tasks")
-    expect(url.searchParams.get("q")).toBe("dashboard")
+    expect(url.searchParams.get("q")).toBe("架构 & /=+ 空格")
+    expect(url.searchParams.get("search")).toBeNull()
     expect(url.searchParams.get("sort")).toBe("priority")
     expect(url.searchParams.getAll("status")).toEqual(["ready", "blocked"])
     expect(url.searchParams.getAll("priority")).toEqual(["0", "2"])
-    expect(url.searchParams.getAll("label")).toEqual(["backend", "api"])
+    expect(url.searchParams.getAll("label")).toEqual(["后端 & API", "api=客户端+v1"])
     expect(url.searchParams.getAll("plan_filter")).toEqual(["plan_needed", "incomplete_required_steps"])
   })
 
@@ -136,13 +154,14 @@ describe("KanbanApi task search", () => {
     expect(result.statuses.flatMap((entry) => entry.tasks)).toEqual([ready, blocked])
     const url = calledUrl(fetchMock)
     expect(url.pathname).toBe("/api/v1/boards/default/tasks/by-status")
+    expect(url.searchParams.get("search")).toBeNull()
     expect(url.searchParams.getAll("status")).toEqual(["ready", "blocked"])
     expect(url.searchParams.get("limit")).toBe("50")
     expect(calledInit(fetchMock).headers).toEqual({ "Accept-Language": "zh-CN" })
   })
 
   it("sends the configured locale on API requests", async () => {
-    const fetchMock = mockFetch({ data: [task({ id: "t_list", title: "localized list" })] })
+    const fetchMock = mockFetch({ data: [task({ id: "t_list", title: "localized list" })], meta: { limit: 10, offset: 0, total: 1 } })
     const api = new KanbanApi(runtimeConfig, { locale: "en" })
 
     await api.listTasks({ includeArchived: false, limit: 10 })
@@ -209,6 +228,53 @@ describe("KanbanApi task search", () => {
       code: "invalid_response",
       message: "tasks response data must be an array",
     } satisfies Partial<ApiError>)
+  })
+
+
+  it.each([
+    ["extra envelope field", { data: [task()], meta: { limit: 10, offset: 0, total: 1 }, extra: true }],
+    ["unsafe pagination", { data: [task()], meta: { limit: Number.MAX_SAFE_INTEGER + 1, offset: 0, total: 1 } }],
+    ["fractional pagination", { data: [task()], meta: { limit: 10.5, offset: 0, total: 1 } }],
+    ["unknown task status", { data: [task({ status: "mystery" as Task["status"] })], meta: { limit: 10, offset: 0, total: 1 } }],
+    ["nested claim token", { data: [{ ...task(), claim_token: "secret" }], meta: { limit: 10, offset: 0, total: 1 } }],
+    ["missing required nullable", { data: [{ ...task(), description: undefined }], meta: { limit: 10, offset: 0, total: 1 } }],
+    ["invalid label", { data: [task({ labels: [{ id: "l_1", board_id: "b_1", name: "x", color: null, created_at: 1, updated_at: 1, extra: true } as never] })], meta: { limit: 10, offset: 0, total: 1 } }],
+  ])("fails closed for hostile list response: %s", async (_label, payload) => {
+    mockFetch(payload)
+    await expect(new KanbanApi(runtimeConfig).listTasks({ limit: 10 })).rejects.toMatchObject({ code: "invalid_response" })
+  })
+
+  it.each([
+    ["extra window field", { data: { statuses: [{ status: "ready", tasks: [task()], page: { limit: 10, offset: 0, total: 1 }, extra: true }] }, meta: { limit: 10, offset: 0 } }],
+    ["unknown window status", { data: { statuses: [{ status: "mystery", tasks: [], page: { limit: 10, offset: 0, total: 0 } }] }, meta: { limit: 10, offset: 0 } }],
+    ["negative window total", { data: { statuses: [{ status: "ready", tasks: [], page: { limit: 10, offset: 0, total: -1 } }] }, meta: { limit: 10, offset: 0 } }],
+    ["extra data field", { data: { statuses: [], extra: true }, meta: { limit: 10, offset: 0 } }],
+  ])("fails closed for hostile status-window response: %s", async (_label, payload) => {
+    mockFetch(payload)
+    await expect(new KanbanApi(runtimeConfig).listTasksByStatus({ statuses: ["ready"], limit: 10 })).rejects.toMatchObject({ code: "invalid_response" })
+  })
+
+
+  it.each([
+    ["null body", { error: null }],
+    ["string body", { error: "bad" }],
+    ["missing message", { error: { code: "invalid_input" } }],
+    ["extra envelope field", { error: { code: "invalid_input", message: "bad" }, extra: true }],
+    ["mixed success and error", { data: [], error: { code: "invalid_input", message: "bad" } }],
+    ["extra error field", { error: { code: "invalid_input", message: "bad", unknown: true } }],
+  ])("rejects malformed task-read error envelope: %s", async (_label, payload) => {
+    mockFetch(payload)
+    await expect(new KanbanApi(runtimeConfig).listTasks({ limit: 10 })).rejects.toMatchObject({ code: "invalid_response" })
+  })
+
+  it("preserves a closed task-read error code, message, and details", async () => {
+    const details = { field: "limit", reason: "too_large" }
+    mockFetch({ error: { code: "invalid_input", message: "bad limit", details } })
+    await expect(new KanbanApi(runtimeConfig).listTasks({ limit: 10 })).rejects.toMatchObject({
+      code: "invalid_input",
+      message: "bad limit",
+      details,
+    })
   })
 
   it("rejects malformed search envelopes before returning hydrated rows", async () => {
@@ -300,6 +366,38 @@ describe("KanbanApi task search", () => {
     expect(calledInit(removeFetch).method).toBe("DELETE")
   })
 
+  it("rejects hostile task-label response drift", async () => {
+    const api = new KanbanApi(runtimeConfig)
+    const valid = task({ labels: [{ id: "l_backend", board_id: "b_1", name: "backend", color: null, created_at: 1, updated_at: 1 }] })
+    mockFetch({ data: valid, meta: { created_labels: valid.labels } })
+    await expect(api.addTaskLabel("t_1", "backend")).resolves.toEqual(valid)
+    vi.unstubAllGlobals()
+    for (const body of [
+      { data: valid, meta: null },
+      { data: valid, meta: {} },
+      { data: valid, meta: { created_labels: valid.labels, extra: true } },
+      { data: valid, meta: { created_labels: {} } },
+      { data: valid, meta: { created_labels: [{ ...valid.labels[0], name: undefined }] } },
+      { data: valid, meta: { created_labels: [{ ...valid.labels[0], extra: true }] } },
+      { data: valid, meta: { created_labels: [{ ...valid.labels[0], created_at: "yesterday" }] } },
+      { data: { ...valid, extra: true } },
+      { data: valid, extra: true },
+    ]) {
+      mockFetch(body)
+      await expect(api.addTaskLabel("t_1", "backend")).rejects.toMatchObject({ code: "invalid_response" })
+      vi.unstubAllGlobals()
+    }
+    for (const body of [
+      { data: valid, extra: true },
+      { data: task({ labels: [{ ...valid.labels[0], extra: true } as never] }) },
+      { data: task({ labels: [{ ...valid.labels[0], updated_at: "tomorrow" } as never] }) },
+    ]) {
+      mockFetch(body)
+      await expect(api.removeTaskLabel("t_1", "l_backend")).rejects.toMatchObject({ code: "invalid_response" })
+      vi.unstubAllGlobals()
+    }
+  })
+
   it("requests task label suggestions through the task label route", async () => {
     const suggestion = {
       task_id: "t_1",
@@ -335,10 +433,19 @@ describe("KanbanApi task search", () => {
     expect(url.searchParams.get("min_score")).toBe("0.15")
   })
 
+  it.each([
+    ["missing field", { task_id: "t_1", board_id: "b_1", selected_labels: [], candidates: [], coverage: 0, coverage_cosine: 0, residual_norm: 1, needs_new_label: false, reason_codes: [], degraded: false }],
+    ["extra field", { task_id: "t_1", board_id: "b_1", selected_labels: [], candidates: [], coverage: 0, coverage_cosine: 0, residual_norm: 1, needs_new_label: false, reason_codes: [], degraded: false, diagnostics: [], extra: true }],
+    ["wrong known field", { task_id: "t_1", board_id: "b_1", selected_labels: [], candidates: [], coverage: "zero", coverage_cosine: 0, residual_norm: 1, needs_new_label: false, reason_codes: [], degraded: false, diagnostics: [] }],
+  ])("rejects hostile label suggestion response: %s", async (_case, data) => {
+    mockFetch({ data })
+    await expect(new KanbanApi(runtimeConfig).suggestTaskLabels("t_1")).rejects.toMatchObject({ code: "invalid_response" })
+  })
+
   it("uses existing ontology HTTP routes for review workbench data and lifecycle actions", async () => {
     const signal = labelOntologySignal({ id: "los_1", target_label_name_snapshot: "cli" })
     const fetchMock = mockFetchSequence([
-      { data: [signal] },
+      { data: [signal], meta: { limit: 25 } },
       { data: [labelOntologyReviewGroup({ key: "cli", label_name: "cli", signal_ids: ["los_1"] })] },
       { data: { signal, observation: labelOntologyObservation({ signals: [signal] }), actions: [] } },
       { data: labelOntologyAction({ id: "loa_confirm", action_type: "confirm", signal_ids: ["los_1"] }) },
@@ -457,6 +564,92 @@ describe("KanbanApi task search", () => {
     } satisfies Partial<ApiError>)
   })
 
+  it("rejects board list rows with missing, mistyped, or unknown contract fields", async () => {
+    const api = new KanbanApi(runtimeConfig)
+
+    mockFetch({ data: [board({ name: undefined as unknown as string })] })
+    await expect(api.listBoards()).rejects.toMatchObject({ code: "invalid_response" })
+
+    mockFetch({ data: [board({ archived_at: "later" as unknown as number })] })
+    await expect(api.listBoards()).rejects.toMatchObject({ code: "invalid_response" })
+
+    mockFetch({ data: [{ ...board(), extra: true }] })
+    await expect(api.listBoards()).rejects.toMatchObject({ code: "invalid_response" })
+  })
+
+  it("rejects board list outer extras and scalar or null data", async () => {
+    const api = new KanbanApi(runtimeConfig)
+
+    for (const envelope of [
+      { data: [], extra: true },
+      { data: 1 },
+      { data: null },
+    ]) {
+      mockFetch(envelope)
+      await expect(api.listBoards()).rejects.toMatchObject({ code: "invalid_response" })
+    }
+  })
+
+  it("creates, gets, and archives boards through exact production transports", async () => {
+    const created = board({ id: "b_ops", slug: "ops", name: "Operations", description: "Runbooks" })
+    const archived = board({ ...created, archived_at: 30, updated_at: 30 })
+    const fetchMock = mockFetchSequence([
+      { data: created },
+      { data: created },
+      { data: archived },
+    ])
+    const api = new KanbanApi(runtimeConfig, { locale: "zh-CN" })
+
+    await expect(api.createBoard({ slug: "ops", name: "Operations", description: "Runbooks" })).resolves.toEqual(created)
+    await expect(api.getBoard("ops / on-call")).resolves.toEqual(created)
+    await expect(api.archiveBoard("ops / on-call")).resolves.toEqual(archived)
+
+    const [createUrl, createInit] = fetchMock.mock.calls[0]!
+    expect(new URL(String(createUrl)).pathname).toBe("/api/v1/boards")
+    expect(createInit?.method).toBe("POST")
+    expect(createInit?.headers).toMatchObject({
+      "Accept-Language": "zh-CN",
+      "Content-Type": "application/json",
+      "X-KB-Actor": "desktop-test",
+    })
+    expect(JSON.parse(String(createInit?.body))).toEqual({
+      slug: "ops",
+      name: "Operations",
+      description: "Runbooks",
+      actor: "desktop-test",
+    })
+
+    const [getUrl, getInit] = fetchMock.mock.calls[1]!
+    expect(new URL(String(getUrl)).pathname).toBe("/api/v1/boards/ops%20%2F%20on-call")
+    expect(getInit?.method).toBe("GET")
+    expect(getInit?.body).toBeUndefined()
+    expect(getInit?.headers).toEqual({ "Accept-Language": "zh-CN" })
+
+    const [archiveUrl, archiveInit] = fetchMock.mock.calls[2]!
+    expect(new URL(String(archiveUrl)).pathname).toBe("/api/v1/boards/ops%20%2F%20on-call/archive")
+    expect(archiveInit?.method).toBe("POST")
+    expect(archiveInit?.headers).toMatchObject({
+      "Accept-Language": "zh-CN",
+      "Content-Type": "application/json",
+      "X-KB-Actor": "desktop-test",
+    })
+    expect(JSON.parse(String(archiveInit?.body))).toEqual({ actor: "desktop-test" })
+  })
+
+  it("rejects hostile endpoint-specific create, get, and archive envelopes", async () => {
+    const api = new KanbanApi(runtimeConfig)
+    const cases = [
+      [{ data: { ...board(), extra: true } }, () => api.createBoard({ slug: "ops", name: "Ops" })],
+      [{ data: 7 }, () => api.getBoard("ops")],
+      [{ data: null }, () => api.archiveBoard("ops")],
+    ] as const
+
+    for (const [envelope, call] of cases) {
+      mockFetch(envelope)
+      await expect(call()).rejects.toMatchObject({ code: "invalid_response" })
+    }
+  })
+
   it("uses backend-shaped maintenance and status envelopes", async () => {
     const searchStatusEnvelope = {
       backend: "sqlite",
@@ -511,6 +704,8 @@ describe("KanbanApi task search", () => {
           outbox_pending: 0,
           outbox_running: 0,
           outbox_failed: 0,
+          unplanned_active_tasks: 0,
+          active_parents_with_incomplete_required_steps: 0,
           derived_dirty_stores: 0,
           derived_error_stores: 0,
           derived_stores: [],
@@ -549,15 +744,46 @@ describe("KanbanApi task search", () => {
     expect(doctor.integrity_check).toBe("ok")
     expect(fetchMock.mock.calls[2] ? new URL(String(fetchMock.mock.calls[2][0])).pathname : "").toBe("/api/v1/maintenance/doctor")
     expect(fetchMock.mock.calls[2]?.[1]?.method).toBe("POST")
-    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({
-      actor: "desktop-test",
-      board: "default",
-    })
+    expect(fetchMock.mock.calls[2]?.[1]?.body).toBeUndefined()
 
     const checkpoint = await api.checkpoint()
     expect(checkpoint).toEqual({ busy: 0, log_frames: 4, checkpointed_frames: 4 })
     expect(fetchMock.mock.calls[3] ? new URL(String(fetchMock.mock.calls[3][0])).pathname : "").toBe("/api/v1/maintenance/checkpoint")
     expect(fetchMock.mock.calls[3]?.[1]?.method).toBe("POST")
+  })
+  it("strictly consumes maintenance contract fixtures and rejects hostile drift", async () => {
+    const doctorFixture = JSON.parse(readFileSync(new URL("../../../../schemas/fixtures/api/doctor-response.v1.valid.json", import.meta.url), "utf8"))
+    const checkpointFixture = JSON.parse(readFileSync(new URL("../../../../schemas/fixtures/api/checkpoint-response.v1.valid.json", import.meta.url), "utf8"))
+    const api = new KanbanApi(runtimeConfig)
+
+    mockFetch(doctorFixture)
+    expect((await api.doctor()).derived_stores[0]?.store_name).toBe("fixture_store")
+    vi.unstubAllGlobals()
+
+    mockFetch(checkpointFixture)
+    expect(await api.checkpoint()).toEqual(checkpointFixture.data)
+    vi.unstubAllGlobals()
+
+    mockFetch({ ...doctorFixture, extra: true })
+    await expect(api.doctor()).rejects.toMatchObject({ code: "invalid_response" })
+    vi.unstubAllGlobals()
+
+    const nestedDrift = structuredClone(checkpointFixture)
+    nestedDrift.data.unexpected = true
+    mockFetch(nestedDrift)
+    await expect(api.checkpoint()).rejects.toMatchObject({ code: "invalid_response" })
+    vi.unstubAllGlobals()
+
+    const missingKey = structuredClone(doctorFixture)
+    delete missingKey.data.ok
+    mockFetch(missingKey)
+    await expect(api.doctor()).rejects.toMatchObject({ code: "invalid_response" })
+    vi.unstubAllGlobals()
+
+    const wrongNestedType = structuredClone(doctorFixture)
+    wrongNestedType.data.derived_stores[0].schema_version = "1"
+    mockFetch(wrongNestedType)
+    await expect(api.doctor()).rejects.toMatchObject({ code: "invalid_response" })
   })
 
   it("deletes parent dependencies through the child scoped endpoint", async () => {
@@ -844,8 +1070,8 @@ function task(overrides: Partial<Task> = {}): Task {
     retry_count: 0,
     max_retries: null,
     result_summary: null,
-    result_json: null,
-    metadata_json: "{}",
+    result: null,
+    metadata: {},
     lock_version: 0,
     dependency_blocked: false,
     unfinished_parent_count: 0,
@@ -1040,3 +1266,30 @@ function labelAtomExplain(overrides: Partial<import("./api").LabelAtomExplainRec
     ...overrides,
   }
 }
+
+  it("rejects missing or malformed C2b task-read pagination metadata", async () => {
+    const api = new KanbanApi(runtimeConfig)
+    const malformed = [
+      { data: [task({ id: "t_missing_meta" })] },
+      { data: [task({ id: "t_wrong_total" })], meta: { limit: 10, offset: 0, total: "1" } },
+      {
+        data: { statuses: [{ status: "ready", tasks: [], page: { limit: 10, offset: 0 } }] },
+        meta: { limit: 10, offset: 0 },
+      },
+      {
+        data: { statuses: [{ status: "ready", tasks: [], page: { limit: "10", offset: 0, total: 0 } }] },
+        meta: { limit: 10, offset: "0" },
+      },
+    ]
+
+    for (const response of malformed.slice(0, 2)) {
+      mockFetch(response)
+      await expect(api.listTasks({ limit: 10 })).rejects.toMatchObject({ code: "invalid_response" } satisfies Partial<ApiError>)
+      vi.unstubAllGlobals()
+    }
+    for (const response of malformed.slice(2)) {
+      mockFetch(response)
+      await expect(api.listTasksByStatus({ statuses: ["ready"], limit: 10 })).rejects.toMatchObject({ code: "invalid_response" } satisfies Partial<ApiError>)
+      vi.unstubAllGlobals()
+    }
+  })

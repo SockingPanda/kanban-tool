@@ -112,12 +112,13 @@ fn export_stdout_rejects_json_envelope_mode() -> anyhow::Result<()> {
 }
 
 #[test]
-fn import_rejects_missing_run_log_without_restoring_database() -> anyhow::Result<()> {
-    let source = TempDb::new("import_rejects_missing_run_log_without_restoring_database_source")?;
+fn import_rejects_nonportable_run_log_without_restoring_database() -> anyhow::Result<()> {
+    let source =
+        TempDb::new("import_rejects_nonportable_run_log_without_restoring_database_source")?;
     let source_data = source_with_completed_run(&source)?;
 
     let (_, _, export_content) = export_board_snapshot(&source, &source_data.task_id)?;
-    reject_import_with_missing_run_log(&source, &export_content)?;
+    reject_import_with_nonportable_run_log(&source, &export_content)?;
     Ok(())
 }
 
@@ -166,10 +167,8 @@ fn source_with_completed_run(source: &TempDb) -> anyhow::Result<SourceData> {
     let run_id = dispatch["data"]["run_id"]
         .as_str()
         .context("expected JSON string")?;
-    let run = kanban(&source.path, &["--json", "run", "show", run_id])?.success_json()?;
-    let log_path = run["data"]["log_path"]
-        .as_str()
-        .context("expected JSON string")?;
+    let run = kanban_sqlite::api::get_run_by_id_global(&source.path, run_id)?;
+    let log_path = run.log_path.as_deref().context("completed run log path")?;
     assert!(Path::new(log_path).is_absolute());
     assert!(log_path.starts_with(source.dir.to_str().context("expected UTF-8 path")?));
     Ok(SourceData {
@@ -240,7 +239,10 @@ fn import_exported_snapshot(
     Ok(())
 }
 
-fn reject_import_with_missing_run_log(source: &TempDb, export_content: &str) -> anyhow::Result<()> {
+fn reject_import_with_nonportable_run_log(
+    source: &TempDb,
+    export_content: &str,
+) -> anyhow::Result<()> {
     let invalid_export_path = source.dir.join("invalid-board.jsonl");
     std::fs::write(
         &invalid_export_path,
@@ -259,16 +261,16 @@ fn reject_import_with_missing_run_log(source: &TempDb, export_content: &str) -> 
             "--replace",
         ],
     )?;
-    assert_eq!(result.output.status.code(), Some(8));
+    assert_eq!(result.output.status.code(), Some(2));
     assert_eq!(String::from_utf8_lossy(&result.output.stderr), "");
     let json: serde_json::Value = serde_json::from_slice(&result.output.stdout)?;
-    assert_eq!(json["error"]["code"], "integrity_check_failed");
-    assert_eq!(json["error"]["exit_code"], 8);
+    assert_eq!(json["error"]["code"], "invalid_input");
+    assert_eq!(json["error"]["exit_code"], 2);
     assert!(
         json["error"]["message"]
             .as_str()
             .unwrap_or_default()
-            .contains("imported data failed doctor checks"),
+            .contains("run import row violates its contract"),
         "{json}"
     );
     assert!(!rejected.path.exists());
@@ -924,7 +926,7 @@ fn column_record() -> serde_json::Value {
             "status": "ready",
             "title": "Ready",
             "position": 40,
-            "hidden": 0,
+            "hidden": false,
             "wip_limit": null,
             "created_at": 1,
             "updated_at": 1
@@ -969,8 +971,8 @@ fn task_record(
             "retry_count": 0,
             "max_retries": null,
             "result_summary": null,
-            "result_json": null,
-            "metadata_json": "{}",
+            "result": null,
+            "metadata": {},
             "lock_version": 0
         }
     })

@@ -2,8 +2,26 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use kanban_context::ContextPolicy;
+use kanban_contract::{
+    CliDerivedStatusOutput, CliDerivedStoreStatus, CliEntity, CliEntityListOutput,
+    CliEntityShowOutput, CliOutboxItem, CliOutboxListOutput, GraphHelperNeighborsResponse,
+    GraphHelperQueryResponse, GraphHelperRelation, GraphHelperStatusResponse,
+    VectorHelperCheckProviderResponse, VectorHelperChunkHit, VectorHelperQueryChunksResponse,
+    VectorHelperQueryLabelAtomsItem, VectorHelperQueryLabelAtomsResponse,
+    VectorHelperStatusResponse,
+    cli_helpers::{
+        CliChunkRef, CliContextBuildOutput, CliGraphNeighborsOutput, CliGraphQueryBinding,
+        CliGraphQueryOutput, CliGraphQueryRow, CliGraphRebuildOutput, CliGraphRelation,
+        CliGraphRelationProvenance, CliGraphStatus, CliGraphStatusOutput, CliGraphSyncOutput,
+        CliLabelAtomHit, CliLabelAtomVectorHit, CliVectorChunkHit, CliVectorConfig,
+        CliVectorConfigureOutput, CliVectorLabelAtomHit, CliVectorQueryChunksOutput,
+        CliVectorQueryLabelAtomsOutput, CliVectorRebuildOutput, CliVectorStatus,
+        CliVectorStatusOutput, CliVectorSyncOutput,
+    },
+};
+use kanban_core::KanbanError;
 use kanban_sqlite::api::{
-    EntityListOptions, MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT, OutboxListOptions,
+    EntityListOptions, EntityRecord, MAX_SEARCH_LIMIT, MAX_TASK_LIST_LIMIT, OutboxListOptions,
     derived_store_statuses, get_entity, list_entities, list_outbox,
 };
 use kanban_vector::SubprocessVectorStore;
@@ -17,7 +35,7 @@ use crate::commands::helper::{
     HelperKind, HelperRunError, helper_degraded_message, resolve_helper, run_helper_json,
     run_helper_json_classified,
 };
-use crate::output::print_or_json;
+use crate::output::{print_contract_or_human, print_human};
 
 pub(crate) fn handle_entity(command: EntityCommand, db_path: &PathBuf, json: bool) -> Result<()> {
     match command {
@@ -30,30 +48,54 @@ pub(crate) fn handle_entity(command: EntityCommand, db_path: &PathBuf, json: boo
                     limit: args.limit,
                 },
             )?;
-            print_or_json(json, &entities, || {
-                entities
-                    .iter()
-                    .map(|entity| {
-                        format!(
-                            "{} [{}] {}:{}",
-                            entity.uri, entity.kind, entity.source_table, entity.source_id
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            })?;
+            let output = CliEntityListOutput::new(
+                entities.into_iter().map(cli_entity_from_record).collect(),
+            );
+            let human = output
+                .data
+                .iter()
+                .map(|entity| {
+                    format!(
+                        "{} [{}] {}:{}",
+                        entity.uri, entity.kind, entity.source_table, entity.source_id
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            print_contract_or_human(json, &output, || human)?;
         }
         EntityCommand::Show { uri } => {
             let entity = get_entity(db_path, &uri)?;
-            print_or_json(json, &entity, || {
-                format!(
-                    "{} [{}] {}:{} title={:?}",
-                    entity.uri, entity.kind, entity.source_table, entity.source_id, entity.title
-                )
-            })?;
+            let output = CliEntityShowOutput::new(cli_entity_from_record(entity));
+            let human = format!(
+                "{} [{}] {}:{} title={:?}",
+                output.data.uri,
+                output.data.kind,
+                output.data.source_table,
+                output.data.source_id,
+                output.data.title
+            );
+            print_contract_or_human(json, &output, || human)?;
         }
     }
     Ok(())
+}
+
+fn cli_entity_from_record(entity: EntityRecord) -> CliEntity {
+    CliEntity {
+        uri: entity.uri,
+        kind: entity.kind,
+        source_table: entity.source_table,
+        source_id: entity.source_id,
+        board_id: entity.board_id,
+        task_id: entity.task_id,
+        title: entity.title,
+        summary: entity.summary,
+        content_hash: entity.content_hash,
+        created_at: entity.created_at,
+        updated_at: entity.updated_at,
+        archived_at: entity.archived_at,
+    }
 }
 
 pub(crate) fn handle_outbox(command: OutboxCommand, db_path: &PathBuf, json: bool) -> Result<()> {
@@ -67,17 +109,47 @@ pub(crate) fn handle_outbox(command: OutboxCommand, db_path: &PathBuf, json: boo
                     limit: args.limit,
                 },
             )?;
-            print_or_json(json, &jobs, || {
-                jobs.iter()
-                    .map(|job| {
-                        format!(
-                            "#{} [{}] {} {} attempts={}",
-                            job.id, job.status, job.target, job.entity_uri, job.attempts
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            })?;
+            if json {
+                let output = CliOutboxListOutput::new(
+                    jobs.into_iter()
+                        .map(|job| -> Result<CliOutboxItem> {
+                            Ok(CliOutboxItem {
+                                id: job.id,
+                                source_event_id: job.source_event_id,
+                                target: job.target,
+                                entity_uri: job.entity_uri,
+                                action: job.action,
+                                payload: serde_json::from_str(&job.payload_json).map_err(
+                                    |error| {
+                                        KanbanError::Storage(format!(
+                                            "outbox item {} has invalid payload_json: {error}",
+                                            job.id
+                                        ))
+                                    },
+                                )?,
+                                status: job.status,
+                                attempts: job.attempts,
+                                last_error: job.last_error,
+                                created_at: job.created_at,
+                                updated_at: job.updated_at,
+                            })
+                        })
+                        .collect::<Result<Vec<_>>>()?,
+                );
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| {
+                    jobs.iter()
+                        .map(|job| {
+                            format!(
+                                "#{} [{}] {} {} attempts={}",
+                                job.id, job.status, job.target, job.entity_uri, job.attempts
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })?;
+            }
         }
     }
     Ok(())
@@ -87,22 +159,41 @@ pub(crate) fn handle_derived(command: DerivedCommand, db_path: &PathBuf, json: b
     match command {
         DerivedCommand::Status => {
             let statuses = derived_store_statuses(db_path)?;
-            print_or_json(json, &statuses, || {
-                statuses
-                    .iter()
-                    .map(|status| {
-                        format!(
-                            "{} schema={} last_event_id={} dirty={} last_error={:?}",
-                            status.store_name,
-                            status.schema_version,
-                            status.last_event_id,
-                            status.dirty,
-                            status.last_error
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            })?;
+            if json {
+                let output = CliDerivedStatusOutput::new(
+                    statuses
+                        .into_iter()
+                        .map(|status| CliDerivedStoreStatus {
+                            store_name: status.store_name,
+                            schema_version: status.schema_version,
+                            last_event_id: status.last_event_id,
+                            dirty: status.dirty,
+                            last_rebuild_at: status.last_rebuild_at,
+                            last_sync_at: status.last_sync_at,
+                            last_error: status.last_error,
+                            updated_at: status.updated_at,
+                        })
+                        .collect(),
+                );
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_human(|| {
+                    statuses
+                        .iter()
+                        .map(|status| {
+                            format!(
+                                "{} schema={} last_event_id={} dirty={} last_error={:?}",
+                                status.store_name,
+                                status.schema_version,
+                                status.last_event_id,
+                                status.dirty,
+                                status.last_error
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })?;
+            }
         }
     }
     Ok(())
@@ -116,7 +207,7 @@ pub(crate) fn handle_graph(
 ) -> Result<()> {
     match command {
         GraphCommand::Status => {
-            let status = match graph_helper_json_classified::<kanban_graph::GraphStoreStatus>(
+            let status = match graph_helper_json_classified::<GraphHelperStatusResponse>(
                 db_path,
                 board,
                 &["status".to_owned()],
@@ -127,7 +218,8 @@ pub(crate) fn handle_graph(
                 }
                 Err(error) => return Err(error.into()),
             };
-            print_or_json(json, &status, || {
+            let output = CliGraphStatusOutput::new(cli_graph_status(&status));
+            print_contract_or_human(json, &output, || {
                 format!(
                     "graph backend={} enabled={}: {}",
                     status.backend, status.enabled, status.message
@@ -148,8 +240,10 @@ pub(crate) fn handle_graph(
                 helper_args.push(predicate);
             }
             let neighbors =
-                graph_helper_json::<Vec<kanban_entity::Relation>>(db_path, board, &helper_args)?;
-            print_or_json(json, &neighbors, || {
+                graph_helper_json::<GraphHelperNeighborsResponse>(db_path, board, &helper_args)?;
+            let output =
+                CliGraphNeighborsOutput::new(neighbors.iter().map(cli_graph_relation).collect());
+            print_contract_or_human(json, &output, || {
                 if neighbors.is_empty() {
                     "No graph neighbors".to_owned()
                 } else {
@@ -167,12 +261,13 @@ pub(crate) fn handle_graph(
             })?;
         }
         GraphCommand::Rebuild => {
-            let status = graph_helper_json::<kanban_graph::GraphStoreStatus>(
+            let status = graph_helper_json::<GraphHelperStatusResponse>(
                 db_path,
                 board,
                 &["rebuild".to_owned()],
             )?;
-            print_or_json(json, &status, || {
+            let output = CliGraphRebuildOutput::new(cli_graph_status(&status));
+            print_contract_or_human(json, &output, || {
                 format!(
                     "graph backend={} enabled={}: {}",
                     status.backend, status.enabled, status.message
@@ -180,12 +275,13 @@ pub(crate) fn handle_graph(
             })?;
         }
         GraphCommand::Sync => {
-            let status = graph_helper_json::<kanban_graph::GraphStoreStatus>(
+            let status = graph_helper_json::<GraphHelperStatusResponse>(
                 db_path,
                 board,
                 &["sync".to_owned()],
             )?;
-            print_or_json(json, &status, || {
+            let output = CliGraphSyncOutput::new(cli_graph_status(&status));
+            print_contract_or_human(json, &output, || {
                 format!(
                     "graph backend={} enabled={}: {}",
                     status.backend, status.enabled, status.message
@@ -208,12 +304,9 @@ pub(crate) fn handle_graph(
                 "--limit".to_owned(),
                 args.limit.to_string(),
             ];
-            let rows = graph_helper_json::<Vec<kanban_graph::GraphQueryRow>>(
-                db_path,
-                board,
-                &helper_args,
-            )?;
-            print_or_json(json, &rows, || {
+            let rows = graph_helper_json::<GraphHelperQueryResponse>(db_path, board, &helper_args)?;
+            let output = CliGraphQueryOutput::new(rows.iter().map(cli_graph_query_row).collect());
+            print_contract_or_human(json, &output, || {
                 if rows.is_empty() {
                     "No graph query results".to_owned()
                 } else {
@@ -262,14 +355,50 @@ where
     run_helper_json_classified(HelperKind::Graph, &args)
 }
 
-fn graph_degraded_status(
-    kind: HelperKind,
-    error: &HelperRunError,
-) -> kanban_graph::GraphStoreStatus {
-    kanban_graph::GraphStoreStatus {
+fn graph_degraded_status(kind: HelperKind, error: &HelperRunError) -> GraphHelperStatusResponse {
+    GraphHelperStatusResponse {
         backend: error.degraded_backend().to_owned(),
         enabled: false,
         message: helper_degraded_message(kind, error),
+    }
+}
+
+fn cli_graph_status(status: &GraphHelperStatusResponse) -> CliGraphStatus {
+    CliGraphStatus {
+        backend: status.backend.clone(),
+        enabled: status.enabled,
+        message: status.message.clone(),
+    }
+}
+
+fn cli_graph_relation(relation: &GraphHelperRelation) -> CliGraphRelation {
+    CliGraphRelation {
+        subject_uri: relation.subject_uri.clone(),
+        predicate: relation.predicate.clone(),
+        object_uri: relation.object_uri.clone(),
+        graph_uri: relation.graph_uri.clone(),
+        provenance: CliGraphRelationProvenance {
+            source_table: relation.provenance.source_table.clone(),
+            source_id: relation.provenance.source_id.clone(),
+            source_event_id: relation.provenance.source_event_id,
+            authoritative_store: relation.provenance.authoritative_store.clone(),
+        },
+        metadata: relation.metadata.clone(),
+        created_at: relation.created_at,
+        updated_at: relation.updated_at,
+    }
+}
+
+fn cli_graph_query_row(row: &kanban_contract::GraphHelperQueryRow) -> CliGraphQueryRow {
+    CliGraphQueryRow {
+        bindings: row
+            .bindings
+            .iter()
+            .map(|binding| CliGraphQueryBinding {
+                name: binding.name.clone(),
+                value: binding.value.clone(),
+            })
+            .collect(),
     }
 }
 
@@ -292,8 +421,11 @@ pub(crate) fn handle_vector(
                     "--dimensions".to_owned(),
                     config.dimensions.to_string(),
                 ];
-                run_helper_json::<serde_json::Value>(HelperKind::Vector, &helper_args)
-                    .with_context(|| "Ollama embedding check failed; config was not written")?;
+                run_helper_json::<VectorHelperCheckProviderResponse>(
+                    HelperKind::Vector,
+                    &helper_args,
+                )
+                .with_context(|| "Ollama embedding check failed; config was not written")?;
             }
             match args.vector_config.as_deref() {
                 Some(path) => kanban_local::write_vector_config_at(path, config.clone())
@@ -303,7 +435,8 @@ pub(crate) fn handle_vector(
                         .with_context(|| "failed to write global vector config")?;
                 }
             }
-            print_or_json(json, &config, || {
+            let output = CliVectorConfigureOutput::new(cli_vector_config(&config));
+            print_contract_or_human(json, &output, || {
                 format!(
                     "Configured vector provider {} model {} ({} dimensions) at {}",
                     config.provider, config.model, config.dimensions, config.endpoint
@@ -311,27 +444,26 @@ pub(crate) fn handle_vector(
             })?;
         }
         VectorCommand::Status(args) => {
-            let status = match vector_helper_json_classified::<kanban_vector::VectorStoreStatus>(
+            let status = match vector_helper_json_classified::<VectorHelperStatusResponse>(
                 db_path,
                 board,
                 &["status".to_owned()],
                 args.vector_config.as_deref(),
             ) {
                 Ok(status) => status,
-                Err(error) if error.is_status_degraded() => {
-                    let mut status = kanban_vector::VectorStoreStatus::new(
-                        error.degraded_backend(),
-                        false,
-                        helper_degraded_message(HelperKind::Vector, &error),
-                    );
-                    status
-                        .diagnostics
-                        .push(error.degraded_diagnostic().to_owned());
-                    status
-                }
+                Err(error) if error.is_status_degraded() => VectorHelperStatusResponse {
+                    backend: error.degraded_backend().to_owned(),
+                    enabled: false,
+                    message: helper_degraded_message(HelperKind::Vector, &error),
+                    diagnostics: vec![error.degraded_diagnostic().to_owned()],
+                    dirty: None,
+                    board_dirty: None,
+                    generation: None,
+                },
                 Err(error) => return Err(error.into()),
             };
-            print_or_json(json, &status, || {
+            let output = CliVectorStatusOutput::new(cli_vector_status(&status));
+            print_contract_or_human(json, &output, || {
                 format!(
                     "vector backend={} enabled={}: {}",
                     status.backend, status.enabled, status.message
@@ -339,13 +471,14 @@ pub(crate) fn handle_vector(
             })?;
         }
         VectorCommand::Rebuild(args) => {
-            let status = vector_helper_json::<kanban_vector::VectorStoreStatus>(
+            let status = vector_helper_json::<VectorHelperStatusResponse>(
                 db_path,
                 board,
                 &["rebuild".to_owned()],
                 args.vector_config.as_deref(),
             )?;
-            print_or_json(json, &status, || {
+            let output = CliVectorRebuildOutput::new(cli_vector_status(&status));
+            print_contract_or_human(json, &output, || {
                 format!(
                     "vector backend={} enabled={}: {}",
                     status.backend, status.enabled, status.message
@@ -353,13 +486,14 @@ pub(crate) fn handle_vector(
             })?;
         }
         VectorCommand::Sync(args) => {
-            let status = vector_helper_json::<kanban_vector::VectorStoreStatus>(
+            let status = vector_helper_json::<VectorHelperStatusResponse>(
                 db_path,
                 board,
                 &["sync".to_owned()],
                 args.vector_config.as_deref(),
             )?;
-            print_or_json(json, &status, || {
+            let output = CliVectorSyncOutput::new(cli_vector_status(&status));
+            print_contract_or_human(json, &output, || {
                 format!(
                     "vector backend={} enabled={}: {}",
                     status.backend, status.enabled, status.message
@@ -375,13 +509,15 @@ pub(crate) fn handle_vector(
                 "--limit".to_owned(),
                 args.limit.to_string(),
             ];
-            let hits = vector_helper_json::<Vec<kanban_vector::VectorHit>>(
+            let hits = vector_helper_json::<VectorHelperQueryChunksResponse>(
                 db_path,
                 board,
                 &command_args,
                 args.vector_config.as_deref(),
             )?;
-            print_or_json(json, &hits, || {
+            let output =
+                CliVectorQueryChunksOutput::new(hits.iter().map(cli_vector_chunk_hit).collect());
+            print_contract_or_human(json, &output, || {
                 if hits.is_empty() {
                     "No vector chunk results".to_owned()
                 } else {
@@ -440,37 +576,30 @@ pub(crate) fn handle_vector(
             if args.include_vector {
                 command_args.push("--include-vector".to_owned());
             }
-            let values = vector_helper_json::<serde_json::Value>(
+            let values = vector_helper_json::<VectorHelperQueryLabelAtomsResponse>(
                 db_path,
                 board,
                 &command_args,
                 args.vector_config.as_deref(),
             )?;
-            print_or_json(json, &values, || {
-                let hits = values.as_array().cloned().unwrap_or_default();
-                if hits.is_empty() {
+            let output = CliVectorQueryLabelAtomsOutput::new(
+                values.into_iter().map(cli_vector_label_atom_hit).collect(),
+            );
+            print_contract_or_human(json, &output, || {
+                if output.data.is_empty() {
                     "No label atom vector results".to_owned()
                 } else {
-                    hits.iter()
+                    output
+                        .data
+                        .iter()
                         .map(|hit| {
-                            let hit = hit.get("hit").unwrap_or(hit);
+                            let hit = match hit {
+                                CliVectorLabelAtomHit::Hit(hit) => hit,
+                                CliVectorLabelAtomHit::WithVector(hit) => &hit.hit,
+                            };
                             format!(
                                 "{} label={} polarity={} distance={} {}",
-                                hit.get("atom_id")
-                                    .and_then(|value| value.as_str())
-                                    .unwrap_or(""),
-                                hit.get("label_name")
-                                    .and_then(|value| value.as_str())
-                                    .unwrap_or(""),
-                                hit.get("polarity")
-                                    .and_then(|value| value.as_str())
-                                    .unwrap_or(""),
-                                hit.get("distance")
-                                    .map(|value| value.to_string())
-                                    .unwrap_or_default(),
-                                hit.get("text")
-                                    .and_then(|value| value.as_str())
-                                    .unwrap_or("")
+                                hit.atom_id, hit.label_name, hit.polarity, hit.distance, hit.text
                             )
                         })
                         .collect::<Vec<_>>()
@@ -554,7 +683,8 @@ pub(crate) fn handle_context(
                 policy,
                 args.vector_config.as_deref(),
             )?;
-            print_or_json(json, &pack, || {
+            let output = CliContextBuildOutput::new(cli_context_pack(&pack));
+            print_contract_or_human(json, &output, || {
                 format!(
                     "context subject={} items={} degraded={}",
                     pack.subject,
@@ -583,6 +713,105 @@ fn vector_config_from_args(args: &VectorConfigureArgs) -> Result<kanban_local::V
         model: args.model.clone(),
         dimensions: args.dimensions,
     })
+}
+
+fn cli_vector_config(config: &kanban_local::VectorConfig) -> CliVectorConfig {
+    CliVectorConfig {
+        provider: config.provider.clone(),
+        endpoint: config.endpoint.clone(),
+        model: config.model.clone(),
+        dimensions: config.dimensions,
+    }
+}
+
+fn cli_vector_status(status: &VectorHelperStatusResponse) -> CliVectorStatus {
+    CliVectorStatus {
+        backend: status.backend.clone(),
+        enabled: status.enabled,
+        message: status.message.clone(),
+        diagnostics: status.diagnostics.clone(),
+        dirty: status.dirty,
+        board_dirty: status.board_dirty,
+        generation: status.generation,
+    }
+}
+
+fn cli_vector_chunk_hit(hit: &VectorHelperChunkHit) -> CliVectorChunkHit {
+    CliVectorChunkHit {
+        chunk: CliChunkRef {
+            uri: hit.chunk.uri.clone(),
+            entity_uri: hit.chunk.entity_uri.clone(),
+            ordinal: hit.chunk.ordinal,
+            content_hash: hit.chunk.content_hash.clone(),
+        },
+        score: hit.score,
+        text: hit.text.clone(),
+        summary: hit.summary.clone(),
+    }
+}
+
+fn cli_label_atom_hit(hit: kanban_contract::VectorHelperLabelAtomHit) -> CliLabelAtomHit {
+    CliLabelAtomHit {
+        atom_id: hit.atom_id,
+        label_id: hit.label_id,
+        label_name: hit.label_name,
+        board_id: hit.board_id,
+        polarity: hit.polarity,
+        kind: hit.kind,
+        text: hit.text,
+        ordinal: hit.ordinal,
+        content_hash: hit.content_hash,
+        embedding_model: hit.embedding_model,
+        distance: hit.distance,
+    }
+}
+
+fn cli_vector_label_atom_hit(hit: VectorHelperQueryLabelAtomsItem) -> CliVectorLabelAtomHit {
+    match hit {
+        VectorHelperQueryLabelAtomsItem::Hit(hit) => {
+            CliVectorLabelAtomHit::Hit(cli_label_atom_hit(hit))
+        }
+        VectorHelperQueryLabelAtomsItem::WithVector(hit) => {
+            CliVectorLabelAtomHit::WithVector(CliLabelAtomVectorHit {
+                hit: cli_label_atom_hit(hit.hit),
+                vector: hit.vector,
+            })
+        }
+    }
+}
+
+fn cli_context_pack(pack: &kanban_context::ContextPack) -> kanban_contract::ContextPack {
+    kanban_contract::ContextPack {
+        subject: pack.subject.to_string(),
+        policy: kanban_contract::ContextPolicy {
+            lexical_limit: pack.policy.lexical_limit,
+            graph_limit: pack.policy.graph_limit,
+            vector_limit: pack.policy.vector_limit,
+            max_items: pack.policy.max_items,
+        },
+        items: pack
+            .items
+            .iter()
+            .map(|item| kanban_contract::ContextItem {
+                entity_uri: item.entity_uri.to_string(),
+                source: item.source.clone(),
+                provenance: item.provenance.clone(),
+                score: item.score,
+                title: item.title.clone(),
+                snippet: item.snippet.clone(),
+            })
+            .collect(),
+        degraded: pack.degraded.clone(),
+        diagnostics: pack
+            .diagnostics
+            .iter()
+            .map(|diagnostic| kanban_contract::ContextDiagnostic {
+                source: diagnostic.source.clone(),
+                code: diagnostic.code.clone(),
+                message: diagnostic.message.clone(),
+            })
+            .collect(),
+    }
 }
 
 fn build_configured_context_pack(

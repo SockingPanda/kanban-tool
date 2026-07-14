@@ -1,0 +1,14 @@
+{
+  "data": {
+    "task_id": "t_project_parent",
+    "steps": [],
+    "execution_plan": {
+      "board_id": "b_project",
+      "task_id": "t_project_parent",
+      "state": "unplanned",
+      "reason": null,
+      "updated_by": "system",
+      "updated_at": 0
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "$defs": {
+    "ApiTaskStatus": {
+      "enum": [
+        "triage",
+        "todo",
+        "scheduled",
+        "ready",
+        "running",
+        "blocked",
+        "review",
+        "done",
+        "archived"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:search-tasks-by-status-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assignee": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "board": {
+      "default": "default",
+      "type": "string"
+    },
+    "include_archived": {
+      "default": false,
+      "type": "boolean"
+    },
+    "label": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "limit": {
+      "default": 20,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "offset": {
+      "default": 0,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "q": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ApiTaskStatus"
+      },
+      "type": "array"
+    }
+  },
+  "title": "Kanban search tasks by status query v1",
+  "type": "object"
+}

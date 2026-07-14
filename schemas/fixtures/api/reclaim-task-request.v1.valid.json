@@ -1,0 +1,6 @@
+{
+  "actor": "fixture-reclaimer",
+  "force": true,
+  "to_status": "ready",
+  "reason": "claim expired"
+}

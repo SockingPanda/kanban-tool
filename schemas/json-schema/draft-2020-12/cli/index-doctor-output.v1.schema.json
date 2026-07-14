@@ -1,0 +1,64 @@
+{
+  "$defs": {
+    "SearchStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "derived_index": {
+          "type": "boolean"
+        },
+        "index_lag_events": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "index_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_event_id": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "stale": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "backend",
+        "derived_index",
+        "stale",
+        "index_version",
+        "last_event_id",
+        "index_lag_events",
+        "message"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:index-doctor-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/SearchStatus"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI index doctor output v1",
+  "type": "object"
+}

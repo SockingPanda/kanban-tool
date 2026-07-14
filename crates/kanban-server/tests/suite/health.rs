@@ -94,3 +94,53 @@ async fn health_rejects_empty_database_file_without_reporting_ok() -> anyhow::Re
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn health_response_fixture_is_produced_by_real_router() -> anyhow::Result<()> {
+    let test = TestApp::new()?;
+    let (status, json) = get_json(test.router(), "/health").await?;
+    assert_eq!(status, StatusCode::OK);
+    let typed: kanban_contract::HealthResponse = serde_json::from_value(json.clone())?;
+    assert_eq!(typed.data.db_path, test.db_path().display().to_string());
+    assert!(typed.data.db_fingerprint.starts_with("sqlite:"));
+    assert_eq!(serde_json::to_value(&typed)?, json);
+    let mut typed_json = serde_json::to_value(typed.clone())?;
+    typed_json["data"]["db_path"] = serde_json::json!("/tmp/kanban.db");
+    typed_json["data"]["db_fingerprint"] = serde_json::json!("sqlite:4096:1");
+    let fixture_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../schemas/fixtures/api/health-response.v1.valid.json");
+    if std::env::var("KANBAN_UPDATE_SCHEMA_FIXTURES").as_deref() == Ok("1") {
+        std::fs::write(
+            &fixture_path,
+            serde_json::to_string_pretty(&typed_json)? + "\n",
+        )?;
+    }
+    let fixture: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&fixture_path)?)?;
+    assert_eq!(typed_json, fixture);
+    Ok(())
+}
+
+#[test]
+fn health_response_contract_consumes_producer_fixture() -> anyhow::Result<()> {
+    let fixture: kanban_contract::HealthResponse = serde_json::from_str(include_str!(
+        "../../../../schemas/fixtures/api/health-response.v1.valid.json"
+    ))?;
+    assert_eq!(
+        serde_json::from_str::<kanban_contract::HealthResponse>(&serde_json::to_string(&fixture)?)?,
+        fixture
+    );
+    Ok(())
+}
+
+#[test]
+fn api_error_response_contract_consumes_fixture() -> anyhow::Result<()> {
+    let fixture: kanban_contract::ErrorEnvelope = serde_json::from_str(include_str!(
+        "../../../../schemas/fixtures/api/error-response.v1.valid.json"
+    ))?;
+    assert_eq!(
+        serde_json::to_value(&fixture)?,
+        serde_json::json!({"error":{"code":"invalid_input","message":"输入无效：limit 必须小于等于 1000"}})
+    );
+    Ok(())
+}

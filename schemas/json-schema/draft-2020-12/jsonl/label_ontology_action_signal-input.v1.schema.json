@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "LabelOntologyActionSignalData": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "type": "string"
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "signal_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "board_id",
+        "action_id",
+        "signal_id",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "LabelOntologyActionSignalRecordType": {
+      "enum": [
+        "label_ontology_action_signal"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:label_ontology_action_signal-input:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/LabelOntologyActionSignalData"
+    },
+    "type": {
+      "$ref": "#/$defs/LabelOntologyActionSignalRecordType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL label_ontology_action_signal input v1",
+  "type": "object"
+}

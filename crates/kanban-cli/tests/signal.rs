@@ -28,28 +28,19 @@ fn create_task(temp: &TempDb, title: &str) -> anyhow::Result<String> {
 }
 
 #[test]
-fn signal_record_creates_ledger_and_backlink_comment() -> anyhow::Result<()> {
+fn metadata_signal_record_input_fixture_is_consumed_by_real_cli() -> anyhow::Result<()> {
     let temp = TempDb::new("signal_record_creates_ledger_and_backlink_comment")?;
     kanban(&temp.path, &["--board", "default", "init"])?.success()?;
     let task_id = create_task(&temp, "signal target")?;
-    let input = temp.dir.join("signal.json");
-    std::fs::write(
-        &input,
-        format!(
-            r#"{{"kind":"agent_cli_failure","title":"Bad flag","summary":"comment add rejected body-file","severity":"medium","task_ref":"{task_id}","actor":"codex","agent_type":"executor","dedupe_key":"cli-body-file","source":"test","evidence":{{"stderr":"unexpected argument"}},"comment":{{"body":"Signal backlink body"}}}}"#
-        ),
-    )?;
+    let input = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/metadata/signal-record-input.v1.valid.json"
+    );
 
     let recorded = kanban(
         &temp.path,
         &[
-            "--json",
-            "--board",
-            "default",
-            "signal",
-            "record",
-            "--input",
-            input.to_str().context("utf8 path")?,
+            "--json", "--board", "default", "signal", "record", "--input", input,
         ],
     )?
     .success_json()?;
@@ -59,12 +50,13 @@ fn signal_record_creates_ledger_and_backlink_comment() -> anyhow::Result<()> {
     assert_eq!(signal["kind"], "agent_cli_failure");
     assert_eq!(signal["observation"]["task_id"], task_id);
     assert_eq!(signal["observation"]["actor"], "codex");
+    let fixture: serde_json::Value = serde_json::from_str(&fs::read_to_string(input)?)?;
+    assert_eq!(signal["observation"]["evidence"], fixture["evidence"]);
 
     let backlink = &recorded["data"]["backlink_comment"];
     assert_eq!(backlink["kind"], "signal");
     assert_eq!(backlink["body"], "Signal backlink body");
-    let metadata: serde_json::Value =
-        serde_json::from_str(backlink["metadata_json"].as_str().unwrap())?;
+    let metadata = &backlink["metadata"];
     assert_eq!(metadata["type"], "signal_link");
     assert_eq!(metadata["signal_id"], signal["id"]);
     assert_eq!(metadata["signal_status"], "open");
@@ -97,6 +89,35 @@ fn signal_record_creates_ledger_and_backlink_comment() -> anyhow::Result<()> {
     )?
     .success_json()?;
     assert_eq!(shown["data"]["id"], signal["id"]);
+    Ok(())
+}
+
+#[test]
+fn metadata_signal_link_output_fixture_is_produced_by_real_service_adapter() -> anyhow::Result<()> {
+    let temp = TempDb::new("metadata_signal_link_fixture")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    create_task(&temp, "signal link fixture target")?;
+    let input = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/metadata/signal-record-input.v1.valid.json"
+    );
+    let recorded = kanban(
+        &temp.path,
+        &[
+            "--json", "--board", "default", "signal", "record", "--input", input,
+        ],
+    )?
+    .success_json()?;
+    let mut actual = recorded["data"]["backlink_comment"]["metadata"].clone();
+    let _: kanban_contract::structured_metadata::SignalLinkMetadataOutput =
+        serde_json::from_value(actual.clone())?;
+    actual["signal_id"] = json!("sig_fixture");
+    actual["observation_id"] = json!("obs_fixture");
+    let expected: serde_json::Value = serde_json::from_str(&fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/metadata/signal-link-output.v1.valid.json"
+    ))?)?;
+    assert_eq!(actual, expected);
     Ok(())
 }
 
@@ -183,8 +204,7 @@ fn signal_export_import_round_trips_and_doctor_remains_clean() -> anyhow::Result
     )?
     .success_json()?;
     assert_eq!(comments["data"][0]["kind"], "signal");
-    let metadata: serde_json::Value =
-        serde_json::from_str(comments["data"][0]["metadata_json"].as_str().unwrap())?;
+    let metadata = &comments["data"][0]["metadata"];
     assert_eq!(metadata["type"], "signal_link");
     assert_eq!(metadata["signal_id"], signal_id);
     let doctor = kanban(&target.path, &["--json", "doctor"])?.success_json()?;
@@ -315,6 +335,90 @@ fn signal_lifecycle_confirm_resolve_and_supersede() -> anyhow::Result<()> {
     .success_json()?;
     assert_eq!(superseded["data"][0]["status"], "superseded");
     assert_eq!(superseded["data"][0]["superseded_by_signal_id"], first);
+    Ok(())
+}
+
+#[test]
+fn signal_review_defaults_to_reviewable_statuses() -> anyhow::Result<()> {
+    let temp = TempDb::new("signal_review_defaults_to_reviewable_statuses")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let open = record_minimal_signal(&temp, "review-open")?;
+    let resolved = record_minimal_signal(&temp, "review-resolved")?;
+    kanban(
+        &temp.path,
+        &[
+            "--json",
+            "signal",
+            "resolve",
+            &resolved,
+            "--reason",
+            "historical signal",
+        ],
+    )?
+    .success_json()?;
+
+    let review = kanban(&temp.path, &["--json", "signal", "review"])?.success_json()?;
+
+    let ids = review["data"]
+        .as_array()
+        .context("review data")?
+        .iter()
+        .filter_map(|signal| signal["id"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(ids, vec![open]);
+    assert!(!ids.contains(&resolved.as_str()));
+    Ok(())
+}
+
+#[test]
+fn signal_review_include_all_returns_historical_statuses() -> anyhow::Result<()> {
+    let temp = TempDb::new("signal_review_include_all_returns_historical_statuses")?;
+    kanban(&temp.path, &["--board", "default", "init"])?.success()?;
+    let open = record_minimal_signal(&temp, "review-all-open")?;
+    let resolved = record_minimal_signal(&temp, "review-all-resolved")?;
+    kanban(
+        &temp.path,
+        &[
+            "--json",
+            "signal",
+            "resolve",
+            &resolved,
+            "--reason",
+            "historical signal",
+        ],
+    )?
+    .success_json()?;
+
+    let review =
+        kanban(&temp.path, &["--json", "signal", "review", "--include-all"])?.success_json()?;
+
+    let ids = review["data"]
+        .as_array()
+        .context("review data")?
+        .iter()
+        .filter_map(|signal| signal["id"].as_str())
+        .collect::<Vec<_>>();
+    assert!(ids.contains(&open.as_str()));
+    assert!(ids.contains(&resolved.as_str()));
+
+    let resolved_only = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "signal",
+            "review",
+            "--status",
+            "resolved",
+            "--include-all",
+        ],
+    )?
+    .success_json()?;
+
+    let resolved_only_data = resolved_only["data"]
+        .as_array()
+        .context("resolved-only review data")?;
+    assert_eq!(resolved_only_data.len(), 1);
+    assert_eq!(resolved_only_data[0]["id"], resolved);
     Ok(())
 }
 

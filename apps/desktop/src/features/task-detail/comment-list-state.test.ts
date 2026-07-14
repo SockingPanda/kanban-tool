@@ -104,7 +104,7 @@ function comment(index: number): CommentRecord {
     agent_type: "codex",
     body: `Comment ${index}`,
     kind: "note",
-    metadata_json: "{}",
+    metadata: {},
     created_at: index,
   }
 }

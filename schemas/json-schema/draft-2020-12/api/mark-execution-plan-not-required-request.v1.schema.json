@@ -1,0 +1,21 @@
+{
+  "$id": "urn:kanban-tool:schema:api:mark-execution-plan-not-required-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "title": "Kanban API mark execution plan not required request v1",
+  "type": "object"
+}

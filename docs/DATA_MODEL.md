@@ -56,6 +56,7 @@ CHECK(json_valid(field_name))
 
 默认值：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {}
 ```
@@ -386,48 +387,64 @@ Event 是 append-only 事实记录。
 
 ### 9.1 Event kind
 
-建议初始 kind：
+API/SSE 当前类型化的 39 个 known kind：
 
 ```text
 board.created
-board.updated
 board.archived
-
-task.created
-task.updated
-task.specified
-task.promoted
-task.claimed
-task.heartbeat
-task.completed
-task.reopened
-task.submitted_for_review
-task.blocked
-task.unblocked
-task.reclaimed
-task.archived
-task.restored
-task.deleted
-
 dependency.added
 dependency.removed
+label.created
+label.deleted
+signal.recorded
+signal.reviewed
+task.archived
+task.blocked
+task.claimed
 task.comment.created
-attachment.added
-attachment.removed
-run.started
-run.finished
+task.completed
+task.created
+task.execution_plan.not_required
+task.execution_plan.planned
+task.execution_plan.unplanned
+task.heartbeat
+task.label.added
+task.label.removed
+task.label_proposal.accepted
+task.label_proposal.proposed
+task.label_proposal.rejected
+task.promoted
+task.reclaimed
+task.recomputed
+task.reopened
+task.retry_policy.updated
+task.specified
+task.step.created
+task.step.done
+task.step.removed
+task.step.reopened
+task.step.skipped
+task.step.updated
+task.submitted_for_review
+task.unblocked
+task.updated
+task.export_sanitized
 ```
 
 ### 8.2 Payload 示例
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
-  "from_status": "ready",
-  "to_status": "running",
   "claim_owner": "alice",
-  "claim_ttl_ms": 300000
+  "metadata": {}
 }
 ```
+
+`task_events.kind/payload_json` 的 SQLite storage 允许未来 unknown kind。Events API 与 SSE
+对上面 39 个 known kind 使用精确 sibling payload contract，known mismatch fail closed；unknown
+kind 的合法 JSON payload 保持 lossless。外层 `task_id`、`run_id`、`actor` 都是
+required-nullable。portable JSONL 的 event payload 仍是 opaque JSON，不复用该 typed union。
 
 ### 8.3 使用场景
 
@@ -460,6 +477,10 @@ run.finished
 旧 comment rows / JSONL import 会迁移到新语义：旧 `human` 变为 `user`，旧 `agent/system` 或 `worker/system` 来源变为 `agent`，旧 `text/system/worker` 内容变为 `note`。没有结构化 metadata 的旧 `decision` 也按 `note` 保留 body fallback。
 
 Comment 创建时也写一条 `task_events(kind='task.comment.created')`。
+
+`metadata_json` 是 SQLite canonical storage 列；CLI/API response 会解码成自然、无损的
+`metadata` object。普通 note/signal metadata 保持开放。只有 service-generated backlink 的
+完整 shape 由 `SignalLinkMetadataOutput` 独立证明，不能把用户自定义的同名键碰撞当成协议。
 
 Decision comment metadata schema：
 
@@ -1063,6 +1084,7 @@ kanban import --input board.jsonl --replace
 
 每行：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {"type":"task","data":{...}}
 {"type":"event","data":{...}}
@@ -1072,6 +1094,7 @@ kanban import --input board.jsonl --replace
 
 Generic signal ledger 使用稳定 record types：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {"type":"signal_observation","data":{...}}
 {"type":"signal","data":{...}}
@@ -1079,6 +1102,7 @@ Generic signal ledger 使用稳定 record types：
 
 Label ontology ledger 使用稳定 record types：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {"type":"label_ontology_observation","data":{...}}
 {"type":"label_ontology_signal","data":{...}}
@@ -1086,6 +1110,12 @@ Label ontology ledger 使用稳定 record types：
 {"type":"label_ontology_action_atom_effect","data":{...}}
 {"type":"label_ontology_action_signal","data":{...}}
 ```
+
+Portable descriptor authority 共覆盖 21 个 discriminator；input/output 各有 exact root，共
+42 个 Draft 2020-12 schemas。每行 `data` 闭合，required-nullable key 必须存在但可显式为
+`null`，真实 export producer 与 import consumer 使用同一 descriptor/fixture registry。
+SQLite 中的 `evidence_json`、`related_labels_json`、`proposal_json`、`change_json`、
+`validation_json` 等仍是 canonical storage 列；公开 adapter 只暴露去掉 `_json` 后的自然 JSON。
 
 导入时会在同一 transaction 中先插入 rows，再运行 final consistency gate。基础关系表
 会检查 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、

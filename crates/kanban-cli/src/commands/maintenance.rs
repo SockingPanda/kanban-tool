@@ -6,6 +6,9 @@ use std::{
 
 use anyhow::{Context, Result};
 use fs_err as fs;
+use kanban_contract::cli_operator::{
+    CliExportOutput, CliExportResult, CliImportOutput, CliImportResult,
+};
 use kanban_sqlite::api::lifecycle::begin_database_replace;
 use kanban_sqlite::api::{
     backup_database, checkpoint_database, export_jsonl, export_jsonl_to_writer, import_jsonl,
@@ -15,24 +18,7 @@ use kanban_sqlite::init::init_database;
 
 use crate::args::{BackupArgs, ExportArgs, ExportFormatArg, ImportArgs};
 use crate::commands::common::{invalid_input, is_stdio_path};
-use crate::output::print_or_json;
-
-#[derive(serde::Serialize)]
-struct ImportOutput {
-    input_path: PathBuf,
-    records: usize,
-    dry_run: bool,
-}
-
-impl ImportOutput {
-    fn from_result(result: kanban_sqlite::api::ImportResult, dry_run: bool) -> Self {
-        Self {
-            input_path: result.input_path,
-            records: result.records,
-            dry_run,
-        }
-    }
-}
+use crate::output::{print_contract_or_human, print_human};
 
 pub(crate) fn import_command(
     db_path: &Path,
@@ -155,48 +141,60 @@ fn replace_database_main_file(
 
 pub(crate) fn handle_doctor(db_path: &PathBuf, json: bool) -> Result<()> {
     let report = kanban_sqlite::api::doctor_database(db_path)?;
-    print_or_json(json, &report, || {
-        format!(
-            "ok={} integrity={} migration={:?} user_version={} expired_running={} running_without_run={} orphan_running_runs={} dependency_cycles={} archived_dependency_edges={} missing_run_logs={} suspicious_run_log_paths={} executable_dependency_violations={} executable_spec_violations={} executable_schedule_violations={} outbox_pending={} outbox_running={} outbox_failed={} derived_dirty_stores={} derived_error_stores={} consistency_errors={} consistency_warnings={} ontology_ledger_errors={} ontology_ledger_warnings={}",
-            report.ok,
-            report.integrity_check,
-            report.migration_version,
-            report.user_version,
-            report.expired_running_tasks,
-            report.running_tasks_without_active_run,
-            report.orphan_running_runs,
-            report.dependency_cycles,
-            report.archived_dependency_edges,
-            report.missing_run_logs,
-            report.suspicious_run_log_paths,
-            report.executable_dependency_violations,
-            report.executable_spec_violations,
-            report.executable_schedule_violations,
-            report.outbox_pending,
-            report.outbox_running,
-            report.outbox_failed,
-            report.derived_dirty_stores,
-            report.derived_error_stores,
-            report.consistency_errors,
-            report.consistency_warnings,
-            report.ontology_ledger_errors,
-            report.ontology_ledger_warnings
-        )
-    })
+    if json {
+        let output =
+            kanban_contract::CliDoctorOutput::new(kanban_server::doctor_report_from_record(report));
+        print_contract_or_human(true, &output, String::new)
+    } else {
+        print_human(|| {
+            format!(
+                "ok={} integrity={} migration={:?} user_version={} expired_running={} running_without_run={} orphan_running_runs={} dependency_cycles={} archived_dependency_edges={} missing_run_logs={} suspicious_run_log_paths={} executable_dependency_violations={} executable_spec_violations={} executable_schedule_violations={} outbox_pending={} outbox_running={} outbox_failed={} derived_dirty_stores={} derived_error_stores={} consistency_errors={} consistency_warnings={} ontology_ledger_errors={} ontology_ledger_warnings={}",
+                report.ok,
+                report.integrity_check,
+                report.migration_version,
+                report.user_version,
+                report.expired_running_tasks,
+                report.running_tasks_without_active_run,
+                report.orphan_running_runs,
+                report.dependency_cycles,
+                report.archived_dependency_edges,
+                report.missing_run_logs,
+                report.suspicious_run_log_paths,
+                report.executable_dependency_violations,
+                report.executable_spec_violations,
+                report.executable_schedule_violations,
+                report.outbox_pending,
+                report.outbox_running,
+                report.outbox_failed,
+                report.derived_dirty_stores,
+                report.derived_error_stores,
+                report.consistency_errors,
+                report.consistency_warnings,
+                report.ontology_ledger_errors,
+                report.ontology_ledger_warnings
+            )
+        })
+    }
 }
 
 pub(crate) fn handle_stats(db_path: &PathBuf, board: &str, json: bool) -> Result<()> {
     let stats = queue_stats(db_path, board)?;
-    print_or_json(json, &stats, || {
-        let stale = stats.stale_claims.len();
-        let blocked = stats
-            .blocked_reasons
-            .iter()
-            .map(|reason| format!("{}={}", reason.reason, reason.count))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("stale_claims={stale} blocked_reasons=[{blocked}]")
-    })
+    if json {
+        let output =
+            kanban_contract::CliStatsOutput::new(kanban_server::queue_stats_from_record(stats)?);
+        print_contract_or_human(true, &output, String::new)
+    } else {
+        print_human(|| {
+            let stale = stats.stale_claims.len();
+            let blocked = stats
+                .blocked_reasons
+                .iter()
+                .map(|reason| format!("{}={}", reason.reason, reason.count))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("stale_claims={stale} blocked_reasons=[{blocked}]")
+        })
+    }
 }
 
 pub(crate) fn handle_backup(db_path: &PathBuf, args: BackupArgs, json: bool) -> Result<()> {
@@ -205,10 +203,24 @@ pub(crate) fn handle_backup(db_path: &PathBuf, args: BackupArgs, json: bool) -> 
             "backup --out requires a filesystem path; '-' is not supported because SQLite VACUUM INTO cannot write to stdout",
         ));
     }
+    let json_out_path = if json {
+        Some(
+            args.out
+                .to_str()
+                .context("backup output path is not valid UTF-8")?
+                .to_owned(),
+        )
+    } else {
+        None
+    };
     let result = backup_database(db_path, args.out)?;
-    print_or_json(json, &result, || {
-        format!("Backup written to {}", result.out_path.display())
-    })
+    if let Some(out_path) = json_out_path {
+        let output =
+            kanban_contract::CliBackupOutput::new(kanban_contract::CliBackupResult { out_path });
+        print_contract_or_human(true, &output, String::new)
+    } else {
+        print_human(|| format!("Backup written to {}", result.out_path.display()))
+    }
 }
 
 pub(crate) fn handle_export(
@@ -233,7 +245,11 @@ pub(crate) fn handle_export(
         return Ok(());
     }
     let result = export_jsonl(db_path, board, args.out)?;
-    print_or_json(json, &result, || {
+    let output = CliExportOutput::new(CliExportResult {
+        out_path: result.out_path.clone(),
+        records: result.records,
+    });
+    print_contract_or_human(json, &output, || {
         format!(
             "Exported {} record(s) to {}",
             result.records,
@@ -256,12 +272,16 @@ pub(crate) fn handle_import(
     }
     if args.dry_run {
         let result = import_dry_run_command(db_path, actor, &args)?;
-        let output = ImportOutput::from_result(result, true);
-        print_or_json(json, &output, || {
+        let output = CliImportOutput::new(CliImportResult {
+            input_path: result.input_path,
+            records: result.records,
+            dry_run: true,
+        });
+        print_contract_or_human(json, &output, || {
             format!(
                 "Dry-run import validated {} record(s) from {}",
-                output.records,
-                output.input_path.display()
+                output.data.records,
+                output.data.input_path.display()
             )
         })?;
         return Ok(());
@@ -270,27 +290,47 @@ pub(crate) fn handle_import(
         return Err(invalid_input("import requires --replace or --dry-run"));
     }
     let result = import_command(db_path, actor, args)?;
-    let output = ImportOutput::from_result(result, false);
-    print_or_json(json, &output, || {
+    let output = CliImportOutput::new(CliImportResult {
+        input_path: result.input_path,
+        records: result.records,
+        dry_run: false,
+    });
+    print_contract_or_human(json, &output, || {
         format!(
             "Imported {} record(s) from {}",
-            output.records,
-            output.input_path.display()
+            output.data.records,
+            output.data.input_path.display()
         )
     })
 }
 
 pub(crate) fn handle_checkpoint(db_path: &PathBuf, json: bool) -> Result<()> {
     let result = checkpoint_database(db_path)?;
-    print_or_json(json, &result, || {
-        format!(
-            "checkpoint busy={} log_frames={} checkpointed_frames={}",
-            result.busy, result.log_frames, result.checkpointed_frames
-        )
-    })
+    if json {
+        let output = kanban_contract::CliCheckpointOutput::new(kanban_contract::CheckpointReport {
+            busy: result.busy,
+            log_frames: result.log_frames,
+            checkpointed_frames: result.checkpointed_frames,
+        });
+        print_contract_or_human(true, &output, String::new)
+    } else {
+        print_human(|| {
+            format!(
+                "checkpoint busy={} log_frames={} checkpointed_frames={}",
+                result.busy, result.log_frames, result.checkpointed_frames
+            )
+        })
+    }
 }
 
 pub(crate) fn handle_vacuum(db_path: &PathBuf, json: bool) -> Result<()> {
     let result = vacuum_database(db_path)?;
-    print_or_json(json, &result, || "Vacuum complete".to_owned())
+    if json {
+        let output = kanban_contract::CliVacuumOutput::new(kanban_contract::CliVacuumResult {
+            ok: result.ok,
+        });
+        print_contract_or_human(true, &output, String::new)
+    } else {
+        print_human(|| "Vacuum complete".to_owned())
+    }
 }

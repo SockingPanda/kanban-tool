@@ -1,0 +1,192 @@
+{
+  "$defs": {
+    "CliSignal": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "dedupe_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "observation": {
+          "$ref": "#/$defs/CliSignalObservation"
+        },
+        "observation_id": {
+          "type": "string"
+        },
+        "review_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reviewed_at": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reviewed_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "severity": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/CliSignalStatus"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "superseded_by_signal_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "observation_id",
+        "kind",
+        "title",
+        "summary",
+        "severity",
+        "status",
+        "dedupe_key",
+        "superseded_by_signal_id",
+        "reviewed_by",
+        "reviewed_at",
+        "review_reason",
+        "created_at",
+        "updated_at",
+        "observation"
+      ],
+      "type": "object"
+    },
+    "CliSignalObservation": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "type": "string"
+        },
+        "agent_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "comment_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "evidence": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "id": {
+          "type": "string"
+        },
+        "run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task_ref_snapshot": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "task_id",
+        "task_ref_snapshot",
+        "run_id",
+        "comment_id",
+        "actor",
+        "agent_type",
+        "source",
+        "evidence",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "CliSignalStatus": {
+      "enum": [
+        "open",
+        "confirmed",
+        "rejected",
+        "superseded",
+        "resolved"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:signal-reject-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/$defs/CliSignal"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI signal reject output v1",
+  "type": "object"
+}

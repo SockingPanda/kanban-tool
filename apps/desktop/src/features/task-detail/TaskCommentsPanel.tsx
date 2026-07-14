@@ -110,6 +110,7 @@ function CommentRows({ commentsPage }: { commentsPage: ReturnType<typeof comment
             </div>
             <MarkdownDescription className="mt-1 text-card-foreground">{comment.body}</MarkdownDescription>
             {comment.kind === "decision" ? <DecisionComment comment={comment} /> : null}
+            {comment.kind === "signal" ? <SignalLinkComment comment={comment} /> : null}
           </Card>
         ))
       ) : (
@@ -162,7 +163,7 @@ type ParsedDecision = { ok: true; metadata: DecisionMetadata } | { ok: false; er
 
 export const DecisionComment = memo(function DecisionComment({ comment }: { comment: CommentRecord }) {
   const { t } = useI18n()
-  const decision = useMemo(() => parseDecisionMetadata(comment.metadata_json), [comment.metadata_json])
+  const decision = useMemo(() => parseDecisionMetadata(comment.metadata), [comment.metadata])
   if (!decision.ok) {
     return (
       <Alert className="mt-2 border-destructive/50 bg-destructive/5">
@@ -224,14 +225,7 @@ function DecisionField({ label, value }: { label: string; value: string }) {
   )
 }
 
-function parseDecisionMetadata(metadataJson: string): ParsedDecision {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(metadataJson)
-  } catch {
-    return { ok: false, error: "metadata_json is not valid JSON" }
-  }
-  if (!isObject(parsed)) return { ok: false, error: "metadata_json must be an object" }
+function parseDecisionMetadata(parsed: Record<string, unknown>): ParsedDecision {
   const options = parsed.options
   if (!Array.isArray(options) || options.length === 0) {
     return { ok: false, error: "options must be a non-empty array" }
@@ -261,6 +255,42 @@ function parseDecisionMetadata(metadataJson: string): ParsedDecision {
   if (verification === false) return { ok: false, error: "verification must be a non-empty string" }
 
   return { ok: true, metadata: { options: decisionOptions, selected, reason, risk, verification } }
+}
+
+type SignalLinkMetadata = {
+  type: "signal_link"
+  signal_id: string
+  observation_id: string
+  signal_kind: string
+  signal_status: "open" | "confirmed" | "rejected" | "superseded" | "resolved"
+}
+
+function SignalLinkComment({ comment }: { comment: CommentRecord }) {
+  const metadata = parseSignalLinkMetadata(comment.metadata)
+  if (!metadata) return null
+  return (
+    <div className="mt-2 grid gap-1 rounded-md border border-border bg-muted/30 p-2 text-xs">
+      <DecisionField label="signal" value={metadata.signal_id} />
+      <DecisionField label="kind" value={metadata.signal_kind} />
+      <DecisionField label="status" value={metadata.signal_status} />
+    </div>
+  )
+}
+
+function parseSignalLinkMetadata(metadata: Record<string, unknown>): SignalLinkMetadata | null {
+  const expectedKeys = ["type", "signal_id", "observation_id", "signal_kind", "signal_status"]
+  const keys = Object.keys(metadata)
+  if (keys.length !== expectedKeys.length || keys.some((key) => !expectedKeys.includes(key))) return null
+  if (metadata.type !== "signal_link") return null
+  if (typeof metadata.signal_id !== "string" || !metadata.signal_id) return null
+  if (typeof metadata.observation_id !== "string" || !metadata.observation_id) return null
+  if (typeof metadata.signal_kind !== "string" || !metadata.signal_kind) return null
+  if (!isSignalLinkStatus(metadata.signal_status)) return null
+  return metadata as SignalLinkMetadata
+}
+
+function isSignalLinkStatus(value: unknown): value is SignalLinkMetadata["signal_status"] {
+  return value === "open" || value === "confirmed" || value === "rejected" || value === "superseded" || value === "resolved"
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

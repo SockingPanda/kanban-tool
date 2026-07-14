@@ -76,6 +76,134 @@ fn runtime_json_errors_include_stable_code_message_and_exit_code() -> anyhow::Re
 }
 
 #[test]
+fn malformed_persisted_json_keeps_storage_error_classification() -> anyhow::Result<()> {
+    let temp = TempDb::new("malformed_persisted_json_keeps_storage_error_classification")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let task = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "malformed persisted JSON",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let task_id = task["data"]["id"].as_str().context("task id")?.to_owned();
+
+    let conn = kanban_test_support::connect_file(&temp.path)?;
+    conn.execute_batch("PRAGMA ignore_check_constraints = ON")?;
+    conn.execute(
+        "UPDATE tasks SET metadata_json = '{invalid' WHERE id = ?1",
+        [task_id.as_str()],
+    )?;
+    drop(conn);
+
+    let result = kanban(&temp.path, &["--json", "task", "show", task_id.as_str()])?;
+    let json = assert_exit_json(result.output, 1, "storage_error")?;
+    assert!(
+        json["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("metadata_json")),
+        "{json}"
+    );
+
+    let conn = kanban_test_support::connect_file(&temp.path)?;
+    conn.execute(
+        "UPDATE tasks SET metadata_json = '{}' WHERE id = ?1",
+        [task_id.as_str()],
+    )?;
+    drop(conn);
+
+    let comment = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "comment",
+            "add",
+            task_id.as_str(),
+            "malformed comment metadata",
+        ],
+    )?
+    .success_json()?;
+    let comment_id = comment["data"]["id"].as_str().context("comment id")?;
+    let conn = kanban_test_support::connect_file(&temp.path)?;
+    conn.execute_batch("PRAGMA ignore_check_constraints = ON")?;
+    conn.execute(
+        "UPDATE task_comments SET metadata_json = '{invalid' WHERE id = ?1",
+        [comment_id],
+    )?;
+    drop(conn);
+    let result = kanban(&temp.path, &["--json", "comment", "list", task_id.as_str()])?;
+    assert_exit_json(result.output, 1, "storage_error")?;
+
+    let signal_input = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/metadata/signal-record-input.v1.valid.json"
+    );
+    let signal = kanban(
+        &temp.path,
+        &["--json", "signal", "record", "--input", signal_input],
+    )?
+    .success_json()?;
+    let signal_id = signal["data"]["signal"]["id"]
+        .as_str()
+        .context("signal id")?;
+    let observation_id = signal["data"]["signal"]["observation"]["id"]
+        .as_str()
+        .context("signal observation id")?;
+    let conn = kanban_test_support::connect_file(&temp.path)?;
+    conn.execute_batch("PRAGMA ignore_check_constraints = ON")?;
+    conn.execute(
+        "UPDATE signal_observations SET evidence_json = '{invalid' WHERE id = ?1",
+        [observation_id],
+    )?;
+    drop(conn);
+    let result = kanban(&temp.path, &["--json", "signal", "show", signal_id])?;
+    assert_exit_json(result.output, 1, "storage_error")?;
+
+    kanban(&temp.path, &["label", "create", "cli"])?.success()?;
+    let ontology_input = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/fixtures/metadata/ontology-record-input.v1.valid.json"
+    );
+    let ontology = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "label",
+            "ontology",
+            "record",
+            task_id.as_str(),
+            "--input",
+            ontology_input,
+        ],
+    )?
+    .success_json()?;
+    let ontology_observation_id = ontology["data"]["id"]
+        .as_str()
+        .context("ontology observation id")?;
+    let ontology_signal_id = ontology["data"]["signals"][0]["id"]
+        .as_str()
+        .context("ontology signal id")?;
+    let conn = kanban_test_support::connect_file(&temp.path)?;
+    conn.execute_batch("PRAGMA ignore_check_constraints = ON")?;
+    conn.execute(
+        "UPDATE label_ontology_observations SET task_snapshot_json = '{invalid' WHERE id = ?1",
+        [ontology_observation_id],
+    )?;
+    drop(conn);
+    let result = kanban(
+        &temp.path,
+        &["--json", "label", "ontology", "show", ontology_signal_id],
+    )?;
+    assert_exit_json(result.output, 1, "storage_error")?;
+    Ok(())
+}
+
+#[test]
 fn runtime_human_errors_include_recovery_hints() -> anyhow::Result<()> {
     let temp = TempDb::new("runtime_human_errors_include_recovery_hints")?;
     kanban(&temp.path, &["init"])?.success()?;

@@ -1,0 +1,6 @@
+{
+  "kind": "agent_cli_failure",
+  "title": "Bad flag",
+  "summary": "invalid evidence shape",
+  "evidence": ["must", "be", "an", "object"]
+}

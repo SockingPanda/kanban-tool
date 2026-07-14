@@ -49,8 +49,37 @@ Content-Type: text/event-stream
 3. Server 默认 actor。
 4. OS username。
 
+### 1.2.1 Request header contracts
+
+除 SSE stream 外，当前 83 个 HTTP endpoint 都拥有 operation-specific、exact、
+`deny_unknown_fields` header contract；每个 contract 都包含可选 `Accept-Language`，并按真实
+handler 输入选择 locale、locale + actor、locale + JSON content type，以及它们的
+optional-body 变体。`X-KB-Actor` 只出现在会解析 actor 的 mutation handler。
+
+有必需 JSON body 的 endpoint 要求且只允许一个 `Content-Type`；允许空 body 的 archive、
+promote、reclaim、unblock、label proposal propose/accept/reject endpoint 将其建模为可选；没有
+body 的 endpoint 不声明 `Content-Type`。这些 cardinality 是 transport contract，不改变 Axum
+对具体媒体类型和 malformed JSON 的既有 400 行为。
+
+SSE 的 `Last-Event-ID` 仍明确 `Excluded`：当前 runtime 忽略该 header，没有 resume contract；
+不得因为其它 endpoint 已关闭 headers 就把它推断为 adopted input。
+
 ### 1.3 Success Response
 
+成功响应按 endpoint 的元数据契约使用以下 wire envelope：
+
+`DataEnvelope` 仅包含 `data`：
+
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
+```json
+{
+  "data": {}
+}
+```
+
+`MetadataEnvelope` 的 `meta` 是必需字段：
+
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {},
@@ -58,17 +87,18 @@ Content-Type: text/event-stream
 }
 ```
 
+`OptionalMetadataEnvelope` 只在 endpoint 产生对应元数据时包含 `meta`；没有元数据时
+直接省略该字段，不返回 `"meta": null`。具体 endpoint 使用哪一种 envelope 及其
+`meta` 字段由该 endpoint 的响应示例和说明定义。
+
 ### 1.4 Error Response
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "error": {
     "code": "invalid_transition",
-    "message": "cannot claim task from status todo",
-    "details": {
-      "task_id": "t_...",
-      "status": "todo"
-    }
+    "message": "cannot claim task from status todo"
   }
 }
 ```
@@ -83,13 +113,14 @@ Content-Type: text/event-stream
 |---|---:|
 | `invalid_input` | 400 |
 | `not_found` | 404 |
+| `conflict` | 409 |
+| `dependency_cycle` | 409 |
 | `invalid_transition` | 409 |
 | `dependency_blocked` | 409 |
 | `execution_plan_required` | 409 |
 | `steps_incomplete` | 409 |
 | `claim_conflict` | 409 |
 | `claim_token_mismatch` | 403 |
-| `db_busy` | 503 |
 | `internal` | 500 |
 
 ---
@@ -100,6 +131,7 @@ Content-Type: text/event-stream
 
 Response：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -135,6 +167,7 @@ Archived boards are hidden by default. Pass `include_archived=true` to include t
 
 Response：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": [
@@ -159,6 +192,7 @@ POST /api/v1/boards
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "slug": "agent-work",
@@ -184,6 +218,20 @@ POST /api/v1/boards/{board}/archive
 
 Archive marks `archived_at` and writes a `board.archived` event; it does not mutate tasks. The operation is rejected with `409 invalid_transition` if the board has active `running` tasks or `running` task runs. After archive, ordinary task mutations on that board are rejected, while audit history endpoints remain readable when called with explicit task/board identity.
 
+### 3.5 B2-C6 boards exact contracts
+
+四个 boards endpoint 使用 endpoint-specific contract roots：list query、create request、
+get/archive path 与各自 success response。四个 success response 只共享闭合 `ApiBoard` component；
+server 显式把 SQLite application record 映射为 wire DTO，不直接序列化 `BoardRecord`。
+archive request body 继续复用既有 `ArchiveBoardRequest` contract。
+
+`include_archived` 缺省为 `false`，传入 `true` 时真实转发到 service 并返回 archived boards。
+Desktop `listBoards` caller exact 校验 `data` envelope 与 `ApiBoard` 的全部字段，missing、mistyped
+或 extra field 返回 `invalid_response`。running-work archive guard、archived audit history、
+not-found status/error code 与 locale-dependent message 不属于 schema authority，继续由
+service/adapter 保证。四个 endpoint 的 headers obligation 仍为 `Todo`，migration state 保持
+`Generated`。
+
 ---
 
 ## 4. Tasks
@@ -202,11 +250,34 @@ Query params：
 | `priority` | 可重复：`?priority=0&priority=2`，值为 P0-P3 的 `0..3`。P0 表示 incident/blocker/must-handle-immediately；P3 是普通 backlog/低优先级/默认。 |
 | `assignee` | 按 assignee。 |
 | `label` | 按 label 名称或 id 过滤，可重复；多个 label 使用 AND 语义。 |
+| `plan_filter` | 可重复：`plan_needed` / `has_steps` / `incomplete_required_steps`。 |
 | `q` | title/description 搜索；task ref 形状按精确匹配处理。 |
 | `include_archived` | bool。 |
 | `limit` | 默认 100。 |
 | `offset` | 分页 offset。 |
 | `sort` | `seq` / `title` / `status` / `position` / `priority` / `assignee` / `scheduled_at` / `due_at` / `created_at` / `updated_at`，前缀 `-` 表示降序。`priority` sorts P0 -> P3; `-priority` sorts P3 -> P0. |
+
+这两个 task-read endpoint 使用同一套严格 raw-query 语法，但各自拥有独立的 exact path/query
+contract，并由两个 server-local typed Axum extractor 分别绑定真实 `{board}` path 与唯一 raw URI
+query 消费点；handler 只接收已解析 request，不持有 `RawQuery` 或第二套 `Query<T>` extractor。
+只有 `status`、`priority`、`label`、`plan_filter` 可以重复；不同语义值按 URI 首次出现顺序
+保留，任何重复语义值返回 `400 invalid_input`。`assignee`、`q`、`include_archived`、
+`limit`、`offset`、`sort` 任一重复也返回 `400`。任何未知 key 失败关闭；旧 `search`
+alias 已删除，只接受 `q`。
+
+raw query 最多 8192 bytes。参数对上限不是独立字面量，而是由 9 个 `status`、4 个
+`priority`、3 个 `plan_filter`、32 个 `label` 和 6 个 scalar 参数推导出的 54。
+`q` 最多 1024 个 Unicode 字符，`assignee` 与单个 `label` 最多 128 个。未提供 query 时
+默认 `include_archived=false`、`limit=100`、`offset=0`、`sort=position`。`limit` 的 wire
+authority 是 `kanban-contract` 的 1000；SQLite service defensive maximum 直接引用唯一
+application authority，server 对该实际 service path 建立编译期相等门禁。`offset` 最大为
+`i64::MAX`。空的 `q`、`assignee` 归一化为未提供；label 会规范化 Unicode 边缘空白，但必须
+包含至少一个非空白字符，且 raw 字符长度不得超过 128；该预算在 trim 前计算，随后会被移除
+的 Unicode 边缘空白也计入 128 字符。空或纯 Unicode 空白 `label`、enum、bool、数字或 sort
+值无效。
+query 使用严格 form 解码：`+` 表示空格，`%HH` 必须完整且解码结果必须是 UTF-8；合法
+UTF-8 与 `&`、`/`、`=`、`+`、空格必须由标准 form encoder 转义，非法 percent encoding
+或 UTF-8 返回 `400`。
 
 Priority 只表达相对重要性和排序，不表达可 claim 状态。`ready` 才表示任务已显式进入可执行队列；普通 `ready` task 可以是 P1/P2/P3，不应为了表示“可做”全部标成 P0。P0 只用于 incident、当前目标 blocker 或必须立即处理的任务；P0 task 若仍缺规格、排期未到或依赖未完成，仍不能被 claim。
 
@@ -215,8 +286,9 @@ Priority 只表达相对重要性和排序，不表达可 claim 状态。`ready`
 与 `{board}` 相同时匹配；`t_...` 只匹配 `{board}` 内的 task id。其他文本仍执行
 title/description 模糊搜索。
 
-Response：
+响应（以下为字段节选；完整、可消费的成功响应以 `schemas/fixtures/api/list-tasks-response.v1.valid.json` 为准）：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": [
@@ -250,7 +322,8 @@ Response：
   ],
   "meta": {
     "limit": 100,
-    "offset": 0
+    "offset": 0,
+    "total": 1
   }
 }
 ```
@@ -263,6 +336,7 @@ POST /api/v1/boards/{board}/tasks
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "title": "实现状态机",
@@ -289,6 +363,9 @@ Notes：
 - Task 响应会暴露派生 dependency 和 execution-plan 字段：`dependency_blocked`、`unfinished_parent_count`、`execution_plan_state`、required/optional step counts。它们是查询元数据，不是可写 task 字段。
 - `priority` 是整数等级 `0..3`：`0` = P0 incident/blocker/must-handle-immediately，`1` = P1 近期重点，`2` = P2 重要后续，`3` = P3 普通 backlog/低优先级/默认。创建时会拒绝非法值。
 - `labels` 可选。名称会先 trim；空白名称会被拒绝；所有 label 必须已存在于当前 board。任一 label 缺失时，整个 create 返回 `400 invalid_input`，且不会写入 `tasks`、`labels`、`task_labels` 或 `task_events`。Task create 不提供 create-missing 模式。
+- `priority` 缺省为 `3`，`labels` / `depends_on` 缺省为空数组；其它 nullable 字段可显式传 `null`。`metadata` 只接受 JSON object 或 `null`，其 object 内容是 opaque extension，不在 transport layer 解释。
+- path、request 与 `201` success response 分别由 `CreateTaskPath`、`CreateTaskRequest` 与 `CreateTaskResponse { data: ApiTask }` 拥有。request status 使用 create-only 的闭合 `triage|todo|scheduled|ready` vocabulary；公开 response 不包含 `claim_token`。
+- handler 只做 contract 到 application input 的显式映射，并继续单次调用 `create_task_with_labels_and_dependencies`。label、dependency、retry policy、metadata validity 与 initial readiness 仍在同一 SQLite transaction/service guard 中处理；任一失败都整体回滚。
 
 ### 4.3 List task windows by status
 
@@ -296,15 +373,14 @@ Notes：
 GET /api/v1/boards/{board}/tasks/by-status?status=triage&status=ready&include_archived=false&limit=50&offset=0&sort=-updated_at
 ```
 
-This read-only endpoint batches the board-column query pattern into one request.
-It accepts the same filter params as `GET /api/v1/boards/{board}/tasks`, but
-returns one independent task window per repeated `status`. `limit` and `offset`
-apply per status window, preserving board per-column pagination semantics.
-Status order in the response follows query parameter order. Omitting `status`
-returns an empty `statuses` array.
+这个只读 endpoint 将 board column 查询批量化为一次请求，并接受 4.1 节定义的同一套严格
+query 语法。每个重复 `status` 生成一个独立 task window；`limit` 与 `offset` 分别应用到
+每个 window。response 中的 status 顺序与 URI 中的重复参数顺序一致；省略 `status` 时返回
+空的 `statuses` array。
 
-Response:
+响应（以下为字段节选；完整、可消费的成功响应以 `schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json` 为准）：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -348,8 +424,8 @@ Query params：
 |---|---|
 | `include` | 可选。当前识别 `ontology`；可用逗号分隔，其他 include 值暂时保持兼容性忽略。 |
 
-默认响应只包含 `data: TaskDto`，不返回 `meta`。传 `include=ontology` 时，`data`
-保持同一 `TaskDto`，并在 `meta.details.ontology_summary` 返回该 task 的 label
+默认响应只包含 `data: ApiTask`，不返回 `meta`。传 `include=ontology` 时，`data`
+保持同一 `ApiTask`，并在 `meta.details.ontology_summary` 返回该 task 的 label
 ontology signal 摘要；没有 ontology signals 时为 `null`。Summary 是只读 task-level
 工作流提示，包含 signal/status/degraded/stale/action counts、oldest open/confirmed
 signal time/age、latest signal/action time、当前 `suggest_input_hash` 和最多 5 条
@@ -372,6 +448,7 @@ PATCH /api/v1/tasks/{task_id}
 
 允许字段：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "title": "新的标题",
@@ -409,6 +486,13 @@ retry policy，不是 status recompute 触发器。
 
 ## 5. Transitions
 
+Transition request 使用各 endpoint 独立的封闭 DTO，未知顶层字段返回 `400`，不共享通用
+transition/token body。Promote、reclaim、unblock 和 task archive 可完全省略 body；出现
+body 时仍按对应 DTO 校验。`actor` 的解析优先级保持为 body、`X-KB-Actor`、server default。
+Claim 与 heartbeat 省略 `ttl_ms` 时使用 `300000`；reclaim、complete、submit-review、block
+与 archive 省略 `force` 时均为 `false`，不能绕过 lease、token 或状态机 guard。Claim-token mismatch
+response 不回显客户端提交的错误 token，也不暴露服务端保存的真实 token。
+
 ### 5.1 Specify
 
 ```http
@@ -417,6 +501,7 @@ POST /api/v1/tasks/{task_id}/transitions/specify
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "description": "补全后的规格",
@@ -435,6 +520,7 @@ Promote is rejected with `409 execution_plan_required` while the task execution 
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "actor": "dispatcher"
@@ -451,6 +537,7 @@ Claim/start is rejected with `409 execution_plan_required` while the task execut
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "actor": "alice",
@@ -462,6 +549,7 @@ Request：
 
 Response：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -487,6 +575,7 @@ POST /api/v1/tasks/{task_id}/transitions/heartbeat
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "claim_token": "ct_01HX...",
@@ -506,6 +595,7 @@ POST /api/v1/tasks/{task_id}/transitions/complete
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "claim_token": "ct_01HX...",
@@ -516,6 +606,8 @@ Request：
 }
 ```
 
+`result` 是可选 opaque JSON value；schema 只约束字段存在形式，不收紧其内部结构。
+
 ### 5.6 Submit Review
 
 ```http
@@ -524,13 +616,17 @@ POST /api/v1/tasks/{task_id}/transitions/submit-review
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "claim_token": "ct_01HX...",
   "summary": "等待人工检查",
+  "force": false,
   "actor": "worker-default"
 }
 ```
+
+Submit-review 不接受 `result`；该字段与其它未知顶层字段一样返回 `400`。
 
 ### 5.7 Block
 
@@ -540,6 +636,7 @@ POST /api/v1/tasks/{task_id}/transitions/block
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "reason": "等待 API schema 确认",
@@ -557,6 +654,7 @@ POST /api/v1/tasks/{task_id}/transitions/unblock
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "actor": "alice"
@@ -573,6 +671,7 @@ POST /api/v1/tasks/{task_id}/transitions/reopen
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "reason": "重新执行修正验证失败",
@@ -580,7 +679,7 @@ Request：
 }
 ```
 
-只允许 reopen `done` task，`reason` 必填且不能为空。Response target 由服务端按 spec、schedule、dependency 和 execution plan readiness 重新计算；`completed_at` 会清空，`result_summary` / `result_json` 保留。事件 `task.reopened` 的 payload 包含 `from`、`to`、`reason` 和 `original_completed_at`。
+只允许 reopen `done` task，`reason` 必填且不能为空。Response target 由服务端按 spec、schedule、dependency 和 execution plan readiness 重新计算；`completed_at` 会清空，`result_summary` / natural JSON `result` 保留（持久层仍存于 `result_json`）。事件 `task.reopened` 的 payload 包含 `from`、`to`、`reason` 和 `original_completed_at`。
 
 直接依赖该 task 的 child 中，仅 `triage|todo|scheduled|ready` 会重新计算；`running|blocked|review|done|archived` 不隐式改写。
 
@@ -592,6 +691,7 @@ POST /api/v1/tasks/{task_id}/transitions/reclaim
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "force": false,
@@ -601,6 +701,8 @@ Request：
 }
 ```
 
+`to_status` 是封闭枚举，只接受 `ready` 或 `blocked`；其它 task status 返回 `400`。
+
 ### 5.11 Archive
 
 ```http
@@ -609,6 +711,7 @@ POST /api/v1/tasks/{task_id}/transitions/archive
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "force": false,
@@ -628,6 +731,7 @@ POST /api/v1/tasks/{child_task_id}/dependencies
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "parent_task_id": "t_01HX...",
@@ -655,12 +759,13 @@ GET /api/v1/tasks/{task_id}/dependencies
 ```
 
 Add/remove/list dependency endpoints return the same dependency envelope. For
-compatibility, `parents` and `children` remain full `TaskDto` arrays. The
-additional `task` and `edges` fields provide a compact hydrated relationship
+the existing wire shape, `parents` and `children` are full `ApiTask` arrays.
+The additional `task` and `edges` fields provide a compact hydrated relationship
 view with stable named parent/child objects.
 
 Response：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -719,6 +824,7 @@ POST /api/v1/tasks/{task_id}/execution-plan/not-required
 
 Create request:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "title": "Write acceptance checks",
@@ -736,6 +842,7 @@ task itself.
 
 Update request:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "title": "Write acceptance checks",
@@ -750,6 +857,7 @@ Update request:
 
 Step status requests:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "note": "Implemented and verified",
@@ -761,6 +869,7 @@ Step status requests:
 
 Mark not required request:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "reason": "Small text-only cleanup",
@@ -770,6 +879,7 @@ Mark not required request:
 
 Step list and mutation responses return the parent task step snapshot:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -825,6 +935,7 @@ reserved for later.
 
 Response:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -893,6 +1004,7 @@ Comments are task-id scoped. Listing comments remains available for archived boa
 
 Response：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": [
@@ -905,7 +1017,7 @@ Response：
       "agent_type": null,
       "body": "这里需要确认边界条件。",
       "kind": "note",
-      "metadata_json": "{}",
+      "metadata": {},
       "created_at": 1717520000000
     }
   ]
@@ -920,6 +1032,7 @@ POST /api/v1/tasks/{task_id}/comments
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "body": "这里需要确认边界条件。",
@@ -937,9 +1050,25 @@ Notes：
 - `decision` records meaningful multi-option choices; body remains the readable fallback, and structured decision metadata is carried by `metadata`.
 - `author_type` marks who produced the comment and allows `user|agent`. If omitted, the service defaults to `user`.
 - `agent_type` is optional open text for `author_type=agent` comments, such as `executor` or `reviewer`. Non-empty `agent_type` with `author_type=user` is rejected as `400 invalid_input`.
-- `metadata` 默认为 `{}`，必须是 JSON object；response 使用 `metadata_json` 字符串保持现有 DTO 风格。`kind=decision` 时必须包含非空 `options`，每个 option 必须有非空 `slug` / `title` / `detail`，slug 必须是唯一小写 ASCII slug，`selected` 必须匹配 option slug，`reason` 必须非空，`risk` / `verification` 如果出现也必须非空。无效 decision metadata 返回 `400 invalid_input`。
+- `metadata` 默认为 `{}`，必须是 JSON object；response 同样使用自然 JSON `metadata` object。普通 note/signal metadata 保持开放且无损，不能因为键名与专用协议碰撞而在 transaction 提交后收紧。`kind=decision` 时必须包含非空 `options`，每个 option 必须有非空 `slug` / `title` / `detail`，slug 必须是唯一小写 ASCII slug，`selected` 必须匹配 option slug，`reason` 必须非空，`risk` / `verification` 如果出现也必须非空。无效 decision metadata 返回 `400 invalid_input`。
 - `author` 走通用 actor 语义；也可以用 `X-KB-Actor` 或 server 默认 actor。
 - 创建评论会写入 `task.comment.created` event。
+
+
+### 7.3 B2-C3 comments wire contracts
+
+`GET` 与 `POST /api/v1/tasks/{task_id}/comments` 各自拥有独立、闭合的 path 与 success root；
+`POST` 另有独立、闭合的 request root。两者只共享 contract-owned `ApiComment` component 与
+既有 shared error component。GET 没有 query/body，POST 没有 query；B7 已为两个 endpoint
+登记并采用精确 header contract。endpoint surface migration 仍诚实标记为 `Generated`，直到
+后续 API adoption cohort 补齐真实 router producer/contract consumer 的 exact surface evidence。
+
+`ApiComment.author_type` 仅允许 `user|agent`，`kind` 仅允许 `note|decision|signal`，
+`agent_type` 是必须出现但可为 `null` 的字段。`metadata` 是开放、无损的 response object。
+create request 的 `metadata` 保持开放 JSON object；decision 的精确 typed shape 由独立的
+`metadata.decision.input` / `NoTransport` contract 与真实 CLI producer/consumer witnesses 拥有。
+运行时原始 JSON object 继续进入 SQLite service 的 decision cross-field guard，schema 不替代
+selected/option uniqueness、slug、非空值、board archive 与 transaction/event 约束。
 
 ---
 
@@ -967,6 +1096,7 @@ GET /api/v1/runs/{run_id}/log
 
 Response：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -996,6 +1126,7 @@ GET /api/v1/stats?board=default
 
 Response：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -1046,6 +1177,7 @@ GET /api/v1/events?board=default&after=0&limit=100
 
 Response：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": [
@@ -1054,9 +1186,10 @@ Response：
       "event_id": "e_01HX...",
       "board_id": "b_01HX...",
       "task_id": "t_01HX...",
+      "run_id": "r_01HX...",
       "kind": "task.claimed",
       "actor": "alice",
-      "payload": {},
+      "payload": {"claim_owner":"alice","metadata":{}},
       "created_at": 1717520000000
     }
   ],
@@ -1077,13 +1210,24 @@ SSE event：
 ```text
 event: task.claimed
 id: 124
-data: {"id":124,"event_id":"e_...","task_id":"t_...","kind":"task.claimed","payload":{}}
+data: {"id":124,"event_id":"e_...","board_id":"b_...","task_id":"t_...","run_id":"r_...","kind":"task.claimed","actor":"alice","payload":{"claim_owner":"alice","metadata":{}},"created_at":1717520000000}
 ```
+
+`board`、`task_id`、`after`、`limit` 是该 endpoint 唯一接受的 query key，均只能出现一次；
+未知或重复 key 返回标准 `400 invalid_input` envelope。默认值分别为 `default`、未提供、`0`、
+`100`，runtime 将 `limit` 防御性限制到 `1000`。每个事件严格按 `event`、`id`、`data`
+frame 顺序输出；`data` 是完整的 `StreamEventData` JSON，不允许额外字段。
+`task_id`、`run_id`、`actor` 都是 required-nullable：键必须出现，值可以显式为 `null`。
+39 个 known kind 的 payload 与 kind 使用同一 tagged union；缺字段、额外字段或 sibling
+status/state 错配会 fail closed。未来 unknown kind 的合法 JSON payload 保持 lossless。
 
 Reconnect：
 
 - V1 implementation emits a finite snapshot of existing matching events and closes; clients should reconnect or poll `GET /api/v1/events` for updates.
 - Browser clients may send Last-Event-ID, but V1 only honors the `after` query parameter.
+- V1 finite snapshot 不发送 SSE comment/heartbeat frame；因此 heartbeat 不是 JSON payload
+  contract，`Last-Event-ID` 也不是已采用的 header input contract。这两项只有未来 runtime
+  真正实现后才能迁移为 typed contract。
 - 若 event 已被压缩/清理，客户端重新 fetch board snapshot。
 
 ---
@@ -1104,6 +1248,7 @@ PATCH /api/v1/boards/{board}/columns
 
 Request：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "columns": [
@@ -1150,6 +1295,7 @@ POST /api/v1/boards/{board}/label-ontology/validate
 
 Board 级标签创建请求：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "name": "core",
@@ -1159,6 +1305,7 @@ Board 级标签创建请求：
 
 Label 响应结构，用于 board 级标签创建和 label 列表：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "id": "l_01HX...",
@@ -1178,6 +1325,7 @@ ledger；创建 label identity 不写 `label_ontology_actions`，也不会创建
 
 Task 标签添加请求：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "name": "core"
@@ -1186,6 +1334,7 @@ Task 标签添加请求：
 
 或批量添加：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "names": ["core", "api"]
@@ -1194,6 +1343,7 @@ Task 标签添加请求：
 
 如果需要在绑定时显式创建缺失 label identity：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "names": ["scratch-label"],
@@ -1214,6 +1364,7 @@ task；不会生成 `label_semantics` 或 `label_atoms`。重复绑定已有 tas
 
 Task label bootstrap 请求：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "name": "database",
@@ -1238,6 +1389,7 @@ semantics，请求会失败，并要求调用方改用专用 semantics mutation 
 proposal/adoption 路径；重复调用同一 task/label 只在目标 label 仍无 semantics 时保持
 task-label 绑定幂等。成功响应状态为 `201 Created`：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -1287,6 +1439,7 @@ semantics；`{label_id}` 只接受 canonical `l_...` label id。Label name 允�
 同步重建该 label 的 SQLite `label_atoms`，并标脏派生的 label atom vector index。
 请求 body：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "actor": "alice",
@@ -1322,8 +1475,9 @@ label atom index。生成 atoms 时，有 description
 fallback atom。atom text 会进一步规范化 whitespace：每个非空行内部 collapse，
 canonical 行分隔保留。同一 label 下相同 `polarity + kind + normalized_text` 的 atom
 会去重并保留首次 ordinal，`id` / `content_hash` 不包含 ordinal，因此只调整数组顺序
-不会改变同一文本 atom identity。响应使用 Envelope：
+不会改变同一文本 atom identity。响应使用 `DataEnvelope`：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -1368,6 +1522,7 @@ DELETE /api/v1/boards/default/labels/l_01HX/semantics?expected_semantics_hash=se
 X-Kanban-Actor: alice
 ```
 
+<!-- schema-doc: contract=api.label-semantics-delete.response fixture=schemas/fixtures/api/delete-response.v1.valid.json -->
 ```json
 { "data": { "deleted": true } }
 ```
@@ -1438,6 +1593,7 @@ list/search/filter 与状态转移不受影响。Dirty 判断来自结构化 sta
 
 Response：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -1514,6 +1670,7 @@ validation 和 persistence。
 
 带本地/offline provider 输出时：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "proposal": {
@@ -1568,6 +1725,7 @@ diagnostics 包含 `label_proposal_residual_validation_unavailable` 和具体原
 
 Attempt response：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -1587,6 +1745,7 @@ Attempt response：
 
 Accept/reject body：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "reason": "coverage 不足，接受新 label",
@@ -1628,14 +1787,14 @@ operator 发现。它独立于 label ontology ledger；这些 endpoint 不创建
 resolve 或 supersede signal，也不会把通用 signal 混入 ontology review groups。
 
 ```http
-GET /api/v1/boards/{board}/signals?status=open&kind=agent_cli_friction&task=kanban-tool%23371&include_all=false&limit=100
-GET /api/v1/boards/{board}/signals/review?status=confirmed&kind=agent_cli_friction&task=kanban-tool%23371&include_all=false&limit=100
+GET /api/v1/boards/{board}/signals?status=open&kind=agent_cli_friction&task_ref=kanban-tool%23371&include_all=false&limit=100
+GET /api/v1/boards/{board}/signals/review?status=confirmed&kind=agent_cli_friction&task_ref=kanban-tool%23371&include_all=false&limit=100
 GET /api/v1/signals/{signal_id}
 ```
 
 `GET /api/v1/boards/{board}/signals` 和 `/signals/review` 返回同一只读 DTO；
 `review` endpoint 是 Desktop / operator console 的语义化入口。默认只返回 `open`
-和 `confirmed`。可重复传 `status` 和 `kind`，并按 `task` 或 `task_ref` 过滤。
+和 `confirmed`。可重复传 `status` 和 `kind`，并按 `task_ref` 过滤。
 `include_all=true` 且没有显式 `status` 时返回完整历史；`limit` 使用普通列表上限。
 这些 list/review routes 是 board-scoped surface；只返回该 board 的 signal rows。
 `GET /api/v1/signals/{signal_id}` 是 operator-wide detail lookup，用于从 backlink、
@@ -1648,6 +1807,7 @@ inbox row 或审计记录直接打开已知 signal。该 detail route 不改变 
 
 响应：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": [
@@ -1677,7 +1837,7 @@ inbox row 或审计记录直接打开已知 signal。该 detail route 不改变 
         "actor": "codex",
         "agent_type": "codex",
         "source": "codex-hook",
-        "evidence_json": "{\"command\":\"kanban task create --required ...\"}",
+        "evidence": {"command":"kanban task create --required ..."},
         "created_at": 1782930000000
       }
     }
@@ -1687,6 +1847,7 @@ inbox row 或审计记录直接打开已知 signal。该 detail route 不改变 
 
 `GET /api/v1/signals/{signal_id}` 返回单条 signal：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -1708,7 +1869,7 @@ binding 仍通过 task label API 或 CLI 完成。
 
 ```http
 POST /api/v1/tasks/{task_id}/label-ontology/observations
-GET /api/v1/boards/{board}/label-ontology/signals?status=open&kind=false_negative&task=default%2312&label=cli&proposed_label=database&include_all=false&limit=100
+GET /api/v1/boards/{board}/label-ontology/signals?status=open&kind=false_negative&task_ref=default%2312&target_label_ref=cli&proposed_label_name=database&include_all=false&limit=100
 GET /api/v1/boards/{board}/label-ontology/review?group_by=label&include_all=false&limit=100
 GET /api/v1/label-ontology/signals/{signal_id}
 POST /api/v1/boards/{board}/label-ontology/actions
@@ -1723,6 +1884,7 @@ observation 和 child signals。HTTP endpoint 不自行运行 `label suggest`；
 服务端会从 snapshot 派生 observation metrics，agent/reviewer 只提交候选、最终判断、
 signals、candidate atom 和 rationale。请求 body：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "actor": {"name": "label-agent", "type": "agent", "agent_type": "local"},
@@ -1765,17 +1927,16 @@ signals、candidate atom 和 rationale。请求 body：
 HTTP ontology DTOs use natural JSON fields for new clients:
 `agent_candidates`, `suggestion_snapshot`, `final_decision`, `diagnostics`,
 signal `related_labels` / `proposal`, action `change` / `validation`, and
-validate `validation`. Legacy escaped-string fields (`agent_candidates_json`,
-`suggestion_snapshot_json`, `final_decision_json`, `diagnostics_json`,
-`related_labels_json`, `proposal_json`, `change_json`, `validation_json`) are
-accepted for one compatibility window, but a request must not supply both the
-natural field and its legacy `*_json` sibling. When `suggestion_snapshot`
+validate `validation`. Legacy escaped-string request siblings (`related_labels_json`,
+`proposal_json`, `change_json`, `validation_json`, and the observation `*_json`
+aliases) are no longer accepted by the public HTTP API. Unknown legacy keys fail
+closed with `400 invalid_input`; clients must send the natural JSON fields. When `suggestion_snapshot`
 contains `coverage`, `coverage_cosine`, `residual_norm`, `needs_new_label`,
 `degraded`, or `diagnostics`, the server derives the stored observation metrics
 from that snapshot. If the request also supplies the matching top-level
 `suggest_*` field or `diagnostics` and the values conflict, the request returns
 `400 invalid_input`. New clients should not repeat snapshot facts as top-level
-scalars; those fields remain for compatibility with older service-shaped callers.
+scalars.
 
 Service 会读取当前 task snapshot、解析 `target_label_ref`、计算 normalized proposed
 label name、signal key 和 candidate atom content hash。`capture_fingerprint` 为空时
@@ -1793,7 +1954,7 @@ Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
 `update_semantics` 必须提供 target label；`bootstrap_label` 必须提供
 `proposed_label_name`；`rename_label` 必须提供 target label 和
 `proposed_label_name`；`split_label` / `merge_labels` 必须提供 target label 和非空
-`related_labels` / `related_labels_json`。Observation metric `suggest_coverage`、
+`related_labels`。Observation metric `suggest_coverage`、
 `suggest_coverage_cosine`、`suggest_residual_norm` 以及 signal metric
 `suggest_score` / `confidence` 必须是 finite `0.0..=1.0`；`suggest_rank` 必须为
 `null` 或 `>= 1`。违反这些契约的 request 返回 `400 invalid_input`，不会写入
@@ -1802,15 +1963,16 @@ review signal proposed_action 保存，不能通过 public HTTP route 写入 can
 mutation action；旧 structure-plan rows 只读展示为 unsupported validation requirement。
 
 `GET /api/v1/boards/{board}/label-ontology/signals` 默认只返回 `open` 和
-`confirmed`。可重复传 `status` 和 `kind`，并按 `task`、`label`、
-`proposed_label`、`include_all`、`limit` 过滤。
+`confirmed`。可重复传 `status` 和 `kind`，并按 `task_ref`、`target_label_ref`、
+`proposed_label_name`、`include_all`、`limit` 过滤。
 
 `GET /api/v1/boards/{board}/label-ontology/review` 返回只读聚合 review queue。
-`group_by` 支持 `label`、`candidate-atom` / `candidate_atom`、`proposed-label` /
-`proposed_label`、以及 opt-in `cluster`，默认 `label`；`include_all=false` 默认只聚合 `open` 和
+`group_by` 支持 `label`、`candidate_atom`、`proposed_label`、以及 opt-in `cluster`，
+默认 `label`；`include_all=false` 默认只聚合 `open` 和
 `confirmed` signals，`true` 时包含完整历史；`limit` 限制 group 数量。响应
 `meta` 回显 `group_by`、`include_all` 和 `limit`。每个 group 包含：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "group_by": "label",
@@ -1865,6 +2027,7 @@ proposed action、target label 和 proposed-label scope，避免跨 label/action
 `cluster_reason` 说明 key 来源。`GET /api/v1/label-ontology/signals/{signal_id}`
 返回：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -1877,6 +2040,7 @@ proposed action、target label 和 proposed-label scope，避免跨 label/action
 
 `POST /api/v1/boards/{board}/label-ontology/actions` 写 review/lifecycle action：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "actor": {"name": "alice", "type": "user", "agent_type": null},
@@ -1900,9 +2064,9 @@ proposed action、target label 和 proposed-label scope，避免跨 label/action
 
 该公共 action endpoint 只接受 lifecycle action types：`confirm`、`reject`、
 `supersede` 和 `resolve_no_change`，并会同步更新 source signal status。请求中的
-`parent_action_id`、`target_label_ref`、result 字段、canonical hash、`change` /
-`change_json`、`validation_requirement`、`validation_status`、
-`validation_effective_outcome` 和 `validation` / `validation_json` 必须为
+`parent_action_id`、`target_label_ref`、result 字段、canonical hash、`change`、
+`validation_requirement`、`validation_status`、
+`validation_effective_outcome` 和 `validation` 必须为
 `null`/缺省；否则返回
 `invalid_input`。`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、
 `update_semantics`、`create_label_proposal`、`bootstrap_label`、`revert_ontology_mutation`、`validate` 等 mutation/validation action
@@ -1915,6 +2079,7 @@ semantics PUT、apply atom、proposal create/accept、task-label bootstrap 或 v
 `POST /api/v1/boards/{board}/label-ontology/apply/atom` 对已有 label 执行
 read-modify-upsert semantics，并写入 atom provenance action：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "actor": {"name": "codex", "type": "agent", "agent_type": "codex"},
@@ -1949,6 +2114,7 @@ canonical atom 实际新增时才标脏 label atom index；vector rebuild 和 su
 `POST /api/v1/boards/{board}/label-ontology/revert` 追加可追溯 rollback action，并把
 目标 label semantics 恢复为被撤销 mutation action 的 before snapshot：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "actor": {"name": "reviewer", "type": "user", "agent_type": null},
@@ -1970,11 +2136,12 @@ external failed/partial 诊断，但不会被当作可 trusted-passed 的 pendin
 staged bootstrap verify 的失败路径在提交前零写入，不再依赖提交后的恢复流程。
 
 `POST /api/v1/boards/{board}/label-ontology/validate` 追加 external attestation
-validation action。HTTP route 接收调用方提交的 `validation` / `validation_json`，
+validation action。HTTP route 接收调用方提交的自然 JSON `validation`，
 但当前不运行 vector rebuild、index query 或 `label suggest`，因此它不能产生
 trusted automated `passed`。需要 trusted automated validation 时使用 CLI
 `label ontology validate --trusted`，由工具采集 index/suggest evidence 后写入。
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "actor": {"name": "codex", "type": "agent", "agent_type": "codex"},
@@ -2006,7 +2173,7 @@ trusted automated `passed`。需要 trusted automated validation 时使用 CLI
 }
 ```
 
-Service 会把 supplied `validation` / `validation_json` 包进 validation envelope，附上
+Service 会把 supplied `validation` 包进 validation envelope，附上
 source signal cases、observation task snapshot / suggest input hash 与当前 task hash
 对比、parent action result 引用和 summary。公共 supplied/collected payload 只保存在
 top-level `manual`；generated `cases[]` 通过 `after.manual_case_ref` 指向
@@ -2077,6 +2244,7 @@ Ref 形状 query 不会从 title、description、comments、runs 或 events 中�
 
 Response:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -2126,6 +2294,7 @@ the response follows query parameter order. Omitting `status` returns an empty
 
 Response:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -2170,6 +2339,7 @@ GET /api/v1/search/status?board=default
 
 Response:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -2255,4 +2425,63 @@ MVP 建议只提供 CLI backup，不开放 HTTP backup。
 
 ### Signal Comments
 
-API comment DTOs use `kind: "signal"` for signal ledger backlink comments. The `metadata_json` string remains the structured payload carrier and contains `type:"signal_link"`, `signal_id`, `observation_id`, `signal_kind`, and `signal_status`. Clients should render the body as a readable fallback and may link to the signal detail using `signal_id`.
+API comment DTOs use `kind: "signal"` for signal ledger backlink comments. The natural `metadata` object contains `type:"signal_link"`, `signal_id`, `observation_id`, `signal_kind`, and `signal_status` for service-generated backlinks. Generic signal comment metadata remains open and lossless; clients should render the body as a readable fallback and may link to a signal detail only when the complete backlink shape is present.
+
+
+## Transport catalog implementation note
+
+本规范所列的每个 API/SSE method/path 都由 `kanban-contract` 的 endpoint descriptor catalog 作为唯一实现 source。注册 handler 时使用稳定 `operation_id` 与 `adapter_id`；这两个 identity 分别表示公开 endpoint 和 server runtime binding，不是 Rust type name、函数地址或 `stringify!` 推导值。
+
+
+## B1-C2b task-read 成功响应契约
+
+`GET /api/v1/boards/:board/tasks` 与 `GET /api/v1/boards/:board/tasks/by-status` 各自拥有独立、精确且闭合的成功响应契约，仅共享 `ApiTask`、`ApiLabel` 与既有 `OffsetPaginationMeta`/`TotalPaginationMeta` primitives。列表响应为 `data[]` 与既有 `TotalPaginationMeta { limit, offset, total }`；按状态响应包含有序窗口，每个窗口使用同一 `TotalPaginationMeta`，外层使用既有 `OffsetPaginationMeta { limit, offset }`。这只是 Rust 类型复用，JSON wire 形状不变。
+
+Desktop 仅对这两个读取端点使用 endpoint-specific recursive exact parser：成功响应的 envelope、`meta`、窗口、共享 `ApiTask`、`ApiLabel` 与既有 `OffsetPaginationMeta`/`TotalPaginationMeta` primitives 都必须闭合且完整，pagination 数值必须是非负 safe integer；错误响应也必须是闭合的 `error { code, message, details? }` envelope。任何 malformed、mixed、missing 或 extra shape 统一返回 `invalid_response`，合法错误继续保留 `code`、`message` 与可选 `details`。其它 generic optional envelope 不受影响。两个 endpoint 的 headers 仍为 `Todo`，本次不采纳任何其它 endpoint。
+
+
+## B2-C3 comments exact contract
+
+List/create comments 使用各自的 exact path/response root，create 另有 exact request root；五个 roots 均有真实 producer/consumer witness。`author_type` 仅为 `user|agent`，`kind` 仅为 `note|decision|signal`；agent 的 `agent_type` 可缺失、null 或空白（空白归一化为 null），user 携带非空 `agent_type` 仍由 service 拒绝。unknown enum 在 typed API 边界返回 400。写入 comment 与 `task.comment.created` event 保持同一 SQLite transaction。B7 已采用 endpoint-specific header contracts；surface migration 仍为 Generated，等待后续 API adoption cohort 的 exact surface evidence。
+
+### 8.4 B2-C4 exact run-read contracts
+
+List/get 分别拥有闭合 path 与 success root，只共享 contract-owned `ApiRun`。Run status 是闭合
+enum：`running|succeeded|failed|canceled|expired`。`worker_profile`、`worker_pid`、
+`finished_at`、`exit_code`、`summary` 与 `error` 都是必须出现但可为 `null` 的字段。
+`claim_token` 只存在于显式 claim transition response，不进入 list/get run；SQLite `log_path`
+只供独立 get-run-log handler 解析受信任文件，不进入 list/get run。读取 archived task 的历史仍被
+允许；list 先由全局 task id 解析真实 board，再通过同一 SQLite service path board-scope 查询。
+Headers 保持 `Todo`，两个 endpoint 因而保持 `Generated`。schema 只约束 JSON shape，不替代
+claim、complete、reopen、archive 或 board isolation service guard。
+### 12.6 B4-C1 exact task-label association contracts
+
+`GET /api/v1/tasks/{task_id}/labels`、`POST /api/v1/tasks/{task_id}/labels` 与 `DELETE /api/v1/tasks/{task_id}/labels/{label_id}` 分别拥有闭合、endpoint-specific path/success root；POST 另有闭合 request root。成功响应递归复用同一个 contract-owned `ApiLabel`/`ApiTask` wire shape；POST 的可选 `meta.created_labels` 仅在实际创建 label identity 时出现。Desktop add/remove caller 对 envelope、task、nested labels 与 created-label metadata 做递归 exact 校验，malformed/extra/null meta 统一返回 `invalid_response`。
+
+本批不收敛 board label identity、bootstrap、semantics、atoms/index、suggestion/proposal 或 ontology ledger endpoint。HTTP headers 保持 `Todo`，三个 endpoint 因而保持 `Generated`；name/names 互斥、batch transaction、board/archive scope、幂等与事件语义继续由既有 SQLite service guard 拥有。
+
+## B5-C2 execution/dependency exact contracts
+
+以下 endpoint 已采用各自闭合的 path 与 success response root；有 JSON request 的 endpoint
+同时采用闭合 request root：
+
+- `GET|POST /api/v1/tasks/{task_id}/dependencies`
+- `DELETE /api/v1/tasks/{child_task_id}/dependencies/{parent_task_id}`
+- `POST /api/v1/tasks/{task_id}/execution-plan/not-required`
+- `GET /api/v1/runs/{run_id}/log`
+- `GET /api/v1/boards/{board}/columns`
+
+Dependency 三个 success root 只复用 contract-owned `ApiDependencies`、`ApiDependencyTask`、
+`ApiDependencyEdge` 和既有 `ApiTask` components；它们仍是 endpoint-specific roots，不是一个
+family shortcut。add 的 `201 Created` / idempotent `200 OK`、cycle rejection、edge/event/status
+recompute transaction 与 board scope 继续由 SQLite service guard 决定。Mark-plan response 只返回
+execution-plan record，不能绕过 required-step 或 task-status guard。
+
+Get-run-log 的 runtime 本来就是 JSON envelope，因此采用
+`{ data: { run_id, content, truncated } }` exact root；`log_path` 和 claim token 保持私有，256 KiB
+tail window 与 lossy UTF-8 读取语义不变。List-columns 返回完整 column fields，包括 required-nullable
+`wip_limit`，column status 仍是 canonical task status enum，不能改变 `tasks.status`。
+
+这些 endpoint 的无 query/body 维度标记 `NotApplicable`。通用 actor、locale 与 content-type
+headers 本批保持 `Todo`，由后续统一 transport-closure cohort 处理，因此 endpoint migration
+保持 `Generated`。

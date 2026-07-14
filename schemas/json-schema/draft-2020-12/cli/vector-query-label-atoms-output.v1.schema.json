@@ -1,0 +1,107 @@
+{
+  "$defs": {
+    "CliLabelAtomHit": {
+      "additionalProperties": false,
+      "properties": {
+        "atom_id": {
+          "type": "string"
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "content_hash": {
+          "type": "string"
+        },
+        "distance": {
+          "format": "float",
+          "type": "number"
+        },
+        "embedding_model": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "label_id": {
+          "type": "string"
+        },
+        "label_name": {
+          "type": "string"
+        },
+        "ordinal": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "polarity": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "atom_id",
+        "label_id",
+        "label_name",
+        "board_id",
+        "polarity",
+        "kind",
+        "text",
+        "ordinal",
+        "content_hash",
+        "embedding_model",
+        "distance"
+      ],
+      "type": "object"
+    },
+    "CliLabelAtomVectorHit": {
+      "additionalProperties": false,
+      "properties": {
+        "hit": {
+          "$ref": "#/$defs/CliLabelAtomHit"
+        },
+        "vector": {
+          "items": {
+            "format": "float",
+            "type": "number"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "hit",
+        "vector"
+      ],
+      "type": "object"
+    },
+    "CliVectorLabelAtomHit": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CliLabelAtomHit"
+        },
+        {
+          "$ref": "#/$defs/CliLabelAtomVectorHit"
+        }
+      ]
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:vector-query-label-atoms-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/$defs/CliVectorLabelAtomHit"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI vector query-label-atoms output v1",
+  "type": "object"
+}

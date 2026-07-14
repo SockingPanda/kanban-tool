@@ -1,0 +1,30 @@
+{
+  "$id": "urn:kanban-tool:schema:api:list-events-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "after": {
+      "default": 0,
+      "format": "int64",
+      "type": "integer"
+    },
+    "board": {
+      "default": "default",
+      "type": "string"
+    },
+    "limit": {
+      "default": 100,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "task_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "Kanban list events query v1",
+  "type": "object"
+}

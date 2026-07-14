@@ -159,7 +159,8 @@ build_deb() {
   out_file="$out_dir/${PACKAGE_NAME}_${VERSION}-${REVISION}_${arch}.deb"
 
   rm -rf "$package_root"
-  mkdir -p "$control_dir" "$out_dir"
+  install -d -m 0755 "$control_dir"
+  mkdir -p "$out_dir"
   install_payload "$package_root"
   installed_size="$(du -sk "$package_root/usr" | awk '{ print $1 }')"
   depends="$(deb_depends "$package_root")"

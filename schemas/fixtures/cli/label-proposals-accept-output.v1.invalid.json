@@ -1,0 +1,31 @@
+{
+  "data": {
+    "applies_when": [
+      "touches Rust service code"
+    ],
+    "board_id": "b_FIXTURE_1",
+    "created_at": 100,
+    "created_by": "fixture",
+    "decided_at": 100,
+    "decision_reason": "fixture accept",
+    "description": "Fixture proposal",
+    "diagnostics": [],
+    "excludes_when": [],
+    "heuristic_coverage": 0,
+    "heuristic_coverage_cosine": 0,
+    "heuristic_residual_norm": 1,
+    "id": "lp_FIXTURE_1",
+    "name": "database",
+    "negative_examples": [],
+    "positive_examples": [
+      "service change"
+    ],
+    "resolved_label_id": "l_FIXTURE_1",
+    "status": "accepted",
+    "task_id": "t_FIXTURE_1",
+    "top1_existing_label_id": null,
+    "top1_existing_label_name": null,
+    "updated_at": 100
+  },
+  "unexpected": true
+}

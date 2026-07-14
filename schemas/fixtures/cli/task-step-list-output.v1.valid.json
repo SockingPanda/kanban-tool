@@ -1,0 +1,70 @@
+{
+  "data": {
+    "execution_plan": {
+      "board_id": "b_fixture",
+      "reason": null,
+      "state": "planned",
+      "task_id": "t_parent",
+      "updated_at": 101,
+      "updated_by": "system"
+    },
+    "steps": [
+      {
+        "body": "Keep the linked task visible",
+        "created_at": 102,
+        "created_by": "fixture",
+        "id": "s_fixture",
+        "linked_task": {
+          "archived_at": null,
+          "assignee": null,
+          "board_id": "b_fixture",
+          "board_slug": "default",
+          "claim_expires_at": null,
+          "claim_owner": null,
+          "completed_at": null,
+          "completed_required_step_count": 0,
+          "created_at": 104,
+          "created_by": "fixture",
+          "current_run_id": null,
+          "dependency_blocked": false,
+          "description": null,
+          "due_at": null,
+          "execution_plan_state": "unplanned",
+          "id": "t_linked",
+          "labels": [],
+          "last_heartbeat_at": null,
+          "lock_version": 0,
+          "max_retries": null,
+          "metadata": {},
+          "optional_step_count": 0,
+          "position": 2048,
+          "priority": 3,
+          "ref": "default#2",
+          "required_step_count": 0,
+          "result": null,
+          "result_summary": null,
+          "retry_count": 0,
+          "scheduled_at": null,
+          "seq": 2,
+          "started_at": null,
+          "status": "triage",
+          "status_reason": null,
+          "title": "Linked implementation",
+          "unfinished_parent_count": 0,
+          "updated_at": 105
+        },
+        "parent_task_id": "t_parent",
+        "position": 1024,
+        "required": true,
+        "resolution_note": null,
+        "resolved_at": null,
+        "resolved_by": null,
+        "status": "todo",
+        "title": "Implement linked work",
+        "updated_at": 103,
+        "updated_by": "fixture"
+      }
+    ],
+    "task_id": "t_parent"
+  }
+}

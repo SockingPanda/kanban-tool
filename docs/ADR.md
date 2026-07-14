@@ -591,6 +591,7 @@ decision 不是 task status，不是 event，不是 ADR 替代品。
 
 建议第一版 shape：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "options": [
@@ -973,3 +974,72 @@ Add board-scoped `signal_observations` and `signals` tables. `kanban signal reco
 ### Consequences
 
 Signal ledger becomes the canonical place for generic agent/product signals. Label ontology ledger remains label-specific and is not reused for generic product signals.
+
+
+## ADR: API/SSE transport descriptor 作为单一 method/path authority
+
+- 决策：在 `kanban-contract` default feature 保存 84 个 API/SSE descriptor；server router 以 `operation_id` + 显式 `adapter_id` 绑定真实 handler，并读取 descriptor method/path。
+- 原因：此前 `SurfaceOperation` 与 router 各自手写 method/path，虽然有 parity test，仍保留双写漂移面。
+- 后果：`SurfaceOperation` 的 API/SSE 记录改为投影；CLI/JSONL 保持其独立 inventory。schema root 使用 `contract_id`，不与 endpoint `operation_id` 混淆。DTO/schema adoption 不在本决策中提前完成。
+
+
+## ADR: B1-A Error 与 delete response 的 wire 收口边界
+
+- 决策：`ErrorBody.code` 使用闭合的 `ApiErrorCode`，server adapter 显式将 `KanbanError` 映射为 enum；label semantics delete handler 使用 `DeleteResponse`/`DeleteResult`，不再公开 `DataEnvelope<serde_json::Value>`。
+- 原因：稳定 error code 与固定 delete acknowledgement 已具备可验证 wire 形状；把任意 `String`/`Value` 留在公开边界会削弱 schema、typed consumer 与 drift gate。
+- 后果：该决策只拥有 wire/schema evidence。HTTP status、locale message、service guard、状态机、CAS、transaction 与 SQLite 继续由 adapter/service/core 负责。delete endpoint 的 path/query/header/body obligations 尚未建模，因此 endpoint 与 response migration 均保持 `generated`，不以局部 response typing 提前关闭 adoption。
+
+
+## ADR: B1-C0 Transport location、cardinality 与 exact/shared binding
+
+- 决策：API/SSE semantic contract 显式声明 `Http { operation_key, location, parameters }`，非 HTTP contract 显式声明 `NoTransport`；parameter cardinality 只允许 `RequiredOne|OptionalOne|RepeatedOrdered`。`Success` 只表示 2xx success；非 2xx `Error` 是仅允许 `SharedComponent` 的第七个 transport location，但 endpoint 仍只有 path/query/headers/body/success/SSE 六类 obligation。任意 `Adopted` contract 和 endpoint exact reference 都必须是 `granularity=Exact`。
+- 原因：仅有 contract ID 与 input/output 方向无法区分 path/query/header/body/2xx success/shared error/SSE，也无法证明 query 重复值顺序、path placeholder 映射或 shared error envelope 的真实复用关系；把 error 继续标成 `Success`、允许 Family 冒充 exact，都会使 coverage 失真。
+- 唯一性：endpoint exact binding 不维护全局 second-binding map。method/path 唯一、contract 的精确 `operation_key` 和单一 location 已共同推出合法 binding 唯一：同 route 的第二个 endpoint 先被 method/path 拒绝，不同 route 被 operation key 拒绝，同 endpoint 的第二个 obligation 被 location 拒绝。surface catalog 的重复 exact reference 仍是可达输入，继续单独 fail closed。
+- Shared orphan policy：`SharedComponent` 可以跨多个 endpoint 复用且永不计入 exact/adoption coverage。generated/adopted shared 满足“至少一个显式 linkage”或“同 surface 的真实 adoption witness”之一即可；只有两者均缺失才是 orphan。`api.error.response` 使用 `location=Error`，当前由 list-tasks 显式链接。
+- 后果：validator 对 unknown/`Planned`/`Excluded` 引用、错误 binding/granularity/location/direction/operation/surface、path 名称/缺失/额外/顺序/大小写漂移、header 大小写冲突、非法 parameter location 和 shared miscount fail closed。13 个 B1-B lifecycle request 保持 body transport 与既有 runtime 语义；本决策不迁移 handler DTO、不改变 HTTP status/service/state-machine 行为，也不关闭 endpoint `Todo`。冻结值为 `stream-events.sse=Todo`、endpoint `Todo=389`、总未闭合 `636`。
+
+
+## ADR: B1-C1 Task-read exact path/query contract 与单一 ordered parser
+
+- 决策：`GET /api/v1/boards/:board/tasks` 与 `/tasks/by-status` 分别拥有独立 path/query DTO，
+  形成 4 个 `Adopted` exact contract。两个 server-local typed Axum extractor 分别绑定对应
+  `Path<...>`，并各自从 `parts.uri.query()` 读取一次 raw URI 后进入共享 ordered parser；handler
+  只接收已绑定的 request，不持有 `RawQuery`、`Query<T>` 或第二个 raw source。
+- Query grammar：只有 `status`、`priority`、`label`、`plan_filter` 是
+  `RepeatedOrdered`；其余 scalar 重复、未知 key 与旧 `search` alias 均返回
+  `400 invalid_input`。54-pair 上限由 9/4/3/32 个 repeated budgets 加 6 个 scalar 参数推导；
+  raw query 上限为 8192 bytes。`q` 是唯一文本搜索 key。label 会 trim Unicode 边缘空白，
+  但纯 Unicode 空白失败关闭；percent/UTF-8、enum、priority、limit、offset 和 sort 边界由
+  真实 router URI matrix 固定。
+- 证据边界：每个 contract 都有独立 DTO-to-fixture producer 和 fixture-to-real-router consumer；
+  非默认 board sentinel 证明真实 path consumption。AST tests 锁定 DTO ownership、typed
+  extractor、两个 raw URI 消费点及 handler `&path.board` 到 `list_tasks_page` 的实参，并以显式
+  mutation 覆盖 alias、private DTO、wrong extractor、dual source、second raw parser 和两个
+  handler 各自的 `path.board -> default`。producer/consumer region guard 只证明当前源码区域直接
+  分离，不把任意未来共同 helper indirection 夸大为 mutation-complete 证明。
+- 后果：Desktop/Web/CLI 的 HTTP caller 必须使用上述 grammar；现有 Desktop caller 已使用 `q`
+  并保留 repeated 参数顺序。SQLite service 的 defensive limit 直接引用唯一 application authority，
+  server equality gate 覆盖该实际 service path；service 查询行为与 core 状态机不变。GET body 为
+  `NotApplicable`，headers 与 success response 保持 `Todo`，所以两个 endpoint 只推进到
+  `Generated`，不提前声称完整 adoption。冻结值变为 `Contract=19`、`Todo=383`、
+  `NotApplicable=102`、总未闭合 `630`。
+
+
+## B1-C2b task-read 成功响应决策
+
+决定让两个 task-read endpoint 分别拥有闭合响应 contract，只复用 `ApiTask`、`ApiLabel` 与既有 pagination primitives，避免共享 envelope 掩盖 endpoint 差异。行为细节以 [API_SPEC](API_SPEC.md#b1-c2b-task-read-成功响应契约) 和 [SCHEMA_CONTRACTS](SCHEMA_CONTRACTS.md#b1-c2b-task-read-成功响应契约) 为准。
+## ADR-0015：Oxigraph quick-xml 安全临时 vendor patch
+
+### Status
+
+Accepted（Phase 2 temporary exception）
+
+### Context
+
+`oxrdfxml 0.2.3` 与 `sparesults 0.3.3` 的 crates.io 版本仍解析到受 RUSTSEC-2026-0194/RUSTSEC-2026-0195 影响的 `quick-xml < 0.41`；security commit `52870a3` vendor 了上游修复源码并统一到 `quick-xml 0.41.0`。
+
+### Decision
+
+允许 root `Cargo.toml` 唯一的 `[patch.crates-io]` 例外，且仅接受 `oxrdfxml`/`sparesults` 两个精确仓内 vendor 路径、package name/version 与普通文件目标。`schema_dependency_policy` 对额外 key、非精确 source/path、path traversal、symlink、全部 `[replace]` 保持 fail-closed；schema-tool registry closure 不变，产品图继续禁止 schema tooling 泄漏。
+
+由 security owner 维护，待 crates.io 上游版本发布并确认 `quick-xml >= 0.41` 后移除 vendor、`[patch]`、lockfile 变更及本 ADR；advisory、provenance 或 vendor digest 变化必须重新 review。复核期限：2026-10-12。

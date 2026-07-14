@@ -12,6 +12,7 @@
 
 - 产品/范围/非目标：`docs/SPEC.md`
 - crate、进程、数据流或 service path：`docs/ARCHITECTURE.md`
+- 公开 machine contract、schema、fixture、artifact 或 dependency isolation：`docs/SCHEMA_CONTRACTS.md`
 - 状态、transition、claim、recompute：`docs/STATE_MACHINE.md`
 - schema、ID、事件、查询模型：`docs/DATA_MODEL.md`、`migrations/001_initial.sql`
 - CLI 行为、参数、输出或退出码：`docs/CLI_SPEC.md`
@@ -32,6 +33,11 @@
 - 不允许绕过 service path 或状态机 guard 直接写 `tasks.status`。
 - `ready -> running` 必须是原子 claim transaction：CAS update + run + event。
 - `blocked -> ready` 必须重新计算 spec、schedule、dependency，不允许盲设。
+- contract 默认是 `operation_id`、method、path 与 obligation 的 authority；router 只保存 `adapter_id` + handler，并从 descriptor 读取 method/path。
+- API/SSE contract 必须显式声明 `Http { operation_key, location, parameters }`，其它 surface 必须显式声明 `NoTransport`；path/query/headers 参数逐项声明 cardinality，禁止隐式缺省。`Success` 只表示 2xx success；`Error` 只用于 `SharedComponent` 的非 2xx response，不新增 endpoint obligation。
+- 任意 `Adopted` contract 和任意 endpoint `ExactSurface` 引用都必须是 `granularity=Exact`。Exact endpoint 唯一性由唯一 method/path、精确 `operation_key` 与单一 location 共同推出，不维护冗余的全局 second-binding 状态。
+- `SharedComponent` 可以被多个 endpoint 显式复用，但不计入 exact coverage，也不能单独把 endpoint 提升为 `Adopted`；generated/adopted shared 必须满足“至少一个显式 linkage”或“同 surface 的真实 adoption witness”之一。
+- contract 只拥有 wire/schema evidence；locale、HTTP status、service guard、状态机、CAS、transaction 与 SQLite 继续属于 adapter/service/core。
 - review 不自动触发执行；dispatcher 不 claim `review`。
 
 ## Desktop frontend guidance
@@ -52,14 +58,6 @@
 - 文档小改、只读分析或无代码行为变化的单文件校准可以跳过分支/TDD，但必须说明原因并做最小验证。
 - 提交语义使用 Conventional Commits。
 
-## 开发执行位置
-
-- 后端/Rust 行为变更默认在 `remote-build-host` 云服务器执行，包括 Rust workspace、CLI/server/helper、SQLite/service、Tauri Rust side、release/package、Rust check/test/clippy/build 和发布打包验证。
-- 前端开发默认在本地执行，包括 `apps/desktop` 的 React/Vite/TypeScript/CSS/UI 层、前端测试、typecheck 和 UI 预览。
-- 文档、前端-only、只读分析或不触及 Rust/backend 行为的小改动不要求云端验证；如果云端验证适用但不可用，最终报告必须明确验证缺口。
-- 不要用本地 Rust build/test/check/clippy/release 结果替代需要云端执行的后端验证；如果一次变更同时涉及前端和后端，分别记录本地前端验证和 `remote-build-host` 后端验证的 evidence origin。
-- 后端云端任务结束、失败或阻塞后，按云服务流程清理多余远端 worktree，并停止 `remote-build-host`，除非用户在同一轮明确要求保持运行。
-
 ## 全局 skill 同步
 
 - 任何改动如果改变了用户可见的 kanban CLI、API、data model、workflow、status、task、dependency、comment、JSON、help 或已实现使用说明，implementer 必须检查全局 Codex skill `kanban-tool` 是否需要同步。
@@ -73,18 +71,20 @@
 
 ### 默认使用 just
 
-- 本仓库验证优先使用 `just`；后端/Rust 验证在 `remote-build-host` 执行，前端验证按“开发执行位置”在本地执行。会写 Cargo target 的 recipes 已经内置共享 target root 与构建锁。
+- 本仓库验证优先使用 `just`。会写 Cargo target 的 recipes 已经内置共享 target root 与构建锁。
 - 不要直接运行会写 Cargo target 的 raw `cargo build/test/check/clippy/nextest/run`；需要新验证入口时，先加 `just` recipe。
 - 验证、review、acceptance gate 必须在用户指定的工作树 / 目录中执行；不要为验证擅自切换到额外 worktree、临时 clone、新路径或隔离目录。
-- 不要额外设置 `KANBAN_CARGO_TARGET_ROOT`、`CARGO_TARGET_DIR` 或其它自定义 target/cache 隔离变量；使用本仓库 `just` recipes 内置的共享 target root 与构建锁。
+- 不要额外设置 `KANBAN_CARGO_TARGET_ROOT`、`CARGO_TARGET_DIR` 或其它自定义 target/cache 隔离变量；使用本仓库 `just` recipes 内置的 exact shared target 与构建锁；所有 worktree 必须解析到同一 `CARGO_TARGET_DIR`，不得派生 per-worktree 子目录。
 - 如果确实需要任何额外隔离、新路径、临时 target 或不同工作树，必须先得到用户明确授权。
 - 查看可用入口：`just --summary`。
 
 常用验证：
 
-- Rust 快速检查：`just fmt`、`just check`、`just test`、`just clippy`、`just rust-fast`。其中 `just test` / `just clippy` 默认覆盖 core set；需要 helper-heavy backend 时使用 `just test-full` / `just clippy-full` 或 `just rust-full`。
+- Rust 快速检查：`just fmt`、`just check`、`just test`、`just clippy`、`just rust-fast`。`just fmt`（及 `fmt-check` alias）只显式选择 core package 集；`just test` / `just clippy` 默认覆盖同一 core set。
+- Helper/full 验证：`just fmt-full`、`just test-full`、`just clippy-full`、`just rust-full`。`fmt-full` 只显式选择 core + helper package 集；这些产品门禁均排除 desktop 与 `kanban-schema-tool`。
 - 单 crate：`just check-p kanban-cli`、`just test-p kanban-cli`、`just clippy-p kanban-cli`。
 - feature 组合：`just feature-p kanban-cli tantivy-backend`。
+- 公开 JSON contract / schema：`just schema-contract`。该 gate 必须先执行 dependency isolation，再用 `schema-fmt` 精确格式化检查 `kanban-contract` + `kanban-schema-tool`，随后运行 feature/tool/artifact/surface/adoption gates；不得用 workspace-wide `cargo fmt` 混入 leaf。full locked metadata、真实 `Cargo.lock` 与 `policy/schema-tool-registry-closure.json` 锁定 opaque logical SourceId、reachable registry tuple/checksum 双向精确集合、effective features、target surface 和产品排除；approval 只比较、不自动 bless。真实 `just` parser AST hash + fake executable ordered trace 还锁定产品 fmt lane、full/rust 调用图、schema/release/closure 内部顺序与 `test-full` 双分支；Cargo source replacement 可使用等价物理 mirror，crate 内容仍由 Cargo fetch/build 按 registry index `cksum` 验证。
 - Desktop / Web：`just desktop-check`、`just desktop-package`、`just web-test`、`just web-typecheck`、`just web-build`。
 - CLI package 与 smoke：`just cli-package`、`just smoke`。
 - 脚本 / 文档小改动：`just target-tools`、`just diff-check`。
@@ -98,6 +98,8 @@
 当前主要 crate：
 
 - `kanban-core`：领域类型、状态机、guard/recompute helper；不依赖 SQLite/HTTP/CLI。
+- `kanban-contract`：候选/已采用 wire DTO、operation inventory、surface catalog 与 schema root registry；默认 runtime 依赖图不包含 schema tooling。
+- `kanban-schema-tool`：独立 leaf tooling，拥有 `kanban-schema` binary、离线校验与 artifact drift gate；direct dependency 必须且只能是 5 条已批准 normal edge，不得新增 dev/build/target edge；全部 Cargo auto target discovery 必须关闭且只允许显式批准的 lib/bin/test；full locked resolve 必须指向 canonical workspace tool/contract 和批准的逻辑 registry closure；其它 workspace member 不得引用它，default/core/helper/full 产品 recipes 也不得选择或调用它。
 - `kanban-sqlite`：SQLite 连接、migration/init、application service、transaction、query helper。
 - `kanban-cli`：`kanban` CLI。
 - `kanban-server`：localhost HTTP API / SSE。

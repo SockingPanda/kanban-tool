@@ -1,0 +1,15 @@
+{
+  "$id": "urn:kanban-tool:schema:helper:vector-check-provider-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ok"
+  ],
+  "title": "Vector Helper Check Provider Response v1",
+  "type": "object"
+}

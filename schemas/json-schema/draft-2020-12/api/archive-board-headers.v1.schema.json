@@ -1,0 +1,27 @@
+{
+  "$id": "urn:kanban-tool:schema:api:archive-board-headers:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "Accept-Language": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "Content-Type": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "X-KB-Actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "Kanban api.archive-board request headers v1",
+  "type": "object"
+}

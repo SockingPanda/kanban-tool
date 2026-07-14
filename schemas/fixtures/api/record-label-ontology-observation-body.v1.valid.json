@@ -1,0 +1,27 @@
+{
+  "actor": {
+    "name": "fixture",
+    "type": "user"
+  },
+  "signals": [
+    {
+      "kind": "false_negative",
+      "target_label_ref": "fixture",
+      "proposed_action": "add_positive_atom",
+      "candidate_atom": {
+        "polarity": "positive",
+        "kind": "applies_when",
+        "text": "fixture"
+      },
+      "proposed_label_name": null,
+      "agent_selected": false,
+      "suggest_state": null,
+      "suggest_score": null,
+      "suggest_rank": null,
+      "final_selected": false,
+      "rationale": "fixture",
+      "confidence": null,
+      "signal_key": "fixture"
+    }
+  ]
+}

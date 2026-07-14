@@ -1,0 +1,10 @@
+{
+  "data": {
+    "ok": true,
+    "db": "ok",
+    "version": "2.1.2",
+    "db_path": "/tmp/kanban.db",
+    "db_fingerprint": "sqlite:4096:1",
+    "unexpected": true
+  }
+}

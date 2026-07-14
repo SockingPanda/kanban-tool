@@ -1,0 +1,40 @@
+{
+  "$defs": {
+    "CheckpointReport": {
+      "additionalProperties": false,
+      "properties": {
+        "busy": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "checkpointed_frames": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "log_frames": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "busy",
+        "log_frames",
+        "checkpointed_frames"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:checkpoint-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CheckpointReport"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI checkpoint output v1",
+  "type": "object"
+}

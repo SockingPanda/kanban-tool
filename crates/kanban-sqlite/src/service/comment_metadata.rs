@@ -16,32 +16,6 @@ pub(crate) fn normalize_comment_metadata_json(
     Ok(metadata_json.to_owned())
 }
 
-pub(crate) fn normalize_imported_comment_metadata_json(
-    kind: &str,
-    metadata_json: Option<&serde_json::Value>,
-) -> Result<String> {
-    let Some(metadata_json) = metadata_json else {
-        return normalize_comment_metadata_json(kind, None);
-    };
-    match metadata_json {
-        serde_json::Value::Null => normalize_comment_metadata_json(kind, None),
-        serde_json::Value::Object(_) => {
-            validate_comment_metadata_value(kind, metadata_json)?;
-            Ok(metadata_json.to_string())
-        }
-        serde_json::Value::String(value) => {
-            let trimmed = value.trim();
-            if trimmed.is_empty() {
-                return normalize_comment_metadata_json(kind, None);
-            }
-            normalize_comment_metadata_json(kind, Some(trimmed))
-        }
-        _ => Err(KanbanError::InvalidInput(
-            "metadata_json must be a JSON object".into(),
-        )),
-    }
-}
-
 fn validate_comment_metadata_value(kind: &str, value: &serde_json::Value) -> Result<()> {
     let object = value
         .as_object()

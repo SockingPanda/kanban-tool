@@ -9,6 +9,7 @@ authors.workspace = true
 default = []
 
 [dependencies]
+kanban-contract.workspace = true
 kanban-entity.workspace = true
 kanban-helper-protocol.workspace = true
 serde.workspace = true

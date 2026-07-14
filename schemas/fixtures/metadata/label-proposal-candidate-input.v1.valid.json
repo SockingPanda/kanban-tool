@@ -1,0 +1,8 @@
+{
+  "name": "workflow",
+  "description": "Workflow classification",
+  "applies_when": ["classifies execution flow"],
+  "excludes_when": ["UI-only polish"],
+  "positive_examples": ["triage work queue"],
+  "negative_examples": ["CSS tweak"]
+}

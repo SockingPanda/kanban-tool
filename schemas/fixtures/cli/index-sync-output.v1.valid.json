@@ -1,0 +1,1 @@
+{"data":{"backend":"tantivy","derived_index":true,"stale":false,"index_version":"tasks-v1","last_event_id":10,"index_lag_events":0,"message":"Synced Tantivy task index at <INDEX_PATH> (<AFFECTED> affected task(s))"}}

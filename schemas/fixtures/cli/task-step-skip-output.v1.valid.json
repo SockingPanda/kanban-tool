@@ -1,0 +1,19 @@
+{
+  "data": {
+    "body": "Preserve the public step wire",
+    "created_at": 101,
+    "created_by": "fixture",
+    "id": "s_fixture",
+    "linked_task": null,
+    "parent_task_id": "t_parent",
+    "position": 2048,
+    "required": false,
+    "resolution_note": "not needed",
+    "resolved_at": 103,
+    "resolved_by": "fixture-skipper",
+    "status": "skipped",
+    "title": "Implement contract",
+    "updated_at": 102,
+    "updated_by": "fixture-skipper"
+  }
+}

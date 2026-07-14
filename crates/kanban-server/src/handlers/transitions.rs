@@ -3,63 +3,65 @@ use axum::{
     extract::{Path, State, rejection::JsonRejection},
     http::HeaderMap,
 };
+use kanban_contract::{
+    ArchiveTaskPath, ArchiveTaskRequest, ArchiveTaskResponse, BlockTaskPath, BlockTaskRequest,
+    BlockTaskResponse, ClaimTaskPath, ClaimTaskRequest, ClaimTaskResponse, CompleteTaskPath,
+    CompleteTaskRequest, CompleteTaskResponse, DataEnvelope, HeartbeatTaskPath,
+    HeartbeatTaskRequest, HeartbeatTaskResponse, PromoteTaskPath, PromoteTaskRequest,
+    PromoteTaskResponse, ReclaimTargetStatus, ReclaimTaskPath, ReclaimTaskRequest,
+    ReclaimTaskResponse, ReopenTaskPath, ReopenTaskRequest, ReopenTaskResponse, SpecifyTaskPath,
+    SpecifyTaskRequest, SpecifyTaskResponse, SubmitReviewTaskPath, SubmitReviewTaskRequest,
+    SubmitReviewTaskResponse, UnblockTaskPath, UnblockTaskRequest, UnblockTaskResponse,
+};
 use kanban_core::{KanbanError, TaskStatus};
 
-use crate::dto::{ClaimDto, Envelope, RunDto, TaskDto};
+use crate::dto::api_task_from_record;
 use crate::error::{ApiError, extractor_error, invalid_input};
+use crate::handlers::runs::api_run;
 use crate::state::AppState;
+use kanban_contract::ApiClaim;
 
-use super::shared::{
-    ActorBody, ArchiveBody, BlockBody, ClaimBody, HeartbeatBody, ReclaimBody, ReopenBody,
-    SpecifyBody, TokenBody, actor, metadata_json, optional_json_body,
-};
+use super::shared::{actor, metadata_json, optional_json_body};
 
 pub(crate) async fn specify_task(
     State(state): State<AppState>,
-    Path(task_id): Path<String>,
+    Path(SpecifyTaskPath { task_id }): Path<SpecifyTaskPath>,
     headers: HeaderMap,
-    body: Result<Json<SpecifyBody>, JsonRejection>,
-) -> Result<Json<Envelope<TaskDto>>, ApiError> {
+    body: Result<Json<SpecifyTaskRequest>, JsonRejection>,
+) -> Result<Json<SpecifyTaskResponse>, ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
-    Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::api::specify_task(
+    Ok(Json(DataEnvelope::new(api_task_from_record(
+        kanban_sqlite::api::specify_task(
             state.db_path(),
             &actor,
             &task_id,
             body.description,
             body.scheduled_at,
-        )?),
-        meta: None,
-    }))
+        )?,
+    )?)))
 }
 
 pub(crate) async fn promote_task(
     State(state): State<AppState>,
-    Path(task_id): Path<String>,
+    Path(PromoteTaskPath { task_id }): Path<PromoteTaskPath>,
     headers: HeaderMap,
-    body: Result<Json<ActorBody>, JsonRejection>,
-) -> Result<Json<Envelope<TaskDto>>, ApiError> {
+    body: Result<Json<PromoteTaskRequest>, JsonRejection>,
+) -> Result<Json<PromoteTaskResponse>, ApiError> {
     let body = optional_json_body(body)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
     let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
-    Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::api::promote_task(
-            state.db_path(),
-            &task.board_id,
-            &actor,
-            &task_id,
-        )?),
-        meta: None,
-    }))
+    Ok(Json(DataEnvelope::new(api_task_from_record(
+        kanban_sqlite::api::promote_task(state.db_path(), &task.board_id, &actor, &task_id)?,
+    )?)))
 }
 
 pub(crate) async fn claim_task(
     State(state): State<AppState>,
-    Path(task_id): Path<String>,
+    Path(ClaimTaskPath { task_id }): Path<ClaimTaskPath>,
     headers: HeaderMap,
-    body: Result<Json<ClaimBody>, JsonRejection>,
-) -> Result<Json<Envelope<ClaimDto>>, ApiError> {
+    body: Result<Json<ClaimTaskRequest>, JsonRejection>,
+) -> Result<Json<ClaimTaskResponse>, ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     if body.ttl_ms <= 0 {
         return Err(invalid_input("ttl_ms must be positive"));
@@ -81,70 +83,69 @@ pub(crate) async fn claim_task(
         .into_iter()
         .find(|run| run.id == claim.run_id)
         .ok_or_else(|| KanbanError::NotFound(format!("run {}", claim.run_id)))?;
-    Ok(Json(Envelope {
-        data: ClaimDto {
-            claim_token: claim.claim_token,
-            claim_expires_at: claim.task.claim_expires_at,
-            task: TaskDto::from(claim.task),
-            run: RunDto::from(run),
-        },
-        meta: None,
-    }))
+    Ok(Json(DataEnvelope::new(ApiClaim {
+        claim_token: claim.claim_token,
+        claim_expires_at: claim.task.claim_expires_at,
+        task: api_task_from_record(claim.task)?,
+        run: api_run(run)?,
+    })))
 }
 
 pub(crate) async fn reclaim_task(
     State(state): State<AppState>,
-    Path(task_id): Path<String>,
+    Path(ReclaimTaskPath { task_id }): Path<ReclaimTaskPath>,
     headers: HeaderMap,
-    body: Result<Json<ReclaimBody>, JsonRejection>,
-) -> Result<Json<Envelope<TaskDto>>, ApiError> {
+    body: Result<Json<ReclaimTaskRequest>, JsonRejection>,
+) -> Result<Json<ReclaimTaskResponse>, ApiError> {
     let body = optional_json_body(body)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
+    let to_status = match body.to_status.unwrap_or(ReclaimTargetStatus::Ready) {
+        ReclaimTargetStatus::Ready => TaskStatus::Ready,
+        ReclaimTargetStatus::Blocked => TaskStatus::Blocked,
+    };
     let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
-    Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::api::reclaim_task_to(
+    Ok(Json(DataEnvelope::new(api_task_from_record(
+        kanban_sqlite::api::reclaim_task_to(
             state.db_path(),
             &task.board_id,
             &actor,
             &task_id,
             body.force,
-            body.to_status.unwrap_or(TaskStatus::Ready),
+            to_status,
             body.reason.as_deref(),
-        )?),
-        meta: None,
-    }))
+        )?,
+    )?)))
 }
 
 pub(crate) async fn reopen_task(
     State(state): State<AppState>,
-    Path(task_id): Path<String>,
+    Path(ReopenTaskPath { task_id }): Path<ReopenTaskPath>,
     headers: HeaderMap,
-    body: Result<Json<ReopenBody>, JsonRejection>,
-) -> Result<Json<Envelope<TaskDto>>, ApiError> {
+    body: Result<Json<ReopenTaskRequest>, JsonRejection>,
+) -> Result<Json<ReopenTaskResponse>, ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     if body.reason.trim().is_empty() {
-        return Err(invalid_input("reopen reason is required"));
+        Err(invalid_input("reopen reason is required"))?;
     }
     let actor = actor(body.actor.as_deref(), &headers, &state);
     let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
-    Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::api::reopen_task(
+    Ok(Json(DataEnvelope::new(api_task_from_record(
+        kanban_sqlite::api::reopen_task(
             state.db_path(),
             &task.board_id,
             &actor,
             &task_id,
             &body.reason,
-        )?),
-        meta: None,
-    }))
+        )?,
+    )?)))
 }
 
 pub(crate) async fn heartbeat_task(
     State(state): State<AppState>,
-    Path(task_id): Path<String>,
+    Path(HeartbeatTaskPath { task_id }): Path<HeartbeatTaskPath>,
     headers: HeaderMap,
-    body: Result<Json<HeartbeatBody>, JsonRejection>,
-) -> Result<Json<Envelope<TaskDto>>, ApiError> {
+    body: Result<Json<HeartbeatTaskRequest>, JsonRejection>,
+) -> Result<Json<HeartbeatTaskResponse>, ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     if body.ttl_ms <= 0 {
         return Err(invalid_input("ttl_ms must be positive"));
@@ -158,8 +159,8 @@ pub(crate) async fn heartbeat_task(
             "claim token mismatch".to_owned(),
         )));
     }
-    Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::api::heartbeat_task_with_note(
+    Ok(Json(DataEnvelope::new(api_task_from_record(
+        kanban_sqlite::api::heartbeat_task_with_note(
             state.db_path(),
             &task.board_id,
             &actor,
@@ -167,23 +168,22 @@ pub(crate) async fn heartbeat_task(
             &body.claim_token,
             body.ttl_ms,
             body.note.as_deref(),
-        )?),
-        meta: None,
-    }))
+        )?,
+    )?)))
 }
 
 pub(crate) async fn complete_task(
     State(state): State<AppState>,
-    Path(task_id): Path<String>,
+    Path(CompleteTaskPath { task_id }): Path<CompleteTaskPath>,
     headers: HeaderMap,
-    body: Result<Json<TokenBody>, JsonRejection>,
-) -> Result<Json<Envelope<TaskDto>>, ApiError> {
+    body: Result<Json<CompleteTaskRequest>, JsonRejection>,
+) -> Result<Json<CompleteTaskResponse>, ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
     let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
     let result_json = body.result.map(|value| value.to_string());
-    Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::api::complete_task_with_summary_and_result(
+    Ok(Json(DataEnvelope::new(api_task_from_record(
+        kanban_sqlite::api::complete_task_with_summary_and_result(
             state.db_path(),
             &task.board_id,
             &actor,
@@ -192,25 +192,21 @@ pub(crate) async fn complete_task(
             body.force,
             body.summary.as_deref(),
             result_json.as_deref(),
-        )?),
-        meta: None,
-    }))
+        )?,
+    )?)))
 }
 
 pub(crate) async fn submit_review_task(
     State(state): State<AppState>,
-    Path(task_id): Path<String>,
+    Path(SubmitReviewTaskPath { task_id }): Path<SubmitReviewTaskPath>,
     headers: HeaderMap,
-    body: Result<Json<TokenBody>, JsonRejection>,
-) -> Result<Json<Envelope<TaskDto>>, ApiError> {
+    body: Result<Json<SubmitReviewTaskRequest>, JsonRejection>,
+) -> Result<Json<SubmitReviewTaskResponse>, ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
-    if body.result.is_some() {
-        return Err(invalid_input("submit-review result is not supported yet"));
-    }
     let actor = actor(body.actor.as_deref(), &headers, &state);
     let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
-    Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::api::submit_review_task_with_summary(
+    Ok(Json(DataEnvelope::new(api_task_from_record(
+        kanban_sqlite::api::submit_review_task_with_summary(
             state.db_path(),
             &task.board_id,
             &actor,
@@ -218,22 +214,21 @@ pub(crate) async fn submit_review_task(
             body.claim_token.as_deref(),
             body.force,
             body.summary.as_deref(),
-        )?),
-        meta: None,
-    }))
+        )?,
+    )?)))
 }
 
 pub(crate) async fn block_task(
     State(state): State<AppState>,
-    Path(task_id): Path<String>,
+    Path(BlockTaskPath { task_id }): Path<BlockTaskPath>,
     headers: HeaderMap,
-    body: Result<Json<BlockBody>, JsonRejection>,
-) -> Result<Json<Envelope<TaskDto>>, ApiError> {
+    body: Result<Json<BlockTaskRequest>, JsonRejection>,
+) -> Result<Json<BlockTaskResponse>, ApiError> {
     let Json(body) = body.map_err(extractor_error)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
     let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
-    Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::api::block_task(
+    Ok(Json(DataEnvelope::new(api_task_from_record(
+        kanban_sqlite::api::block_task(
             state.db_path(),
             &task.board_id,
             &actor,
@@ -241,48 +236,40 @@ pub(crate) async fn block_task(
             &body.reason,
             body.claim_token.as_deref(),
             body.force,
-        )?),
-        meta: None,
-    }))
+        )?,
+    )?)))
 }
 
 pub(crate) async fn unblock_task(
     State(state): State<AppState>,
-    Path(task_id): Path<String>,
+    Path(UnblockTaskPath { task_id }): Path<UnblockTaskPath>,
     headers: HeaderMap,
-    body: Result<Json<ActorBody>, JsonRejection>,
-) -> Result<Json<Envelope<TaskDto>>, ApiError> {
+    body: Result<Json<UnblockTaskRequest>, JsonRejection>,
+) -> Result<Json<UnblockTaskResponse>, ApiError> {
     let body = optional_json_body(body)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
     let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
-    Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::api::unblock_task(
-            state.db_path(),
-            &task.board_id,
-            &actor,
-            &task_id,
-        )?),
-        meta: None,
-    }))
+    Ok(Json(DataEnvelope::new(api_task_from_record(
+        kanban_sqlite::api::unblock_task(state.db_path(), &task.board_id, &actor, &task_id)?,
+    )?)))
 }
 
 pub(crate) async fn archive_task(
     State(state): State<AppState>,
-    Path(task_id): Path<String>,
+    Path(ArchiveTaskPath { task_id }): Path<ArchiveTaskPath>,
     headers: HeaderMap,
-    body: Result<Json<ArchiveBody>, JsonRejection>,
-) -> Result<Json<Envelope<TaskDto>>, ApiError> {
+    body: Result<Json<ArchiveTaskRequest>, JsonRejection>,
+) -> Result<Json<ArchiveTaskResponse>, ApiError> {
     let body = optional_json_body(body)?;
     let actor = actor(body.actor.as_deref(), &headers, &state);
     let task = kanban_sqlite::api::get_task_by_id_global(state.db_path(), &task_id)?;
-    Ok(Json(Envelope {
-        data: TaskDto::from(kanban_sqlite::api::archive_task(
+    Ok(Json(DataEnvelope::new(api_task_from_record(
+        kanban_sqlite::api::archive_task(
             state.db_path(),
             &task.board_id,
             &actor,
             &task_id,
             body.force,
-        )?),
-        meta: None,
-    }))
+        )?,
+    )?)))
 }

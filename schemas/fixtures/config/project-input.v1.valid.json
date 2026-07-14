@@ -1,0 +1,1 @@
+{"board":"kanban-tool","db":".kb/kb.db","vector":{"provider":"ollama","endpoint":"http://127.0.0.1:11434","model":"qwen3-embedding:0.6b","dimensions":1024}}

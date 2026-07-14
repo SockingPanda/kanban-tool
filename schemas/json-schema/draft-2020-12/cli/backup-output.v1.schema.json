@@ -1,0 +1,29 @@
+{
+  "$defs": {
+    "CliBackupResult": {
+      "additionalProperties": false,
+      "properties": {
+        "out_path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "out_path"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:backup-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CliBackupResult"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI backup output v1",
+  "type": "object"
+}

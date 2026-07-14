@@ -1,0 +1,19 @@
+{
+  "$id": "urn:kanban-tool:schema:api:delete-label-semantics-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "expected_semantics_hash": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "expected_semantics_hash",
+    "reason"
+  ],
+  "title": "Delete label semantics query v1",
+  "type": "object"
+}

@@ -1,0 +1,55 @@
+{
+  "data": [
+    {
+      "action_count": 0,
+      "action_ids": [],
+      "average_score": 0,
+      "candidate_atom_kind": "applies_when",
+      "candidate_atom_polarity": "positive",
+      "candidate_atom_variants": [
+        {
+          "content_hash": "hash_fixture",
+          "kind": "applies_when",
+          "polarity": "positive",
+          "signal_count": 1,
+          "text": "touches Rust service code review"
+        }
+      ],
+      "candidate_content_hash": "hash_fixture",
+      "candidate_text": "touches Rust service code review",
+      "cluster_key": null,
+      "cluster_reason": null,
+      "confirmed_count": 0,
+      "degraded_count": 0,
+      "group_by": "label",
+      "key": "l_FIXTURE_1",
+      "label_id": "l_FIXTURE_1",
+      "label_name": "backend",
+      "labels": [
+        {
+          "id": "l_FIXTURE_1",
+          "name": "backend"
+        }
+      ],
+      "latest_signal_at": 100,
+      "median_score": 0,
+      "oldest_signal_at": 100,
+      "open_count": 1,
+      "proposal_ids": [],
+      "proposed_label_name": null,
+      "proposed_label_name_normalized": null,
+      "rejected_count": 0,
+      "resolved_count": 0,
+      "sample_task_refs": [
+        "default#1"
+      ],
+      "signal_count": 1,
+      "signal_ids": [
+        "los_FIXTURE_1"
+      ],
+      "superseded_count": 0,
+      "task_count": 1
+    }
+  ],
+  "unexpected": true
+}

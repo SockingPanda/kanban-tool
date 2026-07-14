@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "LabelOntologyActorWire": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:accept-label-proposal-body:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "allow_retarget": {
+      "default": false,
+      "type": "boolean"
+    },
+    "ontology_actor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LabelOntologyActorWire"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "retarget_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_signal_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "title": "Accept Label Proposal Body v1",
+  "type": "object"
+}

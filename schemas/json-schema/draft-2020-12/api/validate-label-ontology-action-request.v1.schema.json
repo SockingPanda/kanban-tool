@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "JsonBodyField": true,
+    "LabelOntologyActorWire": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "type": "object"
+    },
+    "LabelOntologyValidationStatusWire": {
+      "enum": [
+        "not_required",
+        "pending",
+        "passed",
+        "failed",
+        "partial"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:validate-label-ontology-action-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "$ref": "#/$defs/LabelOntologyActorWire"
+    },
+    "parent_action_id": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "signal_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "validation": {
+      "$ref": "#/$defs/JsonBodyField"
+    },
+    "validation_status": {
+      "$ref": "#/$defs/LabelOntologyValidationStatusWire"
+    }
+  },
+  "required": [
+    "actor",
+    "parent_action_id",
+    "reason",
+    "validation_status"
+  ],
+  "title": "Validate label ontology action request v1",
+  "type": "object"
+}

@@ -1,0 +1,23 @@
+{
+  "$id": "urn:kanban-tool:schema:helper:graph-handshake-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "helper": {
+      "type": "string"
+    },
+    "protocol": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "helper",
+    "protocol",
+    "version"
+  ],
+  "title": "Graph Helper Handshake Response v1",
+  "type": "object"
+}

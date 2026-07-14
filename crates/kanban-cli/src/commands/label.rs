@@ -1,6 +1,27 @@
 use std::path::Path;
 
 use anyhow::Result;
+use kanban_contract::DataEnvelope;
+use kanban_contract::cli_labels::{
+    CliLabelAddOutput, CliLabelAddResult, CliLabelAddWithCreated, CliLabelAtomIndexQueryOutput,
+    CliLabelAtomIndexRebuildOutput, CliLabelAtomIndexStatus, CliLabelAtomIndexStatusOutput,
+    CliLabelAtomsExplainOutput, CliLabelAtomsListOutput, CliLabelBootstrapOutput,
+    CliLabelBootstrapResult, CliLabelBootstrapVerification, CliLabelCreateOutput,
+    CliLabelDeleteOutput, CliLabelListOutput, CliLabelOntologyApplyAtomOutput,
+    CliLabelOntologyConfirmOutput, CliLabelOntologyListOutput, CliLabelOntologyQualityOutput,
+    CliLabelOntologyRecordOutput, CliLabelOntologyRejectOutput, CliLabelOntologyResolveOutput,
+    CliLabelOntologyRevertOutput, CliLabelOntologyReviewOutput, CliLabelOntologyShowOutput,
+    CliLabelOntologySupersedeOutput, CliLabelOntologyValidateOutput, CliLabelProposalsAcceptOutput,
+    CliLabelProposalsListOutput, CliLabelProposalsRejectOutput, CliLabelProposalsShowOutput,
+    CliLabelProposeOutput, CliLabelRemoveOutput, CliLabelSemanticsDeleteOutput,
+    CliLabelSemanticsDeleteResult, CliLabelSemanticsListOutput, CliLabelSemanticsShowOutput,
+    CliLabelSemanticsUpsertOutput, CliLabelSuggestOutput,
+};
+use kanban_contract::structured_metadata::{
+    LabelProposalCandidateMetadataInput, OntologyRecordMetadataInput,
+    OntologyValidationEvidenceMetadataInput,
+};
+use kanban_core::KanbanError;
 use kanban_sqlite::api::provider::{
     DisabledLabelProposalProvider, LabelProposalProvider, ManualLabelProposalProvider,
     propose_task_label_with_store_and_create_options, query_label_atom_index_with,
@@ -28,7 +49,7 @@ use kanban_sqlite::api::{
     validate_label_ontology_action,
 };
 use kanban_vector::{SubprocessVectorStore, VectorStoreBackend};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value as JsonValue;
 use std::{path::Path as StdPath, str::FromStr};
 
@@ -41,7 +62,7 @@ use crate::commands::common::{
     validate_page_bounds,
 };
 use crate::commands::helper::{HelperKind, resolve_helper};
-use crate::output::{label_line, print_or_json, print_task};
+use crate::output::{api_task_from_record, label_line, print_contract_or_human, print_task};
 
 pub(crate) fn handle_label(
     command: LabelCommand,
@@ -53,7 +74,8 @@ pub(crate) fn handle_label(
     match command {
         LabelCommand::List => {
             let labels = list_labels(db_path, board)?;
-            print_or_json(json, &labels, || {
+            let output: CliLabelListOutput = contract_output(&labels)?;
+            print_contract_or_human(json, &output, || {
                 labels.iter().map(label_line).collect::<Vec<_>>().join("\n")
             })?;
         }
@@ -67,11 +89,13 @@ pub(crate) fn handle_label(
                     color: args.color,
                 },
             )?;
-            print_or_json(json, &label, || label_line(&label))?;
+            let output: CliLabelCreateOutput = contract_output(&label)?;
+            print_contract_or_human(json, &output, || label_line(&label))?;
         }
         LabelCommand::Delete(args) => {
             let result = delete_label(db_path, board, actor, &args.label, args.force)?;
-            print_or_json(json, &result, || {
+            let output: CliLabelDeleteOutput = contract_output(&result)?;
+            print_contract_or_human(json, &output, || {
                 format!(
                     "Deleted label {} removed_task_bindings={} removed_semantics={} removed_atoms={}",
                     result.label.name,
@@ -99,7 +123,7 @@ pub(crate) fn handle_label(
                 positive_examples: args.positive_examples,
                 negative_examples: args.negative_examples,
             };
-            let output = if verify {
+            let (output, human) = if verify {
                 let store = subprocess_vector_store(db_path, board, args.vector_config.as_deref())?;
                 let result = bootstrap_task_label_with_staged_verification(
                     db_path,
@@ -110,21 +134,36 @@ pub(crate) fn handle_label(
                     &store,
                     args.min_verify_score,
                 )?;
-                LabelBootstrapCommandOutput {
-                    task: result.task,
-                    semantics: result.semantics,
-                    verification: Some(result.verification),
-                }
+                let human = label_bootstrap_lines(
+                    &result.task,
+                    &result.semantics,
+                    Some(&result.verification),
+                );
+                (
+                    CliLabelBootstrapResult {
+                        task: api_task_from_record(&result.task)?,
+                        semantics: contract_value(&result.semantics)?,
+                        verification: Some(contract_value::<CliLabelBootstrapVerification, _>(
+                            &result.verification,
+                        )?),
+                    },
+                    human,
+                )
             } else {
                 let result =
                     bootstrap_task_label(db_path, board, actor, &args.task_ref, bootstrap_input)?;
-                LabelBootstrapCommandOutput {
-                    task: result.task,
-                    semantics: result.semantics,
-                    verification: None,
-                }
+                let human = label_bootstrap_lines(&result.task, &result.semantics, None);
+                (
+                    CliLabelBootstrapResult {
+                        task: api_task_from_record(&result.task)?,
+                        semantics: contract_value(&result.semantics)?,
+                        verification: None,
+                    },
+                    human,
+                )
             };
-            print_or_json(json, &output, || label_bootstrap_lines(&output))?;
+            let output = CliLabelBootstrapOutput::new(output);
+            print_contract_or_human(json, &output, || human)?;
         }
         LabelCommand::Add(args) => {
             let result = add_task_labels_with_options(
@@ -136,18 +175,31 @@ pub(crate) fn handle_label(
                 args.create_missing,
             )?;
             if args.create_missing {
-                let output = LabelAddCommandOutput {
-                    task: result.task,
-                    created_labels: result.created_labels,
+                let data = CliLabelAddWithCreated {
+                    task: api_task_from_record(&result.task)?,
+                    created_labels: contract_value(&result.created_labels)?,
                 };
-                print_or_json(json, &output, || label_add_lines(&output))?;
+                let output = CliLabelAddOutput::new(CliLabelAddResult::WithCreated(data));
+                print_contract_or_human(json, &output, || label_add_lines(&result))?;
             } else {
-                print_task(json, &result.task)?;
+                let output = CliLabelAddOutput::new(CliLabelAddResult::Task(api_task_from_record(
+                    &result.task,
+                )?));
+                if json {
+                    print_contract_or_human(true, &output, String::new)?;
+                } else {
+                    print_task(false, &result.task)?;
+                }
             }
         }
         LabelCommand::Remove(args) => {
             let task = remove_task_label(db_path, board, actor, &args.task_ref, &args.label)?;
-            print_task(json, &task)?;
+            let output = CliLabelRemoveOutput::new(api_task_from_record(&task)?);
+            if json {
+                print_contract_or_human(true, &output, String::new)?;
+            } else {
+                print_task(false, &task)?;
+            }
         }
         LabelCommand::Semantics { command } => {
             handle_label_semantics(command, db_path, board, actor, json)?
@@ -155,7 +207,8 @@ pub(crate) fn handle_label(
         LabelCommand::Atoms { command } => match command {
             crate::args::LabelAtomsCommand::List => {
                 let atoms = list_label_atoms(db_path, board)?;
-                print_or_json(json, &atoms, || {
+                let output: CliLabelAtomsListOutput = contract_output(&atoms)?;
+                print_contract_or_human(json, &output, || {
                     atoms
                         .iter()
                         .map(|atom| {
@@ -170,7 +223,9 @@ pub(crate) fn handle_label(
             }
             crate::args::LabelAtomsCommand::Explain { atom_ref } => {
                 let explain = explain_label_atom(db_path, board, &atom_ref)?;
-                print_or_json(json, &explain, || label_atom_explain_lines(&explain))?;
+                let output: CliLabelAtomsExplainOutput =
+                    label_atom_explain_contract_output(&explain)?;
+                print_contract_or_human(json, &output, || label_atom_explain_lines(&explain))?;
             }
         },
         LabelCommand::AtomIndex { command } => {
@@ -197,7 +252,8 @@ pub(crate) fn handle_label(
                 options,
                 args.vector_config.as_deref(),
             )?;
-            print_or_json(json, &suggestions, || label_suggestion_lines(&suggestions))?;
+            let output: CliLabelSuggestOutput = contract_output(&suggestions)?;
+            print_contract_or_human(json, &output, || label_suggestion_lines(&suggestions))?;
         }
         LabelCommand::Propose(args) => {
             validate_label_suggest_bounds(
@@ -251,7 +307,8 @@ pub(crate) fn handle_label(
                     args.vector_config.as_deref(),
                 )?
             };
-            print_or_json(json, &attempt, || {
+            let output: CliLabelProposeOutput = contract_output(&attempt)?;
+            print_contract_or_human(json, &output, || {
                 if let Some(proposal) = &attempt.proposal {
                     format!(
                         "{} {} [{}] coverage={:.3} coverage_cosine={:.3} residual_norm={:.3}",
@@ -286,11 +343,13 @@ pub(crate) fn handle_label(
                         status,
                     },
                 )?;
-                print_or_json(json, &proposals, || proposal_lines(&proposals))?;
+                let output: CliLabelProposalsListOutput = contract_output(&proposals)?;
+                print_contract_or_human(json, &output, || proposal_lines(&proposals))?;
             }
             crate::args::LabelProposalsCommand::Show { proposal_id } => {
                 let proposal = get_label_proposal(db_path, &proposal_id)?;
-                print_or_json(json, &proposal, || proposal_line(&proposal))?;
+                let output: CliLabelProposalsShowOutput = contract_output(&proposal)?;
+                print_contract_or_human(json, &output, || proposal_line(&proposal))?;
             }
             crate::args::LabelProposalsCommand::Accept(args) => {
                 let reason = resolve_optional_text_input(
@@ -317,7 +376,8 @@ pub(crate) fn handle_label(
                         retarget_reason,
                     },
                 )?;
-                print_or_json(json, &proposal, || proposal_line(&proposal))?;
+                let output: CliLabelProposalsAcceptOutput = contract_output(&proposal)?;
+                print_contract_or_human(json, &output, || proposal_line(&proposal))?;
             }
             crate::args::LabelProposalsCommand::Reject(args) => {
                 let reason = resolve_optional_text_input(
@@ -327,7 +387,8 @@ pub(crate) fn handle_label(
                     "--reason-file",
                 )?;
                 let proposal = reject_label_proposal(db_path, actor, &args.proposal_id, reason)?;
-                print_or_json(json, &proposal, || proposal_line(&proposal))?;
+                let output: CliLabelProposalsRejectOutput = contract_output(&proposal)?;
+                print_contract_or_human(json, &output, || proposal_line(&proposal))?;
             }
         },
         LabelCommand::Ontology { command } => {
@@ -347,11 +408,13 @@ fn handle_label_semantics(
     match command {
         crate::args::LabelSemanticsCommand::List => {
             let semantics = list_label_semantics(db_path, board)?;
-            print_or_json(json, &semantics, || label_semantics_lines(&semantics))?;
+            let output: CliLabelSemanticsListOutput = contract_output(&semantics)?;
+            print_contract_or_human(json, &output, || label_semantics_lines(&semantics))?;
         }
         crate::args::LabelSemanticsCommand::Show { label } => {
             let semantics = get_label_semantics(db_path, board, &label)?;
-            print_or_json(json, &semantics, || label_semantics_line(&semantics))?;
+            let output: CliLabelSemanticsShowOutput = contract_output(&semantics)?;
+            print_contract_or_human(json, &output, || label_semantics_line(&semantics))?;
         }
         crate::args::LabelSemanticsCommand::Upsert(args) => {
             let args = *args;
@@ -382,7 +445,8 @@ fn handle_label_semantics(
                 },
                 options,
             )?;
-            print_or_json(json, &semantics, || label_semantics_line(&semantics))?;
+            let output: CliLabelSemanticsUpsertOutput = contract_output(&semantics)?;
+            print_contract_or_human(json, &output, || label_semantics_line(&semantics))?;
         }
         crate::args::LabelSemanticsCommand::Delete(args) => {
             let reason = resolve_required_text_input(
@@ -401,8 +465,9 @@ fn handle_label_semantics(
                 args.expected_semantics_hash,
                 options,
             )?;
-            let deleted = serde_json::json!({ "deleted": true });
-            print_or_json(json, &deleted, || {
+            let output =
+                CliLabelSemanticsDeleteOutput::new(CliLabelSemanticsDeleteResult { deleted: true });
+            print_contract_or_human(json, &output, || {
                 format!("Deleted label semantics for {}", args.label)
             })?;
         }
@@ -423,7 +488,9 @@ fn handle_label_atom_index(
                 board,
                 args.vector_config.as_deref(),
             )?;
-            print_or_json(json, &status, || {
+            let output =
+                CliLabelAtomIndexStatusOutput::new(label_atom_index_status_contract(&status));
+            print_contract_or_human(json, &output, || {
                 format!(
                     "label atom index backend={} enabled={}: {}",
                     status.backend, status.enabled, status.message
@@ -433,7 +500,9 @@ fn handle_label_atom_index(
         crate::args::LabelAtomIndexCommand::Rebuild(args) => {
             let status =
                 rebuild_configured_label_atom_index(db_path, board, args.vector_config.as_deref())?;
-            print_or_json(json, &status, || {
+            let output =
+                CliLabelAtomIndexRebuildOutput::new(label_atom_index_status_contract(&status));
+            print_contract_or_human(json, &output, || {
                 format!(
                     "label atom index backend={} enabled={}: {}",
                     status.backend, status.enabled, status.message
@@ -450,7 +519,8 @@ fn handle_label_atom_index(
                 args.limit,
                 args.vector_config.as_deref(),
             )?;
-            print_or_json(json, &hits, || {
+            let output: CliLabelAtomIndexQueryOutput = contract_output(&hits)?;
+            print_contract_or_human(json, &output, || {
                 if hits.is_empty() {
                     "No label atom hits.".to_owned()
                 } else {
@@ -487,7 +557,8 @@ fn handle_label_ontology(
             let input = read_label_ontology_record_input(db_path, board, &args)?;
             let observation =
                 record_label_ontology_observation(db_path, board, &args.task_ref, input)?;
-            print_or_json(json, &observation, || {
+            let output: CliLabelOntologyRecordOutput = contract_output(&observation)?;
+            print_contract_or_human(json, &output, || {
                 label_ontology_observation_line(&observation)
             })?;
         }
@@ -506,11 +577,13 @@ fn handle_label_ontology(
                     args.limit,
                 )?,
             )?;
-            print_or_json(json, &signals, || label_ontology_signal_lines(&signals))?;
+            let output: CliLabelOntologyListOutput = contract_output(&signals)?;
+            print_contract_or_human(json, &output, || label_ontology_signal_lines(&signals))?;
         }
         crate::args::LabelOntologyCommand::Show { signal_id } => {
             let detail = get_label_ontology_signal(db_path, &signal_id)?;
-            print_or_json(json, &detail, || {
+            let output: CliLabelOntologyShowOutput = contract_output(&detail)?;
+            print_contract_or_human(json, &output, || {
                 format!(
                     "{}\nobservation={} task={} actions={}",
                     label_ontology_signal_line(&detail.signal),
@@ -531,7 +604,8 @@ fn handle_label_ontology(
                     limit: args.limit,
                 },
             )?;
-            print_or_json(json, &groups, || label_ontology_review_group_lines(&groups))?;
+            let output: CliLabelOntologyReviewOutput = contract_output(&groups)?;
+            print_contract_or_human(json, &output, || label_ontology_review_group_lines(&groups))?;
         }
         crate::args::LabelOntologyCommand::Quality(args) => {
             validate_page_bounds(args.sample_limit, MAX_TASK_LIST_LIMIT, 0)?;
@@ -542,7 +616,8 @@ fn handle_label_ontology(
                     sample_limit: args.sample_limit,
                 },
             )?;
-            print_or_json(json, &report, || label_ontology_quality_line(&report))?;
+            let output: CliLabelOntologyQualityOutput = contract_output(&report)?;
+            print_contract_or_human(json, &output, || label_ontology_quality_line(&report))?;
         }
         crate::args::LabelOntologyCommand::Confirm(args) => {
             let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
@@ -564,7 +639,8 @@ fn handle_label_ontology(
                     None,
                 ),
             )?;
-            print_or_json(json, &action, || label_ontology_action_line(&action))?;
+            let output: CliLabelOntologyConfirmOutput = contract_output(&action)?;
+            print_contract_or_human(json, &output, || label_ontology_action_line(&action))?;
         }
         crate::args::LabelOntologyCommand::Reject(args) => {
             let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
@@ -586,7 +662,8 @@ fn handle_label_ontology(
                     None,
                 ),
             )?;
-            print_or_json(json, &action, || label_ontology_action_line(&action))?;
+            let output: CliLabelOntologyRejectOutput = contract_output(&action)?;
+            print_contract_or_human(json, &output, || label_ontology_action_line(&action))?;
         }
         crate::args::LabelOntologyCommand::Supersede(args) => {
             let ontology_actor = label_ontology_cli_actor(actor, &args.actor);
@@ -608,7 +685,8 @@ fn handle_label_ontology(
                     Some(args.superseded_by_signal_id),
                 ),
             )?;
-            print_or_json(json, &action, || label_ontology_action_line(&action))?;
+            let output: CliLabelOntologySupersedeOutput = contract_output(&action)?;
+            print_contract_or_human(json, &output, || label_ontology_action_line(&action))?;
         }
         crate::args::LabelOntologyCommand::Resolve(args) => {
             if !args.no_change {
@@ -633,7 +711,8 @@ fn handle_label_ontology(
                     None,
                 ),
             )?;
-            print_or_json(json, &action, || label_ontology_action_line(&action))?;
+            let output: CliLabelOntologyResolveOutput = contract_output(&action)?;
+            print_contract_or_human(json, &output, || label_ontology_action_line(&action))?;
         }
         crate::args::LabelOntologyCommand::Apply { command } => match command {
             crate::args::LabelOntologyApplyCommand::Atom(args) => {
@@ -673,7 +752,8 @@ fn handle_label_ontology(
                         retarget_reason,
                     },
                 )?;
-                print_or_json(json, &action, || label_ontology_action_line(&action))?;
+                let output: CliLabelOntologyApplyAtomOutput = contract_output(&action)?;
+                print_contract_or_human(json, &output, || label_ontology_action_line(&action))?;
             }
         },
         crate::args::LabelOntologyCommand::Revert(args) => {
@@ -694,7 +774,8 @@ fn handle_label_ontology(
                     reason,
                 },
             )?;
-            print_or_json(json, &action, || label_ontology_action_line(&action))?;
+            let output: CliLabelOntologyRevertOutput = contract_output(&action)?;
+            print_contract_or_human(json, &output, || label_ontology_action_line(&action))?;
         }
         crate::args::LabelOntologyCommand::Validate(args) => {
             let reason = resolve_required_text_input(
@@ -755,7 +836,9 @@ fn handle_label_ontology(
                         "label ontology validate requires --input unless --trusted is used",
                     ));
                 };
-                let validation_json = read_json_input_string(input)?;
+                let raw = read_json_input_string(input)?;
+                let evidence: OntologyValidationEvidenceMetadataInput = serde_json::from_str(&raw)?;
+                let validation_json = serde_json::to_string(&evidence)?;
                 validate_label_ontology_action(
                     db_path,
                     board,
@@ -769,7 +852,8 @@ fn handle_label_ontology(
                     },
                 )?
             };
-            print_or_json(json, &action, || label_ontology_action_line(&action))?;
+            let output: CliLabelOntologyValidateOutput = contract_output(&action)?;
+            print_contract_or_human(json, &output, || label_ontology_action_line(&action))?;
         }
     }
     Ok(())
@@ -807,38 +891,36 @@ fn read_label_ontology_record_input(
     args: &crate::args::LabelOntologyRecordArgs,
 ) -> Result<LabelOntologyRecordInput> {
     let raw = read_json_input_string(&args.input)?;
-    if !args.capture_suggest
-        && args.suggestion_snapshot.is_none()
-        && let Ok(input) = serde_json::from_str::<LabelOntologyRecordInput>(&raw)
-    {
-        return Ok(input);
-    }
-
-    let capture = serde_json::from_str::<LabelOntologyRecordCaptureInput>(&raw)?;
+    let contract = serde_json::from_str::<OntologyRecordMetadataInput>(&raw)?;
+    let capture =
+        serde_json::from_value::<LabelOntologyRecordCaptureInput>(serde_json::to_value(contract)?)?;
     capture.into_record_input(captured_or_supplied_suggestion_snapshot(
         db_path, board, args,
     )?)
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LabelOntologyRecordCaptureInput {
     actor: LabelOntologyActor,
     #[serde(default)]
     agent_candidates: Option<JsonValue>,
     #[serde(default)]
-    agent_candidates_json: Option<String>,
-    #[serde(default)]
     suggestion_snapshot: Option<JsonValue>,
-    #[serde(default)]
-    suggestion_snapshot_json: Option<String>,
     #[serde(default)]
     final_decision: Option<JsonValue>,
     #[serde(default)]
-    final_decision_json: Option<String>,
+    suggest_coverage: Option<f64>,
+    #[serde(default)]
+    suggest_coverage_cosine: Option<f64>,
+    #[serde(default)]
+    suggest_residual_norm: Option<f64>,
+    #[serde(default)]
+    suggest_needs_new_label: Option<bool>,
+    #[serde(default)]
+    suggest_degraded: Option<bool>,
     #[serde(default)]
     diagnostics: Option<JsonValue>,
-    #[serde(default)]
-    diagnostics_json: Option<String>,
     #[serde(default)]
     capture_fingerprint: Option<String>,
     #[serde(default)]
@@ -846,14 +928,13 @@ struct LabelOntologyRecordCaptureInput {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LabelOntologyCaptureSignalInput {
     kind: LabelOntologySignalKind,
     #[serde(default)]
     target_label_ref: Option<String>,
     #[serde(default)]
     related_labels: Option<JsonValue>,
-    #[serde(default)]
-    related_labels_json: Option<String>,
     proposed_action: LabelOntologyProposedAction,
     #[serde(default)]
     candidate_atom: Option<LabelOntologyCandidateAtomInput>,
@@ -861,8 +942,6 @@ struct LabelOntologyCaptureSignalInput {
     proposed_label_name: Option<String>,
     #[serde(default)]
     proposal: Option<JsonValue>,
-    #[serde(default)]
-    proposal_json: Option<String>,
     #[serde(default)]
     agent_selected: Option<bool>,
     #[serde(default)]
@@ -885,13 +964,7 @@ impl LabelOntologyRecordCaptureInput {
         self,
         supplied_snapshot: Option<JsonValue>,
     ) -> Result<LabelOntologyRecordInput> {
-        let input_snapshot = coalesce_json_value(
-            "suggestion_snapshot",
-            self.suggestion_snapshot,
-            "suggestion_snapshot_json",
-            self.suggestion_snapshot_json,
-            None,
-        )?;
+        let input_snapshot = self.suggestion_snapshot;
         let suggestion_snapshot = match (input_snapshot, supplied_snapshot) {
             (Some(input), Some(supplied)) if input != supplied => {
                 return Err(invalid_input(
@@ -906,51 +979,43 @@ impl LabelOntologyRecordCaptureInput {
                 ));
             }
         };
-        let diagnostics = coalesce_json_value(
-            "diagnostics",
+        let suggest_needs_new_label = resolve_snapshot_bool_projection(
+            self.suggest_needs_new_label,
+            &suggestion_snapshot,
+            "suggest_needs_new_label",
+            "needs_new_label",
+        )?;
+        let suggest_degraded = resolve_snapshot_bool_projection(
+            self.suggest_degraded,
+            &suggestion_snapshot,
+            "suggest_degraded",
+            "degraded",
+        )?;
+        let diagnostics = resolve_snapshot_json_projection(
             self.diagnostics,
-            "diagnostics_json",
-            self.diagnostics_json,
-            suggestion_snapshot
-                .get("diagnostics")
-                .cloned()
-                .or_else(|| Some(serde_json::json!([]))),
-        )?
-        .unwrap_or_else(|| serde_json::json!([]));
+            &suggestion_snapshot,
+            "diagnostics",
+            "diagnostics",
+            serde_json::json!([]),
+        )?;
         Ok(LabelOntologyRecordInput {
             actor: self.actor,
             agent_candidates_json: json_value_to_string(
-                coalesce_json_value(
-                    "agent_candidates",
-                    self.agent_candidates,
-                    "agent_candidates_json",
-                    self.agent_candidates_json,
-                    Some(serde_json::json!([])),
-                )?
-                .unwrap_or_else(|| serde_json::json!([])),
+                self.agent_candidates
+                    .or_else(|| Some(serde_json::json!([])))
+                    .unwrap_or_else(|| serde_json::json!([])),
             )?,
             suggestion_snapshot_json: json_value_to_string(suggestion_snapshot.clone())?,
             final_decision_json: json_value_to_string(
-                coalesce_json_value(
-                    "final_decision",
-                    self.final_decision,
-                    "final_decision_json",
-                    self.final_decision_json,
-                    Some(serde_json::json!({})),
-                )?
-                .unwrap_or_else(|| serde_json::json!({})),
+                self.final_decision
+                    .or_else(|| Some(serde_json::json!({})))
+                    .unwrap_or_else(|| serde_json::json!({})),
             )?,
-            suggest_coverage: None,
-            suggest_coverage_cosine: None,
-            suggest_residual_norm: None,
-            suggest_needs_new_label: suggestion_snapshot
-                .get("needs_new_label")
-                .and_then(JsonValue::as_bool)
-                .unwrap_or(false),
-            suggest_degraded: suggestion_snapshot
-                .get("degraded")
-                .and_then(JsonValue::as_bool)
-                .unwrap_or(false),
+            suggest_coverage: self.suggest_coverage,
+            suggest_coverage_cosine: self.suggest_coverage_cosine,
+            suggest_residual_norm: self.suggest_residual_norm,
+            suggest_needs_new_label,
+            suggest_degraded,
             diagnostics_json: json_value_to_string(diagnostics)?,
             capture_fingerprint: self.capture_fingerprint,
             signals: self
@@ -962,33 +1027,64 @@ impl LabelOntologyRecordCaptureInput {
     }
 }
 
+fn resolve_snapshot_bool_projection(
+    explicit: Option<bool>,
+    suggestion_snapshot: &JsonValue,
+    input_field: &str,
+    snapshot_field: &str,
+) -> Result<bool> {
+    let snapshot_value = suggestion_snapshot
+        .get(snapshot_field)
+        .filter(|value| !value.is_null());
+    if let (Some(explicit), Some(snapshot_value)) = (explicit, snapshot_value)
+        && snapshot_value.as_bool() != Some(explicit)
+    {
+        return Err(invalid_input(format!(
+            "input {input_field} conflicts with suggestion_snapshot.{snapshot_field}"
+        )));
+    }
+    Ok(explicit.unwrap_or_else(|| snapshot_value.and_then(JsonValue::as_bool).unwrap_or(false)))
+}
+
+fn resolve_snapshot_json_projection(
+    explicit: Option<JsonValue>,
+    suggestion_snapshot: &JsonValue,
+    input_field: &str,
+    snapshot_field: &str,
+    default: JsonValue,
+) -> Result<JsonValue> {
+    let snapshot_value = suggestion_snapshot
+        .get(snapshot_field)
+        .filter(|value| !value.is_null());
+    if let (Some(explicit), Some(snapshot_value)) = (&explicit, snapshot_value)
+        && explicit != snapshot_value
+    {
+        return Err(invalid_input(format!(
+            "input {input_field} conflicts with suggestion_snapshot.{snapshot_field}"
+        )));
+    }
+    Ok(explicit
+        .or_else(|| snapshot_value.cloned())
+        .unwrap_or(default))
+}
+
 impl LabelOntologyCaptureSignalInput {
     fn into_signal_input(self) -> Result<LabelOntologySignalInput> {
         Ok(LabelOntologySignalInput {
             kind: self.kind,
             target_label_ref: self.target_label_ref,
             related_labels_json: json_value_to_string(
-                coalesce_json_value(
-                    "related_labels",
-                    self.related_labels,
-                    "related_labels_json",
-                    self.related_labels_json,
-                    Some(serde_json::json!([])),
-                )?
-                .unwrap_or_else(|| serde_json::json!([])),
+                self.related_labels
+                    .or_else(|| Some(serde_json::json!([])))
+                    .unwrap_or_else(|| serde_json::json!([])),
             )?,
             proposed_action: self.proposed_action,
             candidate_atom: self.candidate_atom,
             proposed_label_name: self.proposed_label_name,
             proposal_json: json_value_to_string(
-                coalesce_json_value(
-                    "proposal",
-                    self.proposal,
-                    "proposal_json",
-                    self.proposal_json,
-                    Some(serde_json::json!({})),
-                )?
-                .unwrap_or_else(|| serde_json::json!({})),
+                self.proposal
+                    .or_else(|| Some(serde_json::json!({})))
+                    .unwrap_or_else(|| serde_json::json!({})),
             )?,
             agent_selected: self.agent_selected.unwrap_or(false),
             suggest_state: self.suggest_state,
@@ -1048,26 +1144,6 @@ fn normalize_suggestion_snapshot_value(value: JsonValue) -> Result<JsonValue> {
             "suggestion snapshot must be a JSON object or an envelope with object data",
         ))
     }
-}
-
-fn coalesce_json_value(
-    natural_field: &str,
-    natural: Option<JsonValue>,
-    legacy_field: &str,
-    legacy_json: Option<String>,
-    default: Option<JsonValue>,
-) -> Result<Option<JsonValue>> {
-    let legacy = legacy_json
-        .map(|raw| serde_json::from_str::<JsonValue>(&raw))
-        .transpose()?;
-    if let (Some(natural), Some(legacy)) = (&natural, &legacy)
-        && natural != legacy
-    {
-        return Err(invalid_input(format!(
-            "{natural_field} conflicts with {legacy_field}"
-        )));
-    }
-    Ok(natural.or(legacy).or(default))
 }
 
 fn json_value_to_string(value: JsonValue) -> Result<String> {
@@ -1404,13 +1480,7 @@ fn label_semantics_line(record: &kanban_sqlite::api::LabelSemanticsRecord) -> St
     )
 }
 
-#[derive(Debug, Serialize)]
-struct LabelAddCommandOutput {
-    task: kanban_sqlite::api::TaskRecord,
-    created_labels: Vec<kanban_sqlite::api::LabelRecord>,
-}
-
-fn label_add_lines(result: &LabelAddCommandOutput) -> String {
+fn label_add_lines(result: &kanban_sqlite::api::AddTaskLabelsResult) -> String {
     let mut lines = crate::output::task_line(&result.task);
     if !result.created_labels.is_empty() {
         let labels = result
@@ -1425,20 +1495,17 @@ fn label_add_lines(result: &LabelAddCommandOutput) -> String {
     lines
 }
 
-#[derive(Debug, Serialize)]
-struct LabelBootstrapCommandOutput {
-    task: kanban_sqlite::api::TaskRecord,
-    semantics: kanban_sqlite::api::LabelSemanticsRecord,
-    verification: Option<kanban_sqlite::api::BootstrapTaskLabelVerification>,
-}
-
-fn label_bootstrap_lines(result: &LabelBootstrapCommandOutput) -> String {
+fn label_bootstrap_lines(
+    task: &kanban_sqlite::api::TaskRecord,
+    semantics: &kanban_sqlite::api::LabelSemanticsRecord,
+    verification: Option<&kanban_sqlite::api::BootstrapTaskLabelVerification>,
+) -> String {
     let mut lines = format!(
         "{}\n{}",
-        label_semantics_line(&result.semantics),
-        crate::output::task_line(&result.task)
+        label_semantics_line(semantics),
+        crate::output::task_line(task)
     );
-    if let Some(verification) = &result.verification {
+    if let Some(verification) = verification {
         lines.push('\n');
         lines.push_str(&format!(
             "verification label={} score={:.3} min_score={:.3} source={}",
@@ -1449,6 +1516,84 @@ fn label_bootstrap_lines(result: &LabelBootstrapCommandOutput) -> String {
         ));
     }
     lines
+}
+
+fn contract_value<T, S>(value: &S) -> Result<T>
+where
+    T: DeserializeOwned,
+    S: Serialize,
+{
+    let mut value = serde_json::to_value(value).map_err(|error| {
+        KanbanError::Storage(format!("label contract serialization failed: {error}"))
+    })?;
+    kanban_sqlite::api::naturalize_structured_metadata(&mut value)?;
+    serde_json::from_value(value).map_err(|error| {
+        KanbanError::Storage(format!("label contract conversion failed: {error}")).into()
+    })
+}
+
+fn contract_output<T, S>(value: &S) -> Result<DataEnvelope<T>>
+where
+    T: DeserializeOwned,
+    S: Serialize,
+{
+    Ok(DataEnvelope::new(contract_value(value)?))
+}
+
+fn label_atom_index_status_contract(
+    status: &kanban_vector::VectorStoreStatus,
+) -> CliLabelAtomIndexStatus {
+    CliLabelAtomIndexStatus {
+        backend: status.backend.clone(),
+        enabled: status.enabled,
+        message: status.message.clone(),
+        diagnostics: status.diagnostics.clone(),
+        dirty: status.dirty,
+        board_dirty: status.board_dirty,
+        generation: status.generation,
+    }
+}
+
+fn label_atom_explain_contract_output(
+    explain: &kanban_sqlite::api::LabelAtomExplainRecord,
+) -> Result<CliLabelAtomsExplainOutput> {
+    let mut value = serde_json::to_value(explain).map_err(|error| {
+        KanbanError::Storage(format!("label atom explain serialization failed: {error}"))
+    })?;
+    let signals = value
+        .get_mut("supporting_signals")
+        .and_then(JsonValue::as_array_mut)
+        .ok_or_else(|| {
+            KanbanError::Storage("label atom explain supporting_signals must be an array".into())
+        })?;
+    for (wire, record) in signals.iter_mut().zip(&explain.supporting_signals) {
+        let source_task = wire
+            .as_object_mut()
+            .ok_or_else(|| {
+                KanbanError::Storage("label atom explain signal must be an object".into())
+            })?
+            .get_mut("source_task")
+            .ok_or_else(|| {
+                KanbanError::Storage("label atom explain signal must contain source_task".into())
+            })?;
+        *source_task =
+            serde_json::to_value(api_task_from_record(&record.source_task)?).map_err(|error| {
+                KanbanError::Storage(format!(
+                    "label atom explain source task serialization failed: {error}"
+                ))
+            })?;
+    }
+    kanban_sqlite::api::naturalize_structured_metadata(&mut value)?;
+    serde_json::from_value(
+        serde_json::to_value(DataEnvelope::new(value)).map_err(|error| {
+            KanbanError::Storage(format!(
+                "label atom explain envelope serialization failed: {error}"
+            ))
+        })?,
+    )
+    .map_err(|error| {
+        KanbanError::Storage(format!("label atom explain conversion failed: {error}")).into()
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1589,7 +1734,8 @@ fn label_suggestion_lines(result: &LabelSuggestionResult) -> String {
 
 fn read_proposal_candidate(path: &std::path::Path) -> Result<LabelProposalCandidate> {
     let raw = read_text_input(path)?;
-    serde_json::from_str(&raw).map_err(Into::into)
+    let contract: LabelProposalCandidateMetadataInput = serde_json::from_str(&raw)?;
+    serde_json::from_value(serde_json::to_value(contract)?).map_err(Into::into)
 }
 
 fn proposal_lines(proposals: &[LabelSemanticProposalRecord]) -> String {

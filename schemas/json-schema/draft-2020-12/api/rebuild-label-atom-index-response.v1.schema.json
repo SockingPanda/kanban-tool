@@ -1,0 +1,69 @@
+{
+  "$defs": {
+    "VectorStoreStatusWire": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "type": "string"
+        },
+        "board_dirty": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "diagnostics": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dirty": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "generation": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "backend",
+        "enabled",
+        "message",
+        "diagnostics",
+        "dirty",
+        "board_dirty",
+        "generation"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:rebuild-label-atom-index-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/VectorStoreStatusWire"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Rebuild label atom index response v1",
+  "type": "object"
+}

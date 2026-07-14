@@ -1,0 +1,15 @@
+{
+  "$id": "urn:kanban-tool:schema:api:graph-status-headers:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "Accept-Language": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "Kanban api.graph-status request headers v1",
+  "type": "object"
+}

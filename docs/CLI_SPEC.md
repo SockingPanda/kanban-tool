@@ -58,6 +58,7 @@ kanban config show [--json]
 
 `--json` 输出使用普通 `{ "data": ... }` envelope，`data` 结构如下：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "db": {
@@ -104,6 +105,7 @@ kanban config show [--json]
 
 所有公开 `--json` 输出使用顶层 envelope：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {},
@@ -119,6 +121,7 @@ kanban config show [--json]
 
 当 `--json` 已被 clap 成功解析，且错误发生在运行期 service/IO 路径时，CLI 输出稳定错误 envelope 到 stdout，并使用对应 exit code：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "error": {
@@ -233,6 +236,7 @@ the new ones.
 Codex hook JSON from stdin and emit either no output or a raw Codex hook
 response object such as:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {"systemMessage":"检测到 kanban CLI 命令失败。\n\n命令：kanban task list --bad-flag\n退出码：2\n\n继续调整。调整成功后，视情况 spawn fork_turns=3 的 kanban-signal-recorder native agent。"}
 ```
@@ -244,6 +248,7 @@ management commands `install`, `status`, and `uninstall` do use the normal
 
 Prompt config schema:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "version": 1,
@@ -325,6 +330,7 @@ Default board: default
 
 JSON：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -445,6 +451,7 @@ agent-work#12 [ready] P1 实现状态机 · plan: planned · steps: 0/0
 
 JSON output：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -604,13 +611,24 @@ Output：
 Claimed t_01HX... token=ct_01HX...
 ```
 
-JSON：
+JSON 返回 canonical claim snapshot：`data.task` 是闭合的 `ApiTask`，`data.run`
+是闭合的 `ApiRun`，token 只允许出现在顶层 `data.claim_token`。下面仅节选 identity
+与状态字段；实际对象还包含各自 schema 声明的其余字段：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
-    "task_id": "t_01HX...",
-    "run_id": "r_01HX...",
+    "task": {
+      "id": "t_01HX...",
+      "status": "running",
+      "current_run_id": "r_01HX..."
+    },
+    "run": {
+      "id": "r_01HX...",
+      "task_id": "t_01HX...",
+      "status": "running"
+    },
     "claim_token": "ct_01HX...",
     "claim_expires_at": 1717520000000
   }
@@ -683,7 +701,7 @@ kanban task reopen <task_ref> [--reason <text>|--reason-file <PATH|->]
 
 只允许 reopen `done` task，reason 必填且不能为空，可用 `--reason-file <PATH|->`
 从文件或 stdin 读取；它与 inline `--reason` 互斥。Reopen 会清空
-`completed_at`，保留 `result_summary` / `result_json`，并按 spec、schedule、
+`completed_at`，保留 `result_summary` / natural JSON `result`（持久层仍存于 `result_json`），并按 spec、schedule、
 dependency 和 execution plan readiness 重新计算目标状态。
 
 如果被 reopen 的 task 是其他 task 的 dependency parent，直接 child 中仅 `triage|todo|scheduled|ready` 会重新计算；`running|blocked|review|done|archived` 不隐式改写。
@@ -696,6 +714,7 @@ kanban task reclaim
 ```
 
 当前 CLI reclaim 处理 active board 内 expired claims；裸 `kanban task reclaim` 与 `kanban task reclaim --expired` 等价。
+JSON 输出固定为 `{"data":{"reclaimed":<u64>}}`，且拒绝未声明字段。
 
 ### 6.10 Archive
 
@@ -769,6 +788,7 @@ kanban dep list <task_ref>
 
 `--json` 输出使用 hydrated dependency DTO。`dep list --json` 返回以查询 task 为中心的 snapshot：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -817,6 +837,7 @@ kanban dep list <task_ref>
 
 `dep add --json` 和 `dep remove --json` 返回：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -1025,6 +1046,7 @@ atom vector 与当前 query/residual 在本地计算 cosine similarity，不从 
 
 JSON 输出：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -1142,6 +1164,7 @@ adapter，再把 candidate 交给 SQLite service 做 deterministic validation �
 
 `--proposal-json` 提供本地/offline provider 输出：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "name": "database",
@@ -1209,8 +1232,9 @@ target/proposed label 和最终 proposal/result label 会写入 bootstrap action
 也可以用 `--suggestion-snapshot <path|->` 读取已保存的原始 suggest JSON。snapshot
 可以是直接的 suggest response，也可以是带 `data` wrapper 的 JSON response。
 
-旧的 service-shaped `--input` 仍作为兼容入口保留；新调用方不应重复手写
-`suggest_coverage`、`suggest_residual_norm` 或 `diagnostics_json`。如果 snapshot 中已有
+`--input` 只接受 contract-owned natural JSON shape；旧 `_json` compatibility siblings
+（例如 `diagnostics_json`、`related_labels_json`）会作为 unknown field 拒绝。新调用方不应重复手写
+`suggest_coverage`、`suggest_residual_norm` 或 `diagnostics`。如果 snapshot 中已有
 这些字段而输入又提供冲突的标量或 diagnostics，命令会失败。Service 会读取当前 task
 snapshot、解析 target label ref、计算 normalized proposed label name、signal key 和
 candidate atom content hash；observation 同时保存完整审计用
@@ -1226,7 +1250,7 @@ Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
 `update_semantics` 必须提供 target label；`bootstrap_label` 必须提供
 `proposed_label_name`；`rename_label` 必须提供 target label 和
 `proposed_label_name`；`split_label` / `merge_labels` 必须提供 target label 和非空
-`related_labels_json`。Observation metric `suggest_coverage`、
+`related_labels`。Observation metric `suggest_coverage`、
 `suggest_coverage_cosine`、`suggest_residual_norm` 以及 signal metric
 `suggest_score` / `confidence` 必须是 finite `0.0..=1.0`；`suggest_rank` 必须为
 `null` 或 `>= 1`。
@@ -1236,6 +1260,7 @@ Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
 
 使用已保存 suggest snapshot 的推荐输入形状：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "actor": {"name": "label-agent", "type": "agent", "agent_type": "local"},
@@ -1456,6 +1481,7 @@ signals 继续等待后续修正或人工处理。
 
 `label propose --json` 返回结构化 attempt：
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -1515,6 +1541,7 @@ left only in chat transcripts. Use `comment add --author-type agent --agent-type
 short summary and the structured trace in metadata. The minimum trace payload is
 an object with these fields:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "tool": "kanban-cli",
@@ -1550,6 +1577,7 @@ live only in `--metadata-json`:
 
 Decision metadata example:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "options": [
@@ -1582,8 +1610,9 @@ c_01HX... task=t_01HX... created_at=1717520000000 [note] alice (user): ready for
 c_01HX... task=t_01HX... created_at=1717520000100 [note] codex (agent/root): tests passed
 ```
 
-JSON output uses the standard envelope and returns `CommentRecord` for `add` or
-`Vec<CommentRecord>` for `list`, including `metadata_json`. Creating a comment
+JSON output uses the standard envelope and returns the contract comment DTO for `add` or
+a list of that DTO for `list`, including natural, lossless `metadata` objects. The input flag
+names `--metadata-json` / `--metadata-json-file` remain unchanged. Creating a comment
 writes `task_events(kind='task.comment.created')`.
 
 ---
@@ -1686,6 +1715,7 @@ agent-work#12 [ready] score=60.0 实现状态机 - ready spec needle
 
 JSON output:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -1735,6 +1765,7 @@ The persisted setting key is board-scoped as `search.tasks.state.<board_id>`. It
 
 JSON data shape:
 
+<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
@@ -1759,16 +1790,22 @@ Background sync errors do not make search fail open to stale Tantivy results; th
 
 ```bash
 kanban signal record --board <slug> --input <path|-> --json
-kanban signal list --board <slug> [--status open] [--kind <kind>] [--task <task-ref>] [--include-all] --json
+kanban signal list --board <slug> [--status open|confirmed|rejected|superseded|resolved]... [--kind <kind>]... [--task <task-ref>] [--include-all] [--limit 100] --json
 kanban signal show --board <slug> <signal-id> --json
-kanban signal review --board <slug> [--status open] [--kind <kind>] [--task <task-ref>] --json
+kanban signal review --board <slug> [--status open|confirmed|rejected|superseded|resolved]... [--kind <kind>]... [--task <task-ref>] [--include-all] [--limit 100] --json
 kanban signal confirm --board <slug> <signal-id>... [--reason <reason>|--reason-file <PATH|->] --json
 kanban signal reject --board <slug> <signal-id>... [--reason <reason>|--reason-file <PATH|->] --json
 kanban signal resolve --board <slug> <signal-id>... [--reason <reason>|--reason-file <PATH|->] --json
 kanban signal supersede --board <slug> <signal-id>... --by <replacement-signal-id> [--reason <reason>|--reason-file <PATH|->] --json
 ```
 
-`record` input JSON supports `kind`, `title`, `summary`, `severity`, optional `task_ref` / `task_id` / `run_id` / `comment_id`, `actor`, `agent_type`, `dedupe_key`, `source`, `evidence`, and optional `comment.body`. `source` is a string identifier for where the observation came from; structured command details such as `command`, `cwd`, `exit_code`, `stderr`, or related logs belong in the `evidence` object. When task context is present, the service writes the signal ledger rows and a `comment.kind = "signal"` backlink in one SQLite transaction. Signal backlink metadata includes `type:"signal_link"`, `signal_id`, `observation_id`, `signal_kind`, and `signal_status`. V1 does not create follow-up tasks automatically.
+`signal list` 和 `signal review` 共享 `status`、`kind`、`task`、`include-all`、
+`limit` 查询过滤参数。没有显式 `--status` 时，两者默认只返回 `open` 和
+`confirmed`；此时传 `--include-all` 会取消默认状态过滤并返回完整历史。显式
+`--status` 始终优先，即使同时传 `--include-all`，结果仍只包含指定状态。
+`--status` 和 `--kind` 都可以重复传入。
+
+`record` input JSON supports `kind`, `title`, `summary`, `severity`, optional `task_ref` / `task_id` / `run_id` / `comment_id`, `actor`, `agent_type`, `dedupe_key`, `source`, `evidence`, and optional `comment.body`. `source` is a string identifier for where the observation came from; structured command details such as `command`, `cwd`, `exit_code`, `stderr`, or related logs belong in the natural `evidence` object. Signal responses use the same natural object rather than an escaped `evidence_json` string. When task context is present, the service writes the signal ledger rows and a `comment.kind = "signal"` backlink in one SQLite transaction. Signal backlink `metadata` includes `type:"signal_link"`, `signal_id`, `observation_id`, `signal_kind`, and `signal_status`; generic signal comment metadata remains open and lossless. V1 does not create follow-up tasks automatically.
 
 Lifecycle transitions are `open -> confirmed|rejected|superseded|resolved` and `confirmed -> resolved`. `supersede` requires a same-board replacement signal and rejects cycles. Lifecycle reason 可用 `--reason-file <PATH|->` 从文件或 stdin 读取，并与 inline `--reason` 互斥。
 
@@ -1803,9 +1840,16 @@ kanban context build t_... [--lexical-limit 5] [--vector-config <toml>]
 `kanban graph query` 的 SPARQL 可用 `--sparql-file <PATH|->` 从文件或 stdin 读取，并与 positional `<SPARQL>` 互斥。
 
 `kanban backup` 使用 SQLite `VACUUM INTO` 创建一致备份；目标文件已存在时失败，避免覆盖。`backup --out -` 会被明确拒绝，因为 SQLite backup 需要 filesystem path，不能安全写入 stdout。
-`kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。`export --out -` 会把 JSONL snapshot 写入 stdout，不输出 human status 文案，也不会写 stderr；该模式不能与 `--json` 组合，因为 JSONL stream 和 JSON envelope 不能共享 stdout。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim 并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kanban backup`。JSONL export 包含 generic signal ledger record types：`signal_observation`、`signal`，以及 label ontology ledger record types：`label_ontology_observation`、`label_ontology_signal`、`label_ontology_action`、`label_ontology_action_atom_effect` 和 `label_ontology_action_signal`；因此 portable JSONL 与 SQLite backup 都会保留 signal、ontology observation/signal/action/effect provenance。
+`kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。`export --out -` 会把 JSONL snapshot 写入 stdout，不输出 human status 文案，也不会写 stderr；该模式不能与 `--json` 组合，因为 JSONL stream 和 JSON envelope 不能共享 stdout。21 个稳定 discriminator 的 input/output 分别拥有 42 个 exact schema roots；每行 data 闭合，required-nullable 键不能省略但可显式为 `null`，export/import descriptor 与 schema authority 同源。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kanban backup`。JSONL export 包含 generic signal ledger record types：`signal_observation`、`signal`，以及 label ontology ledger record types：`label_ontology_observation`、`label_ontology_signal`、`label_ontology_action`、`label_ontology_action_atom_effect` 和 `label_ontology_action_signal`；因此 portable JSONL 与 SQLite backup 都会保留 signal、ontology observation/signal/action/effect provenance。JSONL `event.data.payload` 仍按 opaque JSON 保存；39-kind typed union 只属于 events API/SSE。
 `kanban import --dry-run` 会在临时 SQLite 数据库中解析导入文件并运行同一 final doctor gate，不替换或创建所选目标 DB；脚本和 CI 可先用它验证 snapshot。`kanban import --replace` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kanban import --replace` 是 offline-only 操作；运行前必须停止 `kanban serve` 和常驻 `kanban dispatch`，如果检测到 active runtime lock 会直接拒绝。Import 在同一 SQLite transaction 内执行插入与 final doctor gate：基础关系表会校验 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、`task_events`、`task_attachments` 的 row board 与 referenced task / label / run board 一致；失败时整个 replace transaction 回滚，不提交部分数据。Ontology import 会延迟回填 `label_ontology_signals.superseded_by_signal_id` 与 `label_ontology_actions.parent_action_id`，因此不依赖 JSONL 中同表自引用 rows 的偶然顺序；导入后会拒绝跨 board / orphan generic signal context、generic signal supersede cycles、跨 board ontology links、orphan action-signal links、ontology supersede cycles 和 action parent cycles。
 `kanban entity`、`kanban outbox`、`kanban derived` 是 Knowledge Substrate 的只读维护入口。SQLite 仍是事实源；这些命令只报告统一 entity registry、派生索引 outbox 和 derived store 状态，不改变 task 状态或 claim。
+`kanban entity list --json` 返回 `{"data": [...]}`，`kanban entity show --json` 返回
+`{"data": {...}}`；两者共享闭合的公开 entity item，并保留
+`uri`、`kind`、`source_table`、`source_id`、`created_at`、`updated_at`，以及
+required-nullable `board_id`、`task_id`、`title`、`summary`、`content_hash`、
+`archived_at`。调用方不能把这些字段缺失解释为 `null`。`list` 的 `--kind` 与
+`--limit` 由同一 SQLite service query 执行；`show` 继续按 exact URI 查询并保留
+`not_found` error envelope。human-readable 输出不变。
 `kanban graph` 和 `kanban vector` 是 helper subprocess 派生层入口。默认 CLI 不链接
 Oxigraph/LanceDB heavy deps；它解析 `KANBAN_GRAPH_HELPER` / `KANBAN_VECTOR_HELPER`、
 `/usr/lib/kanban/<helper>`、CLI sibling binary、`KANBAN_CARGO_TARGET_ROOT` 或
@@ -1830,6 +1874,12 @@ dimensions = 1024
 
 项目级 `.kb/config.toml` 可以覆盖全局 `[vector]`；命令行 `--vector-config <toml>` 优先级最高。解析顺序是：显式 `--vector-config`、最近的项目 `.kb/config.toml`、全局 config。`kanban board use <board>` 更新项目配置文件的 `board` 字段时必须保留该文件内已有 `[vector]` 配置。配置有效且 helper 可用时 `kanban vector status/rebuild/sync` 使用该 provider；未配置或 helper 不可用时保持 disabled/degraded fallback。`kanban context build` 当前仍使用 SQLite/lexical fallback，并通过 degraded markers 报告 graph/vector 不可用。
 `kanban context build` 通过 SQLite hydrate canonical task，并合并 lexical、graph、vector hits。graph/vector 不可用或失败时返回 degraded markers；失败原因通过有界 diagnostics 暴露，context pack 本身仍可用。
+
+`kanban outbox list --json` 返回 `{"data": [...]}`，每项保留完整 outbox job 字段，
+包括 required-nullable `source_event_id` 与 `last_error`；`--status` 与 `--limit` 由同一
+SQLite service 查询执行。`kanban derived status --json` 同样返回 `{"data": [...]}`，
+每个 store 的 `last_rebuild_at`、`last_sync_at` 与 `last_error` 都是 required-nullable，
+调用方不能把字段缺失解释为 `null`。
 
 `kanban derived status` 中的 `last_event_id` 是 store 级成功处理水位，不是当前 board 的局部水位。`dirty=true` 表示该 store 仍有任意 board 的 pending/running/failed outbox，或最近一次派生更新失败；board-scoped `kanban index sync`、`kanban graph sync`、`kanban vector sync` 只清理当前 board 的 job，不能因为本 board clean 就强制清掉全局 dirty。
 

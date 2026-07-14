@@ -8,6 +8,7 @@ authors.workspace = true
 [dependencies]
 dirs-next.workspace = true
 fs-err.workspace = true
+kanban-contract.workspace = true
 serde.workspace = true
 serde_path_to_error.workspace = true
 thiserror.workspace = true
@@ -15,4 +16,5 @@ toml.workspace = true
 
 [dev-dependencies]
 assert_fs.workspace = true
+serde_json.workspace = true
 tempfile.workspace = true

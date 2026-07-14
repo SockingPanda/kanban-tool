@@ -39,11 +39,12 @@ configure_paths() {
   CACHE_ROOT="$(expand_home_path "${KANBAN_CLOUD_CACHE_ROOT:-$HOME/.cache/kanban-tool}")"
   export KANBAN_CARGO_TARGET_ROOT
   KANBAN_CARGO_TARGET_ROOT="$(expand_home_path "${KANBAN_CARGO_TARGET_ROOT:-$CACHE_ROOT/cargo-target}")"
+  export CARGO_TARGET_DIR="$KANBAN_CARGO_TARGET_ROOT"
   export KANBAN_CARGO_BUILD_JOBS="${KANBAN_CARGO_BUILD_JOBS:-auto}"
   export KANBAN_TEST_THREADS="${KANBAN_TEST_THREADS:-auto}"
   export PNPM_HOME
   PNPM_HOME="$(expand_home_path "${PNPM_HOME:-$HOME/.local/share/pnpm}")"
-  export PATH="$HOME/.cargo/bin:$PNPM_HOME:$PATH"
+  export PATH="$KANBAN_CARGO_TARGET_ROOT/release:$KANBAN_CARGO_TARGET_ROOT/debug:$HOME/.cargo/bin:$PNPM_HOME:$PATH"
 }
 
 persist_shell_defaults() {
@@ -58,6 +59,15 @@ persist_shell_defaults() {
 
 # kanban-tool Codex Cloud defaults
 export KANBAN_CARGO_TARGET_ROOT="${KANBAN_CARGO_TARGET_ROOT:-$HOME/.cache/kanban-tool/cargo-target}"
+export CARGO_TARGET_DIR="$KANBAN_CARGO_TARGET_ROOT"
+case ":$PATH:" in
+  *":$KANBAN_CARGO_TARGET_ROOT/release:"*) ;;
+  *) export PATH="$KANBAN_CARGO_TARGET_ROOT/release:$PATH" ;;
+esac
+case ":$PATH:" in
+  *":$KANBAN_CARGO_TARGET_ROOT/debug:"*) ;;
+  *) export PATH="$KANBAN_CARGO_TARGET_ROOT/debug:$PATH" ;;
+esac
 export KANBAN_CARGO_BUILD_JOBS="${KANBAN_CARGO_BUILD_JOBS:-auto}"
 export KANBAN_TEST_THREADS="${KANBAN_TEST_THREADS:-auto}"
 export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"

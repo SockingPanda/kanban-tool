@@ -1,0 +1,23 @@
+{
+  "$id": "urn:kanban-tool:schema:helper:graph-rebuild-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "backend": {
+      "type": "string"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "message": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "backend",
+    "enabled",
+    "message"
+  ],
+  "title": "Graph Helper Rebuild Response v1",
+  "type": "object"
+}

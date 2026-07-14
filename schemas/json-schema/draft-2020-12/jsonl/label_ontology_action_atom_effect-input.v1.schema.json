@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "AtomEffect": {
+      "enum": [
+        "added",
+        "removed"
+      ],
+      "type": "string"
+    },
+    "AtomKind": {
+      "enum": [
+        "name",
+        "description",
+        "applies_when",
+        "positive_example",
+        "excludes_when",
+        "negative_example"
+      ],
+      "type": "string"
+    },
+    "AtomPolarity": {
+      "enum": [
+        "positive",
+        "negative"
+      ],
+      "type": "string"
+    },
+    "LabelOntologyActionAtomEffectData": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "type": "string"
+        },
+        "atom_content_hash": {
+          "type": "string"
+        },
+        "atom_id_snapshot": {
+          "type": "string"
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "effect": {
+          "$ref": "#/$defs/AtomEffect"
+        },
+        "kind": {
+          "$ref": "#/$defs/AtomKind"
+        },
+        "label_id_snapshot": {
+          "type": "string"
+        },
+        "polarity": {
+          "$ref": "#/$defs/AtomPolarity"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "board_id",
+        "action_id",
+        "label_id_snapshot",
+        "atom_id_snapshot",
+        "atom_content_hash",
+        "polarity",
+        "kind",
+        "text",
+        "effect",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "LabelOntologyActionAtomEffectRecordType": {
+      "enum": [
+        "label_ontology_action_atom_effect"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:jsonl:label_ontology_action_atom_effect-input:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/LabelOntologyActionAtomEffectData"
+    },
+    "type": {
+      "$ref": "#/$defs/LabelOntologyActionAtomEffectRecordType"
+    }
+  },
+  "required": [
+    "type",
+    "data"
+  ],
+  "title": "Kanban JSONL label_ontology_action_atom_effect input v1",
+  "type": "object"
+}

@@ -1,0 +1,39 @@
+{
+  "$id": "urn:kanban-tool:schema:api:review-signals-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "include_all": {
+      "default": false,
+      "type": "boolean"
+    },
+    "kind": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "limit": {
+      "default": 100,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "status": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "task_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "Review Signals Query v1",
+  "type": "object"
+}

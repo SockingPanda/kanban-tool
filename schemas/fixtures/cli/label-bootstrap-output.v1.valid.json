@@ -1,0 +1,111 @@
+{
+  "data": {
+    "semantics": {
+      "applies_when": [
+        "touches Rust service code"
+      ],
+      "atoms": [
+        {
+          "board_id": "b_FIXTURE_1",
+          "content_hash": "hash_fixture",
+          "created_at": 100,
+          "id": "la_FIXTURE_1",
+          "kind": "description",
+          "label_id": "l_FIXTURE_1",
+          "label_name": "backend",
+          "ordinal": 0,
+          "polarity": "positive",
+          "text": "label: backend\ndescription: Backend implementation work",
+          "updated_at": 100
+        },
+        {
+          "board_id": "b_FIXTURE_1",
+          "content_hash": "hash_fixture",
+          "created_at": 100,
+          "id": "la_FIXTURE_2",
+          "kind": "applies_when",
+          "label_id": "l_FIXTURE_1",
+          "label_name": "backend",
+          "ordinal": 1,
+          "polarity": "positive",
+          "text": "touches Rust service code",
+          "updated_at": 100
+        },
+        {
+          "board_id": "b_FIXTURE_1",
+          "content_hash": "hash_fixture",
+          "created_at": 100,
+          "id": "la_FIXTURE_3",
+          "kind": "positive_example",
+          "label_id": "l_FIXTURE_1",
+          "label_name": "backend",
+          "ordinal": 2,
+          "polarity": "positive",
+          "text": "add a service command",
+          "updated_at": 100
+        }
+      ],
+      "board_id": "b_FIXTURE_1",
+      "created_at": 100,
+      "description": "Backend implementation work",
+      "excludes_when": [],
+      "label_id": "l_FIXTURE_1",
+      "label_name": "backend",
+      "negative_examples": [],
+      "positive_examples": [
+        "add a service command"
+      ],
+      "semantics_hash": "hash_fixture",
+      "updated_at": 100
+    },
+    "task": {
+      "archived_at": null,
+      "assignee": null,
+      "board_id": "b_FIXTURE_1",
+      "board_slug": "default",
+      "claim_expires_at": null,
+      "claim_owner": null,
+      "completed_at": null,
+      "completed_required_step_count": 0,
+      "created_at": 100,
+      "created_by": "root",
+      "current_run_id": null,
+      "dependency_blocked": false,
+      "description": "fixture task description",
+      "due_at": null,
+      "execution_plan_state": "unplanned",
+      "id": "t_FIXTURE_1",
+      "labels": [
+        {
+          "board_id": "b_FIXTURE_1",
+          "color": null,
+          "created_at": 100,
+          "id": "l_FIXTURE_1",
+          "name": "backend",
+          "updated_at": 100
+        }
+      ],
+      "last_heartbeat_at": null,
+      "lock_version": 0,
+      "max_retries": null,
+      "metadata": {},
+      "optional_step_count": 0,
+      "position": 1024,
+      "priority": 3,
+      "ref": "default#1",
+      "required_step_count": 0,
+      "result": null,
+      "result_summary": null,
+      "retry_count": 0,
+      "scheduled_at": null,
+      "seq": 1,
+      "started_at": null,
+      "status": "todo",
+      "status_reason": null,
+      "title": "bootstrap fixture",
+      "unfinished_parent_count": 0,
+      "updated_at": 100
+    },
+    "verification": null
+  }
+}

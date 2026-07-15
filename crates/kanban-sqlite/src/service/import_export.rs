@@ -604,39 +604,53 @@ fn detect_portable_import_format(
     data: &Map<String, serde_json::Value>,
     import_format: &mut PortableImportFormat,
 ) -> Result<()> {
-    let detected = match record_type {
-        "column" => match data.get("hidden") {
+    if record_type == "column" {
+        let detected = match data.get("hidden") {
             Some(serde_json::Value::Bool(_)) => Some(PortableImportFormat::Natural),
             Some(serde_json::Value::Number(value)) if matches!(value.as_i64(), Some(0 | 1)) => {
                 Some(PortableImportFormat::ParentStorageNative)
             }
             _ => None,
-        },
-        "task" if data.contains_key("metadata_json") || data.contains_key("result_json") => {
-            Some(PortableImportFormat::ParentStorageNative)
+        };
+        if let Some(detected) = detected {
+            merge_portable_import_format(import_format, detected)?;
         }
-        "task" if data.contains_key("metadata") || data.contains_key("result") => {
+    }
+
+    for &(storage_field, wire_field, _) in parent_storage_native_json_fields(record_type) {
+        let detected = if storage_field == wire_field {
+            data.get(storage_field).map(|value| {
+                if value.is_string() {
+                    PortableImportFormat::ParentStorageNative
+                } else {
+                    PortableImportFormat::Natural
+                }
+            })
+        } else if data.contains_key(storage_field) {
+            Some(PortableImportFormat::ParentStorageNative)
+        } else if data.contains_key(wire_field) {
             Some(PortableImportFormat::Natural)
+        } else {
+            None
+        };
+        if let Some(detected) = detected {
+            merge_portable_import_format(import_format, detected)?;
         }
-        "run" | "comment" if data.contains_key("metadata_json") => {
-            Some(PortableImportFormat::ParentStorageNative)
-        }
-        "run" | "comment" if data.contains_key("metadata") => Some(PortableImportFormat::Natural),
-        "event" if data.contains_key("payload_json") => {
-            Some(PortableImportFormat::ParentStorageNative)
-        }
-        "event" if data.contains_key("payload") => Some(PortableImportFormat::Natural),
-        _ => None,
-    };
-    if let Some(detected) = detected {
-        match *import_format {
-            PortableImportFormat::Unknown => *import_format = detected,
-            current if current == detected => {}
-            _ => {
-                return Err(KanbanError::InvalidInput(
-                    "JSONL import cannot mix natural and parent storage-native records".into(),
-                ));
-            }
+    }
+    Ok(())
+}
+
+fn merge_portable_import_format(
+    import_format: &mut PortableImportFormat,
+    detected: PortableImportFormat,
+) -> Result<()> {
+    match *import_format {
+        PortableImportFormat::Unknown => *import_format = detected,
+        current if current == detected => {}
+        _ => {
+            return Err(KanbanError::InvalidInput(
+                "JSONL import cannot mix natural and parent storage-native records".into(),
+            ));
         }
     }
     Ok(())

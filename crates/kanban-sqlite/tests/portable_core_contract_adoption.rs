@@ -568,6 +568,79 @@ fn importer_migrates_parent_exporter_json_text_keys_and_integer_booleans() {
 }
 
 #[test]
+fn importer_rejects_cross_record_format_mixing_for_every_core_json_field_family_and_rolls_back() {
+    let natural_records = canonical_input_records();
+    let parent_records = parent_exporter_core_records();
+
+    for record_type in ["task", "run", "comment", "event"] {
+        for (direction, mut records, replacement_records) in [
+            (
+                "parent-with-natural",
+                parent_records.clone(),
+                &natural_records,
+            ),
+            (
+                "natural-with-parent",
+                natural_records.clone(),
+                &parent_records,
+            ),
+        ] {
+            let replacement = replacement_records
+                .iter()
+                .find(|record| record["type"] == record_type)
+                .unwrap_or_else(|| panic!("missing {direction} replacement for {record_type}"))
+                .clone();
+            let mixed = records
+                .iter_mut()
+                .find(|record| record["type"] == record_type)
+                .unwrap_or_else(|| panic!("missing {record_type} record in {direction}"));
+            *mixed = replacement;
+
+            let db = TempDb::new(&format!(
+                "portable-core-cross-record-{direction}-{record_type}-"
+            ));
+            let before_board_id: String = connect_file(&db.path)
+                .expect("connect target before import")
+                .query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+                    row.get(0)
+                })
+                .expect("read original board id");
+            let input = db
+                ._dir
+                .path()
+                .join(format!("{direction}-{record_type}.jsonl"));
+            write_jsonl(&input, &records);
+
+            let error = import_jsonl(&db.path, &input, true)
+                .expect_err("cross-record natural/storage-native mixing must fail closed");
+            assert!(
+                error
+                    .to_string()
+                    .contains("JSONL import cannot mix natural and parent storage-native records"),
+                "{direction} {record_type}: {error}"
+            );
+
+            let conn = connect_file(&db.path).expect("connect rolled-back target");
+            let after_board_id: String = conn
+                .query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+                    row.get(0)
+                })
+                .expect("read retained board id");
+            assert_eq!(
+                after_board_id, before_board_id,
+                "{direction} {record_type}: failed replace must retain the original board"
+            );
+            assert_eq!(
+                conn.query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get::<_, i64>(0))
+                    .expect("count imported tasks"),
+                0,
+                "{direction} {record_type}: failed replace must roll back imported tasks"
+            );
+        }
+    }
+}
+
+#[test]
 fn importer_rejects_hybrid_core_records_before_normalization_and_rolls_back_replace() {
     for (record_type, natural_field, storage_field) in [
         ("task", "result", "result_json"),

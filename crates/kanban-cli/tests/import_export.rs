@@ -528,6 +528,55 @@ fn import_replace_rejects_hybrid_parent_record_without_replacing_database() -> a
 }
 
 #[test]
+fn import_replace_rejects_parent_snapshot_with_natural_setting_without_replacing_database()
+-> anyhow::Result<()> {
+    let target = initialized_database(
+        "import_replace_rejects_parent_snapshot_with_natural_setting_without_replacing_database",
+    )?;
+    let existing = kanban(
+        &target.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "existing task survives cross-record import",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let existing_id = existing["data"]["id"]
+        .as_str()
+        .context("expected JSON string")?;
+    mark_no_plan_required(&target.path, existing_id)?;
+    let input_path = target.dir.join("cross-record-mixed.jsonl");
+    std::fs::write(
+        &input_path,
+        parent_snapshot_with_natural_setting_import_jsonl(),
+    )?;
+
+    kanban(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            input_path.to_str().context("expected UTF-8 path")?,
+            "--replace",
+        ],
+    )?
+    .json_failure_containing("cannot mix natural and parent storage-native records")?;
+
+    let retained =
+        kanban(&target.path, &["--json", "task", "show", existing_id])?.success_json()?;
+    assert_eq!(
+        retained["data"]["title"],
+        "existing task survives cross-record import"
+    );
+    Ok(())
+}
+
+#[test]
 fn import_replace_restores_over_corrupt_existing_database() -> anyhow::Result<()> {
     let source = TempDb::new("import_replace_restores_over_corrupt_existing_database_source")?;
     kanban(&source.path, &["init"])?.success()?;
@@ -984,6 +1033,25 @@ fn hybrid_parent_import_jsonl() -> String {
     );
 
     [board_record(), column, task]
+        .into_iter()
+        .map(|record| record.to_string())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn parent_snapshot_with_natural_setting_import_jsonl() -> String {
+    let mut column = column_record();
+    column["data"]["hidden"] = serde_json::json!(0);
+    let setting = serde_json::json!({
+        "type": "setting",
+        "data": {
+            "key": "contract.fixture",
+            "value": {"enabled": true},
+            "updated_at": 2
+        }
+    });
+
+    [board_record(), column, setting]
         .into_iter()
         .map(|record| record.to_string())
         .collect::<Vec<_>>()

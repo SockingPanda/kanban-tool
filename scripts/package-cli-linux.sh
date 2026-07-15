@@ -63,8 +63,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${KANBAN_PACKAGE_BUILD_LOCK_HELD:-}" != "1" ]]; then
-  exec env KANBAN_PACKAGE_BUILD_LOCK_HELD=1 "$LOCK" -- "$0" "${ORIGINAL_ARGS[@]}"
+if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" != "1" ]]; then
+  exec "$LOCK" -- "$0" "${ORIGINAL_ARGS[@]}"
 fi
 
 command -v cargo >/dev/null 2>&1 || { echo "error: cargo is required" >&2; exit 1; }

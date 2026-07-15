@@ -217,6 +217,80 @@ fn dispatch_profile_routes_assignees() -> anyhow::Result<()> {
 }
 
 #[test]
+fn dispatch_only_validates_the_selected_worker_profile() -> anyhow::Result<()> {
+    let temp = TempDb::new("dispatch_only_validates_the_selected_worker_profile")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let config = temp.dir.join("workers.toml");
+    std::fs::write(
+        &config,
+        r#"[workers.backend]
+command = "true"
+claim_ttl_ms = 60000
+heartbeat_interval_ms = 1000
+on_success = "done"
+on_failure = "blocked"
+
+[workers.future]
+command = "true"
+concurrency = 2
+max_runtime_ms = 3600000
+"#,
+    )?;
+
+    let result = kanban(
+        &temp.path,
+        &[
+            "--json",
+            "dispatch",
+            "--worker-profile",
+            "backend",
+            "--profile-config",
+            config.to_str().context("expected UTF-8 path")?,
+            "--max-iterations",
+            "1",
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(result["data"]["iterations"], 1);
+    assert_eq!(result["data"]["claimed"], 0);
+    Ok(())
+}
+
+#[test]
+fn dispatch_reports_the_selected_profile_field_path() -> anyhow::Result<()> {
+    let temp = TempDb::new("dispatch_reports_the_selected_profile_field_path")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let config = temp.dir.join("workers.toml");
+    std::fs::write(
+        &config,
+        r#"[workers.backend]
+command = "true"
+concurrency = 2
+
+[workers.future]
+max_runtime_ms = 3600000
+"#,
+    )?;
+
+    kanban(
+        &temp.path,
+        &[
+            "--json",
+            "dispatch",
+            "--worker-profile",
+            "backend",
+            "--profile-config",
+            config.to_str().context("expected UTF-8 path")?,
+            "--max-iterations",
+            "1",
+        ],
+    )?
+    .json_failure_containing("workers.backend.concurrency")?;
+    Ok(())
+}
+
+#[test]
 fn dispatch_rejects_untrusted_log_dir() -> anyhow::Result<()> {
     let temp = TempDb::new("dispatch_rejects_profile_log_dir_outside_trusted_roots")?;
     kanban(&temp.path, &["init"])?.success()?;

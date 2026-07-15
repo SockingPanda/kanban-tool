@@ -125,17 +125,11 @@ export type LabelSuggestionResult = {
   diagnostics: string[]
 }
 
-export type LabelOntologySignalKind =
-  | "false_negative"
-  | "false_positive"
-  | "vocabulary_gap"
-  | "name_issue"
-  | "boundary_issue"
-  | "structure_issue"
+export type LabelOntologySignalKind = string
 
-export type LabelOntologySignalStatus = "open" | "confirmed" | "resolved" | "rejected" | "superseded"
+export type LabelOntologySignalStatus = string
 
-export type SignalStatus = "open" | "confirmed" | "resolved" | "rejected" | "superseded"
+export type SignalStatus = string
 
 export type SignalObservationRecord = {
   id: string
@@ -147,7 +141,7 @@ export type SignalObservationRecord = {
   actor: string
   agent_type: string | null
   source: string | null
-  evidence_json: string
+  evidence: Record<string, unknown>
   created_at: number
 }
 
@@ -170,15 +164,7 @@ export type SignalRecord = {
   observation: SignalObservationRecord
 }
 
-export type LabelOntologyProposedAction =
-  | "observe"
-  | "add_positive_atom"
-  | "add_negative_atom"
-  | "update_semantics"
-  | "bootstrap_label"
-  | "rename_label"
-  | "split_label"
-  | "merge_labels"
+export type LabelOntologyProposedAction = string
 
 export type LabelOntologyActionType =
   | "confirm"
@@ -207,7 +193,7 @@ export type LabelOntologyValidationEffectiveOutcome =
   | "failed"
   | "partial"
 
-export type LabelOntologySuggestState = "selected" | "candidate" | "absent" | "unavailable"
+export type LabelOntologySuggestState = string
 
 export type LabelOntologyReviewGroupBy = "label" | "candidate_atom" | "proposed_label" | "cluster"
 
@@ -230,17 +216,17 @@ export type LabelOntologyObservationRecord = {
   board_id: string
   task_id: string
   task_ref_snapshot: string
-  task_snapshot_json: string
+  task_snapshot: Record<string, unknown>
   suggest_input_hash: string | null
-  agent_candidates_json: string
-  suggestion_snapshot_json: string
-  final_decision_json: string
+  agent_candidates: unknown[]
+  suggestion_snapshot: Record<string, unknown>
+  final_decision: Record<string, unknown>
   suggest_coverage: number | null
   suggest_coverage_cosine: number | null
   suggest_residual_norm: number | null
   suggest_needs_new_label: boolean
   suggest_degraded: boolean
-  diagnostics_json: string
+  diagnostics: unknown[]
   capture_fingerprint: string
   created_by: string
   created_by_type: string
@@ -257,7 +243,7 @@ export type LabelOntologySignalRecord = {
   status: LabelOntologySignalStatus
   target_label_id: string | null
   target_label_name_snapshot: string | null
-  related_labels_json: string
+  related_labels: unknown[]
   proposed_action: LabelOntologyProposedAction
   candidate_atom_polarity: string | null
   candidate_atom_kind: string | null
@@ -265,7 +251,7 @@ export type LabelOntologySignalRecord = {
   candidate_content_hash: string | null
   proposed_label_name: string | null
   proposed_label_name_normalized: string | null
-  proposal_json: string
+  proposal: Record<string, unknown>
   agent_selected: boolean
   suggest_state: LabelOntologySuggestState | null
   suggest_score: number | null
@@ -295,12 +281,12 @@ export type LabelOntologyActionRecord = {
   result_proposal_id: string | null
   canonical_before_hash: string | null
   canonical_after_hash: string | null
-  change_json: string
+  change: Record<string, unknown>
   validation_requirement: LabelOntologyValidationRequirement
   validation_status: LabelOntologyValidationStatus
   validation_effective_outcome: LabelOntologyValidationEffectiveOutcome
   validation_latest_attempt_id: string | null
-  validation_json: string
+  validation: Record<string, unknown>
   created_by: string
   created_by_type: string
   agent_type: string | null
@@ -1253,7 +1239,9 @@ export class KanbanApi {
     const meta = expectRecord(response.meta, "label ontology signals response meta")
     expectExactKeys(meta, ["limit"], "label ontology signals response meta")
     expectSafeInteger(meta.limit, "label ontology signals response meta.limit", true)
-    return expectArray<LabelOntologySignalRecord>(response.data, "label ontology signals response data")
+    return expectArray<unknown>(response.data, "label ontology signals response data").map((entry, index) =>
+      parseLabelOntologySignal(entry, `label ontology signals response data[${index}]`),
+    )
   }
 
   async reviewLabelOntology(options: LabelOntologyReviewOptions = {}) {
@@ -1262,22 +1250,29 @@ export class KanbanApi {
       include_all: String(options.includeAll ?? false),
       limit: String(options.limit ?? 100),
     })
-    const groups = await this.request<LabelOntologyReviewGroup[]>(
+    const response = expectRecord<Record<string, unknown>>(await this.requestRaw(
       `/api/v1/boards/${this.board}/label-ontology/review?${params.toString()}`,
       { signal: options.signal },
+    ), "label ontology review response")
+    expectExactKeys(response, ["data", "meta"], "label ontology review response")
+    const meta = expectRecord<Record<string, unknown>>(response.meta, "label ontology review response meta")
+    expectExactKeys(meta, ["group_by", "include_all", "limit"], "label ontology review response meta")
+    expectString(meta.group_by, "label ontology review response meta.group_by")
+    expectBoolean(meta.include_all, "label ontology review response meta.include_all")
+    expectSafeInteger(meta.limit, "label ontology review response meta.limit", true)
+    return expectArray<unknown>(response.data, "label ontology review response data").map((entry, index) =>
+      parseLabelOntologyReviewGroup(entry, `label ontology review response data[${index}]`),
     )
-    return expectArray<LabelOntologyReviewGroup>(groups, "label ontology review response data")
   }
 
   async getLabelOntologySignal(signalId: string, options: RequestOptions = {}) {
-    return this.request<LabelOntologySignalDetail>(
-      `/api/v1/label-ontology/signals/${encodeURIComponent(signalId)}`,
-      options,
-    )
+    return parseLabelOntologyDetailEnvelope(await this.requestRaw(
+      `/api/v1/label-ontology/signals/${encodeURIComponent(signalId)}`, options,
+    )).data
   }
 
   async createLabelOntologyAction(input: LabelOntologyActionCreateInput, options: RequestOptions = {}) {
-    return this.request<LabelOntologyActionRecord>(`/api/v1/boards/${this.board}/label-ontology/actions`, {
+    return parseLabelOntologyActionEnvelope(await this.requestRaw(`/api/v1/boards/${this.board}/label-ontology/actions`, {
       method: "POST",
       body: {
         actor: { name: this.actor, type: "user", agent_type: null },
@@ -1287,7 +1282,7 @@ export class KanbanApi {
         superseded_by_signal_id: input.supersededBySignalId ?? null,
       },
       signal: options.signal,
-    })
+    })).data
   }
 
   async explainLabelAtom(atomRef: string, options: RequestOptions = {}) {
@@ -1716,24 +1711,105 @@ function parseGetRunEnvelope(value: unknown): { data: Run } {
   return { data: parseApiRun(envelope.data, "get run response data") }
 }
 
-const SIGNAL_OBSERVATION_KEYS = ["id", "board_id", "task_id", "task_ref_snapshot", "run_id", "comment_id", "actor", "agent_type", "source", "evidence_json", "created_at"] as const
+const SIGNAL_OBSERVATION_KEYS = ["id", "board_id", "task_id", "task_ref_snapshot", "run_id", "comment_id", "actor", "agent_type", "source", "evidence", "created_at"] as const
 const SIGNAL_KEYS = ["id", "board_id", "observation_id", "kind", "title", "summary", "severity", "status", "dedupe_key", "superseded_by_signal_id", "reviewed_by", "reviewed_at", "review_reason", "created_at", "updated_at", "observation"] as const
 function parseSignalObservation(value: unknown, label: string): SignalObservationRecord {
  const record = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(record, SIGNAL_OBSERVATION_KEYS, label)
- for (const key of ["id", "board_id", "actor", "evidence_json"] as const) expectString(record[key], `.`)
+ for (const key of ["id", "board_id", "actor"] as const) expectString(record[key], `.`)
+ record.evidence = expectRecord<Record<string, unknown>>(record.evidence, `${label}.evidence`)
  for (const key of ["task_id", "task_ref_snapshot", "run_id", "comment_id", "agent_type", "source"] as const) expectNullableString(record[key], `.`)
  expectSafeInteger(record.created_at, `.created_at`, true); return record as SignalObservationRecord
 }
 function parseSignalRecord(value: unknown, label: string): SignalRecord {
  const record = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(record, SIGNAL_KEYS, label)
  for (const key of ["id", "board_id", "observation_id", "kind", "title", "summary", "severity"] as const) expectString(record[key], `.`)
- if (!["open", "confirmed", "resolved", "rejected", "superseded"].includes(record.status as string)) throw new ApiError("invalid_response", `.status is unknown`)
+ expectString(record.status, `${label}.status`)
  for (const key of ["dedupe_key", "superseded_by_signal_id", "reviewed_by", "review_reason"] as const) expectNullableString(record[key], `.`)
  expectNullableInteger(record.reviewed_at, `.reviewed_at`); expectSafeInteger(record.created_at, `.created_at`, true); expectSafeInteger(record.updated_at, `.updated_at`, true)
  record.observation = parseSignalObservation(record.observation, `.observation`); return record as SignalRecord
 }
-function parseSignalListEnvelope(value: unknown): { data: SignalRecord[] } { const envelope = expectRecord<Record<string, unknown>>(value, "signals response"); expectExactKeys(envelope, ["data"], "signals response"); return { data: expectArray<unknown>(envelope.data, "signals response data").map((entry, index) => parseSignalRecord(entry, `signals response data[]`)) } }
+function parseSignalListEnvelope(value: unknown): { data: SignalRecord[]; meta: { include_all: boolean; limit: number } } {
+ const envelope = expectRecord<Record<string, unknown>>(value, "signals response"); expectExactKeys(envelope, ["data", "meta"], "signals response")
+ const meta = expectRecord<Record<string, unknown>>(envelope.meta, "signals response meta"); expectExactKeys(meta, ["include_all", "limit"], "signals response meta")
+ return { data: expectArray<unknown>(envelope.data, "signals response data").map((entry) => parseSignalRecord(entry, `signals response data[]`)), meta: { include_all: expectBoolean(meta.include_all, "signals response meta.include_all"), limit: expectSafeInteger(meta.limit, "signals response meta.limit", true) } }
+}
 function parseSignalEnvelope(value: unknown): { data: SignalRecord } { const envelope = expectRecord<Record<string, unknown>>(value, "signal response"); expectExactKeys(envelope, ["data"], "signal response"); return { data: parseSignalRecord(envelope.data, "signal response data") } }
+
+const ONTOLOGY_SIGNAL_KEYS = ["id", "observation_id", "board_id", "kind", "status", "target_label_id", "target_label_name_snapshot", "proposed_action", "candidate_atom_polarity", "candidate_atom_kind", "candidate_text", "candidate_content_hash", "proposed_label_name", "proposed_label_name_normalized", "agent_selected", "suggest_state", "suggest_score", "suggest_rank", "final_selected", "rationale", "confidence", "signal_key", "superseded_by_signal_id", "status_reason", "created_at", "updated_at", "reviewed_at", "closed_at", "related_labels", "proposal"] as const
+const ONTOLOGY_OBSERVATION_KEYS = ["id", "board_id", "task_id", "task_ref_snapshot", "suggest_input_hash", "suggest_coverage", "suggest_coverage_cosine", "suggest_residual_norm", "suggest_needs_new_label", "suggest_degraded", "capture_fingerprint", "created_by", "created_by_type", "agent_type", "created_at", "signals", "task_snapshot", "agent_candidates", "suggestion_snapshot", "final_decision", "diagnostics"] as const
+const ONTOLOGY_ACTION_KEYS = ["id", "board_id", "parent_action_id", "action_type", "reason", "target_label_id", "result_label_id", "result_atom_id", "result_atom_content_hash", "result_proposal_id", "canonical_before_hash", "canonical_after_hash", "validation_requirement", "validation_status", "validation_effective_outcome", "validation_latest_attempt_id", "created_by", "created_by_type", "agent_type", "created_at", "signal_ids", "change", "validation"] as const
+const ONTOLOGY_REVIEW_GROUP_KEYS = ["group_by", "key", "label_id", "label_name", "candidate_atom_polarity", "candidate_atom_kind", "candidate_text", "candidate_content_hash", "proposed_label_name", "proposed_label_name_normalized", "cluster_key", "cluster_reason", "task_count", "signal_count", "open_count", "confirmed_count", "resolved_count", "rejected_count", "superseded_count", "degraded_count", "average_score", "median_score", "oldest_signal_at", "latest_signal_at", "sample_task_refs", "signal_ids", "action_count", "action_ids", "proposal_ids", "labels", "candidate_atom_variants"] as const
+const ONTOLOGY_REVIEW_GROUP_BY = new Set<LabelOntologyReviewGroupBy>(["label", "candidate_atom", "proposed_label", "cluster"])
+const ONTOLOGY_ACTION_TYPES = new Set<LabelOntologyActionType>(["confirm", "reject", "supersede", "resolve_no_change", "add_positive_atom", "add_negative_atom", "adopt_existing_atom", "update_semantics", "create_label_proposal", "bootstrap_label", "rename_label", "split_label", "merge_labels", "revert_ontology_mutation", "validate"])
+
+function parseLabelOntologySignal(value: unknown, label: string): LabelOntologySignalRecord {
+  const record = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(record, ONTOLOGY_SIGNAL_KEYS, label)
+  for (const key of ["id", "observation_id", "board_id", "rationale", "signal_key"] as const) expectString(record[key], `${label}.${key}`)
+  for (const key of ["target_label_id", "target_label_name_snapshot", "candidate_atom_polarity", "candidate_atom_kind", "candidate_text", "candidate_content_hash", "proposed_label_name", "proposed_label_name_normalized", "suggest_state", "superseded_by_signal_id", "status_reason"] as const) expectNullableString(record[key], `${label}.${key}`)
+  for (const key of ["kind", "status", "proposed_action"] as const) expectString(record[key], `${label}.${key}`)
+  for (const key of ["agent_selected", "final_selected"] as const) expectBoolean(record[key], `${label}.${key}`)
+  for (const key of ["suggest_score", "confidence"] as const) if (record[key] !== null) expectFiniteNumber(record[key], `${label}.${key}`)
+  for (const key of ["suggest_rank", "reviewed_at", "closed_at"] as const) expectNullableInteger(record[key], `${label}.${key}`)
+  for (const key of ["created_at", "updated_at"] as const) expectSafeInteger(record[key], `${label}.${key}`, true)
+  record.related_labels = expectArray<unknown>(record.related_labels, `${label}.related_labels`)
+  record.proposal = expectRecord<Record<string, unknown>>(record.proposal, `${label}.proposal`)
+  return record as LabelOntologySignalRecord
+}
+
+function parseLabelOntologyObservation(value: unknown, label: string): LabelOntologyObservationRecord {
+  const record = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(record, ONTOLOGY_OBSERVATION_KEYS, label)
+  for (const key of ["id", "board_id", "task_id", "task_ref_snapshot", "capture_fingerprint", "created_by", "created_by_type"] as const) expectString(record[key], `${label}.${key}`)
+  for (const key of ["suggest_input_hash", "agent_type"] as const) expectNullableString(record[key], `${label}.${key}`)
+  for (const key of ["suggest_coverage", "suggest_coverage_cosine", "suggest_residual_norm"] as const) if (record[key] !== null) expectFiniteNumber(record[key], `${label}.${key}`)
+  for (const key of ["suggest_needs_new_label", "suggest_degraded"] as const) expectBoolean(record[key], `${label}.${key}`)
+  expectSafeInteger(record.created_at, `${label}.created_at`, true)
+  record.task_snapshot = expectRecord<Record<string, unknown>>(record.task_snapshot, `${label}.task_snapshot`)
+  record.agent_candidates = expectArray<unknown>(record.agent_candidates, `${label}.agent_candidates`)
+  record.suggestion_snapshot = expectRecord<Record<string, unknown>>(record.suggestion_snapshot, `${label}.suggestion_snapshot`)
+  record.final_decision = expectRecord<Record<string, unknown>>(record.final_decision, `${label}.final_decision`)
+  record.diagnostics = expectArray<unknown>(record.diagnostics, `${label}.diagnostics`)
+  record.signals = expectArray<unknown>(record.signals, `${label}.signals`).map((entry, index) => parseLabelOntologySignal(entry, `${label}.signals[${index}]`))
+  return record as LabelOntologyObservationRecord
+}
+
+function parseLabelOntologyAction(value: unknown, label: string): LabelOntologyActionRecord {
+  const record = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(record, ONTOLOGY_ACTION_KEYS, label)
+  for (const key of ["id", "board_id", "reason", "created_by", "created_by_type"] as const) expectString(record[key], `${label}.${key}`)
+  for (const key of ["parent_action_id", "target_label_id", "result_label_id", "result_atom_id", "result_atom_content_hash", "result_proposal_id", "canonical_before_hash", "canonical_after_hash", "validation_latest_attempt_id", "agent_type"] as const) expectNullableString(record[key], `${label}.${key}`)
+  if (!ONTOLOGY_ACTION_TYPES.has(record.action_type as LabelOntologyActionType)) throw new ApiError("invalid_response", `${label}.action_type is unknown`)
+  if (!["none", "required", "unsupported"].includes(record.validation_requirement as string)) throw new ApiError("invalid_response", `${label}.validation_requirement is unknown`)
+  if (!["not_required", "pending", "passed", "failed", "partial"].includes(record.validation_status as string)) throw new ApiError("invalid_response", `${label}.validation_status is unknown`)
+  if (!["not_required", "unsupported", "pending", "passed", "failed", "partial"].includes(record.validation_effective_outcome as string)) throw new ApiError("invalid_response", `${label}.validation_effective_outcome is unknown`)
+  expectSafeInteger(record.created_at, `${label}.created_at`, true)
+  record.change = expectRecord<Record<string, unknown>>(record.change, `${label}.change`)
+  record.validation = expectRecord<Record<string, unknown>>(record.validation, `${label}.validation`)
+  record.signal_ids = expectArray<unknown>(record.signal_ids, `${label}.signal_ids`).map((entry, index) => expectString(entry, `${label}.signal_ids[${index}]`))
+  return record as LabelOntologyActionRecord
+}
+
+function parseLabelOntologyReviewGroup(value: unknown, label: string): LabelOntologyReviewGroup {
+  const record = expectRecord<Record<string, unknown>>(value, label); expectExactKeys(record, ONTOLOGY_REVIEW_GROUP_KEYS, label)
+  if (!ONTOLOGY_REVIEW_GROUP_BY.has(record.group_by as LabelOntologyReviewGroupBy)) throw new ApiError("invalid_response", `${label}.group_by is unknown`)
+  expectString(record.key, `${label}.key`)
+  for (const key of ["label_id", "label_name", "candidate_atom_polarity", "candidate_atom_kind", "candidate_text", "candidate_content_hash", "proposed_label_name", "proposed_label_name_normalized", "cluster_key", "cluster_reason"] as const) expectNullableString(record[key], `${label}.${key}`)
+  for (const key of ["task_count", "signal_count", "open_count", "confirmed_count", "resolved_count", "rejected_count", "superseded_count", "degraded_count", "oldest_signal_at", "latest_signal_at", "action_count"] as const) expectSafeInteger(record[key], `${label}.${key}`, true)
+  for (const key of ["average_score", "median_score"] as const) if (record[key] !== null) expectFiniteNumber(record[key], `${label}.${key}`)
+  for (const key of ["sample_task_refs", "signal_ids", "action_ids", "proposal_ids"] as const) record[key] = expectArray<unknown>(record[key], `${label}.${key}`).map((entry, index) => expectString(entry, `${label}.${key}[${index}]`))
+  record.labels = expectArray<unknown>(record.labels, `${label}.labels`).map((entry, index) => { const item = expectRecord<Record<string, unknown>>(entry, `${label}.labels[${index}]`); expectExactKeys(item, ["id", "name"], `${label}.labels[${index}]`); return { id: expectString(item.id, `${label}.labels[${index}].id`), name: expectNullableString(item.name, `${label}.labels[${index}].name`) } })
+  record.candidate_atom_variants = expectArray<unknown>(record.candidate_atom_variants, `${label}.candidate_atom_variants`).map((entry, index) => { const item = expectRecord<Record<string, unknown>>(entry, `${label}.candidate_atom_variants[${index}]`); expectExactKeys(item, ["content_hash", "polarity", "kind", "text", "signal_count"], `${label}.candidate_atom_variants[${index}]`); return { content_hash: expectString(item.content_hash, `${label}.candidate_atom_variants[${index}].content_hash`), polarity: expectNullableString(item.polarity, `${label}.candidate_atom_variants[${index}].polarity`), kind: expectNullableString(item.kind, `${label}.candidate_atom_variants[${index}].kind`), text: expectNullableString(item.text, `${label}.candidate_atom_variants[${index}].text`), signal_count: expectSafeInteger(item.signal_count, `${label}.candidate_atom_variants[${index}].signal_count`, true) } })
+  return record as LabelOntologyReviewGroup
+}
+
+function parseLabelOntologyDetailEnvelope(value: unknown): { data: LabelOntologySignalDetail } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "label ontology signal response"); expectExactKeys(envelope, ["data"], "label ontology signal response")
+  const data = expectRecord<Record<string, unknown>>(envelope.data, "label ontology signal response data"); expectExactKeys(data, ["signal", "observation", "actions"], "label ontology signal response data")
+  return { data: { signal: parseLabelOntologySignal(data.signal, "label ontology signal response data.signal"), observation: parseLabelOntologyObservation(data.observation, "label ontology signal response data.observation"), actions: expectArray<unknown>(data.actions, "label ontology signal response data.actions").map((entry, index) => parseLabelOntologyAction(entry, `label ontology signal response data.actions[${index}]`)) } }
+}
+
+function parseLabelOntologyActionEnvelope(value: unknown): { data: LabelOntologyActionRecord } {
+  const envelope = expectRecord<Record<string, unknown>>(value, "label ontology action response"); expectExactKeys(envelope, ["data"], "label ontology action response")
+  return { data: parseLabelOntologyAction(envelope.data, "label ontology action response data") }
+}
 
 const LABEL_EVIDENCE_KEYS = ["atom_id", "label_id", "label_name", "polarity", "kind", "text", "score"] as const
 const LABEL_SUGGESTION_KEYS = ["label_id", "label_name", "score", "weight", "already_applied", "evidence_atoms", "negative_evidence_atoms"] as const

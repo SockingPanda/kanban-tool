@@ -13,10 +13,103 @@ const runtimeConfig = {
 
 const apiSource = readFileSync(new URL("./api.ts", import.meta.url), "utf8")
 
+function fixture(name: string): unknown {
+  return JSON.parse(readFileSync(new URL(`../../../../schemas/fixtures/api/${name}`, import.meta.url), "utf8"))
+}
+
 describe("KanbanApi task search", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     setCurrentDesktopLocale("en")
+  })
+
+  it("consumes committed generic signal fixtures with list metadata and natural evidence", async () => {
+    const api = new KanbanApi(runtimeConfig)
+    const listFixture = fixture("list-signals-response.v1.valid.json")
+    const reviewFixture = fixture("review-signals-response.v1.valid.json")
+    const detailFixture = fixture("get-signal-response.v1.valid.json")
+
+    mockFetch(listFixture)
+    await expect(api.listSignals()).resolves.toEqual([])
+    vi.unstubAllGlobals()
+    mockFetch(reviewFixture)
+    await expect(api.reviewSignals()).resolves.toEqual([])
+    vi.unstubAllGlobals()
+    mockFetch(detailFixture)
+    await expect(api.getSignal("sig_fixture")).resolves.toMatchObject({
+      observation: { evidence: {} },
+    })
+  })
+
+  it("consumes committed ontology natural JSON fixtures", async () => {
+    const api = new KanbanApi(runtimeConfig)
+    mockFetch(fixture("list-label-ontology-signals-response.v1.valid.json"))
+    const signals = await api.listLabelOntologySignals()
+    expect(signals[0]).toMatchObject({ related_labels: [], proposal: {} })
+
+    vi.unstubAllGlobals()
+    mockFetch(fixture("review-label-ontology-response.v1.valid.json"))
+    await expect(api.reviewLabelOntology()).resolves.toEqual([])
+
+    vi.unstubAllGlobals()
+    mockFetch(fixture("get-label-ontology-signal-response.v1.valid.json"))
+    const detail = await api.getLabelOntologySignal("los_fixture")
+    expect(detail.observation).toMatchObject({
+      task_snapshot: { id: "t_fixture" },
+      agent_candidates: [],
+      suggestion_snapshot: {},
+      final_decision: {},
+      diagnostics: [],
+    })
+
+    vi.unstubAllGlobals()
+    const observationEnvelope = fixture("record-label-ontology-observation-response.v1.valid.json") as { data: unknown }
+    const detailEnvelope = fixture("get-label-ontology-signal-response.v1.valid.json") as { data: { signal: unknown } }
+    mockFetch({ data: { signal: detailEnvelope.data.signal, observation: observationEnvelope.data, actions: [] } })
+    await expect(api.getLabelOntologySignal("los_fixture")).resolves.toMatchObject({
+      observation: { task_snapshot: { id: "t_fixture" }, diagnostics: [] },
+    })
+
+    vi.unstubAllGlobals()
+    mockFetch(fixture("create-label-ontology-action-response.v1.valid.json"))
+    await expect(api.createLabelOntologyAction({
+      actionType: "confirm",
+      signalIds: ["los_fixture"],
+      reason: "fixture",
+    })).resolves.toMatchObject({ change: {}, validation: {} })
+  })
+
+  it("rejects legacy or malformed ontology response fields", async () => {
+    const api = new KanbanApi(runtimeConfig)
+    const list = fixture("list-label-ontology-signals-response.v1.valid.json") as { data: Array<Record<string, unknown>>; meta: unknown }
+    const legacySignal: Record<string, unknown> = { ...list.data[0], related_labels_json: "[]" }
+    delete legacySignal.related_labels
+    mockFetch({ data: [legacySignal], meta: list.meta })
+    await expect(api.listLabelOntologySignals()).rejects.toMatchObject({ code: "invalid_response" })
+
+    vi.unstubAllGlobals()
+    mockFetch({
+      data: [labelOntologyReviewGroup({ task_count: "one" as unknown as number })],
+      meta: { group_by: "label", include_all: false, limit: 1 },
+    })
+    await expect(api.reviewLabelOntology()).rejects.toMatchObject({ code: "invalid_response" })
+  })
+
+  it("accepts schema-valid open ontology signal strings", async () => {
+    const api = new KanbanApi(runtimeConfig)
+    const list = fixture("list-label-ontology-signals-response.v1.valid.json") as { data: Array<Record<string, unknown>>; meta: unknown }
+    mockFetch({
+      data: [{ ...list.data[0], kind: "future_kind", status: "future_status", proposed_action: "future_action", suggest_state: "future_state" }],
+      meta: list.meta,
+    })
+    await expect(api.listLabelOntologySignals()).resolves.toMatchObject([
+      { kind: "future_kind", status: "future_status", proposed_action: "future_action", suggest_state: "future_state" },
+    ])
+
+    vi.unstubAllGlobals()
+    const generic = fixture("get-signal-response.v1.valid.json") as { data: Record<string, unknown> }
+    mockFetch({ data: { ...generic.data, status: "future_status" } })
+    await expect(api.getSignal("sig_fixture")).resolves.toMatchObject({ status: "future_status" })
   })
 
   it("consumes committed C2b task-read fixtures through production clients", async () => {
@@ -446,7 +539,10 @@ describe("KanbanApi task search", () => {
     const signal = labelOntologySignal({ id: "los_1", target_label_name_snapshot: "cli" })
     const fetchMock = mockFetchSequence([
       { data: [signal], meta: { limit: 25 } },
-      { data: [labelOntologyReviewGroup({ key: "cli", label_name: "cli", signal_ids: ["los_1"] })] },
+      {
+        data: [labelOntologyReviewGroup({ key: "cli", label_name: "cli", signal_ids: ["los_1"] })],
+        meta: { group_by: "candidate_atom", include_all: true, limit: 10 },
+      },
       { data: { signal, observation: labelOntologyObservation({ signals: [signal] }), actions: [] } },
       { data: labelOntologyAction({ id: "loa_confirm", action_type: "confirm", signal_ids: ["los_1"] }) },
       { data: labelAtomExplain({ query: "hash_1" }) },
@@ -494,7 +590,11 @@ describe("KanbanApi task search", () => {
 
   it("uses generic signal HTTP routes for signal inbox data", async () => {
     const signal = genericSignal({ id: "sig_1", kind: "agent_cli_friction" })
-    const fetchMock = mockFetchSequence([{ data: [signal] }, { data: [signal] }, { data: signal }])
+    const fetchMock = mockFetchSequence([
+      { data: [signal], meta: { include_all: false, limit: 25 } },
+      { data: [signal], meta: { include_all: true, limit: 10 } },
+      { data: signal },
+    ])
     const api = new KanbanApi(runtimeConfig)
 
     await expect(
@@ -1093,7 +1193,7 @@ function labelOntologySignal(overrides: Partial<import("./api").LabelOntologySig
     status: "open",
     target_label_id: "lab_cli",
     target_label_name_snapshot: "cli",
-    related_labels_json: "[]",
+    related_labels: [],
     proposed_action: "add_positive_atom",
     candidate_atom_polarity: "positive",
     candidate_atom_kind: "applies_when",
@@ -1101,7 +1201,7 @@ function labelOntologySignal(overrides: Partial<import("./api").LabelOntologySig
     candidate_content_hash: "hash_1",
     proposed_label_name: null,
     proposed_label_name_normalized: null,
-    proposal_json: "{}",
+    proposal: {},
     agent_selected: true,
     suggest_state: "absent",
     suggest_score: 0.12,
@@ -1147,7 +1247,7 @@ function genericSignal(overrides: Partial<import("./api").SignalRecord> = {}): i
       actor: "codex",
       agent_type: "codex",
       source: "api-test",
-      evidence_json: "{}",
+      evidence: {},
       created_at: 1,
     },
     ...overrides,
@@ -1162,17 +1262,17 @@ function labelOntologyObservation(
     board_id: "b_1",
     task_id: "t_1",
     task_ref_snapshot: "default#1",
-    task_snapshot_json: "{}",
+    task_snapshot: {},
     suggest_input_hash: "input-hash",
-    agent_candidates_json: "[]",
-    suggestion_snapshot_json: "{}",
-    final_decision_json: "{}",
+    agent_candidates: [],
+    suggestion_snapshot: {},
+    final_decision: {},
     suggest_coverage: 0.6,
     suggest_coverage_cosine: 0.7,
     suggest_residual_norm: 0.4,
     suggest_needs_new_label: false,
     suggest_degraded: false,
-    diagnostics_json: "[]",
+    diagnostics: [],
     capture_fingerprint: "fingerprint",
     created_by: "desktop-test",
     created_by_type: "user",
@@ -1199,12 +1299,12 @@ function labelOntologyAction(
     result_proposal_id: null,
     canonical_before_hash: null,
     canonical_after_hash: null,
-    change_json: "{}",
+    change: {},
     validation_requirement: "none",
     validation_status: "not_required",
     validation_effective_outcome: "not_required",
     validation_latest_attempt_id: null,
-    validation_json: "{}",
+    validation: {},
     created_by: "desktop-test",
     created_by_type: "user",
     agent_type: null,

@@ -48,7 +48,7 @@ describe("SignalsWorkbench presentation", () => {
             actor: "codex",
             agent_type: "executor",
             source: "codex_cli_failure",
-            evidence_json: "{\"command\":\"kanban task create\",\"exit_code\":1}",
+            evidence: { command: "kanban task create", exit_code: 1 },
           },
         })}
       />,
@@ -98,7 +98,7 @@ function signalFixture(overrides: Partial<SignalRecord> = {}): SignalRecord {
       actor: "codex",
       agent_type: "codex",
       source: "api-test",
-      evidence_json: "{}",
+      evidence: {},
       created_at: 1,
     },
     ...overrides,

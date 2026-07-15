@@ -236,7 +236,7 @@ export function SignalDetail({ loading, signal }: { loading: boolean; signal: Si
           <Braces className="h-4 w-4" />
           {t("Evidence JSON")}
         </div>
-        <pre className="max-h-[340px] overflow-auto p-3 text-xs leading-relaxed">{formatJsonText(observation.evidence_json)}</pre>
+        <pre className="max-h-[340px] overflow-auto p-3 text-xs leading-relaxed">{JSON.stringify(observation.evidence, null, 2)}</pre>
       </div>
     </div>
   )
@@ -291,12 +291,4 @@ function statusVariant(status: SignalStatus) {
 function timeLabel(value: number) {
   if (!Number.isFinite(value)) return "-"
   return new Date(value).toLocaleString()
-}
-
-function formatJsonText(value: string) {
-  try {
-    return JSON.stringify(JSON.parse(value), null, 2)
-  } catch {
-    return value
-  }
 }

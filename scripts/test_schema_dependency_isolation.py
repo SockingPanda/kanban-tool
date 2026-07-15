@@ -38,8 +38,8 @@ CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"
 CONTRACT_PATH = str(ROOT / "crates/kanban-contract")
 CONTRACT_MANIFEST_PATH = str(ROOT / "crates/kanban-contract/Cargo.toml")
 TOOL_MANIFEST_PATH = str(ROOT / TOOL_MEMBER / "Cargo.toml")
-CONTRACT_ID = f"path+file:///workspace/{CONTRACT_PACKAGE}#2.1.2"
-TOOL_ID = f"path+file:///workspace/{TOOL_PACKAGE}#2.1.2"
+CONTRACT_ID = f"path+file:///workspace/{CONTRACT_PACKAGE}#2.1.3"
+TOOL_ID = f"path+file:///workspace/{TOOL_PACKAGE}#2.1.3"
 INTERNAL_PACKAGE = "kanban-context"
 REGISTRY_VERSIONS = {
     "jsonschema": "0.47.0",
@@ -277,7 +277,7 @@ def package(
     package_id: str | None = None,
     source: str | None = None,
     manifest_path: str | None = None,
-    version: str = "2.1.2",
+    version: str = "2.1.3",
     targets: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     if manifest_path is None:
@@ -288,7 +288,7 @@ def package(
         else:
             manifest_path = f"/workspace/{name}/Cargo.toml"
     return {
-        "id": package_id or f"path+file:///workspace/{name}#2.1.2",
+        "id": package_id or f"path+file:///workspace/{name}#2.1.3",
         "name": name,
         "version": version,
         "source": source,
@@ -544,19 +544,19 @@ class DependencyIsolationGateTests(unittest.TestCase):
                     leak = os.environ.get("FAKE_CARGO_LEAK")
                     tool_leak_package = os.environ.get("FAKE_CARGO_TOOL_LEAK_PACKAGE")
                     if package == tool_leak_package:
-                        print(f"{package}\\n└── kanban-schema-tool v2.1.2")
+                        print(f"{package}\\n└── kanban-schema-tool v2.1.3")
                     elif leak and package not in ("kanban-contract", "kanban-schema-tool"):
                         print(f"{package}\\n└── kanban-contract feature \\\"{leak}\\\"")
                     elif package == "kanban-schema-tool":
                         print(
-                            "kanban-schema-tool v2.1.2 (/workspace/crates/kanban-schema-tool)\\n"
+                            "kanban-schema-tool v2.1.3 (/workspace/crates/kanban-schema-tool)\\n"
                             "├── kanban-contract feature \\\"schema\\\"\\n"
                             "├── schemars v1.2.1\\n"
                             "├── jsonschema v0.47.0\\n"
                             "└── sha2 v0.10.9"
                         )
                     else:
-                        print(f"{package}\\n└── kanban-contract v2.1.2 (/workspace/crates/kanban-contract)")
+                        print(f"{package}\\n└── kanban-contract v2.1.3 (/workspace/crates/kanban-contract)")
                     """
                 ),
                 encoding="utf-8",

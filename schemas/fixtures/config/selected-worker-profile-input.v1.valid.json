@@ -1,0 +1,1 @@
+{"command":"echo $KB_TASK_ID","claim_ttl_ms":300000,"heartbeat_interval_ms":30000,"on_success":"done","on_failure":"blocked","log_dir":".kb/logs"}

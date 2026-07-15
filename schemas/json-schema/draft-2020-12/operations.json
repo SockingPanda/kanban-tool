@@ -13501,35 +13501,35 @@
   {
     "adoption": {
       "consumer": {
-        "contract_id": "config.worker-profiles.input",
+        "contract_id": "config.selected-worker-profile.input",
         "direction": "deserialize",
-        "exact_test": "tests::worker_profiles_input_fixture_is_consumed_by_real_toml_decoder",
-        "operation": "dispatcher worker profile document",
+        "exact_test": "tests::selected_worker_profile_input_fixture_is_consumed_by_real_toml_decoder",
+        "operation": "selected dispatcher worker profile after TOML decoding",
         "package": "kanban-local",
         "surface": "config",
         "test_target": "lib"
       },
       "producer": {
-        "contract_id": "config.worker-profiles.input",
+        "contract_id": "config.selected-worker-profile.input",
         "direction": "deserialize",
-        "exact_test": "tests::worker_profiles_input_fixture_is_produced_by_runtime_config_dto",
-        "operation": "dispatcher worker profile document",
+        "exact_test": "tests::selected_worker_profile_input_fixture_is_produced_by_runtime_config_dto",
+        "operation": "selected dispatcher worker profile after TOML decoding",
         "package": "kanban-local",
         "surface": "config",
         "test_target": "lib"
       },
-      "producer_fixture": "schemas/fixtures/config/worker-profiles-input.v1.valid.json"
+      "producer_fixture": "schemas/fixtures/config/selected-worker-profile-input.v1.valid.json"
     },
     "binding": "exact_surface",
     "direction": "deserialize",
     "exclusion": null,
-    "fixture": "schemas/fixtures/config/worker-profiles-input.v1.valid.json",
+    "fixture": "schemas/fixtures/config/selected-worker-profile-input.v1.valid.json",
     "granularity": "exact",
-    "id": "config.worker-profiles.input",
+    "id": "config.selected-worker-profile.input",
     "migration": "adopted",
-    "operation": "dispatcher worker profile document",
-    "path": "dispatcher worker profile TOML",
-    "schema_id": "urn:kanban-tool:schema:config:worker-profiles-input:v1",
+    "operation": "selected dispatcher worker profile after TOML decoding",
+    "path": "selected [workers.<profile>] section",
+    "schema_id": "urn:kanban-tool:schema:config:selected-worker-profile-input:v1",
     "strictness": "deny_unknown_fields",
     "surface": "config",
     "transport": {

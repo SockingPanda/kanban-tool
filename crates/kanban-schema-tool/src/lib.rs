@@ -1591,6 +1591,36 @@ mod tests {
     }
 
     #[test]
+    fn selected_worker_profile_contract_replaces_whole_document_contract() {
+        let inventory = operation_inventory();
+        assert!(
+            inventory
+                .iter()
+                .all(|operation| operation.id != "config.worker-profiles.input")
+        );
+
+        let operation = inventory
+            .iter()
+            .find(|operation| operation.id == "config.selected-worker-profile.input")
+            .expect("selected worker profile operation");
+        assert_eq!(operation.path, "selected [workers.<profile>] section");
+        assert_eq!(operation.migration, MigrationState::Adopted);
+
+        let root = schema_registry()
+            .iter()
+            .find(|root| root.contract_id == operation.id)
+            .expect("selected worker profile schema root");
+        assert_eq!(
+            root.id,
+            "urn:kanban-tool:schema:config:selected-worker-profile-input:v1"
+        );
+        assert_eq!(
+            root.valid_fixture,
+            "schemas/fixtures/config/selected-worker-profile-input.v1.valid.json"
+        );
+    }
+
+    #[test]
     fn final_contract_train_closure_has_no_unfinished_authority() {
         assert_eq!(endpoint_obligation_todo_count(endpoint_catalog()), 0);
         assert_eq!(unfinished_contract_count(), 0);

@@ -4,7 +4,7 @@
 //! availability, derived-store algorithms and dispatcher policy remain in the
 //! runtime adapters that consume them.
 
-use std::{collections::BTreeMap, path::PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -47,13 +47,8 @@ impl Default for ProjectVectorConfigInput {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(deny_unknown_fields)]
-pub struct WorkerProfilesInput {
-    pub workers: BTreeMap<String, WorkerProfileInput>,
-}
-
+/// Strict decoded shape for the single `[workers.<profile>]` section selected by the CLI.
+/// Selection and opaque handling of other profile sections remain adapter concerns.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]

@@ -4281,10 +4281,10 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         binding: ContractBinding::ExactSurface,
     },
     OperationContract {
-        id: "config.worker-profiles.input",
-        path: "dispatcher worker profile TOML",
+        id: "config.selected-worker-profile.input",
+        path: "selected [workers.<profile>] section",
         surface: ContractSurface::Config,
-        operation: "dispatcher worker profile document",
+        operation: "selected dispatcher worker profile after TOML decoding",
         direction: ContractDirection::Deserialize,
         granularity: ContractGranularity::Exact,
         strictness: ContractStrictness::DenyUnknownFields,
@@ -5163,13 +5163,13 @@ fn protocol_adoption_spec(id: &str) -> Option<ProtocolAdoptionSpec> {
             "tests::project_config_input_fixture_is_produced_by_runtime_config_dto",
             "tests::project_config_input_fixture_is_consumed_by_real_toml_decoder",
         ),
-        "config.worker-profiles.input" => (
-            "urn:kanban-tool:schema:config:worker-profiles-input:v1",
-            "schemas/fixtures/config/worker-profiles-input.v1.valid.json",
+        "config.selected-worker-profile.input" => (
+            "urn:kanban-tool:schema:config:selected-worker-profile-input:v1",
+            "schemas/fixtures/config/selected-worker-profile-input.v1.valid.json",
             "kanban-local",
             "lib",
-            "tests::worker_profiles_input_fixture_is_produced_by_runtime_config_dto",
-            "tests::worker_profiles_input_fixture_is_consumed_by_real_toml_decoder",
+            "tests::selected_worker_profile_input_fixture_is_produced_by_runtime_config_dto",
+            "tests::selected_worker_profile_input_fixture_is_consumed_by_real_toml_decoder",
         ),
         "helper.graph.handshake.response" => graph_protocol_spec(
             "graph-handshake-response",

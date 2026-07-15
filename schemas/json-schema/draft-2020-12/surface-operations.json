@@ -2101,10 +2101,10 @@
   },
   {
     "contracts": [
-      "config.worker-profiles.input"
+      "config.selected-worker-profile.input"
     ],
     "exclusion": null,
-    "key": "dispatcher worker profile document",
+    "key": "selected dispatcher worker profile after TOML decoding",
     "migration": "adopted",
     "surface": "config"
   },

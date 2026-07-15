@@ -309,8 +309,8 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         ),
         adopted!(
             Config,
-            "dispatcher worker profile document",
-            "config.worker-profiles.input"
+            "selected dispatcher worker profile after TOML decoding",
+            "config.selected-worker-profile.input"
         ),
         adopted!(
             Helper,

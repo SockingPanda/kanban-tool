@@ -84,8 +84,10 @@ stream 不属于有限 envelope。#441 已将 21 个 portable JSONL discriminato
 persistence-only `claim_token` 与内部 `log_path`，包括递归 linked task；dependency、events 与
 helper subprocess protocol 继续保持各自 owner，public CLI contract 只拥有最终 stdout shape。
 #447 已把 2 个 decoded TOML config input、7 个 graph helper response 与 12 个 vector helper
-response 闭合为 21 个 exact roots；真实 config decoder、subprocess adapter 与 protocol decoder
-分别提供 producer/consumer witness，schema tooling 依赖仍隔离在 leaf crate。
+response 闭合为 21 个 exact roots；worker profile input 只拥有被 CLI 选中的
+`[workers.<profile>]` section，未选 section 保持 opaque/forward-compatible，选中 section 继续
+严格拒绝未知或非法字段；真实 config decoder、subprocess adapter 与 protocol decoder 分别提供
+producer/consumer witness，schema tooling 依赖仍隔离在 leaf crate。
 #446 已把 labels、signals、ontology 与 proposals API 的 75 个 generated roots（48 个 request
 deserialize、27 个 response serialize）绑定到真实 router/DTO producer 与 exact contract
 consumer。#443 删除了 3 个无真实 router obligation 的 generated orphan，authority 已闭合。

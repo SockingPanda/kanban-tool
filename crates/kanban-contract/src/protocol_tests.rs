@@ -8,7 +8,7 @@ use crate::{
     VectorHelperLabelAtomsStatusResponse, VectorHelperQueryChunksResponse,
     VectorHelperQueryLabelAtomsResponse, VectorHelperRebuildLabelAtomsResponse,
     VectorHelperRebuildResponse, VectorHelperStatusResponse, VectorHelperSyncLabelAtomsResponse,
-    VectorHelperSyncResponse, WorkerProfilesInput,
+    VectorHelperSyncResponse, WorkerProfileInput,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -46,7 +46,7 @@ fn assert_exact<T: DeserializeOwned>(relative: &str) {
 #[test]
 fn config_protocol_fixtures_are_exact() {
     assert_exact::<ProjectConfigInput>("config/project-input.v1.valid.json");
-    assert_exact::<WorkerProfilesInput>("config/worker-profiles-input.v1.valid.json");
+    assert_exact::<WorkerProfileInput>("config/selected-worker-profile-input.v1.valid.json");
 }
 
 #[test]

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize, de::IntoDeserializer};
 
 pub use kanban_contract::{
     ProjectConfigInput as ProjectConfig, ProjectVectorConfigInput as VectorConfig,
-    WorkerFinishPolicy, WorkerProfileInput, WorkerProfilesInput,
+    WorkerFinishPolicy, WorkerProfileInput,
 };
 
 pub const INDEX_LAYOUT_VERSION: &str = "v1";
@@ -257,16 +257,6 @@ pub fn read_project_config(path: &Path) -> Result<ProjectConfig, ConfigError> {
     })
 }
 
-pub fn read_worker_profiles(path: &Path) -> Result<WorkerProfilesInput, ConfigError> {
-    let text = fs::read_to_string(path)?;
-    let deserializer = toml::Deserializer::new(&text);
-    serde_path_to_error::deserialize(deserializer).map_err(|err| ConfigError::FileParse {
-        path: path.to_path_buf(),
-        field_path: err.path().to_string(),
-        source: Box::new(err.into_inner()),
-    })
-}
-
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WorkerProfileSections {
@@ -503,31 +493,24 @@ dimensions = 1024
     }
 
     #[test]
-    fn worker_profiles_input_fixture_is_produced_by_runtime_config_dto() {
-        let profiles = WorkerProfilesInput {
-            workers: [(
-                "default".to_owned(),
-                WorkerProfileInput {
-                    command: Some("echo $KB_TASK_ID".to_owned()),
-                    claim_ttl_ms: Some(300_000),
-                    heartbeat_interval_ms: Some(30_000),
-                    on_success: Some(WorkerFinishPolicy::Done),
-                    on_failure: Some(WorkerFinishPolicy::Blocked),
-                    log_dir: Some(PathBuf::from(".kb/logs")),
-                },
-            )]
-            .into_iter()
-            .collect(),
+    fn selected_worker_profile_input_fixture_is_produced_by_runtime_config_dto() {
+        let profile = WorkerProfileInput {
+            command: Some("echo $KB_TASK_ID".to_owned()),
+            claim_ttl_ms: Some(300_000),
+            heartbeat_interval_ms: Some(30_000),
+            on_success: Some(WorkerFinishPolicy::Done),
+            on_failure: Some(WorkerFinishPolicy::Blocked),
+            log_dir: Some(PathBuf::from(".kb/logs")),
         };
 
         assert_eq!(
-            serde_json::to_value(profiles).unwrap(),
-            contract_fixture("worker-profiles-input.v1.valid.json")
+            serde_json::to_value(profile).unwrap(),
+            contract_fixture("selected-worker-profile-input.v1.valid.json")
         );
     }
 
     #[test]
-    fn worker_profiles_input_fixture_is_consumed_by_real_toml_decoder() {
+    fn selected_worker_profile_input_fixture_is_consumed_by_real_toml_decoder() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path().join("workers.toml");
         fs::write(
@@ -539,20 +522,19 @@ heartbeat_interval_ms = 30000
 on_success = "done"
 on_failure = "blocked"
 log_dir = ".kb/logs"
+
+[workers.future]
+concurrency = 2
+max_runtime_ms = 3600000
 "#,
         )
         .unwrap();
 
-        let decoded = read_worker_profiles(&path).unwrap();
+        let decoded = read_worker_profile(&path, "default").unwrap().unwrap();
         assert_eq!(
             serde_json::to_value(decoded).unwrap(),
-            contract_fixture("worker-profiles-input.v1.valid.json")
+            contract_fixture("selected-worker-profile-input.v1.valid.json")
         );
-
-        fs::write(&path, "[workers.default]\nunknown = true\n").unwrap();
-        assert!(read_worker_profiles(&path).is_err());
-        fs::write(&path, "[not_workers]\nunknown = true\n").unwrap();
-        assert!(read_worker_profiles(&path).is_err());
     }
 
     #[test]
@@ -590,10 +572,9 @@ concurrency = 2
         .unwrap();
 
         let error = read_worker_profile(&path, "backend").unwrap_err();
-        assert!(
-            error.to_string().contains("workers.backend.concurrency"),
-            "{error}"
-        );
+        let message = error.to_string();
+        assert!(message.contains("workers.backend.concurrency"), "{message}");
+        assert!(message.contains(&path.display().to_string()), "{message}");
 
         fs::write(
             &path,
@@ -603,10 +584,9 @@ on_success = "future"
         )
         .unwrap();
         let error = read_worker_profile(&path, "backend").unwrap_err();
-        assert!(
-            error.to_string().contains("workers.backend.on_success"),
-            "{error}"
-        );
+        let message = error.to_string();
+        assert!(message.contains("workers.backend.on_success"), "{message}");
+        assert!(message.contains(&path.display().to_string()), "{message}");
     }
 
     #[test]

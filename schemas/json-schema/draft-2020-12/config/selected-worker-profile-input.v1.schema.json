@@ -1,0 +1,67 @@
+{
+  "$defs": {
+    "WorkerFinishPolicy": {
+      "enum": [
+        "done",
+        "review",
+        "blocked",
+        "ready"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:config:selected-worker-profile-input:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Strict decoded shape for the single `[workers.<profile>]` section selected by the CLI.\nSelection and opaque handling of other profile sections remain adapter concerns.",
+  "properties": {
+    "claim_ttl_ms": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "command": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "heartbeat_interval_ms": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "log_dir": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "on_failure": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorkerFinishPolicy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "on_success": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorkerFinishPolicy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "title": "Selected Worker Profile Input v1",
+  "type": "object"
+}

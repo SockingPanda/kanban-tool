@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 
 use kanban_contract::{
     ApiHeaderProfile, CliMachineOutput, ContractBinding, ContractDirection, ContractGranularity,
-    ContractSurface, ContractTransport, EndpointDescriptor, EndpointObligation,
+    ContractStrictness, ContractSurface, ContractTransport, EndpointDescriptor, EndpointObligation,
     EndpointObligations, HttpMethod, HttpTransportLocation, MigrationState, OperationContract,
     WireParameter, WireParameterCardinality, api_header_contract_specs, cli_operation_catalog,
     endpoint_catalog, endpoint_descriptor, endpoint_obligation_todo_count, generated_artifacts,
@@ -1812,7 +1812,7 @@ fn current_train_freeze_requires_closed_authority() {
 fn config_and_helper_protocols_have_exact_roots_surfaces_and_witnesses() {
     let expected = [
         "config.project.input",
-        "config.worker-profiles.input",
+        "config.selected-worker-profile.input",
         "helper.graph.handshake.response",
         "helper.graph.error.response",
         "helper.graph.status.response",
@@ -1868,6 +1868,52 @@ fn config_and_helper_protocols_have_exact_roots_surfaces_and_witnesses() {
             "{contract_id}"
         );
     }
+}
+
+#[test]
+fn selected_worker_profile_contract_matches_runtime_selection_boundary() {
+    let inventory = operation_inventory();
+    assert!(
+        inventory
+            .iter()
+            .all(|contract| contract.id != "config.worker-profiles.input"),
+        "whole-document worker profile contract must not survive selected-only runtime adoption"
+    );
+
+    let contract = inventory
+        .iter()
+        .find(|contract| contract.id == "config.selected-worker-profile.input")
+        .expect("selected worker profile contract");
+    assert_eq!(contract.path, "selected [workers.<profile>] section");
+    assert_eq!(
+        contract.operation,
+        "selected dispatcher worker profile after TOML decoding"
+    );
+    assert_eq!(contract.strictness, ContractStrictness::DenyUnknownFields);
+    let adoption = contract
+        .adoption
+        .expect("selected profile adoption witness");
+    assert_eq!(
+        adoption.producer.exact_test,
+        "tests::selected_worker_profile_input_fixture_is_produced_by_runtime_config_dto"
+    );
+    assert_eq!(
+        adoption.consumer.exact_test,
+        "tests::selected_worker_profile_input_fixture_is_consumed_by_real_toml_decoder"
+    );
+
+    let root = kanban_contract::schema_registry()
+        .iter()
+        .find(|root| root.contract_id == contract.id)
+        .expect("selected worker profile schema root");
+    assert_eq!(
+        root.id,
+        "urn:kanban-tool:schema:config:selected-worker-profile-input:v1"
+    );
+    assert_eq!(
+        root.valid_fixture,
+        "schemas/fixtures/config/selected-worker-profile-input.v1.valid.json"
+    );
 }
 
 #[test]

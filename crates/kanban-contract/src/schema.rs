@@ -2858,13 +2858,13 @@ fn protocol_schema_roots() -> Vec<SchemaRoot> {
             crate::ProjectConfigInput
         ),
         request_schema_root!(
-            "urn:kanban-tool:schema:config:worker-profiles-input:v1",
-            "config/worker-profiles-input.v1.schema.json",
-            "Worker Profiles Input v1",
-            "config.worker-profiles.input",
-            "schemas/fixtures/config/worker-profiles-input.v1.valid.json",
-            "schemas/fixtures/config/worker-profiles-input.v1.invalid.json",
-            crate::WorkerProfilesInput
+            "urn:kanban-tool:schema:config:selected-worker-profile-input:v1",
+            "config/selected-worker-profile-input.v1.schema.json",
+            "Selected Worker Profile Input v1",
+            "config.selected-worker-profile.input",
+            "schemas/fixtures/config/selected-worker-profile-input.v1.valid.json",
+            "schemas/fixtures/config/selected-worker-profile-input.v1.invalid.json",
+            crate::WorkerProfileInput
         ),
         response_schema_root!(
             "urn:kanban-tool:schema:helper:graph-handshake-response:v1",

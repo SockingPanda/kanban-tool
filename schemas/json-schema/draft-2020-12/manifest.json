@@ -1,7 +1,7 @@
 {
   "contract_inventory": {
     "path": "operations.json",
-    "sha256": "sha256:f55afb38fb46467757003c86c297fe813e0b3e13422261fa6477f714ea28847b"
+    "sha256": "sha256:bce801f47a3cf3e9ac8073adb4007d61d36e2518b195954a46421e072e52eb61"
   },
   "roots": [
     {
@@ -3355,13 +3355,13 @@
       "strictness": "deny_unknown_fields"
     },
     {
-      "contract_id": "config.worker-profiles.input",
+      "contract_id": "config.selected-worker-profile.input",
       "direction": "deserialize",
-      "id": "urn:kanban-tool:schema:config:worker-profiles-input:v1",
-      "invalid_fixture": "schemas/fixtures/config/worker-profiles-input.v1.invalid.json",
-      "path": "config/worker-profiles-input.v1.schema.json",
-      "schema_fixture": "schemas/fixtures/config/worker-profiles-input.v1.valid.json",
-      "sha256": "sha256:87b8e0840c7e925a2bfb4664353e9e11c2f7dd9131658667c81973e261bd1c6e",
+      "id": "urn:kanban-tool:schema:config:selected-worker-profile-input:v1",
+      "invalid_fixture": "schemas/fixtures/config/selected-worker-profile-input.v1.invalid.json",
+      "path": "config/selected-worker-profile-input.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/config/selected-worker-profile-input.v1.valid.json",
+      "sha256": "sha256:29cb522e2893f9c932149660470231631b3ff58969e137648dcf58fdb49ddcbd",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -4808,6 +4808,6 @@
   "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
   "surface_catalog": {
     "path": "surface-operations.json",
-    "sha256": "sha256:5c65f1a18036825ef70af831f569e692b3750da99cb49aac7c23e6bb1b26b92c"
+    "sha256": "sha256:6675c7ee87d30e6f123500381c71847db5042381e3545dcd28184acddc937c43"
   }
 }

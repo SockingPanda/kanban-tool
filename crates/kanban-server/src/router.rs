@@ -39,6 +39,7 @@ struct AuditedRouter<S> {
     operations: BTreeSet<ApiRouteOperation>,
     operation_ids: BTreeSet<&'static str>,
     adapter_ids: BTreeSet<&'static str>,
+    method_paths: BTreeSet<(kanban_contract::HttpMethod, &'static str)>,
 }
 
 impl<S> AuditedRouter<S>
@@ -51,6 +52,7 @@ where
             operations: BTreeSet::new(),
             operation_ids: BTreeSet::new(),
             adapter_ids: BTreeSet::new(),
+            method_paths: BTreeSet::new(),
         }
     }
 
@@ -67,10 +69,16 @@ where
                 operation.adapter_id
             );
             assert!(
-                self.operations.insert(operation),
+                self.method_paths
+                    .insert((operation.actual_method, operation.actual_path)),
                 "duplicate endpoint method/path: {} {}",
                 endpoint_method_name(operation.actual_method),
                 operation.actual_path
+            );
+            assert!(
+                self.operations.insert(operation),
+                "duplicate endpoint binding: {}",
+                operation.operation_id
             );
         }
         self.inner = self.inner.route(route.path, route.inner);
@@ -433,7 +441,10 @@ mod contract_catalog_tests {
 
     use kanban_contract::endpoint_catalog;
 
-    use super::{endpoint_operation, registered_api_routes};
+    use super::{
+        ApiRouteOperation, AuditedMethodRouter, AuditedRouter, endpoint_operation,
+        registered_api_routes,
+    };
 
     #[test]
     fn api_route_catalog_matches_exact_contract_catalog() {
@@ -512,5 +523,35 @@ mod contract_catalog_tests {
             "/api/v1/boards",
             kanban_contract::HttpMethod::Get,
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "duplicate endpoint method/path: GET /api/v1/test-duplicate")]
+    fn router_audit_rejects_distinct_bindings_with_duplicate_method_path() {
+        let duplicate_method_path = "/api/v1/test-duplicate";
+        let route = AuditedMethodRouter {
+            path: duplicate_method_path,
+            operations: vec![
+                ApiRouteOperation {
+                    operation_id: "api.test-duplicate-first",
+                    adapter_id: "adapter.test_duplicate_first",
+                    actual_method: kanban_contract::HttpMethod::Get,
+                    actual_path: duplicate_method_path,
+                    descriptor_method: kanban_contract::HttpMethod::Get,
+                    descriptor_path: duplicate_method_path,
+                },
+                ApiRouteOperation {
+                    operation_id: "api.test-duplicate-second",
+                    adapter_id: "adapter.test_duplicate_second",
+                    actual_method: kanban_contract::HttpMethod::Get,
+                    actual_path: duplicate_method_path,
+                    descriptor_method: kanban_contract::HttpMethod::Get,
+                    descriptor_path: duplicate_method_path,
+                },
+            ],
+            inner: axum::routing::MethodRouter::<()>::new(),
+        };
+
+        AuditedRouter::<()>::new().route(route);
     }
 }

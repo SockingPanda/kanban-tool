@@ -69,6 +69,71 @@ fn export_records(path: &Path) -> Vec<Value> {
         .collect()
 }
 
+fn parent_exporter_records(path: &Path) -> Vec<Value> {
+    let mut records = export_records(path);
+    for record in &mut records {
+        let discriminator = record["type"].as_str().expect("record type").to_owned();
+        let data = record["data"].as_object_mut().expect("record data");
+        let json_fields: &[(&str, &str)] = match discriminator.as_str() {
+            "task" => &[("result", "result_json"), ("metadata", "metadata_json")],
+            "run" | "comment" => &[("metadata", "metadata_json")],
+            "event" => &[("payload", "payload_json")],
+            "label_semantics" => &[
+                ("applies_when", "applies_when"),
+                ("excludes_when", "excludes_when"),
+                ("positive_examples", "positive_examples"),
+                ("negative_examples", "negative_examples"),
+            ],
+            "label_semantic_proposal" => &[
+                ("applies_when", "applies_when"),
+                ("excludes_when", "excludes_when"),
+                ("positive_examples", "positive_examples"),
+                ("negative_examples", "negative_examples"),
+                ("diagnostics", "diagnostics_json"),
+            ],
+            "label_ontology_observation" => &[
+                ("task_snapshot", "task_snapshot_json"),
+                ("agent_candidates", "agent_candidates_json"),
+                ("suggestion_snapshot", "suggestion_snapshot_json"),
+                ("final_decision", "final_decision_json"),
+                ("diagnostics", "diagnostics_json"),
+            ],
+            "label_ontology_signal" => &[
+                ("related_labels", "related_labels_json"),
+                ("proposal", "proposal_json"),
+            ],
+            "label_ontology_action" => {
+                &[("change", "change_json"), ("validation", "validation_json")]
+            }
+            "signal_observation" => &[("evidence", "evidence_json")],
+            "setting" => &[("value", "value_json")],
+            _ => &[],
+        };
+        for &(wire, storage) in json_fields {
+            let value = data.remove(wire).expect("parent exporter JSON column");
+            data.insert(
+                storage.into(),
+                if discriminator == "task" && wire == "result" && value.is_null() {
+                    Value::Null
+                } else {
+                    Value::String(value.to_string())
+                },
+            );
+        }
+        let boolean_fields: &[&str] = match discriminator.as_str() {
+            "column" => &["hidden"],
+            "label_ontology_observation" => &["suggest_needs_new_label", "suggest_degraded"],
+            "label_ontology_signal" => &["agent_selected", "final_selected"],
+            _ => &[],
+        };
+        for &field in boolean_fields {
+            let value = data[field].as_bool().expect("parent exporter boolean");
+            data.insert(field.into(), json!(i64::from(value)));
+        }
+    }
+    records
+}
+
 fn fixture(contents: &str) -> Value {
     serde_json::from_str(contents).expect("committed fixture JSON")
 }
@@ -117,6 +182,23 @@ fn real_import_consumes(discriminator: &str, contents: &str) {
     let (_target_dir, target) = temp_db(&format!("portable-{discriminator}-target"));
     import_jsonl(&target, &input, true).expect("real import consumes fixture");
     real_export_matches(&target, discriminator, contents);
+}
+
+#[test]
+fn parent_exporter_storage_native_snapshot_migrates_one_way() {
+    let (source_dir, source) = temp_db("portable-parent-source");
+    seed_ledger(&source);
+    let expected = export_records(&source);
+    let input = source_dir.path().join("parent.jsonl");
+    let mut file = fs::File::create(&input).expect("parent snapshot");
+    for record in parent_exporter_records(&source) {
+        writeln!(file, "{record}").expect("write parent JSONL");
+    }
+    drop(file);
+
+    let (_target_dir, target) = temp_db("portable-parent-target");
+    import_jsonl(&target, &input, true).expect("migrate parent snapshot");
+    assert_eq!(export_records(&target), expected);
 }
 
 fn rn<T>(value: Option<T>) -> RequiredNullable<T> {

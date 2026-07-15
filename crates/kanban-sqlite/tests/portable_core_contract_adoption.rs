@@ -512,32 +512,54 @@ fn natural_json_values_roundtrip_without_double_encoding() {
 }
 
 #[test]
-fn importer_rejects_legacy_json_text_keys_and_rolls_back_replace() {
+fn importer_migrates_parent_exporter_json_text_keys_and_integer_booleans() {
     let db = TempDb::new("portable-core-legacy-key-");
-    let before: i64 = connect_file(&db.path)
-        .expect("connect target")
-        .query_row("SELECT COUNT(*) FROM boards", [], |row| row.get(0))
-        .expect("count boards");
     let mut records = canonical_input_records();
-    let task = records
+    for task in records.iter_mut().filter(|row| row["type"] == "task") {
+        let data = task["data"].as_object_mut().expect("task data");
+        let metadata = data.remove("metadata").expect("task metadata");
+        data.insert("metadata_json".into(), json!(metadata.to_string()));
+        let result = data.remove("result").expect("task result");
+        data.insert("result_json".into(), json!(result.to_string()));
+    }
+    let column = records
         .iter_mut()
-        .find(|row| row["type"] == "task")
-        .expect("task row");
-    let data = task["data"].as_object_mut().expect("task data");
-    data.remove("metadata");
-    data.insert("metadata_json".into(), json!("{}"));
+        .find(|row| row["type"] == "column")
+        .expect("column row");
+    column["data"]["hidden"] = json!(0);
+    let event = records
+        .iter_mut()
+        .find(|row| row["type"] == "event")
+        .expect("event row");
+    let payload = event["data"]
+        .as_object_mut()
+        .expect("event data")
+        .remove("payload")
+        .expect("event payload");
+    event["data"]["payload_json"] = json!(payload.to_string());
+    for record_type in ["run", "comment"] {
+        let record = records
+            .iter_mut()
+            .find(|row| row["type"] == record_type)
+            .expect("metadata-bearing row");
+        let metadata = record["data"]
+            .as_object_mut()
+            .expect("record data")
+            .remove("metadata")
+            .expect("record metadata");
+        record["data"]["metadata_json"] = json!(metadata.to_string());
+    }
     let input = db._dir.path().join("legacy.jsonl");
     write_jsonl(&input, &records);
-    let error = import_jsonl(&db.path, &input, true).expect_err("legacy key must fail closed");
-    assert!(
-        error.to_string().contains("violates its contract"),
-        "{error}"
-    );
-    let after: i64 = connect_file(&db.path)
-        .expect("connect target")
-        .query_row("SELECT COUNT(*) FROM boards", [], |row| row.get(0))
-        .expect("count boards");
-    assert_eq!(after, before, "failed replace import must roll back");
+    import_jsonl(&db.path, &input, true).expect("parent exporter snapshot must migrate");
+
+    let mut output = Vec::new();
+    export_jsonl_to_writer(&db.path, "b_core", &mut output).expect("re-export migrated snapshot");
+    let exported = String::from_utf8(output).expect("utf-8 re-export");
+    assert!(!exported.contains("metadata_json"), "{exported}");
+    assert!(!exported.contains("result_json"), "{exported}");
+    assert!(!exported.contains("payload_json"), "{exported}");
+    assert!(!exported.contains(r#""hidden":0"#), "{exported}");
 }
 
 #[test]
@@ -754,11 +776,33 @@ fn missing_comment_kind_fails_closed_without_defaulting() {
 }
 
 #[test]
-fn legacy_comment_metadata_json_key_fails_closed_without_conversion() {
-    assert_comment_shape_fails(|data| {
-        data.remove("metadata");
-        data.insert("metadata_json".into(), json!(r#"{"source":"legacy"}"#));
-    });
+fn mixed_legacy_comment_metadata_json_key_fails_closed() {
+    let db = TempDb::new("portable-comment-mixed-format-");
+    let mut records = canonical_input_records();
+    let comment = records
+        .iter_mut()
+        .find(|row| row["type"] == "comment")
+        .expect("comment row");
+    let data = comment["data"].as_object_mut().expect("comment data");
+    data.remove("metadata");
+    data.insert("metadata_json".into(), json!(r#"{"source":"legacy"}"#));
+    let input = db._dir.path().join("mixed.jsonl");
+    write_jsonl(&input, &records);
+    let error = import_jsonl(&db.path, &input, true).expect_err("mixed format must fail closed");
+    assert!(
+        error
+            .to_string()
+            .contains("cannot mix natural and parent storage-native records"),
+        "{error}"
+    );
+    assert_eq!(
+        connect_file(&db.path)
+            .expect("connect target")
+            .query_row("SELECT COUNT(*) FROM task_comments", [], |row| row
+                .get::<_, i64>(0))
+            .expect("count comments"),
+        0
+    );
 }
 
 #[test]

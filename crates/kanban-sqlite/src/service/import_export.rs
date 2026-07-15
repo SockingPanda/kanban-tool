@@ -535,6 +535,9 @@ fn insert_jsonl_record(
         .map_err(|error| {
             KanbanError::InvalidInput(format!("top-level JSONL contract violation: {error}"))
         })?;
+    // Reject before format detection and legacy key removal can overwrite an explicitly supplied
+    // natural value.
+    reject_hybrid_parent_storage_native_record(record_type, &data)?;
     detect_portable_import_format(record_type, &data, import_format)?;
     if *import_format == PortableImportFormat::ParentStorageNative {
         migrate_parent_storage_native_record(record_type, &mut data)?;
@@ -567,6 +570,33 @@ fn insert_jsonl_record(
     conn.execute(&sql, params_from_iter(values.iter()))
         .map_err(storage)?;
     Ok(())
+}
+
+fn reject_hybrid_parent_storage_native_record(
+    record_type: &str,
+    data: &Map<String, serde_json::Value>,
+) -> Result<()> {
+    let mut natural_fields = Vec::new();
+    let mut storage_fields = Vec::new();
+    for &(storage_field, wire_field, _) in parent_storage_native_json_fields(record_type) {
+        if storage_field == wire_field {
+            continue;
+        }
+        if data.contains_key(wire_field) {
+            natural_fields.push(wire_field);
+        }
+        if data.contains_key(storage_field) {
+            storage_fields.push(storage_field);
+        }
+    }
+    if natural_fields.is_empty() || storage_fields.is_empty() {
+        return Ok(());
+    }
+    Err(KanbanError::InvalidInput(format!(
+        "JSONL {record_type} record cannot contain both natural and parent storage-native keys: natural [{}], storage-native [{}]",
+        natural_fields.join(", "),
+        storage_fields.join(", ")
+    )))
 }
 
 fn detect_portable_import_format(
@@ -616,46 +646,7 @@ fn migrate_parent_storage_native_record(
     record_type: &str,
     data: &mut Map<String, serde_json::Value>,
 ) -> Result<()> {
-    let json_fields: &[(&str, &str, bool)] = match record_type {
-        "task" => &[
-            ("result_json", "result", true),
-            ("metadata_json", "metadata", false),
-        ],
-        "run" | "comment" => &[("metadata_json", "metadata", false)],
-        "event" => &[("payload_json", "payload", false)],
-        "label_semantics" => &[
-            ("applies_when", "applies_when", false),
-            ("excludes_when", "excludes_when", false),
-            ("positive_examples", "positive_examples", false),
-            ("negative_examples", "negative_examples", false),
-        ],
-        "label_semantic_proposal" => &[
-            ("applies_when", "applies_when", false),
-            ("excludes_when", "excludes_when", false),
-            ("positive_examples", "positive_examples", false),
-            ("negative_examples", "negative_examples", false),
-            ("diagnostics_json", "diagnostics", false),
-        ],
-        "label_ontology_observation" => &[
-            ("task_snapshot_json", "task_snapshot", false),
-            ("agent_candidates_json", "agent_candidates", false),
-            ("suggestion_snapshot_json", "suggestion_snapshot", false),
-            ("final_decision_json", "final_decision", false),
-            ("diagnostics_json", "diagnostics", false),
-        ],
-        "label_ontology_signal" => &[
-            ("related_labels_json", "related_labels", false),
-            ("proposal_json", "proposal", false),
-        ],
-        "label_ontology_action" => &[
-            ("change_json", "change", false),
-            ("validation_json", "validation", false),
-        ],
-        "signal_observation" => &[("evidence_json", "evidence", false)],
-        "setting" => &[("value_json", "value", false)],
-        _ => &[],
-    };
-    for &(storage_field, wire_field, nullable) in json_fields {
+    for &(storage_field, wire_field, nullable) in parent_storage_native_json_fields(record_type) {
         let Some(stored) = data.remove(storage_field) else {
             continue;
         };
@@ -697,6 +688,50 @@ fn migrate_parent_storage_native_record(
         };
     }
     Ok(())
+}
+
+fn parent_storage_native_json_fields(
+    record_type: &str,
+) -> &'static [(&'static str, &'static str, bool)] {
+    match record_type {
+        "task" => &[
+            ("result_json", "result", true),
+            ("metadata_json", "metadata", false),
+        ],
+        "run" | "comment" => &[("metadata_json", "metadata", false)],
+        "event" => &[("payload_json", "payload", false)],
+        "label_semantics" => &[
+            ("applies_when", "applies_when", false),
+            ("excludes_when", "excludes_when", false),
+            ("positive_examples", "positive_examples", false),
+            ("negative_examples", "negative_examples", false),
+        ],
+        "label_semantic_proposal" => &[
+            ("applies_when", "applies_when", false),
+            ("excludes_when", "excludes_when", false),
+            ("positive_examples", "positive_examples", false),
+            ("negative_examples", "negative_examples", false),
+            ("diagnostics_json", "diagnostics", false),
+        ],
+        "label_ontology_observation" => &[
+            ("task_snapshot_json", "task_snapshot", false),
+            ("agent_candidates_json", "agent_candidates", false),
+            ("suggestion_snapshot_json", "suggestion_snapshot", false),
+            ("final_decision_json", "final_decision", false),
+            ("diagnostics_json", "diagnostics", false),
+        ],
+        "label_ontology_signal" => &[
+            ("related_labels_json", "related_labels", false),
+            ("proposal_json", "proposal", false),
+        ],
+        "label_ontology_action" => &[
+            ("change_json", "change", false),
+            ("validation_json", "validation", false),
+        ],
+        "signal_observation" => &[("evidence_json", "evidence", false)],
+        "setting" => &[("value_json", "value", false)],
+        _ => &[],
+    }
 }
 
 fn capture_deferred_ontology_links(

@@ -459,6 +459,74 @@ fn import_dry_run_does_not_replace_existing_database() -> anyhow::Result<()> {
     Ok(())
 }
 
+// These are real CLI entry points: dry-run must remain side-effect free, while replace must roll
+// back the pre-existing target when record-level compatibility detection fails.
+#[test]
+fn import_dry_run_rejects_hybrid_parent_record_without_creating_database() -> anyhow::Result<()> {
+    let target = TempDb::new("import_dry_run_rejects_hybrid_parent_record")?;
+    let input_path = target.dir.join("hybrid.jsonl");
+    std::fs::write(&input_path, hybrid_parent_import_jsonl())?;
+
+    kanban(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            input_path.to_str().context("expected UTF-8 path")?,
+            "--dry-run",
+        ],
+    )?
+    .json_failure_containing("cannot contain both natural and parent storage-native keys")?;
+    assert!(!target.path.exists());
+    Ok(())
+}
+
+#[test]
+fn import_replace_rejects_hybrid_parent_record_without_replacing_database() -> anyhow::Result<()> {
+    let target = initialized_database(
+        "import_replace_rejects_hybrid_parent_record_without_replacing_database",
+    )?;
+    let existing = kanban(
+        &target.path,
+        &[
+            "--json",
+            "task",
+            "create",
+            "existing task survives hybrid import",
+            "--description",
+            "ready spec",
+        ],
+    )?
+    .success_json()?;
+    let existing_id = existing["data"]["id"]
+        .as_str()
+        .context("expected JSON string")?;
+    mark_no_plan_required(&target.path, existing_id)?;
+    let input_path = target.dir.join("hybrid.jsonl");
+    std::fs::write(&input_path, hybrid_parent_import_jsonl())?;
+
+    kanban(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            input_path.to_str().context("expected UTF-8 path")?,
+            "--replace",
+        ],
+    )?
+    .json_failure_containing("cannot contain both natural and parent storage-native keys")?;
+
+    let retained =
+        kanban(&target.path, &["--json", "task", "show", existing_id])?.success_json()?;
+    assert_eq!(
+        retained["data"]["title"],
+        "existing task survives hybrid import"
+    );
+    Ok(())
+}
+
 #[test]
 fn import_replace_restores_over_corrupt_existing_database() -> anyhow::Result<()> {
     let source = TempDb::new("import_replace_restores_over_corrupt_existing_database_source")?;
@@ -892,6 +960,34 @@ fn invalid_import_jsonl(records: &[serde_json::Value]) -> String {
     let mut lines = board_and_column_records();
     lines.extend(records.iter().map(ToString::to_string));
     lines.join("\n")
+}
+
+fn hybrid_parent_import_jsonl() -> String {
+    let mut column = column_record();
+    column["data"]["hidden"] = serde_json::json!(0);
+    let mut task = task_record(
+        "t_hybrid",
+        1,
+        "hybrid parent task",
+        "todo",
+        Some("specified"),
+        None,
+    );
+    let data = task["data"].as_object_mut().expect("task data");
+    let result = data.remove("result").expect("task result");
+    data.insert("result_json".into(), result);
+    let metadata = data.remove("metadata").expect("task metadata");
+    data.insert("metadata_json".into(), metadata.to_string().into());
+    data.insert(
+        "metadata".into(),
+        serde_json::json!({"source": "ambiguous natural value"}),
+    );
+
+    [board_record(), column, task]
+        .into_iter()
+        .map(|record| record.to_string())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn board_only_import_jsonl() -> String {

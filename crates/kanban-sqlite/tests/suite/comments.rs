@@ -659,7 +659,7 @@ fn jsonl_import_rejects_mixed_natural_and_storage_native_comment_keys() -> anyho
     assert!(
         error
             .to_string()
-            .contains("cannot mix natural and parent storage-native records"),
+            .contains("cannot contain both natural and parent storage-native keys"),
         "{error}"
     );
     Ok(())

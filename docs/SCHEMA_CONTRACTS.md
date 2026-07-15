@@ -152,6 +152,13 @@ closure cohort。get-run-log 的现有 JSON response 是真实 runtime contract�
 - CLI 测试从 `clap::CommandFactory` 递归枚举真实 leaf command。
 - JSONL exporter/importer 共用 `PORTABLE_RECORDS` discriminator/table/scope descriptor。
 
+JSONL exact roots 只描述当前 natural JSON wire contract。SQLite importer 在进入 exact
+record decoder 前允许一次 one-way compatibility normalization：仅接受上一版真实 exporter
+写出的 coherent storage-native snapshot（JSON text columns 与 integer booleans），并拒绝与
+natural records 混用。Normalization 后仍由相同的 21 个 input roots 和现有 service/doctor
+guards 校验；export producer 不写 legacy keys，因此该 migration 不新增 schema root、surface
+operation 或双轨 output contract。
+
 以上集合与 committed `surface-operations.json` byte-stable catalog 对照。新增、删除或
 重命名 route、command、export type 时，`schema-surface-audit` 必须先 RED，直到精确
 catalog 和迁移状态被有意更新。`/api/v1/**`、`kanban ** --json` 或一个

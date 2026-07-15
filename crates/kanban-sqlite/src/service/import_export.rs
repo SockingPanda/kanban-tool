@@ -145,6 +145,7 @@ pub fn import_jsonl(
             }
         }
         let mut records = 0;
+        let mut import_format = PortableImportFormat::Unknown;
         let mut deferred_ontology_links = DeferredOntologyLinks::default();
         for line in BufReader::new(file).lines() {
             let line = line.map_err(|error| KanbanError::Storage(error.to_string()))?;
@@ -153,7 +154,12 @@ pub fn import_jsonl(
             }
             let value: serde_json::Value = serde_json::from_str(&line)
                 .map_err(|error| KanbanError::InvalidInput(error.to_string()))?;
-            insert_jsonl_record(&conn, &value, &mut deferred_ontology_links)?;
+            insert_jsonl_record(
+                &conn,
+                &value,
+                &mut import_format,
+                &mut deferred_ontology_links,
+            )?;
             records += 1;
         }
         restore_deferred_ontology_links(&conn, &deferred_ontology_links)?;
@@ -498,15 +504,23 @@ pub(crate) fn database_has_user_records(conn: &Connection) -> Result<bool> {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct DeferredOntologyLinks {
+struct DeferredOntologyLinks {
     generic_signal_supersedes: Vec<(String, String)>,
     signal_supersedes: Vec<(String, String)>,
     action_parents: Vec<(String, String)>,
 }
 
-pub(crate) fn insert_jsonl_record(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PortableImportFormat {
+    Unknown,
+    Natural,
+    ParentStorageNative,
+}
+
+fn insert_jsonl_record(
     conn: &Connection,
     record: &serde_json::Value,
+    import_format: &mut PortableImportFormat,
     deferred_ontology_links: &mut DeferredOntologyLinks,
 ) -> Result<()> {
     let record_type = record
@@ -515,12 +529,16 @@ pub(crate) fn insert_jsonl_record(
         .ok_or_else(|| KanbanError::InvalidInput("export record type is required".into()))?;
     let descriptor = portable_record_descriptor(record_type)?;
     let table = descriptor.table;
-    let data = descriptor
+    let mut data = descriptor
         .contract
         .decode_input_envelope(record.clone())
         .map_err(|error| {
             KanbanError::InvalidInput(format!("top-level JSONL contract violation: {error}"))
         })?;
+    detect_portable_import_format(record_type, &data, import_format)?;
+    if *import_format == PortableImportFormat::ParentStorageNative {
+        migrate_parent_storage_native_record(record_type, &mut data)?;
+    }
     let mut data = decode_portable_record(record_type, data)?;
     validate_import_record(record_type, &data)?;
     capture_deferred_ontology_links(record_type, &mut data, deferred_ontology_links)?;
@@ -548,6 +566,136 @@ pub(crate) fn insert_jsonl_record(
         .collect::<Result<Vec<_>>>()?;
     conn.execute(&sql, params_from_iter(values.iter()))
         .map_err(storage)?;
+    Ok(())
+}
+
+fn detect_portable_import_format(
+    record_type: &str,
+    data: &Map<String, serde_json::Value>,
+    import_format: &mut PortableImportFormat,
+) -> Result<()> {
+    let detected = match record_type {
+        "column" => match data.get("hidden") {
+            Some(serde_json::Value::Bool(_)) => Some(PortableImportFormat::Natural),
+            Some(serde_json::Value::Number(value)) if matches!(value.as_i64(), Some(0 | 1)) => {
+                Some(PortableImportFormat::ParentStorageNative)
+            }
+            _ => None,
+        },
+        "task" if data.contains_key("metadata_json") || data.contains_key("result_json") => {
+            Some(PortableImportFormat::ParentStorageNative)
+        }
+        "task" if data.contains_key("metadata") || data.contains_key("result") => {
+            Some(PortableImportFormat::Natural)
+        }
+        "run" | "comment" if data.contains_key("metadata_json") => {
+            Some(PortableImportFormat::ParentStorageNative)
+        }
+        "run" | "comment" if data.contains_key("metadata") => Some(PortableImportFormat::Natural),
+        "event" if data.contains_key("payload_json") => {
+            Some(PortableImportFormat::ParentStorageNative)
+        }
+        "event" if data.contains_key("payload") => Some(PortableImportFormat::Natural),
+        _ => None,
+    };
+    if let Some(detected) = detected {
+        match *import_format {
+            PortableImportFormat::Unknown => *import_format = detected,
+            current if current == detected => {}
+            _ => {
+                return Err(KanbanError::InvalidInput(
+                    "JSONL import cannot mix natural and parent storage-native records".into(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn migrate_parent_storage_native_record(
+    record_type: &str,
+    data: &mut Map<String, serde_json::Value>,
+) -> Result<()> {
+    let json_fields: &[(&str, &str, bool)] = match record_type {
+        "task" => &[
+            ("result_json", "result", true),
+            ("metadata_json", "metadata", false),
+        ],
+        "run" | "comment" => &[("metadata_json", "metadata", false)],
+        "event" => &[("payload_json", "payload", false)],
+        "label_semantics" => &[
+            ("applies_when", "applies_when", false),
+            ("excludes_when", "excludes_when", false),
+            ("positive_examples", "positive_examples", false),
+            ("negative_examples", "negative_examples", false),
+        ],
+        "label_semantic_proposal" => &[
+            ("applies_when", "applies_when", false),
+            ("excludes_when", "excludes_when", false),
+            ("positive_examples", "positive_examples", false),
+            ("negative_examples", "negative_examples", false),
+            ("diagnostics_json", "diagnostics", false),
+        ],
+        "label_ontology_observation" => &[
+            ("task_snapshot_json", "task_snapshot", false),
+            ("agent_candidates_json", "agent_candidates", false),
+            ("suggestion_snapshot_json", "suggestion_snapshot", false),
+            ("final_decision_json", "final_decision", false),
+            ("diagnostics_json", "diagnostics", false),
+        ],
+        "label_ontology_signal" => &[
+            ("related_labels_json", "related_labels", false),
+            ("proposal_json", "proposal", false),
+        ],
+        "label_ontology_action" => &[
+            ("change_json", "change", false),
+            ("validation_json", "validation", false),
+        ],
+        "signal_observation" => &[("evidence_json", "evidence", false)],
+        "setting" => &[("value_json", "value", false)],
+        _ => &[],
+    };
+    for &(storage_field, wire_field, nullable) in json_fields {
+        let Some(stored) = data.remove(storage_field) else {
+            continue;
+        };
+        let natural = match stored {
+            serde_json::Value::Null if nullable => serde_json::Value::Null,
+            serde_json::Value::String(text) => serde_json::from_str(&text).map_err(|error| {
+                KanbanError::InvalidInput(format!(
+                    "legacy {record_type}.{storage_field} contains invalid JSON: {error}"
+                ))
+            })?,
+            _ => {
+                return Err(KanbanError::InvalidInput(format!(
+                    "legacy {record_type}.{storage_field} must be JSON text{}",
+                    if nullable { " or null" } else { "" }
+                )));
+            }
+        };
+        data.insert(wire_field.to_owned(), natural);
+    }
+
+    let boolean_fields: &[&str] = match record_type {
+        "column" => &["hidden"],
+        "label_ontology_observation" => &["suggest_needs_new_label", "suggest_degraded"],
+        "label_ontology_signal" => &["agent_selected", "final_selected"],
+        _ => &[],
+    };
+    for &field in boolean_fields {
+        let Some(value) = data.get_mut(field) else {
+            continue;
+        };
+        *value = match value.as_i64() {
+            Some(0) => serde_json::Value::Bool(false),
+            Some(1) => serde_json::Value::Bool(true),
+            _ => {
+                return Err(KanbanError::InvalidInput(format!(
+                    "legacy {record_type}.{field} must be SQLite 0 or 1"
+                )));
+            }
+        };
+    }
     Ok(())
 }
 

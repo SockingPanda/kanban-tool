@@ -2967,6 +2967,14 @@ Portable descriptor authority 共覆盖 21 个 discriminator；input/output 各�
 SQLite 中的 `evidence_json`、`related_labels_json`、`proposal_json`、`change_json`、
 `validation_json` 等仍是 canonical storage 列；公开 adapter 只暴露去掉 `_json` 后的自然 JSON。
 
+Import 另有一条仅向前的 compatibility migration，用于读取 natural JSON contract 采用前、
+由上一版 exporter 生成的 storage-native JSONL snapshot。该格式以 `column.hidden=0|1`
+以及 `metadata_json` / `payload_json` 等真实 SQLite 列形状识别；同一 snapshot 必须保持
+单一格式，不能混用 storage-native 与 natural records。Importer 会先把上一版 JSON text
+列和 integer boolean 转为当前 natural record，再执行同一 exact contract validation 与下述
+transaction/final consistency gates。当前及后续 export 始终只写 natural JSON，不再产生
+storage-native keys；这不是长期双轨 public contract。
+
 导入时会在同一 transaction 中先插入 rows，再运行 final consistency gate。基础关系表
 会检查 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、
 `signal_observations`、`signals`、`task_events`、`task_attachments` 的 row board 与

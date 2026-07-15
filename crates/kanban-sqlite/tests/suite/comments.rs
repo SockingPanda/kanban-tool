@@ -477,7 +477,7 @@ fn legacy_jsonl_import_rejects_missing_comment_author_identity() -> anyhow::Resu
 }
 
 #[test]
-fn legacy_jsonl_import_rejects_integer_hidden_and_json_text_task_fields() -> anyhow::Result<()> {
+fn legacy_jsonl_import_still_rejects_out_of_range_task_priority() -> anyhow::Result<()> {
     let source = TempDb::new("legacy_jsonl_import_normalizes_task_priority_source")?;
     let legacy_path = source.dir.join("legacy-priority.jsonl");
     let records = vec![
@@ -562,9 +562,7 @@ fn legacy_jsonl_import_rejects_integer_hidden_and_json_text_task_fields() -> any
     init_database(&target.path, "tester")?;
     let error = result_err(import_jsonl(&target.path, &legacy_path, true))?;
     assert!(
-        error
-            .to_string()
-            .contains("column import row violates its contract"),
+        error.to_string().contains("task priority must be in 0..=3"),
         "{error}"
     );
     assert!(list_tasks(&target.path, "default", &[], true)?.is_empty());
@@ -623,7 +621,7 @@ fn legacy_jsonl_import_rejects_missing_author_type_with_agent_type() -> anyhow::
 }
 
 #[test]
-fn jsonl_import_rejects_comment_metadata_json_non_object() -> anyhow::Result<()> {
+fn jsonl_import_rejects_mixed_natural_and_storage_native_comment_keys() -> anyhow::Result<()> {
     let source = TempDb::new("jsonl_import_rejects_comment_metadata_json_non_object_source")?;
     init_database(&source.path, "tester")?;
     let task = create_task(
@@ -658,7 +656,12 @@ fn jsonl_import_rejects_comment_metadata_json_non_object() -> anyhow::Result<()>
     let target = TempDb::new("jsonl_import_rejects_comment_metadata_json_non_object_target")?;
     init_database(&target.path, "tester")?;
     let error = result_err(import_jsonl(&target.path, &invalid_path, true))?;
-    assert!(error.to_string().contains("metadata_json"));
+    assert!(
+        error
+            .to_string()
+            .contains("cannot mix natural and parent storage-native records"),
+        "{error}"
+    );
     Ok(())
 }
 

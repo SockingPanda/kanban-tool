@@ -199,14 +199,14 @@ affected-self-test:
     scripts/affected-validation.py --self-test
 
 feature-p package features:
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run -p {{package}} --features "{{features}}" --no-fail-fast --no-tests pass; else scripts/cargo-build-lock.sh -- cargo test -p {{package}} --features "{{features}}"; fi
-    scripts/cargo-build-lock.sh -- cargo clippy -p {{package}} --all-targets --features "{{features}}" -- -D warnings
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p {{package}} --features "{{features}}" --no-fail-fast --no-tests pass; else scripts/cargo-build-lock.sh -- cargo test --locked -p {{package}} --features "{{features}}"; fi
+    scripts/cargo-build-lock.sh -- cargo clippy --locked -p {{package}} --all-targets --features "{{features}}" -- -D warnings
 
 schema-generate:
-    scripts/cargo-build-lock.sh -- cargo run -p kanban-schema-tool --bin kanban-schema -- generate --root .
+    scripts/cargo-build-lock.sh -- cargo run --locked -p kanban-schema-tool --bin kanban-schema -- generate --root .
 
 schema-check:
-    scripts/cargo-build-lock.sh -- cargo run -p kanban-schema-tool --bin kanban-schema -- check --root .
+    scripts/cargo-build-lock.sh -- cargo run --locked -p kanban-schema-tool --bin kanban-schema -- check --root .
 
 spec-bundle-generate:
     python3 -B scripts/spec_bundle.py --root . --write
@@ -224,9 +224,9 @@ schema-fmt:
     cargo fmt -p kanban-contract -p kanban-schema-tool -- --check
 
 schema-tool:
-    just check-p kanban-schema-tool
-    just test-p kanban-schema-tool
-    scripts/cargo-build-lock.sh -- cargo clippy -p kanban-schema-tool --all-targets -- -D warnings
+    scripts/cargo-build-lock.sh -- cargo check --locked -p kanban-schema-tool --tests
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-schema-tool --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-schema-tool; fi
+    scripts/cargo-build-lock.sh -- cargo clippy --locked -p kanban-schema-tool --all-targets -- -D warnings
 
 schema-dependency-isolation-self-test:
     python3 -B scripts/test_schema_dependency_isolation.py
@@ -245,9 +245,9 @@ schema-adoption-witness:
     python3 -B scripts/schema_adoption_witnesses.py --root .
 
 schema-surface-audit:
-    just test-p kanban-server api_route_catalog_matches_exact_contract_catalog
-    just test-p kanban-cli clap_leaf_commands_match_exact_contract_catalog
-    just test-p kanban-sqlite jsonl_export_discriminators_match_exact_contract_catalog
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-server api_route_catalog_matches_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server api_route_catalog_matches_exact_contract_catalog; fi
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog; fi
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-sqlite jsonl_export_discriminators_match_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-sqlite jsonl_export_discriminators_match_exact_contract_catalog; fi
 
 schema-contract:
     just schema-dependency-isolation
@@ -261,7 +261,7 @@ schema-contract:
 
 schema-audit-closed:
     just schema-adoption-witness
-    scripts/cargo-build-lock.sh -- cargo run -p kanban-schema-tool --bin kanban-schema -- audit --root . --require-closed
+    scripts/cargo-build-lock.sh -- cargo run --locked -p kanban-schema-tool --bin kanban-schema -- audit --root . --require-closed
 
 release:
     just affected-self-test

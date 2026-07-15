@@ -130,6 +130,11 @@ The `.deb` is written under the exact shared target directory managed by the bui
 $(scripts/cargo-build-lock.sh --print-target-dir)/release/bundle/cli/deb/
 ```
 
+Packaging holds that single shared build lock through build, provenance verification,
+and `.deb` assembly. It invalidates only workspace-package fingerprints (preserving
+registry dependencies), rebuilds from the current tree, and requires dep-info to name
+the current source root before any shared binary is copied into the package.
+
 Feature flags can be passed through to the cargo build:
 
 ```bash

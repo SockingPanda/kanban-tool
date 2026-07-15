@@ -240,6 +240,7 @@ class WitnessGateNegativeTests(unittest.TestCase):
         self.assertEqual(command[command.index("-p") + 1], "kanban-schema-tool")
         self.assertNotIn("--features", command)
         self.assertEqual(command[command.index("--bin") + 1], "kanban-schema")
+        self.assertIn("--locked", command)
 
     def test_metadata_load_keeps_full_locked_resolve_graph(self) -> None:
         metadata = metadata_with_dependency(None)
@@ -372,6 +373,55 @@ class WitnessGateNegativeTests(unittest.TestCase):
         )
 
         witness_gate.require_executed_test(output, "tests::producer_contract")
+
+    def test_duplicate_contract_mappings_execute_each_unique_locator_once(self) -> None:
+        locator = ("runtime-adopter", "contract_witness", "tests::same")
+        witnesses = [
+            ("contract.a", "producer", locator),
+            ("contract.a", "consumer", locator),
+            ("contract.b", "producer", locator),
+        ]
+        with mock.patch.object(witness_gate, "execute_witness_group") as execute:
+            reports = witness_gate.execute_unique_witnesses(
+                WORKSPACE_ROOT, metadata_with_dependency(None), witnesses
+            )
+        execute.assert_called_once_with(
+            WORKSPACE_ROOT, mock.ANY, "runtime-adopter", "contract_witness", ["tests::same"]
+        )
+        self.assertEqual(len(reports), len(witnesses))
+        self.assertTrue(all(report["locator"] == locator for report in reports))
+
+    def test_exact_witness_cargo_test_is_locked(self) -> None:
+        metadata = metadata_with_dependency(None)
+        outputs = [
+            "tests::producer_contract: test\n",
+            "running 1 test\ntest tests::producer_contract ... ok\n"
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured\n",
+        ]
+        with mock.patch.object(witness_gate, "run_checked", side_effect=outputs) as run:
+            witness_gate.execute_witness(
+                WORKSPACE_ROOT,
+                metadata,
+                ("runtime-adopter", "contract_witness", "tests::producer_contract"),
+            )
+        for call in run.call_args_list:
+            self.assertIn("--locked", call.args[0])
+
+    def test_grouped_target_executes_all_unique_locators_in_two_cargo_processes(self) -> None:
+        metadata = metadata_with_dependency(None)
+        exact_tests = ["tests::one", "tests::two"]
+        outputs = [
+            "tests::one: test\ntests::two: test\n",
+            "running 2 tests\ntest tests::one ... ok\ntest tests::two ... ok\n"
+            "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured\n",
+        ]
+        with mock.patch.object(witness_gate, "run_checked", side_effect=outputs) as run:
+            witness_gate.execute_witness_group(
+                WORKSPACE_ROOT, metadata, "runtime-adopter", "contract_witness", exact_tests
+            )
+        self.assertEqual(run.call_count, 2)
+        for call in run.call_args_list:
+            self.assertIn("--locked", call.args[0])
 
 
 if __name__ == "__main__":

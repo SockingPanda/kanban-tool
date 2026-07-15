@@ -9,6 +9,8 @@ HELPER_INSTALL_DIR="usr/lib/kanban"
 REVISION="1"
 BUILD_ARGS=()
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
+PROVENANCE="$ROOT/scripts/package-source-provenance.sh"
+ORIGINAL_ARGS=("$@")
 
 usage() {
   cat <<'EOF'
@@ -61,6 +63,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "${KANBAN_PACKAGE_BUILD_LOCK_HELD:-}" != "1" ]]; then
+  exec env KANBAN_PACKAGE_BUILD_LOCK_HELD=1 "$LOCK" -- "$0" "${ORIGINAL_ARGS[@]}"
+fi
+
 command -v cargo >/dev/null 2>&1 || { echo "error: cargo is required" >&2; exit 1; }
 
 VERSION="$(cargo pkgid -p kanban-cli | sed 's/.*#//')"
@@ -96,15 +102,30 @@ install_payload() {
 }
 
 build_binary() {
-  (
+  local workspace_packages
+  mapfile -t workspace_packages < <(
     cd "$ROOT"
-    "$LOCK" -- cargo build -p kanban-cli --release "${BUILD_ARGS[@]}"
-    "$LOCK" -- cargo build -p kanban-vector-lancedb -p kanban-graph-oxigraph --release --bins
+    cargo metadata --locked --no-deps --format-version 1 |
+      python3 -c 'import json,sys; print("\n".join(p["name"] for p in json.load(sys.stdin)["packages"]))'
   )
-  [[ -x "$BIN_PATH" ]] || { echo "error: expected binary not found: $BIN_PATH" >&2; exit 1; }
+  "$PROVENANCE" --invalidate-packages "$TARGET_DIR" "${workspace_packages[@]}"
+  rm -f "$BIN_PATH" "$TARGET_DIR/$BIN_NAME.d"
   local helper
   for helper in "${HELPER_BINARIES[@]}"; do
+    rm -f "$TARGET_DIR/$helper" "$TARGET_DIR/$helper.d"
+  done
+  (
+    cd "$ROOT"
+    "$LOCK" -- cargo build --locked -p kanban-cli --release "${BUILD_ARGS[@]}"
+    "$LOCK" -- cargo build --locked -p kanban-vector-lancedb -p kanban-graph-oxigraph --release --bins
+  )
+  [[ -x "$BIN_PATH" ]] || { echo "error: expected binary not found: $BIN_PATH" >&2; exit 1; }
+  for helper in "${HELPER_BINARIES[@]}"; do
     [[ -x "$TARGET_DIR/$helper" ]] || { echo "error: expected helper binary not found: $TARGET_DIR/$helper" >&2; exit 1; }
+  done
+  "$PROVENANCE" --verify-dep-info "$ROOT" "$TARGET_DIR/$BIN_NAME.d"
+  for helper in "${HELPER_BINARIES[@]}"; do
+    "$PROVENANCE" --verify-dep-info "$ROOT" "$TARGET_DIR/$helper.d"
   done
 }
 

@@ -69,7 +69,7 @@ fi
 
 command -v cargo >/dev/null 2>&1 || { echo "error: cargo is required" >&2; exit 1; }
 
-VERSION="$(cargo pkgid -p kanban-cli | sed 's/.*#//')"
+VERSION="$(cargo pkgid --locked -p kanban-cli | sed 's/.*#//')"
 TARGET_TRIPLE="$(rustc -vV | awk '/^host:/ { print $2 }')"
 RUST_ARCH="${TARGET_TRIPLE%%-*}"
 TARGET_DIR="$("$LOCK" --print-target-dir)/release"

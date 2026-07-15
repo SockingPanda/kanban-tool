@@ -379,6 +379,150 @@ EOF
   trap - EXIT
 )
 
+assert_cli_package_stale_lock_fails_closed_without_mutation() {
+  local repo="$TMPDIR/cli-package-stale-lock-repo"
+  local fake_bin="$repo/bin"
+  local trace="$repo/cargo.trace"
+  local metadata_marker="$repo/metadata-entered"
+  local invalidation_marker="$repo/invalidation-entered"
+  local build_marker="$repo/build-entered"
+  local provenance_marker="$repo/provenance-entered"
+  local package_marker="$repo/package-entered"
+  local before after first_call status
+
+  mkdir -p "$repo/scripts" "$fake_bin"
+  cp "$ROOT/scripts/package-cli-linux.sh" "$repo/scripts/package-cli-linux.sh"
+  cp "$ROOT/scripts/cargo-build-lock.sh" "$repo/scripts/cargo-build-lock.sh"
+  printf 'stale-lock\n' > "$repo/Cargo.lock"
+  printf '# package fixture\n' > "$repo/README.md"
+
+  cat > "$repo/scripts/package-source-provenance.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  --invalidate-packages)
+    touch "$PACKAGE_INVALIDATION_MARKER"
+    ;;
+  --verify-dep-info)
+    touch "$PACKAGE_PROVENANCE_MARKER"
+    ;;
+  *)
+    exit 2
+    ;;
+esac
+EOF
+  cat > "$fake_bin/cargo" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$PACKAGE_CARGO_TRACE"
+
+has_locked=0
+for argument in "$@"; do
+  if [[ "$argument" == "--locked" ]]; then
+    has_locked=1
+    break
+  fi
+done
+
+case "${1:-}" in
+  pkgid)
+    if [[ "$has_locked" == "1" && "$(cat "$PACKAGE_TEST_REPO/Cargo.lock")" == "stale-lock" ]]; then
+      echo 'error: the lock file needs to be updated but --locked was passed' >&2
+      exit 101
+    fi
+    if [[ "$has_locked" != "1" ]]; then
+      printf 'resolved-lock\n' > "$PACKAGE_TEST_REPO/Cargo.lock"
+    fi
+    printf 'path+file:///fixture#2.1.3\n'
+    ;;
+  metadata)
+    touch "$PACKAGE_METADATA_MARKER"
+    [[ "$has_locked" == "1" ]]
+    [[ "$(cat "$PACKAGE_TEST_REPO/Cargo.lock")" == "resolved-lock" ]]
+    printf '{"packages":[{"name":"kanban-cli"},{"name":"kanban-vector-lancedb"},{"name":"kanban-graph-oxigraph"}]}\n'
+    ;;
+  build)
+    touch "$PACKAGE_BUILD_MARKER"
+    [[ "$has_locked" == "1" ]]
+    [[ "$(cat "$PACKAGE_TEST_REPO/Cargo.lock")" == "resolved-lock" ]]
+    target="$PACKAGE_TEST_TARGET_ROOT/release"
+    mkdir -p "$target"
+    if [[ " $* " == *' -p kanban-cli '* ]]; then
+      touch "$target/kanban" "$target/kanban.d"
+      chmod +x "$target/kanban"
+    else
+      for helper in kanban-vector-lancedb kanban-graph-oxigraph; do
+        touch "$target/$helper" "$target/$helper.d"
+        chmod +x "$target/$helper"
+      done
+    fi
+    ;;
+  *)
+    exit 89
+    ;;
+esac
+EOF
+  cat > "$fake_bin/rustc" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'rustc 1.0.0\nhost: x86_64-unknown-linux-gnu\n'
+EOF
+  cat > "$fake_bin/dpkg-shlibdeps" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'shlibs:Depends=libc6\n'
+EOF
+  cat > "$fake_bin/dpkg-deb" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+touch "$PACKAGE_DPKG_MARKER"
+output="${@: -1}"
+mkdir -p "$(dirname "$output")"
+touch "$output"
+EOF
+  chmod +x "$repo/scripts/package-cli-linux.sh" \
+    "$repo/scripts/cargo-build-lock.sh" \
+    "$repo/scripts/package-source-provenance.sh" \
+    "$fake_bin/cargo" "$fake_bin/rustc" \
+    "$fake_bin/dpkg-shlibdeps" "$fake_bin/dpkg-deb"
+
+  before="$(sha256sum "$repo/Cargo.lock")"
+  set +e
+  env \
+    -u CARGO_TARGET_DIR \
+    -u KANBAN_CARGO_BUILD_LOCK_HELD \
+    KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+    PACKAGE_TEST_REPO="$repo" \
+    PACKAGE_TEST_TARGET_ROOT="$TARGET_ROOT" \
+    PACKAGE_CARGO_TRACE="$trace" \
+    PACKAGE_METADATA_MARKER="$metadata_marker" \
+    PACKAGE_INVALIDATION_MARKER="$invalidation_marker" \
+    PACKAGE_BUILD_MARKER="$build_marker" \
+    PACKAGE_PROVENANCE_MARKER="$provenance_marker" \
+    PACKAGE_DPKG_MARKER="$package_marker" \
+    PATH="$fake_bin:$PATH" \
+    "$repo/scripts/package-cli-linux.sh" --format deb >/dev/null 2>&1
+  status=$?
+  set -e
+  after="$(sha256sum "$repo/Cargo.lock")"
+
+  [[ "$before" == "$after" ]] ||
+    fail "stale-lock cli-package let its first Cargo query mutate Cargo.lock"
+  [[ "$status" -eq 101 ]] ||
+    fail "expected stale-lock cli-package to fail closed with status 101, got $status"
+  [[ -f "$trace" ]] || fail "stale-lock cli-package did not reach its first Cargo query"
+  [[ "$(wc -l < "$trace")" -eq 1 ]] ||
+    fail "stale-lock cli-package reached Cargo after its first locked query"
+  first_call="$(head -n 1 "$trace")"
+  [[ " $first_call " == *' --locked '* ]] ||
+    fail "cli-package first Cargo query was not locked: $first_call"
+  [[ ! -e "$metadata_marker" ]] || fail "stale-lock cli-package reached cargo metadata"
+  [[ ! -e "$invalidation_marker" ]] || fail "stale-lock cli-package invalidated build artifacts"
+  [[ ! -e "$build_marker" ]] || fail "stale-lock cli-package reached cargo build"
+  [[ ! -e "$provenance_marker" ]] || fail "stale-lock cli-package reached dep-info verification"
+  [[ ! -e "$package_marker" ]] || fail "stale-lock cli-package reached Debian assembly"
+}
+
 assert_package_source_provenance_is_current_and_non_mutating() {
   local source_a="$TMPDIR/source a"
   local source_b="$TMPDIR/source b"
@@ -623,6 +767,7 @@ KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash
 assert_distinct_worktrees_share_target_and_lock
 assert_package_lock_marker_is_wrapper_owned
 assert_package_waits_for_shared_build_lock
+assert_cli_package_stale_lock_fails_closed_without_mutation
 assert_package_source_provenance_is_current_and_non_mutating
 assert_schema_cargo_lanes_stale_lock_fail_without_mutation
 assert_resource_limit_defaults

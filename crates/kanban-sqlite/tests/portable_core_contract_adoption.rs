@@ -511,9 +511,7 @@ fn natural_json_values_roundtrip_without_double_encoding() {
     assert!(event["data"].get("payload_json").is_none());
 }
 
-#[test]
-fn importer_migrates_parent_exporter_json_text_keys_and_integer_booleans() {
-    let db = TempDb::new("portable-core-legacy-key-");
+fn parent_exporter_core_records() -> Vec<Value> {
     let mut records = canonical_input_records();
     for task in records.iter_mut().filter(|row| row["type"] == "task") {
         let data = task["data"].as_object_mut().expect("task data");
@@ -549,6 +547,13 @@ fn importer_migrates_parent_exporter_json_text_keys_and_integer_booleans() {
             .expect("record metadata");
         record["data"]["metadata_json"] = json!(metadata.to_string());
     }
+    records
+}
+
+#[test]
+fn importer_migrates_parent_exporter_json_text_keys_and_integer_booleans() {
+    let db = TempDb::new("portable-core-legacy-key-");
+    let records = parent_exporter_core_records();
     let input = db._dir.path().join("legacy.jsonl");
     write_jsonl(&input, &records);
     import_jsonl(&db.path, &input, true).expect("parent exporter snapshot must migrate");
@@ -560,6 +565,63 @@ fn importer_migrates_parent_exporter_json_text_keys_and_integer_booleans() {
     assert!(!exported.contains("result_json"), "{exported}");
     assert!(!exported.contains("payload_json"), "{exported}");
     assert!(!exported.contains(r#""hidden":0"#), "{exported}");
+}
+
+#[test]
+fn importer_rejects_hybrid_core_records_before_normalization_and_rolls_back_replace() {
+    for (record_type, natural_field, storage_field) in [
+        ("task", "result", "result_json"),
+        ("task", "metadata", "metadata_json"),
+        ("run", "metadata", "metadata_json"),
+        ("comment", "metadata", "metadata_json"),
+        ("event", "payload", "payload_json"),
+    ] {
+        let db = TempDb::new(&format!(
+            "portable-core-hybrid-{record_type}-{natural_field}-"
+        ));
+        let mut records = parent_exporter_core_records();
+        let record = records
+            .iter_mut()
+            .find(|row| row["type"] == record_type)
+            .expect("hybrid record");
+        let data = record["data"].as_object_mut().expect("record data");
+        let natural_value = match data.get(storage_field).expect("storage-native field") {
+            Value::Null => Value::Null,
+            Value::String(text) => serde_json::from_str(text).expect("storage JSON text"),
+            other => panic!("unexpected storage-native value: {other}"),
+        };
+        data.insert(natural_field.into(), natural_value);
+
+        let input = db._dir.path().join("hybrid.jsonl");
+        write_jsonl(&input, &records);
+        let error = import_jsonl(&db.path, &input, true)
+            .expect_err("same-record natural/storage-native keys must be rejected");
+        let message = error.to_string();
+        assert!(
+            message.contains("cannot contain both natural and parent storage-native keys"),
+            "{message}"
+        );
+        assert!(message.contains(natural_field), "{message}");
+        assert!(message.contains(storage_field), "{message}");
+
+        let conn = connect_file(&db.path).expect("connect rolled-back target");
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM boards WHERE slug='default'",
+                [],
+                |row| { row.get::<_, i64>(0) }
+            )
+            .expect("count retained default board"),
+            1,
+            "failed replace must retain the original board"
+        );
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get::<_, i64>(0))
+                .expect("count retained tasks"),
+            0,
+            "failed replace must roll back imported tasks"
+        );
+    }
 }
 
 #[test]

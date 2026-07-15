@@ -201,6 +201,108 @@ fn parent_exporter_storage_native_snapshot_migrates_one_way() {
     assert_eq!(export_records(&target), expected);
 }
 
+#[test]
+fn importer_rejects_hybrid_ledger_records_before_normalization_and_rolls_back_replace() {
+    for (record_type, natural_field, storage_field) in [
+        ("label_semantic_proposal", "diagnostics", "diagnostics_json"),
+        (
+            "label_ontology_observation",
+            "task_snapshot",
+            "task_snapshot_json",
+        ),
+        (
+            "label_ontology_observation",
+            "agent_candidates",
+            "agent_candidates_json",
+        ),
+        (
+            "label_ontology_observation",
+            "suggestion_snapshot",
+            "suggestion_snapshot_json",
+        ),
+        (
+            "label_ontology_observation",
+            "final_decision",
+            "final_decision_json",
+        ),
+        (
+            "label_ontology_observation",
+            "diagnostics",
+            "diagnostics_json",
+        ),
+        (
+            "label_ontology_signal",
+            "related_labels",
+            "related_labels_json",
+        ),
+        ("label_ontology_signal", "proposal", "proposal_json"),
+        ("label_ontology_action", "change", "change_json"),
+        ("label_ontology_action", "validation", "validation_json"),
+        ("signal_observation", "evidence", "evidence_json"),
+        ("setting", "value", "value_json"),
+    ] {
+        let (source_dir, source) = temp_db(&format!(
+            "portable-ledger-hybrid-source-{record_type}-{natural_field}"
+        ));
+        seed_ledger(&source);
+        let natural_value = export_records(&source)
+            .into_iter()
+            .find(|record| record["type"] == record_type)
+            .unwrap_or_else(|| panic!("missing natural {record_type} record"))["data"]
+            .get(natural_field)
+            .unwrap_or_else(|| panic!("missing natural {record_type}.{natural_field}"))
+            .clone();
+        let mut records = parent_exporter_records(&source);
+        let record = records
+            .iter_mut()
+            .find(|record| record["type"] == record_type)
+            .unwrap_or_else(|| panic!("missing parent {record_type} record"));
+        let data = record["data"].as_object_mut().expect("record data");
+        assert!(data.contains_key(storage_field));
+        data.insert(natural_field.into(), natural_value);
+
+        let input = source_dir.path().join("hybrid.jsonl");
+        let mut file = fs::File::create(&input).expect("hybrid snapshot");
+        for record in records {
+            writeln!(file, "{record}").expect("write hybrid JSONL");
+        }
+        drop(file);
+
+        let (_target_dir, target) = temp_db(&format!(
+            "portable-ledger-hybrid-target-{record_type}-{natural_field}"
+        ));
+        let error = import_jsonl(&target, &input, true)
+            .expect_err("same-record natural/storage-native keys must be rejected");
+        let message = error.to_string();
+        assert!(
+            message.contains("cannot contain both natural and parent storage-native keys"),
+            "{message}"
+        );
+        assert!(message.contains(natural_field), "{message}");
+        assert!(message.contains(storage_field), "{message}");
+
+        let conn = connect_file(&target).expect("connect rolled-back target");
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM boards WHERE slug='default'",
+                [],
+                |row| { row.get::<_, i64>(0) }
+            )
+            .expect("count retained default board"),
+            1,
+            "failed replace must retain the original board"
+        );
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM label_ontology_actions", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect("count imported ledger actions"),
+            0,
+            "failed replace must roll back imported ledger rows"
+        );
+    }
+}
+
 fn rn<T>(value: Option<T>) -> RequiredNullable<T> {
     RequiredNullable(value)
 }

@@ -202,6 +202,94 @@ fn parent_exporter_storage_native_snapshot_migrates_one_way() {
 }
 
 #[test]
+fn importer_rejects_cross_record_format_mixing_for_every_parent_json_field_family_and_rolls_back() {
+    for record_type in [
+        "setting",
+        "signal_observation",
+        "label_ontology_action",
+        "label_ontology_signal",
+        "label_ontology_observation",
+        "label_semantic_proposal",
+        "label_semantics",
+    ] {
+        let (source_dir, source) = temp_db(&format!("portable-mixed-source-{record_type}"));
+        seed_ledger(&source);
+        let natural_records = export_records(&source);
+        let parent_records = parent_exporter_records(&source);
+
+        for (direction, mut records, replacement_records) in [
+            (
+                "parent-with-natural",
+                parent_records.clone(),
+                &natural_records,
+            ),
+            (
+                "natural-with-parent",
+                natural_records.clone(),
+                &parent_records,
+            ),
+        ] {
+            let replacement = replacement_records
+                .iter()
+                .find(|record| record["type"] == record_type)
+                .unwrap_or_else(|| panic!("missing {direction} replacement for {record_type}"))
+                .clone();
+            let mixed = records
+                .iter_mut()
+                .find(|record| record["type"] == record_type)
+                .unwrap_or_else(|| panic!("missing {record_type} record in {direction}"));
+            *mixed = replacement;
+
+            let input = source_dir
+                .path()
+                .join(format!("{direction}-{record_type}.jsonl"));
+            let mut file = fs::File::create(&input).expect("mixed snapshot");
+            for record in records {
+                writeln!(file, "{record}").expect("write mixed JSONL");
+            }
+            drop(file);
+
+            let (_target_dir, target) =
+                temp_db(&format!("portable-mixed-target-{direction}-{record_type}"));
+            let before_board_id: String = connect_file(&target)
+                .expect("connect target before import")
+                .query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+                    row.get(0)
+                })
+                .expect("read original board id");
+
+            let error = import_jsonl(&target, &input, true)
+                .expect_err("cross-record natural/storage-native mixing must fail closed");
+            assert!(
+                error
+                    .to_string()
+                    .contains("JSONL import cannot mix natural and parent storage-native records"),
+                "{direction} {record_type}: {error}"
+            );
+
+            let conn = connect_file(&target).expect("connect rolled-back target");
+            let after_board_id: String = conn
+                .query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+                    row.get(0)
+                })
+                .expect("read retained board id");
+            assert_eq!(
+                after_board_id, before_board_id,
+                "{direction} {record_type}: failed replace must retain the original board"
+            );
+            assert_eq!(
+                conn.query_row("SELECT COUNT(*) FROM label_ontology_actions", [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .expect("count imported ledger actions"),
+                0,
+                "{direction} {record_type}: failed replace must roll back imported ledger rows"
+            );
+        }
+    }
+}
+
+#[test]
 fn importer_rejects_hybrid_ledger_records_before_normalization_and_rolls_back_replace() {
     for (record_type, natural_field, storage_field) in [
         ("label_semantic_proposal", "diagnostics", "diagnostics_json"),

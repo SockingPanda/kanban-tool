@@ -317,6 +317,10 @@ just schema-audit-closed
   path 同名包冒充、resolve package ID 漂移、all-target normal graph 泄漏、缺失 test
   target、0 exact tests 和“列出但未执行”等防伪分支。
 - `schema-adoption-witness` 先运行上述负测，再从当前 Rust inventory 读取 adopted witness；
+  Cargo plan/metadata/tree/test 调用全部使用 `--locked`，并按
+  `(package, test_target, exact_test)` 唯一 locator 执行一次；同一 package/test target
+  只启动一次 list 与一次完整 test process，再逐 locator 校验唯一列出和真实通过，同时保留
+  每条 contract/role mapping 的报告；
   每个 witness 先用 `--exact --list` 证明唯一命中，再真实执行并要求 1 test 通过。当前
   每个 adopted contract 的 producer/consumer witness 都必须执行；当前计数以本文件前部
   唯一的 train authority snapshot 为准。

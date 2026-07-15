@@ -259,6 +259,75 @@ assert_distinct_worktrees_share_target_and_lock() {
   [[ -e "$second_done" ]] || fail "second worktree did not run after the shared lock was released"
 }
 
+assert_package_source_provenance_is_current_and_non_mutating() {
+  local source_a="$TMPDIR/source-a"
+  local source_b="$TMPDIR/source-b"
+  local stale_dep_info="$TMPDIR/stale.d"
+  local before after
+
+  mkdir -p "$source_a/crates/kanban-cli/src" "$source_b/crates/kanban-cli/src"
+  printf 'fn marker() {}\n' > "$source_a/crates/kanban-cli/src/main.rs"
+  printf 'fn marker() {}\n' > "$source_b/crates/kanban-cli/src/main.rs"
+  printf '%s/release/kanban: %s/crates/kanban-cli/src/main.rs\n' "$TARGET_ROOT" "$source_a" > "$stale_dep_info"
+  before="$(sha256sum "$stale_dep_info")"
+  assert_failure "$ROOT/scripts/package-source-provenance.sh" --verify-dep-info "$source_b" "$stale_dep_info"
+  after="$(sha256sum "$stale_dep_info")"
+  [[ "$before" == "$after" ]] || fail "stale provenance rejection mutated the dep-info artifact"
+  "$ROOT/scripts/package-source-provenance.sh" --verify-dep-info "$source_a" "$stale_dep_info"
+
+  mkdir -p "$TARGET_ROOT/release/.fingerprint/workspace-crate-aaa" \
+    "$TARGET_ROOT/release/.fingerprint/registry-crate-bbb" "$TARGET_ROOT/release/deps"
+  touch "$TARGET_ROOT/release/deps/libworkspace_crate-aaa.rlib" \
+    "$TARGET_ROOT/release/deps/libregistry_crate-bbb.rlib"
+  "$ROOT/scripts/package-source-provenance.sh" --invalidate-packages \
+    "$TARGET_ROOT/release" workspace-crate
+  [[ ! -e "$TARGET_ROOT/release/.fingerprint/workspace-crate-aaa" ]]
+  [[ ! -e "$TARGET_ROOT/release/deps/libworkspace_crate-aaa.rlib" ]]
+  [[ -e "$TARGET_ROOT/release/.fingerprint/registry-crate-bbb" ]]
+  [[ -e "$TARGET_ROOT/release/deps/libregistry_crate-bbb.rlib" ]]
+}
+
+assert_schema_cargo_lanes_stale_lock_fail_without_mutation() {
+  local repo="$TMPDIR/stale-lock-repo"
+  local before after status recipe
+  mkdir -p "$repo/scripts" "$repo/bin"
+  cp "$ROOT/justfile" "$repo/justfile"
+  printf 'stale-lock\n' > "$repo/Cargo.lock"
+  cat > "$repo/scripts/cargo-build-lock.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == "--" ]]
+shift
+exec "$@"
+EOF
+  cat > "$repo/bin/cargo" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "nextest" && "${2:-}" == "--version" ]]; then
+  exit 0
+fi
+if [[ " $* " == *' --locked '* ]]; then
+  echo 'error: the lock file needs to be updated but --locked was passed' >&2
+  exit 101
+fi
+printf 'mutated\n' >> Cargo.lock
+EOF
+  chmod +x "$repo/scripts/cargo-build-lock.sh" "$repo/bin/cargo"
+  for recipe in schema-check schema-tool schema-surface-audit \
+    "feature-p kanban-contract schema"; do
+    before="$(sha256sum "$repo/Cargo.lock")"
+    set +e
+    # shellcheck disable=SC2086 # recipe intentionally carries positional args
+    PATH="$repo/bin:$PATH" just --justfile "$repo/justfile" \
+      --working-directory "$repo" $recipe >/dev/null 2>&1
+    status=$?
+    set -e
+    [[ "$status" -ne 0 ]] || fail "stale lock $recipe unexpectedly succeeded"
+    after="$(sha256sum "$repo/Cargo.lock")"
+    [[ "$before" == "$after" ]] || fail "stale lock $recipe mutated Cargo.lock"
+  done
+}
+
 assert_resource_limit_defaults() {
   local nested_marker="$TMPDIR/resource-nested-marker"
 
@@ -423,6 +492,8 @@ KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash
 [[ -e "$outer_lock_marker" ]] || fail "nested lock-held command did not run"
 
 assert_distinct_worktrees_share_target_and_lock
+assert_package_source_provenance_is_current_and_non_mutating
+assert_schema_cargo_lanes_stale_lock_fail_without_mutation
 assert_resource_limit_defaults
 assert_no_bare_target_writing_cargo
 assert_target_dir_probe_call_sites_quote_paths

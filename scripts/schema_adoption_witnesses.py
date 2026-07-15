@@ -289,6 +289,7 @@ def load_witness_plan(repo_root: Path) -> list[dict[str, Any]]:
             "--",
             "cargo",
             "run",
+            "--locked",
             "--quiet",
             "-p",
             "kanban-schema-tool",
@@ -387,6 +388,7 @@ def execute_witness(
         "--",
         "cargo",
         "test",
+        "--locked",
         "-p",
         adopter_id,
         *selector,
@@ -398,6 +400,58 @@ def execute_witness(
     require_exact_test(list_output, exact_test)
     run_output = run_checked(command, repo_root)
     require_executed_test(run_output, exact_test)
+
+
+def execute_witness_group(
+    repo_root: Path,
+    metadata: dict[str, Any],
+    package: str,
+    test_target: str,
+    exact_tests: list[str],
+) -> None:
+    adopter_id, _ = require_runtime_dependency(metadata, package, repo_root)
+    selector = test_target_selector(metadata, package, test_target)
+    command = [
+        str(repo_root / "scripts/cargo-build-lock.sh"),
+        "--",
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        adopter_id,
+        *selector,
+        "--",
+    ]
+    list_output = run_checked([*command, "--list"], repo_root)
+    for exact_test in exact_tests:
+        require_exact_test(list_output, exact_test)
+    run_output = run_checked(command, repo_root)
+    for exact_test in exact_tests:
+        if not any(
+            line.strip().startswith(f"test {exact_test} ... ok")
+            for line in run_output.splitlines()
+        ):
+            raise WitnessGateError(f"witness locator 未真实执行并通过: {exact_test}")
+
+
+def execute_unique_witnesses(
+    repo_root: Path,
+    metadata: dict[str, Any],
+    witnesses: list[tuple[str, str, tuple[str, str, str]]],
+) -> list[dict[str, Any]]:
+    groups: dict[tuple[str, str], set[str]] = {}
+    for package, test_target, exact_test in {
+        locator for _, _, locator in witnesses
+    }:
+        groups.setdefault((package, test_target), set()).add(exact_test)
+    for (package, test_target), exact_tests in sorted(groups.items()):
+        execute_witness_group(
+            repo_root, metadata, package, test_target, sorted(exact_tests)
+        )
+    return [
+        {"contract_id": contract_id, "role": role, "locator": locator}
+        for contract_id, role, locator in witnesses
+    ]
 
 
 def parse_args() -> argparse.Namespace:
@@ -427,14 +481,18 @@ def main() -> int:
 
     for package in sorted(packages):
         validate_runtime_graph(repo_root, metadata, package)
-    for contract_id, role, locator in witnesses:
-        execute_witness(repo_root, metadata, locator)
+    reports = execute_unique_witnesses(repo_root, metadata, witnesses)
+    for report in reports:
+        contract_id = report["contract_id"]
+        role = report["role"]
+        locator = report["locator"]
         print(
             f"ok: {contract_id} {role} witness package={locator[0]} "
             f"test_target={locator[1]} exact_test={locator[2]}"
         )
     print(
-        f"ok: {len(contracts)} 个 adopted contract 的 {len(witnesses)} 个 witness 已执行"
+        f"ok: {len(contracts)} 个 adopted contract 的 {len(witnesses)} 个 mapping "
+        f"由 {len({locator for _, _, locator in witnesses})} 个 unique locator 执行"
     )
     return 0
 

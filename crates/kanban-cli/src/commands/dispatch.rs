@@ -152,21 +152,21 @@ pub(crate) fn absolute_path(path: PathBuf) -> Result<PathBuf> {
 }
 
 pub(crate) fn load_worker_profile(path: &Path, profile_name: &str) -> Result<WorkerProfileConfig> {
-    let document = kanban_local::read_worker_profiles(path)
+    let profile = kanban_local::read_worker_profile(path, profile_name)
         .with_context(|| format!("failed to read worker profile config {}", path.display()))?;
-    let profile = document.workers.get(profile_name).ok_or_else(|| {
+    let profile = profile.ok_or_else(|| {
         invalid_input(format!(
             "worker profile {profile_name} not found in {}",
             path.display()
         ))
     })?;
     Ok(WorkerProfileConfig {
-        command: profile.command.clone(),
+        command: profile.command,
         claim_ttl_ms: profile.claim_ttl_ms,
         heartbeat_interval_ms: profile.heartbeat_interval_ms,
         on_success: profile.on_success.map(finish_policy),
         on_failure: profile.on_failure.map(finish_policy),
-        log_dir: profile.log_dir.clone(),
+        log_dir: profile.log_dir,
     })
 }
 

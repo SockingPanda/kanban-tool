@@ -1,11 +1,12 @@
 use std::{
+    collections::BTreeMap,
     ffi::OsStr,
     io,
     path::{Path, PathBuf},
 };
 
 use fs_err as fs;
-use serde::Serialize;
+use serde::{Deserialize, Serialize, de::IntoDeserializer};
 
 pub use kanban_contract::{
     ProjectConfigInput as ProjectConfig, ProjectVectorConfigInput as VectorConfig,
@@ -266,6 +267,36 @@ pub fn read_worker_profiles(path: &Path) -> Result<WorkerProfilesInput, ConfigEr
     })
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkerProfileSections {
+    workers: BTreeMap<String, toml::Value>,
+}
+
+pub fn read_worker_profile(
+    path: &Path,
+    profile_name: &str,
+) -> Result<Option<WorkerProfileInput>, ConfigError> {
+    let text = fs::read_to_string(path)?;
+    let deserializer = toml::Deserializer::new(&text);
+    let mut document: WorkerProfileSections = serde_path_to_error::deserialize(deserializer)
+        .map_err(|err| ConfigError::FileParse {
+            path: path.to_path_buf(),
+            field_path: err.path().to_string(),
+            source: Box::new(err.into_inner()),
+        })?;
+    let Some(profile) = document.workers.remove(profile_name) else {
+        return Ok(None);
+    };
+    serde_path_to_error::deserialize(profile.into_deserializer())
+        .map(Some)
+        .map_err(|err| ConfigError::FileParse {
+            path: path.to_path_buf(),
+            field_path: format!("workers.{profile_name}.{}", err.path()),
+            source: Box::new(err.into_inner()),
+        })
+}
+
 pub fn write_project_config(path: &Path, config: &ProjectConfig) -> Result<(), ConfigError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -522,6 +553,60 @@ log_dir = ".kb/logs"
         assert!(read_worker_profiles(&path).is_err());
         fs::write(&path, "[not_workers]\nunknown = true\n").unwrap();
         assert!(read_worker_profiles(&path).is_err());
+    }
+
+    #[test]
+    fn selected_worker_profile_ignores_unselected_profile_extensions() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("workers.toml");
+        fs::write(
+            &path,
+            r#"[workers.backend]
+command = "echo backend"
+claim_ttl_ms = 300000
+
+[workers.future]
+concurrency = 2
+max_runtime_ms = 3600000
+"#,
+        )
+        .unwrap();
+
+        let profile = read_worker_profile(&path, "backend").unwrap().unwrap();
+        assert_eq!(profile.command.as_deref(), Some("echo backend"));
+        assert_eq!(profile.claim_ttl_ms, Some(300_000));
+    }
+
+    #[test]
+    fn selected_worker_profile_preserves_selected_field_path() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("workers.toml");
+        fs::write(
+            &path,
+            r#"[workers.backend]
+concurrency = 2
+"#,
+        )
+        .unwrap();
+
+        let error = read_worker_profile(&path, "backend").unwrap_err();
+        assert!(
+            error.to_string().contains("workers.backend.concurrency"),
+            "{error}"
+        );
+
+        fs::write(
+            &path,
+            r#"[workers.backend]
+on_success = "future"
+"#,
+        )
+        .unwrap();
+        let error = read_worker_profile(&path, "backend").unwrap_err();
+        assert!(
+            error.to_string().contains("workers.backend.on_success"),
+            "{error}"
+        );
     }
 
     #[test]

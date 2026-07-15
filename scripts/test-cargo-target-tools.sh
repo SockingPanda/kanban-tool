@@ -259,21 +259,150 @@ assert_distinct_worktrees_share_target_and_lock() {
   [[ -e "$second_done" ]] || fail "second worktree did not run after the shared lock was released"
 }
 
+assert_package_lock_marker_is_wrapper_owned() {
+  local repo="$TMPDIR/package-marker-repo"
+  local fake_bin="$repo/bin"
+  local wrapper_marker="$repo/wrapper-entered-clean"
+  local status
+
+  mkdir -p "$repo/scripts" "$fake_bin"
+  cp "$ROOT/scripts/package-cli-linux.sh" "$repo/scripts/package-cli-linux.sh"
+  cat > "$repo/scripts/cargo-build-lock.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "--print-target-dir" ]]; then
+  printf '%s\n' "$PACKAGE_TEST_TARGET_ROOT"
+  exit 0
+fi
+[[ "${1:-}" == "--" ]]
+shift
+if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]]; then
+  exec "$@"
+fi
+[[ -z "${KANBAN_PACKAGE_BUILD_LOCK_HELD:-}" ]] || {
+  echo "error: package forged its own build-lock marker" >&2
+  exit 97
+}
+touch "$PACKAGE_WRAPPER_MARKER"
+exec env KANBAN_CARGO_BUILD_LOCK_HELD=1 "$@"
+EOF
+  cat > "$fake_bin/cargo" <<'EOF'
+#!/usr/bin/env bash
+exit 86
+EOF
+  chmod +x "$repo/scripts/package-cli-linux.sh" \
+    "$repo/scripts/cargo-build-lock.sh" "$fake_bin/cargo"
+
+  set +e
+  env \
+    -u KANBAN_CARGO_BUILD_LOCK_HELD \
+    -u KANBAN_PACKAGE_BUILD_LOCK_HELD \
+    PATH="$fake_bin:$PATH" \
+    PACKAGE_TEST_TARGET_ROOT="$repo/target" \
+    PACKAGE_WRAPPER_MARKER="$wrapper_marker" \
+    "$repo/scripts/package-cli-linux.sh" --format deb >/dev/null 2>&1
+  status=$?
+  set -e
+
+  [[ "$status" -eq 86 ]] || fail "expected package child to reach fake cargo with status 86, got $status"
+  [[ -e "$wrapper_marker" ]] || fail "package did not enter the build-lock wrapper without a forged marker"
+}
+
+assert_package_waits_for_shared_build_lock() (
+  local holder_ready="$TMPDIR/package-lock-holder-ready"
+  local release_holder="$TMPDIR/package-lock-holder-release"
+  local cargo_marker="$TMPDIR/package-cargo-entered"
+  local package_stderr="$TMPDIR/package-lock.stderr"
+  local fake_bin="$TMPDIR/package-lock-bin"
+  local holder_pid="" package_pid="" status
+
+  cleanup_package_lock_processes() {
+    local pid i
+
+    touch "$release_holder" 2>/dev/null || true
+    for pid in "$package_pid" "$holder_pid"; do
+      [[ -n "$pid" ]] || continue
+      if kill -0 "$pid" >/dev/null 2>&1; then
+        kill -TERM "$pid" >/dev/null 2>&1 || true
+        for i in {1..100}; do
+          kill -0 "$pid" >/dev/null 2>&1 || break
+          sleep 0.02
+        done
+        kill -KILL "$pid" >/dev/null 2>&1 || true
+      fi
+      wait "$pid" >/dev/null 2>&1 || true
+    done
+  }
+  trap cleanup_package_lock_processes EXIT
+
+  mkdir -p "$fake_bin"
+  cat > "$fake_bin/cargo" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+touch "$PACKAGE_CARGO_MARKER"
+exit 86
+EOF
+  chmod +x "$fake_bin/cargo"
+
+  KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '
+    set -euo pipefail
+    touch "$1"
+    while [[ ! -e "$2" ]]; do sleep 0.02; done
+  ' _ "$holder_ready" "$release_holder" &
+  holder_pid=$!
+  wait_for_file "$holder_ready" "package build lock holder"
+
+  env \
+    -u KANBAN_CARGO_BUILD_LOCK_HELD \
+    -u KANBAN_PACKAGE_BUILD_LOCK_HELD \
+    KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+    PACKAGE_CARGO_MARKER="$cargo_marker" \
+    PATH="$fake_bin:$PATH" \
+    "$ROOT/scripts/package-cli-linux.sh" --format deb \
+    >/dev/null 2>"$package_stderr" &
+  package_pid=$!
+
+  wait_for_grep "正在等待其他构建/测试释放" "$package_stderr" "package lock wait"
+  [[ ! -e "$cargo_marker" ]] || fail "package entered Cargo while the shared build lock was occupied"
+
+  touch "$release_holder"
+  wait "$holder_pid"
+  holder_pid=""
+  set +e
+  wait "$package_pid"
+  status=$?
+  set -e
+  package_pid=""
+  [[ "$status" -eq 86 ]] || fail "expected package to resume into fake cargo with status 86, got $status"
+  [[ -e "$cargo_marker" ]] || fail "package did not resume after the shared build lock was released"
+  trap - EXIT
+)
+
 assert_package_source_provenance_is_current_and_non_mutating() {
-  local source_a="$TMPDIR/source-a"
-  local source_b="$TMPDIR/source-b"
+  local source_a="$TMPDIR/source a"
+  local source_b="$TMPDIR/source b"
   local stale_dep_info="$TMPDIR/stale.d"
-  local before after
+  local escaped_source_a escaped_source_b misleading_target before after
 
   mkdir -p "$source_a/crates/kanban-cli/src" "$source_b/crates/kanban-cli/src"
   printf 'fn marker() {}\n' > "$source_a/crates/kanban-cli/src/main.rs"
   printf 'fn marker() {}\n' > "$source_b/crates/kanban-cli/src/main.rs"
-  printf '%s/release/kanban: %s/crates/kanban-cli/src/main.rs\n' "$TARGET_ROOT" "$source_a" > "$stale_dep_info"
+  escaped_source_a="${source_a// /\\ }"
+  escaped_source_b="${source_b// /\\ }"
+  printf '%s/release/kanban: %s/crates/kanban-cli/src/main.rs\n' \
+    "$TARGET_ROOT" "$escaped_source_a" > "$stale_dep_info"
   before="$(sha256sum "$stale_dep_info")"
   assert_failure "$ROOT/scripts/package-source-provenance.sh" --verify-dep-info "$source_b" "$stale_dep_info"
   after="$(sha256sum "$stale_dep_info")"
   [[ "$before" == "$after" ]] || fail "stale provenance rejection mutated the dep-info artifact"
   "$ROOT/scripts/package-source-provenance.sh" --verify-dep-info "$source_a" "$stale_dep_info"
+
+  misleading_target="$TMPDIR/misleading-target.d"
+  printf '%s/crates/target/release/kanban: %s/crates/kanban-cli/src/main.rs\n' \
+    "$escaped_source_b" "$escaped_source_a" > "$misleading_target"
+  assert_failure "$ROOT/scripts/package-source-provenance.sh" \
+    --verify-dep-info "$source_b" "$misleading_target"
 
   mkdir -p "$TARGET_ROOT/release/.fingerprint/workspace-crate-aaa" \
     "$TARGET_ROOT/release/.fingerprint/registry-crate-bbb" "$TARGET_ROOT/release/deps"
@@ -492,6 +621,8 @@ KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash
 [[ -e "$outer_lock_marker" ]] || fail "nested lock-held command did not run"
 
 assert_distinct_worktrees_share_target_and_lock
+assert_package_lock_marker_is_wrapper_owned
+assert_package_waits_for_shared_build_lock
 assert_package_source_provenance_is_current_and_non_mutating
 assert_schema_cargo_lanes_stale_lock_fail_without_mutation
 assert_resource_limit_defaults

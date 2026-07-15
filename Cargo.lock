@@ -4035,7 +4035,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-application"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "kanban-core",
  "serde",
@@ -4043,7 +4043,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-cli"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -4075,7 +4075,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-context"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "kanban-entity",
  "kanban-graph",
@@ -4087,7 +4087,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-contract"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "schemars 1.2.1",
  "serde",
@@ -4096,7 +4096,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-core"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "proptest",
  "serde",
@@ -4108,7 +4108,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-derived-io"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "kanban-core",
  "kanban-entity",
@@ -4125,7 +4125,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-desktop"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "axum",
  "kanban-local",
@@ -4142,7 +4142,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-entity"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -4150,7 +4150,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-graph"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "kanban-entity",
  "serde",
@@ -4160,7 +4160,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-graph-oxigraph"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -4180,7 +4180,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-helper-protocol"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "kanban-core",
  "serde",
@@ -4190,7 +4190,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-indexer"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "kanban-entity",
  "serde",
@@ -4200,7 +4200,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-labels"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "serde",
  "thiserror 2.0.18",
@@ -4208,7 +4208,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-local"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "assert_fs",
  "dirs-next",
@@ -4224,7 +4224,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-schema-tool"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "jsonschema",
  "kanban-contract",
@@ -4235,7 +4235,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-search"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "kanban-core",
  "serde",
@@ -4245,7 +4245,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-server"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "anyhow",
  "axum",
@@ -4281,7 +4281,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-sqlite"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "anyhow",
  "criterion",
@@ -4307,7 +4307,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-test-support"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "kanban-application",
  "kanban-core",
@@ -4318,7 +4318,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-vector"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "kanban-contract",
  "kanban-entity",
@@ -4330,7 +4330,7 @@ dependencies = [
 
 [[package]]
 name = "kanban-vector-lancedb"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "anyhow",
  "arrow-array",

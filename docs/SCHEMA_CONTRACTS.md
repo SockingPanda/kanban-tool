@@ -320,13 +320,14 @@ just schema-audit-closed
   path 同名包冒充、resolve package ID 漂移、all-target normal graph 泄漏、缺失 test
   target、0 exact tests 和“列出但未执行”等防伪分支。
 - `schema-adoption-witness` 先运行上述负测，再从当前 Rust inventory 读取 adopted witness；
-  Cargo plan/metadata/tree/test 调用全部使用 `--locked`，并按
-  `(package, test_target, exact_test)` 唯一 locator 执行一次；同一 package/test target
-  只启动一次 list 与一次完整 test process，再逐 locator 校验唯一列出和真实通过，同时保留
-  每条 contract/role mapping 的报告；
-  每个 witness 先用 `--exact --list` 证明唯一命中，再真实执行并要求 1 test 通过。当前
-  每个 adopted contract 的 producer/consumer witness 都必须执行；当前计数以本文件前部
-  唯一的 train authority snapshot 为准。
+  Cargo plan/metadata/tree/test 调用全部使用 `--locked`。gate 先按
+  `(package, test_target, exact_test)` 去重 locator，再按 `(package, test_target)` 分组；同一组
+  只启动一次未过滤的 list 与一次完整 test-target process。list 输出必须唯一列出组内每个
+  `exact_test`，完整执行输出必须逐项显示这些 test 真实通过；同一 locator 可以承载多条
+  contract/role mapping，报告仍逐条保留。gate 不再为每个 witness 单独运行
+  `--exact --list` 或要求单测试进程的 `1 passed` summary。当前每个 adopted contract 的
+  producer/consumer mapping 都必须被分组执行覆盖；当前计数以本文件前部唯一的 train
+  authority snapshot 为准。
 - `schema-contract` 先运行 dependency isolation，再运行只选择 `kanban-contract` 与
   `kanban-schema-tool` 的 `schema-fmt`，随后汇总 feature tests/clippy、metaschema、正负
   fixtures、determinism、docs marker、surface audit、adoption witness 和 committed drift gate。
@@ -358,8 +359,9 @@ just schema-audit-closed
   `crates/kanban-contract`；声明 path/source 和 resolve package ID 都一致。
 - 以 adopter package ID 生成的 all-target normal graph 不启用 `kanban-contract/schema`、
   不依赖 `kanban-schema-tool`，且包含当前 workspace contract path。
-- `test_target` 使用 `lib` 或具名 integration test target；`exact_test` 必须唯一存在并
-  真实执行 1 test，0 tests、ignored-only 或不存在都失败。
+- `test_target` 使用 `lib` 或具名 integration test target；分组 list 必须唯一列出每个
+  `exact_test`，完整 test-target process 必须整体成功并逐项显示这些 test 通过；缺失、重复、
+  ignored、未执行或 target 内任一测试失败都失败。
 - schema direction 与真实 Serde 使用方向一致。
 - strictness 与现有行为一致，没有把 open metadata 错误收紧。
 - service/state-machine/exit-code/HTTP-status/transaction tests 继续保留。

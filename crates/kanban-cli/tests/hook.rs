@@ -113,7 +113,7 @@ fn codex_hook_install_status_and_uninstall_preserve_user_hooks() -> anyhow::Resu
         serde_json::from_str(&std::fs::read_to_string(&prompt_config_path)?)?;
     assert_eq!(
         prompt_config["codex_hooks"]["prompts"]["failure.zh-default"],
-        "检测到 kanban CLI 命令失败。\n\n命令：{{command}}\n退出码：{{exit_code}}\n\n继续调整。调整成功后，视情况 记录必要的后续工作。"
+        "检测到 kanban CLI 命令失败。\n\n命令：{{command}}\n退出码：{{exit_code}}\n\n继续调整。修正后继续当前任务，并在确有必要时记录后续工作。"
     );
 
     let status = kanban_in_dir_str_envs(
@@ -229,7 +229,7 @@ fn codex_hook_handle_reports_failed_kanban_command() -> anyhow::Result<()> {
     assert!(message.contains("检测到 kanban CLI 命令失败"));
     assert!(message.contains("命令：kanban task create --bad-flag"));
     assert!(message.contains("退出码：2"));
-    assert!(message.contains("记录必要的后续工作"));
+    assert!(message.contains("修正后继续当前任务，并在确有必要时记录后续工作"));
     assert!(!message.contains("unexpected argument --bad-flag"));
     Ok(())
 }

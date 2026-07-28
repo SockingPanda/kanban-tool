@@ -677,6 +677,8 @@ KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" CARGO_TARGET_DIR="$TARGET_ROOT/" "$LOCK_
 home_dir="$TMPDIR/home"
 home_target="$home_dir/.cache/kanban-tool/cargo-target"
 mkdir -p "$home_dir"
+default_expected_target="$(env -u KANBAN_CARGO_TARGET_ROOT -u CARGO_TARGET_DIR HOME="$home_dir" "$LOCK_SCRIPT" --print-target-dir)"
+[[ "$default_expected_target" == "$home_target" ]] || fail "default target root must be portable under HOME"
 home_expected_target="$(HOME="$home_dir" KANBAN_CARGO_TARGET_ROOT='$HOME/.cache/kanban-tool/cargo-target' "$LOCK_SCRIPT" --print-target-dir)"
 env HOME="$home_dir"   KANBAN_CARGO_TARGET_ROOT='$HOME/.cache/kanban-tool/cargo-target'   "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$home_expected_target"
 assert_exact_shared_target_dir "$home_target" "$home_expected_target"

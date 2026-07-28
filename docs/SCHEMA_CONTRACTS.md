@@ -1,152 +1,108 @@
-# JSON Schema Contracts
+# JSON Schema 契约
 
-## 1. 当前 Authority
+## 1. 当前权威来源
 
-`kanban-contract` 承载公开机器契约的迁移账册、候选/已采用 wire DTO 和 JSON Schema
-root registry。`kanban-schema-tool` leaf crate 独占 binary、离线校验、artifact 与 hash/drift
-tooling。状态必须区分：
+`kanban-contract` 承载公开机器契约目录、wire DTO 和 JSON Schema
+根注册表。`kanban-schema-tool` 叶子 crate 独占二进制程序、离线校验、artifact 与 hash/drift
+工具。状态必须区分：
 
 - Rust 类型已经可以生成 schema。
-- runtime adapter 已经实际使用该类型生产或消费 JSON。
+- 运行时适配器已经实际使用该类型生产或消费 JSON。
 
-早期 foundation 的 API error/health response、label semantics delete response 与 decision
-metadata input 现在均为 `adopted`。API error 的 `code` 已收敛为闭合的 `ApiErrorCode`
-snake_case enum；status 与 locale-dependent `message` 仍由 server adapter/core error rendering
-决定。label semantics delete response 已由真实 CLI adapter 生产；decision metadata input 也有
-独立的 typed producer 与真实 CLI consumer witness。任何仍为 `generated` / `planned` 的条目继续
-以真实 adapter 为 runtime 行为 authority；不能因为 `kanban-contract` 中存在同形 DTO 就宣称
-owner 已迁移。
+API error/health response、label semantics delete response 与 decision metadata input
+均为 `adopted`。API error 的 `code` 使用闭合的 `ApiErrorCode` snake_case 枚举；
+status 与依赖 locale 的 `message` 仍由 server adapter/core 错误渲染决定。运行时行为以真实
+adapter 为权威；不能因为 `kanban-contract` 中存在同形 DTO 就宣称已采用该契约。
 
 提交的 schema 由 Rust 类型确定性生成。`schemas/fixtures/**` 是手工提交且同时经过
-Serde/JSON Schema 测试的 canonical examples。Adoption evidence 必须按 direction 分工：
-`Deserialize` request 的 producer 由真实 contract DTO 程序化构造并序列化，结果与 committed
-valid fixture 精确相等；consumer 从该 fixture 反序列化，并通过真实 runtime router/handler。
-`Serialize` response 的 producer 才来自真实 adapter response path。producer/consumer 不得
+Serde/JSON Schema 测试的权威示例。采用证据必须按方向分工：
+`Deserialize` 请求的 producer 由真实 contract DTO 程序化构造并序列化，结果与已提交的
+有效 fixture 精确相等；consumer 从该 fixture 反序列化，并通过真实运行时 router/handler。
+`Serialize` 响应的 producer 才来自真实 adapter 响应路径。producer/consumer 不得
 共用同一个 exercise helper 或仅靠测试名伪装独立证据。每个 witness 必须包含 `operation`、
 `contract_id`、`surface`、`direction`、`package`、`test_target` 和 `exact_test`。
 
-语义 authority 保持分层：
+语义权威保持分层：
 
-- wire DTO 与 schema：字段、类型、required/optional、unknown-field policy 和基础值域。
-- `docs/API_SPEC.md`、`docs/CLI_SPEC.md`：operation、HTTP/exit code、stdout/stderr
+- wire DTO 与 schema：字段、类型、必填/可选、未知字段策略和基础值域。
+- `docs/API_SPEC.md`、`docs/CLI_SPEC.md`：operation、HTTP/退出码、stdout/stderr
   和用户可见行为。
-- `kanban-sqlite::service` 与 `kanban-core`：transaction、状态机、CAS、dependency、
-  recompute 和 structured metadata 的跨字段业务 guard。
+- `kanban-sqlite::service` 与 `kanban-core`：事务、状态机、CAS、依赖、
+  重新计算和结构化元数据的跨字段业务保护。
 
 schema 校验通过不代表业务命令可以执行；业务测试不能被 schema fixture 替代。
 
-## 2. Migration State
+## 2. 契约状态
 
 `operation_inventory()` 中每个 semantic contract 都必须使用以下状态之一：
 
 | 状态 | 含义 | 必备证据 |
 |---|---|---|
-| `planned` | 已识别精确边界，尚未生成 root | 不允许伪填 schema、fixture、adoption 或 exclusion |
-| `generated` | Rust 类型、root 和手工 schema fixtures 已存在 | schema ID、正例 fixture；不得声明 runtime adoption |
-| `adopted` | 真实 producer/consumer 已切到同一 contract | schema fixture、真实 producer fixture、双方结构化且可执行的精确 test witness |
-| `excluded` | 明确不是稳定 JSON contract | 具体 exclusion 理由，不能同时声明 schema 或 fixture |
+| `planned` | 已识别精确边界，尚未生成 root | 不允许伪填 schema、fixture、采用或排除 |
+| `generated` | Rust 类型、root 和手工 schema fixture 已存在 | schema ID、正例 fixture；不得声明运行时采用 |
+| `adopted` | 真实 producer/consumer 已切到同一 contract | schema fixture、真实 producer fixture、双方结构化且可执行的精确测试 witness |
+| `excluded` | 明确不是稳定 JSON contract | 具体排除理由，不能同时声明 schema 或 fixture |
 
-`schema-audit-closed` 只允许 `adopted` 和 `excluded`。它同时拒绝 family、
-wildcard、bidirectional shortcut；双向协议必须拆成精确 input/output contract。
-因此“生成了 schema”永远不能代替“runtime 已采用”。
+`schema-audit-closed` 只允许 `adopted` 和 `excluded`。它同时拒绝接口族、
+通配符和双向捷径；双向协议必须拆成精确的 input/output contract。
+因此“生成了 schema”永远不能代替“运行时已采用”。
 
-当前已生成的 schema roots：
+以下是结构根的代表性类别，不是当前 480 个根的完整清单：
 
-- foundation：API error response、`GET /health` response、label semantics delete response、
-  decision comment metadata input。
-- B1-B lifecycle request：`SpecifyTaskRequest`、`PromoteTaskRequest`、`ClaimTaskRequest`、
+- 基础契约：API 错误响应、`GET /health` 响应、标签语义删除响应和决策评论元数据输入。
+- 生命周期请求：`SpecifyTaskRequest`、`PromoteTaskRequest`、`ClaimTaskRequest`、
   `ReclaimTaskRequest`、`HeartbeatTaskRequest`、`CompleteTaskRequest`、
   `SubmitReviewTaskRequest`、`BlockTaskRequest`、`UnblockTaskRequest`、
   `ReopenTaskRequest`、`ArchiveTaskRequest`、`ArchiveBoardRequest`、
   `AddDependencyRequest`。
-- B1-C1 task-read request：`GET /api/v1/boards/:board/tasks` 与
-  `GET /api/v1/boards/:board/tasks/by-status` 各自独立的 path/query DTO，共 4 个 exact roots；
-  query schema 对 repeated fields 同时声明 `uniqueItems` 与 9/4/3/32 `maxItems`，并冻结
+- 任务读取请求：`GET /api/v1/boards/:board/tasks` 与
+  `GET /api/v1/boards/:board/tasks/by-status` 各自独立的 path/query DTO，共 4 个精确 root；
+  query schema 对可重复字段同时声明 `uniqueItems` 与 9/4/3/32 `maxItems`，并冻结
   `q=1024`、`assignee=128`、单个 `label=128` 的 `maxLength`、label 的 Unicode
   `White_Space` 反集 pattern 及 `limit=1000`。raw 8192-byte cap 与由各字段预算推导出的
-  54-pair cap 由 server runtime 门禁负责；标准 form-encoded UTF-8/reserved-character fixture、
-  Unicode 纯空白负例与非默认 board sentinel 证明真实 producer/consumer。
-- B2-C6 boards：list query、create request、get/archive path 与四个 endpoint-specific success
-  response，共 8 个 exact roots；四个 success roots 只共享闭合 `ApiBoard` component。
+  54 对上限由 server 运行时门禁负责；标准表单编码的 UTF-8/保留字符 fixture、
+  Unicode 纯空白负例与非默认 board 哨兵证明真实 producer/consumer。
+- 看板端点：list query、create request、get/archive path 与四个端点专属成功
+  response，共 8 个精确 root；四个 success root 只共享闭合的 `ApiBoard` 组件。
 
-当前 train authority snapshot 有 480 个 schema roots：semantic contract migration 为
-480 个 `adopted`、0 个 `generated`、0 个 `planned`，没有 `excluded`；480 个 adopted
-contract 登记 960 个 structured witnesses。#440 已将 114 个有限 JSON CLI leaf 全部绑定到
-exact output roots：除既有 bootstrap/config、diagnostics、maintenance、board/task/step/run、
-comment/dependency/event/entity cohort 外，本批继续闭合 33 个 label/semantics/proposal/atom/
-ontology leaf、15 个 graph/vector/context/search/index helper-facing leaf，以及 14 个
-signal/hook/dispatch/export/import operator leaf。每个 root 都由真实 binary producer、typed
-consumer、committed fixture 与 fail-closed runtime ownership gate验证；export stdout JSONL
-stream 不属于有限 envelope。#441 已将 21 个 portable JSONL discriminator 的 input/output
-拆成 42 个 exact roots，并把 descriptor、export/import runtime adapter、逐行 fixture validation
-与双向 adoption witnesses 收敛为同一 authority；record data 是闭合 natural JSON，required-nullable
-键禁止省略但接受显式 `null`。CLI task/step/run adapter 会显式丢弃
-persistence-only `claim_token` 与内部 `log_path`，包括递归 linked task；dependency、events 与
-helper subprocess protocol 继续保持各自 owner，public CLI contract 只拥有最终 stdout shape。
-#447 已把 2 个 decoded TOML config input、7 个 graph helper response 与 12 个 vector helper
-response 闭合为 21 个 exact roots；worker profile input 只拥有被 CLI 选中的
-`[workers.<profile>]` section，未选 section 保持 opaque/forward-compatible，选中 section 继续
-严格拒绝未知或非法字段；真实 config decoder、subprocess adapter 与 protocol decoder 分别提供
-producer/consumer witness，schema tooling 依赖仍隔离在 leaf crate。
-#446 已把 labels、signals、ontology 与 proposals API 的 75 个 generated roots（48 个 request
-deserialize、27 个 response serialize）绑定到真实 router/DTO producer 与 exact contract
-consumer。#443 删除了 3 个无真实 router obligation 的 generated orphan，authority 已闭合。
+当前权威快照有 480 个 schema root：480 个 `adopted`、0 个 `generated`、
+0 个 `planned`、0 个 `excluded`，并登记 960 个结构化 witness。114 个有限 JSON CLI
+叶子命令均绑定到精确输出 root；export stdout JSONL 流不属于有限 envelope。21 个
+JSONL discriminator 的 input/output 分别拥有精确 root，记录数据使用闭合的自然 JSON；
+required-nullable 键禁止省略，但接受显式 `null`。CLI task/step/run adapter 会丢弃仅供持久层
+使用的 `claim_token` 与内部 `log_path`，包括递归 linked task；dependency、events 与 helper
+subprocess protocol 仍由各自组件负责，公开 CLI 契约只拥有最终 stdout shape。
 
-`surface_operation_catalog()` migration 是独立维度：246 个 `adopted`、0 个 `generated`、
+配置与辅助进程拥有 2 个 TOML 配置输入、7 个 graph helper 响应和 12 个 vector helper
+响应契约。worker profile 输入只约束 CLI 选中的 `[workers.<profile>]` 配置节；未选配置节
+保持不透明并允许向前兼容，选中配置节严格拒绝未知或非法字段。真实配置解码器、子进程
+适配器和协议解码器分别提供 producer/consumer witness，schema 工具依赖仍隔离在叶子 crate。
+
+`surface_operation_catalog()` 是独立维度：246 个 `adopted`、0 个 `generated`、
 0 个 `planned`、5 个 `excluded`。其中 CLI 为 114 个 `adopted`、5 个非 JSON
 `excluded`，21 个 JSONL record surfaces 与 6 个 structured metadata surfaces 全部为
 `adopted`，Config/Helper 为 2/19 个 `adopted`；API 为 83 个 `adopted`，SSE 为 1 个
-`adopted`。Endpoint
-obligation histogram 同样独立：296 个
+`adopted`。端点义务直方图同样独立：296 个
 `Contract`、0 个 `Todo`、207 个 `NotApplicable`、1 个有运行时证据的 `Excluded`。
 `schema-check` 的未闭合项为 0：semantic generated/planned 0 + surface
-generated/planned 0 + endpoint Todo 0。
+generated/planned 0 + 端点 Todo 0。
 
-B7 transport closure 为 83 个 non-SSE endpoint 各注册一个 operation-specific exact header
-root，并按真实 router 行为复用五种闭合 wire profile。所有 profile 都接受可选
+83 个非 SSE 端点各有一个 operation-specific 精确 header root，并按真实 router 行为复用
+五种闭合 wire 配置。所有配置都接受可选
 `Accept-Language`；actor mutation 增加可选 `X-KB-Actor`；required/optional JSON body 分别使用
-`RequiredOne`/`OptionalOne` 的 `Content-Type`，无 body endpoint 不声明该参数。83 个 roots 均以
-profile fixture producer 和真实 router consumer 作为 structured witnesses。SSE
+`RequiredOne`/`OptionalOne` 的 `Content-Type`，无 body 的端点不声明该参数。83 个 root 均以
+配置 fixture producer 和真实 router consumer 作为结构化 witness。SSE
 `Last-Event-ID` 保持有运行时证据的 `Excluded`。由此 API endpoint catalog 已无 `Todo`；全局
-`schema-audit-closed` 已无 semantic、surface 或 endpoint authority 缺口。
+`schema-audit-closed` 已无 semantic、surface 或端点权威缺口。
 
-下方各 cohort 的 headers `Todo` 与冻结计数是当时的历史验收快照；B7 authority snapshot
-取代这些局部数值，不应据此回退当前 catalog。
+## 3. 精确公开面目录
 
-本轮在 events API topology 快照之上继续采用 claim response、ontology signals response 与
-label-semantics delete acknowledgement。`api.list-events.response` 仍是 API 专属 exact root；
-其 data 只在 Rust/schema component 层复用 `StreamEventData` 字段，不把 SSE exact root 当成
-API linkage。下方 B2/B3/B5/B6 段落均为历史 cohort freeze，不覆盖本快照。
-
-#441 同时采用六个 exact metadata contract：decision comment input、signal record input、
-service-generated signal backlink output、label proposal candidate input、ontology record input
-与 ontology external validation evidence input。Decision 已知字段和 option extensions 使用
-typed-open contract，跨字段选择/理由规则仍归 service；普通 comment response 的 `metadata`
-始终是开放、无损的自然 JSON object，不能因为用户键名碰撞而在 transaction 提交后收紧。
-Signal backlink 的闭合 DTO 只由真实 service producer 与独立 fixture consumer 证明。
-
-`StreamEventData` 对 39 个 known event kind 使用 `kind + payload` sibling 约束：known payload
-拒绝缺失的 required-nullable key、额外字段、错误 enum/value range 与 kind/status 不匹配；未来
-unknown kind 保留任意合法 JSON payload。外层 `task_id`、`run_id`、`actor` 均为“键必需、值可
-显式 `null`”。这项 typed union 由 list-events API 与 SSE 共同复用；portable JSONL 的
-`event.data.payload` 仍是 opaque `Value`，不得据此误称 JSONL event payload 已关闭。
-
-B5-C2 采用 dependency list/add/remove、execution-plan not-required、get-run-log 与
-list-board-columns 的 endpoint-specific path/request/success roots。无 query/body 的维度明确为
-`NotApplicable`；通用 actor/locale/content-type headers 仍保持 `Todo`，留给后续统一 transport
-closure cohort。get-run-log 的现有 JSON response 是真实 runtime contract，并继续只暴露
-`run_id/content/truncated`；SQLite `log_path` 与 claim token 均不得进入 wire。dependency cycle、
-同 transaction edge/recompute/event、execution-plan guard、status recompute 与 board scope 仍由
-既有 service path 拥有，schema 不替代这些业务不变量。
-
-## 3. Exact Surface Catalog
-
-`surface_operation_catalog()` 记录可以自动发现的公开 transport operation：
+`surface_operation_catalog()` 记录可以自动发现的公开传输操作：
 
 - API：83 个 JSON method/path，加 1 个 SSE method/path。
-- CLI：119 个 Clap leaf command；非 JSON text/daemon/hook protocol 逐项 `excluded`。
+- CLI：119 个 Clap 叶子命令；非 JSON 文本/守护进程/hook 协议逐项 `excluded`。
 - JSONL：21 个精确 `type=<discriminator>`。
-- Metadata：6 个无 transport 的 exact structured metadata operation。
+- Metadata：6 个无传输的精确结构化元数据操作。
 
 防漏 seam 与生产注册同源：
 
@@ -164,43 +120,43 @@ migration 不新增 schema root、surface operation 或双轨 output contract。
 
 以上集合与 committed `surface-operations.json` byte-stable catalog 对照。新增、删除或
 重命名 route、command、export type 时，`schema-surface-audit` 必须先 RED，直到精确
-catalog 和迁移状态被有意更新。`/api/v1/**`、`kanban ** --json` 或一个
+catalog 和契约状态被有意更新。`/api/v1/**`、`kanban ** --json` 或一个
 bidirectional family 不能用于关闭这些 operation。
 
-## 4. Dependency Boundary
+## 4. 依赖边界
 
-| Build mode | Enabled dependencies | Intended use |
+| 构建模式 | 启用的依赖 | 用途 |
 |---|---|---|
-| `kanban-contract` default | `serde`、`serde_json` | contract 数据类型与迁移账册 |
-| `kanban-contract/schema` | default + `schemars 1.2.1` | 从 Rust DTO 生成 schema document |
-| `kanban-schema-tool` | `kanban-contract/schema` + `jsonschema 0.47.0` + `sha2` | 离线 metaschema、fixture、manifest 和 drift gate |
+| `kanban-contract` 默认模式 | `serde`、`serde_json` | contract 数据类型与状态目录 |
+| `kanban-contract/schema` | 默认模式 + `schemars 1.2.1` | 从 Rust DTO 生成 schema 文档 |
+| `kanban-schema-tool` | `kanban-contract/schema` + `jsonschema 0.47.0` + `sha2` | 离线 metaschema、fixture、manifest 和漂移门禁 |
 
-Phase 1 将 leaf tool 的 direct dependency 拓扑精确锁定为 5 条 normal edge：
+叶子工具的直接依赖拓扑精确锁定为 5 条普通边：
 `jsonschema`、`kanban-contract`、`serde`、`serde_json` 与 `sha2`。它们必须来自 root
 workspace canonical 声明，且 source/path、version requirement、default feature、feature set、
 alias、optional 与 target signature 全部一致；tool 不得声明 dev、build 或 target-specific
 dependency。除 tool 自身外，任何 workspace member 都不得通过 normal/dev/build、alias、
-optional 或 target-specific direct edge 引用它。structured manifest policy 锁定 canonical 声明；
+optional 或 target-specific 直接边引用它。结构化 manifest 策略锁定权威声明；
 metadata policy 必须从 `crates/kanban-schema-tool/Cargo.toml` 运行 full locked graph，不得使用
 `--no-deps`，并 fail-closed 校验 `resolve.root`、package/node 唯一性、tool/contract canonical
 package ID 与 manifest path、五条 resolved direct edge 及 tool-root reachable closure。除当前
 workspace tool/contract 外，closure 的每个 package 都必须来自 crates.io；path/git direct 或
 transitive override 都失败。
 
-`policy/schema-tool-registry-closure.json` 是唯一的 registry closure approval。它用
+`policy/schema-tool-registry-closure.json` 是唯一的 registry 闭包批准记录。它用
 `format_version = 1`、`lockfile_version = 4`、`root_package = "kanban-schema-tool"`
 和 canonical `packages[]` 表达当前 reachable registry set；每项字段必须精确为
 `name`、`version`、`source`、`checksum`，按 `(name, version, source)` 排序，未知字段、
 重复、缺失、额外项、非 canonical 顺序和 checksum 漂移全部失败。policy 解析真实
 `Cargo.lock` 并双向比较，但普通 gate 永不自动写入或 bless approval。该边界检测
-committed lockfile 相对 approved snapshot 的 identity/checksum 漂移；Cargo fetch/build
+已提交 lockfile 相对批准快照的 identity/checksum 漂移；Cargo fetch/build
 另行按 registry index `cksum` 验证 crate 内容。
 
-Cargo metadata 的 `SourceId` 仅作为 opaque identity：本项目锁定 pinned toolchain 下批准的
-logical SourceId 字符串，不把其 URL 字符串当成 Cargo 的通用 canonical network URL；
+Cargo metadata 的 `SourceId` 仅作为不透明标识：本项目锁定指定 toolchain 下批准的
+逻辑 SourceId 字符串，不把其 URL 字符串当成 Cargo 的通用权威网络 URL；
 物理下载允许 Cargo source replacement mirror。六个产品 graph 的真实 `cargo tree` 另行负责
 all-features/all-target normal runtime 传递性泄漏扫描，不能替代 dev/build direct-edge
-检查。Phase 2 若需改变拓扑，必须先形成新决策并显式更新 gate，不能通过 manifest、
+检查。若需改变拓扑，必须先形成新决策并显式更新 gate，不能通过 manifest、
 resolve、lockfile、approval 或 recipe 漂移暗中扩边。
 
 `kanban-contract` 的 manifest feature 必须精确为 `default = []` 与
@@ -229,24 +185,24 @@ runtime adoption witness。
 
 schema tooling 不启用 HTTP/file resolver、TLS、OpenAPI 或生产 runtime validation。
 
-## 5. Root Contract
+## 5. 根契约
 
-- Dialect 固定为 JSON Schema Draft 2020-12，不依赖库默认值。
+- 方言固定为 JSON Schema Draft 2020-12，不依赖库默认值。
 - request/input 使用 `SchemaSettings::for_deserialize()`。
 - response/output 使用 `SchemaSettings::for_serialize()`。
 - root ID 固定为 `urn:kanban-tool:schema:<surface>:<semantic-name>:v1`。
-- root major 与 crate version、API route version 解耦；breaking wire contract 提升 root
-  major，并在同一 train 删除被替代 artifact，不保留兼容双轨。
-- schema 必须 self-contained；只允许 `#/$defs/...` 形式的本地 `$ref`。
-- 产物不得包含 timestamp、hostname、绝对路径或联网 reference。
-- `DecisionMetadata.risk` / `verification` 允许 missing，但 explicit `null` 同时被真实
+- root 主版本与 crate 版本、API route 版本解耦；破坏性 wire contract 提升 root
+  主版本，并同时删除被替代 artifact，不保留兼容双轨。
+- schema 必须自包含；只允许 `#/$defs/...` 形式的本地 `$ref`。
+- 产物不得包含时间戳、主机名、绝对路径或联网引用。
+- `DecisionMetadata.risk` / `verification` 允许缺失，但显式 `null` 同时被真实
   Serde DTO 和 JSON Schema 拒绝。
 
-Decision metadata 的现有 service 语义允许未知 top-level/option 字段，所以该 root 是
-typed-open contract：已知字段被验证，扩展字段被保留。selected 必须匹配 option、
+Decision metadata 的现有 service 语义允许未知顶层/option 字段，所以该 root 是
+类型化开放契约：已知字段被验证，扩展字段被保留。selected 必须匹配 option、
 slug 唯一、纯空白字符串拒绝等跨字段/业务约束仍由现有 service guard 负责。
 
-## 6. Committed Layout
+## 6. 已提交目录结构
 
 ```text
 schemas/
@@ -270,7 +226,7 @@ operation、direction、strictness、schema fixtures 和 SHA-256。生成顺序�
 仓库顶层 Markdown 与 `docs/**/*.md` 中每个 CommonMark `json` fence 都必须紧邻以下两类
 marker 之一。opening fence 可使用至少三个 backtick 或 tilde、最多三个前导空格，并可在
 严格的首个 `json` info token 后携带 attributes；closing fence 必须使用相同字符且长度不短于
-opening fence：
+起始 fence：
 
 - `schema-doc` 同时声明 exact `contract` 与其 manifest-owned positive `fixture`；inline JSON
   必须可解析且与该 fixture 的 JSON value 完全一致。
@@ -281,7 +237,7 @@ opening fence：
 漂移、无效 JSON 与 inline/fixture mismatch。新增公开示例不能依赖“看起来相似”的手工
 payload；要么复用 committed canonical fixture，要么明确说明为何只是 illustrative fragment。
 
-## 7. Commands
+## 7. 命令
 
 ```bash
 just schema-generate
@@ -342,7 +298,7 @@ just schema-audit-closed
 
 所有会写 Cargo target 的命令必须通过这些 `just` recipes 和仓库 build lock 运行。
 
-## 8. Adoption Checklist
+## 8. 采用检查清单
 
 将条目改为 `adopted` 前必须同时满足：
 
@@ -368,7 +324,7 @@ just schema-audit-closed
 - `schema-check`、surface audit、受影响测试和默认 dependency isolation 均有证据。
 
 
-## 9. Transport descriptor authority (Phase 2)
+## 9. 传输描述符权威
 
 `kanban-contract` default feature 现在还拥有 dependency-free 的 transport descriptor catalog。它精确列出 84 个真实 endpoint（83 JSON API + 1 SSE）：稳定 `operation_id`、`surface`、自有 `HttpMethod`、`path`、migration/exclusion 和六项明确 obligation（path/query/headers/body/success/SSE）。每一项 obligation 必须显式为 `Contract(contract_id)`、`NotApplicable`、`Excluded { reason }` 或 `Todo`；没有 `Option` 或隐式默认。
 
@@ -400,133 +356,13 @@ endpoint 就不能提升为 `Adopted`。
 显式链接。orphan policy 是严格的 OR：至少一个显式 linkage，或同 surface 的真实 adoption
 witness；两者均缺失才失败，已有显式 linkage 时不再要求 witness operation 出现在 catalog。
 shared reference 会进入投影 artifact 供审计，但不进入 exact adoption set、不满足 endpoint
-obligation，也不能单独把整个 endpoint 伪装为 `Generated` 或 `Adopted`。当前
-`api.error.response` 使用 `location=Error` 并显式链接到
-`GET /api/v1/boards/:board/tasks`，不计入 success exact coverage，也不改变该 endpoint 的
-`Planned` 状态。
+obligation，也不能单独决定整个 endpoint 的 migration state。当前 `api.error.response`
+使用 `location=Error` 并显式链接到 8 个 endpoint；它仍不计入 success exact coverage。
+这些 endpoint 依靠各自完整的 exact obligations 达到 `Adopted`。
 
-B1-B lifecycle request 采用 13 个独立 DTO，不提供通用 transition/token body。所有 DTO
+生命周期请求采用 13 个独立 DTO，不提供通用 transition/token body。所有 DTO
 拒绝未知顶层字段；`ClaimTaskRequest.metadata` 与 `CompleteTaskRequest.result` 仅保持
 `serde_json::Value` opaque extension，`SubmitReviewTaskRequest` 则完全不接受 `result`。
 `ReclaimTaskRequest.to_status` 是封闭的 `ready|blocked` 枚举。Promote、reclaim、unblock、
 task archive 和 board archive 保留 optional body 与既有默认值，actor 仍按 body、
 `X-KB-Actor`、server default 的优先级解析。
-
-
-## B1-C2b task-read 成功响应契约
-
-`GET /api/v1/boards/:board/tasks` 与 `GET /api/v1/boards/:board/tasks/by-status` 各自拥有独立、精确且闭合的成功响应契约，仅共享 `ApiTask`、`ApiLabel` 与既有 `OffsetPaginationMeta`/`TotalPaginationMeta` primitives。列表响应为 `data[]` 与既有 `TotalPaginationMeta { limit, offset, total }`；按状态响应包含有序窗口，每个窗口使用同一 `TotalPaginationMeta`，外层使用既有 `OffsetPaginationMeta { limit, offset }`。这只是 Rust 类型复用，JSON wire 形状不变。
-
-Desktop 仅对这两个读取端点使用 endpoint-specific recursive exact parser：成功响应的 envelope、`meta`、窗口、共享 `ApiTask`、`ApiLabel` 与既有 `OffsetPaginationMeta`/`TotalPaginationMeta` primitives 都必须闭合且完整，pagination 数值必须是非负 safe integer；错误响应也必须是闭合的 `error { code, message, details? }` envelope。任何 malformed、mixed、missing 或 extra shape 统一返回 `invalid_response`，合法错误继续保留 `code`、`message` 与可选 `details`。其它 generic optional envelope 不受影响。两个 endpoint 的 headers 仍为 `Todo`，本次不采纳任何其它 endpoint。
-
-当前冻结值：schema roots=23，adopted contracts=21，witnesses=42，Contract=21，Todo=381，NotApplicable=102，unfinished=628。
-
-
-## B2-C3 comments pair
-
-Comments pair 注册 5 个 endpoint-specific roots：list path/response 与 create path/request/response。
-成功 envelope 均为闭合 `data`-only shape，且 list/create response root 不互相复用；只共享闭合
-`ApiComment` component。`CommentAuthorType` 与 `CommentKind` 是闭合 enum，`agent_type` 为
-required-nullable。create request 的 metadata 保持为开放 JSON object；独立的
-`metadata.decision.input` exact contract 描述 decision typed shape，跨字段业务约束仍由既有
-SQLite service guard 执行。
-
-五个 roots 均为 `Adopted`，每个 root 都登记 structured producer/consumer witness；两个 endpoint 仍为 `Generated`，因为 headers 继续为 `Todo`。本批生成后的权威快照为 schema roots=28、adopted contracts=26、witnesses=52、endpoint Contract=26、Todo=373、NotApplicable=105、unfinished=620（inventory generated/planned/todo 分别为 29/218/373）。
-
-## B2-C4 run reads
-
-`GET /api/v1/tasks/:task_id/runs` 与 `GET /api/v1/runs/:run_id` 注册四个 endpoint-specific
-path/success roots，并共享 contract-owned `ApiRun`。四个 roots 均为 `Adopted`，各自登记真实
-structured producer/consumer witness；两个 endpoint 因 headers 仍为 `Todo` 而保持
-`Generated`。`ApiRun.status` 仅允许 `running|succeeded|failed|canceled|expired`，nullable
-lifecycle 字段必须出现；公开 response 不包含 `claim_token` 或内部 `log_path`。本批权威快照：
-schema roots=32、adopted contracts=30、witnesses=60、endpoint Contract=30、Todo=365、
-NotApplicable=109、unfinished=612（inventory generated/planned/todo 为 29/218/365）。
-## B2-C5 create task
-
-`POST /api/v1/boards/:board/tasks` 注册 endpoint-specific path、request 与 success response 三个
-`Adopted + Exact + ExactSurface` roots。request 使用 create-only 闭合 status vocabulary
-`triage|todo|scheduled|ready`，精确保留 priority=3、空 labels/depends_on 与 nullable 字段的既有
-Serde 默认；metadata 只允许 opaque JSON object。response 是闭合
-`CreateTaskResponse { data: ApiTask }`，不允许 private envelope 或 claim token。
-
-真实非默认 board router fixture 同时覆盖 labels、dependencies、actor、priority、metadata、
-`201` 与 ready 降级；独立 DTO producer、真实 router consumer、contract response consumer、
-Desktop exact consumer 和 syn ownership mutation 形成结构化 evidence。handler 继续唯一调用
-`create_task_with_labels_and_dependencies`，SQLite transaction/retry/readiness/privacy authority不变。
-endpoint 因 headers 仍为 `Todo` 保持 `Generated`。本批冻结值为 schema roots=31、adopted
-contracts=29、witnesses=58、endpoint Contract=29、Todo=369、NotApplicable=106、unfinished=616。
-## B2-C6 boards endpoints
-
-`GET/POST /api/v1/boards`、`GET /api/v1/boards/:board` 与
-`POST /api/v1/boards/:board/archive` 由 8 个 endpoint-specific roots 覆盖：list query、create
-request、get/archive path 与四个 success response。四个 success root 只复用 contract-owned
-`ApiBoard` component；server 不再把 `kanban_sqlite::api::BoardRecord` 直接暴露为 wire type，
-也不再拥有 private `CreateBoardBody`。archive body 继续唯一复用先前 adopted 的
-`ArchiveBoardRequest`，没有建立重复 owner。
-
-所有新 roots 均为 `Adopted`，并登记独立、可执行的 structured producer/consumer witness。
-真实 router fixtures 使用 non-default board，list query 的 `include_archived` 进入
-`kanban_sqlite::api::list_boards` 的 application options；create/get/archive 继续走同一 facade。
-running-work archive guard、archived history/read、not-found HTTP status 与 locale-dependent message
-仍由既有 service/adapter 测试保护。Desktop 的生产 `listBoards` caller 对 envelope 与每个
-`ApiBoard` 字段执行 exact parser，拒绝 missing、mistyped 与 extra fields。
-
-四个 endpoint 的 path/query/body/success 已闭合或标为 `NotApplicable`，headers 仍为
-`Todo`，所以 endpoint migration 诚实保持 `Generated`。本批权威快照为 schema roots=36、
-adopted contracts=34、witnesses=68、endpoint Contract=34、Todo=360、NotApplicable=110、
-unfinished=607（inventory generated/planned/todo 分别为 29/218/360）。
-## B2-C7 steps family
-
-Steps family 的 list/create/update/remove/done/skip/reopen 七个 endpoint 各自拥有 exact path 与
-success root；create/update/done/skip/reopen 另有 endpoint-specific request root。成功响应只共享
-闭合的 `ApiTaskStep`、`ApiExecutionPlan` 与 `ApiTaskSteps` components，不复用 endpoint root。
-`ApiStepStatus` 闭合为 `todo|done|skipped`；nullable resolution、linked task 与 execution-plan
-字段在成功响应中保持 required-nullable。request 的 optional/default/alias 行为与既有 handler
-一致，title/reason、required-step completion、plan readiness、linked-task 与 transition guard
-继续由 SQLite service/state-machine 拥有，schema 只证明 wire shape。
-
-19 个 roots 均为 `Adopted` 并登记 structured producer/consumer witnesses。真实 router producer
-使用非默认 `project` board，Desktop 的七个 production callers 使用 endpoint-specific recursive
-exact consumer；server AST mutation gate 锁定 contract-owned path/request/response、canonical service
-call 与 private DTO/request owner 删除。七个 endpoint 保持 `Generated`，因为 headers 仍为 `Todo`。
-本批生成后的权威快照为 schema roots=47、adopted contracts=45、witnesses=90、endpoint
-Contract=45、Todo=345、NotApplicable=114、unfinished=592（inventory generated/planned/todo 分别为
-36/211/345）。
-
-## B2-C5-C7 integrated freeze
-
-Create-task、boards 与 steps 三条已审查 lane 在 feature train 上语义合并；生成器权威快照为
-schema roots=62、adopted contracts=60、witnesses=120。semantic contract migration 为
-adopted/generated/planned=60/2/27；surface migration 为
-adopted/generated/planned/excluded=1/31/187/5；endpoint obligation histogram 为
-Contract/Todo/NotApplicable/Excluded=60/320/124/0。unfinished=567 由 semantic
-generated+planned 29、surface generated+planned 218 与 endpoint Todo 320 相加得到。各 endpoint
-仍因 headers Todo 保持 Generated；合并未关闭 get-run-log、transition、SSE 或其它后续义务。
-### B3-C1 lifecycle transport 第一批冻结
-
-第一批选择 specify、promote、reopen、unblock、archive 五个不返回 claim token 的 task lifecycle endpoint，分别采用 operation-specific path 与 success exact roots；既有 request roots 保持 adopted。真实 Axum handler 使用 contract path DTO 和 operation-specific response alias，Desktop 对 DataEnvelope<ApiTask> 做 outer/nested exact parsing，并拒绝额外 envelope、错误 data 类型、缺失 required-nullable 字段和 claim_token 泄漏。
-
-五个 endpoint 仍保持 Generated，因为 headers 与 query obligations 均继续为 Todo；本批 10 个新 roots 均为 Adopted，登记 20 个方向独立的 producer/consumer witnesses。权威快照为 schema roots=42、adopted contracts=40、witnesses=80、endpoint Contract=40、Todo=355、NotApplicable=109、unfinished=602（inventory generated/planned/todo 为 29/218/355）。剩余 claim、reclaim、heartbeat、complete、submit-review、block 独立进入后续 cohort，以单独审计 claim-token、CAS、force、actor 与状态机 guard。
-
-### B5-C1 maintenance auxiliary
-
-- B5-C1 auxiliary 首批选择 `POST /api/v1/maintenance/doctor` 与
-  `POST /api/v1/maintenance/checkpoint`：两者共享单一 SQLite maintenance service 边界、没有
-  path/query/body 输入，也不引入 search/context/helper provider 的重型 feature 组合。两项
-  success response 已迁入 contract-owned exact DTO，并由真实 router producer、独立 fixture
-  consumer 与 Desktop fail-closed parser 共同约束；service 仍拥有 SQLite integrity、derived
-  store 诊断与 WAL checkpoint 语义。endpoint 因 headers obligation 尚未收敛保持
-  `generated`。后续 auxiliary 拆分应把 search、context、graph/vector status 与 events/SSE
-  分成独立 cohort，避免把 provider feature、helper lifecycle 和 streaming transport 混入本批。
-## B6-C1 SSE finite stream
-
-`GET /api/v1/stream/events` 采用 endpoint-specific `StreamEventsQuery` 与
-`StreamEventData` 两个 exact roots。真实 router producer/consumer 锁定 query、严格 payload、
-`event -> id -> data` frame 顺序以及有限 snapshot 关闭语义；未知/重复 query 继续返回可本地化
-的 `400 invalid_input`。V1 明确忽略 `Last-Event-ID` 且不产生 heartbeat/comment frame，故
-headers obligation 以运行时测试和 API SPEC 为证据标记 `Excluded`，不虚构 typed header 或
-heartbeat JSON contract。该 endpoint 六项 obligation 已闭合并提升为 `Adopted`。本批权威
-快照：schema roots=34、adopted contracts=32、witnesses=64、endpoint Contract=32、Todo=360、
-NotApplicable=111、Excluded=1、unfinished=605（inventory generated/planned/todo 为
-28/217/360）。

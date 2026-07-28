@@ -387,14 +387,16 @@ pub(crate) fn execution_plan_is_ready(
     .map_err(storage)
 }
 
-fn plan_guarded_retry_status(
+fn readiness_guarded_retry_status(
     conn: &Connection,
     board_id: &str,
     task_id: &str,
     target: TaskStatus,
+    now: i64,
 ) -> Result<TaskStatus> {
-    if target == TaskStatus::Ready && !execution_plan_is_ready(conn, board_id, task_id)? {
-        Ok(TaskStatus::Todo)
+    if target == TaskStatus::Ready {
+        let fresh = get_task_by_id(conn, board_id, task_id)?;
+        recompute_ready_status(conn, &fresh, now)
     } else {
         Ok(target)
     }
@@ -836,8 +838,13 @@ pub fn reclaim_task_to(
             ));
         }
         let decision = retry_decision(fresh.retry_count, fresh.max_retries, to_status);
-        let target_status =
-            plan_guarded_retry_status(&conn, &board_id, &fresh.id, decision.status)?;
+        let target_status = readiness_guarded_retry_status(
+            &conn,
+            &board_id,
+            &fresh.id,
+            decision.status,
+            tx_now,
+        )?;
         let default_reason = if decision.max_retries_reached {
             "max retries reached"
         } else if force {
@@ -1041,7 +1048,8 @@ pub(crate) fn retry_running_task(
         ));
     }
     let decision = retry_decision(task.retry_count, task.max_retries, TaskStatus::Ready);
-    let target_status = plan_guarded_retry_status(conn, board_id, &task.id, decision.status)?;
+    let target_status =
+        readiness_guarded_retry_status(conn, board_id, &task.id, decision.status, now)?;
     if let (Some(run_id), Some(token)) = (&task.current_run_id, &task.claim_token) {
         let changed = exec_named(
             conn,

@@ -19,7 +19,7 @@ describe("TaskGraphNodeCard", () => {
   })
 
   it("uses dependency blocked styling for non-blocked nodes", () => {
-    const node = nodeFixture({ id: "t_blocked_by_dependency", ref: "default#123", title: "Blocked by dependency" })
+    const node = nodeFixture({ id: "t_blocked_by_dependency", ref: "default#124", title: "Blocked by dependency" })
     const tree = TaskGraphNodeCard({
       node: { ...node, status: "ready", dependencyBlocked: true },
       selected: false,

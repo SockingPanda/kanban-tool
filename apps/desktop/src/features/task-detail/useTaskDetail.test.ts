@@ -120,7 +120,7 @@ const task = {
   id: "t_1",
   board_id: "b_1",
   board_slug: "kanban-tool",
-  ref: "default#123",
+  ref: "default#1",
   seq: 1,
   title: "Manual label suggestions",
   description: null,

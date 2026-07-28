@@ -1,6 +1,6 @@
 # kanban-tool 协作规则
 
-本项目是本地优先 Kanban / durable work queue：Rust core + SQLite-only + CLI + localhost Web + 可选 dispatcher。
+本项目是本地优先看板与持久工作队列：Rust 核心、SQLite、CLI、本机 API 和 Tauri 桌面端。
 
 ## 必读文档
 
@@ -17,8 +17,7 @@
 - schema、ID、事件、查询模型：`docs/DATA_MODEL.md`、`migrations/001_initial.sql`
 - CLI 行为、参数、输出或退出码：`docs/CLI_SPEC.md`
 - Web API、SSE 或 desktop embedded server：`docs/API_SPEC.md`
-- dispatcher、worker、heartbeat 或 reclaim：`docs/DISPATCHER_SPEC.md`
-- 分阶段计划、验收标准或 release/milestone 判断：`docs/IMPLEMENTATION_PLAN.md`
+- 领取、心跳、回收和内部实验性 dispatch 路径：`docs/STATE_MACHINE.md`、`docs/CLI_SPEC.md`
 - 架构决策或取舍背景：`docs/ADR.md`
 
 跨模块、架构级、release/milestone 级改动必须读完整文档包和相关 migration。
@@ -40,17 +39,17 @@
 - contract 只拥有 wire/schema evidence；locale、HTTP status、service guard、状态机、CAS、transaction 与 SQLite 继续属于 adapter/service/core。
 - review 不自动触发执行；dispatcher 不 claim `review`。
 
-## Desktop frontend guidance
+## 桌面前端约定
 
-- 修改 `apps/desktop` 前先查阅 `docs/plans/desktop-shadcn-dashboard.md`，把 shadcn dashboard 作为方向参考，不要整套复制或做无目标重写。
+- 修改 `apps/desktop` 的外壳或滚动布局时，先查阅 `docs/DESKTOP_LAYOUT_SMOKE.md`，并同步维护自动契约与人工冒烟清单。
 - Desktop UI 必须保持本地优先、单用户、localhost operator console 语义；不要引入 SaaS、团队协作、RBAC、邀请、云同步或远程 worker 假设。
 - 未来 shell/layout 变更优先保持 `AppShell` 作为边界：sidebar/header/global search/actions 属于 shell，Board/List/Event/Run/TaskDetail 等功能视图不要重复实现外层布局。
 - Board/List/Event 等数据视图必须保留状态机语义：列只是展示，任务状态变化通过 API/core command service，不直接写 `tasks.status`。
 
 ## 工程流程
 
-- 当前目录如果不是 git 仓库，先初始化 git；每个方向使用独立分支。
-- 默认分支工作流：clean main → feature branch → TDD 实现 → verify → squash/merge → 删除临时分支。
+- 公开仓库只长期保留 `main`。需要隔离时可以使用本地临时分支，但发布前必须合回 `main` 并删除临时分支。
+- 默认流程：干净的 `main` → 必要时使用本地临时分支 → TDD 实现 → 验证 → 合回 `main`。
 - 复杂实现优先按小任务推进，并使用 worker/reviewer gate；父级负责最终验证。
 - milestone/release 级实现必须在合并前通过独立 spec reviewer + quality reviewer；仅 `fmt/test/clippy/smoke` 通过不能宣称版本完成。
 - 如果 reviewer 指出 P0/P1 规格或质量问题，必须在同一方向分支上修正并重新 review，直到 PASS/APPROVED 后再由父级合并。
@@ -58,12 +57,12 @@
 - 文档小改、只读分析或无代码行为变化的单文件校准可以跳过分支/TDD，但必须说明原因并做最小验证。
 - 提交语义使用 Conventional Commits。
 
-## 全局 skill 同步
+## 文档语言
 
-- 任何改动如果改变了用户可见的 kanban CLI、API、data model、workflow、status、task、dependency、comment、JSON、help 或已实现使用说明，implementer 必须检查全局 Codex skill `kanban-tool` 是否需要同步。
-- 如果该行为影响 skill 使用说明，必须同步更新 `~/.codex/skills/kanban-tool/SKILL.md`，以及必要的相关 agent 或 `openai.yaml` 配置。
-- 纯内部重构、测试、样式或不改变使用行为的文档措辞不触发全局 skill 同步；如果检查后不需要同步，final report 或 task record 必须明确记录 `kanban-tool skill checked: no change`。
-- 全局 skill 只能描述已经实现、并且能由 CLI help 或实际命令/API 输出确认的行为；不要把 roadmap、计划中功能或未实现规格写入 skill。
+- 项目自有文档以简体中文为主要说明语言。
+- 命令、路径、代码符号、JSON 字段、枚举、库名、协议名和必要的标准术语保留原文。
+- `vendor/` 中的上游文档和 Apache-2.0 官方许可证不翻译、不改写。
+- `KANBAN_SPEC_BUNDLE.md` 是生成文件；先改中文源文档，再重新生成。
 
 ## 验证策略
 
@@ -98,13 +97,14 @@
 当前主要 crate：
 
 - `kanban-core`：领域类型、状态机、guard/recompute helper；不依赖 SQLite/HTTP/CLI。
+- `kanban-application`：选定用例的 DTO 与端口契约；不拥有 SQLite 事务。
 - `kanban-contract`：候选/已采用 wire DTO、operation inventory、surface catalog 与 schema root registry；默认 runtime 依赖图不包含 schema tooling。
 - `kanban-schema-tool`：独立 leaf tooling，拥有 `kanban-schema` binary、离线校验与 artifact drift gate；direct dependency 必须且只能是 5 条已批准 normal edge，不得新增 dev/build/target edge；全部 Cargo auto target discovery 必须关闭且只允许显式批准的 lib/bin/test；full locked resolve 必须指向 canonical workspace tool/contract 和批准的逻辑 registry closure；其它 workspace member 不得引用它，default/core/helper/full 产品 recipes 也不得选择或调用它。
 - `kanban-sqlite`：SQLite 连接、migration/init、application service、transaction、query helper。
 - `kanban-cli`：`kanban` CLI。
-- `kanban-server`：localhost HTTP API / SSE。
+- `kanban-server`：本机 HTTP API 与 SSE。
 - `kanban-context`、`kanban-entity`、`kanban-graph`、`kanban-indexer`、`kanban-labels`、`kanban-local`、`kanban-search`、`kanban-vector`：本地派生层、索引、graph、context、label 和 vector 支持 crate。
-- `apps/desktop`：Tauri desktop operator console。
+- `apps/desktop`：Tauri 桌面操作者控制台。
 
 ## 本地文档经验
 

@@ -479,8 +479,8 @@ describe("MarkdownDescription", () => {
   })
 
   it("renders the workbench map, execution plan, and gated primary action", () => {
-    const parentTask: Task = { ...task, id: "t_parent", ref: "default#123", seq: 2, title: "Parent blocker", status: "blocked" }
-    const childTask: Task = { ...task, id: "t_child", ref: "default#123", seq: 3, title: "Unlocked child", status: "todo" }
+    const parentTask: Task = { ...task, id: "t_parent", ref: "default#2", seq: 2, title: "Parent blocker", status: "blocked" }
+    const childTask: Task = { ...task, id: "t_child", ref: "default#3", seq: 3, title: "Unlocked child", status: "todo" }
     const html = renderToStaticMarkup(
       <Sheet open>
         <TaskDetail
@@ -595,7 +595,7 @@ const task: Task = {
   id: "t_1",
   board_id: "b_1",
   board_slug: "kanban-tool",
-  ref: "default#123",
+  ref: "default#1",
   seq: 1,
   title: "Render comment markdown",
   description: null,

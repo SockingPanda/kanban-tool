@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,17 +31,41 @@ class SpecBundleTests(unittest.TestCase):
         previous = -1
         for source in spec_bundle.SOURCE_PATHS:
             self.assertIn(f"- {source}\n", rendered)
-            offset = rendered.index(f"# File: {source}\n")
+            offset = rendered.index(f"# 文件：{source}\n")
             self.assertGreater(offset, previous)
             previous = offset
 
         self.assertIn("```sql\ncontents of migrations/001_initial.sql\n```", rendered)
         self.assertTrue(rendered.endswith("\n"))
 
+    def test_render_rebases_relative_links_to_bundle_root(self) -> None:
+        (self.root / "README.md").write_text(
+            "[spec](docs/SPEC.md) [external](https://example.com) [section](#section)\n",
+            encoding="utf-8",
+        )
+        (self.root / "docs/SPEC.md").write_text(
+            "[state](STATE_MACHINE.md) "
+            "[schema](../migrations/001_initial.sql) "
+            "[section](#section)\n",
+            encoding="utf-8",
+        )
+
+        rendered = spec_bundle.render_bundle(self.root)
+
+        self.assertIn("[spec](docs/SPEC.md)", rendered)
+        self.assertIn("[external](https://example.com)", rendered)
+        self.assertIn("[state](docs/STATE_MACHINE.md)", rendered)
+        self.assertIn("[schema](migrations/001_initial.sql)", rendered)
+        self.assertEqual(rendered.count("[section](#section)"), 2)
+
     def test_check_detects_source_drift_until_bundle_is_rewritten(self) -> None:
         spec_bundle.write_bundle(self.root)
         self.assertEqual(spec_bundle.check_bundle(self.root), None)
-        self.assertEqual(S_IMODE((self.root / spec_bundle.BUNDLE_PATH).stat().st_mode), 0o644)
+        if os.name != "nt":
+            self.assertEqual(
+                S_IMODE((self.root / spec_bundle.BUNDLE_PATH).stat().st_mode),
+                0o644,
+            )
 
         source = self.root / "docs/SPEC.md"
         source.write_text("changed source\n", encoding="utf-8")

@@ -30,7 +30,7 @@ const TASK_CREATE_STATUS_MESSAGE: &str = "检查 kanban task 创建 trace";
 const PROMPT_CONFIG_FILE_NAME: &str = "codex-hooks.json";
 const DEFAULT_FAILURE_PROMPT_ALIAS: &str = "failure.zh-default";
 const DEFAULT_TASK_CREATE_PROMPT_ALIAS: &str = "task_create.zh-default";
-const DEFAULT_FAILURE_PROMPT_TEMPLATE: &str = "检测到 kanban CLI 命令失败。\n\n命令：{{command}}\n退出码：{{exit_code}}\n\n继续调整。调整成功后，视情况 记录必要的后续工作。";
+const DEFAULT_FAILURE_PROMPT_TEMPLATE: &str = "检测到 kanban CLI 命令失败。\n\n命令：{{command}}\n退出码：{{exit_code}}\n\n继续调整。修正后继续当前任务，并在确有必要时记录后续工作。";
 const DEFAULT_TASK_CREATE_PROMPT_TEMPLATE: &str = "检测到 kanban task 创建成功。\n\n命令：{{command}}\n任务：{{task_ref}}\n\n请考虑为该 task 执行 label/signal follow-up；需要标签时先运行 `kanban label suggest {{task_ref}} --json`。不要自动写 label ontology，除非已有完整 suggestion snapshot 和明确 decision payload。";
 
 pub(crate) fn handle_hook(

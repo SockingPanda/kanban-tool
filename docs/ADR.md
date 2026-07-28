@@ -1,65 +1,67 @@
-# Architecture Decision Records
+# 架构决策记录
 
-本文件记录当前 SPEC 的关键架构决策。
+本文件按时间记录 SPEC 的关键架构决策。每条 ADR 的背景、统计值和迁移状态都是
+决策时快照，不会随着实现自动改写；当前行为和实时契约覆盖以对应的
+`docs/*_SPEC.md` 与 `docs/SCHEMA_CONTRACTS.md` 为准。
 
 ---
 
-## ADR-0001：SQLite-only
+## ADR-0001：仅使用 SQLite
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
 项目明确不考虑多用户、多租户、团队协作和远程 worker。核心运行环境是本地单机，同时需要 CLI 和 Web。
 
-### Decision
+### 决策
 
 只支持 SQLite。
 
-默认 DB：
+默认数据库：
 
 ```text
 ~/.local/share/kb/kb.db
 ```
 
-可通过 `--db <path>` 指定项目本地 DB。
+可通过 `--db <path>` 指定项目本地数据库。
 
-### Consequences
+### 影响
 
 优点：
 
-- 单 binary 易分发。
+- 单一二进制文件易分发。
 - CLI 使用成本低。
 - 备份简单。
 - 本地事务足够强。
-- WAL 支持 reader/writer 并发。
+- WAL 支持读写并发。
 
 代价：
 
 - 不支持跨机器共享写入。
-- 不做 server cluster。
-- 一次只有一个 writer。
-- 需要控制 transaction 长度。
+- 不做 server 集群。
+- 同一时刻只有一个写入者。
+- 需要控制事务长度。
 
 ---
 
-## ADR-0002：Status Enum 是真相，Column 是视图
+## ADR-0002：Status 枚举是事实，Column 是视图
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-传统 Trello-like 工具常把 list/column 视为状态。但本项目需要 dispatcher、claim、heartbeat、reclaim、run history。`running` 不是普通视觉列，而是 claim 成功后的执行状态。
+传统的类 Trello 工具常把 list/column 视为状态。但本项目需要 dispatcher、claim、heartbeat、reclaim 和 run 历史。`running` 不是普通视觉列，而是 claim 成功后的执行状态。
 
-### Decision
+### 决策
 
-`tasks.status` 是 canonical truth。`board_columns` 只是 UI 展示映射。
+`tasks.status` 是权威事实。`board_columns` 只是界面展示映射。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -70,21 +72,21 @@ Accepted
 代价：
 
 - 拖拽列不能简单 PATCH status。
-- Web UI 需要根据目标列调用 transition endpoint。
+- Web 界面需要根据目标列调用状态转换端点。
 
 ---
 
-## ADR-0003：Snapshot + Append-only Events，不做纯 Event Sourcing
+## ADR-0003：快照 + 只追加事件，不做纯事件溯源
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-看板 UI 高频查询当前任务列表。纯 event sourcing 会让当前状态查询复杂化，需要重放事件或额外投影。
+看板界面会高频查询当前任务列表。纯事件溯源会让当前状态查询复杂化，需要重放事件或额外投影。
 
-### Decision
+### 决策
 
 采用：
 
@@ -92,40 +94,40 @@ Accepted
 tasks snapshot + task_events append-only
 ```
 
-状态变化时，snapshot update 与 event insert 必须在同一 transaction 内完成。
+状态变化时，快照更新与事件插入必须在同一事务内完成。
 
-### Consequences
+### 影响
 
 优点：
 
 - 当前 board 查询简单。
-- 事件仍可用于审计、SSE、debug。
+- 事件仍可用于审计、SSE、调试。
 - 实现复杂度可控。
 
 代价：
 
-- 需要保证 snapshot/event 一致。
+- 需要保证快照/事件一致。
 - 事件不是唯一事实源。
 
 ---
 
-## ADR-0004：CLI 可以直接访问 SQLite，但必须走统一 service path
+## ADR-0004：CLI 可以直接访问 SQLite，但必须走统一服务路径
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-如果 CLI 必须依赖常驻 server，会降低本地工具可用性。直接访问 SQLite 更适合脚本和开发流。
+如果 CLI 必须依赖常驻 server，会降低本地工具可用性。直接访问 SQLite 更适合脚本和开发流程。
 
-### Decision
+### 决策
 
-CLI 可以直接打开 SQLite DB，但只能调用统一 Rust service path；当前实现主要是
-`kanban-sqlite::service` use-case 函数，并复用 `kanban-core` 的纯状态机 helper。
+CLI 可以直接打开 SQLite 数据库，但只能调用统一 Rust 服务路径；当前实现主要是
+`kanban-sqlite::service` 用例函数，并复用 `kanban-core` 的纯状态机辅助函数。
 CLI 不允许绕过状态机执行裸 SQL 修改状态。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -136,26 +138,26 @@ CLI 不允许绕过状态机执行裸 SQL 修改状态。
 代价：
 
 - 需要处理 CLI/server/dispatcher 同机并发。
-- 所有状态逻辑必须集中在共享 service/state-machine path，避免 CLI、server 或
+- 所有状态逻辑必须集中在共享的 service/state-machine 路径，避免 CLI、server 或
   dispatcher 各自实现一套状态转换。
 
 ---
 
 ## ADR-0005：Actor 是审计字符串，不是用户模型
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
 项目不做多用户和权限，但仍需要知道某个操作来自谁或哪个 worker。
 
-### Decision
+### 决策
 
-保留 `actor`、`created_by`、`claim_owner` 字段。它们是字符串，不关联 users 表。
+保留 `actor`、`created_by`、`claim_owner` 字段。它们是字符串，不关联用户表。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -170,57 +172,57 @@ Accepted
 
 ---
 
-## ADR-0006：Worker stdout/stderr 存文件，DB 只存摘要与路径
+## ADR-0006：Worker stdout/stderr 存文件，数据库只存摘要与路径
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-运行日志可能很大。把日志 blob 放进 SQLite 会影响性能和备份体积。
+运行日志可能很大。把日志数据放进 SQLite 会影响性能和备份体积。
 
-### Decision
+### 决策
 
 日志写入：
 
 ```text
-~/.local/state/kb/logs/r_<run_id>.log
+~/.local/state/kb/logs/runs/<run_id>.log
 ```
 
-DB 只存：
+数据库只存：
 
 - `log_path`
 - `summary`
 - `error`
 - `exit_code`
 
-### Consequences
+### 影响
 
 优点：
 
 - SQLite 保持轻量。
-- 日志可直接 tail。
-- 备份策略可分开处理 DB 和 logs。
+- 日志可直接用 `tail` 查看。
+- 备份策略可分开处理数据库和日志。
 
 代价：
 
-- 移动 DB 时需要同时移动 logs/attachments。
-- log path 需要 doctor 检查。
+- 移动数据库时需要同时移动日志/附件。
+- 日志路径需要由 doctor 检查。
 
 ---
 
 ## ADR-0007：默认只监听 localhost
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
 不做远程服务和多用户登录。暴露到局域网会制造安全边界问题。
 
-### Decision
+### 决策
 
 `kanban serve` 默认并且建议只监听：
 
@@ -230,7 +232,7 @@ Accepted
 
 MVP 不提供 `0.0.0.0` 远程模式。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -244,19 +246,19 @@ MVP 不提供 `0.0.0.0` 远程模式。
 
 ---
 
-## ADR-0008：状态变化必须有专用 Transition Command
+## ADR-0008：状态变化必须使用专用转换命令
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-直接 PATCH `status` 容易绕过 claim/run/event/dependency guard。
+直接 PATCH `status` 容易绕过 claim/run/event/dependency 保护。
 
-### Decision
+### 决策
 
-禁止普通 update 修改 status。所有状态变化都使用 command：
+禁止普通 update 修改 status。所有状态变化都使用专用命令：
 
 - specify
 - promote
@@ -269,7 +271,7 @@ Accepted
 - reclaim
 - archive
 
-### Consequences
+### 影响
 
 优点：
 
@@ -280,103 +282,103 @@ Accepted
 代价：
 
 - API 数量更多。
-- UI 拖拽逻辑更复杂。
+- 界面拖拽逻辑更复杂。
 
 ---
 
 ## ADR-0009：Knowledge Substrate 派生层
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-后续搜索、关系扩展、agent context、artifact provenance 和向量召回需要跨 task/run/comment/artifact/skill 的统一身份与派生索引，但不能削弱 SQLite 状态机、claim 和 dependency guard。
+后续搜索、关系扩展、agent 上下文、artifact 来源和向量召回需要跨 task/run/comment/artifact/skill 的统一身份与派生索引，但不能削弱 SQLite 状态机、claim 和依赖保护。
 
-### Decision
+### 决策
 
-SQLite 继续作为 operational source of truth。新增：
+SQLite 继续作为运行事实源。新增：
 
-- `entities`：跨库统一 `kb://...` identity registry。
+- `entities`：跨库统一的 `kb://...` 身份注册表。
 - `relation_predicates` / `entity_relations`：受控 predicate 与可重建关系镜像。
-- `index_outbox`：派生 store 的 at-least-once job surface。
+- `index_outbox`：派生存储的至少一次任务入口。
 - `derived_store_state`：Tantivy/Oxigraph/LanceDB 等派生层健康和水位。
 
-Tantivy、Oxigraph、LanceDB 都是可重建 derived stores，不参与状态机事务。
+Tantivy、Oxigraph、LanceDB 都是可重建的派生存储，不参与状态机事务。
 
-`derived_store_state` 的语义是 store 全局状态，不是 board 局部状态：
+`derived_store_state` 的语义是存储全局状态，不是 board 局部状态：
 
-- `last_event_id` 表示该 store 已成功处理并提交的全局 task event 高水位。成功 sync/rebuild 只能把它单调推进，不能倒退。
-- `dirty=true` 表示该 store 仍有未完成 outbox、失败 outbox 或最近一次派生更新失败；即使某个 board 已 sync/rebuild 完成，其他 board 仍有 pending/failed job 时也必须保持 dirty。
-- board-scoped sync/rebuild 只清理当前 board 的 outbox job；是否把 `dirty` 置回 false 取决于同一 store target 是否还存在任何 board 的 unfinished outbox。
-- `last_error` 记录最近一次 store 级失败证据。成功处理会清除 `last_error`，失败会保持 `dirty=true` 并保留/标记相关 outbox 失败状态。
-- `index_outbox` 是恢复和重放入口；`derived_store_state` 是 operator health/watermark 摘要。两者都不能使派生层成为事实源。
+- `last_event_id` 表示该存储已成功处理并提交的全局 task event 高水位。成功同步/重建只能把它单调推进，不能倒退。
+- `dirty=true` 表示该存储仍有未完成 outbox、失败 outbox 或最近一次派生更新失败；即使某个 board 已完成同步/重建，其他 board 仍有待处理/失败任务时也必须保持 dirty。
+- board 范围的同步/重建只清理当前 board 的 outbox 任务；是否把 `dirty` 置回 false，取决于同一存储目标是否还存在任何 board 的未完成 outbox。
+- `last_error` 记录最近一次存储级失败证据。成功处理会清除 `last_error`，失败会保持 `dirty=true` 并保留/标记相关 outbox 失败状态。
+- `index_outbox` 是恢复和重放入口；`derived_store_state` 是操作者使用的健康/水位摘要。两者都不能使派生层成为事实源。
 
-### Consequences
+### 影响
 
 优点：
 
-- 后续 graph/vector/context broker 可以接同一 entity/relation contract。
+- 后续图/向量/context broker 可以接同一实体/关系契约。
 - SQLite 状态机边界保持清楚。
-- 派生 store 损坏时可 fallback/rebuild。
-- `kanban doctor` / maintenance API 汇总 outbox backlog、dirty stores、last_error 和 failed outbox，用于本地 operator 判断 sync/rebuild，而不是让派生层参与 SQLite 事务。
+- 派生存储损坏时可回退/重建。
+- `kanban doctor` / maintenance API 汇总 outbox 积压、脏存储、last_error 和失败 outbox，供本地操作者判断是否同步/重建，而不是让派生层参与 SQLite 事务。
 
 代价：
 
-- 需要维护 entity backfill/outbox/derived state。
-- `derived_store_state` 是派生 store 的主健康/水位记录；Tantivy 的旧 `app_settings` search state 仅保留为兼容 metadata。
+- 需要维护实体回填/outbox/派生状态。
+- `derived_store_state` 是派生存储的主健康/水位记录；Tantivy 的旧 `app_settings` 搜索状态仅保留为兼容元数据。
 
 ---
 
-## ADR-0010：单 DB 多 board 与 CLI task ref
+## ADR-0010：单数据库多 board 与 CLI task 引用
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-本地项目需要不同 board/project，但未来也需要聚合视图和跨 board 审计。如果每个项目拆一个 SQLite DB，聚合、搜索、事件和 dispatcher 恢复都会变复杂。另一方面，裸 `#12` 在 shell 中容易被当作注释，且 board-local seq 不能跨 board 唯一。
+本地项目需要不同 board/project，但未来也需要聚合视图和跨 board 审计。如果每个项目拆一个 SQLite 数据库，聚合、搜索、事件和 dispatcher 恢复都会变复杂。另一方面，裸 `#12` 在 shell 中容易被当作注释，且 board 内的 seq 不能跨 board 唯一。
 
-### Decision
+### 决策
 
-继续使用单 SQLite DB 内多个 board：
+继续使用单个 SQLite 数据库内的多个 board：
 
 - `tasks.id` 是全局唯一 `t_...`。
 - `tasks.seq` 只在 `board_id` 内唯一。
-- CLI/API 展示 copyable task ref：`board_slug#seq`。
-- CLI task ref 支持全局 `t_...`、当前 active board 的 `12` / `#12`、显式 `board#12` / `board/#12` / `b_...#12`。
-- Active board 解析顺序是 `--board`、`KB_BOARD`、最近 `.kb/config.toml`、`default`。
-- `.kb/config.toml` 只记录当前项目选择的 board，不表示项目拥有独立 DB。
-- Board slug 禁用保留 ID 前缀和会破坏 ref 语法的字符。
+- CLI/API 展示可复制的 task 引用：`board_slug#seq`。
+- CLI task 引用支持全局 `t_...`、当前 board 的 `12` / `#12`、显式 `board#12` / `board/#12` / `b_...#12`。
+- 当前 board 的解析顺序是 `--board`、`KB_BOARD`、最近的 `.kb/config.toml`、`default`。
+- `.kb/config.toml` 只记录当前项目选择的 board，不表示项目拥有独立数据库。
+- Board slug 禁用保留 ID 前缀和会破坏引用语法的字符。
 
-Archived board 默认不可写；归档只标记 board，不改 task 状态，并拒绝仍有 `running` task/run 的 board。Read-only events/runs/comments 历史保留可查，作为审计入口。
+已归档 board 默认不可写；归档只标记 board，不改 task 状态，并拒绝仍有 `running` task/run 的 board。只读 events/runs/comments 历史保留可查，作为审计入口。
 
-### Consequences
+### 影响
 
 优点：
 
-- 保留未来聚合 board / dashboard 的数据基础。
+- 保留未来聚合 board / 仪表盘的数据基础。
 - `t_...` 可作为脚本稳定全局引用。
 - `board#seq` 对人和 shell 都更可复制。
-- 项目级 active board 不破坏单 DB 备份、搜索和 dispatcher 语义。
+- 项目级当前 board 不破坏单数据库备份、搜索和 dispatcher 语义。
 
 代价：
 
-- CLI 必须维护 task ref parser/resolver。
-- Archived board 需要区分 read-only history 与 mutation guard。
+- CLI 必须维护 task 引用的解析/解析目标逻辑。
+- 已归档 board 需要区分只读历史与变更保护。
 - 裸 `#12` 只能作为兼容输入，文档和输出不能依赖它。
 
 ---
 
-## ADR-0011：Schema Train 边界：status、type、labels、dependency type 与 decision comments
+## ADR-0011：Schema 批次边界：status、type、labels、dependency type 与 decision comments
 
-### Status
+### 状态
 
-Proposed
+提议中
 
-### Context
+### 背景
 
 `kanban-tool` 接下来会进入一组 schema/model 扩展：
 
@@ -384,66 +386,67 @@ Proposed
 - `dependency_type`：表达任务之间是什么关系。
 - labels：表达可搜索、可筛选、可推荐的多维标签。
 - comments：承载人和 agent 的协作记录。
-- decision comments：记录人或 LLM/agent 在多个方案之间做出的选择。
+- decision comment：记录人或 LLM/agent 在多个方案之间做出的选择。
 
 当前 comment 模型里的 `kind` 混用了两类概念：
 
 - 谁写的：system / worker / agent / user。
 - 写的是什么：普通记录 / 决策记录。
 
-这会让后续结构化 decision comment 变脏。需要先把模型边界切开：
+这会让后续结构化 decision comment 变得混乱。需要先把模型边界切开：
 
-- author/source 轴：谁留下了这条 comment。
-- content kind 轴：这条 comment 表达什么语义。
+- 作者/来源轴：谁留下了这条 comment。
+- 内容类型轴：这条 comment 表达什么语义。
 
-本项目是 dogfood local tool，不需要为早期 comment schema 保留沉重兼容层。可以直接修改模型，只要迁移清晰，并让 CLI/API/Desktop 一次性跟上。
+项目早期只面向本地单用户场景，不需要为早期评论结构保留沉重兼容层。可以直接修改模型，
+只要迁移清晰，并让 CLI、API 与 Desktop 同步跟上。
 
-### Decision
+### 决策
 
 保留现有核心原则：
 
-- `tasks.status` 继续是唯一 canonical workflow state。
-- hard dependency 继续是状态机和 dispatcher guard 的事实来源。
-- `task_events` 继续是 append-only audit trail。
+- `tasks.status` 继续是唯一的权威工作流状态。
+- hard dependency 继续是状态机和 dispatcher 保护的事实来源。
+- `task_events` 继续是只追加审计轨迹。
 - comments 继续承载协作记录，但 comment schema 要拆清楚作者和内容语义。
-- 新字段默认不改变状态机、dispatcher claim 或 ready eligibility，除非本 ADR 明确允许。
+- 新字段默认不改变状态机、dispatcher claim 或 ready 资格，除非本 ADR 明确允许。
 
-### Field Responsibilities
+### 字段职责
 
-| Field / Model | 责任 | 是否影响状态机 | 是否影响 dispatcher | 是否影响 dependency/search/context 展示 | 是否用于 search/context/UI |
+| 字段 / 模型 | 责任 | 是否影响状态机 | 是否影响 dispatcher | 是否影响依赖/搜索/上下文展示 | 是否用于搜索/上下文/界面 |
 |---|---|---:|---:|---:|---:|
-| `status` | canonical workflow state | 是 | 是 | 是 | 是 |
+| `status` | 权威工作流状态 | 是 | 是 | 是 | 是 |
 | `priority` | ready/dispatcher 的排序权重 | 否 | 是，排序 | 是，列表和推荐排序 | 是 |
 | `scheduled_at` | 计划时间，参与 scheduled/ready guard | 是 | 是 | 是，列表和上下文排序 | 是 |
 | `due_at` | 截止时间，只展示、筛选、排序 | 否 | 可排序 | 可排序 | 是 |
-| `task_type` | 任务类别，例如 bug/feature/research/ops/follow_up | 否 | 否 | 可用于展示/排序，不改变 eligibility | 是 |
-| labels | 多标签分类、搜索、推荐和 UI grouping | 否 | 否 | 否，除非未来显式配置排序策略 | 是 |
-| `dependency_type` | 依赖边语义，区分 hard block 和 soft relation | 仅 hard block | 仅 hard block | 是，但必须区分 hard/soft | 是 |
+| `task_type` | 任务类别，例如 bug/feature/research/ops/follow_up | 否 | 否 | 可用于展示/排序，不改变执行资格 | 是 |
+| labels | 多标签分类、搜索、推荐和界面分组 | 否 | 否 | 否，除非未来显式配置排序策略 | 是 |
+| `dependency_type` | 依赖边语义，区分硬阻塞和软关系 | 仅硬阻塞 | 仅硬阻塞 | 是，但必须区分硬/软关系 | 是 |
 | `comment.author_type` | 评论作者角色：`user` 或 `agent` | 否 | 否 | 否 | 是 |
 | `comment.author` | 展示名，例如 `alice`、`codex` | 否 | 否 | 否 | 是 |
 | `comment.agent_type` | 可选 agent 细分，例如 `codex`、`executor`、`dispatcher` | 否 | 否 | 否 | 是 |
 | `comment.kind` | 内容语义：`note` 或 `decision` | 否 | 否 | 否 | 是 |
 | `comment.metadata_json` | `comment.kind` 对应的结构化 payload | 否 | 否 | 否 | 是 |
-| `event.kind` | append-only audit event 类型 | 否，event 是结果不是输入 | 否 | 否 | 是 |
+| `event.kind` | 只追加审计事件类型 | 否，event 是结果不是输入 | 否 | 否 | 是 |
 
-### Workflow State
+### 工作流状态
 
 `status` 仍然是任务是否可执行、是否被 claim、是否 blocked/review/done 的唯一事实来源。
 
 任何新字段都不能隐式表达状态：
 
 - `task_type=bug` 不表示高优先级。
-- label `blocked` 不表示 task blocked。
-- decision selected option 不表示 task done。
+- label `blocked` 不表示 task 处于 blocked。
+- decision 的选中项不表示 task 处于 done。
 - comment 中写 “blocked” 不改变 task status。
 
-状态变化只能通过 transition command。
+状态变化只能通过状态转换命令完成。
 
-### Task Type
+### 任务类型
 
 `task_type` 表达“这个 task 是什么工作类别”，不表达“它现在处于什么执行状态”。
 
-建议第一批 task types：
+建议第一批 task 类型：
 
 ```text
 bug | feature | research | ops | docs | refactor | test | follow_up
@@ -452,46 +455,46 @@ bug | feature | research | ops | docs | refactor | test | follow_up
 `task_type` 可以用于：
 
 - Desktop/List/Board 筛选。
-- Search/context 过滤。
-- 依赖、search 和 context 解释。
+- 搜索/上下文过滤。
+- 依赖、搜索和上下文解释。
 - 未来排序加权。
 
 `task_type` 不用于：
 
-- dispatcher claim eligibility。
-- 状态机 transition guard。
-- hard dependency 判断。
+- dispatcher 领取资格。
+- 状态机转换保护。
+- 硬依赖判断。
 - 替代 labels。
 
 枚举策略：
 
 - 第一版使用受控枚举。
 - 后续如需要开放扩展，再单独做 ADR。
-- 未知 type 应被拒绝，而不是静默写入。
+- 未知类型应被拒绝，而不是静默写入。
 
-### Labels
+### 标签
 
 labels 表达多维、可叠加的分类。一个 task 可以有多个 label。
 
 labels 适合表达：
 
-- area：`desktop`、`cli`、`sqlite`
-- domain：`search`、`dispatcher`、`comments`
-- semantic group：`llm-facing`、`release-risk`
+- 区域：`desktop`、`cli`、`sqlite`
+- 领域：`search`、`dispatcher`、`comments`
+- 语义组：`llm-facing`、`release-risk`
 - 用户临时整理方式
 
 labels 不适合表达：
 
-- workflow state
-- hard dependency
-- execution ownership
-- decision result
+- 工作流状态
+- 硬依赖
+- 执行所有权
+- 决策结果
 
-未来 semantic label recommender 可以推荐 label，但推荐结果必须显式保存后才成为 task label。
+未来的语义 label 推荐器可以推荐 label，但推荐结果必须显式保存后才成为 task label。
 
-### Dependency Type
+### 依赖类型
 
-现有 dependency 的核心语义是 hard prerequisite：
+现有 dependency 的核心语义是硬前置条件：
 
 ```text
 parent done or archived => child may become ready
@@ -500,31 +503,31 @@ parent neither done nor archived => child cannot be ready/running
 
 引入 `dependency_type` 后，必须保留 hard dependency 的清晰语义。
 
-建议第一批 dependency types：
+建议第一批 dependency 类型：
 
-| Type | 语义 | 是否阻塞 child |
+| 类型 | 语义 | 是否阻塞子任务 |
 |---|---|---:|
-| `blocks` | parent 是 child 的硬前置条件 | 是 |
+| `blocks` | 父任务是子任务的硬前置条件 | 是 |
 | `relates_to` | 相关任务，仅用于导航/search/context | 否 |
-| `informs` | parent 提供背景、设计输入或决策依据 | 否 |
-| `spawned_from` | child 由 parent 执行过程中发现 | 否 |
+| `informs` | 父任务提供背景、设计输入或决策依据 | 否 |
+| `spawned_from` | 子任务在父任务执行过程中被发现 | 否 |
 | `duplicates` | 重复或替代关系 | 否 |
 
 只有 `blocks` 参与：
 
-- dependency blocked 判断
-- promote guard
-- claim guard
-- dispatcher eligibility
-- hard dependency blocking
+- 依赖阻塞判断
+- promote 保护
+- claim 保护
+- dispatcher 执行资格
+- 硬依赖阻塞
 
-soft dependency 可以进入 Desktop 展示、search 和 context，但不能让任务变成 blocked，也不能阻止 claim。
+软依赖可以进入 Desktop 展示、搜索和上下文，但不能让任务变成 blocked，也不能阻止 claim。
 
-### Comment Author Model
+### 评论作者模型
 
 comment 的作者模型只表达“谁写的”。
 
-本项目是本地 dogfood 工具，不建用户系统。作者角色只保留两类：
+本项目面向本地单用户场景，不建立用户系统。作者角色只保留两类：
 
 ```text
 user | agent
@@ -532,15 +535,15 @@ user | agent
 
 规则：
 
-- `user`：本地操作者，也就是“我”。
-- `agent`：不是我写的，都算 agent。
+- `user`：本地操作者写入的内容。
+- `agent`：自动化主体写入的内容。
 - `author`：展示名，例如 `alice`、`codex`。
 - `agent_type`：仅当 `author_type=agent` 时可用，例如 `codex`、`executor`、`reviewer`、`dispatcher`。
 - 不引入 users table、identity table、RBAC 或权限模型。
 
-这意味着不再使用 comment kind 表示 `system`、`worker` 或 `agent`。这些都属于 author/source 轴。
+这意味着不再使用 comment kind 表示 `system`、`worker` 或 `agent`。这些都属于作者/来源轴。
 
-### Comment Kind Model
+### 评论类型模型
 
 `comment.kind` 只表达“这条 comment 的内容语义”。
 
@@ -550,6 +553,9 @@ user | agent
 note | decision
 ```
 
+后续 Generic Signal Ledger 决策把 `signal` 加入该集合，用于指向通用 signal ledger；
+当前完整约束以 `docs/DATA_MODEL.md` 和 `docs/API_SPEC.md` 为准。
+
 #### `note`
 
 普通协作记录。包括：
@@ -558,23 +564,23 @@ note | decision
 - 交接记录
 - 执行总结
 - 问题描述
-- reviewer 反馈
+- 审查者反馈
 - 验证记录
 - 人或 agent 的普通回复
 
-“遇到的问题”默认也是 `note`。如果问题真的阻塞任务，应该同时通过 transition command 把 task 变成 `blocked`，并写入 `status_reason`。
+“遇到的问题”默认也是 `note`。如果问题真的阻塞任务，应该同时通过状态转换命令把 task 变成 `blocked`，并写入 `status_reason`。
 
 #### `decision`
 
 结构化选择记录。用于表达：
 
-- 有多个 option。
+- 有多个选项。
 - 最终选择了其中一个。
 - 有选择理由、风险和验证方式。
 
-decision 不是 task status，不是 event，不是 ADR 替代品。
+decision 不是 task status，不是 event，也不是 ADR 的替代品。
 
-### Comment Metadata
+### 评论元数据
 
 `comment.metadata_json` 是 `comment.kind` 的结构化 payload。
 
@@ -587,58 +593,58 @@ decision 不是 task status，不是 event，不是 ADR 替代品。
 - metadata 不替代 event。
 - metadata 不应该变成随意塞字段的长期垃圾桶。
 
-### Decision Comment Schema
+### 决策评论 Schema
 
-建议第一版 shape：
+建议第一版结构：
 
-<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
+<!-- schema-doc-ignore: 说明性或不完整 payload；已提交的 schema fixture 仍是可执行权威 -->
 ```json
 {
   "options": [
     {
       "slug": "comment-metadata",
-      "title": "Use comment metadata",
-      "detail": "Store structured decision data in task_comments.metadata_json."
+      "title": "使用评论元数据",
+      "detail": "把结构化决策数据保存在 task_comments.metadata_json 中。"
     },
     {
       "slug": "decision-table",
-      "title": "Create decision table",
-      "detail": "Create a separate task_decisions table with option rows."
+      "title": "创建决策表",
+      "detail": "创建独立的 task_decisions 表并保存各个选项。"
     }
   ],
   "selected": "comment-metadata",
-  "reason": "Keeps decisions close to task discussion and avoids a parallel timeline.",
-  "risk": "metadata schema needs validation discipline.",
-  "verification": "CLI/API/Desktop tests cover creation, reading, rendering, and invalid metadata rejection."
+  "reason": "让决策紧邻任务讨论，避免产生平行时间线。",
+  "risk": "metadata schema 需要严格验证。",
+  "verification": "CLI/API/Desktop 测试覆盖创建、读取、渲染和非法元数据拒绝。"
 }
 ```
 
-Validation rules:
+验证规则：
 
 - `options` 必须非空。
-- 每个 option 必须是 object，且有非空 string `slug`、`title`、`detail`。
+- 每个 option 必须是 object，且有非空字符串 `slug`、`title`、`detail`。
 - 每个 option 必须有唯一 `slug`。
 - `selected` 必须匹配某个 option slug。
 - `reason` 必填且非空。
-- `risk` 可选但推荐；如果出现，必须是非空 string。
-- `verification` 可选但推荐；如果出现，必须是非空 string。
+- `risk` 可选但推荐；如果出现，必须是非空字符串。
+- `verification` 可选但推荐；如果出现，必须是非空字符串。
 - `slug` 使用稳定小写 ASCII slug，必须以小写字母或数字开头，只包含小写字母、数字和 `-`，便于 CLI、JSON 和前端引用。
-- `detail` 可以是 Markdown 文本，但 Desktop 渲染必须走安全 markdown 规则。
+- `detail` 可以是 Markdown 文本，但 Desktop 渲染必须遵守安全 Markdown 规则。
 
-### Desktop Rendering Rules
+### Desktop 渲染规则
 
-Desktop TaskDetail comment list：
+Desktop TaskDetail 评论列表：
 
-- `note`：按普通 markdown comment 渲染。
+- `note`：按普通 Markdown 评论渲染。
 - `decision`：
   - 展示 comment body 作为自然语言摘要，例如“已决定继续使用 comment metadata 承载结构化决策信息，正文保留为简短结论，方便没有结构化渲染的环境阅读。”
-  - 展示所有 option slug。
-  - selected option 使用明确绿色/selected 状态。
-  - 点击 option 展开 `title` 和 `detail`。
+  - 展示所有选项 slug。
+  - 选中项使用明确的绿色/selected 状态。
+  - 点击选项展开 `title` 和 `detail`。
   - 展示 reason、risk、verification。
-  - 如果 decision metadata 无效，不应该静默当作 selected；应显示错误状态或 degraded note。
+  - 如果 decision metadata 无效，不应该静默当作 selected；应显示错误状态或降级 note。
 
-### CLI / API Rules
+### CLI / API 规则
 
 CLI：
 
@@ -648,7 +654,7 @@ kanban comment add <task-ref> "<body>" --kind note
 kanban comment add <task-ref> "<body>" --kind decision --metadata-json '<json>'
 ```
 
-`kind=decision` 的 body 是自然语言 fallback 摘要，不重复完整选项表；`options`、`selected`、`reason`、`risk` 和 `verification` 只放在 `metadata_json` 中，由 Desktop 在正文下方结构化渲染。
+`kind=decision` 的 body 是自然语言回退摘要，不重复完整选项表；`options`、`selected`、`reason`、`risk` 和 `verification` 只放在 `metadata_json` 中，由 Desktop 在正文下方结构化渲染。
 
 可后续增加更友好的命令：
 
@@ -660,17 +666,17 @@ kanban decision add <task-ref> ...
 
 API：
 
-- comment create request 显式包含：
+- comment 创建请求显式包含：
   - `body`
   - `author_type`
   - `author`
   - `agent_type`
   - `kind`
   - `metadata`
-- comment response 返回同样字段。
+- comment 响应返回同样字段。
 - 不再把 `system/worker` 作为 kind 返回。
 
-### Event Kind
+### 事件类型
 
 `event.kind` 只记录系统事实：
 
@@ -681,24 +687,24 @@ API：
 - `task.completed`
 - `dependency.added`
 
-event 不承载 decision 本体。添加 decision comment 时，event 只记录 `comment.added`，decision 内容在 comment snapshot 中。
+event 不承载 decision 本体。添加 decision comment 时，event 只记录 `comment.added`，decision 内容在 comment 快照中。
 
-### Dispatcher And Frontier Rules
+### Dispatcher 与候选集规则
 
-Dispatcher claim eligibility 只能看：
+Dispatcher 领取资格只能看：
 
 - `status`
-- hard dependency (`dependency_type=blocks`)
+- 硬依赖（`dependency_type=blocks`）
 - `scheduled_at`
-- claim token / lease
-- board archived state
-- assignee / worker profile
+- claim token / 租约
+- board 归档状态
+- 负责人 / worker profile
 
 Dispatcher 排序可以看：
 
 - `priority`
 - `created_at`
-- future explicit dispatcher policy
+- 未来显式的 dispatcher 策略
 
 Dispatcher 不看：
 
@@ -706,14 +712,14 @@ Dispatcher 不看：
 - labels
 - `comment.kind`
 - `comment.metadata_json`
-- decision selected option
-- soft dependency
+- decision 选中项
+- 软依赖
 
-Frontier 可以展示和解释更多字段，但不得把 soft 字段解释成 hard blocker。
+候选集可以展示和解释更多字段，但不得把软字段解释成硬阻塞条件。
 
-### Migration Strategy
+### 迁移策略
 
-本项目是 dogfood 版本，不做沉重兼容层。采用直接 schema train：
+项目当时仍处于本地单用户的早期版本，不做沉重兼容层。采用直接结构迁移批次：
 
 1. 本 ADR 固定边界。
 2. 修改 `task_comments`：
@@ -722,17 +728,17 @@ Frontier 可以展示和解释更多字段，但不得把 soft 字段解释成 h
    - 增加 `agent_type`
    - 收窄 `kind` 为 `note | decision`
    - 增加 `metadata_json`
-3. 更新 Rust domain/API/CLI/Desktop type。
+3. 更新 Rust domain/API/CLI/Desktop 类型。
 4. 迁移现有 comment：
    - 不是用户本人写的，一律 `author_type=agent`
    - 用户本人写的，`author_type=user`
    - 普通历史 comment 一律 `kind=note`
    - 已有 decision comment 若能识别则 `kind=decision`，否则 `note`
-5. 实现 decision metadata validation。
-6. 实现 Desktop decision rendering。
+5. 实现 decision metadata 验证。
+6. 实现 Desktop decision 渲染。
 7. 后续再做 `task_type`、`dependency_type`、labels 扩展。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -740,17 +746,17 @@ Frontier 可以展示和解释更多字段，但不得把 soft 字段解释成 h
 - decision comment 可以成为真正结构化对象。
 - Desktop 渲染会简单很多。
 - LLM/agent 做选择时可以留下可索引、可展开、可复盘的记录。
-- 不再让 `system/worker` 这类来源概念污染 content kind。
+- 不再让 `system/worker` 这类来源概念污染内容类型。
 
 代价：
 
 - 需要 schema migration。
 - 需要一次性更新 CLI/API/Desktop。
 - 旧 comment JSON shape 会改变。
-- 需要认真做 decision metadata validation，避免 `metadata_json` 变成任意垃圾桶。
+- 需要认真做 decision metadata 验证，避免 `metadata_json` 变成任意垃圾桶。
 - 全局 `kanban-tool` skill 需要同步，因为 CLI/API/comment JSON 行为会变化。
 
-### Non-Goals
+### 非目标
 
 - 不引入多用户系统。
 - 不引入 RBAC、团队、组织、邀请或云同步。
@@ -764,56 +770,55 @@ Frontier 可以展示和解释更多字段，但不得把 soft 字段解释成 h
 
 ## ADR-0012：Label Proposal Provider 边界
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-Semantic label suggestion 的日常路径应保持 deterministic：SQLite 存 canonical
+语义 label 建议的日常路径应保持确定性：SQLite 保存权威的
 `labels` / `task_labels` / `label_semantics` / `label_atoms`，LanceDB 只是
-`kb_label_atoms` derived index，solver 只做本地向量计算。Label proposal 是“coverage
-不足时建议新 label semantics”的可选流程，它可以由人工、离线工具或未来本地 LLM provider
-产生 candidate。
+`kb_label_atoms` 派生索引，求解器只做本地向量计算。Label proposal 是“覆盖不足时建议新 label
+semantics”的可选流程，它可以由人工、离线工具或未来本地 LLM provider 产生候选项。
 
 真实 LLM provider 如果直接放进 `kanban-sqlite`，会把外部 SDK、HTTP client、prompt、
-credentials 和 runtime 配置拖入 SQLite service。这样会破坏本项目的 local-first / SQLite-only
-边界，也会让 proposal validation 与模型调用耦合过深。
+credential 和 runtime 配置拖入 SQLite service。这样会破坏本项目的本地优先 / 仅 SQLite
+边界，也会让 proposal 验证与模型调用耦合过深。
 
-### Decision
+### 决策
 
 `kanban-sqlite` 只定义并消费 `LabelProposalProvider` trait：
 
-- `DisabledLabelProposalProvider`：默认 provider 不可用，返回 degraded attempt，不写 canonical label。
-- `ManualLabelProposalProvider`：接收 CLI/API 显式传入的本地/offline candidate。
-- `propose_task_label_with_store`：从 SQLite 读取 task 和 suggestion context，调用 provider，
-  然后执行 deterministic validation、residual top1+margin gate、proposal persistence、
-  accept/reject lifecycle。
+- `DisabledLabelProposalProvider`：默认 provider 不可用，返回降级尝试，不写入权威 label。
+- `ManualLabelProposalProvider`：接收 CLI/API 显式传入的本地/离线候选项。
+- `propose_task_label_with_store`：从 SQLite 读取 task 和建议上下文，调用 provider，
+  然后执行确定性验证、残差 top1+margin 门禁、proposal 持久化和
+  accept/reject 生命周期。
 
 真实 LLM provider 不属于 `kanban-sqlite`。可选实现位置是：
 
 - `kanban-server`：当 localhost server 显式配置本地 provider/runtime 时注入 trait object。
-- `kanban-cli` 或本地 runtime：当命令显式读取本地/offline candidate 或未来本机模型输出时注入。
+- `kanban-cli` 或本地 runtime：当命令显式读取本地/离线候选项或未来本机模型输出时注入。
 - 独立 `kanban-ai` / `kanban-llm` crate：承载 SDK、HTTP client、prompt 和 credential 读取，
-  再向上层暴露实现 `LabelProposalProvider` 的 adapter。
+  再向上层暴露实现 `LabelProposalProvider` 的适配器。
 
-### Consequences
+### 影响
 
 优点：
 
-- SQLite service 不依赖 LLM SDK、HTTP AI client、runtime credentials 或外部模型配置。
-- proposal lifecycle 仍由 deterministic SQLite service 守住，不会因为 provider 类型不同而绕过
-  residual validation 或 accept/reject gate。
-- 日常 `label suggest` 不依赖 proposal provider；provider 不可用只是 degraded proposal attempt。
-- 未来 provider 可以替换或禁用，不需要改 canonical label truth 或 task label binding 语义。
+- SQLite service 不依赖 LLM SDK、HTTP AI client、runtime credential 或外部模型配置。
+- proposal 生命周期仍由确定性的 SQLite service 守住，不会因为 provider 类型不同而绕过
+  残差验证或 accept/reject 门禁。
+- 日常 `label suggest` 不依赖 proposal provider；provider 不可用只会产生降级的 proposal 尝试。
+- 未来 provider 可以替换或禁用，不需要修改权威 label 事实或 task label 绑定语义。
 
 代价：
 
-- 真实 provider 需要在上层做 adapter 和配置装配。
-- server/CLI 需要明确区分“candidate 生成失败”和“SQLite validation 拒绝 candidate”。
-- 需要持续避免把 prompt、credential、HTTP retry 等 concerns 下沉进 `kanban-sqlite`。
+- 真实 provider 需要在上层做适配器和配置装配。
+- server/CLI 需要明确区分“候选项生成失败”和“SQLite 验证拒绝候选项”。
+- 需要持续避免把 prompt、credential、HTTP 重试等关注点下沉进 `kanban-sqlite`。
 
-### Non-Goals
+### 非目标
 
 - 本 ADR 不实现真实 LLM provider。
 - 不上传本地 task 数据到远程服务。
@@ -822,39 +827,39 @@ credentials 和 runtime 配置拖入 SQLite service。这样会破坏本项目�
 
 ---
 
-## ADR-0013：暂不引入 label ontology graph projection
+## ADR-0013：暂不引入 label ontology 图投影
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-当前 label ontology 已有 SQLite truth 与查询面：
+当前 label ontology 已有 SQLite 权威事实与查询面：
 
-- `labels` / `task_labels` 表达当前 task label binding truth。
-- `label_semantics` 表达 canonical ontology semantics；`label_atoms` 是从 semantics 与
-  label name 展开的 SQLite materialized projection。
+- `labels` / `task_labels` 表达当前 task label 绑定事实。
+- `label_semantics` 表达权威 ontology semantics；`label_atoms` 是从 semantics 与
+  label name 展开的 SQLite 物化投影。
 - `label_semantic_proposals` 表达新 label proposal lifecycle。
 - `label_ontology_observations` / `signals` / `actions` / `action_signals` 表达
-  provenance、review、mutation 和 validation history。
+  来源、审查、变更和验证历史。
 - `label ontology review`、`label atom explain`、JSONL export/import 和 doctor 已经从
   SQLite records 直接回答第一批 review/provenance 问题。
 
-项目也已有通用 Knowledge Substrate graph：`entity_relations` 作为 SQLite mirror，
-Oxigraph 作为可重建 derived store，`index_outbox` / `derived_store_state` 管理 dirty、
-sync 和 rebuild。这个 graph 当前覆盖 task-board、task dependency 等通用 entity
-关系，不覆盖 label ontology ledger。
+项目也已有通用 Knowledge Substrate 图：`entity_relations` 作为 SQLite 镜像，
+Oxigraph 作为可重建派生存储，`index_outbox` / `derived_store_state` 管理 dirty、
+同步和重建。这个图当前覆盖 task-board、task dependency 等通用实体
+关系，不覆盖 label ontology 账本。
 
-第一版 ledger 还没有明确的关系查询需求需要 ontology-specific graph。过早投影 signals、
-actions、atoms 和 proposals 会增加 schema、outbox、query API 和 rebuild 复杂度，并提高把
-graph 误当第二 truth 的风险。
+第一版账本还没有明确的关系查询需求需要 ontology 专属图。过早投影 signal、
+action、atom 和 proposal 会增加 schema、outbox、query API 和重建复杂度，并提高把
+图误当第二事实源的风险。
 
-### Decision
+### 决策
 
-暂不实现 label ontology graph projection。
+暂不实现 label ontology 图投影。
 
-在 rename/split/merge、cross-action provenance、atom lineage 或 review workbench 出现明确
+在 rename/split/merge、跨 action 来源、atom 谱系或审查工作台出现明确
 关系查询需求前，ontology 查询继续走 SQLite service/API：
 
 - `label ontology review`
@@ -867,14 +872,14 @@ graph 误当第二 truth 的风险。
 
 - SQLite `labels`、`task_labels`、`label_semantics`、`label_atoms`、proposal 和
   `label_ontology_*` 仍是事实来源；`label_atoms` 是 projection，不是独立 semantic truth。
-- projection 只能从 SQLite 快照/outbox 派生，可删除重建。
-- projection 状态通过 `index_outbox` 和 `derived_store_state` 或等价派生层控制面表达。
-- graph API 只能查询 relation/provenance，不提供 confirm/apply/validate/revert/bootstrap
-  或其它 canonical mutation 写入口。
-- graph dirty、error、删除或重建失败不改变 task status、task labels、semantics、atoms、
-  proposal 或 ledger rows。
+- 投影只能从 SQLite 快照/outbox 派生，可删除重建。
+- 投影状态通过 `index_outbox` 和 `derived_store_state` 或等价派生层控制面表达。
+- graph API 只能查询关系/来源，不提供 confirm/apply/validate/revert/bootstrap
+  或其它权威变更写入口。
+- 图 dirty、error、删除或重建失败不改变 task status、task labels、semantics、atoms、
+  proposal 或账本记录。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -890,7 +895,7 @@ graph 误当第二 truth 的风险。
 - 未来若要支持 ontology graph，需要单独设计 projection schema、outbox fanout 和 rebuild
   测试。
 
-### Non-Goals
+### 非目标
 
 - 本 ADR 不新增 ontology RDF schema。
 - 不把 `label_ontology_*` rows 写入 `entity_relations`。
@@ -899,21 +904,20 @@ graph 误当第二 truth 的风险。
 
 ---
 
-## ADR-0014：Label ontology closure contract
+## ADR-0014：标签本体收口契约
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-Label identity CRUD、task label binding、semantics mutation、proposal accept、bootstrap、
-validation 和 review lifecycle 曾经混用 provenance 语义。最危险的问题是 routine task
-capture 可以隐式创建 vocabulary，label identity delete 可以隐式删除 semantics/atoms，
-semantics mutation 会 fan out 多条 per-atom action，trusted validation raw JSON 可能绕过
-collector，bootstrap verify 曾依赖 post-commit compensation。
+标签身份增删改查、任务标签绑定、语义变更、提案接受、引导初始化、验证与审查生命周期
+曾经混用来源语义。最危险的问题是普通任务采集可以隐式创建词汇，删除标签身份可以隐式
+删除语义与 atom，语义变更会拆成多条逐 atom 操作，受信验证的原始 JSON 可能绕过采集器，
+引导验证也曾依赖提交后的补偿操作。
 
-### Decision
+### 决策
 
 采用收窄后的 closure contract：
 
@@ -936,7 +940,7 @@ collector，bootstrap verify 曾依赖 post-commit compensation。
 - Public structure plan write 入口关闭；rename/split/merge 暂仅可作为 review signal 或
   legacy action 读取。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -951,95 +955,178 @@ collector，bootstrap verify 曾依赖 post-commit compensation。
 - Base label identity delete 需要用户先显式 clear semantics。
 - Structure mutation 需要未来单独 typed apply、binding migration 和 validation policy。
 
-### Non-Goals
+### 非目标
 
 - 不新增 action type、signal type、validation status 或 graph/dashboard projection。
 - 不回写或压缩历史 per-atom actions。
 - 不实现 rename/split/merge canonical mutation。
 
-## ADR-0013: Generic Signal Ledger
+## ADR-0015：通用信号账本
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-Agent/Product failures and observations need a durable review lifecycle that is not label-specific and is not just free-form comment metadata.
+Agent/Product 的故障和观察需要一个持久的审查生命周期；它不能局限于 label，也不能只是自由格式的评论元数据。
 
-### Decision
+### 决策
 
-Add board-scoped `signal_observations` and `signals` tables. `kanban signal record` writes observation and signal rows, and when task context exists it writes a short `task_comments.kind = signal` backlink in the same SQLite transaction. Lifecycle review supports `open -> confirmed|rejected|superseded|resolved` and `confirmed -> resolved`; supersede requires same-board replacement and cycle prevention. V1 does not automatically create follow-up tasks.
+新增 board 范围的 `signal_observations` 和 `signals` 表。`kanban signal record` 写入 observation 与 signal 记录；存在 task 上下文时，还会在同一 SQLite 事务中写入简短的 `task_comments.kind = signal` 回链。生命周期审查支持 `open -> confirmed|rejected|superseded|resolved` 和 `confirmed -> resolved`；supersede 要求替代 signal 与原 signal 属于同一 board，并防止成环。V1 不会自动创建后续任务。
 
-### Consequences
+### 影响
 
-Signal ledger becomes the canonical place for generic agent/product signals. Label ontology ledger remains label-specific and is not reused for generic product signals.
-
-
-## ADR: API/SSE transport descriptor 作为单一 method/path authority
-
-- 决策：在 `kanban-contract` default feature 保存 84 个 API/SSE descriptor；server router 以 `operation_id` + 显式 `adapter_id` 绑定真实 handler，并读取 descriptor method/path。
-- 原因：此前 `SurfaceOperation` 与 router 各自手写 method/path，虽然有 parity test，仍保留双写漂移面。
-- 后果：`SurfaceOperation` 的 API/SSE 记录改为投影；CLI/JSONL 保持其独立 inventory。schema root 使用 `contract_id`，不与 endpoint `operation_id` 混淆。DTO/schema adoption 不在本决策中提前完成。
+Signal 账本成为通用 agent/product 信号的权威存储。Label ontology 账本仍然只服务于 label，不复用于通用产品信号。
 
 
-## ADR: B1-A Error 与 delete response 的 wire 收口边界
+## ADR-0016：API/SSE 传输描述符作为唯一 method/path 权威
 
-- 决策：`ErrorBody.code` 使用闭合的 `ApiErrorCode`，server adapter 显式将 `KanbanError` 映射为 enum；label semantics delete handler 使用 `DeleteResponse`/`DeleteResult`，不再公开 `DataEnvelope<serde_json::Value>`。
-- 原因：稳定 error code 与固定 delete acknowledgement 已具备可验证 wire 形状；把任意 `String`/`Value` 留在公开边界会削弱 schema、typed consumer 与 drift gate。
-- 后果：该决策只拥有 wire/schema evidence。HTTP status、locale message、service guard、状态机、CAS、transaction 与 SQLite 继续由 adapter/service/core 负责。delete endpoint 的 path/query/header/body obligations 尚未建模，因此 endpoint 与 response migration 均保持 `generated`，不以局部 response typing 提前关闭 adoption。
+### 状态
 
+已接受
 
-## ADR: B1-C0 Transport location、cardinality 与 exact/shared binding
+### 背景
 
-- 决策：API/SSE semantic contract 显式声明 `Http { operation_key, location, parameters }`，非 HTTP contract 显式声明 `NoTransport`；parameter cardinality 只允许 `RequiredOne|OptionalOne|RepeatedOrdered`。`Success` 只表示 2xx success；非 2xx `Error` 是仅允许 `SharedComponent` 的第七个 transport location，但 endpoint 仍只有 path/query/headers/body/success/SSE 六类 obligation。任意 `Adopted` contract 和 endpoint exact reference 都必须是 `granularity=Exact`。
-- 原因：仅有 contract ID 与 input/output 方向无法区分 path/query/header/body/2xx success/shared error/SSE，也无法证明 query 重复值顺序、path placeholder 映射或 shared error envelope 的真实复用关系；把 error 继续标成 `Success`、允许 Family 冒充 exact，都会使 coverage 失真。
-- 唯一性：endpoint exact binding 不维护全局 second-binding map。method/path 唯一、contract 的精确 `operation_key` 和单一 location 已共同推出合法 binding 唯一：同 route 的第二个 endpoint 先被 method/path 拒绝，不同 route 被 operation key 拒绝，同 endpoint 的第二个 obligation 被 location 拒绝。surface catalog 的重复 exact reference 仍是可达输入，继续单独 fail closed。
-- Shared orphan policy：`SharedComponent` 可以跨多个 endpoint 复用且永不计入 exact/adoption coverage。generated/adopted shared 满足“至少一个显式 linkage”或“同 surface 的真实 adoption witness”之一即可；只有两者均缺失才是 orphan。`api.error.response` 使用 `location=Error`，当前由 list-tasks 显式链接。
-- 后果：validator 对 unknown/`Planned`/`Excluded` 引用、错误 binding/granularity/location/direction/operation/surface、path 名称/缺失/额外/顺序/大小写漂移、header 大小写冲突、非法 parameter location 和 shared miscount fail closed。13 个 B1-B lifecycle request 保持 body transport 与既有 runtime 语义；本决策不迁移 handler DTO、不改变 HTTP status/service/state-machine 行为，也不关闭 endpoint `Todo`。冻结值为 `stream-events.sse=Todo`、endpoint `Todo=389`、总未闭合 `636`。
+此前 `SurfaceOperation` 与 router 各自手写 method/path；即使已有一致性测试，仍存在双写漂移面。
 
+### 决策
 
-## ADR: B1-C1 Task-read exact path/query contract 与单一 ordered parser
+在 `kanban-contract` 默认 feature 中保存 API/SSE 描述符；server router 以
+`operation_id` + 显式 `adapter_id` 绑定真实 handler，并读取描述符的 method/path。
 
-- 决策：`GET /api/v1/boards/:board/tasks` 与 `/tasks/by-status` 分别拥有独立 path/query DTO，
-  形成 4 个 `Adopted` exact contract。两个 server-local typed Axum extractor 分别绑定对应
-  `Path<...>`，并各自从 `parts.uri.query()` 读取一次 raw URI 后进入共享 ordered parser；handler
+### 影响
+
+`SurfaceOperation` 的 API/SSE 记录改为投影；CLI/JSONL 保持独立清单。schema root 使用
+`contract_id`，不与端点 `operation_id` 混淆。DTO/schema 采用不在本决策中提前完成。
+
+## ADR-0017：B1-A 错误与删除响应的 wire 收口边界
+
+### 状态
+
+已接受
+
+### 背景
+
+稳定错误码与固定删除确认响应已具备可验证的 wire 形状；把任意
+`String`/`Value` 留在公开边界会削弱 schema、类型化 consumer 与漂移门禁。
+
+### 决策
+
+`ErrorBody.code` 使用闭合的 `ApiErrorCode`，server 适配器显式将 `KanbanError` 映射为
+枚举；label semantics 删除 handler 使用 `DeleteResponse`/`DeleteResult`，不再公开
+`DataEnvelope<serde_json::Value>`。
+
+### 影响
+
+该决策只拥有 wire/schema 证据。HTTP status、locale 消息、service 保护、状态机、
+CAS、事务与 SQLite 继续由 adapter/service/core 负责。决策时删除端点的
+其它义务尚未建模；其后续当前状态以 `docs/SCHEMA_CONTRACTS.md` 为准。
+
+## ADR-0018：B1-C0 传输位置、基数与精确/共享绑定
+
+### 状态
+
+已接受
+
+### 背景
+
+仅有 contract ID 与 input/output 方向无法区分 path/query/header/body/2xx success/shared
+error/SSE，也无法证明 query 重复值顺序、path placeholder 映射或共享错误 envelope 的
+真实复用关系。
+
+### 决策
+
+API/SSE 语义 contract 显式声明 `Http { operation_key, location, parameters }`，非 HTTP
+contract 显式声明 `NoTransport`；参数基数只允许
+`RequiredOne|OptionalOne|RepeatedOrdered`。`Success` 只表示 2xx success；非 2xx `Error`
+只允许用于 `SharedComponent`。任意 `Adopted` contract 和端点精确引用都必须是
+`granularity=Exact`。
+
+端点精确绑定不维护全局第二绑定映射。method/path 唯一、精确
+`operation_key` 和单一 location 共同推出合法绑定唯一；公开面目录中的重复精确
+引用仍单独失败关闭。
+
+`SharedComponent` 可以跨多个端点复用且不计入精确/采用覆盖。
+generated/adopted shared 必须至少有显式链接，或同一公开面的真实采用 witness。
+
+### 影响
+
+验证器对未知/`Planned`/`Excluded` 引用，以及错误的
+binding/granularity/location/direction/operation/surface 失败关闭。本 ADR 保存的是
+迁移当时的边界和冻结值，不代表当前覆盖；实时状态见 `docs/SCHEMA_CONTRACTS.md`。
+
+## ADR-0019：B1-C1 Task-read 精确 path/query 契约与单一有序解析器
+
+### 状态
+
+已接受
+
+### 背景
+
+两个 task-read 端点需要证明各自精确消费 path/query，同时避免 handler 或多个 parser
+重复拥有 raw query。
+
+### 决策
+
+`GET /api/v1/boards/:board/tasks` 与 `/tasks/by-status` 分别拥有独立 path/query DTO，
+  形成 4 个 `Adopted` 精确 contract。两个 server 本地类型化 Axum extractor 分别绑定对应
+  `Path<...>`，并各自从 `parts.uri.query()` 读取一次 raw URI 后进入共享有序解析器；handler
   只接收已绑定的 request，不持有 `RawQuery`、`Query<T>` 或第二个 raw source。
-- Query grammar：只有 `status`、`priority`、`label`、`plan_filter` 是
-  `RepeatedOrdered`；其余 scalar 重复、未知 key 与旧 `search` alias 均返回
-  `400 invalid_input`。54-pair 上限由 9/4/3/32 个 repeated budgets 加 6 个 scalar 参数推导；
-  raw query 上限为 8192 bytes。`q` 是唯一文本搜索 key。label 会 trim Unicode 边缘空白，
-  但纯 Unicode 空白失败关闭；percent/UTF-8、enum、priority、limit、offset 和 sort 边界由
-  真实 router URI matrix 固定。
-- 证据边界：每个 contract 都有独立 DTO-to-fixture producer 和 fixture-to-real-router consumer；
-  非默认 board sentinel 证明真实 path consumption。AST tests 锁定 DTO ownership、typed
+- Query 语法：只有 `status`、`priority`、`label`、`plan_filter` 是
+  `RepeatedOrdered`；其余标量重复、未知 key 与旧 `search` 别名均返回
+  `400 invalid_input`。54 对上限由 9/4/3/32 个重复参数预算加 6 个标量参数推导；
+  raw query 上限为 8192 字节。`q` 是唯一文本搜索 key。label 会 trim Unicode 边缘空白，
+  但纯 Unicode 空白失败关闭；percent/UTF-8、枚举、priority、limit、offset 和 sort 边界由
+  真实 router URI 矩阵固定。
+每个 contract 都有独立的 DTO-to-fixture producer 和 fixture-to-real-router consumer；
+  非默认 board 哨兵证明真实 path 消费。AST 测试锁定 DTO 所有权、类型化
   extractor、两个 raw URI 消费点及 handler `&path.board` 到 `list_tasks_page` 的实参，并以显式
-  mutation 覆盖 alias、private DTO、wrong extractor、dual source、second raw parser 和两个
-  handler 各自的 `path.board -> default`。producer/consumer region guard 只证明当前源码区域直接
-  分离，不把任意未来共同 helper indirection 夸大为 mutation-complete 证明。
-- 后果：Desktop/Web/CLI 的 HTTP caller 必须使用上述 grammar；现有 Desktop caller 已使用 `q`
-  并保留 repeated 参数顺序。SQLite service 的 defensive limit 直接引用唯一 application authority，
-  server equality gate 覆盖该实际 service path；service 查询行为与 core 状态机不变。GET body 为
-  `NotApplicable`，headers 与 success response 保持 `Todo`，所以两个 endpoint 只推进到
-  `Generated`，不提前声称完整 adoption。冻结值变为 `Contract=19`、`Todo=383`、
-  `NotApplicable=102`、总未闭合 `630`。
+  变异覆盖别名、私有 DTO、错误 extractor、双重来源、第二个 raw parser，以及两个
+  handler 各自的 `path.board -> default`。producer/consumer 区域保护只证明当前源码区域直接
+  分离，不把任意未来共同 helper 间接层夸大为变异完备证明。
 
+### 影响
 
-## B1-C2b task-read 成功响应决策
+Desktop/Web/CLI 的 HTTP 调用方必须使用上述语法；现有 Desktop 调用方已使用 `q`
+  并保留重复参数顺序。SQLite service 的防御性上限直接引用唯一 application 权威，
+  server 相等性门禁覆盖该实际 service 路径；service 查询行为与 core 状态机不变。本文保留
+  决策时的迁移边界；当前采用状态以 `docs/SCHEMA_CONTRACTS.md` 为准。
 
-决定让两个 task-read endpoint 分别拥有闭合响应 contract，只复用 `ApiTask`、`ApiLabel` 与既有 pagination primitives，避免共享 envelope 掩盖 endpoint 差异。行为细节以 [API_SPEC](API_SPEC.md#b1-c2b-task-read-成功响应契约) 和 [SCHEMA_CONTRACTS](SCHEMA_CONTRACTS.md#b1-c2b-task-read-成功响应契约) 为准。
-## ADR-0015：Oxigraph quick-xml 安全临时 vendor patch
+## ADR-0020：B1-C2b task-read 成功响应决策
 
-### Status
+### 状态
 
-Accepted（Phase 2 temporary exception）
+已接受
 
-### Context
+### 背景
 
-`oxrdfxml 0.2.3` 与 `sparesults 0.3.3` 的 crates.io 版本仍解析到受 RUSTSEC-2026-0194/RUSTSEC-2026-0195 影响的 `quick-xml < 0.41`；security commit `52870a3` vendor 了上游修复源码并统一到 `quick-xml 0.41.0`。
+共享响应 envelope 会掩盖两个 task-read 端点的精确响应差异。
 
-### Decision
+### 决策
 
-允许 root `Cargo.toml` 唯一的 `[patch.crates-io]` 例外，且仅接受 `oxrdfxml`/`sparesults` 两个精确仓内 vendor 路径、package name/version 与普通文件目标。`schema_dependency_policy` 对额外 key、非精确 source/path、path traversal、symlink、全部 `[replace]` 保持 fail-closed；schema-tool registry closure 不变，产品图继续禁止 schema tooling 泄漏。
+让两个 task-read 端点分别拥有闭合响应 contract，只复用 `ApiTask`、`ApiLabel` 与既有
+pagination primitives。
 
-由 security owner 维护，待 crates.io 上游版本发布并确认 `quick-xml >= 0.41` 后移除 vendor、`[patch]`、lockfile 变更及本 ADR；advisory、provenance 或 vendor digest 变化必须重新 review。复核期限：2026-10-12。
+### 影响
+
+行为细节以 [API_SPEC](API_SPEC.md#4-任务) 和
+[SCHEMA_CONTRACTS](SCHEMA_CONTRACTS.md#2-契约状态) 为准。
+
+## ADR-0021：Oxigraph quick-xml 安全临时 vendor patch
+
+### 状态
+
+已接受（第 2 阶段临时例外）
+
+### 背景
+
+`oxrdfxml 0.2.3` 与 `sparesults 0.3.3` 的 crates.io 版本仍解析到受
+RUSTSEC-2026-0194/RUSTSEC-2026-0195 影响的 `quick-xml < 0.41`；仓库当前通过 root
+`Cargo.toml` 与对应的 `vendor/` 目录使用上游修复源码，并统一到 `quick-xml 0.41.0`。
+
+### 决策
+
+允许根目录 `Cargo.toml` 中唯一的 `[patch.crates-io]` 例外，且仅接受 `oxrdfxml`/`sparesults` 两个精确仓内 vendor 路径、package name/version 与普通文件目标。`schema_dependency_policy` 对额外 key、非精确 source/path、path traversal、symlink、全部 `[replace]` 保持失败关闭；schema-tool 注册表闭包不变，产品依赖图继续禁止 schema tooling 泄漏。
+
+由安全负责人维护，待 crates.io 上游版本发布并确认 `quick-xml >= 0.41` 后移除 vendor、`[patch]`、lockfile 变更及本 ADR；advisory、provenance 或 vendor digest 变化必须重新审查。复核期限：2026-10-12。

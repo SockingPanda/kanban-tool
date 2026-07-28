@@ -131,6 +131,7 @@ pub(crate) enum Command {
         command: ContextCommand,
     },
     /// Run the local dispatcher loop to claim ready tasks and execute a worker command.
+    #[command(hide = true)]
     Dispatch(DispatchArgs),
     /// Start the localhost HTTP API and SSE server.
     Serve(ServeArgs),

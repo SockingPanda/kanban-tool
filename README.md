@@ -6,14 +6,14 @@
 
 - 这项工作真的可以开始了吗，还是仍被依赖阻塞？
 - 是谁接走了任务？执行进程中断后，任务会不会永远卡在“进行中”？
-- 人在界面上拖动卡片、脚本修改状态、agent 自动执行时，三者看到的是不是同一份事实？
+- 人在界面上操作、脚本修改状态、agent 更新任务时，三者看到的是不是同一份事实？
 - 几天以后，还能不能说清楚任务为什么被阻塞、何时恢复、经历过哪些尝试？
 
 Kanban Tool 想解决的就是这些问题。
 
 它把每张卡片当成一个有生命周期的工作单元：任务、依赖、评论、执行记录和状态变化都保存在本地 SQLite 中。
 
-桌面界面适合人查看和操作，CLI 适合脚本与 agent，必要时还可以启动本地 dispatcher 自动领取工作。所有入口共享同一套状态机，不会各自维护一份互相打架的状态。
+桌面界面适合人查看和操作，CLI 适合脚本与 agent。所有受支持入口共享同一套状态机，不会各自维护一份互相打架的状态。
 
 ## 你可以拿它做什么
 
@@ -37,7 +37,7 @@ Kanban Tool 想解决的就是这些问题。
 - `triage`：想法还不够清楚，暂时不能执行。
 - `todo`：任务已经定义，但依赖尚未完成，或还没有进入执行队列。
 - `scheduled`：任务有明确的未来开始时间。
-- `ready`：条件已经满足，可以被人或 dispatcher 领取。
+- `ready`：条件已经满足，可以被操作者或显式调用的客户端领取。
 - `running`：任务已被领取，拥有一次真实的执行记录。
 - `blocked`：执行遇到外部依赖、失败或需要人工输入。
 - `review`：工作已经提交，等待人工确认。
@@ -92,13 +92,13 @@ kanban task list
 
 ```bash
 kanban task start personal#1
-# Claimed ... token=ct_...
+# Claimed ... token=claim_...
 ```
 
 完成任务需要带回这个 token，从而避免另一个过期或并发执行者误改状态：
 
 ```bash
-kanban task done personal#1 --claim-token ct_...
+kanban task done personal#1 --claim-token claim_...
 ```
 
 常用的下一步：
@@ -110,7 +110,7 @@ kanban search "项目首页"
 kanban doctor
 ```
 
-## 四种使用方式
+## 三种使用方式
 
 ### 桌面看板
 
@@ -125,10 +125,6 @@ kanban doctor
 ### 本地 HTTP API
 
 `kanban serve` 默认在 `127.0.0.1:8721` 启动本地 HTTP API 和 SSE 事件流，供 Desktop 或本地脚本使用。它不会提供浏览器版看板，也不会监听公网地址。
-
-### 本地 dispatcher
-
-`kanban dispatch` 可以轮询显式进入 `ready` 的任务，按 worker 配置领取并执行。它能通过领取期限和 heartbeat 判断执行者是否仍然在线，也支持失败重试和过期回收，但不会擅自把 `todo` 或 `scheduled` 任务提升成可执行状态。
 
 ## 数据放在哪里
 
@@ -160,6 +156,7 @@ Kanban Tool 有意保持本地、单用户：
 - 不提供云同步或远程 worker。
 - 不支持 PostgreSQL、MySQL 或 MongoDB 后端。
 - localhost API 只服务本机界面和本地脚本，不是公网协作 API。
+- 仓库中保留的实验性 dispatch 命令不属于公开支持能力；自动化请使用 CLI 或本机 API 显式编排。
 
 这些不是“以后再补的企业功能清单”，而是当前产品边界。它让项目可以把精力放在本地任务状态、恢复能力、审计记录和人机协作上。
 
@@ -173,7 +170,6 @@ Kanban Tool 有意保持本地、单用户：
 | CLI 命令和输出 | [`docs/CLI_SPEC.md`](docs/CLI_SPEC.md) |
 | 状态为什么这样流转 | [`docs/STATE_MACHINE.md`](docs/STATE_MACHINE.md) |
 | 本地 API 与 SSE | [`docs/API_SPEC.md`](docs/API_SPEC.md) |
-| dispatcher 如何领取和恢复任务 | [`docs/DISPATCHER_SPEC.md`](docs/DISPATCHER_SPEC.md) |
 | Rust crate、进程和数据流 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | 数据对象、ID 与事件 | [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) |
 | JSON schema 与公开契约 | [`docs/SCHEMA_CONTRACTS.md`](docs/SCHEMA_CONTRACTS.md) |
@@ -214,6 +210,6 @@ Linux CLI 可以构建为独立的 Debian 包：
 
 当前工程验证和安装打包主要围绕 Debian / Ubuntu；其他平台可以从源码尝试，但项目暂未提供同等完成度的安装包承诺。
 
-## License
+## 许可证
 
 Kanban Tool 使用 [Apache License 2.0](LICENSE) 开源。

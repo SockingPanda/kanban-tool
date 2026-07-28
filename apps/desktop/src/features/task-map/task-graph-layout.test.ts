@@ -6,9 +6,9 @@ import type { TaskGraph } from "./task-graph-types"
 const graph: TaskGraph = {
   nodes: [
     { id: "center", ref: "default#123", title: "Graph base", status: "running", role: "center" },
-    { id: "parent", ref: "default#123", title: "Contract", status: "done", role: "dependency_parent", contextOnly: true },
-    { id: "child", ref: "default#123", title: "Detail workbench", status: "todo", role: "dependency_child" },
-    { id: "step", ref: "default#123", title: "Renderer", status: "todo", role: "step_child" },
+    { id: "parent", ref: "default#122", title: "Contract", status: "done", role: "dependency_parent", contextOnly: true },
+    { id: "child", ref: "default#124", title: "Detail workbench", status: "todo", role: "dependency_child" },
+    { id: "step", ref: "default#999", title: "Renderer", status: "todo", role: "step_child" },
   ],
   edges: [
     { id: "dep:parent:center", sourceTaskId: "parent", targetTaskId: "center", kind: "dependency", blocking: true },
@@ -52,8 +52,8 @@ describe("layoutTaskGraphWithElk", () => {
   it("uses fallback layout for tiny graphs", async () => {
     const tinyGraph: TaskGraph = {
       nodes: [
-        { id: "parent", ref: "default#123", title: "Parent", status: "ready" },
-        { id: "child", ref: "default#123", title: "Child", status: "todo" },
+        { id: "parent", ref: "default#1", title: "Parent", status: "ready" },
+        { id: "child", ref: "default#2", title: "Child", status: "todo" },
       ],
       edges: [{ id: "dep:parent:child", sourceTaskId: "parent", targetTaskId: "child", kind: "dependency", blocking: true }],
     }
@@ -68,8 +68,8 @@ describe("layoutTaskGraphWithElk", () => {
     const reverseLayout = await layoutTaskGraphWithElk(
       {
         nodes: [
-          { id: "ready", ref: "default#123", title: "Ready", status: "ready", role: "context" },
-          { id: "done", ref: "default#123", title: "Done context", status: "done", role: "context", contextOnly: true },
+          { id: "ready", ref: "default#1", title: "Ready", status: "ready", role: "context" },
+          { id: "done", ref: "default#2", title: "Done context", status: "done", role: "context", contextOnly: true },
         ],
         edges: [{ id: "dep:done:ready", sourceTaskId: "done", targetTaskId: "ready", kind: "dependency", blocking: false }],
       },
@@ -87,8 +87,8 @@ describe("layoutTaskGraphWithElk", () => {
     const sameColumnLayout = layoutTaskGraphFallback(
       {
         nodes: [
-          { id: "first", ref: "default#123", title: "First", status: "ready", role: "context" },
-          { id: "second", ref: "default#123", title: "Second", status: "ready", role: "context" },
+          { id: "first", ref: "default#1", title: "First", status: "ready", role: "context" },
+          { id: "second", ref: "default#2", title: "Second", status: "ready", role: "context" },
         ],
         edges: [{ id: "dep:first:second", sourceTaskId: "first", targetTaskId: "second", kind: "dependency", blocking: false }],
       },

@@ -97,7 +97,6 @@ def is_core(path: str) -> bool:
             "docs/DATA_MODEL.md",
             "docs/CLI_SPEC.md",
             "docs/API_SPEC.md",
-            "docs/DISPATCHER_SPEC.md",
         }
     )
 

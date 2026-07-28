@@ -62,15 +62,15 @@ describe("desktop layout and scroll contracts", () => {
 
   it("tracks the manual narrow-width smoke checklist beside the automatic contracts", () => {
     const checklist = readFileSync(
-      new URL("../../../../docs/plans/desktop-layout-smoke.md", import.meta.url),
+      new URL("../../../../docs/DESKTOP_LAYOUT_SMOKE.md", import.meta.url),
       "utf8",
     )
 
-    expect(checklist).toContain("Automatic contracts")
-    expect(checklist).toContain("Manual narrow-width smoke")
-    expect(checklist).toContain("Board horizontal overflow")
-    expect(checklist).toContain("Column vertical scroll")
-    expect(checklist).toContain("Task detail sheet body scroll")
-    expect(checklist).toContain("Sidebar transition and clipping")
+    expect(checklist).toContain("自动契约")
+    expect(checklist).toContain("窄窗口人工冒烟检查")
+    expect(checklist).toContain("看板横向滚动")
+    expect(checklist).toContain("列内纵向滚动")
+    expect(checklist).toContain("任务详情正文滚动")
+    expect(checklist).toContain("侧边栏过渡与裁切")
   })
 })

@@ -573,6 +573,82 @@ fn manual_block_during_dispatch_is_not_overwritten_to_done() -> anyhow::Result<(
 }
 
 #[test]
+fn failed_dispatch_after_parent_reopen_recomputes_dependency_readiness() -> anyhow::Result<()> {
+    let temp =
+        TempDb::new("failed_dispatch_after_parent_reopen_recomputes_dependency_readiness")?;
+    init_database(&temp.path, "tester")?;
+
+    let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("parent"))?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &parent.id)?;
+    let parent_claim = claim_task(&temp.path, "default", "worker", &parent.id, 300_000)?;
+    complete_task(
+        &temp.path,
+        "default",
+        "worker",
+        &parent.id,
+        Some(&parent_claim.claim_token),
+        false,
+    )?;
+
+    let child = create_task(&temp.path, "default", "tester", CreateTask::ready("child"))?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &child.id)?;
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+    let release = temp.dir.join("release-failed-worker");
+    let dispatch_path = temp.path.clone();
+    let dispatch_release = release.clone();
+    let handle = thread::spawn(move || {
+        dispatch_once(
+            &dispatch_path,
+            "default",
+            DispatchOptions {
+                actor: "dispatcher".into(),
+                command: format!(
+                    "while [ ! -f '{}' ]; do sleep 0.01; done; exit 7",
+                    dispatch_release.display()
+                ),
+                worker_profile: "default".into(),
+                claim_ttl_ms: 300_000,
+                heartbeat_interval_ms: 30_000,
+                on_success: FinishPolicy::Done,
+                on_failure: FinishPolicy::Ready,
+                log_dir: dispatch_release
+                    .parent()
+                    .ok_or_else(|| KanbanError::InvalidInput("release path has no parent".into()))?
+                    .join("logs"),
+            },
+        )
+    });
+
+    let mut child_is_running = false;
+    for _ in 0..200 {
+        if get_task(&temp.path, "default", &child.id)?.status == TaskStatus::Running {
+            child_is_running = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    if !child_is_running {
+        std::fs::write(&release, "go")?;
+        let result = join_thread(handle)??;
+        return Err(test_error(format!(
+            "dispatcher did not claim child in time: {result:?}"
+        )));
+    }
+
+    reopen_task(&temp.path, "default", "tester", &parent.id, "retry parent")?;
+    assert!(get_task(&temp.path, "default", &child.id)?.dependency_blocked);
+    std::fs::write(&release, "go")?;
+    let result = join_thread(handle)??;
+    assert_eq!(result.exit_code, Some(7));
+
+    let fresh = get_task(&temp.path, "default", &child.id)?;
+    assert_eq!(fresh.status, TaskStatus::Todo);
+    assert!(fresh.dependency_blocked);
+    assert_eq!(fresh.retry_count, 1);
+    Ok(())
+}
+
+#[test]
 fn todo_without_description_is_not_promoted_or_claimed_by_dispatch() -> anyhow::Result<()> {
     let temp = TempDb::new("todo_without_description_is_not_promoted_or_claimed_by_dispatch")?;
     init_database(&temp.path, "tester")?;

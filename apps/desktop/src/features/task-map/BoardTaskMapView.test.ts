@@ -9,7 +9,7 @@ import { boardTaskMapQueryOptions } from "./useBoardTaskMap"
 function task(id: string, status: Task["status"], overrides: Partial<Task> = {}): Task {
   return {
     id,
-    ref: "kanban-tool#" + id,
+    ref: "default#" + id,
     seq: Number(id.replace(/\D/g, "")) || 1,
     board_id: "b_1",
     board_slug: "kanban-tool",

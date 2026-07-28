@@ -77,17 +77,27 @@ jobs:
               - 'Cargo.lock'
               - 'migrations/**'
               # Keep this allowlist in sync with kanban-desktop's Rust dependency graph.
+              - 'crates/kanban-application/**'
+              - 'crates/kanban-contract/**'
               - 'crates/kanban-core/**'
               - 'crates/kanban-context/**'
+              - 'crates/kanban-derived-io/**'
               - 'crates/kanban-entity/**'
               - 'crates/kanban-graph/**'
+              - 'crates/kanban-graph-oxigraph/**'
+              - 'crates/kanban-helper-protocol/**'
               - 'crates/kanban-indexer/**'
+              - 'crates/kanban-labels/**'
               - 'crates/kanban-local/**'
               - 'crates/kanban-search/**'
               - 'crates/kanban-server/**'
               - 'crates/kanban-sqlite/**'
               - 'crates/kanban-vector/**'
+              - 'crates/kanban-vector-lancedb/**'
               - 'apps/desktop/src-tauri/**'
+              - 'scripts/cargo-build-lock.sh'
+              - 'scripts/prepare-desktop-helper-binaries.sh'
+              - 'scripts/test-desktop-helper-sidecars.sh'
 
   repo-meta:
     name: Repo metadata checks
@@ -124,6 +134,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
       - name: Install nextest
         uses: taiki-e/install-action@v2
         with:
@@ -172,6 +186,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.desktop-rust == 'true'
     runs-on: ubuntu-latest
+    env:
+      KANBAN_CARGO_TARGET_ROOT: ${{ github.workspace }}/target
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -188,11 +204,16 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            protobuf-compiler
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+      - name: Prepare Tauri sidecars
+        run: |
+          bash scripts/prepare-desktop-helper-binaries.sh
+          bash scripts/test-desktop-helper-sidecars.sh
       - name: Check Tauri Rust
         run: cargo check -p kanban-desktop --tests
 

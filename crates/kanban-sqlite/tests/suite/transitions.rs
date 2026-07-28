@@ -450,6 +450,92 @@ fn reopen_skips_running_blocked_review_done_and_archived_children() -> anyhow::R
 }
 
 #[test]
+fn reclaim_running_children_after_parent_reopen_recomputes_only_ready_target() -> anyhow::Result<()>
+{
+    let temp = TempDb::new(
+        "reclaim_running_children_after_parent_reopen_recomputes_only_ready_target",
+    )?;
+    init_database(&temp.path, "tester")?;
+
+    let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("parent"))?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &parent.id)?;
+    let parent_claim = claim_task(&temp.path, "default", "worker", &parent.id, 300_000)?;
+    complete_task(
+        &temp.path,
+        "default",
+        "worker",
+        &parent.id,
+        Some(&parent_claim.claim_token),
+        false,
+    )?;
+
+    let child = create_task(&temp.path, "default", "tester", CreateTask::ready("child"))?;
+    mark_plan_not_required_for_test(&temp.path, "default", "tester", &child.id)?;
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+    let child_claim = claim_task(&temp.path, "default", "worker", &child.id, 300_000)?;
+    let explicitly_blocked_child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("explicitly blocked child"),
+    )?;
+    mark_plan_not_required_for_test(
+        &temp.path,
+        "default",
+        "tester",
+        &explicitly_blocked_child.id,
+    )?;
+    add_dependency(
+        &temp.path,
+        "default",
+        "tester",
+        &parent.id,
+        &explicitly_blocked_child.id,
+    )?;
+    let explicitly_blocked_claim = claim_task(
+        &temp.path,
+        "default",
+        "worker",
+        &explicitly_blocked_child.id,
+        300_000,
+    )?;
+
+    reopen_task(&temp.path, "default", "tester", &parent.id, "retry parent")?;
+    let running_child = get_task(&temp.path, "default", &child.id)?;
+    assert_eq!(running_child.status, TaskStatus::Running);
+    assert!(running_child.dependency_blocked);
+
+    let reclaimed = kanban_sqlite::api::reclaim_task(
+        &temp.path,
+        "default",
+        "tester",
+        &child_claim.task.id,
+        true,
+    )?;
+
+    assert_eq!(reclaimed.status, TaskStatus::Todo);
+    assert!(reclaimed.dependency_blocked);
+    assert_eq!(reclaimed.retry_count, 1);
+
+    let explicitly_blocked = kanban_sqlite::api::reclaim_task_to(
+        &temp.path,
+        "default",
+        "tester",
+        &explicitly_blocked_claim.task.id,
+        true,
+        TaskStatus::Blocked,
+        Some("manual decision"),
+    )?;
+    assert_eq!(explicitly_blocked.status, TaskStatus::Blocked);
+    assert_eq!(
+        explicitly_blocked.status_reason.as_deref(),
+        Some("manual decision")
+    );
+    assert!(explicitly_blocked.dependency_blocked);
+    Ok(())
+}
+
+#[test]
 fn reopen_rejects_non_done_and_blank_reason_without_mutation() -> anyhow::Result<()> {
     let temp = TempDb::new("reopen_rejects_non_done_and_blank_reason_without_mutation")?;
     init_database(&temp.path, "tester")?;

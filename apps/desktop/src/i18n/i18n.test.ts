@@ -32,7 +32,7 @@ describe("desktop i18n", () => {
 
   it("translates known messages and falls back to english keys", () => {
     expect(translate("zh-CN", "Search tasks")).toBe("搜索任务")
-    expect(translate("zh-CN", "Open task {ref} {title}", { ref: "default#123", title: "Demo" })).toBe("打开任务 default#123 Demo")
+    expect(translate("zh-CN", "Open task {ref} {title}", { ref: "default#1", title: "Demo" })).toBe("打开任务 default#1 Demo")
     expect(translate("zh-CN", "Unmapped message")).toBe("Unmapped message")
     expect(translate("en", "Search tasks")).toBe("Search tasks")
   })

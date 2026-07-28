@@ -1,27 +1,27 @@
-# Codex Cloud Environment
+# Codex Cloud 环境
 
-本页记录 `kanban-tool` 在 Codex Cloud 中使用的前端/后端验证环境。它只用于云端开发、测试、lint 和 PR diff，不是产品部署方案，也不改变本项目 SQLite-only、本地单用户、localhost Web 和本地 dispatcher 的架构边界。
+本页记录 `kanban-tool` 在 Codex Cloud 中使用的前端 / 后端验证环境。它只用于云端开发、测试、lint 和 PR 差异检查，不是产品部署方案，也不改变本项目仅使用 SQLite、本地单用户、localhost Web 的架构边界。dispatcher 只是仓库内暂时保留的实验性能力，不属于公开支持或云端部署路径。
 
 官方边界：
 
-- Codex Cloud 会在托管容器中 checkout GitHub repo，运行 setup script，再让 agent 执行命令和验证。
-- Setup script 阶段可以联网安装依赖；agent 阶段默认离线。
-- Cached container 恢复时可以运行 maintenance script 刷新 branch 依赖。
+- Codex Cloud 会在托管容器中检出 GitHub 仓库，运行安装脚本，再让 agent 执行命令和验证。
+- 安装脚本阶段可以联网安装依赖；agent 阶段默认离线。
+- 缓存容器恢复时可以运行维护脚本刷新分支依赖。
 - 如果仓库有 `AGENTS.md`，Codex 会用它找到项目约定和验证命令。
 
-## Environment Settings
+## 环境设置
 
-在 Codex web 的 environment settings 中为这个仓库建立环境：
+在 Codex Web 的环境设置中为这个仓库建立环境：
 
-| Field | Value |
+| 字段 | 值 |
 |---|---|
-| Image | Default `universal` image |
-| Package versions | Pin Node.js 22；Rust 使用仓库 `rust-toolchain.toml` 的 stable toolchain |
-| Setup script | `scripts/codex-cloud-setup.sh` |
-| Maintenance script | `scripts/codex-cloud-maintenance.sh` |
-| Agent internet access | Off by default |
-| Setup internet access | On |
-| Domain allowlist | Common dependencies preset is enough for normal setup |
+| 镜像 | 默认 `universal` 镜像 |
+| 软件包版本 | 固定 Node.js 22；Rust 使用仓库 `rust-toolchain.toml` 指定的 stable toolchain |
+| 安装脚本 | `scripts/codex-cloud-setup.sh` |
+| 维护脚本 | `scripts/codex-cloud-maintenance.sh` |
+| Agent 联网权限 | 默认关闭 |
+| 安装阶段联网权限 | 开启 |
+| 域名白名单 | 常规安装使用“常见依赖”预设即可 |
 
 推荐环境变量：
 
@@ -36,43 +36,42 @@ CODEX_CLOUD_PREWARM_RUST=1
 CODEX_CLOUD_PREWARM_DESKTOP=0
 ```
 
-`KANBAN_CARGO_TARGET_ROOT` 是 Cloud 专用 target 目录；`CARGO_TARGET_DIR` 必须规范化为同一路径。所有 worktree 使用该 exact target，不再派生 `worktrees/<hash>` 子目录，并由 target root 下唯一的 `.build.lock` 串行写入。项目本地验证仍按 `AGENTS.md` 使用 `just` recipes；Cloud 环境需要这个变量是因为本地默认 target root 是开发机路径，容器中不应依赖它。Codex Cloud environment values are not shell-expanded by the UI, so the repo scripts expand literal `$HOME/...`, `${HOME}/...`, and `~/...` values before passing paths to Cargo. `KANBAN_CARGO_BUILD_JOBS=auto` 和 `KANBAN_TEST_THREADS=auto` 让 Cargo、nextest 和 libtest 使用容器默认并发；只有 Cloud runner 资源紧张时才改成具体数字。
+`KANBAN_CARGO_TARGET_ROOT` 是 Cloud 专用构建产物目录；`CARGO_TARGET_DIR` 必须规范化为同一路径。所有工作树使用这一目标目录，不再派生 `worktrees/<hash>` 子目录，并由目标根目录下唯一的 `.build.lock` 串行写入。项目本地验证仍按 `AGENTS.md` 使用 `just` 配方；未显式设置时，构建脚本使用可移植的 `$HOME/.cache/kanban-tool/cargo-target` 默认值。Cloud 环境显式设置这个变量，是为了让容器缓存位置和并发策略可控。Codex Cloud 界面不会对环境变量值做 shell 展开，因此仓库脚本会先展开字面形式的 `$HOME/...`、`${HOME}/...` 和 `~/...`，再把路径传给 Cargo。`KANBAN_CARGO_BUILD_JOBS=auto` 和 `KANBAN_TEST_THREADS=auto` 让 Cargo、nextest 和 libtest 使用容器默认并发；只有 Cloud 运行器资源紧张时才改成具体数字。
 
-## Installed Surface
+## 安装内容
 
-Setup script 会准备：
+安装脚本会准备：
 
 - Rust stable、`rustfmt`、`clippy`。
 - `just`。
 - `cargo-nextest`，供 `just test`、`just test-full` 和 `just rust-fast` 优先使用。
-- Node.js / pnpm 10 / `apps/desktop` dependencies。
-- Debian/Ubuntu 上的 protobuf compiler / well-known types，以及 Tauri Linux build dependencies，包括 WebKitGTK、GTK、ayatana appindicator、xdo、rsvg、OpenSSL 和 Debian packaging tools。
-- Rust crate cache，通过 `cargo fetch --locked` 预热。
+- Node.js、pnpm 10 和 `apps/desktop` 依赖。
+- Debian / Ubuntu 上的 protobuf 编译器 / well-known types，以及 Tauri Linux 构建依赖，包括 WebKitGTK、GTK、ayatana appindicator、xdo、rsvg、OpenSSL 和 Debian 打包工具。
+- Rust crate 缓存，通过 `cargo fetch --locked` 预热。
 
-Maintenance script 在 cached container 恢复后刷新：
+维护脚本会在缓存容器恢复后刷新：
 
-- Rust components。
-- protobuf compiler / well-known types，保证 cached container 也能获得新增系统依赖。
+- Rust 组件。
+- protobuf 编译器 / well-known types，保证缓存容器也能获得新增系统依赖。
 - `just` / `cargo-nextest` 是否仍可用。
-- pnpm activation 和 `apps/desktop` dependencies。
-- Rust dependency cache。
+- pnpm 激活状态和 `apps/desktop` 依赖。
+- Rust 依赖缓存。
 
-## Recommended Cloud Tasks
+## 推荐的云端任务
 
-Focused validation from the current diff:
+根据当前差异执行针对性验证：
 
 ```bash
 just affected base=main
 ```
 
-Daily Rust backend / CLI / SQLite / server API validation excludes the
-helper-heavy LanceDB and Oxigraph backend crates:
+日常 Rust 后端、CLI、SQLite 和服务器 API 验证不包含依赖较重的 LanceDB 与 Oxigraph 后端 crate：
 
 ```bash
 just rust-fast
 ```
 
-Equivalent expanded core steps:
+等价的展开版核心步骤：
 
 ```bash
 just fmt
@@ -81,17 +80,16 @@ just test
 just clippy
 ```
 
-Dependency audit gate:
+依赖审计门禁：
 
 ```bash
 just audit
 ```
 
-`just audit` runs `cargo deny check` and `cargo audit -D warnings`. These
-commands do not write the shared Cargo target directory, so they run directly
-without `scripts/cargo-build-lock.sh`.
+`just audit` 会运行 `cargo deny check` 和 `cargo audit -D warnings`。这些命令不会写入共用
+Cargo target 目录，因此不经过 `scripts/cargo-build-lock.sh`，而是直接运行。
 
-Single package:
+单个包：
 
 ```bash
 just check-p kanban-cli
@@ -99,7 +97,7 @@ just test-p kanban-cli
 just clippy-p kanban-cli
 ```
 
-Helper-heavy backend validation:
+依赖较重的辅助后端验证：
 
 ```bash
 just check-helpers
@@ -109,10 +107,10 @@ just test-full
 just clippy-full
 ```
 
-Use `just rust-full` when a branch touches helper backends or release-sensitive
-Rust validation boundaries but does not need desktop/package smoke coverage.
+如果分支修改了辅助后端或影响发布的 Rust 验证边界，但不需要桌面端 / 打包冒烟覆盖，请使用
+`just rust-full`。
 
-Desktop frontend and Tauri check:
+桌面前端与 Tauri 检查：
 
 ```bash
 just web-typecheck
@@ -121,68 +119,74 @@ just web-build
 just desktop-check
 ```
 
-Release-style gate:
+发布级门禁：
 
 ```bash
 just release
 ```
 
-`just release` is intentionally heavy. Use it when the branch touches release-sensitive packaging, desktop package behavior, or cross-surface integration.
-It includes `just audit` and `just rust-full`, so dependency advisories, helper-heavy crates, tests, and lints run before packaging and smoke checks.
+`just release` 有意设置得较重。分支影响发布打包、桌面包行为或跨入口集成时才使用它。
+它包含 `just audit` 和 `just rust-full`，所以会在打包和冒烟检查前完成依赖公告检查、辅助
+crate 验证、测试与 lint。
 
-## Prompt Template
+## 提示词模板
 
-Use this prompt for Cloud verification jobs:
-
-```text
-Run repository verification for this branch using AGENTS.md.
-Use just recipes only; do not call raw cargo build/test/check/clippy directly.
-Start with `just affected base=main`.
-If validation fails, diagnose the failure and fix only issues introduced by this branch.
-Report exact commands run and final pass/fail evidence.
-```
-
-For backend-only work:
+Cloud 验证任务可使用下面的提示词：
 
 ```text
-Verify backend/CLI/SQLite behavior for this branch using AGENTS.md.
-Run `just rust-fast` for daily core validation, or `just rust-full` if helper-heavy crates are affected. `just test` and `just clippy` are core defaults; use `just test-full` and `just clippy-full` when helper-heavy crates need explicit coverage.
-Fix only branch-caused failures and report command evidence.
+按照 AGENTS.md 验证当前分支。
+只使用 just recipes；不要直接调用原始 cargo build/test/check/clippy 命令。
+从 `just affected base=main` 开始。
+如果验证失败，诊断原因，并且只修复当前分支引入的问题。
+报告实际运行的完整命令，以及最终通过或失败的证据。
 ```
 
-For desktop work:
+仅涉及后端时：
 
 ```text
-Verify desktop frontend and Tauri checks for this branch using AGENTS.md.
-Run `just desktop-check`.
-If it fails, isolate whether the failure is TypeScript/Vitest/Rust/Tauri system dependency related.
-Fix only branch-caused failures and report command evidence.
+按照 AGENTS.md 验证当前分支的后端、CLI 和 SQLite 行为。
+日常核心验证运行 `just rust-fast`；如果影响依赖较重的辅助 crate，则运行 `just rust-full`。`just test` 和 `just clippy` 默认只覆盖核心范围；辅助 crate 需要显式覆盖时，使用 `just test-full` 和 `just clippy-full`。
+只修复当前分支导致的失败，并报告命令证据。
 ```
 
-## Boundaries
+涉及桌面端时：
 
-Codex Cloud is useful for saving local CPU, RAM, and compile time, but keep these boundaries explicit:
+```text
+按照 AGENTS.md 验证当前分支的桌面前端和 Tauri 检查。
+运行 `just desktop-check`。
+如果失败，判断问题来自 TypeScript、Vitest、Rust 还是 Tauri 系统依赖。
+只修复当前分支导致的失败，并报告命令证据。
+```
 
-- It does not see the developer machine's local SQLite database, localhost services, tmux sessions, or OMX runtime.
-- It is not a deployment target for `kanban serve`, dispatcher, or Desktop.
-- It must not introduce cloud sync, remote worker, multi-user, RBAC, organization, invite, or SaaS assumptions.
-- Tauri packaging can run in Cloud only when Linux system dependencies are present; actual desktop tray/window behavior still needs local manual verification when relevant.
-- Agent internet access should stay off unless the task explicitly needs current external information.
+## 边界
 
-## Troubleshooting
+Codex Cloud 可以节省本机 CPU、内存和编译时间，但必须明确以下边界：
 
-If `just` commands try to write to a missing local path, confirm `KANBAN_CARGO_TARGET_ROOT` and `CARGO_TARGET_DIR` are set to the same exact path in the environment settings or sourced from `~/.bashrc`.
+- 它看不到开发机上的本地 SQLite 数据库、localhost 服务或其他仅存在于开发机的进程与会话。
+- 它不是 `kanban serve`、实验性 dispatcher 或 Desktop 的部署目标。
+- 它不得引入云同步、远程 worker、多用户、RBAC、组织、邀请或 SaaS 假设。
+- 只有 Linux 系统依赖齐全时，才能在 Cloud 中打包 Tauri；实际桌面托盘 / 窗口行为在相关改动中仍需本地人工验证。
+- 除非任务明确需要当前外部信息，否则 agent 联网权限应保持关闭。
 
-If `just check` fails in `lance-encoding` with `google/protobuf/empty.proto: File not found`, rerun maintenance or reset the environment cache so `protobuf-compiler` and `libprotobuf-dev` are installed.
+## 故障排查
 
-If `desktop-package` fails with missing `webkit2gtk`, reset the environment cache and rerun setup with `CODEX_CLOUD_INSTALL_TAURI_DEPS=1`.
+如果 `just` 命令试图写入不存在的本地路径，请确认环境设置或 `~/.bashrc` 中的
+`KANBAN_CARGO_TARGET_ROOT` 与 `CARGO_TARGET_DIR` 被设为完全相同的路径。
 
-If `pnpm --dir apps/desktop install --frozen-lockfile` fails because of the pnpm version, keep Node pinned to 22 and rerun setup; the script activates pnpm 10, which supports this lockfile format.
+如果 `just check` 在 `lance-encoding` 中因 `google/protobuf/empty.proto: File not found`
+失败，请重新运行维护脚本或重置环境缓存，确保安装 `protobuf-compiler` 和 `libprotobuf-dev`。
 
-If `cargo-nextest` install is too slow for a temporary environment, set `CODEX_CLOUD_INSTALL_NEXTEST=0`; `just test` and `just test-full` will fall back to `cargo test`.
+如果 `desktop-package` 因缺少 `webkit2gtk` 失败，请重置环境缓存，并以
+`CODEX_CLOUD_INSTALL_TAURI_DEPS=1` 重新运行安装脚本。
 
-## References
+如果 `pnpm --dir apps/desktop install --frozen-lockfile` 因 pnpm 版本失败，请继续固定
+Node 22 并重新运行安装脚本；脚本会激活支持当前锁文件格式的 pnpm 10。
 
-- Codex Cloud environments: <https://developers.openai.com/codex/cloud/environments>
-- Codex Cloud internet access: <https://developers.openai.com/codex/cloud/internet-access>
-- Codex web setup: <https://developers.openai.com/codex/cloud>
+如果临时环境安装 `cargo-nextest` 太慢，可设置 `CODEX_CLOUD_INSTALL_NEXTEST=0`；
+`just test` 和 `just test-full` 会回退到 `cargo test`。
+
+## 参考资料
+
+- Codex Cloud 环境：<https://developers.openai.com/codex/cloud/environments>
+- Codex Cloud 联网权限：<https://developers.openai.com/codex/cloud/internet-access>
+- Codex Web 配置：<https://developers.openai.com/codex/cloud>

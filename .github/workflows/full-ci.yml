@@ -20,6 +20,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
       - name: Install nextest
         uses: taiki-e/install-action@v2
         with:
@@ -46,18 +50,8 @@ jobs:
             features: tantivy-backend
           - package: kanban-search
             features: tantivy-backend
-          - package: kanban-graph
-            features: graph-oxigraph
-          - package: kanban-vector
-            features: vector-lancedb
           - package: kanban-cli
             features: tantivy-backend
-          - package: kanban-cli
-            features: graph-oxigraph
-          - package: kanban-cli
-            features: vector-lancedb
-          - package: kanban-cli
-            features: tantivy-backend,graph-oxigraph,vector-lancedb
           - package: kanban-server
             features: tantivy-backend
     steps:
@@ -79,6 +73,8 @@ jobs:
   desktop:
     name: Desktop build and Tauri
     runs-on: ubuntu-22.04
+    env:
+      KANBAN_CARGO_TARGET_ROOT: ${{ github.workspace }}/target
     defaults:
       run:
         working-directory: apps/desktop
@@ -98,7 +94,8 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            protobuf-compiler
         working-directory: .
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -120,12 +117,19 @@ jobs:
         run: pnpm typecheck
       - name: Test
         run: pnpm test
+      - name: Prepare Tauri sidecars
+        run: |
+          bash scripts/prepare-desktop-helper-binaries.sh
+          bash scripts/test-desktop-helper-sidecars.sh
+        working-directory: .
       - name: Build Tauri app
         run: pnpm tauri build
 
   smoke:
     name: Smoke
     runs-on: ubuntu-latest
+    env:
+      KANBAN_CARGO_TARGET_ROOT: ${{ github.workspace }}/target
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -1,4 +1,4 @@
-# Kanban Tool SPEC Bundle
+# Kanban Tool 规范合集
 
 本文档由以下文件合并而成：
 
@@ -9,18 +9,17 @@
 - docs/DATA_MODEL.md
 - docs/CLI_SPEC.md
 - docs/API_SPEC.md
-- docs/DISPATCHER_SPEC.md
-- docs/IMPLEMENTATION_PLAN.md
+- docs/SCHEMA_CONTRACTS.md
 - docs/ADR.md
 - migrations/001_initial.sql
 - migrations/003_comment_author_identity.sql
 
-`docs/SPEC.md`、`docs/CLI_SPEC.md`、`docs/API_SPEC.md`、`docs/DISPATCHER_SPEC.md` 等分主题文档是当前行为的权威来源；本文件是这些源文档的同步快照，便于一次性阅读和离线传递。
+`docs/SPEC.md`、`docs/CLI_SPEC.md`、`docs/API_SPEC.md`、`docs/STATE_MACHINE.md` 和 `docs/SCHEMA_CONTRACTS.md` 等分主题文档是当前行为的权威来源；本文件是这些源文档的同步快照，便于一次性阅读和离线传递。
 
 
 ---
 
-# File: README.md
+# 文件：README.md
 
 # Kanban Tool
 
@@ -30,14 +29,14 @@
 
 - 这项工作真的可以开始了吗，还是仍被依赖阻塞？
 - 是谁接走了任务？执行进程中断后，任务会不会永远卡在“进行中”？
-- 人在界面上拖动卡片、脚本修改状态、agent 自动执行时，三者看到的是不是同一份事实？
+- 人在界面上操作、脚本修改状态、agent 更新任务时，三者看到的是不是同一份事实？
 - 几天以后，还能不能说清楚任务为什么被阻塞、何时恢复、经历过哪些尝试？
 
 Kanban Tool 想解决的就是这些问题。
 
 它把每张卡片当成一个有生命周期的工作单元：任务、依赖、评论、执行记录和状态变化都保存在本地 SQLite 中。
 
-桌面界面适合人查看和操作，CLI 适合脚本与 agent，必要时还可以启动本地 dispatcher 自动领取工作。所有入口共享同一套状态机，不会各自维护一份互相打架的状态。
+桌面界面适合人查看和操作，CLI 适合脚本与 agent。所有受支持入口共享同一套状态机，不会各自维护一份互相打架的状态。
 
 ## 你可以拿它做什么
 
@@ -61,7 +60,7 @@ Kanban Tool 想解决的就是这些问题。
 - `triage`：想法还不够清楚，暂时不能执行。
 - `todo`：任务已经定义，但依赖尚未完成，或还没有进入执行队列。
 - `scheduled`：任务有明确的未来开始时间。
-- `ready`：条件已经满足，可以被人或 dispatcher 领取。
+- `ready`：条件已经满足，可以被操作者或显式调用的客户端领取。
 - `running`：任务已被领取，拥有一次真实的执行记录。
 - `blocked`：执行遇到外部依赖、失败或需要人工输入。
 - `review`：工作已经提交，等待人工确认。
@@ -116,13 +115,13 @@ kanban task list
 
 ```bash
 kanban task start personal#1
-# Claimed ... token=ct_...
+# Claimed ... token=claim_...
 ```
 
 完成任务需要带回这个 token，从而避免另一个过期或并发执行者误改状态：
 
 ```bash
-kanban task done personal#1 --claim-token ct_...
+kanban task done personal#1 --claim-token claim_...
 ```
 
 常用的下一步：
@@ -134,7 +133,7 @@ kanban search "项目首页"
 kanban doctor
 ```
 
-## 四种使用方式
+## 三种使用方式
 
 ### 桌面看板
 
@@ -149,10 +148,6 @@ kanban doctor
 ### 本地 HTTP API
 
 `kanban serve` 默认在 `127.0.0.1:8721` 启动本地 HTTP API 和 SSE 事件流，供 Desktop 或本地脚本使用。它不会提供浏览器版看板，也不会监听公网地址。
-
-### 本地 dispatcher
-
-`kanban dispatch` 可以轮询显式进入 `ready` 的任务，按 worker 配置领取并执行。它能通过领取期限和 heartbeat 判断执行者是否仍然在线，也支持失败重试和过期回收，但不会擅自把 `todo` 或 `scheduled` 任务提升成可执行状态。
 
 ## 数据放在哪里
 
@@ -184,6 +179,7 @@ Kanban Tool 有意保持本地、单用户：
 - 不提供云同步或远程 worker。
 - 不支持 PostgreSQL、MySQL 或 MongoDB 后端。
 - localhost API 只服务本机界面和本地脚本，不是公网协作 API。
+- 仓库中保留的实验性 dispatch 命令不属于公开支持能力；自动化请使用 CLI 或本机 API 显式编排。
 
 这些不是“以后再补的企业功能清单”，而是当前产品边界。它让项目可以把精力放在本地任务状态、恢复能力、审计记录和人机协作上。
 
@@ -197,7 +193,6 @@ Kanban Tool 有意保持本地、单用户：
 | CLI 命令和输出 | [`docs/CLI_SPEC.md`](docs/CLI_SPEC.md) |
 | 状态为什么这样流转 | [`docs/STATE_MACHINE.md`](docs/STATE_MACHINE.md) |
 | 本地 API 与 SSE | [`docs/API_SPEC.md`](docs/API_SPEC.md) |
-| dispatcher 如何领取和恢复任务 | [`docs/DISPATCHER_SPEC.md`](docs/DISPATCHER_SPEC.md) |
 | Rust crate、进程和数据流 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | 数据对象、ID 与事件 | [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) |
 | JSON schema 与公开契约 | [`docs/SCHEMA_CONTRACTS.md`](docs/SCHEMA_CONTRACTS.md) |
@@ -238,41 +233,41 @@ Linux CLI 可以构建为独立的 Debian 包：
 
 当前工程验证和安装打包主要围绕 Debian / Ubuntu；其他平台可以从源码尝试，但项目暂未提供同等完成度的安装包承诺。
 
-## License
+## 许可证
 
 Kanban Tool 使用 [Apache License 2.0](LICENSE) 开源。
 
 
 ---
 
-# File: docs/SPEC.md
+# 文件：docs/SPEC.md
 
-# Kanban Tool SPEC
+# Kanban Tool 产品规范
 
-版本：0.1  
-范围：Rust core + SQLite-only + Web + CLI + local dispatcher  
+文档类型：持续维护的当前规范
+范围：Rust 核心 + 仅 SQLite + CLI + localhost Web；dispatcher 仅保留为实验性实现
 约束：无多用户、无多租户、无远程同步、无 PostgreSQL 后端
 
 ---
 
 ## 1. 产品定位
 
-本工具是一个本地优先的 Kanban 工作系统。它既能作为人类使用的看板，也能作为自动化任务、agent 工作流或本地脚本的 durable work queue。
+本工具是一个本地优先的 Kanban 工作系统。它既能作为人类使用的看板，也能作为自动化任务、agent 工作流或本地脚本的持久工作队列。
 
 核心目标：
 
 1. **持久化**：任务、状态、依赖、评论、事件、运行历史必须落盘。
-2. **可恢复**：本地进程崩溃后，任务可以通过 claim TTL / heartbeat / reclaim 恢复。
+2. **可恢复**：本地进程崩溃后，任务可以通过领取期限（claim TTL）、心跳（heartbeat）与重新领取（reclaim）恢复。
 3. **可审计**：每次关键变化写入 `task_events`。
-4. **多入口一致**：Web、CLI、dispatcher 必须走同一套 Rust use-case/service path
-   （当前主要在 `kanban-sqlite::service`，并复用 `kanban-core` 状态机 helper），
+4. **多入口一致**：Web、CLI 和任何保留的实验性执行入口必须走同一套 Rust 用例/服务路径
+   （当前主要在 `kanban-sqlite::service`，并复用 `kanban-core` 状态机辅助函数），
    不允许绕过状态机直接写状态。
-5. **SQLite-only**：第一版只支持 SQLite，不设计 PostgreSQL/MongoDB backend。
+5. **仅 SQLite**：第一版只支持 SQLite，不设计 PostgreSQL/MongoDB 后端。
 6. **单用户本地语义**：actor 是操作来源字符串，用于审计，不用于鉴权。
 
 一句话定义：
 
-> 一个 SQLite 驱动的本地 Kanban 状态机，暴露 CLI 和 localhost Web API，并可选运行本地 dispatcher 来执行任务。
+> 一个 SQLite 驱动的本地 Kanban 状态机，通过 CLI、桌面界面和 localhost Web API 为人、脚本与 agent 提供同一份任务事实。
 
 ---
 
@@ -286,7 +281,7 @@ Kanban Tool 使用 [Apache License 2.0](LICENSE) 开源。
 - SaaS 部署。
 - 跨机器 dispatcher/worker。
 - SQLite 文件放在 NFS、Dropbox、iCloud Drive 等同步盘上共享写入。
-- 任意自定义 workflow editor。
+- 任意自定义工作流编辑器。
 - 任意自定义字段数据库。
 - 复杂自动化规则引擎。
 
@@ -296,25 +291,25 @@ Kanban Tool 使用 [Apache License 2.0](LICENSE) 开源。
 
 | 对象 | 说明 |
 |---|---|
-| Board | 本地 project/board。不是租户。一个 SQLite DB 内可以有多个 board。 |
+| Board | 本地项目/看板。不是租户。一个 SQLite 数据库内可以有多个 board。 |
 | Task | 看板卡片，也是可执行工作单元。 |
-| Status | canonical 状态。UI column 只是状态的展示映射。 |
-| Dependency | parent task 阻塞 child task。 |
-| Comment | 人或自动化留下的协作文本；`kind=signal` 用作 signal ledger backlink。 |
-| Event | append-only 事件流，用于审计、SSE、调试。 |
-| Run | 一次执行 attempt。只有 claim/start 后才产生。 |
+| Status | 权威状态。界面列只是状态的展示映射。 |
+| Dependency | 父任务阻塞子任务。 |
+| Comment | 人或自动化留下的协作文本；`kind=signal` 用作信号账本回链。 |
+| Event | 只追加事件流，用于审计、SSE、调试。 |
+| Run | 一次执行尝试。只有 claim/start 后才产生。 |
 | Attachment | 附件元数据，blob 存文件系统。 |
 | Label | 本地标签。 |
-| Label Semantics / Atoms | Label 的 canonical ontology truth，用于本地 suggest 与 review。 |
-| Label Proposal / Ontology Ledger | 新 label 候选 lifecycle 与 append-only provenance；它们解释 ontology 演化，但不替代当前 label truth。 |
-| Signal Observation / Signal | 通用 Agent/Product signal ledger；记录产品或 agent 操作信号、review lifecycle 和可选 task/run/comment context。 |
-| Column | UI 展示配置，映射到 status。 |
+| Label Semantics / Atoms | Label 的权威本体事实，用于本地建议与审查。 |
+| Label Proposal / Ontology Ledger | 新 label 候选生命周期与只追加来源记录；它们解释 ontology 演化，但不替代当前 label 事实。 |
+| Signal Observation / Signal | 通用 Agent/Product 信号账本；记录产品或 agent 操作信号、审查生命周期和可选 task/run/comment 上下文。 |
+| Column | 界面展示配置，映射到 status。 |
 
 ---
 
 ## 4. 状态模型
 
-Canonical status：
+权威状态：
 
 ```text
 triage | todo | scheduled | ready | running | blocked | review | done | archived
@@ -327,8 +322,8 @@ triage | todo | scheduled | ready | running | blocked | review | done | archived
 | `triage` | 待澄清、待补全规格、尚不可执行。 |
 | `todo` | 已定义，但依赖未完成，或尚未进入 ready 队列。 |
 | `scheduled` | 已定义，但 `scheduled_at` 在未来。 |
-| `ready` | 可被人工或 dispatcher claim。 |
-| `running` | 已被某个 actor/worker claim，正在执行。 |
+| `ready` | 可被人工或实验性 dispatcher 领取。 |
+| `running` | 已被某个操作者/worker 领取，正在执行。 |
 | `blocked` | 因外部依赖、失败、人工输入等原因阻塞。 |
 | `review` | 执行完成但需要人工检查。 |
 | `done` | 完成。 |
@@ -336,13 +331,13 @@ triage | todo | scheduled | ready | running | blocked | review | done | archived
 
 ### 4.2 关键原则
 
-1. `running` 只能通过 `claim/start` transition 进入。
-2. `ready -> running` 必须在单个 SQLite transaction 中完成 CAS update、创建 run、写 event。
-3. `blocked -> ready` 不能盲目设置，必须重新检查依赖与 schedule。
-4. UI 拖拽到列时，本质上调用 transition，不是直接 update `tasks.status`。
-5. CLI 也不能绕过 transition service。
+1. `running` 只能通过 `claim/start` 状态转换进入。
+2. `ready -> running` 必须在单个 SQLite 事务中完成 CAS 更新、创建 run、写 event。
+3. `blocked -> ready` 不能盲目设置，必须重新检查依赖与计划时间。
+4. 界面拖拽到列时，本质上调用状态转换，不是直接更新 `tasks.status`。
+5. CLI 也不能绕过状态转换服务。
 
-完整转换表见 [`STATE_MACHINE.md`](STATE_MACHINE.md)。
+完整转换表见 [`STATE_MACHINE.md`](docs/STATE_MACHINE.md)。
 
 ---
 
@@ -391,79 +386,80 @@ PRAGMA temp_store = MEMORY;
 采用：
 
 ```text
-tasks 当前快照 + task_events append-only 事件流
+tasks 当前快照 + task_events 只追加事件流
 ```
 
-不采用纯 event sourcing。原因：
+不采用纯事件溯源（event sourcing）。原因：
 
 - 查询当前看板需要快照表，不能每次重放事件。
 - 事件流用于审计、实时推送、调试、增量同步到 Web UI。
-- 快照与事件必须在同一 transaction 内更新。
+- 快照与事件必须在同一事务内更新。
 
-初始 schema 见 [`../migrations/001_initial.sql`](../migrations/001_initial.sql)。
+初始 schema 见 [`../migrations/001_initial.sql`](migrations/001_initial.sql)。
 
-### 5.4 Label ontology truth 与 provenance
+### 5.4 Label 本体事实与来源记录
 
 Label 系统保持四类角色分离：
 
 1. `labels` / `task_labels` 是任务当前绑定事实。
-2. `label_semantics` / `label_atoms` 是 label 的 canonical ontology truth。
-3. `lancedb_label_atoms` 等向量索引是可删除重建的派生检索层。
-4. `label_semantic_proposals` 与 `label_ontology_*` ledger 记录候选、分歧、review、
-   mutation provenance 和 validation history。
+2. `label_semantics` / `label_atoms` 是 label 的权威本体事实。
+3. `lancedb_label_atoms` 等向量索引是可删除、可重建的派生检索层。
+4. `label_semantic_proposals` 与 `label_ontology_*` 账本记录候选、分歧、审查、
+   变更来源和验证历史。
 
-当前不引入 label-ontology 专属 graph projection。现有 `kanban graph` / Oxigraph 只消费
-Knowledge Substrate 的 `entity_relations` mirror；ontology review、atom explain、proposal
-和 validation history 直接从 SQLite truth 读取。未来若为 rename/split/merge 或 provenance
-关系查询增加 graph projection，它必须是可删除重建的 derived store，不能拥有 canonical write
-path。
+当前不引入 label ontology 专属图投影。现有 `kanban graph` / Oxigraph 只消费
+Knowledge Substrate 的 `entity_relations` 镜像；ontology 审查、atom 解释、proposal
+和验证历史直接从 SQLite 权威数据读取。未来若为 rename/split/merge 或来源
+关系查询增加图投影，它必须是可删除、可重建的派生存储，不能拥有权威写入路径。
 
-Constructive ontology mutation 必须通过专用 service path：semantics patch/replace、
+会构造新事实的 ontology 变更必须通过专用服务路径：semantics patch/replace、
 atom apply、task-label bootstrap、proposal create/accept 和 validation 都要在同一 SQLite
-transaction 中写入对应 canonical row 与 provenance action，或一起回滚。通用
-ontology action endpoint 只允许 lifecycle review action，不能伪造 canonical before/after
-hash、result atom/result label/result proposal 或 validation evidence。
+事务中写入对应权威记录与来源 action，或一起回滚。通用 ontology action endpoint
+只允许生命周期审查 action，不能伪造权威的 before/after hash、result atom/result label、
+result proposal 或验证证据。
 
-已提交的 label-scoped semantics/atom mutation 可以通过专用 revert path 追加
-`revert_ontology_mutation` action：它要求当前 canonical hash 仍等于被撤销 action 的
-after hash，将 semantics 恢复到 before snapshot，标脏 atom index，并保留原 action
-history。该 path 不承担 bootstrap label identity 或 task binding 回滚。
+已提交的 label 范围 semantics/atom 变更可以通过专用撤销路径追加
+`revert_ontology_mutation` action：它要求当前权威 hash 仍等于被撤销 action 的
+after hash，将 semantics 恢复到 before snapshot，标脏 atom 索引，并保留原 action
+历史。该路径不承担 bootstrap label identity 或 task binding 回滚。
 
-Semantics upsert 默认是 patch，不是 full replace：缺省字段保留当前值，数组字段追加或按
+Semantics upsert 默认是 patch，不是完整替换：缺省字段保留当前值，数组字段追加或按
 `remove_*` 删除；只有显式 replace 才把缺省数组解释为空。`expected_semantics_hash`
-用于防止 lost update。Proposal accept 与单 task bootstrap 共用 new-label adoption
+用于防止更新丢失。Proposal accept 与单 task bootstrap 共用 new-label adoption
 primitive；proposal accept 不自动写 `task_labels`，bootstrap 会绑定来源 task。旧数据或
-cleanup 路径中缺少 action provenance 的 atom 只能通过 `legacy_untracked=true` 标记，不应
-被当作新的 ontology growth 方式。
-当 apply atom 发现同内容 atom 已存在时，只写 `adopt_existing_atom` provenance-only action；
-它连接新的 source signals 到 existing atom，不修改 canonical semantics/atoms，也不触发
-derived atom index dirty。
+cleanup 路径中缺少 action 来源记录的 atom 只能通过 `legacy_untracked=true` 标记，不应
+被当作新的 ontology 增长方式。
+当 apply atom 发现同内容 atom 已存在时，只写 `adopt_existing_atom` 这一仅记录来源的 action；
+它把新的来源信号连接到既有 atom，不修改权威 semantics/atoms，也不标脏派生 atom 索引。
 
 ---
 
-## 6. Web 端能力
+## 6. 桌面端能力
 
-Web 端是 localhost UI，不是远程协作服务。
+桌面端是使用 Web 技术栈构建的 Tauri 本机界面，不是由 `kanban serve` 托管的浏览器
+看板，也不是远程协作服务。它通过本机 HTTP API 工作。
 
-默认监听：
+Tauri 内嵌 API 绑定到回环地址上的随机可用端口：
 
 ```text
-127.0.0.1:8721
+127.0.0.1:<动态端口>
 ```
+
+独立运行的 `kanban serve` 才默认使用 `127.0.0.1:8721`。
 
 主要页面：
 
 1. Board 看板页。
-2. Task detail drawer。
-3. Comments。
-4. Event timeline。
-5. Runs / execution history。
-6. Filter/search。
-7. Settings。
+2. Task 详情抽屉。
+3. 评论。
+4. 事件时间线。
+5. Run / 执行历史。
+6. 筛选/搜索。
+7. 设置。
 
-Web 端只调用 HTTP API，不直接访问 SQLite。
+桌面端前端只调用 HTTP API，不直接访问 SQLite。
 
-API 见 [`API_SPEC.md`](API_SPEC.md)。
+API 见 [`API_SPEC.md`](docs/API_SPEC.md)。
 
 ---
 
@@ -489,144 +485,107 @@ kanban task archive t_xxx
 kanban events t_xxx
 kanban runs t_xxx
 kanban serve
-kanban dispatch --once
 ```
 
 CLI 必须支持：
 
 - `--json`：机器可读输出。
 - `--db <path>`：指定 SQLite DB。
-- `--board <slug-or-id>`：显式指定 active board。
-- `--actor <name>`：覆盖 actor。
+- `--board <slug-or-id>`：显式指定当前 board。
+- `--actor <name>`：覆盖操作者标识。
 - 稳定退出码。
 
-Active board 选择顺序是 `--board`、`KB_BOARD`、最近 `.kb/config.toml`、`default`。`kanban board use <board>` 写入项目级 `.kb/config.toml`，但仍使用同一个全局 SQLite DB。Task ref 必须支持全局 `t_...`、当前 board 的裸 seq / `#seq`、以及显式 `board#seq` / `board/#seq`；CLI 和 API 输出应带可复制的 `board_slug#seq` ref。
+当前 board 的选择顺序是 `--board`、`KB_BOARD`、最近的 `.kb/config.toml`、`default`。`kanban board use <board>` 写入项目级 `.kb/config.toml`，但仍使用同一个全局 SQLite 数据库。Task 引用必须支持全局 `t_...`、当前 board 的裸 seq / `#seq`、以及显式 `board#seq` / `board/#seq`；CLI 和 API 输出应带可复制的 `board_slug#seq` 引用。
 
-CLI 见 [`CLI_SPEC.md`](CLI_SPEC.md)。
-
----
-
-## 8. Dispatcher 能力
-
-Dispatcher 是本地可选组件。它不负责多人协作，只负责本地自动化：
-
-1. 从 `ready` 中 claim 任务。
-3. 为 claim 创建 `task_runs`。
-3. 运行 worker profile。
-4. 周期性 heartbeat。
-5. 超时或崩溃后 reclaim。
-6. 根据 worker exit status 写入 `done/review/blocked/ready`。
-
-`ready` 表示显式人工 promote 意图；parent 完成、dependency 移除或 schedule 到期不会被 dispatcher 自动提升到 `ready`。
-
-Dispatcher 见 [`DISPATCHER_SPEC.md`](DISPATCHER_SPEC.md)。
+CLI 见 [`CLI_SPEC.md`](docs/CLI_SPEC.md)。
 
 ---
 
-## 9. 核心不变量
+## 8. 核心不变量
 
 实现必须保证：
 
-1. 一个 task 同时最多一个 active claim。
-2. 一个 active claim 必须有一个 active run。
+1. 一个 task 同时最多一个有效领取。
+2. 一个有效领取必须有一个有效 run。
 3. `running` task 必须有 `claim_token`、`claim_owner`、`claim_expires_at`。
 4. task 不能依赖自己。
-5. dependency graph 不能形成环。
-6. 有未完成 parent 的 child 不得进入 `ready/running`。
+5. 依赖图不能形成环。
+6. 有未完成父任务的子任务不得进入 `ready/running`。
 7. `archived` task 不参与默认 list、promotion、claim。
-8. `done` 和 `archived` 是 terminal-like 状态；默认不再被 dispatcher 修改。
-9. Archived board 不接受普通 task/comment/dispatcher 写入；只读 events/runs/comments 历史仍可审计。
+8. `done` 和 `archived` 是类终态；默认不再被自动执行入口修改。
+9. 已归档 board 不接受普通 task/comment/自动执行入口写入；只读 events/runs/comments 历史仍可审计。
 10. Board archive 不会改变 task 状态；如果 board 上仍有 `running` task/run，必须拒绝 archive。
 11. 每次状态变化必须写 `task_events`。
 12. task snapshot 与对应 event 必须同 transaction 提交。
-13. `tasks.status`、label binding truth、label semantics truth、ontology ledger 和派生检索层各自有明确写权限；derived stores 不拥有 canonical write path。
-14. 新的 constructive ontology mutation 不通过 generic lifecycle action endpoint；必须由专用 command/API/service 路径同时写 canonical state 与 provenance action；采用已存在 atom 只写 `adopt_existing_atom` provenance action，不伪装成新增 atom。
-15. label ontology graph projection 当前不存在；如未来新增，只能从 SQLite truth 派生并重建，不得成为 `labels`、`task_labels`、`label_semantics`、`label_atoms` 或 `label_ontology_*` 的写入口。
-16. label ontology longitudinal regression corpus 是测试/评估基础设施：它可比较固定 corpus 的 selected labels、score 和 evidence atoms，但 corpus run 本身不得修改 canonical label/ontology/ledger truth，也不得成为日常 task label 绑定的默认流程。
-17. label ontology quality analytics 是只读投影：denominator 来源必须可审计；raw disagreement signal count 不得被命名或解释为模型错误率、precision 或 recall。没有带 expected labels 的独立评估 cohort 时，precision/recall 必须显示为 unavailable。
-
----
-
-## 10. 成功标准
-
-MVP 完成时必须满足：
-
-- 可以通过 CLI 初始化 DB、创建 task、查看 board、claim、complete、block、unblock。
-- 可以通过 Web UI 完成同样操作。
-- 状态转换不允许非法路径。
-- 并发 claim 同一 task 时只能一个成功。
-- 依赖未完成时 child 不会被提升到 `ready`。
-- crash/timeout 后可以 reclaim。
-- task events 能完整解释 task 当前状态是如何来的。
-- SQLite migration 可重复测试。
-- 所有核心命令有单元测试或集成测试。
+13. `tasks.status`、label 绑定事实、label semantics 事实、ontology 账本和派生检索层各自有明确写权限；派生存储不拥有权威写入路径。
+14. 新的构造性 ontology 变更不通过通用生命周期 action endpoint；必须由专用 command/API/service 路径同时写入权威状态与来源 action；采用已存在 atom 时只写 `adopt_existing_atom` 来源 action，不伪装成新增 atom。
+15. label ontology 图投影当前不存在；如未来新增，只能从 SQLite 权威数据派生并重建，不得成为 `labels`、`task_labels`、`label_semantics`、`label_atoms` 或 `label_ontology_*` 的写入口。
+16. label ontology 纵向回归语料集是测试/评估基础设施：它可比较固定语料集的 selected labels、score 和 evidence atoms，但语料集运行本身不得修改权威 label/ontology/ledger 事实，也不得成为日常 task label 绑定的默认流程。
+17. label ontology 质量分析是只读投影：分母来源必须可审计；原始分歧信号数不得被命名或解释为模型错误率、precision 或 recall。没有带 expected labels 的独立评估批次时，precision/recall 必须显示为 unavailable。
 
 
 ---
 
-# File: docs/ARCHITECTURE.md
+# 文件：docs/ARCHITECTURE.md
 
-# Architecture
+# 架构
 
-`POST /api/v1/boards/:board/tasks` 的公开 path/request/success wire DTO 由
-`kanban-contract` 单一拥有；server adapter 显式映射到 `kanban_sqlite::api::CreateTask`，并继续
-以一次 `create_task_with_labels_and_dependencies` 调用进入 canonical transaction。Contract
-status 只表达 create 输入允许的 `triage|todo|scheduled|ready`，metadata 只表达 opaque object
-shape；initial-status recompute、ready 降级、labels/dependencies、retry policy、events 与 rollback
-仍由 SQLite service/core 拥有。
+Kanban Tool 把本机 SQLite 作为唯一权威事实来源。CLI、Tauri 桌面端和本机 HTTP API
+共享同一组 Rust 用例与状态机；搜索、图和向量存储都是可重建的派生层。
 
-本架构面向本地单机运行：Rust workspace、SQLite-only、CLI、localhost Web server、可选 dispatcher。
+本架构面向本地单机运行：Rust 工作区、SQLite、CLI、本机 HTTP API、Tauri 桌面端，
+以及暂不作为公开支持能力的实验性 dispatcher 入口。
 
 ---
 
 ## 1. 总体架构
 
 ```text
-Web UI
-  -> kanban-server handlers/DTO
+Tauri Desktop
+  -> kanban-server handler/DTO
         \
 kanban-cli \
-dispatcher  -> kanban-application API / DTO contracts
-                     | implemented by kanban-sqlite::api / SqliteApplication
-                     | uses kanban-core pure state-machine helpers
+dispatcher  -> kanban-application API / DTO 契约
+                     | 由 kanban-sqlite::api / SqliteApplication 实现
+                     | 使用 kanban-core 的纯状态机辅助函数
                      v
-                canonical SQLite WAL
+                权威 SQLite WAL
                      |
-                     | task_events / index_outbox / dirty-generation markers
+                     | task_events / index_outbox / 脏代际标记
                      v
-                rebuildable derived stores
+                可重建派生存储
                 (Tantivy / Oxigraph / LanceDB)
 ```
 
-当前实现已经把一组已选择的 adapter-facing DTO/port vertical slice 抽到 `kanban-application`；它不是完整 application service，也不拥有 SQLite transaction。CLI、HTTP
+当前实现已经把一组已选择的面向适配器的 DTO/port 垂直切片抽到 `kanban-application`；它不是完整的 application service，也不拥有 SQLite 事务。CLI、HTTP
 server、desktop 和 dispatcher 通过 `kanban_sqlite::api` 或 `SqliteApplication` 进入同一组
-SQLite-backed use cases；`kanban-sqlite::service` 仍是 transaction、状态机 guard、canonical
-writes、events、runs、outbox 和 provenance 的 implementation owner。`kanban-core` 承载
-`TaskStatus`、ID/error/clock 和纯状态机 helper，不拥有持久化 records。
+SQLite 支持的用例；`kanban-sqlite::service` 仍是事务、状态机保护、权威
+写入、events、runs、outbox 和来源记录的实现 owner。`kanban-core` 承载
+`TaskStatus`、ID/error/clock 和纯状态机辅助函数，不拥有持久化记录。
 
-`kanban-sqlite` crate root 不再 re-export DB/init/service 符号。生产 adapter 必须导入
+`kanban-sqlite` crate 根模块不再重新导出数据库/init/service 符号。生产适配器必须导入
 `kanban_sqlite::api`、`kanban_sqlite::application::SqliteApplication`，或显式的
-`kanban_sqlite::db` / `kanban_sqlite::init` 基础设施模块。测试 raw inspection 入口集中到
+`kanban_sqlite::db` / `kanban_sqlite::init` 基础设施模块。测试原始检查入口集中到
 `kanban-test-support`，crate 内部测试可使用显式 `db` / `init` 模块。
 
 可把系统按八个运行平面理解：
 
 | 平面 | 当前内容 | 写权限边界 |
 |---|---|---|
-| Interaction/adapters | `kanban-cli`、`kanban-server`、desktop、dispatcher 入口 | 转换输入/输出和 locale/message 渲染，不直接写 SQLite truth |
-| Wire contracts | `kanban-contract` 的候选 Serde DTO、精确 surface catalog、operation inventory 与 schema root registry | 只定义公开机器契约候选；只有 `Adopted` 条目表示运行时采用，不拥有 service guard、SQLite record 或 runtime validation |
-| Schema tooling | `kanban-schema-tool` 的 `kanban-schema` binary、metaschema/fixture 校验、manifest/hash 和 drift gate | 独立 leaf tool，不进入产品 runtime graph，也不能充当 adoption witness |
-| Application contracts | `kanban-application` selected use-case DTO/port API，SQLite 实现位于 `kanban-sqlite` | adapters 逐步依赖稳定 API/DTO；该 crate 不是完整 application service |
-| Domain/state machine | `kanban-core` 的 status、guard 和 recompute helper | 纯逻辑，不访问 SQLite/HTTP/CLI |
-| Canonical SQLite truth | tasks/status、dependencies、labels、semantics、proposals、ontology ledger | 只能由 service path 写入 |
-| Propagation/control plane | `task_events`、`index_outbox`、dirty/generation/status markers | 记录同步水位和恢复入口，不替代 truth |
-| Rebuildable derived stores | Tantivy、Oxigraph、LanceDB `kb_chunks` / `kb_label_atoms` | 可删除重建，无 canonical write path |
+| 交互/适配器 | `kanban-cli`、`kanban-server`、desktop、dispatcher 入口 | 转换输入/输出和 locale/message 渲染，不直接写 SQLite 事实 |
+| Wire 契约 | `kanban-contract` 的候选 Serde DTO、精确公开面目录、操作清单与 schema 根注册表 | 只定义公开机器契约候选；只有 `Adopted` 条目表示运行时采用，不拥有 service 保护、SQLite 记录或运行时验证 |
+| Schema 工具 | `kanban-schema-tool` 的 `kanban-schema` 二进制程序、metaschema/fixture 校验、manifest/hash 和漂移门禁 | 独立叶子工具，不进入产品运行时依赖图，也不能充当采用 witness |
+| 应用契约 | `kanban-application` 已选择的用例 DTO/port API，SQLite 实现位于 `kanban-sqlite` | 适配器逐步依赖稳定 API/DTO；该 crate 不是完整 application service |
+| 领域/状态机 | `kanban-core` 的 status、保护和重新计算辅助函数 | 纯逻辑，不访问 SQLite/HTTP/CLI |
+| 权威 SQLite 事实 | tasks/status、dependencies、labels、semantics、proposals、ontology 账本 | 只能由 service 路径写入 |
+| 传播/控制平面 | `task_events`、`index_outbox`、dirty/generation/status 标记 | 记录同步水位和恢复入口，不替代事实 |
+| 可重建派生存储 | Tantivy、Oxigraph、LanceDB `kb_chunks` / `kb_label_atoms` | 可删除重建，无权威写入路径 |
 
 ---
 
 ## 2. Crate 结构
 
-当前主要仓库结构（省略 tests、scripts、生成文件和部分支持文件）：
+当前主要仓库结构（省略测试、脚本、生成文件和部分支持文件）：
 
 ```text
 crates/
@@ -643,6 +602,10 @@ crates/
       wire.rs
       inventory.rs
       schema.rs
+
+  kanban-application/
+    src/
+      lib.rs
 
   kanban-schema-tool/
     src/
@@ -690,22 +653,22 @@ apps/
   desktop/
 ```
 
-Desktop package 由 Tauri 构建，内置 `kanban-vector-lancedb` 与
-`kanban-graph-oxigraph` helper sidecars。Desktop 启动 embedded server 时把已存在的
-bundled helper path 注入 `kanban-server::AppState`；CLI `.deb` 仍由
-`scripts/package-cli-linux.sh` 独立安装 `/usr/bin/kanban` 与 `/usr/lib/kanban/` helpers。
+Desktop 包由 Tauri 构建，内置 `kanban-vector-lancedb` 与
+`kanban-graph-oxigraph` 辅助进程。Desktop 启动内嵌 server 时把已有的
+内置辅助进程路径注入 `kanban-server::AppState`；CLI `.deb` 仍由
+`scripts/package-cli-linux.sh` 独立安装 `/usr/bin/kanban` 与 `/usr/lib/kanban/` 下的辅助程序。
 
 ### 2.1 `kanban-core`
 
 职责：
 
 - 定义基础领域类型：`Board`、`BoardColumn`、`TaskStatus`。
-- 提供 typed ID、clock 和统一错误类型。
-- 实现纯状态机、readiness recompute 与 transition guard helper。
-- 提供轻量 locale 与 message rendering helper；只渲染用户可见文案，不翻译 canonical status、ID、JSON key 或数据库值。
+- 提供类型化 ID、clock 和统一错误类型。
+- 实现纯状态机、ready 重新计算与状态转换保护辅助函数。
+- 提供轻量 locale 与消息渲染辅助函数；只渲染用户可见文案，不翻译权威 status、ID、JSON key 或数据库值。
 - 不依赖 SQLite、HTTP、CLI、前端。
-- 当前不定义完整 command input/output，也不定义 application service interface。
-  这些 use-case orchestration 和持久化 records 主要在 `kanban-sqlite::service`。
+- 当前不定义完整命令输入/输出，也不定义 application service 接口。
+  这些用例编排和持久化记录主要在 `kanban-sqlite::service`。
 
 示例：
 
@@ -732,41 +695,41 @@ pub fn can_complete_from(status: TaskStatus) -> bool;
 
 职责：
 
-- 为逐步迁入的公开 API、CLI、JSONL、SSE、structured metadata、config 和 helper
-  wire DTO 提供唯一候选归属；adapter 迁移时负责 application/SQLite record 到 wire DTO
+- 为逐步迁入的公开 API、CLI、JSONL、SSE、结构化元数据、配置和辅助进程
+  wire DTO 提供唯一候选归属；适配器迁移时负责 application/SQLite 记录到 wire DTO
   的显式映射。
-- 默认 feature 只包含轻量 Serde 类型；唯一 additive `schema` feature 启用 `schemars`
-  并公开 schema root registry。该 crate 不拥有 binary、`jsonschema`、SHA-256 或 drift tooling。
-- 用精确 surface catalog 枚举实际 Axum method/path、Clap leaf command 和 JSONL
+- 默认 feature 只包含轻量 Serde 类型；唯一增量 `schema` feature 启用 `schemars`
+  并公开 schema 根注册表。该 crate 不拥有二进制程序、`jsonschema`、SHA-256 或漂移工具。
+- 用精确公开面目录枚举实际 Axum method/path、Clap 叶子命令和 JSONL
   discriminator；对应测试从真实声明生成 key，新增公开入口而未登记时自动失败。
 - 对 API/SSE contract 显式记录 `operation_key`、`Path|Query|Headers|Body|Success|Error|Sse`
   location 和参数 cardinality；非 HTTP surface 显式记录 `NoTransport`。`Success` 只表达 2xx
   success，`Error` 只表达 `SharedComponent` 非 2xx response，且不新增第七 endpoint obligation。
-  transport validator 负责 direction/location、operation/surface、granularity、path placeholder 和
-  重复/缺失参数的 fail-closed 拓扑校验，不承担 HTTP status 或业务语义。
-- 用 operation inventory 明确每个公开 surface 的方向、strictness、fixture、schema ID
+  传输验证器负责 direction/location、operation/surface、granularity、path placeholder 和
+  重复/缺失参数的失败关闭拓扑校验，不承担 HTTP status 或业务语义。
+- 用操作清单明确每个公开面的方向、严格性、fixture、schema ID
   或 exclusion，并区分 `Planned`、`Generated`、`Adopted`、`Excluded`。`Generated`
   只表示离线 schema/fixture 就绪；`Adopted` 还必须绑定 direction-correct evidence：
-  request/input producer 由 contract DTO 程序化序列化并精确匹配 committed fixture，consumer
-  从 fixture 经真实 runtime handler；response/output producer 来自真实 adapter。双方包含
+  request/input producer 由 contract DTO 程序化序列化并精确匹配已提交 fixture，consumer
+  从 fixture 经真实运行时 handler；response/output producer 来自真实适配器。双方包含
   operation/contract/surface/direction 和精确 Cargo test locator，且不共用同一个高层 exercise
-  helper。Endpoint 的整体 migration state 与六项 obligation 分开收敛：
-  `Generated` endpoint 可以先把已迁移的 body 声明为 adopted exact contract，但其它
-  obligation 仍为 `Todo` 时不能提升为 `Adopted`；审计要求该 contract 与 runtime operation
+  helper。端点整体迁移状态与六项义务分开收敛：
+  `Generated` 端点可以先把已迁移的 body 声明为 adopted 精确 contract，但其它
+  义务仍为 `Todo` 时不能提升为 `Adopted`；审计要求该 contract 与运行时 operation
   唯一、双向且精确绑定。witness gate 以 canonical manifest 和 Cargo package ID 锁定
-  当前 workspace `kanban-contract`，要求 unconditional non-optional normal declaration 与 default
-  resolve edge，并以 `--all-features --target all --edges normal,features --locked` 扫描 adopter runtime
-  leakage，随后真实执行双方测试；registry/git/其它 path 的同名 package 不构成 adoption。最终 closure gate 只允许
+  当前 workspace `kanban-contract`，要求无条件、非可选的普通依赖声明与默认
+  resolve edge，并以 `--all-features --target all --edges normal,features --locked` 扫描采用者的运行时
+  泄漏，随后真实执行双方测试；registry/git/其它 path 的同名 package 不构成采用。最终收口门禁只允许
   `Adopted` 或 `Excluded`。
 - 生成显式 Draft 2020-12、离线
-  `urn:kanban-tool:schema:<surface>:<semantic-name>:v1` root；schema bytes 从候选 wire type
+  `urn:kanban-tool:schema:<surface>:<semantic-name>:v1` root；schema 字节从候选 wire 类型
   确定生成。fixtures 是手写正负样例，用于验证 schema 与当前候选 wire shape；
   它们本身不构成运行时采用证据。
 
 该 crate 不依赖 `kanban-sqlite`、`kanban-server`、`kanban-cli`、desktop、
-dispatcher 或 helper-heavy backend。JSON Schema 只验证 wire shape/value domain，
-不能替代状态机、CAS、dependency、recompute、transaction 或 comment semantic guard。
-详细生成与验证契约见 [`SCHEMA_CONTRACTS.md`](SCHEMA_CONTRACTS.md)。
+dispatcher 或重型辅助后端。JSON Schema 只验证 wire 结构/值域，
+不能替代状态机、CAS、依赖、重新计算、事务或评论语义保护。
+详细生成与验证契约见 [`SCHEMA_CONTRACTS.md`](docs/SCHEMA_CONTRACTS.md)。
 
 ### 2.1b `kanban-schema-tool`
 
@@ -797,7 +760,7 @@ dispatcher 或 helper-heavy backend。JSON Schema 只验证 wire shape/value dom
 - Cargo metadata 的 `SourceId` 是 opaque identity；这里锁定的是 pinned toolchain 下
   本项目批准的 logical SourceId 字符串，不宣称其中 URL 是 Cargo 通用 canonical network
   URL。物理 index/download 可由 Cargo source replacement mirror 提供，不要求直连
-  crates.io origin。
+  crates.io 原始来源。
 - 除该 tool 自身外，任何 workspace member 都不得以任何 dependency kind、alias、optional
   或 target-specific direct edge 引用它；六个产品 runtime graph 另由 all-features/all-target
   cargo tree gate 扫描传递性 tooling 泄漏。
@@ -817,35 +780,35 @@ dispatcher 或 helper-heavy backend。JSON Schema 只验证 wire shape/value dom
 职责：
 
 - SQLite 连接初始化。
-- migrations。
-- transaction 封装。
-- application/service orchestration 与 repository 实现。
+- migration。
+- 事务封装。
+- application/service 编排与 repository 实现。
 - 复杂查询。
 - CAS claim。
-- append event。
-- task/comment/dependency/run/label/ontology use cases。
-- label proposal validation / persistence，以及 `LabelProposalProvider` trait 边界。
+- 追加 event。
+- task/comment/dependency/run/label/ontology 用例。
+- label proposal 验证/持久化，以及 `LabelProposalProvider` trait 边界。
 
-Public API 边界：
+公开 API 边界：
 
-- `kanban_sqlite::service` 是 implementation owner，负责 transaction、状态机 guard、
-  canonical writes、events、runs 和 provenance。
-- `kanban_sqlite::api` root 是 adapter/product use-case curated facade，用于 CLI、server、desktop
+- `kanban_sqlite::service` 是实现 owner，负责事务、状态机保护、
+  权威写入、events、runs 和来源记录。
+- `kanban_sqlite::api` 根模块是面向适配器/产品用例的精选 facade，用于 CLI、server、desktop
   和 dispatcher contract path 复用已允许的 use case、query、record 和 provenance 类型。它不拥有新的
-  orchestration 语义，不是 `service::*` broad re-export，也不导出 DB connection helper、init
-  helper、runtime lifecycle guard、provider/vector-store seam，或未列入 allowlist 的 service-only
-  implementation helper。
+  编排语义，不是 `service::*` 的宽泛重新导出，也不导出数据库连接辅助函数、init
+  辅助函数、运行时生命周期保护、provider/vector-store seam，或未列入允许清单的 service-only
+  实现辅助函数。
 - `kanban_sqlite::api::provider` 承载 adapter/test 需要显式注入 provider 或 vector store 的 seam，
   包括 `LabelProposalProvider`、manual/disabled proposal provider、`*_with` label suggestion/proposal
   helpers、label atom/vector-store status/query/rebuild/sync helpers，以及 trusted-suggestion validation DTO。
   这些符号不从 `api` root 暴露。
-- `kanban_sqlite::api::lifecycle` 承载进程 runtime/replace lifecycle plumbing：
+- `kanban_sqlite::api::lifecycle` 承载进程运行时/替换生命周期管线：
   `DatabaseRuntimeGuard`、`DatabaseReplaceGuard`、`begin_database_runtime` 和
-  `begin_database_replace`。这些 guard 是 binary/runtime owner 的基础设施，不是普通 product use-case。
+  `begin_database_replace`。这些保护是二进制程序/运行时 owner 的基础设施，不是普通产品用例。
 - `kanban_sqlite::db` 和 `kanban_sqlite::init` 仍是显式基础设施模块；`connect_file`、
   `init_database` 不从 `api` root 暴露。
-- crate root 不再提供 `kanban_sqlite::*` legacy re-export；旧 root path 是 breaking change，
-  并由 `tests/ui/root_legacy_reexport_removed.rs` 负向 compile contract 锁定。`api` root、
+- crate 根模块不再提供 `kanban_sqlite::*` 旧版重新导出；旧根路径是破坏性变更，
+  并由 `tests/ui/root_legacy_reexport_removed.rs` 负向编译契约锁定。`api` 根模块、
   `api::provider`、`api::lifecycle` 和显式 `db` / `init` 边界由 `public_api` trybuild contract 锁定。
 - `kanban_sqlite::application::SqliteApplication` 实现 `kanban-application` 的 backend port，
   用于需要以 application API 组合 selected use-case slice 的 adapter/benchmark 路径。
@@ -855,7 +818,7 @@ Public API 边界：
 
 关键要求：
 
-- 所有状态变化必须在 transaction 内完成。
+- 所有状态变化必须在事务内完成。
 - claim 必须使用 `BEGIN IMMEDIATE` 或等价机制抢写锁。
 - 不允许业务层执行裸 SQL 更新状态。
 - `kanban-sqlite` 不直接依赖 LLM SDK、HTTP AI client、runtime credentials 或外部模型
@@ -872,53 +835,34 @@ Public API 边界：
 - 调用 `kanban_sqlite::api` root 中的 shared use-case 函数；需要 provider/vector-store seam 时显式使用
   `kanban_sqlite::api::provider`，需要 runtime guard 时显式使用 `kanban_sqlite::api::lifecycle`；状态判断复用
   `kanban-core` 的纯状态机 helper。
-- 输出 human table 或 JSON。
-- 返回稳定 exit code。
-- `--locale` / `KANBAN_LOCALE` 只选择 human 输出语言；脚本契约仍以 `--json` 为准。
+- 输出人类可读表格或 JSON。
+- 返回稳定退出码。
+- `--locale` / `KANBAN_LOCALE` 只选择人类可读输出语言；脚本契约仍以 `--json` 为准。
 
-CLI 可以直接打开 SQLite DB 调用 service，不需要 server 常驻。
+CLI 可以直接打开 SQLite 数据库调用 service，不需要 server 常驻。
 
 ### 2.4 `kanban-server`
 
 职责：
 
 - localhost HTTP API。
-- 静态 Web UI hosting 或 API-only。
-- SSE event stream。
-- 请求 DTO 转 command input。
+- 只提供本机 API，不托管浏览器版看板。
+- SSE 事件流。
+- 请求 DTO 转换为命令输入。
 - 错误格式统一。
 - 根据 `Accept-Language` 渲染 `error.message`；`error.code` 和 JSON shape 保持稳定。
 - 通过 `AppState` 接收可选 graph/vector helper binary path；缺失时 graph/vector
   status endpoint 返回 degraded diagnostics，而不是把 helper-heavy crates 编进 server。
 
-默认只监听：
+独立运行 `kanban serve` 时默认只监听：
 
 ```text
 127.0.0.1:8721
 ```
 
-### 2.5 Dispatcher path
+Tauri Desktop 的内嵌服务器绑定 `127.0.0.1:0`，由操作系统选择可用端口。
 
-职责：
-
-- claim。
-- heartbeat。
-- reclaim。
-- worker profile 执行。
-- run result 写回。
-
-当前没有独立 `kanban-dispatcher` crate。Dispatcher 入口由 CLI 提供，
-执行路径复用同一套 `kanban-sqlite::service` 语义；`kanban serve`
-不启动 dispatcher，server 同进程运行 dispatcher 仍是后续扩展。
-
-CLI 入口：
-
-```bash
-kanban dispatch
-kanban dispatch --once
-```
-
-### 2.6 `kanban-vector`
+### 2.5 `kanban-vector`
 
 职责：
 
@@ -941,50 +885,50 @@ kanban dispatch --once
 - label atom 场景获取 model 名称时使用通用 `VectorStoreBackend::embedding_model()`；`chunk_embedding_model()` 仅作为 chunk 路径的兼容入口。
 - LanceDB 表仍按 derived store 隔离：task chunks 写入 `kb_chunks`，label atoms 写入 `kb_label_atoms`。
 
-### 2.7 Label proposal provider boundary
+### 2.6 标签提案 provider 边界
 
-Semantic label proposals 分成两层：
+语义 label proposal 分成两层：
 
 ```text
-upper provider layer
-  - manual/offline candidate input
-  - future local LLM / AI runtime integration
-  - credentials, model config, HTTP/client concerns
+上层 provider
+  - 人工/离线候选项输入
+  - 未来的本地 LLM / AI 运行时集成
+  - credential、模型配置与 HTTP/client 关注点
         ↓ LabelProposalProvider
 kanban-sqlite
-  - task/suggestion context lookup
-  - deterministic validation
-  - residual top1+margin gate
-  - proposal persistence and accept/reject lifecycle
+  - task/建议上下文查询
+  - 确定性验证
+  - 残差 top1+margin 门禁
+  - proposal 持久化与 accept/reject 生命周期
 ```
 
 `kanban-sqlite` 只接受 `LabelProposalProvider` trait object，不拥有真实 LLM provider。
-默认 `DisabledLabelProposalProvider` 只产生 degraded attempt；`ManualLabelProposalProvider`
-用于 CLI/API 显式传入的本地/offline candidate。未来真实 provider 的候选位置是
-`kanban-server`、本地 runtime、或独立 `kanban-ai` / `kanban-llm` crate，并且必须保持
-SQLite service 不知道 credentials、HTTP transport、prompt 模板或外部 SDK。
+默认 `DisabledLabelProposalProvider` 只产生降级尝试；`ManualLabelProposalProvider`
+用于 CLI/API 显式传入的本地/离线候选项。未来真实 provider 的候选位置是
+`kanban-server`、本地运行时或独立 `kanban-ai` / `kanban-llm` crate，并且必须保持
+SQLite service 不知道 credential、HTTP transport、prompt 模板或外部 SDK。
 
-### 2.8 Label ontology roles
+### 2.7 标签本体角色
 
 Label 系统有六个角色，但不是六个严格独立的存储层：
 
-1. `labels` / `task_labels`：canonical label identity 与 task 当前绑定事实；base identity
-   CRUD 是 vocabulary registry，不写 ontology ledger。
-2. `label_semantics`：canonical ontology semantics；`label_atoms` 是从 semantics 与 label
-   name 展开的 SQLite materialized projection。
-3. `kb_label_atoms` / `label_atom_index_boards`：可重建 label atom derived retrieval。
-4. `label suggest`：基于当前 task、atoms 和 vector evidence 的计算/诊断，不是持久 truth。
-5. `label_semantic_proposals`：候选新 label 的 lifecycle 记录，accept 前不改变当前 task-label truth。
-6. `label_ontology_*` ledger：observation、signal、action、validation provenance。
+1. `labels` / `task_labels`：权威 label identity 与 task 当前绑定事实；基础 identity
+   CRUD 是词汇表注册表，不写 ontology 账本。
+2. `label_semantics`：权威 ontology semantics；`label_atoms` 是从 semantics 与 label
+   name 展开的 SQLite 物化投影。
+3. `kb_label_atoms` / `label_atom_index_boards`：可重建 label atom 派生检索。
+4. `label suggest`：基于当前 task、atom 和向量证据的计算/诊断，不是持久事实。
+5. `label_semantic_proposals`：候选新 label 的生命周期记录，accept 前不改变当前 task-label 事实。
+6. `label_ontology_*` 账本：observation、signal、action、validation 来源记录。
 
-Proposal 与 ledger 是 SQLite canonical records，因为它们需要审计和可查询历史；但它们不替代
+Proposal 与账本是 SQLite 权威记录，因为它们需要审计和可查询历史；但它们不替代
 `task_labels` 的当前绑定事实，也不替代 `label_semantics` 的 ontology semantics。
-Ledger 覆盖 semantics/atom mutation provenance；`labels` identity create/delete 位于
-ledger 之外。
-正式文档使用 `canonical truth`、`derived retrieval`、`proposal workflow` 和
-`ontology provenance` 这些边界词；不要把未定义的内部简称写成架构术语。
+账本覆盖 semantics/atom 变更来源；`labels` identity create/delete 位于
+账本之外。
+正式文档使用“权威事实”“派生检索”“proposal 工作流”和
+“ontology 来源记录”这些边界词；不要把未定义的内部简称写成架构术语。
 
-### 2.9 Label ontology graph boundary
+### 2.8 标签本体图边界
 
 当前没有 label-ontology 专属 graph projection。`kanban graph` / Oxigraph 只镜像
 `entity_relations` 中已有的 Knowledge Substrate 关系，例如 task-board 与 task dependency；
@@ -1005,86 +949,89 @@ Knowledge Substrate 的派生层边界：
 
 ## 3. 数据流
 
-### 3.1 创建 task
+### 3.1 创建任务
 
 ```text
 CLI/Web
-  -> CreateTask command
-  -> validate input
-  -> compute initial status
-  -> insert tasks
-  -> insert task_events(kind='task.created')
-  -> return task snapshot
+  -> CreateTask 命令
+  -> 验证输入
+  -> 计算初始状态
+  -> 插入 tasks
+  -> 插入 task_events(kind='task.created')
+  -> 返回 task 快照
 ```
 
 初始状态计算：
 
 ```text
-if spec incomplete           -> triage
-else if scheduled_at > now   -> scheduled
-else if dependencies exist   -> todo
-else                         -> ready
+如果规格不完整                  -> triage
+否则如果 scheduled_at > 当前时间 -> scheduled
+否则如果存在依赖                -> todo
+否则                            -> ready 候选
+新任务 execution plan=unplanned  -> 将 ready 候选降为 todo
 ```
 
-### 3.2 Claim task
+添加第一个 step，或明确标记 `not_required` 后，服务才会重新计算是否进入 `ready`。
+
+### 3.2 领取任务
 
 ```text
 CLI/Web/Dispatcher
-  -> ClaimTask command
+  -> ClaimTask 命令
   -> BEGIN IMMEDIATE
-  -> verify task.status == ready
-  -> verify no unfinished parent dependencies
-  -> CAS update tasks to running
-  -> insert task_runs(status='running')
-  -> update tasks.current_run_id
-  -> insert task_events(kind='task.claimed')
+  -> 验证 task.status == ready
+  -> 验证不存在未完成的父任务依赖
+  -> 通过 CAS 把 tasks 更新为 running
+  -> 插入 task_runs(status='running')
+  -> 更新 tasks.current_run_id
+  -> 插入 task_events(kind='task.claimed')
   -> COMMIT
 ```
 
-### 3.3 Complete task
+### 3.3 完成任务
 
 ```text
 Worker/CLI/Web
-  -> CompleteTask command
+  -> CompleteTask 命令
   -> BEGIN IMMEDIATE
-  -> verify running/review
-  -> if running: verify claim token unless force=true
-  -> update task_runs
-  -> update tasks to done or review
-  -> clear claim fields
-  -> insert task_events(kind='task.completed')
-  -> children remain todo; derived dependency state reflects whether they are still blocked
+  -> 验证处于 running/review
+  -> 如果处于 running：除非 force=true，否则验证 claim token
+  -> 更新 task_runs
+  -> 把 tasks 更新为 done 或 review
+  -> 清除领取字段
+  -> 插入 task_events(kind='task.completed')
+  -> 子任务保持 todo；派生依赖状态反映它们是否仍被阻塞
   -> COMMIT
 ```
 
-### 3.4 Reopen task
+### 3.4 重新打开任务
 
 ```text
 CLI/Web
-  -> ReopenTask command
+  -> ReopenTask 命令
   -> BEGIN IMMEDIATE
-  -> verify task.status == done
-  -> verify reason is non-empty
-  -> recompute target from spec, schedule, dependencies, and execution plan
-  -> clear completed_at while preserving result_summary/result_json
-  -> insert task_events(kind='task.reopened')
-  -> recompute direct active children; leave running/blocked/review/done/archived children unchanged
+  -> 验证 task.status == done
+  -> 验证 reason 非空
+  -> 根据规格、计划时间、依赖和执行计划重新计算目标状态
+  -> 清除 completed_at，同时保留 result_summary/result_json
+  -> 插入 task_events(kind='task.reopened')
+  -> 重新计算直接的活跃子任务；running/blocked/review/done/archived 子任务保持不变
   -> COMMIT
 ```
 
-### 3.5 Web live update
+### 3.5 Web 实时更新
 
 ```text
-State-changing command
-  -> insert task_events with monotonically increasing id
-  -> server SSE loop polls or subscribes to events
-  -> browser receives event
-  -> browser fetches changed task or applies patch
+状态变更命令
+  -> 插入 ID 单调递增的 task_events
+  -> server SSE 循环轮询或订阅事件
+  -> 浏览器接收事件
+  -> 浏览器获取已变更 task 或应用补丁
 ```
 
 ---
 
-## 4. Process 模型
+## 4. 进程模型
 
 ### 4.1 无 server 模式
 
@@ -1106,21 +1053,13 @@ kanban serve
 启动：
 
 - localhost HTTP server。
-- Web UI。
+- SSE 事件流。
 
-适用：日常看板 UI。
-
-### 4.3 dispatcher 模式
-
-```bash
-kanban dispatch
-```
-
-启动本地调度循环。与 server 同进程运行 dispatcher 是后续扩展；当前 CLI 使用独立 `kanban dispatch` 前台 loop。
+适用：为 Tauri Desktop 或本机脚本提供 API；该命令本身不提供浏览器看板。
 
 ---
 
-## 5. Config
+## 5. 配置
 
 默认配置文件：
 
@@ -1128,37 +1067,23 @@ kanban dispatch
 ~/.config/kanban/config.toml
 ```
 
-示例：
+可解析的项目或全局配置示例：
 
 ```toml
-[data]
-db_path = "~/.local/share/kb/kb.db"
-data_dir = "~/.local/share/kb"
-attachments_dir = "~/.local/share/kb/attachments"
-logs_dir = "~/.local/state/kb/logs"
-
-[server]
-listen = "127.0.0.1:8721"
-open_browser = true
-
-[defaults]
 board = "default"
-actor = "auto" # auto = OS username or hostname/user
+db = "/path/to/kb.db"
 
-[dispatcher]
-enabled = false
-poll_interval_ms = 2000
-claim_ttl_ms = 300000
-max_concurrency = 1
-
-[workers.default]
-command = "echo Task $KB_TASK_ID: $KB_TASK_TITLE"
-concurrency = 1
-on_success = "done" # done | review
-on_failure = "blocked" # blocked | ready
+[vector]
+provider = "ollama"
+endpoint = "http://127.0.0.1:11434"
+model = "qwen3-embedding:0.6b"
+dimensions = 1024
 ```
 
-CLI 还支持项目级 active board 配置：
+当前配置只接受顶层 `board`、`db` 和可选的 `[vector]`；未知字段会被拒绝。默认操作者
+来自 `USER`、`USERNAME` 或回退值 `local`，不是配置字段。
+
+CLI 还支持项目级当前 board 配置：
 
 ```text
 <project>/.kb/config.toml
@@ -1170,24 +1095,24 @@ CLI 还支持项目级 active board 配置：
 board = "agent-work"
 ```
 
-Active board 解析顺序是 `--board`、`KB_BOARD`、向上查找最近 `.kb/config.toml`、最后 fallback 到 `default`。项目配置只选择同一个全局 SQLite DB 内的 board，不表示每个项目一个 DB。
+当前 board 的解析顺序是 `--board`、`KB_BOARD`、向上查找最近的 `.kb/config.toml`，最后回退到 `default`。项目配置只选择同一个全局 SQLite 数据库内的 board，不表示每个项目使用一个数据库。
 
 ---
 
-## 6. Concurrency
+## 6. 并发
 
 ### 6.1 SQLite 写入策略
 
 - 使用 WAL。
-- 使用短 transaction。
+- 使用短事务。
 - 对 claim/reclaim/complete 使用 `BEGIN IMMEDIATE`。
-- 使用 optimistic lock：`lock_version`。
+- 使用乐观锁：`lock_version`。
 - 并发 claim 同一 task 时，只有一个 `UPDATE ... WHERE status='ready' AND claim_token IS NULL` 成功。
 
 ### 6.2 不做的事情
 
 - 不引入分布式锁。
-- 不用网络文件系统共享 DB。
+- 不用网络文件系统共享数据库。
 - 不允许多个机器同时写同一 SQLite 文件。
 
 ### 6.3 同机多进程
@@ -1198,41 +1123,41 @@ Active board 解析顺序是 `--board`、`KB_BOARD`、向上查找最近 `.kb/co
 - 一个 server。
 - 一个 dispatcher。
 
-SQLite WAL 和 busy timeout 负责排队。业务层仍需保证 transaction 短小。
+SQLite WAL 和 busy timeout 负责排队。业务层仍需保证事务短小。
 
 ---
 
-## 7. Error Model
+## 7. 错误模型
 
-公开 error wire vocabulary 由 `kanban-contract::ApiErrorCode` 作为唯一闭合集合 owner。
+公开错误 wire 词汇由 `kanban-contract::ApiErrorCode` 作为唯一闭合集合 owner。
 HTTP status 映射与 operation-level transport 说明仅在 `docs/API_SPEC.md` 的
-“HTTP Status Mapping”表中维护；架构文档不复制 code 表，避免与 server adapter 的实际
+“HTTP 状态映射”表中维护；架构文档不复制 code 表，避免与 server 适配器的实际
 `KanbanError -> ApiErrorCode` 映射漂移。
 
-`error.message` 仍是面向人的 locale-dependent 文案；状态机、service guard、CAS、
-transaction 与 SQLite 错误 authority 不转移给 wire contract。
+`error.message` 仍是面向人的 locale 相关文案；状态机、service 保护、CAS、
+事务与 SQLite 错误权威不转移给 wire contract。
 
 ---
 
-## 8. Observability
+## 8. 可观测性
 
 本地工具仍需要基本可观测性：
 
 - `task_events` 是第一审计来源。
 - server 输出结构化日志。
 - dispatcher 对每次 run 写入 `task_runs`。
-- worker stdout/stderr 可写入本地 log 文件，DB 只存路径和摘要。
-- `kanban doctor` 检查 DB、WAL、schema、integrity、orphan run、基础关系表
-  board consistency、label ontology ledger consistency，并报告 Knowledge Substrate 的
-  `index_outbox` backlog、derived store dirty/error 状态和 per-store last_error。派生层
-  异常不改变 SQLite task truth；operator 通过 sync/rebuild 恢复 Tantivy/Oxigraph/LanceDB。
+- worker stdout/stderr 可写入本地日志文件，数据库只存路径和摘要。
+- `kanban doctor` 检查数据库、WAL、schema、完整性、孤儿 run、基础关系表
+  board 一致性、label ontology 账本一致性，并报告 Knowledge Substrate 的
+  `index_outbox` 积压、派生存储 dirty/error 状态和各存储的 last_error。派生层
+  异常不改变 SQLite task 事实；操作者通过同步/重建恢复 Tantivy/Oxigraph/LanceDB。
 
 ### 8.1 Board scope 与 schema/service/doctor 分工
 
-Board 是本地 project/board，不是 tenant。正常写路径的隔离边界在 service 层：
+Board 是本地 project/board，不是租户。正常写路径的隔离边界在 service 层：
 CLI、HTTP、desktop 和 dispatcher 通过 `kanban-sqlite::service` resolve board/task/label/run，
-再在同一 transaction 中写 canonical SQLite truth。Derived stores 只消费 SQLite/outbox
-投影，不拥有 canonical write 权限。
+再在同一事务中写入权威 SQLite 事实。派生存储只消费 SQLite/outbox
+投影，不拥有权威写入权限。
 
 关键关系表已经使用包含 `board_id` 的 composite FK 或 trigger。`task_labels`、
 `task_dependencies`、`task_runs`、`task_comments`、`task_attachments` 在 SQLite 层直接
@@ -1242,68 +1167,55 @@ refs 的 board scope。Ontology action-signal 使用 board-scoped composite FK�
 ontology refs、parent/supersede links、proposal resolved label 等用 triggers 保护；historical
 atom refs 保持 soft ref。
 
-- service guard 是普通 CLI/API/Desktop/dispatcher 写入的主防线；
-- `kanban doctor` 是现有 DB 的只读巡检层，发现 cross-board relationship rows 或
-  `PRAGMA foreign_key_check` violation 时让 `ok=false`；
-- JSONL import 在 replace transaction 提交前运行同类 consistency/FK gate，失败会回滚整个
-  import。
+- service 保护是普通 CLI/API/Desktop/dispatcher 写入的主防线；
+- `kanban doctor` 是现有数据库的只读巡检层，发现跨 board 关系记录或
+  `PRAGMA foreign_key_check` 违规时让 `ok=false`；
+- JSONL import 在替换事务提交前运行同类一致性/外键门禁，失败会回滚整个
+  导入。
 
 ---
 
-## 9. Security Boundary
+## 9. 安全边界
 
 因为不做多用户/远程：
 
 - 默认只绑定 `127.0.0.1`。
 - 不提供登录系统。
 - 不提供远程访问配置。
-- 不在 API 中执行任意 shell，worker profile 只能来自本地 config。
-- 附件路径必须限制在 data dir 内，防止 path traversal。
+- 不在 API 中执行任意 shell，worker profile 只能来自本地配置。
+- 附件路径必须限制在数据目录内，防止路径穿越。
 
 
-### Transport descriptor boundary
+### 传输描述符边界
 
-`kanban-contract` 是 localhost transport 的 method/path authority：其 default feature 无 runtime HTTP dependency，仍可被 leaf schema tool 离线使用。`kanban-server::router::registered_api_routes()` 仅提供显式 `adapter_id` 和真实 handler；path/method 从 contract descriptor 读取。这样 CLI/JSONL inventory 与 API/SSE transport identity 分层，server 不能自行复制 transport strings。
+`kanban-contract` 是 localhost 传输的 method/path 权威：其默认 feature 无运行时 HTTP 依赖，仍可被叶子 schema 工具离线使用。`kanban-server::router::registered_api_routes()` 仅提供显式 `adapter_id` 和真实 handler；path/method 从 contract 描述符读取。这样 CLI/JSONL 清单与 API/SSE 传输标识分层，server 不能自行复制传输字符串。
 
-每个 API/SSE semantic contract 还必须显式声明 HTTP location；其它 surface 必须声明
-`NoTransport`。任意 `Adopted` contract 与 endpoint exact reference 都必须保持
+每个 API/SSE 语义 contract 还必须显式声明 HTTP location；其它公开面必须声明
+`NoTransport`。任意 `Adopted` contract 与端点精确引用都必须保持
 `granularity=Exact`。唯一 method/path、精确 `operation_key` 和单一 location 共同保证一个
-`ExactSurface` contract 不可能合法绑定两个 endpoint obligations，因此不保留不可达的全局
-second-binding guard。`SharedComponent` 允许被多个 endpoint 显式链接，或由同 surface 的真实
-adoption witness 证明非 orphan；这两个条件是 OR。shared 永远不计入 endpoint exact coverage，
-也不单独决定 endpoint migration state。
+`ExactSurface` contract 不可能合法绑定两个端点义务，因此不保留不可达的全局
+第二绑定保护。`SharedComponent` 允许被多个端点显式链接，或由同一公开面的真实
+采用 witness 证明不是孤儿；这两个条件取其一。共享 contract 永远不计入端点精确覆盖，
+也不单独决定端点迁移状态。
 
-B1-C1 已把两个 board task-read endpoint 的 path/query transport 收口为 4 个 endpoint-specific
-exact contract。两个 server-local typed Axum extractor 各自绑定对应 path/query DTO，并且各自只从
-`parts.uri.query()` 调用一次共享 ordered parser；handler 不再持有 `Path`、`RawQuery` 或第二套
-`Query<T>` extractor。parser 以 8192 bytes 为 raw 总预算；pair cap 由 9/4/3/32 repeated
-budgets 加 6 个 scalar 参数推导为 54。只有 `status`、`priority`、`label`、`plan_filter` 可重复，
-不同值保留首次出现顺序；重复语义值、纯 Unicode 空白 label、未知 key、旧 `search` alias、
-scalar duplicate 及各字段预算越界均失败关闭。wire limit 由
-`kanban-contract::MAX_TASK_READ_LIMIT` 拥有；`kanban-sqlite::service::MAX_TASK_LIST_LIMIT` 直接引用
-唯一 application authority，server 对这个实际 defensive path 建立编译期相等门禁。该边界只
-负责 wire grammar 与 DTO 到既有 application option 的显式映射；service 查询行为与
-`kanban-core` 状态机语义未改变。两个 endpoint 的 path/query
-obligation 已是 `Contract`，GET body 是 `NotApplicable`；headers 和 success response 仍为
-`Todo`，因此 endpoint migration state 保持 `Generated`。
-
-
-## B1-C2b task-read 响应边界
-
-`kanban-contract` 拥有共享 `ApiTask`/`ApiLabel` 与既有 pagination primitives，两个 endpoint 各自拥有闭合 response root；server adapter 与 Desktop consumer 不另建 wire DTO。精确 wire 行为见 [API_SPEC](API_SPEC.md#b1-c2b-task-read-成功响应契约)，schema/adoption 证据见 [SCHEMA_CONTRACTS](SCHEMA_CONTRACTS.md#b1-c2b-task-read-成功响应契约)。
+两个 task-read 端点的 path、query、headers 与成功响应都由
+端点专属精确 contract 覆盖，当前迁移状态为 `Adopted`。精确 wire 形状、
+query 预算、producer/consumer 证据与实时覆盖状态以 `docs/API_SPEC.md`、
+`docs/SCHEMA_CONTRACTS.md` 和生成的 schema artifact 为准；架构层只规定传输权威
+和共享 service 路径，不复制阶段性冻结统计。
 
 
 ---
 
-# File: docs/STATE_MACHINE.md
+# 文件：docs/STATE_MACHINE.md
 
-# State Machine
+# 状态机规范
 
-本文件定义 canonical task status、合法 transition、guard 与 side effects。
+本文件定义权威任务状态、合法转换、守卫条件与副作用。
 
 ---
 
-## 1. Status Enum
+## 1. 状态枚举
 
 ```text
 triage | todo | scheduled | ready | running | blocked | review | done | archived
@@ -1331,42 +1243,38 @@ pub enum TaskStatus {
 
 ## 2. 状态职责
 
-| Status | 是否可编辑 | 是否可 claim | 是否默认展示 | 是否参与 promotion | 说明 |
-|---|---:|---:|---:|---:|---|
-| `triage` | 是 | 否 | 是 | 否 | 待澄清。 |
-| `todo` | 是 | 否 | 是 | 否 | 已定义，但依赖未完成，或尚未被人工提升到 ready。 |
-| `scheduled` | 是 | 否 | 是 | 否 | 等时间到；到期后仍需显式 promote 才进入 ready。 |
-| `ready` | 是 | 是 | 是 | 否 | 已显式进入可执行队列。 |
-| `running` | 部分 | 否 | 是 | 否 | 正在执行。 |
-| `blocked` | 是 | 否 | 是 | 否 | 阻塞。 |
-| `review` | 是 | 否 | 是 | 否 | 待检查。 |
-| `done` | 部分 | 否 | 默认可隐藏 | 否 | 已完成。 |
-| `archived` | 否 | 否 | 默认隐藏 | 否 | 归档。 |
+| 状态 | 是否可编辑 | 是否可领取 | 是否默认展示 | 说明 |
+|---|---:|---:|---:|---|
+| `triage` | 是 | 否 | 是 | 待澄清。 |
+| `todo` | 是 | 否 | 是 | 已定义，但依赖或执行计划尚未允许进入 `ready`。 |
+| `scheduled` | 是 | 否 | 是 | 等时间到；时间到本身不会改变状态。 |
+| `ready` | 是 | 是 | 是 | 已进入可执行队列。 |
+| `running` | 部分 | 否 | 是 | 正在执行。 |
+| `blocked` | 是 | 否 | 是 | 阻塞。 |
+| `review` | 是 | 否 | 是 | 待检查。 |
+| `done` | 部分 | 否 | 默认可隐藏 | 已完成。 |
+| `archived` | 否 | 否 | 默认隐藏 | 归档。 |
 
 ---
 
-## 3. Transition Commands
+## 3. 状态转换命令
 
-### 3.1 Create
+### 3.1 创建（`create`）
 
 ```text
 none -> triage | todo | scheduled | ready
 ```
 
-Initial status 计算：
+候选初始状态按以下顺序计算：
 
-```text
-if input.status explicitly provided and valid for creation:
-    use explicit status
-else if required spec missing:
-    triage
-else if scheduled_at > now:
-    scheduled
-else if parent dependencies exist and not all parents are done or archived:
-    todo
-else:
-    ready
-```
+1. 如果调用方显式提供了允许创建的 `input.status`，使用它作为候选状态。
+2. 否则，如果必需规格不完整，候选状态为 `triage`。
+3. 否则，如果 `scheduled_at > now`，候选状态为 `scheduled`。
+4. 否则，如果存在尚未进入 `done` 或 `archived` 的父依赖，候选状态为 `todo`。
+5. 否则，候选状态为 `ready`。
+
+候选状态为 `ready` 时，创建服务仍会保存为 `todo`，因为新任务的执行计划从
+`unplanned` 开始。
 
 允许显式创建状态：
 
@@ -1374,331 +1282,350 @@ else:
 triage | todo | scheduled | ready
 ```
 
+这里的 `ready` 是允许请求并通过基础守卫的候选状态，不表示新任务会直接保存为
+`ready`。新任务还没有执行计划，因此服务会把候选 `ready` 保存为
+`todo`，计划状态为 `unplanned`。添加第一个 step 使计划成为 `planned`，或者通过
+`kanban task step not-required` 填写原因后标记为 `not_required`；其它守卫也满足
+时，重新计算才会进入 `ready`。
+
+删除最后一个 step 会使派生计划回到 `unplanned`，并把可重新计算的任务退回
+`todo`。当前删除操作只写入 `task.step.removed`，不会额外写入
+`task.execution_plan.unplanned` 事件。
+
 不允许直接创建：
 
 ```text
-running | review | done | archived
+running | blocked | review | done | archived
 ```
 
-Side effects：
+副作用：
 
-- insert `tasks`
-- insert `task_events(kind='task.created')`
+- 向 `tasks` 插入记录。
+- 写入 `task_events(kind='task.created')`。
 
 ---
 
-### 3.2 Specify
+### 3.2 明确规格（`specify`）
 
 ```text
 triage -> todo | scheduled | ready
 ```
 
-Guard：
+守卫条件：
 
-- title 非空。
-- description/spec 满足本地校验。
+- `title` 非空。
+- `description` / 规格满足本地校验。
 - 如果 `scheduled_at > now`，目标必须是 `scheduled`。
-- 如果 parent dependencies 未全部进入 `done` 或 `archived`，目标必须是 `todo`。
+- 如果父依赖未全部进入 `done` 或 `archived`，目标必须是 `todo`。
+- 如果执行计划仍为 `unplanned`，目标必须是 `todo`。
 - 否则可进入 `ready`。
 
-Side effects：
+副作用：
 
-- update task fields。
-- insert `task_events(kind='task.specified')`。
+- 更新任务字段。
+- 写入 `task_events(kind='task.specified')`。
 
 ---
 
-### 3.3 Promote
+### 3.3 提升为可执行（`promote`）
 
 ```text
 todo -> ready
 scheduled -> ready
 ```
 
-Guard：
+守卫条件：
 
-- 所有 parent dependency 都是 `done` 或 `archived`。
-- execution plan 不是 `unplanned`：必须有 step 形成 `planned`，或显式标记 `not_required` 并填写 reason。
-- task 未 archived。
+- 所有父依赖都是 `done` 或 `archived`。
+- 执行计划不是 `unplanned`：必须有 step 形成 `planned`，或显式标记
+  `not_required` 并填写原因。
+- 任务未归档。
 - 对 `scheduled`，必须 `scheduled_at <= now`。
 
-Side effects：
+副作用：
 
-- update status。
-- insert `task_events(kind='task.promoted')`。
+- 更新状态。
+- 写入 `task_events(kind='task.promoted')`。
 
-Promote 是显式 ready 意图，通常由人工 CLI/Web action 触发：
+`promote` 表示显式进入 `ready` 的意图，通常由人工 CLI 或 Web 操作触发：
 
 ```bash
 kanban task promote t_xxx
 ```
 
+执行计划或规格变更也可能触发活动状态重算。例如添加第一个 step 或标记
+`not_required` 后，满足其它条件的 `todo` 会通过 `task.recomputed` 进入 `ready`，
+而不是写入 `task.promoted`。排期时间到达本身不会触发这种重算。
+
 ---
 
-### 3.4 Claim / Start
+### 3.4 领取 / 开始（`claim` / `start`）
 
 ```text
 ready -> running
 ```
 
-Guard：
+守卫条件：
 
-- task.status == `ready`。
+- `task.status == 'ready'`。
 - `claim_token IS NULL`。
-- 所有 parent dependency 都是 `done` 或 `archived`。
-- execution plan 不是 `unplanned`。
-- task 未 archived。
+- 所有父依赖都是 `done` 或 `archived`。
+- 执行计划不是 `unplanned`。
+- 任务未归档。
 
-Atomic side effects in one transaction：
+同一事务内的原子副作用：
 
-1. CAS update `tasks`：
+1. 以 CAS 更新 `tasks`：
    - `status = 'running'`
-   - `claim_token = <new token>`
+   - `claim_token = <new_token>`
    - `claim_owner = <actor>`
    - `claim_expires_at = now + ttl`
    - `last_heartbeat_at = now`
    - `started_at = COALESCE(started_at, now)`
    - `lock_version = lock_version + 1`
-2. insert `task_runs(status='running')`
-3. update `tasks.current_run_id`
-4. insert `task_events(kind='task.claimed')`
+2. 插入 `task_runs(status='running')`。
+3. 更新 `tasks.current_run_id`。
+4. 写入 `task_events(kind='task.claimed')`。
 
-Failure：
+失败：
 
-- 若 affected rows = 0，返回 `claim_conflict` 或 `dependency_blocked`。
+- 如果受影响行数为 0，返回 `claim_conflict` 或 `dependency_blocked`。
 
 ---
 
-### 3.5 Heartbeat
+### 3.5 心跳（`heartbeat`）
 
 ```text
 running -> running
 ```
 
-Guard：
+守卫条件：
 
-- task.status == `running`。
-- claim token 匹配。
-- claim 未被 force reclaimed。
+- `task.status == 'running'`。
+- 领取凭证匹配。
+- 领取尚未被强制回收。
 
-Side effects：
+副作用：
 
-- extend `claim_expires_at`。
-- update `last_heartbeat_at`。
-- update active `task_runs.last_heartbeat_at`。
-- insert `task_events(kind='task.heartbeat')` 可采样写入，避免过多事件。
+- 延长 `claim_expires_at`。
+- 更新任务的 `last_heartbeat_at`。
+- 更新活动 run 的 `claim_expires_at` 与 `last_heartbeat_at`。
+- 每次显式心跳都写入 `task_events(kind='task.heartbeat')`。
 
-建议：
-
-- 默认每次 heartbeat 更新 run/task。
-- event 可每 N 次或每 60s 写一次。
-- 对 `running` task，后续有效 task-scoped event（例如 comment、step、label 变更）也可作为 implicit liveness signal：服务层刷新 task `claim_expires_at`、`last_heartbeat_at` 和 active run `last_heartbeat_at`，但不额外写 `task.heartbeat` event，避免递归和轮询噪音。
-- board-level event 或没有 `task_id` 的 event 不刷新 running lease。
+对于 `running` 任务，后续有效的任务级事件（例如评论、step 或 label 变更）也会作为
+隐式存活信号：服务层刷新任务与活动 run 的领取期限和最后心跳时间，但不额外写入
+`task.heartbeat` 事件。board 级事件或没有 `task_id` 的事件不会刷新领取期限。
 
 ---
 
-### 3.6 Complete
+### 3.6 完成（`complete`）
 
 ```text
 running -> done
 review -> done
 ```
 
-Guard：
+守卫条件：
 
-- `running -> done` 必须 claim token 匹配，除非 `force=true`。
-- `review -> done` 不需要 claim token。
-- 如果存在 required steps，它们必须全部为 `done` 或 `skipped`；optional steps 不阻塞 parent complete。
+- `running -> done` 必须匹配领取凭证，除非 `force=true`。
+- `review -> done` 不需要领取凭证。
+- 如果存在必需 step，它们必须全部为 `done` 或 `skipped`；可选 step 不阻塞父任务完成。
 
-Side effects：
+副作用：
 
-- update task status `done`。
-- set `completed_at = now`。
-- clear claim fields。
-- update active run status `succeeded`。
-- insert `task_events(kind='task.completed')`。
-- 不自动 promote child tasks；child 保持 `todo`，由 derived dependency state 表示是否仍被 parent 阻塞。
+- 把任务状态更新为 `done`。
+- 设置 `completed_at = now`。
+- 清除领取字段。
+- 把活动 run 状态更新为 `succeeded`。
+- 写入 `task_events(kind='task.completed')`。
+- 不自动改写或提升子任务；子任务保持原状态。此前为 `todo` 的仍是 `todo`，派生依赖
+  状态会更新为不再受该父任务阻塞。
 
 ---
 
-### 3.7 Submit Review
+### 3.7 提交审核（`review`）
 
 ```text
 running -> review
 ```
 
-Guard：
+守卫条件：
 
-- claim token 匹配，除非 `force=true`。
+- 领取凭证匹配，除非 `force=true`。
 
-Side effects：
+副作用：
 
-- update task status `review`。
-- clear claim fields。
-- update active run status `succeeded` with `outcome='review'`。
-- insert `task_events(kind='task.submitted_for_review')`。
+- 把任务状态更新为 `review`。
+- 清除领取字段。
+- 把活动 run 状态更新为 `succeeded`。
+- 写入 `task_events(kind='task.submitted_for_review')`。
 
 ---
 
-### 3.8 Block
+### 3.8 阻塞（`block`）
 
 ```text
 triage | todo | scheduled | ready | running | review -> blocked
 ```
 
-Guard：
+守卫条件：
 
-- reason 非空。
-- 若从 `running` block，必须 claim token 匹配，除非 `force=true`。
+- `reason` 非空。
+- 从 `running` 进入 `blocked` 时必须匹配领取凭证，除非 `force=true`。
 
-Side effects：
+副作用：
 
-- update status `blocked`。
-- set `status_reason`。
-- if running: close active run as `failed` or `canceled` depending input。
-- clear claim fields。
-- insert `task_events(kind='task.blocked')`。
+- 把状态更新为 `blocked`。
+- 设置 `status_reason`。
+- 如果原状态为 `running`，把活动 run 关闭为 `failed`，并记录退出码 `1`。
+- 清除领取字段。
+- 写入 `task_events(kind='task.blocked')`。
 
 ---
 
-### 3.9 Unblock
+### 3.9 解除阻塞（`unblock`）
 
 ```text
 blocked -> triage | todo | scheduled | ready
 ```
 
-目标状态计算：
+目标状态按以下顺序计算：
 
-```text
-if spec incomplete:
-    triage
-else if scheduled_at > now:
-    scheduled
-else if parents not all done:
-    todo
-else:
-    ready
-```
+1. 规格不完整时进入 `triage`。
+2. 否则，`scheduled_at > now` 时进入 `scheduled`。
+3. 否则，父依赖未全部完成时进入 `todo`。
+4. 否则，执行计划仍为 `unplanned` 时进入 `todo`。
+5. 否则进入 `ready`。
 
-Side effects：
+副作用：
 
-- clear `status_reason`。
-- update status to computed target。
-- insert `task_events(kind='task.unblocked')`。
+- 清除 `status_reason`。
+- 更新为计算出的目标状态。
+- 写入 `task_events(kind='task.unblocked')`。
 
 ---
 
-### 3.10 Reclaim
+### 3.10 回收领取（`reclaim`）
 
 ```text
-running -> ready | blocked
+running -> ready | todo | blocked
 ```
 
-Guard：
+守卫条件：
 
-任一条件满足：
-
-- `claim_expires_at <= now`。
-- worker PID 已不存在。
-- run 超过 max runtime。
-- 人工 `force=true`。
+- 批量自动回收只扫描 `running` 且 `claim_expires_at <= now` 的任务。
+- 指定任务回收要求任务为 `running`，并且领取已过期或显式传入 `force=true`。
+- 当前实现不检查工作进程 PID，也没有最长运行时间回收。
 
 目标状态：
 
 - 默认 `ready`。
-- 如果 retry_count >= max_retries，则 `blocked`。
+- 如果回收后的 `retry_count` 达到 `max_retries`，则进入 `blocked`。
+- 如果目标原本为 `ready`，但执行计划守卫不再满足，则降级为 `todo`。
 
-Side effects：
+副作用：
 
-- close active run as `expired` or `canceled`。
-- clear claim fields。
-- increment retry_count if appropriate。
-- insert `task_events(kind='task.reclaimed')`。
+- 把活动 run 关闭为 `expired` 或 `canceled`。
+- 清除领取字段。
+- 增加 `retry_count`。
+- 写入 `task_events(kind='task.reclaimed')`。
 
 ---
 
-### 3.11 Archive
+### 3.11 归档（`archive`）
 
 ```text
 triage | todo | scheduled | ready | blocked | review | done -> archived
 ```
 
-默认不允许直接 archive `running`，除非 `force=true`。
+默认不允许直接归档 `running`，除非 `force=true`。非强制归档还要求所有必需 step
+均已完成或跳过；`force=true` 才会绕过该守卫。
 
-Side effects：
+副作用：
 
-- set `archived_at = now`。
-- set status `archived`。
-- clear claim fields if force。
-- insert `task_events(kind='task.archived')`。
-
----
-
-### 3.11.1 Board archive
-
-Board archive is a board lifecycle operation, not a task status transition.
-
-Rules：
-
-- Set `boards.archived_at = now`。
-- Insert `task_events(kind='board.archived')`。
-- Do not rewrite tasks on that board.
-- Reject archive if the board has any `running` task or any `running` task_run.
-- After archive, ordinary task/comment/dispatcher mutations against that board are rejected.
-- Read-only history queries for events, runs, and comments remain available for audit.
+- 设置 `archived_at = now`。
+- 把状态更新为 `archived`。
+- 强制归档时清除领取字段。
+- 写入 `task_events(kind='task.archived')`。
 
 ---
 
-### 3.12 Reopen
+#### 3.11.1 看板归档
+
+看板归档属于 board 生命周期操作，不是任务状态转换。
+
+规则：
+
+- 设置 `boards.archived_at = now`。
+- 写入 `task_events(kind='board.archived')`。
+- 不改写该看板上的任务。
+- 如果看板上存在 `running` 任务或 `running` run 记录，则拒绝归档。
+- 归档后，拒绝针对该看板的普通任务、评论和内部实验性 dispatcher 写操作。
+- 事件、run 记录与评论的只读历史查询仍然可用，以便审计。
+
+---
+
+### 3.12 重新打开（`reopen`）
 
 ```text
 done -> triage | todo | scheduled | ready
 ```
 
-Guard：
+守卫条件：
 
-- 只允许 `done` task reopen；`review`、`archived` 和非 done task 必须拒绝。
+- 只允许重新打开 `done` 任务；`review`、`archived` 和其它状态必须拒绝。
 - `reason` 必须非空。
 
 目标状态由服务端重新计算，不由调用方指定：
 
-```text
-if spec incomplete -> triage
-else if scheduled_at > now -> scheduled
-else if parent dependencies not all done/archived -> todo
-else if execution plan is not ready -> todo
-else -> ready
-```
+1. 规格不完整时进入 `triage`。
+2. 否则，`scheduled_at > now` 时进入 `scheduled`。
+3. 否则，父依赖未全部进入 `done` 或 `archived` 时进入 `todo`。
+4. 否则，执行计划尚不可执行时进入 `todo`。
+5. 否则进入 `ready`。
 
-Side effects：
+副作用：
 
-- clear `completed_at`。
-- preserve `result_summary` / `result_json`。
-- insert `task_events(kind='task.reopened')`，payload 包含 `from`、`to`、`reason`、`original_completed_at`。
-- 直接依赖该 task 的 child 中，仅 `triage|todo|scheduled|ready` 会按 readiness 重新计算；`running|blocked|review|done|archived` 不隐式改写。
+- 清除 `completed_at`。
+- 保留 `result_summary` / `result_json`。
+- 写入 `task_events(kind='task.reopened')`，payload 包含 `from`、`to`、`reason`、
+  `original_completed_at`。
+- 直接依赖该任务的子任务中，仅 `triage | todo | scheduled | ready` 会按可执行条件
+  重新计算；`running | blocked | review | done | archived` 不会被隐式改写。
 
 ---
 
-## 4. Transition Matrix
+## 4. 当前已实现的显式转换矩阵
 
-| From \ To | triage | todo | scheduled | ready | running | blocked | review | done | archived |
+| 来源 \ 目标 | triage | todo | scheduled | ready | running | blocked | review | done | archived |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| none | create | create | create | create | - | - | - | - | - |
+| none | create | create | create | 请求 `ready` 后保存为 `todo` | - | - | - | - | - |
 | triage | - | specify | specify | specify | - | block | - | - | archive |
-| todo | - | - | schedule | promote/manual | - | block | - | - | archive |
-| scheduled | - | unschedule | - | promote | - | block | - | - | archive |
-| ready | - | demote | schedule | - | claim | block | - | - | archive |
-| running | - | - | - | reclaim | - | block | submit_review | complete | force_archive |
+| todo | - | - | - | promote | - | block | - | - | archive |
+| scheduled | - | - | - | promote | - | block | - | - | archive |
+| ready | - | - | - | - | claim | block | - | - | archive |
+| running | - | reclaim | - | reclaim | - | block / reclaim | submit_review | complete | force_archive |
 | blocked | unblock | unblock | unblock | unblock | - | - | - | - | archive |
 | review | - | - | - | - | - | block | - | complete | archive |
 | done | reopen | reopen | reopen | reopen | - | - | - | - | archive |
-| archived | restore | restore | restore | restore | - | - | - | - | - |
+| archived | - | - | - | - | - | - | - | - | - |
 
-`demote`、`schedule`、`restore` 可作为 v1+ 命令；task-level `reopen` 当前只实现 `done -> recomputed active status`。
+表中只列出当前已有的显式转换服务。由规格、依赖或执行计划变化触发的状态重算不作为
+独立命令列入矩阵；它们通过 `task.recomputed` 进入计算出的活动状态。任务级 `reopen`
+当前只实现从 `done` 进入服务端重新计算出的活动状态。
+
+### 4.1 未实现候选
+
+以下命令目前没有实现，不属于当前转换矩阵：
+
+- `schedule`
+- `unschedule`
+- `demote`
+- `restore`
 
 ---
 
-## 5. Dependency Rules
+## 5. 依赖规则
 
 ### 5.1 依赖语义
 
@@ -1706,25 +1633,31 @@ Side effects：
 parent_task_id -> child_task_id
 ```
 
-表示 child 被 parent 阻塞。只有 parent 为 `done` 或 `archived` 时，child 才能进入 `ready` 或 `running`。归档 parent 会满足 hard dependency guard，但不会删除 dependency edge，也不会自动 promote child。
+表示子任务被父任务阻塞。只有父任务为 `done` 或 `archived` 时，子任务才能进入
+`ready` 或 `running`。归档父任务会满足强依赖守卫，但不会删除依赖边，也不会自动
+提升子任务。
 
 ### 5.2 规则
 
-1. parent != child。
+1. `parent_task_id != child_task_id`。
 2. 新增依赖不能产生环。
-3. 如果给一个 `ready` child 增加未完成 parent（不是 `done` 或 `archived`），child 必须降级为 `todo`。
-4. 如果 parent 从 `done` 被 reopen，仅直接 child 中的 active recomputable 状态（`triage|todo|scheduled|ready`）按 readiness 重新计算；`blocked|review|running|done|archived` 不隐式改写。
-5. `running` child 不应被新增未完成依赖；除非 force，并且需要 block/reclaim。
+3. 如果给一个 `ready` 子任务增加未完成父任务（不是 `done` 或 `archived`），子任务必须
+   降级为 `todo`。
+4. 父任务从 `done` 被重新打开时，仅直接子任务中的可重新计算活动状态
+   （`triage | todo | scheduled | ready`）会按可执行条件重新计算；
+   `blocked | review | running | done | archived` 不会被隐式改写。
+5. 不允许给 `running` 子任务新增未完成依赖；当前接口没有强制例外。必须先通过阻塞或
+   回收让子任务退出 `running`，再新增依赖。
 
 ---
 
-## 6. UI Column Mapping
+## 6. UI 列映射
 
-UI column 不是状态真相，只是展示配置。
+UI 列不是状态真相，只是展示配置。
 
 默认列：
 
-| Column | Status |
+| 默认显示名 | 状态 |
 |---|---|
 | Triage | `triage` |
 | Todo | `todo` |
@@ -1739,35 +1672,35 @@ UI column 不是状态真相，只是展示配置。
 
 拖拽行为：
 
-- 从 `ready` 拖到 `running`：调用 claim/start。
-- 从 `running` 拖到 `done`：调用 complete，需 active claim 或 force。
-- 从任意非 terminal 拖到 `blocked`：弹窗要求 reason，调用 block。
-- 从 `blocked` 拖到其他列：调用 unblock，不直接设目标状态。
-- 拖到 `archived`：调用 archive。
+- 从 `ready` 拖到 `running`：调用 `claim` / `start`。
+- 从 `running` 拖到 `done`：调用 `complete`，需要活动领取或显式强制。
+- 从任意非终态拖到 `blocked`：弹窗要求填写原因，然后调用 `block`。
+- 从 `blocked` 拖到其他列：调用 `unblock`，不直接设置目标状态。
+- 拖到 `archived`：调用 `archive`。
 
 ---
 
-## 7. Testing Requirements
+## 7. 测试要求
 
 必须覆盖：
 
-1. transition matrix 单元测试。
-2. dependency cycle detection。
-3. `ready -> running` 并发 claim 只有一个成功。
-4. expired claim reclaim。
-5. block/unblock 重新计算目标状态。
-6. completion 后 child 保持 `todo`，并清除 derived dependency-blocked state。
-7. archived task 不被 dispatcher 处理。
-8. `unplanned` task 不能 promote/claim，dispatcher 也不能 claim。
-9. required step 未完成时 parent 不能 complete。
-10. illegal direct transition 返回 `invalid_transition`。
+1. 状态转换矩阵单元测试。
+2. 依赖环检测。
+3. `ready -> running` 并发领取只有一个成功。
+4. 过期领取回收。
+5. `block` / `unblock` 重新计算目标状态。
+6. 完成父任务后不自动改写子任务状态，并更新派生的依赖阻塞状态。
+7. 内部实验性 dispatcher 不处理已归档任务。
+8. `unplanned` 任务不能 `promote` 或 `claim`，内部实验性 dispatcher 也不能领取。
+9. 必需 step 未完成时，父任务不能 `complete`。
+10. 非法直接转换返回 `invalid_transition`。
 
 
 ---
 
-# File: docs/DATA_MODEL.md
+# 文件：docs/DATA_MODEL.md
 
-# Data Model
+# 数据模型
 
 本文件定义领域模型、SQLite 表、ID、时间、JSON、附件、事件与常用查询。
 
@@ -1775,20 +1708,27 @@ UI column 不是状态真相，只是展示配置。
 
 ## 1. ID 规范
 
-所有 public ID 使用带前缀的 ULID/UUID-like string，便于日志和 CLI 区分。
+除预置看板列这类固定 ID 外，公开实体 ID 通常使用带前缀的 ULID（类 UUID 字符串），
+便于在日志和 CLI 中区分。
 
 | 对象 | 前缀 | 示例 |
 |---|---|---|
-| Board | `b_` | `b_01HY...` |
-| Task | `t_` | `t_01HY...` |
-| Run | `r_` | `r_01HY...` |
-| Comment | `c_` | `c_01HY...` |
-| Attachment | `a_` | `a_01HY...` |
-| Label | `l_` | `l_01HY...` |
-| Column | `col_` | `col_ready` |
-| Event | `e_` | `e_01HY...` |
+| 看板（Board） | `b_` | `b_01HY...` |
+| 任务（Task） | `t_` | `t_01HY...` |
+| 步骤（Step） | `step_` | `step_01HY...` |
+| 执行记录（Run） | `r_` | `r_01HY...` |
+| 评论（Comment） | `c_` | `c_01HY...` |
+| 附件（Attachment） | `a_` | `a_01HY...` |
+| 标签（Label） | `l_` | `l_01HY...` |
+| 看板列（Column） | `col_` | `col_ready` |
+| 事件（Event） | `e_` | `e_01HY...` |
 
-`task_events.id` 同时保留自增 integer，用于 SSE offset 和顺序分页。
+`task_events.event_id` 保存带 `e_` 前缀的公开事件 ID；`task_events.id` 是单独的自增整数，
+用于 SSE 偏移量和顺序分页。
+
+领取凭证不是实体 ID。`tasks.claim_token` 与 `task_runs.claim_token` 使用
+`claim_...` 格式，例如 `claim_01HY...`；调用方必须把它视为临时凭证，不应当作可公开枚举的
+稳定身份。
 
 ---
 
@@ -1797,7 +1737,7 @@ UI column 不是状态真相，只是展示配置。
 所有时间字段使用：
 
 ```text
-INTEGER unix epoch milliseconds UTC
+INTEGER，UTC Unix 时间戳（毫秒）
 ```
 
 字段命名：
@@ -1811,7 +1751,7 @@ INTEGER unix epoch milliseconds UTC
 - `claim_expires_at`
 - `last_heartbeat_at`
 
-Rust 内部建议使用 `time::OffsetDateTime`，DB 边界转换为 `i64` milliseconds。
+Rust 内部建议使用 `time::OffsetDateTime`，在数据库边界转换为以毫秒表示的 `i64`。
 
 ---
 
@@ -1825,7 +1765,7 @@ CHECK(json_valid(field_name))
 
 默认值：
 
-<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
+<!-- schema-doc-ignore: 仅作示意或只展示部分载荷；已提交的结构 fixture 才是可执行的权威依据 -->
 ```json
 {}
 ```
@@ -1835,113 +1775,116 @@ CHECK(json_valid(field_name))
 | 字段 | 说明 |
 |---|---|
 | `tasks.metadata_json` | 轻量扩展信息。 |
-| `task_runs.metadata_json` | worker profile、环境、命令摘要等。 |
-| `task_events.payload_json` | event payload。 |
+| `task_runs.metadata_json` | worker 配置、环境、命令摘要等。 |
+| `task_events.payload_json` | 事件载荷。 |
 
-禁止把大对象、stdout/stderr 全量日志、附件 blob 放进 JSON。
+禁止把大对象、完整 stdout/stderr 日志或附件二进制内容放进 JSON。
 
 ---
 
-## 4. Board
+## 4. 看板（Board）
 
-Board 是本地 project/board，不是 tenant。
+看板（Board）表示本地项目或看板，不是租户。
 
 主要字段：
 
 | 字段 | 说明 |
 |---|---|
-| `id` | `b_` prefixed ID。 |
-| `slug` | CLI/Web 使用的人类可读短名。 |
+| `id` | 带 `b_` 前缀的 ID。 |
+| `slug` | CLI 和 Web 使用的人类可读短名。 |
 | `name` | 展示名。 |
 | `description` | 可选说明。 |
 | `created_at` | 创建时间。 |
 | `updated_at` | 更新时间。 |
 | `archived_at` | 归档时间。 |
 
-默认 board：
+默认看板：
 
 ```text
 default
 ```
 
-Board slug 由 service 层校验：必须唯一、非空、不超过 64 bytes，以小写 ASCII 字母或数字开头，只能包含小写 ASCII 字母、数字、`.`、`_`、`-`，并且不能使用 `b_`、`t_`、`r_`、`c_`、`a_`、`l_`、`col_`、`e_` 等保留前缀。这样可以避免和 public ID、`board#seq` task ref、路径式 alias 语法冲突。
+Board slug 由服务层校验：必须唯一、非空、不超过 64 字节，以小写 ASCII 字母或数字开头，只能包含小写 ASCII 字母、数字、`.`、`_`、`-`，并且不能使用 `b_`、`t_`、`r_`、`c_`、`a_`、`l_`、`col_`、`e_` 等保留前缀。这样可以避免与公开 ID、`board#seq` 任务引用和路径式别名语法冲突。
 
-Archived board 默认不出现在 board list，也不接受普通 task/comment/dispatcher 写入。归档只设置 board 的 `archived_at` 并写入 `board.archived` event，不改变 task 状态；如果 board 上仍有 `running` task 或 `running` run，归档会被拒绝。Events、runs、comments 等只读历史仍可通过显式 task/board identity 查询，用于审计。
+已归档的看板默认不出现在看板列表中，也不接受普通任务、评论或实验性 dispatcher 写入。归档只设置看板的 `archived_at` 并写入 `board.archived` 事件，不改变任务状态；如果看板上仍有 `running` 任务或 `running` 执行记录，归档会被拒绝。事件、执行记录、评论等只读历史仍可通过明确的任务或看板身份查询，用于审计。
 
-### 4.1 Board isolation 责任边界
+### 4.1 看板隔离的责任边界
 
-SQLite 是 canonical truth，但 board isolation 由 schema、service 和 diagnostic gate 共同保证：
+SQLite 是权威事实来源，但看板隔离由数据库结构、服务和诊断门禁共同保证：
 
-1. DB constraint：所有 board-scoped rows 都有 `board_id` 并引用 `boards(id)`；
-   referenced task / label / run id 也各自有 FK，确保引用对象存在。`task_labels`、
-   `task_dependencies`、`task_steps`、`task_execution_plans`、`task_runs`、`task_comments`、`task_attachments` 和较新的
-   label semantics / atoms / ontology link 表使用包含 `board_id` 的复合 FK，直接阻止这些
-   关系表出现 cross-board row。`task_events` 保留 nullable task/run refs 与
-   `ON DELETE SET NULL` 语义，由 INSERT/UPDATE triggers 校验非空 refs 的 board scope。
-2. Service guard：CLI、HTTP、desktop 和 dispatcher 的正常写路径必须先在同一 board
-   scope 内 resolve task、label、run 等对象，再写关系 row；例如 task label binding、
-   dependency、comment、event、run 和 attachment 都不应跨 board 组合。
-3. Doctor/import check：`kanban doctor` 和 JSONL import final gate 会只读检查基础关系表
-   中 `row.board_id` 与 referenced task / label / run 的 board 是否一致，并运行
-   `PRAGMA foreign_key_check`。任一 violation 都会成为 hard-error issue；import 会在
-   commit 前回滚整个 replace transaction。
+1. 数据库约束：所有看板作用域内的行都有 `board_id` 并引用 `boards(id)`；
+   被引用的任务、标签和执行记录 ID 也各自有外键，确保引用对象存在。`task_labels`、
+   `task_dependencies`、`task_execution_plans`、`task_runs`、`task_comments`、
+   `task_attachments` 和较新的标签语义、atom 与本体链接表使用包含 `board_id`
+   的复合外键，直接阻止这些关系表出现跨看板行。`task_steps` 的父任务也由复合外键
+   约束；可选的 `linked_task_id` 只有普通任务外键，其同看板约束由服务守卫与诊断或
+   导入门禁负责。`task_events` 保留可空的 task/run 引用和
+   `ON DELETE SET NULL` 语义，由 INSERT/UPDATE 触发器校验非空引用的看板作用域。
+2. 服务守卫：CLI、HTTP、桌面端和实验性 dispatcher 的正常写路径必须先在同一看板
+   作用域内解析 task、label、run 等对象，再写入关系行；例如任务标签绑定、
+   依赖、评论、事件、run 和附件都不应跨看板组合。
+3. Doctor 和导入检查：`kanban doctor` 与 JSONL 导入的最终门禁会只读检查基础关系表
+   中 `row.board_id` 与被引用任务、标签、执行记录所属看板是否一致，并运行
+   `PRAGMA foreign_key_check`。任何违规都会成为严重错误；导入会在
+   提交前回滚整个替换事务。
 
 ---
 
-## 5. Task
+## 5. 任务（Task）
 
-Task 是核心对象，既是看板卡片，也是可执行工作单元。
+任务（Task）是核心对象，既是看板卡片，也是可执行工作单元。
 
 ### 5.1 字段分组
 
-#### Identity
+#### 身份
 
 | 字段 | 说明 |
 |---|---|
-| `id` | Task ID。 |
-| `board_id` | 所属 board。 |
-| `seq` | board 内递增数字，便于显示 `board#12`。 |
+| `id` | 任务 ID。 |
+| `board_id` | 所属看板。 |
+| `seq` | 看板内递增数字，便于显示 `board#12`。 |
 
-Task public identity 有两层：
+任务的公开身份分为两层：
 
-- `id` 是全局唯一 `t_...`，可跨 board 直接定位 task。
-- `seq` 只在同一 board 内唯一，CLI/API 展示时应组合成 `board_slug#seq`，例如 `agent-work#12`。
+- `id` 是全局唯一的 `t_...`，可跨看板直接定位任务。
+- `seq` 只在同一看板内唯一，CLI/API 展示时应组合成 `board_slug#seq`，例如 `agent-work#12`。
 
-#### Content
+#### 内容
 
 | 字段 | 说明 |
 |---|---|
 | `title` | 必填。 |
 | `description` | Markdown 文本。 |
-| `status_reason` | block 等状态原因。 |
+| `status_reason` | 阻塞等状态原因。 |
 | `result_summary` | 完成摘要。 |
+| `result_json` | 完成结果的自然 JSON；存储值必须是合法 JSON，CLI/API 公开为解码后的 `result`。 |
 | `metadata_json` | 扩展字段。 |
 
-#### Workflow
+#### 工作流
 
 | 字段 | 说明 |
 |---|---|
-| `status` | canonical status。 |
-| `priority` | integer enum-like priority level: `0` = P0 highest, `1` = P1, `2` = P2, `3` = P3 lowest/default. DB default is `3` and values are constrained with `CHECK(priority BETWEEN 0 AND 3)` after migrations. Create/update commands reject values outside P0-P3. |
+| `status` | 权威状态。 |
+| `priority` | 类枚举的整数优先级：`0` = 最高的 P0，`1` = P1，`2` = P2，`3` = 最低且默认的 P3。数据库默认值是 `3`，迁移后由 `CHECK(priority BETWEEN 0 AND 3)` 约束。创建和更新命令会拒绝 P0—P3 之外的值。 |
 | `position` | UI 排序键。 |
 | `scheduled_at` | 计划时间。 |
 | `due_at` | 截止时间，仅展示/过滤，不驱动状态机。 |
-| `retry_count` | 已 retry 次数。 |
-| `max_retries` | 最大 retry 次数。 |
+| `retry_count` | 已重试次数。 |
+| `max_retries` | 最大重试次数。 |
 
-#### Actor / Execution
+#### 操作者与执行
 
 | 字段 | 说明 |
 |---|---|
-| `assignee` | 人或 worker profile 名称。 |
-| `created_by` | actor string。 |
-| `claim_token` | active claim token。 |
-| `claim_owner` | active claim actor。 |
-| `claim_expires_at` | claim 过期时间。 |
-| `last_heartbeat_at` | heartbeat 时间。 |
-| `current_run_id` | active/latest run id。 |
+| `assignee` | 人或 worker 配置名称。 |
+| `created_by` | 操作者字符串。 |
+| `claim_token` | 当前领取凭证，格式为 `claim_...`。 |
+| `claim_owner` | 当前领取者。 |
+| `claim_expires_at` | 领取过期时间。 |
+| `last_heartbeat_at` | 最近心跳时间。 |
+| `current_run_id` | 当前或最近的 run ID。 |
 
-#### Timestamps
+#### 时间戳
 
 | 字段 | 说明 |
 |---|---|
@@ -1951,43 +1894,43 @@ Task public identity 有两层：
 | `completed_at` | 完成。 |
 | `archived_at` | 归档。 |
 
-#### Concurrency
+#### 并发
 
 | 字段 | 说明 |
 |---|---|
-| `lock_version` | optimistic lock。 |
+| `lock_version` | 乐观锁版本。 |
 
-### 5.2 Priority 语义
+### 5.2 优先级语义
 
 `priority` 表示任务的相对重要性和排序权重，不表示状态机可执行性。`ready`
-表示任务已经被人工或服务显式放入可 claim 队列；P0-P3 只影响列表和 dispatcher 在可选任务之间的排序。
+表示任务已经由人工或服务明确放入可领取队列；P0—P3 只影响列表排序，以及内部实验性 dispatcher 在候选任务之间的排序。
 
 优先级约定：
 
-| Priority | 语义 | 示例 |
+| 优先级 | 语义 | 示例 |
 |---|---|---|
-| `0` / P0 | incident、阻断当前目标、必须立即处理的任务。少量使用，不作为普通 ready 默认值。 | 修复导致本地队列无法 claim 的回归；解除发布前 P1/P0 reviewer blocker。 |
-| `1` / P1 | 近期待办焦点，当前迭代或当前工作流应优先完成。 | 今天要完成的实现切片；当前 PR 必须补齐的测试。 |
-| `2` / P2 | 重要 follow-up，但不阻塞当前主线。 | 整理文档示例；补充非关键 smoke。 |
-| `3` / P3 | 普通 backlog、低优先级或默认值。 | 想法、低风险清理、未来可做的体验改进。 |
+| `0` / P0 | 事故、阻断当前目标或必须立即处理的任务。应当少量使用，不作为普通 `ready` 任务的默认值。 | 修复导致本地队列无法领取任务的回归；解除发布前的 P1/P0 审查阻塞。 |
+| `1` / P1 | 近期工作焦点，当前迭代或当前工作流应优先完成。 | 今天要完成的实现切片；当前 PR 必须补齐的测试。 |
+| `2` / P2 | 重要的后续任务，但不阻塞当前主线。 | 整理文档示例；补充非关键冒烟测试。 |
+| `3` / P3 | 普通待办、低优先级或默认值。 | 想法、低风险清理、未来可做的体验改进。 |
 
 `ready` 与 P0 不能互相替代：
 
 - 普通可执行任务应是 `ready` + P1/P2/P3，而不是为了进入队列全部标成 P0。
-- P0 任务如果仍缺规格、排期未到或依赖未完成，仍不能被 claim；它应保持
-  `triage`、`scheduled` 或 `todo`，直到满足状态机 guard 后再 promote 到 `ready`。
-- Dispatcher 只 claim `ready` 任务；在多个 `ready` 任务之间，才按 priority 从
-  P0 到 P3 排序。
+- P0 任务如果仍缺规格、排期未到或依赖未完成，仍不能被领取；它应保持
+  `triage`、`scheduled` 或 `todo`，直到满足状态机守卫后再提升到 `ready`。
+- 内部实验性 dispatcher 只领取 `ready` 任务；只有在多个 `ready` 任务之间，才按
+  P0 到 P3 排序。这不是当前公开支持的使用路径。
 
 ---
 
-## 6. Dependency
+## 6. 依赖（Dependency）
 
 表：`task_dependencies`
 
-Schema-level invariant：`parent_task_id` 和 `child_task_id` 必须都属于 row
-`board_id`。旧数据库升级到 composite FK schema 前会先检查 existing cross-board rows；
-发现不一致时 migration 会失败并要求先用 doctor/repair 清理。
+数据库结构不变量：`parent_task_id` 和 `child_task_id` 必须都属于该行的
+`board_id`。旧数据库升级到复合外键结构前会先检查已有的跨看板行；
+发现不一致时迁移会失败，并要求先用 doctor/repair 清理。
 
 字段：
 
@@ -1995,56 +1938,58 @@ Schema-level invariant：`parent_task_id` 和 `child_task_id` 必须都属于 ro
 |---|---|
 | `parent_task_id` | 前置任务。 |
 | `child_task_id` | 被阻塞任务。 |
+| `board_id` | 两个任务共同所属的看板。 |
 | `created_at` | 创建时间。 |
 
 语义：
 
 ```text
-parent done or archived => child may become ready
-parent neither done nor archived => child cannot be ready/running
+前置任务为 done 或 archived => 后续任务可以变为 ready
+前置任务既不是 done 也不是 archived => 后续任务不能进入 ready/running
 ```
 
-添加依赖时必须做环检测。归档 parent 会满足 hard dependency guard，但 dependency edge 保留为历史，不会自动 promote child。
+添加依赖时必须做环检测。归档前置任务会满足强依赖守卫，但依赖边会作为历史保留，也不会自动提升后续任务。
 
-parent 从 `done` reopen 后，直接 child 中仅 `triage|todo|scheduled|ready` 会按 readiness 重算；`running|blocked|review|done|archived` 不隐式改写。
+前置任务从 `done` 重新打开后，直接后续任务中只有 `triage|todo|scheduled|ready` 会按就绪条件重新计算；`running|blocked|review|done|archived` 不会被隐式改写。
 
 
 ---
 
-## 7. Step / Execution Plan
+## 7. 步骤与执行计划（Step / Execution Plan）
 
-Step 是父任务内部的有序执行步骤，不是阻塞依赖关系。Step 可以是普通文本，
-也可以链接到另一个普通 task 作为上下文。链接 task 不会自动创建
-`task_dependencies` 边，也不会用 linked task 的状态自动完成 step；step 自己有独立的
+步骤（Step）是父任务内部的有序执行步骤，不是阻塞依赖关系。Step 可以是普通文本，
+也可以链接到另一个普通任务作为上下文。链接任务不会自动创建
+`task_dependencies` 边，也不会根据所链接任务的状态自动完成 step；step 自己有独立的
 `todo | done | skipped` 状态。
 
-### 7.1 Steps
+### 7.1 步骤
 
 表：`task_steps`
 
-Schema-level invariant：`parent_task_id` 必须属于 row `board_id`；可选的
-`linked_task_id` 也必须属于同一 board，且不能等于 `parent_task_id`。Service 还必须
-拒绝 archived parent、archived linked task、空白标题和 cross-board link。
+数据库结构通过复合外键保证 `parent_task_id` 属于该行的 `board_id`。可选的
+`linked_task_id` 只有指向 `tasks(id)` 的普通外键；服务与诊断或导入门禁必须另外保证
+它属于同一看板，且不能等于 `parent_task_id`。服务还必须拒绝已归档的父任务、
+已归档的链接任务、空白标题和跨看板链接。
 
 字段：
 
 | 字段 | 说明 |
 |---|---|
-| `id` | Step ID。 |
-| `board_id` | 所属 board。 |
+| `id` | Step ID，格式为 `step_...`。 |
+| `board_id` | 所属看板。 |
 | `parent_task_id` | 被规划的父任务。 |
 | `position` | 父任务内步骤排序键。 |
 | `title` | 步骤标题。 |
 | `body` | 可选说明文本。 |
-| `linked_task_id` | 可选上下文 task。 |
-| `required` | 是否阻塞父任务 complete/archive。 |
+| `linked_task_id` | 可选的上下文任务。 |
+| `required` | 是否阻止父任务完成或归档。 |
 | `status` | `todo`、`done` 或 `skipped`。 |
-| `resolution_note` | done/skip/reopen 的说明。 |
-| `resolved_by` | 最近一次 resolution actor。 |
-| `resolved_at` | 最近一次 resolution 时间。 |
-| `created_by` | 创建 actor。 |
+| `resolution_note` | 完成、跳过或重新打开的说明。 |
+| `resolved_by` | 最近一次处理的操作者。 |
+| `resolved_at` | 最近一次处理时间。 |
+| `created_by` | 创建者。 |
 | `created_at` | 创建时间。 |
-| `updated_by` | 最近更新 actor。 |
+| `updated_by` | 最近更新者。 |
 | `updated_at` | 最近更新时间。 |
 
 索引：
@@ -2056,15 +2001,15 @@ Schema-level invariant：`parent_task_id` 必须属于 row `board_id`；可选�
 语义：
 
 ```text
-parent task contains ordered step
-optional linked_task_id supplies task context only
+父任务包含有序步骤
+可选的 linked_task_id 只提供任务上下文
 ```
 
-Step 不会直接驱动 `dependency_blocked` 或 `unfinished_parent_count`。Required step
-只参与 execution-plan guard：父任务不能 complete/archive，直到所有 required step
+Step 不会直接驱动 `dependency_blocked` 或 `unfinished_parent_count`。必需步骤
+只参与执行计划守卫：父任务不能完成或归档，直到所有必需步骤
 都是 `done` 或 `skipped`。
 
-### 7.2 Execution plans
+### 7.2 执行计划
 
 表：`task_execution_plans`
 
@@ -2072,11 +2017,11 @@ Step 不会直接驱动 `dependency_blocked` 或 `unfinished_parent_count`。Req
 
 | 字段 | 说明 |
 |---|---|
-| `board_id` | 所属 board。 |
-| `task_id` | 被规划的 task。 |
+| `board_id` | 所属看板。 |
+| `task_id` | 被规划的任务。 |
 | `state` | `unplanned`、`planned` 或 `not_required`。 |
 | `reason` | `not_required` 的说明。 |
-| `updated_by` | 最近更新 actor。 |
+| `updated_by` | 最近更新者。 |
 | `updated_at` | 最近更新时间。 |
 
 索引：
@@ -2086,9 +2031,9 @@ Step 不会直接驱动 `dependency_blocked` 或 `unfinished_parent_count`。Req
 派生口径：
 
 ```text
-steps count > 0 => planned
-explicit not_required row and no steps => not_required
-otherwise => unplanned
+步骤数量 > 0 => planned
+存在明确的 not_required 行且没有步骤 => not_required
+其他情况 => unplanned
 ```
 
 事件：
@@ -2104,16 +2049,16 @@ task.execution_plan.planned
 task.execution_plan.not_required
 ```
 
-## 8. Run
+## 8. 执行记录（Run）
 
 表：`task_runs`
 
-Schema-level invariant：`task_id` 必须属于 row `board_id`。这保证 run attempt
-不能在 SQLite 层跨 board 指向 task。
+数据库结构不变量：`task_id` 必须属于该行的 `board_id`。这保证一次 run 尝试
+不能在 SQLite 层跨看板指向任务。
 
-Run 是一次 execution attempt。
+执行记录（Run）表示一次执行尝试。
 
-### 8.1 Run status
+### 8.1 Run 状态
 
 ```text
 running | succeeded | failed | canceled | expired
@@ -2123,14 +2068,17 @@ running | succeeded | failed | canceled | expired
 
 | 字段 | 说明 |
 |---|---|
-| `id` | `r_` prefixed ID。 |
-| `task_id` | 关联 task。 |
+| `id` | 带 `r_` 前缀的 ID。 |
+| `board_id` | 所属看板。 |
+| `task_id` | 关联任务。 |
 | `status` | run 状态。 |
-| `worker_profile` | worker profile 名。 |
-| `worker_pid` | 本机 PID。 |
-| `claim_token` | 对应 claim。 |
+| `worker_profile` | worker 配置名称。 |
+| `worker_pid` | 可选、预留的本机 PID；当前内部实验性 dispatcher 不填充此字段。 |
+| `claim_token` | 对应的领取凭证，格式为 `claim_...`。 |
+| `claim_owner` | 本次领取的操作者。 |
+| `claim_expires_at` | 本次领取的过期时间。 |
 | `started_at` | run 开始。 |
-| `last_heartbeat_at` | 最近 heartbeat。 |
+| `last_heartbeat_at` | 最近心跳时间。 |
 | `finished_at` | run 结束。 |
 | `exit_code` | worker 退出码。 |
 | `summary` | 简短摘要。 |
@@ -2140,23 +2088,23 @@ running | succeeded | failed | canceled | expired
 
 ### 8.3 约束
 
-- active `running` task 必须有 active run。
-- 一个 task 可以有多个历史 run。
-- 同一 task 同时最多一个 running run。
+- 当前为 `running` 的任务必须有当前 run。
+- 一个任务可以有多个历史 run。
+- 同一任务同时最多有一个 `running` run。
 
-SQLite 不强制最后一条，需要 service 层和 transaction 保证。
+最后一条不由 SQLite 直接强制，需要服务层和事务共同保证。
 
 ---
 
-## 9. Event
+## 9. 事件（Event）
 
 表：`task_events`
 
-Event 是 append-only 事实记录。
+事件（Event）是只追加的事实记录。
 
-### 9.1 Event kind
+### 9.1 事件类型
 
-API/SSE 当前类型化的 39 个 known kind：
+API/SSE 当前已类型化的 39 个已知类型：
 
 ```text
 board.created
@@ -2200,9 +2148,9 @@ task.updated
 task.export_sanitized
 ```
 
-### 8.2 Payload 示例
+### 9.2 载荷示例
 
-<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
+<!-- schema-doc-ignore: 仅作示意或只展示部分载荷；已提交的结构 fixture 才是可执行的权威依据 -->
 ```json
 {
   "claim_owner": "alice",
@@ -2210,22 +2158,22 @@ task.export_sanitized
 }
 ```
 
-`task_events.kind/payload_json` 的 SQLite storage 允许未来 unknown kind。Events API 与 SSE
-对上面 39 个 known kind 使用精确 sibling payload contract，known mismatch fail closed；unknown
-kind 的合法 JSON payload 保持 lossless。外层 `task_id`、`run_id`、`actor` 都是
-required-nullable。portable JSONL 的 event payload 仍是 opaque JSON，不复用该 typed union。
+`task_events.kind/payload_json` 的 SQLite 存储允许未来出现未知类型。事件 API 与 SSE
+对上面 39 个已知类型使用精确的同级载荷契约，已知类型不匹配时按失败关闭处理；未知
+类型的合法 JSON 载荷保持无损。外层 `task_id`、`run_id`、`actor` 都是
+必需但可空的字段。可移植 JSONL 的事件载荷仍是不透明 JSON，不复用这组类型化联合。
 
-### 8.3 使用场景
+### 9.3 使用场景
 
-- Task detail timeline。
-- SSE event stream。
-- Debug dispatcher。
+- 任务详情时间线。
+- SSE 事件流。
+- 调试领取与执行记录。
 - CLI `kanban events`。
-- 未来 export/import。
+- 导出与导入。
 
 ---
 
-## 9. Comment
+## 10. 评论（Comment）
 
 表：`task_comments`
 
@@ -2233,441 +2181,481 @@ required-nullable。portable JSONL 的 event payload 仍是 opaque JSON，不复
 
 | 字段 | 说明 |
 |---|---|
-| `id` | Comment ID。 |
-| `task_id` | 关联 task。 |
-| `author` | actor string。 |
-| `author_type` | `user` / `agent`，表示评论作者身份；本地操作者是 `user`，其它自动化来源是 `agent`。 |
-| `agent_type` | 可选 open text，仅用于 `author_type=agent`，例如 `executor` / `reviewer`。 |
+| `id` | 评论 ID。 |
+| `task_id` | 关联任务。 |
+| `board_id` | 关联看板。 |
+| `author` | 操作者字符串。 |
+| `author_type` | `user` / `agent`，表示评论作者身份；本地操作者是 `user`，其他自动化来源是 `agent`。 |
+| `agent_type` | 可选的开放文本，仅用于 `author_type=agent`，例如 `executor` / `reviewer`。 |
 | `body` | Markdown 文本。 |
-| `kind` | `note` / `decision` / `signal`，表示 comment 内容语义，不表示作者身份。`signal` 是 signal ledger backlink。 |
-| `metadata_json` | `kind` 对应的结构化 payload；默认 `{}`，必须是合法 JSON object。`kind=decision` 时必须符合 decision schema。`kind=signal` backlink metadata 包含 `type:"signal_link"`、`signal_id`、`observation_id`、`signal_kind`、`signal_status`。 |
+| `kind` | `note` / `decision` / `signal`，表示评论内容语义，不表示作者身份。`signal` 是信号账本的反向链接。 |
+| `metadata_json` | `kind` 对应的结构化载荷；默认 `{}`，必须是合法 JSON 对象。`kind=decision` 时必须符合决策结构。`kind=signal` 的反向链接元数据包含 `type:"signal_link"`、`signal_id`、`observation_id`、`signal_kind`、`signal_status`。 |
 | `created_at` | 创建时间。 |
 
-旧 comment rows / JSONL import 会迁移到新语义：旧 `human` 变为 `user`，旧 `agent/system` 或 `worker/system` 来源变为 `agent`，旧 `text/system/worker` 内容变为 `note`。没有结构化 metadata 的旧 `decision` 也按 `note` 保留 body fallback。
+`(task_id, board_id)` 通过复合外键关联 `tasks(id, board_id)`，因此评论不能跨看板挂接任务。
 
-Comment 创建时也写一条 `task_events(kind='task.comment.created')`。
+旧评论行或 JSONL 导入记录会迁移到新语义：旧 `human` 变为 `user`，旧 `agent/system` 或 `worker/system` 来源变为 `agent`，旧 `text/system/worker` 内容变为 `note`。没有结构化元数据的旧 `decision` 也按 `note` 保留正文作为回退。
 
-`metadata_json` 是 SQLite canonical storage 列；CLI/API response 会解码成自然、无损的
-`metadata` object。普通 note/signal metadata 保持开放。只有 service-generated backlink 的
-完整 shape 由 `SignalLinkMetadataOutput` 独立证明，不能把用户自定义的同名键碰撞当成协议。
+创建评论时也会写入一条 `task_events(kind='task.comment.created')`。
 
-Decision comment metadata schema：
+`metadata_json` 是 SQLite 的权威存储列；CLI/API 响应会把它解码成自然、无损的
+`metadata` 对象。普通 `note`/`signal` 元数据保持开放。只有服务生成的反向链接
+完整结构由 `SignalLinkMetadataOutput` 独立证明，不能把用户自定义的同名键碰撞当成协议。
 
-- `options`：非空 array。
-- 每个 option 是 object，且包含非空 string `slug`、`title`、`detail`。
-- `slug` 必须是稳定小写 ASCII slug：以小写字母或数字开头，只包含小写字母、数字和 `-`；同一 decision 内唯一。
-- `selected`：非空 string，必须匹配某个 option slug。
-- `reason`：非空 string。
-- `risk` / `verification`：可选；如果出现，必须是非空 string。
-- 未知顶层字段允许保留，但不参与状态机、dispatcher 或 event 语义。
+决策评论的元数据结构：
+
+- `options`：非空数组。
+- 每个选项都是对象，且包含非空字符串 `slug`、`title`、`detail`。
+- `slug` 必须是稳定的小写 ASCII 短名：以小写字母或数字开头，只包含小写字母、数字和 `-`；在同一决策内唯一。
+- `selected`：非空字符串，必须匹配某个选项的 `slug`。
+- `reason`：非空字符串。
+- `risk` / `verification`：可选；如果出现，必须是非空字符串。
+- 未知顶层字段允许保留，但不参与状态机、内部实验性 dispatcher 或事件语义。
 
 ---
 
-## 10. Attachment
+## 11. 附件（Attachment）
 
-Blob 不存 DB。
+二进制内容不存入数据库。
 
-默认路径：
+附件默认保存在数据库目录下：
 
 ```text
-~/.local/share/kb/attachments/<board_id>/<task_id>/<attachment_id>/<filename>
+<db_dir>/attachments/<board_id>/<task_id>/<attachment_id>/<filename>
 ```
 
-DB 存：
+例如，在使用常见 Linux 默认数据库目录时，路径通常为
+`~/.local/share/kb/attachments/<board_id>/<task_id>/<attachment_id>/<filename>`。
+
+数据库记录：
 
 | 字段 | 说明 |
 |---|---|
-| `id` | Attachment ID。 |
-| `task_id` | 关联 task。 |
+| `id` | 附件 ID。 |
+| `task_id` | 关联任务。 |
+| `board_id` | 关联看板。 |
 | `filename` | 原始文件名。 |
-| `rel_path` | 相对 data dir 的路径。 |
-| `content_type` | MIME。 |
+| `rel_path` | 相对数据目录的路径。 |
+| `content_type` | MIME 类型。 |
 | `size_bytes` | 大小。 |
-| `sha256` | 内容 hash。 |
-| `created_by` | actor。 |
+| `sha256` | 内容哈希。 |
+| `created_by` | 操作者。 |
 | `created_at` | 上传时间。 |
+
+`(task_id, board_id)` 通过复合外键关联 `tasks(id, board_id)`，因此附件不能跨看板挂接任务。
 
 安全要求：
 
-- `filename` 必须 sanitize。
-- `rel_path` 必须在 data dir 内。
-- 不允许 `../` path traversal。
+- `filename` 必须经过安全清理。
+- `rel_path` 必须位于数据目录内。
+- 不允许通过 `../` 进行路径穿越。
 
 ---
 
-## 11. Label
+## 12. 标签（Label）
 
-Label 是轻量分类。
+标签（Label）用于轻量分类。
 
 字段：
 
 | 字段 | 说明 |
 |---|---|
-| `id` | Label ID。 |
-| `board_id` | 所属 board。 |
+| `id` | 标签 ID。 |
+| `board_id` | 所属看板。 |
 | `name` | 标签名。 |
-| `color` | UI 颜色 token。 |
+| `color` | UI 颜色标记。 |
 | `created_at` | 创建时间。 |
 | `updated_at` | 更新时间。 |
 
-同一 board 内 label name 唯一。
+同一看板内标签名唯一。
 
-Task 与 label 的关联通过 `task_labels(task_id, label_id)` 关联表表达。
-Label 只用于分类、过滤和展示；添加或移除 label 不改变 `tasks.status`，
-不触发 dependency recompute，也不会让 dispatcher claim `review` 或其他非
+任务与标签的关联通过 `task_labels(task_id, label_id, board_id, created_at)` 关联表表达。
+两条复合外键分别约束任务和标签都属于 `board_id` 指定的看板，不能跨看板绑定。
+标签只用于分类、过滤和展示；添加或移除标签不改变 `tasks.status`，
+不触发依赖重新计算，也不会让内部实验性 dispatcher 领取 `review` 或其他非
 `ready` 状态。
 
-### 11.1 Label semantics
+### 12.1 标签语义
 
-`labels` 仍是 canonical label identity：名称、颜色和 board 作用域由 `labels`
-定义。`task_labels` 仍是 task 的最终 label 绑定事实。语义推荐和向量检索使用
-额外 truth 表，不替代这两张表。
-`labels` identity CRUD 是基础 vocabulary registry，不写 ontology mutation ledger；
-`label delete` 不会隐式删除 semantics/atoms，必须先通过 CAS-protected semantics clear
+`labels` 仍是权威的标签身份表：名称、颜色和看板作用域由 `labels`
+定义。`task_labels` 仍是任务最终绑定标签的事实。语义推荐和向量检索使用
+额外的事实表，不替代这两张表。
+`labels` 的身份增删改查属于基础词表登记，不写入本体变更账本；
+`label delete` 不会隐式删除语义或 atom，必须先通过受 CAS 保护的语义清理流程
 清空语义。
 
 表：`label_semantics`
 
 | 字段 | 说明 |
 |---|---|
-| `label_id` | 关联 `labels(id)`，一条 label 最多一条 semantics。 |
-| `board_id` | 冗余 board scope，用复合外键保证 label/board 一致。 |
-| `description` | label 的自然语言说明。 |
-| `applies_when` | JSON string array，正向适用条件。 |
-| `excludes_when` | JSON string array，反向排除条件。 |
-| `positive_examples` | JSON string array，正向示例。 |
-| `negative_examples` | JSON string array，反向示例。 |
+| `label_id` | 关联 `labels(id)`，一个标签最多有一条语义记录。 |
+| `board_id` | 冗余的看板作用域，用复合外键保证标签与看板一致。 |
+| `description` | 标签的自然语言说明。 |
+| `applies_when` | JSON 字符串数组，正向适用条件。 |
+| `excludes_when` | JSON 字符串数组，反向排除条件。 |
+| `positive_examples` | JSON 字符串数组，正向示例。 |
+| `negative_examples` | JSON 字符串数组，反向示例。 |
 | `created_at` / `updated_at` | 语义记录时间。 |
 
 表：`label_atoms`
 
-`label_atoms` 是从 `label_semantics` 与 label name 展开的 SQLite materialized
-projection。它保存 positive 与 negative 两种 polarity，供后续 Group OMP/NNLS label
-solver 和 LanceDB atom retrieval 使用；它随 semantics mutation 同事务重建，不是独立于
-`label_semantics` 的第二份 semantic truth。
+`label_atoms` 是从 `label_semantics` 与标签名展开的 SQLite 物化投影。
+它保存 `positive` 与 `negative` 两种极性，供后续 Group OMP/NNLS 标签求解器和
+LanceDB atom 检索使用；它随语义变更在同一事务内重建，不是独立于
+`label_semantics` 的第二份语义事实。
 
 | 字段 | 说明 |
 |---|---|
-| `id` | 稳定 `la_...` atom id。 |
-| `label_id` / `board_id` | 关联 canonical label 与 board。 |
-| `polarity` | `positive` / `negative`。 |
-| `kind` | `name`、`description`、`applies_when`、`positive_example`、`excludes_when`、`negative_example`；有 description 时，`description` atom 是 `label: {name}\ndescription: {description}` canonical atom，无 description 时才使用 `name` fallback atom。 |
-| `text` | trim 且规范化 whitespace 后的 atom 文本；每个非空行内部 whitespace collapse，canonical 行分隔保留，空文本不入库。 |
-| `ordinal` | 同一 label 展开后的顺序；同语义重复 atom 去重时保留首次出现的 ordinal。 |
-| `content_hash` | atom 语义内容 hash，用于派生层判断变化；输入为 `label_id + polarity + kind + normalized_text`，不包含 `ordinal`。 |
-| `created_at` / `updated_at` | projection row 时间。 |
+| `id` | 稳定的 `la_...` atom ID。 |
+| `label_id` / `board_id` | 关联权威标签与看板。 |
+| `polarity` | 极性：`positive` / `negative`。 |
+| `kind` | `name`、`description`、`applies_when`、`positive_example`、`excludes_when`、`negative_example`；有说明时，`description` atom 是 `label: {name}\ndescription: {description}` 形式的权威 atom，没有说明时才使用 `name` 回退 atom。 |
+| `text` | 去除首尾空白并规范化空白后的 atom 文本；每个非空行内部的空白会折叠，权威行分隔保留，空文本不入库。 |
+| `ordinal` | 同一标签展开后的顺序；同语义的重复 atom 去重时保留首次出现的 `ordinal`。 |
+| `content_hash` | atom 语义内容哈希，用于派生层判断变化；输入为 `label_id + polarity + kind + normalized_text`，不包含 `ordinal`。 |
+| `created_at` / `updated_at` | 投影行时间。 |
 
 派生向量表：`kb_label_atoms`
 
-`kb_label_atoms` 是 LanceDB 中的可重建 label atom 向量表，独立于 task chunk 表
-`kb_chunks`。它按 `board_id`、`embedding_model`、`polarity` 查询 atom evidence，
-返回 `label_id`、atom id、`polarity`、`kind`、`text` 和 LanceDB `_distance` 原始
-distance 等字段。语义 label 候选会用返回的 atom vector 在本地重新计算
-query/residual cosine similarity，不把 distance 当作 solver score。派生表损坏或缺少
-provider 时只让 label atom index degraded，不影响普通 label CRUD、`task_labels` 绑定
-或 task 状态机。
+`kb_label_atoms` 是 LanceDB 中可重建的标签 atom 向量表，独立于任务分块表
+`kb_chunks`。它按 `board_id`、`embedding_model`、`polarity` 查询 atom 证据，
+返回 `label_id`、atom ID、`polarity`、`kind`、`text` 和 LanceDB 原始
+`_distance` 等字段。语义标签候选会使用返回的 atom 向量，在本地重新计算
+查询向量与残差的余弦相似度，不把距离当作求解器分数。派生表损坏或缺少
+提供方时，只会让标签 atom 索引降级，不影响普通标签增删改查、`task_labels` 绑定
+或任务状态机。
 
-### 11.2 Generic signal ledger
+### 12.2 通用信号账本
 
-Generic signal ledger 保存 agent/product 在 kanban 工作流中发现的通用问题信号，
-例如 CLI 参数摩擦、提示误导、参数设计不符合 agent 惯用方式，或 operator 发现的
-产品反馈。它是 board-scoped 审计账本和只读 inbox 数据源，不替代 `tasks.status`、
-task comments、runs、events 或 label ontology ledger。
+通用信号账本保存 agent 或产品在 kanban 工作流中发现的通用问题，
+例如 CLI 参数使用不顺、提示误导、参数设计不符合 agent 惯用方式，或操作者发现的
+产品反馈。它是看板作用域内的审计账本和只读收件箱数据源，不替代 `tasks.status`、
+任务评论、run、事件或标签本体账本。
 
-- `signal_observations` 保存一次观察的来源、actor、task/run/comment 关联和原始证据。
-- `signals` 保存一个可独立 review 的通用 signal，并指向对应 observation。
-- 通用 signal 与 `label_ontology_signals` 分离；ontology signals 仍只服务 label
-  semantics/atom/proposal review 和 mutation provenance。
-- 当前 public HTTP surface 只读取通用 signal；lifecycle 写操作仍由 CLI/runtime
-  signal record 流程负责。
-- Board-scoped list/review surface 只通过 board 路由读取：
+- `signal_observations` 保存一次观察的来源、操作者、task/run/comment 关联和原始证据。
+- `signals` 保存一个可以独立审查的通用信号，并指向对应 observation。
+- 通用信号与 `label_ontology_signals` 分离；本体信号仍只服务于标签
+  语义、atom、提案审查和变更来源追踪。
+- 当前公开 HTTP 接口只读取通用信号；生命周期写操作仍由 CLI/runtime
+  的信号记录流程负责。
+- 看板作用域内的列表和审查接口只通过 board 路由读取：
   `/api/v1/boards/{board}/signals*`。单条详情
-  `GET /api/v1/signals/{signal_id}` 是 operator-wide detail lookup，用于从
-  backlink 或 inbox row 直接打开已知 signal；它不改变 signal 的 `board_id`
-  truth，也不把 signal 混入其它 board 的列表。
-- `signal_observations.task_id`、`run_id`、`comment_id` 是 provenance/history
-  soft refs。当前一致性由 service 写入路径、doctor 和 import final gate 维护；
-  这些 refs 允许保留历史来源语义，未来如需把全部来源关系硬化，可迁移为
-  board-composite FK。
+  `GET /api/v1/signals/{signal_id}` 是面向操作者的全局详情查询，用于从
+  反向链接或收件箱行直接打开已知信号；它不改变信号的 `board_id`
+  事实，也不会把信号混入其他看板的列表。
+- `signal_observations.task_id`、`run_id`、`comment_id` 是用于来源和历史的
+  软引用。当前一致性由服务写入路径、doctor 和导入最终门禁维护；
+  这些引用允许保留历史来源语义。未来如需把全部来源关系硬化，可迁移为
+  带看板作用域的复合外键。
 
 表：`signal_observations`
 
-一行表示一次 agent 或 operator 观察。Observation 可关联 task、run 或 comment；
+一行表示一次 agent 或操作者的观察。Observation 可关联 task、run 或 comment；
 这些关联用于定位来源，不改变对应实体状态。
 
 | 字段 | 说明 |
 |---|---|
-| `id` | `obs_...` observation id。 |
-| `board_id` | 来源 board scope。 |
-| `task_id` / `task_ref_snapshot` | 可空。来源 task 与捕获时的人类 ref 快照；task 后续改动不影响快照。 |
-| `run_id` | 可空。来源 execution run。 |
-| `comment_id` | 可空。来源 comment。 |
-| `actor` / `agent_type` | 捕获者名称与可选 agent type。 |
+| `id` | `obs_...` 观察记录 ID。 |
+| `board_id` | 来源看板作用域。 |
+| `task_id` / `task_ref_snapshot` | 可空。来源任务与捕获时的人类可读引用快照；任务后续改动不影响快照。 |
+| `run_id` | 可空。来源执行 run。 |
+| `comment_id` | 可空。来源评论。 |
+| `actor` / `agent_type` | 捕获者名称与可选的 agent 类型。 |
 | `source` | 可空。信号来源，例如 `codex-hook`、`cli` 或 `operator`。 |
-| `evidence_json` | JSON object 字符串，保存命令、stderr、上下文片段、hook 提示等原始证据。 |
+| `evidence_json` | JSON 对象字符串，保存命令、stderr、上下文片段、hook 提示等原始证据。 |
 | `created_at` | 创建时间。 |
 
 表：`signals`
 
-一行表示一个可独立进入 operator inbox 的通用 signal。它只描述发现的问题和 review
-lifecycle，不直接触发修复或修改 canonical workflow。
+一行表示一个可以独立进入操作者收件箱的通用信号。它只描述发现的问题和审查
+生命周期，不直接触发修复，也不修改权威工作流。
 
 | 字段 | 说明 |
 |---|---|
-| `id` | `sig_...` signal id。 |
-| `board_id` / `observation_id` | board scope 与来源 observation。 |
-| `kind` | 通用 signal 类型，例如 `agent_cli_friction`。 |
-| `title` / `summary` | 面向 operator 的短标题与摘要。 |
+| `id` | `sig_...` 信号 ID。 |
+| `board_id` / `observation_id` | 看板作用域与来源 observation。 |
+| `kind` | 通用信号类型，例如 `agent_cli_friction`。 |
+| `title` / `summary` | 面向操作者的短标题与摘要。 |
 | `severity` | 文本严重度，例如 `info`、`medium` 或 `high`。 |
 | `status` | `open`、`confirmed`、`resolved`、`rejected`、`superseded`。 |
-| `dedupe_key` | 可空。用于调用方聚合相似 signal。 |
-| `superseded_by_signal_id` | 可空。指向同 board 的替代 signal。 |
-| `reviewed_by` / `reviewed_at` / `review_reason` | lifecycle review 记录。 |
+| `dedupe_key` | 可空。用于调用方聚合相似信号。 |
+| `superseded_by_signal_id` | 可空。指向同一看板中的替代信号。 |
+| `reviewed_by` / `reviewed_at` / `review_reason` | 生命周期审查记录。 |
 | `created_at` / `updated_at` | 创建与更新时间。 |
 
-默认 review queue 只读取 `open` 与 `confirmed` signals；完整历史需显式
-`include_all` 或指定 status。
+默认审查队列只读取 `open` 与 `confirmed` 信号；完整历史需要明确设置
+`include_all` 或指定状态。
 
-### 11.3 Label ontology ledger
+### 12.3 标签本体账本
 
-Label ontology ledger 记录 task 标注过程里的证据、分歧 signal、review/action 历史
-和 validation 结果。它是可查询的审计账本，不替代 canonical truth：
+标签本体账本记录任务标注过程中的证据、分歧信号、审查与操作历史
+以及验证结果。它是可查询的审计账本，不替代权威事实：
 
-- `labels` / `task_labels` 仍决定 task 当前实际绑定哪些 label。
-- `label_semantics` 决定 label 的 canonical 语义；`label_atoms` 是它的 SQLite
-  materialized atom projection。
-- `label_semantic_proposals` 仍负责新 label proposal lifecycle。
-- ontology ledger 覆盖 semantics/atom mutations；base `labels` identity CRUD 位于
-  ledger 之外，只写普通 events。
+- `labels` / `task_labels` 仍决定任务当前实际绑定哪些标签。
+- `label_semantics` 决定标签的权威语义；`label_atoms` 是它的 SQLite
+  物化 atom 投影。
+- `label_semantic_proposals` 仍负责新标签提案的生命周期。
+- 本体账本覆盖语义和 atom 变更；基础 `labels` 身份的增删改查位于
+  账本之外，只写普通事件。
 
-这些表是 label 系统中的不同角色，不是六个严格独立的存储层。`label suggest` 是计算结果，
-`kb_label_atoms` 是可重建检索投影，proposal 和 ledger 是需要持久审计的 SQLite records；
+这些表在标签系统中承担不同角色，不是六个严格独立的存储层。`label suggest` 是计算结果，
+`kb_label_atoms` 是可重建的检索投影，提案和账本是需要持久审计的 SQLite 记录；
 它们都不能直接替代 `task_labels` 的当前绑定事实。
 
 表：`label_ontology_observations`
 
-一行表示一次完整的 task label 判断过程。它保存当时的 task 快照、agent 候选、
-`label suggest` 快照、最终选择和由 snapshot 派生的 solver 指标；即使 task、label 或
-atoms 后续变化，仍能还原当时为什么产生 signal。Observation 是只读 provenance：
-record 写入不会修改 `task_labels`、`label_semantics`、`label_atoms`、label atom index 或
-proposal。
+一行表示一次完整的任务标签判断过程。它保存当时的任务快照、agent 候选、
+`label suggest` 快照、最终选择和由快照派生的求解器指标；即使任务、标签或
+atom 后续变化，仍能还原当时为什么产生信号。Observation 是只读的来源记录：
+写入记录不会修改 `task_labels`、`label_semantics`、`label_atoms`、标签 atom 索引或
+提案。
 
 | 字段 | 说明 |
 |---|---|
-| `id` | `lor_...` observation id。 |
-| `board_id` / `task_id` | 来源 board 与 task。 |
+| `id` | `lor_...` 观察记录 ID。 |
+| `board_id` / `task_id` | 来源看板与任务。 |
 | `task_ref_snapshot` | 捕获时的人类 ref，例如 `default#42`。 |
-| `task_snapshot_json` | 捕获时的 task title、description、labels、version/hash 等快照。 |
-| `suggest_input_hash` | 可空。按 label suggest 输入（normalized title + description）计算的窄 hash，用于 validation comparability；旧 observation 缺失时按 legacy incomparable 处理，不能静默 passed。 |
-| `agent_candidates_json` | agent 原始候选 labels、置信度和理由。 |
-| `suggestion_snapshot_json` | 完整 suggestion 输出、参数、模型和 index 状态快照；新 capture path 要保存未改写的原始 snapshot。 |
-| `final_decision_json` | 最终接受、拒绝和未采用 labels 的判断。 |
-| `suggest_coverage` / `suggest_coverage_cosine` / `suggest_residual_norm` | 可查询的 solver 指标。新 capture path 从 `suggestion_snapshot_json` 派生这些值；调用方不应重复手写。`suggest_coverage = clamp(1 - suggest_residual_norm, 0.0, 1.0)`，二者不是独立证据；`suggest_coverage_cosine` 是 query 与 fitted vector 的 cosine similarity，可作为补充指标。 |
-| `suggest_needs_new_label` / `suggest_degraded` | 捕获时 suggestion 状态。新 capture path 从 `suggestion_snapshot_json` 派生这些值。`suggest_needs_new_label` 是 coverage review 兼容字段，不等于自动 vocabulary gap；判断新 label 需要结合 reason codes、evidence、diagnostics 和人工语义判断。 |
-| `diagnostics_json` | suggestion diagnostics 数组。新 capture path 从 snapshot 的 `diagnostics` 派生；冲突的重复输入会被拒绝。 |
-| `capture_fingerprint` | 同一 board 内幂等 fingerprint。 |
+| `task_snapshot_json` | 捕获时的任务标题、说明、标签、版本和哈希等快照。 |
+| `suggest_input_hash` | 可空。按标签建议输入（规范化标题 + 说明）计算的窄哈希，用于验证可比性；旧 observation 缺失时按旧版不可比较处理，不能静默标记为通过。 |
+| `agent_candidates_json` | agent 原始候选标签、置信度和理由。 |
+| `suggestion_snapshot_json` | 完整的建议输出、参数、模型和索引状态快照；新的捕获路径要保存未经改写的原始快照。 |
+| `final_decision_json` | 对最终接受、拒绝和未采用标签的判断。 |
+| `suggest_coverage` / `suggest_coverage_cosine` / `suggest_residual_norm` | 可查询的求解器指标。新的捕获路径从 `suggestion_snapshot_json` 派生这些值；调用方不应重复手写。`suggest_coverage = clamp(1 - suggest_residual_norm, 0.0, 1.0)`，二者不是独立证据；`suggest_coverage_cosine` 是查询向量与拟合向量的余弦相似度，可作为补充指标。 |
+| `suggest_needs_new_label` / `suggest_degraded` | 捕获时的建议状态。新的捕获路径从 `suggestion_snapshot_json` 派生这些值。`suggest_needs_new_label` 是覆盖审查的兼容字段，不等于自动发现词表缺口；判断是否需要新标签还要结合原因代码、证据、诊断和人工语义判断。 |
+| `diagnostics_json` | 建议诊断数组。新的捕获路径从快照的 `diagnostics` 派生；冲突的重复输入会被拒绝。 |
+| `capture_fingerprint` | 同一看板内的幂等指纹。 |
 | `created_by` / `created_by_type` / `agent_type` | 捕获者身份。 |
 | `created_at` | 创建时间。 |
 
 表：`label_ontology_signals`
 
-一行只表达一个可独立 review 的 ontology 问题，例如某个已有 label 漏选、
-suggest 误选、存在 vocabulary gap 或 label 边界/名称问题。
+一行只表达一个可独立审查的本体问题，例如某个已有标签漏选、
+建议误选、存在词表缺口或标签边界、名称问题。
 
 | 字段 | 说明 |
 |---|---|
-| `id` | `los_...` signal id。 |
-| `observation_id` / `board_id` | 来源 observation 与 board scope。 |
+| `id` | `los_...` 信号 ID。 |
+| `observation_id` / `board_id` | 来源 observation 与看板作用域。 |
 | `kind` | `false_negative`、`false_positive`、`vocabulary_gap`、`name_issue`、`boundary_issue`、`structure_issue`。 |
 | `status` | `open`、`confirmed`、`resolved`、`rejected`、`superseded`。 |
-| `target_label_id` / `target_label_name_snapshot` | 已有 label 目标；名称快照用于历史解释。 |
-| `related_labels_json` | split/merge 等多 label 关系快照。 |
+| `target_label_id` / `target_label_name_snapshot` | 已有标签目标；名称快照用于历史解释。 |
+| `related_labels_json` | 拆分、合并等多标签关系快照。 |
 | `proposed_action` | `observe`、`add_positive_atom`、`add_negative_atom`、`update_semantics`、`bootstrap_label`、`rename_label`、`split_label`、`merge_labels`。 |
-| `candidate_atom_polarity` / `candidate_atom_kind` / `candidate_text` | 建议 atom 的 polarity、kind 和泛化文本。 |
+| `candidate_atom_polarity` / `candidate_atom_kind` / `candidate_text` | 建议 atom 的极性、类型和泛化文本。 |
 | `candidate_content_hash` | 按 `label_id + polarity + kind + normalized_text` 计算的聚合键。 |
-| `proposed_label_name` / `proposed_label_name_normalized` | vocabulary gap 或 rename 候选。 |
-| `proposal_json` | 新 label 或结构变更的候选语义快照。 |
-| `agent_selected` / `suggest_state` / `suggest_score` / `suggest_rank` / `final_selected` | agent、suggest 与最终判断之间的分歧证据。 |
+| `proposed_label_name` / `proposed_label_name_normalized` | 词表缺口或重命名候选。 |
+| `proposal_json` | 新标签或结构变更的候选语义快照。 |
+| `agent_selected` / `suggest_state` / `suggest_score` / `suggest_rank` / `final_selected` | agent、建议与最终判断之间的分歧证据。 |
 | `rationale` / `confidence` | 可审查理由和可选置信度。 |
-| `signal_key` | observation 内幂等键。 |
+| `signal_key` | observation 内的幂等键。 |
 | `superseded_by_signal_id` / `status_reason` | 关闭或替代原因。 |
 | `created_at` / `updated_at` / `reviewed_at` / `closed_at` | 生命周期时间。 |
 
-`label ontology review` 是基于 signals 的只读聚合投影，不是新的 canonical truth，也不是
-新的可持久化 derived store。group key 来自调用方选择的维度：`label` 使用目标 label，
-`proposed-label` 使用 normalized proposed label name，`candidate-atom` 优先使用
-`candidate_content_hash`。没有 candidate
-atom 的 signals 不会进入一个全局空值 bucket；fallback key 会带上 signal kind、target
-label 或 proposed label、以及 proposed action，例如
+`label ontology review`（标签本体审查）是基于信号的只读聚合投影，不是新的权威事实，也不是
+新的可持久化派生存储。分组键来自调用方选择的维度：`label` 使用目标标签，
+`proposed-label` 使用规范化后的候选标签名，`candidate-atom` 优先使用
+`candidate_content_hash`。没有候选
+atom 的信号不会进入一个全局空值分组；回退键会带上信号类型、目标
+标签或候选标签，以及候选操作，例如
 `no-candidate-atom|kind:vocabulary_gap|proposed:ontology ledger|action:bootstrap_label`。
-因此一个 group 的含义是“这些 signals 共享同一个 review key”，不是“这些 signals 已被证明
+因此一个分组的含义是“这些信号共享同一个审查键”，不是“这些信号已被证明
 来自同一个根因”。
 
-`cluster` 是 opt-in duplicate-signal review-aid，不默认启用，不写 canonical atoms，不自动
-confirm/apply/validate/mutate，也不成为 SQLite truth。cluster key 每次 review 查询时从
-已有 signal 文本和 review scope 重建：key 始终包含 signal kind、proposed action、target
-label snapshot（或 id fallback）以及 proposed label scope，再附加优先级最高的
-lexical-normalized candidate text，其次 proposed label，再其次 rationale，最后退回纯
-scope 组合。这个 scope 前缀避免把相同文本但不同 label boundary/action 的 signals 强制
-合并；输出中的 `cluster_key` 和 `cluster_reason` 只解释这个辅助分组来源。
+`cluster` 是需要明确启用的重复信号审查辅助功能；它默认关闭，不写入权威 atom，不会自动
+确认、应用、验证或变更，也不成为 SQLite 事实。每次审查查询时，聚类键都会从
+已有信号文本和审查范围重建：键始终包含信号类型、候选操作、目标
+标签快照（或 ID 回退）以及候选标签范围，再依次附加词法规范化后的候选文本、
+候选标签、理由，最后回退到纯范围组合。这个范围前缀避免把文本相同但标签边界或操作
+不同的信号强制合并；输出中的 `cluster_key` 和 `cluster_reason` 只用于解释辅助分组来源。
 
-Review queue 的默认排序使用 distinct source task count（`task_count`）作为主要热度指标，
-再按 confirmed count、latest signal time 和 key 排序。`signal_count` 只是 group 内原始
-signal 行数；同一 task 可以贡献多条 signals，所以它不能单独代表模型错误率、precision、
-recall 或 label suggest 质量。需要质量指标时必须另有 denominator，例如 agreement cohort
+审查队列默认使用不同来源任务数（`task_count`）作为主要热度指标，
+再按已确认数量、最近信号时间和键排序。`signal_count` 只是分组内的原始
+信号行数；同一任务可以贡献多条信号，所以它不能单独代表模型错误率、准确率、
+召回率或标签建议质量。需要质量指标时必须另有分母，例如一致性队列
 或固定评估集。
 
-`label ontology quality` 是一个只读 analytics 投影，不新增表，也不写 canonical truth。
-它把 `label_ontology_observations` 作为 denominator 来源并在输出中记录该来源、distinct
-task 数、observation 数、agreement/degraded observation 数、时间范围和 task ref sample；
-同时把 `label_ontology_signals` 作为 raw disagreement numerator 来源，按 kind/status
-给出原始 signal counts。只有当 denominator 中存在 agreement observations 时，才会给出
-`disagreement_task_rate`；只有 signals 的数据集会明确返回 rate unavailable，避免把分歧
-记录误称为错误率。Precision/recall 仍需要带 expected labels 的独立评估 cohort，当前
-ledger signal 不能单独提供这些指标。
+`label ontology quality` 是一个只读分析投影，不新增表，也不写权威事实。
+它把 `label_ontology_observations` 作为分母来源，并在输出中记录来源、不同
+任务数、observation 数、一致或降级的 observation 数、时间范围和任务引用样本；
+同时把 `label_ontology_signals` 作为原始分歧分子来源，按类型和状态
+给出原始信号数量。只有当分母中存在一致的 observations 时，才会给出
+`disagreement_task_rate`；只有信号的数据集会明确返回比率不可用，避免把分歧
+记录误称为错误率。准确率和召回率仍需要带预期标签的独立评估队列，当前
+账本信号不能单独提供这些指标。
 
-长期 label ontology regression corpus 属于测试/评估基础设施，不是新的 SQLite truth。
-当前固定 corpus 测试使用临时 DB 和内存 label atom index 跟踪 important labels 的 known
-positive/negative-control tasks，并比较 `label suggest` 的 selected labels、score 与
-evidence atoms。Corpus run 本身应保持只读 canonical ontology；只有测试中显式模拟的
-临时 semantics/atom 变更才会用于证明 comparison 能发现回归。真实 DB 上的长期 corpus
-需要等稳定任务集积累后再扩展，不应替代 ledger signals、trusted validation 或人工 review。
+长期标签本体回归语料集属于测试和评估基础设施，不是新的 SQLite 事实。
+当前固定语料集测试使用临时数据库和内存标签 atom 索引，跟踪重要标签的已知
+正向和负向对照任务，并比较 `label suggest` 选中的标签、分数与证据 atom。
+语料集运行本身应只读权威本体；只有测试中明确模拟的临时语义或 atom 变更，
+才用于证明比较能够发现回归。真实数据库上的长期语料集需要等稳定任务集积累后再扩展，
+不应替代账本信号、可信验证或人工审查。
 
-当前没有 label-ontology 专属 graph projection。`label_ontology_*` 表本身就是 SQLite
-provenance truth；`kanban graph` / Oxigraph 只投影 Knowledge Substrate 的
-`entity_relations`，不保存或拥有 label ontology action/signal truth。若未来出现明确的
-rename/split/merge 或 provenance relationship 查询需求，新增 projection 必须从
+当前没有标签本体专属的图投影。`label_ontology_*` 表本身就是 SQLite
+来源事实；`kanban graph` / Oxigraph 只投影知识派生底座的
+`entity_relations`，不保存也不拥有标签本体操作或信号事实。若未来出现明确的
+重命名、拆分、合并或来源关系查询需求，新增投影必须从
 `labels`、`label_semantics`、`label_atoms`、`label_semantic_proposals` 和
-`label_ontology_*` 重建，并通过 `index_outbox` / `derived_store_state` 表达 dirty、sync、
-rebuild 和 error 状态；删除或损坏 graph 不得改变 canonical label/ontology/ledger rows。
+`label_ontology_*` 重建，并通过 `index_outbox` / `derived_store_state` 表达标脏、同步、
+重建和错误状态；删除或损坏图存储不得改变权威的标签、本体或账本行。
 
 表：`label_ontology_actions`
 
-Action 是 append-only history，表示 reviewer/agent 实际确认、拒绝、修改 ontology 或
-记录 validation 的动作。直接修改 label semantics 或接受 proposal 时，provenance
-也写成 action。
+Action 是只追加的历史，表示审查者或 agent 实际确认、拒绝、修改本体或
+记录验证的操作。直接修改标签语义或接受提案时，来源信息
+也写成操作记录。
 
 | 字段 | 说明 |
 |---|---|
-| `id` | `loa_...` action id。 |
-| `board_id` | board scope。 |
-| `parent_action_id` | validation 等后续 action 指向被验证的 mutation action。 |
+| `id` | `loa_...` 操作 ID。 |
+| `board_id` | 看板作用域。 |
+| `parent_action_id` | 验证等后续操作指向被验证的变更操作。 |
 | `action_type` | `confirm`、`reject`、`supersede`、`resolve_no_change`、`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、`update_semantics`、`create_label_proposal`、`bootstrap_label`、`rename_label`、`split_label`、`merge_labels`、`validate`、`revert_ontology_mutation`。 |
-| `reason` | 必填人工或 agent 理由。 |
-| `target_label_id` / `result_label_id` | 修改目标与结果 label。 |
-| `result_atom_id` / `result_atom_content_hash` | 新增或采用 atom 的软引用和稳定 hash。 |
+| `reason` | 必填的人工或 agent 理由。 |
+| `target_label_id` / `result_label_id` | 修改目标与结果标签。 |
+| `result_atom_id` / `result_atom_content_hash` | 新增或采用 atom 的软引用和稳定哈希。 |
 | `result_proposal_id` | 关联的 `label_semantic_proposals`。 |
-| `canonical_before_hash` / `canonical_after_hash` | 修改前后 canonical semantics hash。 |
-| `change_json` | before/after/diff 或其它可解释变更快照。 |
-| `validation_requirement` | `none`、`required`、`unsupported`。表达 parent mutation 是否需要 typed validation policy；不改写历史 attempt outcome。 |
-| `validation_status` | `not_required`、`pending`、`passed`、`failed`、`partial`。对 mutation parent 是历史兼容/base status；对 `validate` action 表示一次 attempt outcome。 |
-| `validation_json` | validation evidence envelope；service 会包装 supplied/collected payload、source signal cases、task snapshot comparability、parent action result 引用和 summary。公共 supplied/collected payload 只保存在 top-level `manual`；generated `cases[]` 用 `after.manual_case_ref` 指向 `manual.cases[]` 中对应 signal 的 evidence，避免把同一 payload 复制到每个 case。`failed` / `partial` 可保存 external/manual attestation 诊断。`passed` action 只能来自工具采集的 `trusted_automated` evidence（collector source、embedding model、solver options、clean atom index status/generation、per-signal before/after cases），并按 parent action 校验 positive atom、negative atom、bootstrap label 和 negative positive-control/waiver policy；调用方手写 JSON 或自称 `automated` 不构成可信来源。 |
-| `created_by` / `created_by_type` / `agent_type` | action actor。 |
+| `canonical_before_hash` / `canonical_after_hash` | 修改前后权威语义的哈希。 |
+| `change_json` | 修改前、修改后、差异或其他可解释的变更快照。 |
+| `validation_requirement` | `none`、`required`、`unsupported`。表示父级变更是否需要类型化验证策略；不改写历史尝试结果。 |
+| `validation_status` | `not_required`、`pending`、`passed`、`failed`、`partial`。对父级变更表示历史兼容或基础状态；对 `validate` 操作表示一次尝试结果。 |
+| `validation_json` | 验证证据封装；服务会包装调用方提供或工具采集的载荷、来源信号用例、任务快照可比性、父级操作结果引用和摘要。公开的提供或采集载荷只保存在顶层 `manual`；生成的 `cases[]` 用 `after.manual_case_ref` 指向 `manual.cases[]` 中对应信号的证据，避免把同一载荷复制到每个用例。`failed` / `partial` 可保存外部或人工证明的诊断。`passed` 操作只能来自工具采集的 `trusted_automated` 证据（采集器来源、嵌入模型、求解器选项、干净的 atom 索引状态与代次、每个信号修改前后的用例），并按父级操作校验正向 atom、负向 atom、标签引导创建，以及负向正例对照或豁免策略；调用方手写 JSON 或自称 `automated` 不构成可信来源。 |
+| `created_by` / `created_by_type` / `agent_type` | 操作者身份。 |
 | `created_at` | 创建时间。 |
 
-`validation_effective_outcome` 是读取 DTO 中的 reducer 结果，不是独立存储列。它按
-`validation_requirement` 和 latest validation child action（`created_at,id`）计算：
+`validation_effective_outcome` 是读取 DTO 时归并计算的结果，不是独立存储列。它按
+`validation_requirement` 和最近的验证子操作（`created_at,id`）计算：
 `not_required`、`unsupported`、`pending`、`passed`、`failed` 或 `partial`。只有
-`required + trusted passed` 会 resolve linked source signals；`unsupported` 可以记录
-external failed/partial 诊断，但拒绝 passed。
+`required + trusted passed` 会处理已链接的来源信号；`unsupported` 可以记录
+外部的失败或部分成功诊断，但拒绝 `passed`。
 
-`label_ontology_action_atom_effects` 连接一条 root mutation action 与本次实际 added/removed
-atom snapshots。它保存 `board_id`、`action_id`、`label_id_snapshot`、`atom_id_snapshot`、
+`label_ontology_action_atom_effects` 连接一条根变更操作与本次实际新增或删除的
+atom 快照。它保存 `board_id`、`action_id`、`label_id_snapshot`、`atom_id_snapshot`、
 `atom_content_hash`、`polarity`、`kind`、`text`、`effect` 和 `created_at`；`effect` 只允许
-`added` / `removed`，唯一约束为 `(action_id, atom_content_hash, effect)`。Action 使用
-board-scoped composite FK；atom snapshot 不使用 live FK，因为 `label_atoms` 会随 projection
+`added` / `removed`，唯一约束为 `(action_id, atom_content_hash, effect)`。操作记录使用
+带看板作用域的复合外键；atom 快照不使用实时外键，因为 `label_atoms` 会随投影
 重建。
 
-`result_atom_id` 故意不是强 FK。`label_atoms` 会随 semantics rebuild delete/insert；
-历史 action/effect 依赖 `result_atom_content_hash`、effect row 和 `change_json` 中的 atom
-snapshot 保持可解释。Atom explain 查询会优先使用
-`label_ontology_action_atom_effects`，也允许用 legacy `result_atom_id` /
-`result_atom_content_hash` 兼容旧数据。`adopt_existing_atom` 表示新的 source signal 采用了当前已存在 atom，
-不代表 canonical 内容新增。已有 atom 如果来自旧 semantics 写入而没有任何 ontology action 引用，
-查询结果只标记 `legacy_untracked=true`，不会伪造 provenance。
+`result_atom_id` 有意不使用强外键。`label_atoms` 会随语义重建而删除再插入；
+历史操作和影响记录依赖 `result_atom_content_hash`、影响行与 `change_json` 中的 atom
+快照保持可解释。Atom 解释查询会优先使用
+`label_ontology_action_atom_effects`，也允许用旧版 `result_atom_id` /
+`result_atom_content_hash` 兼容旧数据。`adopt_existing_atom` 表示新的来源信号采用了当前已存在的 atom，
+不代表权威内容新增。已有 atom 如果来自旧语义写入而没有任何本体操作引用，
+查询结果只标记 `legacy_untracked=true`，不会伪造来源记录。
 
-`create_label_proposal` action 对同一 `(board_id, result_proposal_id)` 唯一；proposal
-accept 生成的 `bootstrap_label` action 通过 `parent_action_id` 指向这条 creation
-action，从而让 proposal creation -> bootstrap acceptance provenance 链路保持无歧义。
+同一 `(board_id, result_proposal_id)` 只能有一条 `create_label_proposal` 操作；接受提案
+生成的 `bootstrap_label` 操作通过 `parent_action_id` 指向这条创建
+操作，从而让“创建提案 → 引导接受”的来源链路保持无歧义。
 
-`revert_ontology_mutation` 是 append-only rollback history：它不会修改或删除原 mutation
-action，而是用 `parent_action_id` 指向被撤销 action，并把 canonical semantics 恢复到该
-action 的 `change_json.before` / `canonical_before_hash` snapshot。当前实现只覆盖
-label-scoped semantics/atom mutations（`add_positive_atom`、`add_negative_atom`、
-`update_semantics`），成功后标脏 label atom index 并保持 validation pending；bootstrap
-的 label identity / task binding rollback 不由该 action 类型表达。
+`revert_ontology_mutation` 是只追加的回滚历史：它不会修改或删除原变更
+操作，而是用 `parent_action_id` 指向被撤销操作，并把权威语义恢复到该
+操作的 `change_json.before` / `canonical_before_hash` 快照。当前实现只覆盖
+标签作用域内的语义或 atom 变更（`add_positive_atom`、`add_negative_atom`、
+`update_semantics`），成功后标脏标签 atom 索引并保持验证待定；引导创建产生的
+标签身份或任务绑定回滚不由该操作类型表达。
 
-当前 constructive ontology mutation path 的责任边界如下：
+当前建设性本体变更路径的责任边界如下：
 
-- `label_semantics` 是 canonical ontology truth；`label_atoms` 是它的 SQLite materialized
-  projection；`label_ontology_actions` 是 append-only provenance，不是第二份 truth。
+- `label_semantics` 是权威本体事实；`label_atoms` 是它的 SQLite 物化
+  投影；`label_ontology_actions` 是只追加的来源记录，不是第二份事实。
 - `update_semantics`、`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、
-  `create_label_proposal` 和 `bootstrap_label` action 只能由专用 service path 写入。
-  `adopt_existing_atom` 是 provenance-only path，before/after hash 相同，只连接新的
-  source signals 到 existing atom，不修改 canonical semantics/atoms，也不标脏 atom
-  index；其它 constructive mutation 与对应 canonical write 位于同一 SQLite transaction。
-- 每个 semantics/atom mutation transaction 只写一条 root mutation action；`change_json`
-  只保存一次 before/after semantics snapshot。实际 added/removed atoms 写入
-  `label_ontology_action_atom_effects`，description-only patch 写零 effect，no-op patch 不写
-  action/effect/index dirty。
-- Manual mutation 可以没有 source signals，但仍必须记录 actor、reason、before/after
-  hash 和 change snapshot。Signal-driven mutation 会额外写入
-  `label_ontology_action_signals` links。
-- `label semantics upsert` 默认是 patch/CAS path：`expected_semantics_hash` 防止
-  lost update；缺省字段不清空旧 semantics；`replace=true` 才执行完整替换，并将缺省
-  arrays 解释为空集合。
-- Direct task-label bootstrap 与 proposal accept 共用 adoption primitive。Task-label
-  bootstrap 可创建或复用无 semantics 的同名 canonical label；proposal accept 当前会先拒绝
-  任何 existing normalized-name conflict，因此成功路径创建新 canonical label。二者都会写
-  semantics/atoms、标脏 label atom index，并写一个 `bootstrap_label` root action 和 added
-  atom effects；proposal accept
-  不写 `task_labels`，task-label bootstrap 会绑定来源 task。失败时 canonical writes 与
-  provenance action 一起回滚。
-- `rename_label`、`split_label`、`merge_labels` 仍可作为 signal proposed_action 或 legacy
-  action 读取；当前 public service/CLI/HTTP 不再写新的 structure plan mutation action。旧
-  structure plan action 的 validation requirement 解释为 `unsupported`。
-- `legacy_untracked=true` 只表示当前 atom 没有可匹配的 ontology action，例如旧数据或
-  destructive cleanup 后的历史缺口；新 constructive mutation 不应依赖这种兼容路径来解释
-  provenance。
+  `create_label_proposal` 和 `bootstrap_label` 操作只能由专用服务路径写入。
+  `adopt_existing_atom` 是只记录来源的路径，修改前后哈希相同，只把新的
+  来源信号连接到已有 atom，不修改权威语义或 atom，也不标脏 atom
+  索引；其他建设性变更与对应的权威写入位于同一 SQLite 事务。
+- 每个语义或 atom 变更事务只写一条根变更操作；`change_json`
+  只保存一次修改前后的语义快照。实际新增或删除的 atom 写入
+  `label_ontology_action_atom_effects`；仅修改说明的补丁写入零条影响记录，无实际变化的补丁不写
+  操作、影响记录，也不标脏索引。
+- 人工变更可以没有来源信号，但仍必须记录操作者、理由、修改前后
+  哈希和变更快照。信号驱动的变更会额外写入
+  `label_ontology_action_signals` 链接。
+- `label semantics upsert` 默认使用补丁与 CAS 路径：`expected_semantics_hash` 防止
+  更新丢失；缺省字段不清空旧语义；只有 `replace=true` 才执行完整替换，并将缺省
+  数组解释为空集合。
+- 直接从任务标签引导创建与接受提案共用同一采用原语。任务标签
+  引导创建可以新建或复用没有语义的同名权威标签；接受提案当前会先拒绝
+  任何已有的规范化名称冲突，因此成功路径会创建新的权威标签。二者都会写入
+  语义和 atom、标脏标签 atom 索引，并写一个 `bootstrap_label` 根操作和新增的
+  atom 影响记录；接受提案
+  不写 `task_labels`，任务标签引导创建会绑定来源任务。失败时权威写入与
+  来源操作一起回滚。
+- `rename_label`、`split_label`、`merge_labels` 仍可作为信号的 `proposed_action` 或旧版
+  操作读取；当前公开服务、CLI 和 HTTP 不再写新的结构规划变更操作。旧
+  结构规划操作的验证要求解释为 `unsupported`。
+- `legacy_untracked=true` 只表示当前 atom 没有可匹配的本体操作，例如旧数据或
+  破坏性清理后的历史缺口；新的建设性变更不应依赖这种兼容路径来解释
+  来源。
 
 表：`label_ontology_action_signals`
 
-多对多连接 action 与 signals。多个 signals 可以支持一次 atom 修改；同一个 signal
-也可以先被 confirm，随后关联 mutation action 和 validation action。
+多对多连接操作与信号。多个信号可以支持一次 atom 修改；同一个信号
+也可以先被确认，随后关联变更操作和验证操作。
 
-默认 review queue 只读取 `open` 与 `confirmed` signals；完整历史需显式 include all。
-Mutation action 写入后通常保持 source signals 为 `confirmed`。只有 trusted automated
-`passed` validation 会把 linked source signals 转为 `resolved`；external/manual
-attestation、`failed` 或 `partial` validation 只追加历史，不删除 signals，也不把问题
+默认审查队列只读取 `open` 与 `confirmed` 信号；完整历史需要明确包含全部状态。
+变更操作写入后通常保持来源信号为 `confirmed`。只有可信自动化
+`passed` 验证会把已链接的来源信号转为 `resolved`；外部或人工
+证明、`failed` 或 `partial` 验证只追加历史，不删除信号，也不把问题
 伪装成已验证关闭。
+
+### 12.4 标签语义提案
+
+表：`label_semantic_proposals`
+
+`label_semantic_proposals` 保存新增标签提案的生命周期，不是权威的
+标签事实。它只记录“现有标签 atom 建议覆盖不足时，外部或人工提供方
+给出的候选语义”。明确接受之前，不会创建 `labels`、`label_semantics`、
+`label_atoms` 或 `task_labels`。
+
+| 字段 | 说明 |
+|---|---|
+| `id` | `lp_...` 提案 ID。 |
+| `board_id` / `task_id` | 提案来源任务。 |
+| `status` | `proposed` / `accepted` / `rejected`。提供方不可用不会写成状态，而是返回降级尝试。 |
+| `name` / `description` / `applies_when` / `excludes_when` / `positive_examples` / `negative_examples` | 候选标签语义。数组字段为 JSON 字符串数组。 |
+| `heuristic_coverage` / `heuristic_coverage_cosine` / `heuristic_residual_norm` | 来自当前残差标签建议求解器的覆盖与残差元数据，用于记录提案创建时现有标签 atom 的覆盖程度；`heuristic_coverage = clamp(1 - heuristic_residual_norm, 0.0, 1.0)`，二者不是独立证据；`heuristic_coverage_cosine` 是查询向量与拟合向量的余弦相似度。 |
+| `top1_existing_label_id` / `top1_existing_label_name` | 当前启发式排序第一的已有标签。 |
+| `diagnostics_json` | JSON 字符串数组，包含降级、冲突或验证诊断。 |
+| `decision_reason` / `resolved_label_id` / `decided_at` | 接受或拒绝的决策信息；接受后 `resolved_label_id` 指向新建的权威标签。 |
+
+只有 `proposed` 状态的提案可以被接受。接受操作通过共享的采用原语创建同一看板内的
+权威 `labels` 行，并写入对应的 `label_semantics` / `label_atoms`，同时标脏
+`lancedb_label_atoms` 派生存储，写入 `bootstrap_label` 来源操作，并让
+`resolved_label_id` 指向结果标签；提案状态、权威写入与来源操作
+在同一事务内提交。它不写入 `task_labels`，不会把新标签自动绑定到来源
+任务。
+
+拒绝操作会把提案标记为 `rejected`。与现有标签发生规范化名称冲突的
+候选会持久化为 `rejected`，诊断信息包含 `near_duplicate_label_conflict`。
+规范化名称冲突是一种确定性的近似重复启发式判断，会忽略大小写、空白和标点。
 
 ---
 
-## 12. Column
+## 13. 看板列（Column）
 
-Column 是 UI 展示层。
+看板列（Column）属于 UI 展示层。
 
 字段：
 
 | 字段 | 说明 |
 |---|---|
-| `id` | Column ID。 |
-| `board_id` | 所属 board。 |
-| `status` | 映射的 canonical status。 |
+| `id` | 看板列 ID。 |
+| `board_id` | 所属看板。 |
+| `status` | 映射的权威状态。 |
 | `title` | UI 名称。 |
 | `position` | UI 排序。 |
 | `hidden` | 是否隐藏。 |
-| `wip_limit` | 可选 WIP limit。 |
+| `wip_limit` | 可选的在制任务数量限制。 |
 
-MVP：一个 status 对应一个 column。
+当前最小实现中，一个状态对应一个看板列。
 
 ---
 
-## 13. Knowledge Substrate
+## 14. 知识派生底座（Knowledge Substrate）
 
-Knowledge Substrate 表只支持实体身份、关系镜像、派生 outbox 和派生 store 健康状态。SQLite task/run/comment/event 仍是 operational source of truth。
+知识派生底座相关表只支持实体身份、关系镜像、派生发件箱和派生存储健康状态。SQLite 中的任务、执行记录、评论和事件仍是运行时权威事实来源。
 
-### 13.1 Entity registry
+### 14.1 实体登记
 
 表：`entities`
 
@@ -2675,24 +2663,24 @@ Knowledge Substrate 表只支持实体身份、关系镜像、派生 outbox 和�
 
 | 字段 | 说明 |
 |---|---|
-| `uri` | 稳定 `kb://...` entity URI。 |
-| `kind` | `task` / `run` / `comment` / `artifact` / `skill` / `project`。 |
+| `uri` | 稳定的 `kb://...` 实体 URI。 |
+| `kind` | 开放文本；当前自动投影使用 `board`、`column`、`task`、`run`、`event`、`comment`、`attachment`、`label`、`task_label`、`setting`。 |
 | `source_table` | 来源 SQLite 表。 |
-| `source_id` | 来源 row id。 |
-| `board_id` | 可选 board scope。 |
-| `task_id` | 可选 task scope。 |
+| `source_id` | 来源行 ID。 |
+| `board_id` | 可选的看板作用域。 |
+| `task_id` | 可选的任务作用域。 |
 | `title` | 展示标题。 |
 | `summary` | 简短摘要。 |
-| `content_hash` | 内容 hash，用于派生层判断变化。 |
+| `content_hash` | 内容哈希，用于派生层判断变化。 |
 | `created_at` / `updated_at` / `archived_at` | 生命周期时间。 |
 
-### 13.2 Relation graph mirror
+### 14.2 关系图镜像
 
 表：`relation_predicates`、`entity_relations`
 
-`relation_predicates` 定义受控 predicate；`entity_relations` 存可重建关系镜像。关系层用于 graph/context 查询，不改变 task 状态机。状态机仍以 `tasks.status`、`task_dependencies` 和 service transaction 为准。
+`relation_predicates` 定义受控谓词；`entity_relations` 保存可重建的关系镜像。关系层用于图与上下文查询，不改变任务状态机。状态机仍以 `tasks.status`、`task_dependencies` 和服务事务为准。
 
-### 13.3 Index outbox
+### 14.3 索引发件箱
 
 表：`index_outbox`
 
@@ -2700,20 +2688,20 @@ Knowledge Substrate 表只支持实体身份、关系镜像、派生 outbox 和�
 
 | 字段 | 说明 |
 |---|---|
-| `id` | 自增 job id。 |
+| `id` | 自增作业 ID。 |
 | `source_event_id` | 来源 `task_events.id`，允许事件被删除/导入时置空。 |
 | `target` | `tantivy` / `oxigraph` / `lancedb` / `all`。 |
-| `entity_uri` | 目标 entity。 |
+| `entity_uri` | 目标实体。 |
 | `action` | `upsert` / `delete` / `rebuild`。 |
-| `payload_json` | 有界 job payload。 |
+| `payload_json` | 有界的作业载荷。 |
 | `status` | `pending` / `running` / `done` / `failed`。 |
 | `attempts` | 尝试次数。 |
 | `last_error` | 最近失败原因。 |
-| `created_at` / `updated_at` | job 时间。 |
+| `created_at` / `updated_at` | 作业时间。 |
 
-`index_outbox` 是 at-least-once 派生 job surface。task mutation transaction 只写 SQLite truth、event、entity/outbox 记录，不直接写 Tantivy/Oxigraph/LanceDB。
+`index_outbox` 是至少执行一次语义的派生作业接口。任务变更事务只写 SQLite 权威事实、事件、实体和发件箱记录，不直接写 Tantivy、Oxigraph 或 LanceDB。
 
-### 13.4 Derived store state
+### 14.4 派生存储状态
 
 表：`derived_store_state`
 
@@ -2721,62 +2709,30 @@ Knowledge Substrate 表只支持实体身份、关系镜像、派生 outbox 和�
 
 | 字段 | 说明 |
 |---|---|
-| `store_name` | 派生 store 名称，例如 `tantivy_tasks`、`oxigraph_relations`、`lancedb_chunks`、`lancedb_label_atoms`。 |
-| `schema_version` | store schema/contract 版本。 |
-| `last_event_id` | store 已成功提交的全局 `task_events.id` 水位。 |
-| `dirty` | 是否仍有未完成 outbox、失败 outbox 或最近一次 store 更新失败。 |
-| `last_rebuild_at` | 最近成功 rebuild 时间。 |
-| `last_sync_at` | 最近成功 sync 时间。 |
+| `store_name` | 派生存储名称，例如 `tantivy_tasks`、`oxigraph_relations`、`lancedb_chunks`、`lancedb_label_atoms`。 |
+| `schema_version` | 存储结构或契约版本。 |
+| `last_event_id` | 存储已成功提交的全局 `task_events.id` 水位。 |
+| `dirty` | 是否仍有未完成的发件箱记录、失败的发件箱记录，或最近一次存储更新失败。 |
+| `last_rebuild_at` | 最近成功重建时间。 |
+| `last_sync_at` | 最近成功同步时间。 |
 | `last_error` | 最近失败证据。 |
 | `updated_at` | 状态更新时间。 |
 
-`last_event_id` 是 store 全局成功处理水位，不是 board 局部水位。成功 sync/rebuild 只能单调推进这个值；当一个 board sync 完成但其他 board 仍有 pending/running/failed outbox 时，`dirty` 必须保持 true。`dirty=false` 只表示同一 store target 当前没有 unfinished outbox 且最近一次 store 更新没有失败。
+`last_event_id` 是存储全局成功处理水位，不是单个看板的局部水位。成功同步或重建只能单调推进这个值；当一个看板同步完成、但其他看板仍有 `pending`、`running` 或 `failed` 发件箱记录时，`dirty` 必须保持 `true`。`dirty=false` 只表示同一存储目标当前没有未完成的发件箱记录，而且最近一次存储更新没有失败。
 
-`last_error` 成功后清空，失败时保留错误证据并保持 `dirty=true`。Operator 应通过 `kanban derived status`、`kanban doctor`、maintenance API 和对应 `sync/rebuild` 命令恢复派生层；派生 store 损坏或落后不改变 SQLite task truth。
+`last_error` 在成功后清空，失败时保留错误证据并保持 `dirty=true`。操作者应通过 `kanban derived status`、`kanban doctor`、维护 API 和对应的同步或重建命令恢复派生层；派生存储损坏或落后不会改变 SQLite 中的任务事实。
 
 表：`label_atom_index_boards`
 
-`label_atom_index_boards` 只跟踪可重建的 `lancedb_label_atoms` 派生层在各 board
-上的刷新状态，不是 label truth。`label_semantics` / `label_atoms` 更新会把对应
-board 标脏；单个 board 的 label atom rebuild 成功只清理该 board 的 dirty 标记。
-只有该 store 下所有 board 都不 dirty 时，`derived_store_state.dirty` 才能变为
+`label_atom_index_boards` 只跟踪可重建的 `lancedb_label_atoms` 派生层在各看板
+上的刷新状态，不是标签事实。`label_semantics` / `label_atoms` 更新会把对应
+看板标脏；单个看板的标签 atom 重建成功，只会清理该看板的 `dirty` 标记。
+只有该存储下所有看板都不再标脏时，`derived_store_state.dirty` 才能变为
 `false`。
 
-### 11.2 Label semantic proposals
+## 15. 常用查询
 
-表：`label_semantic_proposals`
-
-`label_semantic_proposals` 是新增 label 的持久提案生命周期，不是 canonical
-label truth。它只记录“现有 label atom suggestion 覆盖不足时，外部/manual provider
-给出的候选语义”。未显式 accept 前，不创建 `labels`、`label_semantics`、
-`label_atoms` 或 `task_labels`。
-
-| 字段 | 说明 |
-|---|---|
-| `id` | `lp_...` proposal id。 |
-| `board_id` / `task_id` | 提案来源 task。 |
-| `status` | `proposed` / `accepted` / `rejected`。provider 不可用不写成 status，而是返回 degraded attempt。 |
-| `name` / `description` / `applies_when` / `excludes_when` / `positive_examples` / `negative_examples` | 候选 label semantics。数组字段为 JSON string array。 |
-| `heuristic_coverage` / `heuristic_coverage_cosine` / `heuristic_residual_norm` | 来自当前 residual label suggestion solver 的覆盖/残差元数据，用于记录 proposal 创建时现有 label atoms 的覆盖程度；`heuristic_coverage = clamp(1 - heuristic_residual_norm, 0.0, 1.0)`，二者不是独立证据；`heuristic_coverage_cosine` 是 query 与 fitted vector 的 cosine similarity。 |
-| `top1_existing_label_id` / `top1_existing_label_name` | 当前启发式 top1 existing label。 |
-| `diagnostics_json` | JSON string array，包含 degraded、冲突或 validation 诊断。 |
-| `decision_reason` / `resolved_label_id` / `decided_at` | accept/reject 决策信息；accept 后 `resolved_label_id` 指向新建 canonical label。 |
-
-Accept 只允许 `proposed` proposal。accept 通过共享 adoption primitive 创建同 board 的
-canonical `labels` 行，并写入对应 `label_semantics` / `label_atoms`，同时标脏
-`lancedb_label_atoms` 派生 store，写入 `bootstrap_label` provenance action，并把
-`resolved_label_id` 指向 result label；proposal status、canonical writes 与 action
-provenance 同 transaction 提交。它不写入 `task_labels`，不会把新 label 自动绑定到来源
-task。
-
-Reject 将 proposal 标记为 `rejected`。与现有 label 发生 normalized-name 冲突的
-候选会持久化为 `rejected`，diagnostics 包含 `near_duplicate_label_conflict`。
-Normalized-name 冲突是忽略大小写、空白和标点后的 deterministic near-duplicate
-heuristic。
-
-## 14. 常用查询
-
-### 14.1 Board task list
+### 15.1 看板任务列表
 
 ```sql
 SELECT *
@@ -2800,7 +2756,7 @@ ORDER BY
   created_at ASC;
 ```
 
-### 14.2 Ready queue
+### 15.2 就绪队列
 
 ```sql
 SELECT *
@@ -2819,7 +2775,7 @@ ORDER BY t.priority ASC, t.created_at ASC
 LIMIT ?;
 ```
 
-### 14.3 Expired claims
+### 15.3 已过期的领取
 
 ```sql
 SELECT *
@@ -2829,7 +2785,7 @@ WHERE status = 'running'
   AND claim_expires_at <= ?;
 ```
 
-### 14.4 Event stream
+### 15.4 事件流
 
 ```sql
 SELECT *
@@ -2842,9 +2798,9 @@ LIMIT ?;
 
 ---
 
-## 15. Export / Import Format
+## 16. 导出与导入格式
 
-JSONL export/import 是 portable board snapshot 格式：
+JSONL 导出与导入使用可移植的看板快照格式：
 
 ```bash
 kanban export --board default --format jsonl --out board.jsonl
@@ -2853,7 +2809,7 @@ kanban import --input board.jsonl --replace
 
 每行：
 
-<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
+<!-- schema-doc-ignore: 仅作示意或只展示部分载荷；已提交的结构 fixture 才是可执行的权威依据 -->
 ```json
 {"type":"task","data":{...}}
 {"type":"event","data":{...}}
@@ -2861,17 +2817,17 @@ kanban import --input board.jsonl --replace
 {"type":"dependency","data":{...}}
 ```
 
-Generic signal ledger 使用稳定 record types：
+通用信号账本使用稳定的记录类型：
 
-<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
+<!-- schema-doc-ignore: 仅作示意或只展示部分载荷；已提交的结构 fixture 才是可执行的权威依据 -->
 ```json
 {"type":"signal_observation","data":{...}}
 {"type":"signal","data":{...}}
 ```
 
-Label ontology ledger 使用稳定 record types：
+标签本体账本使用稳定的记录类型：
 
-<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
+<!-- schema-doc-ignore: 仅作示意或只展示部分载荷；已提交的结构 fixture 才是可执行的权威依据 -->
 ```json
 {"type":"label_ontology_observation","data":{...}}
 {"type":"label_ontology_signal","data":{...}}
@@ -2880,115 +2836,116 @@ Label ontology ledger 使用稳定 record types：
 {"type":"label_ontology_action_signal","data":{...}}
 ```
 
-Portable descriptor authority 共覆盖 21 个 discriminator；input/output 各有 exact root，共
-42 个 Draft 2020-12 schemas。每行 `data` 闭合，required-nullable key 必须存在但可显式为
-`null`，真实 export producer 与 import consumer 使用同一 descriptor/fixture registry。
+可移植描述符的权威定义共覆盖 21 个辨别字段值；输入和输出各有精确根结构，共
+42 个 Draft 2020-12 结构定义。每行 `data` 都是闭合对象，必需但可空的键必须存在，
+但可以明确为 `null`。真实的导出生产者与导入消费者使用同一描述符和 fixture 登记表。
 SQLite 中的 `evidence_json`、`related_labels_json`、`proposal_json`、`change_json`、
-`validation_json` 等仍是 canonical storage 列；公开 adapter 只暴露去掉 `_json` 后的自然 JSON。
+`validation_json` 等仍是权威存储列；公开适配器只暴露去掉 `_json` 后的自然 JSON。
 
-Import 另有一条仅向前的 compatibility migration，用于读取 natural JSON contract 采用前、
-由上一版 exporter 生成的 storage-native JSONL snapshot。该格式以 `column.hidden=0|1`
-以及 `metadata_json` / `payload_json` 等真实 SQLite 列形状识别；同一 snapshot 必须保持
-单一格式，不能混用 storage-native 与 natural records。同一 record 只要同时出现 natural
-renamed key 与 storage-native renamed key，就会在 normalization 前被拒绝，不能让 legacy
-值静默覆盖 natural 值。Importer 只对 coherent 父版本 record 把上一版 JSON text 列和 integer
-boolean 转为当前 natural record，再执行同一 exact contract validation 与下述 transaction/final
-consistency gates。当前及后续 export 始终只写 natural JSON，不再产生 storage-native keys；
-这不是长期双轨 public contract。
+导入另有一条只向前兼容的迁移，用于读取采用自然 JSON 契约之前、
+由上一版导出器生成的数据库原生 JSONL 快照。该格式通过 `column.hidden=0|1`
+以及 `metadata_json` / `payload_json` 等真实 SQLite 列形状识别；同一快照必须保持
+单一格式，不能混用数据库原生记录与自然 JSON 记录。同一记录只要同时出现自然 JSON
+重命名键和数据库原生重命名键，就会在规范化前被拒绝，不能让旧版
+值静默覆盖自然 JSON 值。导入器只会把结构一致的上一版本记录中的 JSON 文本列和整数
+布尔值转换为当前自然 JSON 记录，再执行同一精确契约验证，以及下述事务和最终
+一致性门禁。当前及后续导出始终只写自然 JSON，不再产生数据库原生键；
+这不是长期双轨公开契约。
 
-导入时会在同一 transaction 中先插入 rows，再运行 final consistency gate。基础关系表
+导入时会在同一事务中先插入各行，再运行最终一致性门禁。基础关系表
 会检查 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、
-`signal_observations`、`signals`、`task_events`、`task_attachments` 的 row board 与
-referenced task / label / run / comment / observation board 是否一致；失败时整个
-`--replace` import transaction 回滚，不提交部分数据。
+`signal_observations`、`signals`、`task_events`、`task_attachments` 的行所属看板与
+被引用任务、标签、执行记录、评论和观察记录所属看板是否一致；失败时整个
+`--replace` 导入事务回滚，不提交部分数据。
 
-Ontology rows 也在同一 transaction 中插入，并延迟回填
+本体相关行也在同一事务中插入，并延迟回填
 `label_ontology_signals.superseded_by_signal_id` 与
-`label_ontology_actions.parent_action_id`，避免依赖同表自引用 rows 的文件顺序。导入完成前会校验 ontology ledger board isolation：observation/signal board、action
-parent board、action-signal link board、label/proposal soft reference board 必须一致；
-orphan action-signal links、supersede cycles 和 action parent cycles 会导致 import
+`label_ontology_actions.parent_action_id`，避免依赖同表自引用行在文件中的顺序。导入完成前会校验本体账本的看板隔离：观察记录与信号所属看板、操作
+父级所属看板、操作与信号链接所属看板、标签或提案软引用所属看板必须一致；
+孤立的操作与信号链接、替代关系环和操作父级环会导致导入
 失败。
 
-Generic `signals.superseded_by_signal_id` 同样会延迟回填，避免依赖同表自引用 rows 的文件顺序。
+通用信号的 `signals.superseded_by_signal_id` 同样会延迟回填，避免依赖同表自引用行在文件中的顺序。
 
-`kanban doctor --json` 对上述基础关系表、SQLite `PRAGMA foreign_key_check`、ontology
-ledger consistency 和 generic signal ledger board consistency 规则做只读巡检。
+`kanban doctor --json` 对上述基础关系表、SQLite `PRAGMA foreign_key_check`、本体
+账本一致性和通用信号账本的看板一致性规则做只读巡检。
 基础关系表问题返回 `consistency_errors`、`consistency_warnings`、
-`consistency_issues[]`；ontology ledger 问题返回 `ontology_ledger_errors`、
-`ontology_ledger_warnings`、`ontology_ledger_issues[]`。Issue 包含 `severity`、
-`code`、`message`、`record_ids`，用于定位损坏 row；基础关系表 message 包含
-`table`、`row`、`row_board` 和 `referenced_board`，foreign-key issue 会记录 table、
-rowid、parent table 和 FK index。Hard error 覆盖 row board mismatch、
-missing v12 ontology table、跨 board link、orphan action-signal/action-effect link、generic
-signal orphan/cross-board context、generic signal supersede cycle、parent/supersede 异常、label/proposal/task board mismatch、
-supersede cycle 和 action parent cycle；非零
-error 让 `ok=false`。Warning 保留给仍可解释或可重建的软引用，例如历史 action 的
-`result_atom_id` 已被当前 `label_atoms` rebuild 删除。
+`consistency_issues[]`；本体账本问题返回 `ontology_ledger_errors`、
+`ontology_ledger_warnings`、`ontology_ledger_issues[]`。问题项包含 `severity`、
+`code`、`message`、`record_ids`，用于定位损坏行；基础关系表消息包含
+`table`、`row`、`row_board` 和 `referenced_board`，外键问题会记录表、
+rowid、父表和外键索引。严重错误包括行所属看板不匹配、
+缺失 v12 本体表、跨看板链接、孤立的操作与信号或操作与影响链接、通用
+信号孤立或跨看板上下文、通用信号替代关系环、父级或替代关系异常、标签、提案或任务所属看板不匹配、
+替代关系环和操作父级环；错误数非零会让 `ok=false`。警告保留给仍可解释或可重建的软引用，例如历史操作的
+`result_atom_id` 已被当前 `label_atoms` 重建删除。
 
 
 ---
 
-# File: docs/CLI_SPEC.md
+# 文件：docs/CLI_SPEC.md
 
-# CLI SPEC
+# CLI 规范
 
-默认 binary 名称：`kanban`
+默认二进制名称：`kanban`
 
-CLI 是一等入口；它与 Web 使用同一套 `kanban-sqlite::service` backed service path
-和 SQLite schema。
+CLI 是一等入口；它与 Tauri Desktop 和本机 API 共用由 `kanban-sqlite::service` 支撑的服务路径
+和 SQLite 模式。
 
 ---
 
-## 1. Global Options
+## 1. 全局选项
 
 ```bash
 kanban [GLOBAL_OPTIONS] <COMMAND>
 ```
 
-| Option | 说明 |
+| 选项 | 说明 |
 |---|---|
-| `--db <path>` | 指定 SQLite DB；优先级高于 env、config 和 XDG 默认路径。 |
-| `--board <slug-or-id>` | 显式指定 active board，优先级最高。 |
-| `--actor <name>` | 操作 actor。默认 OS username。 |
-| `--locale <auto|zh-CN|en>` | human 输出语言。默认 `zh-CN`；`auto`/`system` 使用系统 locale。 |
+| `--db <path>` | 指定 SQLite 数据库；优先级高于环境变量、配置文件和 XDG 默认路径。 |
+| `--board <slug-or-id>` | 显式指定当前看板，优先级最高。 |
+| `--actor <name>` | 操作者名称，默认为操作系统用户名。 |
+| `--locale <auto|system|zh-CN|en>` | 选择区域设置；省略、`auto` 或 `system` 时使用系统区域设置。当前只覆盖部分错误提示和依赖命令文案。 |
 | `--json` | JSON 输出。 |
 
-SQLite DB path 解析顺序：
+SQLite 数据库路径的解析顺序：
 
 1. `--db <path>`。
 2. `KANBAN_DB` 环境变量。
 3. `KB_DB` 环境变量（兼容短名）。
 4. 从当前目录向上查找最近的 `.kb/config.toml`，读取 `db = "<path>"`。
-5. 用户全局 config `$XDG_CONFIG_HOME/kanban/config.toml`，读取 `db = "<path>"`。
-6. fallback 到 XDG data 默认路径，通常是 `~/.local/share/kb/kb.db`。
+5. 用户全局配置 `$XDG_CONFIG_HOME/kanban/config.toml`，读取 `db = "<path>"`。
+6. 回退到 XDG 数据默认路径，通常是 `~/.local/share/kb/kb.db`。
 
-Active board 解析顺序：
+当前看板的解析顺序：
 
 1. `--board <slug-or-id>`。
 2. `KB_BOARD` 环境变量。
 3. 从当前目录向上查找最近的 `.kb/config.toml`，读取 `board = "<slug>"`。
-4. fallback 到 `default`。
+4. 回退到 `default`。
 
-`kanban board use <board>` 会把当前目录写成项目级 `.kb/config.toml`；后续子目录自动继承该 active board。该配置只选择本地项目的 board，不创建新 DB。
-如果同一配置文件也包含 `db = "<path>"` 或 `[vector]`，`board use` 必须保留这些字段。配置中的相对 DB 路径按配置文件所在目录解析；环境变量和 `--db` 中的相对路径按当前工作目录解析。
+`kanban board use <board>` 会把当前目录写成项目级 `.kb/config.toml`；后续子目录自动继承该当前看板。该配置只选择本地项目的看板，不创建新数据库。
+如果同一配置文件也包含 `db = "<path>"` 或 `[vector]`，`board use` 必须保留这些字段。配置中的相对数据库路径按配置文件所在目录解析；环境变量和 `--db` 中的相对路径按当前工作目录解析。
 
-Locale 只影响 human-readable 输出和错误消息，不改变 JSON key、状态枚举、task ref、ID、exit code 或机器可读 diagnostics。选择顺序：
+区域设置不改变 JSON 键、状态枚举、任务引用、ID、退出码或机器可读诊断信息。当前本地化
+只覆盖部分运行时错误提示，以及依赖新增和移除的少量人类可读输出；初始化、任务、步骤、
+配置等多数人类输出仍为英文，因此不能把该选项理解为完整界面翻译。选择顺序：
 
-1. `--locale <auto|zh-CN|en>`。
+1. `--locale <auto|system|zh-CN|en>`。
 2. `KANBAN_LOCALE`。
-3. 默认 `zh-CN`。
+3. 系统区域设置。
 
-`auto` / `system` 会按 `LC_ALL`、`LC_MESSAGES`、`LANG` 解析系统 locale；当前只支持中文和英文。脚本和自动化应优先使用 `--json`，不要依赖 human 文案。
+`auto` / `system` 会按 `LC_ALL`、`LC_MESSAGES`、`LANG` 解析系统区域设置；当前只支持中文和英文。脚本和自动化应优先使用 `--json`，不要依赖人类可读文案。
 
-### 1.1 Config inspection
+### 1.1 查看配置
 
 ```bash
 kanban config show [--json]
 ```
 
-`config show` 输出当前 CLI 会使用的 SQLite DB path、active board 和 locale，以及每个值的来源。该命令用于 agent/operator 排查 precedence，不会打开、初始化或创建 SQLite DB。
+`config show` 输出当前 CLI 会使用的 SQLite 数据库路径、当前看板和区域设置，以及每个值的来源。该命令用于智能体或操作人员排查优先级，不会打开、初始化或创建 SQLite 数据库。
 
-`--json` 输出使用普通 `{ "data": ... }` envelope，`data` 结构如下：
+`--json` 输出使用常规 `{ "data": ... }` 封装，`data` 结构如下：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -3013,29 +2970,29 @@ kanban config show [--json]
 
 | `source.kind` | 含义 |
 |---|---|
-| `flag` | 来自显式 CLI flag，例如 `--db`、`--board`、`--locale`。 |
+| `flag` | 来自显式 CLI 标志，例如 `--db`、`--board`、`--locale`。 |
 | `env` | 来自环境变量，例如 `KANBAN_DB`、`KB_DB`、`KB_BOARD`、`KANBAN_LOCALE`。 |
 | `project_config` | 来自最近的项目级 `.kb/config.toml`。 |
-| `global_config` | 来自 `$XDG_CONFIG_HOME/kanban/config.toml`。当前只适用于 DB path。 |
-| `default` | 来自 CLI 默认值或 fallback。 |
+| `global_config` | 来自 `$XDG_CONFIG_HOME/kanban/config.toml`。当前只适用于数据库路径。 |
+| `default` | 来自 CLI 默认值或回退值。 |
 
-`locale.value` 是实际解析后的 locale；当输入为 `auto` / `system` 时，`input` 保留原始选择，`value` 保留系统 locale 解析结果。`db.value` 对显式 flag 和环境变量保留调用方传入的路径形态；config 中的相对 DB 路径按 config 文件所在目录解析。
+`locale.value` 是实际解析后的区域设置；当输入为 `auto` / `system` 时，`input` 保留原始选择，`value` 保留系统区域设置的解析结果。`db.value` 对显式标志和环境变量保留调用方传入的路径形态；配置中的相对数据库路径按配置文件所在目录解析。
 
-### 1.2 Help output contract
+### 1.2 帮助输出契约
 
-`kanban --help` 和公开 command group 的 `--help` 输出必须为每个公开 command/subcommand 行提供一句简短用途说明；隐藏内部命令（例如 `__complete`）除外。`kanban` 无参或公开 command group 缺少 subcommand 时必须显示同一类简洁帮助，而不是只输出 parser error；这仍属于 clap parse-time 路径，退出码为 2，且不输出 runtime JSON error envelope。全局 options 的 help 必须说明它们影响的是 SQLite DB、active board、actor、locale 或 JSON 输出，不改变 JSON key、状态枚举或 exit code 契约。
+`kanban --help` 和公开命令组的 `--help` 输出必须为每个公开命令或子命令提供一句简短用途说明；隐藏内部命令（例如 `__complete`）除外。`kanban` 无参数或公开命令组缺少子命令时，必须显示同一类简洁帮助，而不是只输出解析错误；这仍属于 clap 参数解析阶段，退出码为 2，且不输出运行期 JSON 错误封装。全局选项的帮助必须说明它们影响的是 SQLite 数据库、当前看板、操作者、区域设置或 JSON 输出，不改变 JSON 键、状态枚举或退出码契约。
 
-关键 agent-facing 输入面必须在命令 help 中优先展示安全路径：多行或 shell-sensitive 文本使用 `--description-file -`、`--body-file -`、`--metadata-json-file <PATH|->`、`--metadata-file <PATH|->` 或 `--input -`，避免 shell expansion / quoting 污染。危险、破坏性或容易误解的 flag 必须在 help 中说明语义，例如 `task archive --force` 绕过普通 archive guard，`import --replace` 是有意 backup/restore flow 的替换式恢复入口；兼容 no-op flag 必须明确写出 no-op。
+面向智能体的关键输入面必须在命令帮助中优先展示安全路径：多行或对 shell 敏感的文本使用 `--description-file -`、`--body-file -`、`--metadata-json-file <PATH|->`、`--metadata-file <PATH|->` 或 `--input -`，避免 shell 展开或引号处理污染。危险、破坏性或容易误解的标志必须在帮助中说明语义，例如 `task archive --force` 绕过普通归档保护，`import --replace` 是明确用于备份恢复流程的替换式恢复入口；兼容性空操作标志必须明确写出其不执行额外操作。
 
-对 `PATH|-` 文本输入（如 `--reason-file`、`--input`、`--body-file`、`--metadata-json-file`）与其变体，`kanban` 实现上约束单次输入上限为 1MiB。超过上限时返回 `invalid_input`，并在 `--json` 下通过 `error.message` 指明输入长度限制，CLI 端可用更高层分片策略。该约束覆盖 stdin 与文件输入，目的是避免错误输入导致 CLI 服务路径资源异常。
+对 `PATH|-` 文本输入（如 `--reason-file`、`--input`、`--body-file`、`--metadata-json-file`）与其变体，`kanban` 实现上约束单次输入上限为 1MiB。超过上限时返回 `invalid_input`，并在 `--json` 下通过 `error.message` 指明输入长度限制，CLI 端可用更高层分片策略。该约束覆盖标准输入与文件输入，目的是避免错误输入导致 CLI 服务路径资源异常。
 
-顶层 help 和关键 agent-facing 命令可以包含 `Examples:`，但示例必须保持短小、稳定，并与实际命令语义一致；不要把 CLI_SPEC 的完整说明复制进 help。CLI help contract 由 `crates/kanban-cli/tests/help.rs` 覆盖，防止公开 command 行退化为空描述。
+顶层帮助和面向智能体的关键命令可以包含 `Examples:`，但示例必须保持短小、稳定，并与实际命令语义一致；不要把 CLI 规范的完整说明复制进帮助。CLI 帮助契约由 `crates/kanban-cli/tests/help.rs` 覆盖，防止公开命令行退化为空描述。
 
-顶层 `kanban --help` 必须包含简洁 `Error codes:` section，覆盖当前公开退出码，帮助 operator 在终端直接发现 parse/runtime error code 边界。该 section 是 human-readable discovery surface；脚本仍应依赖 `--json` 下的 `error.code` 和 `error.exit_code`，不要解析 help 文案。
+顶层 `kanban --help` 必须包含简洁的 `Error codes:` 小节，覆盖当前公开退出码，帮助操作人员在终端直接发现参数解析阶段与运行阶段的错误码边界。该小节是人类可读的发现入口；脚本仍应依赖 `--json` 下的 `error.code` 和 `error.exit_code`，不要解析帮助文案。
 
-### 1.3 JSON output contract
+### 1.3 JSON 输出契约
 
-所有公开 `--json` 输出使用顶层 envelope：
+所有公开 `--json` 输出使用顶层封装：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -3045,13 +3002,13 @@ kanban config show [--json]
 }
 ```
 
-`meta` 只在需要分页、details 或 diagnostics 时出现。`data` 可以是一个对象，也可以是对象数组；公共输出不得依赖裸 tuple、未命名数组位置、只有内部 id 的临时数组，或只回显输入参数。命令需要表达关系、删除或当前选择时，应返回命名 DTO，例如 `edge.parent`/`edge.child`、`step`、`board`。Task-like DTO 必须带可复制的 `ref`、`id`、`board_id` 或 `board_slug` 中的必要身份字段。
+`meta` 只在需要分页、详细信息或诊断信息时出现。`data` 可以是一个对象，也可以是对象数组；公共输出不得依赖裸元组、未命名数组位置、只有内部 ID 的临时数组，或只回显输入参数。命令需要表达关系、删除或当前选择时，应返回命名 DTO，例如 `edge.parent`/`edge.child`、`step`、`board`。任务类 DTO 必须带可复制的 `ref`、`id`、`board_id` 或 `board_slug` 中的必要身份字段。
 
-`board current --json` 和 `board use --json` 的 `data.board` 是完整 board 对象；调用方应读取 `data.board.slug`，不要把 `data.board` 当字符串。
+`board current --json` 和 `board use --json` 的 `data.board` 是完整看板对象；调用方应读取 `data.board.slug`，不要把 `data.board` 当字符串。
 
-#### JSON error output
+#### JSON 错误输出
 
-当 `--json` 已被 clap 成功解析，且错误发生在运行期 service/IO 路径时，CLI 输出稳定错误 envelope 到 stdout，并使用对应 exit code：
+当 `--json` 已被 clap 成功解析，且错误发生在运行期服务或 I/O 路径时，CLI 向标准输出写入稳定的错误封装，并使用对应退出码：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -3064,68 +3021,68 @@ kanban config show [--json]
 }
 ```
 
-`error.code` 是脚本可依赖的 ASCII 枚举；`message` 是本地化 human-readable 说明；`exit_code` 与进程退出码一致。运行期 `--json` 错误不写 stderr。
+`error.code` 是脚本可依赖的 ASCII 枚举；`message` 是本地化的人类可读说明；`exit_code` 与进程退出码一致。运行期 `--json` 错误不写标准错误。
 
-`error.code` 不应依赖业务校验 message 文案推断；普通业务层 `KanbanError::InvalidInput` / `InvalidStatus` 都返回稳定 `invalid_input`。已通过 clap 解析后的用户配置 TOML 解析失败也属于 `invalid_input`：例如 `kanban --json config show` 读取 malformed `.kb/config.toml` 或 `$XDG_CONFIG_HOME/kanban/config.toml` 时，输出 runtime JSON error 到 stdout、退出 2、不写 stderr，并且不打开、初始化或创建 SQLite DB。仅对无结构化层外错误（IO、路径、异常第三方 text）以及穿过 `InvalidInput` 的 SQLite/maintenance lock sentinel 使用降级文本分类作为补充，例如 `sqlite_busy`。
+`error.code` 不应依赖业务校验消息文案推断；普通业务层 `KanbanError::InvalidInput` / `InvalidStatus` 都返回稳定的 `invalid_input`。已通过 clap 解析后的用户配置 TOML 解析失败也属于 `invalid_input`：例如 `kanban --json config show` 读取格式错误的 `.kb/config.toml` 或 `$XDG_CONFIG_HOME/kanban/config.toml` 时，向标准输出写入运行期 JSON 错误、退出 2、不写标准错误，并且不打开、初始化或创建 SQLite 数据库。仅对缺少结构化分类的外层错误（I/O、路径、异常第三方文本），以及穿过 `InvalidInput` 的 SQLite 或维护锁哨兵值，使用降级文本分类作为补充，例如 `sqlite_busy`。
 
-参数解析错误发生在 clap 解析阶段，仍由 clap 输出 stderr 并退出 2；这类错误不输出 JSON envelope。没有 `--json` 时，运行期错误继续输出 human-readable stderr。
+参数解析错误发生在 clap 解析阶段，仍由 clap 写入标准错误并退出 2；这类错误不输出 JSON 封装。没有 `--json` 时，运行期错误继续写入人类可读的标准错误。
 
-### 1.3.1 JSONL / NDJSON streaming boundary
+### 1.3.1 JSONL / NDJSON 流式输出边界
 
-JSONL/NDJSON 只适用于 streaming 或 record-oriented surfaces，例如 portable export/import、watch/event stream，或未来逐条输出的长流命令。该类输出必须满足：stdout 中每一行都是独立 valid JSON object，编码为 UTF-8，记录之间仅用 newline 分隔；human diagnostics、progress、warnings 和 runtime errors 不得混入同一个 stdout 数据流。
+JSONL/NDJSON 只适用于流式或面向记录的接口，例如可移植导出/导入、监视/事件流，或未来逐条输出的长流命令。该类输出必须满足：标准输出中的每一行都是独立有效的 JSON 对象，编码为 UTF-8，记录之间仅用换行符分隔；人类可读的诊断、进度、警告和运行期错误不得混入同一个标准输出数据流。
 
-有限命令仍使用 `--json` 的 `{data, meta?}` 成功 envelope 或 `{error:{code,message,exit_code}}` runtime error envelope。JSONL/NDJSON 不替代有限命令 envelope，也不能成为未设计的全局 `--jsonl` 快捷方式。若某个命令支持 `--out -` JSONL stream，则它不得与 `--json` 共享 stdout；需要结构化错误时，必须在命令级定义 stream error policy，并用 line-by-line JSON、stdout/stderr purity 和退出码测试覆盖。
+有限命令仍使用 `--json` 的 `{data, meta?}` 成功封装或 `{error:{code,message,exit_code}}` 运行期错误封装。JSONL/NDJSON 不替代有限命令封装，也不能成为未设计的全局 `--jsonl` 快捷方式。若某个命令支持 `--out -` JSONL 流，则它不得与 `--json` 共享标准输出；需要结构化错误时，必须在命令级定义流错误策略，并用逐行 JSON、标准输出/标准错误纯净性和退出码测试覆盖。
 
-当前公开错误 code：
+当前公开错误代码：
 
-| `error.code` | Exit code | 含义 |
+| `error.code` | 退出码 | 含义 |
 |---|---:|---|
 | `generic_error` | 1 | 未分类通用错误。 |
-| `invalid_input` | 2 | 参数已通过 clap 解析，但业务输入、值域或 validation 无效。 |
-| `not_found` | 3 | board、task、label、step、run 等对象未找到。 |
-| `invalid_transition` | 4 | 状态机拒绝该转换，或 required execution plan / steps 未满足。 |
-| `claim_conflict` | 5 | claim/heartbeat/finish token 或并发 claim 冲突。 |
+| `invalid_input` | 2 | 参数已通过 clap 解析，但业务输入、值域或校验无效。 |
+| `not_found` | 3 | 看板、任务、标签、步骤、运行记录等对象未找到。 |
+| `invalid_transition` | 4 | 状态机拒绝该转换，或必需执行计划/步骤未满足。 |
+| `claim_conflict` | 5 | 并发领取，以及能被分类器识别的领取或心跳冲突。 |
 | `dependency_blocked` | 6 | 依赖未完成导致任务不能进入 ready/running。 |
-| `sqlite_busy` | 7 | SQLite busy/locked 或维护/runtime lock 阻塞。 |
-| `integrity_check_failed` | 8 | doctor/import/maintenance 发现 integrity 或 consistency hard failure。 |
-| `storage_error` | 1 | 其它存储错误；不保证可按 SQLite lock/integrity 自动恢复。 |
+| `sqlite_busy` | 7 | SQLite 忙碌/锁定，或维护锁/运行锁造成阻塞。 |
+| `integrity_check_failed` | 8 | `doctor`、导入或维护过程发现完整性或一致性硬错误。 |
+| `storage_error` | 1 | 其它存储错误；不保证可按 SQLite 锁或完整性错误自动恢复。 |
 
-### 1.4 Shell completions
+当前完成、提交审核或阻塞时的 `claim token mismatch` 会归类为
+`invalid_transition`（退出码 4），不是 `claim_conflict`。自动化调用方应以这里记录的
+当前分类为准，不要把所有领取凭证错误都假定为退出码 5。
+
+### 1.4 Shell 补全
 
 ```bash
 kanban completions <shell>
 kanban __complete <kind> [prefix]
 ```
 
-`kanban completions <shell>` writes a completion script to stdout. Supported
-shells:
+`kanban completions <shell>` 向标准输出写入补全脚本。支持的 shell：
 
 ```text
 bash | zsh | fish | powershell | elvish
 ```
 
-Static command and option completion is generated for all supported shells.
-Bash and zsh scripts additionally include dynamic hooks that call the hidden
-internal `kanban __complete` helper for DB-backed candidates:
+所有受支持的 shell 都会生成静态命令和选项补全。Bash 与 zsh 脚本还包含动态钩子，
+会调用隐藏的内部辅助命令 `kanban __complete`，获取由数据库提供的候选值：
 
-- task refs for task, comment, event, run, and dependency commands;
-- board slugs for `--board` and board identity arguments;
-- status values for `--status`;
-- comment kind values for `comment add --kind` (`note`, `decision`, `signal`).
+- 任务、评论、事件、运行记录和依赖命令所需的任务引用；
+- `--board` 和看板身份参数所需的看板 slug；
+- `--status` 所需的状态值；
+- `comment add --kind` 所需的评论类型值（`note`、`decision`、`signal`）。
 
-`kanban __complete` is an internal newline-delimited helper for shell scripts
-and tests. It accepts:
+`kanban __complete` 是供 shell 脚本和测试使用的内部辅助命令，结果按换行符分隔。它接受：
 
 ```text
 task-ref | dependency-task-ref | board | status | comment-kind
 ```
 
-The helper must be quiet for completion use: missing DB files, uninitialized
-DBs, missing board config, or read/query failures return success with no
-candidates and no stderr. Static completion generation itself does not open or
-create the SQLite database.
+为满足补全场景，该辅助命令必须保持静默：数据库文件缺失、数据库未初始化、看板配置缺失，
+或读取/查询失败时，都成功退出且不返回候选值、不写标准错误。生成静态补全脚本本身
+不会打开或创建 SQLite 数据库。
 
-### 1.5 Codex hooks
+### 1.5 Codex 钩子
 
 ```bash
 kanban hook codex install [--handler-command <command-prefix>] [--timeout 30] [--record-signals] [--json]
@@ -3135,50 +3092,43 @@ kanban hook codex handle failure [--record-signals]
 kanban hook codex handle task-create
 ```
 
-`kanban hook codex` manages a Codex lifecycle hook for kanban-aware agent
-feedback. Hooks are installed at the Codex user config path:
-`$CODEX_HOME/hooks.json`, or `~/.codex/hooks.json` when `CODEX_HOME` is not set.
-There is no project-scope install mode, because kanban is intended to provide
-the same CLI-aware behavior across workspaces.
+`kanban hook codex` 管理一组 Codex 生命周期钩子，为智能体提供与看板相关的反馈。
+钩子安装到 Codex 用户配置路径：`$CODEX_HOME/hooks.json`；未设置 `CODEX_HOME` 时
+使用 `~/.codex/hooks.json`。该功能不提供项目级安装模式，因为 kanban 旨在跨工作区
+提供一致的 CLI 感知行为。
 
-Hook prompt text is read from the user kanban config path:
-`$XDG_CONFIG_HOME/kanban/codex-hooks.json`, normally `~/.config/kanban/codex-hooks.json`.
-`install` creates this file with Chinese default prompts when it is missing, and
-never overwrites an existing file. If the prompt file is missing, malformed, has
-an unsupported `version`, or points a binding at a missing prompt alias, the
-handler falls back to the embedded Chinese defaults instead of failing the Codex
-hook.
+钩子提示词从用户的 kanban 配置路径读取：
+`$XDG_CONFIG_HOME/kanban/codex-hooks.json`，通常是
+`~/.config/kanban/codex-hooks.json`。若文件不存在，`install` 会用中文默认提示词创建，
+但不会覆盖现有文件。若提示词文件缺失、格式错误、使用不支持的 `version`，或绑定指向
+不存在的提示词别名，处理程序会回退到内置中文默认值，而不会让 Codex 钩子失败。
 
-`install` adds two managed `PostToolUse` command hooks under matcher `^Bash$`:
-one for failed `kanban ...` command traces and one for successful
-`kanban task create ...` follow-up advice. The managed command prefix defaults
-to `kanban hook codex handle`; the installed commands are:
+`install` 在匹配器 `^Bash$` 下添加两个受管的 `PostToolUse` 命令钩子：
+一个处理失败的 `kanban ...` 命令记录，另一个为成功的
+`kanban task create ...` 提供后续建议。受管命令前缀默认为
+`kanban hook codex handle`；安装的命令如下：
 
 ```bash
 kanban hook codex handle failure --installed-by kanban-hook-codex [--record-signals]
 kanban hook codex handle task-create --installed-by kanban-hook-codex
 ```
 
-`uninstall` removes only hooks with the hidden marker
-`--installed-by kanban-hook-codex` and preserves unrelated user hooks. Re-running
-`install` is idempotent: it replaces the previous managed hooks before writing
-the new ones.
+`uninstall` 只删除带隐藏标记 `--installed-by kanban-hook-codex` 的钩子，并保留
+无关的用户钩子。重复运行 `install` 是幂等的：写入新钩子前会替换先前的受管钩子。
 
-`handle failure` and `handle task-create` are internal hook commands. They read
-Codex hook JSON from stdin and emit either no output or a raw Codex hook
-response object such as:
+`handle failure` 和 `handle task-create` 是内部钩子命令。它们从标准输入读取
+Codex 钩子 JSON，不输出内容，或直接输出如下 Codex 钩子响应对象：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
-{"systemMessage":"检测到 kanban CLI 命令失败。\n\n命令：kanban task list --bad-flag\n退出码：2\n\n继续调整。调整成功后，视情况 记录必要的后续工作。"}
+{"systemMessage":"检测到 kanban CLI 命令失败。\n\n命令：kanban task list --bad-flag\n退出码：2\n\n继续调整。修正后继续当前任务，并在确有必要时记录后续工作。"}
 ```
 
-The `handle` subcommands deliberately do not use the normal `{ "data": ... }`
-JSON envelope, because Codex consumes hook stdout directly. The public
-management commands `install`, `status`, and `uninstall` do use the normal
-`--json` envelope.
+`handle` 子命令有意不使用常规 `{ "data": ... }` JSON 封装，因为 Codex 会直接消费
+钩子的标准输出。公开管理命令 `install`、`status` 和 `uninstall` 则使用常规
+`--json` 封装。
 
-Prompt config schema:
+提示词配置模式：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -3190,60 +3140,56 @@ Prompt config schema:
       "task_create": "task_create.zh-default"
     },
     "prompts": {
-      "failure.zh-default": "检测到 kanban CLI 命令失败。\n\n命令：{{command}}\n退出码：{{exit_code}}\n\n继续调整。调整成功后，视情况 记录必要的后续工作。",
+      "failure.zh-default": "检测到 kanban CLI 命令失败。\n\n命令：{{command}}\n退出码：{{exit_code}}\n\n继续调整。修正后继续当前任务，并在确有必要时记录后续工作。",
       "task_create.zh-default": "检测到 kanban task 创建成功。\n\n命令：{{command}}\n任务：{{task_ref}}\n\n请考虑为该 task 执行 label/signal follow-up；需要标签时先运行 `kanban label suggest {{task_ref}} --json`。不要自动写 label ontology，除非已有完整 suggestion snapshot 和明确 decision payload。"
     }
   }
 }
 ```
 
-Supported placeholders are deliberately small:
+支持的占位符有意保持精简：
 
-- `failure`: `{{command}}`, `{{exit_code}}`;
-- `task_create`: `{{command}}`, `{{task_ref}}`.
+- `failure`：`{{command}}`、`{{exit_code}}`；
+- `task_create`：`{{command}}`、`{{task_ref}}`。
 
-`stderr` and `stdout` are not prompt placeholders. For `handle failure
---record-signals`, they remain bounded internal evidence in the recorded generic
-signal.
+`stderr` 和 `stdout` 不是提示词占位符。使用 `handle failure --record-signals` 时，
+它们仍会作为有界的内部证据保存在所记录的通用信号中。
 
-V1 behavior:
+V1 行为：
 
-- non-`Bash` tools and Bash commands that do not invoke `kanban` are no-op;
-- `handle failure` only reports failed `kanban ...` commands with a prompt
-  rendered from `codex-hooks.json` or the embedded Chinese default;
-- `handle failure --record-signals` also records a generic signal with
-  `kind="agent_cli_failure"`, `source="kanban-hook-codex"`, and bounded command
-  evidence;
-- `handle task-create` only reports successful `kanban task create ...` commands
-  with a label/signal follow-up prompt rendered from `codex-hooks.json` or the
-  embedded Chinese default;
-- the hook never silently starts a Codex native subagent and never writes label
-  ontology automatically. It only injects advice; the active Codex session must
-  decide whether to spawn a native agent or record ontology observations.
+- 非 `Bash` 工具和不调用 `kanban` 的 Bash 命令都是空操作；
+- `handle failure` 只报告失败的 `kanban ...` 命令，提示词来自
+  `codex-hooks.json` 或内置中文默认值；
+- `handle failure --record-signals` 还会记录一个通用信号，其中包含
+  `kind="agent_cli_failure"`、`source="kanban-hook-codex"` 和有界的命令证据；
+- `handle task-create` 只报告成功的 `kanban task create ...` 命令，并使用
+  `codex-hooks.json` 或内置中文默认值渲染标签/信号后续提示；
+- 钩子绝不会静默启动 Codex 原生子智能体，也不会自动写入标签本体。它只注入建议；
+  当前 Codex 会话必须自行决定是否启动原生智能体或记录本体观察。
 
 ---
 
-## 2. Exit Codes
+## 2. 退出码
 
-| Code | 含义 |
+| 代码 | 含义 |
 |---:|---|
 | 0 | 成功。 |
-| 1 | 通用错误或未分类 storage error。 |
-| 2 | clap 参数错误，或运行期 validation / invalid input。 |
+| 1 | 通用错误或未分类存储错误。 |
+| 2 | clap 参数错误，或运行期校验/无效输入。 |
 | 3 | 未找到对象。 |
-| 4 | 非法状态转换、required execution plan 或 required steps 未满足。 |
-| 5 | claim/token/concurrent claim 冲突。 |
-| 6 | dependency blocked。 |
-| 7 | SQLite busy/locked 或 maintenance/runtime lock。 |
-| 8 | integrity check failed 或 consistency hard failure。 |
+| 4 | 非法状态转换，或必需执行计划/步骤未满足。 |
+| 5 | 并发领取，以及能被分类器识别的领取或心跳冲突。 |
+| 6 | 依赖阻塞。 |
+| 7 | SQLite 忙碌/锁定，或维护锁/运行锁阻塞。 |
+| 8 | 完整性检查失败或一致性硬错误。 |
 
 ---
 
-## 3. Init
+## 3. 初始化
 
 ### 3.1 `kanban init`
 
-初始化本地 DB、默认 board、默认 columns。该命令是幂等的；重复执行只会应用缺失 migration 并确保默认数据存在，不会重置或覆盖已有任务数据。`--force` 是兼容旧脚本的 no-op，不改变 `init` 行为。
+初始化本地数据库、默认看板和默认列。该命令是幂等的；重复执行只会应用缺失的迁移并确保默认数据存在，不会重置或覆盖已有任务数据。`--force` 是兼容旧脚本的空操作，不改变 `init` 行为。
 
 ```bash
 kanban init
@@ -3251,7 +3197,7 @@ kanban init --db .kb/kb.db
 kanban init --force
 ```
 
-`--force` 是 deprecated compatibility no-op：保留用于兼容旧脚本，不改变 `init` 行为，不执行 reset/overwrite，也不会绕过 migration 或 schema 校验。
+`--force` 是已弃用的兼容性空操作：保留用于兼容旧脚本，不改变 `init` 行为，不执行重置或覆盖，也不会绕过迁移或模式校验。
 
 输出：
 
@@ -3266,122 +3212,138 @@ JSON：
 ```json
 {
   "data": {
-    "db_path": "/home/alice/.local/share/kb/kb.db",
-    "board": "default"
+    "db_path": "/home/user/.local/share/kb/kb.db",
+    "board_id": "b_01HX...",
+    "board_slug": "default"
   }
 }
 ```
 
 ---
 
-## 4. Board Commands
+## 4. 看板命令
 
-### 4.1 List boards
+### 4.1 列出看板
 
 ```bash
 kanban board list [--include-archived]
 ```
 
-### 4.2 Create board
+### 4.2 创建看板
 
 ```bash
 kanban board create <slug> --name <name> [--description <text>]
 ```
 
-Example：
+示例：
 
 ```bash
-kanban board create agent-work --name "Agent Work"
+kanban board create agent-work --name "智能体工作"
 ```
 
-### 4.3 Show board
+### 4.3 查看看板
 
 ```bash
 kanban board show <slug>
 ```
 
-### 4.4 Use board
+### 4.4 选择看板
 
 ```bash
 kanban board use <slug-or-id>
 ```
 
-Writes:
+写入：
 
 ```toml
 board = "agent-work"
 ```
 
-to `.kb/config.toml` in the current directory.
+写入当前目录的 `.kb/config.toml`。
 
-### 4.5 Current board
+### 4.5 查看当前看板
 
 ```bash
 kanban board current
 ```
 
-Shows the resolved active board after applying `--board`, `KB_BOARD`, project config, and fallback precedence.
-Board resolution is independent from DB path resolution: `--db` / `KANBAN_DB` / `KB_DB` choose which SQLite database to open, while `--board` / `KB_BOARD` / `.kb/config.toml` `board` choose the board inside that database.
+应用 `--board`、`KB_BOARD`、项目配置和回退优先级后，显示最终解析出的当前看板。
+看板解析与数据库路径解析相互独立：`--db` / `KANBAN_DB` / `KB_DB` 决定打开哪个
+SQLite 数据库，`--board` / `KB_BOARD` / `.kb/config.toml` 中的 `board` 则决定选择
+该数据库里的哪个看板。
 
-### 4.6 Archive board
+### 4.6 归档看板
 
 ```bash
 kanban board archive <slug>
 ```
 
-Archived boards are hidden from `kanban board list` unless `--include-archived` is passed. Ordinary task writes against archived boards are rejected. Audit history remains readable through task/event/run/comment history commands when the task or board can be resolved explicitly. Archiving a board with active `running` work is rejected; finish, block, or reclaim that work first.
+除非传入 `--include-archived`，否则 `kanban board list` 不显示已归档看板。系统会拒绝
+向已归档看板进行普通任务写入。只要能显式解析出任务或看板，仍可通过任务、事件、运行记录
+和评论历史命令读取审计历史。若看板中仍有 `running` 工作，归档请求会被拒绝；应先完成、
+阻塞或回收这些工作。
 
 ---
 
-## 5. Task Commands
+## 5. 任务命令
 
-### 5.1 Create task
+### 5.1 创建任务
 
 ```bash
 kanban task create <title> [OPTIONS]
 ```
 
-Options：
+选项：
 
-| Option | 说明 |
+| 选项 | 说明 |
 |---|---|
 | `--description <text>` | Markdown 描述。 |
-| `--description-file <PATH|->` | 从文件或 stdin (`-`) 读取 Markdown 描述；与 `--description` 互斥。推荐用于多行或包含 `$`、反引号、JSON 等 shell-sensitive 文本。 |
-| `--status <status>` | 显式初始状态：triage/todo/scheduled/ready。 |
-| `--assignee <name>` | assignee/worker profile。 |
-| `--priority <int>` | Priority level `0..3`: `0` = P0 incident/blocker/must-handle-immediately, `1` = P1 near-term focus, `2` = P2 important follow-up, `3` = P3 ordinary backlog/low/default. Invalid values are rejected. |
-| `--scheduled-at <epoch_ms>` | 计划时间，Unix epoch milliseconds。 |
-| `--due-at <epoch_ms>` | 截止时间，Unix epoch milliseconds。 |
-| `--max-retries <n>` | worker 失败或 reclaim 后最多重试次数。 |
-| `--label <name>` | 创建时附加已存在 label，可重复；缺失的 board label 会拒绝整个 create。 |
+| `--description-file <PATH|->` | 从文件或标准输入（`-`）读取 Markdown 描述；与 `--description` 互斥。推荐用于多行或包含 `$`、反引号、JSON 等对 shell 敏感的文本。 |
+| `--status <status>` | 显式指定初始状态：`triage` / `todo` / `scheduled` / `ready`。 |
+| `--assignee <name>` | 负责人或工作者配置名称。 |
+| `--priority <int>` | 优先级 `0..3`：`0` = P0 事故、阻塞项或必须立即处理；`1` = P1 近期重点；`2` = P2 重要后续；`3` = P3 普通待办、低优先级或默认值。非法值会被拒绝。 |
+| `--scheduled-at <epoch_ms>` | 计划时间，Unix 纪元毫秒数。 |
+| `--due-at <epoch_ms>` | 截止时间，Unix 纪元毫秒数。 |
+| `--max-retries <n>` | 工作者失败或回收后最多重试次数。 |
+| `--label <name>` | 创建时附加已存在标签，可重复；若看板内缺少任一标签，整个创建操作都会被拒绝。 |
 | `--metadata <json>` | 扩展 JSON。 |
-| `--metadata-file <PATH|->` | 从文件或 stdin (`-`) 读取扩展 JSON；与 `--metadata` 互斥。推荐用于避免 JSON shell quoting 问题。 |
+| `--metadata-file <PATH|->` | 从文件或标准输入（`-`）读取扩展 JSON；与 `--metadata` 互斥。推荐用于避免 JSON 的 shell 引号处理问题。 |
 
-Priority 只表达相对重要性和排序，不表达可 claim 状态。`ready` 才表示任务已被显式放入可执行队列；普通 ready 任务通常仍应是 P1/P2/P3，不能为了表示“下一批可做”全部标成 P0。P0 只用于 incident、当前目标 blocker 或必须立即处理的任务；若 P0 task 仍缺规格、排期未到或依赖未完成，它仍保持 `triage` / `scheduled` / `todo`，不能被 claim。
+优先级只表达相对重要性和排序，不表示任务可以被领取。只有 `ready` 才表示任务已被显式
+放入可执行队列；普通 `ready` 任务通常仍应是 P1/P2/P3，不能为了表示“下一批可做”
+而全部标成 P0。P0 只用于事故、当前目标的阻塞项或必须立即处理的任务；若 P0 任务仍缺
+规格、排期未到或依赖未完成，它仍保持 `triage` / `scheduled` / `todo`，不能被领取。
 
-Examples：
+`task create` 可以请求 `--status ready`，但新任务创建时尚无执行计划。服务会把任务实际
+保存为 `todo`；查询和响应会把执行计划状态派生为 `unplanned`，并不会为此写入计划行。
+添加第一个步骤或执行
+`task step not-required` 后，服务才会结合规格、排期和依赖等其他保护条件重新计算状态。
+显式请求 `scheduled` 时必须同时提供 `--scheduled-at`；显式请求 `ready` 时必须有非空
+描述，且排期不能位于未来。
+
+示例：
 
 ```bash
 kanban task create "修复 claim 队列阻断回归" --priority 0
-kanban task create "实现状态机" --priority 1
+kanban task create "实现状态机" --description "补齐状态转换和测试" --priority 1 --status ready
 kanban task create "补充文档示例" --priority 2
 kanban task create "明早检查报告" --scheduled-at 1780640400000
 kanban task create "修复 API 回归" --label backend --label p1
 ```
 
-`--label` 只绑定当前 board 中已存在的 label identity。名称会先 trim；空白名称会被拒绝。
-任一 label 缺失时，整个 create 返回 invalid input，且不会写入 `tasks`、`labels`、
-`task_labels` 或 `task_events`。需要新 vocabulary identity 时，先显式运行
-`kanban label create`，或使用 `kanban label add --create-missing` 这类明确的 identity
-创建入口；task create 本身没有 create-missing 模式。
+`--label` 只绑定当前看板中已存在的标签身份。名称会先去除首尾空白；空白名称会被拒绝。
+任一标签缺失时，整个创建操作返回无效输入，且不会写入 `tasks`、`labels`、
+`task_labels` 或 `task_events`。需要新的词汇身份时，先显式运行
+`kanban label create`，或使用 `kanban label add --create-missing` 这类明确的身份
+创建入口；任务创建本身没有自动创建缺失标签的模式。
 
-Human output：
+人类可读输出：
 
 ```text
-agent-work#12 [ready] P1 实现状态机 · plan: planned · steps: 0/0
+agent-work#12 [todo] P1 实现状态机 · plan: unplanned · steps: 0/0
 ```
 
-JSON output：
+JSON 输出：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -3392,44 +3354,44 @@ JSON output：
     "board_slug": "agent-work",
     "ref": "agent-work#12",
     "seq": 12,
-    "status": "ready",
+    "status": "todo",
     "title": "实现状态机",
     "labels": []
   }
 }
 ```
 
-### 5.2 List tasks
+### 5.2 列出任务
 
 ```bash
 kanban task list [OPTIONS]
 ```
 
-Options：
+选项：
 
-| Option | 说明 |
+| 选项 | 说明 |
 |---|---|
 | `--status <status>` | 按状态过滤，可重复。 |
-| `--assignee <name>` | 按 assignee。 |
-| `--label <name>` | 按 label 名称或 id 过滤，可重复；多个 label 使用 AND 语义。 |
-| `--search <query>` | title/description 模糊搜索；task ref 形状按精确匹配处理。 |
-| `--include-archived` | 包含 archived。 |
+| `--assignee <name>` | 按负责人过滤。 |
+| `--label <name>` | 按标签名称或 ID 过滤，可重复；多个标签使用 AND 语义。 |
+| `--search <query>` | 模糊搜索标题和描述；形似任务引用的查询按精确匹配处理。 |
+| `--include-archived` | 包含已归档任务。 |
 | `--limit <n>` | 限制数量。 |
 | `--offset <n>` | 分页偏移。 |
-| `--sort <field>` | `seq` / `title` / `status` / `position` / `priority` / `assignee` / `scheduled_at` / `due_at` / `created_at` / `updated_at`。降序可用 `<field>_desc`，也兼容 API 风格 `-<field>`。`priority` sorts P0 -> P3; `priority_desc` / `-priority` sorts P3 -> P0. |
-| `--plan-needed` | 只列出 execution plan 仍为 `unplanned` 的 active tasks。 |
-| `--has-steps` | 只列出至少有一个 step 的 tasks。 |
-| `--incomplete-required-steps` | 只列出存在未完成 required step 的 tasks。 |
+| `--sort <field>` | `seq` / `title` / `status` / `position` / `priority` / `assignee` / `scheduled_at` / `due_at` / `created_at` / `updated_at`。降序可用 `<field>_desc`，也兼容 API 风格 `-<field>`。`priority` 按 P0 → P3 排序；`priority_desc` / `-priority` 按 P3 → P0 排序。 |
+| `--plan-needed` | 只列出执行计划仍为 `unplanned` 的活动任务。 |
+| `--has-steps` | 只列出至少有一个步骤的任务。 |
+| `--incomplete-required-steps` | 只列出存在未完成必需步骤的任务。 |
 | `--plan-filter <filter>` | 可重复：`plan-needed` / `has-steps` / `incomplete-required-steps`。 |
 
-Priority sort does not promote work into `ready`; it only orders tasks within the selected result set.
+优先级排序不会把工作提升为 `ready`；它只对所选结果集中的任务排序。
 
-`--search` 对 task ref 形状使用精确匹配而不是文本 contains 匹配：
-纯数字 `12`、`#12` 匹配 active board 内的 seq；`board#12` / `board/#12`
-只在该 board 与当前列表请求的 board 相同时匹配；`t_...` 只匹配当前列表请求 board
-内的 task id。其他文本仍执行 title/description 模糊搜索。
+`--search` 对任务引用形状使用精确匹配，而不是文本包含匹配：
+纯数字 `12`、`#12` 匹配当前看板内的序号；`board#12` / `board/#12`
+只在该看板与当前列表请求的看板相同时匹配；`t_...` 只匹配当前列表请求看板
+内的任务 ID。其他文本仍执行标题和描述的模糊搜索。
 
-Examples：
+示例：
 
 ```bash
 kanban task list
@@ -3440,65 +3402,78 @@ kanban task list --plan-needed
 kanban task list --plan-filter incomplete-required-steps
 ```
 
-### 5.3 Show task
+### 5.3 查看任务
 
 ```bash
 kanban task show <task_ref>
 kanban task show <task_ref> --details
 ```
 
-默认人类可读输出仍是紧凑的单行 task 摘要；默认摘要面向扫描，保留可复制 ref、status、priority、title、labels，以及必要 plan/step 信号，不默认展示内部 `t_...` id：
+默认人类可读输出仍是紧凑的单行任务摘要；默认摘要便于快速扫描，保留可复制的引用、状态、
+优先级、标题、标签，以及必要的计划/步骤信号，不默认展示内部 `t_...` ID：
 
 ```text
 agent-work#12 [ready] P1 实现状态机 · plan: planned · steps: 0/0
 ```
 
-`--details` 改变人类可读输出，按 `Task`、`Description`、`Plan`、`Schedule`、`Timestamps`、`Execution`、`Result`、`Metadata` 分组显示易读字段列表。可用时包含 task ref/id/status/title、完整多行 description、assignee、priority、labels、scheduled_at、due_at、created_at、updated_at、execution plan state、required/optional step counts、claim/run、result、metadata 以及其他 task snapshot 字段。
-如果该 task 有 label ontology signals，details 输出还会追加紧凑的
-`ontology_summary`，列出 signal/status/degraded/stale/action counts、aging 时间和
-少量 sample signal ids。
+`--details` 改变人类可读输出，按 `Task`、`Description`、`Plan`、`Schedule`、
+`Timestamps`、`Execution`、`Result`、`Metadata` 分组显示易读字段列表。可用时包含
+任务引用、ID、状态、标题、完整多行描述、负责人、优先级、标签、`scheduled_at`、
+`due_at`、`created_at`、`updated_at`、执行计划状态、必需/可选步骤数量、领取信息、
+运行记录、结果、元数据以及其他任务快照字段。
+如果该任务有标签本体信号，详细输出还会追加紧凑的 `ontology_summary`，列出信号、
+状态、降级、过期和操作数量、老化时间，以及少量信号 ID 示例。
 
 `task show <task_ref> --json` 默认只返回 `{"data": TaskRecord}`。带 `--details`
-时，`data` 仍是相同的 `TaskRecord`，但 envelope 会包含
-`meta.details.ontology_summary`；没有 ontology signals 时该字段为 `null`。该 summary
-只读，不改变 task、labels 或 ontology signal 状态。需要完整 review queue 时继续使用
+时，`data` 仍是相同的 `TaskRecord`，但封装会包含
+`meta.details.ontology_summary`；没有本体信号时该字段为 `null`。该摘要
+只读，不改变任务、标签或本体信号状态。需要完整审核队列时继续使用
 `label ontology list/show/review`。
 
 `task_ref` 支持：
 
-- `t_...`：全局 task id，忽略 active board。
-- `12`：当前 active board 内的 seq。
-- `#12`：当前 active board 内的 seq；shell 中需要引号，例如 `'#12'`。
-- `agent-work#12`：显式 board slug + seq。
-- `agent-work/#12`：兼容 alias/#seq 形式。
-- `b_01HX...#12`：显式 board id + seq。
+- `t_...`：全局任务 ID，忽略当前看板。
+- `12`：当前看板内的序号。
+- `#12`：当前看板内的序号；在 shell 中需要引号，例如 `'#12'`。
+- `agent-work#12`：显式看板 slug + 序号。
+- `agent-work/#12`：兼容别名/#序号形式。
+- `b_01HX...#12`：显式看板 ID + 序号。
 
-裸 `12` / `#12` 依赖 active board；显式 `board#seq` 和 `t_...` 可跨 active board 使用。跨 board dependency 在当前版本中会被拒绝。
+裸 `12` / `#12` 依赖当前看板；显式 `board#seq` 和 `t_...` 可跨当前看板使用。
+当前版本会拒绝跨看板依赖。
 
-### 5.4 Update task fields
+### 5.4 更新任务字段
 
 ```bash
 kanban task update <task_ref> [OPTIONS]
 ```
 
-允许更新：
+允许更新的选项：
 
-- title
-- description
-- assignee
-- priority
-- scheduled_at
-- due_at
-- max_retries
-- metadata
+| 选项 | 说明 |
+|---|---|
+| `--title <text>` | 更新标题。 |
+| `--description <text>` | 更新描述。 |
+| `--description-file <PATH|->` | 从文件或标准输入读取描述；与 `--description` 互斥。 |
+| `--assignee <name>` | 更新负责人。 |
+| `--clear-assignee` | 清空负责人；若同时提供 `--assignee`，以清空为准。 |
+| `--priority <int>` | 更新优先级。 |
+| `--scheduled-at <epoch_ms>` | 更新计划时间。 |
+| `--clear-scheduled-at` | 清空计划时间；若同时提供 `--scheduled-at`，以清空为准。 |
+| `--due-at <epoch_ms>` | 更新截止时间。 |
+| `--clear-due-at` | 清空截止时间；若同时提供 `--due-at`，以清空为准。 |
+| `--max-retries <n>` | 更新最大重试次数。 |
+| `--clear-max-retries` | 清空最大重试次数；若同时提供 `--max-retries`，以清空为准。 |
+| `--metadata <json>` | 更新扩展 JSON。 |
+| `--metadata-file <PATH|->` | 从文件或标准输入读取扩展 JSON；与 `--metadata` 互斥。 |
+| `--expected-lock-version <version>` | 要求任务当前 `lock_version` 与给定值一致，不一致时拒绝更新。 |
 
-不允许通过 update 修改 status；status 必须通过 transition command。允许字段仍由
-shared service path 处理，因此修改 description、scheduled_at 等会影响 spec 或
-schedule 的字段后，服务会根据 spec、schedule 和当前 dependencies 重新计算
-active task 的目标状态并写入对应事件。Dependency edge 通过 `kanban dep`
-命令修改；`max_retries` 只更新 retry policy，不是 status recompute 触发器。
+不允许通过更新命令修改状态；状态必须通过转换命令修改。允许更新的字段仍由共享服务路径
+处理，因此修改描述、`scheduled_at` 等会影响规格或排期的字段后，服务会根据规格、
+排期和当前依赖重新计算活动任务的目标状态并写入对应事件。依赖边通过 `kanban dep`
+命令修改；`max_retries` 只更新重试策略，不触发状态重算。
 
-Examples：
+示例：
 
 ```bash
 kanban task update 12 --priority 1
@@ -3512,9 +3487,9 @@ kanban task update t_01HX --clear-max-retries
 
 ---
 
-## 6. Transition Commands
+## 6. 状态转换命令
 
-### 6.1 Promote
+### 6.1 提升为可执行
 
 ```bash
 kanban task promote <task_ref>
@@ -3522,30 +3497,30 @@ kanban task promote <task_ref>
 
 手动尝试 `todo/scheduled -> ready`。
 
-### 6.2 Start / Claim
+### 6.2 启动/领取
 
 ```bash
 kanban task start <task_ref> [OPTIONS]
 kanban task claim <task_ref> [OPTIONS]
 ```
 
-`start` 是 `claim` 的人类友好 alias。
+`start` 是 `claim` 更便于人类理解的别名。
 
-Options：
+选项：
 
-| Option | 说明 |
+| 选项 | 说明 |
 |---|---|
-| `--ttl-ms <ms>` | claim TTL。默认 300000。 |
+| `--ttl-ms <ms>` | 领取有效期（TTL）。默认 300000。 |
 
-Output：
+输出：
 
 ```text
-Claimed t_01HX... token=ct_01HX...
+Claimed t_01HX... token=claim_01HX...
 ```
 
-JSON 返回 canonical claim snapshot：`data.task` 是闭合的 `ApiTask`，`data.run`
-是闭合的 `ApiRun`，token 只允许出现在顶层 `data.claim_token`。下面仅节选 identity
-与状态字段；实际对象还包含各自 schema 声明的其余字段：
+JSON 返回规范领取快照：`data.task` 是闭合的 `ApiTask`，`data.run`
+是闭合的 `ApiRun`，令牌只允许出现在顶层 `data.claim_token`。下面仅节选身份
+与状态字段；实际对象还包含各自模式声明的其余字段：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -3561,156 +3536,160 @@ JSON 返回 canonical claim snapshot：`data.task` 是闭合的 `ApiTask`，`dat
       "task_id": "t_01HX...",
       "status": "running"
     },
-    "claim_token": "ct_01HX...",
+    "claim_token": "claim_01HX...",
     "claim_expires_at": 1717520000000
   }
 }
 ```
 
-### 6.3 Heartbeat
+### 6.3 心跳
 
 ```bash
 kanban task heartbeat <task_ref> --claim-token <token>
 ```
 
-Options：
+选项：
 
-| Option | 说明 |
+| 选项 | 说明 |
 |---|---|
 | `--ttl-ms <ms>` | 延长 TTL。 |
 
-显式 heartbeat API 保持兼容。除此之外，`running` task 的有效 task-scoped activity event 也会隐式刷新 lease，可作为 liveness signal；该隐式刷新不会再写 `task.heartbeat` event。board-level event 或没有 `task_id` 的 event 不触发续租。
+显式心跳 API 保持兼容。除此之外，`running` 任务的有效任务级活动事件也会隐式刷新租约，
+可作为存活信号；该隐式刷新不会再写 `task.heartbeat` 事件。看板级事件或没有 `task_id`
+的事件不触发续租。
 
-### 6.4 Done / Complete
+### 6.4 完成
 
 ```bash
-kanban task done <task_ref> --claim-token <token>
-kanban task complete <task_ref> --claim-token <token>
+kanban task done <task_ref> [--claim-token <token>] [--force]
+kanban task complete <task_ref> [--claim-token <token>] [--force]
 ```
 
-Options：
+选项：
 
-| Option | 说明 |
+| 选项 | 说明 |
 |---|---|
-| `--claim-token <token>` | active claim token。 |
-| `--force` | 强制完成 running task；仅本地人工修复使用。 |
+| `--claim-token <token>` | 从 `running` 完成时需要匹配当前领取；从 `review` 完成时可省略。 |
+| `--force` | 只绕过 `running` 的领取匹配，不能绕过必需步骤守卫；仅供本地人工修复使用。 |
 
-### 6.5 Submit Review
-
-```bash
-kanban task review <task_ref> --claim-token <token>
-```
-
-使 task 从 `running` 到 `review`。
-
-### 6.6 Block
+### 6.5 提交审核
 
 ```bash
-kanban task block <task_ref> [<reason>|--reason-file <PATH|->]
+kanban task review <task_ref> [--claim-token <token>] [--force]
 ```
 
-Options：
+使任务从 `running` 转为 `review`。正常路径需要匹配领取凭证；`--force` 只绕过领取守卫。
 
-| Option | 说明 |
+### 6.6 阻塞
+
+```bash
+kanban task block <task_ref> (<reason>|--reason-file <PATH|->)
+```
+
+选项：
+
+| 选项 | 说明 |
 |---|---|
-| `--claim-token <token>` | running task block 时需要。 |
-| `--force` | 强制 block。 |
-| `--reason-file <PATH|->` | 从文件或 stdin (`-`) 读取 block reason；与 positional `<reason>` 互斥。 |
+| `--claim-token <token>` | 阻塞 `running` 任务时需要。 |
+| `--force` | 强制阻塞。 |
+| `--reason-file <PATH|->` | 从文件或标准输入（`-`）读取阻塞原因；与位置参数 `<reason>` 互斥。 |
 
-### 6.7 Unblock
+### 6.7 解除阻塞
 
 ```bash
 kanban task unblock <task_ref>
 ```
 
-不会盲目进入 ready，而是根据 spec、schedule、dependencies 重新计算目标状态。
+不会盲目进入 `ready`，而是根据规格、排期和依赖重新计算目标状态。
 
-### 6.8 Reopen
+### 6.8 重新打开
 
 ```bash
-kanban task reopen <task_ref> [--reason <text>|--reason-file <PATH|->]
+kanban task reopen <task_ref> (--reason <text>|--reason-file <PATH|->)
 ```
 
-只允许 reopen `done` task，reason 必填且不能为空，可用 `--reason-file <PATH|->`
-从文件或 stdin 读取；它与 inline `--reason` 互斥。Reopen 会清空
-`completed_at`，保留 `result_summary` / natural JSON `result`（持久层仍存于 `result_json`），并按 spec、schedule、
-dependency 和 execution plan readiness 重新计算目标状态。
+只允许重新打开 `done` 任务，原因必填且不能为空，可用 `--reason-file <PATH|->`
+从文件或标准输入读取；它与行内 `--reason` 互斥。重新打开会清空
+`completed_at`，保留 `result_summary` / 自然 JSON `result`（持久层仍存于
+`result_json`），并按规格、排期、依赖和执行计划就绪情况重新计算目标状态。
 
-如果被 reopen 的 task 是其他 task 的 dependency parent，直接 child 中仅 `triage|todo|scheduled|ready` 会重新计算；`running|blocked|review|done|archived` 不隐式改写。
+如果被重新打开的任务是其他任务的依赖父项，直接子任务中仅
+`triage|todo|scheduled|ready` 会重新计算；`running|blocked|review|done|archived`
+不会被隐式改写。
 
-### 6.9 Reclaim
+### 6.9 回收
 
 ```bash
 kanban task reclaim --expired
 kanban task reclaim
 ```
 
-当前 CLI reclaim 处理 active board 内 expired claims；裸 `kanban task reclaim` 与 `kanban task reclaim --expired` 等价。
+当前 CLI 回收当前看板内已过期的领取；裸 `kanban task reclaim` 与
+`kanban task reclaim --expired` 等价。
 JSON 输出固定为 `{"data":{"reclaimed":<u64>}}`，且拒绝未声明字段。
 
-### 6.10 Archive
+### 6.10 归档
 
 ```bash
 kanban task archive <task_ref>
 ```
 
-Options：
+选项：
 
-| Option | 说明 |
+| 选项 | 说明 |
 |---|---|
-| `--force` | 允许 archive running task，并关闭 active run。 |
+| `--force` | 允许归档 `running` 任务，并关闭当前运行记录。 |
 
 ---
 
-### 6.10 Step / Execution Plan
+### 6.11 步骤/执行计划
 
 ```bash
 kanban task step list <task_ref>
 kanban task step add <task_ref> <title> [--body <text>|--body-file <PATH|->] [--link-task <task_ref>] [--position <n>] [--required|--optional]
 kanban task step update <task_ref> <step_ref> [--title <text>] [--body <text>|--body-file <PATH|->|--clear-body] [--link-task <task_ref>|--unlink-task] [--position <n>] [--required|--optional]
-kanban task step done <task_ref> <step_ref> [--note <text>|--note-file <PATH|->]
-kanban task step skip <task_ref> <step_ref> [--reason <text>|--reason-file <PATH|->]
-kanban task step reopen <task_ref> <step_ref> [--reason <text>|--reason-file <PATH|->]
+kanban task step done <task_ref> <step_ref> (--note <text>|--note-file <PATH|->)
+kanban task step skip <task_ref> <step_ref> (--reason <text>|--reason-file <PATH|->)
+kanban task step reopen <task_ref> <step_ref> (--reason <text>|--reason-file <PATH|->)
 kanban task step remove <task_ref> <step_ref>
-kanban task step not-required <task_ref> [--reason <text>|--reason-file <PATH|->]
+kanban task step not-required <task_ref> (--reason <text>|--reason-file <PATH|->)
 ```
 
-Step 是 execution plan 的一等结构化项目。它可以是纯文本步骤，也可以通过
-`--link-task` 引用同一 board 内的普通 task 作为上下文。链接 task 不等于 dependency，
-不会让 linked task 的状态自动完成 step。Step 自己的状态是 `todo`、`done` 或
+步骤是执行计划的一等结构化项目。它可以是纯文本步骤，也可以通过
+`--link-task` 引用同一看板内的普通任务作为上下文。链接任务不等于依赖，
+链接任务的状态不会自动完成步骤。步骤自身的状态是 `todo`、`done` 或
 `skipped`。
 
-`step_ref` 支持 step id，也支持父任务列表里的 `S<n>` 序号。`add` 默认创建
-required step；`--required` / `--optional` 互斥。Canonical human form is the bare
-flag form, but the CLI also accepts bounded agent-generated values for this
-specific flag: `--required true`, `--required=false`, and the matching
-`--required=true` / `--required false` forms. Only literal `true` / `false` are
-consumed as boolean values; ordinary positional text after `--required` remains
-positional, and any other extra value remains a parser error. `--body-file
-<PATH|->` 从文件或 stdin 读取长正文，与 `--body` 互斥；`update --clear-body`
-也与 `--body-file` 互斥。`update` 只有在显式传 `--required` 或 `--optional`
-时才改变 required flag。`done`、`skip` 和 `reopen` 必须记录说明文本。
-`--note-file <PATH|->` 和 `--reason-file <PATH|->` 从文件或 stdin 读取长
-note/reason，分别与 inline `--note` / `--reason` 互斥。
+`step_ref` 支持步骤 ID，也支持父任务列表里的 `S<n>` 序号。`add` 默认创建
+必需步骤；`--required` / `--optional` 互斥。供人类使用的规范形式是不带值的标志，
+但针对该标志，CLI 也接受有界的智能体生成值：`--required true`、
+`--required=false`，以及对应的 `--required=true` / `--required false` 形式。
+只有字面量 `true` / `false` 会被当作布尔值消费；`--required` 之后的普通位置文本
+仍是位置参数，任何其他额外值仍会触发解析错误。`--body-file <PATH|->` 从文件或
+标准输入读取长正文，与 `--body` 互斥；`update --clear-body` 也与 `--body-file`
+互斥。`update` 只有在显式传入 `--required` 或 `--optional` 时才改变是否必需。
+`done`、`skip` 和 `reopen` 必须记录说明文本。`--note-file <PATH|->` 和
+`--reason-file <PATH|->` 从文件或标准输入读取较长的备注/原因，分别与行内
+`--note` / `--reason` 互斥。
 
-Human list 输出示例：
+人类可读列表输出示例：
 
 ```text
 Execution plan: planned
 Required steps: 1/2 done-or-skipped
 Optional steps: 1
 
-S1 st_01HX... [done] required pos=1024 Write tests
-S2 st_01HY... [todo] required pos=2048 link=default#13 Verify desktop UI
-S3 st_01HZ... [todo] optional pos=3072 Release notes
+S1 step_01HX... [done] required pos=1024 编写测试
+S2 step_01HY... [todo] required pos=2048 link=default#13 验证桌面界面
+S3 step_01HZ... [todo] optional pos=3072 发布说明
 ```
 
-`task step not-required` 只在没有 steps 时可用；它记录 reason 并解除 ready/claim 的
-execution-plan gate。已有 step 的 task 不能标记为 `not_required`。
+`task step not-required` 只在没有步骤时可用；它记录原因并解除 `ready`/领取的
+执行计划门禁。已有步骤的任务不能标记为 `not_required`。
 
 ---
 
-## 7. Dependency Commands
+## 7. 依赖命令
 
 ```bash
 kanban dep add <parent_ref> <child_ref>
@@ -3718,7 +3697,7 @@ kanban dep remove <parent_ref> <child_ref>
 kanban dep list <task_ref>
 ```
 
-`--json` 输出使用 hydrated dependency DTO。`dep list --json` 返回以查询 task 为中心的 snapshot：
+`--json` 输出使用已补全信息的依赖 DTO。`dep list --json` 返回以所查询任务为中心的快照：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -3729,7 +3708,7 @@ kanban dep list <task_ref>
       "board_id": "b_default",
       "board_slug": "default",
       "ref": "default#2",
-      "title": "child",
+      "title": "子任务",
       "status": "todo"
     },
     "parents": [
@@ -3738,7 +3717,7 @@ kanban dep list <task_ref>
         "board_id": "b_default",
         "board_slug": "default",
         "ref": "default#1",
-        "title": "parent",
+        "title": "父任务",
         "status": "done"
       }
     ],
@@ -3750,7 +3729,7 @@ kanban dep list <task_ref>
           "board_id": "b_default",
           "board_slug": "default",
           "ref": "default#1",
-          "title": "parent",
+          "title": "父任务",
           "status": "done"
         },
         "child": {
@@ -3758,7 +3737,7 @@ kanban dep list <task_ref>
           "board_id": "b_default",
           "board_slug": "default",
           "ref": "default#2",
-          "title": "child",
+          "title": "子任务",
           "status": "todo"
         }
       }
@@ -3785,26 +3764,29 @@ kanban dep list <task_ref>
 kanban dep list default#2 --json | jq -r '.data.edges[] | "\(.parent.ref) -> \(.child.ref)"'
 ```
 
-Human output for add/remove is Chinese-first:
+添加和移除依赖的人类可读输出以中文为主：
 
 ```text
 已添加依赖：default#1 -> default#2
 已移除依赖：default#1 -> default#2
 ```
 
-添加 dependency 后：
+添加依赖后：
 
-- 如果 child 当前是 `ready` 且 parent 未完成（不是 `done` 或 `archived`），child 降级为 `todo`。
-- parent 完成、归档或 dependency 移除后，child 保持 `todo`；需要 `kanban task promote <task_ref>` 才显式进入 `ready`。归档 parent 不会删除 dependency edge。
-- parent 从 `done` reopen 后，直接 child 中仅 `triage|todo|scheduled|ready` 会按 readiness 重算；`running|blocked|review|done|archived` 不隐式改写。
-- 重复添加同一 parent/child edge 是 idempotent no-op：不追加新的
-  `dependency.added` event，也不再次触发 child 状态重算。
-- 如果产生环，返回 exit code 6 或 invalid input。
-- 当前版本拒绝跨 board dependency，即使 parent/child 通过全局 `t_...` 或显式 `board#seq` 解析成功。
+- 如果子任务当前是 `ready` 且父任务未完成（不是 `done` 或 `archived`），子任务降级为 `todo`。
+- 父任务完成、归档或依赖移除后，子任务保持 `todo`；需要
+  `kanban task promote <task_ref>` 才显式进入 `ready`。归档父任务不会删除依赖边。
+- 父任务从 `done` 重新打开后，直接子任务中仅 `triage|todo|scheduled|ready`
+  会按就绪条件重算；`running|blocked|review|done|archived` 不会被隐式改写。
+- 重复添加同一父任务/子任务边是幂等空操作：不追加新的 `dependency.added` 事件，
+  也不再次触发子任务状态重算。
+- 如果产生环，返回 `invalid_input`，退出码为 2。
+- 当前版本拒绝跨看板依赖，即使父任务/子任务通过全局 `t_...` 或显式
+  `board#seq` 解析成功。
 
-`task list/show --json` 返回 derived dependency fields：`dependency_blocked`
-和 `unfinished_parent_count`。未完成 parent 指状态不是 `done` 或 `archived` 的 parent；这些字段用于区分仍被未完成 parent 阻塞的 `todo`
-与已解除依赖但尚未人工 promote 的 `todo`。
+`task list/show --json` 返回派生依赖字段：`dependency_blocked`
+和 `unfinished_parent_count`。未完成父任务指状态不是 `done` 或 `archived` 的父任务；
+这些字段用于区分仍被未完成父任务阻塞的 `todo`，与已解除依赖但尚未人工提升的 `todo`。
 
 ---
 
@@ -3820,14 +3802,12 @@ kanban label remove <task_ref> <label>
 kanban label semantics list [--json]
 kanban label semantics show <label> [--json]
 kanban label semantics upsert <label> [--expected-semantics-hash <hash>] [--replace] [--reason <text>|--reason-file <PATH|->] [--source-signal <signal_id>]... [--description <text>] [--applies-when <text>]... [--excludes-when <text>]... [--positive-example <text>]... [--negative-example <text>]... [--remove-applies-when <text>]... [--remove-excludes-when <text>]... [--remove-positive-example <text>]... [--remove-negative-example <text>]... [--json]
-kanban label semantics delete <label> --expected-semantics-hash <hash> [--reason <text>|--reason-file <PATH|->] [--json]
+kanban label semantics delete <label> --expected-semantics-hash <hash> (--reason <text>|--reason-file <PATH|->) [--json]
 kanban label atoms list [--json]
 kanban label atom explain <atom-id-or-content-hash> [--json]
 kanban label atom-index status [--vector-config <toml>] [--json]
 kanban label atom-index rebuild [--vector-config <toml>] [--json]
 kanban label atom-index query <text> [--polarity positive|negative] [--limit 24] [--vector-config <toml>] [--json]
-
-`label atom-index status`、`rebuild` 和 `query` 复用 vector TOML 解析规则：显式 `--vector-config`/`--config` 优先，其次是最近项目 `.kb/config.toml`，最后是全局 config。helper argv 只在显式传入 `--vector-config` 时附带该参数；省略时由 helper 按默认配置解析。
 kanban label suggest <task_ref> [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label propose <task_ref> [--proposal-json <path>] [--source-signal <signal_id>]... [--allow-retarget] [--retarget-reason <text>|--retarget-reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--vector-config <toml>] [--json]
 kanban label proposals list [--task <task_ref>] [--status proposed|accepted|rejected] [--json]
@@ -3839,84 +3819,86 @@ kanban label ontology list [--status open|confirmed|resolved|rejected|superseded
 kanban label ontology show <signal_id> [--json]
 kanban label ontology review [--group-by label|candidate-atom|proposed-label|cluster] [--include-all] [--limit 100] [--json]
 kanban label ontology quality [--sample-limit 20] [--json]
-kanban label ontology confirm <signal_id>... [--reason <text>|--reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology reject <signal_id>... [--reason <text>|--reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology supersede <signal_id>... --by <signal_id> [--reason <text>|--reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology resolve <signal_id>... --no-change [--reason <text>|--reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology apply atom <signal_id>... --label <label> --kind applies-when|positive-example|excludes-when|negative-example [--text <text>|--text-file <PATH|->] [--reason <text>|--reason-file <PATH|->] [--allow-retarget] [--retarget-reason <text>|--retarget-reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology revert <action_id> [--reason <text>|--reason-file <PATH|->] [--expected-current-hash <hash>] [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology validate <action_id> --status passed|failed|partial [--reason <text>|--reason-file <PATH|->] --input <PATH|-> [signal_id]... [--actor-type user|agent] [--agent-type <type>] [--json]
-kanban label ontology validate <action_id> --trusted --status passed|failed|partial [--reason <text>|--reason-file <PATH|->] [signal_id]... [--positive-control <TASK_REF>]... [--positive-control-waiver <REASON>|--positive-control-waiver-file <PATH|->] [--vector-config <toml>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology confirm <signal_id>... (--reason <text>|--reason-file <PATH|->) [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology reject <signal_id>... (--reason <text>|--reason-file <PATH|->) [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology supersede <signal_id>... --by <signal_id> (--reason <text>|--reason-file <PATH|->) [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology resolve <signal_id>... --no-change (--reason <text>|--reason-file <PATH|->) [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology apply atom <signal_id>... --label <label> --kind applies-when|positive-example|excludes-when|negative-example (--text <text>|--text-file <PATH|->) (--reason <text>|--reason-file <PATH|->) [--allow-retarget] [--retarget-reason <text>|--retarget-reason-file <PATH|->] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology revert <action_id> (--reason <text>|--reason-file <PATH|->) [--expected-current-hash <hash>] [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology validate <action_id> --status passed|failed|partial (--reason <text>|--reason-file <PATH|->) --input <PATH|-> [signal_id]... [--actor-type user|agent] [--agent-type <type>] [--json]
+kanban label ontology validate <action_id> --trusted --status passed|failed|partial (--reason <text>|--reason-file <PATH|->) [signal_id]... [--positive-control <TASK_REF>]... [--positive-control-waiver <REASON>|--positive-control-waiver-file <PATH|->] [--vector-config <toml>] [--limit 5] [--candidate-limit 32] [--atom-limit 80] [--max-selected-labels 4] [--min-score 0.15] [--actor-type user|agent] [--agent-type <type>] [--json]
 ```
 
-Label semantics/proposal/ontology 命令中的 `--reason-file <PATH|->`、
+`label atom-index status`、`rebuild` 和 `query` 复用向量 TOML 解析规则：
+显式 `--vector-config`/`--config` 优先，其次是最近项目的 `.kb/config.toml`，
+最后是全局配置。只有显式传入 `--vector-config` 时，辅助进程参数才会附带该值；
+省略时由辅助进程按默认配置解析。
+
+标签语义、提案和本体命令中的 `--reason-file <PATH|->`、
 `--retarget-reason-file <PATH|->`、`--text-file <PATH|->` 和
-`--positive-control-waiver-file <PATH|->` 从文件或 stdin 读取对应长文本，并与同名
-inline 参数互斥。`label atom-index query <text>` 的 `<text>` 是短查询标量，不提供
-file 输入；需要持久 ontology evidence 时使用 `label ontology record --input <path|->`
+`--positive-control-waiver-file <PATH|->` 从文件或标准输入读取对应长文本，并与同名
+行内参数互斥。`label atom-index query <text>` 的 `<text>` 是短查询标量，不提供
+文件输入；需要持久本体证据时使用 `label ontology record --input <path|->`
 或 `label ontology validate --input <PATH|->`。
 
-`label create` 创建当前 board 作用域内的 label；如果同一 board 已存在同名
-label，返回已有 label。`label add` 接受 task ref 和一个或多个 label 名称；默认
-只绑定 task 所属 board 上已经存在的 canonical label。缺失 label 会返回
-invalid input，并提示先用 `label create`、`label bootstrap`、proposal/adoption
-路径创建，或在明确接受只创建 canonical identity 的情况下传 `--create-missing`。
-`--create-missing` 只创建 `labels` identity 并绑定 task，不生成 `label_semantics`
-或 `label_atoms`；JSON 输出改为 `{ "task": <TaskRecord>, "created_labels": [...] }`。
-`label remove` 接受 task ref 和 label 名称或 id。空白 label 名称会被拒绝。
+`label create` 在当前看板作用域内创建标签；如果同一看板已存在同名标签，则返回
+已有标签。`label add` 接受任务引用和一个或多个标签名称；默认只绑定任务所属看板上
+已经存在的规范标签。缺失标签会返回无效输入，并提示先用 `label create`、
+`label bootstrap`、提案/采用路径创建，或在明确接受只创建规范身份的情况下传入
+`--create-missing`。`--create-missing` 只创建 `labels` 身份并绑定任务，不生成
+`label_semantics` 或 `label_atoms`；JSON 输出改为
+`{ "task": <TaskRecord>, "created_labels": [...] }`。
+`label remove` 接受任务引用和标签名称或 ID。空白标签名称会被拒绝。
 
-`label delete <label>` 删除当前 board 上的 canonical label identity，区别于
-`label remove <task_ref> <label>` 的 task-level 解绑。Label identity CRUD 不属于
-ontology ledger；create/delete 只写普通 board/task event，不写 ontology mutation
-action。默认情况下，如果 label 仍绑定任何 task，会拒绝删除并报告绑定数量；显式传
-`--force` 时只移除 task bindings 后删除空 label identity。若 label 仍有
+`label delete <label>` 删除当前看板上的规范标签身份，区别于
+`label remove <task_ref> <label>` 的任务级解绑。标签身份的增删改查不属于
+本体账本；创建/删除只写普通看板/任务事件，不写本体变更操作。默认情况下，如果标签
+仍绑定任何任务，系统会拒绝删除并报告绑定数量；显式传入 `--force` 时，只移除任务绑定
+后删除空标签身份。若标签仍有
 `label_semantics` 或 `label_atoms`，即使传 `--force` 也会拒绝；必须先用
 `label semantics delete --expected-semantics-hash <hash> --reason <text>` 清空语义。
-JSON 返回 `{ "label": <LabelRecord>, "forced": bool, "removed_task_bindings": n,
-"removed_semantics": false, "removed_atoms": 0 }`。删除 canonical label 不改变 task
-status；被删除 label 会从 `label list`、`task show/list` 的 labels 和后续 suggest truth
+JSON 返回 `{ "label": <LabelRecord>, "forced": bool, "removed_task_bindings": n, "removed_semantics": false, "removed_atoms": 0 }`。
+删除规范标签不改变任务
+状态；被删除标签会从 `label list`、`task show/list` 的标签和后续建议事实
 中消失。
 
-Label 变更对 task-label 关联保持幂等。只有关联实际变化时，才追加
-`task.label.added` / `task.label.removed` event；该操作不改变 task status。
-批量 `label add` 会先验证所有 label 名称；如果任一 label 为空白、非法或缺失且未传
-`--create-missing`，不会创建 canonical label，也不会留下部分 task-label 绑定。
-显式创建模式与单 label add 相同，只创建缺失的 canonical identity，并在输出中列出
-本次新建的 labels。
+标签变更对任务—标签关联保持幂等。只有关联实际变化时，才追加
+`task.label.added` / `task.label.removed` 事件；该操作不改变任务状态。
+批量 `label add` 会先验证所有标签名称；如果任一标签为空白、非法或缺失且未传
+`--create-missing`，不会创建规范标签，也不会留下部分任务—标签绑定。
+显式创建模式与添加单个标签相同，只创建缺失的规范身份，并在输出中列出本次新建的标签。
 
-`label bootstrap` 是一次性 new-label adoption helper：在同一 transaction 内创建
-当前 task 所属 board 上缺失的 canonical label，或复用没有既有 semantics 的同名
-label，写入该 label 的 `label_semantics`，同步重建 SQLite `label_atoms`，标脏派生
-的 label atom vector index，并把该 label 绑定到 task。`<label>` 按名称解析；空白
-名称会被拒绝。语义输入会 trim 并丢弃空白值，且必须至少提供 `description` 或一个非空
+`label bootstrap` 是一次性新标签采用辅助命令：在同一事务内创建当前任务所属看板上
+缺失的规范标签，或复用尚无语义的同名标签；写入该标签的 `label_semantics`，同步重建
+SQLite `label_atoms`，将派生的标签原子向量索引标记为脏，并把该标签绑定到任务。
+`<label>` 按名称解析；空白名称会被拒绝。语义输入会去除首尾空白并丢弃空白值，
+且必须至少提供 `description` 或一个非空
 语义数组值。
 
-Bootstrap 默认不会覆盖已有 `label_semantics`。如果同名 label 已经有 semantics，
-命令会失败，并要求改用专用 semantics mutation 或 proposal/adoption 路径；重复执行
-同一 task/label 只在目标 label 仍无 semantics 时保持 task-label 绑定幂等。JSON
+引导操作默认不会覆盖已有 `label_semantics`。如果同名标签已经有语义，
+命令会失败，并要求改用专用语义变更或提案/采用路径；重复执行同一任务/标签时，
+只有目标标签仍无语义才会保持任务—标签绑定幂等。JSON
 返回 `{ "task": <TaskRecord>, "semantics": <LabelSemanticsRecord>, "verification": null|<Verification> }`。
 
-当前 no-heavy CLI build 已把 label suggestion/proposal、bootstrap staged verification 和
-label atom status/rebuild/query 接到 vector helper subprocess adapter；`kanban vector ...` 仍保留
-raw chunk / label-atom 查询入口，helper 内部用 label atom 专用 command 处理
-`lancedb_label_atoms`，不复用 chunk store status 伪装 label atom 状态。
+当前轻量 CLI 构建已把标签建议/提案、引导阶段校验和标签原子状态/重建/查询接到向量辅助
+子进程适配器；`kanban vector ...` 仍保留原始分块/标签原子查询入口，辅助进程内部用
+标签原子专用命令处理 `lancedb_label_atoms`，不复用分块存储状态来伪装标签原子状态。
 
-传入 `--verify` 或 `--vector-config <toml>` 时，CLI 使用 pre-commit staged
-verification：先在 canonical DB transaction 外读取当前 task、target label state 和
-board ontology digest，并在隔离的临时 atom store 中加载当前 atoms 与 candidate atoms。
-随后对来源 task 运行非 degraded `label suggest`，要求新 label 出现在
-`selected_labels` 或 `candidates`，且 score 至少达到 `--min-verify-score`（默认
-`0.50`）。rebuild、suggest、threshold、provider 或临时 store 失败时不会写
-canonical label、semantics、atoms、task-label binding、ontology action、event 或 dirty
-marker。如果 vector helper/provider 不可用会返回明确的 verification error；需要离线验收时也可改走 external attestation `--input` 路径。
+传入 `--verify` 或 `--vector-config <toml>` 时，CLI 使用提交前的分阶段校验：
+先在规范数据库事务外读取当前任务、目标标签状态和看板本体摘要，并在隔离的临时原子存储
+中加载当前原子与候选原子。随后对来源任务运行非降级的 `label suggest`，要求新标签
+出现在 `selected_labels` 或 `candidates` 中，且分数至少达到
+`--min-verify-score`（默认 `0.50`）。重建、建议、阈值、提供程序或临时存储失败时，
+不会写入规范标签、语义、原子、任务—标签绑定、本体操作、事件或脏标记。如果向量辅助
+进程/提供程序不可用，会返回明确的校验错误；需要离线验收时，也可改走外部证明
+`--input` 路径。
 
-验证通过后 CLI 才开启短 `BEGIN IMMEDIATE` transaction，重算 task suggest-input hash、
-target label state 和 board ontology digest；任一值变化会返回 conflict 且零写入。成功
-路径在一个 transaction 中写 canonical label/semantics/atoms、task binding、普通
-task-label event、一个 `bootstrap_label` root ontology action 和对应 added atom
-effects。Verification summary 会写入 root action change snapshot 和 CLI output；它不等同于
-post-commit trusted validation。无可用 vector provider 时，验证会在写入前失败；不需要
-本地 vector 验证时省略 `--verify` 和 `--vector-config`。
+验证通过后 CLI 才开启短 `BEGIN IMMEDIATE` 事务，重算任务建议输入哈希、目标标签状态
+和看板本体摘要；任一值变化都会返回冲突且零写入。成功路径在一个事务中写入规范
+标签/语义/原子、任务绑定、普通任务—标签事件、一个 `bootstrap_label` 根本体操作，
+以及对应的新增原子影响。校验摘要会写入根操作的变更快照和 CLI 输出；它不等同于
+提交后受信任校验。无可用向量提供程序时，校验会在写入前失败；不需要本地向量校验时，
+省略 `--verify` 和 `--vector-config`。
 
 示例：
 
@@ -3924,9 +3906,9 @@ post-commit trusted validation。无可用 vector provider 时，验证会在写
 kanban label create backend --color blue
 kanban label delete old-label --json
 kanban label delete old-label --force --json
-kanban label semantics delete old-label --expected-semantics-hash sem_abc123 --reason "Retire obsolete semantics before deleting identity" --json
-kanban label bootstrap default#12 database --description "Database persistence work" --applies-when "touches SQLite migrations" --positive-example "new table migration" --json
-kanban label bootstrap default#12 database --description "Database persistence work" --applies-when "touches SQLite migrations" --positive-example "new table migration" --vector-config .kb/vector.toml --min-verify-score 0.50 --json
+kanban label semantics delete old-label --expected-semantics-hash sem_abc123 --reason "删除标签身份前停用旧语义" --json
+kanban label bootstrap default#12 database --description "数据库持久化工作" --applies-when "涉及 SQLite 迁移" --positive-example "新增数据表迁移" --json
+kanban label bootstrap default#12 database --description "数据库持久化工作" --applies-when "涉及 SQLite 迁移" --positive-example "新增数据表迁移" --vector-config .kb/vector.toml --min-verify-score 0.50 --json
 kanban label add default#12 backend
 kanban label create api
 kanban label add default#12 backend api
@@ -3935,46 +3917,45 @@ kanban label remove t_01HX... backend
 kanban label list --json
 ```
 
-人类可读输出使用紧凑 label 行：
+人类可读输出使用紧凑的标签行：
 
 ```text
 backend l_01HX... color=blue
 ```
 
-Task 的人类可读摘要如果存在 labels，会在末尾追加方括号标签列表：
+如果任务有人类可读的标签，摘要末尾会追加方括号标签列表：
 
 ```text
 default#12 [ready] P1 修复 API 回归 [backend,p1] · plan: planned · steps: 0/0
 ```
 
-`label suggest` 返回 task-level label suggestions。带内置 label atom vector store 的
-构建会把 task title +
-description embedding 作为 query，使用 `lancedb_label_atoms` 按残差多轮检索正向
-label atoms，并用原始 query 检索负向 atoms 做 penalty / suppression。solver 在
-label group 层执行 Group OMP 选择，再用选中 label 的 top positive atom vectors 做
-non-negative refit；`coverage` / `residual_norm` 来自该 atom-level fitted vector，
+`label suggest` 返回任务级标签建议。带内置标签原子向量存储的构建，会把任务标题和
+描述的嵌入向量作为查询，使用 `lancedb_label_atoms` 按残差多轮检索正向标签原子，
+并用原始查询检索负向原子，以施加惩罚或抑制。求解器在标签组层执行 Group OMP 选择，
+再用所选标签的最相关正向原子向量执行非负重拟合；`coverage` / `residual_norm`
+来自该原子级拟合向量，
 其中 `coverage = clamp(1 - residual_norm, 0.0, 1.0)`，因此二者不是两份独立
-证据；`coverage_cosine` 是原始 query 与 fitted vector 的 cosine similarity，
+证据；`coverage_cosine` 是原始查询与拟合向量的余弦相似度，
 可作为独立补充指标。
-候选 label 只有在 tentative refit 后带来足够 residual norm 降幅才会进入结果；
-coverage 或 residual norm 达到停止阈值后，solver 会提前停止而不是凑满
-`--max-selected-labels`。candidate group 与已选 label 语义向量过度相似时会被跳过，
-以减少重复语义 label 同时出现在 selected labels；这不会合并或删除 canonical
-labels。
-`needs_new_label` 是兼容字段，只表示存在需要人工 review 的 label coverage
-诊断；具体原因必须读取 `reason_codes`，例如 `no_selected_labels`、
+候选标签只有在试探性重拟合后带来足够的残差范数降幅，才会进入结果；覆盖率或残差范数
+达到停止阈值后，求解器会提前停止，而不是凑满 `--max-selected-labels`。候选组与
+已选标签语义向量过度相似时会被跳过，以减少重复语义标签同时出现在已选标签中；
+这不会合并或删除规范标签。
+`needs_new_label` 是兼容字段，只表示存在需要人工审核的标签覆盖率诊断；
+具体原因必须读取 `reason_codes`，例如 `no_selected_labels`、
 `coverage_below_threshold`、`residual_above_threshold`、`unexplained_residual`，
-或 degraded 相关原因。不要把 `coverage` 与 `residual_norm` 重复计票，也不要仅凭
-`needs_new_label=true` 创建 vocabulary；必须结合 `reason_codes`、evidence atoms、
-diagnostics 和人工语义判断。
-它不会自动创建新 label，也不会写入 new-label proposal。应用建议时仍使用现有
+或与降级相关的原因。不要把 `coverage` 与 `residual_norm` 重复计票，也不要仅凭
+`needs_new_label=true` 创建新词汇；必须结合 `reason_codes`、证据原子、诊断信息
+和人工语义判断。
+它不会自动创建新标签，也不会写入新标签提案。应用建议时仍使用现有
 `label add <task_ref> <label>...` / API attach 流程。
 
-默认 no-heavy CLI 通过 vector helper adapter 运行 label vector 查询；helper/provider 不可用时命令成功返回
-degraded 结果而不是失败，且 `needs_new_label=false`。`--vector-config`
-使用与 `kanban vector configure/status` 相同的 TOML 解析规则，并把解析出的 embedding model 传给 helper 查询。`LabelAtomHit.distance`
-保留 LanceDB `_distance` 的原始语义；suggestion / proposal 的 score 只根据返回
-atom vector 与当前 query/residual 在本地计算 cosine similarity，不从 distance 推导。
+默认轻量 CLI 通过向量辅助适配器运行标签向量查询；辅助进程/提供程序不可用时，
+命令成功返回降级结果而不是失败，且 `needs_new_label=false`。`--vector-config`
+使用与 `kanban vector configure/status` 相同的 TOML 解析规则，并把解析出的嵌入模型
+传给辅助进程查询。`LabelAtomHit.distance` 保留 LanceDB `_distance` 的原始语义；
+建议/提案分数只根据返回的原子向量与当前查询/残差，在本地计算余弦相似度，
+不从距离值推导。
 
 JSON 输出：
 
@@ -3997,207 +3978,197 @@ JSON 输出：
 }
 ```
 
-Human output 简洁列出建议 label、score、weight、already_applied；degraded 时追加
-diagnostics 行。
+人类可读输出简洁列出建议标签、分数、权重和是否已应用；降级时追加诊断信息行。
 
 `--limit` 只控制最终输出中 `selected_labels` / `candidates` 的最大条数，不会收窄
-solver 内部搜索能力。内部能力由 `--candidate-limit`、`--atom-limit` 和
-`--max-selected-labels` 分别控制：候选 label group 数、每轮 atom vector 检索上限、
-以及最多进入 non-negative refit 的 label 数。所有 limit 参数都必须是
+求解器内部搜索能力。内部能力由 `--candidate-limit`、`--atom-limit` 和
+`--max-selected-labels` 分别控制：候选标签组数、每轮原子向量检索上限，
+以及最多进入非负重拟合的标签数。所有限制参数都必须是
 `1..=1000`；`--min-score` 必须在 `0..=1`。
 
-Label ontology 的长期 regression corpus 目前是本地测试基础设施，不是一个会写生产
-DB 的 CLI mutation 流程。修改 label solver、semantics/atom 生成、trusted validation
-或重要 label ontology 时，可以运行：
+标签本体的长期回归语料库目前是本地测试基础设施，不是会写生产数据库的 CLI 变更流程。
+修改标签求解器、语义/原子生成、受信任校验或重要标签本体时，可以运行：
 
 ```bash
 just test-p kanban-sqlite label_ontology_longitudinal_regression
 ```
 
-该测试在临时 SQLite DB 中建立固定 important labels、known positive tasks 和
-negative-control tasks，重建内存 label atom index，保存 baseline `label suggest`
-结果，再模拟一次过宽 atom 变更并比较 selected labels、score 和 evidence atoms。它会
-断言正常 corpus run 不修改 `labels`、`task_labels`、`label_semantics`、
-`label_atoms` 或 ontology ledger rows；真实项目 corpus 应在积累稳定任务后逐步扩展，
-但不应成为每个日常 task label 绑定的默认必跑步骤。
+该测试在临时 SQLite 数据库中建立固定的重要标签、已知正样本任务和负对照任务，重建
+内存标签原子索引，保存基线 `label suggest` 结果，再模拟一次范围过宽的原子变更，
+并比较已选标签、分数和证据原子。它会断言正常语料库运行不会修改 `labels`、
+`task_labels`、`label_semantics`、`label_atoms` 或本体账本记录；真实项目语料库
+应在积累稳定任务后逐步扩展，但不应成为每个日常任务标签绑定的默认必跑步骤。
 
-`label semantics` 管理当前 board 上已有 label 的语义字典。`<label>` 接受 label
-name 或 `l_...` id。`upsert` 默认是 patch：`--description` 只在提供非空值时覆盖当前
-description，数组参数会追加到对应集合，`--remove-*` 只删除匹配的既有文本；未提供的
-字段不会被解释为清空。传 `--replace` 时才执行完整替换，此时未提供的数组会成为空
-数组，并且不能同时传 `--remove-*`。`--expected-semantics-hash <hash>` 是
-compare-and-swap guard：hash 不等于当前 semantics hash 时返回 conflict 且不写入。
-`--reason` 和 `--source-signal` 会进入 `update_semantics` ontology action；即使没有
-source signal，constructive semantics mutation 也会在同一 transaction 写入 before/after
-hash、change snapshot 和 actor provenance。`upsert` 会写入 `label_semantics` 并同步重建
-该 label 的 `label_atoms`，随后标脏派生的 label atom vector index。数组参数可重复；空白值会被
-trim 后丢弃。生成 atoms 时，有 description 的 label 会生成一个 canonical
-`description` atom：`label: {name}\ndescription: {description}`；没有 description 时
-才使用 `name` fallback atom。atom text 会进一步规范化 whitespace：每个非空行内部
-collapse，canonical 行分隔保留。同一 label 下相同
-`polarity + kind + normalized_text` 的 atom 会去重并保留首次 ordinal，`id` /
-`content_hash` 不包含 ordinal，因此只调整数组顺序不会改变同一文本 atom identity。
-`delete` 是 CAS-protected semantics clear：必须传
-`--expected-semantics-hash <hash>` 和非空 `--reason <text>`。它删除该 label 的
-semantics 与 SQLite atoms，但不删除 canonical label identity 或 task-label 绑定；同一
-transaction 会写一个 `update_semantics` root ontology action，after snapshot 为空，
-并为实际 removed atoms 写 `removed` atom effects，随后标脏 label atom index。Hash
-mismatch 时 canonical、action、effects 和 dirty state 全不变。成功返回
-`{ "data": { "deleted": true } }`。需要在清空后删除 label identity 时，先 clear
-semantics，再执行 `label delete`。
+`label semantics` 管理当前看板上已有标签的语义字典。`<label>` 接受标签名称或
+`l_...` ID。`upsert` 默认是补丁：`--description` 只在提供非空值时覆盖当前描述，
+数组参数会追加到对应集合，`--remove-*` 只删除匹配的既有文本；未提供的字段不会被
+解释为清空。传入 `--replace` 时才执行完整替换，此时未提供的数组会成为空数组，
+并且不能同时传入 `--remove-*`。`--expected-semantics-hash <hash>` 是比较并交换保护：
+哈希不等于当前语义哈希时返回冲突且不写入。`--reason` 和 `--source-signal` 会进入
+`update_semantics` 本体操作；即使没有来源信号，建设性语义变更也会在同一事务写入
+前后哈希、变更快照和操作者来源。`upsert` 会写入 `label_semantics` 并同步重建
+该标签的 `label_atoms`，随后将派生的标签原子向量索引标记为脏。数组参数可重复；
+空白值去除首尾空白后会被丢弃。生成原子时，有描述的标签会生成一个规范的
+`description` 原子：`label: {name}\ndescription: {description}`；没有描述时
+才使用 `name` 回退原子。原子文本会进一步规范化空白：折叠每个非空行内部的空白，
+保留规范行分隔。同一标签下相同 `polarity + kind + normalized_text` 的原子会去重
+并保留首次序号，`id` / `content_hash` 不包含序号，因此只调整数组顺序不会改变
+同一文本原子的身份。
+`delete` 是受 CAS 保护的语义清空操作：必须传入
+`--expected-semantics-hash <hash>` 和非空 `--reason <text>`。它删除该标签的
+语义与 SQLite 原子，但不删除规范标签身份或任务—标签绑定；同一事务会写一个
+`update_semantics` 根本体操作，操作后快照为空，并为实际移除的原子写入 `removed`
+原子影响，随后将标签原子索引标记为脏。哈希不匹配时，规范数据、操作、影响和脏状态
+全部不变。成功返回 `{ "data": { "deleted": true } }`。需要在清空后删除标签身份时，
+先清空语义，再执行 `label delete`。
 
-`label atoms list` 读取 SQLite `label_atoms` materialized projection。这些 atoms 来自
-`label semantics upsert`、`label bootstrap`、`label ontology apply atom` 或接受 label
-proposal 后生成的 semantics；它们是 `lancedb_label_atoms` 派生索引的输入，不是派生索引本身。
+`label atoms list` 读取 SQLite `label_atoms` 物化投影。这些原子来自
+`label semantics upsert`、`label bootstrap`、`label ontology apply atom`，或接受标签
+提案后生成的语义；它们是 `lancedb_label_atoms` 派生索引的输入，不是派生索引本身。
 
 `label atom explain <atom-id-or-content-hash>` 是 `label atoms explain` 的单数别名，
-按当前 board 的 atom id 或稳定 `content_hash` 解析现有 atom，并返回当前 atom、
-canonical semantics、provenance actions、supporting signals/source tasks 和
-validation history。当前 atom 存在但没有 ontology provenance action 引用其 id 或
-content hash 时命令成功返回 `legacy_untracked=true` 和 `legacy_reason`；未知 id/hash
-返回 not found。JSON 输出是 `LabelAtomExplainRecord`，包含 `query`、`atom`、
+按当前看板的原子 ID 或稳定 `content_hash` 解析现有原子，并返回当前原子、规范语义、
+来源操作、支持信号/来源任务和校验历史。当前原子存在，但没有本体来源操作引用其 ID 或
+内容哈希时，命令成功返回 `legacy_untracked=true` 和 `legacy_reason`；未知 ID/哈希
+返回未找到。JSON 输出是 `LabelAtomExplainRecord`，包含 `query`、`atom`、
 `current_semantics`、`provenance_actions`、`supporting_signals`、
-`validation_history`、`legacy_untracked` 和 `legacy_reason`。由于 content hash 不含
-ordinal，semantics rebuild 后同语义 atom 的 id 改变时仍可用 content hash 解释历史。
+`validation_history`、`legacy_untracked` 和 `legacy_reason`。由于内容哈希不含序号，
+语义重建后同语义原子的 ID 改变时，仍可用内容哈希解释历史。
 
-`label atom-index status` 返回 label atom vector index 的状态。未配置 provider 或 helper
-不可用时仍成功返回 disabled/degraded 状态。JSON 保留兼容字段 `message`，并返回结构化
-`diagnostics: string[]`、`dirty: boolean | null`、`board_dirty: boolean | null`；调用方应使用
-结构化字段判断 dirty/error，而不要解析 `message` 文案。`status` 通过 helper 的
-`label-atoms-status` command 读取 `LANCEDB_LABEL_ATOMS_STORE` 与 `label_atom_index_boards` 语义；
-`query` 通过 helper adapter 查询 label atom vector index，`--polarity` 只接受 `positive` 或
-`negative`，human 输出和 JSON hit 都把 LanceDB `_distance` 暴露为 `distance`。`rebuild` 通过
-helper 的 `rebuild-label-atoms` command 重建 label atom 派生索引；helper/provider 不可用时返回显式
-error，不修改 SQLite canonical label truth，也不标记 chunk store success。
+`label atom-index status` 返回标签原子向量索引的状态。未配置提供程序或辅助进程不可用时，
+仍成功返回禁用/降级状态。JSON 保留兼容字段 `message`，并返回结构化的
+`diagnostics: string[]`、`dirty: boolean | null`、`board_dirty: boolean | null`；
+调用方应使用结构化字段判断脏状态/错误，而不要解析 `message` 文案。`status` 通过
+辅助进程的 `label-atoms-status` 命令读取 `LANCEDB_LABEL_ATOMS_STORE` 与
+`label_atom_index_boards` 语义；`query` 通过辅助适配器查询标签原子向量索引，
+`--polarity` 只接受 `positive` 或 `negative`，人类可读输出和 JSON 命中记录都把
+LanceDB `_distance` 暴露为 `distance`。`rebuild` 通过辅助进程的
+`rebuild-label-atoms` 命令重建标签原子派生索引；辅助进程/提供程序不可用时返回
+显式错误，不修改 SQLite 中的规范标签事实，也不把分块存储标记为成功。
 
-`kanban vector query-label-atoms` 是公开 raw helper 查询入口，支持 text 查询和 raw vector 查询。
-输入必须且只能选择一种：positional `<text>`、`--text-file <PATH|->`、`--vector-json <JSON>` 或
-`--vector-json-file <PATH|->`。`-` 表示从 stdin 读取。示例：
+`kanban vector query-label-atoms` 是公开的原始辅助查询入口，支持文本查询和原始向量查询。
+输入必须且只能选择一种：位置参数 `<text>`、`--text-file <PATH|->`、
+`--vector-json <JSON>` 或 `--vector-json-file <PATH|->`。`-` 表示从标准输入读取。示例：
 `kanban vector query-label-atoms --text-file query.txt [--polarity positive|negative] [--limit N] [--embedding-model MODEL] [--vector-config <toml>]`，或
 `kanban vector query-label-atoms --vector-json-file vector.json [--include-vector] [--embedding-model MODEL] [--polarity positive|negative] [--limit N]`。
-`--include-vector` 只对 helper 支持的 raw vector/vector hit 输出有意义。
+`--include-vector` 只对辅助进程支持的原始向量/向量命中输出有意义。
 
-`label propose` 是独立的新 label semantics 提案流程，不复用或改变 `label suggest`。
-它先读取当前 task-level label suggestions 的 `coverage` / `coverage_cosine` / `residual_norm` /
-top1 existing label。没有 `--proposal-json` 时默认 provider 不可用，命令成功返回
-degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms` 或
-`task_labels`。日常 label suggestion 不依赖该 proposal provider。
-`--limit` 只截断 proposal attempt 中复用的 suggestion 输出；`--candidate-limit`、
-`--atom-limit`、`--max-selected-labels`、`--min-score` 会在 proposal 持久化前调节底层
-label suggestion solver，用于计算 coverage、coverage_cosine、residual_norm 和 top1 existing label。
-`--vector-config` 使用与 `label suggest` 相同的 TOML 解析规则。默认 no-heavy CLI
-通过 vector helper adapter 运行 residual validation；未配置或 helper/provider 不可用时保持
-degraded fallback，不写入普通 label 或 task-label 关联。
+`label propose` 是独立的新标签语义提案流程，不复用或改变 `label suggest`。
+它先读取当前任务级标签建议的 `coverage` / `coverage_cosine` / `residual_norm` /
+最相关现有标签。没有 `--proposal-json` 时，默认提供程序不可用；命令成功返回降级尝试，
+不创建规范标签、`label_semantics`、`label_atoms` 或 `task_labels`。日常标签建议
+不依赖该提案提供程序。
+`--limit` 只截断提案尝试中复用的建议输出；`--candidate-limit`、`--atom-limit`、
+`--max-selected-labels`、`--min-score` 会在提案持久化前调节底层标签建议求解器，
+用于计算覆盖率、覆盖率余弦值、残差范数和最相关现有标签。
+`--vector-config` 使用与 `label suggest` 相同的 TOML 解析规则。默认轻量 CLI
+通过向量辅助适配器运行残差校验；未配置或辅助进程/提供程序不可用时保持降级回退，
+不写入普通标签或任务—标签关联。
 
-Provider boundary：CLI 当前只使用 disabled provider 或 `--proposal-json` 显式传入的
-本地/offline candidate。真实 LLM provider 不属于 `kanban-sqlite`；未来若接入本机
-AI/runtime，应在 CLI/local runtime 或独立 AI crate 中实现 `LabelProposalProvider`
-adapter，再把 candidate 交给 SQLite service 做 deterministic validation 和 persistence。
+提供程序边界：CLI 当前只使用禁用的提供程序，或通过 `--proposal-json` 显式传入的
+本地/离线候选。真实 LLM 提供程序不属于 `kanban-sqlite`；未来若接入本机 AI 运行时，
+应在 CLI、本地运行时或独立 AI crate 中实现 `LabelProposalProvider` 适配器，
+再把候选交给 SQLite 服务做确定性校验和持久化。
 
-`--proposal-json` 提供本地/offline provider 输出：
+`--proposal-json` 提供本地/离线提供程序输出：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "name": "database",
-  "description": "Database persistence work",
-  "applies_when": ["touches SQLite migrations"],
-  "excludes_when": ["UI-only polish"],
-  "positive_examples": ["new table migration"],
-  "negative_examples": ["CSS-only tweak"]
+  "description": "数据库持久化工作",
+  "applies_when": ["涉及 SQLite 迁移"],
+  "excludes_when": ["只调整界面"],
+  "positive_examples": ["新增数据表迁移"],
+  "negative_examples": ["只修改 CSS"]
 }
 ```
 
-数组字段缺省时按空数组处理。`name` 不能为空，且 description 或任一语义数组至少
-需要提供一个非空值。只有当前启发式 coverage 不足时才持久化 proposal。与现有
-label 发生 normalized-name 冲突的候选会写成 `rejected` proposal，并在 diagnostics
-中返回 `near_duplicate_label_conflict`；该 normalized-name 检查忽略大小写、空白
-和标点，是 deterministic near-duplicate heuristic。
-coverage 不足的候选还会执行残差 top1+margin 校验：候选语义的 residual score
-和现有 label top1 都按返回 atom vector 在本地计算 cosine similarity，不从
-LanceDB distance 推导；候选必须超过现有 label top1，且超过幅度达到固定 margin。
-校验失败时 attempt 仍会把候选持久化为 `rejected` proposal，diagnostics 包含
+数组字段缺省时按空数组处理。`name` 不能为空，且描述或任一语义数组至少需要提供
+一个非空值。只有当前启发式覆盖率不足时才持久化提案。与现有标签发生规范化名称冲突的
+候选会写成 `rejected` 提案，并在诊断信息中返回 `near_duplicate_label_conflict`；
+该规范化名称检查忽略大小写、空白和标点，是确定性的近重复启发式规则。
+覆盖率不足的候选还会执行残差最相关结果加间隔校验：候选语义的残差分数和现有标签
+最相关结果，都按返回的原子向量在本地计算余弦相似度，不从 LanceDB 距离推导；
+候选必须超过现有标签最相关结果，且超过幅度达到固定间隔。校验失败时，本次尝试仍会
+把候选持久化为 `rejected` 提案，诊断信息包含
 `label_proposal_residual_top1_failed` 或
 `label_proposal_residual_margin_insufficient`，用于审计为什么没有进入可接受状态。
-如果 residual validation 不可用或 degraded，且没有明确通过 top1+margin 校验，
-attempt 返回 `degraded=true`、`proposal=null`，不新增 proposal row，也不创建
-canonical label、`label_semantics`、`label_atoms` 或 `task_labels`；diagnostics 包含
+如果残差校验不可用或已降级，且没有明确通过最相关结果加间隔校验，本次尝试返回
+`degraded=true`、`proposal=null`，不新增提案记录，也不创建规范标签、
+`label_semantics`、`label_atoms` 或 `task_labels`；诊断信息包含
 `label_proposal_residual_validation_unavailable` 和具体原因。
-传入 `--source-signal <los_...>` 时，proposal 创建成功后会在同一 transaction 写入
-`create_label_proposal` ontology action，并通过 action-signal links 记录该 proposal
-由哪些 confirmed vocabulary-gap signals 支持；proposal row 与 provenance action
-要么同时写入，要么一起回滚。Source signals 默认必须是同一 board 上 `confirmed`
-的 `vocabulary_gap` + `bootstrap_label` signals，且 normalized `proposed_label_name`
-必须等于 proposal name。`--actor-type` / `--agent-type` 控制该
-`create_label_proposal` action 的 actor provenance；actor name 仍来自全局 `--actor`。
-确实需要把 confirmed same-board source signal retarget 到该 proposal 时，必须同时传
-`--allow-retarget` 和非空 `--retarget-reason <text>`；reason 和 source signal 原始
-target/proposed label 会写入 `change_json.retarget_override`。Override 不放宽
-board/status 要求。
+传入 `--source-signal <los_...>` 时，提案创建成功后会在同一事务写入
+`create_label_proposal` 本体操作，并通过操作—信号链接记录该提案由哪些已确认的
+词汇缺口信号支持；提案记录与来源操作要么同时写入，要么一起回滚。来源信号默认必须是
+同一看板上 `confirmed` 的 `vocabulary_gap` + `bootstrap_label` 信号，且规范化后的
+`proposed_label_name` 必须等于提案名称。`--actor-type` / `--agent-type` 控制该
+`create_label_proposal` 操作的操作者来源；操作者名称仍来自全局 `--actor`。
+确实需要把已确认的同看板来源信号重定向到该提案时，必须同时传入 `--allow-retarget`
+和非空 `--retarget-reason <text>`；原因和来源信号原始目标/候选标签会写入
+`change_json.retarget_override`。重定向不会放宽看板/状态要求。
 
-`label proposals accept` 只接受 `proposed` proposal。accept 与单 task bootstrap 共用
-同一个 adoption primitive：创建 canonical label、`label_semantics` 与 `label_atoms`，
-标脏 label atom index，并写入 `bootstrap_label` ontology action；proposal row、
-canonical writes 和 action provenance 要么同一 transaction 成功，要么一起回滚。它不会自动
-给来源 task 写入 `task_labels`。未传 `--source-signal` 时仍会记录 bootstrap action，
-只是没有 action-signal links；传入 `--source-signal <los_...>` 时会通过 links 记录该
-new-label bootstrap 的 signal provenance，且这些 source signals 必须是同一 board 上的
-`confirmed` signals。`--actor-type` / `--agent-type` 控制该
-`bootstrap_label` action 的 actor provenance；actor name 仍来自全局 `--actor`。
+`label proposals accept` 只接受 `proposed` 提案。接受操作与单任务引导共用
+同一个采用原语：创建规范标签、`label_semantics` 与 `label_atoms`，
+将标签原子索引标记为脏，并写入 `bootstrap_label` 本体操作；提案记录、规范写入和
+操作来源要么在同一事务中成功，要么一起回滚。它不会自动给来源任务写入
+`task_labels`。未传 `--source-signal` 时仍会记录引导操作，只是没有操作—信号链接；
+传入 `--source-signal <los_...>` 时会通过链接记录该新标签引导的信号来源，
+且这些来源信号必须是同一看板上的 `confirmed` 信号。`--actor-type` /
+`--agent-type` 控制该 `bootstrap_label` 操作的操作者来源；操作者名称仍来自
+全局 `--actor`。
 默认是 `user`。`--actor-type agent` 必须提供非空 `--agent-type`；`user` 不能提供
-`--agent-type`。Source signals 默认还必须是 `vocabulary_gap` +
-`bootstrap_label`，且 normalized `proposed_label_name` 必须等于 proposal name。
-如果 proposal 已有 `create_label_proposal` action，accept 产生的 `bootstrap_label`
-action 会把 `parent_action_id` 指向该 creation action，形成 proposal creation ->
-bootstrap acceptance 链路。
-确实需要把 confirmed same-board source signal retarget 到该 proposal 时，必须同时传
-`--allow-retarget` 和非空 `--retarget-reason <text>`；该 reason、source signal 原始
-target/proposed label 和最终 proposal/result label 会写入 bootstrap action
-`change_json.retarget_override`。Override 不放宽 board/status 要求。`label proposals reject`
-标记 proposal 为 `rejected`，不接受 `--source-signal`。accepted/rejected proposal 不能再次决策。
+`--agent-type`。来源信号默认还必须是 `vocabulary_gap` + `bootstrap_label`，
+且规范化后的 `proposed_label_name` 必须等于提案名称。如果提案已有
+`create_label_proposal` 操作，接受时产生的 `bootstrap_label` 操作会把
+`parent_action_id` 指向该创建操作，形成“提案创建 → 引导接受”链路。
+确实需要把已确认的同看板来源信号重定向到该提案时，必须同时传入
+`--allow-retarget` 和非空 `--retarget-reason <text>`；该原因、来源信号的原始
+目标/候选标签和最终提案/结果标签会写入引导操作的
+`change_json.retarget_override`。重定向不会放宽看板/状态要求。
+`label proposals reject` 把提案标记为 `rejected`，不接受 `--source-signal`。
+已接受或已拒绝的提案不能再次决策。
 
-`label ontology record` 记录一次 label 判断 observation 并写入其中的 child signals。
-推荐输入边界是：工具采集或接收未改写的 `label suggest` snapshot，service 从 snapshot
-派生 coverage、residual、degraded、diagnostics 等 observation metrics；agent 只提交
-候选、最终判断、signals、candidate atom 和 rationale。CLI 可以用
-`--capture-suggest` 在 record 前用同一组 suggest options 运行一次真实 `label suggest`，
-也可以用 `--suggestion-snapshot <path|->` 读取已保存的原始 suggest JSON。snapshot
-可以是直接的 suggest response，也可以是带 `data` wrapper 的 JSON response。
+`label ontology record` 记录一次标签判断观察，并写入其中的子信号。
+推荐输入边界是：工具采集或接收未经改写的 `label suggest` 快照，服务从快照派生
+覆盖率、残差、降级、诊断等观察指标；智能体只提交候选、最终判断、信号、候选原子和
+理由。CLI 可以用 `--capture-suggest` 在记录前用同一组建议选项运行一次真实的
+`label suggest`，也可以用 `--suggestion-snapshot <path|->` 读取已保存的原始建议
+JSON。快照可以是直接的建议响应，也可以是带 `data` 封装的 JSON 响应。
 
-`--input` 只接受 contract-owned natural JSON shape；旧 `_json` compatibility siblings
-（例如 `diagnostics_json`、`related_labels_json`）会作为 unknown field 拒绝。新调用方不应重复手写
-`suggest_coverage`、`suggest_residual_norm` 或 `diagnostics`。如果 snapshot 中已有
-这些字段而输入又提供冲突的标量或 diagnostics，命令会失败。Service 会读取当前 task
-snapshot、解析 target label ref、计算 normalized proposed label name、signal key 和
-candidate atom content hash；observation 同时保存完整审计用
-`task_snapshot_json.content_hash` 和只基于 label suggest 输入（normalized title +
-description）的 `suggest_input_hash`。它只写 ledger，不修改 `task_labels`、
-`label_semantics`、`label_atoms`、label atom index 或 proposal。
+`--input` 只接受契约所有的自然 JSON 结构；旧 `_json` 兼容同级字段（例如
+`diagnostics_json`、`related_labels_json`）会作为未知字段拒绝。新调用方不应重复手写
+`suggest_coverage`、`suggest_residual_norm` 或 `diagnostics`。如果快照中已有这些字段，
+而输入又提供冲突的标量或诊断信息，命令会失败。服务会读取当前任务快照、解析目标标签
+引用、计算规范化候选标签名称、信号键和候选原子内容哈希；观察记录同时保存用于完整审计的
+`task_snapshot_json.content_hash`，以及只基于标签建议输入（规范化标题和描述）的
+`suggest_input_hash`。它只写账本，不修改 `task_labels`、`label_semantics`、
+`label_atoms`、标签原子索引或提案。
 
-Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
-`applies_when` / `positive_example` 只能使用 `positive` polarity，
-`excludes_when` / `negative_example` 只能使用 `negative` polarity。
-`add_positive_atom` 必须提供 target label 和 positive candidate atom；
-`add_negative_atom` 必须提供 target label 和 negative candidate atom；
-`update_semantics` 必须提供 target label；`bootstrap_label` 必须提供
-`proposed_label_name`；`rename_label` 必须提供 target label 和
-`proposed_label_name`；`split_label` / `merge_labels` 必须提供 target label 和非空
-`related_labels`。Observation metric `suggest_coverage`、
-`suggest_coverage_cosine`、`suggest_residual_norm` 以及 signal metric
-`suggest_score` / `confidence` 必须是 finite `0.0..=1.0`；`suggest_rank` 必须为
+信号输入会在写入前做本体契约校验。`candidate_atom` 的
+`applies_when` / `positive_example` 只能使用 `positive` 极性，
+`excludes_when` / `negative_example` 只能使用 `negative` 极性。
+`add_positive_atom` 必须提供目标标签和正向候选原子；
+`add_negative_atom` 必须提供目标标签和负向候选原子；
+`update_semantics` 必须提供目标标签；`bootstrap_label` 必须提供
+`proposed_label_name`；`rename_label` 必须提供目标标签和
+`proposed_label_name`；`split_label` / `merge_labels` 必须提供目标标签和非空
+`related_labels`。观察指标 `suggest_coverage`、`suggest_coverage_cosine`、
+`suggest_residual_norm` 以及信号指标
+`suggest_score` / `confidence` 必须是 `0.0..=1.0` 范围内的有限数；`suggest_rank` 必须为
 `null` 或 `>= 1`。
-`rename_label` / `split_label` / `merge_labels` 当前只作为 review signal proposed_action
-保存，CLI 不提供写入 canonical structure mutation action 或 structure plan action 的命令；
-旧 structure-plan rows 只读展示为 unsupported validation requirement。
+`rename_label` / `split_label` / `merge_labels` 当前只作为审核信号的候选操作保存，
+CLI 不提供写入规范结构变更操作或结构计划操作的命令；旧结构计划记录只读展示为
+不支持的校验要求。
 
-使用已保存 suggest snapshot 的推荐输入形状：
+使用已保存标签建议快照时，推荐的输入结构如下：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "actor": {"name": "label-agent", "type": "agent", "agent_type": "local"},
   "agent_candidates": [
-    {"label": "cli", "reason": "The task changes CLI behavior."}
+    {"label": "cli", "reason": "该任务会改变 CLI 行为。"}
   ],
   "final_decision": {
     "selected": ["cli"],
@@ -4212,7 +4183,7 @@ Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
       "candidate_atom": {
         "polarity": "positive",
         "kind": "applies_when",
-        "text": "extends CLI subcommands, command arguments, help output, or machine-readable JSON behavior"
+        "text": "扩展 CLI 子命令、命令参数、帮助输出或机器可读 JSON 行为"
       },
       "proposal": {},
       "agent_selected": true,
@@ -4220,7 +4191,7 @@ Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
       "suggest_score": 0.08,
       "suggest_rank": 6,
       "final_selected": true,
-      "rationale": "The task expands the CLI surface."
+      "rationale": "该任务扩展了 CLI 接口。"
     }
   ]
 }
@@ -4236,7 +4207,7 @@ kanban label ontology record default#42 \
   --json
 ```
 
-或者让 CLI 在记录前采集 snapshot：
+或者让 CLI 在记录前采集快照：
 
 ```bash
 kanban label ontology record default#42 \
@@ -4246,172 +4217,161 @@ kanban label ontology record default#42 \
   --json
 ```
 
-`label ontology list` 默认只返回 `open` 和 `confirmed` signals。`--include-all`
+`label ontology list` 默认只返回 `open` 和 `confirmed` 信号。`--include-all`
 返回完整历史；`--status`、`--kind` 可重复过滤，`--task`、`--label` 和
-`--proposed-label` 用于按来源 task、目标 label 或候选新 label 查询。
-`label ontology show` 返回 signal、observation 和关联 actions。`label ontology review`
-是只读聚合 review queue 视图，默认只聚合 `open` 和 `confirmed` signals；传
-`--include-all` 时包含 resolved/rejected/superseded 历史。`--group-by` 支持按
-`label`、`candidate-atom`、`proposed-label` 或 opt-in `cluster` 聚合，`--limit` 限制返回 group
-数量。`--json` 每个 group 返回聚合维度、key、相关 label / candidate atom /
-proposed label、cluster key/reason（仅 cluster view 有值）、distinct task count、signal/status/degraded/action counts、score
-summary、sample task refs、signal ids、action ids 和 proposal ids。排序优先使用
-distinct task count，其次 confirmed count、latest signal time 和 key。
+`--proposed-label` 用于按来源任务、目标标签或候选新标签查询。
+`label ontology show` 返回信号、观察和关联操作。`label ontology review`
+是只读聚合审核队列视图，默认只聚合 `open` 和 `confirmed` 信号；传入
+`--include-all` 时包含 `resolved` / `rejected` / `superseded` 历史。`--group-by`
+支持按 `label`、`candidate-atom`、`proposed-label` 或需显式选择的 `cluster` 聚合，
+`--limit` 限制返回组数。`--json` 中每个组返回聚合维度、键、相关标签/候选原子/
+候选标签、聚类键/原因（仅聚类视图有值）、不同任务数、信号/状态/降级/操作数量、
+分数摘要、任务引用示例、信号 ID、操作 ID 和提案 ID。排序优先使用不同任务数，
+其次是已确认数量、最新信号时间和键。
 
-Review group 只表示一组 signals 共享同一个聚合键，不证明它们一定来自同一个根因。
-`--group-by label` 使用 `target_label_id` 作为 key，缺失目标 label 时使用
-`no-target-label`。`--group-by proposed-label` 使用 normalized proposed label name，
-缺失候选新 label 时使用 `no-proposed-label`。`--group-by candidate-atom` 优先使用
-`candidate_content_hash`；如果 signal 没有 candidate atom，则 key 会包含 signal kind、
-target label 或 proposed label、以及 proposed action，例如
+审核组只表示一组信号共享同一个聚合键，不证明它们一定来自同一个根因。
+`--group-by label` 使用 `target_label_id` 作为键，缺失目标标签时使用
+`no-target-label`。`--group-by proposed-label` 使用规范化后的候选标签名称，
+缺失候选新标签时使用 `no-proposed-label`。`--group-by candidate-atom` 优先使用
+`candidate_content_hash`；如果信号没有候选原子，则键会包含信号类型、
+目标标签或候选标签，以及候选操作，例如
 `no-candidate-atom|kind:vocabulary_gap|proposed:ontology ledger|action:bootstrap_label`。
-这个 fallback 避免把不同 kind、不同 label 或不同 proposed action 的空 candidate
-signals 合并到一个全局 bucket。
-`--group-by cluster` 是一个只读 review-aid：它不写 canonical atoms，也不会确认、
-应用、validate 或关闭 signal。cluster key 每次查询时从已有 signal 文本重建，优先使用
-lexical-normalized candidate text，其次 proposed label，再其次 rationale，最后才退回到
-kind/action/target/proposed-label scope 组合；所有 cluster key 都带有 signal kind、
-proposed action、target label 和 proposed-label scope，避免跨 label/action/boundary 误合并；
-`cluster_reason` 说明当前 key 的来源。
+这个回退规则避免把不同类型、不同标签或不同候选操作的空候选信号合并到一个全局桶。
+`--group-by cluster` 是只读审核辅助：它不写规范原子，也不会确认、应用、校验或关闭
+信号。聚类键在每次查询时从已有信号文本重建，优先使用词法规范化后的候选文本，
+其次是候选标签，再其次是理由，最后才回退到类型/操作/目标/候选标签作用域组合；
+所有聚类键都带有信号类型、候选操作、目标标签和候选标签作用域，避免跨标签、操作或
+边界误合并；`cluster_reason` 说明当前键的来源。
 
-`task_count` 是 group 内 distinct source task 数，也是默认热度排序的第一依据；同一 task
-上的多条 signals 仍只贡献一个 distinct task。`signal_count` 是原始 signal 行数，
-用于判断一组里有多少审查项；它没有 denominator，不能解释为模型错误率、precision
-或 recall。`degraded_count`、status counts、score summary 和 sample task refs 只是
-reviewer 的排查线索。排序为 `task_count` desc、`confirmed_count` desc、
-`latest_signal_at` desc、`key` asc；需要判断是否同一问题时，应继续查看 group 的
-sample tasks、signal ids 和 `label ontology show` 详情。
+`task_count` 是组内不同来源任务数，也是默认热度排序的第一依据；同一任务上的多条信号
+仍只贡献一个不同任务。`signal_count` 是原始信号记录数，用于判断一组里有多少审查项；
+它没有分母，不能解释为模型错误率、精确率或召回率。`degraded_count`、状态数量、
+分数摘要和任务引用示例只是审核人员的排查线索。排序为 `task_count` 降序、
+`confirmed_count` 降序、`latest_signal_at` 降序、`key` 升序；需要判断是否同一问题时，
+应继续查看组内任务示例、信号 ID 和 `label ontology show` 详情。
 
-`label ontology quality` 是只读 quality/analytics 报告。它从当前 board 的
-`label_ontology_observations` 取得可审计 denominator，并从
-`label_ontology_signals` 取得 raw disagreement counts；不会写入 task、label、
-semantics、atoms 或 ledger action。JSON 输出包含：
+`label ontology quality` 是只读质量/分析报告。它从当前看板的
+`label_ontology_observations` 取得可审计分母，并从 `label_ontology_signals`
+取得原始分歧数量；不会写入任务、标签、语义、原子或账本操作。JSON 输出包含：
 
 - `denominator.source="label_ontology_observations"`、`observation_count`、
-  `distinct_task_count`、agreement/degraded observation counts、时间范围和
+  `distinct_task_count`、一致/降级观察数量、时间范围和
   `sample_task_refs`。
 - `disagreement.signal_count`、`disagreement.distinct_task_count`、`by_kind`、
   `by_status`。
-- `rates.disagreement_task_rate`，只在 denominator 至少包含一个 agreement
-  observation 时返回；只有 signals 的历史不会输出伪错误率。
-- `precision_recall.available=false`，直到项目有带 expected labels 的独立评估
-  cohort。raw signals 只能说明记录过分歧，不能单独证明 precision、recall、miss
-  rate 或模型错误率。
+- `rates.disagreement_task_rate`：只在分母至少包含一个一致观察时返回；
+  只有信号的历史不会输出伪错误率。
+- `precision_recall.available=false`，直到项目有带预期标签的独立评估样本群。
+  原始信号只能说明记录过分歧，不能单独证明精确率、召回率、漏报率或模型错误率。
 
-Lifecycle commands 写入 action 并同步更新 signal status：
+生命周期命令写入操作并同步更新信号状态：
 
-- `confirm`：`open` signal 进入 `confirmed`。
-- `reject`：把 signal 标记为 `rejected`。
-- `supersede --by`：把重复或过时 signal 标记为 `superseded`；写入前会沿
-  replacement `superseded_by_signal_id` 链检查，拒绝会回到任一 source signal 的环。
-- `resolve --no-change`：记录无需 ontology 修改的 resolution。
+- `confirm`：`open` 信号进入 `confirmed`。
+- `reject`：把信号标记为 `rejected`。
+- `supersede --by`：把重复或过时信号标记为 `superseded`；写入前会沿替代项的
+  `superseded_by_signal_id` 链检查，拒绝会回到任一来源信号的环。
+- `resolve --no-change`：记录无需修改本体的解决结果。
 
-这些 lifecycle commands 只记录 review/status 变化，不接受 canonical mutation
-provenance 字段。`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、
-`update_semantics`、`create_label_proposal`、`bootstrap_label`、`revert_ontology_mutation` 和 `validate` 等 action rows 只能由
+这些生命周期命令只记录审核/状态变化，不接受规范变更来源字段。
+`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、
+`update_semantics`、`create_label_proposal`、`bootstrap_label`、`revert_ontology_mutation`
+和 `validate` 等操作记录，只能由
 `label semantics upsert`、`label ontology apply atom`、`label propose`、
-proposal accept、`label bootstrap`、`label ontology revert`、`label ontology validate` 等专用命令/服务路径在同一
-transaction 中写入。通用 action command 不能伪造 canonical before/after hash、
-result atom/result label/result proposal 或 validation payload。
-Lifecycle、apply atom、validate 和带 `--source-signal` 的 proposal accept 都支持
-`--actor-type user|agent` 与 `--agent-type <type>`。这些 flag 只控制 ontology action
-row 的 `created_by_type` / `agent_type`；action name 仍来自全局 `--actor`。默认
-`--actor-type user` 且不写 `agent_type`。`agent` actor 必须提供非空 `--agent-type`，
-`user` actor 带 `--agent-type` 会被拒绝。
+提案接受、`label bootstrap`、`label ontology revert`、`label ontology validate`
+等专用命令/服务路径在同一
+同一事务中写入。通用操作命令不能伪造规范数据前后哈希、结果原子/标签/提案或校验载荷。
+生命周期、应用原子、校验和带 `--source-signal` 的提案接受操作都支持
+`--actor-type user|agent` 与 `--agent-type <type>`。这些标志只控制本体操作记录的
+`created_by_type` / `agent_type`；操作名称仍来自全局 `--actor`。默认为
+`--actor-type user` 且不写 `agent_type`。`agent` 操作者必须提供非空
+`--agent-type`，`user` 操作者带 `--agent-type` 会被拒绝。
 
-`label ontology apply atom` 只接受 `confirmed` source signals。它会读取目标 label
-当前 semantics，把泛化文本加入对应数组，走现有 semantics upsert/rebuild atoms 路径。
-如果 canonical 内容实际新增 atom，会写入 `add_positive_atom` 或 `add_negative_atom`
-action，记录生成 atom 的软引用、content hash、before/after hash、单份 change snapshot
-和一个 `added` atom effect，并把 `validation_requirement` 置为 `required`。如果同内容 atom 已经存在，则写入
-`adopt_existing_atom` provenance-only action，记录 existing atom 软引用、before/after
-hash（相同）和 source signal links；该 action 不修改 semantics/atoms、不标脏 atom
-index，`validation_requirement=none` 且 effective outcome 为 `not_required`。
-默认要求所有带 `target_label_id` 的 source signals 都指向被修改 label；不匹配时拒绝
-并列出 offending signal ids。Atom text 不需要逐字等于 source signal 的 candidate
-text，reviewer 可以写更泛化的 canonical atom。确实需要 retarget confirmed same-board
-signals 时，必须传 `--allow-retarget` 和非空 `--retarget-reason <text>`；action
-`change_json.retarget_override` 会记录 reason、source signal 原始 target/proposed label
-和最终 target label。Override 不放宽 board/status 要求。
-该命令只有在 canonical atom 实际新增时才标脏 label atom index；vector index rebuild
-和后续 suggest 验证仍是第二阶段。
+`label ontology apply atom` 只接受 `confirmed` 来源信号。它会读取目标标签的当前语义，
+把泛化文本加入对应数组，走现有的语义更新/原子重建路径。如果规范内容实际新增原子，
+会写入 `add_positive_atom` 或 `add_negative_atom` 操作，记录生成原子的软引用、
+内容哈希、前后哈希、单份变更快照和一个 `added` 原子影响，并把
+`validation_requirement` 置为 `required`。如果同内容原子已经存在，则写入仅记录来源的
+`adopt_existing_atom` 操作，记录现有原子软引用、相同的前后哈希和来源信号链接；
+该操作不修改语义/原子，不把原子索引标记为脏，`validation_requirement=none`
+且有效结果为 `not_required`。
+默认要求所有带 `target_label_id` 的来源信号都指向被修改标签；不匹配时拒绝并列出
+违规信号 ID。原子文本不需要逐字等于来源信号的候选文本，审核人员可以写更泛化的规范
+原子。确实需要重定向已确认的同看板信号时，必须传入 `--allow-retarget` 和非空
+`--retarget-reason <text>`；操作的 `change_json.retarget_override` 会记录原因、
+来源信号的原始目标/候选标签和最终目标标签。重定向不会放宽看板/状态要求。
+该命令只有在规范原子实际新增时才把标签原子索引标记为脏；向量索引重建和后续建议校验
+仍是第二阶段。
 
-`label ontology revert <action_id>` 为已提交的 label-scoped canonical ontology mutation
-追加 `revert_ontology_mutation` action，并把目标 label semantics 恢复到被撤销 action
-的 `canonical_before_hash` / `change_json.before` snapshot。当前只支持
-`add_positive_atom`、`add_negative_atom` 和 `update_semantics`；不处理 bootstrap 的
-label identity 或 task binding 回滚。为避免覆盖后续修改，命令要求当前 canonical
-semantics hash 仍等于目标 action 的 `canonical_after_hash`；传
-`--expected-current-hash <hash>` 时还会先做调用方持有快照的 CAS 检查。成功后会写入
-append-only revert action，`parent_action_id` 指向被撤销 action，复制原 action 的
-source signal links，记录 before/after revert snapshot，为本次 revert 实际 added/removed
-atoms 写 atom effects，标脏 label atom index，并把 `validation_requirement` 置为
-`unsupported`。原 mutation
-action 不会被修改或删除。
+`label ontology revert <action_id>` 为已提交的标签级规范本体变更追加
+`revert_ontology_mutation` 操作，并把目标标签语义恢复到被撤销操作的
+`canonical_before_hash` / `change_json.before` 快照。当前只支持
+`add_positive_atom`、`add_negative_atom` 和 `update_semantics`；不处理引导操作的
+标签身份或任务绑定回滚。为避免覆盖后续修改，命令要求当前规范语义哈希仍等于目标操作的
+`canonical_after_hash`；传入 `--expected-current-hash <hash>` 时，还会先对调用方持有的
+快照执行 CAS 检查。成功后会写入仅追加的撤销操作，`parent_action_id` 指向被撤销操作，
+复制原操作的来源信号链接，记录撤销前后快照，为本次撤销实际新增/移除的原子写入原子
+影响，把标签原子索引标记为脏，并把 `validation_requirement` 置为 `unsupported`。
+原变更操作不会被修改或删除。
 
-所有 canonical semantics/atom mutation transaction 都遵循 one-root-action 合同：同一
-transaction 只写一条 root mutation action，`change_json` 只保存一次 before/after
-semantics snapshot；实际新增或删除的 atoms 通过
-`label_ontology_action_atom_effects` 记录 `added` / `removed` effects。Description-only
-patch 会写一条 root action 和零 atom effects；no-op patch 不写 action/effects，也不标脏
-index。Atom explain 优先使用 effect rows；legacy per-atom actions 仍保持兼容读取。
+所有规范语义/原子变更事务都遵循单根操作合同：同一事务只写一条根变更操作，
+`change_json` 只保存一次语义前后快照；实际新增或删除的原子通过
+`label_ontology_action_atom_effects` 记录 `added` / `removed` 影响。只修改描述的
+补丁会写一条根操作和零个原子影响；空操作补丁不写操作/影响，也不把索引标记为脏。
+原子解释优先使用影响记录；旧版逐原子操作仍保持兼容读取。
 
-`label ontology validate` 为一个 mutation action 追加 `validate` action。Parent action
-必须是同一 board 上 `validation_requirement=required` 的 canonical mutation action，
-并携带 canonical result evidence（例如 atom/result label/proposal 引用、canonical hash
-和非空 change snapshot）。Parent action 的 `validation_status` 是历史兼容字段，不再单独
-表达“是否需要验证”；读取时通过 reducer 暴露 effective outcome：
+`label ontology validate` 为一个变更操作追加 `validate` 操作。父操作必须是同一看板上
+`validation_requirement=required` 的规范变更操作，并携带规范结果证据（例如原子、
+结果标签/提案引用、规范哈希和非空变更快照）。父操作的 `validation_status` 是历史兼容
+字段，不再单独表达“是否需要验证”；读取时通过归并器暴露有效结果：
 `not_required|unsupported|pending|passed|failed|partial`。
 
-普通 `--input` 路径是 external attestation：CLI 读取调用方提供的 JSON，service 只把
-supplied payload、source signal case 摘要、task snapshot/suggest input hash 对比和
-parent action 结果引用包装进 validation envelope。公共 supplied/collected payload
-只保存一次在 top-level `manual`；generated `cases[]` 使用 `after.manual_case_ref`
-引用 `manual.cases[]` 中对应 signal 的 evidence，不在每个 case 中重复整份 payload。
-该路径可记录 `failed` / `partial` 诊断，但不能把 `passed` 写成 trusted proof；即使 JSON 自称
-`evidence_type="automated"`，`--status passed` 也会被拒绝，linked signals 不会被
+普通 `--input` 路径属于外部证明：CLI 读取调用方提供的 JSON，服务只把提供的载荷、
+来源信号用例摘要、任务快照/建议输入哈希对比和父操作结果引用包装进校验封装。
+公共的提供/采集载荷只在顶层 `manual` 保存一次；生成的 `cases[]` 使用
+`after.manual_case_ref` 引用 `manual.cases[]` 中对应信号的证据，不在每个用例中重复
+整份载荷。该路径可记录 `failed` / `partial` 诊断，但不能把 `passed` 写成受信任证明；
+即使 JSON 自称
+`evidence_type="automated"`，`--status passed` 也会被拒绝，关联信号不会被
 关闭。
 
-`--trusted` 路径才是 trusted automated validation。它不接受 `--input`，也不接受调用方
-手写 trusted evidence JSON；CLI 只能走内置 collector。Trusted 表示工具在当前 parent
-action、source signals、canonical hash、atom index generation 和指定 cases/controls 上做了
-机械采集和检查，不表示 ontology 在全局语义上正确。CLI 必须有可用 label atom vector
-workflow adapter（当前 no-heavy CLI 尚未接入；旧内置 `vector-lancedb` build 需可解析 `--vector-config` 或默认 config），先在 SQLite transaction 外 rebuild atom index，再用同一
+`--trusted` 路径才是受信任的自动校验。它不接受 `--input`，也不接受调用方手写的受信任
+证据 JSON；CLI 只能走内置采集器。“受信任”表示工具在当前父操作、来源信号、规范哈希、
+原子索引代次和指定用例/对照上做了机械采集和检查，不表示本体在全局语义上正确。
+CLI 必须有可用的标签原子向量工作流适配器（当前轻量 CLI 尚未接入；旧内置
+`vector-lancedb` 构建需可解析 `--vector-config` 或默认配置），先在 SQLite 事务外
+重建原子索引，再用同一
 `--limit` / `--candidate-limit` / `--atom-limit` / `--max-selected-labels` /
-`--min-score` options 对 linked source signals 重新运行 `label suggest`，由工具生成
+`--min-score` 选项对关联来源信号重新运行 `label suggest`，由工具生成
 `evidence_type="trusted_automated"`、`collector.source="label_ontology_validate_trusted"`、
-`embedding_model`、`solver_options`、clean `index.status` / `index.generation` 和
-per-signal `cases[]`。写 action 时 service 会在短 transaction 内重新核验 parent action、
-source signals、canonical after hash、atom index dirty/error 状态和 generation，防止
-查询后 canonical 或 derived state 已变化。dirty/error/disabled index、缺失 generation
-或 stale generation 都不能产生 trusted passed。
+`embedding_model`、`solver_options`、干净的 `index.status` / `index.generation`
+和逐信号 `cases[]`。写操作时，服务会在短事务内重新核验父操作、来源信号、规范结果哈希、
+原子索引脏状态/错误状态和代次，防止查询后规范或派生状态已变化。脏、错误、禁用的索引，
+缺失代次或过期代次，都不能产生受信任的通过结果。
 
 `--positive-control <TASK_REF>` 与 `--positive-control-waiver <REASON>` 只用于
-negative atom trusted validation，且二者互斥；非 negative parent 携带这些参数会被拒绝。
-waiver 只能由 `--actor-type user` 提交，reason 必须非空。Negative atom parent 若两者都
-缺失，会在 collection 前失败。
+负向原子的受信任校验，且二者互斥；非负向父操作携带这些参数会被拒绝。
+豁免只能由 `--actor-type user` 提交，原因必须非空。负向原子父操作若两者都缺失，
+会在采集前失败。
 
-`cases[]` 的 `case_type` 必须匹配 parent action：`positive_atom`、`negative_atom`
-或 `bootstrap_label`。Positive atom validation 要求 `after.degraded=false`、
-result atom id/content hash 出现在 `after.evidence_atoms[]`、target label selected
-或 score >= 0.50，且 score/coverage 不恶化。Negative atom validation 要求 result
-atom id/content hash 出现在 `after.negative_evidence_atoms[]`；false-positive task 上
-必须证明 `after.target.selected=false`，或 before/after score 都存在且 after score
-低于 before score；并且必须提供至少一个 `after.positive_controls[]` 且全部 passed
-未 regressed，或提供带非空 reason 的 `after.positive_control_waiver`。Bootstrap
-label validation 要求所有 linked source signals 都有 passed case，new/result label
-selected 或 score >= 0.50，且 evidence atoms 来自 result label。
+`cases[]` 的 `case_type` 必须匹配父操作：`positive_atom`、`negative_atom`
+或 `bootstrap_label`。正向原子校验要求 `after.degraded=false`、结果原子 ID/内容哈希
+出现在 `after.evidence_atoms[]`、目标标签被选中或分数不低于 0.50，且分数/覆盖率
+不恶化。负向原子校验要求结果原子 ID/内容哈希出现在
+`after.negative_evidence_atoms[]`；在误报任务上，必须证明
+`after.target.selected=false`，或前后分数都存在且结果分数低于先前分数；并且必须提供
+至少一个 `after.positive_controls[]` 且全部通过、未退化，或提供原因非空的
+`after.positive_control_waiver`。引导标签校验要求所有关联来源信号都有通过用例，
+新标签/结果标签被选中或分数不低于 0.50，且证据原子来自结果标签。
 
-Validation comparability 默认使用 observation 的
-`suggest_input_hash`；status、`updated_at`、`lock_version` 或 task label binding
-只改变完整 snapshot 时写入 `task_metadata_drift` / `label_binding_drift` warning，
-不会让 passed validation stale。title/description 变化会写入 `suggest_input_drift`
-并使 case incomparable；旧 observation 缺少 `suggest_input_hash` 时写入
-`legacy_suggest_input_hash_missing`，不能静默 passed。`--status passed` 会把 linked
-source signals 转为 `resolved`；`failed` / `partial` 保留历史和 evidence，source
-signals 继续等待后续修正或人工处理。
+校验可比性默认使用观察记录的 `suggest_input_hash`；状态、`updated_at`、
+`lock_version` 或任务标签绑定只改变完整快照时，写入 `task_metadata_drift` /
+`label_binding_drift` 警告，不会让已通过校验过期。标题/描述变化会写入
+`suggest_input_drift` 并使该用例不可比较；旧观察缺少 `suggest_input_hash` 时写入
+`legacy_suggest_input_hash_missing`，不能静默通过。`--status passed` 会把关联来源
+信号转为 `resolved`；`failed` / `partial` 保留历史和证据，来源信号继续等待后续修正
+或人工处理。
 
-`label propose --json` 返回结构化 attempt：
+`label propose --json` 返回结构化尝试结果：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -4433,45 +4393,29 @@ signals 继续等待后续修正或人工处理。
 
 ---
 
-## 9. Removed DAG Commands
-
-`kanban dag` is no longer a supported command surface. Dependency management
-remains available through `kanban dep`, task status transitions, dispatcher
-guards, and the shared SQLite command service. Callers that previously consumed
-DAG snapshot, ancestors, actionable, or frontier JSON must switch to the
-specific dependency, task list, search, context, or graph APIs that match their
-use case.
-
----
-
-## 10. Comment Commands
+## 9. 评论命令
 
 ```bash
-kanban comment add <task_ref> [<body>|--body-file <PATH|->] [--kind note|decision] [--author-type user|agent] [--agent-type <type>] [--metadata-json <json>|--metadata-json-file <PATH|->]
+kanban comment add <task_ref> (<body>|--body-file <PATH|->) [--kind note|decision] [--author-type user|agent] [--agent-type <type>] [--metadata-json <json>|--metadata-json-file <PATH|->]
 kanban comment list <task_ref>
 ```
 
-`--actor` supplies the comment author display identity. If `--kind` is omitted,
-the service default is `note`. If `--author-type` is omitted, the service default
-is `user`; pass `--author-type agent --agent-type <type>` for Codex/dispatcher or
-other automated writers. `signal` is a persisted comment kind, but users should
-create signal backlink comments through `kanban signal record` rather than
-manually using `comment add --kind signal`; this keeps the signal ledger and
-backlink comment in one transaction. `--body-file <PATH|->` reads long comment
-bodies from files or stdin and is mutually exclusive with inline `<body>`; it is the recommended path for multiline or shell-sensitive comment text.
-`--metadata-json` defaults to `{}` and must be a JSON object;
-`--metadata-json-file <PATH|->` reads the same JSON payload from a file or stdin, avoids shell quoting issues for structured payloads,
-and is mutually exclusive with `--metadata-json`. For `--kind decision`,
-metadata is required to satisfy the structured
-decision schema: non-empty `options`, unique lowercase ASCII option `slug`
-values, `selected` matching one slug, non-empty `reason`, and optional
-non-empty `risk` / `verification`.
+`--actor` 提供评论作者的显示身份。省略 `--kind` 时，服务默认为 `note`。
+省略 `--author-type` 时，服务默认为 `user`；Codex、现有实验性调度器或其他自动写入方
+应传入 `--author-type agent --agent-type <type>`。`signal` 是持久化评论类型，
+但用户应通过 `kanban signal record` 创建信号反向链接评论，而不是手动使用
+`comment add --kind signal`；这样信号账本和反向链接评论会在同一事务中写入。
+`--body-file <PATH|->` 从文件或标准输入读取较长评论正文，并与行内 `<body>` 互斥；
+多行或对 shell 敏感的评论文本推荐使用这种方式。`--metadata-json` 默认为 `{}`，
+并且必须是 JSON 对象；`--metadata-json-file <PATH|->` 从文件或标准输入读取相同的
+JSON 载荷，避免结构化载荷的 shell 引号问题，并与 `--metadata-json` 互斥。
+使用 `--kind decision` 时，元数据必须满足结构化决策模式：非空 `options`、
+唯一的小写 ASCII 选项 `slug`、与某个 slug 匹配的 `selected`、非空 `reason`，
+以及可选但非空的 `risk` / `verification`。
 
-Agent command failure traces should be recorded as comments instead of being
-left only in chat transcripts. Use `comment add --author-type agent --agent-type
-<name> --kind note --metadata-json <json>` with the human-readable body as a
-short summary and the structured trace in metadata. The minimum trace payload is
-an object with these fields:
+智能体命令失败记录应保存为评论，而不是只留在聊天记录中。使用
+`comment add --author-type agent --agent-type <name> --kind note --metadata-json <json>`，
+在人类可读正文中写简短摘要，并把结构化记录放入元数据。最小记录载荷是包含以下字段的对象：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -4479,19 +4423,19 @@ an object with these fields:
   "tool": "kanban-cli",
   "command": "kanban task step add",
   "argv": ["kanban", "task", "step", "add", "..."],
-  "intent": "add a required execution-plan step",
-  "why_selected": "agent selected the step command because the task needed execution-plan tracking",
+  "intent": "添加必需的执行计划步骤",
+  "why_selected": "任务需要跟踪执行计划，因此智能体选择了步骤命令",
   "actual_error": "unexpected argument 'true' found",
-  "repair": "retry with canonical bare --required or supported --required true/false form",
-  "product_signal": "agent-facing boolean flag compatibility gap",
+  "repair": "改用规范的独立 --required，或受支持的 --required true/false 形式重试",
+  "product_signal": "面向智能体的布尔标志兼容性缺口",
   "followup_task": "default#123"
 }
 ```
 
-Callers may add extra fields, but these names are the stable minimum contract for
-tooling that mines failed agent commands into parser, docs, skill, or test work.
+调用方可以添加其他字段，但对于把智能体命令失败记录转化为解析器、文档、技能或测试工作的
+工具而言，这些字段名是稳定的最小契约。
 
-Agent-facing rich input example:
+面向智能体的富文本输入示例：
 
 ```bash
 kanban comment add default#12 --body-file - <<'EOF'
@@ -4499,15 +4443,14 @@ kanban comment add default#12 --body-file - <<'EOF'
 EOF
 ```
 
-Use `--kind decision` for meaningful multi-option choices. Body remains the
-human-readable fallback summary, while structured options and selection data
-live only in `--metadata-json`:
+有意义的多选项决策应使用 `--kind decision`。正文保留为人类可读的回退摘要，
+结构化选项和选择数据只放在 `--metadata-json` 中：
 
 ```text
 已决定继续使用 comment metadata 承载结构化决策信息，正文保留为简短结论，方便没有结构化渲染的环境阅读。
 ```
 
-Decision metadata example:
+决策元数据示例：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -4515,52 +4458,50 @@ Decision metadata example:
   "options": [
     {
       "slug": "comment-metadata",
-      "title": "Use comment metadata",
-      "detail": "Store structured decision data in task_comments.metadata_json."
+      "title": "使用评论元数据",
+      "detail": "把结构化决策数据存入 task_comments.metadata_json。"
     },
     {
       "slug": "decision-table",
-      "title": "Create decision table",
-      "detail": "Create a separate task_decisions table with option rows."
+      "title": "创建决策表",
+      "detail": "创建独立的 task_decisions 表和选项记录。"
     }
   ],
   "selected": "comment-metadata",
-  "reason": "Keeps decisions close to task discussion and avoids a parallel timeline.",
-  "risk": "metadata schema needs validation discipline.",
-  "verification": "CLI/API/Desktop tests cover creation, reading, rendering, and invalid metadata rejection."
+  "reason": "让决策紧邻任务讨论，避免产生并行时间线。",
+  "risk": "元数据模式需要严格校验。",
+  "verification": "CLI、API 和桌面端测试覆盖创建、读取、渲染及非法元数据拒绝。"
 }
 ```
 
-Skip decision comments for trivial naming, formatting, or purely mechanical
-choices.
+琐碎命名、格式调整或纯机械选择无需创建决策评论。
 
-Human output is compact and includes comment id, task id, created_at, kind,
-author identity, author_type, optional agent_type, and body:
+人类可读输出保持紧凑，包含评论 ID、任务 ID、`created_at`、类型、作者身份、
+`author_type`、可选的 `agent_type` 和正文：
 
 ```text
-c_01HX... task=t_01HX... created_at=1717520000000 [note] alice (user): ready for review
-c_01HX... task=t_01HX... created_at=1717520000100 [note] codex (agent/root): tests passed
+c_01HX... task=t_01HX... created_at=1717520000000 [note] 用户甲 (user): 可以审核了
+c_01HX... task=t_01HX... created_at=1717520000100 [note] codex (agent/root): 测试已通过
 ```
 
-JSON output uses the standard envelope and returns the contract comment DTO for `add` or
-a list of that DTO for `list`, including natural, lossless `metadata` objects. The input flag
-names `--metadata-json` / `--metadata-json-file` remain unchanged. Creating a comment
-writes `task_events(kind='task.comment.created')`.
+JSON 输出使用标准封装：`add` 返回契约评论 DTO，`list` 返回该 DTO 列表，并包含自然、
+无损的 `metadata` 对象。输入标志名 `--metadata-json` / `--metadata-json-file` 保持不变。
+创建评论会写入 `task_events(kind='task.comment.created')`。
 
 ---
 
-## 11. Event Commands
+## 10. 事件命令
 
 ```bash
 kanban events <task_ref>
 kanban events --board default
 ```
 
-不传 `<task_ref>` 时按 active board 列出 events。Archived board 的 events 仍可通过显式 `--board` 读取。
+不传 `<task_ref>` 时，按当前看板列出事件。已归档看板的事件仍可通过显式 `--board` 读取。
 
 ---
 
-## 12. Run Commands
+## 11. 运行记录命令
 
 ```bash
 kanban runs <task_ref>
@@ -4569,83 +4510,74 @@ kanban run logs <run_id>
 kanban run logs <run_id> --tail-bytes 65536
 ```
 
-`kanban run logs` 默认最多读取 256 KiB。传 `--tail-bytes` 时只返回 log 末尾指定字节数。`task_runs.log_path` 必须解析到受信任日志目录且文件名匹配 `<run_id>.log`；可疑路径会被拒绝。
+`kanban run logs` 默认最多读取 256 KiB。传入 `--tail-bytes` 时只返回日志末尾的指定
+字节数。`task_runs.log_path` 必须解析到受信任日志目录，且文件名匹配 `<run_id>.log`；
+可疑路径会被拒绝。
 
 ---
 
-## 13. Dispatcher / Server Commands
+## 12. 服务端命令
+
+`kanban serve` 是受支持的本地 API 入口：
 
 ```bash
 kanban serve
+kanban serve --host 127.0.0.1 --port 8721
 kanban serve --quiet
 kanban serve --log-level warn
 kanban serve --search-sync-interval-ms 5000
-
-kanban dispatch
-kanban dispatch --once
-kanban dispatch --worker-profile default
-kanban dispatch --worker-profile backend --profile-config ./workers.toml
-kanban dispatch --max-iterations 10 --poll-interval-ms 1000
 ```
 
-`kanban dispatch` is a foreground loop. Use `--once` for one pass, or `--max-iterations`
-for bounded scripts/tests. `--profile-config` reads the selected `[workers.<name>]`
-section and can set `command`, `claim_ttl_ms`, `heartbeat_interval_ms`,
-`on_success`, `on_failure`, and `log_dir`. Dispatcher log directories must be
-inside a trusted run-log root: the platform default run log directory,
-`<db_dir>/logs`, or `<db_dir>/.kb/logs`.
+默认地址是 `127.0.0.1:8721`；`--host` 必须解析为回环地址，`--port` 指定端口。
+仓库仍保留实验性 `kanban dispatch` 代码，但它不属于公开支持路径，本规范不把其内部
+参数作为用户契约。
 
-Ctrl-C/SIGINT is an operator stop for the foreground `kanban dispatch` loop.
-The current `dispatch_once` / worker iteration is not actively interrupted; the
-loop stops before starting another polling iteration, including during the
-inter-iteration wait. The command exits `0` after this graceful stop. With
-`--json`, stdout remains the normal success envelope and includes
-`data.stop_reason="interrupted"`; operator cancellation diagnostics, if emitted,
-go to stderr only. A non-interrupted `--max-iterations` exit omits
-`data.stop_reason`. A second Ctrl-C during dispatcher shutdown exits
-immediately with code `130`.
+`kanban serve` 默认把启动诊断、HTTP 请求记录和优雅关闭通知写入标准错误；标准输出
+保留给显式机器可读输出，不用于服务日志。使用 `--quiet` 可抑制服务诊断，
+`--log-level <off|error|warn|info|debug|trace>` 可简单覆盖详细程度；也可省略两者并设置
+`RUST_LOG`，使用高级跟踪过滤器。默认过滤器是
+`kanban=info,kanban_cli=info,kanban_server=info,tower_http=info,kanban_desktop=info`。
 
-`kanban serve` writes startup diagnostics, HTTP request traces, and graceful shutdown notices to stderr by default; stdout remains reserved for explicit machine-readable output and is not used for service logs. Use `--quiet` to suppress serve diagnostics, `--log-level <off|error|warn|info|debug|trace>` for a simple verbosity override, or omit both and set `RUST_LOG` for advanced tracing filters. The default filter is `kanban=info,kanban_cli=info,kanban_server=info,tower_http=info,kanban_desktop=info`.
+Ctrl-C/SIGINT 会触发 `kanban serve` 优雅关闭、释放运行锁、以 `0` 退出，且不写标准输出。
+`--quiet` 和 `--log-level off` 会抑制优雅关闭通知。关闭期间第二次按下 Ctrl-C 会立即
+以代码 `130` 退出。
 
-Ctrl-C/SIGINT triggers graceful shutdown for `kanban serve`, releases the runtime
-lock, exits `0`, and writes no stdout. `--quiet` and `--log-level off` suppress
-the graceful shutdown notice. A second Ctrl-C during shutdown exits immediately
-with code `130`.
-
-`kanban serve` starts a conservative background search sync loop when the binary is
-built with `tantivy-backend`. The loop makes one prompt startup attempt and then
-calls `sync_search_index` every `--search-sync-interval-ms` milliseconds
-(default `5000`). Use `--search-sync-interval-ms 0` to disable it. Without
-`tantivy-backend`, the flag is accepted and no background index task is started.
+使用 `tantivy-backend` 构建二进制时，`kanban serve` 会启动保守的后台搜索同步循环。
+循环在启动时立即尝试一次，随后每隔 `--search-sync-interval-ms` 毫秒调用
+`sync_search_index`（默认 `5000`）。使用 `--search-sync-interval-ms 0` 可禁用。
+未启用 `tantivy-backend` 时，该标志仍会被接受，但不会启动后台索引任务。
 
 ---
 
-## 14. Search Commands
+## 13. 搜索命令
 
-### 14.1 `kanban search`
+### 13.1 `kanban search`
 
 ```bash
 kanban search <query> [--status ready] [--status review] [--assignee worker-a] [--label backend] [--include-archived] [--limit 20] [--offset 0] [--json]
 ```
 
-默认 CLI build 启用 `tantivy-backend`。当 `index/v1/tasks/` 存在可读 Tantivy 索引时，`kanban search` 使用 Tantivy；缺失、损坏、过期或二进制显式以 `--no-default-features` 构建时回落 SQLite，并在顶层 `meta` 中标记 stale。搜索匹配 task title、description、comments、run summary/error、event kind/payload。
+默认 CLI 构建启用 `tantivy-backend`。当 `index/v1/tasks/` 存在可读 Tantivy 索引时，
+`kanban search` 使用 Tantivy；索引缺失、损坏、过期，或二进制显式以
+`--no-default-features` 构建时，会回退到 SQLite，并在顶层 `meta` 中标记过期。
+搜索匹配任务标题、描述、评论、运行摘要/错误，以及事件类型/载荷。
 
-`--label <name-or-id>` 可重复；多个 label 使用 AND 语义，并在 search
-分页前过滤 task。带 label 过滤的 Tantivy search 会回落到 SQLite fallback，
-以保持当前 label 关联关系和分页语义正确。
+`--label <name-or-id>` 可重复；多个标签使用 AND 语义，并在搜索分页前过滤任务。
+带标签过滤的 Tantivy 搜索会回退到 SQLite，以保持当前标签关联关系和分页语义正确。
 
-Task ref 形状的 query 始终使用 SQLite 精确匹配语义，即使当前存在可用 Tantivy index：
-纯数字 `12`、`#12` 匹配请求 board 内的 seq；`board#12` / `board/#12`
-只在显式 board 与请求 board 相同时匹配；`t_...` 只匹配请求 board 内的 task id。
-这些 query 不会因为 title、description 或聚合搜索文本包含相同数字/ref 片段而返回额外 task。
+形似任务引用的查询始终使用 SQLite 精确匹配语义，即使当前存在可用 Tantivy 索引：
+纯数字 `12`、`#12` 匹配请求看板内的序号；`board#12` / `board/#12`
+只在显式看板与请求看板相同时匹配；`t_...` 只匹配请求看板内的任务 ID。
+这些查询不会因为标题、描述或聚合搜索文本包含相同数字/引用片段而返回额外任务。
 
-Human output compactly includes the public task ref, status, score, title, and snippet when available. It does not include the internal `t_...` task id by default; task id remains available in JSON output and diagnostic/detail-oriented surfaces.
+人类可读输出会紧凑展示公开任务引用、状态、分数、标题，以及可用时的摘要片段。
+默认不包含内部 `t_...` 任务 ID；任务 ID 仍可在 JSON 输出和面向诊断/详情的接口中取得。
 
 ```text
-agent-work#12 [ready] score=60.0 实现状态机 - ready spec needle
+agent-work#12 [ready] score=60.0 实现状态机 - 就绪规格片段
 ```
 
-JSON output:
+JSON 输出：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -4656,7 +4588,7 @@ JSON output:
         "task_id": "t_01HX...",
         "seq": 12,
         "score": 60.0,
-        "snippet": "ready spec needle",
+        "snippet": "就绪规格片段",
         "task": {
           "id": "t_01HX...",
           "seq": 12,
@@ -4676,7 +4608,7 @@ JSON output:
 }
 ```
 
-### 14.2 `kanban index`
+### 13.2 `kanban index`
 
 ```bash
 kanban index status
@@ -4685,17 +4617,24 @@ kanban index rebuild
 kanban index sync
 ```
 
-默认 CLI build 启用 `tantivy-backend`，Tantivy index 是可重建 derived cache；显式以 `--no-default-features` 构建时保留 SQLite fallback：
+默认 CLI 构建启用 `tantivy-backend`，Tantivy 索引是可重建的派生缓存；显式以
+`--no-default-features` 构建时保留 SQLite 回退：
 
-- `status` returns backend/meta.
-- `doctor` returns the same fallback health meta for scripts.
-- `rebuild` builds/replaces `index/v1/tasks/` beside the SQLite DB and stores a clean high-watermark state in `app_settings`.
-- `sync` consumes `task_events.id` after the stored high-watermark, delete+reindexes affected task aggregates, then advances the high-watermark only after a successful commit.
-- Task mutations do not update Tantivy inside their transactions; run `kanban index sync` after changes, rely on `kanban serve` background sync for local server/desktop sessions, or use `kanban index rebuild` to replace the derived index.
+- `status` 返回后端和元数据。
+- `doctor` 为脚本返回同样的回退健康状态元数据。
+- `rebuild` 在 SQLite 数据库旁构建或替换 `index/v1/tasks/`，并在 `app_settings`
+  中保存干净的高水位状态。
+- `sync` 消费已保存高水位之后的 `task_events.id`，删除并重新索引受影响的任务聚合，
+  只有成功提交后才推进高水位。
+- 任务变更不会在事务内更新 Tantivy；变更后运行 `kanban index sync`，本地服务端/
+  桌面会话也可依赖 `kanban serve` 后台同步，或用 `kanban index rebuild` 替换派生索引。
 
-The persisted setting key is board-scoped as `search.tasks.state.<board_id>`. Its JSON contains `schema_version`, `index_version`, `backend`, `index_name`, `board_id`, `last_event_id`, `dirty`, `updated_at`, and optional `message`; it is included in JSONL export/import through existing `app_settings` handling.
+持久化设置键按看板区分，格式为 `search.tasks.state.<board_id>`。其 JSON 包含
+`schema_version`、`index_version`、`backend`、`index_name`、`board_id`、
+`last_event_id`、`dirty`、`updated_at` 和可选 `message`；现有 `app_settings`
+处理会将它纳入 JSONL 导出/导入。
 
-JSON data shape:
+JSON 数据结构：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -4712,23 +4651,26 @@ JSON data shape:
 }
 ```
 
-With Tantivy enabled after rebuild, `backend` is `tantivy`, `derived_index` is `true`, and `index_version` is `tasks-v1`.
-When the current `MAX(task_events.id)` is greater than the stored `last_event_id`, `stale=true` and `index_lag_events` reports the event lag. Search falls back to SQLite while stale to preserve current-result correctness.
-Background sync errors do not make search fail open to stale Tantivy results; the next search still reports stale/fallback metadata and returns current SQLite results when the derived index is behind or unusable.
+启用 Tantivy 并完成重建后，`backend` 为 `tantivy`，`derived_index` 为 `true`，
+`index_version` 为 `tasks-v1`。当前 `MAX(task_events.id)` 大于已保存的
+`last_event_id` 时，`stale=true`，`index_lag_events` 报告事件滞后量。索引过期时
+搜索会回退到 SQLite，以保证当前结果正确。后台同步错误不会让搜索放行过期的 Tantivy
+结果；派生索引落后或不可用时，下一次搜索仍会报告过期/回退元数据，并返回当前 SQLite
+结果。
 
 ---
 
-### Signal Ledger
+## 14. 信号账本
 
 ```bash
 kanban signal record --board <slug> --input <path|-> --json
 kanban signal list --board <slug> [--status open|confirmed|rejected|superseded|resolved]... [--kind <kind>]... [--task <task-ref>] [--include-all] [--limit 100] --json
 kanban signal show --board <slug> <signal-id> --json
 kanban signal review --board <slug> [--status open|confirmed|rejected|superseded|resolved]... [--kind <kind>]... [--task <task-ref>] [--include-all] [--limit 100] --json
-kanban signal confirm --board <slug> <signal-id>... [--reason <reason>|--reason-file <PATH|->] --json
-kanban signal reject --board <slug> <signal-id>... [--reason <reason>|--reason-file <PATH|->] --json
-kanban signal resolve --board <slug> <signal-id>... [--reason <reason>|--reason-file <PATH|->] --json
-kanban signal supersede --board <slug> <signal-id>... --by <replacement-signal-id> [--reason <reason>|--reason-file <PATH|->] --json
+kanban signal confirm [--board <slug>] <signal-id>... (--reason <reason>|--reason-file <PATH|->) [--json]
+kanban signal reject [--board <slug>] <signal-id>... (--reason <reason>|--reason-file <PATH|->) [--json]
+kanban signal resolve [--board <slug>] <signal-id>... (--reason <reason>|--reason-file <PATH|->) [--json]
+kanban signal supersede [--board <slug>] <signal-id>... --by <replacement-signal-id> (--reason <reason>|--reason-file <PATH|->) [--json]
 ```
 
 `signal list` 和 `signal review` 共享 `status`、`kind`、`task`、`include-all`、
@@ -4737,11 +4679,22 @@ kanban signal supersede --board <slug> <signal-id>... --by <replacement-signal-i
 `--status` 始终优先，即使同时传 `--include-all`，结果仍只包含指定状态。
 `--status` 和 `--kind` 都可以重复传入。
 
-`record` input JSON supports `kind`, `title`, `summary`, `severity`, optional `task_ref` / `task_id` / `run_id` / `comment_id`, `actor`, `agent_type`, `dedupe_key`, `source`, `evidence`, and optional `comment.body`. `source` is a string identifier for where the observation came from; structured command details such as `command`, `cwd`, `exit_code`, `stderr`, or related logs belong in the natural `evidence` object. Signal responses use the same natural object rather than an escaped `evidence_json` string. When task context is present, the service writes the signal ledger rows and a `comment.kind = "signal"` backlink in one SQLite transaction. Signal backlink `metadata` includes `type:"signal_link"`, `signal_id`, `observation_id`, `signal_kind`, and `signal_status`; generic signal comment metadata remains open and lossless. V1 does not create follow-up tasks automatically.
+`record` 输入 JSON 支持 `kind`、`title`、`summary`、`severity`，可选的 `task_ref` /
+`task_id` / `run_id` / `comment_id`，以及 `actor`、`agent_type`、`dedupe_key`、
+`source`、`evidence` 和可选 `comment.body`。`source` 是标识观察来源的字符串；
+`command`、`cwd`、`exit_code`、`stderr` 或相关日志等结构化命令细节应放入自然的
+`evidence` 对象。信号响应使用同样的自然对象，而不是转义后的 `evidence_json`
+字符串。有任务上下文时，服务会在同一 SQLite 事务中写入信号账本记录和一条
+`comment.kind = "signal"` 反向链接。信号反向链接的 `metadata` 包含
+`type:"signal_link"`、`signal_id`、`observation_id`、`signal_kind` 和
+`signal_status`；通用信号评论元数据保持开放且无损。V1 不会自动创建后续任务。
 
-Lifecycle transitions are `open -> confirmed|rejected|superseded|resolved` and `confirmed -> resolved`. `supersede` requires a same-board replacement signal and rejects cycles. Lifecycle reason 可用 `--reason-file <PATH|->` 从文件或 stdin 读取，并与 inline `--reason` 互斥。
+生命周期转换是 `open -> confirmed|rejected|superseded|resolved` 和
+`confirmed -> resolved`。`supersede` 要求替代信号来自同一看板，并拒绝环。
+生命周期原因可用 `--reason-file <PATH|->` 从文件或标准输入读取，并与行内
+`--reason` 互斥。
 
-## 15. Maintenance Commands
+## 15. 维护命令
 
 ```bash
 kanban doctor
@@ -4759,40 +4712,90 @@ kanban entity show kb://task/t_...
 kanban outbox list [--status pending] [--limit 50]
 kanban derived status
 kanban graph status
+kanban graph rebuild
+kanban graph sync
 kanban graph neighbors kb://task/t_... [--predicate depends_on] [--limit 50]
-kanban graph query [<SPARQL>|--sparql-file <PATH|->] [--limit 50]
+kanban graph query (<SPARQL>|--sparql-file <PATH|->) [--limit 50]
 kanban vector configure [--provider ollama] [--endpoint http://127.0.0.1:11434] [--model qwen3-embedding:0.6b] [--dimensions 1024] [--skip-check] [--vector-config <toml>]
 kanban vector status [--vector-config <toml>]
 kanban vector rebuild [--vector-config <toml>]
 kanban vector sync [--vector-config <toml>]
-kanban context build t_... [--lexical-limit 5] [--vector-config <toml>]
+kanban vector query-chunks <text> [--limit 10] [--vector-config <toml>]
+kanban vector query-label-atoms (<text>|--text-file <PATH|->|--vector-json <json>|--vector-json-file <PATH|->) [--board-id <id>] [--embedding-model <model>] [--polarity positive|negative] [--include-vector] [--limit 10] [--vector-config <toml>]
+kanban context build t_... [--lexical-limit 5] [--graph-limit 10] [--vector-limit 5] [--max-items 20] [--vector-config <toml>]
 ```
 
-`kanban stats --json` 返回 status counts、过期 running claim 列表、blocked reason 聚合、unplanned active task 数量，以及 required steps 未完成的 active parent 数量，用于本地 operator recovery。
-`kanban graph query` 的 SPARQL 可用 `--sparql-file <PATH|->` 从文件或 stdin 读取，并与 positional `<SPARQL>` 互斥。
+`kanban stats --json` 返回状态数量、过期 `running` 领取列表、阻塞原因聚合、
+未规划的活动任务数量，以及必需步骤未完成的活动父任务数量，供本地操作人员恢复使用。
+`kanban graph query` 的 SPARQL 可用 `--sparql-file <PATH|->` 从文件或标准输入读取，
+并与位置参数 `<SPARQL>` 互斥。
+`kanban vector query-chunks` 只接受必填的行内短文本；`query-label-atoms` 则要求在
+行内文本、文本文件、行内向量 JSON 和向量 JSON 文件四种输入中选择一种。
 
-`kanban backup` 使用 SQLite `VACUUM INTO` 创建一致备份；目标文件已存在时失败，避免覆盖。`backup --out -` 会被明确拒绝，因为 SQLite backup 需要 filesystem path，不能安全写入 stdout。
-`kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧 snapshot。`export --out -` 会把 JSONL snapshot 写入 stdout，不输出 human status 文案，也不会写 stderr；该模式不能与 `--json` 组合，因为 JSONL stream 和 JSON envelope 不能共享 stdout。21 个稳定 discriminator 的 input/output 分别拥有 42 个 exact schema roots；每行 data 闭合，required-nullable 键不能省略但可显式为 `null`，export/import descriptor 与 schema authority 同源。JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的 run 记录会清空 `log_path`；导出中的 live `running` task 会清除 claim并恢复为 `ready`，对应 running run 会落为 `canceled`，并追加 `task.export_sanitized` 事件解释这次 portable snapshot 改写。需要完整可恢复副本时使用 `kanban backup`。JSONL export 包含 generic signal ledger record types：`signal_observation`、`signal`，以及 label ontology ledger record types：`label_ontology_observation`、`label_ontology_signal`、`label_ontology_action`、`label_ontology_action_atom_effect` 和 `label_ontology_action_signal`；因此 portable JSONL 与 SQLite backup 都会保留 signal、ontology observation/signal/action/effect provenance。JSONL `event.data.payload` 仍按 opaque JSON 保存；39-kind typed union 只属于 events API/SSE。
-`kanban import --dry-run` 会在临时 SQLite 数据库中解析导入文件并运行同一 final doctor gate，不替换或创建所选目标 DB；脚本和 CI 可先用它验证 snapshot。上一版 exporter 的 storage-native snapshot 只作为单向兼容输入：同一 record 如果同时出现 natural renamed key 与对应格式的 storage-native renamed key，会在 compatibility normalization 前以 `invalid_input` 拒绝，不能由 legacy 值静默覆盖 natural 值。`kanban import --replace` 是替换式恢复入口，必须显式传 `--replace`；导入文件必须至少包含一个 board，且每个 board 必须包含 columns。`kanban import --replace` 是 offline-only 操作；运行前必须停止 `kanban serve` 和常驻 `kanban dispatch`，如果检测到 active runtime lock 会直接拒绝。Import 在同一 SQLite transaction 内执行插入与 final doctor gate：基础关系表会校验 `task_labels`、`task_dependencies`、`task_runs`、`task_comments`、`task_events`、`task_attachments` 的 row board 与 referenced task / label / run board 一致；失败时整个 replace transaction 回滚，不提交部分数据。Ontology import 会延迟回填 `label_ontology_signals.superseded_by_signal_id` 与 `label_ontology_actions.parent_action_id`，因此不依赖 JSONL 中同表自引用 rows 的偶然顺序；导入后会拒绝跨 board / orphan generic signal context、generic signal supersede cycles、跨 board ontology links、orphan action-signal links、ontology supersede cycles 和 action parent cycles。
-`kanban entity`、`kanban outbox`、`kanban derived` 是 Knowledge Substrate 的只读维护入口。SQLite 仍是事实源；这些命令只报告统一 entity registry、派生索引 outbox 和 derived store 状态，不改变 task 状态或 claim。
+`kanban backup` 使用 SQLite `VACUUM INTO` 创建一致备份；目标文件已存在时失败，
+避免覆盖。`backup --out -` 会被明确拒绝，因为 SQLite 备份需要文件系统路径，
+不能安全写入标准输出。
+
+`kanban export --format jsonl` 导出数据库记录；目标文件已存在时失败，避免覆盖旧快照。
+`export --out -` 会把 JSONL 快照写入标准输出，不输出人类可读状态文案，也不写标准错误；
+该模式不能与 `--json` 组合，因为 JSONL 流和 JSON 封装不能共享标准输出。21 个稳定
+判别值的输入/输出分别拥有 42 个精确模式根；每行数据闭合，必需但可为空的键不能省略，
+但可显式为 `null`；导出/导入描述符与模式权威来源同源。
+
+JSONL 不复制 `task_runs.log_path` 指向的外部日志文件，导出的运行记录会清空 `log_path`；
+导出中的活动 `running` 任务会清除领取并恢复为 `ready`，对应的 `running` 运行记录会
+变为 `canceled`，并追加 `task.export_sanitized` 事件解释这次可移植快照改写。需要完整
+可恢复副本时使用 `kanban backup`。JSONL 导出包含通用信号账本记录类型
+`signal_observation`、`signal`，以及标签本体账本记录类型
+`label_ontology_observation`、`label_ontology_signal`、`label_ontology_action`、
+`label_ontology_action_atom_effect` 和 `label_ontology_action_signal`；因此可移植 JSONL
+与 SQLite 备份都会保留信号、本体观察/信号/操作/影响的来源记录。
+JSONL `event.data.payload` 仍按不透明 JSON 保存；39 种类型的联合只属于事件 API/SSE。
+
+`kanban import --dry-run` 会在临时 SQLite 数据库中解析导入文件并运行同一最终
+`doctor` 门禁，不替换或创建所选目标数据库；脚本和 CI 可先用它验证快照。上一版导出器的
+存储原生快照只作为单向兼容输入：同一记录如果同时出现自然命名的新键与对应格式的
+存储原生旧键，会在兼容性规范化前以 `invalid_input` 拒绝，不能由旧值静默覆盖自然命名值。
+
+`kanban import --replace` 是替换式恢复入口，必须显式传入 `--replace`；导入文件必须至少
+包含一个看板，且每个看板必须包含列。该命令只能离线运行；运行前必须停止 `kanban serve`
+和其他持有活动运行锁的进程；如果检测到活动运行锁会直接拒绝。导入会在同一 SQLite 事务内
+执行插入与最终 `doctor` 门禁：基础关系表会校验 `task_labels`、`task_dependencies`、
+`task_runs`、`task_comments`、`task_events`、`task_attachments` 的记录看板与所引用的
+任务/标签/运行记录看板一致；失败时整个替换事务回滚，不提交部分数据。
+
+本体导入会延迟回填 `label_ontology_signals.superseded_by_signal_id` 与
+`label_ontology_actions.parent_action_id`，因此不依赖 JSONL 中同表自引用记录的偶然顺序；
+导入后会拒绝跨看板/孤立的通用信号上下文、通用信号替代环、跨看板本体链接、
+孤立的操作—信号链接、本体替代环和操作父级环。
+`kanban entity`、`kanban outbox`、`kanban derived` 是知识底座的只读维护入口。
+SQLite 仍是事实源；这些命令只报告统一实体注册表、派生索引发件箱和派生存储状态，
+不改变任务状态或领取。
 `kanban entity list --json` 返回 `{"data": [...]}`，`kanban entity show --json` 返回
-`{"data": {...}}`；两者共享闭合的公开 entity item，并保留
+`{"data": {...}}`；两者共享闭合的公开实体项，并保留
 `uri`、`kind`、`source_table`、`source_id`、`created_at`、`updated_at`，以及
-required-nullable `board_id`、`task_id`、`title`、`summary`、`content_hash`、
+必需但可为空的 `board_id`、`task_id`、`title`、`summary`、`content_hash`、
 `archived_at`。调用方不能把这些字段缺失解释为 `null`。`list` 的 `--kind` 与
-`--limit` 由同一 SQLite service query 执行；`show` 继续按 exact URI 查询并保留
-`not_found` error envelope。human-readable 输出不变。
-`kanban graph` 和 `kanban vector` 是 helper subprocess 派生层入口。默认 CLI 不链接
-Oxigraph/LanceDB heavy deps；它解析 `KANBAN_GRAPH_HELPER` / `KANBAN_VECTOR_HELPER`、
-`/usr/lib/kanban/<helper>`、CLI sibling binary、`KANBAN_CARGO_TARGET_ROOT` 或
-`CARGO_TARGET_DIR` 的 `release/<helper>`，最后回退到 `PATH` 中的 helper。helper 缺失或
-返回非法 envelope 时，`status` 返回 disabled/degraded status；helper error envelope、
-坏 board/db/config 或 payload/domain 错误会作为命令错误返回。启用后仍只作为可重建
-relation/vector store，不参与 task 状态事务。
+`--limit` 由同一 SQLite 服务查询执行；`show` 继续按精确 URI 查询并保留
+`not_found` 错误封装。人类可读输出不变。
+
+`kanban graph` 和 `kanban vector` 是辅助子进程派生层入口。默认 CLI 不链接
+Oxigraph/LanceDB 重型依赖；它依次解析 `KANBAN_GRAPH_HELPER` /
+`KANBAN_VECTOR_HELPER`、`/usr/lib/kanban/<helper>`、CLI 同目录二进制、
+`KANBAN_CARGO_TARGET_ROOT` 或 `CARGO_TARGET_DIR` 的 `release/<helper>`，最后回退到
+`PATH` 中的辅助程序。辅助程序缺失或返回非法封装时，`status` 返回禁用/降级状态；
+辅助程序错误封装、错误的看板/数据库/配置或载荷/领域错误会作为命令错误返回。
+启用后仍只作为可重建的关系/向量存储，不参与任务状态事务。
+
 `kanban vector status --json` 保留 `message` 兼容字段，同时返回结构化
-`diagnostics`、`dirty`、`board_dirty` 字段；dirty/error 判断应使用这些字段，不解析
+`diagnostics`、`dirty`、`board_dirty` 字段；脏状态/错误判断应使用这些字段，不解析
 `message` 文案。
-`kanban vector configure` 默认写入全局 config：`$XDG_CONFIG_HOME/kanban/config.toml`（平台默认通常为 `~/.config/kanban/config.toml`），并默认配置本机 Ollama embedding provider。传 `--vector-config <toml>`（别名 `--config`）时写入指定 TOML。configure 默认调用 `/api/embed` 做短文本维度校验；校验失败时不写配置；`--skip-check` 只跳过这次连通性/维度检查。配置格式：
+`kanban vector configure` 默认写入全局配置：
+`$XDG_CONFIG_HOME/kanban/config.toml`（平台默认通常为
+`~/.config/kanban/config.toml`），并默认配置本机 Ollama 嵌入提供程序。
+传入 `--vector-config <toml>`（别名 `--config`）时写入指定 TOML。配置命令默认调用
+`/api/embed` 做短文本维度校验；校验失败时不写配置；`--skip-check` 只跳过这次
+连通性/维度检查。配置格式：
 
 ```toml
 board = "kanban-tool"
@@ -4804,85 +4807,113 @@ model = "qwen3-embedding:0.6b"
 dimensions = 1024
 ```
 
-项目级 `.kb/config.toml` 可以覆盖全局 `[vector]`；命令行 `--vector-config <toml>` 优先级最高。解析顺序是：显式 `--vector-config`、最近的项目 `.kb/config.toml`、全局 config。`kanban board use <board>` 更新项目配置文件的 `board` 字段时必须保留该文件内已有 `[vector]` 配置。配置有效且 helper 可用时 `kanban vector status/rebuild/sync` 使用该 provider；未配置或 helper 不可用时保持 disabled/degraded fallback。`kanban context build` 当前仍使用 SQLite/lexical fallback，并通过 degraded markers 报告 graph/vector 不可用。
-`kanban context build` 通过 SQLite hydrate canonical task，并合并 lexical、graph、vector hits。graph/vector 不可用或失败时返回 degraded markers；失败原因通过有界 diagnostics 暴露，context pack 本身仍可用。
+项目级 `.kb/config.toml` 可以覆盖全局 `[vector]`；命令行
+`--vector-config <toml>` 优先级最高。解析顺序是：显式 `--vector-config`、最近的项目
+`.kb/config.toml`、全局配置。`kanban board use <board>` 更新项目配置文件的
+`board` 字段时必须保留该文件内已有 `[vector]` 配置。配置有效且辅助程序可用时，
+`kanban vector status/rebuild/sync` 使用该提供程序。`kanban context build` 通过 SQLite
+补全规范任务，并在可用时合并词法、图和向量命中；图或向量未配置、不可用或失败时，
+以降级标记回退到仍可用的结果。失败原因通过有界诊断信息暴露，上下文包本身仍可用。
 
-`kanban outbox list --json` 返回 `{"data": [...]}`，每项保留完整 outbox job 字段，
-包括 required-nullable `source_event_id` 与 `last_error`；`--status` 与 `--limit` 由同一
-SQLite service 查询执行。`kanban derived status --json` 同样返回 `{"data": [...]}`，
-每个 store 的 `last_rebuild_at`、`last_sync_at` 与 `last_error` 都是 required-nullable，
+`kanban outbox list --json` 返回 `{"data": [...]}`，每项保留完整发件箱作业字段，
+包括必需但可为空的 `source_event_id` 与 `last_error`；`--status` 与 `--limit` 由同一
+SQLite 服务查询执行。`kanban derived status --json` 同样返回 `{"data": [...]}`，
+每个存储的 `last_rebuild_at`、`last_sync_at` 与 `last_error` 都是必需但可为空，
 调用方不能把字段缺失解释为 `null`。
 
-`kanban derived status` 中的 `last_event_id` 是 store 级成功处理水位，不是当前 board 的局部水位。`dirty=true` 表示该 store 仍有任意 board 的 pending/running/failed outbox，或最近一次派生更新失败；board-scoped `kanban index sync`、`kanban graph sync`、`kanban vector sync` 只清理当前 board 的 job，不能因为本 board clean 就强制清掉全局 dirty。
+`kanban derived status` 中的 `last_event_id` 是存储级成功处理水位，不是当前看板的
+局部水位。`dirty=true` 表示该存储仍有任意看板的待处理/运行中/失败发件箱作业，
+或最近一次派生更新失败；按看板工作的 `kanban index sync`、`kanban graph sync`、
+`kanban vector sync` 只清理当前看板的作业，不能因为本看板干净就强制清掉全局脏状态。
 
-语义 label atom 使用独立 derived store `lancedb_label_atoms`，对应 LanceDB 表
-`kb_label_atoms`。它不属于普通 task event outbox fanout：`kanban vector sync/rebuild`
-只维护 `lancedb_chunks` / `kb_chunks`，不会把 label atom store 标记为完成。label
-semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
-`lancedb_label_atoms`；provider 或 feature 不可用时该 store 可报告 degraded，但不影响
-普通 `kanban label` CRUD 和 `task_labels` 绑定。
+语义标签原子使用独立派生存储 `lancedb_label_atoms`，对应 LanceDB 表
+`kb_label_atoms`。它不属于普通任务事件发件箱扇出：`kanban vector sync/rebuild`
+只维护 `lancedb_chunks` / `kb_chunks`，不会把标签原子存储标记为完成。标签语义服务
+写入 `label_semantics` / `label_atoms` 后，会单独把 `lancedb_label_atoms` 标记为脏；
+提供程序或功能不可用时，该存储可报告降级，但不影响普通 `kanban label` 增删改查和
+`task_labels` 绑定。
 
 ### 15.1 `kanban doctor`
 
 检查：
 
-- DB 文件存在。
-- migrations 完整；当前 schema user_version 为 23。
+- 数据库文件存在。
+- 迁移完整；当前已提交的迁移版本（`schema user_version`）为 25。
 - `PRAGMA integrity_check`。
-- orphan active run。
-- running task 是否缺 claim。
-- expired claim 数量。
-- dependency cycle。
-- archived dependency edge（archived parent -> active child is allowed history; archived child from active parent is reported）。
-- 缺失 run log 文件。
-- 可疑 run log 路径。
-- `ready/running` task 带有未完成 parent dependency。
-- `ready/running` task 缺少可执行 spec。
-- `ready/running` task 带有未来 `scheduled_at`。
-- 基础关系表 board consistency：`task_labels`、`task_dependencies`、`task_runs`、
-  `task_comments`、`task_events`、`task_attachments` 的 row board 必须和 referenced
-  task / label / run board 一致。当前 schema 用 board-scoped composite FK 保护
+- 孤立的活动运行记录。
+- `running` 任务是否缺少领取。
+- 过期领取数量。
+- 依赖环。
+- 已归档依赖边（允许“已归档父任务 → 活动子任务”作为历史；报告“活动父任务 →
+  已归档子任务”）。
+- 缺失的运行日志文件。
+- 可疑运行日志路径。
+- `ready/running` 任务带有未完成父依赖。
+- `ready/running` 任务缺少可执行规格。
+- `ready/running` 任务带有未来的 `scheduled_at`。
+- 基础关系表看板一致性：`task_labels`、`task_dependencies`、`task_runs`、
+  `task_comments`、`task_events`、`task_attachments` 的记录看板必须和所引用的
+  任务/标签/运行记录看板一致。当前模式用按看板区分的复合外键保护
   `task_labels`、`task_dependencies`、`task_runs`、`task_comments` 和
-  `task_attachments`；v22+ 还检查 `task_execution_plans` task board scope，v23+ 还检查 `task_steps` parent/linked task board scope。`task_events` 保留 nullable task/run refs 与 `ON DELETE SET NULL`
-  语义，通过 INSERT/UPDATE triggers 校验非空 refs 的 board scope。
-- SQLite `PRAGMA foreign_key_check`：doctor 将每条 violation 转换为 hard-error issue；
-  JSONL import final gate 也会在 commit 前运行同一检查，失败时回滚整个 replace
-  transaction。
-- `index_outbox` backlog：`outbox_pending`、`outbox_running`、`outbox_failed`。
-- derived store health：`derived_dirty_stores`、`derived_error_stores`、`derived_stores[]`，每个 store 包含 `dirty`、`last_error` 和按 store target 聚合的 pending/running/failed outbox 计数。
-- foundation relationship consistency：人类输出包含 `consistency_errors` /
-  `consistency_warnings` 计数；`--json` 额外返回 `consistency_issues[]`，每条 issue
-  包含 `severity`、`code`、`message`、`record_ids`。Message 包含 `table`、`row`、
+  `task_attachments`；v22+ 还检查 `task_execution_plans` 的任务看板作用域，v23+ 还检查
+  `task_steps` 的父任务/链接任务看板作用域。`task_events` 保留可为空的任务/运行记录引用
+  与 `ON DELETE SET NULL` 语义，通过 INSERT/UPDATE 触发器校验非空引用的看板作用域。
+- SQLite `PRAGMA foreign_key_check`：`doctor` 将每条违规转成硬错误问题；
+  JSONL 导入最终门禁也会在提交前运行同一检查，失败时回滚整个替换事务。
+- `index_outbox` 积压：`outbox_pending`、`outbox_running`、`outbox_failed`。
+- 派生存储健康状态：`derived_dirty_stores`、`derived_error_stores`、
+  `derived_stores[]`。每个存储包含 `dirty`、`last_error`，以及按存储目标聚合的
+  待处理/运行中/失败发件箱数量。
+- 基础关系一致性：人类可读输出包含 `consistency_errors` /
+  `consistency_warnings` 计数；`--json` 额外返回 `consistency_issues[]`，每条问题
+  包含 `severity`、`code`、`message`、`record_ids`。消息包含 `table`、`row`、
   `row_board`、`referenced` 和 `referenced_board`。非零 `consistency_errors` 会让
   `ok=false`。
-- label ontology ledger health：v12+ 数据库必须存在 `label_ontology_observations`、`label_ontology_signals`、`label_ontology_actions`、`label_ontology_action_atom_effects`、`label_ontology_action_signals`；doctor 会报告 observation/signal/action/action-effect/action-signal 的跨 board link、orphan link、parent action 异常、supersede cycle 和可检查 soft reference 不一致。人类输出包含 `ontology_ledger_errors` / `ontology_ledger_warnings` 计数；`--json` 额外返回 `ontology_ledger_issues[]`，每条 issue 包含 `severity`、`code`、`message`、`record_ids`。非零 `ontology_ledger_errors` 会让 `ok=false`；warning 用于 rebuildable 或可解释的软引用异常，不单独让 doctor unhealthy。
+- 标签本体账本健康状态：v12+ 数据库必须存在 `label_ontology_observations`、
+  `label_ontology_signals`、`label_ontology_actions`、
+  `label_ontology_action_atom_effects`、`label_ontology_action_signals`；`doctor`
+  会报告观察/信号/操作/操作影响/操作—信号的跨看板链接、孤立链接、父操作异常、
+  替代环和可检查的软引用不一致。人类可读输出包含 `ontology_ledger_errors` /
+  `ontology_ledger_warnings` 计数；`--json` 额外返回 `ontology_ledger_issues[]`，
+  每条问题包含 `severity`、`code`、`message`、`record_ids`。非零
+  `ontology_ledger_errors` 会让 `ok=false`；警告用于可重建或可解释的软引用异常，
+  不会单独让 `doctor` 变为不健康。
 
-`dirty` / pending outbox 表示派生层需要 sync/rebuild，不会改变 SQLite task truth；failed outbox 或 `last_error` 用于 operator 判断是否需要 `kanban index sync`、`kanban graph sync/rebuild` 或 `kanban vector sync/rebuild`。`derived_stores[].last_event_id` 表示对应 store 已成功提交的全局 event watermark；当 `dirty=true` 时，它仍然只是“已成功处理到哪里”的摘要，不代表所有 board 都已经干净。
+`dirty` / 待处理发件箱表示派生层需要同步或重建，不会改变 SQLite 中的任务事实；
+失败的发件箱作业或 `last_error` 用于帮助操作人员判断是否需要运行
+`kanban index sync`、`kanban graph sync/rebuild` 或 `kanban vector sync/rebuild`。
+`derived_stores[].last_event_id` 表示对应存储已成功提交的全局事件水位；
+当 `dirty=true` 时，它仍然只是“已成功处理到哪里”的摘要，不代表所有看板都已经干净。
 
 ---
 
-## 16. JSON contract reference
+## 16. JSON 契约索引
 
-JSON 输出、运行期 JSON error、clap parse-time error、stderr/stdout 数据平面和 JSONL / NDJSON streaming boundary 的权威契约统一见 [1.3 JSON output contract](#13-json-output-contract)。
+JSON 输出、运行期 JSON 错误、clap 参数解析阶段错误、标准错误/标准输出数据平面，
+以及 JSONL / NDJSON 流式输出边界的权威契约，统一见
+[1.3 JSON 输出契约](#13-json-输出契约)。
 
-本节仅保留跳转，避免同一份 CLI_SPEC 出现两个 JSON 契约来源。新增或修改 JSON / JSONL / error-code 行为时，只更新 1.3 及对应命令章节，并补充测试证据。
+本节仅保留跳转，避免同一份 CLI 规范出现两个 JSON 契约来源。新增或修改 JSON /
+JSONL / 错误码行为时，只更新 1.3 及对应命令章节，并补充测试证据。
 
 
 ---
 
-# File: docs/API_SPEC.md
+# 文件：docs/API_SPEC.md
 
-# Local Web API SPEC
+# 本地 Web API 规范
 
-本 API 只面向 localhost Web UI 和本地脚本。它不是远程协作 API。
+本 API 只面向 Tauri Desktop 和本地脚本。它不是远程协作 API。
 
-默认监听：
+独立运行 `kanban serve` 时默认监听：
 
 ```text
 127.0.0.1:8721
 ```
 
-Base path：
+Tauri 内嵌运行时绑定 `127.0.0.1:0`，由操作系统选择可用端口。
+
+基础路径：
 
 ```text
 /api/v1
@@ -4892,15 +4923,15 @@ Base path：
 
 ## 1. 通用约定
 
-### 1.1 Content Type
+### 1.1 内容类型
 
-Request：
+请求：
 
 ```http
 Content-Type: application/json
 ```
 
-Response：
+响应：
 
 ```http
 Content-Type: application/json
@@ -4912,35 +4943,35 @@ SSE：
 Content-Type: text/event-stream
 ```
 
-### 1.2 Actor
+### 1.2 操作者
 
-因为没有多用户系统，actor 是审计字段。
+因为没有多用户系统，`actor` 是审计字段。
 
 来源优先级：
 
-1. Request body `actor`。
-2. Header `X-KB-Actor`。
-3. Server 默认 actor。
-4. OS username。
+1. 请求体中的 `actor`。
+2. 请求头 `X-KB-Actor`。
+3. 服务端默认的 `actor`。
+4. 操作系统用户名。
 
-### 1.2.1 Request header contracts
+#### 1.2.1 请求头契约
 
-除 SSE stream 外，当前 83 个 HTTP endpoint 都拥有 operation-specific、exact、
-`deny_unknown_fields` header contract；每个 contract 都包含可选 `Accept-Language`，并按真实
-handler 输入选择 locale、locale + actor、locale + JSON content type，以及它们的
-optional-body 变体。`X-KB-Actor` 只出现在会解析 actor 的 mutation handler。
+除 SSE 事件流外，当前 83 个 HTTP 端点都拥有端点专属、精确且
+`deny_unknown_fields` 的请求头契约。每份契约都包含可选的 `Accept-Language`，并按处理器的真实
+输入选择语言、语言加操作者、语言加 JSON 内容类型，以及它们允许省略请求体的变体。
+`X-KB-Actor` 只出现在会解析操作者的变更处理器中。
 
-有必需 JSON body 的 endpoint 要求且只允许一个 `Content-Type`；允许空 body 的 archive、
-promote、reclaim、unblock、label proposal propose/accept/reject endpoint 将其建模为可选；没有
-body 的 endpoint 不声明 `Content-Type`。这些 cardinality 是 transport contract，不改变 Axum
-对具体媒体类型和 malformed JSON 的既有 400 行为。
+必须提供 JSON 请求体的端点要求且只允许一个 `Content-Type`；允许省略请求体的归档、
+推进、回收、解除阻塞，以及标签提议、接受和拒绝端点将其建模为可选；没有
+请求体的端点不声明 `Content-Type`。这些数量约束属于传输契约，不改变 Axum
+对具体媒体类型和格式错误 JSON 的既有 400 行为。
 
-SSE 的 `Last-Event-ID` 仍明确 `Excluded`：当前 runtime 忽略该 header，没有 resume contract；
-不得因为其它 endpoint 已关闭 headers 就把它推断为 adopted input。
+SSE 的 `Last-Event-ID` 仍明确标记为 `Excluded`：当前运行时忽略该请求头，没有续传契约；
+不得因为其他端点已经收紧请求头，就把它推断为已采用的输入。
 
-### 1.3 Success Response
+### 1.3 成功响应
 
-成功响应按 endpoint 的元数据契约使用以下 wire envelope：
+成功响应按端点的元数据契约使用以下线上封装：
 
 `DataEnvelope` 仅包含 `data`：
 
@@ -4961,11 +4992,11 @@ SSE 的 `Last-Event-ID` 仍明确 `Excluded`：当前 runtime 忽略该 header�
 }
 ```
 
-`OptionalMetadataEnvelope` 只在 endpoint 产生对应元数据时包含 `meta`；没有元数据时
-直接省略该字段，不返回 `"meta": null`。具体 endpoint 使用哪一种 envelope 及其
-`meta` 字段由该 endpoint 的响应示例和说明定义。
+`OptionalMetadataEnvelope` 只在端点产生对应元数据时包含 `meta`；没有元数据时
+直接省略该字段，不返回 `"meta": null`。具体端点使用哪一种封装及其
+`meta` 字段，由该端点的响应示例和说明定义。
 
-### 1.4 Error Response
+### 1.4 错误响应
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -4977,13 +5008,13 @@ SSE 的 `Last-Event-ID` 仍明确 `Excluded`：当前 runtime 忽略该 header�
 }
 ```
 
-`error.code` 是稳定机器契约。`error.message` 是 human-readable 文案，会根据
-`Accept-Language` 在 `zh-CN` 和 `en` 之间选择；未传 header 时保持既有默认 `en`。
+`error.code` 是稳定的机器契约。`error.message` 是供人阅读的文案，会根据
+`Accept-Language` 在 `zh-CN` 和 `en` 之间选择；未传请求头时保持既有默认值 `en`。
 客户端逻辑必须读取 `error.code`，不要解析 `error.message`。
 
-### 1.5 HTTP Status Mapping
+### 1.5 HTTP 状态码映射
 
-| Error code | HTTP status |
+| 错误代码 | HTTP 状态码 |
 |---|---:|
 | `invalid_input` | 400 |
 | `not_found` | 404 |
@@ -4999,11 +5030,11 @@ SSE 的 `Last-Event-ID` 仍明确 `Excluded`：当前 runtime 忽略该 header�
 
 ---
 
-## 2. Health
+## 2. 健康检查
 
 ### `GET /health`
 
-Response：
+响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5018,28 +5049,26 @@ Response：
 }
 ```
 
-`db_path` and `db_fingerprint` let local Desktop/Web development surfaces verify
-which local SQLite runtime answered the request. If the configured database file
-has been deleted, `/health` returns `400 invalid_input` instead of recreating an
-empty SQLite file. Other API routes apply the same missing-file guard before
-running handlers, so stale/deleted runtimes fail explicitly instead of opening a
-new empty database at the configured path. `/health` also validates that the
-database has the expected migrated schema and returns `400 invalid_input` for an
-empty or uninitialized SQLite file.
+`db_path` 和 `db_fingerprint` 让本地桌面端或 Web 开发界面能够确认由哪一个
+SQLite 运行实例响应了请求。若配置的数据库文件已被删除，`/health` 会返回
+`400 invalid_input`，而不是重新创建空的 SQLite 文件。其他 API 路由也会在运行处理器前
+执行相同的文件缺失检查，因此过期或已删除的运行实例会明确失败，不会在配置路径上打开
+新的空数据库。`/health` 还会验证数据库是否具备预期的迁移后结构；空数据库或未初始化的
+SQLite 文件同样返回 `400 invalid_input`。
 
 ---
 
-## 3. Boards
+## 3. 看板
 
-### 3.1 List boards
+### 3.1 列出看板
 
 ```http
 GET /api/v1/boards?include_archived=false
 ```
 
-Archived boards are hidden by default. Pass `include_archived=true` to include them.
+默认隐藏已归档看板；传入 `include_archived=true` 可将其一并返回。
 
-Response：
+响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5048,7 +5077,7 @@ Response：
     {
       "id": "b_01HX...",
       "slug": "default",
-      "name": "Default",
+      "name": "默认看板",
       "description": null,
       "created_at": 1717520000000,
       "updated_at": 1717520000000,
@@ -5058,107 +5087,113 @@ Response：
 }
 ```
 
-### 3.2 Create board
+### 3.2 创建看板
 
 ```http
 POST /api/v1/boards
 ```
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "slug": "agent-work",
-  "name": "Agent Work",
-  "description": "Local agent board",
+  "name": "代理工作",
+  "description": "本地代理任务看板",
   "actor": "alice"
 }
 ```
 
-Response status is `201 Created`. Board slugs must be unique, non-empty, no longer than 64 bytes, start with a lowercase ASCII letter or digit, contain only lowercase ASCII letters, digits, `.`, `_`, `-`, and must not start with reserved ID prefixes such as `b_`, `t_`, `r_`, `c_`, `a_`, `l_`, `col_`, or `e_`. Duplicate or invalid slugs return the normal `400 invalid_input` error envelope, not `500`.
+成功时返回 `201 Created`。看板 slug 必须唯一且非空，长度不超过 64 字节；首字符必须是
+小写 ASCII 字母或数字，后续只能包含小写 ASCII 字母、数字、`.`、`_`、`-`，且不能以
+`b_`、`t_`、`r_`、`c_`、`a_`、`l_`、`col_`、`e_` 等保留 ID 前缀开头。slug 重复或
+格式无效时返回标准 `400 invalid_input` 错误封装，而不是 `500`。
 
-### 3.3 Get board
+### 3.3 获取看板
 
 ```http
 GET /api/v1/boards/{board_slug_or_id}
 ```
 
-### 3.4 Archive board
+### 3.4 归档看板
 
 ```http
 POST /api/v1/boards/{board}/archive
 ```
 
-Archive marks `archived_at` and writes a `board.archived` event; it does not mutate tasks. The operation is rejected with `409 invalid_transition` if the board has active `running` tasks or `running` task runs. After archive, ordinary task mutations on that board are rejected, while audit history endpoints remain readable when called with explicit task/board identity.
+归档会设置 `archived_at` 并写入 `board.archived` 事件，但不会修改任务。若看板上存在
+活跃的 `running` 任务或仍在运行的任务执行记录，操作会返回 `409 invalid_transition`。
+归档后，该看板上的普通任务变更会被拒绝；显式指定任务或看板标识时，审计历史端点仍可读取。
 
-### 3.5 B2-C6 boards exact contracts
+### 3.5 看板端点的精确契约
 
-四个 boards endpoint 使用 endpoint-specific contract roots：list query、create request、
-get/archive path 与各自 success response。四个 success response 只共享闭合 `ApiBoard` component；
-server 显式把 SQLite application record 映射为 wire DTO，不直接序列化 `BoardRecord`。
-archive request body 继续复用既有 `ArchiveBoardRequest` contract。
+四个看板端点使用端点专属的契约根：列表查询、创建请求、获取或归档路径，以及各自的成功响应。
+四个成功响应只共享闭合的 `ApiBoard` 组件；服务端会把 SQLite 应用记录显式映射为线上 DTO，
+不会直接序列化 `BoardRecord`。归档请求体继续复用既有的 `ArchiveBoardRequest` 契约。
 
-`include_archived` 缺省为 `false`，传入 `true` 时真实转发到 service 并返回 archived boards。
-Desktop `listBoards` caller exact 校验 `data` envelope 与 `ApiBoard` 的全部字段，missing、mistyped
-或 extra field 返回 `invalid_response`。running-work archive guard、archived audit history、
-not-found status/error code 与 locale-dependent message 不属于 schema authority，继续由
-service/adapter 保证。四个 endpoint 的 headers obligation 仍为 `Todo`，migration state 保持
-`Generated`。
+`include_archived` 默认为 `false`，传入 `true` 时会真实转发给服务层并返回已归档看板。
+桌面端的 `listBoards` 调用方会精确校验 `data` 封装和 `ApiBoard` 的全部字段；字段缺失、
+类型错误或出现额外字段时返回 `invalid_response`。运行中工作项的归档保护、已归档看板的
+审计历史、未找到时的状态码和错误代码，以及依赖语言的消息文案不属于模式文件的权威范围，
+继续由服务层和适配器保证。四个端点的路径、查询、请求头、请求体和成功响应契约均已采用，
+迁移状态为 `Adopted`。
 
 ---
 
-## 4. Tasks
+## 4. 任务
 
-### 4.1 List tasks
+### 4.1 列出任务
 
 ```http
 GET /api/v1/boards/{board}/tasks
 ```
 
-Query params：
+查询参数：
 
-| Param | 说明 |
+| 参数 | 说明 |
 |---|---|
 | `status` | 可重复：`?status=ready&status=running`。 |
-| `priority` | 可重复：`?priority=0&priority=2`，值为 P0-P3 的 `0..3`。P0 表示 incident/blocker/must-handle-immediately；P3 是普通 backlog/低优先级/默认。 |
-| `assignee` | 按 assignee。 |
-| `label` | 按 label 名称或 id 过滤，可重复；多个 label 使用 AND 语义。 |
+| `priority` | 可重复：`?priority=0&priority=2`，值为 P0-P3 的 `0..3`。P0 表示事故、阻塞项或必须立即处理的任务；P3 是普通待办、低优先级和默认值。 |
+| `assignee` | 按执行者过滤。 |
+| `label` | 按标签名称或 ID 过滤，可重复；多个标签使用 AND 语义。 |
 | `plan_filter` | 可重复：`plan_needed` / `has_steps` / `incomplete_required_steps`。 |
-| `q` | title/description 搜索；task ref 形状按精确匹配处理。 |
-| `include_archived` | bool。 |
+| `q` | 搜索标题或描述；任务引用形状按精确匹配处理。 |
+| `include_archived` | 布尔值。 |
 | `limit` | 默认 100。 |
-| `offset` | 分页 offset。 |
-| `sort` | `seq` / `title` / `status` / `position` / `priority` / `assignee` / `scheduled_at` / `due_at` / `created_at` / `updated_at`，前缀 `-` 表示降序。`priority` sorts P0 -> P3; `-priority` sorts P3 -> P0. |
+| `offset` | 分页偏移量。 |
+| `sort` | `seq` / `title` / `status` / `position` / `priority` / `assignee` / `scheduled_at` / `due_at` / `created_at` / `updated_at`，前缀 `-` 表示降序。`priority` 按 P0 到 P3 排序；`-priority` 按 P3 到 P0 排序。 |
 
-这两个 task-read endpoint 使用同一套严格 raw-query 语法，但各自拥有独立的 exact path/query
-contract，并由两个 server-local typed Axum extractor 分别绑定真实 `{board}` path 与唯一 raw URI
-query 消费点；handler 只接收已解析 request，不持有 `RawQuery` 或第二套 `Query<T>` extractor。
+这两个任务读取端点使用同一套严格的原始查询语法，但各自拥有独立的精确路径与查询契约，
+并由两个服务端本地的强类型 Axum 提取器分别绑定真实 `{board}` 路径和唯一的原始 URI
+查询消费点；处理器只接收已解析请求，不持有 `RawQuery` 或第二套 `Query<T>` 提取器。
 只有 `status`、`priority`、`label`、`plan_filter` 可以重复；不同语义值按 URI 首次出现顺序
 保留，任何重复语义值返回 `400 invalid_input`。`assignee`、`q`、`include_archived`、
 `limit`、`offset`、`sort` 任一重复也返回 `400`。任何未知 key 失败关闭；旧 `search`
 alias 已删除，只接受 `q`。
 
-raw query 最多 8192 bytes。参数对上限不是独立字面量，而是由 9 个 `status`、4 个
-`priority`、3 个 `plan_filter`、32 个 `label` 和 6 个 scalar 参数推导出的 54。
-`q` 最多 1024 个 Unicode 字符，`assignee` 与单个 `label` 最多 128 个。未提供 query 时
-默认 `include_archived=false`、`limit=100`、`offset=0`、`sort=position`。`limit` 的 wire
-authority 是 `kanban-contract` 的 1000；SQLite service defensive maximum 直接引用唯一
-application authority，server 对该实际 service path 建立编译期相等门禁。`offset` 最大为
+原始查询最多 8192 字节。参数对上限不是独立字面量，而是由 9 个 `status`、4 个
+`priority`、3 个 `plan_filter`、32 个 `label` 和 6 个标量参数推导出的 54。
+`q` 最多 1024 个 Unicode 字符，`assignee` 与单个 `label` 最多 128 个。未提供查询时
+默认 `include_archived=false`、`limit=100`、`offset=0`、`sort=position`。`limit` 的线上
+权威上限是 `kanban-contract` 的 1000；SQLite 服务层的防御性上限直接引用唯一的应用权威值，
+服务端对这条实际服务路径建立编译期相等门禁。`offset` 最大为
 `i64::MAX`。空的 `q`、`assignee` 归一化为未提供；label 会规范化 Unicode 边缘空白，但必须
 包含至少一个非空白字符，且 raw 字符长度不得超过 128；该预算在 trim 前计算，随后会被移除
 的 Unicode 边缘空白也计入 128 字符。空或纯 Unicode 空白 `label`、enum、bool、数字或 sort
 值无效。
-query 使用严格 form 解码：`+` 表示空格，`%HH` 必须完整且解码结果必须是 UTF-8；合法
-UTF-8 与 `&`、`/`、`=`、`+`、空格必须由标准 form encoder 转义，非法 percent encoding
+查询使用严格的表单解码：`+` 表示空格，`%HH` 必须完整且解码结果必须是 UTF-8；合法
+UTF-8 与 `&`、`/`、`=`、`+`、空格必须由标准表单编码器转义，非法百分号编码
 或 UTF-8 返回 `400`。
 
-Priority 只表达相对重要性和排序，不表达可 claim 状态。`ready` 才表示任务已显式进入可执行队列；普通 `ready` task 可以是 P1/P2/P3，不应为了表示“可做”全部标成 P0。P0 只用于 incident、当前目标 blocker 或必须立即处理的任务；P0 task 若仍缺规格、排期未到或依赖未完成，仍不能被 claim。
+优先级只表达相对重要性和排序，不表示能否认领。`ready` 才表示任务已显式进入可执行队列；
+普通 `ready` 任务可以是 P1、P2 或 P3，不应为了表示“可做”而全部标成 P0。P0 只用于事故、
+当前目标阻塞项或必须立即处理的任务；P0 任务若仍缺规格、排期未到或依赖未完成，仍不能被认领。
 
-`q` 对 task ref 形状使用精确匹配而不是文本 contains 匹配：纯数字 `12`、
-`#12` 匹配 `{board}` 内的 seq；`board#12` / `board/#12` 只在显式 board
-与 `{board}` 相同时匹配；`t_...` 只匹配 `{board}` 内的 task id。其他文本仍执行
-title/description 模糊搜索。
+`q` 对任务引用形状使用精确匹配，而不是文本包含匹配：纯数字 `12` 和
+`#12` 匹配 `{board}` 内的序号；`board#12` / `board/#12` 只在显式看板
+与 `{board}` 相同时匹配；`t_...` 只匹配 `{board}` 内的任务 ID。其他文本仍执行
+标题和描述的模糊搜索。
 
 响应（以下为字段节选；完整、可消费的成功响应以 `schemas/fixtures/api/list-tasks-response.v1.valid.json` 为准）：
 
@@ -5202,19 +5237,19 @@ title/description 模糊搜索。
 }
 ```
 
-### 4.2 Create task
+### 4.2 创建任务
 
 ```http
 POST /api/v1/boards/{board}/tasks
 ```
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "title": "实现状态机",
-  "description": "Markdown spec",
+  "description": "Markdown 规格",
   "status": "ready",
   "assignee": "local-worker",
   "priority": 1,
@@ -5228,29 +5263,44 @@ Request：
 }
 ```
 
-Notes：
+说明：
 
 - `status` 只能是 `triage|todo|scheduled|ready`。
 - 若不传 `status`，服务端计算初始状态。
-- 若存在未完成 dependencies（parent 不是 `done` 或 `archived`），不能创建为 `ready`。
-- 若 execution plan 仍为 `unplanned`，不能创建为 `ready`；先添加 step，或显式标记 `not_required` 并填写 reason。
-- Task 响应会暴露派生 dependency 和 execution-plan 字段：`dependency_blocked`、`unfinished_parent_count`、`execution_plan_state`、required/optional step counts。它们是查询元数据，不是可写 task 字段。
-- `priority` 是整数等级 `0..3`：`0` = P0 incident/blocker/must-handle-immediately，`1` = P1 近期重点，`2` = P2 重要后续，`3` = P3 普通 backlog/低优先级/默认。创建时会拒绝非法值。
-- `labels` 可选。名称会先 trim；空白名称会被拒绝；所有 label 必须已存在于当前 board。任一 label 缺失时，整个 create 返回 `400 invalid_input`，且不会写入 `tasks`、`labels`、`task_labels` 或 `task_events`。Task create 不提供 create-missing 模式。
-- `priority` 缺省为 `3`，`labels` / `depends_on` 缺省为空数组；其它 nullable 字段可显式传 `null`。`metadata` 只接受 JSON object 或 `null`，其 object 内容是 opaque extension，不在 transport layer 解释。
-- path、request 与 `201` success response 分别由 `CreateTaskPath`、`CreateTaskRequest` 与 `CreateTaskResponse { data: ApiTask }` 拥有。request status 使用 create-only 的闭合 `triage|todo|scheduled|ready` vocabulary；公开 response 不包含 `claim_token`。
-- handler 只做 contract 到 application input 的显式映射，并继续单次调用 `create_task_with_labels_and_dependencies`。label、dependency、retry policy、metadata validity 与 initial readiness 仍在同一 SQLite transaction/service guard 中处理；任一失败都整体回滚。
+- 显式请求 `scheduled` 时必须同时提供 `scheduled_at`。
+- 显式请求 `ready` 时必须有非空描述，且 `scheduled_at` 不能位于未来。
+- 若存在未完成依赖（父任务不是 `done` 或 `archived`），`status=ready` 请求仍可接受，
+  但依赖守卫会让最终状态保持为 `todo`。
+- 无论显式请求 `ready`，还是省略 `status` 后计算出 `ready`，新任务尚无执行计划时
+  都会实际以 `todo` 状态落库；响应会把 `execution_plan_state` 派生为 `unplanned`，
+  不会为此写入计划行。添加第一个步骤，或通过
+  `/execution-plan/not-required` 明确标记无需计划并填写原因后，服务端才会结合规格、
+  排期和依赖等其他保护条件重新计算是否进入 `ready`。
+- 任务响应会公开派生的依赖和执行计划字段：`dependency_blocked`、`unfinished_parent_count`、
+  `execution_plan_state`，以及必需或可选步骤数量。它们是查询元数据，不是可写任务字段。
+- `priority` 是整数等级 `0..3`：`0` = P0 事故、阻塞项或必须立即处理，`1` = P1 近期重点，
+  `2` = P2 重要后续，`3` = P3 普通待办、低优先级和默认值。创建时会拒绝非法值。
+- `labels` 可选。名称会先去除两端空白；空白名称会被拒绝；所有标签必须已存在于当前看板。
+  任一标签缺失时，整个创建请求返回 `400 invalid_input`，且不会写入 `tasks`、`labels`、
+  `task_labels` 或 `task_events`。创建任务不提供自动创建缺失标签的模式。
+- `priority` 默认为 `3`，`labels` 和 `depends_on` 默认为空数组；其他可空字段可显式传入
+  `null`。`metadata` 只接受 JSON 对象或 `null`，对象内容是开放扩展，不在传输层解释。
+- 路径、请求与 `201` 成功响应分别由 `CreateTaskPath`、`CreateTaskRequest` 和
+  `CreateTaskResponse { data: ApiTask }` 拥有。请求状态使用仅限创建的闭合词汇
+  `triage|todo|scheduled|ready`；公开响应不包含 `claim_token`。
+- 处理器只负责把契约显式映射到应用输入，并继续单次调用
+  `create_task_with_labels_and_dependencies`。标签、依赖、重试策略、元数据有效性和初始就绪
+  判断仍在同一 SQLite 事务和服务保护中处理；任一失败都会整体回滚。
 
-### 4.3 List task windows by status
+### 4.3 按状态列出任务窗口
 
 ```http
 GET /api/v1/boards/{board}/tasks/by-status?status=triage&status=ready&include_archived=false&limit=50&offset=0&sort=-updated_at
 ```
 
-这个只读 endpoint 将 board column 查询批量化为一次请求，并接受 4.1 节定义的同一套严格
-query 语法。每个重复 `status` 生成一个独立 task window；`limit` 与 `offset` 分别应用到
-每个 window。response 中的 status 顺序与 URI 中的重复参数顺序一致；省略 `status` 时返回
-空的 `statuses` array。
+这个只读端点把看板列查询合并为一次请求，并接受 4.1 节定义的同一套严格查询语法。
+每个重复的 `status` 生成独立任务窗口；`limit` 与 `offset` 分别应用到每个窗口。
+响应中的状态顺序与 URI 中重复参数的顺序一致；省略 `status` 时返回空的 `statuses` 数组。
 
 响应（以下为字段节选；完整、可消费的成功响应以 `schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json` 为准）：
 
@@ -5284,37 +5334,59 @@ query 语法。每个重复 `status` 生成一个独立 task window；`limit` �
 }
 ```
 
-### 4.4 Get task
+### 4.4 获取任务
 
 ```http
 GET /api/v1/tasks/{task_id}
 ```
 
-`task_id` is the global `t_...` id and is not scoped by board. Responses include `board_id`, `board_slug`, and `ref` so clients can render copyable `board#seq` task refs.
+`task_id` 是全局 `t_...` ID，不受看板作用域限制。响应包含 `board_id`、`board_slug`
+和 `ref`，便于客户端展示可复制的 `board#seq` 任务引用。
 
-Query params：
+查询参数：
 
-| Param | 说明 |
+| 参数 | 说明 |
 |---|---|
 | `include` | 可选。当前识别 `ontology`；可用逗号分隔，其他 include 值暂时保持兼容性忽略。 |
 
 默认响应只包含 `data: ApiTask`，不返回 `meta`。传 `include=ontology` 时，`data`
-保持同一 `ApiTask`，并在 `meta.details.ontology_summary` 返回该 task 的 label
-ontology signal 摘要；没有 ontology signals 时为 `null`。Summary 是只读 task-level
-工作流提示，包含 signal/status/degraded/stale/action counts、oldest open/confirmed
-signal time/age、latest signal/action time、当前 `suggest_input_hash` 和最多 5 条
-sample signals（id/kind/status/proposed_action/score/stale/degraded/action count）。完整
-queue/review 仍使用 `/label-ontology/signals`、`/label-ontology/review` 和
+保持同一 `ApiTask`，并在 `meta.details.ontology_summary` 返回该任务的标签本体信号摘要；
+没有本体信号时为 `null`。该摘要是任务级的只读工作流提示，包含信号、状态、降级、过期和
+操作数量，最早的开放或已确认信号时间及距今时长，最新信号或操作时间，当前
+`suggest_input_hash`，以及最多 5 条示例信号
+（ID、种类、状态、提议操作、分数、过期、降级和操作数量）。完整队列和审核仍使用
+`/label-ontology/signals`、`/label-ontology/review` 和
 `/label-ontology/signals/{signal_id}`。
 
-Task detail aggregate endpoints such as
-`GET /api/v1/tasks/{task_id}/detail?include=dependencies,steps,runs,events,comments,neighborhood`,
-panel-specific timelines, or execution-context bundles are not part of the
-current API. They remain a follow-up optimization candidate for reducing
-TaskDetail panel fan-out after the existing per-panel routes and cache
-invalidation behavior are stable.
+当前 API 不包含
+`GET /api/v1/tasks/{task_id}/detail?include=dependencies,steps,runs,events,comments,neighborhood`
+这类任务详情聚合端点，也不包含面板专属时间线。现有的分面板路由和缓存失效行为稳定后，
+可再考虑以聚合端点减少 `TaskDetail` 面板的请求扇出。任务执行上下文已有独立的
+`GET /api/v1/tasks/{task_id}/context` 端点，见 4.5 节。
 
-### 4.5 Update task fields
+### 4.5 获取任务上下文
+
+```http
+GET /api/v1/tasks/{task_id}/context?board=default&lexical_limit=5&graph_limit=10&vector_limit=5&max_items=20
+```
+
+这是已经采用精确路径、查询、请求头和成功响应契约的只读端点，迁移状态为 `Adopted`。
+`task_id` 为必填路径参数；
+查询参数均只能出现一次，未知参数会被拒绝：
+
+| 参数 | 是否必填 | 默认值 | 说明 |
+|---|---|---:|---|
+| `board` | 否 | `default` | 看板 slug 或 ID。 |
+| `lexical_limit` | 否 | `5` | 词法检索条目上限，范围 `0..=1000`。 |
+| `graph_limit` | 否 | `10` | 图关系条目上限，范围 `0..=1000`。 |
+| `vector_limit` | 否 | `5` | 向量检索条目上限，范围 `0..=1000`。 |
+| `max_items` | 否 | `20` | 合并后的上下文条目总上限，范围 `1..=1000`。 |
+
+响应的 `data` 包含 `subject`、回显实际限制的 `policy`、合并后的 `items`、
+降级原因 `degraded`，以及有诊断时才出现的 `diagnostics`。图或向量后端不可用时，
+端点会保留可用来源的结果并通过这些结构化字段说明降级，不会把派生存储当作权威数据源。
+
+### 4.6 更新任务字段
 
 ```http
 PATCH /api/v1/tasks/{task_id}
@@ -5338,9 +5410,11 @@ PATCH /api/v1/tasks/{task_id}
 }
 ```
 
-`priority` updates reject values outside `0..3`.
+`priority` 更新会拒绝 `0..3` 以外的值。
 
-`max_retries: null` 清空 retry policy。Task DTOs include `execution_plan_state`, `required_step_count`, `completed_required_step_count`, and `optional_step_count` so clients can show plan readiness without separately listing steps.
+`max_retries: null` 会清空重试策略。任务 DTO 包含 `execution_plan_state`、
+`required_step_count`、`completed_required_step_count` 和 `optional_step_count`，
+因此客户端无需另行列出步骤，也能展示执行计划是否就绪。
 
 禁止字段：
 
@@ -5349,31 +5423,29 @@ PATCH /api/v1/tasks/{task_id}
 - `current_run_id`
 - `completed_at`
 
-`PATCH` 不能直接设置 canonical `status`；状态必须通过 transition endpoint 修改。
-不过允许字段仍会走 shared service path。更新 `description`、`scheduled_at`
-等影响 spec 或 schedule 的字段后，服务端可以根据 spec、schedule 和
-当前 dependencies 重新计算 active task 的目标状态，并写入对应事件。
-Dependency edge 必须通过 dependency endpoints 修改；`max_retries` 只更新
-retry policy，不是 status recompute 触发器。
+`PATCH` 不能直接设置规范 `status`；状态必须通过状态转换端点修改。允许字段仍会走共享服务路径。
+更新 `description`、`scheduled_at` 等影响规格或排期的字段后，服务端可以根据规格、排期和
+当前依赖重新计算活跃任务的目标状态，并写入对应事件。依赖边必须通过依赖端点修改；
+`max_retries` 只更新重试策略，不会触发状态重算。
 
 ---
 
-## 5. Transitions
+## 5. 状态转换
 
-Transition request 使用各 endpoint 独立的封闭 DTO，未知顶层字段返回 `400`，不共享通用
-transition/token body。Promote、reclaim、unblock 和 task archive 可完全省略 body；出现
-body 时仍按对应 DTO 校验。`actor` 的解析优先级保持为 body、`X-KB-Actor`、server default。
-Claim 与 heartbeat 省略 `ttl_ms` 时使用 `300000`；reclaim、complete、submit-review、block
-与 archive 省略 `force` 时均为 `false`，不能绕过 lease、token 或状态机 guard。Claim-token mismatch
-response 不回显客户端提交的错误 token，也不暴露服务端保存的真实 token。
+状态转换请求使用各端点独立的封闭 DTO，未知顶层字段会导致 `400`，不共享通用的转换或
+令牌请求体。推进、回收认领、解除阻塞和任务归档可以完全省略请求体；出现请求体时仍按对应
+DTO 校验。`actor` 的解析优先级保持为请求体、`X-KB-Actor`、服务端默认值。认领和心跳省略
+`ttl_ms` 时使用 `300000`；回收认领、完成、提交审核、阻塞和归档省略 `force` 时均为
+`false`，不能绕过租约、令牌或状态机保护。认领令牌不匹配的响应不会回显客户端提交的错误
+令牌，也不会暴露服务端保存的真实令牌。
 
-### 5.1 Specify
+### 5.1 补全规格
 
 ```http
 POST /api/v1/tasks/{task_id}/transitions/specify
 ```
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5384,32 +5456,32 @@ Request：
 }
 ```
 
-### 5.2 Promote
+### 5.2 推进
 
 ```http
 POST /api/v1/tasks/{task_id}/transitions/promote
 ```
 
-Promote is rejected with `409 execution_plan_required` while the task execution plan is `unplanned`.
+任务执行计划仍为 `unplanned` 时，推进操作会返回 `409 execution_plan_required`。
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
-  "actor": "dispatcher"
+  "actor": "local-worker"
 }
 ```
 
-### 5.3 Claim / Start
+### 5.3 认领并开始
 
 ```http
 POST /api/v1/tasks/{task_id}/transitions/claim
 ```
 
-Claim/start is rejected with `409 execution_plan_required` while the task execution plan is `unplanned`.
+任务执行计划仍为 `unplanned` 时，认领并开始操作会返回 `409 execution_plan_required`。
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5421,7 +5493,10 @@ Request：
 }
 ```
 
-Response：
+省略 `worker_profile` 或传入 `null` 时，运行时会把本次执行记录的工作进程配置记为
+`"manual"`。
+
+响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5435,44 +5510,46 @@ Response：
       "id": "r_01HX...",
       "status": "running"
     },
-    "claim_token": "ct_01HX...",
+    "claim_token": "claim_01HX...",
     "claim_expires_at": 1717520300000
   }
 }
 ```
 
-### 5.4 Heartbeat
+### 5.4 心跳
 
 ```http
 POST /api/v1/tasks/{task_id}/transitions/heartbeat
 ```
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
-  "claim_token": "ct_01HX...",
+  "claim_token": "claim_01HX...",
   "ttl_ms": 300000,
-  "note": "still running",
+  "note": "仍在执行",
   "actor": "worker-default"
 }
 ```
 
-Explicit heartbeat remains supported. For a `running` task, a later valid task-scoped activity event also refreshes the task lease and active run heartbeat as an implicit liveness signal; that implicit renewal does not emit an extra `task.heartbeat` event. Board-level events and events without `task_id` do not renew a task.
+显式心跳仍受支持。对于 `running` 任务，后续合法且属于该任务的活动事件也会刷新任务租约和
+当前执行记录的心跳，作为隐式存活信号；这种隐式续期不会额外产生 `task.heartbeat` 事件。
+看板级事件和不含 `task_id` 的事件不会续期任务。
 
-### 5.5 Complete
+### 5.5 完成
 
 ```http
 POST /api/v1/tasks/{task_id}/transitions/complete
 ```
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
-  "claim_token": "ct_01HX...",
+  "claim_token": "claim_01HX...",
   "summary": "实现完成，测试通过",
   "result": {},
   "force": false,
@@ -5480,35 +5557,35 @@ Request：
 }
 ```
 
-`result` 是可选 opaque JSON value；schema 只约束字段存在形式，不收紧其内部结构。
+`result` 是可选的不透明 JSON 值；schema 只约束字段存在形式，不收紧其内部结构。
 
-### 5.6 Submit Review
+### 5.6 提交审核
 
 ```http
 POST /api/v1/tasks/{task_id}/transitions/submit-review
 ```
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
-  "claim_token": "ct_01HX...",
+  "claim_token": "claim_01HX...",
   "summary": "等待人工检查",
   "force": false,
   "actor": "worker-default"
 }
 ```
 
-Submit-review 不接受 `result`；该字段与其它未知顶层字段一样返回 `400`。
+提交审核不接受 `result`；该字段与其他未知顶层字段一样会导致 `400`。
 
-### 5.7 Block
+### 5.7 阻塞
 
 ```http
 POST /api/v1/tasks/{task_id}/transitions/block
 ```
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5520,13 +5597,13 @@ Request：
 }
 ```
 
-### 5.8 Unblock
+### 5.8 解除阻塞
 
 ```http
 POST /api/v1/tasks/{task_id}/transitions/unblock
 ```
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5535,15 +5612,15 @@ Request：
 }
 ```
 
-Response target 由服务端计算，不由客户端指定。
+响应中的目标状态由服务端计算，不由客户端指定。
 
-### 5.9 Reopen
+### 5.9 重新打开
 
 ```http
 POST /api/v1/tasks/{task_id}/transitions/reopen
 ```
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5553,37 +5630,43 @@ Request：
 }
 ```
 
-只允许 reopen `done` task，`reason` 必填且不能为空。Response target 由服务端按 spec、schedule、dependency 和 execution plan readiness 重新计算；`completed_at` 会清空，`result_summary` / natural JSON `result` 保留（持久层仍存于 `result_json`）。事件 `task.reopened` 的 payload 包含 `from`、`to`、`reason` 和 `original_completed_at`。
+只允许重新打开 `done` 任务，`reason` 必填且不能为空。响应中的目标状态由服务端按规格、
+排期、依赖和执行计划就绪情况重新计算；`completed_at` 会被清空，`result_summary` 和自然
+JSON `result` 会保留（持久层仍存于 `result_json`）。`task.reopened` 事件的载荷包含
+`from`、`to`、`reason` 和 `original_completed_at`。
 
-直接依赖该 task 的 child 中，仅 `triage|todo|scheduled|ready` 会重新计算；`running|blocked|review|done|archived` 不隐式改写。
+直接依赖该任务的子任务中，仅 `triage|todo|scheduled|ready` 会重新计算；
+`running|blocked|review|done|archived` 不会被隐式改写。
 
-### 5.10 Reclaim
+### 5.10 回收认领
 
 ```http
 POST /api/v1/tasks/{task_id}/transitions/reclaim
 ```
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "force": false,
   "to_status": "ready",
-  "reason": "claim expired",
-  "actor": "dispatcher"
+  "reason": "认领已过期",
+  "actor": "local-worker"
 }
 ```
 
-`to_status` 是封闭枚举，只接受 `ready` 或 `blocked`；其它 task status 返回 `400`。
+`to_status` 是封闭枚举，只接受 `ready` 或 `blocked`；省略时默认为 `ready`，其他任务
+状态会导致 `400`。目标为 `blocked` 时必须提供非空 `reason`。领取尚未过期时，只有
+`force=true` 才能回收。
 
-### 5.11 Archive
+### 5.11 归档
 
 ```http
 POST /api/v1/tasks/{task_id}/transitions/archive
 ```
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5595,15 +5678,15 @@ Request：
 
 ---
 
-## 6. Dependencies
+## 6. 依赖与执行计划
 
-### 6.1 Add dependency
+### 6.1 添加依赖
 
 ```http
 POST /api/v1/tasks/{child_task_id}/dependencies
 ```
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5613,31 +5696,30 @@ Request：
 }
 ```
 
-Response status is `201 Created` when a new edge is inserted. Re-adding the
-same parent/child edge is idempotent and returns `200 OK` with the same
-dependency envelope; it does not write another `dependency.added` event or
-recompute the child status again. Dependency changes may demote an invalid
-`ready` child to `todo`, but they do not auto-promote `todo` children to
-`ready`. Reopening a `done` parent recomputes direct children only when the child is `triage|todo|scheduled|ready`; it leaves `running|blocked|review|done|archived` children unchanged.
+插入新依赖边时返回 `201 Created`。重复添加同一父子依赖是幂等操作，会以相同的依赖封装
+返回 `200 OK`；不会再次写入 `dependency.added` 事件，也不会重复计算子任务状态。
+依赖变化可能把不再合法的 `ready` 子任务降为 `todo`，但不会自动把 `todo` 子任务推进到
+`ready`。重新打开 `done` 父任务时，仅当直接子任务处于
+`triage|todo|scheduled|ready` 才会重新计算；`running|blocked|review|done|archived`
+子任务保持不变。
 
-### 6.2 Remove dependency
+### 6.2 移除依赖
 
 ```http
 DELETE /api/v1/tasks/{child_task_id}/dependencies/{parent_task_id}
 ```
 
-### 6.3 List dependencies
+### 6.3 列出依赖
 
 ```http
 GET /api/v1/tasks/{task_id}/dependencies
 ```
 
-Add/remove/list dependency endpoints return the same dependency envelope. For
-the existing wire shape, `parents` and `children` are full `ApiTask` arrays.
-The additional `task` and `edges` fields provide a compact hydrated relationship
-view with stable named parent/child objects.
+添加、移除和列出依赖的端点返回同一种依赖封装。在现有线上结构中，`parents` 和
+`children` 是完整的 `ApiTask` 数组；额外的 `task` 和 `edges` 字段提供紧凑且已展开的
+关系视图，其中父子对象使用稳定命名。
 
-Response：
+响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5648,7 +5730,7 @@ Response：
       "board_id": "b_default",
       "board_slug": "default",
       "ref": "default#2",
-      "title": "child",
+      "title": "子任务",
       "status": "todo"
     },
     "parents": [],
@@ -5660,7 +5742,7 @@ Response：
           "board_id": "b_default",
           "board_slug": "default",
           "ref": "default#1",
-          "title": "parent",
+          "title": "父任务",
           "status": "done"
         },
         "child": {
@@ -5668,7 +5750,7 @@ Response：
           "board_id": "b_default",
           "board_slug": "default",
           "ref": "default#2",
-          "title": "child",
+          "title": "子任务",
           "status": "todo"
         }
       }
@@ -5677,13 +5759,11 @@ Response：
 }
 ```
 
-### 6.4 Steps and execution plan
+### 6.4 步骤与执行计划
 
-Steps are ordered execution-plan items owned by a task. A step can be plain
-text, or it can link to an existing normal task for context. A linked task is
-not a dependency edge: linking does not affect dependency readiness, and the
-linked task status does not automatically complete the step. Step completion is
-tracked independently with `todo | done | skipped`.
+步骤是归属于任务的有序执行计划项。步骤可以是纯文本，也可以链接一个现有普通任务作为
+上下文。链接任务不等于建立依赖边：链接不会影响依赖就绪判断，链接任务的状态也不会自动
+完成该步骤。步骤完成状态通过 `todo | done | skipped` 独立跟踪。
 
 ```http
 GET /api/v1/tasks/{task_id}/steps
@@ -5696,13 +5776,13 @@ POST /api/v1/tasks/{task_id}/steps/{step_id}/reopen
 POST /api/v1/tasks/{task_id}/execution-plan/not-required
 ```
 
-Create request:
+创建请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
-  "title": "Write acceptance checks",
-  "body": "Cover dependency and plan guards",
+  "title": "编写验收检查",
+  "body": "覆盖依赖和执行计划保护",
   "linked_task_ref": "default#13",
   "position": 2048,
   "required": true,
@@ -5710,16 +5790,15 @@ Create request:
 }
 ```
 
-`linked_task_ref` is optional. Omit it for a plain text step. When present, it
-must resolve to a non-archived task on the same board and must not be the parent
-task itself.
+`linked_task_ref` 可选；纯文本步骤应省略它。提供时，它必须解析到同一看板上未归档的任务，
+且不能指向父任务本身。
 
-Update request:
+更新请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
-  "title": "Write acceptance checks",
+  "title": "编写验收检查",
   "body": null,
   "linked_task_ref": "default#14",
   "unlink_task": false,
@@ -5729,29 +5808,29 @@ Update request:
 }
 ```
 
-Step status requests:
+步骤状态请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
-  "note": "Implemented and verified",
+  "note": "已经实现并验证",
   "actor": "alice"
 }
 ```
 
-`skip` and `reopen` use the same envelope but name the text field `reason`.
+`skip` 和 `reopen` 使用相同的封装，但文本字段名为 `reason`。
 
-Mark not required request:
+标记为不需要执行计划的请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
-  "reason": "Small text-only cleanup",
+  "reason": "只是一次小型文本整理",
   "actor": "alice"
 }
 ```
 
-Step list and mutation responses return the parent task step snapshot:
+步骤列表和变更响应都会返回父任务的步骤快照：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5760,10 +5839,10 @@ Step list and mutation responses return the parent task step snapshot:
     "task_id": "t_parent",
     "steps": [
       {
-        "id": "st_01HX...",
+        "id": "step_01HX...",
         "parent_task_id": "t_parent",
-        "title": "Write acceptance checks",
-        "body": "Cover dependency and plan guards",
+        "title": "编写验收检查",
+        "body": "覆盖依赖和执行计划保护",
         "linked_task": { "id": "t_child", "ref": "default#13" },
         "position": 2048,
         "required": true,
@@ -5789,25 +5868,22 @@ Step list and mutation responses return the parent task step snapshot:
 }
 ```
 
-`POST /execution-plan/not-required` returns the execution plan record directly.
-Missing linked task targets return `404 not_found`; self-links, cross-board
-links, archived linked tasks, and empty titles return `400 invalid_input` in the
-standard error envelope. Completing or archiving a parent with incomplete
-required steps returns `409 steps_incomplete`. Required steps are complete for
-that guard only when their step status is `done` or `skipped`.
+`POST /execution-plan/not-required` 直接返回执行计划记录。链接目标不存在时返回
+`404 not_found`；链接自身、跨看板链接、链接已归档任务或标题为空时，以标准错误封装返回
+`400 invalid_input`。完成或归档仍有必需步骤未完成的父任务时返回
+`409 steps_incomplete`。对这项保护而言，必需步骤只有在状态为 `done` 或 `skipped`
+时才算完成。
 
-### 6.5 Task neighborhood
+### 6.5 任务邻域
 
 ```http
 GET /api/v1/tasks/{task_id}/neighborhood?depth=1&limit_nodes=250&include_archived_context=false
 ```
 
-This read-only endpoint returns the selected task, direct dependency parents,
-direct dependency children, direct linked-step parents/children, and every dependency or step edge whose source and target are
-both visible. V1 only accepts `depth=1`; deeper graph expansion is intentionally
-reserved for later.
+这个只读端点返回选中的任务、直接依赖父任务、直接依赖子任务、直接步骤链接的父子任务，
+以及起点和终点都可见的每一条依赖边或步骤边。V1 只接受 `depth=1`；更深的图展开留待以后实现。
 
-Response:
+响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5844,39 +5920,40 @@ Response:
 }
 ```
 
-`task` uses the same public task DTO as task list/detail responses and does not
-expose `claim_token`.
+`task` 与任务列表和详情响应使用相同的公开任务 DTO，不会暴露 `claim_token`。
 
-### 6.6 Board task map
+### 6.6 看板任务图
 
 ```http
 GET /api/v1/boards/{board}/task-map?active_only=true&context_depth=1&limit_nodes=250&include_done_context=true&include_archived_context=false&hide_isolated=false
 ```
 
-This read-only endpoint returns an operational graph for the board. By default it
-includes all active, non-archived tasks (`triage`, `todo`, `scheduled`, `ready`,
-`running`, `blocked`, `review`) plus at most one dependency-hop of non-archived
-context. Done context is included by default and marked `context_only`; archived
-context is excluded unless explicitly requested. V1 only accepts
-`context_depth=0` or `context_depth=1`.
+这个只读端点返回看板的工作关系图。默认包含所有活跃且未归档的任务
+（`triage`、`todo`、`scheduled`、`ready`、`running`、`blocked`、`review`），以及最多一跳的
+未归档依赖上下文。默认包含 `done` 上下文并标记为 `context_only`；只有显式请求时才包含
+已归档上下文。V1 只接受 `context_depth=0` 或 `context_depth=1`。
 
-Node roles are `active` for active board tasks and `context` for one-hop context.
-Dependency and step edges are returned only when both endpoints are visible. Dependency edges use `kind=dependency`, `required=true`, and `blocking=true`; step edges use `kind=step`, preserve the step `required` flag, and set `blocking=false`. Pure text steps have no task node and therefore do not appear as graph edges. The `meta` object reports active statuses, node/edge counts, truncation, limit, and the query context flags.
+活跃看板任务的节点角色为 `active`，一跳上下文的角色为 `context`。只有边的两个端点都可见时
+才返回依赖边和步骤边。依赖边使用 `kind=dependency`、`required=true` 和 `blocking=true`；
+步骤边使用 `kind=step`，保留步骤的 `required` 标记，并设置 `blocking=false`。纯文本步骤没有
+任务节点，因此不会出现在图边中。`meta` 对象报告活跃状态、节点数、边数、是否截断、数量上限
+和查询中的上下文选项。
 
 
 ---
 
-## 7. Comments
+## 7. 评论
 
-### 7.1 List comments
+### 7.1 列出评论
 
 ```http
 GET /api/v1/tasks/{task_id}/comments
 ```
 
-Comments are task-id scoped. Listing comments remains available for archived boards because it is read-only audit history; creating comments on archived boards is rejected.
+评论以任务 ID 为作用域。列出评论属于只读审计历史，因此归档看板仍可调用；在归档看板上
+创建评论会被拒绝。
 
-Response：
+响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5898,13 +5975,13 @@ Response：
 }
 ```
 
-### 7.2 Add comment
+### 7.2 添加评论
 
 ```http
 POST /api/v1/tasks/{task_id}/comments
 ```
 
-Request：
+请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -5918,87 +5995,101 @@ Request：
 }
 ```
 
-Notes：
+说明：
 
 - `kind` 默认为 `note`，当前允许 `note|decision|signal`。
-- `decision` records meaningful multi-option choices; body remains the readable fallback, and structured decision metadata is carried by `metadata`.
-- `author_type` marks who produced the comment and allows `user|agent`. If omitted, the service defaults to `user`.
-- `agent_type` is optional open text for `author_type=agent` comments, such as `executor` or `reviewer`. Non-empty `agent_type` with `author_type=user` is rejected as `400 invalid_input`.
-- `metadata` 默认为 `{}`，必须是 JSON object；response 同样使用自然 JSON `metadata` object。普通 note/signal metadata 保持开放且无损，不能因为键名与专用协议碰撞而在 transaction 提交后收紧。`kind=decision` 时必须包含非空 `options`，每个 option 必须有非空 `slug` / `title` / `detail`，slug 必须是唯一小写 ASCII slug，`selected` 必须匹配 option slug，`reason` 必须非空，`risk` / `verification` 如果出现也必须非空。无效 decision metadata 返回 `400 invalid_input`。
-- `author` 走通用 actor 语义；也可以用 `X-KB-Actor` 或 server 默认 actor。
-- 创建评论会写入 `task.comment.created` event。
+- `decision` 记录有实际意义的多选项决策；`body` 始终是可读的后备说明，结构化决策数据放在 `metadata` 中。
+- `author_type` 标记评论来源，可取 `user|agent`；省略时服务层默认为 `user`。
+- 当 `author_type=agent` 时，`agent_type` 是可选的开放文本，例如 `executor` 或 `reviewer`。
+  当 `author_type=user` 时提供非空 `agent_type` 会返回 `400 invalid_input`。
+- `metadata` 默认为 `{}`，必须是 JSON 对象；响应同样使用自然 JSON `metadata` 对象。
+  普通备注或信号的元数据保持开放且无损，不能因为键名与专用协议碰撞而在事务提交后收紧。
+  当 `kind=decision` 时必须包含非空 `options`；每个选项必须有非空的 `slug`、`title` 和
+  `detail`；slug 必须是唯一的小写 ASCII slug；`selected` 必须匹配某个选项 slug；
+  `reason` 必须非空；`risk` 和 `verification` 如果出现也必须非空。无效的决策元数据返回
+  `400 invalid_input`。
+- `author` 使用通用的操作者语义；也可以使用 `X-KB-Actor` 或服务端默认操作者。
+- 创建评论会写入 `task.comment.created` 事件。
 
 
-### 7.3 B2-C3 comments wire contracts
+### 7.3 评论端点的精确线上契约
 
-`GET` 与 `POST /api/v1/tasks/{task_id}/comments` 各自拥有独立、闭合的 path 与 success root；
-`POST` 另有独立、闭合的 request root。两者只共享 contract-owned `ApiComment` component 与
-既有 shared error component。GET 没有 query/body，POST 没有 query；B7 已为两个 endpoint
-登记并采用精确 header contract。endpoint surface migration 仍诚实标记为 `Generated`，直到
-后续 API adoption cohort 补齐真实 router producer/contract consumer 的 exact surface evidence。
+`GET` 与 `POST /api/v1/tasks/{task_id}/comments` 各自拥有独立、闭合的路径与成功响应根；
+`POST` 另有独立、闭合的请求根。两者只共享契约拥有的 `ApiComment` 组件和既有共享错误组件。
+GET 没有查询或请求体，POST 没有查询；两个端点都已登记并采用精确请求头契约，也已具备
+真实路由生产者和契约消费者的精确证据，迁移状态为 `Adopted`。
 
 `ApiComment.author_type` 仅允许 `user|agent`，`kind` 仅允许 `note|decision|signal`，
-`agent_type` 是必须出现但可为 `null` 的字段。`metadata` 是开放、无损的 response object。
-create request 的 `metadata` 保持开放 JSON object；decision 的精确 typed shape 由独立的
-`metadata.decision.input` / `NoTransport` contract 与真实 CLI producer/consumer witnesses 拥有。
-运行时原始 JSON object 继续进入 SQLite service 的 decision cross-field guard，schema 不替代
-selected/option uniqueness、slug、非空值、board archive 与 transaction/event 约束。
+`agent_type` 是必须出现但可为 `null` 的字段。`metadata` 是开放、无损的响应对象。
+创建请求中的 `metadata` 保持为开放 JSON 对象；决策的精确强类型结构由独立的
+`metadata.decision.input` / `NoTransport` 契约和真实 CLI 生产者与消费者证据拥有。
+运行时原始 JSON 对象继续进入 SQLite 服务层的决策跨字段保护；模式文件不能替代
+选中项与选项唯一性、slug、非空值、看板归档以及事务和事件约束。
 
 ---
 
-## 8. Runs
+## 8. 执行记录
 
-### 8.1 List task runs
+### 8.1 列出任务执行记录
 
 ```http
 GET /api/v1/tasks/{task_id}/runs
 ```
 
-Run listing is task-id scoped and remains available for archived boards as read-only audit history.
+执行记录列表以任务 ID 为作用域，并作为只读审计历史继续对已归档看板开放。
 
-### 8.2 Get run
+### 8.2 获取执行记录
 
 ```http
 GET /api/v1/runs/{run_id}
 ```
 
-### 8.3 Get run log
+### 8.3 获取执行日志
 
 ```http
 GET /api/v1/runs/{run_id}/log
 ```
 
-Response：
+响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "data": {
     "run_id": "r_01HX...",
-    "content": "worker output\n",
+    "content": "执行器输出\n",
     "truncated": false
   }
 }
 ```
 
-Notes：
+说明：
 
-- Response 不包含 `claim_token`。
-- 当前最多返回末尾 256 KiB；更大的 log 会设置 `truncated: true`。
-- 若 run 没有 `log_path` 或文件不存在，返回 `not_found`。
+- 响应不包含 `claim_token`。
+- 当前最多返回日志末尾 256 KiB；更大的日志会设置 `truncated: true`。
+- 若执行记录没有 `log_path` 或文件不存在，返回 `not_found`。
 - 若 `log_path` 不在受信任日志目录或文件名不匹配 `<run_id>.log`，返回 `invalid_input`。
+
+### 8.4 读取契约
+
+列表与详情端点分别拥有闭合的路径和成功响应契约，只共享由契约定义的 `ApiRun`。
+执行状态是闭合枚举：`running|succeeded|failed|canceled|expired`。
+`worker_profile`、`worker_pid`、`finished_at`、`exit_code`、`summary` 和 `error`
+都必须出现，但值可以为 `null`。`claim_token` 只出现在显式认领转换的响应中，不进入
+执行记录列表或详情；SQLite `log_path` 只供独立日志端点解析受信任文件，也不进入执行记录
+列表或详情。上述读取端点均已采用精确契约。
 
 ---
 
-## 9. Stats
+## 9. 统计
 
-### 9.1 Queue stats
+### 9.1 队列统计
 
 ```http
 GET /api/v1/stats?board=default
 ```
 
-Response：
+响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6014,8 +6105,8 @@ Response：
       {
         "task_id": "t_01HX...",
         "seq": 12,
-        "title": "stale worker",
-        "claim_owner": "dispatcher",
+        "title": "执行器已失联",
+        "claim_owner": "local-worker",
         "claim_expires_at": 1717520000000,
         "last_heartbeat_at": 1717519900000,
         "current_run_id": "r_01HX...",
@@ -6024,7 +6115,7 @@ Response：
       }
     ],
     "blocked_reasons": [
-      {"reason": "waiting on operator", "count": 2}
+      {"reason": "等待操作人员处理", "count": 2}
     ],
     "unplanned_active_tasks": 4,
     "active_parents_with_incomplete_required_steps": 1
@@ -6032,24 +6123,24 @@ Response：
 }
 ```
 
-Notes：
+说明：
 
 - `stale_claims` 只包含 `running` 且 `claim_expires_at <= now` 的任务。
 - `blocked_reasons` 按数量降序、reason 升序排序。
 
 ---
 
-## 10. Events
+## 10. 事件
 
-### 10.1 List events
+### 10.1 列出事件
 
 ```http
 GET /api/v1/events?board=default&after=0&limit=100
 ```
 
-`board` accepts board slug or id. Events for archived boards remain readable so clients can inspect the audit trail after archive.
+`board` 接受看板 slug 或 ID。归档看板的事件仍可读取，便于客户端检查归档后的审计轨迹。
 
-Response：
+响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6073,13 +6164,13 @@ Response：
 }
 ```
 
-### 10.2 SSE stream
+### 10.2 SSE 事件流
 
 ```http
 GET /api/v1/stream/events?board=default&after=123
 ```
 
-SSE event：
+SSE 事件：
 
 ```text
 event: task.claimed
@@ -6087,52 +6178,35 @@ id: 124
 data: {"id":124,"event_id":"e_...","board_id":"b_...","task_id":"t_...","run_id":"r_...","kind":"task.claimed","actor":"alice","payload":{"claim_owner":"alice","metadata":{}},"created_at":1717520000000}
 ```
 
-`board`、`task_id`、`after`、`limit` 是该 endpoint 唯一接受的 query key，均只能出现一次；
-未知或重复 key 返回标准 `400 invalid_input` envelope。默认值分别为 `default`、未提供、`0`、
-`100`，runtime 将 `limit` 防御性限制到 `1000`。每个事件严格按 `event`、`id`、`data`
-frame 顺序输出；`data` 是完整的 `StreamEventData` JSON，不允许额外字段。
-`task_id`、`run_id`、`actor` 都是 required-nullable：键必须出现，值可以显式为 `null`。
-39 个 known kind 的 payload 与 kind 使用同一 tagged union；缺字段、额外字段或 sibling
-status/state 错配会 fail closed。未来 unknown kind 的合法 JSON payload 保持 lossless。
+`board`、`task_id`、`after`、`limit` 是该端点唯一接受的查询键，均只能出现一次；
+未知或重复键返回标准 `400 invalid_input` 封装。默认值分别为 `default`、未提供、`0` 和
+`100`，运行时会把 `limit` 防御性限制到 `1000`。每个事件严格按 `event`、`id`、`data`
+帧顺序输出；`data` 是完整的 `StreamEventData` JSON，不允许额外字段。
+`task_id`、`run_id`、`actor` 都是必须存在但可为空：键必须出现，值可以显式为 `null`。
+39 个已知事件种类的载荷与种类使用同一个带标签联合；字段缺失、出现额外字段或同级状态
+错配时会失败关闭。未来未知事件种类的合法 JSON 载荷保持无损。
 
-Reconnect：
+重新连接：
 
-- V1 implementation emits a finite snapshot of existing matching events and closes; clients should reconnect or poll `GET /api/v1/events` for updates.
-- Browser clients may send Last-Event-ID, but V1 only honors the `after` query parameter.
-- V1 finite snapshot 不发送 SSE comment/heartbeat frame；因此 heartbeat 不是 JSON payload
-  contract，`Last-Event-ID` 也不是已采用的 header input contract。这两项只有未来 runtime
-  真正实现后才能迁移为 typed contract。
-- 若 event 已被压缩/清理，客户端重新 fetch board snapshot。
+- V1 实现会发送当前匹配事件的有限快照后关闭连接；客户端应重新连接，或轮询 `GET /api/v1/events` 获取更新。
+- 浏览器客户端可以发送 `Last-Event-ID`，但 V1 只处理 `after` 查询参数。
+- V1 有限快照不发送 SSE 注释或心跳帧；因此心跳不是 JSON 载荷契约，`Last-Event-ID`
+  也不是已采用的请求头输入契约。这两项只有未来运行时真正实现后才能迁移为强类型契约。
+- 若事件已被压缩或清理，客户端应重新获取看板快照。
 
 ---
 
-## 11. Columns / UI Settings
+## 11. 看板列与界面设置
 
-### 11.1 List columns
+### 11.1 列出看板列
 
 ```http
 GET /api/v1/boards/{board}/columns
 ```
 
-### 11.2 Update columns
-
-```http
-PATCH /api/v1/boards/{board}/columns
-```
-
-Request：
-
-<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
-```json
-{
-  "columns": [
-    {"id": "col_triage", "title": "Triage", "position": 10, "hidden": false},
-    {"id": "col_done", "title": "Done", "position": 80, "hidden": false}
-  ]
-}
-```
-
-MVP 不允许 column 改变 canonical status。
+当前只开放读取接口，服务端没有看板列更新路由，因此暂时不能通过 HTTP API 修改看板列。
+返回的列状态仍对应规范任务状态；调用方不得把读取接口推断为可写配置接口。
+读取端点的路径、请求头和成功响应精确契约均已采用。
 
 ---
 
@@ -6167,7 +6241,7 @@ POST /api/v1/boards/{board}/label-ontology/revert
 POST /api/v1/boards/{board}/label-ontology/validate
 ```
 
-Board 级标签创建请求：
+看板级标签创建请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6177,7 +6251,7 @@ Board 级标签创建请求：
 }
 ```
 
-Label 响应结构，用于 board 级标签创建和 label 列表：
+标签响应结构，用于看板级标签创建和标签列表：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6191,13 +6265,13 @@ Label 响应结构，用于 board 级标签创建和 label 列表：
 }
 ```
 
-`POST /api/v1/boards/{board}/labels` 按 board 作用域创建 label，并按 label
-名称保持幂等。如果该 board 上已存在同名 label，响应返回已有 label。空白 name
-会被拒绝。Base label identity CRUD 属于 vocabulary registry，不属于 ontology
-ledger；创建 label identity 不写 `label_ontology_actions`，也不会创建
+`POST /api/v1/boards/{board}/labels` 按看板作用域创建标签，并按标签
+名称保持幂等。如果该看板上已存在同名标签，响应返回已有标签。空白 `name`
+会被拒绝。基础标签标识的增删改查属于词汇表注册表，不属于本体台账；
+创建标签标识不会写入 `label_ontology_actions`，也不会创建
 `label_semantics` 或 `label_atoms`。
 
-Task 标签添加请求：
+任务标签添加请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6215,7 +6289,7 @@ Task 标签添加请求：
 }
 ```
 
-如果需要在绑定时显式创建缺失 label identity：
+如果需要在绑定时显式创建缺失的标签标识：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6225,43 +6299,42 @@ Task 标签添加请求：
 }
 ```
 
-`POST /api/v1/tasks/{task_id}/labels` 会把指定 name 或 names 的 label 绑定到 task。
+`POST /api/v1/tasks/{task_id}/labels` 会把 `name` 或 `names` 指定的标签绑定到任务。
 `name` 与 `names` 互斥；二者都缺失、二者同时出现或 `names` 为空数组都会返回
-invalid input。批量添加在同一 transaction 内执行，并先验证所有 label 名称；如果
-任一 label 为空白或非法，不会创建 canonical label，也不会留下部分 task-label 绑定。
-默认情况下，如果该 task 所属 board 上还不存在指定 name 的 label，请求会返回
-invalid input，且不会增加 `labels` 或 `task_labels` 记录。传入
-`"create_missing": true` 时，API 会只创建缺失的 canonical label identity，并绑定到
-task；不会生成 `label_semantics` 或 `label_atoms`。重复绑定已有 task-label 关系不会
-重复写入。成功响应返回更新后的 task，包含当前 `labels` 列表；显式创建模式下如果
-本次创建了 label，响应 `meta.created_labels` 会列出新建 labels。
+`invalid_input`。批量添加在同一事务内执行，并先验证所有标签名称；如果
+任一标签为空白或非法，不会创建规范标签，也不会留下部分任务标签绑定。
+默认情况下，如果该任务所属看板上还不存在指定名称的标签，请求会返回
+`invalid_input`，且不会增加 `labels` 或 `task_labels` 记录。传入
+`"create_missing": true` 时，API 只会创建缺失的规范标签标识并绑定到
+任务；不会生成 `label_semantics` 或 `label_atoms`。重复绑定已有任务标签关系不会
+重复写入。成功响应返回更新后的任务及当前 `labels` 列表；显式创建模式下若
+本次创建了标签，响应中的 `meta.created_labels` 会列出新标签。
 
-Task label bootstrap 请求：
+任务标签引导创建请求：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "name": "database",
-  "description": "Database persistence work",
-  "applies_when": ["touches SQLite migrations"],
-  "excludes_when": ["UI-only polish"],
-  "positive_examples": ["new table migration"],
-  "negative_examples": ["CSS-only tweak"],
+  "description": "数据库持久化工作",
+  "applies_when": ["涉及 SQLite 迁移"],
+  "excludes_when": ["仅调整界面样式"],
+  "positive_examples": ["新增数据表迁移"],
+  "negative_examples": ["只修改 CSS"],
   "actor": "alice"
 }
 ```
 
-`POST /api/v1/tasks/{task_id}/labels/bootstrap` 是一次性 new-label adoption API：
-在同一 transaction 内创建 task 所属 board 上缺失的 canonical label，或复用没有既有
-semantics 的同名 label，写入该 label 的 `label_semantics`，同步重建 SQLite
-`label_atoms`，标脏派生的 label atom vector index，并把该 label 绑定到 task。
-`name` 按 label 名称解析；空白名称会被拒绝。语义输入会 trim 并丢弃空白值，且必须至少
+`POST /api/v1/tasks/{task_id}/labels/bootstrap` 是一次性采用新标签的 API：
+它会在同一事务内创建任务所属看板上缺失的规范标签，或复用尚无既有语义的同名标签，
+写入该标签的 `label_semantics`，同步重建 SQLite `label_atoms`，标记派生的标签原子
+向量索引为脏，并把该标签绑定到任务。`name` 按标签名称解析；空白名称会被拒绝。
+语义输入会去除两端空白并丢弃空白值，且必须至少
 提供 `description` 或一个非空语义数组值。
 
-Bootstrap API 默认不会覆盖已有 `label_semantics`。如果同名 label 已经有
-semantics，请求会失败，并要求调用方改用专用 semantics mutation 或
-proposal/adoption 路径；重复调用同一 task/label 只在目标 label 仍无 semantics 时保持
-task-label 绑定幂等。成功响应状态为 `201 Created`：
+引导创建 API 默认不会覆盖已有的 `label_semantics`。如果同名标签已经有语义，
+请求会失败，并要求调用方改用专用语义变更或提议与采用路径；只有目标标签仍无语义时，
+重复调用同一任务和标签才会保持任务标签绑定幂等。成功响应状态为 `201 Created`：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6278,40 +6351,38 @@ task-label 绑定幂等。成功响应状态为 `201 Created`：
       "label_id": "l_01HX...",
       "board_id": "b_01HX...",
       "label_name": "database",
-      "description": "Database persistence work",
-      "applies_when": ["touches SQLite migrations"],
-      "excludes_when": ["UI-only polish"],
-      "positive_examples": ["new table migration"],
-      "negative_examples": ["CSS-only tweak"],
+      "description": "数据库持久化工作",
+      "applies_when": ["涉及 SQLite 迁移"],
+      "excludes_when": ["仅调整界面样式"],
+      "positive_examples": ["新增数据表迁移"],
+      "negative_examples": ["只修改 CSS"],
       "atoms": []
     }
   }
 }
 ```
 
-HTTP bootstrap 不包含 CLI `--verify` 的 orchestration：请求体没有 vector config、
-minimum score 或 verify flag，响应也没有 `verification` 字段。该 endpoint 不会替调用方
-重建 label atom vector index、运行 `label suggest` 或检查分数门槛；需要 pre-commit
-staged verification 的零写入失败语义时使用 CLI `label bootstrap --verify`。API 调用后如需
-诊断，可显式执行 index rebuild / suggest / review 流程，但这不具备 CLI staged verifier 的
-同一事务 adoption contract。
+HTTP 引导创建不包含 CLI `--verify` 的编排：请求体没有向量配置、最低分数或验证标记，
+响应也没有 `verification` 字段。该端点不会替调用方重建标签原子向量索引、运行
+`label suggest` 或检查分数门槛；需要提交前分阶段验证且失败时零写入的语义时，应使用
+CLI `label bootstrap --verify`。API 调用后如需诊断，可显式执行索引重建、建议和审核流程，
+但它不具备 CLI 分阶段验证器的同一事务采用契约。
 
-`DELETE /api/v1/tasks/{task_id}/labels/{label_id}` 会移除 task 上的指定 label，
-`{label_id}` 接受 label id 或 label 名称。成功响应同样返回更新后的 task，包含
-当前 `labels` 列表。只有关联行发生变化时，label attach/remove 才写入 task
-label event；该操作不改变 task status。
+`DELETE /api/v1/tasks/{task_id}/labels/{label_id}` 会移除任务上的指定标签，
+`{label_id}` 接受标签 ID 或标签名称。成功响应同样返回更新后的任务及当前 `labels`
+列表。只有关联行发生变化时，标签绑定或移除才会写入任务标签事件；该操作不改变任务状态。
 
-### 12.1 Label semantics, atoms, and atom index
+### 12.1 标签语义、原子与原子索引
 
-`GET /api/v1/boards/{board}/labels/semantics` 返回当前 board 已定义 semantics 的
-列表。`GET /api/v1/boards/{board}/labels/{label_id}/semantics` 返回单个 label
-semantics；`{label_id}` 只接受 canonical `l_...` label id。Label name 允许包含
-`/` 等 path 不安全字符，因此 semantics API path 不支持按 label name 寻址；需要按
-名称查找时，先调用 `GET /api/v1/boards/{board}/labels` 获取对应 id。
+`GET /api/v1/boards/{board}/labels/semantics` 返回当前看板上已定义语义的列表。
+`GET /api/v1/boards/{board}/labels/{label_id}/semantics` 返回单个标签的语义；
+`{label_id}` 只接受规范的 `l_...` 标签 ID。标签名称允许包含 `/` 等不适合放入路径的字符，
+因此语义 API 的路径不支持按标签名称寻址；需要按名称查找时，应先调用
+`GET /api/v1/boards/{board}/labels` 获取对应 ID。
 
-`PUT /api/v1/boards/{board}/labels/{label_id}/semantics` 写入已有 label 的语义字典，
-同步重建该 label 的 SQLite `label_atoms`，并标脏派生的 label atom vector index。
-请求 body：
+`PUT /api/v1/boards/{board}/labels/{label_id}/semantics` 写入已有标签的语义字典，
+同步重建该标签的 SQLite `label_atoms`，并标记派生的标签原子向量索引为脏。
+请求体：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6319,13 +6390,13 @@ semantics；`{label_id}` 只接受 canonical `l_...` label id。Label name 允�
   "actor": "alice",
   "expected_semantics_hash": "optional-current-hash",
   "replace": false,
-  "reason": "Add a repeated boundary observed during label review",
+  "reason": "补充标签审核中反复出现的边界",
   "source_signal_ids": ["los_..."],
-  "description": "Backend service work",
-  "applies_when": ["touches Rust service code"],
-  "excludes_when": ["CSS-only"],
-  "positive_examples": ["add API handler"],
-  "negative_examples": ["adjust spacing"],
+  "description": "后端服务工作",
+  "applies_when": ["涉及 Rust 服务代码"],
+  "excludes_when": ["仅修改 CSS"],
+  "positive_examples": ["新增 API 处理器"],
+  "negative_examples": ["调整界面间距"],
   "remove_applies_when": [],
   "remove_excludes_when": [],
   "remove_positive_examples": [],
@@ -6333,23 +6404,21 @@ semantics；`{label_id}` 只接受 canonical `l_...` label id。Label name 允�
 }
 ```
 
-默认 `replace=false`，请求按 patch 语义处理：`description` 只在提供非空值时覆盖当前
-description，数组字段会追加到对应集合，`remove_*` 数组删除匹配文本；缺省字段不会清空
-已有 semantics。传 `replace=true` 时才完整替换五个语义字段，此时缺省数组视为空数组，
-并且不能同时传任何 `remove_*` 字段。`expected_semantics_hash` 是 CAS guard；如果与
-当前 `semantics_hash` 不一致，请求返回 conflict 且不写入。服务会 trim 并丢弃空白值。
-每次实际改变 canonical semantics/atoms 的 constructive semantics write 都会在同一
-SQLite transaction 写入一条 `update_semantics` root ontology action，记录 actor、reason、
-source signal links（如有）、before/after hash 和单份 change snapshot；实际 added/removed
-atoms 通过 `label_ontology_action_atom_effects` 写 `added` / `removed` rows。Description-only
-patch 会写一条 root action 和零 atom effects；no-op patch 不写 action/effects，也不标脏
-label atom index。生成 atoms 时，有 description
-的 label 会生成一个 canonical `description` atom：
-`label: {name}\ndescription: {description}`；没有 description 时才使用 `name`
-fallback atom。atom text 会进一步规范化 whitespace：每个非空行内部 collapse，
-canonical 行分隔保留。同一 label 下相同 `polarity + kind + normalized_text` 的 atom
-会去重并保留首次 ordinal，`id` / `content_hash` 不包含 ordinal，因此只调整数组顺序
-不会改变同一文本 atom identity。响应使用 `DataEnvelope`：
+默认 `replace=false`，请求按补丁语义处理：`description` 只在提供非空值时覆盖当前描述，
+数组字段会追加到对应集合，`remove_*` 数组删除匹配文本；省略字段不会清空已有语义。
+传入 `replace=true` 时才完整替换五个语义字段，此时省略的数组视为空数组，并且不能同时传入
+任何 `remove_*` 字段。`expected_semantics_hash` 是 CAS 保护条件；如果与当前
+`semantics_hash` 不一致，请求返回冲突且不写入。服务会去除两端空白并丢弃空白值。
+每次实际改变规范语义或原子的建设性写入，都会在同一 SQLite 事务中写入一条
+`update_semantics` 根本体操作，记录操作者、原因、来源信号链接（如有）、前后哈希和一份
+变更快照；实际新增或移除的原子通过 `label_ontology_action_atom_effects` 写成
+`added` / `removed` 行。仅修改描述的补丁会写一条根操作和零条原子效果；无变化补丁不会写
+操作或效果，也不会标记标签原子索引为脏。生成原子时，有描述的标签会生成一个规范
+`description` 原子：`label: {name}\ndescription: {description}`；没有描述时才使用
+`name` 后备原子。原子文本还会规范化空白：折叠每个非空行内部的空白，但保留规范换行。
+同一标签下 `polarity + kind + normalized_text` 相同的原子会去重并保留第一次出现的
+`ordinal`；`id` 和 `content_hash` 不包含 `ordinal`，因此仅调整数组顺序不会改变同一文本
+原子的标识。响应使用 `DataEnvelope`：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6358,11 +6427,11 @@ canonical 行分隔保留。同一 label 下相同 `polarity + kind + normalized
     "label_id": "l_01HX...",
     "board_id": "b_01HX...",
     "label_name": "backend",
-    "description": "Backend service work",
-    "applies_when": ["touches Rust service code"],
-    "excludes_when": ["CSS-only"],
-    "positive_examples": ["add API handler"],
-    "negative_examples": ["adjust spacing"],
+    "description": "后端服务工作",
+    "applies_when": ["涉及 Rust 服务代码"],
+    "excludes_when": ["仅修改 CSS"],
+    "positive_examples": ["新增 API 处理器"],
+    "negative_examples": ["调整界面间距"],
     "created_at": 1717520000000,
     "updated_at": 1717520000000,
     "atoms": [
@@ -6373,7 +6442,7 @@ canonical 行分隔保留。同一 label 下相同 `polarity + kind + normalized
         "label_name": "backend",
         "polarity": "positive",
         "kind": "applies_when",
-        "text": "touches Rust service code",
+        "text": "涉及 Rust 服务代码",
         "ordinal": 2,
         "content_hash": "...",
         "created_at": 1717520000000,
@@ -6385,15 +6454,14 @@ canonical 行分隔保留。同一 label 下相同 `polarity + kind + normalized
 ```
 
 `DELETE /api/v1/boards/{board}/labels/{label_id}/semantics?expected_semantics_hash=<hash>&reason=<text>`
-是 CAS-protected semantics clear：`expected_semantics_hash` 与非空 `reason` 都必填。
-它删除该 label 的 semantics 与 SQLite atoms，但不删除 canonical label identity 或
-task-label binding；同一 transaction 写一条 `update_semantics` root ontology action，
-after snapshot 为空，并为实际 removed atoms 写 `removed` atom effects，随后标脏 label
-atom index。Hash mismatch 时 canonical、action、effects 和 dirty state 全不变。成功返回：
+是受 CAS 保护的语义清除操作：`expected_semantics_hash` 与非空 `reason` 都必填。
+它删除该标签的语义与 SQLite 原子，但不删除规范标签标识或任务标签绑定；同一事务会写入一条
+`update_semantics` 根本体操作，变更后快照为空，并为实际移除的原子写入 `removed` 效果，
+随后标记标签原子索引为脏。哈希不匹配时，规范数据、操作、效果和脏状态均保持不变。成功返回：
 
 ```http
-DELETE /api/v1/boards/default/labels/l_01HX/semantics?expected_semantics_hash=sem_abc123&reason=Retire%20obsolete%20semantics
-X-Kanban-Actor: alice
+DELETE /api/v1/boards/default/labels/l_01HX/semantics?expected_semantics_hash=sem_abc123&reason=%E5%81%9C%E7%94%A8%E8%BF%87%E6%9C%9F%E8%AF%AD%E4%B9%89
+X-KB-Actor: alice
 ```
 
 <!-- schema-doc: contract=api.label-semantics-delete.response fixture=schemas/fixtures/api/delete-response.v1.valid.json -->
@@ -6401,71 +6469,65 @@ X-Kanban-Actor: alice
 { "data": { "deleted": true } }
 ```
 
-`GET /api/v1/boards/{board}/labels/atoms` 返回 SQLite `label_atoms` materialized
-projection。它由 `label_semantics` 和 label name 展开、随 semantics mutation 同事务重建，
-是 `lancedb_label_atoms` 派生索引的输入；不要把它描述成独立于 semantics 的第二份
-semantic truth。
+`GET /api/v1/boards/{board}/labels/atoms` 返回 SQLite `label_atoms` 的物化投影。
+它由 `label_semantics` 和标签名称展开，并随语义变更在同一事务内重建；它是
+`lancedb_label_atoms` 派生索引的输入，不能把它描述成独立于语义的第二份语义事实源。
 
-`GET /api/v1/boards/{board}/labels/atoms/{atom_ref}/explain` 按当前 atom id 或稳定
-`content_hash` 解析 atom，并返回 `LabelAtomExplainRecord`：`query`、`atom`、
+`GET /api/v1/boards/{board}/labels/atoms/{atom_ref}/explain` 按当前原子 ID 或稳定的
+`content_hash` 解析原子，并返回 `LabelAtomExplainRecord`：`query`、`atom`、
 `current_semantics`、`provenance_actions`、`supporting_signals`、
-`validation_history`、`legacy_untracked` 和 `legacy_reason`。当前 atom 存在但没有
-ontology provenance action 引用其 id 或 content hash 时返回 `200` 且
-`legacy_untracked=true`；未知 id/hash 返回 not found。
+`validation_history`、`legacy_untracked` 和 `legacy_reason`。当前原子存在但没有
+本体来源操作引用其 ID 或内容哈希时，返回 `200` 且 `legacy_untracked=true`；
+未知 ID 或哈希返回 `not_found`。
 
-`GET /api/v1/boards/{board}/labels/atom-index/status` 返回 label atom vector index
-状态。server no-heavy route 通过 vector helper adapter 报告当前 helper 能力。无 vector provider、
-adapter 不可用或 helper 缺失时仍返回 `200` disabled 状态。JSON 保留兼容字段 `message`，并额外返回结构化
-`diagnostics: string[]`、`dirty: boolean | null`、`board_dirty: boolean | null`；调用方应使用结构化字段判断 dirty/error，
-而不要解析 `message` 文案。同一 `VectorStoreStatus` shape 也用于 `/api/v1/vector/status`。
+`GET /api/v1/boards/{board}/labels/atom-index/status` 返回标签原子向量索引状态。
+服务端的轻量路由通过向量辅助程序适配器报告当前能力。没有向量提供方、适配器不可用或辅助程序
+缺失时，仍返回 `200` 和禁用状态。JSON 保留兼容字段 `message`，并额外返回结构化的
+`diagnostics: string[]`、`dirty: boolean | null`、`board_dirty: boolean | null`；调用方应使用
+结构化字段判断脏状态和错误，不要解析 `message` 文案。相同的 `VectorStoreStatus` 结构也用于
+`/api/v1/vector/status`。
 
-`POST /api/v1/boards/{board}/labels/atom-index/rebuild` 通过 vector helper adapter 调用
-label atom 专用 `rebuild-label-atoms` helper command，重建 `lancedb_label_atoms` 派生索引并更新
-`label_atom_index_boards` / `lancedb_label_atoms` status。helper/provider 缺失返回显式 API error，
-不得写 canonical label truth，也不得把 chunk store status 当作 label atom rebuild success。
-`GET /api/v1/boards/{board}/labels/atom-index/query` 通过 vector helper adapter 查询派生的
+`POST /api/v1/boards/{board}/labels/atom-index/rebuild` 通过向量辅助程序适配器调用
+标签原子专用的 `rebuild-label-atoms` 命令，重建 `lancedb_label_atoms` 派生索引并更新
+`label_atom_index_boards` / `lancedb_label_atoms` 状态。辅助程序或提供方缺失时返回明确的
+API 错误，不得写入规范标签事实，也不得把分块存储状态当成标签原子重建成功。
+`GET /api/v1/boards/{board}/labels/atom-index/query` 通过向量辅助程序适配器查询派生的
 `lancedb_label_atoms` 索引。请求必须提供 `q=<text>` 或 `vector_json=<json-array>` 之一，二者互斥；
-`embedding_model` 可选，`include_vector=true` 可要求 raw vector hit 返回向量，`polarity` 可选且只接受
-`positive` / `negative`，`limit` 默认 24。hit 中的 `distance` 是 LanceDB `_distance`，不是 solver
-similarity score。未配置 provider、adapter/helper 不可用或 vector store 不可用时，query 返回显式 API error，
-不修改 SQLite truth。
+`embedding_model` 可选，`include_vector=true` 可要求原始向量命中返回向量，`polarity` 可选且只接受
+`positive` / `negative`，`limit` 默认 24。命中项中的 `distance` 是 LanceDB `_distance`，不是
+求解器相似度分数。未配置提供方、适配器或辅助程序不可用，或者向量存储不可用时，查询返回明确的
+API 错误，且不修改 SQLite 事实。
 
-### 12.2 Task label suggestions
+### 12.2 任务标签建议
 
 ```http
 GET /api/v1/tasks/{task_id}/labels/suggestions?limit=5&candidate_limit=32&atom_limit=80&max_selected_labels=4&min_score=0.15
 ```
 
-返回 task-level label suggestions。带可用 label atom vector store 的部署使用 task title + description embedding
-查询 `lancedb_label_atoms`：正向 atoms 按 residual 多轮检索，负向 atoms 固定用原始
-query 检索并做 penalty / suppression。solver 在 label group 层执行 Group OMP 选择，
-再把选中 label 的 top positive atom vectors 作为 basis 做 non-negative refit；
-`coverage` / `residual_norm` 来自 atom-level fitted vector，其中
+返回任务级标签建议。若部署中有可用的标签原子向量存储，服务会使用任务标题和描述的嵌入
+查询 `lancedb_label_atoms`：正向原子按残差进行多轮检索，负向原子固定使用原始查询检索并
+施加惩罚或抑制。求解器在标签组层执行 Group OMP 选择，再把选中标签的高分正向原子向量
+作为基底进行非负重新拟合。`coverage` 和 `residual_norm` 来自原子级拟合向量，其中
 `coverage = clamp(1 - residual_norm, 0.0, 1.0)`，因此二者不是两份独立证据；
-`coverage_cosine` 是原始 query 与 fitted vector 的 cosine similarity，可作为
-独立补充指标。候选 label 只有在
-tentative refit 后带来足够 residual norm 降幅才会进入结果；coverage 或
-residual norm 达到停止阈值后，solver 会提前停止而不是凑满
-`max_selected_labels`。candidate group 与已选 label 语义向量过度相似时会被跳过，
-以减少重复语义 label 同时出现在 `selected_labels`；这不会合并或删除 canonical
-labels。`needs_new_label` 是兼容字段，只表示存在需要人工 review 的 label
-coverage 诊断；具体原因必须读取 `reason_codes`，并结合 evidence atoms、
-diagnostics 与人工语义判断，不应仅凭该布尔值创建 vocabulary。接口不会创建新
-label，也不会写入 `label_semantics` / `label_atoms`。
+`coverage_cosine` 是原始查询与拟合向量的余弦相似度，可作为独立补充指标。候选标签只有在
+试探性重新拟合后带来足够的残差范数降幅，才会进入结果；覆盖率或残差范数达到停止阈值后，
+求解器会提前停止，而不是凑满 `max_selected_labels`。候选组与已选标签的语义向量过度相似时
+会被跳过，以减少语义重复的标签同时出现在 `selected_labels`；这不会合并或删除规范标签。
+`needs_new_label` 是兼容字段，只表示存在需要人工审核的标签覆盖率诊断；具体原因必须读取
+`reason_codes`，并结合证据原子、诊断信息和人工语义判断，不能只凭该布尔值创建新词汇。
+接口不会创建新标签，也不会写入 `label_semantics` 或 `label_atoms`。
 
-`limit` 只控制 response 中 `selected_labels` / `candidates` 的最大条数，不会收窄
-solver 内部搜索能力。内部能力由 `candidate_limit`、`atom_limit` 和
-`max_selected_labels` 分别控制：候选 label group 数、每轮 atom vector 检索上限、
-以及最多进入 non-negative refit 的 label 数。所有 limit 参数都必须是
+`limit` 只控制响应中 `selected_labels` 和 `candidates` 的最大条数，不会收窄求解器内部
+搜索能力。内部能力由 `candidate_limit`、`atom_limit` 和 `max_selected_labels` 分别控制：
+候选标签组数量、每轮原子向量检索上限，以及最多进入非负重新拟合的标签数量。所有数量上限都必须是
 `1..=1000`；`min_score` 必须在 `0..=1`。
 
-未配置 provider、label vector adapter/feature 不可用、LanceDB 表缺失、索引为空或索引
-dirty 时，接口仍返回 `200` 和结构化 degraded JSON；普通 label CRUD、task
-list/search/filter 与状态转移不受影响。Dirty 判断来自结构化 status/SQLite dirty
-字段，不依赖 `message` 文案。无 provider 时 `needs_new_label=false`，
-避免把 #105 的新 label 创建流程误触发。
+未配置提供方、标签向量适配器或功能不可用、LanceDB 表缺失、索引为空或索引为脏时，
+接口仍返回 `200` 和结构化的降级 JSON；普通标签增删改查、任务列表、搜索、筛选和状态转换
+不受影响。脏状态判断来自结构化状态和 SQLite 的 `dirty` 字段，不依赖 `message` 文案。
+没有提供方时 `needs_new_label=false`，避免误触发自动创建新标签的流程。
 
-Response：
+响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6487,7 +6549,7 @@ Response：
             "label_name": "backend",
             "polarity": "positive",
             "kind": "applies_when",
-            "text": "touches server code",
+            "text": "涉及服务端代码",
             "score": 0.91
           }
         ],
@@ -6506,7 +6568,7 @@ Response：
 }
 ```
 
-稳定 diagnostics 包括：
+稳定的 `diagnostics` 包括：
 
 - `vector_store_disabled`
 - `label_atom_index_dirty`
@@ -6514,14 +6576,14 @@ Response：
 - `label_atom_index_error`
 - `vector_query_error`
 
-非 degraded coverage review 的稳定 `reason_codes` 包括：
+非降级覆盖率审核的稳定 `reason_codes` 包括：
 
 - `no_selected_labels`
 - `coverage_below_threshold`
 - `residual_above_threshold`
 - `unexplained_residual`
 
-### 12.3 Label semantic proposals
+### 12.3 标签语义提议
 
 ```http
 POST /api/v1/tasks/{task_id}/label-proposals?limit=5&candidate_limit=32&atom_limit=80&max_selected_labels=4&min_score=0.15
@@ -6531,29 +6593,28 @@ POST /api/v1/label-proposals/{proposal_id}/accept
 POST /api/v1/label-proposals/{proposal_id}/reject
 ```
 
-`POST /api/v1/tasks/{task_id}/label-proposals` 创建一次新 label proposal attempt。
-请求 body 可为空或仅包含 `actor`；此时默认 provider 不可用，接口返回 `200`
-degraded attempt，不创建 canonical label、`label_semantics`、`label_atoms` 或
+`POST /api/v1/tasks/{task_id}/label-proposals` 创建一次新的标签提议尝试。
+请求体可为空或仅包含 `actor`；此时默认提供方不可用，接口返回 `200`
+和降级的尝试结果，不创建规范标签、`label_semantics`、`label_atoms` 或
 `task_labels`。
 
-Provider boundary：API 当前只支持空/default provider 或请求 body 中显式传入的
-本地/offline candidate。真实 LLM provider 不在 `kanban-sqlite` 中实现；如果未来
-server 支持本机 AI/runtime，它必须在 server/local/独立 AI crate 层实现
-`LabelProposalProvider` adapter，并把 candidate 交给 SQLite service 做 deterministic
-validation 和 persistence。
+提供方边界：API 当前只支持空的默认提供方，或请求体中显式传入的本地离线候选。
+真实 LLM 提供方不在 `kanban-sqlite` 中实现；如果未来服务端支持本机 AI 运行时，
+必须在服务端、本地层或独立 AI crate 层实现 `LabelProposalProvider` 适配器，
+并把候选交给 SQLite 服务层做确定性校验和持久化。
 
-带本地/offline provider 输出时：
+带本地离线提供方输出时：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
   "proposal": {
     "name": "database",
-    "description": "Database persistence work",
-    "applies_when": ["touches SQLite migrations"],
-    "excludes_when": ["UI-only polish"],
-    "positive_examples": ["new table migration"],
-    "negative_examples": ["CSS-only tweak"]
+    "description": "数据库持久化工作",
+    "applies_when": ["涉及 SQLite 迁移"],
+    "excludes_when": ["仅调整界面样式"],
+    "positive_examples": ["新增数据表迁移"],
+    "negative_examples": ["只修改 CSS"]
   },
   "actor": "alice",
   "source_signal_ids": ["los_..."],
@@ -6563,41 +6624,40 @@ validation 和 persistence。
 }
 ```
 
-数组字段缺省时按空数组处理。服务先读取当前 label suggestion 的启发式
-`coverage` / `coverage_cosine` / `residual_norm` / top1 existing label。coverage 充足时不写 proposal；
-coverage 不足且候选语义有效，并且残差 top1+margin 校验明确通过时，返回 `201` 并持久化
-`proposed` proposal。与现有 label 发生 normalized-name 冲突的候选持久化为 `rejected`，diagnostics 包含
-`near_duplicate_label_conflict`。Normalized-name conflict 忽略大小写、空白和标点，
-是 deterministic near-duplicate heuristic。
-`source_signal_ids` 可选；传入时，proposal 创建成功后会在同一 transaction 写入
-`create_label_proposal` ontology action，并通过 action-signal links 记录该 proposal
-由哪些 confirmed vocabulary-gap signals 支持。Proposal row 与 provenance action
-要么同时写入，要么一起回滚。Source signals 默认必须属于同一 board、状态为
-`confirmed`、kind 为 `vocabulary_gap`、`proposed_action` 为 `bootstrap_label`，且
-normalized `proposed_label_name` 等于 proposal name。`ontology_actor` 只控制
-`create_label_proposal` action provenance；省略时使用 `actor` 字符串作为
-`type=user` actor。确需 retarget confirmed same-board source signal 时，必须传
-`allow_retarget=true` 和非空 `retarget_reason`；reason 和 source signal 原始
-target/proposed label 会写入 `change_json.retarget_override`。Override 不放宽
-board/status 要求。
+数组字段省略时按空数组处理。服务先读取当前标签建议的启发式 `coverage`、
+`coverage_cosine`、`residual_norm` 和现有标签第一名。覆盖率充足时不写提议；
+覆盖率不足、候选语义有效，且残差第一名加间隔校验明确通过时，返回 `201` 并持久化
+状态为 `proposed` 的提议。候选与现有标签发生规范化名称冲突时，会以 `rejected` 状态
+持久化，`diagnostics` 包含 `near_duplicate_label_conflict`。规范化名称冲突忽略大小写、
+空白和标点，是确定性的近似重复启发式。
 
-POST proposal route 接受与 label suggestion 相同的 query 参数。`limit` 只截断
-suggestion 输出；`candidate_limit`、`atom_limit`、`max_selected_labels` 和 `min_score`
-调节用于 heuristic coverage / residual validation 的底层 solver。
+`source_signal_ids` 可选；传入时，提议创建成功后会在同一事务中写入
+`create_label_proposal` 本体操作，并通过操作与信号的链接记录哪些已确认的词汇缺口信号
+支持该提议。提议行与来源操作要么同时写入，要么一起回滚。来源信号默认必须属于同一看板、
+状态为 `confirmed`、种类为 `vocabulary_gap`、`proposed_action` 为 `bootstrap_label`，
+且规范化后的 `proposed_label_name` 等于提议名称。`ontology_actor` 只控制
+`create_label_proposal` 操作的来源；省略时使用 `actor` 字符串作为 `type=user` 的操作者。
+确需重定向同一看板上已确认的来源信号时，必须传入 `allow_retarget=true` 和非空
+`retarget_reason`；原因和来源信号原始的目标或提议标签会写入
+`change_json.retarget_override`。重定向不会放宽看板和状态要求。
 
-当 server 配置了可用 vector provider 时，proposal attempt 与 label suggestion
-使用同一套 LanceDB label atom store。coverage 不足的候选会在持久化前执行残差
-top1+margin 校验：候选语义的 residual score 和现有 label top1 都按返回 atom
-vector 在本地计算 cosine similarity，不从 LanceDB distance 推导；候选必须超过现有
-label top1，且超过幅度达到固定 margin。校验失败时候选仍会以 `rejected` proposal 持久化，diagnostics
+POST 提议路由接受与标签建议相同的查询参数。`limit` 只截断建议输出；
+`candidate_limit`、`atom_limit`、`max_selected_labels` 和 `min_score` 用于调节底层求解器的
+启发式覆盖率和残差校验。
+
+服务端配置了可用的向量提供方时，提议尝试与标签建议使用同一套 LanceDB 标签原子存储。
+覆盖率不足的候选会在持久化前执行残差第一名加间隔校验：候选语义的残差分数和现有标签
+第一名都根据返回的原子向量在本地计算余弦相似度，不从 LanceDB 距离推导；候选必须超过
+现有标签第一名，且差值达到固定间隔。校验失败时，候选仍会以 `rejected` 提议持久化，
+`diagnostics`
 包含 `label_proposal_residual_top1_failed` 或
-`label_proposal_residual_margin_insufficient`。未配置 provider、feature 不可用或
-vector 检索失败时返回 degraded attempt，不创建 canonical label、`label_semantics`、
-`label_atoms` 或 `task_labels`。如果 residual validation 不可用或 degraded，且没有
-明确通过 top1+margin 校验，attempt 返回 `proposal=null`，不新增 proposal row，
-diagnostics 包含 `label_proposal_residual_validation_unavailable` 和具体原因。
+`label_proposal_residual_margin_insufficient`。未配置提供方、功能不可用或向量检索失败时
+返回降级尝试，不创建规范标签、`label_semantics`、`label_atoms` 或 `task_labels`。
+如果残差校验不可用或已降级，且没有明确通过第一名加间隔校验，本次尝试返回
+`proposal=null`，不新增提议行；`diagnostics` 包含
+`label_proposal_residual_validation_unavailable` 和具体原因。
 
-Attempt response：
+尝试响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6617,12 +6677,12 @@ Attempt response：
 }
 ```
 
-Accept/reject body：
+接受或拒绝的请求体：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
 {
-  "reason": "coverage 不足，接受新 label",
+  "reason": "覆盖率不足，接受新标签",
   "actor": "alice",
   "source_signal_ids": ["los_..."],
   "ontology_actor": {"name": "codex", "type": "agent", "agent_type": "codex"},
@@ -6631,34 +6691,30 @@ Accept/reject body：
 }
 ```
 
-Accept 只允许 `proposed` proposal。成功后会通过与 task-label bootstrap 相同的 adoption
-primitive 创建 canonical `labels` 行与对应 `label_semantics` / `label_atoms`，
-标脏 label atom index，并在同一 transaction 写入一条 `bootstrap_label` root ontology
-action 和对应 added atom effects；
-proposal status、canonical writes 和 provenance action 要么一起成功，要么一起回滚。
-它不会自动写 `task_labels`。`source_signal_ids` 可选；省略时仍记录 bootstrap action，
-但没有 action-signal links。传入时，accept 会通过 action-signal links 记录 new-label
-bootstrap provenance。Source signals 必须属于同一 board 且处于 `confirmed`。
-`actor` 字符串仍用于 proposal decision event；`ontology_actor` 只控制 accept 产生的
-`bootstrap_label` ontology action provenance。省略 `ontology_actor` 时，bootstrap
-action 使用 `actor` 字符串作为 `type=user` actor。`type=agent` 必须提供非空
-`agent_type`；`type=user` 不能提供 `agent_type`。Source signals 默认还必须是
-`vocabulary_gap` + `bootstrap_label`，且 normalized `proposed_label_name` 必须等于
-proposal name。确实需要 retarget confirmed same-board source signal 时，必须传
-`allow_retarget=true` 和非空 `retarget_reason`；bootstrap action
-`change_json.retarget_override` 会记录 reason、source signal 原始 target/proposed
-label 和最终 proposal/result label。如果 proposal 已有 `create_label_proposal`
-action，accept 产生的 `bootstrap_label` action 会把 `parent_action_id` 指向该
-creation action。Override 不放宽 board/status 要求。Reject 标记为
-`rejected`，不接受 `source_signal_ids`、`ontology_actor` 或 retarget options。
-accepted/rejected proposal 再次决策返回普通 `400 invalid_input` error envelope。
+接受操作只允许状态为 `proposed` 的提议。成功后会通过与任务标签引导创建相同的采用原语，
+创建规范 `labels` 行以及对应的 `label_semantics` 和 `label_atoms`，标记标签原子索引为脏，
+并在同一事务中写入一条 `bootstrap_label` 根本体操作和对应的新增原子效果。提议状态、
+规范写入和来源操作要么一起成功，要么一起回滚。它不会自动写入 `task_labels`。
+`source_signal_ids` 可选；省略时仍会记录引导创建操作，但没有操作与信号的链接。传入时，
+接受操作会通过这些链接记录新标签的引导创建来源。来源信号必须属于同一看板且处于
+`confirmed`。`actor` 字符串仍用于提议决策事件；`ontology_actor` 只控制接受操作产生的
+`bootstrap_label` 本体操作来源。省略 `ontology_actor` 时，引导创建操作使用 `actor`
+字符串作为 `type=user` 的操作者。`type=agent` 必须提供非空 `agent_type`；
+`type=user` 不能提供 `agent_type`。来源信号默认还必须是
+`vocabulary_gap` 加 `bootstrap_label`，且规范化后的 `proposed_label_name` 必须等于提议名称。
+确需重定向同一看板上已确认的来源信号时，必须传入 `allow_retarget=true` 和非空
+`retarget_reason`；引导创建操作中的 `change_json.retarget_override` 会记录原因、来源信号
+原始目标或提议标签，以及最终提议或结果标签。如果提议已有 `create_label_proposal` 操作，
+接受操作产生的 `bootstrap_label` 操作会把 `parent_action_id` 指向该创建操作。重定向不会
+放宽看板和状态要求。拒绝操作把提议标记为 `rejected`，不接受 `source_signal_ids`、
+`ontology_actor` 或重定向选项。对已接受或已拒绝的提议再次决策，会返回标准
+`400 invalid_input` 错误封装。
 
-### 12.4 Generic signal ledger
+### 12.4 通用信号台账
 
-Generic signal ledger API 提供 board-scoped 只读 inbox，用于展示 agent/product
-在 kanban 工作流中记录的通用 signal，例如 CLI 参数摩擦、提示误导、参数设计问题或
-operator 发现。它独立于 label ontology ledger；这些 endpoint 不创建、确认、拒绝、
-resolve 或 supersede signal，也不会把通用 signal 混入 ontology review groups。
+通用信号台账 API 提供按看板划分的只读收件箱，用于展示代理或产品在看板工作流中记录的
+通用信号，例如 CLI 参数摩擦、提示误导、参数设计问题或操作人员发现。它独立于标签本体台账；
+这些端点不会创建、确认、拒绝、解决或取代信号，也不会把通用信号混入本体审核分组。
 
 ```http
 GET /api/v1/boards/{board}/signals?status=open&kind=agent_cli_friction&task_ref=default%23123&include_all=false&limit=100
@@ -6667,17 +6723,17 @@ GET /api/v1/signals/{signal_id}
 ```
 
 `GET /api/v1/boards/{board}/signals` 和 `/signals/review` 返回同一只读 DTO；
-`review` endpoint 是 Desktop / operator console 的语义化入口。默认只返回 `open`
+`review` 端点是桌面端或操作人员控制台的语义化入口。默认只返回 `open`
 和 `confirmed`。可重复传 `status` 和 `kind`，并按 `task_ref` 过滤。
 `include_all=true` 且没有显式 `status` 时返回完整历史；`limit` 使用普通列表上限。
-这些 list/review routes 是 board-scoped surface；只返回该 board 的 signal rows。
-`GET /api/v1/signals/{signal_id}` 是 operator-wide detail lookup，用于从 backlink、
-inbox row 或审计记录直接打开已知 signal。该 detail route 不改变 signal 的
-`board_id` truth，也不让 board-scoped list/review 泄漏其它 board 的 signal。
+这些列表和审核路由以看板为作用域，只返回该看板的信号行。
+`GET /api/v1/signals/{signal_id}` 是操作人员全局详情查询，用于从反向链接、收件箱行或审计
+记录直接打开已知信号。该详情路由不会改变信号的 `board_id` 事实，也不会让按看板划分的
+列表或审核接口泄漏其他看板的信号。
 
-`signal_observations.task_id`、`run_id` 和 `comment_id` 是 provenance/history soft refs。
-当前 service 写入路径、doctor 和 import final gate 维护这些 refs 与 observation board
-的一致性；未来若需要把所有来源关系硬化，可迁移为 board-composite FK。
+`signal_observations.task_id`、`run_id` 和 `comment_id` 是来源与历史的软引用。
+当前服务写入路径、诊断命令和导入最终门禁会维护这些引用与观察记录所属看板的一致性；
+未来若需要硬化所有来源关系，可迁移为按看板组合的外键。
 
 响应：
 
@@ -6691,7 +6747,7 @@ inbox row 或审计记录直接打开已知 signal。该 detail route 不改变 
       "observation_id": "obs_...",
       "kind": "agent_cli_friction",
       "title": "--require 参数命名不符合 agent 惯用预期",
-      "summary": "agent 尝试使用 --required/--requires，实际 CLI 只接受 --require。",
+      "summary": "代理尝试使用 --required/--requires，实际 CLI 只接受 --require。",
       "severity": "medium",
       "status": "open",
       "dedupe_key": "kanban-task-create-require",
@@ -6708,9 +6764,9 @@ inbox row 或审计记录直接打开已知 signal。该 detail route 不改变 
         "task_ref_snapshot": "default#123",
         "run_id": "r_...",
         "comment_id": null,
-        "actor": "codex",
-        "agent_type": "codex",
-        "source": "codex-hook",
+        "actor": "local-agent",
+        "agent_type": "automation",
+        "source": "cli-hook",
         "evidence": {"command":"kanban task create --required ..."},
         "created_at": 1782930000000
       }
@@ -6731,13 +6787,12 @@ inbox row 或审计记录直接打开已知 signal。该 detail route 不改变 
 }
 ```
 
-### 12.5 Label ontology ledger
+### 12.5 标签本体台账
 
-Label ontology ledger API 记录 task 标注过程、review queue、ontology mutation
-provenance 和 validation history。Ledger 不会自动修改 task labels；canonical
-binding 仍通过 task label API 或 CLI 完成。
+标签本体台账 API 记录任务标注过程、审核队列、本体变更来源和验证历史。台账不会自动修改
+任务标签；规范绑定仍通过任务标签 API 或 CLI 完成。
 
-所有 ontology actor object 使用 `{ "name": string, "type": "user"|"agent",
+所有本体操作者对象使用 `{ "name": string, "type": "user"|"agent",
 "agent_type": string|null }`。`type=agent` 必须提供非空 `agent_type`；
 `type=user` 必须省略或传 `null`。
 
@@ -6752,11 +6807,10 @@ POST /api/v1/boards/{board}/label-ontology/revert
 POST /api/v1/boards/{board}/label-ontology/validate
 ```
 
-`POST /api/v1/tasks/{task_id}/label-ontology/observations` 在一个 transaction 中写入
-observation 和 child signals。HTTP endpoint 不自行运行 `label suggest`；调用方必须传入
-由工具采集且未改写的 `suggestion_snapshot`，或在没有 suggest 证据时显式传空 snapshot。
-服务端会从 snapshot 派生 observation metrics，agent/reviewer 只提交候选、最终判断、
-signals、candidate atom 和 rationale。请求 body：
+`POST /api/v1/tasks/{task_id}/label-ontology/observations` 在一个事务中写入观察记录和
+子信号。HTTP 端点不会自行运行 `label suggest`；调用方必须传入由工具采集且未改写的
+`suggestion_snapshot`，或在没有建议证据时显式传入空快照。服务端会从快照派生观察指标，
+代理或审核者只提交候选、最终判断、信号、候选原子和理由。请求体：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6783,7 +6837,7 @@ signals、candidate atom 和 rationale。请求 body：
       "candidate_atom": {
         "polarity": "positive",
         "kind": "applies_when",
-        "text": "extends CLI subcommands, command arguments, help output, or machine-readable JSON behavior"
+      "text": "扩展 CLI 子命令、命令参数、帮助输出或机器可读的 JSON 行为"
       },
       "proposal": {},
       "agent_selected": true,
@@ -6791,60 +6845,52 @@ signals、candidate atom 和 rationale。请求 body：
       "suggest_score": 0.08,
       "suggest_rank": 6,
       "final_selected": true,
-      "rationale": "The task expands the CLI surface.",
+      "rationale": "该任务扩展了 CLI 接口。",
       "confidence": 0.9
     }
   ]
 }
 ```
 
-HTTP ontology DTOs use natural JSON fields for new clients:
-`agent_candidates`, `suggestion_snapshot`, `final_decision`, `diagnostics`,
-signal `related_labels` / `proposal`, action `change` / `validation`, and
-validate `validation`. Legacy escaped-string request siblings (`related_labels_json`,
-`proposal_json`, `change_json`, `validation_json`, and the observation `*_json`
-aliases) are no longer accepted by the public HTTP API. Unknown legacy keys fail
-closed with `400 invalid_input`; clients must send the natural JSON fields. When `suggestion_snapshot`
-contains `coverage`, `coverage_cosine`, `residual_norm`, `needs_new_label`,
-`degraded`, or `diagnostics`, the server derives the stored observation metrics
-from that snapshot. If the request also supplies the matching top-level
-`suggest_*` field or `diagnostics` and the values conflict, the request returns
-`400 invalid_input`. New clients should not repeat snapshot facts as top-level
-scalars.
+面向新客户端的 HTTP 本体 DTO 使用自然 JSON 字段：`agent_candidates`、
+`suggestion_snapshot`、`final_decision`、`diagnostics`，信号中的 `related_labels` 和
+`proposal`，操作中的 `change` 和 `validation`，以及验证请求中的 `validation`。
+公开 HTTP API 不再接受旧的转义字符串同级请求字段，例如 `related_labels_json`、
+`proposal_json`、`change_json`、`validation_json` 和观察记录中的 `*_json` 别名。
+出现未知旧字段时会以 `400 invalid_input` 失败关闭；客户端必须发送自然 JSON 字段。
+当 `suggestion_snapshot` 包含 `coverage`、`coverage_cosine`、`residual_norm`、
+`needs_new_label`、`degraded` 或 `diagnostics` 时，服务端会从快照派生持久化的观察指标。
+如果请求同时提供对应的顶层 `suggest_*` 字段或 `diagnostics`，且值发生冲突，则返回
+`400 invalid_input`。新客户端不应在顶层重复快照事实。
 
-Service 会读取当前 task snapshot、解析 `target_label_ref`、计算 normalized proposed
-label name、signal key 和 candidate atom content hash。`capture_fingerprint` 为空时
-按 task、snapshots 和 signals 派生；同一 board 重复 fingerprint 会被唯一约束拒绝。
-Observation response 返回 created observation，并展开 child `signals`。Observation
-包含完整审计用 `task_snapshot_json.content_hash`，以及只基于 label suggest 输入
-（normalized title + description）的 `suggest_input_hash`；后者用于后续 validation
-comparability。
+服务会读取当前任务快照、解析 `target_label_ref`，并计算规范化的提议标签名称、信号键和
+候选原子内容哈希。`capture_fingerprint` 为空时会根据任务、快照和信号派生；同一看板上的
+重复指纹会被唯一约束拒绝。观察响应返回新建观察记录并展开子 `signals`。观察记录包含用于
+完整审计的 `task_snapshot_json.content_hash`，以及只基于标签建议输入
+（规范化标题加描述）的 `suggest_input_hash`；后者用于后续验证的可比性判断。
 
-Signal 输入会在写入前做 ontology contract 校验。`candidate_atom` 的
-`applies_when` / `positive_example` 只能使用 `positive` polarity，
-`excludes_when` / `negative_example` 只能使用 `negative` polarity。
-`add_positive_atom` 必须提供 target label 和 positive candidate atom；
-`add_negative_atom` 必须提供 target label 和 negative candidate atom；
-`update_semantics` 必须提供 target label；`bootstrap_label` 必须提供
-`proposed_label_name`；`rename_label` 必须提供 target label 和
-`proposed_label_name`；`split_label` / `merge_labels` 必须提供 target label 和非空
-`related_labels`。Observation metric `suggest_coverage`、
-`suggest_coverage_cosine`、`suggest_residual_norm` 以及 signal metric
-`suggest_score` / `confidence` 必须是 finite `0.0..=1.0`；`suggest_rank` 必须为
-`null` 或 `>= 1`。违反这些契约的 request 返回 `400 invalid_input`，不会写入
-observation 或 signals。`rename_label` / `split_label` / `merge_labels` 当前只作为
-review signal proposed_action 保存，不能通过 public HTTP route 写入 canonical structure
-mutation action；旧 structure-plan rows 只读展示为 unsupported validation requirement。
+信号输入会在写入前接受本体契约校验。`candidate_atom` 中，`applies_when` 和
+`positive_example` 只能使用 `positive` 极性，`excludes_when` 和 `negative_example`
+只能使用 `negative` 极性。`add_positive_atom` 必须提供目标标签和正向候选原子；
+`add_negative_atom` 必须提供目标标签和负向候选原子；`update_semantics` 必须提供目标标签；
+`bootstrap_label` 必须提供 `proposed_label_name`；`rename_label` 必须提供目标标签和
+`proposed_label_name`；`split_label` 和 `merge_labels` 必须提供目标标签及非空的
+`related_labels`。观察指标 `suggest_coverage`、`suggest_coverage_cosine`、
+`suggest_residual_norm` 以及信号指标 `suggest_score` 和 `confidence` 必须是有限的
+`0.0..=1.0`；`suggest_rank` 必须为 `null` 或 `>= 1`。违反这些契约的请求返回
+`400 invalid_input`，不会写入观察记录或信号。`rename_label`、`split_label` 和
+`merge_labels` 当前只作为审核信号的提议操作保存，不能通过公开 HTTP 路由写入规范结构
+变更操作；旧的结构计划行只读展示为不受支持的验证要求。
 
 `GET /api/v1/boards/{board}/label-ontology/signals` 默认只返回 `open` 和
 `confirmed`。可重复传 `status` 和 `kind`，并按 `task_ref`、`target_label_ref`、
 `proposed_label_name`、`include_all`、`limit` 过滤。
 
-`GET /api/v1/boards/{board}/label-ontology/review` 返回只读聚合 review queue。
-`group_by` 支持 `label`、`candidate_atom`、`proposed_label`、以及 opt-in `cluster`，
+`GET /api/v1/boards/{board}/label-ontology/review` 返回只读聚合审核队列。
+`group_by` 支持 `label`、`candidate_atom`、`proposed_label`，以及需要显式启用的 `cluster`，
 默认 `label`；`include_all=false` 默认只聚合 `open` 和
-`confirmed` signals，`true` 时包含完整历史；`limit` 限制 group 数量。响应
-`meta` 回显 `group_by`、`include_all` 和 `limit`。每个 group 包含：
+`confirmed` 信号，`true` 时包含完整历史；`limit` 限制分组数量。响应
+`meta` 回显 `group_by`、`include_all` 和 `limit`。每个分组包含：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6855,7 +6901,7 @@ mutation action；旧 structure-plan rows 只读展示为 unsupported validation
   "label_name": "cli",
   "candidate_atom_polarity": "positive",
   "candidate_atom_kind": "applies_when",
-  "candidate_text": "extends CLI subcommands",
+  "candidate_text": "扩展 CLI 子命令",
   "candidate_content_hash": "14ada47e4b0566c5",
   "proposed_label_name": null,
   "proposed_label_name_normalized": null,
@@ -6884,21 +6930,20 @@ mutation action；旧 structure-plan rows 只读展示为 unsupported validation
       "content_hash": "14ada47e4b0566c5",
       "polarity": "positive",
       "kind": "applies_when",
-      "text": "extends CLI subcommands",
+      "text": "扩展 CLI 子命令",
       "signal_count": 2
     }
   ]
 }
 ```
 
-Groups sort by distinct `task_count` desc, then `confirmed_count` desc,
-`latest_signal_at` desc, and `key` asc。`group_by=cluster` 是可禁用的只读辅助视图：
-默认不会启用，不写 canonical atoms，不确认、应用、validate 或关闭 signal，也不会创建
-新的 SQLite truth 表。cluster key 每次请求时从已有 signal 文本重建，优先使用
-lexical-normalized candidate text，其次 proposed label，再其次 rationale，最后退回到
-kind/action/target/proposed-label scope 组合；所有 cluster key 都带有 signal kind、
-proposed action、target label 和 proposed-label scope，避免跨 label/action/boundary 误合并；
-`cluster_reason` 说明 key 来源。`GET /api/v1/label-ontology/signals/{signal_id}`
+分组依次按去重后的 `task_count` 降序、`confirmed_count` 降序、
+`latest_signal_at` 降序和 `key` 升序排列。`group_by=cluster` 是可禁用的只读辅助视图：
+默认不会启用，不写规范原子，不确认、应用、验证或关闭信号，也不会创建新的 SQLite 事实表。
+聚类键会在每次请求时根据已有信号文本重建：优先使用词法规范化后的候选文本，其次使用提议
+标签，再其次使用理由，最后退回到种类、操作、目标和提议标签作用域的组合。所有聚类键都带有
+信号种类、提议操作、目标标签和提议标签作用域，避免跨标签、操作或边界误合并；
+`cluster_reason` 说明键的来源。`GET /api/v1/label-ontology/signals/{signal_id}`
 返回：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
@@ -6912,7 +6957,7 @@ proposed action、target label 和 proposed-label scope，避免跨 label/action
 }
 ```
 
-`POST /api/v1/boards/{board}/label-ontology/actions` 写 review/lifecycle action：
+`POST /api/v1/boards/{board}/label-ontology/actions` 写入审核或生命周期操作：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6920,7 +6965,7 @@ proposed action、target label 和 proposed-label scope，避免跨 label/action
   "actor": {"name": "alice", "type": "user", "agent_type": null},
   "action_type": "confirm",
   "signal_ids": ["los_..."],
-  "reason": "Observed across independent CLI tasks",
+  "reason": "在多个独立 CLI 任务中观察到",
   "superseded_by_signal_id": null,
   "parent_action_id": null,
   "target_label_ref": null,
@@ -6936,22 +6981,21 @@ proposed action、target label 和 proposed-label scope，避免跨 label/action
 }
 ```
 
-该公共 action endpoint 只接受 lifecycle action types：`confirm`、`reject`、
-`supersede` 和 `resolve_no_change`，并会同步更新 source signal status。请求中的
-`parent_action_id`、`target_label_ref`、result 字段、canonical hash、`change`、
+该公共操作端点只接受生命周期操作类型：`confirm`、`reject`、`supersede` 和
+`resolve_no_change`，并会同步更新来源信号状态。请求中的
+`parent_action_id`、`target_label_ref`、结果字段、规范哈希、`change`、
 `validation_requirement`、`validation_status`、
 `validation_effective_outcome` 和 `validation` 必须为
-`null`/缺省；否则返回
-`invalid_input`。`add_positive_atom`、`add_negative_atom`、`adopt_existing_atom`、
-`update_semantics`、`create_label_proposal`、`bootstrap_label`、`revert_ontology_mutation`、`validate` 等 mutation/validation action
-types 不允许通过该 generic endpoint 写入；canonical mutation provenance 必须由
-semantics PUT、apply atom、proposal create/accept、task-label bootstrap 或 validate 等
-专用 route 在同一 transaction 内写入。`supersede` 写入时会沿 replacement
-`superseded_by_signal_id` 链检查，若链路回到任一 source signal 或 replacement chain
-自身已有环，则返回 `invalid_input`，不会写入新的 supersede action。
+`null` 或省略；否则返回 `invalid_input`。`add_positive_atom`、`add_negative_atom`、
+`adopt_existing_atom`、`update_semantics`、`create_label_proposal`、`bootstrap_label`、
+`revert_ontology_mutation`、`validate` 等变更或验证操作类型，不允许通过该通用端点写入；
+规范变更的来源必须由语义 PUT、应用原子、创建或接受提议、任务标签引导创建或验证等专用
+路由在同一事务内写入。写入 `supersede` 时会沿替代关系的 `superseded_by_signal_id`
+链检查；若链路回到任一来源信号，或替代链本身已有环，则返回 `invalid_input`，不会写入新的
+取代操作。
 
-`POST /api/v1/boards/{board}/label-ontology/apply/atom` 对已有 label 执行
-read-modify-upsert semantics，并写入 atom provenance action：
+`POST /api/v1/boards/{board}/label-ontology/apply/atom` 对已有标签执行
+读取、修改并更新语义，并写入原子来源操作：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6960,33 +7004,30 @@ read-modify-upsert semantics，并写入 atom provenance action：
   "signal_ids": ["los_1", "los_2"],
   "label_ref": "cli",
   "kind": "applies_when",
-  "text": "extends CLI subcommands, command arguments, help output, or machine-readable JSON behavior",
-  "reason": "Repeated false-negative signal across CLI surface tasks",
+  "text": "扩展 CLI 子命令、命令参数、帮助输出或机器可读的 JSON 行为",
+  "reason": "多个 CLI 接口任务反复出现假阴性信号",
   "allow_retarget": false,
   "retarget_reason": null
 }
 ```
 
-Source signals 必须属于同一 board 且已 `confirmed`。`kind` 只接受
-`applies_when`、`positive_example`、`excludes_when`、`negative_example`。如果 canonical
-内容实际新增 atom，成功后返回 `add_positive_atom` 或 `add_negative_atom` action，
-记录 result atom soft reference、content hash、before/after canonical hash、单份
-change snapshot 和一个 `added` atom effect，并把 `validation_requirement` 置为
-`required`。如果同内容 atom 已经存在，成功后返回
-`adopt_existing_atom` provenance-only action，记录 existing atom soft reference、相同的
-before/after canonical hash 和 source signal links；该 action 不修改 semantics/atoms、
-不标脏 atom index，`validation_requirement=none` 且 effective outcome 为
-`not_required`。默认要求所有带 `target_label_id` 的 source signals 都指向 `label_ref`；
-不匹配时返回 `400 invalid_input` 并列出 offending signal ids。Atom text 可由 reviewer
-泛化，不要求等于 source signal 的 candidate text。确实需要 retarget confirmed
-same-board signals 时，必须传 `allow_retarget=true` 和非空 `retarget_reason`；
-action `change_json.retarget_override` 会记录 reason、source signal 原始 target/proposed
-label 和最终 target label。Override 不放宽 board/status 要求。该 route 只有在
-canonical atom 实际新增时才标脏 label atom index；vector rebuild 和 suggest validation
-在 transaction 外执行。
+来源信号必须属于同一看板且已 `confirmed`。`kind` 只接受
+`applies_when`、`positive_example`、`excludes_when`、`negative_example`。如果规范内容
+实际新增了原子，成功后返回 `add_positive_atom` 或 `add_negative_atom` 操作，记录结果
+原子的软引用、内容哈希、变更前后规范哈希、一份变更快照和一个 `added` 原子效果，并把
+`validation_requirement` 设为 `required`。如果相同内容的原子已经存在，成功后返回
+仅记录来源的 `adopt_existing_atom` 操作，记录现有原子的软引用、相同的前后规范哈希和
+来源信号链接；该操作不修改语义或原子，不标记原子索引为脏，
+`validation_requirement=none`，有效结果为 `not_required`。默认要求所有带
+`target_label_id` 的来源信号都指向 `label_ref`；不匹配时返回 `400 invalid_input`
+并列出违规信号 ID。审核者可以泛化原子文本，不要求它等于来源信号中的候选文本。
+确需重定向同一看板上已确认的信号时，必须传入 `allow_retarget=true` 和非空
+`retarget_reason`；操作中的 `change_json.retarget_override` 会记录原因、来源信号原始
+目标或提议标签，以及最终目标标签。重定向不会放宽看板和状态要求。只有实际新增规范原子时，
+该路由才会标记标签原子索引为脏；向量重建和建议验证在事务外执行。
 
-`POST /api/v1/boards/{board}/label-ontology/revert` 追加可追溯 rollback action，并把
-目标 label semantics 恢复为被撤销 mutation action 的 before snapshot：
+`POST /api/v1/boards/{board}/label-ontology/revert` 追加可追溯的回滚操作，并把目标标签语义
+恢复为被撤销变更操作的变更前快照：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -6994,26 +7035,24 @@ canonical atom 实际新增时才标脏 label atom index；vector rebuild 和 su
   "actor": {"name": "reviewer", "type": "user", "agent_type": null},
   "target_action_id": "loa_...",
   "expected_current_hash": "optional-current-semantics-hash",
-  "reason": "Rollback test-only atom mutation"
+  "reason": "回滚仅用于测试的原子变更"
 }
 ```
 
-当前只支持 `add_positive_atom`、`add_negative_atom` 和 `update_semantics`。Route 要求
-当前 canonical semantics hash 仍等于 `target_action_id` 的 `canonical_after_hash`；
-`expected_current_hash` 非空时还必须等于当前 hash。成功后返回
-`revert_ontology_mutation` action：`parent_action_id` 指向被撤销 action，source signal
-links 从目标 action 复制，`change` 记录被撤销 action、before/after revert snapshot 和
-`index_dirty=true`，并为本次 revert 实际 added/removed atoms 写 atom effects，随后标脏
-label atom index。该 action 的 `validation_requirement` 为 `unsupported`，可记录
-external failed/partial 诊断，但不会被当作可 trusted-passed 的 pending validation。该 route
-不删除或修改原 action，也不处理 bootstrap label identity / task binding rollback；CLI
-staged bootstrap verify 的失败路径在提交前零写入，不再依赖提交后的恢复流程。
+当前只支持 `add_positive_atom`、`add_negative_atom` 和 `update_semantics`。路由要求当前
+规范语义哈希仍等于 `target_action_id` 的 `canonical_after_hash`；
+`expected_current_hash` 非空时还必须等于当前哈希。成功后返回
+`revert_ontology_mutation` 操作：`parent_action_id` 指向被撤销操作，来源信号链接从目标
+操作复制，`change` 记录被撤销操作、回滚前后快照和 `index_dirty=true`，并为本次回滚实际
+新增或移除的原子写入原子效果，随后标记标签原子索引为脏。该操作的
+`validation_requirement` 为 `unsupported`，可以记录外部失败或部分诊断，但不会被当作可由
+可信验证通过的待验证项。该路由不会删除或修改原操作，也不处理引导创建的标签标识或任务
+绑定回滚；CLI 分阶段引导验证的失败路径会在提交前保持零写入，不再依赖提交后的恢复流程。
 
-`POST /api/v1/boards/{board}/label-ontology/validate` 追加 external attestation
-validation action。HTTP route 接收调用方提交的自然 JSON `validation`，
-但当前不运行 vector rebuild、index query 或 `label suggest`，因此它不能产生
-trusted automated `passed`。需要 trusted automated validation 时使用 CLI
-`label ontology validate --trusted`，由工具采集 index/suggest evidence 后写入。
+`POST /api/v1/boards/{board}/label-ontology/validate` 追加外部证明验证操作。HTTP 路由接收
+调用方提交的自然 JSON `validation`，但当前不会运行向量重建、索引查询或 `label suggest`，
+因此不能产生可信自动化的 `passed`。需要可信自动化验证时，应使用 CLI
+`label ontology validate --trusted`，由工具采集索引和建议证据后写入。
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -7021,7 +7060,7 @@ trusted automated `passed`。需要 trusted automated validation 时使用 CLI
   "actor": {"name": "codex", "type": "agent", "agent_type": "codex"},
   "parent_action_id": "loa_...",
   "signal_ids": ["los_1", "los_2"],
-  "reason": "Source task still does not select the target label after atom rebuild",
+  "reason": "重建原子后，来源任务仍未选中目标标签",
   "validation_status": "failed",
   "validation": {
     "evidence_type": "external_attestation",
@@ -7039,7 +7078,7 @@ trusted automated `passed`。需要 trusted automated validation 时使用 CLI
           "degraded": false,
           "target": {"label_id": "l_cli", "selected": false, "score": 0.14},
           "coverage": 0.60,
-          "notes": "Manual review of stored suggest output did not meet pass criteria"
+          "notes": "人工审核持久化的建议输出后，结果未达到通过标准"
         }
       }
     ]
@@ -7047,76 +7086,73 @@ trusted automated `passed`。需要 trusted automated validation 时使用 CLI
 }
 ```
 
-Service 会把 supplied `validation` 包进 validation envelope，附上
-source signal cases、observation task snapshot / suggest input hash 与当前 task hash
-对比、parent action result 引用和 summary。公共 supplied/collected payload 只保存在
-top-level `manual`；generated `cases[]` 通过 `after.manual_case_ref` 指向
-`manual.cases[]` 中对应 signal 的原始 evidence，避免多 signal validation 把同一 payload
-重复存入每个 case。`parent_action_id` 必须指向同一 board 上
-`validation_requirement=required` 的 canonical mutation action，且 parent action 必须带有
-canonical result evidence（例如 atom/result label/proposal 引用、canonical hash 和
-非空 change snapshot）。HTTP supplied JSON 是 external attestation；它可保存
-`failed` / `partial` 诊断，但 `validation_status="passed"` 会返回 `invalid_input`，
-因为 passed validation 需要工具采集的 `trusted_automated` evidence。`unsupported`
-parent 可以记录 external failed/partial 诊断，但不能 passed。结构化字段或字符串
-`"automated"` 本身不构成可信来源。
+服务会把调用方提供的 `validation` 包入验证封装，并附上来源信号案例、观察时任务快照或
+建议输入哈希与当前任务哈希的对比、父操作结果引用和摘要。公开的提供或采集载荷只保存在
+顶层 `manual`；生成的 `cases[]` 通过 `after.manual_case_ref` 指向
+`manual.cases[]` 中对应信号的原始证据，避免多信号验证把同一载荷重复存入每个案例。
+`parent_action_id` 必须指向同一看板上 `validation_requirement=required` 的规范变更操作，
+且父操作必须带有规范结果证据，例如原子、结果标签或提议引用、规范哈希和非空变更快照。
+HTTP 提供的 JSON 属于外部证明；它可以保存 `failed` 或 `partial` 诊断，但
+`validation_status="passed"` 会返回 `invalid_input`，因为验证通过需要工具采集的
+`trusted_automated` 证据。`unsupported` 的父操作可以记录外部失败或部分诊断，但不能通过。
+结构化字段或字符串 `"automated"` 本身不构成可信来源。
 
-Trusted automated validation 的 persisted payload 由 CLI collector 生成，而不是由 HTTP
-caller 手写：top-level `evidence_type="trusted_automated"`、`collector.source`、
-非空 `embedding_model`、object `solver_options`、clean `index.status`、
-`index.generation` 和覆盖每个 linked source signal 的 `cases[]`。CLI collector 在长
-SQLite transaction 外 rebuild atom index 并运行 suggest；写 action 时 service 在短
-transaction 中重新核验 parent action、source signals、canonical after hash、index
-dirty/error 状态和 generation。Trusted 表示工具采集、current hash/index generation
-一致，并在指定 cases/controls 上机械通过；它不是全局语义正确性证明。
+可信自动化验证的持久化载荷由 CLI 采集器生成，而不是由 HTTP 调用方手写：顶层包含
+`evidence_type="trusted_automated"`、`collector.source`、非空 `embedding_model`、
+对象 `solver_options`、干净的 `index.status`、`index.generation`，以及覆盖每个已链接来源
+信号的 `cases[]`。CLI 采集器在较长的 SQLite 事务之外重建原子索引并运行建议；写入操作时，
+服务会在短事务中重新核验父操作、来源信号、变更后规范哈希、索引脏或错误状态和代次。
+“可信”表示证据由工具采集、当前哈希与索引代次一致，并在指定案例和对照上机械通过；
+它不是全局语义正确性的证明。
 
-Typed policy 按 parent action 检查：
+强类型策略按父操作检查：
 
-- `add_positive_atom`：`case_type="positive_atom"`，`after.degraded=false`，
-  `after.evidence_atoms[]` 必须包含 parent `result_atom_id` 或
-  `result_atom_content_hash`；target label 必须 selected 或 score >= 0.50；
-  score/coverage 不能比 before 恶化。
+- `add_positive_atom`：`case_type="positive_atom"`，`after.degraded=false`；
+  `after.evidence_atoms[]` 必须包含父操作的 `result_atom_id` 或
+  `result_atom_content_hash`；目标标签必须已选中或分数不低于 0.50；
+  分数和覆盖率不能比变更前恶化。
 - `add_negative_atom`：`case_type="negative_atom"`，`after.evidence_atoms[]`
-  不用于 result negative atom 校验；parent result atom 必须出现在
-  `after.negative_evidence_atoms[]`。false-positive task 上必须证明
-  `after.target.selected=false`，或 before/after score 都存在且 after score 低于
-  before score。必须提供至少一个 `after.positive_controls[]` 且每个 control
-  passed 且未 regressed；若没有 positive control，必须提供带非空 reason 的
+  不用于结果负向原子校验；父操作的结果原子必须出现在
+  `after.negative_evidence_atoms[]`。假阳性任务必须证明
+  `after.target.selected=false`，或变更前后分数都存在且变更后分数低于变更前分数。
+  必须提供至少一个 `after.positive_controls[]`，且每个对照都已通过且未退化；
+  若没有正向对照，必须提供带非空原因的
   `after.positive_control_waiver`。
-- `bootstrap_label`：`case_type="bootstrap_label"`，所有 linked source signals
-  都必须有 passed case；new/result label 必须 selected 或 score >= 0.50；
-  evidence atoms 必须来自 result label。
+- `bootstrap_label`：`case_type="bootstrap_label"`，所有已链接来源信号都必须有通过的
+  案例；新标签或结果标签必须已选中或分数不低于 0.50；证据原子必须来自结果标签。
 
-Validation comparability 默认使用 observation 的 `suggest_input_hash`；status、
-`updated_at`、`lock_version` 或 task label binding 只改变完整 snapshot 时写入
-`task_metadata_drift` / `label_binding_drift` warning，不会让 passed validation stale。
-title/description 变化会写入 `suggest_input_drift` 并使 case incomparable；旧
-observation 缺少 `suggest_input_hash` 时写入 `legacy_suggest_input_hash_missing`，
-不能静默 passed。`passed` 会把 linked source signals 转为 `resolved`；`failed` 与
-`partial` 保留 signals 供后续修正或人工处理。
+验证可比性默认使用观察记录的 `suggest_input_hash`。状态、`updated_at`、`lock_version`
+或任务标签绑定只改变完整快照时，会写入 `task_metadata_drift` 或
+`label_binding_drift` 警告，不会让已通过的验证过期。标题或描述变化会写入
+`suggest_input_drift` 并使案例不可比较；旧观察记录缺少 `suggest_input_hash` 时写入
+`legacy_suggest_input_hash_missing`，不能静默通过。`passed` 会把已链接来源信号转为
+`resolved`；`failed` 和 `partial` 会保留信号，供后续修正或人工处理。
 
 ---
 
-## 13. Search
+## 13. 搜索
 
-### 13.1 Search tasks
+### 13.1 搜索任务
 
 ```http
 GET /api/v1/search/tasks?board=default&q=needle&status=ready&label=backend&assignee=worker-a&include_archived=false&limit=20&offset=0
 ```
 
-默认 CLI/server build 启用 `tantivy-backend`。SQLite DB 旁存在 `index/v1/tasks/` 时，search 使用 Tantivy task index。Tantivy index 缺失、损坏、过期或二进制显式以 `--no-default-features` 构建时会回落到 SQLite，并带上 stale metadata。搜索匹配 task title、description、comments、run summary/error 和 event kind/payload。
+默认的 CLI 和服务端构建启用 `tantivy-backend`。SQLite 数据库旁存在 `index/v1/tasks/` 时，
+搜索使用 Tantivy 任务索引。Tantivy 索引缺失、损坏或过期，或者二进制显式使用
+`--no-default-features` 构建时，会回落到 SQLite，并附带过期元数据。搜索会匹配任务标题、
+描述、评论、执行摘要或错误，以及事件种类和载荷。
 
-`label` 按 label 名称或 id 过滤，可重复，并在评分和分页前使用 AND 语义。
-带 label 过滤的 search 即使存在可用 Tantivy index，也会使用 SQLite fallback，
-以确保结果反映当前 task-label 关联行。
+`label` 按标签名称或 ID 过滤，可重复，并在评分和分页前使用 AND 语义。
+带标签过滤的搜索即使存在可用的 Tantivy 索引，也会使用 SQLite 后备路径，
+以确保结果反映当前任务标签关联行。
 
-Task ref 形状的 `q` 始终使用 SQLite 精确匹配语义，即使当前存在可用 Tantivy index：
-纯数字 `12` 和 `#12` 匹配请求 `board` 内的 seq；`board#12` 和 `board/#12`
-只在显式 board 等于请求 board 时匹配；`t_...` 只匹配请求 board 内的 task id。
-Ref 形状 query 不会从 title、description、comments、runs 或 events 中返回模糊匹配。
+任务引用形状的 `q` 始终使用 SQLite 精确匹配语义，即使当前存在可用的 Tantivy 索引：
+纯数字 `12` 和 `#12` 匹配请求看板内的序号；`board#12` 和 `board/#12`
+只在显式看板等于请求看板时匹配；`t_...` 只匹配请求看板内的任务 ID。
+任务引用形状的查询不会从标题、描述、评论、执行记录或事件中返回模糊匹配。
 
-Response:
+响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -7127,7 +7163,7 @@ Response:
         "task_id": "t_01HX...",
         "seq": 12,
         "score": 60.0,
-        "snippet": "ready spec needle",
+        "snippet": "就绪任务的规格命中内容",
         "task": {
           "id": "t_01HX...",
           "seq": 12,
@@ -7151,22 +7187,24 @@ Response:
 }
 ```
 
-Task mutations do not write Tantivy inside their SQLite transactions. When served by `kanban serve` with `tantivy-backend`, a background loop makes one prompt startup `sync_search_index` attempt and then syncs every `--search-sync-interval-ms` milliseconds by default (`5000`; `0` disables). Manual `kanban index sync` remains available after normal task changes, and `kanban index rebuild` replaces the derived index. The Tantivy state is stored in board-scoped `app_settings` under `search.tasks.state.<board_id>` and round-trips through existing export/import.
+任务变更不会在 SQLite 事务内写入 Tantivy。使用 `tantivy-backend` 运行 `kanban serve` 时，
+后台循环会在启动后立即尝试一次 `sync_search_index`，随后默认每
+`--search-sync-interval-ms` 毫秒同步一次（默认 `5000`；`0` 表示禁用）。普通任务变更后仍可
+手动运行 `kanban index sync`；`kanban index rebuild` 会替换派生索引。Tantivy 状态按看板
+存放在 `app_settings` 的 `search.tasks.state.<board_id>` 下，并可随现有导出与导入往返。
 
-### 13.2 Search task windows by status
+### 13.2 按状态搜索任务窗口
 
 ```http
 GET /api/v1/search/tasks/by-status?board=default&q=needle&status=ready&status=review&include_archived=false&limit=50&offset=0
 ```
 
-This read-only endpoint batches board search columns into one request. It
-accepts the same query, board, label, assignee, archive, and pagination params as
-`GET /api/v1/search/tasks`, but returns one independent search window per
-repeated `status`. `limit` and `offset` apply per status window. Status order in
-the response follows query parameter order. Omitting `status` returns an empty
-`statuses` array.
+这个只读端点把看板上的多列搜索合并为一个请求。它接受与
+`GET /api/v1/search/tasks` 相同的查询文本、看板、标签、执行者、归档和分页参数，
+但会为每个重复的 `status` 返回独立搜索窗口。`limit` 和 `offset` 分别作用于每个状态窗口。
+响应中的状态顺序与查询参数顺序一致；省略 `status` 时返回空的 `statuses` 数组。
 
-Response:
+响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -7205,13 +7243,13 @@ Response:
 }
 ```
 
-### 13.3 Search status
+### 13.3 搜索索引状态
 
 ```http
 GET /api/v1/search/status?board=default
 ```
 
-Response:
+响应：
 
 <!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
 ```json
@@ -7228,1060 +7266,602 @@ Response:
 }
 ```
 
-When the current `MAX(task_events.id)` is greater than the stored Tantivy `last_event_id`, `stale=true` and `index_lag_events` reports that high-watermark lag.
-If background sync is disabled, delayed, or fails, search keeps returning current SQLite fallback results with stale metadata instead of trusting an out-of-date derived index.
+当前的 `MAX(task_events.id)` 大于 Tantivy 持久化的 `last_event_id` 时，
+`stale=true`，`index_lag_events` 会报告高水位差值。后台同步被禁用、延迟或失败时，
+搜索仍会返回当前 SQLite 后备结果和过期元数据，而不会信任已经落后的派生索引。
 
 ---
 
-## 14. Maintenance
+## 14. 图与向量派生能力
 
-### 14.1 Doctor
+本节三个只读端点均已采用精确查询、请求头和成功响应契约，迁移状态均为 `Adopted`。
+SQLite 仍是事实源；图和向量后端是可重建的派生能力。
+
+### 14.1 图后端状态
+
+```http
+GET /api/v1/graph/status?board=default
+```
+
+`board` 可选，默认为 `default`。响应的 `data` 包含 `backend`、`enabled` 和
+供人阅读的 `message`。辅助程序缺失等可降级状态仍以 `200` 返回，并设置
+`enabled=false`。
+
+### 14.2 查询图邻居
+
+```http
+GET /api/v1/graph/neighbors?board=default&entity_uri=kb%3A%2F%2Ftask%2Ft_example&predicate=depends_on&limit=50
+```
+
+| 参数 | 是否必填 | 默认值 | 说明 |
+|---|---|---:|---|
+| `board` | 否 | `default` | 看板 slug 或 ID。 |
+| `entity_uri` | 是 | 无 | 要查询的实体 URI。 |
+| `predicate` | 否 | 无 | 可选的关系谓词过滤，取值见下文。 |
+| `limit` | 否 | `50` | 返回关系数量上限，范围 `0..=1000`。 |
+
+`predicate` 只接受 `belongs_to_board`、`belongs_to_task`、`depends_on`、`produced_by`、
+`generated_by`、`references_artifact`、`related_to`、`uses_skill`、`uses_context`、
+`derived_from`、`supersedes`、`similar_to`、`requires_review` 或 `waiting_for_user`。
+
+响应以 `data` 数组返回关系记录，以 `meta.limit` 回显实际数量上限。每条关系包含
+`subject_uri`、`predicate`、`object_uri`、`graph_uri`、来源信息、开放的 `metadata`，
+以及创建和更新时间。
+
+### 14.3 向量后端状态
+
+```http
+GET /api/v1/vector/status?board=default
+```
+
+`board` 可选，默认为 `default`。响应的 `data` 包含 `backend`、`enabled`、`message`、
+`diagnostics`、必需但可为 `null` 的 `dirty` 和 `board_dirty`，以及有值时才出现的
+`generation`。辅助程序缺失或输出不可用时会通过结构化状态说明降级。
+
+---
+
+## 15. 维护
+
+### 15.1 诊断
 
 ```http
 POST /api/v1/maintenance/doctor
 ```
 
-Response includes SQLite integrity, migration/user version, expired running tasks, orphan run checks, dependency cycle count, archived dependency edge count, missing and suspicious run log counts, executable status invariant counts for dependency/spec/schedule violations, foundation relationship consistency diagnostics, label ontology ledger diagnostics, and Knowledge Substrate diagnostics. Archived parent -> active child edges are allowed historical dependency edges; archived child edges from active parents are counted.
+响应包含 SQLite 完整性、迁移或用户版本、已过期的运行中任务、孤立执行记录检查、依赖环数量、
+已归档依赖边数量、缺失或可疑执行日志数量、依赖、规格和排期违规的可执行状态不变量统计、
+基础关系一致性诊断、标签本体台账诊断和知识底座诊断。已归档父任务指向活跃子任务的边属于
+允许保留的历史依赖边；活跃父任务指向已归档子任务的边会被计数。
 
-Foundation relationship diagnostics are read-only:
+基础关系诊断是只读的：
 
-- `consistency_errors` / `consistency_warnings` summarize board consistency findings for base relationship rows.
-- `consistency_issues[]` reports structured findings with `severity`, `code`, `message`, and `record_ids`.
-- Covered tables: `task_labels`, `task_dependencies`, `task_steps`, `task_execution_plans`, `task_runs`, `task_comments`, `signal_observations`, `signals`, `task_events`, and `task_attachments`.
-- v24+ databases require `signal_observations` and `signals` for the generic signal ledger.
-- Hard errors mean a row's `board_id` differs from a referenced task / label / run / comment / observation board. The message includes `table`, `row`, `row_board`, `referenced`, and `referenced_board`.
-- v25+ databases add board-scoped composite FKs for `signals.observation_id` and `signals.superseded_by_signal_id`.
-- These checks complement service-layer board-scoped writes. `task_labels`, `task_dependencies`, `task_steps`, `task_execution_plans`, `task_runs`, `task_comments`, `signals`, and `task_attachments` are protected by board-scoped composite FKs in current schema. `signal_observations` and `task_events` retain nullable source references; doctor/import still check those board relationships as a hard-error diagnostic layer for corrupted JSONL/raw-SQL inputs.
-- `PRAGMA foreign_key_check` results are surfaced as hard-error `consistency_issues[]` with table, rowid, parent table, and FK index. Import runs the same gate before commit and rolls back on violation.
-- Nonzero `consistency_errors` make `ok=false`.
+- `consistency_errors` 和 `consistency_warnings` 汇总基础关系行的看板一致性发现。
+- `consistency_issues[]` 以 `severity`、`code`、`message` 和 `record_ids` 报告结构化问题。
+- 覆盖的表包括 `task_labels`、`task_dependencies`、`task_steps`、`task_execution_plans`、
+  `task_runs`、`task_comments`、`signal_observations`、`signals`、`task_events` 和
+  `task_attachments`。
+- v24 及以上数据库要求通用信号台账具备 `signal_observations` 和 `signals`。
+- 硬错误表示某行的 `board_id` 与它引用的任务、标签、执行记录、评论或观察记录所属看板不同。
+  消息包含 `table`、`row`、`row_board`、`referenced` 和 `referenced_board`。
+- v25 及以上数据库为 `signals.observation_id` 和 `signals.superseded_by_signal_id`
+  添加按看板组合的外键。
+- 这些检查补充服务层按看板划分的写入保护。当前结构中，`task_labels`、`task_dependencies`、
+  `task_steps`、`task_execution_plans`、`task_runs`、`task_comments`、`signals` 和
+  `task_attachments` 受按看板组合的外键保护。`signal_observations` 和 `task_events`
+  保留可空的来源引用；诊断和导入流程仍会检查这些看板关系，作为损坏 JSONL 或原始 SQL
+  输入的硬错误诊断层。
+- `PRAGMA foreign_key_check` 的结果以硬错误 `consistency_issues[]` 呈现，并包含表名、
+  行 ID、父表和外键索引。导入会在提交前运行同一门禁，出现违规时回滚。
+- `consistency_errors` 非零时，`ok=false`。
 
-Ontology ledger diagnostics are read-only:
+本体台账诊断是只读的：
 
-- `ontology_ledger_errors` / `ontology_ledger_warnings` summarize hard errors and warnings.
-- `ontology_ledger_issues[]` reports structured findings with `severity`, `code`, `message`, and `record_ids`.
-- v12+ databases require `label_ontology_observations`, `label_ontology_signals`, `label_ontology_actions`, `label_ontology_action_atom_effects`, and `label_ontology_action_signals`.
-- Hard errors include cross-board ontology links, orphan action-signal/action-effect links, missing parent/supersede references, label/proposal/task board mismatches, signal supersede cycles, and action parent cycles. Nonzero errors make `ok=false`.
-- Warnings are reserved for rebuildable or historically explainable soft references, such as an action `result_atom_id` whose current `label_atoms` row was rebuilt away.
+- `ontology_ledger_errors` 和 `ontology_ledger_warnings` 汇总硬错误和警告。
+- `ontology_ledger_issues[]` 以 `severity`、`code`、`message` 和 `record_ids` 报告结构化问题。
+- v12 及以上数据库要求具备 `label_ontology_observations`、`label_ontology_signals`、
+  `label_ontology_actions`、`label_ontology_action_atom_effects` 和
+  `label_ontology_action_signals`。
+- 硬错误包括跨看板本体链接、孤立的操作信号或操作效果链接、缺失父级或取代引用、
+  标签、提议或任务的看板不一致、信号取代环和操作父级环。错误非零时 `ok=false`。
+- 警告只用于可重建或可由历史解释的软引用，例如某操作的 `result_atom_id` 所指向的当前
+  `label_atoms` 行已在重建中消失。
 
-Derived-layer diagnostics are read-only:
+派生层诊断是只读的：
 
-- `outbox_pending` / `outbox_running` / `outbox_failed` summarize `index_outbox`.
-- `derived_dirty_stores` counts stores with `dirty=true`.
-- `derived_error_stores` counts stores with `last_error` or failed outbox.
-- `derived_stores[]` reports each store's `store_name`, `schema_version`, `last_event_id`, `dirty`, `last_error`, and pending/running/failed outbox counts for that store target.
+- `outbox_pending`、`outbox_running` 和 `outbox_failed` 汇总 `index_outbox`。
+- `derived_dirty_stores` 统计 `dirty=true` 的存储。
+- `derived_error_stores` 统计存在 `last_error` 或发件箱失败项的存储。
+- `derived_stores[]` 报告每个存储的 `store_name`、`schema_version`、`last_event_id`、
+  `dirty`、`last_error`，以及该存储目标的待处理、运行中和失败发件箱数量。
 
-`derived_stores[].last_event_id` is the store-level successful event watermark, not a board-local watermark. `dirty=true` means the store still has unfinished outbox on any board or a recent update failure; a board-scoped sync/rebuild can advance the watermark while leaving the store dirty if another board still has pending or failed work.
+`derived_stores[].last_event_id` 是存储级成功事件水位，不是看板本地水位。`dirty=true`
+表示该存储在某个看板上仍有未完成的发件箱项，或最近一次更新失败。按看板同步或重建可以推进
+水位；如果其他看板仍有待处理或失败工作，存储会继续保持脏状态。
 
-These fields do not make Tantivy/Oxigraph/LanceDB authoritative. SQLite remains the source of truth, and dirty derived stores remain rebuildable caches.
+这些字段不会让 Tantivy、Oxigraph 或 LanceDB 成为权威数据源。SQLite 仍是事实源，
+脏的派生存储仍是可重建缓存。
 
-### 14.2 Checkpoint
+### 15.2 检查点
 
 ```http
 POST /api/v1/maintenance/checkpoint
 ```
 
-Runs `PRAGMA wal_checkpoint(TRUNCATE)` and returns `busy`, `log_frames`, and `checkpointed_frames`.
+运行 `PRAGMA wal_checkpoint(TRUNCATE)`，并返回 `busy`、`log_frames` 和
+`checkpointed_frames`。
 
-### 14.3 Backup
+### 15.3 备份
 
-MVP 建议只提供 CLI backup，不开放 HTTP backup。
+当前不提供 HTTP 备份；请使用 CLI 备份命令。
 
 ---
 
-## 15. Web UI Interaction Rules
+## 16. Web 界面交互规则
 
-1. 拖拽列时调用 transition endpoint。
+1. 拖拽列时调用状态转换端点。
 2. 普通字段编辑调用 `PATCH /tasks/{id}`。
-3. Web UI 不显示 claim_token，除非 debug 模式。
-4. running task 的 complete/block 操作，若无 token，则 UI 走 `force=true` 并要求确认。
-5. blocked task unblock 后目标列由服务端返回，前端不要预设。
-6. SSE 收到 event 后，优先 refetch affected task，避免客户端状态机漂移。
+3. Web 界面不显示 `claim_token`，调试模式除外。
+4. 对 `running` 任务执行完成或阻塞操作时，若没有令牌，界面使用 `force=true` 并要求确认。
+5. `blocked` 任务解除阻塞后的目标列由服务端返回，前端不要预设。
+6. SSE 收到事件后，优先重新获取受影响任务，避免客户端状态机漂移。
 
-### Signal Comments
+### 16.1 信号评论
 
-API comment DTOs use `kind: "signal"` for signal ledger backlink comments. The natural `metadata` object contains `type:"signal_link"`, `signal_id`, `observation_id`, `signal_kind`, and `signal_status` for service-generated backlinks. Generic signal comment metadata remains open and lossless; clients should render the body as a readable fallback and may link to a signal detail only when the complete backlink shape is present.
-
-
-## Transport catalog implementation note
-
-本规范所列的每个 API/SSE method/path 都由 `kanban-contract` 的 endpoint descriptor catalog 作为唯一实现 source。注册 handler 时使用稳定 `operation_id` 与 `adapter_id`；这两个 identity 分别表示公开 endpoint 和 server runtime binding，不是 Rust type name、函数地址或 `stringify!` 推导值。
+API 评论 DTO 使用 `kind: "signal"` 表示信号台账的反向链接评论。服务生成的反向链接会在
+自然 JSON `metadata` 对象中包含 `type:"signal_link"`、`signal_id`、`observation_id`、
+`signal_kind` 和 `signal_status`。通用信号评论的元数据保持开放且无损；客户端应把正文
+作为可读的后备内容，只有完整的反向链接结构存在时才可链接到信号详情。
 
 
-## B1-C2b task-read 成功响应契约
+## 附录 A. 传输目录实现说明
 
-`GET /api/v1/boards/:board/tasks` 与 `GET /api/v1/boards/:board/tasks/by-status` 各自拥有独立、精确且闭合的成功响应契约，仅共享 `ApiTask`、`ApiLabel` 与既有 `OffsetPaginationMeta`/`TotalPaginationMeta` primitives。列表响应为 `data[]` 与既有 `TotalPaginationMeta { limit, offset, total }`；按状态响应包含有序窗口，每个窗口使用同一 `TotalPaginationMeta`，外层使用既有 `OffsetPaginationMeta { limit, offset }`。这只是 Rust 类型复用，JSON wire 形状不变。
-
-Desktop 仅对这两个读取端点使用 endpoint-specific recursive exact parser：成功响应的 envelope、`meta`、窗口、共享 `ApiTask`、`ApiLabel` 与既有 `OffsetPaginationMeta`/`TotalPaginationMeta` primitives 都必须闭合且完整，pagination 数值必须是非负 safe integer；错误响应也必须是闭合的 `error { code, message, details? }` envelope。任何 malformed、mixed、missing 或 extra shape 统一返回 `invalid_response`，合法错误继续保留 `code`、`message` 与可选 `details`。其它 generic optional envelope 不受影响。两个 endpoint 的 headers 仍为 `Todo`，本次不采纳任何其它 endpoint。
-
-
-## B2-C3 comments exact contract
-
-List/create comments 使用各自的 exact path/response root，create 另有 exact request root；五个 roots 均有真实 producer/consumer witness。`author_type` 仅为 `user|agent`，`kind` 仅为 `note|decision|signal`；agent 的 `agent_type` 可缺失、null 或空白（空白归一化为 null），user 携带非空 `agent_type` 仍由 service 拒绝。unknown enum 在 typed API 边界返回 400。写入 comment 与 `task.comment.created` event 保持同一 SQLite transaction。B7 已采用 endpoint-specific header contracts；surface migration 仍为 Generated，等待后续 API adoption cohort 的 exact surface evidence。
-
-### 8.4 B2-C4 exact run-read contracts
-
-List/get 分别拥有闭合 path 与 success root，只共享 contract-owned `ApiRun`。Run status 是闭合
-enum：`running|succeeded|failed|canceled|expired`。`worker_profile`、`worker_pid`、
-`finished_at`、`exit_code`、`summary` 与 `error` 都是必须出现但可为 `null` 的字段。
-`claim_token` 只存在于显式 claim transition response，不进入 list/get run；SQLite `log_path`
-只供独立 get-run-log handler 解析受信任文件，不进入 list/get run。读取 archived task 的历史仍被
-允许；list 先由全局 task id 解析真实 board，再通过同一 SQLite service path board-scope 查询。
-Headers 保持 `Todo`，两个 endpoint 因而保持 `Generated`。schema 只约束 JSON shape，不替代
-claim、complete、reopen、archive 或 board isolation service guard。
-### 12.6 B4-C1 exact task-label association contracts
-
-`GET /api/v1/tasks/{task_id}/labels`、`POST /api/v1/tasks/{task_id}/labels` 与 `DELETE /api/v1/tasks/{task_id}/labels/{label_id}` 分别拥有闭合、endpoint-specific path/success root；POST 另有闭合 request root。成功响应递归复用同一个 contract-owned `ApiLabel`/`ApiTask` wire shape；POST 的可选 `meta.created_labels` 仅在实际创建 label identity 时出现。Desktop add/remove caller 对 envelope、task、nested labels 与 created-label metadata 做递归 exact 校验，malformed/extra/null meta 统一返回 `invalid_response`。
-
-本批不收敛 board label identity、bootstrap、semantics、atoms/index、suggestion/proposal 或 ontology ledger endpoint。HTTP headers 保持 `Todo`，三个 endpoint 因而保持 `Generated`；name/names 互斥、batch transaction、board/archive scope、幂等与事件语义继续由既有 SQLite service guard 拥有。
-
-## B5-C2 execution/dependency exact contracts
-
-以下 endpoint 已采用各自闭合的 path 与 success response root；有 JSON request 的 endpoint
-同时采用闭合 request root：
-
-- `GET|POST /api/v1/tasks/{task_id}/dependencies`
-- `DELETE /api/v1/tasks/{child_task_id}/dependencies/{parent_task_id}`
-- `POST /api/v1/tasks/{task_id}/execution-plan/not-required`
-- `GET /api/v1/runs/{run_id}/log`
-- `GET /api/v1/boards/{board}/columns`
-
-Dependency 三个 success root 只复用 contract-owned `ApiDependencies`、`ApiDependencyTask`、
-`ApiDependencyEdge` 和既有 `ApiTask` components；它们仍是 endpoint-specific roots，不是一个
-family shortcut。add 的 `201 Created` / idempotent `200 OK`、cycle rejection、edge/event/status
-recompute transaction 与 board scope 继续由 SQLite service guard 决定。Mark-plan response 只返回
-execution-plan record，不能绕过 required-step 或 task-status guard。
-
-Get-run-log 的 runtime 本来就是 JSON envelope，因此采用
-`{ data: { run_id, content, truncated } }` exact root；`log_path` 和 claim token 保持私有，256 KiB
-tail window 与 lossy UTF-8 读取语义不变。List-columns 返回完整 column fields，包括 required-nullable
-`wip_limit`，column status 仍是 canonical task status enum，不能改变 `tasks.status`。
-
-这些 endpoint 的无 query/body 维度标记 `NotApplicable`。通用 actor、locale 与 content-type
-headers 本批保持 `Todo`，由后续统一 transport-closure cohort 处理，因此 endpoint migration
-保持 `Generated`。
+本规范所列的每个 API 或 SSE 方法与路径，都以 `kanban-contract` 的端点描述目录作为唯一
+实现来源。注册处理器时使用稳定的 `operation_id` 与 `adapter_id`；两者分别表示公开端点和
+服务端运行时绑定，不是 Rust 类型名、函数地址或由 `stringify!` 推导出的值。
 
 
 ---
 
-# File: docs/DISPATCHER_SPEC.md
+# 文件：docs/SCHEMA_CONTRACTS.md
 
-# Dispatcher SPEC
+# JSON Schema 契约
 
-Dispatcher 是本地可选调度器。它只处理本机 SQLite DB，不处理远程 worker，不处理多用户协作。
+## 1. 当前权威来源
 
----
+`kanban-contract` 承载公开机器契约目录、wire DTO 和 JSON Schema
+根注册表。`kanban-schema-tool` 叶子 crate 独占二进制程序、离线校验、artifact 与 hash/drift
+工具。状态必须区分：
 
-## 1. 目标
+- Rust 类型已经可以生成 schema。
+- 运行时适配器已经实际使用该类型生产或消费 JSON。
 
-Dispatcher 负责：
+API error/health response、label semantics delete response 与 decision metadata input
+均为 `adopted`。API error 的 `code` 使用闭合的 `ApiErrorCode` snake_case 枚举；
+status 与依赖 locale 的 `message` 仍由 server adapter/core 错误渲染决定。运行时行为以真实
+adapter 为权威；不能因为 `kanban-contract` 中存在同形 DTO 就宣称已采用该契约。
 
-1. reclaim：回收超时、崩溃或失联的 `running` 任务。
-2. claim：从 `ready` 队列选择任务并进入 `running`。
-3. run：执行本地 worker profile。
-4. heartbeat：维持 claim。
-5. finish：根据 worker 结果写回 `done/review/blocked/ready`。
+提交的 schema 由 Rust 类型确定性生成。`schemas/fixtures/**` 是手工提交且同时经过
+Serde/JSON Schema 测试的权威示例。采用证据必须按方向分工：
+`Deserialize` 请求的 producer 由真实 contract DTO 程序化构造并序列化，结果与已提交的
+有效 fixture 精确相等；consumer 从该 fixture 反序列化，并通过真实运行时 router/handler。
+`Serialize` 响应的 producer 才来自真实 adapter 响应路径。producer/consumer 不得
+共用同一个 exercise helper 或仅靠测试名伪装独立证据。每个 witness 必须包含 `operation`、
+`contract_id`、`surface`、`direction`、`package`、`test_target` 和 `exact_test`。
 
-Dispatcher 不负责：
+语义权威保持分层：
 
-- 远程执行。
-- 多机协调。
-- 权限控制。
-- 长期日志存储。
+- wire DTO 与 schema：字段、类型、必填/可选、未知字段策略和基础值域。
+- `docs/API_SPEC.md`、`docs/CLI_SPEC.md`：operation、HTTP/退出码、stdout/stderr
+  和用户可见行为。
+- `kanban-sqlite::service` 与 `kanban-core`：事务、状态机、CAS、依赖、
+  重新计算和结构化元数据的跨字段业务保护。
 
----
+schema 校验通过不代表业务命令可以执行；业务测试不能被 schema fixture 替代。
 
-## 2. 运行方式
+## 2. 契约状态
 
-### 2.1 单次运行
+`operation_inventory()` 中每个 semantic contract 都必须使用以下状态之一：
 
-```bash
-kanban dispatch --once
-```
+| 状态 | 含义 | 必备证据 |
+|---|---|---|
+| `planned` | 已识别精确边界，尚未生成 root | 不允许伪填 schema、fixture、采用或排除 |
+| `generated` | Rust 类型、root 和手工 schema fixture 已存在 | schema ID、正例 fixture；不得声明运行时采用 |
+| `adopted` | 真实 producer/consumer 已切到同一 contract | schema fixture、真实 producer fixture、双方结构化且可执行的精确测试 witness |
+| `excluded` | 明确不是稳定 JSON contract | 具体排除理由，不能同时声明 schema 或 fixture |
 
-执行一轮：
+`schema-audit-closed` 只允许 `adopted` 和 `excluded`。它同时拒绝接口族、
+通配符和双向捷径；双向协议必须拆成精确的 input/output contract。
+因此“生成了 schema”永远不能代替“运行时已采用”。
 
-1. reclaim expired。
-2. claim up to capacity。
-3. 对已 claim task 启动 worker。
+以下是结构根的代表性类别，不是当前 480 个根的完整清单：
 
-### 2.2 常驻运行
+- 基础契约：API 错误响应、`GET /health` 响应、标签语义删除响应和决策评论元数据输入。
+- 生命周期请求：`SpecifyTaskRequest`、`PromoteTaskRequest`、`ClaimTaskRequest`、
+  `ReclaimTaskRequest`、`HeartbeatTaskRequest`、`CompleteTaskRequest`、
+  `SubmitReviewTaskRequest`、`BlockTaskRequest`、`UnblockTaskRequest`、
+  `ReopenTaskRequest`、`ArchiveTaskRequest`、`ArchiveBoardRequest`、
+  `AddDependencyRequest`。
+- 任务读取请求：`GET /api/v1/boards/:board/tasks` 与
+  `GET /api/v1/boards/:board/tasks/by-status` 各自独立的 path/query DTO，共 4 个精确 root；
+  query schema 对可重复字段同时声明 `uniqueItems` 与 9/4/3/32 `maxItems`，并冻结
+  `q=1024`、`assignee=128`、单个 `label=128` 的 `maxLength`、label 的 Unicode
+  `White_Space` 反集 pattern 及 `limit=1000`。raw 8192-byte cap 与由各字段预算推导出的
+  54 对上限由 server 运行时门禁负责；标准表单编码的 UTF-8/保留字符 fixture、
+  Unicode 纯空白负例与非默认 board 哨兵证明真实 producer/consumer。
+- 看板端点：list query、create request、get/archive path 与四个端点专属成功
+  response，共 8 个精确 root；四个 success root 只共享闭合的 `ApiBoard` 组件。
 
-```bash
-kanban dispatch
-kanban dispatch --max-iterations 10
-```
+当前权威快照有 480 个 schema root：480 个 `adopted`、0 个 `generated`、
+0 个 `planned`、0 个 `excluded`，并登记 960 个结构化 witness。114 个有限 JSON CLI
+叶子命令均绑定到精确输出 root；export stdout JSONL 流不属于有限 envelope。21 个
+JSONL discriminator 的 input/output 分别拥有精确 root，记录数据使用闭合的自然 JSON；
+required-nullable 键禁止省略，但接受显式 `null`。CLI task/step/run adapter 会丢弃仅供持久层
+使用的 `claim_token` 与内部 `log_path`，包括递归 linked task；dependency、events 与 helper
+subprocess protocol 仍由各自组件负责，公开 CLI 契约只拥有最终 stdout shape。
 
-前台循环执行。`--max-iterations` 用于测试、脚本或受控 smoke；不传时持续运行直到进程收到外部停止信号。
+配置与辅助进程拥有 2 个 TOML 配置输入、7 个 graph helper 响应和 12 个 vector helper
+响应契约。worker profile 输入只约束 CLI 选中的 `[workers.<profile>]` 配置节；未选配置节
+保持不透明并允许向前兼容，选中配置节严格拒绝未知或非法字段。真实配置解码器、子进程
+适配器和协议解码器分别提供 producer/consumer witness，schema 工具依赖仍隔离在叶子 crate。
 
-### 2.3 与 server 同进程
+`surface_operation_catalog()` 是独立维度：246 个 `adopted`、0 个 `generated`、
+0 个 `planned`、5 个 `excluded`。其中 CLI 为 114 个 `adopted`、5 个非 JSON
+`excluded`，21 个 JSONL record surfaces 与 6 个 structured metadata surfaces 全部为
+`adopted`，Config/Helper 为 2/19 个 `adopted`；API 为 83 个 `adopted`，SSE 为 1 个
+`adopted`。端点义务直方图同样独立：296 个
+`Contract`、0 个 `Todo`、207 个 `NotApplicable`、1 个有运行时证据的 `Excluded`。
+`schema-check` 的未闭合项为 0：semantic generated/planned 0 + surface
+generated/planned 0 + 端点 Todo 0。
 
-后续扩展。当前实现先提供独立 `kanban dispatch` 前台 loop；`kanban serve` 不启动 dispatcher。
+83 个非 SSE 端点各有一个 operation-specific 精确 header root，并按真实 router 行为复用
+五种闭合 wire 配置。所有配置都接受可选
+`Accept-Language`；actor mutation 增加可选 `X-KB-Actor`；required/optional JSON body 分别使用
+`RequiredOne`/`OptionalOne` 的 `Content-Type`，无 body 的端点不声明该参数。83 个 root 均以
+配置 fixture producer 和真实 router consumer 作为结构化 witness。SSE
+`Last-Event-ID` 保持有运行时证据的 `Excluded`。由此 API endpoint catalog 已无 `Todo`；全局
+`schema-audit-closed` 已无 semantic、surface 或端点权威缺口。
 
-### 2.4 Worker profile config
+## 3. 精确公开面目录
 
-```bash
-kanban dispatch --worker-profile backend --profile-config ./workers.toml
-```
+`surface_operation_catalog()` 记录可以自动发现的公开传输操作：
 
-最小配置格式：
+- API：83 个 JSON method/path，加 1 个 SSE method/path。
+- CLI：119 个 Clap 叶子命令；非 JSON 文本/守护进程/hook 协议逐项 `excluded`。
+- JSONL：21 个精确 `type=<discriminator>`。
+- Metadata：6 个无传输的精确结构化元数据操作。
 
-```toml
-[workers.backend]
-command = "cargo nextest run -p kanban-sqlite --no-fail-fast"
-claim_ttl_ms = 300000
-heartbeat_interval_ms = 30000
-on_success = "done"
-on_failure = "blocked"
-log_dir = ".kb/logs/runs"
-```
+防漏 seam 与生产注册同源：
 
-当前 CLI 只读取被 `--worker-profile` 选中的 section。支持字段：
+- API 由 `AuditedRouter` / `endpoint_route!` 注册 Axum route；每个 binding 以 descriptor 的实际 method/path 建立并审计。
+- CLI 测试从 `clap::CommandFactory` 递归枚举真实 leaf command。
+- JSONL exporter/importer 共用 `PORTABLE_RECORDS` discriminator/table/scope descriptor。
 
-- `command`
-- `claim_ttl_ms`
-- `heartbeat_interval_ms`
-- `on_success`: `done|review|blocked|ready`
-- `on_failure`: `done|review|blocked|ready`
-- `log_dir`
+JSONL exact roots 只描述当前 natural JSON wire contract。SQLite importer 在进入 exact
+record decoder 前允许一次 one-way compatibility normalization：仅接受上一版真实 exporter
+写出的 coherent storage-native snapshot（JSON text columns 与 integer booleans），并拒绝与
+natural records 混用；同一 record 同时出现 natural/storage-native renamed keys 时，必须在
+normalization 前拒绝，不能由 legacy 值覆盖 natural 值。Normalization 后仍由相同的 21 个
+input roots 和现有 service/doctor guards 校验；export producer 不写 legacy keys，因此该
+migration 不新增 schema root、surface operation 或双轨 output contract。
 
-`log_dir` 必须位于受信任 run log 根目录内：平台默认 run log 目录、
-`<db_dir>/logs`，或 `<db_dir>/.kb/logs`。Dispatcher 在 claim task 之前拒绝
-其他路径，避免写出后续 `kanban run logs` 和 `doctor` 会判定为可疑的 run log。
+以上集合与 committed `surface-operations.json` byte-stable catalog 对照。新增、删除或
+重命名 route、command、export type 时，`schema-surface-audit` 必须先 RED，直到精确
+catalog 和契约状态被有意更新。`/api/v1/**`、`kanban ** --json` 或一个
+bidirectional family 不能用于关闭这些 operation。
 
----
+## 4. 依赖边界
 
-## 3. Dispatcher Loop
+| 构建模式 | 启用的依赖 | 用途 |
+|---|---|---|
+| `kanban-contract` 默认模式 | `serde`、`serde_json` | contract 数据类型与状态目录 |
+| `kanban-contract/schema` | 默认模式 + `schemars 1.2.1` | 从 Rust DTO 生成 schema 文档 |
+| `kanban-schema-tool` | `kanban-contract/schema` + `jsonschema 0.47.0` + `sha2` | 离线 metaschema、fixture、manifest 和漂移门禁 |
 
-伪代码：
+叶子工具的直接依赖拓扑精确锁定为 5 条普通边：
+`jsonschema`、`kanban-contract`、`serde`、`serde_json` 与 `sha2`。它们必须来自 root
+workspace canonical 声明，且 source/path、version requirement、default feature、feature set、
+alias、optional 与 target signature 全部一致；tool 不得声明 dev、build 或 target-specific
+dependency。除 tool 自身外，任何 workspace member 都不得通过 normal/dev/build、alias、
+optional 或 target-specific 直接边引用它。结构化 manifest 策略锁定权威声明；
+metadata policy 必须从 `crates/kanban-schema-tool/Cargo.toml` 运行 full locked graph，不得使用
+`--no-deps`，并 fail-closed 校验 `resolve.root`、package/node 唯一性、tool/contract canonical
+package ID 与 manifest path、五条 resolved direct edge 及 tool-root reachable closure。除当前
+workspace tool/contract 外，closure 的每个 package 都必须来自 crates.io；path/git direct 或
+transitive override 都失败。
 
-```rust
-loop {
-    let now = clock.now_ms();
+`policy/schema-tool-registry-closure.json` 是唯一的 registry 闭包批准记录。它用
+`format_version = 1`、`lockfile_version = 4`、`root_package = "kanban-schema-tool"`
+和 canonical `packages[]` 表达当前 reachable registry set；每项字段必须精确为
+`name`、`version`、`source`、`checksum`，按 `(name, version, source)` 排序，未知字段、
+重复、缺失、额外项、非 canonical 顺序和 checksum 漂移全部失败。policy 解析真实
+`Cargo.lock` 并双向比较，但普通 gate 永不自动写入或 bless approval。该边界检测
+已提交 lockfile 相对批准快照的 identity/checksum 漂移；Cargo fetch/build
+另行按 registry index `cksum` 验证 crate 内容。
 
-    reclaim_expired(now)?;
-    while running_count() < max_concurrency {
-        match claim_next_ready_task(now)? {
-            Some(claimed) => spawn_worker(claimed)?,
-            None => break,
-        }
-    }
+Cargo metadata 的 `SourceId` 仅作为不透明标识：本项目锁定指定 toolchain 下批准的
+逻辑 SourceId 字符串，不把其 URL 字符串当成 Cargo 的通用权威网络 URL；
+物理下载允许 Cargo source replacement mirror。六个产品 graph 的真实 `cargo tree` 另行负责
+all-features/all-target normal runtime 传递性泄漏扫描，不能替代 dev/build direct-edge
+检查。若需改变拓扑，必须先形成新决策并显式更新 gate，不能通过 manifest、
+resolve、lockfile、approval 或 recipe 漂移暗中扩边。
 
-    sleep(poll_interval);
-}
-```
+`kanban-contract` 的 manifest feature 必须精确为 `default = []` 与
+`schema = ["dep:schemars"]`；dependencies 必须精确为 `serde`、`serde_json` 和 optional
+workspace `schemars`，且不允许 dev/build/target dependency。root canonical `schemars` 固定
+`1.2.1`、`default-features = false`、`features = ["std", "derive"]`；full resolve 必须启用
+contract `schema` 并形成唯一同名 crates.io `schemars 1.2.1` edge。
 
----
+`schemars 1.x` 与 `jsonschema` 都关闭默认 feature。正常 CLI/server/desktop/dispatcher 及
+`kanban-vector-lancedb`、`kanban-graph-oxigraph` 产品 helper 依赖图不得启用 `kanban-contract/schema`、依赖 `kanban-schema-tool`，也不得包含本项目采用的
+`schemars 1.x` / `jsonschema`。Tauri 自身当前存在独立的 `schemars 0.8` transitive
+依赖；隔离 gate 明确区分该既有图与 leaf tooling graph。
 
-## 4. Promotion
+任何拥有 adopted producer/consumer witness 的 package 都必须通过 normal dependency
+引用当前 workspace 的 `crates/kanban-contract`；只有 dev-dependency，或指向 registry、
+git、其它本地 path 的同名 package，都不能证明运行时采用。witness gate 从完整
+`cargo metadata` 同时锁定 canonical manifest path、workspace package ID、unconditional
+non-optional normal dependency 声明和 default resolve edge：两者都要求 `kind is None` 与
+`target is None`，声明还要求 `optional is false`。平台或 feature-specific witness 当前不受
+支持。默认 metadata/exact test 是正向采用证明；随后以 adopter package ID 运行
+`cargo tree --all-features --target all --edges normal,features --locked`，作为负向泄漏扫描，
+覆盖 host、target-specific 与产品 feature runtime graph，拒绝 `kanban-contract/schema`、
+`kanban-schema-tool`、`schemars 1.x` 或 `jsonschema` 泄漏，并要求 tree 实际出现当前
+workspace contract path。离线 tooling 只能通过 leaf crate 执行，tooling owner 本身不能充当
+runtime adoption witness。
 
-Dispatcher 不执行 `todo/scheduled -> ready` promotion。`ready` 表示显式人工 promote 意图；依赖完成或计划到期只会改变查询返回的 derived state，不会把 task 放入 ready 队列。
+schema tooling 不启用 HTTP/file resolver、TLS、OpenAPI 或生产 runtime validation。
 
----
+## 5. 根契约
 
-## 5. Ready Queue Selection
+- 方言固定为 JSON Schema Draft 2020-12，不依赖库默认值。
+- request/input 使用 `SchemaSettings::for_deserialize()`。
+- response/output 使用 `SchemaSettings::for_serialize()`。
+- root ID 固定为 `urn:kanban-tool:schema:<surface>:<semantic-name>:v1`。
+- root 主版本与 crate 版本、API route 版本解耦；破坏性 wire contract 提升 root
+  主版本，并同时删除被替代 artifact，不保留兼容双轨。
+- schema 必须自包含；只允许 `#/$defs/...` 形式的本地 `$ref`。
+- 产物不得包含时间戳、主机名、绝对路径或联网引用。
+- `DecisionMetadata.risk` / `verification` 允许缺失，但显式 `null` 同时被真实
+  Serde DTO 和 JSON Schema 拒绝。
 
-默认排序：
+Decision metadata 的现有 service 语义允许未知顶层/option 字段，所以该 root 是
+类型化开放契约：已知字段被验证，扩展字段被保留。selected 必须匹配 option、
+slug 唯一、纯空白字符串拒绝等跨字段/业务约束仍由现有 service guard 负责。
 
-```sql
-ORDER BY priority ASC, created_at ASC
-```
-
-`priority` is the implemented P0-P3 integer level where `0` (P0) is highest and
-`3` (P3) is lowest/default, so dispatcher claim order selects P0 first among tasks that are already `ready`.
-
-Priority does not place work into the ready queue. P0 means incident, current
-blocker, or must-handle-immediately work; P1 is near-term focus; P2 is important
-follow-up; P3 is ordinary backlog/low/default. Ordinary ready tasks should remain
-P1/P2/P3 unless they are truly immediate blockers. A P0 task in `todo`,
-`scheduled`, or `triage` is still not claimable until the normal state-machine
-guards allow explicit promotion to `ready`. A task whose execution plan is still
-`unplanned` is not claimable even if its status is `ready`; add steps or mark the plan `not_required` before dispatcher claim.
-
-可选后续扩展：
-
-- assignee/profile matching。
-- due_at 优先。
-- label filter。
-- WIP limit。
-
-MVP selection 输入：
+## 6. 已提交目录结构
 
 ```text
-board_id
-worker_profile optional
-limit
+schemas/
+  fixtures/
+    api/
+    metadata/
+  json-schema/
+    draft-2020-12/
+      operations.json
+      surface-operations.json
+      manifest.json
+      api/
+      metadata/
 ```
 
-如果 task.assignee 不为空：
+`operations.json` 记录 semantic contract 状态；`surface-operations.json` 记录精确
+transport operation。`manifest.json` 分别记录两者的 hash，以及每个 root 的 ID、path、
+operation、direction、strictness、schema fixtures 和 SHA-256。生成顺序和 JSON key
+顺序稳定；连续生成必须 byte-identical。
 
-- 当 worker profile 与 assignee 匹配时可 claim。
-- 人工 CLI start 可忽略 worker profile，但 actor 写入 claim_owner。
+仓库顶层 Markdown 与 `docs/**/*.md` 中每个 CommonMark `json` fence 都必须紧邻以下两类
+marker 之一。opening fence 可使用至少三个 backtick 或 tilde、最多三个前导空格，并可在
+严格的首个 `json` info token 后携带 attributes；closing fence 必须使用相同字符且长度不短于
+起始 fence：
 
----
+- `schema-doc` 同时声明 exact `contract` 与其 manifest-owned positive `fixture`；inline JSON
+  必须可解析且与该 fixture 的 JSON value 完全一致。
+- `schema-doc-ignore` 必须填写非空理由，只用于片段、伪值或其它有意不作为完整 wire
+  example 的说明性 payload。
 
-## 6. Claim Algorithm
+`schema-docs` 会拒绝未标记 fence、malformed/orphan marker、未知 contract、fixture mapping
+漂移、无效 JSON 与 inline/fixture mismatch。新增公开示例不能依赖“看起来相似”的手工
+payload；要么复用 committed canonical fixture，要么明确说明为何只是 illustrative fragment。
 
-Claim 必须原子执行。
-
-伪 SQL：
-
-```sql
-BEGIN IMMEDIATE;
-
-SELECT id
-FROM tasks
-JOIN boards ON boards.id = tasks.board_id
-WHERE tasks.board_id = ?
-  AND boards.archived_at IS NULL
-  AND status = 'ready'
-  AND claim_token IS NULL
-  AND (assignee IS NULL OR assignee = ?)
-  AND (
-    EXISTS (
-      SELECT 1 FROM task_steps s
-      WHERE s.board_id = tasks.board_id
-        AND s.parent_task_id = tasks.id
-        AND s.required = 1
-    )
-    OR EXISTS (
-      SELECT 1 FROM task_execution_plans ep
-      WHERE ep.board_id = tasks.board_id
-        AND ep.task_id = tasks.id
-        AND ep.state = 'not_required'
-    )
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM task_dependencies d
-    JOIN tasks p ON p.id = d.parent_task_id
-    WHERE d.child_task_id = tasks.id
-      AND p.status NOT IN ('done','archived')
-  )
-ORDER BY priority ASC, created_at ASC
-LIMIT 1;
-
-UPDATE tasks
-SET status = 'running',
-    claim_token = ?,
-    claim_owner = ?,
-    claim_expires_at = ?,
-    last_heartbeat_at = ?,
-    started_at = COALESCE(started_at, ?),
-    updated_at = ?,
-    lock_version = lock_version + 1
-WHERE id = ?
-  AND status = 'ready'
-  AND claim_token IS NULL;
-
-INSERT INTO task_runs (...);
-UPDATE tasks SET current_run_id = ? WHERE id = ?;
-INSERT INTO task_events (...);
-
-COMMIT;
-```
-
-如果 update affected rows = 0，说明被其他进程抢先 claim，重新选择下一个。
-
----
-
-## 7. Worker Profile
-
-配置示例：
-
-```toml
-[workers.default]
-command = "./scripts/run-task.sh"
-concurrency = 1
-claim_ttl_ms = 300000
-heartbeat_interval_ms = 30000
-max_runtime_ms = 3600000
-on_success = "done"   # done | review
-on_failure = "blocked" # blocked | ready
-
-[workers.codegen]
-command = "kb-agent --task $KB_TASK_ID"
-concurrency = 2
-on_success = "review"
-on_failure = "blocked"
-```
-
-### 7.1 环境变量
-
-Worker process 获得：
-
-| Env | 说明 |
-|---|---|
-| `KB_DB_PATH` | SQLite DB path。 |
-| `KB_BOARD_ID` | board id。 |
-| `KB_BOARD_SLUG` | board slug。 |
-| `KB_TASK_ID` | task id。 |
-| `KB_TASK_SEQ` | task seq。 |
-| `KB_TASK_TITLE` | title。 |
-| `KB_CLAIM_TOKEN` | claim token。 |
-| `KB_RUN_ID` | run id。 |
-| `KB_ACTOR` | dispatcher/worker actor。 |
-
-Worker 可通过 CLI 回写：
+## 7. 命令
 
 ```bash
-kanban --db "$KB_DB_PATH" task heartbeat "$KB_TASK_ID" --claim-token "$KB_CLAIM_TOKEN"
-kanban --db "$KB_DB_PATH" task done "$KB_TASK_ID" --claim-token "$KB_CLAIM_TOKEN" --summary "..."
+just schema-generate
+just schema-check
+just schema-docs
+just schema-tool
+just schema-surface-audit
+just schema-dependency-isolation
+just schema-adoption-witness-self-test
+just schema-adoption-witness
+just schema-contract
+just schema-audit-closed
 ```
 
-也可以让 dispatcher wrapper 根据进程退出码自动 complete/block。
+- `schema-generate` 从 registry 重新生成 committed tree，然后立即验证。
+- `schema-check` 不写文件，比较 fresh generation 与 committed tree，并拒绝 missing、
+  stale、orphan 或 byte drift。
+- `schema-docs` 先运行 marker 负测，再审计顶层与 `docs/` 下全部项目文档中的 public JSON fence。
+- `schema-surface-audit` 对照真实 API/CLI/JSONL surface 与 exact catalog。
+- `schema-dependency-isolation-self-test` 用 fake `cargo` 锁定 default contract、六个产品
+  crate/helper 的 all-features/all-target 负向扫描与 leaf tool 正向控制 argv；
+  manifest/metadata/lockfile/approval mutations 覆盖 full resolve 的
+  missing/duplicate node/record、wrong package/source/path、同名多版本 checksum、
+  direct/transitive path/git override、contract/schema/schemars 漂移和 registry closure
+  双向集合漂移。真实 `just` parser AST hash 与 fake nested
+  `just`/build-lock/cargo/python/script JSONL trace 另外锁定产品 `fmt`（core）、
+  `fmt-full`（core + helper）、`schema-fmt`（contract + leaf）的互斥 package selection，
+  full/rust/test 调用图、schema 子 gate、`schema-audit-closed` 内部调用、`release`
+  13 步顺序和 `test-full` 的 nextest/fallback 双分支。mutation tests 必须拒绝
+  workspace-wide fmt、package 漂移、gate 删除、命令旁路与顺序调换。
+- `schema-dependency-isolation` 先运行该自测，再用结构化 manifest/full locked metadata policy
+  检查全部 workspace declaration、resolved identity、真实 `Cargo.lock` 与 committed registry
+  approval，再用真实 cargo tree 检查六个产品的传递性 runtime graph 与 leaf tooling graph；
+  tool 不能进入产品 default/core/helper/full/rust 门禁，也不能作为 runtime adopter。
+- `schema-adoption-witness-self-test` 持久验证 dev-only dependency、registry/git/其它
+  path 同名包冒充、resolve package ID 漂移、all-target normal graph 泄漏、缺失 test
+  target、0 exact tests 和“列出但未执行”等防伪分支。
+- `schema-adoption-witness` 先运行上述负测，再从当前 Rust inventory 读取 adopted witness；
+  Cargo plan/metadata/tree/test 调用全部使用 `--locked`。gate 先按
+  `(package, test_target, exact_test)` 去重 locator，再按 `(package, test_target)` 分组；同一组
+  只启动一次未过滤的 list 与一次完整 test-target process。list 输出必须唯一列出组内每个
+  `exact_test`，完整执行输出必须逐项显示这些 test 真实通过；同一 locator 可以承载多条
+  contract/role mapping，报告仍逐条保留。gate 不再为每个 witness 单独运行
+  `--exact --list` 或要求单测试进程的 `1 passed` summary。当前每个 adopted contract 的
+  producer/consumer mapping 都必须被分组执行覆盖；当前计数以本文件前部唯一的 train
+  authority snapshot 为准。
+- `schema-contract` 先运行 dependency isolation，再运行只选择 `kanban-contract` 与
+  `kanban-schema-tool` 的 `schema-fmt`，随后汇总 feature tests/clippy、metaschema、正负
+  fixtures、determinism、docs marker、surface audit、adoption witness 和 committed drift gate。
+- `schema-audit-closed` 用于整个 migration train 的最终关闭检查；真实 trace 锁定它先执行
+  adoption witness，再通过 build lock 运行 `kanban-schema audit --require-closed`。当前
+  migration train 的 contract、surface 与 endpoint obligation 已全部闭合；该 gate 应成功，
+  G006 已由 WATCH 转为 closed evidence。
+- `release` 精确依次调用 `affected-self-test`、`schema-contract`、`audit`、`rust-full`、
+  `bench-check`、`target-tools`、`cli-package`、`cli-package-layout`、
+  `desktop-package-config`、`desktop-package`、`desktop-package-layout`、`smoke` 与
+  `diff-check`；AST + ordered trace 对删除或重排 fail closed。
 
----
+所有会写 Cargo target 的命令必须通过这些 `just` recipes 和仓库 build lock 运行。
 
-## 8. Heartbeat
+## 8. 采用检查清单
 
-默认：dispatcher wrapper 负责 heartbeat，不要求 worker 自己做。
+将条目改为 `adopted` 前必须同时满足：
 
-规则：
+- operation 是精确 input 或 output，不是 family/wildcard/bidirectional shortcut。
+- runtime producer/consumer 实际引用 `kanban-contract` 的同一 DTO。
+- `adoption.producer_fixture` 能通过对应 schema；request/input 由 contract DTO 程序化
+  serialize 后与它精确比较，response/output 则来自真实 adapter producer path。
+- consumer 对 request/input 必须从 committed fixture 开始并通过真实 production handler；
+  producer 与 consumer 不能调用同一个高层 exercise helper。
+- `adoption.producer` 和 `adoption.consumer` 都声明完整的结构化 witness；其
+  `operation`、`contract_id`、`surface`、`direction` 与 adopted surface/contract
+  完全一致。
+- 每个 witness 的 `package` 以 normal path dependency 引用当前 workspace
+  `crates/kanban-contract`；声明 path/source 和 resolve package ID 都一致。
+- 以 adopter package ID 生成的 all-target normal graph 不启用 `kanban-contract/schema`、
+  不依赖 `kanban-schema-tool`，且包含当前 workspace contract path。
+- `test_target` 使用 `lib` 或具名 integration test target；分组 list 必须唯一列出每个
+  `exact_test`，完整 test-target process 必须整体成功并逐项显示这些 test 通过；缺失、重复、
+  ignored、未执行或 target 内任一测试失败都失败。
+- schema direction 与真实 Serde 使用方向一致。
+- strictness 与现有行为一致，没有把 open metadata 错误收紧。
+- service/state-machine/exit-code/HTTP-status/transaction tests 继续保留。
+- `schema-check`、surface audit、受影响测试和默认 dependency isolation 均有证据。
 
-- 每 `heartbeat_interval_ms` 更新一次。
-- heartbeat TTL 延长至 `now + claim_ttl_ms`。
-- 若 heartbeat 失败，dispatcher 应终止 worker 或等待 reclaim。
 
----
+## 9. 传输描述符权威
 
-## 9. Finish Policy
+`kanban-contract` default feature 现在还拥有 dependency-free 的 transport descriptor catalog。它精确列出 84 个真实 endpoint（83 JSON API + 1 SSE）：稳定 `operation_id`、`surface`、自有 `HttpMethod`、`path`、migration/exclusion 和六项明确 obligation（path/query/headers/body/success/SSE）。每一项 obligation 必须显式为 `Contract(contract_id)`、`NotApplicable`、`Excluded { reason }` 或 `Todo`；没有 `Option` 或隐式默认。
 
-### 9.1 Success
+`OperationContract.transport` 对 API/SSE 必须显式为
+`Http { operation_key, location, parameters }`，对 CLI/JSONL/metadata/config/helper 必须显式为
+`NoTransport`。location 是 `Path|Query|Headers|Body|Success|Error|Sse`：前四项只允许
+`Deserialize`，后三项只允许 `Serialize`。`Success` 只表示 2xx success；`Error` 只允许
+`SharedComponent`，表示非 2xx response，且不会增加第七种 endpoint obligation。只有
+path/query/headers 可以声明 wire parameter；每个参数必须选择
+`RequiredOne|OptionalOne|RepeatedOrdered`。名称为空或有首尾空白、header 大小写冲突、缺
+cardinality、非 `RequiredOne` 的 path 参数、path placeholder 的名称/缺失/额外/顺序/大小写
+不精确匹配，以及 Body/Success/Error/SSE 携带 parameters 都会失败。
 
-Worker exit code = 0。
+`SurfaceOperation` 仍保留 CLI/JSONL inventory，但 API/SSE 条目由 descriptor 投影生成，不能再维护独立的手写 method/path 表。Schema root 的关联字段为 `contract_id`；`operation_id` 只属于 transport endpoint，二者不能混用。
 
-根据 profile：
+server 在唯一注册点为每个 descriptor 建立稳定、显式、唯一的 `adapter_id` 与 handler binding，并从 descriptor 取得 method/path。validator 同时拒绝 duplicate `operation_id`、duplicate method/path、wrong surface 及缺失/重复/orphan runtime binding；这一步只收敛 transport 身份，DTO adoption 仍按 migration train 单独完成。
 
-| `on_success` | Transition |
-|---|---|
-| `done` | `running -> done` |
-| `review` | `running -> review` |
+Endpoint migration state 与单项 obligation adoption 分开收敛：endpoint 可以保持
+`Generated`，同时把已经真实迁移的 body 标为 `Contract(contract_id)`，且该 contract 为
+`Adopted`。任意 `Adopted` contract 都必须是 `granularity=Exact`；obligation 只能引用
+`Generated|Adopted` 且 `binding=ExactSurface, granularity=Exact` 的 contract，并要求
+operation、surface、direction 与 location 全部精确匹配。唯一 method/path、精确
+`operation_key` 与单一 location 已结构性保证 endpoint exact binding 唯一，因此不保留一个
+不可达的全局 second-binding guard；surface catalog 自身仍显式拒绝重复 exact reference。
+unknown、`Planned`、`Excluded` 或错位引用均 fail closed。只要其它 obligation 仍为 `Todo`，
+endpoint 就不能提升为 `Adopted`。
 
-### 9.2 Failure
+`SharedComponent` 使用无 exact `operation_key` 的 HTTP transport，可以被多个 endpoint
+显式链接。orphan policy 是严格的 OR：至少一个显式 linkage，或同 surface 的真实 adoption
+witness；两者均缺失才失败，已有显式 linkage 时不再要求 witness operation 出现在 catalog。
+shared reference 会进入投影 artifact 供审计，但不进入 exact adoption set、不满足 endpoint
+obligation，也不能单独决定整个 endpoint 的 migration state。当前 `api.error.response`
+使用 `location=Error` 并显式链接到 8 个 endpoint；它仍不计入 success exact coverage。
+这些 endpoint 依靠各自完整的 exact obligations 达到 `Adopted`。
 
-Worker exit code != 0。
-
-根据 profile：
-
-| `on_failure` | Transition |
-|---|---|
-| `blocked` | `running -> blocked` with reason。 |
-| `ready` | reclaim to ready and increment retry。 |
-
-如果 `retry_count >= max_retries`，强制进入 `blocked`。
-
-### 9.3 Timeout
-
-如果 run 超过 `max_runtime_ms`：
-
-- 尝试 terminate worker。
-- close run as `expired`。
-- 根据 retry policy 进入 `ready` 或 `blocked`。
-
----
-
-## 10. Reclaim
-
-Reclaim 条件：
-
-1. `claim_expires_at <= now`。
-2. worker_pid 不存在。
-3. run 超时。
-4. manual force。
-
-Reclaim side effects：
-
-- task status: `ready` 或 `blocked`。
-- clear claim fields。
-- close active run as `expired/canceled`。
-- insert `task_events(kind='task.reclaimed')`。
-
----
-
-## 11. PID Checking
-
-因为只支持单机，可以检查 PID。
-
-限制：
-
-- PID 可能复用。
-- 只能作为辅助信号，claim TTL 仍是主机制。
-- 跨平台实现需要抽象。
-
-建议：
-
-- Linux/macOS：检查 pid 是否存在。
-- Windows：后续实现，MVP 可只依赖 TTL。
-
----
-
-## 12. Logs
-
-Worker stdout/stderr 不全量写 DB。
-
-默认路径：
-
-```text
-~/.local/state/kb/logs/r_<run_id>.log
-```
-
-DB 记录：
-
-- `task_runs.log_path`
-- `task_runs.summary`
-- `task_runs.error`
-
-CLI：
-
-```bash
-kanban run logs r_01HX...
-```
-
----
-
-## 13. Failure Cases
-
-| Case | 行为 |
-|---|---|
-| Dispatcher 崩溃 | running task claim 过期后被下次 dispatcher reclaim。 |
-| Worker 崩溃 | heartbeat 停止，claim 过期，reclaim。 |
-| SQLite busy | 等待 busy_timeout；仍失败则记录错误并下轮重试。 |
-| Task 被人工 block | Dispatcher 不再处理。 |
-| Board 被归档 | Dispatcher 不再 claim/reclaim 该 board；若仍有 running task/run，board archive 本身会被拒绝。 |
-| Task 被人工 force complete | Worker 后续 complete 失败，因 token/run 已关闭。 |
-| DB integrity failed | Dispatcher 停止，提示运行 `kanban doctor`。 |
-
----
-
-## 14. MVP Scope
-
-MVP dispatcher 必须实现：
-
-- claim one ready task。
-- spawn command。
-- heartbeat。
-- complete/block based on exit code。
-- reclaim expired claims。
-
-MVP 可暂不实现：
-
-- profile concurrency > 1。
-- complex worker matching。
-- Windows PID checking。
-- per-label routing。
-- cron-like recurring tasks。
+生命周期请求采用 13 个独立 DTO，不提供通用 transition/token body。所有 DTO
+拒绝未知顶层字段；`ClaimTaskRequest.metadata` 与 `CompleteTaskRequest.result` 仅保持
+`serde_json::Value` opaque extension，`SubmitReviewTaskRequest` 则完全不接受 `result`。
+`ReclaimTaskRequest.to_status` 是封闭的 `ready|blocked` 枚举。Promote、reclaim、unblock、
+task archive 和 board archive 保留 optional body 与既有默认值，actor 仍按 body、
+`X-KB-Actor`、server default 的优先级解析。
 
 
 ---
 
-# File: docs/IMPLEMENTATION_PLAN.md
+# 文件：docs/ADR.md
 
-# Implementation Plan
+# 架构决策记录
 
-本文档给出分阶段实现计划、验收标准和测试策略。
-
----
-
-## Phase 0：Repository Skeleton
-
-目标：建立 Rust workspace 和基本工程纪律。
-
-交付：
-
-- `Cargo.toml` workspace。
-- crates：`kanban-core`、`kanban-sqlite`、`kanban-cli`。
-- migrations 目录。
-- lint/format/test workflow。
-- error type。
-- ID/time utility。
-
-验收：
-
-- `cargo test` 通过。
-- `cargo fmt --check` 通过。
-- `cargo clippy` 无关键 warning。
+本文件按时间记录 SPEC 的关键架构决策。每条 ADR 的背景、统计值和迁移状态都是
+决策时快照，不会随着实现自动改写；当前行为和实时契约覆盖以对应的
+`docs/*_SPEC.md` 与 `docs/SCHEMA_CONTRACTS.md` 为准。
 
 ---
 
-## Phase 1：SQLite Schema + Core Domain
+## ADR-0001：仅使用 SQLite
 
-目标：数据结构和 migration 可用。
+### 状态
 
-交付：
+已接受
 
-- 执行 `001_initial.sql`。
-- `kanban init`。
-- 默认 board。
-- 默认 columns。
-- 领域类型：Board、Task、Status、Run、Event。
-- status enum 与 parse/serialize。
-
-验收：
-
-- 新建 DB 后 `PRAGMA integrity_check` 返回 ok。
-- 重复运行 `kanban init` 不破坏已有 DB。
-- schema version 可查询。
-
-测试：
-
-- migration test。
-- schema smoke test。
-- enum roundtrip test。
-
----
-
-## Phase 2：Task CRUD + Events
-
-目标：任务可创建、查询、更新，事件可记录。
-
-交付：
-
-- `kanban task create/list/show/update`。
-- `task_events` 写入。
-- `--json` 输出。
-- `expected_lock_version` 乐观锁。
-
-验收：
-
-- 创建 task 后有 `task.created` event。
-- update 不允许修改 status。
-- board task list 默认隐藏 archived。
-
-测试：
-
-- create/list/show integration test。
-- event transaction test。
-- invalid input test。
-
----
-
-## Phase 3：State Machine Transitions
-
-目标：核心状态机可用。
-
-交付：
-
-- specify。
-- promote。
-- claim/start。
-- heartbeat。
-- complete/done。
-- block。
-- unblock。
-- reclaim。
-- archive。
-
-验收：
-
-- 非法 transition 被拒绝。
-- 每个 transition 写 event。
-- running task 必须有 claim token。
-- complete 后清理 claim fields。
-
-测试：
-
-- transition matrix unit tests。
-- block/unblock target recomputation tests。
-- token mismatch tests。
-
----
-
-## Phase 4：Dependencies
-
-目标：支持 parent/child 依赖和显式 manual promotion。
-
-交付：
-
-- `kanban dep add/remove/list`。
-- cycle detection。
-- dependency-aware create/promote/claim。
-- parent complete 后不自动 promote children；child 保持 `todo`，由 derived dependency fields 表达是否仍被阻塞。
-
-验收：
-
-- child 依赖未完成 parent 时不能 ready/running。
-- parent 完成后 child 可被手动 promotion。
-- cycle 添加失败。
-
-测试：
-
-- direct cycle。
-- indirect cycle。
-- child demotion when dependency added。
-- manual promotion after completion。
-
----
-
-## Phase 5：Runs + Dispatcher MVP
-
-目标：可执行任务并恢复崩溃任务。
-
-交付：
-
-- `task_runs` 写入。
-- `kanban dispatch --once`。
-- `kanban dispatch` loop。
-- worker profile command。
-- heartbeat wrapper。
-- expired reclaim。
-- run logs。
-
-验收：
-
-- ready task 被 dispatcher claim 并执行。
-- command exit 0 后 task done/review。
-- command exit non-zero 后 task blocked/ready。
-- worker timeout 后 reclaim/block。
-- dispatcher crash 后 task 可被 reclaim。
-
-测试：
-
-- claim race test，多线程同时 claim 同 task 只有一个成功。
-- worker success integration。
-- worker failure integration。
-- expired claim reclaim test。
-
----
-
-## Phase 6：Local Web API
-
-目标：Web 端可通过 HTTP 操作 board/task。
-
-交付：
-
-- `kanban serve`。
-- REST endpoints。
-- unified error response。
-- SSE event stream。
-- health endpoint。
-
-验收：
-
-- Web API 能完成 CLI 同等生命周期。
-- SSE 收到 task events。
-- API 不能 PATCH status。
-- 默认只监听 127.0.0.1。
-
-测试：
-
-- route integration tests。
-- API transition tests。
-- SSE reconnect test。
-
----
-
-## Phase 6.5：Board Lifecycle MVP
-
-目标：让单 SQLite DB 内的多个 board 可通过 CLI/API 创建、选择、归档，并让 task ref 兼容未来聚合视图。
-
-交付：
-
-- `kanban board list/create/show/use/current/archive`。
-- `POST /api/v1/boards` 与 `POST /api/v1/boards/{board}/archive`。
-- 项目级 `.kb/config.toml` active board，解析顺序为 `--board`、`KB_BOARD`、最近项目 config、`default`。
-- task ref 支持全局 `t_...`、当前 board 的裸 seq / `#seq`、显式 `board#seq` / `board/#seq`。
-- CLI/API task 输出包含 `board_slug` 和可复制 `ref`。
-
-验收：
-
-- `board create` 创建默认 columns 并写 `board.created` event。
-- `board use` 写入项目级 `.kb/config.toml`。
-- `t_...` 可跨 active board resolve，`board#seq` 可显式跨 board resolve。
-- Archived board 默认隐藏且拒绝普通写入；events/runs/comments 历史仍可读。
-- Board archive 在存在 `running` task/run 时被拒绝。
-- Duplicate board slug 返回 user-facing invalid input / HTTP 400。
-
----
-
-## Phase 7：Web UI MVP
-
-目标：基本看板 UI 可用。
-
-交付：
-
-- Board columns。
-- Task cards。
-- Task detail drawer。
-- Create/update task。
-- Drag/drop 调用 transition。
-- Comments。
-- Event timeline。
-- Run history。
-- SSE live refresh。
-
-验收：
-
-- UI 不直接修改 status。
-- blocked unblock 后根据服务端返回移动列。
-- running complete force 时有确认。
-
----
-
-## Phase 8：Maintenance & Hardening
-
-目标：本地数据可靠性。
-
-交付：
-
-- `kanban doctor`。
-- `kanban backup`。
-- `kanban checkpoint`。
-- `kanban vacuum`。
-- JSONL export。
-- orphan run 检查。
-
-验收：
-
-- backup 可恢复。
-- integrity check 可报告问题。
-- expired running task 可列出并 reclaim。
-
----
-
-## Testing Strategy
-
-### Unit Tests
-
-- status parse/format。
-- transition guard。
-- initial status computation。
-- unblock target computation。
-- dependency cycle detection。
-
-### SQLite Integration Tests
-
-- migration fresh DB。
-- migration idempotency。
-- FK constraints。
-- JSON validation constraints。
-- CAS claim affected rows。
-
-### Concurrency Tests
-
-- 10/50/100 concurrent claim attempts on one task。
-- CLI + server simultaneous writes。
-- busy timeout behavior。
-
-### Dispatcher Tests
-
-- successful worker。
-- failed worker。
-- timeout worker。
-- heartbeat extension。
-- reclaim expired。
-
-### CLI Golden Tests
-
-- human output stable enough。
-- JSON output exact contract。
-- exit code mapping。
-
-### API Tests
-
-- task lifecycle。
-- invalid transition HTTP 409。
-- error body format。
-- SSE stream ordering。
-
----
-
-## Definition of Done for MVP
-
-MVP 完成定义：
-
-1. `kanban init` 创建可用 DB。
-2. `kanban board list/create/show/use/current/archive` 可用。
-3. `kanban task create/list/show/update` 可用，输出包含 `board#seq` ref。
-4. `kanban task start/heartbeat/done/block/unblock/archive` 可用。
-5. dependencies 可用。
-6. events 可用。
-7. runs 可用。
-8. dispatcher 可执行本地命令。
-9. web API 覆盖核心 lifecycle。
-10. web UI 可视化 board。
-11. 并发 claim 测试稳定通过。
-12. `kanban doctor` 能发现基本数据异常。
-
----
-
-## Recommended First Milestone
-
-最小可用 milestone：
-
-```text
-Phase 0 + Phase 1 + Phase 2 + Phase 3 + 部分 Phase 4
-```
-
-即：
-
-- SQLite schema。
-- CLI task lifecycle。
-- 状态机。
-- events。
-- dependencies 基础。
-
-先不要做 Web UI 和 dispatcher，直到状态机与 schema 稳定。
-
-
-### Phase 2 transport identity 收敛
-
-已完成 API/SSE method/path authority：84 个 descriptor（83 API + 1 SSE）和真实 router binding 的双向 parity 已锁定。后续 DTO adoption 必须复用 descriptor 的 `operation_id` 与 obligation，逐项把 `Todo` 收敛为 `Contract`、`NotApplicable` 或带理由 `Excluded`；不得重新引入 server 或 surface catalog 的手写 API/SSE path 表。
-
-B1-A 已完成 wire 收口：API error response 已使用闭合 `ApiErrorCode`，label semantics delete handler 已使用 `DeleteResponse`/`DeleteResult` 并有真实 producer、typed consumer、schema 与 AST ownership evidence。delete endpoint 的 path/query/header/body obligation 尚未逐项建模，故 endpoint 和 response migration 继续标为 `generated`；下一步应先建模并验证这些请求义务，再考虑 adoption。
-
-B1-C0 已完成 transport proof foundation：全部现有 contract 都显式区分 HTTP transport 与 `NoTransport`；HTTP contract 记录 location 与参数 cardinality，`Success`/`Error` 分别表示 2xx exact success 与 shared non-2xx response。任意 `Adopted` contract 及 endpoint exact reference 都要求 `granularity=Exact`；endpoint exact 唯一性由唯一 method/path、精确 `operation_key` 和 location 结构性保证。shared component 的多 endpoint linkage、linkage OR witness orphan policy 和 exact-miscount 均由 mutation tests fail closed。该阶段没有迁移 handler DTO，也没有关闭任何 endpoint `Todo`；冻结值保持 SSE `Todo`、endpoint `Todo=389`、总未闭合 `636`。
-
-B1-C1 已完成两个 board task-read endpoint 的 path/query transport adoption：4 个 endpoint-specific
-exact contract 拥有独立 DTO、schema、正负 fixture、DTO producer、非默认 board sentinel 的真实
-router consumer 与 AST ownership/mutation evidence。两个 server-local typed extractor 各自绑定
-path，并各自只调用一次共享 ordered raw-query parser；handler 不持有 raw URI。真实 URI matrix
-锁定 8192 bytes raw 总预算、由 9/4/3/32 repeated 与 6 scalar 推导出的 54-pair cap、
-RepeatedOrdered distinct 语义、1024/128/128 Unicode 字符预算、label 的 raw 128 字符预算
-包含随后会被 trim 的 Unicode 边缘空白、纯 Unicode 空白 label 拒绝、
-唯一 application/service/contract limit authority 链、全部 filter 转发、标准 form encoding 与
-max/max+1。Desktop caller 继续使用 `URLSearchParams` 标准 form encoder，并以保留字符/UTF-8
-断言锁定只发送 `q` 而不恢复 `search`。本阶段仅将 SQLite service 的 `MAX_TASK_LIST_LIMIT`
-改为直接复用 application authority；service 查询行为与 `kanban-core` 状态机未改变。GET body
-是 `NotApplicable`，headers/success 保持 `Todo`，因此两个 endpoint
-仍为 `Generated`。冻结值保持 endpoint `Contract=19`、`Todo=383`、`NotApplicable=102`，
-总未闭合 `630`。
-
-
-## B1-C2b task-read 成功响应验收
-
-验收要求：两个 endpoint 各有 response root/schema/正负 fixture/producer-consumer evidence；共享 `ApiTask`/`ApiLabel` 与既有 pagination primitives；Desktop 对这两个 endpoint exact recursive fail-closed，hostile payload 返回 `invalid_response`；`just schema-contract`、`just desktop-check` 与 affected gate 通过。权威行为见 [API_SPEC](API_SPEC.md#b1-c2b-task-read-成功响应契约) 与 [SCHEMA_CONTRACTS](SCHEMA_CONTRACTS.md#b1-c2b-task-read-成功响应契约)。
-
-
-### B2-C3 comments pair acceptance
-
-- list/create comment 各自拥有 exact path 与 success root，create 拥有 exact request root。
-- 真实 non-default-board route 生成 committed fixtures；contract 与 Desktop 分别独立消费。
-- private `CommentBody`/`CommentDto` 归零，handler 经共享 SQLite service path 显式适配 `ApiComment`。
-- board isolation、archived-board write guard、decision metadata、event transaction 与 locale/status
-  继续由既有 service/API tests 锁定。
-
-B2-C3 review closure：五个 comments roots 均提升为有 structured witnesses 的 Adopted；endpoint 仍 Generated、headers Todo。验收额外锁定 AST canonical tail/adapter、防 bypass mutations、Desktop create hostile/error transport、comment/event rollback 与完整 identity/kind matrix；权威统计见 SCHEMA_CONTRACTS。
-
-### B2-C4 run reads acceptance
-
-- 仅迁移 list-runs/get-run；get-run-log、transition、create-task 与 steps 不进入本批。
-- contract-owned `ApiRun`/`ApiClaim` 取代 private `RunDto`/`ClaimDto`；共享 adapter 隐去
-  `RunRecord.claim_token` 与 `log_path`。
-- 四个 roots 以 non-default-board 真实 claim/complete/reopen/claim lifecycle 产生 active 与
-  finished run fixtures，并分别由 contract root 独立消费。
-- Server AST mutation、board isolation、archived history、not-found/privacy，以及 Desktop exact
-  parser/transport/hostile/error tests 构成运行时 adoption 证据。
-## B2-C5 create-task contract checkpoint
-
-- `POST /api/v1/boards/:board/tasks` 的 path/request/success 三项 contract 已采用，headers 保持
-  `Todo`，endpoint 诚实保持 `Generated`。
-- contract owner 提供 create-only status、opaque object metadata 与闭合 `ApiTask` response；
-  server 删除 private `CreateTaskBody`，Desktop 使用 exact response parser。
-- 真实 router、transaction rollback/retry/readiness guard、schema witness 与 Desktop consumer 是
-  本切片验收面；不改变 SQLite/core authority，也不提前关闭其它 CRUD endpoint。
-### B2-C6 boards endpoints acceptance
-
-- list query、create request、get/archive path 与四个 success response 各有 exact root、schema、
-  正负 fixture 和独立 producer/consumer witness；archive body 继续复用既有
-  `ArchiveBoardRequest` owner。
-- handler 删除 private `CreateBoardBody` 和 `BoardRecord` wire 泄漏，经
-  `kanban_sqlite::api` 显式映射到 contract-owned `ApiBoard`；真实 fixtures 使用 non-default board。
-- list 的 `include_archived` 必须真实转发到 service options；archive running guard、archived
-  history/read、404/status/i18n 不得改变。
-- Desktop `listBoards` production caller 使用 endpoint exact parser；AST ownership 与 mutation
-  gate 阻止 private DTO、错误 response root、默认 board/path 绕过或 private service/adapter。
-
-B2-C6 完成时 8 个新 roots 为 Adopted；四个 endpoint 因 headers 仍为 Todo 而保持 Generated。
-权威统计见 SCHEMA_CONTRACTS。
-
-### B7 API transport header closure
-
-- 83 个 non-SSE endpoint 各自拥有 exact header contract，统一复用五种 locale/actor/body
-  cardinality profile；endpoint obligation `Todo` 已归零。
-- 真实 router gate 锁定 locale、body actor 优先级、header actor fallback、required/optional/no-body
-  `Content-Type` 行为；SSE `Last-Event-ID` 继续保持明确 exclusion。
-- schema roots=301，semantic adopted/generated/planned=222/79/26，surface
-  adopted/generated/planned/excluded=2/82/135/5，unfinished=322。
-- 该阶段只关闭 API endpoint catalog，不等于全局 `schema-audit-closed`；后续继续处理 semantic
-  generated/planned 与 CLI/JSONL/helper surface obligations。
-### B2-C7 steps family acceptance
-
-- list/create/update/remove/done/skip/reopen 共 19 个 endpoint-specific path/request/success roots 全部 `Adopted`，headers 保持 `Todo`，endpoint 保持 `Generated`。
-- server 删除 private step DTO/request owners，以 contract DTO 作为唯一 wire owner，同时保留原 SQLite service path、required/optional/resolution/status/plan 与 transition guards。
-- committed fixtures 由非默认 board 的真实 router producer 证明；request/path 使用程序化 DTO producer 与独立真实 router consumer，Desktop 七个 production callers 使用递归 exact consumer。
-- syn AST ownership mutation、schema shape、既有 required-step/plan transition service tests、`schema-contract`、server、web 与 affected gates 共同构成验收证据。
-
-### B2 integrated train acceptance
-
-Create-task、boards 与 steps 的全部 exact roots、真实 router witnesses、Desktop consumers 和 service guards 已按合集重新生成并验证；集成冻结为 62 roots / 60 adopted contracts / 120 witnesses / 567 unfinished。后续 B2 切片必须从该 train 快照继续，不得回退到任一独立 lane 的局部统计。
-
-
----
-
-# File: docs/ADR.md
-
-# Architecture Decision Records
-
-本文件记录当前 SPEC 的关键架构决策。
-
----
-
-## ADR-0001：SQLite-only
-
-### Status
-
-Accepted
-
-### Context
+### 背景
 
 项目明确不考虑多用户、多租户、团队协作和远程 worker。核心运行环境是本地单机，同时需要 CLI 和 Web。
 
-### Decision
+### 决策
 
 只支持 SQLite。
 
-默认 DB：
+默认数据库：
 
 ```text
 ~/.local/share/kb/kb.db
 ```
 
-可通过 `--db <path>` 指定项目本地 DB。
+可通过 `--db <path>` 指定项目本地数据库。
 
-### Consequences
+### 影响
 
 优点：
 
-- 单 binary 易分发。
+- 单一二进制文件易分发。
 - CLI 使用成本低。
 - 备份简单。
 - 本地事务足够强。
-- WAL 支持 reader/writer 并发。
+- WAL 支持读写并发。
 
 代价：
 
 - 不支持跨机器共享写入。
-- 不做 server cluster。
-- 一次只有一个 writer。
-- 需要控制 transaction 长度。
+- 不做 server 集群。
+- 同一时刻只有一个写入者。
+- 需要控制事务长度。
 
 ---
 
-## ADR-0002：Status Enum 是真相，Column 是视图
+## ADR-0002：Status 枚举是事实，Column 是视图
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-传统 Trello-like 工具常把 list/column 视为状态。但本项目需要 dispatcher、claim、heartbeat、reclaim、run history。`running` 不是普通视觉列，而是 claim 成功后的执行状态。
+传统的类 Trello 工具常把 list/column 视为状态。但本项目需要 dispatcher、claim、heartbeat、reclaim 和 run 历史。`running` 不是普通视觉列，而是 claim 成功后的执行状态。
 
-### Decision
+### 决策
 
-`tasks.status` 是 canonical truth。`board_columns` 只是 UI 展示映射。
+`tasks.status` 是权威事实。`board_columns` 只是界面展示映射。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -8292,21 +7872,21 @@ Accepted
 代价：
 
 - 拖拽列不能简单 PATCH status。
-- Web UI 需要根据目标列调用 transition endpoint。
+- Web 界面需要根据目标列调用状态转换端点。
 
 ---
 
-## ADR-0003：Snapshot + Append-only Events，不做纯 Event Sourcing
+## ADR-0003：快照 + 只追加事件，不做纯事件溯源
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-看板 UI 高频查询当前任务列表。纯 event sourcing 会让当前状态查询复杂化，需要重放事件或额外投影。
+看板界面会高频查询当前任务列表。纯事件溯源会让当前状态查询复杂化，需要重放事件或额外投影。
 
-### Decision
+### 决策
 
 采用：
 
@@ -8314,40 +7894,40 @@ Accepted
 tasks snapshot + task_events append-only
 ```
 
-状态变化时，snapshot update 与 event insert 必须在同一 transaction 内完成。
+状态变化时，快照更新与事件插入必须在同一事务内完成。
 
-### Consequences
+### 影响
 
 优点：
 
 - 当前 board 查询简单。
-- 事件仍可用于审计、SSE、debug。
+- 事件仍可用于审计、SSE、调试。
 - 实现复杂度可控。
 
 代价：
 
-- 需要保证 snapshot/event 一致。
+- 需要保证快照/事件一致。
 - 事件不是唯一事实源。
 
 ---
 
-## ADR-0004：CLI 可以直接访问 SQLite，但必须走统一 service path
+## ADR-0004：CLI 可以直接访问 SQLite，但必须走统一服务路径
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-如果 CLI 必须依赖常驻 server，会降低本地工具可用性。直接访问 SQLite 更适合脚本和开发流。
+如果 CLI 必须依赖常驻 server，会降低本地工具可用性。直接访问 SQLite 更适合脚本和开发流程。
 
-### Decision
+### 决策
 
-CLI 可以直接打开 SQLite DB，但只能调用统一 Rust service path；当前实现主要是
-`kanban-sqlite::service` use-case 函数，并复用 `kanban-core` 的纯状态机 helper。
+CLI 可以直接打开 SQLite 数据库，但只能调用统一 Rust 服务路径；当前实现主要是
+`kanban-sqlite::service` 用例函数，并复用 `kanban-core` 的纯状态机辅助函数。
 CLI 不允许绕过状态机执行裸 SQL 修改状态。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -8358,26 +7938,26 @@ CLI 不允许绕过状态机执行裸 SQL 修改状态。
 代价：
 
 - 需要处理 CLI/server/dispatcher 同机并发。
-- 所有状态逻辑必须集中在共享 service/state-machine path，避免 CLI、server 或
+- 所有状态逻辑必须集中在共享的 service/state-machine 路径，避免 CLI、server 或
   dispatcher 各自实现一套状态转换。
 
 ---
 
 ## ADR-0005：Actor 是审计字符串，不是用户模型
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
 项目不做多用户和权限，但仍需要知道某个操作来自谁或哪个 worker。
 
-### Decision
+### 决策
 
-保留 `actor`、`created_by`、`claim_owner` 字段。它们是字符串，不关联 users 表。
+保留 `actor`、`created_by`、`claim_owner` 字段。它们是字符串，不关联用户表。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -8392,57 +7972,57 @@ Accepted
 
 ---
 
-## ADR-0006：Worker stdout/stderr 存文件，DB 只存摘要与路径
+## ADR-0006：Worker stdout/stderr 存文件，数据库只存摘要与路径
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-运行日志可能很大。把日志 blob 放进 SQLite 会影响性能和备份体积。
+运行日志可能很大。把日志数据放进 SQLite 会影响性能和备份体积。
 
-### Decision
+### 决策
 
 日志写入：
 
 ```text
-~/.local/state/kb/logs/r_<run_id>.log
+~/.local/state/kb/logs/runs/<run_id>.log
 ```
 
-DB 只存：
+数据库只存：
 
 - `log_path`
 - `summary`
 - `error`
 - `exit_code`
 
-### Consequences
+### 影响
 
 优点：
 
 - SQLite 保持轻量。
-- 日志可直接 tail。
-- 备份策略可分开处理 DB 和 logs。
+- 日志可直接用 `tail` 查看。
+- 备份策略可分开处理数据库和日志。
 
 代价：
 
-- 移动 DB 时需要同时移动 logs/attachments。
-- log path 需要 doctor 检查。
+- 移动数据库时需要同时移动日志/附件。
+- 日志路径需要由 doctor 检查。
 
 ---
 
 ## ADR-0007：默认只监听 localhost
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
 不做远程服务和多用户登录。暴露到局域网会制造安全边界问题。
 
-### Decision
+### 决策
 
 `kanban serve` 默认并且建议只监听：
 
@@ -8452,7 +8032,7 @@ Accepted
 
 MVP 不提供 `0.0.0.0` 远程模式。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -8466,19 +8046,19 @@ MVP 不提供 `0.0.0.0` 远程模式。
 
 ---
 
-## ADR-0008：状态变化必须有专用 Transition Command
+## ADR-0008：状态变化必须使用专用转换命令
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-直接 PATCH `status` 容易绕过 claim/run/event/dependency guard。
+直接 PATCH `status` 容易绕过 claim/run/event/dependency 保护。
 
-### Decision
+### 决策
 
-禁止普通 update 修改 status。所有状态变化都使用 command：
+禁止普通 update 修改 status。所有状态变化都使用专用命令：
 
 - specify
 - promote
@@ -8491,7 +8071,7 @@ Accepted
 - reclaim
 - archive
 
-### Consequences
+### 影响
 
 优点：
 
@@ -8502,103 +8082,103 @@ Accepted
 代价：
 
 - API 数量更多。
-- UI 拖拽逻辑更复杂。
+- 界面拖拽逻辑更复杂。
 
 ---
 
 ## ADR-0009：Knowledge Substrate 派生层
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-后续搜索、关系扩展、agent context、artifact provenance 和向量召回需要跨 task/run/comment/artifact/skill 的统一身份与派生索引，但不能削弱 SQLite 状态机、claim 和 dependency guard。
+后续搜索、关系扩展、agent 上下文、artifact 来源和向量召回需要跨 task/run/comment/artifact/skill 的统一身份与派生索引，但不能削弱 SQLite 状态机、claim 和依赖保护。
 
-### Decision
+### 决策
 
-SQLite 继续作为 operational source of truth。新增：
+SQLite 继续作为运行事实源。新增：
 
-- `entities`：跨库统一 `kb://...` identity registry。
+- `entities`：跨库统一的 `kb://...` 身份注册表。
 - `relation_predicates` / `entity_relations`：受控 predicate 与可重建关系镜像。
-- `index_outbox`：派生 store 的 at-least-once job surface。
+- `index_outbox`：派生存储的至少一次任务入口。
 - `derived_store_state`：Tantivy/Oxigraph/LanceDB 等派生层健康和水位。
 
-Tantivy、Oxigraph、LanceDB 都是可重建 derived stores，不参与状态机事务。
+Tantivy、Oxigraph、LanceDB 都是可重建的派生存储，不参与状态机事务。
 
-`derived_store_state` 的语义是 store 全局状态，不是 board 局部状态：
+`derived_store_state` 的语义是存储全局状态，不是 board 局部状态：
 
-- `last_event_id` 表示该 store 已成功处理并提交的全局 task event 高水位。成功 sync/rebuild 只能把它单调推进，不能倒退。
-- `dirty=true` 表示该 store 仍有未完成 outbox、失败 outbox 或最近一次派生更新失败；即使某个 board 已 sync/rebuild 完成，其他 board 仍有 pending/failed job 时也必须保持 dirty。
-- board-scoped sync/rebuild 只清理当前 board 的 outbox job；是否把 `dirty` 置回 false 取决于同一 store target 是否还存在任何 board 的 unfinished outbox。
-- `last_error` 记录最近一次 store 级失败证据。成功处理会清除 `last_error`，失败会保持 `dirty=true` 并保留/标记相关 outbox 失败状态。
-- `index_outbox` 是恢复和重放入口；`derived_store_state` 是 operator health/watermark 摘要。两者都不能使派生层成为事实源。
+- `last_event_id` 表示该存储已成功处理并提交的全局 task event 高水位。成功同步/重建只能把它单调推进，不能倒退。
+- `dirty=true` 表示该存储仍有未完成 outbox、失败 outbox 或最近一次派生更新失败；即使某个 board 已完成同步/重建，其他 board 仍有待处理/失败任务时也必须保持 dirty。
+- board 范围的同步/重建只清理当前 board 的 outbox 任务；是否把 `dirty` 置回 false，取决于同一存储目标是否还存在任何 board 的未完成 outbox。
+- `last_error` 记录最近一次存储级失败证据。成功处理会清除 `last_error`，失败会保持 `dirty=true` 并保留/标记相关 outbox 失败状态。
+- `index_outbox` 是恢复和重放入口；`derived_store_state` 是操作者使用的健康/水位摘要。两者都不能使派生层成为事实源。
 
-### Consequences
+### 影响
 
 优点：
 
-- 后续 graph/vector/context broker 可以接同一 entity/relation contract。
+- 后续图/向量/context broker 可以接同一实体/关系契约。
 - SQLite 状态机边界保持清楚。
-- 派生 store 损坏时可 fallback/rebuild。
-- `kanban doctor` / maintenance API 汇总 outbox backlog、dirty stores、last_error 和 failed outbox，用于本地 operator 判断 sync/rebuild，而不是让派生层参与 SQLite 事务。
+- 派生存储损坏时可回退/重建。
+- `kanban doctor` / maintenance API 汇总 outbox 积压、脏存储、last_error 和失败 outbox，供本地操作者判断是否同步/重建，而不是让派生层参与 SQLite 事务。
 
 代价：
 
-- 需要维护 entity backfill/outbox/derived state。
-- `derived_store_state` 是派生 store 的主健康/水位记录；Tantivy 的旧 `app_settings` search state 仅保留为兼容 metadata。
+- 需要维护实体回填/outbox/派生状态。
+- `derived_store_state` 是派生存储的主健康/水位记录；Tantivy 的旧 `app_settings` 搜索状态仅保留为兼容元数据。
 
 ---
 
-## ADR-0010：单 DB 多 board 与 CLI task ref
+## ADR-0010：单数据库多 board 与 CLI task 引用
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-本地项目需要不同 board/project，但未来也需要聚合视图和跨 board 审计。如果每个项目拆一个 SQLite DB，聚合、搜索、事件和 dispatcher 恢复都会变复杂。另一方面，裸 `#12` 在 shell 中容易被当作注释，且 board-local seq 不能跨 board 唯一。
+本地项目需要不同 board/project，但未来也需要聚合视图和跨 board 审计。如果每个项目拆一个 SQLite 数据库，聚合、搜索、事件和 dispatcher 恢复都会变复杂。另一方面，裸 `#12` 在 shell 中容易被当作注释，且 board 内的 seq 不能跨 board 唯一。
 
-### Decision
+### 决策
 
-继续使用单 SQLite DB 内多个 board：
+继续使用单个 SQLite 数据库内的多个 board：
 
 - `tasks.id` 是全局唯一 `t_...`。
 - `tasks.seq` 只在 `board_id` 内唯一。
-- CLI/API 展示 copyable task ref：`board_slug#seq`。
-- CLI task ref 支持全局 `t_...`、当前 active board 的 `12` / `#12`、显式 `board#12` / `board/#12` / `b_...#12`。
-- Active board 解析顺序是 `--board`、`KB_BOARD`、最近 `.kb/config.toml`、`default`。
-- `.kb/config.toml` 只记录当前项目选择的 board，不表示项目拥有独立 DB。
-- Board slug 禁用保留 ID 前缀和会破坏 ref 语法的字符。
+- CLI/API 展示可复制的 task 引用：`board_slug#seq`。
+- CLI task 引用支持全局 `t_...`、当前 board 的 `12` / `#12`、显式 `board#12` / `board/#12` / `b_...#12`。
+- 当前 board 的解析顺序是 `--board`、`KB_BOARD`、最近的 `.kb/config.toml`、`default`。
+- `.kb/config.toml` 只记录当前项目选择的 board，不表示项目拥有独立数据库。
+- Board slug 禁用保留 ID 前缀和会破坏引用语法的字符。
 
-Archived board 默认不可写；归档只标记 board，不改 task 状态，并拒绝仍有 `running` task/run 的 board。Read-only events/runs/comments 历史保留可查，作为审计入口。
+已归档 board 默认不可写；归档只标记 board，不改 task 状态，并拒绝仍有 `running` task/run 的 board。只读 events/runs/comments 历史保留可查，作为审计入口。
 
-### Consequences
+### 影响
 
 优点：
 
-- 保留未来聚合 board / dashboard 的数据基础。
+- 保留未来聚合 board / 仪表盘的数据基础。
 - `t_...` 可作为脚本稳定全局引用。
 - `board#seq` 对人和 shell 都更可复制。
-- 项目级 active board 不破坏单 DB 备份、搜索和 dispatcher 语义。
+- 项目级当前 board 不破坏单数据库备份、搜索和 dispatcher 语义。
 
 代价：
 
-- CLI 必须维护 task ref parser/resolver。
-- Archived board 需要区分 read-only history 与 mutation guard。
+- CLI 必须维护 task 引用的解析/解析目标逻辑。
+- 已归档 board 需要区分只读历史与变更保护。
 - 裸 `#12` 只能作为兼容输入，文档和输出不能依赖它。
 
 ---
 
-## ADR-0011：Schema Train 边界：status、type、labels、dependency type 与 decision comments
+## ADR-0011：Schema 批次边界：status、type、labels、dependency type 与 decision comments
 
-### Status
+### 状态
 
-Proposed
+提议中
 
-### Context
+### 背景
 
 `kanban-tool` 接下来会进入一组 schema/model 扩展：
 
@@ -8606,66 +8186,67 @@ Proposed
 - `dependency_type`：表达任务之间是什么关系。
 - labels：表达可搜索、可筛选、可推荐的多维标签。
 - comments：承载人和 agent 的协作记录。
-- decision comments：记录人或 LLM/agent 在多个方案之间做出的选择。
+- decision comment：记录人或 LLM/agent 在多个方案之间做出的选择。
 
 当前 comment 模型里的 `kind` 混用了两类概念：
 
 - 谁写的：system / worker / agent / user。
 - 写的是什么：普通记录 / 决策记录。
 
-这会让后续结构化 decision comment 变脏。需要先把模型边界切开：
+这会让后续结构化 decision comment 变得混乱。需要先把模型边界切开：
 
-- author/source 轴：谁留下了这条 comment。
-- content kind 轴：这条 comment 表达什么语义。
+- 作者/来源轴：谁留下了这条 comment。
+- 内容类型轴：这条 comment 表达什么语义。
 
-本项目是 dogfood local tool，不需要为早期 comment schema 保留沉重兼容层。可以直接修改模型，只要迁移清晰，并让 CLI/API/Desktop 一次性跟上。
+项目早期只面向本地单用户场景，不需要为早期评论结构保留沉重兼容层。可以直接修改模型，
+只要迁移清晰，并让 CLI、API 与 Desktop 同步跟上。
 
-### Decision
+### 决策
 
 保留现有核心原则：
 
-- `tasks.status` 继续是唯一 canonical workflow state。
-- hard dependency 继续是状态机和 dispatcher guard 的事实来源。
-- `task_events` 继续是 append-only audit trail。
+- `tasks.status` 继续是唯一的权威工作流状态。
+- hard dependency 继续是状态机和 dispatcher 保护的事实来源。
+- `task_events` 继续是只追加审计轨迹。
 - comments 继续承载协作记录，但 comment schema 要拆清楚作者和内容语义。
-- 新字段默认不改变状态机、dispatcher claim 或 ready eligibility，除非本 ADR 明确允许。
+- 新字段默认不改变状态机、dispatcher claim 或 ready 资格，除非本 ADR 明确允许。
 
-### Field Responsibilities
+### 字段职责
 
-| Field / Model | 责任 | 是否影响状态机 | 是否影响 dispatcher | 是否影响 dependency/search/context 展示 | 是否用于 search/context/UI |
+| 字段 / 模型 | 责任 | 是否影响状态机 | 是否影响 dispatcher | 是否影响依赖/搜索/上下文展示 | 是否用于搜索/上下文/界面 |
 |---|---|---:|---:|---:|---:|
-| `status` | canonical workflow state | 是 | 是 | 是 | 是 |
+| `status` | 权威工作流状态 | 是 | 是 | 是 | 是 |
 | `priority` | ready/dispatcher 的排序权重 | 否 | 是，排序 | 是，列表和推荐排序 | 是 |
 | `scheduled_at` | 计划时间，参与 scheduled/ready guard | 是 | 是 | 是，列表和上下文排序 | 是 |
 | `due_at` | 截止时间，只展示、筛选、排序 | 否 | 可排序 | 可排序 | 是 |
-| `task_type` | 任务类别，例如 bug/feature/research/ops/follow_up | 否 | 否 | 可用于展示/排序，不改变 eligibility | 是 |
-| labels | 多标签分类、搜索、推荐和 UI grouping | 否 | 否 | 否，除非未来显式配置排序策略 | 是 |
-| `dependency_type` | 依赖边语义，区分 hard block 和 soft relation | 仅 hard block | 仅 hard block | 是，但必须区分 hard/soft | 是 |
+| `task_type` | 任务类别，例如 bug/feature/research/ops/follow_up | 否 | 否 | 可用于展示/排序，不改变执行资格 | 是 |
+| labels | 多标签分类、搜索、推荐和界面分组 | 否 | 否 | 否，除非未来显式配置排序策略 | 是 |
+| `dependency_type` | 依赖边语义，区分硬阻塞和软关系 | 仅硬阻塞 | 仅硬阻塞 | 是，但必须区分硬/软关系 | 是 |
 | `comment.author_type` | 评论作者角色：`user` 或 `agent` | 否 | 否 | 否 | 是 |
 | `comment.author` | 展示名，例如 `alice`、`codex` | 否 | 否 | 否 | 是 |
 | `comment.agent_type` | 可选 agent 细分，例如 `codex`、`executor`、`dispatcher` | 否 | 否 | 否 | 是 |
 | `comment.kind` | 内容语义：`note` 或 `decision` | 否 | 否 | 否 | 是 |
 | `comment.metadata_json` | `comment.kind` 对应的结构化 payload | 否 | 否 | 否 | 是 |
-| `event.kind` | append-only audit event 类型 | 否，event 是结果不是输入 | 否 | 否 | 是 |
+| `event.kind` | 只追加审计事件类型 | 否，event 是结果不是输入 | 否 | 否 | 是 |
 
-### Workflow State
+### 工作流状态
 
 `status` 仍然是任务是否可执行、是否被 claim、是否 blocked/review/done 的唯一事实来源。
 
 任何新字段都不能隐式表达状态：
 
 - `task_type=bug` 不表示高优先级。
-- label `blocked` 不表示 task blocked。
-- decision selected option 不表示 task done。
+- label `blocked` 不表示 task 处于 blocked。
+- decision 的选中项不表示 task 处于 done。
 - comment 中写 “blocked” 不改变 task status。
 
-状态变化只能通过 transition command。
+状态变化只能通过状态转换命令完成。
 
-### Task Type
+### 任务类型
 
 `task_type` 表达“这个 task 是什么工作类别”，不表达“它现在处于什么执行状态”。
 
-建议第一批 task types：
+建议第一批 task 类型：
 
 ```text
 bug | feature | research | ops | docs | refactor | test | follow_up
@@ -8674,46 +8255,46 @@ bug | feature | research | ops | docs | refactor | test | follow_up
 `task_type` 可以用于：
 
 - Desktop/List/Board 筛选。
-- Search/context 过滤。
-- 依赖、search 和 context 解释。
+- 搜索/上下文过滤。
+- 依赖、搜索和上下文解释。
 - 未来排序加权。
 
 `task_type` 不用于：
 
-- dispatcher claim eligibility。
-- 状态机 transition guard。
-- hard dependency 判断。
+- dispatcher 领取资格。
+- 状态机转换保护。
+- 硬依赖判断。
 - 替代 labels。
 
 枚举策略：
 
 - 第一版使用受控枚举。
 - 后续如需要开放扩展，再单独做 ADR。
-- 未知 type 应被拒绝，而不是静默写入。
+- 未知类型应被拒绝，而不是静默写入。
 
-### Labels
+### 标签
 
 labels 表达多维、可叠加的分类。一个 task 可以有多个 label。
 
 labels 适合表达：
 
-- area：`desktop`、`cli`、`sqlite`
-- domain：`search`、`dispatcher`、`comments`
-- semantic group：`llm-facing`、`release-risk`
+- 区域：`desktop`、`cli`、`sqlite`
+- 领域：`search`、`dispatcher`、`comments`
+- 语义组：`llm-facing`、`release-risk`
 - 用户临时整理方式
 
 labels 不适合表达：
 
-- workflow state
-- hard dependency
-- execution ownership
-- decision result
+- 工作流状态
+- 硬依赖
+- 执行所有权
+- 决策结果
 
-未来 semantic label recommender 可以推荐 label，但推荐结果必须显式保存后才成为 task label。
+未来的语义 label 推荐器可以推荐 label，但推荐结果必须显式保存后才成为 task label。
 
-### Dependency Type
+### 依赖类型
 
-现有 dependency 的核心语义是 hard prerequisite：
+现有 dependency 的核心语义是硬前置条件：
 
 ```text
 parent done or archived => child may become ready
@@ -8722,31 +8303,31 @@ parent neither done nor archived => child cannot be ready/running
 
 引入 `dependency_type` 后，必须保留 hard dependency 的清晰语义。
 
-建议第一批 dependency types：
+建议第一批 dependency 类型：
 
-| Type | 语义 | 是否阻塞 child |
+| 类型 | 语义 | 是否阻塞子任务 |
 |---|---|---:|
-| `blocks` | parent 是 child 的硬前置条件 | 是 |
+| `blocks` | 父任务是子任务的硬前置条件 | 是 |
 | `relates_to` | 相关任务，仅用于导航/search/context | 否 |
-| `informs` | parent 提供背景、设计输入或决策依据 | 否 |
-| `spawned_from` | child 由 parent 执行过程中发现 | 否 |
+| `informs` | 父任务提供背景、设计输入或决策依据 | 否 |
+| `spawned_from` | 子任务在父任务执行过程中被发现 | 否 |
 | `duplicates` | 重复或替代关系 | 否 |
 
 只有 `blocks` 参与：
 
-- dependency blocked 判断
-- promote guard
-- claim guard
-- dispatcher eligibility
-- hard dependency blocking
+- 依赖阻塞判断
+- promote 保护
+- claim 保护
+- dispatcher 执行资格
+- 硬依赖阻塞
 
-soft dependency 可以进入 Desktop 展示、search 和 context，但不能让任务变成 blocked，也不能阻止 claim。
+软依赖可以进入 Desktop 展示、搜索和上下文，但不能让任务变成 blocked，也不能阻止 claim。
 
-### Comment Author Model
+### 评论作者模型
 
 comment 的作者模型只表达“谁写的”。
 
-本项目是本地 dogfood 工具，不建用户系统。作者角色只保留两类：
+本项目面向本地单用户场景，不建立用户系统。作者角色只保留两类：
 
 ```text
 user | agent
@@ -8754,15 +8335,15 @@ user | agent
 
 规则：
 
-- `user`：本地操作者，也就是“我”。
-- `agent`：不是我写的，都算 agent。
+- `user`：本地操作者写入的内容。
+- `agent`：自动化主体写入的内容。
 - `author`：展示名，例如 `alice`、`codex`。
 - `agent_type`：仅当 `author_type=agent` 时可用，例如 `codex`、`executor`、`reviewer`、`dispatcher`。
 - 不引入 users table、identity table、RBAC 或权限模型。
 
-这意味着不再使用 comment kind 表示 `system`、`worker` 或 `agent`。这些都属于 author/source 轴。
+这意味着不再使用 comment kind 表示 `system`、`worker` 或 `agent`。这些都属于作者/来源轴。
 
-### Comment Kind Model
+### 评论类型模型
 
 `comment.kind` 只表达“这条 comment 的内容语义”。
 
@@ -8772,6 +8353,9 @@ user | agent
 note | decision
 ```
 
+后续 Generic Signal Ledger 决策把 `signal` 加入该集合，用于指向通用 signal ledger；
+当前完整约束以 `docs/DATA_MODEL.md` 和 `docs/API_SPEC.md` 为准。
+
 #### `note`
 
 普通协作记录。包括：
@@ -8780,23 +8364,23 @@ note | decision
 - 交接记录
 - 执行总结
 - 问题描述
-- reviewer 反馈
+- 审查者反馈
 - 验证记录
 - 人或 agent 的普通回复
 
-“遇到的问题”默认也是 `note`。如果问题真的阻塞任务，应该同时通过 transition command 把 task 变成 `blocked`，并写入 `status_reason`。
+“遇到的问题”默认也是 `note`。如果问题真的阻塞任务，应该同时通过状态转换命令把 task 变成 `blocked`，并写入 `status_reason`。
 
 #### `decision`
 
 结构化选择记录。用于表达：
 
-- 有多个 option。
+- 有多个选项。
 - 最终选择了其中一个。
 - 有选择理由、风险和验证方式。
 
-decision 不是 task status，不是 event，不是 ADR 替代品。
+decision 不是 task status，不是 event，也不是 ADR 的替代品。
 
-### Comment Metadata
+### 评论元数据
 
 `comment.metadata_json` 是 `comment.kind` 的结构化 payload。
 
@@ -8809,58 +8393,58 @@ decision 不是 task status，不是 event，不是 ADR 替代品。
 - metadata 不替代 event。
 - metadata 不应该变成随意塞字段的长期垃圾桶。
 
-### Decision Comment Schema
+### 决策评论 Schema
 
-建议第一版 shape：
+建议第一版结构：
 
-<!-- schema-doc-ignore: illustrative or partial payload; committed schema fixtures remain executable authority -->
+<!-- schema-doc-ignore: 说明性或不完整 payload；已提交的 schema fixture 仍是可执行权威 -->
 ```json
 {
   "options": [
     {
       "slug": "comment-metadata",
-      "title": "Use comment metadata",
-      "detail": "Store structured decision data in task_comments.metadata_json."
+      "title": "使用评论元数据",
+      "detail": "把结构化决策数据保存在 task_comments.metadata_json 中。"
     },
     {
       "slug": "decision-table",
-      "title": "Create decision table",
-      "detail": "Create a separate task_decisions table with option rows."
+      "title": "创建决策表",
+      "detail": "创建独立的 task_decisions 表并保存各个选项。"
     }
   ],
   "selected": "comment-metadata",
-  "reason": "Keeps decisions close to task discussion and avoids a parallel timeline.",
-  "risk": "metadata schema needs validation discipline.",
-  "verification": "CLI/API/Desktop tests cover creation, reading, rendering, and invalid metadata rejection."
+  "reason": "让决策紧邻任务讨论，避免产生平行时间线。",
+  "risk": "metadata schema 需要严格验证。",
+  "verification": "CLI/API/Desktop 测试覆盖创建、读取、渲染和非法元数据拒绝。"
 }
 ```
 
-Validation rules:
+验证规则：
 
 - `options` 必须非空。
-- 每个 option 必须是 object，且有非空 string `slug`、`title`、`detail`。
+- 每个 option 必须是 object，且有非空字符串 `slug`、`title`、`detail`。
 - 每个 option 必须有唯一 `slug`。
 - `selected` 必须匹配某个 option slug。
 - `reason` 必填且非空。
-- `risk` 可选但推荐；如果出现，必须是非空 string。
-- `verification` 可选但推荐；如果出现，必须是非空 string。
+- `risk` 可选但推荐；如果出现，必须是非空字符串。
+- `verification` 可选但推荐；如果出现，必须是非空字符串。
 - `slug` 使用稳定小写 ASCII slug，必须以小写字母或数字开头，只包含小写字母、数字和 `-`，便于 CLI、JSON 和前端引用。
-- `detail` 可以是 Markdown 文本，但 Desktop 渲染必须走安全 markdown 规则。
+- `detail` 可以是 Markdown 文本，但 Desktop 渲染必须遵守安全 Markdown 规则。
 
-### Desktop Rendering Rules
+### Desktop 渲染规则
 
-Desktop TaskDetail comment list：
+Desktop TaskDetail 评论列表：
 
-- `note`：按普通 markdown comment 渲染。
+- `note`：按普通 Markdown 评论渲染。
 - `decision`：
   - 展示 comment body 作为自然语言摘要，例如“已决定继续使用 comment metadata 承载结构化决策信息，正文保留为简短结论，方便没有结构化渲染的环境阅读。”
-  - 展示所有 option slug。
-  - selected option 使用明确绿色/selected 状态。
-  - 点击 option 展开 `title` 和 `detail`。
+  - 展示所有选项 slug。
+  - 选中项使用明确的绿色/selected 状态。
+  - 点击选项展开 `title` 和 `detail`。
   - 展示 reason、risk、verification。
-  - 如果 decision metadata 无效，不应该静默当作 selected；应显示错误状态或 degraded note。
+  - 如果 decision metadata 无效，不应该静默当作 selected；应显示错误状态或降级 note。
 
-### CLI / API Rules
+### CLI / API 规则
 
 CLI：
 
@@ -8870,7 +8454,7 @@ kanban comment add <task-ref> "<body>" --kind note
 kanban comment add <task-ref> "<body>" --kind decision --metadata-json '<json>'
 ```
 
-`kind=decision` 的 body 是自然语言 fallback 摘要，不重复完整选项表；`options`、`selected`、`reason`、`risk` 和 `verification` 只放在 `metadata_json` 中，由 Desktop 在正文下方结构化渲染。
+`kind=decision` 的 body 是自然语言回退摘要，不重复完整选项表；`options`、`selected`、`reason`、`risk` 和 `verification` 只放在 `metadata_json` 中，由 Desktop 在正文下方结构化渲染。
 
 可后续增加更友好的命令：
 
@@ -8882,17 +8466,17 @@ kanban decision add <task-ref> ...
 
 API：
 
-- comment create request 显式包含：
+- comment 创建请求显式包含：
   - `body`
   - `author_type`
   - `author`
   - `agent_type`
   - `kind`
   - `metadata`
-- comment response 返回同样字段。
+- comment 响应返回同样字段。
 - 不再把 `system/worker` 作为 kind 返回。
 
-### Event Kind
+### 事件类型
 
 `event.kind` 只记录系统事实：
 
@@ -8903,24 +8487,24 @@ API：
 - `task.completed`
 - `dependency.added`
 
-event 不承载 decision 本体。添加 decision comment 时，event 只记录 `comment.added`，decision 内容在 comment snapshot 中。
+event 不承载 decision 本体。添加 decision comment 时，event 只记录 `comment.added`，decision 内容在 comment 快照中。
 
-### Dispatcher And Frontier Rules
+### Dispatcher 与候选集规则
 
-Dispatcher claim eligibility 只能看：
+Dispatcher 领取资格只能看：
 
 - `status`
-- hard dependency (`dependency_type=blocks`)
+- 硬依赖（`dependency_type=blocks`）
 - `scheduled_at`
-- claim token / lease
-- board archived state
-- assignee / worker profile
+- claim token / 租约
+- board 归档状态
+- 负责人 / worker profile
 
 Dispatcher 排序可以看：
 
 - `priority`
 - `created_at`
-- future explicit dispatcher policy
+- 未来显式的 dispatcher 策略
 
 Dispatcher 不看：
 
@@ -8928,14 +8512,14 @@ Dispatcher 不看：
 - labels
 - `comment.kind`
 - `comment.metadata_json`
-- decision selected option
-- soft dependency
+- decision 选中项
+- 软依赖
 
-Frontier 可以展示和解释更多字段，但不得把 soft 字段解释成 hard blocker。
+候选集可以展示和解释更多字段，但不得把软字段解释成硬阻塞条件。
 
-### Migration Strategy
+### 迁移策略
 
-本项目是 dogfood 版本，不做沉重兼容层。采用直接 schema train：
+项目当时仍处于本地单用户的早期版本，不做沉重兼容层。采用直接结构迁移批次：
 
 1. 本 ADR 固定边界。
 2. 修改 `task_comments`：
@@ -8944,17 +8528,17 @@ Frontier 可以展示和解释更多字段，但不得把 soft 字段解释成 h
    - 增加 `agent_type`
    - 收窄 `kind` 为 `note | decision`
    - 增加 `metadata_json`
-3. 更新 Rust domain/API/CLI/Desktop type。
+3. 更新 Rust domain/API/CLI/Desktop 类型。
 4. 迁移现有 comment：
    - 不是用户本人写的，一律 `author_type=agent`
    - 用户本人写的，`author_type=user`
    - 普通历史 comment 一律 `kind=note`
    - 已有 decision comment 若能识别则 `kind=decision`，否则 `note`
-5. 实现 decision metadata validation。
-6. 实现 Desktop decision rendering。
+5. 实现 decision metadata 验证。
+6. 实现 Desktop decision 渲染。
 7. 后续再做 `task_type`、`dependency_type`、labels 扩展。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -8962,17 +8546,17 @@ Frontier 可以展示和解释更多字段，但不得把 soft 字段解释成 h
 - decision comment 可以成为真正结构化对象。
 - Desktop 渲染会简单很多。
 - LLM/agent 做选择时可以留下可索引、可展开、可复盘的记录。
-- 不再让 `system/worker` 这类来源概念污染 content kind。
+- 不再让 `system/worker` 这类来源概念污染内容类型。
 
 代价：
 
 - 需要 schema migration。
 - 需要一次性更新 CLI/API/Desktop。
 - 旧 comment JSON shape 会改变。
-- 需要认真做 decision metadata validation，避免 `metadata_json` 变成任意垃圾桶。
+- 需要认真做 decision metadata 验证，避免 `metadata_json` 变成任意垃圾桶。
 - 全局 `kanban-tool` skill 需要同步，因为 CLI/API/comment JSON 行为会变化。
 
-### Non-Goals
+### 非目标
 
 - 不引入多用户系统。
 - 不引入 RBAC、团队、组织、邀请或云同步。
@@ -8986,56 +8570,55 @@ Frontier 可以展示和解释更多字段，但不得把 soft 字段解释成 h
 
 ## ADR-0012：Label Proposal Provider 边界
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-Semantic label suggestion 的日常路径应保持 deterministic：SQLite 存 canonical
+语义 label 建议的日常路径应保持确定性：SQLite 保存权威的
 `labels` / `task_labels` / `label_semantics` / `label_atoms`，LanceDB 只是
-`kb_label_atoms` derived index，solver 只做本地向量计算。Label proposal 是“coverage
-不足时建议新 label semantics”的可选流程，它可以由人工、离线工具或未来本地 LLM provider
-产生 candidate。
+`kb_label_atoms` 派生索引，求解器只做本地向量计算。Label proposal 是“覆盖不足时建议新 label
+semantics”的可选流程，它可以由人工、离线工具或未来本地 LLM provider 产生候选项。
 
 真实 LLM provider 如果直接放进 `kanban-sqlite`，会把外部 SDK、HTTP client、prompt、
-credentials 和 runtime 配置拖入 SQLite service。这样会破坏本项目的 local-first / SQLite-only
-边界，也会让 proposal validation 与模型调用耦合过深。
+credential 和 runtime 配置拖入 SQLite service。这样会破坏本项目的本地优先 / 仅 SQLite
+边界，也会让 proposal 验证与模型调用耦合过深。
 
-### Decision
+### 决策
 
 `kanban-sqlite` 只定义并消费 `LabelProposalProvider` trait：
 
-- `DisabledLabelProposalProvider`：默认 provider 不可用，返回 degraded attempt，不写 canonical label。
-- `ManualLabelProposalProvider`：接收 CLI/API 显式传入的本地/offline candidate。
-- `propose_task_label_with_store`：从 SQLite 读取 task 和 suggestion context，调用 provider，
-  然后执行 deterministic validation、residual top1+margin gate、proposal persistence、
-  accept/reject lifecycle。
+- `DisabledLabelProposalProvider`：默认 provider 不可用，返回降级尝试，不写入权威 label。
+- `ManualLabelProposalProvider`：接收 CLI/API 显式传入的本地/离线候选项。
+- `propose_task_label_with_store`：从 SQLite 读取 task 和建议上下文，调用 provider，
+  然后执行确定性验证、残差 top1+margin 门禁、proposal 持久化和
+  accept/reject 生命周期。
 
 真实 LLM provider 不属于 `kanban-sqlite`。可选实现位置是：
 
 - `kanban-server`：当 localhost server 显式配置本地 provider/runtime 时注入 trait object。
-- `kanban-cli` 或本地 runtime：当命令显式读取本地/offline candidate 或未来本机模型输出时注入。
+- `kanban-cli` 或本地 runtime：当命令显式读取本地/离线候选项或未来本机模型输出时注入。
 - 独立 `kanban-ai` / `kanban-llm` crate：承载 SDK、HTTP client、prompt 和 credential 读取，
-  再向上层暴露实现 `LabelProposalProvider` 的 adapter。
+  再向上层暴露实现 `LabelProposalProvider` 的适配器。
 
-### Consequences
+### 影响
 
 优点：
 
-- SQLite service 不依赖 LLM SDK、HTTP AI client、runtime credentials 或外部模型配置。
-- proposal lifecycle 仍由 deterministic SQLite service 守住，不会因为 provider 类型不同而绕过
-  residual validation 或 accept/reject gate。
-- 日常 `label suggest` 不依赖 proposal provider；provider 不可用只是 degraded proposal attempt。
-- 未来 provider 可以替换或禁用，不需要改 canonical label truth 或 task label binding 语义。
+- SQLite service 不依赖 LLM SDK、HTTP AI client、runtime credential 或外部模型配置。
+- proposal 生命周期仍由确定性的 SQLite service 守住，不会因为 provider 类型不同而绕过
+  残差验证或 accept/reject 门禁。
+- 日常 `label suggest` 不依赖 proposal provider；provider 不可用只会产生降级的 proposal 尝试。
+- 未来 provider 可以替换或禁用，不需要修改权威 label 事实或 task label 绑定语义。
 
 代价：
 
-- 真实 provider 需要在上层做 adapter 和配置装配。
-- server/CLI 需要明确区分“candidate 生成失败”和“SQLite validation 拒绝 candidate”。
-- 需要持续避免把 prompt、credential、HTTP retry 等 concerns 下沉进 `kanban-sqlite`。
+- 真实 provider 需要在上层做适配器和配置装配。
+- server/CLI 需要明确区分“候选项生成失败”和“SQLite 验证拒绝候选项”。
+- 需要持续避免把 prompt、credential、HTTP 重试等关注点下沉进 `kanban-sqlite`。
 
-### Non-Goals
+### 非目标
 
 - 本 ADR 不实现真实 LLM provider。
 - 不上传本地 task 数据到远程服务。
@@ -9044,39 +8627,39 @@ credentials 和 runtime 配置拖入 SQLite service。这样会破坏本项目�
 
 ---
 
-## ADR-0013：暂不引入 label ontology graph projection
+## ADR-0013：暂不引入 label ontology 图投影
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-当前 label ontology 已有 SQLite truth 与查询面：
+当前 label ontology 已有 SQLite 权威事实与查询面：
 
-- `labels` / `task_labels` 表达当前 task label binding truth。
-- `label_semantics` 表达 canonical ontology semantics；`label_atoms` 是从 semantics 与
-  label name 展开的 SQLite materialized projection。
+- `labels` / `task_labels` 表达当前 task label 绑定事实。
+- `label_semantics` 表达权威 ontology semantics；`label_atoms` 是从 semantics 与
+  label name 展开的 SQLite 物化投影。
 - `label_semantic_proposals` 表达新 label proposal lifecycle。
 - `label_ontology_observations` / `signals` / `actions` / `action_signals` 表达
-  provenance、review、mutation 和 validation history。
+  来源、审查、变更和验证历史。
 - `label ontology review`、`label atom explain`、JSONL export/import 和 doctor 已经从
   SQLite records 直接回答第一批 review/provenance 问题。
 
-项目也已有通用 Knowledge Substrate graph：`entity_relations` 作为 SQLite mirror，
-Oxigraph 作为可重建 derived store，`index_outbox` / `derived_store_state` 管理 dirty、
-sync 和 rebuild。这个 graph 当前覆盖 task-board、task dependency 等通用 entity
-关系，不覆盖 label ontology ledger。
+项目也已有通用 Knowledge Substrate 图：`entity_relations` 作为 SQLite 镜像，
+Oxigraph 作为可重建派生存储，`index_outbox` / `derived_store_state` 管理 dirty、
+同步和重建。这个图当前覆盖 task-board、task dependency 等通用实体
+关系，不覆盖 label ontology 账本。
 
-第一版 ledger 还没有明确的关系查询需求需要 ontology-specific graph。过早投影 signals、
-actions、atoms 和 proposals 会增加 schema、outbox、query API 和 rebuild 复杂度，并提高把
-graph 误当第二 truth 的风险。
+第一版账本还没有明确的关系查询需求需要 ontology 专属图。过早投影 signal、
+action、atom 和 proposal 会增加 schema、outbox、query API 和重建复杂度，并提高把
+图误当第二事实源的风险。
 
-### Decision
+### 决策
 
-暂不实现 label ontology graph projection。
+暂不实现 label ontology 图投影。
 
-在 rename/split/merge、cross-action provenance、atom lineage 或 review workbench 出现明确
+在 rename/split/merge、跨 action 来源、atom 谱系或审查工作台出现明确
 关系查询需求前，ontology 查询继续走 SQLite service/API：
 
 - `label ontology review`
@@ -9089,14 +8672,14 @@ graph 误当第二 truth 的风险。
 
 - SQLite `labels`、`task_labels`、`label_semantics`、`label_atoms`、proposal 和
   `label_ontology_*` 仍是事实来源；`label_atoms` 是 projection，不是独立 semantic truth。
-- projection 只能从 SQLite 快照/outbox 派生，可删除重建。
-- projection 状态通过 `index_outbox` 和 `derived_store_state` 或等价派生层控制面表达。
-- graph API 只能查询 relation/provenance，不提供 confirm/apply/validate/revert/bootstrap
-  或其它 canonical mutation 写入口。
-- graph dirty、error、删除或重建失败不改变 task status、task labels、semantics、atoms、
-  proposal 或 ledger rows。
+- 投影只能从 SQLite 快照/outbox 派生，可删除重建。
+- 投影状态通过 `index_outbox` 和 `derived_store_state` 或等价派生层控制面表达。
+- graph API 只能查询关系/来源，不提供 confirm/apply/validate/revert/bootstrap
+  或其它权威变更写入口。
+- 图 dirty、error、删除或重建失败不改变 task status、task labels、semantics、atoms、
+  proposal 或账本记录。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -9112,7 +8695,7 @@ graph 误当第二 truth 的风险。
 - 未来若要支持 ontology graph，需要单独设计 projection schema、outbox fanout 和 rebuild
   测试。
 
-### Non-Goals
+### 非目标
 
 - 本 ADR 不新增 ontology RDF schema。
 - 不把 `label_ontology_*` rows 写入 `entity_relations`。
@@ -9121,21 +8704,20 @@ graph 误当第二 truth 的风险。
 
 ---
 
-## ADR-0014：Label ontology closure contract
+## ADR-0014：标签本体收口契约
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-Label identity CRUD、task label binding、semantics mutation、proposal accept、bootstrap、
-validation 和 review lifecycle 曾经混用 provenance 语义。最危险的问题是 routine task
-capture 可以隐式创建 vocabulary，label identity delete 可以隐式删除 semantics/atoms，
-semantics mutation 会 fan out 多条 per-atom action，trusted validation raw JSON 可能绕过
-collector，bootstrap verify 曾依赖 post-commit compensation。
+标签身份增删改查、任务标签绑定、语义变更、提案接受、引导初始化、验证与审查生命周期
+曾经混用来源语义。最危险的问题是普通任务采集可以隐式创建词汇，删除标签身份可以隐式
+删除语义与 atom，语义变更会拆成多条逐 atom 操作，受信验证的原始 JSON 可能绕过采集器，
+引导验证也曾依赖提交后的补偿操作。
 
-### Decision
+### 决策
 
 采用收窄后的 closure contract：
 
@@ -9158,7 +8740,7 @@ collector，bootstrap verify 曾依赖 post-commit compensation。
 - Public structure plan write 入口关闭；rename/split/merge 暂仅可作为 review signal 或
   legacy action 读取。
 
-### Consequences
+### 影响
 
 优点：
 
@@ -9173,103 +8755,186 @@ collector，bootstrap verify 曾依赖 post-commit compensation。
 - Base label identity delete 需要用户先显式 clear semantics。
 - Structure mutation 需要未来单独 typed apply、binding migration 和 validation policy。
 
-### Non-Goals
+### 非目标
 
 - 不新增 action type、signal type、validation status 或 graph/dashboard projection。
 - 不回写或压缩历史 per-atom actions。
 - 不实现 rename/split/merge canonical mutation。
 
-## ADR-0013: Generic Signal Ledger
+## ADR-0015：通用信号账本
 
-### Status
+### 状态
 
-Accepted
+已接受
 
-### Context
+### 背景
 
-Agent/Product failures and observations need a durable review lifecycle that is not label-specific and is not just free-form comment metadata.
+Agent/Product 的故障和观察需要一个持久的审查生命周期；它不能局限于 label，也不能只是自由格式的评论元数据。
 
-### Decision
+### 决策
 
-Add board-scoped `signal_observations` and `signals` tables. `kanban signal record` writes observation and signal rows, and when task context exists it writes a short `task_comments.kind = signal` backlink in the same SQLite transaction. Lifecycle review supports `open -> confirmed|rejected|superseded|resolved` and `confirmed -> resolved`; supersede requires same-board replacement and cycle prevention. V1 does not automatically create follow-up tasks.
+新增 board 范围的 `signal_observations` 和 `signals` 表。`kanban signal record` 写入 observation 与 signal 记录；存在 task 上下文时，还会在同一 SQLite 事务中写入简短的 `task_comments.kind = signal` 回链。生命周期审查支持 `open -> confirmed|rejected|superseded|resolved` 和 `confirmed -> resolved`；supersede 要求替代 signal 与原 signal 属于同一 board，并防止成环。V1 不会自动创建后续任务。
 
-### Consequences
+### 影响
 
-Signal ledger becomes the canonical place for generic agent/product signals. Label ontology ledger remains label-specific and is not reused for generic product signals.
-
-
-## ADR: API/SSE transport descriptor 作为单一 method/path authority
-
-- 决策：在 `kanban-contract` default feature 保存 84 个 API/SSE descriptor；server router 以 `operation_id` + 显式 `adapter_id` 绑定真实 handler，并读取 descriptor method/path。
-- 原因：此前 `SurfaceOperation` 与 router 各自手写 method/path，虽然有 parity test，仍保留双写漂移面。
-- 后果：`SurfaceOperation` 的 API/SSE 记录改为投影；CLI/JSONL 保持其独立 inventory。schema root 使用 `contract_id`，不与 endpoint `operation_id` 混淆。DTO/schema adoption 不在本决策中提前完成。
+Signal 账本成为通用 agent/product 信号的权威存储。Label ontology 账本仍然只服务于 label，不复用于通用产品信号。
 
 
-## ADR: B1-A Error 与 delete response 的 wire 收口边界
+## ADR-0016：API/SSE 传输描述符作为唯一 method/path 权威
 
-- 决策：`ErrorBody.code` 使用闭合的 `ApiErrorCode`，server adapter 显式将 `KanbanError` 映射为 enum；label semantics delete handler 使用 `DeleteResponse`/`DeleteResult`，不再公开 `DataEnvelope<serde_json::Value>`。
-- 原因：稳定 error code 与固定 delete acknowledgement 已具备可验证 wire 形状；把任意 `String`/`Value` 留在公开边界会削弱 schema、typed consumer 与 drift gate。
-- 后果：该决策只拥有 wire/schema evidence。HTTP status、locale message、service guard、状态机、CAS、transaction 与 SQLite 继续由 adapter/service/core 负责。delete endpoint 的 path/query/header/body obligations 尚未建模，因此 endpoint 与 response migration 均保持 `generated`，不以局部 response typing 提前关闭 adoption。
+### 状态
 
+已接受
 
-## ADR: B1-C0 Transport location、cardinality 与 exact/shared binding
+### 背景
 
-- 决策：API/SSE semantic contract 显式声明 `Http { operation_key, location, parameters }`，非 HTTP contract 显式声明 `NoTransport`；parameter cardinality 只允许 `RequiredOne|OptionalOne|RepeatedOrdered`。`Success` 只表示 2xx success；非 2xx `Error` 是仅允许 `SharedComponent` 的第七个 transport location，但 endpoint 仍只有 path/query/headers/body/success/SSE 六类 obligation。任意 `Adopted` contract 和 endpoint exact reference 都必须是 `granularity=Exact`。
-- 原因：仅有 contract ID 与 input/output 方向无法区分 path/query/header/body/2xx success/shared error/SSE，也无法证明 query 重复值顺序、path placeholder 映射或 shared error envelope 的真实复用关系；把 error 继续标成 `Success`、允许 Family 冒充 exact，都会使 coverage 失真。
-- 唯一性：endpoint exact binding 不维护全局 second-binding map。method/path 唯一、contract 的精确 `operation_key` 和单一 location 已共同推出合法 binding 唯一：同 route 的第二个 endpoint 先被 method/path 拒绝，不同 route 被 operation key 拒绝，同 endpoint 的第二个 obligation 被 location 拒绝。surface catalog 的重复 exact reference 仍是可达输入，继续单独 fail closed。
-- Shared orphan policy：`SharedComponent` 可以跨多个 endpoint 复用且永不计入 exact/adoption coverage。generated/adopted shared 满足“至少一个显式 linkage”或“同 surface 的真实 adoption witness”之一即可；只有两者均缺失才是 orphan。`api.error.response` 使用 `location=Error`，当前由 list-tasks 显式链接。
-- 后果：validator 对 unknown/`Planned`/`Excluded` 引用、错误 binding/granularity/location/direction/operation/surface、path 名称/缺失/额外/顺序/大小写漂移、header 大小写冲突、非法 parameter location 和 shared miscount fail closed。13 个 B1-B lifecycle request 保持 body transport 与既有 runtime 语义；本决策不迁移 handler DTO、不改变 HTTP status/service/state-machine 行为，也不关闭 endpoint `Todo`。冻结值为 `stream-events.sse=Todo`、endpoint `Todo=389`、总未闭合 `636`。
+此前 `SurfaceOperation` 与 router 各自手写 method/path；即使已有一致性测试，仍存在双写漂移面。
 
+### 决策
 
-## ADR: B1-C1 Task-read exact path/query contract 与单一 ordered parser
+在 `kanban-contract` 默认 feature 中保存 API/SSE 描述符；server router 以
+`operation_id` + 显式 `adapter_id` 绑定真实 handler，并读取描述符的 method/path。
 
-- 决策：`GET /api/v1/boards/:board/tasks` 与 `/tasks/by-status` 分别拥有独立 path/query DTO，
-  形成 4 个 `Adopted` exact contract。两个 server-local typed Axum extractor 分别绑定对应
-  `Path<...>`，并各自从 `parts.uri.query()` 读取一次 raw URI 后进入共享 ordered parser；handler
+### 影响
+
+`SurfaceOperation` 的 API/SSE 记录改为投影；CLI/JSONL 保持独立清单。schema root 使用
+`contract_id`，不与端点 `operation_id` 混淆。DTO/schema 采用不在本决策中提前完成。
+
+## ADR-0017：B1-A 错误与删除响应的 wire 收口边界
+
+### 状态
+
+已接受
+
+### 背景
+
+稳定错误码与固定删除确认响应已具备可验证的 wire 形状；把任意
+`String`/`Value` 留在公开边界会削弱 schema、类型化 consumer 与漂移门禁。
+
+### 决策
+
+`ErrorBody.code` 使用闭合的 `ApiErrorCode`，server 适配器显式将 `KanbanError` 映射为
+枚举；label semantics 删除 handler 使用 `DeleteResponse`/`DeleteResult`，不再公开
+`DataEnvelope<serde_json::Value>`。
+
+### 影响
+
+该决策只拥有 wire/schema 证据。HTTP status、locale 消息、service 保护、状态机、
+CAS、事务与 SQLite 继续由 adapter/service/core 负责。决策时删除端点的
+其它义务尚未建模；其后续当前状态以 `docs/SCHEMA_CONTRACTS.md` 为准。
+
+## ADR-0018：B1-C0 传输位置、基数与精确/共享绑定
+
+### 状态
+
+已接受
+
+### 背景
+
+仅有 contract ID 与 input/output 方向无法区分 path/query/header/body/2xx success/shared
+error/SSE，也无法证明 query 重复值顺序、path placeholder 映射或共享错误 envelope 的
+真实复用关系。
+
+### 决策
+
+API/SSE 语义 contract 显式声明 `Http { operation_key, location, parameters }`，非 HTTP
+contract 显式声明 `NoTransport`；参数基数只允许
+`RequiredOne|OptionalOne|RepeatedOrdered`。`Success` 只表示 2xx success；非 2xx `Error`
+只允许用于 `SharedComponent`。任意 `Adopted` contract 和端点精确引用都必须是
+`granularity=Exact`。
+
+端点精确绑定不维护全局第二绑定映射。method/path 唯一、精确
+`operation_key` 和单一 location 共同推出合法绑定唯一；公开面目录中的重复精确
+引用仍单独失败关闭。
+
+`SharedComponent` 可以跨多个端点复用且不计入精确/采用覆盖。
+generated/adopted shared 必须至少有显式链接，或同一公开面的真实采用 witness。
+
+### 影响
+
+验证器对未知/`Planned`/`Excluded` 引用，以及错误的
+binding/granularity/location/direction/operation/surface 失败关闭。本 ADR 保存的是
+迁移当时的边界和冻结值，不代表当前覆盖；实时状态见 `docs/SCHEMA_CONTRACTS.md`。
+
+## ADR-0019：B1-C1 Task-read 精确 path/query 契约与单一有序解析器
+
+### 状态
+
+已接受
+
+### 背景
+
+两个 task-read 端点需要证明各自精确消费 path/query，同时避免 handler 或多个 parser
+重复拥有 raw query。
+
+### 决策
+
+`GET /api/v1/boards/:board/tasks` 与 `/tasks/by-status` 分别拥有独立 path/query DTO，
+  形成 4 个 `Adopted` 精确 contract。两个 server 本地类型化 Axum extractor 分别绑定对应
+  `Path<...>`，并各自从 `parts.uri.query()` 读取一次 raw URI 后进入共享有序解析器；handler
   只接收已绑定的 request，不持有 `RawQuery`、`Query<T>` 或第二个 raw source。
-- Query grammar：只有 `status`、`priority`、`label`、`plan_filter` 是
-  `RepeatedOrdered`；其余 scalar 重复、未知 key 与旧 `search` alias 均返回
-  `400 invalid_input`。54-pair 上限由 9/4/3/32 个 repeated budgets 加 6 个 scalar 参数推导；
-  raw query 上限为 8192 bytes。`q` 是唯一文本搜索 key。label 会 trim Unicode 边缘空白，
-  但纯 Unicode 空白失败关闭；percent/UTF-8、enum、priority、limit、offset 和 sort 边界由
-  真实 router URI matrix 固定。
-- 证据边界：每个 contract 都有独立 DTO-to-fixture producer 和 fixture-to-real-router consumer；
-  非默认 board sentinel 证明真实 path consumption。AST tests 锁定 DTO ownership、typed
+- Query 语法：只有 `status`、`priority`、`label`、`plan_filter` 是
+  `RepeatedOrdered`；其余标量重复、未知 key 与旧 `search` 别名均返回
+  `400 invalid_input`。54 对上限由 9/4/3/32 个重复参数预算加 6 个标量参数推导；
+  raw query 上限为 8192 字节。`q` 是唯一文本搜索 key。label 会 trim Unicode 边缘空白，
+  但纯 Unicode 空白失败关闭；percent/UTF-8、枚举、priority、limit、offset 和 sort 边界由
+  真实 router URI 矩阵固定。
+每个 contract 都有独立的 DTO-to-fixture producer 和 fixture-to-real-router consumer；
+  非默认 board 哨兵证明真实 path 消费。AST 测试锁定 DTO 所有权、类型化
   extractor、两个 raw URI 消费点及 handler `&path.board` 到 `list_tasks_page` 的实参，并以显式
-  mutation 覆盖 alias、private DTO、wrong extractor、dual source、second raw parser 和两个
-  handler 各自的 `path.board -> default`。producer/consumer region guard 只证明当前源码区域直接
-  分离，不把任意未来共同 helper indirection 夸大为 mutation-complete 证明。
-- 后果：Desktop/Web/CLI 的 HTTP caller 必须使用上述 grammar；现有 Desktop caller 已使用 `q`
-  并保留 repeated 参数顺序。SQLite service 的 defensive limit 直接引用唯一 application authority，
-  server equality gate 覆盖该实际 service path；service 查询行为与 core 状态机不变。GET body 为
-  `NotApplicable`，headers 与 success response 保持 `Todo`，所以两个 endpoint 只推进到
-  `Generated`，不提前声称完整 adoption。冻结值变为 `Contract=19`、`Todo=383`、
-  `NotApplicable=102`、总未闭合 `630`。
+  变异覆盖别名、私有 DTO、错误 extractor、双重来源、第二个 raw parser，以及两个
+  handler 各自的 `path.board -> default`。producer/consumer 区域保护只证明当前源码区域直接
+  分离，不把任意未来共同 helper 间接层夸大为变异完备证明。
 
+### 影响
 
-## B1-C2b task-read 成功响应决策
+Desktop/Web/CLI 的 HTTP 调用方必须使用上述语法；现有 Desktop 调用方已使用 `q`
+  并保留重复参数顺序。SQLite service 的防御性上限直接引用唯一 application 权威，
+  server 相等性门禁覆盖该实际 service 路径；service 查询行为与 core 状态机不变。本文保留
+  决策时的迁移边界；当前采用状态以 `docs/SCHEMA_CONTRACTS.md` 为准。
 
-决定让两个 task-read endpoint 分别拥有闭合响应 contract，只复用 `ApiTask`、`ApiLabel` 与既有 pagination primitives，避免共享 envelope 掩盖 endpoint 差异。行为细节以 [API_SPEC](API_SPEC.md#b1-c2b-task-read-成功响应契约) 和 [SCHEMA_CONTRACTS](SCHEMA_CONTRACTS.md#b1-c2b-task-read-成功响应契约) 为准。
-## ADR-0015：Oxigraph quick-xml 安全临时 vendor patch
+## ADR-0020：B1-C2b task-read 成功响应决策
 
-### Status
+### 状态
 
-Accepted（Phase 2 temporary exception）
+已接受
 
-### Context
+### 背景
 
-`oxrdfxml 0.2.3` 与 `sparesults 0.3.3` 的 crates.io 版本仍解析到受 RUSTSEC-2026-0194/RUSTSEC-2026-0195 影响的 `quick-xml < 0.41`；security commit `52870a3` vendor 了上游修复源码并统一到 `quick-xml 0.41.0`。
+共享响应 envelope 会掩盖两个 task-read 端点的精确响应差异。
 
-### Decision
+### 决策
 
-允许 root `Cargo.toml` 唯一的 `[patch.crates-io]` 例外，且仅接受 `oxrdfxml`/`sparesults` 两个精确仓内 vendor 路径、package name/version 与普通文件目标。`schema_dependency_policy` 对额外 key、非精确 source/path、path traversal、symlink、全部 `[replace]` 保持 fail-closed；schema-tool registry closure 不变，产品图继续禁止 schema tooling 泄漏。
+让两个 task-read 端点分别拥有闭合响应 contract，只复用 `ApiTask`、`ApiLabel` 与既有
+pagination primitives。
 
-由 security owner 维护，待 crates.io 上游版本发布并确认 `quick-xml >= 0.41` 后移除 vendor、`[patch]`、lockfile 变更及本 ADR；advisory、provenance 或 vendor digest 变化必须重新 review。复核期限：2026-10-12。
+### 影响
+
+行为细节以 [API_SPEC](docs/API_SPEC.md#4-任务) 和
+[SCHEMA_CONTRACTS](docs/SCHEMA_CONTRACTS.md#2-契约状态) 为准。
+
+## ADR-0021：Oxigraph quick-xml 安全临时 vendor patch
+
+### 状态
+
+已接受（第 2 阶段临时例外）
+
+### 背景
+
+`oxrdfxml 0.2.3` 与 `sparesults 0.3.3` 的 crates.io 版本仍解析到受
+RUSTSEC-2026-0194/RUSTSEC-2026-0195 影响的 `quick-xml < 0.41`；仓库当前通过 root
+`Cargo.toml` 与对应的 `vendor/` 目录使用上游修复源码，并统一到 `quick-xml 0.41.0`。
+
+### 决策
+
+允许根目录 `Cargo.toml` 中唯一的 `[patch.crates-io]` 例外，且仅接受 `oxrdfxml`/`sparesults` 两个精确仓内 vendor 路径、package name/version 与普通文件目标。`schema_dependency_policy` 对额外 key、非精确 source/path、path traversal、symlink、全部 `[replace]` 保持失败关闭；schema-tool 注册表闭包不变，产品依赖图继续禁止 schema tooling 泄漏。
+
+由安全负责人维护，待 crates.io 上游版本发布并确认 `quick-xml >= 0.41` 后移除 vendor、`[patch]`、lockfile 变更及本 ADR；advisory、provenance 或 vendor digest 变化必须重新审查。复核期限：2026-10-12。
 
 
 ---
 
-# File: migrations/001_initial.sql
+# 文件：migrations/001_initial.sql
 
 ```sql
 -- Kanban Tool initial SQLite schema
@@ -9525,7 +9190,7 @@ COMMIT;
 
 ---
 
-# File: migrations/003_comment_author_identity.sql
+# 文件：migrations/003_comment_author_identity.sql
 
 ```sql
 -- Add explicit comment author identity while preserving existing kind values.

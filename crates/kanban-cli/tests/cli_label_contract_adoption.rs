@@ -12,6 +12,10 @@ use kanban_contract::cli_labels::*;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
+// Exact output fixtures use this actor; pass it explicitly instead of inheriting
+// the host username.
+const FIXTURE_ACTOR: &str = "root";
+
 fn fixture(slug: &str, valid: bool) -> Result<Value> {
     let suffix = if valid { "valid" } else { "invalid" };
     let path = if slug == "label-add-task" {
@@ -141,12 +145,19 @@ fn remove_object_field(value: &mut Value, path: &[PathPart]) {
 
 fn setup(name: &str) -> Result<TempDb> {
     let temp = TempDb::new(name)?;
-    kanban(&temp.path, &["init"])?.success()?;
+    kanban(&temp.path, &fixture_args(&["init"]))?.success()?;
     Ok(temp)
 }
 
+fn fixture_args<'a>(args: &[&'a str]) -> Vec<&'a str> {
+    let mut fixture_args = Vec::with_capacity(args.len() + 2);
+    fixture_args.extend(["--actor", FIXTURE_ACTOR]);
+    fixture_args.extend_from_slice(args);
+    fixture_args
+}
+
 fn run(temp: &TempDb, args: &[&str]) -> Result<Value> {
-    kanban(&temp.path, args)?.success_json()
+    kanban(&temp.path, &fixture_args(args))?.success_json()
 }
 
 fn create_task(temp: &TempDb, title: &str) -> Result<String> {
@@ -238,9 +249,10 @@ print(json.dumps({"protocol":"kanban-derived-helper.v1","payload_json":json.dump
 #[cfg(unix)]
 fn run_with_helper(temp: &TempDb, args: &[&str]) -> Result<Value> {
     let helper = vector_helper(temp)?;
+    let args = fixture_args(args);
     kanban_in_dir_str_envs(
         &temp.path,
-        args,
+        &args,
         &temp.dir,
         &[(
             "KANBAN_VECTOR_HELPER",
@@ -252,9 +264,10 @@ fn run_with_helper(temp: &TempDb, args: &[&str]) -> Result<Value> {
 
 fn run_without_helper(temp: &TempDb, args: &[&str]) -> Result<Value> {
     let missing = temp.dir.join("missing-vector-helper");
+    let args = fixture_args(args);
     kanban_in_dir_str_envs(
         &temp.path,
-        args,
+        &args,
         &temp.dir,
         &[(
             "KANBAN_VECTOR_HELPER",
@@ -262,6 +275,14 @@ fn run_without_helper(temp: &TempDb, args: &[&str]) -> Result<Value> {
         )],
     )?
     .success_json()
+}
+
+#[test]
+fn fixture_commands_pin_actor_instead_of_using_host_username() {
+    assert_eq!(
+        fixture_args(&["--json", "label", "list"]),
+        ["--actor", FIXTURE_ACTOR, "--json", "label", "list"]
+    );
 }
 
 fn seed_proposal(temp: &TempDb, task_id: &str, name: &str) -> Result<String> {

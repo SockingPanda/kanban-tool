@@ -2,7 +2,7 @@ set positional-arguments
 set shell := ["bash", "-cu"]
 
 # cargo audit runs with `-D warnings`; these exact IDs are the current
-# transitive advisory baseline and are tracked by default#123.
+# transitive advisory baseline tracked by the explicit allowlist below.
 # - RUSTSEC-2024-0370: proc-macro-error via GTK3/glib macro dependencies.
 # - RUSTSEC-2024-0411..0420: gtk-rs GTK3 binding advisories via Tauri/wry.
 # - RUSTSEC-2024-0429: glib unsound advisory via GTK3 stack; cargo audit still

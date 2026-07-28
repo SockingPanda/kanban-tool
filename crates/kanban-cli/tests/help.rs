@@ -58,6 +58,34 @@ fn public_command_groups_have_subcommand_descriptions() -> anyhow::Result<()> {
 }
 
 #[test]
+fn dispatch_is_hidden_from_root_help_but_remains_parseable() -> anyhow::Result<()> {
+    let root = kanban_help(&[])?;
+    let dispatch_is_listed = root
+        .lines()
+        .skip_while(|line| line.trim() != "Commands:")
+        .skip(1)
+        .take_while(|line| !line.trim().is_empty())
+        .any(|line| line.split_whitespace().next() == Some("dispatch"));
+    anyhow::ensure!(
+        !dispatch_is_listed,
+        "expected root help not to list hidden dispatch command, got:\n{root}"
+    );
+
+    let matches = args::Cli::command()
+        .try_get_matches_from(["kanban", "dispatch", "--once"])
+        .map_err(|error| anyhow::anyhow!("expected direct dispatch invocation to parse: {error}"))?;
+    let Some(("dispatch", dispatch)) = matches.subcommand() else {
+        anyhow::bail!("expected parsed dispatch subcommand, got {matches:?}");
+    };
+    anyhow::ensure!(
+        dispatch.get_flag("once"),
+        "expected parsed dispatch --once flag"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn key_agent_facing_help_includes_examples_and_safe_input_guidance() -> anyhow::Result<()> {
     let root = kanban_help(&[])?;
     assert_contains_all(

@@ -15,6 +15,12 @@ jobs:
   rust-default:
     name: Rust default workspace
     runs-on: ubuntu-latest
+    env:
+      # CI 无需调试符号，给完整工作区冷构建留出磁盘空间。
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      # 受限 runner 上的内置 LLD 会崩溃；三阶段统一使用系统 linker，避免重复指纹。
+      RUSTFLAGS: "-C linker-features=-lld"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -39,8 +45,6 @@ jobs:
         env:
           # 避免多个大型测试二进制在受限 runner 上同时链接。
           CARGO_BUILD_JOBS: "1"
-          # 受限 runner 上的内置 LLD 会在大型单次链接中崩溃，改用系统 linker。
-          RUSTFLAGS: "-C linker-features=-lld"
       - name: Clippy
         run: cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings
 

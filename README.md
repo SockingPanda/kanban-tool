@@ -303,3 +303,7 @@ workspace gates. Override with `KANBAN_CARGO_BUILD_JOBS` /
 `NEXTEST_TEST_THREADS`, and `RUST_TEST_THREADS`. Set the repo-level values to
 `auto` to leave the tool-specific variables unset, which is the preferred
 Codex Cloud setting.
+
+## License
+
+Kanban Tool is licensed under the [Apache License 2.0](LICENSE).

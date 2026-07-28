@@ -44,8 +44,8 @@ resolver = "3"
 [workspace.package]
 edition = "2024"
 version = "2.1.3"
-license = "MIT"
-authors = ["kanban-user"]
+license = "Apache-2.0"
+authors = ["SockingPanda"]
 
 [workspace.dependencies]
 anyhow = "1.0"

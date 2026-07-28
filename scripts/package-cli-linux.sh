@@ -193,7 +193,7 @@ Section: utils
 Priority: optional
 Architecture: $arch
 Depends: $depends
-Maintainer: kanban-user
+Maintainer: SockingPanda <42059910+SockingPanda@users.noreply.github.com>
 Installed-Size: $installed_size
 Description: Local-first Kanban CLI
  Standalone kanban command line client for the Kanban Tool local work queue.

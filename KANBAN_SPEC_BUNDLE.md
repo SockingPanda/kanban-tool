@@ -328,6 +328,10 @@ workspace gates. Override with `KANBAN_CARGO_BUILD_JOBS` /
 `auto` to leave the tool-specific variables unset, which is the preferred
 Codex Cloud setting.
 
+## License
+
+Kanban Tool is licensed under the [Apache License 2.0](LICENSE).
+
 
 ---
 
@@ -8728,7 +8732,7 @@ Proposed
 | labels | 多标签分类、搜索、推荐和 UI grouping | 否 | 否 | 否，除非未来显式配置排序策略 | 是 |
 | `dependency_type` | 依赖边语义，区分 hard block 和 soft relation | 仅 hard block | 仅 hard block | 是，但必须区分 hard/soft | 是 |
 | `comment.author_type` | 评论作者角色：`user` 或 `agent` | 否 | 否 | 否 | 是 |
-| `comment.author` | 展示名，例如 `kanban-user`、`codex` | 否 | 否 | 否 | 是 |
+| `comment.author` | 展示名，例如 `alice`、`codex` | 否 | 否 | 否 | 是 |
 | `comment.agent_type` | 可选 agent 细分，例如 `codex`、`executor`、`dispatcher` | 否 | 否 | 否 | 是 |
 | `comment.kind` | 内容语义：`note` 或 `decision` | 否 | 否 | 否 | 是 |
 | `comment.metadata_json` | `comment.kind` 对应的结构化 payload | 否 | 否 | 否 | 是 |
@@ -8842,7 +8846,7 @@ user | agent
 
 - `user`：本地操作者，也就是“我”。
 - `agent`：不是我写的，都算 agent。
-- `author`：展示名，例如 `kanban-user`、`codex`。
+- `author`：展示名，例如 `alice`、`codex`。
 - `agent_type`：仅当 `author_type=agent` 时可用，例如 `codex`、`executor`、`reviewer`、`dispatcher`。
 - 不引入 users table、identity table、RBAC 或权限模型。
 

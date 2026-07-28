@@ -1,0 +1,4 @@
+# 让脚本与按字节校验的生成文件在 Windows、macOS 和 Linux 上保持一致。
+* text=auto eol=lf
+
+*.png binary

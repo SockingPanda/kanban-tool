@@ -2,10 +2,12 @@
 test-threads = 2
 slow-timeout = { period = "60s", terminate-after = 2 }
 
-# trybuild 测试会各自启动 Cargo 编译；串行执行可避免共享构建目录争用和误超时。
+# trybuild 测试会各自启动 Cargo 编译；串行执行可避免共享构建目录争用。
+# 干净的 CI runner 上，首个 trybuild 用例总耗时可能超过两分钟，因此只为这组测试放宽终止时间。
 [[profile.default.overrides]]
 filter = "binary_id(kanban-sqlite::public_api)"
 threads-required = "num-test-threads"
+slow-timeout = { period = "60s", terminate-after = 6 }
 
 [profile.default.junit]
 path = "junit.xml"

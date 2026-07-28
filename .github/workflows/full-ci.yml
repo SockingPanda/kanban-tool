@@ -36,6 +36,9 @@ jobs:
         run: cargo check --workspace --exclude kanban-desktop --tests
       - name: Test workspace
         run: cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast
+        env:
+          # 避免多个大型测试二进制在受限 runner 上同时链接。
+          CARGO_BUILD_JOBS: "1"
       - name: Clippy
         run: cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings
 
@@ -106,11 +109,11 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v4.4.0
         with:
           version: 9
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm

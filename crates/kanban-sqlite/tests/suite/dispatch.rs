@@ -574,8 +574,7 @@ fn manual_block_during_dispatch_is_not_overwritten_to_done() -> anyhow::Result<(
 
 #[test]
 fn failed_dispatch_after_parent_reopen_recomputes_dependency_readiness() -> anyhow::Result<()> {
-    let temp =
-        TempDb::new("failed_dispatch_after_parent_reopen_recomputes_dependency_readiness")?;
+    let temp = TempDb::new("failed_dispatch_after_parent_reopen_recomputes_dependency_readiness")?;
     init_database(&temp.path, "tester")?;
 
     let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("parent"))?;

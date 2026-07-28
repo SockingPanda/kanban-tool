@@ -838,13 +838,8 @@ pub fn reclaim_task_to(
             ));
         }
         let decision = retry_decision(fresh.retry_count, fresh.max_retries, to_status);
-        let target_status = readiness_guarded_retry_status(
-            &conn,
-            &board_id,
-            &fresh.id,
-            decision.status,
-            tx_now,
-        )?;
+        let target_status =
+            readiness_guarded_retry_status(&conn, &board_id, &fresh.id, decision.status, tx_now)?;
         let default_reason = if decision.max_retries_reached {
             "max retries reached"
         } else if force {

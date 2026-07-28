@@ -452,9 +452,8 @@ fn reopen_skips_running_blocked_review_done_and_archived_children() -> anyhow::R
 #[test]
 fn reclaim_running_children_after_parent_reopen_recomputes_only_ready_target() -> anyhow::Result<()>
 {
-    let temp = TempDb::new(
-        "reclaim_running_children_after_parent_reopen_recomputes_only_ready_target",
-    )?;
+    let temp =
+        TempDb::new("reclaim_running_children_after_parent_reopen_recomputes_only_ready_target")?;
     init_database(&temp.path, "tester")?;
 
     let parent = create_task(&temp.path, "default", "tester", CreateTask::ready("parent"))?;

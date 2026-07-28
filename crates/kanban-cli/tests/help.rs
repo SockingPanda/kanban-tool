@@ -73,7 +73,9 @@ fn dispatch_is_hidden_from_root_help_but_remains_parseable() -> anyhow::Result<(
 
     let matches = args::Cli::command()
         .try_get_matches_from(["kanban", "dispatch", "--once"])
-        .map_err(|error| anyhow::anyhow!("expected direct dispatch invocation to parse: {error}"))?;
+        .map_err(|error| {
+            anyhow::anyhow!("expected direct dispatch invocation to parse: {error}")
+        })?;
     let Some(("dispatch", dispatch)) = matches.subcommand() else {
         anyhow::bail!("expected parsed dispatch subcommand, got {matches:?}");
     };

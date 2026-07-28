@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Install protobuf compiler
@@ -48,15 +48,19 @@ jobs:
         include:
           - package: kanban-sqlite
             features: tantivy-backend
+            no_tests: fail
           - package: kanban-search
             features: tantivy-backend
+            no_tests: pass
           - package: kanban-cli
             features: tantivy-backend
+            no_tests: fail
           - package: kanban-server
             features: tantivy-backend
+            no_tests: fail
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Install nextest
@@ -66,7 +70,7 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
       - name: Test package with features
-        run: cargo nextest run -p '${{ matrix.package }}' --features '${{ matrix.features }}' --no-fail-fast
+        run: cargo nextest run -p '${{ matrix.package }}' --features '${{ matrix.features }}' --no-fail-fast --no-tests '${{ matrix.no_tests }}'
       - name: Clippy package with features
         run: cargo clippy -p '${{ matrix.package }}' --all-targets --features '${{ matrix.features }}' -- -D warnings
 
@@ -80,7 +84,7 @@ jobs:
         working-directory: apps/desktop
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Linux webkit dependencies
         run: |
           sudo apt-get update
@@ -132,7 +136,7 @@ jobs:
       KANBAN_CARGO_TARGET_ROOT: ${{ github.workspace }}/target
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Cache cargo
@@ -149,7 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Install audit tools

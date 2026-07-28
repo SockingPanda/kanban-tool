@@ -154,6 +154,8 @@ jobs:
         env:
           # 避免多个大型测试二进制在受限 runner 上同时链接。
           CARGO_BUILD_JOBS: "1"
+          # 受限 runner 上的内置 LLD 会在大型单次链接中崩溃，改用系统 linker。
+          RUSTFLAGS: "-C linker-features=-lld"
       - name: Clippy
         run: cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings
 

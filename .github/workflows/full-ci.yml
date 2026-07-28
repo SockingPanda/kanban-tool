@@ -78,6 +78,8 @@ jobs:
           tool: cargo-nextest
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ matrix.package == 'kanban-cli' }}
       - name: Test package with features
         run: cargo nextest run -p '${{ matrix.package }}' --features '${{ matrix.features }}' --no-fail-fast --no-tests '${{ matrix.no_tests }}'
       - name: Clippy package with features

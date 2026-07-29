@@ -3,7 +3,9 @@ use kanban_indexer::{DERIVED_STORE_SCHEMA_VERSION, LANCEDB_LABEL_ATOMS_STORE};
 use kanban_vector::{LabelAtomVector, LabelAtomVectorStore, VectorStoreBackend, VectorStoreStatus};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
-use crate::{board_id, connect_file, derived_status_by_name, storage};
+use crate::{
+    board_id, connect_file, derived_status_by_name, ensure_legacy_projection_control, storage,
+};
 
 pub fn label_atom_vectors_for_board(
     conn: &Connection,
@@ -73,7 +75,10 @@ pub fn rebuild_lancedb_label_atoms_with_store(
     board: &str,
     store: &impl LabelAtomVectorStore,
 ) -> Result<VectorStoreStatus> {
-    let conn = connect_file(path.as_ref())?;
+    let path = path.as_ref();
+    let _write_guard = crate::acquire_derived_store_write_guard(path, LANCEDB_LABEL_ATOMS_STORE)?;
+    let conn = connect_file(path)?;
+    ensure_legacy_projection_control(&conn, LANCEDB_LABEL_ATOMS_STORE)?;
     let board_id = board_id(&conn, board)?;
     rebuild_lancedb_label_atoms_with_conn(&conn, &board_id, store)
 }
@@ -83,7 +88,10 @@ pub fn sync_lancedb_label_atoms_with_store(
     board: &str,
     store: &impl LabelAtomVectorStore,
 ) -> Result<VectorStoreStatus> {
-    let conn = connect_file(path.as_ref())?;
+    let path = path.as_ref();
+    let _write_guard = crate::acquire_derived_store_write_guard(path, LANCEDB_LABEL_ATOMS_STORE)?;
+    let conn = connect_file(path)?;
+    ensure_legacy_projection_control(&conn, LANCEDB_LABEL_ATOMS_STORE)?;
     let board_id = board_id(&conn, board)?;
     let board = label_atom_index_board_status(&conn, &board_id)?;
     let state = derived_status_by_name(&conn, LANCEDB_LABEL_ATOMS_STORE)?;

@@ -5,7 +5,10 @@ use super::{
     task_ref_filter, validate_page_bounds,
 };
 #[cfg(feature = "tantivy-backend")]
-use super::{mark_derived_store_dirty, mark_derived_store_failure, mark_derived_store_success};
+use super::{
+    ensure_legacy_projection_control, mark_derived_store_dirty, mark_derived_store_failure,
+    mark_derived_store_success,
+};
 
 #[cfg(feature = "tantivy-backend")]
 use std::collections::HashSet;
@@ -289,7 +292,10 @@ pub fn rebuild_search_index(path: impl AsRef<Path>, board: &str) -> Result<Searc
     #[cfg(feature = "tantivy-backend")]
     {
         let path_ref = path.as_ref();
+        let _write_guard =
+            crate::db::acquire_derived_store_write_guard(path_ref, TANTIVY_TASKS_STORE)?;
         let conn = connect_file(path_ref)?;
+        ensure_legacy_projection_control(&conn, TANTIVY_TASKS_STORE)?;
         let board_id = board_id(&conn, board)?;
         let last_event_id = current_last_event_id(&conn, &board_id)?;
         let documents = task_search_documents(&conn, &board_id)?;
@@ -354,10 +360,14 @@ pub fn sync_search_index(path: impl AsRef<Path>, board: &str) -> Result<SearchIn
     #[cfg(feature = "tantivy-backend")]
     {
         let path_ref = path.as_ref();
+        let _write_guard =
+            crate::db::acquire_derived_store_write_guard(path_ref, TANTIVY_TASKS_STORE)?;
         let conn = connect_file(path_ref)?;
+        ensure_legacy_projection_control(&conn, TANTIVY_TASKS_STORE)?;
         let board_id = board_id(&conn, board)?;
         let index_path = task_index_path(path_ref);
         if !kanban_search::tantivy_backend::task_index_exists(&index_path) {
+            drop(_write_guard);
             return rebuild_search_index(path_ref, board);
         }
         let metadata =
@@ -380,6 +390,7 @@ pub fn sync_search_index(path: impl AsRef<Path>, board: &str) -> Result<SearchIn
         let indexed_last_event_id = contract.indexed_last_event_id;
         let current_last_event_id = current_last_event_id(&conn, &board_id)?;
         if contract.mismatch || search_index_ahead(current_last_event_id, indexed_last_event_id) {
+            drop(_write_guard);
             return rebuild_search_index(path_ref, board);
         }
         let lag = search_lag(current_last_event_id, indexed_last_event_id);

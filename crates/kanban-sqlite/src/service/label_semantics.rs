@@ -7,9 +7,10 @@ use super::{
     LabelOntologySignalRecord, LabelOntologyValidationEffectiveOutcome,
     LabelOntologyValidationRequirement, LabelOntologyValidationStatus, LabelProposalCandidate,
     LabelSemanticsMutationOptions, LabelSemanticsRecord, TaskRecord, UpsertLabelSemantics,
-    board_id, derived_status_by_name, get_task_by_id, label_ontology_mutation_atoms,
-    label_ontology_semantics_snapshot_for_definition, label_ontology_semantics_snapshot_in_tx,
-    record_label_ontology_semantics_mutation_in_tx, storage, vector_storage, with_immediate_tx,
+    board_id, derived_status_by_name, ensure_legacy_projection_control, get_task_by_id,
+    label_ontology_mutation_atoms, label_ontology_semantics_snapshot_for_definition,
+    label_ontology_semantics_snapshot_in_tx, record_label_ontology_semantics_mutation_in_tx,
+    storage, vector_storage, with_immediate_tx,
 };
 
 use std::{collections::BTreeSet, path::Path, str::FromStr};
@@ -458,7 +459,11 @@ pub fn rebuild_label_atom_index_with(
     board: &str,
     store: &impl LabelAtomVectorStore,
 ) -> Result<VectorStoreStatus> {
-    let conn = connect_file(path.as_ref())?;
+    let path = path.as_ref();
+    let _write_guard =
+        crate::db::acquire_derived_store_write_guard(path, LANCEDB_LABEL_ATOMS_STORE)?;
+    let conn = connect_file(path)?;
+    ensure_legacy_projection_control(&conn, LANCEDB_LABEL_ATOMS_STORE)?;
     let board_id = board_id(&conn, board)?;
     let atoms = label_atom_vectors_for_board(&conn, &board_id, store.embedding_model())?;
     match store

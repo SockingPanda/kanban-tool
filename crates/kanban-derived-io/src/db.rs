@@ -4,6 +4,7 @@ use std::{
 };
 
 use kanban_core::{KanbanError, Result};
+use kanban_local::DerivedStoreWriteGuard;
 use rusqlite::{Connection, OptionalExtension};
 
 pub fn connect_file(path: impl AsRef<Path>) -> Result<Connection> {
@@ -48,6 +49,19 @@ pub fn maintenance_lock_blocks(lock_path: &Path) -> Result<bool> {
         return Ok(false);
     }
     Ok(true)
+}
+
+pub fn acquire_derived_store_write_guard(
+    path: &Path,
+    store_name: &str,
+) -> Result<DerivedStoreWriteGuard> {
+    DerivedStoreWriteGuard::acquire(path, store_name).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::WouldBlock {
+            KanbanError::Conflict(error.to_string())
+        } else {
+            storage(error)
+        }
+    })
 }
 
 pub fn board_id(conn: &Connection, slug_or_id: &str) -> Result<String> {

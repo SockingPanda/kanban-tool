@@ -9,8 +9,8 @@ use kanban_entity::{EntityUri, Predicate, Relation};
 use kanban_graph::{GraphError, GraphQueryRow, GraphStoreStatus, RelationGraph};
 use kanban_indexer::{LANCEDB_CHUNKS_STORE, OXIGRAPH_RELATIONS_STORE};
 use kanban_vector::{
-    ChunkVectorStore, EmbeddingChunk, VectorError, VectorQuery, VectorStoreBackend,
-    VectorStoreStatus,
+    ChunkVectorStore, EmbeddingChunk, LabelAtomVectorStore, QueryEmbeddingProvider, VectorError,
+    VectorQuery, VectorStoreBackend, VectorStoreStatus,
 };
 use tempfile::NamedTempFile;
 
@@ -101,6 +101,70 @@ fn graph_snapshot_and_sync_use_narrow_sqlite_io() {
     assert_eq!(pending, 0);
 }
 
+#[test]
+fn legacy_graph_writer_is_rejected_after_projection_v2_takes_control() {
+    let db = TestDb::new();
+    let conn = connect_file(db.path()).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE projection_store_state(
+           store_name TEXT PRIMARY KEY,
+           control_plane TEXT NOT NULL,
+           building_generation TEXT
+         );
+         INSERT INTO projection_store_state(store_name,control_plane)
+         VALUES('oxigraph_relations','v2');",
+    )
+    .unwrap();
+    drop(conn);
+
+    let graph = MockGraph::default();
+    let error = sync_oxigraph_with_store(db.path(), "default", &graph).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("managed by projection maintenance v2")
+    );
+    assert!(graph.upserted.borrow().is_empty());
+
+    let conn = connect_file(db.path()).unwrap();
+    let pending: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM index_outbox
+             WHERE target='oxigraph' AND status='pending'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(pending, 1);
+}
+
+#[test]
+fn legacy_label_atom_writer_is_rejected_after_projection_v2_takes_control() {
+    let db = TestDb::new();
+    let conn = connect_file(db.path()).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE projection_store_state(
+           store_name TEXT PRIMARY KEY,
+           control_plane TEXT NOT NULL,
+           building_generation TEXT
+         );
+         INSERT INTO projection_store_state(store_name,control_plane)
+         VALUES('lancedb_label_atoms','v2');",
+    )
+    .unwrap();
+    drop(conn);
+
+    let store = MockVectorStore::default();
+    let error =
+        kanban_derived_io::sync_lancedb_label_atoms_with_store(db.path(), "default", &store)
+            .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("managed by projection maintenance v2")
+    );
+}
+
 struct TestDb {
     file: NamedTempFile,
 }
@@ -183,6 +247,10 @@ impl ChunkVectorStore for MockVectorStore {
         Ok(Vec::new())
     }
 }
+
+impl QueryEmbeddingProvider for MockVectorStore {}
+
+impl LabelAtomVectorStore for MockVectorStore {}
 
 #[derive(Default)]
 struct MockGraph {

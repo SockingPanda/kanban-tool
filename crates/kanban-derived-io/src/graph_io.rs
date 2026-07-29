@@ -6,7 +6,8 @@ use rusqlite::{Connection, Row, params};
 
 use crate::{
     IndexOutboxRecord, board_id, connect_file, current_last_event_id, derived_status_by_name,
-    mark_derived_store_failure, mark_derived_store_success, outbox_from_row, storage,
+    ensure_legacy_projection_control, mark_derived_store_failure, mark_derived_store_success,
+    outbox_from_row, storage,
 };
 
 pub fn graph_relation_snapshot_for_board(
@@ -103,7 +104,10 @@ pub fn rebuild_oxigraph_with_store(
     board: &str,
     graph: &impl RelationGraph,
 ) -> Result<GraphStoreStatus> {
-    let conn = connect_file(path.as_ref())?;
+    let path = path.as_ref();
+    let _write_guard = crate::acquire_derived_store_write_guard(path, OXIGRAPH_RELATIONS_STORE)?;
+    let conn = connect_file(path)?;
+    ensure_legacy_projection_control(&conn, OXIGRAPH_RELATIONS_STORE)?;
     let board_id = board_id(&conn, board)?;
     let last_event_id = current_last_event_id(&conn, &board_id)?;
     let relations = graph_relation_snapshot_for_board(&conn, &board_id)?;
@@ -149,7 +153,10 @@ pub fn sync_oxigraph_with_store(
     board: &str,
     graph: &impl RelationGraph,
 ) -> Result<GraphStoreStatus> {
-    let conn = connect_file(path.as_ref())?;
+    let path = path.as_ref();
+    let _write_guard = crate::acquire_derived_store_write_guard(path, OXIGRAPH_RELATIONS_STORE)?;
+    let conn = connect_file(path)?;
+    ensure_legacy_projection_control(&conn, OXIGRAPH_RELATIONS_STORE)?;
     let board_id = board_id(&conn, board)?;
     let last_event_id = current_last_event_id(&conn, &board_id)?;
     let state = derived_status_by_name(&conn, OXIGRAPH_RELATIONS_STORE)?;

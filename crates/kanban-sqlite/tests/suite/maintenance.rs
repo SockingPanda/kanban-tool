@@ -150,12 +150,17 @@ fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() -> anyhow::Resu
             "doctor_reports_missing_knowledge_substrate_tables_unhealthy_{table}"
         ))?;
         init_database(&temp.path, "tester")?;
-        connect_file(&temp.path)?.execute_batch(&format!("DROP TABLE {table};"))?;
+        // Construct a deliberately corrupt schema. Projection v2 adds
+        // foreign-key dependants to both foundation tables, so disable FK
+        // enforcement only on this fixture connection before removing the
+        // parent table that doctor must diagnose.
+        connect_file(&temp.path)?
+            .execute_batch(&format!("PRAGMA foreign_keys=OFF; DROP TABLE {table};"))?;
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(25));
-        assert_eq!(report.user_version, 25);
+        assert_eq!(report.migration_version, Some(26));
+        assert_eq!(report.user_version, 26);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())
@@ -172,8 +177,8 @@ fn doctor_reports_missing_signal_ledger_tables_unhealthy() -> anyhow::Result<()>
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(25));
-        assert_eq!(report.user_version, 25);
+        assert_eq!(report.migration_version, Some(26));
+        assert_eq!(report.user_version, 26);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
         assert_eq!(report.consistency_errors, 1);
         assert!(report.consistency_issues.iter().any(|issue| {
@@ -201,8 +206,8 @@ fn doctor_ontology_reports_missing_v12_tables_unhealthy() -> anyhow::Result<()> 
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(25));
-        assert_eq!(report.user_version, 25);
+        assert_eq!(report.migration_version, Some(26));
+        assert_eq!(report.user_version, 26);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
         assert_eq!(report.ontology_ledger_errors, 1);
         assert!(report.ontology_ledger_issues.iter().any(|issue| {

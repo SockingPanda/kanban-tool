@@ -163,6 +163,9 @@ pub fn import_jsonl(
             records += 1;
         }
         restore_deferred_ontology_links(&conn, &deferred_ontology_links)?;
+        if replace {
+            rebuild_imported_derived_substrate(&conn)?;
+        }
         validate_imported_ontology_ledger(&conn)?;
         reject_imported_active_claims(&conn)?;
         validate_imported_snapshot(&conn)?;
@@ -181,6 +184,10 @@ pub fn import_jsonl(
 }
 
 pub(crate) const IMPORT_DELETE_ORDER: &[&str] = &[
+    "projection_deliveries",
+    "index_outbox",
+    "entity_relations",
+    "entities",
     "label_ontology_action_signals",
     "label_ontology_action_atom_effects",
     "label_ontology_actions",
@@ -203,6 +210,54 @@ pub(crate) const IMPORT_DELETE_ORDER: &[&str] = &[
     "boards",
     "app_settings",
 ];
+
+fn rebuild_imported_derived_substrate(conn: &Connection) -> Result<()> {
+    crate::init::ensure_knowledge_substrate(conn)?;
+    let now = SystemClock.now_ms();
+    conn.execute(
+        "UPDATE projection_store_state
+         SET control_plane='legacy',
+             active_generation=NULL,active_fingerprint=NULL,active_fence_epoch=NULL,
+             active_snapshot_cursor=NULL,
+             previous_generation=NULL,previous_fingerprint=NULL,previous_fence_epoch=NULL,
+             previous_snapshot_cursor=NULL,
+             previous_provider=NULL,previous_provider_fingerprint=NULL,
+             previous_canonical_count=NULL,previous_canonical_digest=NULL,
+             previous_delivery_count=NULL,previous_delivery_digest=NULL,
+             building_generation=NULL,building_fingerprint=NULL,building_fence_epoch=NULL,
+             building_provider=NULL,building_provider_fingerprint=NULL,
+             building_canonical_count=NULL,building_canonical_digest=NULL,
+             building_delivery_count=NULL,building_delivery_digest=NULL,building_phase=NULL,
+             active_provider=NULL,active_provider_fingerprint=NULL,
+             active_canonical_count=NULL,active_canonical_digest=NULL,
+             active_delivery_count=NULL,active_delivery_digest=NULL,
+             snapshot_cursor=0,checkpoint_cursor=0,legacy_checkpoint_cursor=0,
+             lifecycle_status='bootstrap_required',fence_epoch=fence_epoch+1,
+             lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,
+             last_success_at=NULL,last_error=NULL,updated_at=?1",
+        [now],
+    )
+    .map_err(storage)?;
+    conn.execute(
+        "UPDATE derived_store_state
+         SET last_event_id=0,dirty=1,last_rebuild_at=NULL,last_sync_at=NULL,
+             last_error=NULL,updated_at=?1",
+        [now],
+    )
+    .map_err(storage)?;
+    conn.execute(
+        "INSERT INTO index_outbox(
+           source_event_id,target,entity_uri,action,payload_json,status,attempts,last_error,
+           created_at,updated_at
+         )
+         SELECT NULL,'all','kb://board/' || id,'rebuild','{}','pending',0,NULL,?1,?1
+         FROM boards
+         ORDER BY id",
+        [now],
+    )
+    .map_err(storage)?;
+    Ok(())
+}
 
 pub(crate) fn write_jsonl_table(
     conn: &Connection,

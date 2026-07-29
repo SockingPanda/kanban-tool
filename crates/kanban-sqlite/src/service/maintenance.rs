@@ -20,7 +20,9 @@ use std::{
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock};
 
-use kanban_indexer::{OUTBOX_DERIVED_STORE_SEEDS, OutboxTarget, derived_store_for_name};
+use kanban_indexer::{
+    DERIVED_STORE_SEEDS, OUTBOX_DERIVED_STORE_SEEDS, OutboxTarget, derived_store_for_name,
+};
 
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -224,6 +226,7 @@ pub(crate) fn doctor_report_conn(conn: &Connection, db_dir: Option<&Path>) -> Re
         .filter(|store| store.last_error.is_some() || store.failed_outbox > 0)
         .count() as i64;
     let mut consistency_issues = doctor_consistency_issues(conn)?;
+    consistency_issues.extend(doctor_projection_issues(conn)?);
     consistency_issues.extend(doctor_foreign_key_issues(conn)?);
     let (consistency_errors, consistency_warnings) = doctor_issue_counts(&consistency_issues);
     let ontology_ledger_issues = doctor_ontology_ledger_issues(conn)?;
@@ -398,8 +401,15 @@ pub fn begin_database_replace(path: impl AsRef<Path>) -> Result<DatabaseReplaceG
             path.display()
         )));
     }
+    let derived_store_guards = DERIVED_STORE_SEEDS
+        .iter()
+        .map(|seed| crate::db::acquire_derived_store_write_guard(path, seed.store_name))
+        .collect::<Result<Vec<_>>>()?;
     create_lock_file(&lock_path, "maintenance", path)?;
-    let guard = DatabaseReplaceGuard { lock_path };
+    let guard = DatabaseReplaceGuard {
+        lock_path,
+        _derived_store_guards: derived_store_guards,
+    };
     if path.exists() && !path.is_file() {
         drop(guard);
         return Err(KanbanError::InvalidInput(format!(
@@ -693,6 +703,13 @@ fn doctor_missing_required_tables(
     if migration_version.unwrap_or(0) >= 24 || user_version >= 24 {
         required_tables.extend(SIGNAL_LEDGER_TABLES);
     }
+    if migration_version.unwrap_or(0) >= 26 || user_version >= 26 {
+        required_tables.extend([
+            "projection_database",
+            "projection_store_state",
+            "projection_deliveries",
+        ]);
+    }
     let mut missing = Vec::new();
     for table in required_tables {
         if !table_exists(conn, table)? {
@@ -700,6 +717,236 @@ fn doctor_missing_required_tables(
         }
     }
     Ok(missing)
+}
+
+fn doctor_projection_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> {
+    if !table_exists(conn, "projection_database")?
+        || !table_exists(conn, "projection_store_state")?
+        || !table_exists(conn, "projection_deliveries")?
+    {
+        return Ok(Vec::new());
+    }
+    let mut issues = Vec::new();
+    let now = SystemClock.now_ms();
+    let identity_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM projection_database \
+             WHERE singleton=1 AND protocol_version=2 \
+               AND database_instance_id LIKE 'db_%'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if identity_count != 1 {
+        issues.push(doctor_issue(
+            "error",
+            "projection_database_identity_invalid",
+            "projection v2 requires exactly one protocol-v2 database identity",
+            Vec::new(),
+        ));
+    }
+    let state_mismatch_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM projection_store_state s \
+             LEFT JOIN projection_database d \
+               ON d.database_instance_id=s.database_instance_id \
+              AND d.protocol_version=s.protocol_version \
+             WHERE d.singleton IS NULL OR s.protocol_version!=2",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if state_mismatch_count != 0 {
+        issues.push(doctor_issue(
+            "error",
+            "projection_store_identity_mismatch",
+            format!(
+                "{state_mismatch_count} projection store state row(s) do not match the database identity"
+            ),
+            Vec::new(),
+        ));
+    }
+    let missing_store_state_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM derived_store_state legacy
+             LEFT JOIN projection_store_state projection
+               ON projection.store_name=legacy.store_name
+             WHERE projection.store_name IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if missing_store_state_count != 0 {
+        issues.push(doctor_issue(
+            "error",
+            "projection_store_state_missing",
+            format!("{missing_store_state_count} derived store(s) have no projection-v2 state row"),
+            Vec::new(),
+        ));
+    }
+    let board_mismatch_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM projection_deliveries d \
+             LEFT JOIN task_events e ON e.id=d.source_event_id \
+             LEFT JOIN entities entity ON entity.uri=d.entity_uri \
+             WHERE (e.id IS NOT NULL AND e.board_id!=d.board_id) \
+                OR (entity.board_id IS NOT NULL AND entity.board_id!=d.board_id)",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if board_mismatch_count != 0 {
+        issues.push(doctor_issue(
+            "error",
+            "projection_delivery_board_mismatch",
+            format!(
+                "{board_mismatch_count} projection delivery row(s) violate mandatory board scope"
+            ),
+            Vec::new(),
+        ));
+    }
+    let relation_board_mismatch_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM entity_relations r
+             JOIN entities subject ON subject.uri=r.subject_uri
+             JOIN entities object ON object.uri=r.object_uri
+             WHERE subject.board_id IS NOT NULL
+               AND object.board_id IS NOT NULL
+               AND subject.board_id!=object.board_id",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if relation_board_mismatch_count != 0 {
+        issues.push(doctor_issue(
+            "error",
+            "projection_relation_board_mismatch",
+            format!(
+                "{relation_board_mismatch_count} canonical relation(s) cross mandatory board scope"
+            ),
+            Vec::new(),
+        ));
+    }
+    let claim_mismatch_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM projection_deliveries d \
+             LEFT JOIN projection_store_state s ON s.store_name=d.store_name \
+             WHERE d.status='running' AND (\
+               s.store_name IS NULL OR s.lease_token IS NULL OR s.lease_expires_at IS NULL \
+               OR d.claim_lease_token IS NOT s.lease_token \
+               OR d.claim_fence_epoch IS NOT s.fence_epoch \
+               OR d.claim_expires_at>s.lease_expires_at\
+             )",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if claim_mismatch_count != 0 {
+        issues.push(doctor_issue(
+            "error",
+            "projection_claim_fence_mismatch",
+            format!(
+                "{claim_mismatch_count} running projection claim(s) exceed or mismatch the store lease"
+            ),
+            Vec::new(),
+        ));
+    }
+    let failed_delivery_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM projection_deliveries WHERE status='failed'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if failed_delivery_count != 0 {
+        issues.push(doctor_issue(
+            "error",
+            "projection_delivery_failed",
+            format!("{failed_delivery_count} projection delivery item(s) are failed"),
+            Vec::new(),
+        ));
+    }
+    let error_store_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM projection_store_state
+             WHERE lifecycle_status='error' OR last_error IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if error_store_count != 0 {
+        issues.push(doctor_issue(
+            "error",
+            "projection_store_error",
+            format!("{error_store_count} projection store(s) report a maintenance error"),
+            Vec::new(),
+        ));
+    }
+    let expired_claim_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM projection_deliveries
+             WHERE status='running' AND claim_expires_at<=?1",
+            [now],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if expired_claim_count != 0 {
+        issues.push(doctor_issue(
+            "error",
+            "projection_claim_expired",
+            format!("{expired_claim_count} projection delivery claim(s) are expired"),
+            Vec::new(),
+        ));
+    }
+    let discontinuous_checkpoint_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM projection_store_state s
+             WHERE s.checkpoint_cursor != COALESCE((
+               SELECT MAX(done.cursor) FROM projection_deliveries done
+               WHERE done.store_name=s.store_name AND done.status='done'
+                 AND done.cursor < COALESCE((
+                   SELECT MIN(open.cursor) FROM projection_deliveries open
+                   WHERE open.store_name=s.store_name AND open.status!='done'
+                 ),9223372036854775807)
+             ),0)",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if discontinuous_checkpoint_count != 0 {
+        issues.push(doctor_issue(
+            "error",
+            "projection_checkpoint_discontinuous",
+            format!(
+                "{discontinuous_checkpoint_count} projection store checkpoint(s) are not a continuous done prefix"
+            ),
+            Vec::new(),
+        ));
+    }
+    let active_mismatch_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM projection_store_state \
+             WHERE control_plane='v2' \
+               AND (active_generation IS NULL OR active_fingerprint IS NULL \
+                    OR active_fence_epoch IS NULL OR active_snapshot_cursor IS NULL \
+                    OR active_provider IS NULL OR active_provider_fingerprint IS NULL \
+                    OR active_canonical_count IS NULL OR active_canonical_digest IS NULL \
+                    OR active_delivery_count IS NULL OR active_delivery_digest IS NULL)",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if active_mismatch_count != 0 {
+        issues.push(doctor_issue(
+            "error",
+            "projection_v2_active_generation_missing",
+            format!(
+                "{active_mismatch_count} v2-controlled store(s) have no complete active generation"
+            ),
+            Vec::new(),
+        ));
+    }
+    Ok(issues)
 }
 
 fn doctor_missing_ontology_table_issues(missing_tables: &[&'static str]) -> Vec<DoctorIssue> {

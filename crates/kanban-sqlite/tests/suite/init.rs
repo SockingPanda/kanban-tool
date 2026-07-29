@@ -48,6 +48,77 @@ fn init_is_idempotent() -> anyhow::Result<()> {
 }
 
 #[test]
+fn init_v26_preflight_reports_unresolved_and_cross_board_outbox_rows() -> anyhow::Result<()> {
+    for case_name in ["unresolved", "cross_board"] {
+        let temp = TempDb::new(&format!("init_v26_preflight_{case_name}"))?;
+        init_database(&temp.path, "tester")?;
+        if case_name == "cross_board" {
+            create_task(
+                &temp.path,
+                "default",
+                "tester",
+                CreateTask::ready("v26 board scope source"),
+            )?;
+        }
+
+        let conn = connect_file(&temp.path)?;
+        conn.execute_batch(
+            "DROP TRIGGER IF EXISTS projection_deliveries_after_outbox_insert;
+             DROP TRIGGER IF EXISTS projection_deliveries_after_legacy_outbox_done;
+             DROP TABLE projection_deliveries;
+             DROP TABLE projection_store_state;
+             DROP TABLE projection_database;
+             DELETE FROM schema_migrations WHERE version=26;
+             PRAGMA user_version=25;",
+        )?;
+
+        let expected_key = if case_name == "unresolved" {
+            conn.execute(
+                "INSERT INTO index_outbox(
+                   source_event_id,target,entity_uri,action,payload_json,status,attempts,created_at,updated_at
+                 ) VALUES(NULL,'tantivy','kb://task/missing','upsert','{}','pending',0,1,1)",
+                [],
+            )?;
+            "kb://task/missing".to_owned()
+        } else {
+            conn.execute(
+                "INSERT INTO boards(id,slug,name,created_at,updated_at)
+                 VALUES('b_v26_other','v26-other','V26 Other',1,1)",
+                [],
+            )?;
+            let entity_uri: String = conn.query_row(
+                "SELECT o.entity_uri
+                 FROM index_outbox o
+                 JOIN task_events e ON e.id=o.source_event_id
+                 JOIN entities entity ON entity.uri=o.entity_uri
+                 LIMIT 1",
+                [],
+                |row| row.get(0),
+            )?;
+            conn.execute(
+                "UPDATE entities SET board_id='b_v26_other' WHERE uri=?1",
+                [&entity_uri],
+            )?;
+            entity_uri
+        };
+        drop(conn);
+
+        let err = result_err(init_database(&temp.path, "tester"))?;
+        let message = err.to_string();
+        assert!(
+            message.contains("cannot apply migration 026_projection_v2"),
+            "{case_name}: {message}"
+        );
+        assert!(message.contains(&expected_key), "{case_name}: {message}");
+        assert!(
+            message.contains("repair the canonical board mapping"),
+            "{case_name}: {message}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn init_records_and_enforces_migration_checksum() -> anyhow::Result<()> {
     let temp = TempDb::new("init_records_and_enforces_migration_checksum")?;
 
@@ -60,7 +131,7 @@ fn init_records_and_enforces_migration_checksum() -> anyhow::Result<()> {
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    assert_eq!(user_version, 25);
+    assert_eq!(user_version, 26);
     assert_eq!(name, "001_initial");
     assert!(checksum.starts_with("fnv64:"), "checksum: {checksum}");
 
@@ -86,7 +157,7 @@ fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 25);
+    assert_eq!(user_version, 26);
     for table in [
         "entities",
         "relation_predicates",
@@ -155,7 +226,7 @@ fn init_upgrades_v1_database_and_backfills_task_entities() -> anyhow::Result<()>
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 25);
+    assert_eq!(user_version, 26);
     let task_entity_title: String = conn.query_row(
         "SELECT title FROM entities WHERE uri='kb://task/t_test'",
         [],
@@ -182,7 +253,7 @@ fn init_v17_rebuilds_key_relationship_tables_without_losing_rows() -> anyhow::Re
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 25);
+    assert_eq!(user_version, 26);
     assert_eq!(v17_relationship_counts(&conn)?, before_counts);
     assert_eq!(
         task_label_board_for(&conn, &fixture.task_id, &fixture.label_id)?,
@@ -212,7 +283,7 @@ fn init_v18_adds_root_action_atom_effects_table_to_v17_database() -> anyhow::Res
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 25);
+    assert_eq!(user_version, 26);
     let table_exists: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_ontology_action_atom_effects'",
         [],
@@ -273,7 +344,7 @@ fn init_v19_adds_validation_requirement_and_backfills_v18_actions() -> anyhow::R
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 25);
+    assert_eq!(user_version, 26);
     let column_exists: i64 = conn.query_row(
         "SELECT COUNT(*) FROM pragma_table_info('label_ontology_actions') WHERE name='validation_requirement'",
         [],
@@ -379,7 +450,7 @@ fn init_v20_hardens_task_history_tables_without_losing_rows() -> anyhow::Result<
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 25);
+    assert_eq!(user_version, 26);
     assert_eq!(v20_task_history_counts(&conn)?, before_counts);
     let fk_errors = foreign_key_check_rows(&conn)?;
     assert!(fk_errors.is_empty(), "{fk_errors:#?}");
@@ -516,7 +587,7 @@ fn init_v21_hardens_ontology_links_without_losing_rows() -> anyhow::Result<()> {
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 25);
+    assert_eq!(user_version, 26);
     assert_eq!(v21_ontology_link_counts(&conn)?, before_counts);
     let fk_errors = foreign_key_check_rows(&conn)?;
     assert!(fk_errors.is_empty(), "{fk_errors:#?}");

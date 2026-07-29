@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use kanban_core::TaskStatus;
+use kanban_local::DerivedStoreWriteGuard;
 use serde::{Deserialize, Serialize};
 
 pub use kanban_application::dto::{
@@ -1542,6 +1543,7 @@ pub struct ImportResult {
 #[derive(Debug)]
 pub struct DatabaseReplaceGuard {
     pub(super) lock_path: PathBuf,
+    pub(super) _derived_store_guards: Vec<DerivedStoreWriteGuard>,
 }
 
 impl Drop for DatabaseReplaceGuard {

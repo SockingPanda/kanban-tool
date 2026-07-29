@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use kanban_core::{Clock, KanbanError, Result, SystemClock, new_board_id};
+use kanban_core::{Clock, KanbanError, Result, SystemClock, new_board_id, new_typed_id};
 use kanban_entity::PREDICATE_SEEDS;
 use kanban_indexer::DERIVED_STORE_SEEDS;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -55,7 +55,8 @@ const TASK_STEPS_MIGRATION: &str = include_str!("../../../migrations/023_task_st
 const SIGNAL_LEDGER_MIGRATION: &str = include_str!("../../../migrations/024_signal_ledger.sql");
 const GENERIC_SIGNAL_LEDGER_MIGRATION: &str =
     include_str!("../../../migrations/025_generic_signal_ledger.sql");
-const LATEST_MIGRATION_VERSION: i64 = 25;
+const PROJECTION_V2_MIGRATION: &str = include_str!("../../../migrations/026_projection_v2.sql");
+const LATEST_MIGRATION_VERSION: i64 = 26;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &[
     "fnv64:0ca871be950fc8a6",
     "fnv64:3b08da4e2b6041f5",
@@ -195,6 +196,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "025_generic_signal_ledger",
         sql: GENERIC_SIGNAL_LEDGER_MIGRATION,
     },
+    Migration {
+        version: 26,
+        name: "026_projection_v2",
+        sql: PROJECTION_V2_MIGRATION,
+    },
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -212,6 +218,7 @@ pub fn init_database(path: impl AsRef<Path>, actor: &str) -> Result<InitResult> 
     let board_id = default_board_id(&conn)?;
     ensure_default_columns(&conn, &board_id, SystemClock.now_ms())?;
     ensure_knowledge_substrate(&conn)?;
+    ensure_projection_v2(&conn)?;
     Ok(InitResult {
         db_path: path.to_path_buf(),
         board_id,
@@ -300,6 +307,68 @@ fn run_migration_preflight(conn: &Connection, migration: &Migration) -> Result<(
     }
     if migration.version == 25 {
         ensure_no_cross_board_rows_for_signal_ledger_migration(conn)?;
+    }
+    if migration.version == 26 {
+        ensure_projection_v2_outbox_board_scope(conn)?;
+    }
+    Ok(())
+}
+
+struct ProjectionOutboxBoardMismatch {
+    outbox_id: i64,
+    entity_uri: String,
+    source_event_id: Option<i64>,
+    event_board: Option<String>,
+    entity_board: Option<String>,
+}
+
+fn ensure_projection_v2_outbox_board_scope(conn: &Connection) -> Result<()> {
+    let mismatch: Option<ProjectionOutboxBoardMismatch> = conn
+        .query_row(
+            "SELECT o.id, o.entity_uri, o.source_event_id, e.board_id, entity.board_id
+             FROM index_outbox o
+             LEFT JOIN task_events e ON e.id=o.source_event_id
+             LEFT JOIN entities entity ON entity.uri=o.entity_uri
+             WHERE o.target IN ('tantivy','oxigraph','lancedb','all')
+               AND (
+                 (o.source_event_id IS NULL AND entity.board_id IS NULL)
+                 OR (o.source_event_id IS NOT NULL AND e.id IS NULL)
+                 OR (
+                   e.board_id IS NOT NULL
+                   AND entity.board_id IS NOT NULL
+                   AND e.board_id != entity.board_id
+                 )
+               )
+             ORDER BY o.id
+             LIMIT 1",
+            [],
+            |row| {
+                Ok(ProjectionOutboxBoardMismatch {
+                    outbox_id: row.get(0)?,
+                    entity_uri: row.get(1)?,
+                    source_event_id: row.get(2)?,
+                    event_board: row.get(3)?,
+                    entity_board: row.get(4)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
+
+    if let Some(mismatch) = mismatch {
+        return Err(KanbanError::Storage(format!(
+            "cannot apply migration 026_projection_v2: index_outbox row {} for {} \
+             has no unambiguous board (source event {}, event board {}, entity board {}); \
+             run kanban doctor and repair the canonical board mapping before migrating",
+            mismatch.outbox_id,
+            mismatch.entity_uri,
+            mismatch
+                .source_event_id
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "none".to_owned()),
+            mismatch.event_board.as_deref().unwrap_or("missing"),
+            mismatch.entity_board.as_deref().unwrap_or("missing"),
+        )));
     }
     Ok(())
 }
@@ -701,6 +770,48 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
             &["store_name", "schema_version", "last_event_id", "dirty"][..],
         ),
         (
+            "projection_database",
+            &["database_instance_id", "protocol_version", "updated_at"][..],
+        ),
+        (
+            "projection_store_state",
+            &[
+                "store_name",
+                "database_instance_id",
+                "protocol_version",
+                "checkpoint_cursor",
+                "legacy_checkpoint_cursor",
+                "snapshot_cursor",
+                "building_provider",
+                "building_provider_fingerprint",
+                "building_canonical_count",
+                "building_canonical_digest",
+                "building_delivery_count",
+                "building_delivery_digest",
+                "lifecycle_status",
+                "control_plane",
+                "fence_epoch",
+                "updated_at",
+            ][..],
+        ),
+        (
+            "projection_deliveries",
+            &[
+                "outbox_id",
+                "store_name",
+                "cursor",
+                "board_id",
+                "status",
+                "attempts",
+                "next_attempt_at",
+                "claim_lease_token",
+                "claim_fence_epoch",
+                "claim_generation",
+                "published_generation",
+                "updated_at",
+            ][..],
+        ),
+        (
             "label_semantics",
             &[
                 "label_id",
@@ -812,12 +923,85 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn ensure_knowledge_substrate(conn: &Connection) -> Result<()> {
+pub(crate) fn ensure_knowledge_substrate(conn: &Connection) -> Result<()> {
     let now = SystemClock.now_ms();
     seed_relation_predicates(conn, now)?;
     seed_derived_store_state(conn, now)?;
     backfill_entities(conn)?;
     backfill_dependency_relations(conn, now)?;
+    Ok(())
+}
+
+fn ensure_projection_v2(conn: &Connection) -> Result<()> {
+    let now = SystemClock.now_ms();
+    conn.execute(
+        "INSERT OR IGNORE INTO projection_database(\
+             singleton,database_instance_id,protocol_version,created_at,updated_at\
+         ) VALUES (1,?1,2,?2,?2)",
+        params![new_typed_id("db"), now],
+    )
+    .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    let database_instance_id: String = conn
+        .query_row(
+            "SELECT database_instance_id FROM projection_database WHERE singleton=1",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    for seed in DERIVED_STORE_SEEDS {
+        conn.execute(
+            "INSERT OR IGNORE INTO projection_store_state(\
+                 store_name,database_instance_id,protocol_version,schema_version,\
+                 control_plane,active_generation,active_fingerprint,active_fence_epoch,\
+                 previous_generation,previous_fingerprint,previous_fence_epoch,\
+                 building_generation,building_fingerprint,building_fence_epoch,building_phase,\
+                 snapshot_cursor,checkpoint_cursor,legacy_checkpoint_cursor,lifecycle_status,\
+                 fence_epoch,lease_owner,lease_token,lease_expires_at,\
+                 last_success_at,last_error,updated_at\
+             ) VALUES (\
+                 ?1,?2,2,?3,'legacy',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,\
+                 0,0,0,'bootstrap_required',0,NULL,NULL,NULL,NULL,NULL,?4\
+             )",
+            params![
+                seed.store_name,
+                database_instance_id,
+                seed.schema_version,
+                now
+            ],
+        )
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
+        let first_unfinished: Option<i64> = conn
+            .query_row(
+                "SELECT MIN(cursor) FROM projection_deliveries \
+                 WHERE store_name=?1 AND status!='legacy_done'",
+                [seed.store_name],
+                |row| row.get(0),
+            )
+            .map_err(|err| KanbanError::Storage(err.to_string()))?;
+        let legacy_checkpoint: i64 = if let Some(first_unfinished) = first_unfinished {
+            conn.query_row(
+                "SELECT COALESCE(MAX(cursor),0) FROM projection_deliveries \
+                 WHERE store_name=?1 AND status='legacy_done' AND cursor<?2",
+                params![seed.store_name, first_unfinished],
+                |row| row.get(0),
+            )
+            .map_err(|err| KanbanError::Storage(err.to_string()))?
+        } else {
+            conn.query_row(
+                "SELECT COALESCE(MAX(cursor),0) FROM projection_deliveries \
+                 WHERE store_name=?1 AND status='legacy_done'",
+                [seed.store_name],
+                |row| row.get(0),
+            )
+            .map_err(|err| KanbanError::Storage(err.to_string()))?
+        };
+        conn.execute(
+            "UPDATE projection_store_state SET legacy_checkpoint_cursor=?1 \
+             WHERE store_name=?2",
+            params![legacy_checkpoint, seed.store_name],
+        )
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    }
     Ok(())
 }
 

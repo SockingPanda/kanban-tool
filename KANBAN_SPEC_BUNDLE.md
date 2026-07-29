@@ -1226,6 +1226,23 @@ transaction 与 SQLite 错误 authority 不转移给 wire contract。
   board consistency、label ontology ledger consistency，并报告 Knowledge Substrate 的
   `index_outbox` backlog、derived store dirty/error 状态和 per-store last_error。派生层
   异常不改变 SQLite task truth；operator 通过 sync/rebuild 恢复 Tantivy/Oxigraph/LanceDB。
+- Migration 026 引入 database-scoped Projection v2 control plane。SQLite 为每个 store
+  保存 fenced lease、连续 delivery checkpoint 与 active/previous/building generation；
+  provider snapshot evidence 同时绑定 database/protocol/schema/provider、完整 canonical
+  corpus coverage、board-scoped delivery coverage、cursor 与 fence。物理 generation
+  pointer 先做 CAS/read-back，并验证上一物理 generation 仍可读取，随后 SQLite 才发布
+  active generation；pointer swap 后进程退出可由新 fence owner reconcile 恢复。
+- v1 writer 与 v2 owner 不能同时写一个 store。Projection v2 在 generation begin
+  transaction 即取得 control plane；legacy writer、v2 backend 调用和 database replace
+  在完整物理写周期共享 per-database/per-store writer barrier。由此 generation 构建、
+  pointer swap、SQLite confirm 或 replace 均不能与 Tantivy/Oxigraph/LanceDB legacy
+  rebuild/sync 交错；legacy guard 也会拒绝已有 building generation 的异常中间状态。
+  v2 acknowledgement reducer 再兼容更新旧 outbox/dirty 摘要，供迁移期 reader 和 doctor
+  使用。任何 derived failure 都不回滚 canonical mutation。
+- `lancedb_label_atoms` 当前仍由独立的 per-board dirty/rebuild 协议驱动；在 label
+  semantics mutation 尚未写入 Projection v2 delivery 流之前，generation begin 会
+  fail closed，避免 snapshot 发布后遗漏后续 atom mutation。它不能仅凭 corpus
+  fingerprint 被提升到 v2 control plane。
 
 ### 8.1 Board scope 与 schema/service/doctor 分工
 
@@ -2733,6 +2750,53 @@ Knowledge Substrate 表只支持实体身份、关系镜像、派生 outbox 和�
 `last_event_id` 是 store 全局成功处理水位，不是 board 局部水位。成功 sync/rebuild 只能单调推进这个值；当一个 board sync 完成但其他 board 仍有 pending/running/failed outbox 时，`dirty` 必须保持 true。`dirty=false` 只表示同一 store target 当前没有 unfinished outbox 且最近一次 store 更新没有失败。
 
 `last_error` 成功后清空，失败时保留错误证据并保持 `dirty=true`。Operator 应通过 `kanban derived status`、`kanban doctor`、maintenance API 和对应 `sync/rebuild` 命令恢复派生层；派生 store 损坏或落后不改变 SQLite task truth。
+
+### 13.5 Projection v2 consistency domain
+
+表：`projection_database`、`projection_store_state`、`projection_deliveries`
+
+`projection_database` 为一份 SQLite 文件保存稳定 `database_instance_id` 和 projection
+protocol version。`projection_store_state` 为每个物理 store 保存 schema version、
+legacy/v2 control-plane owner、连续 checkpoint、active/previous/building generation、
+provider/model fingerprint、canonical 与 delivery 双 coverage digest、单调 fence epoch、
+lease 和 lifecycle/error 状态。
+`projection_deliveries` 把一个 `index_outbox` row 展开为各 store 的 board-scoped delivery；
+唯一键是 `(outbox_id, store_name)`，每个 delivery 同时携带不可空 `board_id`、连续
+store cursor、claim token、lease token、fence epoch 和 target generation。
+
+Migration 026 在 fanout/backfill 前验证每个相关 outbox row 能从 source event 或 entity
+得到唯一 board；无法解析、orphan source event 或 event/entity board 冲突时 fail closed，
+不会以 nullable/global delivery 绕过隔离。旧 `index_outbox.status=done` 只映射为
+`legacy_done`，不伪造 v2 checkpoint 或 generation coverage。
+
+Projection v2 的 snapshot 流程先固定 cursor，并按 store 从 canonical SQLite 读取完整、
+稳定排序且强制携带 board scope 的 corpus：task search/chunk 投影包含 task 及其 comments、
+runs、events；graph 投影包含 relation；label atom 投影包含 atom。每条 record 具有稳定
+identity、payload 与 content hash；manifest 同时保存 canonical corpus 和 cursor 内
+delivery 集合的 count + stable digest，并绑定 provider/model fingerprint。Provider 必须
+实际消费 records，返回的 artifact evidence 必须匹配
+database/protocol/schema/provider/generation/fence/cursor/两组 coverage；提交 snapshot
+acknowledgement 的 transaction 会再次读取 canonical corpus 和 delivery coverage，任一
+变化或存在 running claim 都拒绝批量完成。增量 batch 的 receipt 还必须精确匹配 lease、
+fence、provider、generation、claim token 和 item count。
+
+当前 `lancedb_label_atoms` 的 canonical mutation 尚未进入 `projection_deliveries`，
+因此 generation begin 对该 store fail closed；其 snapshot record/manifest 只定义未来
+接入时必须满足的证据形状，不能在缺少 mutation delivery 的情况下据此发布 v2
+generation。现阶段继续使用下述 `label_atom_index_boards` per-board dirty/rebuild
+协议。
+
+只有物理 store 完成 generation pointer CAS、active read-back 匹配，并证明上一物理
+generation（若存在）仍可按 generation id 读取，SQLite 才原子发布 active/previous
+metadata。若进程在物理 pointer swap 后退出，新 fence owner 可检查同一 generation 的
+artifact evidence 并 reconcile SQLite publish。
+
+`derived_store_state` 和 `index_outbox` 在迁移期保留为 v1 compatibility projection。
+generation begin 即把 store 切到 v2 control plane；legacy 与 v2 writer 在完整物理写周期
+共享 per-database/per-store barrier，database replace 同时取得所有 store barrier，因此
+旧 Tantivy/Oxigraph/LanceDB writer、v2 pointer swap 和 replace 不会交错。v2 reducer
+只在 delivery 获得真实 generation coverage 后更新 legacy dirty/outbox 摘要，避免双控制面
+永久 dirty 或虚假 clean。
 
 表：`label_atom_index_boards`
 
@@ -4827,7 +4891,7 @@ semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
 检查：
 
 - DB 文件存在。
-- migrations 完整；当前 schema user_version 为 23。
+- migrations 完整；当前 schema user_version 为 26。
 - `PRAGMA integrity_check`。
 - orphan active run。
 - running task 是否缺 claim。

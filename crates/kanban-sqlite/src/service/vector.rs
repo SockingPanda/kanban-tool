@@ -2,7 +2,8 @@ use crate::db::connect_file;
 
 use super::{
     IndexOutboxRecord, board_id, current_last_event_id, derived_status_by_name,
-    mark_derived_store_failure, mark_derived_store_success, outbox_from_row, search_lag, storage,
+    ensure_legacy_projection_control, mark_derived_store_failure, mark_derived_store_success,
+    outbox_from_row, search_lag, storage,
 };
 
 use std::path::Path;
@@ -40,7 +41,10 @@ pub fn rebuild_vector_store_with(
     board: &str,
     store: &impl ChunkVectorStore,
 ) -> Result<VectorStoreStatus> {
-    let conn = connect_file(path.as_ref())?;
+    let path = path.as_ref();
+    let _write_guard = crate::db::acquire_derived_store_write_guard(path, LANCEDB_CHUNKS_STORE)?;
+    let conn = connect_file(path)?;
+    ensure_legacy_projection_control(&conn, LANCEDB_CHUNKS_STORE)?;
     let board_id = board_id(&conn, board)?;
     let last_event_id = current_last_event_id(&conn, &board_id)?;
     let chunks = vector_chunks_for_board(&conn, &board_id, store.chunk_embedding_model())?;
@@ -87,7 +91,10 @@ pub fn sync_vector_store_with(
     board: &str,
     store: &impl ChunkVectorStore,
 ) -> Result<VectorStoreStatus> {
-    let conn = connect_file(path.as_ref())?;
+    let path = path.as_ref();
+    let _write_guard = crate::db::acquire_derived_store_write_guard(path, LANCEDB_CHUNKS_STORE)?;
+    let conn = connect_file(path)?;
+    ensure_legacy_projection_control(&conn, LANCEDB_CHUNKS_STORE)?;
     let board_id = board_id(&conn, board)?;
     let last_event_id = current_last_event_id(&conn, &board_id)?;
     let state = derived_status_by_name(&conn, LANCEDB_CHUNKS_STORE)?;

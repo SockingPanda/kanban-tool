@@ -1895,7 +1895,7 @@ semantics service 写入 `label_semantics` / `label_atoms` 后单独标脏
 检查：
 
 - DB 文件存在。
-- migrations 完整；当前 schema user_version 为 23。
+- migrations 完整；当前 schema user_version 为 26。
 - `PRAGMA integrity_check`。
 - orphan active run。
 - running task 是否缺 claim。

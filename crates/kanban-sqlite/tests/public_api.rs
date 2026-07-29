@@ -59,6 +59,18 @@ fn lifecycle_plane_is_public_api() {
 }
 
 #[test]
+fn projection_v2_plane_is_public_api() {
+    let tests = trybuild::TestCases::new();
+    tests.pass("tests/ui/api_projection_v2_contract.rs");
+}
+
+#[test]
+fn projection_v2_provider_seam_is_excluded_from_api_root() {
+    let tests = trybuild::TestCases::new();
+    tests.compile_fail("tests/ui/api_projection_v2_provider_root_private.rs");
+}
+
+#[test]
 fn adapter_api_facade_excludes_db_init_helpers_independently() {
     let tests = trybuild::TestCases::new();
     tests.compile_fail("tests/ui/api_root_excludes_db_init/*.rs");

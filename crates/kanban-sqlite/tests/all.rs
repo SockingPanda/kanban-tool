@@ -13,6 +13,7 @@ mod suite {
     mod label_ontology;
     mod label_semantics;
     mod maintenance;
+    mod projection_v2;
     mod retry_policy;
     mod search_sqlite;
     mod search_tantivy;

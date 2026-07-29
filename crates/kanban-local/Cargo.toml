@@ -8,6 +8,7 @@ authors.workspace = true
 [dependencies]
 dirs-next.workspace = true
 fs-err.workspace = true
+fs4.workspace = true
 kanban-contract.workspace = true
 serde.workspace = true
 serde_path_to_error.workspace = true

@@ -1,11 +1,14 @@
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
-    io,
+    io::{self, Write},
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use fs_err as fs;
+use fs4::fs_std::FileExt as _;
 use serde::{Deserialize, Serialize, de::IntoDeserializer};
 
 pub use kanban_contract::{
@@ -25,6 +28,93 @@ pub const DEFAULT_VECTOR_PROVIDER: &str = "ollama";
 pub const DEFAULT_OLLAMA_ENDPOINT: &str = "http://127.0.0.1:11434";
 pub const DEFAULT_OLLAMA_EMBEDDING_MODEL: &str = "qwen3-embedding:0.6b";
 pub const DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS: usize = 1024;
+
+#[derive(Debug)]
+pub struct DerivedStoreWriteGuard {
+    lock_file: std::fs::File,
+}
+
+static DERIVED_LOCK_NONCE: AtomicU64 = AtomicU64::new(1);
+
+impl DerivedStoreWriteGuard {
+    pub fn acquire(db_path: &Path, store_name: &str) -> io::Result<Self> {
+        if store_name.is_empty()
+            || !store_name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "derived store name is not lock-path safe",
+            ));
+        }
+        let lock_path = derived_store_write_lock_path(db_path, store_name);
+        let mut lock_file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)?;
+        if !lock_file.try_lock_exclusive()? {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                format!(
+                    "derived store {store_name} has an active physical writer: {}",
+                    lock_path.display()
+                ),
+            ));
+        }
+        let identity = derived_store_lock_identity(store_name);
+        lock_file.set_len(0)?;
+        lock_file.write_all(identity.as_bytes())?;
+        lock_file.sync_data()?;
+        Ok(Self { lock_file })
+    }
+}
+
+impl Drop for DerivedStoreWriteGuard {
+    fn drop(&mut self) {
+        let _ = self.lock_file.unlock();
+    }
+}
+
+pub fn derived_store_write_lock_path(db_path: &Path, store_name: &str) -> PathBuf {
+    let normalized = normalized_file_path(db_path);
+    PathBuf::from(format!(
+        "{}.derived.{store_name}.lock",
+        normalized.display()
+    ))
+}
+
+fn normalized_file_path(path: &Path) -> PathBuf {
+    if path.exists()
+        && let Ok(canonical) = std::fs::canonicalize(path)
+    {
+        return canonical;
+    }
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path.file_name().unwrap_or_default();
+    if let Ok(canonical_parent) = std::fs::canonicalize(parent) {
+        return canonical_parent.join(file_name);
+    }
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
+    }
+}
+
+fn derived_store_lock_identity(store_name: &str) -> String {
+    let pid = std::process::id();
+    let nonce = DERIVED_LOCK_NONCE.fetch_add(1, Ordering::Relaxed);
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("pid={pid}\nowner={pid}-{timestamp}-{nonce}\nstore={store_name}\n")
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -441,6 +531,54 @@ pub fn default_actor() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn derived_store_lock_file_is_persistent_and_candidate_artifacts_are_ignored() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        fs::write(&db_path, "").unwrap();
+        let lock_path = derived_store_write_lock_path(&db_path, "tantivy_tasks");
+        let abandoned_candidate =
+            PathBuf::from(format!("{}.candidate.reused", lock_path.display()));
+
+        fs::write(&lock_path, "pid=").unwrap();
+        fs::write(&abandoned_candidate, "abandoned").unwrap();
+        let guard = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap();
+        let error = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+        drop(guard);
+
+        assert!(lock_path.exists());
+        assert_eq!(
+            fs::read_to_string(&abandoned_candidate).unwrap(),
+            "abandoned"
+        );
+        drop(DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap());
+        assert!(lock_path.exists());
+    }
+
+    #[test]
+    fn derived_store_lock_serializes_concurrent_contenders() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        fs::write(&db_path, "").unwrap();
+        let guard = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap();
+        let contenders = (0..16)
+            .map(|_| {
+                let db_path = db_path.clone();
+                std::thread::spawn(move || {
+                    DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks")
+                        .unwrap_err()
+                        .kind()
+                })
+            })
+            .collect::<Vec<_>>();
+        for contender in contenders {
+            assert_eq!(contender.join().unwrap(), io::ErrorKind::WouldBlock);
+        }
+        drop(guard);
+        drop(DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap());
+    }
 
     fn contract_fixture(relative: &str) -> serde_json::Value {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");

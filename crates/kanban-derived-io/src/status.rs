@@ -49,6 +49,38 @@ pub fn derived_status_by_name(
     .ok_or_else(|| KanbanError::Storage(format!("missing derived store state: {store_name}")))
 }
 
+pub fn ensure_legacy_projection_control(conn: &Connection, store_name: &str) -> Result<()> {
+    let has_projection_state: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master \
+             WHERE type='table' AND name='projection_store_state')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if !has_projection_state {
+        return Ok(());
+    }
+    let state: Option<(String, Option<String>)> = conn
+        .query_row(
+            "SELECT control_plane,building_generation
+             FROM projection_store_state WHERE store_name=?1",
+            [store_name],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(storage)?;
+    if state
+        .as_ref()
+        .is_some_and(|(control, building)| control == "v2" || building.is_some())
+    {
+        return Err(KanbanError::Conflict(format!(
+            "derived store {store_name} is managed by projection maintenance v2"
+        )));
+    }
+    Ok(())
+}
+
 pub fn mark_derived_store_success(
     conn: &Connection,
     store_name: &str,

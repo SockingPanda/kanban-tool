@@ -658,6 +658,23 @@ transaction 与 SQLite 错误 authority 不转移给 wire contract。
   board consistency、label ontology ledger consistency，并报告 Knowledge Substrate 的
   `index_outbox` backlog、derived store dirty/error 状态和 per-store last_error。派生层
   异常不改变 SQLite task truth；operator 通过 sync/rebuild 恢复 Tantivy/Oxigraph/LanceDB。
+- Migration 026 引入 database-scoped Projection v2 control plane。SQLite 为每个 store
+  保存 fenced lease、连续 delivery checkpoint 与 active/previous/building generation；
+  provider snapshot evidence 同时绑定 database/protocol/schema/provider、完整 canonical
+  corpus coverage、board-scoped delivery coverage、cursor 与 fence。物理 generation
+  pointer 先做 CAS/read-back，并验证上一物理 generation 仍可读取，随后 SQLite 才发布
+  active generation；pointer swap 后进程退出可由新 fence owner reconcile 恢复。
+- v1 writer 与 v2 owner 不能同时写一个 store。Projection v2 在 generation begin
+  transaction 即取得 control plane；legacy writer、v2 backend 调用和 database replace
+  在完整物理写周期共享 per-database/per-store writer barrier。由此 generation 构建、
+  pointer swap、SQLite confirm 或 replace 均不能与 Tantivy/Oxigraph/LanceDB legacy
+  rebuild/sync 交错；legacy guard 也会拒绝已有 building generation 的异常中间状态。
+  v2 acknowledgement reducer 再兼容更新旧 outbox/dirty 摘要，供迁移期 reader 和 doctor
+  使用。任何 derived failure 都不回滚 canonical mutation。
+- `lancedb_label_atoms` 当前仍由独立的 per-board dirty/rebuild 协议驱动；在 label
+  semantics mutation 尚未写入 Projection v2 delivery 流之前，generation begin 会
+  fail closed，避免 snapshot 发布后遗漏后续 atom mutation。它不能仅凭 corpus
+  fingerprint 被提升到 v2 control plane。
 
 ### 8.1 Board scope 与 schema/service/doctor 分工
 

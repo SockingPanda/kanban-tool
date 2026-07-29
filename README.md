@@ -108,6 +108,8 @@ kanban task show personal#1 --details
 kanban task list --status ready --status running
 kanban search "项目首页"
 kanban doctor
+kanban maintenance status
+kanban maintenance run --once
 ```
 
 ## 四种使用方式

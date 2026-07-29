@@ -83,6 +83,11 @@ pub(crate) fn handle_search(
         SearchMeta {
             backend: results.meta.backend,
             stale: results.meta.stale,
+            database_instance_id: results.meta.database_instance_id,
+            protocol_version: results.meta.protocol_version,
+            generation: results.meta.generation,
+            resolved_board_id: results.meta.resolved_board_id,
+            fallback_reason: results.meta.fallback_reason,
             index_version: results.meta.index_version,
             last_event_id: results.meta.last_event_id,
             index_lag_events: results.meta.index_lag_events,

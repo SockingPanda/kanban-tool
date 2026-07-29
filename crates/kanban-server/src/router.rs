@@ -16,7 +16,7 @@ use crate::handlers::api::*;
 use crate::handlers::health::health;
 use crate::i18n::request_locale;
 use crate::observability::http_trace_layer;
-use crate::state::{AppState, SearchSyncConfig, spawn_search_sync_task_until_shutdown};
+use crate::state::{AppState, MaintenanceConfig, spawn_maintenance_task_until_shutdown};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct ApiRouteOperation {
@@ -394,21 +394,21 @@ async fn require_existing_database(
 }
 
 pub async fn serve(addr: SocketAddr, state: AppState) -> std::io::Result<()> {
-    serve_with_search_sync(addr, state, SearchSyncConfig::disabled("default")).await
+    serve_with_maintenance(addr, state, MaintenanceConfig::disabled("kanban-server")).await
 }
 
-pub async fn serve_with_search_sync(
+pub async fn serve_with_maintenance(
     addr: SocketAddr,
     state: AppState,
-    search_sync: SearchSyncConfig,
+    maintenance: MaintenanceConfig,
 ) -> std::io::Result<()> {
-    serve_with_search_sync_shutdown(addr, state, search_sync, std::future::pending()).await
+    serve_with_maintenance_shutdown(addr, state, maintenance, std::future::pending()).await
 }
 
-pub async fn serve_with_search_sync_shutdown<S>(
+pub async fn serve_with_maintenance_shutdown<S>(
     addr: SocketAddr,
     state: AppState,
-    search_sync: SearchSyncConfig,
+    maintenance: MaintenanceConfig,
     shutdown: S,
 ) -> std::io::Result<()>
 where
@@ -416,11 +416,11 @@ where
 {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let shutdown_token = CancellationToken::new();
-    let search_sync_shutdown = shutdown_token.clone();
-    let search_sync_task = spawn_search_sync_task_until_shutdown(
+    let maintenance_shutdown = shutdown_token.clone();
+    let maintenance_task = spawn_maintenance_task_until_shutdown(
         state.clone(),
-        search_sync,
-        search_sync_shutdown.clone(),
+        maintenance,
+        maintenance_shutdown.clone(),
     );
     let result = axum::serve(listener, build_serve_router(state))
         .with_graceful_shutdown(async move {
@@ -428,8 +428,8 @@ where
             shutdown_token.cancel();
         })
         .await;
-    search_sync_shutdown.cancel();
-    if let Some(task) = search_sync_task {
+    maintenance_shutdown.cancel();
+    if let Some(task) = maintenance_task {
         let _ = task.await;
     }
     result

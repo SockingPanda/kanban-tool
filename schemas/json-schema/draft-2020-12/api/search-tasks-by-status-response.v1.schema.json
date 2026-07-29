@@ -306,6 +306,24 @@
         "backend": {
           "type": "string"
         },
+        "database_instance_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fallback_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "generation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "index_lag_events": {
           "format": "int64",
           "type": [
@@ -326,6 +344,16 @@
             "null"
           ]
         },
+        "protocol_version": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "resolved_board_id": {
+          "type": "string"
+        },
         "stale": {
           "type": "boolean"
         }
@@ -333,6 +361,11 @@
       "required": [
         "backend",
         "stale",
+        "database_instance_id",
+        "protocol_version",
+        "generation",
+        "resolved_board_id",
+        "fallback_reason",
         "index_version",
         "last_event_id",
         "index_lag_events"

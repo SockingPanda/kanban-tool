@@ -154,6 +154,120 @@
   {
     "adoption": {
       "consumer": {
+        "contract_id": "cli.maintenance-status.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_status_output_fixture_is_consumed_by_public_contract",
+        "operation": "maintenance status",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer": {
+        "contract_id": "cli.maintenance-status.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_status_output_fixture_is_produced_by_real_cli",
+        "operation": "maintenance status",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/cli/maintenance-status-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/maintenance-status-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.maintenance-status.output",
+    "migration": "adopted",
+    "operation": "maintenance status",
+    "path": "kanban maintenance status --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:maintenance-status-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "cli.maintenance-run.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_run_output_fixture_is_consumed_by_public_contract",
+        "operation": "maintenance run",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer": {
+        "contract_id": "cli.maintenance-run.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_run_output_fixture_is_produced_by_real_cli",
+        "operation": "maintenance run",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/cli/maintenance-run-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/maintenance-run-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.maintenance-run.output",
+    "migration": "adopted",
+    "operation": "maintenance run",
+    "path": "kanban maintenance run --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:maintenance-run-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "cli.maintenance-rebuild.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_rebuild_output_fixture_is_consumed_by_public_contract",
+        "operation": "maintenance rebuild",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer": {
+        "contract_id": "cli.maintenance-rebuild.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_rebuild_output_fixture_is_produced_by_real_cli",
+        "operation": "maintenance rebuild",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/cli/maintenance-rebuild-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/maintenance-rebuild-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.maintenance-rebuild.output",
+    "migration": "adopted",
+    "operation": "maintenance rebuild",
+    "path": "kanban maintenance rebuild --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:maintenance-rebuild-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
         "contract_id": "cli.derived-status.output",
         "direction": "serialize",
         "exact_test": "derived_status_output_fixture_is_consumed_by_public_contract",

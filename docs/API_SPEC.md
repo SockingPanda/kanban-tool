@@ -2277,7 +2277,20 @@ Response:
 }
 ```
 
-Task mutations do not write Tantivy inside their SQLite transactions. When served by `kanban serve` with `tantivy-backend`, a background loop makes one prompt startup `sync_search_index` attempt and then syncs every `--search-sync-interval-ms` milliseconds by default (`5000`; `0` disables). Manual `kanban index sync` remains available after normal task changes, and `kanban index rebuild` replaces the derived index. The Tantivy state is stored in board-scoped `app_settings` under `search.tasks.state.<board_id>` and round-trips through existing export/import.
+Task mutations do not write Tantivy inside their SQLite transactions. When served by
+`kanban serve` with `tantivy-backend`, one database-scoped Projection v2 owner makes
+an immediate pass and then runs every `--maintenance-interval-ms` milliseconds
+(default `5000`; `0` disables). It processes all boards through the same fenced
+maintenance service used by the CLI. `--search-sync-interval-ms` is a deprecated
+alias and no longer starts a single-board v1 writer. Manual `kanban index
+sync/rebuild` remain v1 compatibility commands only and reject a store already
+owned by Projection v2.
+
+Search result metadata and `/api/v1/search/status` expose
+`database_instance_id`, `protocol_version`, `generation`, `resolved_board_id`,
+and `fallback_reason`. Projection v2 fills the identity fields even when the
+reader falls back to canonical SQLite; legacy/no-index reads leave them null.
+`resolved_board_id` is always the canonical board id after board resolution.
 
 ### 13.2 Search task windows by status
 

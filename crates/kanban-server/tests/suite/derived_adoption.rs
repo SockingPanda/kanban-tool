@@ -629,6 +629,7 @@ async fn search_tasks_response_fixture_is_produced_by_real_router() -> anyhow::R
     normalize_search_task(&mut value["data"]["hits"][0]["task"]);
     value["data"]["hits"][0]["task_id"] = json!("t_fixture");
     value["data"]["meta"]["last_event_id"] = json!(0);
+    value["data"]["meta"]["resolved_board_id"] = json!("b_fixture");
     assert_eq!(
         value,
         fixture("schemas/fixtures/api/search-tasks-response.v1.valid.json")?
@@ -649,6 +650,7 @@ async fn search_tasks_by_status_response_fixture_is_produced_by_real_router() ->
         .context("windows")?
     {
         window["search_meta"]["last_event_id"] = json!(0);
+        window["search_meta"]["resolved_board_id"] = json!("b_fixture");
     }
     assert!(!serde_json::to_string(&value)?.contains("claim_token"));
     assert_eq!(
@@ -662,6 +664,7 @@ async fn search_tasks_by_status_response_fixture_is_produced_by_real_router() ->
 async fn search_status_response_fixture_is_produced_by_real_router() -> anyhow::Result<()> {
     let mut value = assert_ok("/api/v1/search/status?board=default").await?;
     value["data"]["message"] = json!("fixture");
+    value["data"]["resolved_board_id"] = json!("b_fixture");
     assert_eq!(
         value,
         fixture("schemas/fixtures/api/search-status-response.v1.valid.json")?

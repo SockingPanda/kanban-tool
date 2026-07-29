@@ -69,9 +69,14 @@ wildcard、bidirectional shortcut；双向协议必须拆成精确 input/output 
 - B2-C6 boards：list query、create request、get/archive path 与四个 endpoint-specific success
   response，共 8 个 exact roots；四个 success roots 只共享闭合 `ApiBoard` component。
 
-当前 train authority snapshot 有 480 个 schema roots：semantic contract migration 为
-480 个 `adopted`、0 个 `generated`、0 个 `planned`，没有 `excluded`；480 个 adopted
-contract 登记 960 个 structured witnesses。#440 已将 114 个有限 JSON CLI leaf 全部绑定到
+当前 train authority snapshot 有 483 个 schema roots：semantic contract migration 为
+483 个 `adopted`、0 个 `generated`、0 个 `planned`，没有 `excluded`；483 个 adopted
+contract 登记 966 个 structured witnesses。Projection v2 新增
+`cli.maintenance-status.output`、`cli.maintenance-run.output` 与
+`cli.maintenance-rebuild.output`：status 显式携带 database identity/protocol、owner lease
+summary、generation/provider/cursor/pending age/error/fallback reason，且不暴露 opaque lease
+token。Search/index exact roots 同步要求 nullable database identity/protocol/generation、
+必填 resolved board id 与 nullable structured fallback reason。#440 已将既有 114 个有限 JSON CLI leaf 全部绑定到
 exact output roots：除既有 bootstrap/config、diagnostics、maintenance、board/task/step/run、
 comment/dependency/event/entity cohort 外，本批继续闭合 33 个 label/semantics/proposal/atom/
 ontology leaf、15 个 graph/vector/context/search/index helper-facing leaf，以及 14 个

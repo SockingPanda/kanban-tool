@@ -27,7 +27,7 @@ use crate::commands::{
     label::handle_label,
     maintenance::{
         handle_backup, handle_checkpoint, handle_doctor, handle_export, handle_import,
-        handle_stats, handle_vacuum,
+        handle_maintenance, handle_stats, handle_vacuum,
     },
     run::handle_run,
     search::handle_search,
@@ -214,10 +214,13 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
                 })?;
             }
         }
-        Command::Serve(args) => serve(args, db_path, &board, actor)?,
+        Command::Serve(args) => serve(args, db_path, actor)?,
         Command::Completions { .. } => unreachable!("handled before database initialization"),
         Command::Complete(..) => unreachable!("handled before database initialization"),
-        Command::Doctor => handle_doctor(&db_path, cli.json)?,
+        Command::Maintenance { command } => {
+            handle_maintenance(&db_path, &actor, command, cli.json)?
+        }
+        Command::Doctor(args) => handle_doctor(&db_path, args, cli.json)?,
         Command::Stats => handle_stats(&db_path, &board, cli.json)?,
         Command::Backup(args) => handle_backup(&db_path, args, cli.json)?,
         Command::Export(args) => handle_export(&db_path, &board, args, cli.json)?,

@@ -48,6 +48,42 @@ fn init_is_idempotent() -> anyhow::Result<()> {
 }
 
 #[test]
+fn init_upgrades_v26_with_singleton_maintenance_owner_idempotently() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_upgrades_v26_maintenance_owner")?;
+    init_database(&temp.path, "first")?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute_batch(
+        "DROP TABLE projection_maintenance_owner;
+         DELETE FROM schema_migrations WHERE version=27;
+         PRAGMA user_version=26;",
+    )?;
+    drop(conn);
+
+    init_database(&temp.path, "upgrade")?;
+    init_database(&temp.path, "idempotent")?;
+
+    let conn = connect_file(&temp.path)?;
+    let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    let migration_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM schema_migrations
+         WHERE version=27 AND name='027_projection_maintenance_owner'
+           AND checksum GLOB 'fnv64:*'",
+        [],
+        |row| row.get(0),
+    )?;
+    let owner_rows: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM projection_maintenance_owner
+         WHERE singleton=1 AND owner IS NULL AND lease_token IS NULL",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(user_version, 27);
+    assert_eq!(migration_count, 1);
+    assert_eq!(owner_rows, 1);
+    Ok(())
+}
+
+#[test]
 fn init_v26_preflight_reports_unresolved_and_cross_board_outbox_rows() -> anyhow::Result<()> {
     for case_name in ["unresolved", "cross_board"] {
         let temp = TempDb::new(&format!("init_v26_preflight_{case_name}"))?;
@@ -131,7 +167,7 @@ fn init_records_and_enforces_migration_checksum() -> anyhow::Result<()> {
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    assert_eq!(user_version, 26);
+    assert_eq!(user_version, 27);
     assert_eq!(name, "001_initial");
     assert!(checksum.starts_with("fnv64:"), "checksum: {checksum}");
 
@@ -157,7 +193,7 @@ fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 26);
+    assert_eq!(user_version, 27);
     for table in [
         "entities",
         "relation_predicates",
@@ -226,7 +262,7 @@ fn init_upgrades_v1_database_and_backfills_task_entities() -> anyhow::Result<()>
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 26);
+    assert_eq!(user_version, 27);
     let task_entity_title: String = conn.query_row(
         "SELECT title FROM entities WHERE uri='kb://task/t_test'",
         [],
@@ -253,7 +289,7 @@ fn init_v17_rebuilds_key_relationship_tables_without_losing_rows() -> anyhow::Re
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 26);
+    assert_eq!(user_version, 27);
     assert_eq!(v17_relationship_counts(&conn)?, before_counts);
     assert_eq!(
         task_label_board_for(&conn, &fixture.task_id, &fixture.label_id)?,
@@ -283,7 +319,7 @@ fn init_v18_adds_root_action_atom_effects_table_to_v17_database() -> anyhow::Res
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 26);
+    assert_eq!(user_version, 27);
     let table_exists: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_ontology_action_atom_effects'",
         [],
@@ -344,7 +380,7 @@ fn init_v19_adds_validation_requirement_and_backfills_v18_actions() -> anyhow::R
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 26);
+    assert_eq!(user_version, 27);
     let column_exists: i64 = conn.query_row(
         "SELECT COUNT(*) FROM pragma_table_info('label_ontology_actions') WHERE name='validation_requirement'",
         [],
@@ -450,7 +486,7 @@ fn init_v20_hardens_task_history_tables_without_losing_rows() -> anyhow::Result<
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 26);
+    assert_eq!(user_version, 27);
     assert_eq!(v20_task_history_counts(&conn)?, before_counts);
     let fk_errors = foreign_key_check_rows(&conn)?;
     assert!(fk_errors.is_empty(), "{fk_errors:#?}");
@@ -587,7 +623,7 @@ fn init_v21_hardens_ontology_links_without_losing_rows() -> anyhow::Result<()> {
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 26);
+    assert_eq!(user_version, 27);
     assert_eq!(v21_ontology_link_counts(&conn)?, before_counts);
     let fk_errors = foreign_key_check_rows(&conn)?;
     assert!(fk_errors.is_empty(), "{fk_errors:#?}");

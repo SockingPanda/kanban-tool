@@ -178,6 +178,11 @@ fn search_meta(value: kanban_search::SearchMeta) -> SearchMeta {
     SearchMeta {
         backend: value.backend,
         stale: value.stale,
+        database_instance_id: value.database_instance_id,
+        protocol_version: value.protocol_version,
+        generation: value.generation,
+        resolved_board_id: value.resolved_board_id,
+        fallback_reason: value.fallback_reason,
         index_version: value.index_version,
         last_event_id: value.last_event_id,
         index_lag_events: value.index_lag_events,

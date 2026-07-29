@@ -24,6 +24,7 @@ const PUBLIC_COMMAND_GROUP_PATHS: &[&[&str]] = &[
     &["label", "ontology", "apply"],
     &["dep"],
     &["index"],
+    &["maintenance"],
     &["entity"],
     &["outbox"],
     &["derived"],

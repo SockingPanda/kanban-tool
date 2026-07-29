@@ -12,7 +12,7 @@ pub use observability::{
     DEFAULT_TRACING_FILTER, init_tracing, init_tracing_with_filter, init_tracing_with_filter_spec,
 };
 pub use router::{
-    build_desktop_router, build_router, build_serve_router, serve, serve_with_search_sync,
-    serve_with_search_sync_shutdown,
+    build_desktop_router, build_router, build_serve_router, serve, serve_with_maintenance,
+    serve_with_maintenance_shutdown,
 };
-pub use state::{AppState, SearchSyncConfig, search_sync_task_enabled, spawn_search_sync_task};
+pub use state::{AppState, MaintenanceConfig, maintenance_task_enabled, spawn_maintenance_task};

@@ -85,6 +85,228 @@ pub type CliIndexDoctorOutput = DataEnvelope<SearchStatus>;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
+pub struct CliMaintenanceOwnerStatus {
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub owner: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub mode: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_i64_schema")
+    )]
+    pub lease_expires_at: Option<i64>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_i64_schema")
+    )]
+    pub last_heartbeat_at: Option<i64>,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct CliProjectionStoreStatus {
+    pub store_name: String,
+    pub database_instance_id: String,
+    pub protocol_version: i64,
+    pub schema_version: i64,
+    pub control_plane: String,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub active_generation: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub active_fingerprint: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_i64_schema")
+    )]
+    pub active_fence_epoch: Option<i64>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub active_provider: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub active_provider_fingerprint: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub previous_generation: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub previous_fingerprint: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_i64_schema")
+    )]
+    pub previous_fence_epoch: Option<i64>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub building_generation: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub building_fingerprint: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_i64_schema")
+    )]
+    pub building_fence_epoch: Option<i64>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub building_provider: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub building_provider_fingerprint: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub building_phase: Option<String>,
+    pub snapshot_cursor: i64,
+    pub checkpoint_cursor: i64,
+    pub legacy_checkpoint_cursor: i64,
+    pub lifecycle_status: String,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub owner: Option<String>,
+    pub fence_epoch: i64,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_i64_schema")
+    )]
+    pub lease_expires_at: Option<i64>,
+    pub pending: i64,
+    pub running: i64,
+    pub failed: i64,
+    pub legacy_done: i64,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_i64_schema")
+    )]
+    pub pending_age_ms: Option<i64>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_i64_schema")
+    )]
+    pub last_success_at: Option<i64>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub last_error: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub fallback_reason: Option<String>,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct CliMaintenanceStatus {
+    pub database_instance_id: String,
+    pub protocol_version: i64,
+    pub maintenance_owner: CliMaintenanceOwnerStatus,
+    pub stores: Vec<CliProjectionStoreStatus>,
+}
+
+pub type CliMaintenanceStatusOutput = DataEnvelope<CliMaintenanceStatus>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum CliMaintenanceMode {
+    Once,
+    Continuous,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct CliMaintenanceStoreRun {
+    pub store_name: String,
+    pub action: String,
+    pub processed: usize,
+    pub lifecycle_status: String,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub fallback_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct CliMaintenanceRun {
+    pub database_instance_id: String,
+    pub protocol_version: i64,
+    pub owner: String,
+    pub mode: CliMaintenanceMode,
+    pub stores: Vec<CliMaintenanceStoreRun>,
+}
+
+pub type CliMaintenanceRunOutput = DataEnvelope<CliMaintenanceRun>;
+pub type CliMaintenanceRebuildOutput = DataEnvelope<CliMaintenanceRun>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
 pub struct CliOutboxItem {
     pub id: i64,
     #[serde(deserialize_with = "deserialize_required_nullable")]

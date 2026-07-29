@@ -967,7 +967,8 @@ Knowledge Substrate 表只支持实体身份、关系镜像、派生 outbox 和�
 
 ### 13.5 Projection v2 consistency domain
 
-表：`projection_database`、`projection_store_state`、`projection_deliveries`
+表：`projection_database`、`projection_store_state`、`projection_deliveries`、
+`projection_maintenance_owner`
 
 `projection_database` 为一份 SQLite 文件保存稳定 `database_instance_id` 和 projection
 protocol version。`projection_store_state` 为每个物理 store 保存 schema version、
@@ -977,6 +978,9 @@ lease 和 lifecycle/error 状态。
 `projection_deliveries` 把一个 `index_outbox` row 展开为各 store 的 board-scoped delivery；
 唯一键是 `(outbox_id, store_name)`，每个 delivery 同时携带不可空 `board_id`、连续
 store cursor、claim token、lease token、fence epoch 和 target generation。
+`projection_maintenance_owner` 是 singleton database runtime lease，保存 owner、opaque
+token、mode、expiry 与 heartbeat；public status 不返回 token。lease 获取、续约与释放
+都比较 owner + token，过期 owner 无法清除后继 owner。
 
 Migration 026 在 fanout/backfill 前验证每个相关 outbox row 能从 source event 或 entity
 得到唯一 board；无法解析、orphan source event 或 event/entity board 冲突时 fail closed，
@@ -1004,6 +1008,10 @@ generation。现阶段继续使用下述 `label_atom_index_boards` per-board dir
 generation（若存在）仍可按 generation id 读取，SQLite 才原子发布 active/previous
 metadata。若进程在物理 pointer swap 后退出，新 fence owner 可检查同一 generation 的
 artifact evidence 并 reconcile SQLite publish。
+若 logical active 的物理 artifact 已不可读，正常 publish CAS 仍 fail closed。只有
+maintenance 的显式 recovery 路径可在新 snapshot/catch-up、当前 database/provider
+binding 与 fenced lease 均成立时发布替代 generation；SQLite previous metadata 改为
+实际可读且被物理 backend 保留的 generation，而不是伪造已丢失 artifact 的保留证据。
 
 `derived_store_state` 和 `index_outbox` 在迁移期保留为 v1 compatibility projection。
 generation begin 即把 store 切到 v2 control plane；legacy 与 v2 writer 在完整物理写周期

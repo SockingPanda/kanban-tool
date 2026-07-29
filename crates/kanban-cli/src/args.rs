@@ -138,8 +138,13 @@ pub(crate) enum Command {
     Completions { shell: Shell },
     #[command(name = "__complete", hide = true)]
     Complete(CompleteArgs),
+    /// Run and inspect the database-scoped Projection v2 maintenance runtime.
+    Maintenance {
+        #[command(subcommand)]
+        command: MaintenanceCommand,
+    },
     /// Check database integrity and consistency.
-    Doctor,
+    Doctor(DoctorArgs),
     /// Show board task counts and summary statistics.
     Stats,
     /// Write a SQLite backup copy to a chosen path.
@@ -170,6 +175,48 @@ pub(crate) enum CompleteKind {
     Status,
     #[value(name = "comment-kind")]
     CommentKind,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct DoctorArgs {
+    /// Fail unless every Projection v2 store is ready with no fallback reason.
+    #[arg(long)]
+    pub(crate) strict_derived: bool,
+}
+
+#[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
+pub(crate) enum MaintenanceCommand {
+    /// Run one maintenance pass or keep running until interrupted.
+    Run(MaintenanceRunArgs),
+    /// Show database identity, owner lease, generations, cursors, lag, and fallback reasons.
+    Status,
+    /// Build and atomically publish a new store generation.
+    Rebuild(MaintenanceRebuildArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct MaintenanceRunArgs {
+    /// Run one bounded pass and exit.
+    #[arg(long)]
+    pub(crate) once: bool,
+    /// Delay between continuous passes in milliseconds.
+    #[arg(long, default_value_t = 5_000)]
+    pub(crate) poll_interval_ms: u64,
+}
+
+#[derive(Debug, Args)]
+#[command(group(
+    ArgGroup::new("maintenance_rebuild_target")
+        .required(true)
+        .args(["store", "all"])
+))]
+pub(crate) struct MaintenanceRebuildArgs {
+    /// Projection store name.
+    pub(crate) store: Option<String>,
+    /// Rebuild every store currently supported by the unified runtime.
+    #[arg(long)]
+    pub(crate) all: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -1844,9 +1891,13 @@ pub(crate) struct ServeArgs {
     /// TCP port to bind.
     #[arg(long, default_value_t = 8721)]
     pub(crate) port: u16,
-    /// Background search index sync interval in milliseconds. Use 0 to disable.
-    #[arg(long, default_value_t = 5_000)]
-    pub(crate) search_sync_interval_ms: u64,
+    /// Background Projection v2 maintenance interval in milliseconds. Use 0 to disable.
+    #[arg(
+        long = "maintenance-interval-ms",
+        visible_alias = "search-sync-interval-ms",
+        default_value_t = 5_000
+    )]
+    pub(crate) maintenance_interval_ms: u64,
     /// Suppress serve startup diagnostics and request traces on stderr.
     #[arg(long, conflicts_with = "log_level")]
     pub(crate) quiet: bool,

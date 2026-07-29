@@ -4,7 +4,12 @@ use anyhow::Context;
 use common::{TempDb, kanban, kanban_in_dir};
 use kanban_sqlite::db::maintenance_lock_path;
 use pretty_assertions::assert_eq;
-use std::path::Path;
+use std::{
+    path::Path,
+    process::{Command as ProcessCommand, Stdio},
+    thread,
+    time::{Duration, Instant},
+};
 
 fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
     kanban_sqlite::api::mark_execution_plan_not_required(
@@ -47,8 +52,8 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     let doctor = kanban(&temp.path, &["--json", "doctor"])?.success_json()?;
 
     assert_eq!(doctor["data"]["integrity_check"], "ok");
-    assert_eq!(doctor["data"]["migration_version"], 26);
-    assert_eq!(doctor["data"]["user_version"], 26);
+    assert_eq!(doctor["data"]["migration_version"], 27);
+    assert_eq!(doctor["data"]["user_version"], 27);
     assert_eq!(doctor["data"]["expired_running_tasks"], 1);
     assert_eq!(doctor["data"]["dependency_cycles"], 0);
     assert_eq!(doctor["data"]["archived_dependency_edges"], 0);
@@ -124,6 +129,9 @@ fn maintenance_rejects_missing_database() -> anyhow::Result<()> {
     let export_path = temp.dir.join("board.jsonl");
     let cases = [
         vec!["--json", "doctor"],
+        vec!["--json", "maintenance", "status"],
+        vec!["--json", "maintenance", "run", "--once"],
+        vec!["--json", "maintenance", "rebuild", "tantivy_tasks"],
         vec!["--json", "checkpoint"],
         vec!["--json", "vacuum"],
         vec![
@@ -161,6 +169,97 @@ fn maintenance_rejects_missing_database() -> anyhow::Result<()> {
             .exists()
     );
     assert!(!export_path.exists());
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn maintenance_continuous_reacquires_stale_owner_and_releases_on_sigint() -> anyhow::Result<()> {
+    let temp = TempDb::new("maintenance_continuous_reacquire")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let mut command = ProcessCommand::new(env!("CARGO_BIN_EXE_kanban"));
+    command
+        .current_dir(&temp.dir)
+        .arg("--db")
+        .arg(&temp.path)
+        .args(["--json", "maintenance", "run", "--poll-interval-ms", "20"])
+        .env_remove("KB_BOARD")
+        .env("XDG_CONFIG_HOME", temp.dir.join(".xdg-config"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let child = command.spawn().context("spawn continuous maintenance")?;
+
+    let first_token = wait_for_maintenance_owner(&temp.path, None)?;
+    kanban_sqlite::db::connect_file(&temp.path)?.execute(
+        "UPDATE projection_maintenance_owner
+         SET lease_expires_at=0
+         WHERE singleton=1 AND lease_token=?1",
+        [&first_token],
+    )?;
+    let second_token = wait_for_maintenance_owner(&temp.path, Some(&first_token))?;
+    assert_ne!(second_token, first_token);
+
+    let status = ProcessCommand::new("/bin/kill")
+        .arg("-INT")
+        .arg(child.id().to_string())
+        .status()
+        .context("send SIGINT")?;
+    anyhow::ensure!(status.success(), "kill -INT failed with {status}");
+    let output = child
+        .wait_with_output()
+        .context("wait for continuous maintenance")?;
+    anyhow::ensure!(
+        output.status.success(),
+        "continuous maintenance failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let owner: Option<String> = kanban_sqlite::db::connect_file(&temp.path)?.query_row(
+        "SELECT owner FROM projection_maintenance_owner WHERE singleton=1",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(owner, None);
+    Ok(())
+}
+
+#[cfg(unix)]
+fn wait_for_maintenance_owner(
+    db_path: &Path,
+    different_from: Option<&str>,
+) -> anyhow::Result<String> {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        let row = kanban_sqlite::db::connect_file(db_path)?.query_row(
+            "SELECT lease_token,lease_expires_at
+             FROM projection_maintenance_owner WHERE singleton=1",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<i64>>(1)?,
+                ))
+            },
+        )?;
+        if let (Some(token), Some(expires_at)) = row
+            && different_from != Some(token.as_str())
+            && expires_at > 0
+        {
+            return Ok(token);
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    anyhow::bail!("maintenance owner did not reach the expected lease state")
+}
+
+#[test]
+fn doctor_strict_derived_fails_closed_on_bootstrap_store() -> anyhow::Result<()> {
+    let temp = TempDb::new("doctor_strict_derived_bootstrap")?;
+    kanban(&temp.path, &["init"])?.success()?;
+
+    kanban(&temp.path, &["--json", "doctor", "--strict-derived"])?
+        .json_failure_code_containing(8, "strict derived stores are not ready")?;
     Ok(())
 }
 

@@ -6,8 +6,26 @@
         "backend": {
           "type": "string"
         },
+        "database_instance_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "derived_index": {
           "type": "boolean"
+        },
+        "fallback_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "generation": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "index_lag_events": {
           "format": "int64",
@@ -32,6 +50,16 @@
         "message": {
           "type": "string"
         },
+        "protocol_version": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "resolved_board_id": {
+          "type": "string"
+        },
         "stale": {
           "type": "boolean"
         }
@@ -40,6 +68,11 @@
         "backend",
         "derived_index",
         "stale",
+        "database_instance_id",
+        "protocol_version",
+        "generation",
+        "resolved_board_id",
+        "fallback_reason",
         "index_version",
         "last_event_id",
         "index_lag_events",

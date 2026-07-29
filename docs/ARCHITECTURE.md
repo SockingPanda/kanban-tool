@@ -658,12 +658,16 @@ transaction 与 SQLite 错误 authority 不转移给 wire contract。
   board consistency、label ontology ledger consistency，并报告 Knowledge Substrate 的
   `index_outbox` backlog、derived store dirty/error 状态和 per-store last_error。派生层
   异常不改变 SQLite task truth；operator 通过 sync/rebuild 恢复 Tantivy/Oxigraph/LanceDB。
-- Migration 026 引入 database-scoped Projection v2 control plane。SQLite 为每个 store
+- Migration 026 引入 database-scoped Projection v2 control plane；Migration 027
+  增加数据库级 singleton maintenance owner lease。SQLite 为每个 store
   保存 fenced lease、连续 delivery checkpoint 与 active/previous/building generation；
   provider snapshot evidence 同时绑定 database/protocol/schema/provider、完整 canonical
   corpus coverage、board-scoped delivery coverage、cursor 与 fence。物理 generation
   pointer 先做 CAS/read-back，并验证上一物理 generation 仍可读取，随后 SQLite 才发布
   active generation；pointer swap 后进程退出可由新 fence owner reconcile 恢复。
+  若 SQLite active 对应的物理 generation 已缺失或损坏，maintenance 只能在新 snapshot
+  与 catch-up 完成后走显式 recovery publish；该路径仍校验 database/provider/lease/fence，
+  且只把实际仍可读的旧 generation 记作 previous。
 - v1 writer 与 v2 owner 不能同时写一个 store。Projection v2 在 generation begin
   transaction 即取得 control plane；legacy writer、v2 backend 调用和 database replace
   在完整物理写周期共享 per-database/per-store writer barrier。由此 generation 构建、
@@ -671,6 +675,16 @@ transaction 与 SQLite 错误 authority 不转移给 wire contract。
   rebuild/sync 交错；legacy guard 也会拒绝已有 building generation 的异常中间状态。
   v2 acknowledgement reducer 再兼容更新旧 outbox/dirty 摘要，供迁移期 reader 和 doctor
   使用。任何 derived failure 都不回滚 canonical mutation。
+- `kanban maintenance run` 与 `kanban serve` 共用同一个 runtime/service path。runtime
+  在完整生命周期持有 database owner，并按 store 取得独立 fenced lease；Tantivy v2
+  使用 `index/v2/tantivy_tasks/generations/<generation>` immutable generation、复合
+  `(board_id, task_id)` document key 和强制 board query filter。新 generation publish
+  后保留上一 generation；reader 只在 control state、provider fingerprint、物理
+  generation 与 delivery health 全部匹配时使用 Tantivy，否则返回 SQLite canonical
+  结果，并在 search/index machine metadata 中返回 database identity、protocol、
+  generation、resolved board id 与结构化 fallback reason。旧 server single-board
+  Tantivy timer 已由该 DB-scoped owner 替代；owner conflict、pass failure 或 lease
+  heartbeat failure 会进入有界重试/重新领取，长 poll interval 期间仍按 TTL heartbeat。
 - `lancedb_label_atoms` 当前仍由独立的 per-board dirty/rebuild 协议驱动；在 label
   semantics mutation 尚未写入 Projection v2 delivery 流之前，generation begin 会
   fail closed，避免 snapshot 发布后遗漏后续 atom mutation。它不能仅凭 corpus

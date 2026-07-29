@@ -1,0 +1,52 @@
+{
+  "data": {
+    "database_instance_id": "db_fixture",
+    "protocol_version": 2,
+    "maintenance_owner": {
+      "owner": null,
+      "mode": null,
+      "lease_expires_at": null,
+      "last_heartbeat_at": null,
+      "active": false
+    },
+    "stores": [
+      {
+        "store_name": "tantivy_tasks",
+        "database_instance_id": "db_fixture",
+        "protocol_version": 2,
+        "schema_version": 1,
+        "control_plane": "legacy",
+        "active_generation": null,
+        "active_fingerprint": null,
+        "active_fence_epoch": null,
+        "active_provider": null,
+        "active_provider_fingerprint": null,
+        "previous_generation": null,
+        "previous_fingerprint": null,
+        "previous_fence_epoch": null,
+        "building_generation": null,
+        "building_fingerprint": null,
+        "building_fence_epoch": null,
+        "building_provider": null,
+        "building_provider_fingerprint": null,
+        "building_phase": null,
+        "snapshot_cursor": 0,
+        "checkpoint_cursor": 0,
+        "legacy_checkpoint_cursor": 0,
+        "lifecycle_status": "bootstrap_required",
+        "owner": null,
+        "fence_epoch": 0,
+        "lease_expires_at": null,
+        "pending": 0,
+        "running": 0,
+        "failed": 0,
+        "legacy_done": 0,
+        "pending_age_ms": null,
+        "last_success_at": null,
+        "last_error": null,
+        "fallback_reason": "generation_rebuild_required",
+        "updated_at": 0
+      }
+    ]
+  }
+}

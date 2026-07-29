@@ -26,6 +26,11 @@ pub struct SearchHit {
 pub struct SearchMeta {
     pub backend: String,
     pub stale: bool,
+    pub database_instance_id: Option<String>,
+    pub protocol_version: Option<i64>,
+    pub generation: Option<String>,
+    pub resolved_board_id: String,
+    pub fallback_reason: Option<String>,
     pub index_version: Option<String>,
     pub last_event_id: Option<i64>,
     pub index_lag_events: Option<i64>,
@@ -42,6 +47,11 @@ pub struct SearchIndexStatus {
     pub backend: String,
     pub derived_index: bool,
     pub stale: bool,
+    pub database_instance_id: Option<String>,
+    pub protocol_version: Option<i64>,
+    pub generation: Option<String>,
+    pub resolved_board_id: String,
+    pub fallback_reason: Option<String>,
     pub index_version: Option<String>,
     pub last_event_id: Option<i64>,
     pub index_lag_events: Option<i64>,
@@ -110,6 +120,7 @@ pub mod tantivy_backend {
     };
 
     pub const INDEX_VERSION: &str = "tasks-v1";
+    pub const PROJECTION_INDEX_VERSION: &str = "tasks-v2";
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum TantivyTaskIndexErrorKind {
@@ -192,10 +203,35 @@ pub mod tantivy_backend {
         pub last_event_id: Option<i64>,
     }
 
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub struct TantivyTaskProjectionMetadata {
+        pub database_instance_id: String,
+        pub protocol_version: i64,
+        pub schema_version: i64,
+        pub generation: String,
+        pub fence_epoch: i64,
+        pub snapshot_cursor: i64,
+        pub provider: String,
+        pub provider_fingerprint: String,
+        pub canonical_item_count: i64,
+        pub canonical_digest: String,
+        pub delivery_item_count: i64,
+        pub delivery_digest: String,
+        pub fingerprint: String,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct TaskProjectionDocumentKey {
+        pub board_id: String,
+        pub task_id: String,
+    }
+
     #[derive(Clone, Copy)]
     struct Fields {
         board_id: Field,
         task_id: Field,
+        document_key: Option<Field>,
         seq: Field,
         status: Field,
         assignee: Field,
@@ -281,6 +317,174 @@ pub mod tantivy_backend {
         };
         write_index_metadata(path, &metadata)?;
         Ok(metadata)
+    }
+
+    pub fn prepare_task_projection_generation(
+        path: &Path,
+        metadata: &TantivyTaskProjectionMetadata,
+        documents: &[TaskSearchDocument],
+    ) -> Result<TantivyTaskProjectionMetadata, TantivyTaskIndexError> {
+        validate_projection_metadata_shape(metadata)?;
+        if path.exists() {
+            let existing = validate_task_projection_generation(
+                path,
+                &metadata.database_instance_id,
+                &metadata.generation,
+            )?;
+            if existing == *metadata {
+                return Ok(existing);
+            }
+            return Err(TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Corrupt,
+                "task projection generation already exists with different metadata",
+            ));
+        }
+        let parent = path.parent().ok_or_else(|| {
+            TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Internal,
+                "projection generation path must have a parent",
+            )
+        })?;
+        fs::create_dir_all(parent)?;
+        let tmp_path = temp_index_path(path);
+        if tmp_path.exists() {
+            fs::remove_dir_all(&tmp_path)?;
+        }
+        fs::create_dir_all(&tmp_path)?;
+        let result = (|| {
+            let (schema, fields) = projection_task_schema();
+            let index = Index::create_in_dir(&tmp_path, schema)?;
+            let mut writer = index.writer(50_000_000)?;
+            for document in documents {
+                writer.add_document(to_tantivy_doc(fields, document))?;
+            }
+            writer.commit()?;
+            write_projection_metadata(&tmp_path, metadata)?;
+            sync_directory_tree(&tmp_path)?;
+            fs::rename(&tmp_path, path)?;
+            sync_directory(parent)?;
+            Ok(metadata.clone())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_dir_all(&tmp_path);
+        }
+        result
+    }
+
+    pub fn sync_task_projection_generation(
+        path: &Path,
+        expected: &TantivyTaskProjectionMetadata,
+        documents: &[TaskSearchDocument],
+        delete_keys: &[TaskProjectionDocumentKey],
+    ) -> Result<TantivyTaskProjectionMetadata, TantivyTaskIndexError> {
+        let metadata = validate_task_projection_generation(
+            path,
+            &expected.database_instance_id,
+            &expected.generation,
+        )?;
+        if metadata != *expected {
+            return Err(TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Corrupt,
+                "task projection metadata changed during incremental update",
+            ));
+        }
+        let index = Index::open_in_dir(path).map_err(TantivyTaskIndexError::corrupt)?;
+        let fields = projection_fields_from_schema(&index.schema())?;
+        let document_key = fields
+            .document_key
+            .expect("projection schema requires document_key");
+        let mut writer = index.writer(50_000_000)?;
+        for key in delete_keys {
+            writer.delete_term(Term::from_field_text(
+                document_key,
+                &projection_document_key(&key.board_id, &key.task_id),
+            ));
+        }
+        for document in documents {
+            writer.delete_term(Term::from_field_text(
+                document_key,
+                &projection_document_key(&document.board_id, &document.task_id),
+            ));
+            writer.add_document(to_tantivy_doc(fields, document))?;
+        }
+        writer.commit()?;
+        Ok(metadata)
+    }
+
+    pub fn validate_task_projection_generation(
+        path: &Path,
+        database_instance_id: &str,
+        generation: &str,
+    ) -> Result<TantivyTaskProjectionMetadata, TantivyTaskIndexError> {
+        let metadata = read_projection_metadata(path)?;
+        validate_projection_metadata_shape(&metadata)?;
+        if metadata.database_instance_id != database_instance_id {
+            return Err(TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Unavailable,
+                "task projection database identity mismatch",
+            ));
+        }
+        if metadata.generation != generation {
+            return Err(TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Unavailable,
+                "task projection generation mismatch",
+            ));
+        }
+        let index = Index::open_in_dir(path).map_err(TantivyTaskIndexError::corrupt)?;
+        projection_fields_from_schema(&index.schema())?;
+        index.reader().map_err(TantivyTaskIndexError::corrupt)?;
+        Ok(metadata)
+    }
+
+    pub fn search_task_projection_generation(
+        path: &Path,
+        database_instance_id: &str,
+        generation: &str,
+        query: &SearchQuery,
+    ) -> Result<(Vec<SearchHit>, SearchMeta), TantivyTaskIndexError> {
+        let metadata = validate_task_projection_generation(path, database_instance_id, generation)?;
+        let index = Index::open_in_dir(path).map_err(TantivyTaskIndexError::corrupt)?;
+        let fields = projection_fields_from_schema(&index.schema())?;
+        let hits = search_index(&index, fields, &query.board, query)?;
+        Ok((
+            hits,
+            SearchMeta {
+                backend: "tantivy".to_owned(),
+                stale: false,
+                database_instance_id: Some(database_instance_id.to_owned()),
+                protocol_version: Some(metadata.protocol_version),
+                generation: Some(generation.to_owned()),
+                resolved_board_id: query.board.clone(),
+                fallback_reason: None,
+                index_version: Some(PROJECTION_INDEX_VERSION.to_owned()),
+                last_event_id: None,
+                index_lag_events: None,
+            },
+        ))
+    }
+
+    pub fn search_task_projection_generation_against(
+        path: &Path,
+        expected: &TantivyTaskProjectionMetadata,
+        query: &SearchQuery,
+    ) -> Result<(Vec<SearchHit>, SearchMeta), TantivyTaskIndexError> {
+        let metadata = validate_task_projection_generation(
+            path,
+            &expected.database_instance_id,
+            &expected.generation,
+        )?;
+        if metadata != *expected {
+            return Err(TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Corrupt,
+                "task projection metadata does not match SQLite active evidence",
+            ));
+        }
+        search_task_projection_generation(
+            path,
+            &expected.database_instance_id,
+            &expected.generation,
+            query,
+        )
     }
 
     pub fn task_index_exists(path: &Path) -> bool {
@@ -376,6 +580,11 @@ pub mod tantivy_backend {
             SearchMeta {
                 backend: "tantivy".to_owned(),
                 stale: lag.is_some_and(|value| value > 0),
+                database_instance_id: None,
+                protocol_version: None,
+                generation: None,
+                resolved_board_id: board_id.to_owned(),
+                fallback_reason: None,
                 index_version: Some(metadata.index_version),
                 last_event_id: metadata.last_event_id,
                 index_lag_events: lag,
@@ -410,6 +619,82 @@ pub mod tantivy_backend {
             path.join("kb-index-meta.json"),
             serde_json::to_vec_pretty(metadata)?,
         )?;
+        Ok(())
+    }
+
+    fn read_projection_metadata(
+        path: &Path,
+    ) -> Result<TantivyTaskProjectionMetadata, TantivyTaskIndexError> {
+        let bytes = fs::read(path.join("kb-projection-meta.json")).map_err(|error| {
+            let kind = if error.kind() == std::io::ErrorKind::NotFound {
+                TantivyTaskIndexErrorKind::Unavailable
+            } else {
+                TantivyTaskIndexErrorKind::Io
+            };
+            TantivyTaskIndexError::new(kind, error.to_string())
+        })?;
+        serde_json::from_slice(&bytes).map_err(TantivyTaskIndexError::from)
+    }
+
+    fn write_projection_metadata(
+        path: &Path,
+        metadata: &TantivyTaskProjectionMetadata,
+    ) -> Result<(), TantivyTaskIndexError> {
+        let metadata_path = path.join("kb-projection-meta.json");
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(metadata_path)?;
+        use std::io::Write as _;
+        file.write_all(&serde_json::to_vec_pretty(metadata)?)?;
+        file.sync_all()?;
+        Ok(())
+    }
+
+    pub fn sync_task_projection_generation_files(path: &Path) -> Result<(), TantivyTaskIndexError> {
+        sync_directory_tree(path)
+    }
+
+    fn sync_directory_tree(path: &Path) -> Result<(), TantivyTaskIndexError> {
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let file_type = entry.file_type()?;
+            if file_type.is_dir() {
+                sync_directory_tree(&entry.path())?;
+            } else if file_type.is_file() {
+                fs::File::open(entry.path())?.sync_all()?;
+            }
+        }
+        sync_directory(path)
+    }
+
+    fn sync_directory(path: &Path) -> Result<(), TantivyTaskIndexError> {
+        fs::File::open(path)?.sync_all()?;
+        Ok(())
+    }
+
+    fn validate_projection_metadata_shape(
+        metadata: &TantivyTaskProjectionMetadata,
+    ) -> Result<(), TantivyTaskIndexError> {
+        if metadata.protocol_version != 2
+            || metadata.schema_version <= 0
+            || metadata.fence_epoch < 0
+            || metadata.snapshot_cursor < 0
+            || metadata.database_instance_id.trim().is_empty()
+            || metadata.generation.trim().is_empty()
+            || metadata.provider.trim().is_empty()
+            || metadata.provider_fingerprint.trim().is_empty()
+            || metadata.canonical_item_count < 0
+            || metadata.canonical_digest.trim().is_empty()
+            || metadata.delivery_item_count < 0
+            || metadata.delivery_digest.trim().is_empty()
+            || metadata.fingerprint.trim().is_empty()
+        {
+            return Err(TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Corrupt,
+                "invalid task projection metadata",
+            ));
+        }
         Ok(())
     }
 
@@ -490,6 +775,53 @@ pub mod tantivy_backend {
         Ok(Box::new(BooleanQuery::new(clauses)))
     }
 
+    fn search_index(
+        index: &Index,
+        fields: Fields,
+        board_id: &str,
+        query: &SearchQuery,
+    ) -> Result<Vec<SearchHit>, TantivyTaskIndexError> {
+        let reader = index.reader().map_err(TantivyTaskIndexError::corrupt)?;
+        let searcher = reader.searcher();
+        let search_query = build_query(index, fields, board_id, query)?;
+        let wanted = query.limit.checked_add(query.offset).ok_or_else(|| {
+            TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Query,
+                "search page bound overflow",
+            )
+        })?;
+        let top_docs = searcher
+            .search(
+                &*search_query,
+                &TopDocs::with_limit(wanted).order_by_score(),
+            )
+            .map_err(TantivyTaskIndexError::corrupt)?;
+        let mut hits = Vec::new();
+        for (score, address) in top_docs.into_iter().skip(query.offset) {
+            let document = searcher
+                .doc::<TantivyDocument>(address)
+                .map_err(TantivyTaskIndexError::corrupt)?;
+            let task_id = text_value(&document, fields.task_id).ok_or_else(|| {
+                TantivyTaskIndexError::new(
+                    TantivyTaskIndexErrorKind::Internal,
+                    "task_id missing from hit",
+                )
+            })?;
+            let seq = i64_value(&document, fields.seq).unwrap_or_default();
+            let snippet = query
+                .q
+                .as_deref()
+                .and_then(|needle| snippet_from_document(&document, fields, needle));
+            hits.push(SearchHit {
+                task_id,
+                seq,
+                score: score.into(),
+                snippet,
+            });
+        }
+        Ok(hits)
+    }
+
     fn task_schema() -> (Schema, Fields) {
         let mut builder = Schema::builder();
         let board_id = builder.add_text_field("board_id", STRING | STORED);
@@ -512,6 +844,7 @@ pub mod tantivy_backend {
             Fields {
                 board_id,
                 task_id,
+                document_key: None,
                 seq,
                 status,
                 assignee,
@@ -529,6 +862,23 @@ pub mod tantivy_backend {
         )
     }
 
+    fn projection_task_schema() -> (Schema, Fields) {
+        let (schema, fields) = task_schema();
+        let mut builder = Schema::builder();
+        for (field, entry) in schema.fields() {
+            let _ = field;
+            builder.add_field(entry.clone());
+        }
+        let document_key = builder.add_text_field("document_key", STRING | STORED);
+        (
+            builder.build(),
+            Fields {
+                document_key: Some(document_key),
+                ..fields
+            },
+        )
+    }
+
     fn fields_from_schema(schema: &Schema) -> Result<Fields, TantivyTaskIndexError> {
         let field = |name: &str| {
             schema.get_field(name).map_err(|_| {
@@ -541,6 +891,7 @@ pub mod tantivy_backend {
         Ok(Fields {
             board_id: field("board_id")?,
             task_id: field("task_id")?,
+            document_key: None,
             seq: field("seq")?,
             status: field("status")?,
             assignee: field("assignee")?,
@@ -557,10 +908,27 @@ pub mod tantivy_backend {
         })
     }
 
+    fn projection_fields_from_schema(schema: &Schema) -> Result<Fields, TantivyTaskIndexError> {
+        let mut fields = fields_from_schema(schema)?;
+        fields.document_key = Some(schema.get_field("document_key").map_err(|_| {
+            TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Schema,
+                "missing field document_key",
+            )
+        })?);
+        Ok(fields)
+    }
+
     fn to_tantivy_doc(fields: Fields, task: &TaskSearchDocument) -> TantivyDocument {
         let mut document = TantivyDocument::default();
         document.add_text(fields.board_id, &task.board_id);
         document.add_text(fields.task_id, &task.task_id);
+        if let Some(document_key) = fields.document_key {
+            document.add_text(
+                document_key,
+                projection_document_key(&task.board_id, &task.task_id),
+            );
+        }
         document.add_i64(fields.seq, task.seq);
         document.add_text(fields.status, task.status.as_str());
         if let Some(assignee) = task.assignee.as_deref() {
@@ -591,6 +959,10 @@ pub mod tantivy_backend {
             .join("\n"),
         );
         document
+    }
+
+    fn projection_document_key(board_id: &str, task_id: &str) -> String {
+        format!("{}:{board_id}{}:{task_id}", board_id.len(), task_id.len())
     }
 
     fn text_value(document: &TantivyDocument, field: Field) -> Option<String> {
@@ -662,4 +1034,205 @@ pub mod tantivy_backend {
     }
 
     impl std::error::Error for TantivyTaskIndexError {}
+}
+
+#[cfg(all(test, feature = "tantivy-backend"))]
+mod projection_v2_tests {
+    use std::{
+        path::{Path, PathBuf},
+        sync::atomic::{AtomicU64, Ordering},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use kanban_core::TaskStatus;
+
+    use super::{
+        SearchQuery, TaskSearchDocument,
+        tantivy_backend::{
+            TantivyTaskProjectionMetadata, TaskProjectionDocumentKey,
+            prepare_task_projection_generation, search_task_projection_generation,
+            sync_task_projection_generation, validate_task_projection_generation,
+        },
+    };
+
+    static TEST_NONCE: AtomicU64 = AtomicU64::new(1);
+
+    struct TestDir(PathBuf);
+
+    impl TestDir {
+        fn new(name: &str) -> Self {
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "kanban-search-{name}-{}-{timestamp}-{}",
+                std::process::id(),
+                TEST_NONCE.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn metadata(generation: &str) -> TantivyTaskProjectionMetadata {
+        TantivyTaskProjectionMetadata {
+            database_instance_id: "db_test".to_owned(),
+            protocol_version: 2,
+            schema_version: 1,
+            generation: generation.to_owned(),
+            fence_epoch: 7,
+            snapshot_cursor: 11,
+            provider: "tantivy".to_owned(),
+            provider_fingerprint: "tantivy-tasks-v2".to_owned(),
+            canonical_item_count: 2,
+            canonical_digest: "fnv64:canonical".to_owned(),
+            delivery_item_count: 2,
+            delivery_digest: "fnv64:delivery".to_owned(),
+            fingerprint: "fnv64:artifact".to_owned(),
+        }
+    }
+
+    fn document(board_id: &str, task_id: &str, title: &str) -> TaskSearchDocument {
+        TaskSearchDocument {
+            board_id: board_id.to_owned(),
+            task_id: task_id.to_owned(),
+            seq: 1,
+            status: TaskStatus::Ready,
+            assignee: None,
+            priority: 1,
+            created_at: 1,
+            updated_at: 1,
+            due_at: None,
+            title: title.to_owned(),
+            description: None,
+            comments: String::new(),
+            run_text: String::new(),
+            event_text: String::new(),
+        }
+    }
+
+    fn query(board: &str, text: &str) -> SearchQuery {
+        SearchQuery {
+            board: board.to_owned(),
+            q: Some(text.to_owned()),
+            statuses: Vec::new(),
+            labels: Vec::new(),
+            assignee: None,
+            include_archived: false,
+            limit: 20,
+            offset: 0,
+        }
+    }
+
+    #[test]
+    fn projection_generation_contains_multiple_boards_and_forces_board_scope() {
+        let temp = TestDir::new("multi-board");
+        let path = temp.path().join("generation");
+        let documents = vec![
+            document("board-a", "task-a", "shared needle"),
+            document("board-b", "task-b", "shared needle"),
+        ];
+
+        prepare_task_projection_generation(&path, &metadata("gen-a"), &documents).unwrap();
+
+        let (board_a, _) = search_task_projection_generation(
+            &path,
+            "db_test",
+            "gen-a",
+            &query("board-a", "needle"),
+        )
+        .unwrap();
+        let (board_b, _) = search_task_projection_generation(
+            &path,
+            "db_test",
+            "gen-a",
+            &query("board-b", "needle"),
+        )
+        .unwrap();
+        assert_eq!(
+            board_a
+                .iter()
+                .map(|hit| hit.task_id.as_str())
+                .collect::<Vec<_>>(),
+            ["task-a"]
+        );
+        assert_eq!(
+            board_b
+                .iter()
+                .map(|hit| hit.task_id.as_str())
+                .collect::<Vec<_>>(),
+            ["task-b"]
+        );
+    }
+
+    #[test]
+    fn projection_sync_delete_uses_board_and_task_composite_key() {
+        let temp = TestDir::new("composite-delete");
+        let path = temp.path().join("generation");
+        let documents = vec![
+            document("board-a", "shared-task", "alpha"),
+            document("board-b", "shared-task", "beta"),
+        ];
+        let manifest = metadata("gen-a");
+        prepare_task_projection_generation(&path, &manifest, &documents).unwrap();
+
+        sync_task_projection_generation(
+            &path,
+            &manifest,
+            &[],
+            &[TaskProjectionDocumentKey {
+                board_id: "board-a".to_owned(),
+                task_id: "shared-task".to_owned(),
+            }],
+        )
+        .unwrap();
+
+        let (board_a, _) = search_task_projection_generation(
+            &path,
+            "db_test",
+            "gen-a",
+            &query("board-a", "alpha"),
+        )
+        .unwrap();
+        let (board_b, _) =
+            search_task_projection_generation(&path, "db_test", "gen-a", &query("board-b", "beta"))
+                .unwrap();
+        assert!(board_a.is_empty());
+        assert_eq!(board_b.len(), 1);
+    }
+
+    #[test]
+    fn projection_metadata_fails_closed_for_database_or_generation_mismatch() {
+        let temp = TestDir::new("metadata-mismatch");
+        let path = temp.path().join("generation");
+        prepare_task_projection_generation(
+            &path,
+            &metadata("gen-a"),
+            &[document("board-a", "task-a", "needle")],
+        )
+        .unwrap();
+
+        assert!(validate_task_projection_generation(&path, "db_other", "gen-a").is_err());
+        assert!(validate_task_projection_generation(&path, "db_test", "gen-other").is_err());
+        assert!(
+            search_task_projection_generation(
+                Path::new(&path),
+                "db_other",
+                "gen-a",
+                &query("board-a", "needle"),
+            )
+            .is_err()
+        );
+    }
 }

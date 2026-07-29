@@ -132,6 +132,8 @@ kanban task show personal#1 --details
 kanban task list --status ready --status running
 kanban search "项目首页"
 kanban doctor
+kanban maintenance status
+kanban maintenance run --once
 ```
 
 ## 四种使用方式
@@ -1226,12 +1228,16 @@ transaction 与 SQLite 错误 authority 不转移给 wire contract。
   board consistency、label ontology ledger consistency，并报告 Knowledge Substrate 的
   `index_outbox` backlog、derived store dirty/error 状态和 per-store last_error。派生层
   异常不改变 SQLite task truth；operator 通过 sync/rebuild 恢复 Tantivy/Oxigraph/LanceDB。
-- Migration 026 引入 database-scoped Projection v2 control plane。SQLite 为每个 store
+- Migration 026 引入 database-scoped Projection v2 control plane；Migration 027
+  增加数据库级 singleton maintenance owner lease。SQLite 为每个 store
   保存 fenced lease、连续 delivery checkpoint 与 active/previous/building generation；
   provider snapshot evidence 同时绑定 database/protocol/schema/provider、完整 canonical
   corpus coverage、board-scoped delivery coverage、cursor 与 fence。物理 generation
   pointer 先做 CAS/read-back，并验证上一物理 generation 仍可读取，随后 SQLite 才发布
   active generation；pointer swap 后进程退出可由新 fence owner reconcile 恢复。
+  若 SQLite active 对应的物理 generation 已缺失或损坏，maintenance 只能在新 snapshot
+  与 catch-up 完成后走显式 recovery publish；该路径仍校验 database/provider/lease/fence，
+  且只把实际仍可读的旧 generation 记作 previous。
 - v1 writer 与 v2 owner 不能同时写一个 store。Projection v2 在 generation begin
   transaction 即取得 control plane；legacy writer、v2 backend 调用和 database replace
   在完整物理写周期共享 per-database/per-store writer barrier。由此 generation 构建、
@@ -1239,6 +1245,16 @@ transaction 与 SQLite 错误 authority 不转移给 wire contract。
   rebuild/sync 交错；legacy guard 也会拒绝已有 building generation 的异常中间状态。
   v2 acknowledgement reducer 再兼容更新旧 outbox/dirty 摘要，供迁移期 reader 和 doctor
   使用。任何 derived failure 都不回滚 canonical mutation。
+- `kanban maintenance run` 与 `kanban serve` 共用同一个 runtime/service path。runtime
+  在完整生命周期持有 database owner，并按 store 取得独立 fenced lease；Tantivy v2
+  使用 `index/v2/tantivy_tasks/generations/<generation>` immutable generation、复合
+  `(board_id, task_id)` document key 和强制 board query filter。新 generation publish
+  后保留上一 generation；reader 只在 control state、provider fingerprint、物理
+  generation 与 delivery health 全部匹配时使用 Tantivy，否则返回 SQLite canonical
+  结果，并在 search/index machine metadata 中返回 database identity、protocol、
+  generation、resolved board id 与结构化 fallback reason。旧 server single-board
+  Tantivy timer 已由该 DB-scoped owner 替代；owner conflict、pass failure 或 lease
+  heartbeat failure 会进入有界重试/重新领取，长 poll interval 期间仍按 TTL heartbeat。
 - `lancedb_label_atoms` 当前仍由独立的 per-board dirty/rebuild 协议驱动；在 label
   semantics mutation 尚未写入 Projection v2 delivery 流之前，generation begin 会
   fail closed，避免 snapshot 发布后遗漏后续 atom mutation。它不能仅凭 corpus
@@ -2753,7 +2769,8 @@ Knowledge Substrate 表只支持实体身份、关系镜像、派生 outbox 和�
 
 ### 13.5 Projection v2 consistency domain
 
-表：`projection_database`、`projection_store_state`、`projection_deliveries`
+表：`projection_database`、`projection_store_state`、`projection_deliveries`、
+`projection_maintenance_owner`
 
 `projection_database` 为一份 SQLite 文件保存稳定 `database_instance_id` 和 projection
 protocol version。`projection_store_state` 为每个物理 store 保存 schema version、
@@ -2763,6 +2780,9 @@ lease 和 lifecycle/error 状态。
 `projection_deliveries` 把一个 `index_outbox` row 展开为各 store 的 board-scoped delivery；
 唯一键是 `(outbox_id, store_name)`，每个 delivery 同时携带不可空 `board_id`、连续
 store cursor、claim token、lease token、fence epoch 和 target generation。
+`projection_maintenance_owner` 是 singleton database runtime lease，保存 owner、opaque
+token、mode、expiry 与 heartbeat；public status 不返回 token。lease 获取、续约与释放
+都比较 owner + token，过期 owner 无法清除后继 owner。
 
 Migration 026 在 fanout/backfill 前验证每个相关 outbox row 能从 source event 或 entity
 得到唯一 board；无法解析、orphan source event 或 event/entity board 冲突时 fail closed，
@@ -2790,6 +2810,10 @@ generation。现阶段继续使用下述 `label_atom_index_boards` per-board dir
 generation（若存在）仍可按 generation id 读取，SQLite 才原子发布 active/previous
 metadata。若进程在物理 pointer swap 后退出，新 fence owner 可检查同一 generation 的
 artifact evidence 并 reconcile SQLite publish。
+若 logical active 的物理 artifact 已不可读，正常 publish CAS 仍 fail closed。只有
+maintenance 的显式 recovery 路径可在新 snapshot/catch-up、当前 database/provider
+binding 与 fenced lease 均成立时发布替代 generation；SQLite previous metadata 改为
+实际可读且被物理 backend 保留的 generation，而不是伪造已丢失 artifact 的保留证据。
 
 `derived_store_state` 和 `index_outbox` 在迁移期保留为 v1 compatibility projection。
 generation begin 即把 store 切到 v2 control plane；legacy 与 v2 writer 在完整物理写周期
@@ -4643,7 +4667,7 @@ kanban run logs <run_id> --tail-bytes 65536
 kanban serve
 kanban serve --quiet
 kanban serve --log-level warn
-kanban serve --search-sync-interval-ms 5000
+kanban serve --maintenance-interval-ms 5000
 
 kanban dispatch
 kanban dispatch --once
@@ -4676,11 +4700,13 @@ lock, exits `0`, and writes no stdout. `--quiet` and `--log-level off` suppress
 the graceful shutdown notice. A second Ctrl-C during shutdown exits immediately
 with code `130`.
 
-`kanban serve` starts a conservative background search sync loop when the binary is
-built with `tantivy-backend`. The loop makes one prompt startup attempt and then
-calls `sync_search_index` every `--search-sync-interval-ms` milliseconds
-(default `5000`). Use `--search-sync-interval-ms 0` to disable it. Without
-`tantivy-backend`, the flag is accepted and no background index task is started.
+`kanban serve` starts one database-scoped Projection v2 maintenance owner when the
+binary is built with `tantivy-backend`. The owner makes one prompt startup pass and
+then processes every board every `--maintenance-interval-ms` milliseconds (default
+`5000`). Use `--maintenance-interval-ms 0` to disable it. The deprecated
+`--search-sync-interval-ms` spelling remains a visible alias, but it no longer starts
+a board-specific v1 writer. Without `tantivy-backend`, the flag is accepted and no
+background maintenance task is started.
 
 ---
 
@@ -4757,6 +4783,9 @@ kanban index sync
 - `sync` consumes `task_events.id` after the stored high-watermark, delete+reindexes affected task aggregates, then advances the high-watermark only after a successful commit.
 - Task mutations do not update Tantivy inside their transactions; run `kanban index sync` after changes, rely on `kanban serve` background sync for local server/desktop sessions, or use `kanban index rebuild` to replace the derived index.
 
+`kanban index rebuild/sync` are v1 compatibility commands. Once
+`tantivy_tasks.control_plane=v2`, they fail closed; use `kanban maintenance` instead.
+
 The persisted setting key is board-scoped as `search.tasks.state.<board_id>`. Its JSON contains `schema_version`, `index_version`, `backend`, `index_name`, `board_id`, `last_event_id`, `dirty`, `updated_at`, and optional `message`; it is included in JSONL export/import through existing `app_settings` handling.
 
 JSON data shape:
@@ -4779,6 +4808,47 @@ JSON data shape:
 With Tantivy enabled after rebuild, `backend` is `tantivy`, `derived_index` is `true`, and `index_version` is `tasks-v1`.
 When the current `MAX(task_events.id)` is greater than the stored `last_event_id`, `stale=true` and `index_lag_events` reports the event lag. Search falls back to SQLite while stale to preserve current-result correctness.
 Background sync errors do not make search fail open to stale Tantivy results; the next search still reports stale/fallback metadata and returns current SQLite results when the derived index is behind or unusable.
+
+---
+
+### 14.3 `kanban maintenance`
+
+```bash
+kanban maintenance run --once
+kanban maintenance run --poll-interval-ms 5000
+kanban maintenance status
+kanban maintenance rebuild tantivy_tasks
+kanban maintenance rebuild --all
+kanban doctor --strict-derived
+```
+
+The runtime has one fenced owner per SQLite database, not one timer per board.
+`run --once` performs a bounded pass and releases the owner; `run` without
+`--once` retains the owner until Ctrl-C. `status --json` exposes the stable
+database identity and protocol plus owner/mode/lease, per-store control plane,
+active/previous/building generation, provider fingerprint, snapshot/checkpoint
+cursors, pending/running/failed counts, pending age, last error, and structured
+`fallback_reason`.
+
+Search and index JSON metadata use the same projection identity vocabulary:
+`database_instance_id`, `protocol_version`, `generation`, `resolved_board_id`,
+and `fallback_reason`. Legacy or pre-v2 reads keep the identity fields nullable,
+but `resolved_board_id` is always the canonical board id selected by the service.
+
+`rebuild` creates an immutable generation from a full board-scoped canonical
+snapshot, catches up post-snapshot deliveries, then publishes under the store
+fence. The previous published generation is retained. `--all` means every store
+currently wired to the unified runtime; during staged rollout this set grows from
+Tantivy to Oxigraph and the two LanceDB projections.
+If status proves the SQLite active generation is physically missing or unreadable,
+the runtime performs an explicit fenced recovery publish from a fresh snapshot.
+It never treats that path as a normal pointer CAS, and records only a still-readable
+older generation as `previous`.
+
+`doctor --strict-derived` preserves the normal doctor checks and additionally
+exits with `integrity_check_failed` (8) unless every Projection v2 store is ready,
+has an active generation, and has no fallback reason. It never clears outbox rows,
+changes a watermark, or repairs a store.
 
 ---
 
@@ -7215,7 +7285,20 @@ Response:
 }
 ```
 
-Task mutations do not write Tantivy inside their SQLite transactions. When served by `kanban serve` with `tantivy-backend`, a background loop makes one prompt startup `sync_search_index` attempt and then syncs every `--search-sync-interval-ms` milliseconds by default (`5000`; `0` disables). Manual `kanban index sync` remains available after normal task changes, and `kanban index rebuild` replaces the derived index. The Tantivy state is stored in board-scoped `app_settings` under `search.tasks.state.<board_id>` and round-trips through existing export/import.
+Task mutations do not write Tantivy inside their SQLite transactions. When served by
+`kanban serve` with `tantivy-backend`, one database-scoped Projection v2 owner makes
+an immediate pass and then runs every `--maintenance-interval-ms` milliseconds
+(default `5000`; `0` disables). It processes all boards through the same fenced
+maintenance service used by the CLI. `--search-sync-interval-ms` is a deprecated
+alias and no longer starts a single-board v1 writer. Manual `kanban index
+sync/rebuild` remain v1 compatibility commands only and reject a store already
+owned by Projection v2.
+
+Search result metadata and `/api/v1/search/status` expose
+`database_instance_id`, `protocol_version`, `generation`, `resolved_board_id`,
+and `fallback_reason`. Projection v2 fills the identity fields even when the
+reader falls back to canonical SQLite; legacy/no-index reads leave them null.
+`resolved_board_id` is always the canonical board id after board resolution.
 
 ### 13.2 Search task windows by status
 

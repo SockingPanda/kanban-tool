@@ -16,8 +16,9 @@ use crate::{
     CliConfigShowOutput, CliDependencyAddOutput, CliDependencyListOutput,
     CliDependencyRemoveOutput, CliDerivedStatusOutput, CliDoctorOutput, CliEntityListOutput,
     CliEntityShowOutput, CliEventsOutput, CliIndexDoctorOutput, CliIndexStatusOutput,
-    CliInitOutput, CliOutboxListOutput, CliRunLogsOutput, CliRunShowOutput, CliRunsOutput,
-    CliStatsOutput, CliTaskArchiveOutput, CliTaskBlockOutput, CliTaskClaimOutput,
+    CliInitOutput, CliMaintenanceRebuildOutput, CliMaintenanceRunOutput,
+    CliMaintenanceStatusOutput, CliOutboxListOutput, CliRunLogsOutput, CliRunShowOutput,
+    CliRunsOutput, CliStatsOutput, CliTaskArchiveOutput, CliTaskBlockOutput, CliTaskClaimOutput,
     CliTaskCompleteOutput, CliTaskCreateOutput, CliTaskDoneOutput, CliTaskHeartbeatOutput,
     CliTaskListOutput, CliTaskPromoteOutput, CliTaskReclaimOutput, CliTaskReopenOutput,
     CliTaskReviewOutput, CliTaskShowOutput, CliTaskStartOutput, CliTaskStepAddOutput,
@@ -164,6 +165,33 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/cli/index-doctor-output.v1.valid.json",
         "schemas/fixtures/cli/index-doctor-output.v1.invalid.json",
         CliIndexDoctorOutput
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-status-output:v1",
+        "cli/maintenance-status-output.v1.schema.json",
+        "Kanban CLI maintenance status output v1",
+        "cli.maintenance-status.output",
+        "schemas/fixtures/cli/maintenance-status-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-status-output.v1.invalid.json",
+        CliMaintenanceStatusOutput
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-run-output:v1",
+        "cli/maintenance-run-output.v1.schema.json",
+        "Kanban CLI maintenance run output v1",
+        "cli.maintenance-run.output",
+        "schemas/fixtures/cli/maintenance-run-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-run-output.v1.invalid.json",
+        CliMaintenanceRunOutput
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-rebuild-output:v1",
+        "cli/maintenance-rebuild-output.v1.schema.json",
+        "Kanban CLI maintenance rebuild output v1",
+        "cli.maintenance-rebuild.output",
+        "schemas/fixtures/cli/maintenance-rebuild-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-rebuild-output.v1.invalid.json",
+        CliMaintenanceRebuildOutput
     ),
     response_schema_root!(
         "urn:kanban-tool:schema:cli:derived-status-output:v1",

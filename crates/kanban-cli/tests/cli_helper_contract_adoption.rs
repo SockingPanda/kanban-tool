@@ -262,6 +262,8 @@ fn normalize_index_status(
     fixture_message: &str,
 ) -> anyhow::Result<Value> {
     output["data"]["last_event_id"] = json!(10);
+    anyhow::ensure!(output["data"]["resolved_board_id"].as_str().is_some());
+    output["data"]["resolved_board_id"] = json!("b_fixture");
     let message = output["data"]["message"]
         .as_str()
         .context("index status message")?;
@@ -304,6 +306,8 @@ fn normalize_search(mut output: Value, task_id: &str, board_id: &str) -> anyhow:
     task.insert("created_at".to_owned(), json!(100));
     task.insert("updated_at".to_owned(), json!(101));
     output["meta"]["last_event_id"] = json!(10);
+    anyhow::ensure!(output["meta"]["resolved_board_id"] == board_id);
+    output["meta"]["resolved_board_id"] = json!("b_fixture");
     Ok(output)
 }
 

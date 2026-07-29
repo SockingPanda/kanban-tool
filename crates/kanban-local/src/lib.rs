@@ -17,6 +17,7 @@ pub use kanban_contract::{
 };
 
 pub const INDEX_LAYOUT_VERSION: &str = "v1";
+pub const PROJECTION_INDEX_LAYOUT_VERSION: &str = "v2";
 pub const TASK_INDEX_NAME: &str = "tasks";
 pub const GRAPH_STORE_NAME: &str = "graph";
 pub const VECTOR_STORE_NAME: &str = "vectors";
@@ -289,6 +290,26 @@ pub fn graph_store_path(db_path: impl Into<PathBuf>) -> PathBuf {
 
 pub fn vector_store_path(db_path: impl Into<PathBuf>) -> PathBuf {
     index_root_path(db_path).join(VECTOR_STORE_NAME)
+}
+
+pub fn projection_store_root_path(
+    db_path: impl Into<PathBuf>,
+    store_name: &str,
+) -> io::Result<PathBuf> {
+    if store_name.is_empty()
+        || !store_name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "derived store name is not projection-path safe",
+        ));
+    }
+    Ok(kb_data_dir_for_db(db_path)
+        .join("index")
+        .join(PROJECTION_INDEX_LAYOUT_VERSION)
+        .join(store_name))
 }
 
 pub fn blob_root_path(db_path: impl Into<PathBuf>) -> PathBuf {

@@ -56,7 +56,9 @@ const SIGNAL_LEDGER_MIGRATION: &str = include_str!("../../../migrations/024_sign
 const GENERIC_SIGNAL_LEDGER_MIGRATION: &str =
     include_str!("../../../migrations/025_generic_signal_ledger.sql");
 const PROJECTION_V2_MIGRATION: &str = include_str!("../../../migrations/026_projection_v2.sql");
-const LATEST_MIGRATION_VERSION: i64 = 26;
+const PROJECTION_MAINTENANCE_OWNER_MIGRATION: &str =
+    include_str!("../../../migrations/027_projection_maintenance_owner.sql");
+const LATEST_MIGRATION_VERSION: i64 = 27;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &[
     "fnv64:0ca871be950fc8a6",
     "fnv64:3b08da4e2b6041f5",
@@ -200,6 +202,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 26,
         name: "026_projection_v2",
         sql: PROJECTION_V2_MIGRATION,
+    },
+    Migration {
+        version: 27,
+        name: "027_projection_maintenance_owner",
+        sql: PROJECTION_MAINTENANCE_OWNER_MIGRATION,
     },
 ];
 
@@ -808,6 +815,18 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
                 "claim_fence_epoch",
                 "claim_generation",
                 "published_generation",
+                "updated_at",
+            ][..],
+        ),
+        (
+            "projection_maintenance_owner",
+            &[
+                "owner",
+                "lease_token",
+                "lease_expires_at",
+                "mode",
+                "started_at",
+                "last_heartbeat_at",
                 "updated_at",
             ][..],
         ),

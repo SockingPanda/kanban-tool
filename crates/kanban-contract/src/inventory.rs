@@ -759,6 +759,33 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "index_doctor_output_fixture_is_consumed_by_public_contract"
     ),
     adopted_cli_output_contract!(
+        "cli.maintenance-status.output",
+        "maintenance status",
+        "urn:kanban-tool:schema:cli:maintenance-status-output:v1",
+        "schemas/fixtures/cli/maintenance-status-output.v1.valid.json",
+        "cli_projection_maintenance_contract_adoption",
+        "maintenance_status_output_fixture_is_produced_by_real_cli",
+        "maintenance_status_output_fixture_is_consumed_by_public_contract"
+    ),
+    adopted_cli_output_contract!(
+        "cli.maintenance-run.output",
+        "maintenance run",
+        "urn:kanban-tool:schema:cli:maintenance-run-output:v1",
+        "schemas/fixtures/cli/maintenance-run-output.v1.valid.json",
+        "cli_projection_maintenance_contract_adoption",
+        "maintenance_run_output_fixture_is_produced_by_real_cli",
+        "maintenance_run_output_fixture_is_consumed_by_public_contract"
+    ),
+    adopted_cli_output_contract!(
+        "cli.maintenance-rebuild.output",
+        "maintenance rebuild",
+        "urn:kanban-tool:schema:cli:maintenance-rebuild-output:v1",
+        "schemas/fixtures/cli/maintenance-rebuild-output.v1.valid.json",
+        "cli_projection_maintenance_contract_adoption",
+        "maintenance_rebuild_output_fixture_is_produced_by_real_cli",
+        "maintenance_rebuild_output_fixture_is_consumed_by_public_contract"
+    ),
+    adopted_cli_output_contract!(
         "cli.derived-status.output",
         "derived status",
         "urn:kanban-tool:schema:cli:derived-status-output:v1",

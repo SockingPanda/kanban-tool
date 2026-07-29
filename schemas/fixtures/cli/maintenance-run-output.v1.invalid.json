@@ -1,0 +1,10 @@
+{
+  "data": {
+    "database_instance_id": "db_fixture",
+    "protocol_version": 2,
+    "owner": "fixture-owner",
+    "mode": "once",
+    "stores": [],
+    "unexpected": true
+  }
+}

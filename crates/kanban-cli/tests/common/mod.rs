@@ -230,6 +230,19 @@ impl CmdResult {
         Ok(())
     }
 
+    pub fn json_failure_code_containing(
+        self,
+        expected_code: i32,
+        expected: &str,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.output.status.code() == Some(expected_code),
+            "expected exit code {expected_code}, got {:?}",
+            self.output.status.code()
+        );
+        self.json_failure_containing(expected)
+    }
+
     pub fn json_failure_containing_any(self, expected: &[&str]) -> anyhow::Result<()> {
         let json = self.json_failure()?;
         let message = json["error"]["message"].as_str().unwrap_or_default();

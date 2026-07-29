@@ -1,7 +1,7 @@
 {
   "contract_inventory": {
     "path": "operations.json",
-    "sha256": "sha256:bce801f47a3cf3e9ac8073adb4007d61d36e2518b195954a46421e072e52eb61"
+    "sha256": "sha256:53b07af3c7484ad0e4baab984398a29f593a6b0af8f91fe979c54c46d35c3b2b"
   },
   "roots": [
     {
@@ -31,7 +31,7 @@
       "invalid_fixture": "schemas/fixtures/cli/index-status-output.v1.invalid.json",
       "path": "cli/index-status-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/index-status-output.v1.valid.json",
-      "sha256": "sha256:9164f94931cbdffdc301740c5458fe7d679afbd09329683341700aa02e97e29f",
+      "sha256": "sha256:50db2d8e550cd77ea8fe1b6e4b3788503f32aa435d608a17e14020c2c0aa646f",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -41,7 +41,37 @@
       "invalid_fixture": "schemas/fixtures/cli/index-doctor-output.v1.invalid.json",
       "path": "cli/index-doctor-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/index-doctor-output.v1.valid.json",
-      "sha256": "sha256:666d893c14d4a3ef5be04a97da262624fc9c22b9e1406a08e97730cc46ead070",
+      "sha256": "sha256:50131c6282f5c118bfb45538d4e0d892c66f75a54059648720f3eb63f1d1ea45",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "cli.maintenance-status.output",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:cli:maintenance-status-output:v1",
+      "invalid_fixture": "schemas/fixtures/cli/maintenance-status-output.v1.invalid.json",
+      "path": "cli/maintenance-status-output.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/cli/maintenance-status-output.v1.valid.json",
+      "sha256": "sha256:b68a339feb8db3689e6de591742d0796da482278f5447f74feae0ae3617c9753",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "cli.maintenance-run.output",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:cli:maintenance-run-output:v1",
+      "invalid_fixture": "schemas/fixtures/cli/maintenance-run-output.v1.invalid.json",
+      "path": "cli/maintenance-run-output.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/cli/maintenance-run-output.v1.valid.json",
+      "sha256": "sha256:54b43f711b4a32f0203f9975f707b69332dbf260cf32f7ae6565caa4b888a689",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "cli.maintenance-rebuild.output",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:cli:maintenance-rebuild-output:v1",
+      "invalid_fixture": "schemas/fixtures/cli/maintenance-rebuild-output.v1.invalid.json",
+      "path": "cli/maintenance-rebuild-output.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/cli/maintenance-rebuild-output.v1.valid.json",
+      "sha256": "sha256:1f12d91b6844436463d80ac06b984f917cdbb2c1e86ae5f95ded6971b15e2860",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -981,7 +1011,7 @@
       "invalid_fixture": "schemas/fixtures/cli/search-output.v1.invalid.json",
       "path": "cli/search-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/search-output.v1.valid.json",
-      "sha256": "sha256:5728b12238378b36fcac9da39046335eeb12e90cf49dccb7ddde699a02e412b3",
+      "sha256": "sha256:b41b9e9bb023a69667b1ea179bb82955ad44d72155fc1bd2c1decb4fb24ba6ea",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -991,7 +1021,7 @@
       "invalid_fixture": "schemas/fixtures/cli/index-rebuild-output.v1.invalid.json",
       "path": "cli/index-rebuild-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/index-rebuild-output.v1.valid.json",
-      "sha256": "sha256:6d8a10877329abdcfad4b76582a228afa70152e915c29834718bd6871e3317b5",
+      "sha256": "sha256:2a2862798849e5494a48e5001938f8e7ae5b01ee8c4066d25b4c3157a4c828a0",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1001,7 +1031,7 @@
       "invalid_fixture": "schemas/fixtures/cli/index-sync-output.v1.invalid.json",
       "path": "cli/index-sync-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/index-sync-output.v1.valid.json",
-      "sha256": "sha256:ef2380cb659c97806209e3a40da0285f28b6c4a065596cab8eed3b2b6d0f6cc1",
+      "sha256": "sha256:a05f3dd17159cff36778ef954376e6d1a1dc63eaf94ff628181915e38131d101",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1181,7 +1211,7 @@
       "invalid_fixture": "schemas/fixtures/api/search-tasks-response.v1.invalid.json",
       "path": "api/search-tasks-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/search-tasks-response.v1.valid.json",
-      "sha256": "sha256:a90b8dfefd25e7307a0d7ca0d2b4a6e6d625727051fa55ce9583bd0538a7c2c7",
+      "sha256": "sha256:0c2acce73823d638fec437796f5bdd0af3cdbbab0f84da9eedff17bb909ff06c",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1201,7 +1231,7 @@
       "invalid_fixture": "schemas/fixtures/api/search-tasks-by-status-response.v1.invalid.json",
       "path": "api/search-tasks-by-status-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/search-tasks-by-status-response.v1.valid.json",
-      "sha256": "sha256:3b3f31f57dac8614b73abf44c6fa9c7804d2c7a980cd37854d13bd9b38041385",
+      "sha256": "sha256:2d41c1d02e1e9e3258ba32963ea9750fdcb91e7dd18f9ead7276cceb6e336840",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1221,7 +1251,7 @@
       "invalid_fixture": "schemas/fixtures/api/search-status-response.v1.invalid.json",
       "path": "api/search-status-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/search-status-response.v1.valid.json",
-      "sha256": "sha256:a3c4e5b07864b0405f867d33fa3b86aa466dc9ec1e41b2196ed84dee4c1a6367",
+      "sha256": "sha256:3a9eabc8dc30bfc9a93e84823caea47f5e06c95044bfe13d31f06314ac5480b0",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -4808,6 +4838,6 @@
   "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
   "surface_catalog": {
     "path": "surface-operations.json",
-    "sha256": "sha256:6675c7ee87d30e6f123500381c71847db5042381e3545dcd28184acddc937c43"
+    "sha256": "sha256:85565c5e9c2ac5d6bac6520acf27e3293b6d37c637daa03328eaa302ee864e31"
   }
 }

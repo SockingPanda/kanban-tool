@@ -20,7 +20,16 @@ fn consume<T: DeserializeOwned>(operation: &str) -> anyhow::Result<()> {
 
 fn reject_missing_and_unknown_fields<T: DeserializeOwned>(operation: &str) -> anyhow::Result<()> {
     let valid = fixture(operation)?;
-    for key in ["index_version", "last_event_id", "index_lag_events"] {
+    for key in [
+        "database_instance_id",
+        "protocol_version",
+        "generation",
+        "resolved_board_id",
+        "fallback_reason",
+        "index_version",
+        "last_event_id",
+        "index_lag_events",
+    ] {
         let mut missing = valid.clone();
         missing["data"]
             .as_object_mut()
@@ -56,12 +65,18 @@ fn normalize_sqlite_status(mut output: Value) -> anyhow::Result<Value> {
     anyhow::ensure!(data["index_version"].is_null());
     anyhow::ensure!(data["last_event_id"].as_i64().is_some());
     anyhow::ensure!(data["index_lag_events"] == 0);
+    anyhow::ensure!(data["database_instance_id"].is_null());
+    anyhow::ensure!(data["protocol_version"].is_null());
+    anyhow::ensure!(data["generation"].is_null());
+    anyhow::ensure!(data["resolved_board_id"].as_str().is_some());
+    anyhow::ensure!(data["fallback_reason"].is_null());
     anyhow::ensure!(
         data["message"]
             .as_str()
             .is_some_and(|message| message.contains("SQLite fallback"))
     );
     data.insert("last_event_id".to_owned(), json!(0));
+    data.insert("resolved_board_id".to_owned(), json!("b_fixture"));
     Ok(output)
 }
 

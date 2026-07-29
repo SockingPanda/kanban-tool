@@ -7,7 +7,7 @@ use kanban_sqlite::init::init_database;
 use crate::args::{ServeArgs, ServeLogLevel};
 use crate::commands::common::invalid_input;
 
-pub(crate) fn serve(args: ServeArgs, db_path: PathBuf, board: &str, actor: String) -> Result<()> {
+pub(crate) fn serve(args: ServeArgs, db_path: PathBuf, actor: String) -> Result<()> {
     let addr: SocketAddr = format!("{}:{}", args.host, args.port)
         .parse()
         .with_context(|| format!("invalid bind address {}:{}", args.host, args.port))?;
@@ -27,12 +27,12 @@ pub(crate) fn serve(args: ServeArgs, db_path: PathBuf, board: &str, actor: Strin
     );
     let runtime = tokio::runtime::Runtime::new().context("failed to start tokio runtime")?;
     runtime
-        .block_on(kanban_server::serve_with_search_sync_shutdown(
+        .block_on(kanban_server::serve_with_maintenance_shutdown(
             addr,
-            kanban_server::AppState::new(db_path, actor),
-            kanban_server::SearchSyncConfig::new(
-                board,
-                Duration::from_millis(args.search_sync_interval_ms),
+            kanban_server::AppState::new(db_path, actor.clone()),
+            kanban_server::MaintenanceConfig::new(
+                format!("kanban-server:{actor}"),
+                Duration::from_millis(args.maintenance_interval_ms),
             ),
             serve_shutdown_signal(),
         ))

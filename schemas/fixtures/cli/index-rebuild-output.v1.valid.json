@@ -1,1 +1,1 @@
-{"data":{"backend":"tantivy","derived_index":true,"stale":false,"index_version":"tasks-v1","last_event_id":10,"index_lag_events":0,"message":"Rebuilt Tantivy task index at <INDEX_PATH>"}}
+{"data":{"backend":"tantivy","derived_index":true,"stale":false,"database_instance_id":null,"protocol_version":null,"generation":null,"resolved_board_id":"b_fixture","fallback_reason":null,"index_version":"tasks-v1","last_event_id":10,"index_lag_events":0,"message":"Rebuilt Tantivy task index at <INDEX_PATH>"}}

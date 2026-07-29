@@ -134,6 +134,12 @@ pub trait ProjectionStoreBackend {
     fn inspect_active(&self) -> Result<Option<ProjectionArtifactEvidence>>;
 
     fn inspect_generation(&self, generation: &str) -> Result<Option<ProjectionArtifactEvidence>>;
+
+    fn quarantine_generation(&self, generation: &str) -> Result<()> {
+        Err(KanbanError::Conflict(format!(
+            "projection backend cannot quarantine generation {generation}"
+        )))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -176,21 +182,52 @@ pub struct ProjectionStoreStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectionMaintenanceOwnerStatus {
+    pub owner: Option<String>,
+    pub mode: Option<String>,
+    pub lease_expires_at: Option<i64>,
+    pub last_heartbeat_at: Option<i64>,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectionStatus {
     pub database_instance_id: String,
     pub protocol_version: i64,
+    pub maintenance_owner: ProjectionMaintenanceOwnerStatus,
     pub stores: Vec<ProjectionStoreStatus>,
 }
 
 pub fn projection_status(path: impl AsRef<Path>) -> Result<ProjectionStatus> {
     let now = SystemClock.now_ms();
-    let conn = connect_file(path.as_ref())?;
+    let conn = super::maintenance::connect_existing_database(path.as_ref())?;
     let (database_instance_id, protocol_version) = conn
         .query_row(
             "SELECT database_instance_id,protocol_version \
              FROM projection_database WHERE singleton=1",
             [],
             |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(storage)?;
+    let maintenance_owner = conn
+        .query_row(
+            "SELECT owner,mode,lease_expires_at,last_heartbeat_at
+             FROM projection_maintenance_owner WHERE singleton=1",
+            [],
+            |row| {
+                let owner: Option<String> = row.get(0)?;
+                let mode: Option<String> = row.get(1)?;
+                let lease_expires_at: Option<i64> = row.get(2)?;
+                let last_heartbeat_at: Option<i64> = row.get(3)?;
+                Ok(ProjectionMaintenanceOwnerStatus {
+                    active: lease_expires_at.is_some_and(|expires_at| expires_at > now)
+                        && owner.is_some(),
+                    owner,
+                    mode,
+                    lease_expires_at,
+                    last_heartbeat_at,
+                })
+            },
         )
         .map_err(storage)?;
     let mut statement = conn
@@ -231,6 +268,7 @@ pub fn projection_status(path: impl AsRef<Path>) -> Result<ProjectionStatus> {
     Ok(ProjectionStatus {
         database_instance_id,
         protocol_version,
+        maintenance_owner,
         stores,
     })
 }
@@ -701,7 +739,108 @@ pub fn publish_projection_generation_with(
             )));
         }
         inspect_expected_previous(backend, expected_active.as_ref())?;
-        confirm_published_generation(path, store_name, owner, lease_token, &active)?;
+        confirm_published_generation(
+            path,
+            store_name,
+            owner,
+            lease_token,
+            &active,
+            expected_active.as_ref(),
+        )?;
+        Ok(active)
+    })();
+    if let Err(error) = &operation {
+        record_projection_error(path, store_name, &error.to_string())?;
+    }
+    operation
+}
+
+pub fn recover_projection_generation_with(
+    path: impl AsRef<Path>,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+) -> Result<ProjectionArtifactEvidence> {
+    let path = path.as_ref();
+    let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
+    let prepared = prepared_manifest(path, store_name, owner, lease_token)?;
+    validate_backend_binding(backend, &prepared.manifest)?;
+    let missing_active = active_artifact(path, store_name)?.ok_or_else(|| {
+        KanbanError::Conflict(format!(
+            "projection recovery requires a logical active generation for {store_name}"
+        ))
+    })?;
+    let expected_previous = previous_artifact(path, store_name)?;
+    let operation = (|| {
+        if backend
+            .inspect_generation(&missing_active.manifest.generation)?
+            .as_ref()
+            .is_some_and(|artifact| same_artifact(artifact, &missing_active))
+        {
+            return Err(KanbanError::Conflict(format!(
+                "projection recovery refused because logical active generation {} is still readable",
+                missing_active.manifest.generation
+            )));
+        }
+        let mut physical_active = backend.inspect_active()?;
+        for _ in 0..1_024 {
+            let Some(active) = physical_active.as_ref() else {
+                break;
+            };
+            if expected_previous
+                .as_ref()
+                .is_some_and(|previous| same_artifact(previous, active))
+            {
+                break;
+            }
+            let quarantined = active.clone();
+            backend.quarantine_generation(&quarantined.manifest.generation)?;
+            physical_active = backend.inspect_active()?;
+            if physical_active
+                .as_ref()
+                .is_some_and(|current| same_artifact(current, &quarantined))
+            {
+                return Err(KanbanError::Storage(format!(
+                    "projection backend did not quarantine unexpected generation {}",
+                    quarantined.manifest.generation
+                )));
+            }
+        }
+        if physical_active
+            .as_ref()
+            .is_some_and(|active| expected_previous.as_ref() != Some(active))
+        {
+            return Err(KanbanError::Conflict(format!(
+                "projection recovery found too many unexpected physical generations for {store_name}"
+            )));
+        }
+        let receipt = backend.publish_generation(physical_active.as_ref(), &prepared)?;
+        validate_artifact_evidence(&prepared.manifest, &receipt.active)?;
+        if receipt.retained_previous != physical_active {
+            return Err(KanbanError::Storage(format!(
+                "projection recovery did not retain the readable previous generation for {store_name}"
+            )));
+        }
+        let active = backend.inspect_active()?.ok_or_else(|| {
+            KanbanError::Storage(format!(
+                "projection recovery did not expose active generation for {store_name}"
+            ))
+        })?;
+        if !same_artifact(&receipt.active, &active) {
+            return Err(KanbanError::Storage(format!(
+                "projection recovery active generation readback mismatch for {store_name}"
+            )));
+        }
+        inspect_expected_previous(backend, physical_active.as_ref())?;
+        confirm_published_generation(
+            path,
+            store_name,
+            owner,
+            lease_token,
+            &active,
+            physical_active.as_ref(),
+        )?;
         Ok(active)
     })();
     if let Err(error) = &operation {
@@ -734,7 +873,14 @@ pub fn reconcile_projection_generation_with(
         }
         let expected_previous = active_artifact(path, store_name)?;
         inspect_expected_previous(backend, expected_previous.as_ref())?;
-        confirm_published_generation(path, store_name, owner, lease_token, &active)?;
+        confirm_published_generation(
+            path,
+            store_name,
+            owner,
+            lease_token,
+            &active,
+            expected_previous.as_ref(),
+        )?;
         Ok(active)
     })();
     if let Err(error) = &operation {
@@ -1013,6 +1159,7 @@ fn confirm_published_generation(
     owner: &str,
     lease_token: &str,
     active: &ProjectionArtifactEvidence,
+    retained_previous: Option<&ProjectionArtifactEvidence>,
 ) -> Result<()> {
     let now = SystemClock.now_ms();
     let conn = connect_file(path.as_ref())?;
@@ -1033,19 +1180,15 @@ fn confirm_published_generation(
                  {unfinished} delivery item(s) lack generation coverage"
             )));
         }
+        let previous = retained_previous.map(|evidence| &evidence.manifest);
         let changed = conn
             .execute(
                 "UPDATE projection_store_state \
-                 SET previous_generation=active_generation,\
-                     previous_fingerprint=active_fingerprint,\
-                     previous_fence_epoch=active_fence_epoch,\
-                     previous_snapshot_cursor=active_snapshot_cursor,\
-                     previous_provider=active_provider,\
-                     previous_provider_fingerprint=active_provider_fingerprint,\
-                     previous_canonical_count=active_canonical_count,\
-                     previous_canonical_digest=active_canonical_digest,\
-                     previous_delivery_count=active_delivery_count,\
-                     previous_delivery_digest=active_delivery_digest,\
+                 SET previous_generation=?6,previous_fingerprint=?7,\
+                     previous_fence_epoch=?8,previous_snapshot_cursor=?9,\
+                     previous_provider=?10,previous_provider_fingerprint=?11,\
+                     previous_canonical_count=?12,previous_canonical_digest=?13,\
+                     previous_delivery_count=?14,previous_delivery_digest=?15,\
                      active_generation=building_generation,\
                      active_fingerprint=building_fingerprint,\
                      active_fence_epoch=building_fence_epoch,\
@@ -1071,7 +1214,17 @@ fn confirm_published_generation(
                     store_name,
                     active.manifest.generation,
                     active.fingerprint,
-                    active.manifest.fence_epoch
+                    active.manifest.fence_epoch,
+                    previous.map(|manifest| manifest.generation.as_str()),
+                    retained_previous.map(|evidence| evidence.fingerprint.as_str()),
+                    previous.map(|manifest| manifest.fence_epoch),
+                    previous.map(|manifest| manifest.snapshot_cursor),
+                    previous.map(|manifest| manifest.provider.as_str()),
+                    previous.map(|manifest| manifest.provider_fingerprint.as_str()),
+                    previous.map(|manifest| manifest.canonical_item_count),
+                    previous.map(|manifest| manifest.canonical_digest.as_str()),
+                    previous.map(|manifest| manifest.delivery_item_count),
+                    previous.map(|manifest| manifest.delivery_digest.as_str()),
                 ],
             )
             .map_err(storage)?;
@@ -1188,7 +1341,10 @@ fn prepared_manifest(
     })
 }
 
-fn active_artifact(path: &Path, store_name: &str) -> Result<Option<ProjectionArtifactEvidence>> {
+pub(crate) fn active_artifact(
+    path: &Path,
+    store_name: &str,
+) -> Result<Option<ProjectionArtifactEvidence>> {
     let conn = connect_file(path)?;
     let row = conn
         .query_row(
@@ -1279,6 +1435,100 @@ fn active_artifact(path: &Path, store_name: &str) -> Result<Option<ProjectionArt
     Ok(Some(ProjectionArtifactEvidence {
         manifest,
         fingerprint: required_artifact_field(fingerprint, store_name, "active_fingerprint")?,
+    }))
+}
+
+fn previous_artifact(path: &Path, store_name: &str) -> Result<Option<ProjectionArtifactEvidence>> {
+    let conn = connect_file(path)?;
+    let row = conn
+        .query_row(
+            "SELECT database_instance_id,protocol_version,schema_version,
+                    previous_generation,previous_fence_epoch,previous_snapshot_cursor,
+                    previous_provider,previous_provider_fingerprint,
+                    previous_canonical_count,previous_canonical_digest,
+                    previous_delivery_count,previous_delivery_digest,previous_fingerprint
+             FROM projection_store_state WHERE store_name=?1",
+            [store_name],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<i64>>(4)?,
+                    row.get::<_, Option<i64>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
+                    row.get::<_, Option<i64>>(8)?,
+                    row.get::<_, Option<String>>(9)?,
+                    row.get::<_, Option<i64>>(10)?,
+                    row.get::<_, Option<String>>(11)?,
+                    row.get::<_, Option<String>>(12)?,
+                ))
+            },
+        )
+        .map_err(storage)?;
+    let (
+        database_instance_id,
+        protocol_version,
+        schema_version,
+        generation,
+        fence_epoch,
+        snapshot_cursor,
+        provider,
+        provider_fingerprint,
+        canonical_item_count,
+        canonical_digest,
+        delivery_item_count,
+        delivery_digest,
+        fingerprint,
+    ) = row;
+    let Some(generation) = generation else {
+        return Ok(None);
+    };
+    let manifest = ProjectionArtifactManifest {
+        store_name: store_name.to_owned(),
+        database_instance_id,
+        protocol_version,
+        schema_version,
+        generation,
+        fence_epoch: required_artifact_field(fence_epoch, store_name, "previous_fence_epoch")?,
+        snapshot_cursor: required_artifact_field(
+            snapshot_cursor,
+            store_name,
+            "previous_snapshot_cursor",
+        )?,
+        provider: required_artifact_field(provider, store_name, "previous_provider")?,
+        provider_fingerprint: required_artifact_field(
+            provider_fingerprint,
+            store_name,
+            "previous_provider_fingerprint",
+        )?,
+        canonical_item_count: required_artifact_field(
+            canonical_item_count,
+            store_name,
+            "previous_canonical_count",
+        )?,
+        canonical_digest: required_artifact_field(
+            canonical_digest,
+            store_name,
+            "previous_canonical_digest",
+        )?,
+        delivery_item_count: required_artifact_field(
+            delivery_item_count,
+            store_name,
+            "previous_delivery_count",
+        )?,
+        delivery_digest: required_artifact_field(
+            delivery_digest,
+            store_name,
+            "previous_delivery_digest",
+        )?,
+        fingerprint: fingerprint.clone(),
+    };
+    Ok(Some(ProjectionArtifactEvidence {
+        manifest,
+        fingerprint: required_artifact_field(fingerprint, store_name, "previous_fingerprint")?,
     }))
 }
 
@@ -1797,6 +2047,36 @@ fn same_artifact(
     actual: &ProjectionArtifactEvidence,
 ) -> bool {
     expected == actual
+}
+
+pub(crate) fn validate_physical_active_artifact_with(
+    path: &Path,
+    store_name: &str,
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+) -> Result<Option<ProjectionArtifactEvidence>> {
+    let Some(expected) = active_artifact(path, store_name)? else {
+        return Ok(None);
+    };
+    let generation = expected.manifest.generation.as_str();
+    let physical_generation = backend.inspect_generation(generation)?.ok_or_else(|| {
+        KanbanError::Storage(format!(
+            "active projection generation {generation} is missing"
+        ))
+    })?;
+    if !same_artifact(&expected, &physical_generation) {
+        return Err(KanbanError::Storage(format!(
+            "active projection generation {generation} evidence does not match SQLite"
+        )));
+    }
+    let physical_active = backend.inspect_active()?.ok_or_else(|| {
+        KanbanError::Storage("projection store has no physically published generation".to_owned())
+    })?;
+    if !same_artifact(&expected, &physical_active) {
+        return Err(KanbanError::Storage(format!(
+            "physically published projection generation does not match SQLite active generation {generation}"
+        )));
+    }
+    Ok(Some(expected))
 }
 
 fn advance_checkpoint(conn: &Connection, store_name: &str, now: i64) -> Result<i64> {

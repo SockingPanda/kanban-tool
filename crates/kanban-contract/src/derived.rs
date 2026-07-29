@@ -247,6 +247,31 @@ pub struct SearchMeta {
         feature = "schema",
         schemars(required, schema_with = "required_nullable_string_schema")
     )]
+    pub database_instance_id: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_i64_schema")
+    )]
+    pub protocol_version: Option<i64>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub generation: Option<String>,
+    pub resolved_board_id: String,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub fallback_reason: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
     pub index_version: Option<String>,
     #[serde(deserialize_with = "deserialize_required_nullable")]
     #[cfg_attr(
@@ -327,6 +352,31 @@ pub struct SearchStatus {
     pub backend: String,
     pub derived_index: bool,
     pub stale: bool,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub database_instance_id: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_i64_schema")
+    )]
+    pub protocol_version: Option<i64>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub generation: Option<String>,
+    pub resolved_board_id: String,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub fallback_reason: Option<String>,
     #[serde(deserialize_with = "deserialize_required_nullable")]
     #[cfg_attr(
         feature = "schema",

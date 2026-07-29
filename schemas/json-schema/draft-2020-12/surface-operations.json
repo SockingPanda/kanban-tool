@@ -1329,6 +1329,33 @@
   },
   {
     "contracts": [
+      "cli.maintenance-rebuild.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance rebuild",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-run.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance run",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-status.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance status",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
       "cli.label-add.output"
     ],
     "exclusion": null,

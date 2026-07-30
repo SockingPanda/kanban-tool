@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
     sync::Mutex,
 };
 
@@ -48,7 +49,16 @@ struct FakeProjectionStoreState {
     corrupt_publication_marker: Option<String>,
     publication_validation_failure: Option<String>,
     active_contents_validation_failure: bool,
+    label_mutation_during_apply: Option<ApplyLabelMutation>,
+    label_mutation_during_publish: Option<ApplyLabelMutation>,
     repair_calls: usize,
+}
+
+struct ApplyLabelMutation {
+    path: PathBuf,
+    board: String,
+    label_ref: String,
+    description: String,
 }
 
 #[derive(Clone, Copy)]
@@ -109,6 +119,46 @@ impl FakeProjectionStore {
         let store = Self::default();
         store.state.lock().expect("fake lock").bad_batch_receipt = true;
         store
+    }
+
+    fn reject_next_batch_receipt(&self) {
+        self.state.lock().expect("fake lock").bad_batch_receipt = true;
+    }
+
+    fn mutate_label_semantics_during_next_batch(
+        &self,
+        path: &Path,
+        board: &str,
+        label_ref: &str,
+        description: &str,
+    ) {
+        self.state
+            .lock()
+            .expect("fake lock")
+            .label_mutation_during_apply = Some(ApplyLabelMutation {
+            path: path.to_path_buf(),
+            board: board.to_owned(),
+            label_ref: label_ref.to_owned(),
+            description: description.to_owned(),
+        });
+    }
+
+    fn mutate_label_semantics_during_next_publish(
+        &self,
+        path: &Path,
+        board: &str,
+        label_ref: &str,
+        description: &str,
+    ) {
+        self.state
+            .lock()
+            .expect("fake lock")
+            .label_mutation_during_publish = Some(ApplyLabelMutation {
+            path: path.to_path_buf(),
+            board: board.to_owned(),
+            label_ref: label_ref.to_owned(),
+            description: description.to_owned(),
+        });
     }
 
     fn fail_after_publish_once(&self) {
@@ -287,6 +337,20 @@ impl ProjectionStoreBackend for FakeProjectionStore {
             ));
         }
         state.max_fence_epoch = batch.fence_epoch;
+        let bad_batch_receipt = state.bad_batch_receipt;
+        let label_mutation = state.label_mutation_during_apply.take();
+        drop(state);
+        if let Some(mutation) = label_mutation {
+            upsert_label_semantics(
+                &mutation.path,
+                &mutation.board,
+                UpsertLabelSemantics {
+                    label_ref: mutation.label_ref,
+                    description: Some(mutation.description),
+                    ..UpsertLabelSemantics::default()
+                },
+            )?;
+        }
         Ok(ProjectionBatchReceipt {
             store_name: batch.store_name.clone(),
             database_instance_id: batch.database_instance_id.clone(),
@@ -297,7 +361,7 @@ impl ProjectionStoreBackend for FakeProjectionStore {
             target_generation: batch.target_generation.clone(),
             lease_token: batch.lease_token.clone(),
             fence_epoch: batch.fence_epoch,
-            claim_token: if state.bad_batch_receipt {
+            claim_token: if bad_batch_receipt {
                 "pclaim_wrong".to_owned()
             } else {
                 batch.claim_token.clone()
@@ -351,6 +415,19 @@ impl ProjectionStoreBackend for FakeProjectionStore {
             return Err(KanbanError::Storage(
                 "simulated crash after pointer swap".to_owned(),
             ));
+        }
+        let label_mutation = state.label_mutation_during_publish.take();
+        drop(state);
+        if let Some(mutation) = label_mutation {
+            upsert_label_semantics(
+                &mutation.path,
+                &mutation.board,
+                UpsertLabelSemantics {
+                    label_ref: mutation.label_ref,
+                    description: Some(mutation.description),
+                    ..UpsertLabelSemantics::default()
+                },
+            )?;
         }
         Ok(ProjectionPublishReceipt {
             active: prepared.clone(),
@@ -2090,6 +2167,548 @@ fn label_atoms_enter_v2_after_mutation_delivery_migration() -> anyhow::Result<()
         &lease.lease_token,
         &backend,
     )?;
+    Ok(())
+}
+
+#[test]
+fn label_atom_v2_batch_ack_cleans_only_the_claimed_drained_boards() -> anyhow::Result<()> {
+    const LABEL_ATOMS: &str = "lancedb_label_atoms";
+    let temp = TempDb::new("projection_v2_label_atom_batch_ack_board_isolation")?;
+    init_database(&temp.path, "tester")?;
+    for index in 1..9 {
+        create_board(
+            &temp.path,
+            "tester",
+            CreateBoard {
+                slug: format!("label-board-{index}"),
+                name: format!("Label board {index}"),
+                description: None,
+            },
+        )?;
+    }
+    let conn = connect_file(&temp.path)?;
+    let boards = {
+        let mut statement = conn.prepare("SELECT id FROM boards ORDER BY slug LIMIT 9")?;
+        statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    assert_eq!(boards.len(), 9);
+    for (index, board_id) in boards.iter().enumerate() {
+        conn.execute(
+            "INSERT INTO label_atom_index_boards(
+               store_name,board_id,dirty,last_rebuild_at,last_error,updated_at
+             ) VALUES(?1,?2,0,NULL,NULL,?3)",
+            params![LABEL_ATOMS, board_id, 100 + index as i64],
+        )?;
+    }
+    drop(conn);
+
+    let backend = FakeProjectionStore::for_store(LABEL_ATOMS);
+    let lease = acquire_projection_lease(&temp.path, LABEL_ATOMS, "owner", 20_000)?;
+    begin_projection_generation(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+    prepare_projection_snapshot_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+    publish_projection_generation_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+
+    let conn = connect_file(&temp.path)?;
+    for (index, board_id) in boards.iter().enumerate() {
+        conn.execute(
+            "UPDATE label_atom_index_boards
+             SET dirty=1,last_error='preexisting provider diagnostic',updated_at=?1
+             WHERE store_name=?2 AND board_id=?3",
+            params![200 + index as i64, LABEL_ATOMS, board_id],
+        )?;
+    }
+    drop(conn);
+
+    let batch = run_projection_batch_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        1_000,
+        4,
+        &backend,
+    )?;
+    assert_eq!(batch.items.len(), 4);
+    let claimed_boards = batch
+        .items
+        .iter()
+        .map(|item| item.board_id.as_str())
+        .collect::<BTreeSet<_>>();
+
+    let conn = connect_file(&temp.path)?;
+    for board_id in &boards {
+        let (dirty, last_rebuild_at, last_error, updated_at): (
+            bool,
+            Option<i64>,
+            Option<String>,
+            i64,
+        ) = conn.query_row(
+            "SELECT dirty,last_rebuild_at,last_error,updated_at
+             FROM label_atom_index_boards
+             WHERE store_name=?1 AND board_id=?2",
+            params![LABEL_ATOMS, board_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+        if claimed_boards.contains(board_id.as_str()) {
+            assert!(!dirty, "claimed and drained board must become clean");
+            assert!(
+                last_rebuild_at.is_some(),
+                "compatibility generation must advance on successful batch ack"
+            );
+            assert_eq!(last_error, None);
+            assert_eq!(updated_at, last_rebuild_at.expect("compat generation"));
+        } else {
+            assert!(dirty, "unclaimed board must remain dirty");
+            assert_eq!(last_rebuild_at, None);
+            assert_eq!(
+                last_error.as_deref(),
+                Some("preexisting provider diagnostic")
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn label_atom_v2_batch_ack_does_not_clear_a_concurrent_canonical_mutation() -> anyhow::Result<()> {
+    const LABEL_ATOMS: &str = "lancedb_label_atoms";
+    let temp = TempDb::new("projection_v2_label_atom_batch_ack_concurrent_mutation")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("initial semantics".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+
+    let backend = FakeProjectionStore::for_store(LABEL_ATOMS);
+    let lease = acquire_projection_lease(&temp.path, LABEL_ATOMS, "owner", 20_000)?;
+    begin_projection_generation(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+    prepare_projection_snapshot_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+    publish_projection_generation_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+
+    let conn = connect_file(&temp.path)?;
+    let board_id: String =
+        conn.query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })?;
+    conn.execute(
+        "UPDATE label_atom_index_boards
+         SET dirty=0,last_rebuild_at=101,last_error=NULL,updated_at=101
+         WHERE store_name=?1 AND board_id=?2",
+        params![LABEL_ATOMS, board_id],
+    )?;
+    drop(conn);
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("mutation claimed by this batch".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    backend.mutate_label_semantics_during_next_batch(
+        &temp.path,
+        "default",
+        "backend",
+        "newer mutation created while provider applies the batch",
+    );
+
+    let batch = run_projection_batch_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        1_000,
+        1,
+        &backend,
+    )?;
+    assert_eq!(batch.items.len(), 1);
+
+    let conn = connect_file(&temp.path)?;
+    let board_state: (bool, Option<i64>, Option<String>) = conn.query_row(
+        "SELECT dirty,last_rebuild_at,last_error
+         FROM label_atom_index_boards
+         WHERE store_name=?1 AND board_id=?2",
+        params![LABEL_ATOMS, board_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(board_state, (true, Some(101), None));
+    let incomplete: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM projection_deliveries
+         WHERE store_name=?1 AND board_id=?2 AND status!='done'",
+        params![LABEL_ATOMS, board_id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(incomplete, 1, "new canonical work must remain pending");
+    Ok(())
+}
+
+#[test]
+fn label_atom_v2_batch_ack_failure_preserves_board_dirty_error_state() -> anyhow::Result<()> {
+    const LABEL_ATOMS: &str = "lancedb_label_atoms";
+    let temp = TempDb::new("projection_v2_label_atom_batch_ack_failure_state")?;
+    init_database(&temp.path, "tester")?;
+    let conn = connect_file(&temp.path)?;
+    let board_id: String =
+        conn.query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })?;
+    conn.execute(
+        "INSERT INTO label_atom_index_boards(
+           store_name,board_id,dirty,last_rebuild_at,last_error,updated_at
+         ) VALUES(?1,?2,0,101,NULL,101)",
+        params![LABEL_ATOMS, board_id],
+    )?;
+    drop(conn);
+
+    let backend = FakeProjectionStore::for_store(LABEL_ATOMS);
+    let lease = acquire_projection_lease(&temp.path, LABEL_ATOMS, "owner", 20_000)?;
+    begin_projection_generation(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+    prepare_projection_snapshot_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+    publish_projection_generation_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+    connect_file(&temp.path)?.execute(
+        "UPDATE label_atom_index_boards
+         SET dirty=1,last_error='provider unavailable',updated_at=202
+         WHERE store_name=?1 AND board_id=?2",
+        params![LABEL_ATOMS, board_id],
+    )?;
+    backend.reject_next_batch_receipt();
+
+    let error = result_err(run_projection_batch_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        1_000,
+        1,
+        &backend,
+    ))?;
+    assert!(error.to_string().contains("receipt mismatch"));
+
+    let conn = connect_file(&temp.path)?;
+    let board_state: (bool, Option<i64>, Option<String>) = conn.query_row(
+        "SELECT dirty,last_rebuild_at,last_error
+         FROM label_atom_index_boards
+         WHERE store_name=?1 AND board_id=?2",
+        params![LABEL_ATOMS, board_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(
+        board_state,
+        (true, Some(101), Some("provider unavailable".to_owned()))
+    );
+    let failed: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM projection_deliveries
+         WHERE store_name=?1 AND board_id=?2 AND status='failed'",
+        params![LABEL_ATOMS, board_id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(failed, 1);
+    Ok(())
+}
+
+#[test]
+fn label_atom_v2_snapshot_publish_cleans_nine_drained_boards() -> anyhow::Result<()> {
+    const LABEL_ATOMS: &str = "lancedb_label_atoms";
+    let temp = TempDb::new("projection_v2_label_atom_snapshot_publish_nine_boards")?;
+    init_database(&temp.path, "tester")?;
+    for index in 1..9 {
+        create_board(
+            &temp.path,
+            "tester",
+            CreateBoard {
+                slug: format!("snapshot-label-board-{index}"),
+                name: format!("Snapshot label board {index}"),
+                description: None,
+            },
+        )?;
+    }
+    let conn = connect_file(&temp.path)?;
+    let boards = {
+        let mut statement = conn.prepare("SELECT id FROM boards ORDER BY slug LIMIT 9")?;
+        statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    assert_eq!(boards.len(), 9);
+    for (index, board_id) in boards.iter().enumerate() {
+        conn.execute(
+            "INSERT INTO label_atom_index_boards(
+               store_name,board_id,dirty,last_rebuild_at,last_error,updated_at
+             ) VALUES(?1,?2,1,NULL,'snapshot pending',?3)",
+            params![LABEL_ATOMS, board_id, 300 + index as i64],
+        )?;
+    }
+    drop(conn);
+
+    let backend = FakeProjectionStore::for_store(LABEL_ATOMS);
+    let lease = acquire_projection_lease(&temp.path, LABEL_ATOMS, "owner", 20_000)?;
+    begin_projection_generation(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+    let prepared = prepare_projection_snapshot_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+
+    let conn = connect_file(&temp.path)?;
+    let dirty_before_publish: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM label_atom_index_boards
+         WHERE store_name=?1 AND dirty=1 AND last_rebuild_at IS NULL
+           AND last_error='snapshot pending'",
+        [LABEL_ATOMS],
+        |row| row.get(0),
+    )?;
+    let snapshot_done: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM projection_deliveries
+         WHERE store_name=?1 AND published_generation=?2 AND status='done'",
+        params![LABEL_ATOMS, prepared.manifest.generation],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        dirty_before_publish, 9,
+        "prepare coverage must not claim an unpublished generation is ready"
+    );
+    assert_eq!(snapshot_done, 9);
+    drop(conn);
+
+    publish_projection_generation_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+
+    let conn = connect_file(&temp.path)?;
+    for board_id in boards {
+        let state: (bool, Option<i64>, Option<String>, i64) = conn.query_row(
+            "SELECT dirty,last_rebuild_at,last_error,updated_at
+             FROM label_atom_index_boards
+             WHERE store_name=?1 AND board_id=?2",
+            params![LABEL_ATOMS, board_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+        assert!(!state.0);
+        assert!(state.1.is_some());
+        assert_eq!(state.2, None);
+        assert_eq!(state.3, state.1.expect("compat generation"));
+    }
+    Ok(())
+}
+
+#[test]
+fn label_atom_v2_snapshot_publish_failure_keeps_board_dirty_error_state() -> anyhow::Result<()> {
+    const LABEL_ATOMS: &str = "lancedb_label_atoms";
+    let temp = TempDb::new("projection_v2_label_atom_snapshot_publish_failure")?;
+    init_database(&temp.path, "tester")?;
+    let conn = connect_file(&temp.path)?;
+    let board_id: String =
+        conn.query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })?;
+    conn.execute(
+        "INSERT INTO label_atom_index_boards(
+           store_name,board_id,dirty,last_rebuild_at,last_error,updated_at
+         ) VALUES(?1,?2,1,NULL,'snapshot provider failed',401)",
+        params![LABEL_ATOMS, board_id],
+    )?;
+    drop(conn);
+
+    let backend = FakeProjectionStore::for_store(LABEL_ATOMS);
+    let lease = acquire_projection_lease(&temp.path, LABEL_ATOMS, "owner", 20_000)?;
+    begin_projection_generation(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+    prepare_projection_snapshot_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+    backend.fail_after_publish_once();
+    let error = result_err(publish_projection_generation_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+    assert!(error.to_string().contains("pointer swap"));
+
+    let state: (bool, Option<i64>, Option<String>) = connect_file(&temp.path)?.query_row(
+        "SELECT dirty,last_rebuild_at,last_error
+         FROM label_atom_index_boards
+         WHERE store_name=?1 AND board_id=?2",
+        params![LABEL_ATOMS, board_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(
+        state,
+        (true, None, Some("snapshot provider failed".to_owned()))
+    );
+    Ok(())
+}
+
+#[test]
+fn label_atom_v2_snapshot_confirm_rejects_and_preserves_a_concurrent_canonical_mutation()
+-> anyhow::Result<()> {
+    const LABEL_ATOMS: &str = "lancedb_label_atoms";
+    let temp = TempDb::new("projection_v2_label_atom_snapshot_concurrent_mutation")?;
+    init_database(&temp.path, "tester")?;
+    create_label(
+        &temp.path,
+        "default",
+        CreateLabel {
+            name: "backend".to_owned(),
+            color: None,
+        },
+    )?;
+    upsert_label_semantics(
+        &temp.path,
+        "default",
+        UpsertLabelSemantics {
+            label_ref: "backend".to_owned(),
+            description: Some("snapshot semantics".to_owned()),
+            ..UpsertLabelSemantics::default()
+        },
+    )?;
+    let conn = connect_file(&temp.path)?;
+    let board_id: String =
+        conn.query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })?;
+    drop(conn);
+
+    let backend = FakeProjectionStore::for_store(LABEL_ATOMS);
+    let lease = acquire_projection_lease(&temp.path, LABEL_ATOMS, "owner", 20_000)?;
+    begin_projection_generation(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+    prepare_projection_snapshot_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+    backend.mutate_label_semantics_during_next_publish(
+        &temp.path,
+        "default",
+        "backend",
+        "newer mutation committed after physical publish but before SQLite confirm",
+    );
+
+    let error = result_err(publish_projection_generation_with(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+    assert!(error.to_string().contains("catch-up is incomplete"));
+
+    let conn = connect_file(&temp.path)?;
+    let state: (bool, Option<i64>) = conn.query_row(
+        "SELECT dirty,last_rebuild_at
+         FROM label_atom_index_boards
+         WHERE store_name=?1 AND board_id=?2",
+        params![LABEL_ATOMS, board_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    assert_eq!(state, (true, None));
+    let pending: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM projection_deliveries
+         WHERE store_name=?1 AND board_id=?2 AND status='pending'",
+        params![LABEL_ATOMS, board_id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(pending, 1);
     Ok(())
 }
 

@@ -1698,6 +1698,13 @@ fn acknowledge_projection_batch(
             )
             .map_err(storage)?;
         if targets_active {
+            reconcile_label_atom_board_compatibility(
+                &conn,
+                &batch.store_name,
+                &batch.target_generation,
+                batch.items.iter().map(|item| item.board_id.as_str()),
+                now,
+            )?;
             reconcile_legacy_outbox(&conn, &batch.store_name, now)?;
             reconcile_legacy_store_state(&conn, &batch.store_name, now)?;
         }
@@ -1894,6 +1901,15 @@ fn confirm_published_generation(
         if changed != 1 {
             return Err(stale_generation(store_name));
         }
+        let covered_label_boards =
+            label_atom_generation_board_ids(&conn, store_name, &active.manifest.generation)?;
+        reconcile_label_atom_board_compatibility(
+            &conn,
+            store_name,
+            &active.manifest.generation,
+            covered_label_boards.iter().map(String::as_str),
+            now,
+        )?;
         reconcile_legacy_outbox(&conn, store_name, now)?;
         reconcile_legacy_store_state(&conn, store_name, now)?;
         Ok(())
@@ -3478,6 +3494,59 @@ fn reconcile_legacy_outbox(conn: &Connection, store_name: &str, now: i64) -> Res
         params![now, store_name],
     )
     .map_err(storage)?;
+    Ok(())
+}
+
+fn label_atom_generation_board_ids(
+    conn: &Connection,
+    store_name: &str,
+    generation: &str,
+) -> Result<Vec<String>> {
+    if store_name != LANCEDB_LABEL_ATOMS_STORE {
+        return Ok(Vec::new());
+    }
+    let mut statement = conn
+        .prepare(
+            "SELECT DISTINCT board_id
+             FROM projection_deliveries
+             WHERE store_name=?1 AND published_generation=?2
+             ORDER BY board_id",
+        )
+        .map_err(storage)?;
+    let rows = statement
+        .query_map(params![store_name, generation], |row| row.get(0))
+        .map_err(storage)?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)
+}
+
+fn reconcile_label_atom_board_compatibility<'a>(
+    conn: &Connection,
+    store_name: &str,
+    generation: &str,
+    board_ids: impl IntoIterator<Item = &'a str>,
+    now: i64,
+) -> Result<()> {
+    if store_name != LANCEDB_LABEL_ATOMS_STORE {
+        return Ok(());
+    }
+    for board_id in board_ids {
+        conn.execute(
+            "UPDATE label_atom_index_boards
+             SET dirty=0,last_rebuild_at=?1,last_error=NULL,updated_at=?1
+             WHERE store_name=?2 AND board_id=?3
+               AND EXISTS (
+                 SELECT 1 FROM projection_store_state
+                 WHERE store_name=?2 AND active_generation=?4
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM projection_deliveries
+                 WHERE store_name=?2 AND board_id=?3 AND status!='done'
+               )",
+            params![now, store_name, board_id, generation],
+        )
+        .map_err(storage)?;
+    }
     Ok(())
 }
 
